@@ -90,9 +90,11 @@ echo "==> [7b/8] Install API dependencies"
 cd "${APP_DIR}/apps/api"
 npm ci
 
-echo "==> [7c/8] Prisma generate + migrate"
+echo "==> [7c/8] Prisma generate + push schema"
 npx prisma generate
-npx prisma migrate deploy
+# db push syncs schema directly to PostgreSQL without needing migration history.
+# On future deploys after migrations are created, switch to: npx prisma migrate deploy
+npx prisma db push
 
 echo "==> [7d/8] Build NestJS"
 npm run build
