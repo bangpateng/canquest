@@ -1,0 +1,36 @@
+# Persistent SSH tunnel from VPS 2 → VPS 1 (Canton validator)
+# Tunnels:
+#   localhost:7575 → 172.18.0.5:7575  (Canton JSON Ledger API)
+#   localhost:8080 → localhost:80       (Splice nginx / validator onboarding)
+#
+# SETUP on VPS 2:
+# 1. Generate SSH key: ssh-keygen -t ed25519 -f /root/.ssh/canton_tunnel -N ""
+# 2. Copy public key to VPS 1: ssh-copy-id -i /root/.ssh/canton_tunnel.pub root@162.250.191.46
+# 3. Copy this file to: /etc/systemd/system/canton-tunnel.service
+# 4. Enable: systemctl daemon-reload && systemctl enable --now canton-tunnel
+
+[Unit]
+Description=SSH tunnel to Canton Validator VPS 1
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Restart=always
+RestartSec=10
+
+ExecStart=/usr/bin/ssh \
+  -N \
+  -o ServerAliveInterval=30 \
+  -o ServerAliveCountMax=3 \
+  -o ExitOnForwardFailure=yes \
+  -o StrictHostKeyChecking=accept-new \
+  -o BatchMode=yes \
+  -i /root/.ssh/canton_tunnel \
+  -L 7575:172.18.0.5:7575 \
+  -L 8080:localhost:80 \
+  root@162.250.191.46
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,37 @@
+import type { Metadata } from "next";
+import { Inter, Space_Grotesk } from "next/font/google";
+import { Providers } from "@/components/providers";
+import "./globals.css";
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+});
+
+const space = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-space",
+});
+
+export const metadata: Metadata = {
+  title: "CanQuest — Quest on Canton",
+  description:
+    "Enterprise Web3 quest platform: earn points, compete on leaderboards, and build on the Canton network.",
+  metadataBase: new URL("https://canquest.com"),
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <body
+        className={`${inter.variable} ${space.variable} min-h-screen antialiased`}
+      >
+        <Providers>{children}</Providers>
+      </body>
+    </html>
+  );
+}

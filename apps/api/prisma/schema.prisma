@@ -1,0 +1,219 @@
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "binary"
+}
+
+// PostgreSQL for both local dev and production.
+// Local dev: install PostgreSQL locally or run `docker compose up db` from /infra.
+// Production (VPS 2): DATABASE_URL=postgresql://canquest:PASSWORD@localhost:5432/canquest_app
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Application state: auth, quests, spins, etc.
+model User {
+  id             String          @id @default(cuid())
+  email          String          @unique
+  displayName    String?
+  passwordHash   String
+  inviteCode     String?
+  emailVerified  Boolean         @default(false)
+  otpCodeHash    String?
+  otpExpiresAt   DateTime?
+  username       String?         @unique
+  /// Canton ledger party identifier after binding — follow Participant / Ledger API contracts.
+  cantonPartyId  String?
+  /// Admin flag — set via ADMIN_EMAILS env or manually.
+  isAdmin        Boolean         @default(false)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  refreshTokens    RefreshToken[]
+  ccBalance        CcBalance?
+  ccTransactions   CcTransaction[]
+  questCompletions QuestCompletion[]
+  questSubmissions QuestSubmission[]
+  winnerDraws      WinnerDraw[]
+  assignedCodes    InviteCodePool[]
+}
+
+model RefreshToken {
+  id          String    @id @default(cuid())
+  tokenHash   String    @unique
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+}
+
+/// Tracks CC token balance for each user (off-chain mirror of Canton ledger).
+/// Settled to the actual Splice ledger periodically or on withdrawal.
+model CcBalance {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Total CC balance in micro-CC (1 CC = 1_000_000 micro-CC) to avoid float precision issues.
+  balanceMicroCc BigInt   @default(0)
+  updatedAt      DateTime @updatedAt
+}
+
+/// Every CC credit/debit event — full audit trail.
+model CcTransaction {
+  id             String            @id @default(cuid())
+  userId         String
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Positive = credit, negative = debit (in micro-CC).
+  amountMicroCc  BigInt
+  type           CcTransactionType
+  /// Human-readable description, e.g. "Quest reward: Daily Login"
+  description    String
+  /// Reference to the source (questId, spinId, etc.)
+  referenceId    String?
+  /// Canton ledger transaction ID after on-chain settlement.
+  ledgerTxId     String?
+  settledAt      DateTime?
+  createdAt      DateTime          @default(now())
+}
+
+enum CcTransactionType {
+  QUEST_REWARD
+  SPIN_REWARD
+  TRANSFER_IN
+  TRANSFER_OUT
+  AIRDROP
+}
+
+/// Quest campaign dibuat oleh admin/operator.
+model Quest {
+  id           String      @id @default(cuid())
+  title        String
+  org          String
+  orgSlug      String
+  description  String
+  banner           String      @default("linear-gradient(135deg,#1e293b,#0f172a)")
+  /// Optional image URL (e.g. /quest-media/uuid.webp) shown as quest card/header banner; overrides gradient when set.
+  bannerImageUrl String?
+  /// Square project logo; falls back to org initials when absent.
+  logoUrl        String?
+  rewardCc     Float       @default(0)
+  rewardPool   String      @default("0 CC")
+  deadline     String?
+  status       QuestStatus @default(ACTIVE)
+  tags         String      @default("[]")
+  /// Type of reward: CC, INVITE_CODE, or both
+  rewardType   RewardType  @default(CC_ONLY)
+  /// Max number of winners (null = unlimited / all completers rewarded)
+  maxWinners   Int?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  tasks        QuestTask[]
+  completions  QuestCompletion[]
+  submissions  QuestSubmission[]
+  inviteCodes  InviteCodePool[]
+  winnerDraws  WinnerDraw[]
+}
+
+enum RewardType {
+  CC_ONLY
+  INVITE_CODE
+  CC_AND_INVITE
+}
+
+/// Pool of invite codes for a quest (admin uploads these).
+model InviteCodePool {
+  id         String    @id @default(cuid())
+  questId    String
+  quest      Quest     @relation(fields: [questId], references: [id], onDelete: Cascade)
+  code       String    @unique
+  /// Assigned to this user (null = not yet distributed)
+  userId     String?
+  user       User?     @relation(fields: [userId], references: [id])
+  assignedAt DateTime?
+  createdAt  DateTime  @default(now())
+}
+
+/// Records winner selection for a quest draw.
+model WinnerDraw {
+  id           String     @id @default(cuid())
+  questId      String
+  quest        Quest      @relation(fields: [questId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// CC amount that was (or will be) sent to this winner
+  ccAmount     Float      @default(0)
+  /// Invite code assigned (if applicable)
+  inviteCode   String?
+  /// Whether the reward has been distributed on-chain
+  distributed  Boolean    @default(false)
+  /// Canton ledger TX id after CC distribution
+  ledgerTxId   String?
+  drawnAt      DateTime   @default(now())
+  distributedAt DateTime?
+
+  @@unique([questId, userId])
+}
+
+/// Task individual dalam sebuah quest.
+model QuestTask {
+  id          String   @id @default(cuid())
+  questId     String
+  quest       Quest    @relation(fields: [questId], references: [id], onDelete: Cascade)
+  type        String
+  title       String
+  description String?
+  points      Int      @default(10)
+  target      String?
+  order       Int      @default(0)
+  /// Jawaban benar untuk tipe quiz (opsional)
+  correctAnswer String?
+  submissions QuestSubmission[]
+}
+
+/// Submission satu task oleh satu user.
+model QuestSubmission {
+  id          String           @id @default(cuid())
+  userId      String
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questId     String
+  quest       Quest            @relation(fields: [questId], references: [id], onDelete: Cascade)
+  taskId      String
+  task        QuestTask        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  /// Bukti dari user: URL, handle, jawaban, dll.
+  proof       String?
+  status      SubmissionStatus @default(PENDING)
+  /// Canton ledger TX ID dari CC reward = Proof of Execution on-chain
+  ledgerTxId  String?
+  submittedAt DateTime         @default(now())
+  verifiedAt  DateTime?
+
+  @@unique([userId, taskId])
+}
+
+enum QuestStatus {
+  ACTIVE
+  COMING_SOON
+  ENDED
+}
+
+enum SubmissionStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+/// Tracks which quests each user has completed.
+model QuestCompletion {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questId       String
+  quest         Quest    @relation(fields: [questId], references: [id], onDelete: Cascade)
+  /// CC reward in micro-CC already credited from this completion.
+  rewardMicroCc BigInt   @default(0)
+  /// Canton ledger TX ID dari CC reward = bukti on-chain
+  ledgerTxId    String?
+  completedAt   DateTime @default(now())
+
+  @@unique([userId, questId])
+}

@@ -1,0 +1,124 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /** Canton Network primary yellow (brand ref ~#d9f542, rgb 217 245 66) */
+  --canton-rgb: 217 245 66;
+  --canton-ink: 52 58 13;
+  --canton-ink-muted: 72 81 18;
+  --background: #fffef7;
+  --foreground: #111111;
+  --muted: #f8f9fb;
+  --muted-foreground: #666666;
+  --card: #ffffff;
+  --border: rgb(35 35 35 / 8%);
+  --primary: rgb(var(--canton-rgb));
+  --primary-strong: #e8fb6a;
+  --primary-soft: #efff9f;
+  --primary-foreground: #111111;
+  --accent: #232323;
+  --ring: rgb(var(--canton-rgb));
+  --elevated: rgb(255 255 255 / 72%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --canton-rgb: 226 251 92;
+    --canton-ink: 240 248 176;
+    --canton-ink-muted: 224 239 148;
+    --background: #0c0c0c;
+    --foreground: #f4f4f5;
+    --muted: #161616;
+    --muted-foreground: #a1a1aa;
+    --card: #121212;
+    --border: rgb(244 244 245 / 8%);
+    --primary: rgb(var(--canton-rgb));
+    --primary-strong: #f3ff96;
+    --primary-soft: #fafec4;
+    --primary-foreground: #111111;
+    --accent: #ebebeb;
+    --ring: rgb(var(--canton-rgb));
+    --elevated: rgb(18 18 18 / 85%);
+  }
+}
+
+@layer base {
+  body {
+    @apply bg-[var(--background)] text-[var(--foreground)] antialiased;
+    font-family: var(--font-inter), system-ui, sans-serif;
+  }
+}
+
+.glass-card {
+  background: var(--elevated);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 40px rgb(17 17 17 / 6%);
+}
+
+.gradient-mesh {
+  background:
+    radial-gradient(
+      ellipse 80% 50% at 50% -20%,
+      rgb(235 252 120 / 38%),
+      transparent
+    ),
+    radial-gradient(
+      ellipse 60% 40% at 100% 0%,
+      rgb(var(--canton-rgb) / 22%),
+      transparent
+    ),
+    radial-gradient(
+      ellipse 50% 30% at 0% 100%,
+      rgb(200 225 52 / 14%),
+      transparent
+    );
+}
+
+.particle-field {
+  background-image: radial-gradient(
+    circle,
+    rgb(17 17 17 / 20%) 1px,
+    transparent 1px
+  );
+  background-size: 24px 24px;
+}
+
+@layer utilities {
+  .text-canton {
+    color: rgb(var(--canton-ink));
+  }
+  .text-canton-muted {
+    color: rgb(var(--canton-ink-muted));
+  }
+  /** Positive / accent copy & links aligned to Canton hue */
+  .bg-canton-subtle {
+    background-color: rgb(var(--canton-rgb) / 0.12);
+  }
+  .bg-canton-soft {
+    background-color: rgb(var(--canton-rgb) / 0.2);
+  }
+  .border-canton-muted {
+    border-color: rgb(var(--canton-rgb) / 0.28);
+  }
+  .border-canton-strong {
+    border-color: rgb(var(--canton-rgb) / 0.42);
+  }
+  .underline-canton {
+    text-decoration-color: rgb(var(--canton-rgb) / 0.45);
+  }
+  .underline-canton-strong {
+    text-decoration-color: rgb(var(--canton-rgb) / 0.72);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .particle-field {
+    background-image: radial-gradient(
+      circle,
+      rgb(244 244 245 / 10%) 1px,
+      transparent 1px
+    );
+  }
+}

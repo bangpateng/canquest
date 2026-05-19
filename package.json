@@ -1,0 +1,34 @@
+{
+  "name": "canquest",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev -w web",
+    "dev:web:lite": "npm run dev:lite -w web",
+    "dev:web:ia32": "npm run dev:ia32 -w web",
+    "preview:web": "npm run preview -w web",
+    "dev:api": "npm run start:dev -w api",
+    "build:web": "npm run build -w web",
+    "build:api": "npm run build -w api",
+    "lint:web": "npm run lint -w web",
+    "lint:api": "npm run lint -w api",
+    "db:generate": "npm run prisma:generate -w api",
+    "db:migrate": "npm run prisma:migrate -w api",
+    "clean:web": "npm run clean -w web",
+    "dev:fresh:web": "npm run dev:fresh -w web"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "jsonwebtoken": "^9.0.3"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.10"
+  }
+}

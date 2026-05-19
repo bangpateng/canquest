@@ -1,0 +1,6 @@
+-- | Root module. Replace with real contracts per official DAML / Canton patterns.
+module Main where
+
+-- See README.md for intended module map (User, Quest, Reward, Wallet, Admin, Audit).
+
+data Placeholder = Placeholder
