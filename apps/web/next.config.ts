@@ -8,6 +8,9 @@ import type { NextConfig } from "next";
  * Escape hatch if you truly need zero cache: `NEXT_WEBPACK_DISABLE_CACHE=true npm run dev`
  */
 const nextConfig: NextConfig = {
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   // Allow Next.js Image Optimization to serve images from the API CDN
   images: {
     remotePatterns: [

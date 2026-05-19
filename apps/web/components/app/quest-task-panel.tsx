@@ -13,7 +13,6 @@ import {
   Loader2,
   Repeat2,
   Send,
-  SendHorizontal,
   UserPlus,
   Users,
   Trophy,

@@ -10,7 +10,6 @@ import {
   Send,
   Shuffle,
   Ticket,
-  Trash2,
   UserCheck,
   Plus,
 } from "lucide-react";

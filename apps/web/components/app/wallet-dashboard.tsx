@@ -34,7 +34,7 @@ interface TxPage {
 
 interface WalletDashboardProps {
   me: { username?: string | null; cantonPartyId?: string | null };
-  onRefresh: () => void;
+  onRefresh?: () => void;
 }
 
 const PAGE_SIZE = 5;
