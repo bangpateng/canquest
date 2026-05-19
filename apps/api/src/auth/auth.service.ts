@@ -14,7 +14,7 @@ import {
 
 import { JwtService } from '@nestjs/jwt';
 
-import * as bcrypt from 'bcryptjs';
+import * as bcrypt from 'bcrypt';
 
 import { createHash, randomBytes } from 'crypto';
 
