@@ -109,10 +109,7 @@ export default function RegisterPage() {
         <h1 className="font-[family-name:var(--font-space)] text-2xl font-semibold tracking-tight">
           Create account
         </h1>
-        <p className="text-sm text-[var(--muted-foreground)]">
-          Invite codes are checked on the server. If your administrator enabled OTP, finish with the six-digit
-          code after submitting this form (dev builds may surface the OTP for testing).
-        </p>
+
       </div>
 
       {error ? (
@@ -135,7 +132,7 @@ export default function RegisterPage() {
               name="displayName"
               type="text"
               autoComplete="name"
-              placeholder="Alex Chen"
+              placeholder="Your Name"
               required
               minLength={2}
               maxLength={80}
@@ -151,7 +148,7 @@ export default function RegisterPage() {
               name="email"
               type="email"
               autoComplete="email"
-              placeholder="you@organization.com"
+              placeholder="Your Email"
               required
               className="w-full rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2.5 text-sm outline-none ring-offset-[var(--card)] placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
             />
@@ -182,13 +179,10 @@ export default function RegisterPage() {
               inputMode="text"
               spellCheck={false}
               autoComplete="off"
-              placeholder="Paste if required by your deployment"
+              placeholder="Your Code Invite"
               className="w-full rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2.5 font-mono text-sm tracking-wide outline-none ring-offset-[var(--card)] placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
             />
-            <p className="text-[11px] leading-relaxed text-[var(--muted-foreground)]">
-              When invite codes are configured on the API, you must paste a valid server-side code. Leave blank
-              only if development is configured without <span className="font-mono">INVITE_CODES</span>.
-            </p>
+
           </div>
           <label className="flex cursor-pointer items-start gap-2 text-xs leading-relaxed text-[var(--muted-foreground)]">
             <input
@@ -258,7 +252,7 @@ export default function RegisterPage() {
         href="/"
         className="mt-6 block text-center text-xs text-[var(--muted-foreground)] underline-offset-4 hover:underline"
       >
-        ← Back to marketing site
+        ← Back to home
       </Link>
     </div>
   );

@@ -51,9 +51,7 @@ function LoginForm() {
         <h1 className="font-[family-name:var(--font-space)] text-2xl font-semibold tracking-tight">
           Sign in
         </h1>
-        <p className="text-sm text-[var(--muted-foreground)]">
-          Use your CanQuest credentials. Sessions use secure cookies backed by the API.
-        </p>
+
       </div>
 
       {error ? (
@@ -75,7 +73,7 @@ function LoginForm() {
             name="email"
             type="email"
             autoComplete="email"
-            placeholder="you@organization.com"
+            placeholder="Your Email"
             required
             className="w-full rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2.5 text-sm outline-none ring-offset-[var(--card)] placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
           />
@@ -85,9 +83,7 @@ function LoginForm() {
             <label htmlFor="login-password" className="text-xs font-medium text-[var(--muted-foreground)]">
               Password
             </label>
-            <span className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
-              Forgot link later
-            </span>
+
           </div>
           <input
             id="login-password"
@@ -101,7 +97,7 @@ function LoginForm() {
           />
         </div>
         <button type="submit" disabled={busy} className={cn(buttonVariants({ size: "default" }), "w-full")}>
-          {busy ? "Opening…" : "Continue to app"}
+          {busy ? "Opening…" : "Login"}
         </button>
       </form>
 
@@ -119,7 +115,7 @@ function LoginForm() {
         href="/"
         className="mt-6 block text-center text-xs text-[var(--muted-foreground)] underline-offset-4 hover:underline"
       >
-        ← Back to marketing site
+        ← Back to home
       </Link>
     </div>
   );
