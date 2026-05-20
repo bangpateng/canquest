@@ -3,6 +3,23 @@ import { Calendar, CheckCircle2, Trophy } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
+function QuestLogo({ logoUrl, orgSlug }: { logoUrl?: string | null; orgSlug: string }) {
+  if (logoUrl) {
+    return (
+      <img /* eslint-disable-line @next/next/no-img-element */
+        src={logoUrl}
+        alt=""
+        className="h-10 w-10 shrink-0 rounded-xl border border-[var(--border)] object-cover"
+      />
+    );
+  }
+  return (
+    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--muted)] font-[family-name:var(--font-space)] text-sm font-bold">
+      {orgSlug.slice(0, 2)}
+    </div>
+  );
+}
+
 /** Shared finish CTA (below banner on cards) — softer than banner pills */
 const QUEST_COMPLETE_STYLES =
   "border border-emerald-700/40 bg-emerald-600/15 text-emerald-900 dark:border-emerald-400/45 dark:bg-emerald-500/20 dark:text-emerald-100";
@@ -48,14 +65,8 @@ export function QuestCard({
       </div>
       <div className="flex flex-1 flex-col p-4">
         <div className="flex items-start gap-3">
-          {quest.logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={quest.logoUrl} alt="" className="h-10 w-10 shrink-0 rounded-xl border border-[var(--border)] object-cover" />
-          ) : (
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--muted)] font-[family-name:var(--font-space)] text-sm font-bold">
-              {quest.orgSlug.slice(0, 2)}
-            </div>
-          )}
+          <QuestLogo logoUrl={quest.logoUrl} orgSlug={quest.orgSlug} />
+
           <div className="min-w-0 flex-1">
             <p className="text-xs font-medium text-[var(--muted-foreground)]">
               {quest.org}
