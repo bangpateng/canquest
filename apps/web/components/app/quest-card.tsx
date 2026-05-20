@@ -48,9 +48,9 @@ export function QuestCard({
       </div>
       <div className="flex flex-1 flex-col p-4">
         <div className="flex items-start gap-3">
-            {quest.logoUrl ? (
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={quest.logoUrl} alt="" className="h-10 w-10 shrink-0 rounded-xl border border-[var(--border)] object-cover" />
+          {quest.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={quest.logoUrl} alt="" className="h-10 w-10 shrink-0 rounded-xl border border-[var(--border)] object-cover" />
           ) : (
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--muted)] font-[family-name:var(--font-space)] text-sm font-bold">
               {quest.orgSlug.slice(0, 2)}
