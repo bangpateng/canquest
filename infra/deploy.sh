@@ -82,7 +82,9 @@ else
 fi
 cd "${APP_DIR}"
 
-echo "⚠️  Make sure infra/env/api.env.production has real secrets before continuing!"
+echo "⚠️  Make sure infra/env/api.env.production.example has been copied to"
+echo "    infra/env/api.env.production and filled with real secrets before continuing!"
+echo "    (All Canton variables must be set — see CANTON_TUNNEL_GUIDE.md)"
 read -p "Press ENTER to continue..."
 cp "${APP_DIR}/infra/env/api.env.production" "${APP_DIR}/apps/api/.env"
 
@@ -104,22 +106,30 @@ echo "==> [8/8] Install PM2 + configure nginx"
 npm install -g pm2
 pm2 startup systemd -u root --hp /root | tail -1 | bash
 
-# Start only the API process
+# Start the API process
 pm2 start "${APP_DIR}/infra/pm2.ecosystem.config.js" --only canquest-api --env production
 pm2 save
 
-# Nginx — API only
+# Nginx — API reverse proxy only (web is on Vercel)
 cp "${APP_DIR}/infra/nginx/canquest-api.conf" /etc/nginx/sites-available/canquest-api
 ln -sf /etc/nginx/sites-available/canquest-api /etc/nginx/sites-enabled/canquest-api
 rm -f /etc/nginx/sites-enabled/default
 nginx -t && systemctl reload nginx
 
 echo ""
-echo "✅ VPS 2 backend deploy complete!"
+echo "╔══════════════════════════════════════════════════════════╗"
+echo "  ✅  VPS 2 backend deploy complete!"
+echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
 echo "Next steps:"
-echo "  1. Add DNS A record:  api.canquest.cc → 62.171.185.56"
-echo "  2. Get SSL cert:      certbot --nginx -d api.canquest.cc"
-echo "  3. Deploy frontend:   push code → Vercel auto-deploys"
+echo "  1. DNS A record:      api.canquest.cc → 62.171.185.56  (if not already)"
+echo "  2. SSL certificate:   certbot --nginx -d api.canquest.cc"
+echo "  3. Verify API:        curl https://api.canquest.cc/api/health"
 echo "  4. PM2 status:        pm2 status"
-echo "  5. API health check:  curl https://api.canquest.cc/api/health"
+echo "  5. PM2 logs:          pm2 logs canquest-api --lines 30"
+echo ""
+echo "  Vercel (Next.js frontend) — set these env vars in Vercel Dashboard:"
+echo "    NEXT_PUBLIC_API_URL  = https://api.canquest.cc/api"
+echo "    INTERNAL_API_URL     = https://api.canquest.cc/api"
+echo "    JWT_ACCESS_SECRET    = (same value as in apps/api/.env)"
+echo "  Then push to git → Vercel will auto-deploy."

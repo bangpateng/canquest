@@ -37,7 +37,7 @@ export class CantonLedgerService {
     this.ledgerApiUser =
       config.get<string>('CANTON_LEDGER_API_USER') ?? 'ledger-api-user';
     this.ledgerAudience =
-      config.get<string>('CANTON_LEDGER_API_AUDIENCE') ?? 'https://ledger_api.example.com';
+      config.get<string>('CANTON_LEDGER_API_AUDIENCE') ?? 'https://canton.network.global';
   }
 
   /** JWT token for Canton JSON Ledger API calls. */
@@ -267,6 +267,7 @@ export class CantonLedgerService {
     try {
       const encoded = encodeURIComponent(partyId);
       const res = await fetch(`${this.baseUrl}/v2/parties?parties=${encoded}`, {
+        headers: this.authHeaders(),
         signal: AbortSignal.timeout(6_000),
       });
       if (!res.ok) return false;
@@ -280,6 +281,7 @@ export class CantonLedgerService {
   /** List parties visible to this participant. */
   async listParties(): Promise<unknown[]> {
     const res = await fetch(`${this.baseUrl}/v2/parties`, {
+      headers: this.authHeaders(),
       signal: AbortSignal.timeout(6_000),
     });
     const text = await res.text();
@@ -290,6 +292,7 @@ export class CantonLedgerService {
   /** Returns current ledger-end offset. */
   async ledgerEnd(): Promise<unknown> {
     const res = await fetch(`${this.baseUrl}/v2/state/ledger-end`, {
+      headers: this.authHeaders(),
       signal: AbortSignal.timeout(6_000),
     });
     const text = await res.text();
