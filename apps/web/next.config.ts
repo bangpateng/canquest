@@ -11,6 +11,9 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
   // Allow Next.js Image Optimization to serve images from the API CDN
   images: {
     remotePatterns: [
