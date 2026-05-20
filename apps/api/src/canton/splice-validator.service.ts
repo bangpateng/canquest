@@ -34,15 +34,41 @@ export class SpliceValidatorService {
   private readonly logger = new Logger(SpliceValidatorService.name);
   private readonly baseUrl: string | null;
   private readonly secret: string | null;
+  /**
+   * Host header to send on every request to the Splice Validator API.
+   *
+   * VPS 1 nginx routes by server_name, not by port:
+   *   wallet.localhost          → validator:5003  (Splice Wallet + Admin API)
+   *   json-ledger-api.localhost → participant:7575 (Canton JSON Ledger API)
+   *
+   * When tunnelling VPS2:8080 → VPS1:127.0.0.1:80 we must set
+   * Host: wallet.localhost so nginx forwards to the right upstream.
+   *
+   * Set CANTON_VALIDATOR_HOST_HEADER=wallet.localhost in .env (default).
+   * Leave empty/unset to skip the custom Host header (e.g. direct port 5003).
+   */
+  private readonly hostHeader: string | null;
 
   constructor(private readonly config: ConfigService) {
     const raw = config.get<string>('CANTON_VALIDATOR_URL');
     this.baseUrl = raw ? raw.replace(/\/$/, '') : null;
     this.secret = config.get<string>('CANTON_SPLICE_SECRET') ?? null;
+    this.hostHeader =
+      config.get<string>('CANTON_VALIDATOR_HOST_HEADER') ?? 'wallet.localhost';
   }
 
   get isConfigured(): boolean {
     return Boolean(this.baseUrl && this.secret);
+  }
+
+  /**
+   * Base headers for every Splice Validator API request.
+   * Includes Host override required by nginx server_name routing on VPS 1.
+   */
+  private baseHeaders(extraHeaders?: Record<string, string>): Record<string, string> {
+    const headers: Record<string, string> = { ...extraHeaders };
+    if (this.hostHeader) headers['Host'] = this.hostHeader;
+    return headers;
   }
 
   /** JWT token for admin operations — signed with the Splice hs-256-unsafe shared secret. */
@@ -55,6 +81,21 @@ export class SpliceValidatorService {
       this.secret,
       { algorithm: 'HS256', expiresIn: '5m' },
     );
+  }
+
+  /** Auth headers (Authorization + optional Host override). */
+  private authHeaders(subject?: string): Record<string, string> {
+    return this.baseHeaders({
+      Authorization: `Bearer ${this.adminToken(subject)}`,
+    });
+  }
+
+  /** Auth + Content-Type headers. */
+  private jsonAuthHeaders(subject?: string): Record<string, string> {
+    return this.baseHeaders({
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${this.adminToken(subject)}`,
+    });
   }
 
   /**
@@ -79,14 +120,11 @@ export class SpliceValidatorService {
     const url = `${this.baseUrl}/api/validator/v0/admin/users`;
     const token = this.adminToken();
 
-    let res: Response;
+        let res: Response;
     try {
       res = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers: this.jsonAuthHeaders(),
         body: JSON.stringify({ name: username }),
         signal: AbortSignal.timeout(30_000),
       });
@@ -130,13 +168,13 @@ export class SpliceValidatorService {
    * Fetch a specific user's party ID from the Splice validator.
    * GET /api/validator/v0/admin/users/{username}
    */
-  async getUserPartyId(username: string): Promise<string | null> {
+    async getUserPartyId(username: string): Promise<string | null> {
     if (!this.isConfigured) return null;
     try {
       const res = await fetch(
         `${this.baseUrl}/api/validator/v0/admin/users/${encodeURIComponent(username)}`,
         {
-          headers: { Authorization: `Bearer ${this.adminToken()}` },
+          headers: this.authHeaders(),
           signal: AbortSignal.timeout(8_000),
         },
       );
@@ -166,10 +204,10 @@ export class SpliceValidatorService {
     if (!this.isConfigured) return null;
     try {
       const encoded = encodeURIComponent(partyId);
-      const res = await fetch(
+            const res = await fetch(
         `${this.baseUrl}/api/validator/v0/admin/transfer-preapprovals/by-party/${encoded}`,
         {
-          headers: { Authorization: `Bearer ${this.adminToken()}` },
+          headers: this.authHeaders(),
           signal: AbortSignal.timeout(8_000),
         },
       );
@@ -210,13 +248,13 @@ export class SpliceValidatorService {
    * Check if the Splice validator API is reachable.
    * Any HTTP response (including 4xx) means the server is up.
    */
-  async isReachable(): Promise<boolean> {
+    async isReachable(): Promise<boolean> {
     if (!this.baseUrl) return false;
     try {
-      // Any HTTP response (even 404) means the nginx/validator is reachable.
+      // Any HTTP response (even 404/401) means nginx+validator is reachable.
       await fetch(`${this.baseUrl}/api/validator/v0/admin/users`, {
         method: 'GET',
-        headers: { Authorization: `Bearer ${this.adminToken()}` },
+        headers: this.authHeaders(),
         signal: AbortSignal.timeout(4_000),
       });
       return true;
@@ -254,13 +292,12 @@ export class SpliceValidatorService {
     // expires_at must be in MICROSECONDS (Unix timestamp × 1_000_000)
     const expiresAtMicros = BigInt(Date.now()) * 1_000n + 7n * 24n * 3600n * 1_000_000n;
 
-    const token = this.adminToken(validatorAdminUsername);
-    const url = `${this.baseUrl}/api/validator/v0/wallet/transfer-offers`;
+        const url = `${this.baseUrl}/api/validator/v0/wallet/transfer-offers`;
 
     try {
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: this.jsonAuthHeaders(validatorAdminUsername),
         body: JSON.stringify({
           receiver_party_id: receiverPartyId,
           amount: amountCc.toString(),
@@ -293,12 +330,11 @@ export class SpliceValidatorService {
    * Get a user's CC balance from the Splice Wallet API.
    * GET /api/validator/v0/wallet/balance  (as the user)
    */
-  async getUserBalance(username: string): Promise<number | null> {
+    async getUserBalance(username: string): Promise<number | null> {
     if (!this.isConfigured) return null;
     try {
-      const token = this.adminToken(username);
       const res = await fetch(`${this.baseUrl}/api/validator/v0/wallet/balance`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: this.authHeaders(username),
         signal: AbortSignal.timeout(8_000),
       });
       if (!res.ok) return null;
@@ -313,12 +349,11 @@ export class SpliceValidatorService {
    * List open transfer offers for a user (incoming + outgoing).
    * GET /api/validator/v0/wallet/transfer-offers  (as the user)
    */
-  async listTransferOffers(username: string): Promise<{ contractId: string; payload: unknown }[]> {
+    async listTransferOffers(username: string): Promise<{ contractId: string; payload: unknown }[]> {
     if (!this.isConfigured) return [];
     try {
-      const token = this.adminToken(username);
       const res = await fetch(`${this.baseUrl}/api/validator/v0/wallet/transfer-offers`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: this.authHeaders(username),
         signal: AbortSignal.timeout(8_000),
       });
       if (!res.ok) return [];
@@ -350,13 +385,12 @@ export class SpliceValidatorService {
    */
   async createTransferPreapproval(username: string): Promise<boolean> {
     if (!this.isConfigured) return false;
-    try {
-      const token = this.adminToken(username);
+        try {
       const res = await fetch(
         `${this.baseUrl}/api/validator/v0/wallet/transfer-preapprovals`,
         {
           method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          headers: this.jsonAuthHeaders(username),
           body: '{}',
           signal: AbortSignal.timeout(15_000),
         },
@@ -393,14 +427,13 @@ export class SpliceValidatorService {
     asUsername: string,
   ): Promise<boolean> {
     if (!this.isConfigured) return false;
-    try {
-      const token = this.adminToken(asUsername);
+        try {
       const encodedId = encodeURIComponent(contractId);
       const res = await fetch(
         `${this.baseUrl}/api/validator/v0/wallet/transfer-offers/${encodedId}/accept`,
         {
           method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          headers: this.jsonAuthHeaders(asUsername),
           body: '{}',
           signal: AbortSignal.timeout(45_000),
         },

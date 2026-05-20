@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { AppRouteTitle } from "@/components/app/app-route-title";
-import { DemoBanner } from "@/components/app/demo-banner";
 const navItems: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/quests", label: "Quest", icon: Gift },
@@ -70,16 +69,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <nav className="flex flex-1 flex-col gap-1">
           <NavLinks variant="sidebar" />
         </nav>
-        <p className="mt-auto px-3 text-xs text-[var(--muted-foreground)]">
-          app.canquest.com · Phase 1 shell
+                <p className="mt-auto px-3 text-xs text-[var(--muted-foreground)]">
+          app.canquest.com
         </p>
       </aside>
       <div className="flex min-h-screen flex-1 flex-col pb-20 md:pb-0">
         <header className="flex h-14 items-center border-b border-[var(--border)] px-4 md:h-16 md:px-8">
           <AppRouteTitle />
         </header>
-        <div className="flex-1 space-y-4 p-4 md:p-8">
-          <DemoBanner />
+                <div className="flex-1 space-y-4 p-4 md:p-8">
           {children}
         </div>
       </div>

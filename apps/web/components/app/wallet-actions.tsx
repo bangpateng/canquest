@@ -177,24 +177,31 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
               </div>
             ) : (
               <form onSubmit={submitSend} className="mt-6 space-y-4">
-                <div className="space-y-2">
+                                <div className="space-y-2">
                   <label
                     htmlFor="wallet-send-recipient"
                     className="text-xs font-medium text-[var(--muted-foreground)]"
                   >
-                    Recipient Party ID
+                    Recipient
+                    <span className="ml-1 font-normal text-[var(--muted-foreground)]/70">
+                      (@username or Party ID)
+                    </span>
                   </label>
                   <textarea
                     id="wallet-send-recipient"
                     required
-                    rows={3}
+                    rows={2}
                     autoComplete="off"
                     value={recipientUsername}
                     onChange={(e) => setRecipientUsername(e.target.value)}
-                    placeholder="alice::1220…"
+                    placeholder="@alice or alice::1220…"
                     disabled={sendState === "loading"}
                     className="w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 font-mono text-xs text-[var(--foreground)] outline-none ring-offset-[var(--card)] placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--foreground)]/25 disabled:opacity-50"
                   />
+                  <p className="text-[11px] text-[var(--muted-foreground)]">
+                    Enter <strong>@username</strong> for CanQuest users, or paste the full
+                    <strong> Party ID</strong> (e.g. <code>alice::1220…</code>) for any Canton party.
+                  </p>
                 </div>
 
                 <div className="space-y-2">

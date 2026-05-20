@@ -1,4 +1,5 @@
 import { SettingsAccountPanel } from "@/components/app/settings/settings-account-panel";
+import { CantonTransferPreferences } from "@/components/app/settings/canton-transfer-preferences";
 import { SignOutButton } from "@/components/app/sign-out-button";
 
 export default function SettingsPage() {
@@ -6,20 +7,22 @@ export default function SettingsPage() {
     <div className="mx-auto grid max-w-3xl gap-8 pb-8">
       <SettingsAccountPanel />
 
+      <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 md:p-8">
+        <h3 className="font-[family-name:var(--font-space)] text-lg font-semibold">Canton Transfer Preferences</h3>
+        <p className="mt-1 mb-6 text-sm text-[var(--muted-foreground)]">
+          Configure Canton-native CC settlement options for your wallet.
+        </p>
+        <CantonTransferPreferences variant="full" />
+      </section>
+
       <section className="rounded-2xl border border-[var(--border)] bg-[var(--muted)]/30 p-6 md:p-8">
-        <h3 className="font-[family-name:var(--font-space)] text-lg font-semibold">Sessions & alerts</h3>
+        <h3 className="font-[family-name:var(--font-space)] text-lg font-semibold">Sessions</h3>
 
         <ul className="mt-4 space-y-3 text-sm">
           <li className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3">
             <span>Email login alerts</span>
-            <span className="text-xs font-medium text-canton-muted">Mock · enabled</span>
+            <span className="text-xs font-medium text-[var(--muted-foreground)]">Enabled</span>
           </li>
-
-          <li className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3">
-            <span>Device fingerprint reminder</span>
-            <span className="text-xs font-medium text-[var(--muted-foreground)]">Planned · JWT rotation Phase 6</span>
-          </li>
-
           <li className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3">
             <span>Marketing digests</span>
             <span className="text-xs font-medium text-[var(--muted-foreground)]">Off</span>

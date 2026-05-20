@@ -1,14 +1,8 @@
 "use client";
 
-import {
-  getLeaderboardProfile,
-  LEADERBOARD_PAGE_SIZE,
-  MOCK_LEADERBOARD,
-  type MockLeaderRow,
-} from "@/lib/mock-demo";
 import { cn } from "@/lib/utils";
-import { ChevronLeft, ChevronRight, Trophy } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, Loader2, Trophy } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 
 const TABS = [
   { id: "weekly" as const, label: "Weekly" },
@@ -16,34 +10,84 @@ const TABS = [
   { id: "all" as const, label: "All time" },
 ];
 
-function ParticipantCell({ row }: { row: MockLeaderRow }) {
-  const p = getLeaderboardProfile(row.handle);
+interface LeaderboardRow {
+  rank: number;
+  userId: string;
+  username: string;
+  displayName: string;
+  points: number;
+}
 
+interface LeaderboardData {
+  rows: LeaderboardRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+function getInitials(displayName: string): string {
+  return displayName
+    .split(" ")
+    .map((w) => w[0] ?? "")
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+}
+
+const AVATAR_GRADIENTS = [
+  "linear-gradient(145deg, #d4ff3f 0%, #8b9c0d 100%)",
+  "linear-gradient(145deg, #60a5fa 0%, #1d4ed8 100%)",
+  "linear-gradient(145deg, #f472b6 0%, #9333ea 100%)",
+  "linear-gradient(145deg, #34d399 0%, #0d9488 100%)",
+  "linear-gradient(145deg, #fb923c 0%, #c2410c 100%)",
+  "linear-gradient(145deg, #a78bfa 0%, #6d28d9 100%)",
+  "linear-gradient(145deg, #38bdf8 0%, #0369a1 100%)",
+  "linear-gradient(145deg, #fbbf24 0%, #d97706 100%)",
+];
+
+function avatarGradient(username: string): string {
+  let hash = 0;
+  for (let i = 0; i < username.length; i++) hash = (hash * 31 + username.charCodeAt(i)) | 0;
+  return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length]!;
+}
+
+function ParticipantCell({
+  row,
+  isCurrentUser,
+}: {
+  row: LeaderboardRow;
+  isCurrentUser: boolean;
+}) {
   return (
     <td className="px-3 py-3">
       <div className="flex items-center gap-3">
         <div
           className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full ring-2 ring-[var(--border)] ring-offset-2 ring-offset-[var(--card)]"
           aria-hidden
-          style={{ backgroundImage: p.avatarGradient }}
+          style={{ backgroundImage: avatarGradient(row.username) }}
         >
           <span className="font-[family-name:var(--font-space)] text-xs font-bold tracking-tight text-white drop-shadow-sm">
-            {p.initials}
+            {getInitials(row.displayName)}
           </span>
         </div>
         <div className="min-w-0 leading-tight">
           <div className="flex flex-wrap items-center gap-2 gap-y-1">
             <span className="font-[family-name:var(--font-space)] font-semibold text-[var(--foreground)]">
-              {p.displayName}
+              {row.displayName}
             </span>
-            {row.badge ? (
-              <span className="rounded-md bg-[var(--muted)] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
-                {row.badge}
+            {isCurrentUser && (
+              <span className="rounded-md bg-[var(--primary)]/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--foreground)]">
+                You
               </span>
-            ) : null}
+            )}
+            {row.rank <= 3 && (
+              <span className="text-sm">
+                {row.rank === 1 ? "🥇" : row.rank === 2 ? "🥈" : "🥉"}
+              </span>
+            )}
           </div>
           <span className="mt-0.5 block truncate text-xs text-[var(--muted-foreground)]">
-            @{row.handle}
+            @{row.username}
           </span>
         </div>
       </div>
@@ -51,46 +95,51 @@ function ParticipantCell({ row }: { row: MockLeaderRow }) {
   );
 }
 
-function Row({ row }: { row: MockLeaderRow }) {
-  return (
-    <tr
-      className={cn(
-        "border-t border-[var(--border)]",
-        row.badge === "You" && "bg-[var(--primary)]/6",
-      )}
-    >
-      <td className="px-3 py-3 text-sm tabular-nums font-medium">{row.rank}</td>
-      <ParticipantCell row={row} />
-      <td className="px-3 py-3 text-right text-sm tabular-nums font-medium">
-        {row.points.toLocaleString()}
-      </td>
-      <td className="hidden px-3 py-3 text-right text-sm text-canton-muted sm:table-cell">
-        {row.change}
-      </td>
-    </tr>
-  );
-}
-
 export function LeaderboardTable() {
-  const [period, setPeriod] = useState<(typeof TABS)[number]["id"]>("weekly");
+  const [period, setPeriod] = useState<"weekly" | "monthly" | "all">("weekly");
   const [page, setPage] = useState(1);
-  const rows = MOCK_LEADERBOARD[period];
+  const [data, setData] = useState<LeaderboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-  const totalPages = Math.max(1, Math.ceil(rows.length / LEADERBOARD_PAGE_SIZE));
-  const currentPage = Math.min(Math.max(1, page), totalPages);
+  // Get current user ID for highlighting
+  useEffect(() => {
+    fetch("/api/me", { credentials: "include" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((d: { id?: string } | null) => { if (d?.id) setCurrentUserId(d.id); })
+      .catch(() => {});
+  }, []);
+
+  const fetchLeaderboard = useCallback(
+    async (p: number, per: typeof period) => {
+      setLoading(true);
+      try {
+        const res = await fetch(
+          `/api/quests/leaderboard?period=${per}&page=${p}&pageSize=10`,
+          { credentials: "include" },
+        );
+        if (res.ok) setData((await res.json()) as LeaderboardData);
+        else setData({ rows: [], total: 0, page: p, pageSize: 10 });
+      } catch {
+        setData({ rows: [], total: 0, page: p, pageSize: 10 });
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     setPage(1);
-  }, [period]);
+    void fetchLeaderboard(1, period);
+  }, [period, fetchLeaderboard]);
 
-  const { pageRows, rangeStart, rangeEnd } = useMemo(() => {
-    const start = (currentPage - 1) * LEADERBOARD_PAGE_SIZE;
-    return {
-      pageRows: rows.slice(start, start + LEADERBOARD_PAGE_SIZE),
-      rangeStart: rows.length ? start + 1 : 0,
-      rangeEnd: Math.min(start + LEADERBOARD_PAGE_SIZE, rows.length),
-    };
-  }, [rows, currentPage]);
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / (data.pageSize || 10))) : 1;
+
+  function changePage(newPage: number) {
+    setPage(newPage);
+    void fetchLeaderboard(newPage, period);
+  }
 
   return (
     <div className="space-y-4">
@@ -111,44 +160,81 @@ export function LeaderboardTable() {
           </button>
         ))}
       </div>
+
       <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]">
         <div className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3 text-sm font-medium">
           <Trophy className="h-4 w-4 text-[var(--muted-foreground)]" />
           Top participants ·{" "}
-          {period === "all" ? "All time" : period.charAt(0).toUpperCase() + period.slice(1)}
+          {period === "all" ? "All time" : period === "weekly" ? "Weekly" : "Monthly"}
+          {data && (
+            <span className="ml-auto text-xs text-[var(--muted-foreground)]">
+              {data.total} participants
+            </span>
+          )}
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[320px] text-left">
-            <thead className="text-xs uppercase tracking-wide text-[var(--muted-foreground)]">
-              <tr>
-                <th className="whitespace-nowrap px-3 py-2 font-medium">#</th>
-                <th className="min-w-[12rem] px-3 py-2 font-medium">Participant</th>
-                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">Pts</th>
-                <th className="hidden whitespace-nowrap px-3 py-2 text-right font-medium sm:table-cell">
-                  Δ
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {pageRows.map((row) => (
-                <Row key={`${period}-${row.rank}-${row.handle}`} row={row} />
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {totalPages > 1 ? (
+
+        {loading ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="h-6 w-6 animate-spin text-[var(--muted-foreground)]" />
+          </div>
+        ) : !data || data.rows.length === 0 ? (
+          <div className="py-16 text-center">
+            <p className="text-sm font-medium text-[var(--foreground)]">
+              No participants yet
+            </p>
+            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+              Complete quests to appear on the leaderboard.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[320px] text-left">
+              <thead className="text-xs uppercase tracking-wide text-[var(--muted-foreground)]">
+                <tr>
+                  <th className="whitespace-nowrap px-3 py-2 font-medium">#</th>
+                  <th className="min-w-[12rem] px-3 py-2 font-medium">Participant</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-right font-medium">Points</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.rows.map((row) => {
+                  const isCurrentUser = row.userId === currentUserId;
+                  return (
+                    <tr
+                      key={row.userId}
+                      className={cn(
+                        "border-t border-[var(--border)]",
+                        isCurrentUser && "bg-[var(--primary)]/6",
+                      )}
+                    >
+                      <td className="px-3 py-3 text-sm tabular-nums font-medium">
+                        {row.rank}
+                      </td>
+                      <ParticipantCell row={row} isCurrentUser={isCurrentUser} />
+                      <td className="px-3 py-3 text-right text-sm tabular-nums font-medium">
+                        {row.points.toLocaleString()}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {!loading && totalPages > 1 && (
           <div className="flex flex-col gap-3 border-t border-[var(--border)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-[var(--muted-foreground)]">
-              Showing {rangeStart}–{rangeEnd} of {rows.length}
+              Page {page} of {totalPages} · {data?.total ?? 0} total
             </p>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage <= 1}
+                onClick={() => changePage(Math.max(1, page - 1))}
+                disabled={page <= 1}
                 className={cn(
                   "inline-flex items-center gap-1 rounded-xl border border-[var(--border)] px-3 py-1.5 text-sm font-medium transition-colors",
-                  currentPage <= 1
+                  page <= 1
                     ? "cursor-not-allowed opacity-40"
                     : "bg-[var(--card)] hover:bg-[var(--muted)]",
                 )}
@@ -156,30 +242,13 @@ export function LeaderboardTable() {
                 <ChevronLeft className="h-4 w-4" aria-hidden />
                 Prev
               </button>
-              <div className="flex flex-wrap items-center gap-1">
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setPage(n)}
-                    className={cn(
-                      "min-h-8 min-w-8 rounded-lg px-2 text-sm font-medium transition-colors",
-                      n === currentPage
-                        ? "bg-[var(--foreground)] text-[var(--background)]"
-                        : "border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] hover:bg-[var(--muted)]",
-                    )}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
               <button
                 type="button"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage >= totalPages}
+                onClick={() => changePage(Math.min(totalPages, page + 1))}
+                disabled={page >= totalPages}
                 className={cn(
                   "inline-flex items-center gap-1 rounded-xl border border-[var(--border)] px-3 py-1.5 text-sm font-medium transition-colors",
-                  currentPage >= totalPages
+                  page >= totalPages
                     ? "cursor-not-allowed opacity-40"
                     : "bg-[var(--card)] hover:bg-[var(--muted)]",
                 )}
@@ -189,7 +258,7 @@ export function LeaderboardTable() {
               </button>
             </div>
           </div>
-        ) : null}
+        )}
       </div>
     </div>
   );

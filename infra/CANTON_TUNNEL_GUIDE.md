@@ -179,14 +179,27 @@ pm2 logs canquest-api --lines 20
 
 ---
 
-## Nilai Saat Ini (Testnet)
+## Nilai Saat Ini (Confirmed dari VPS 1)
 
 | Variable | Value |
 |----------|-------|
-| VPS Node | `162.250.191.46` |
-| Participant Docker IP | `172.19.0.5` |
-| Nginx Docker IP | `172.19.0.7` |
-| Canton JSON API | `http://127.0.0.1:7575` |
-| Splice nginx | `http://127.0.0.1:8080` |
+| VPS 1 IP | `162.250.191.46` |
+| Participant container | `172.19.0.5` (port 7575) |
+| Validator container | `172.19.0.6` (port 5003) |
+| Nginx container | `172.19.0.7` (port 80) |
+| ANS Web UI | `172.19.0.3` (port 8080) |
+| Wallet Web UI | `172.19.0.2` (port 8080) |
+| Postgres Splice | `172.19.0.4` (port 5432) |
+| **Tunnel 1** | `VPS2:7575 → 172.19.0.5:7575` (Ledger API langsung) |
+| **Tunnel 2** | `VPS2:8080 → 127.0.0.1:80` (Nginx VPS1) |
+| **Host header** | `wallet.localhost` (untuk akses Splice API lewat nginx) |
+| CANTON_JSON_API_URL | `http://127.0.0.1:7575` |
+| CANTON_VALIDATOR_URL | `http://127.0.0.1:8080` |
+| CANTON_VALIDATOR_HOST_HEADER | `wallet.localhost` |
+| CANTON_SPLICE_SECRET | `unsafe` |
+| CANTON_SPLICE_AUDIENCE | `https://validator.example.com` |
+| CANTON_LEDGER_API_AUDIENCE | `https://ledger_api.example.com` |
+| CANTON_LEDGER_API_USER | `ledger-api-user` |
+| CANTON_VALIDATOR_ADMIN_USER | `ledger-api-user` |
 
 Update tabel ini setiap ganti node agar mudah diingat.
