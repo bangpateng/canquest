@@ -28,6 +28,11 @@ export async function nestWithAdminAccessCookie(
   const url = `${internalApiBase()}${pathSuffix.startsWith('/') ? pathSuffix : `/${pathSuffix}`}`;
   const headers = new Headers(init.headers);
   headers.set('Authorization', `Bearer ${token}`);
-  const upstream = await fetch(url, { ...init, headers, cache: 'no-store' });
-  return upstreamToNext(upstream);
+  try {
+    const upstream = await fetch(url, { ...init, headers, cache: 'no-store' });
+    return upstreamToNext(upstream);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'API unreachable';
+    return NextResponse.json({ message: `Gateway error: ${message}` }, { status: 502 });
+  }
 }

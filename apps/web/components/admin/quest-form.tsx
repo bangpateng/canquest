@@ -233,10 +233,17 @@ export function QuestForm({ initialData }: QuestFormProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = (await res.json()) as { id?: string; message?: string };
+
+      let data: { id?: string; message?: string } = {};
+      try {
+        const text = await res.text();
+        data = text ? (JSON.parse(text) as typeof data) : {};
+      } catch {
+        data = {};
+      }
 
       if (!res.ok) {
-        setError((data.message as string | undefined) ?? "Failed to save quest");
+        setError(data.message ?? `Server error (${res.status})`);
         return;
       }
 
