@@ -28,8 +28,8 @@ ExecStart=/usr/bin/ssh \
   -o StrictHostKeyChecking=accept-new \
   -o BatchMode=yes \
   -i /root/.ssh/canton_tunnel \
-  -L 7575:172.18.0.5:7575 \
-  -L 8080:localhost:80 \
+  -L 7575:172.19.0.5:7575 \
+  -L 8080:172.19.0.7:80 \
   root@162.250.191.46
 
 [Install]
