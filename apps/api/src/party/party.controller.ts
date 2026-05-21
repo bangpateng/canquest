@@ -12,10 +12,12 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { AuthGuard } from '@nestjs/passport';
+import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { ConfigService } from '@nestjs/config';
 
 import { CantonLedgerService } from '../canton/canton-ledger.service';
 import { SpliceValidatorService } from '../canton/splice-validator.service';
+import { FeaturedAppActivityService } from '../canton/featured-app-activity.service';
 import { UsersService } from '../users/users.service';
 import { CantonPartyBindingDto } from './dto/canton-party-binding.dto';
 import { SetUsernameDto } from './dto/set-username.dto';
@@ -24,6 +26,7 @@ type AuthedReq = Request & { user: { userId: string; email: string } };
 
 @Controller('party')
 @UseGuards(AuthGuard('jwt'))
+@Throttle({ ledger: { limit: 30, ttl: 60_000 } }) // semua ledger ops: 30/mnt
 export class PartyController {
   private readonly logger = new Logger(PartyController.name);
 
@@ -31,6 +34,7 @@ export class PartyController {
     private readonly users: UsersService,
     private readonly ledger: CantonLedgerService,
     private readonly splice: SpliceValidatorService,
+    private readonly featuredActivity: FeaturedAppActivityService,
     private readonly config: ConfigService,
   ) {}
 
@@ -72,11 +76,19 @@ export class PartyController {
       }
     }
 
-    await this.users.setPartyId(req.user.userId, cantonPartyId, body.username);
+        await this.users.setPartyId(req.user.userId, cantonPartyId, body.username);
+
+    // Emit FeaturedAppActivityMarker for wallet creation
+    // Per Canton Module 4: wallet_created is a meaningful user action
+    // https://docs.canton.network/appdev/modules/m4-featured-app-activity-marker
+    void this.featuredActivity
+      .recordActivity('wallet_created', cantonPartyId, `Wallet created for @${body.username}`)
+      .catch(() => { /* non-critical */ });
 
     // CIP-56 compliance: auto-create TransferPreapproval so the user can receive
     // CC transfers directly without a manual step. This is a best-effort call —
     // the offer/accept flow still works even if preapproval creation fails.
+    // See: https://docs.canton.network/appdev/modules/m7-canton-coin-preapprovals
     let preapprovalActive = false;
     if (spliceOnboarded) {
       // First check if one already exists (e.g. re-generating wallet)
@@ -371,7 +383,7 @@ export class PartyController {
       );
     }
 
-    // Catat riwayat transaksi
+        // Catat riwayat transaksi
     void this.users.recordTransaction({
       userId: sender.id,
       amountCc: amount,
@@ -380,6 +392,15 @@ export class PartyController {
       counterparty: recipientLabel,
       ledgerTxId: offerContractId,
     });
+
+    // Emit FeaturedAppActivityMarker for CC transfer
+    // Per Canton Module 4: cc_transfer is a meaningful user action
+    // https://docs.canton.network/appdev/modules/m4-featured-app-activity-marker
+    if (sender.cantonPartyId) {
+      void this.featuredActivity
+        .recordActivity('cc_transfer', sender.cantonPartyId, `CC transfer ${amount} CC to ${recipientLabel}`)
+        .catch(() => { /* non-critical */ });
+    }
 
     // Catat TRANSFER_IN untuk penerima jika adalah user CanQuest
     const recipientUser = recipientUsername

@@ -10,9 +10,10 @@ import { AdminPanelJwtStrategy } from './strategies/admin-panel-jwt.strategy';
 import { UsersModule } from '../users/users.module';
 import { CantonModule } from '../canton/canton.module';
 import { PrismaModule } from '../prisma/prisma.module';
+import { QueueModule } from '../queue/queue.module';
 
 @Module({
-  imports: [
+    imports: [
     ConfigModule,
     PassportModule.register({}),
     JwtModule.registerAsync({
@@ -26,6 +27,7 @@ import { PrismaModule } from '../prisma/prisma.module';
     UsersModule,
     CantonModule,
     PrismaModule,
+    QueueModule,
   ],
   controllers: [AdminAuthController, AdminController],
   providers: [AdminService, AdminGuard, AdminPanelJwtStrategy],

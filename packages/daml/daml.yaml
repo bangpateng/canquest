@@ -1,9 +1,11 @@
-sdk-version: 3.0.0
+sdk-version: 3.3.0
 name: canquest
 source: daml
-version: 0.0.1
+version: 0.1.0
 dependencies:
   - daml-prim
   - daml-stdlib
 build-options:
   - --target=1.17
+# Canton Network documentation reference:
+# https://docs.canton.network/appdev/modules/m3-building-packaging

@@ -6,7 +6,10 @@ import { randomUUID } from 'crypto';
 /**
  * HTTP client for the Canton JSON Ledger API v2.
  *
- * Docs: https://docs.digitalasset.com/build/3.5/tutorials/json-api/canton_and_the_json_ledger_api.html
+ * Official Canton Network Documentation:
+ *   https://docs.canton.network/appdev/modules/m4-json-api-tutorial
+ *   https://docs.canton.network/appdev/modules/m4-backend-dev
+ *   https://docs.canton.network/appdev/modules/m7-error-handling
  *
  * Setup (VPS 2 → VPS 1 participant):
  *   1. Get participant Docker IP on VPS 1:
@@ -16,10 +19,25 @@ import { randomUUID } from 'crypto';
  *   3. Set env: CANTON_JSON_API_URL=http://127.0.0.1:7575
  *   4. Verify: curl http://127.0.0.1:7575/livez  → HTTP 200
  *
- * Auth: Splice uses hs-256-unsafe in devnet. Set:
+ * JSON Ledger API endpoints used:
+ *   POST /v2/parties                         — allocate a party
+ *   POST /v2/commands/submit-and-wait        — create contracts / exercise choices
+ *   GET  /v2/parties?parties=<id>            — verify a party exists
+ *   POST /v2/users/{userId}/rights           — grant actAs / readAs rights
+ *   GET  /v2/state/ledger-end               — current ledger offset
+ *   POST /v2/state/active-contracts          — query ACS (active contract set)
+ *   GET  /livez                              — health check
+ *
+ * Auth: Splice uses hs-256-unsafe in devnet/testnet. Set:
  *   CANTON_SPLICE_SECRET=unsafe
- *   CANTON_LEDGER_API_AUDIENCE=https://ledger_api.example.com
+ *   CANTON_LEDGER_API_AUDIENCE=https://canton.network.global
  *   CANTON_LEDGER_API_USER=ledger-api-user
+ *
+ * Error handling follows Module 7 patterns:
+ *   - FAILED_PRECONDITION / ABORTED → contention → retry with backoff
+ *   - NOT_FOUND                     → stale contract ID → re-query
+ *   - INVALID_ARGUMENT              → bug in payload → do not retry
+ *   - PERMISSION_DENIED             → missing rights → check party grants
  */
 @Injectable()
 export class CantonLedgerService {
@@ -57,7 +75,13 @@ export class CantonLedgerService {
     return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
   }
 
-  /** Quick health check — returns false if JSON API unreachable (never throws). */
+    /**
+   * Quick health check using the /livez endpoint.
+   * Per Canton docs: http://localhost:7575/livez returns HTTP 200 when the
+   * JSON Ledger API is healthy.
+   * See: https://docs.canton.network/appdev/modules/m4-json-api-tutorial
+   * Never throws — returns false on any error.
+   */
   async isReachable(): Promise<boolean> {
     try {
       const res = await fetch(`${this.baseUrl}/livez`, {
@@ -71,43 +95,101 @@ export class CantonLedgerService {
   }
 
   /**
-   * Submit a command to the Canton JSON Ledger API v2.
+   * Submit a command to the Canton JSON Ledger API v2 with retry on contention.
    *
-   * The correct body format (per docs) is FLAT — commands is a top-level array:
-   * { "commands": [...], "userId": "...", "actAs": [...], ... }
-   * NOT nested like { "commands": { "commands": [...] } }
+   * Command body format per official Canton docs:
+   * {
+   *   "commands": [...],       <- FLAT top-level array (NOT nested)
+   *   "userId": "...",
+   *   "commandId": "uuid",     <- Used for deduplication
+   *   "actAs": [...],
+   *   "readAs": [...]
+   * }
+   *
+   * Error handling per Module 7:
+   *   - 409 FAILED_PRECONDITION/ABORTED (contention) → retry with exponential backoff
+   *   - 404 NOT_FOUND                               → stale contract, do not retry
+   *   - 400 INVALID_ARGUMENT                        → bug in payload, do not retry
+   *   - 403 PERMISSION_DENIED                       → missing rights, do not retry
+   *
+   * Deduplication: each unique operation uses a stable commandId so that if the
+   * same command is submitted twice (e.g. after a timeout), the ledger returns
+   * the original result instead of executing twice.
+   * See: https://docs.canton.network/appdev/modules/m7-error-handling
    */
   private async submitCommand(
     commands: unknown[],
     actAs: string[],
     userId?: string,
+    /** Stable command ID for deduplication. Generates a UUID if not provided. */
+    commandId?: string,
   ): Promise<{ ok: boolean; status: number; text: string }> {
     const url = `${this.baseUrl}/v2/commands/submit-and-wait`;
     const effectiveUserId = userId ?? this.ledgerApiUser;
+    const effectiveCommandId = commandId ?? randomUUID();
 
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: this.authHeaders(effectiveUserId),
-        body: JSON.stringify({
-          commands,
-          userId: effectiveUserId,
-          commandId: randomUUID(),
-          actAs,
-          readAs: actAs,
-        }),
-        signal: AbortSignal.timeout(30_000),
-      });
-      const text = await res.text();
-      return { ok: res.ok, status: res.status, text };
-    } catch (err) {
-      return { ok: false, status: 0, text: String(err) };
+    const MAX_RETRIES = 3;
+    const RETRYABLE_STATUSES = new Set([408, 409, 429, 503]);
+
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: this.authHeaders(effectiveUserId),
+          body: JSON.stringify({
+            commands,
+            userId: effectiveUserId,
+            commandId: effectiveCommandId,
+            actAs,
+            readAs: actAs,
+          }),
+          signal: AbortSignal.timeout(30_000),
+        });
+        const text = await res.text();
+
+        // Success
+        if (res.ok) return { ok: true, status: res.status, text };
+
+        // Contention / transient errors → retry with exponential backoff
+        // Per M7: FAILED_PRECONDITION = contract archived by competing tx
+        if (RETRYABLE_STATUSES.has(res.status) && attempt < MAX_RETRIES - 1) {
+          const delay = Math.pow(2, attempt) * 150; // 150ms, 300ms, 600ms
+          this.logger.warn(
+            `Command contention (attempt ${attempt + 1}/${MAX_RETRIES}) HTTP ${res.status} — retrying in ${delay}ms`,
+          );
+          await sleep(delay);
+          continue;
+        }
+
+        return { ok: false, status: res.status, text };
+      } catch (err) {
+        if (attempt < MAX_RETRIES - 1) {
+          const delay = Math.pow(2, attempt) * 150;
+          this.logger.warn(`Command fetch error (attempt ${attempt + 1}): ${String(err)} — retrying in ${delay}ms`);
+          await sleep(delay);
+          continue;
+        }
+        return { ok: false, status: 0, text: String(err) };
+      }
     }
+
+    return { ok: false, status: 0, text: 'Max retries exceeded' };
   }
 
-
   /**
-   * Exercise a choice on the Canton JSON Ledger API v2.
+   * Exercise a choice on a contract via the Canton JSON Ledger API v2.
+   *
+   * ExerciseCommand body per official docs:
+   * {
+   *   "ExerciseCommand": {
+   *     "templateId": "<packageId>:<ModuleName>:<TemplateName>",
+   *     "contractId": "<contractId>",
+   *     "choice": "<ChoiceName>",
+   *     "choiceArgument": { ... }
+   *   }
+   * }
+   *
+   * See: https://docs.canton.network/appdev/modules/m4-json-api-tutorial
    */
   async exerciseChoice(
     contractId: string,
@@ -115,6 +197,7 @@ export class CantonLedgerService {
     choiceName: string,
     choiceArgument: unknown,
     actAs: string[],
+    commandId?: string,
   ): Promise<{ ok: boolean; status: number; text: string }> {
     return this.submitCommand(
       [
@@ -128,6 +211,8 @@ export class CantonLedgerService {
         },
       ],
       actAs,
+      undefined,
+      commandId,
     );
   }
 
@@ -289,7 +374,7 @@ export class CantonLedgerService {
     return (JSON.parse(text) as { partyDetails: unknown[] }).partyDetails ?? [];
   }
 
-  /** Returns current ledger-end offset. */
+    /** Returns current ledger-end offset. */
   async ledgerEnd(): Promise<unknown> {
     const res = await fetch(`${this.baseUrl}/v2/state/ledger-end`, {
       headers: this.authHeaders(),
@@ -299,4 +384,143 @@ export class CantonLedgerService {
     if (!res.ok) throw new ServiceUnavailableException(`Canton ledger-end ${res.status}`);
     return JSON.parse(text);
   }
+
+  /**
+   * Query the Active Contract Set (ACS) for a specific template.
+   *
+   * Uses POST /v2/state/active-contracts with a WildcardFilter or
+   * IdentifierFilter to find contracts visible to the given parties.
+   *
+   * Per official docs:
+   *   https://docs.canton.network/appdev/modules/m4-json-api-tutorial
+   *
+   * The request body follows the eventFormat / filtersForAnyParty structure:
+   * {
+   *   "eventFormat": {
+   *     "filtersByParty": {},
+   *     "filtersForAnyParty": {
+   *       "cumulative": [
+   *         { "identifierFilter": { "TemplateFilter": { "templateId": "...", ... } } }
+   *       ]
+   *     },
+   *     "verbose": false
+   *   },
+   *   "activeAtOffset": "<completionOffset>"
+   * }
+   *
+   * @param templateId  - e.g. "#canquest:Main:Quest" or full packageId:Module:Template
+   * @param parties     - parties whose visible contracts to query
+   * @param activeAtOffset - ledger offset from a prior completionOffset (optional)
+   */
+  async queryActiveContracts(
+    templateId: string,
+    parties: string[],
+    activeAtOffset?: number | string,
+  ): Promise<unknown[]> {
+    // Get current ledger end to use as activeAtOffset if not specified
+    let offset = activeAtOffset;
+    if (offset === undefined) {
+      try {
+        const end = (await this.ledgerEnd()) as { offset?: number | string };
+        offset = end?.offset ?? 0;
+      } catch {
+        offset = 0;
+      }
+    }
+
+    const filtersByParty: Record<string, unknown> = {};
+    for (const party of parties) {
+      filtersByParty[party] = {
+        cumulative: [
+          {
+            identifierFilter: {
+              TemplateFilter: {
+                templateId,
+                includeCreatedEventBlob: true,
+              },
+            },
+          },
+        ],
+      };
+    }
+
+    const body = {
+      eventFormat: {
+        filtersByParty,
+        filtersForAnyParty: { cumulative: [] },
+        verbose: false,
+      },
+      activeAtOffset: offset,
+    };
+
+    try {
+      const res = await fetch(`${this.baseUrl}/v2/state/active-contracts`, {
+        method: 'POST',
+        headers: this.authHeaders(),
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(15_000),
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        this.logger.warn(`queryActiveContracts ${res.status}: ${text.slice(0, 200)}`);
+        return [];
+      }
+
+      const data = (await res.json()) as unknown[];
+      // The response is an array of contract entries
+      return Array.isArray(data) ? data : [];
+    } catch (err) {
+      this.logger.warn(`queryActiveContracts error: ${String(err)}`);
+      return [];
+    }
+  }
+
+  /**
+   * Create a contract on the Canton ledger.
+   *
+   * CreateCommand body per official docs:
+   * {
+   *   "CreateCommand": {
+   *     "templateId": "<packageId>:<ModuleName>:<TemplateName>",
+   *     "createArguments": { ... }
+   *   }
+   * }
+   *
+   * Returns { ok, contractId, updateId }
+   */
+  async createContract(
+    templateId: string,
+    createArguments: unknown,
+    actAs: string[],
+    commandId?: string,
+  ): Promise<{ ok: boolean; contractId: string | null; updateId: string | null; error?: string }> {
+    const { ok, status, text } = await this.submitCommand(
+      [{ CreateCommand: { templateId, createArguments } }],
+      actAs,
+      undefined,
+      commandId,
+    );
+
+    if (ok) {
+      try {
+        const parsed = JSON.parse(text) as { updateId?: string; contractId?: string };
+        return {
+          ok: true,
+          contractId: parsed.contractId ?? null,
+          updateId: parsed.updateId ?? null,
+        };
+      } catch {
+        return { ok: true, contractId: null, updateId: null };
+      }
+    }
+
+    this.logger.warn(`createContract failed ${status}: ${text.slice(0, 200)}`);
+    return { ok: false, contractId: null, updateId: null, error: text.slice(0, 300) };
+  }
+}
+
+/** Exponential-backoff sleep helper (milliseconds). */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

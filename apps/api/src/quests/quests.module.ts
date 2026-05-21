@@ -5,9 +5,10 @@ import { QuestsService } from './quests.service';
 import { AuthModule } from '../auth/auth.module';
 import { UsersModule } from '../users/users.module';
 import { CantonModule } from '../canton/canton.module';
+import { QueueModule } from '../queue/queue.module';
 
 @Module({
-  imports: [AuthModule, UsersModule, CantonModule, ConfigModule],
+  imports: [AuthModule, UsersModule, CantonModule, ConfigModule, QueueModule],
   controllers: [QuestsController],
   providers: [QuestsService],
   exports: [QuestsService],

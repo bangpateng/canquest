@@ -4,30 +4,43 @@ import * as jwt from 'jsonwebtoken';
 import { randomUUID } from 'crypto';
 
 /**
- * Client for the Splice Validator App REST API (port 5003).
+ * Client for the Splice Validator App REST API.
+ *
+ * Official Canton Network documentation:
+ *   https://docs.canton.network/appdev/modules/m7-canton-coin-preapprovals
+ *   https://docs.canton.network/appdev/modules/m4-canton-coin
  *
  * Responsibilities:
- *   - Onboard a new party as a Splice wallet user so they appear in the
- *     validator explorer and can receive / send CC tokens.
- *   - Accept pending TransferOffer contracts on behalf of a party.
+ *   - Onboard a new party as a Splice wallet user (validator creates the
+ *     Canton Party + registers the user in Splice in a single call).
+ *   - Create / accept TransferOffer contracts for CC reward distribution.
+ *   - Manage TransferPreapproval contracts (CIP-56 compliance).
+ *     A TransferPreapproval allows any sender to transfer CC to the holder
+ *     without the offer/accept round-trip.
+ *     See: https://docs.canton.network/appdev/modules/m7-canton-coin-preapprovals
  *
- * Setup — add an SSH tunnel from your machine (or VPS 2) to VPS 1:
+ * Setup — SSH tunnel from VPS 2 to VPS 1:
  *
- *   # Get validator container Docker IP on VPS 1:
+ *   # Get validator Docker IP on VPS 1:
  *   docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' splice-validator-validator-1
  *
- *   # Open tunnel (keep running in background terminal):
+ *   # Open tunnel:
  *   ssh -N -L 5003:<DOCKER_IP>:5003 root@VPS1_IP
+ *   # Or via nginx reverse proxy on port 8080:
+ *   ssh -N -L 8080:127.0.0.1:80 root@VPS1_IP
  *
  *   # Set in apps/api/.env:
  *   CANTON_VALIDATOR_URL=http://127.0.0.1:5003
+ *   CANTON_VALIDATOR_HOST_HEADER=wallet.localhost   # required when routing through nginx
  *
- * Auth — shared-secret mode (typical for devnet/testnet):
- *   CANTON_SPLICE_SECRET=<the HS256 secret from your validator config>
+ * Auth — hs-256-unsafe shared secret (devnet/testnet):
+ *   CANTON_SPLICE_SECRET=unsafe
+ *   CANTON_SPLICE_AUDIENCE=https://validator.example.com
  *
- *   To find the secret on VPS 1:
- *     docker exec splice-validator-validator-1 env | grep -i secret
- *     # or look in your canton.conf / docker-compose.yaml for "unsafe"
+ * TransferPreapproval lifecycle (per Canton docs):
+ *   1. Created via POST /api/validator/v0/wallet/transfer-preapprovals (as user)
+ *   2. Expires after 90 days — auto-renewed by validator if provider = validator
+ *   3. Cancelled via DELETE /v0/admin/transfer-preapprovals/by-party/{party}
  */
 @Injectable()
 export class SpliceValidatorService {
@@ -244,22 +257,42 @@ export class SpliceValidatorService {
     return tp ? [tp] : [];
   }
 
-  /**
+    /**
    * Check if the Splice validator API is reachable.
-   * Any HTTP response (including 4xx) means the server is up.
+   *
+   * Uses GET /api/validator/v0/readyz — a dedicated health/readiness endpoint
+   * that returns HTTP 200 when the validator is ready to accept requests.
+   * Falls back to the admin users endpoint for older validator versions.
+   *
+   * Any HTTP response (including 4xx/5xx) from the network indicates the
+   * server is reachable (i.e., the TCP connection succeeded).
    */
-    async isReachable(): Promise<boolean> {
+  async isReachable(): Promise<boolean> {
     if (!this.baseUrl) return false;
     try {
-      // Any HTTP response (even 404/401) means nginx+validator is reachable.
-      await fetch(`${this.baseUrl}/api/validator/v0/admin/users`, {
-        method: 'GET',
-        headers: this.authHeaders(),
-        signal: AbortSignal.timeout(4_000),
-      });
+      // Try the readyz health endpoint first (preferred, less auth overhead)
+      const healthRes = await fetch(
+        `${this.baseUrl}/api/validator/v0/readyz`,
+        {
+          method: 'GET',
+          headers: this.baseHeaders(),
+          signal: AbortSignal.timeout(4_000),
+        },
+      );
+      // Any response (200, 401, 404, 503) means the server is reachable
       return true;
     } catch {
-      return false;
+      // Connection refused / timeout — try authenticated endpoint as fallback
+      try {
+        await fetch(`${this.baseUrl}/api/validator/v0/admin/users`, {
+          method: 'GET',
+          headers: this.authHeaders(),
+          signal: AbortSignal.timeout(4_000),
+        });
+        return true;
+      } catch {
+        return false;
+      }
     }
   }
 
@@ -289,10 +322,15 @@ export class SpliceValidatorService {
     const validatorAdminUsername =
       senderUsername ?? this.config.get<string>('CANTON_VALIDATOR_ADMIN_USER') ?? 'administrator';
 
-    // expires_at must be in MICROSECONDS (Unix timestamp × 1_000_000)
-    const expiresAtMicros = BigInt(Date.now()) * 1_000n + 7n * 24n * 3600n * 1_000_000n;
+        // expires_at must be in MICROSECONDS (Unix timestamp × 1_000_000).
+    // Per Canton docs the timestamp is epoch-microseconds as a number.
+    // We compute: (now_ms * 1000) + (7_days_in_microseconds)
+    // Using BigInt throughout to avoid float precision loss at large values.
+    const nowMicros = BigInt(Date.now()) * 1_000n;
+    const sevenDaysMicros = 7n * 24n * 3_600n * 1_000_000n;
+    const expiresAtMicros = nowMicros + sevenDaysMicros;
 
-        const url = `${this.baseUrl}/api/validator/v0/wallet/transfer-offers`;
+    const url = `${this.baseUrl}/api/validator/v0/wallet/transfer-offers`;
 
     try {
       const res = await fetch(url, {
@@ -302,6 +340,8 @@ export class SpliceValidatorService {
           receiver_party_id: receiverPartyId,
           amount: amountCc.toString(),
           description,
+          // Convert BigInt to Number for JSON serialisation.
+          // Safe up to ~9_007_199_254_740_991 microseconds (≈2285 AD).
           expires_at: Number(expiresAtMicros),
           tracking_id: trackingId,
         }),

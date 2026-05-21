@@ -15,6 +15,8 @@ import { QuestStatus } from '@prisma/client';
 import { QuestsService } from './quests.service';
 import { UsersService } from '../users/users.service';
 import { SpliceValidatorService } from '../canton/splice-validator.service';
+import { FeaturedAppActivityService } from '../canton/featured-app-activity.service';
+import { LedgerQueueService } from '../queue/ledger-queue.service';
 
 type AuthedReq = Request & { user: { userId: string; email: string } };
 
@@ -23,10 +25,12 @@ type AuthedReq = Request & { user: { userId: string; email: string } };
 export class QuestsController {
   private readonly logger = new Logger(QuestsController.name);
 
-  constructor(
+    constructor(
     private readonly quests: QuestsService,
     private readonly users: UsersService,
     private readonly splice: SpliceValidatorService,
+    private readonly featuredActivity: FeaturedAppActivityService,
+    private readonly ledgerQueue: LedgerQueueService,
   ) {}
 
     /* ─── Leaderboard ─── */
@@ -108,13 +112,22 @@ export class QuestsController {
       proof: body.proof,
     });
 
-    if (alreadyDone) {
+        if (alreadyDone) {
       return { ok: true, status, message: 'Task already completed' };
     }
 
     // After submitting, check if the whole quest is now complete
     let rewardInfo: { justCompleted: boolean; rewardCc: number } | null = null;
     if (status === 'VERIFIED') {
+      // Emit FeaturedAppActivityMarker for task verification
+      // Per Canton Module 4: each meaningful user action earns app rewards
+      // https://docs.canton.network/appdev/modules/m4-featured-app-activity-marker
+      if (user.cantonPartyId) {
+        void this.featuredActivity
+          .recordActivity('task_verified', user.cantonPartyId, `Task ${taskId} in quest ${questId}`)
+          .catch(() => { /* non-critical */ });
+      }
+
       const { justCompleted, rewardMicroCc } =
         await this.quests.checkAndCompleteQuest({
           userId: user.id,
@@ -128,11 +141,27 @@ export class QuestsController {
           `Sending quest reward: ${rewardCc} CC → ${user.username}`,
         );
 
-        void this.sendQuestReward(user, questId, rewardCc).catch((err: unknown) => {
-          this.logger.warn(
-            `Quest reward transfer failed: ${err instanceof Error ? err.message : String(err)}`,
-          );
-        });
+        // Emit FeaturedAppActivityMarker for quest completion
+        if (user.cantonPartyId) {
+          void this.featuredActivity
+            .recordActivity('quest_completed', user.cantonPartyId, `Quest ${questId} completed`)
+            .catch(() => { /* non-critical */ });
+        }
+
+                // Enqueue ke BullMQ — tidak fire-and-forget lagi
+        // BullMQ akan retry otomatis jika ledger error
+        if (user.username && user.cantonPartyId) {
+          void this.ledgerQueue.enqueueCcReward({
+            userId: user.id,
+            username: user.username,
+            cantonPartyId: user.cantonPartyId,
+            amountCc: rewardCc,
+            description: `Quest reward: ${questId}`,
+            referenceId: questId,
+          }).catch((err: unknown) => {
+            this.logger.warn(`Failed to enqueue CC reward: ${String(err)}`);
+          });
+        }
 
         rewardInfo = { justCompleted: true, rewardCc };
       } else if (justCompleted) {
@@ -149,38 +178,5 @@ export class QuestsController {
     };
   }
 
-  /* ─── Reward helper (async, fire-and-forget) ─── */
-
-  private async sendQuestReward(
-    user: { id: string; username: string | null; cantonPartyId: string | null },
-    questId: string,
-    rewardCc: number,
-  ) {
-    if (!user.username || !user.cantonPartyId) return;
-
-    // Create offer from validator to user (receiver = user's Party ID)
-    const offerContractId = await this.splice.createTransferOffer(
-      user.cantonPartyId,
-      rewardCc,
-      `Quest reward: ${questId}`,
-    );
-
-    if (!offerContractId) {
-      this.logger.warn(`Quest reward offer creation failed for ${user.username}`);
-      return;
-    }
-
-    const accepted = await this.splice.acceptOfferViaWallet(offerContractId, user.username);
-    this.logger.log(
-      `Quest reward ${rewardCc} CC → ${user.username} (accepted: ${String(accepted)})`,
-    );
-
-    // Record CC transaction
-    await this.users.recordTransaction({
-      userId: user.id,
-      amountCc: rewardCc,
-      type: 'QUEST_REWARD',
-      description: `Quest reward: ${questId}`,
-    });
-  }
+    // sendQuestReward dihapus — digantikan oleh LedgerQueueService.enqueueCcReward()
 }

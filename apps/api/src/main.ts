@@ -1,10 +1,27 @@
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import helmet from 'helmet';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const logger = new Logger('Bootstrap');
+  const app = await NestFactory.create(AppModule, {
+    logger: ['log', 'warn', 'error', 'debug'],
+  });
+
+  // ── Security headers (helmet) ─────────────────────────────────────────────
+  // Adds X-DNS-Prefetch-Control, X-Frame-Options, X-Content-Type-Options, etc.
+  app.use(
+    helmet({
+      contentSecurityPolicy: false, // managed by Next.js frontend
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
+
+  // ── Global prefix ─────────────────────────────────────────────────────────
   app.setGlobalPrefix('api');
+
+  // ── Validation ────────────────────────────────────────────────────────────
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -12,13 +29,18 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
+  // ── CORS ──────────────────────────────────────────────────────────────────
   app.enableCors({
     origin: process.env.WEB_ORIGIN?.split(',').filter(Boolean) ?? [
       'http://localhost:3000',
     ],
     credentials: true,
   });
+
   const port = Number(process.env.PORT ?? 3001);
   await app.listen(port);
+  logger.log(`API running on port ${port}`);
+  logger.log(`Environment: ${process.env.NODE_ENV ?? 'development'}`);
 }
 bootstrap();

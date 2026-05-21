@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { resolve } from 'path';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
@@ -8,6 +10,10 @@ import { PartyModule } from './party/party.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { QuestsModule } from './quests/quests.module';
 import { AdminModule } from './admin/admin.module';
+import { SpinModule } from './spin/spin.module';
+import { LedgerIndexerModule } from './ledger-indexer/ledger-indexer.module';
+import { QueueModule } from './queue/queue.module';
+import { throttlerConfig } from './common/throttler.config';
 
 /** Load API env from `apps/api/.env` even when npm workspaces run Nest with cwd at repo root. */
 const resolveApiEnvPaths = (): string[] => [
@@ -21,14 +27,30 @@ const resolveApiEnvPaths = (): string[] => [
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: resolveApiEnvPaths(),
-    }),    PrismaModule,
+    }),
+    // ── Global rate limiting ────────────────────────────────────
+    ThrottlerModule.forRoot(throttlerConfig),
+    // ── Core modules ─────────────────────────────────────────────
+    PrismaModule,
     AuthModule,
     CantonModule,
     PartyModule,
     QuestsModule,
     AdminModule,
+    // ── New modules ─────────────────────────────────────────────
+    QueueModule,
+    SpinModule,
+    LedgerIndexerModule,
   ],
-  controllers: [AppController],
-  providers: [],
+    controllers: [AppController],
+  providers: [
+    // Apply ThrottlerGuard globally — semua endpoint dilindungi rate limit
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}
+
+

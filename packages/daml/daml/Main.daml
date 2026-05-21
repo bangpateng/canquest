@@ -1,6 +1,141 @@
--- | Root module. Replace with real contracts per official DAML / Canton patterns.
+-- | CanQuest Daml smart contracts.
+-- Implements Quest, QuestCompletion, and QuestReward templates following
+-- the official Canton Network app-dev patterns (Module 3 & 4).
+-- See: https://docs.canton.network/appdev/modules/m3-contract-templates
 module Main where
 
--- See README.md for intended module map (User, Quest, Reward, Wallet, Admin, Audit).
+import DA.Time (RelTime, addRelTime, days)
+import DA.Optional (isNone)
 
-data Placeholder = Placeholder
+-- ─── Quest ────────────────────────────────────────────────────────────────────
+-- Created by the App Provider (operator) to represent a quest campaign.
+-- signatory: operator  — only the operator can create/archive quests
+-- observer:  [] initially — users become observers via QuestParticipation
+
+template Quest
+  with
+    operator   : Party       -- App Provider party (signatory)
+    questId    : Text        -- off-chain DB primary key
+    title      : Text
+    rewardCc   : Decimal     -- reward amount in Canton Coin
+    deadline   : Optional Time
+  where
+    signatory operator
+    ensure rewardCc >= 0.0 && title /= ""
+
+    -- Admin choice: close the quest
+    choice Quest_Close : ()
+      controller operator
+      do
+        return ()
+
+-- ─── QuestParticipation ───────────────────────────────────────────────────────
+-- Created when a user starts a quest. Both operator and user are signatories
+-- so neither can unilaterally archive the other's rights (dual-signatory pattern).
+-- Follows: https://docs.canton.network/appdev/modules/m3-design-patterns
+
+template QuestParticipation
+  with
+    operator   : Party
+    user       : Party
+    questId    : Text
+    startedAt  : Time
+  where
+    signatory operator, user
+    key (operator, user, questId) : (Party, Party, Text)
+    maintainer key._1
+
+    -- User submits proof of task completion
+    choice QuestParticipation_SubmitTask : ContractId QuestTaskSubmission
+      with
+        taskId  : Text
+        proof   : Text
+      controller user
+      do
+        now <- getTime
+        create QuestTaskSubmission with
+          operator
+          user
+          questId
+          taskId
+          proof
+          submittedAt = now
+          verified    = False
+
+-- ─── QuestTaskSubmission ─────────────────────────────────────────────────────
+-- On-chain record of a task proof submission.
+-- signatory: operator, user (both parties consent)
+
+template QuestTaskSubmission
+  with
+    operator    : Party
+    user        : Party
+    questId     : Text
+    taskId      : Text
+    proof       : Text
+    submittedAt : Time
+    verified    : Bool
+  where
+    signatory operator, user
+    key (operator, user, questId, taskId) : (Party, Party, Text, Text)
+    maintainer key._1
+
+    -- Operator verifies the submitted proof
+    choice QuestTaskSubmission_Verify : ContractId QuestTaskSubmission
+      controller operator
+      do
+        create this with verified = True
+
+    -- Operator rejects the submission
+    choice QuestTaskSubmission_Reject : ()
+      controller operator
+      do
+        return ()
+
+-- ─── QuestReward ─────────────────────────────────────────────────────────────
+-- Created by operator once all tasks are verified. Implements the
+-- propose-accept pattern for CC reward disbursement.
+-- CIP-56: if the user has a TransferPreapproval, the operator can send CC
+-- directly. This contract is the on-chain record / audit trail.
+-- See: https://docs.canton.network/appdev/modules/m7-canton-coin-preapprovals
+
+template QuestReward
+  with
+    operator    : Party
+    user        : Party
+    questId     : Text
+    rewardCc    : Decimal
+    completedAt : Time
+    claimed     : Bool
+  where
+    signatory operator
+    observer user
+    ensure rewardCc > 0.0
+
+    -- User acknowledges / claims the reward (for audit trail)
+    choice QuestReward_Claim : ContractId QuestReward
+      controller user
+      do
+        create this with claimed = True
+
+    -- Operator archives after CC has been transferred on-chain
+    choice QuestReward_Archive : ()
+      controller operator
+      do
+        return ()
+
+-- ─── CanQuestUserProfile ─────────────────────────────────────────────────────
+-- Optional on-chain user profile. Lets the operator issue a username binding
+-- that both parties acknowledge.
+
+template CanQuestUserProfile
+  with
+    operator  : Party
+    user      : Party
+    username  : Text
+    createdAt : Time
+  where
+    signatory operator, user
+    key (operator, user) : (Party, Party)
+    maintainer key._1
+    ensure username /= ""

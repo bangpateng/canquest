@@ -26,7 +26,7 @@ model User {
   cantonPartyId  String?
   /// Admin flag — set via ADMIN_EMAILS env or manually.
   isAdmin        Boolean         @default(false)
-  createdAt        DateTime          @default(now())
+    createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   refreshTokens    RefreshToken[]
   ccBalance        CcBalance?
@@ -35,6 +35,7 @@ model User {
   questSubmissions QuestSubmission[]
   winnerDraws      WinnerDraw[]
   assignedCodes    InviteCodePool[]
+  spinResults      SpinResult[]
 }
 
 model RefreshToken {
@@ -200,6 +201,61 @@ enum SubmissionStatus {
   PENDING
   VERIFIED
   REJECTED
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SPIN REWARD SYSTEM
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Konfigurasi satu reward item dalam spin pool.
+ * Admin membuat beberapa SpinItem per pool, masing-masing punya rarity & reward.
+ */
+model SpinItem {
+  id          String       @id @default(cuid())
+  /// Label yang ditampilkan ke user
+  label       String
+  /// Tipe reward: 'cc' | 'points' | 'invite_code' | 'none'
+  rewardType  String       @default("none")
+  /// Jumlah CC jika rewardType = 'cc'
+  rewardCc    Float        @default(0)
+  /// Jumlah points jika rewardType = 'points'
+  rewardPoints Int         @default(0)
+  /// Probabilitas dalam persen (0–100), total semua item harus = 100
+  probability Float        @default(0)
+  /// Warna hex untuk slot UI, e.g. '#d4ff3f'
+  color       String       @default("#d4ff3f")
+  /// Icon nama (lucide), e.g. 'coins', 'gift', 'x'
+  icon        String       @default("gift")
+  /// Apakah item ini aktif
+  active      Boolean      @default(true)
+  /// Inventory terbatas (null = unlimited)
+  inventory   Int?
+  /// Sudah berapa kali item ini dimenangkan
+  wonCount    Int          @default(0)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  spinResults SpinResult[]
+}
+
+/**
+ * Hasil satu putaran spin oleh satu user.
+ * Dibuat saat spin terjadi, status PENDING → DELIVERED setelah reward dikirim.
+ */
+model SpinResult {
+  id           String      @id @default(cuid())
+  userId       String
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  spinItemId   String
+  spinItem     SpinItem    @relation(fields: [spinItemId], references: [id])
+  /// Berapa points yang digunakan untuk spin ini
+  pointsSpent  Int         @default(0)
+  /// Status pengiriman reward
+  delivered    Boolean     @default(false)
+  deliveredAt  DateTime?
+  /// Canton ledger TX ID jika reward = CC
+  ledgerTxId   String?
+  createdAt    DateTime    @default(now())
 }
 
 /// Tracks which quests each user has completed.
