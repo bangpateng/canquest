@@ -41,6 +41,8 @@ module.exports = {
       name: 'canquest-api',
       cwd: root,
       script: path.join(apiDir, 'dist/main.js'),
+      // Preload fixes "No driver (HTTP)" when deps live in apps/api/node_modules
+      node_args: `-r ${path.join(apiDir, 'register-module-path.cjs')}`,
       instances: 1,
       exec_mode: 'fork',
       env_production: {
