@@ -5,8 +5,9 @@ const fs = require('fs');
 
 const root = path.resolve(__dirname, '..');
 const apiDir = path.join(root, 'apps/api');
+const rootModules = path.join(root, 'node_modules');
 
-/** Load apps/api/.env into process env for PM2 (PM2 env_file is unreliable on some versions). */
+/** Load apps/api/.env into PM2 env (env_file is unreliable on some PM2 versions). */
 function loadEnvFile(envPath) {
   if (!fs.existsSync(envPath)) return {};
   const out = {};
@@ -34,13 +35,15 @@ module.exports = {
   apps: [
     {
       name: 'canquest-api',
-      // Run from apps/api so Nest ConfigModule + Prisma resolve paths correctly
-      cwd: apiDir,
-      script: 'dist/main.js',
+      // cwd = repo root: npm workspaces hoist deps to ~/canquest/node_modules
+      cwd: root,
+      script: path.join(apiDir, 'dist/main.js'),
       instances: 1,
       exec_mode: 'fork',
       env_production: {
         NODE_ENV: 'production',
+        // Help Node find hoisted workspace packages (@nestjs/platform-express, etc.)
+        NODE_PATH: rootModules,
         ...apiEnv,
       },
       watch: false,
