@@ -17,13 +17,30 @@
 !**/.env.example
 !**/.env.*.example
 
-# infra/env/ — production, staging, devnet env files (NEVER commit these)
+# infra/env/ — real values, VPS copy-paste, references (NEVER commit)
+infra/env/*
+!infra/env/*.example
+infra/env/*COPY*
+infra/env/*VPS*
+infra/env/*.reference
+infra/env/*.txt
 infra/env/*.production
 infra/env/*.staging
 infra/env/*.devnet
 infra/env/*.local
-# Only allow the example/template files
-!infra/env/*.example
+infra/env/*.md
+
+# ─── Infra ops docs (IPs, deploy steps, passwords in notes — local only) ─────
+infra/**/*.md
+work.md
+*.env.md
+
+# ─── Local-only ops scripts (contain VPS IP / tunnel setup) ──────────────────
+infra/vps2-setup-tunnels.sh
+infra/systemd/
+infra/deploy.sh
+infra/redeploy.sh
+infra/cleanup.sh
 
 # ─── SSH / TLS / Keys ────────────────────────────────────────────────────────
 **/*.pem
