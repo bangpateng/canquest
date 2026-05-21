@@ -243,7 +243,7 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
     });
     const fromDb = users
       .map((u) => u.cantonPartyId)
-      .filter((p): p is string => Boolean(p) && !p.startsWith('canquest:'));
+      .filter((p): p is string => typeof p === 'string' && !p.startsWith('canquest:'));
     return [...new Set([...fromEnv, ...fromDb])];
   }
 
