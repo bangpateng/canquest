@@ -22,28 +22,31 @@ git reset --hard origin/master
 echo "    ✓ $(git log -1 --format='%h %s')"
 
 # ───────────────────────────────────────────────────────────────
-echo "==> [2/6] Install ALL API dependencies (clean install)"
-cd "${API_DIR}"
+echo "==> [2/6] Install ALL dependencies dari root (npm workspaces)"
+cd "${APP_DIR}"
 
-# Hapus node_modules sepenuhnya untuk menghindari stale/partial installs
-# yang menyebabkan 'No driver (HTTP)' dan error serupa.
-echo "    Removing old node_modules..."
-rm -rf node_modules
+# Install dari ROOT karena package.json root punya workspaces: ["apps/*"]
+# Semua packages di-hoist ke /var/www/canquest/node_modules/
+# PM2 juga jalan dari root sehingga node bisa resolve packages dengan benar
+echo "    Removing old root node_modules..."
+rm -rf node_modules apps/api/node_modules apps/web/node_modules
 
-# npm install (bukan npm ci) agar toleran terhadap lock file differences
 npm install --legacy-peer-deps
-echo "    ✓ node_modules installed"
+echo "    ✓ node_modules installed ($(ls node_modules | wc -l) packages)"
 
 # ───────────────────────────────────────────────────────────────
 echo "==> [3/6] Prisma generate + sync database schema"
+cd "${API_DIR}"
 npx prisma generate
 npx prisma db push --accept-data-loss
 echo "    ✓ Database schema synced"
+cd "${APP_DIR}"
 
 # ───────────────────────────────────────────────────────────────
 echo "==> [4/6] Build NestJS API"
+cd "${API_DIR}"
 npm run build
-echo "    ✓ Build complete"
+echo "    ✓ Build complete: $(ls dist/main.js)"
 cd "${APP_DIR}"
 
 # ───────────────────────────────────────────────────────────────

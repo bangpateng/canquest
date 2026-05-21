@@ -3,9 +3,9 @@
 module.exports = {
   apps: [
     {
-      name: 'canquest-api',
-      cwd: '/var/www/canquest/apps/api',
-      script: 'dist/main.js',
+            name: 'canquest-api',
+      cwd: '/var/www/canquest',
+      script: 'apps/api/dist/main.js',
       instances: 1,
       exec_mode: 'fork',
       env_production: {
