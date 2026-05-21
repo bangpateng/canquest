@@ -16,7 +16,7 @@
     "lint:web": "npm run lint -w web",
     "lint:api": "npm run lint -w api",
     "db:generate": "npm run prisma:generate -w api",
-    "postinstall": "npm run db:generate",
+    "postinstall": "node scripts/postinstall.cjs",
     "db:migrate": "npm run prisma:migrate -w api",
     "clean:web": "npm run clean -w web",
     "dev:fresh:web": "npm run dev:fresh -w web"
