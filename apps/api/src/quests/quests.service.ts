@@ -39,7 +39,7 @@ export class QuestsService {
 
   async listQuests(status?: QuestStatus) {
     const quests = await this.prisma.quest.findMany({
-      where: status ? { status: status as string } : undefined,
+      where: status ? { status } : undefined,
       include: { tasks: { orderBy: { order: 'asc' } } },
       orderBy: { createdAt: 'desc' },
     });
@@ -210,7 +210,7 @@ export class QuestsService {
         rewardCc: data.rewardCc,
         rewardPool: data.rewardPool ?? `${data.rewardCc} CC`,
         deadline: data.deadline ?? null,
-                status: (data.status ?? QuestStatus.ACTIVE) as string,
+        status: data.status ?? QuestStatus.ACTIVE,
         tags: tagsJson,
       },
       update: {
@@ -222,7 +222,7 @@ export class QuestsService {
         rewardCc: data.rewardCc,
         rewardPool: data.rewardPool ?? `${data.rewardCc} CC`,
         deadline: data.deadline ?? null,
-        status: (data.status ?? QuestStatus.ACTIVE) as string,
+        status: data.status ?? QuestStatus.ACTIVE,
         tags: tagsJson,
       },
     });

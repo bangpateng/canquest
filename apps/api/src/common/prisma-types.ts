@@ -1,24 +1,20 @@
 /**
- * String literal types menggantikan Prisma enum imports.
- * Dibuat karena npm workspaces meng-hoist @prisma/client ke root node_modules
- * sehingga enum tidak selalu tersedia saat kompilasi di sub-package.
- * Nilai ini harus sinkron dengan prisma/schema.prisma.
+ * String literal types — must match prisma/schema.prisma enums exactly.
+ * Used instead of @prisma/client enum imports for reliable builds in npm workspaces.
  */
 
-export type QuestStatus = 'ACTIVE' | 'COMPLETED' | 'DRAFT' | 'ARCHIVED';
+export type QuestStatus = 'ACTIVE' | 'COMING_SOON' | 'ENDED';
 export const QuestStatus = {
   ACTIVE: 'ACTIVE' as QuestStatus,
-  COMPLETED: 'COMPLETED' as QuestStatus,
-  DRAFT: 'DRAFT' as QuestStatus,
-  ARCHIVED: 'ARCHIVED' as QuestStatus,
+  COMING_SOON: 'COMING_SOON' as QuestStatus,
+  ENDED: 'ENDED' as QuestStatus,
 };
 
-export type RewardType = 'CC_ONLY' | 'INVITE_CODE' | 'CC_AND_INVITE' | 'NONE';
+export type RewardType = 'CC_ONLY' | 'INVITE_CODE' | 'CC_AND_INVITE';
 export const RewardType = {
   CC_ONLY: 'CC_ONLY' as RewardType,
   INVITE_CODE: 'INVITE_CODE' as RewardType,
   CC_AND_INVITE: 'CC_AND_INVITE' as RewardType,
-  NONE: 'NONE' as RewardType,
 };
 
 export type SubmissionStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';

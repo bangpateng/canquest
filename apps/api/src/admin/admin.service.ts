@@ -85,8 +85,8 @@ export class AdminService {
         rewardCc: data.rewardCc ?? 0,
         rewardPool: data.rewardPool ?? (data.rewardCc ? `${data.rewardCc} CC` : 'TBD'),
         deadline: data.deadline ?? null,
-                status: (data.status ?? QuestStatus.ACTIVE) as string,
-        rewardType: (data.rewardType ?? RewardType.CC_ONLY) as string,
+        status: data.status ?? QuestStatus.ACTIVE,
+        rewardType: data.rewardType ?? RewardType.CC_ONLY,
         maxWinners: data.maxWinners ?? null,
         tags: JSON.stringify(data.tags ?? []),
         tasks: data.tasks
