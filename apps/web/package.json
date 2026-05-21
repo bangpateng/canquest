@@ -5,9 +5,9 @@
   "scripts": {
     "clean": "node -e \"try{require('fs').rmSync(require('path').join(process.cwd(),'.next'),{recursive:true,force:true});}catch(e){process.exitCode=0;}\"",
     "dev:fresh": "npm run clean && npm run dev",
-    "dev": "cross-env NODE_OPTIONS=--max-old-space-size=3072 NEXT_TELEMETRY_DISABLED=1 next dev",
-    "dev:lite": "cross-env NODE_OPTIONS=--max-old-space-size=1536 NEXT_TELEMETRY_DISABLED=1 next dev",
-    "dev:ia32": "cross-env NODE_OPTIONS=--max-old-space-size=768 NEXT_TELEMETRY_DISABLED=1 next dev",
+    "dev": "npx cross-env NODE_OPTIONS=--max-old-space-size=3072 NEXT_TELEMETRY_DISABLED=1 next dev",
+    "dev:lite": "npx cross-env NODE_OPTIONS=--max-old-space-size=1536 NEXT_TELEMETRY_DISABLED=1 next dev",
+    "dev:ia32": "npx cross-env NODE_OPTIONS=--max-old-space-size=768 NEXT_TELEMETRY_DISABLED=1 next dev",
     "preview": "cross-env NEXT_TELEMETRY_DISABLED=1 next build && next start -p 3000",
     "build": "next build",
     "start": "next start",

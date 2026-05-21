@@ -18,6 +18,7 @@ import { ConfigService } from '@nestjs/config';
 import { CantonLedgerService } from '../canton/canton-ledger.service';
 import { SpliceValidatorService } from '../canton/splice-validator.service';
 import { FeaturedAppActivityService } from '../canton/featured-app-activity.service';
+import { CcInboundSyncService } from '../canton/cc-inbound-sync.service';
 import { UsersService } from '../users/users.service';
 import { CantonPartyBindingDto } from './dto/canton-party-binding.dto';
 import { SetUsernameDto } from './dto/set-username.dto';
@@ -35,6 +36,7 @@ export class PartyController {
     private readonly ledger: CantonLedgerService,
     private readonly splice: SpliceValidatorService,
     private readonly featuredActivity: FeaturedAppActivityService,
+    private readonly inboundSync: CcInboundSyncService,
     private readonly config: ConfigService,
   ) {}
 
@@ -96,7 +98,7 @@ export class PartyController {
       if (existing) {
         preapprovalActive = true;
       } else {
-        preapprovalActive = await this.splice.createTransferPreapproval(body.username);
+        preapprovalActive = (await this.splice.createTransferPreapproval(body.username)).ok;
       }
     }
 
@@ -134,6 +136,57 @@ export class PartyController {
    *   3. Approve the transaction — this burns a small CC fee ($1/year)
    *   4. After that, all incoming CC transfers go through automatically
    */
+  /**
+   * Aktifkan / perbarui TransferPreapproval (CIP-56) untuk user yang login.
+   * Wajib untuk Opsi B: terima CC langsung dari wallet validator tanpa Accept manual.
+   */
+  @Post('ensure-preapproval')
+  async ensurePreapproval(@Req() req: AuthedReq) {
+    const user = await this.users.findById(req.user.userId);
+    if (!user?.username || !user.cantonPartyId) {
+      throw new BadRequestException('Buat wallet dulu dari halaman Wallet.');
+    }
+    if (user.cantonPartyId.startsWith('canquest:')) {
+      throw new BadRequestException(
+        'Party ID masih placeholder. Jalankan POST /party/allocate saat tunnel Splice aktif.',
+      );
+    }
+
+    const existing = await this.splice.hasTransferPreapproval(user.cantonPartyId);
+    if (existing) {
+      return {
+        active: true,
+        partyId: user.cantonPartyId,
+        username: user.username,
+        message: 'TransferPreapproval sudah aktif (CIP-56).',
+      };
+    }
+
+    const created = await this.splice.createTransferPreapproval(user.username);
+    if (!created.ok) {
+      const balance = await this.splice.getUserBalance(user.username);
+      const hint =
+        balance === null || balance <= 0
+          ? ' User perlu saldo CC minimal untuk biaya preapproval (~$1/tahun). Fund dulu dari wallet validator.'
+          : '';
+      throw new BadRequestException(
+        (created.detail ?? 'Gagal membuat TransferPreapproval.') + hint,
+      );
+    }
+
+    void this.featuredActivity
+      .recordActivity('wallet_created', user.cantonPartyId, `Preapproval enabled for @${user.username}`)
+      .catch(() => {});
+
+    return {
+      active: true,
+      partyId: user.cantonPartyId,
+      username: user.username,
+      message:
+        'TransferPreapproval aktif — CC dari wallet validator bisa masuk langsung (Opsi B / CIP-56).',
+    };
+  }
+
   @Get('preapproval-status')
   async preapprovalStatus(@Req() req: AuthedReq) {
     const user = await this.users.findById(req.user.userId);
@@ -184,7 +237,7 @@ export class PartyController {
     if (splicePartyId) {
       await this.users.setPartyId(req.user.userId, splicePartyId, user.username ?? undefined);
       // CIP-56: ensure TransferPreapproval exists for this user
-      const preapprovalActive = await this.splice.createTransferPreapproval(username);
+      const preapprovalActive = (await this.splice.createTransferPreapproval(username)).ok;
       return {
         cantonPartyId: splicePartyId,
         isPlaceholder: false,
@@ -230,6 +283,7 @@ export class PartyController {
     if (!user?.username) {
       return { balance: null, message: 'No wallet found. Create your wallet first.' };
     }
+    await this.inboundSync.syncUser(user.id, user.username, user.cantonPartyId);
     const balance = await this.splice.getUserBalance(user.username);
     return { username: user.username, balance, unit: 'CC' };
   }
@@ -402,10 +456,13 @@ export class PartyController {
         .catch(() => { /* non-critical */ });
     }
 
-    // Catat TRANSFER_IN untuk penerima jika adalah user CanQuest
-    const recipientUser = recipientUsername
-      ? await this.users.findByUsername(recipientUsername)
+    // Catat TRANSFER_IN untuk penerima jika terdaftar di CanQuest (username atau party ID)
+    let recipientUser = recipientUsername
+      ? await this.users.findByUsernameInsensitive(recipientUsername)
       : null;
+    if (!recipientUser) {
+      recipientUser = await this.users.findByPartyId(recipientPartyId);
+    }
     if (recipientUser) {
       void this.users.recordTransaction({
         userId: recipientUser.id,
@@ -415,6 +472,15 @@ export class PartyController {
         counterparty: `@${sender.username}`,
         ledgerTxId: offerContractId,
       });
+      if (recipientUser.username) {
+        void this.inboundSync.alignBalanceFromChain(
+          recipientUser.id,
+          recipientUser.username,
+        );
+      }
+    }
+    if (sender.username) {
+      void this.inboundSync.alignBalanceFromChain(sender.id, sender.username);
     }
 
     // ── Step 2: Platform fee sender → validator (async, tidak memblokir respons) ─
@@ -464,6 +530,9 @@ export class PartyController {
   ) {
     const user = await this.users.findById(req.user.userId);
     if (!user) throw new BadRequestException('User not found.');
+    if (user.username) {
+      await this.inboundSync.syncUser(user.id, user.username, user.cantonPartyId);
+    }
     const p = Math.max(1, parseInt(page ?? '1', 10) || 1);
     const ps = Math.min(20, Math.max(1, parseInt(pageSize ?? '5', 10) || 5));
     return this.users.getTransactions(user.id, p, ps);

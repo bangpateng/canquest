@@ -120,9 +120,12 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async fetchAndProcessUpdates(): Promise<void> {
+    const parties = await this.resolveWatchParties();
+    if (parties.length === 0) return;
+
     // Build filtersByParty untuk semua watched parties
     const filtersByParty: Record<string, unknown> = {};
-    for (const party of this.watchParties) {
+    for (const party of parties) {
       filtersByParty[party] = {
         cumulative: [
           {
@@ -229,6 +232,19 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
 
       this.logger.debug(`Indexed TransferOffer archived: ${contractId.slice(0, 16)}… updateId=${updateId}`);
     }
+  }
+
+  /** Env parties + semua cantonPartyId user CanQuest (non-placeholder). */
+  private async resolveWatchParties(): Promise<string[]> {
+    const fromEnv = this.watchParties;
+    const users = await this.prisma.user.findMany({
+      where: { cantonPartyId: { not: null } },
+      select: { cantonPartyId: true },
+    });
+    const fromDb = users
+      .map((u) => u.cantonPartyId)
+      .filter((p): p is string => Boolean(p) && !p.startsWith('canquest:'));
+    return [...new Set([...fromEnv, ...fromDb])];
   }
 
   /** Status indexer untuk health check endpoint. */

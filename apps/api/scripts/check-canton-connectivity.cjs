@@ -42,9 +42,12 @@ async function checkValidatorApi() {
     { algorithm: 'HS256', expiresIn: '5m' },
   );
 
+  const host = process.env.CANTON_VALIDATOR_HOST_HEADER ?? 'wallet.localhost';
+  const headers = { Authorization: `Bearer ${token}`, Host: host };
+
   try {
     const res = await fetch(`${baseUrl}/api/validator/v0/admin/users`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers,
       signal: AbortSignal.timeout(5000),
     });
     if (res.ok || res.status === 401 || res.status === 403) {

@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { PrismaModule } from '../prisma/prisma.module';
 import { CantonLedgerService } from './canton-ledger.service';
 import { SpliceValidatorService } from './splice-validator.service';
 import { FeaturedAppActivityService } from './featured-app-activity.service';
+import { CcInboundSyncService } from './cc-inbound-sync.service';
 
 /**
  * CantonModule wires together:
@@ -13,15 +16,18 @@ import { FeaturedAppActivityService } from './featured-app-activity.service';
  *   https://docs.canton.network/appdev/modules/m4-app-architecture
  */
 @Module({
+  imports: [PrismaModule, ConfigModule],
   providers: [
     CantonLedgerService,
     SpliceValidatorService,
     FeaturedAppActivityService,
+    CcInboundSyncService,
   ],
   exports: [
     CantonLedgerService,
     SpliceValidatorService,
     FeaturedAppActivityService,
+    CcInboundSyncService,
   ],
 })
 export class CantonModule {}

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { CopyField } from "@/components/app/copy-field";
 import { WalletActions } from "@/components/app/wallet-actions";
+import { WalletPreapprovalBanner } from "@/components/app/wallet-preapproval-banner";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -136,6 +137,8 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
           </p>
         )}
       </div>
+
+      <WalletPreapprovalBanner onActivated={handleBalanceRefresh} />
 
       {/* Send / Receive */}
       <WalletActions partyId={me.cantonPartyId ?? ""} onBalanceRefresh={handleBalanceRefresh} />

@@ -19,6 +19,13 @@ export class UsersService {
     return this.prisma.user.findUnique({ where: { username } });
   }
 
+  /** Case-insensitive username lookup (Send CC / party resolve). */
+  findByUsernameInsensitive(username: string) {
+    return this.prisma.user.findFirst({
+      where: { username: { equals: username, mode: 'insensitive' } },
+    });
+  }
+
   findByPartyId(cantonPartyId: string) {
     return this.prisma.user.findFirst({ where: { cantonPartyId } });
   }

@@ -38,7 +38,7 @@ import { randomUUID } from 'crypto';
  *   CANTON_SPLICE_AUDIENCE=https://validator.example.com
  *
  * TransferPreapproval lifecycle (per Canton docs):
- *   1. Created via POST /api/validator/v0/wallet/transfer-preapprovals (as user)
+ *   1. Created via POST /api/validator/v0/wallet/transfer-preapproval (as user; singular path)
  *   2. Expires after 90 days — auto-renewed by validator if provider = validator
  *   3. Cancelled via DELETE /v0/admin/transfer-preapprovals/by-party/{party}
  */
@@ -416,18 +416,22 @@ export class SpliceValidatorService {
    * consents to receiving direct CC transfers. Without it, every incoming transfer
    * still requires an explicit offer/accept round-trip.
    *
-   * POST /api/validator/v0/wallet/transfer-preapprovals  (authenticated as the user)
+   * POST /api/validator/v0/wallet/transfer-preapproval  (authenticated as the user)
    *
    * This is called automatically when a user creates their wallet so they are
    * immediately ready to receive CC transfers without any manual step.
    *
    * Returns true if created (or already exists), false on failure.
    */
-  async createTransferPreapproval(username: string): Promise<boolean> {
-    if (!this.isConfigured) return false;
-        try {
+  async createTransferPreapproval(
+    username: string,
+  ): Promise<{ ok: boolean; status?: number; detail?: string }> {
+    if (!this.isConfigured) {
+      return { ok: false, detail: 'CANTON_VALIDATOR_URL atau CANTON_SPLICE_SECRET belum di-set.' };
+    }
+    try {
       const res = await fetch(
-        `${this.baseUrl}/api/validator/v0/wallet/transfer-preapprovals`,
+        `${this.baseUrl}/api/validator/v0/wallet/transfer-preapproval`,
         {
           method: 'POST',
           headers: this.jsonAuthHeaders(username),
@@ -439,20 +443,35 @@ export class SpliceValidatorService {
 
       if (res.ok) {
         this.logger.log(`TransferPreapproval created for @${username} (CIP-56)`);
-        return true;
+        return { ok: true, status: res.status };
       }
 
       // 409 = already exists — that's fine, user is already CIP-56 compliant
       if (res.status === 409) {
         this.logger.log(`TransferPreapproval already active for @${username}`);
-        return true;
+        return { ok: true, status: 409 };
       }
 
+      let detail = text.slice(0, 300);
+      if (res.status === 404) {
+        detail =
+          'Endpoint preapproval tidak ditemukan di validator (versi Splice?). Buat lewat Splice Wallet UI.';
+      } else if (res.status === 401 || res.status === 403) {
+        detail =
+          'Auth Splice gagal — untuk DevNet set CANTON_SPLICE_AUDIENCE=https://validator.example.com';
+      }
       this.logger.warn(`createTransferPreapproval ${res.status} for @${username}: ${text.slice(0, 200)}`);
-      return false;
+      return { ok: false, status: res.status, detail };
     } catch (err) {
-      this.logger.warn(`createTransferPreapproval error for @${username}: ${String(err)}`);
-      return false;
+      const msg = String(err);
+      this.logger.warn(`createTransferPreapproval error for @${username}: ${msg}`);
+      return {
+        ok: false,
+        detail:
+          msg.includes('ECONNREFUSED') || msg.includes('fetch failed')
+            ? 'Tidak bisa hubungi Splice (port 8080). Jalankan SSH tunnel ke node validator.'
+            : msg,
+      };
     }
   }
 
