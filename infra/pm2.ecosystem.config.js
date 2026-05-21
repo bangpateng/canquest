@@ -1,23 +1,48 @@
 // VPS 2 — runs NestJS API only.
 // Next.js web is on Vercel (auto-deployed on git push).
-// Paths resolve from repo root so this works whether the app lives in
-// /root/canquest, /var/www/canquest, or elsewhere.
 const path = require('path');
+const fs = require('fs');
 
 const root = path.resolve(__dirname, '..');
+const apiDir = path.join(root, 'apps/api');
+
+/** Load apps/api/.env into process env for PM2 (PM2 env_file is unreliable on some versions). */
+function loadEnvFile(envPath) {
+  if (!fs.existsSync(envPath)) return {};
+  const out = {};
+  for (const line of fs.readFileSync(envPath, 'utf8').split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq === -1) continue;
+    const key = trimmed.slice(0, eq).trim();
+    let val = trimmed.slice(eq + 1).trim();
+    if (
+      (val.startsWith('"') && val.endsWith('"')) ||
+      (val.startsWith("'") && val.endsWith("'"))
+    ) {
+      val = val.slice(1, -1);
+    }
+    out[key] = val;
+  }
+  return out;
+}
+
+const apiEnv = loadEnvFile(path.join(apiDir, '.env'));
 
 module.exports = {
   apps: [
     {
       name: 'canquest-api',
-      cwd: root,
-      script: path.join(root, 'apps/api/dist/main.js'),
+      // Run from apps/api so Nest ConfigModule + Prisma resolve paths correctly
+      cwd: apiDir,
+      script: 'dist/main.js',
       instances: 1,
       exec_mode: 'fork',
       env_production: {
         NODE_ENV: 'production',
+        ...apiEnv,
       },
-      env_file: path.join(root, 'apps/api/.env'),
       watch: false,
       max_memory_restart: '512M',
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
