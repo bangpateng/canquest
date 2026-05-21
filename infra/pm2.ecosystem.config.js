@@ -5,7 +5,6 @@ const fs = require('fs');
 
 const root = path.resolve(__dirname, '..');
 const apiDir = path.join(root, 'apps/api');
-const rootModules = path.join(root, 'node_modules');
 
 /** Load apps/api/.env into PM2 env (env_file is unreliable on some PM2 versions). */
 function loadEnvFile(envPath) {
@@ -31,19 +30,22 @@ function loadEnvFile(envPath) {
 
 const apiEnv = loadEnvFile(path.join(apiDir, '.env'));
 
+// npm workspaces installs api deps under apps/api/node_modules (not always at repo root)
+const nodePath = [path.join(root, 'node_modules'), path.join(apiDir, 'node_modules')]
+  .filter((p) => fs.existsSync(p))
+  .join(path.delimiter);
+
 module.exports = {
   apps: [
     {
       name: 'canquest-api',
-      // cwd = repo root: npm workspaces hoist deps to ~/canquest/node_modules
       cwd: root,
       script: path.join(apiDir, 'dist/main.js'),
       instances: 1,
       exec_mode: 'fork',
       env_production: {
         NODE_ENV: 'production',
-        // Help Node find hoisted workspace packages (@nestjs/platform-express, etc.)
-        NODE_PATH: rootModules,
+        NODE_PATH: nodePath,
         ...apiEnv,
       },
       watch: false,
