@@ -69,13 +69,22 @@ export default async function AdminPage() {
             Manage quests, winners, and reward distribution
           </p>
         </div>
-        <Link
-          href="/admin/quests/new"
-          className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-[var(--primary-foreground)] transition-opacity hover:opacity-90"
-        >
-          <Plus className="h-4 w-4" />
-          New Quest
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/admin/users"
+            className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-semibold transition-colors hover:bg-[var(--muted)]"
+          >
+            <Users className="h-4 w-4" />
+            Manage Users
+          </Link>
+          <Link
+            href="/admin/quests/new"
+            className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-[var(--primary-foreground)] transition-opacity hover:opacity-90"
+          >
+            <Plus className="h-4 w-4" />
+            New Quest
+          </Link>
+        </div>
       </div>
 
       {/* Stats */}

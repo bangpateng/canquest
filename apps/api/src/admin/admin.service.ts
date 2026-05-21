@@ -1,9 +1,11 @@
 import {
+  BadRequestException,
   Injectable,
   Logger,
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { QuestStatus, RewardType, SubmissionStatus } from '../common/prisma-types';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -18,6 +20,7 @@ export class AdminService {
     private readonly prisma: PrismaService,
     private readonly splice: SpliceValidatorService,
     private readonly users: UsersService,
+    private readonly config: ConfigService,
   ) {}
 
   /* ────────────────────────────────────────────────────────
@@ -525,10 +528,22 @@ export class AdminService {
      USER MANAGEMENT
   ──────────────────────────────────────────────────────── */
 
-  async listUsers(page = 1, pageSize = 20) {
+  async listUsers(page = 1, pageSize = 20, search?: string) {
     const skip = (page - 1) * pageSize;
+    const q = search?.trim();
+    const where = q
+      ? {
+          OR: [
+            { email: { contains: q, mode: 'insensitive' as const } },
+            { username: { contains: q, mode: 'insensitive' as const } },
+            { displayName: { contains: q, mode: 'insensitive' as const } },
+          ],
+        }
+      : undefined;
+
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
+        where,
         skip,
         take: pageSize,
         orderBy: { createdAt: 'desc' },
@@ -541,12 +556,23 @@ export class AdminService {
           isAdmin: true,
           emailVerified: true,
           createdAt: true,
+          ccBalance: { select: { balanceMicroCc: true } },
           _count: { select: { questCompletions: true } },
         },
       }),
-      this.prisma.user.count(),
+      this.prisma.user.count({ where }),
     ]);
-    return { users, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
+    return {
+      users: users.map((u) => ({
+        ...u,
+        balanceMicroCc: u.ccBalance?.balanceMicroCc?.toString() ?? '0',
+        ccBalance: undefined,
+      })),
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
   }
 
   async setAdmin(userId: string, isAdmin: boolean) {
@@ -555,6 +581,76 @@ export class AdminService {
       data: { isAdmin },
       select: { id: true, email: true, isAdmin: true },
     });
+  }
+
+  /** Delete one or more app users (DB only — does not remove Canton party on-chain). */
+  async deleteUsers(userIds: string[]) {
+    const ids = [...new Set(userIds.map((id) => id.trim()).filter(Boolean))];
+    if (ids.length === 0) {
+      throw new BadRequestException('No user IDs provided');
+    }
+
+    const protectedEmails = this.getProtectedAdminEmails();
+    const found = await this.prisma.user.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, email: true, isAdmin: true },
+    });
+
+    const missing = ids.filter((id) => !found.some((u) => u.id === id));
+    const blocked = found.filter(
+      (u) =>
+        u.isAdmin ||
+        protectedEmails.has(u.email.toLowerCase()),
+    );
+    const toDelete = found.filter(
+      (u) =>
+        !u.isAdmin &&
+        !protectedEmails.has(u.email.toLowerCase()),
+    );
+
+    if (toDelete.length === 0) {
+      throw new BadRequestException(
+        blocked.length > 0
+          ? 'Cannot delete admin accounts'
+          : 'No matching users to delete',
+      );
+    }
+
+    const deleteIds = toDelete.map((u) => u.id);
+
+    await this.prisma.inviteCodePool.updateMany({
+      where: { userId: { in: deleteIds } },
+      data: { userId: null, assignedAt: null },
+    });
+
+    const result = await this.prisma.user.deleteMany({
+      where: { id: { in: deleteIds } },
+    });
+
+    for (const u of toDelete) {
+      this.logger.warn(`Deleted user ${u.email} (${u.id})`);
+    }
+
+    return {
+      deleted: result.count,
+      blocked: blocked.map((u) => ({ id: u.id, email: u.email, reason: 'admin' })),
+      notFound: missing,
+    };
+  }
+
+  private getProtectedAdminEmails(): Set<string> {
+    const raw =
+      this.config.get<string>('ADMIN_EMAILS') ??
+      process.env.ADMIN_EMAILS ??
+      '';
+    const panel =
+      this.config.get<string>('ADMIN_PANEL_EMAIL') ??
+      process.env.ADMIN_PANEL_EMAIL ??
+      '';
+    const emails = [...raw.split(','), panel]
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean);
+    return new Set(emails);
   }
 
   /* ────────────────────────────────────────────────────────

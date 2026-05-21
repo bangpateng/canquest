@@ -199,8 +199,23 @@ export class AdminController {
   listUsers(
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
+    @Query('q') q?: string,
   ) {
-    return this.admin.listUsers(Number(page ?? 1), Number(pageSize ?? 20));
+    return this.admin.listUsers(
+      Number(page ?? 1),
+      Number(pageSize ?? 20),
+      q,
+    );
+  }
+
+  @Delete('users/:userId')
+  deleteUser(@Param('userId') userId: string) {
+    return this.admin.deleteUsers([userId]);
+  }
+
+  @Post('users/delete-bulk')
+  deleteUsersBulk(@Body() body: { userIds: string[] }) {
+    return this.admin.deleteUsers(body.userIds ?? []);
   }
 
   @Patch('users/:userId/admin')

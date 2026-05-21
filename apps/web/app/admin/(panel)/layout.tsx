@@ -53,6 +53,18 @@ export default async function AdminPanelLayout({ children }: { children: ReactNo
             </span>
           </div>
           <nav className="flex shrink-0 items-center gap-4">
+            <Link
+              href="/admin"
+              className="text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+            >
+              Dashboard
+            </Link>
+            <Link
+              href="/admin/users"
+              className="text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+            >
+              Users
+            </Link>
             <LogoutButton />
             <Link
               href="/login"
