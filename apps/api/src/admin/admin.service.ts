@@ -4,7 +4,7 @@ import {
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
-import { QuestStatus, RewardType, SubmissionStatus } from '@prisma/client';
+import { QuestStatus, RewardType, SubmissionStatus } from '../common/prisma-types';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { SpliceValidatorService } from '../canton/splice-validator.service';
@@ -85,8 +85,8 @@ export class AdminService {
         rewardCc: data.rewardCc ?? 0,
         rewardPool: data.rewardPool ?? (data.rewardCc ? `${data.rewardCc} CC` : 'TBD'),
         deadline: data.deadline ?? null,
-        status: data.status ?? QuestStatus.ACTIVE,
-        rewardType: data.rewardType ?? RewardType.CC_ONLY,
+                status: (data.status ?? QuestStatus.ACTIVE) as string,
+        rewardType: (data.rewardType ?? RewardType.CC_ONLY) as string,
         maxWinners: data.maxWinners ?? null,
         tags: JSON.stringify(data.tags ?? []),
         tasks: data.tasks

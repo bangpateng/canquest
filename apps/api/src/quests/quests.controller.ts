@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { AuthGuard } from '@nestjs/passport';
-import { QuestStatus } from '@prisma/client';
+import { QuestStatus } from '../common/prisma-types';
 import { QuestsService } from './quests.service';
 import { UsersService } from '../users/users.service';
 import { SpliceValidatorService } from '../canton/splice-validator.service';

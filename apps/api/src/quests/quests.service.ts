@@ -4,7 +4,7 @@ import {
   ConflictException,
   Logger,
 } from '@nestjs/common';
-import { QuestStatus, SubmissionStatus } from '@prisma/client';
+import { QuestStatus, SubmissionStatus } from '../common/prisma-types';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface LeaderboardRow {
@@ -39,7 +39,7 @@ export class QuestsService {
 
   async listQuests(status?: QuestStatus) {
     const quests = await this.prisma.quest.findMany({
-      where: status ? { status } : undefined,
+      where: status ? { status: status as string } : undefined,
       include: { tasks: { orderBy: { order: 'asc' } } },
       orderBy: { createdAt: 'desc' },
     });
@@ -210,7 +210,7 @@ export class QuestsService {
         rewardCc: data.rewardCc,
         rewardPool: data.rewardPool ?? `${data.rewardCc} CC`,
         deadline: data.deadline ?? null,
-        status: data.status ?? QuestStatus.ACTIVE,
+                status: (data.status ?? QuestStatus.ACTIVE) as string,
         tags: tagsJson,
       },
       update: {
@@ -222,7 +222,7 @@ export class QuestsService {
         rewardCc: data.rewardCc,
         rewardPool: data.rewardPool ?? `${data.rewardCc} CC`,
         deadline: data.deadline ?? null,
-        status: data.status ?? QuestStatus.ACTIVE,
+        status: (data.status ?? QuestStatus.ACTIVE) as string,
         tags: tagsJson,
       },
     });

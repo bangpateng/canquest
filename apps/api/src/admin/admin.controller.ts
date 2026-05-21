@@ -10,7 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { QuestStatus, RewardType } from '@prisma/client';
+import { QuestStatus, RewardType } from '../common/prisma-types';
 
 import { AdminService } from './admin.service';
 import { AdminGuard } from './admin.guard';

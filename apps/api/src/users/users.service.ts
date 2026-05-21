@@ -1,8 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
-// String literal type agar tidak bergantung pada Prisma Client generated types
-type CcTransactionType = 'QUEST_REWARD' | 'SPIN_REWARD' | 'TRANSFER_IN' | 'TRANSFER_OUT' | 'AIRDROP';
+import { CcTransactionType } from '../common/prisma-types';
 
 @Injectable()
 export class UsersService {
