@@ -58,10 +58,17 @@ else
 fi
 
 # ───────────────────────────────────────────────────────────────
-echo "==> [6/6] Restart PM2"
-pm2 restart canquest-api --update-env 2>/dev/null || \
-  pm2 start "${APP_DIR}/infra/pm2.ecosystem.config.js" --only canquest-api --env production
+echo "==> [6/6] Start / Restart PM2"
+# Cek apakah process sudah terdaftar di PM2
+if pm2 describe canquest-api > /dev/null 2>&1; then
+  echo "    Process found in PM2 — restarting..."
+  pm2 restart canquest-api --update-env
+else
+  echo "    Process not found in PM2 — starting fresh..."
+  pm2 start "${APP_DIR}/infra/pm2.ecosystem.config.js" --env production
+fi
 pm2 save
+echo "    ✓ PM2 done"
 
 echo ""
 echo "╔══════════════════════════════════════════════╗"
