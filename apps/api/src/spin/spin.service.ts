@@ -2,7 +2,6 @@ import {
   BadRequestException,
   Injectable,
   Logger,
-  NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { LedgerQueueService } from '../queue/ledger-queue.service';
@@ -170,20 +169,19 @@ export class SpinService {
 
     // Cek inventory
     if (winner.inventory !== null && winner.wonCount >= winner.inventory) {
-      // Inventory habis — pick 'none' type sebagai fallback
       const fallback = items.find((i) => i.rewardType === 'none') ?? items[0];
       if (!fallback) throw new BadRequestException('No fallback item available.');
-      return this.saveAndEnqueue(userId, username, cantonPartyId, fallback, spinCost);
+      return this.saveAndEnqueue(userId, username, cantonPartyId, this.toDto(fallback), spinCost);
     }
 
-    return this.saveAndEnqueue(userId, username, cantonPartyId, winner, spinCost);
+    return this.saveAndEnqueue(userId, username, cantonPartyId, this.toDto(winner), spinCost);
   }
 
   private async saveAndEnqueue(
     userId: string,
     username: string | null,
     cantonPartyId: string | null,
-    item: { id: string; label: string; rewardType: string; rewardCc: number; rewardPoints: number; probability: number; color: string; icon: string; inventory: number | null; wonCount: number },
+    item: SpinItemDto,
     spinCost: number,
   ): Promise<SpinResultDto> {
     // Simpan hasil spin
@@ -250,7 +248,7 @@ export class SpinService {
       this.prisma.spinResult.count({ where: { userId } }),
     ]);
     return {
-      items: results.map((r) => ({
+      items: results.map((r: typeof results[0]) => ({
         id: r.id,
         item: this.toDto(r.spinItem),
         pointsSpent: r.pointsSpent,
