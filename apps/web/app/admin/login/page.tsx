@@ -33,7 +33,7 @@ export default async function AdminLoginPage() {
           <span className="rounded-md bg-red-500/15 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-red-600 dark:text-red-400">
             Admin panel
           </span>
-          <h1 className="mt-3 font-[family-name:var(--font-space)] text-2xl font-semibold tracking-tight">
+          <h1 className="type-page-title mt-3">
             CanQuest Admin
           </h1>
           <p className="mt-2 text-sm text-[var(--muted-foreground)]">

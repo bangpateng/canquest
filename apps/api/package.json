@@ -22,7 +22,13 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "canton:check": "node scripts/check-canton-connectivity.cjs",
-    "canton:get-validator-party": "node scripts/get-validator-party-id.cjs"
+    "demo:seed": "node scripts/seed-reward-demo-quests.cjs --replace",
+    "demo:users": "node scripts/create-demo-test-users.cjs",
+    "demo:e2e": "node scripts/e2e-reward-demos.cjs --admin-draw",
+    "demo:dedupe-txs": "node scripts/dedupe-quest-wallet-txs.cjs",
+    "canton:get-validator-party": "node scripts/get-validator-party-id.cjs",
+    "daml:build": "docker run --rm -v \"../../packages/daml:/project\" -w /project digitalasset/daml-sdk:3.3.0-snapshot.20250930.0 bash -lc \"/home/daml/.daml/bin/daml build\"",
+    "daml:upload": "node scripts/upload-daml-dar.cjs"
   },
   "dependencies": {
     "@nestjs/bull": "^11.0.4",

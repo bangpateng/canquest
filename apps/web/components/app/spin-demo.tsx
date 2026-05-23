@@ -91,7 +91,7 @@ export function SpinDemo() {
         </div>
       </div>
       <aside className="rounded-2xl border border-[var(--border)] bg-[var(--muted)]/30 p-6">
-        <h3 className="font-[family-name:var(--font-space)] text-sm font-semibold">
+        <h3 className="type-card-title">
           Probability table (example)
         </h3>
         <ul className="mt-4 space-y-3 text-sm">

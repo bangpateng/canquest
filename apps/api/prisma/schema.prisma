@@ -16,6 +16,8 @@ model User {
   id             String          @id @default(cuid())
   email          String          @unique
   displayName    String?
+  /// Relative path under uploads root, e.g. avatars/{userId}.jpg
+  avatarPath     String?
   passwordHash   String
   inviteCode     String?
   emailVerified  Boolean         @default(false)
@@ -26,7 +28,13 @@ model User {
   cantonPartyId  String?
   /// Admin flag — set via ADMIN_EMAILS env or manually.
   isAdmin        Boolean         @default(false)
-    createdAt        DateTime          @default(now())
+  /// CanQuest Earn menu points (redeem / streak — separate from quest task points).
+  earnPoints     Int             @default(0)
+  /// Linked X (Twitter) handle for social task verification (twitterapi.io).
+  twitterUsername   String?   @unique
+  twitterUserId     String?
+  twitterConnectedAt DateTime?
+  createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   refreshTokens    RefreshToken[]
   ccBalance        CcBalance?
@@ -100,12 +108,17 @@ model Quest {
   rewardCc     Float       @default(0)
   rewardPool   String      @default("0 CC")
   deadline     String?
+  /// Optional ISO timeline — quest hidden before startsAt / after endsAt when set.
+  startsAt     DateTime?
+  endsAt       DateTime?
   status       QuestStatus @default(ACTIVE)
   tags         String      @default("[]")
-  /// Type of reward: CC, INVITE_CODE, or both
+  /// Reward category: waitlist email, random invite, FCFS invite, CC, or CC + invite
   rewardType   RewardType  @default(CC_ONLY)
   /// Max number of winners (null = unlimited / all completers rewarded)
   maxWinners   Int?
+  /// CAMPAIGN = partner campaigns (user menu Earn). EARN_HUB = CanQuest daily tasks (user menu Quest).
+  questKind    QuestKind   @default(CAMPAIGN)
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
   tasks        QuestTask[]
@@ -116,9 +129,13 @@ model Quest {
 }
 
 enum RewardType {
+  WAITLIST_EMAIL
+  INVITE_CODE_RANDOM
+  INVITE_CODE_FCFS
   CC_ONLY
-  INVITE_CODE
   CC_AND_INVITE
+  /// @deprecated Use INVITE_CODE_RANDOM — kept for existing rows
+  INVITE_CODE
 }
 
 /// Pool of invite codes for a quest (admin uploads these).
@@ -168,6 +185,11 @@ model QuestTask {
   order       Int      @default(0)
   /// Jawaban benar untuk tipe quiz (opsional)
   correctAnswer String?
+  /// Tampilkan badge "NEW" di halaman Quest user
+  showNewBadge  Boolean  @default(false)
+  /// Task tetap tampil; user bisa dapat poin lagi setiap 24 jam (daily check-in selalu aktif)
+  repeatEvery24h Boolean @default(false)
+  createdAt     DateTime @default(now())
   submissions QuestSubmission[]
 }
 
@@ -189,6 +211,11 @@ model QuestSubmission {
   verifiedAt  DateTime?
 
   @@unique([userId, taskId])
+}
+
+enum QuestKind {
+  CAMPAIGN
+  EARN_HUB
 }
 
 enum QuestStatus {
@@ -269,6 +296,12 @@ model QuestCompletion {
   rewardMicroCc BigInt   @default(0)
   /// Canton ledger TX ID dari CC reward = bukti on-chain
   ledgerTxId    String?
+  /// DAML QuestParticipation contract id (if recorded on ledger)
+  ledgerParticipationId String?
+  /// DAML QuestReward contract id (if recorded on ledger)
+  ledgerRewardId        String?
+  /// DAML QuestTaskSubmission contract ids (JSON string array)
+  ledgerTaskSubmissionIds Json @default("[]")
   completedAt   DateTime @default(now())
 
   @@unique([userId, questId])

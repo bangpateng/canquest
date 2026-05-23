@@ -6,7 +6,32 @@
  *   node apps/api/scripts/check-canton-connectivity.cjs
  */
 
+const fs = require('fs');
+const path = require('path');
 const jwt = require('jsonwebtoken');
+
+/** Load apps/api/.env when run from repo (canton:check does not use Nest ConfigModule). */
+function loadEnv() {
+  const envPath = path.join(__dirname, '..', '.env');
+  if (!fs.existsSync(envPath)) return;
+  for (const line of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t || t.startsWith('#')) continue;
+    const i = t.indexOf('=');
+    if (i < 1) continue;
+    const key = t.slice(0, i).trim();
+    let val = t.slice(i + 1).trim();
+    if (
+      (val.startsWith('"') && val.endsWith('"')) ||
+      (val.startsWith("'") && val.endsWith("'"))
+    ) {
+      val = val.slice(1, -1);
+    }
+    if (process.env[key] === undefined) process.env[key] = val;
+  }
+}
+
+loadEnv();
 
 async function checkLedgerApi() {
   const baseUrl = process.env.CANTON_JSON_API_URL ?? 'http://127.0.0.1:7575';
@@ -32,12 +57,14 @@ async function checkValidatorApi() {
   const baseUrl = process.env.CANTON_VALIDATOR_URL ?? 'http://127.0.0.1:5003';
   const secret = process.env.CANTON_SPLICE_SECRET ?? 'unsafe';
   const audience = process.env.CANTON_SPLICE_AUDIENCE ?? 'https://validator.example.com';
-  const adminUser = process.env.CANTON_VALIDATOR_ADMIN_USER ?? 'administrator';
+  // Same JWT sub as SpliceValidatorService.adminToken() — not CANTON_VALIDATOR_ADMIN_USER
+  const jwtSub = process.env.CANTON_LEDGER_API_USER ?? 'ledger-api-user';
   
   console.log(`\n[2] Splice Validator API — ${baseUrl}`);
+  console.log(`   (JWT sub=${jwtSub}, aud=${audience})`);
   
   const token = jwt.sign(
-    { sub: adminUser, aud: audience },
+    { sub: jwtSub, aud: audience },
     secret,
     { algorithm: 'HS256', expiresIn: '5m' },
   );
@@ -62,7 +89,7 @@ async function checkValidatorApi() {
         return true;
       } else {
         console.log(`   ⚠️  Reachable but auth failed (HTTP ${res.status})`);
-        console.log('   Check CANTON_SPLICE_SECRET and CANTON_SPLICE_AUDIENCE in .env');
+        console.log('   Check CANTON_SPLICE_SECRET, CANTON_SPLICE_AUDIENCE, CANTON_LEDGER_API_USER');
         return false;
       }
     } else {
@@ -71,7 +98,7 @@ async function checkValidatorApi() {
     }
   } catch (err) {
     console.log(`   ❌ NOT reachable: ${err.message}`);
-    console.log('   Fix: ssh -N -L 5003:<VALIDATOR_DOCKER_IP>:5003 root@VPS1_IP');
+    console.log('   Fix: ssh -N -L 8080:localhost:80 root@VPS1_IP  (set CANTON_VALIDATOR_URL=http://127.0.0.1:8080)');
     return false;
   }
 }

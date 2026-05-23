@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ChevronLeft,
+  Download,
   Edit,
   Loader2,
   Plus,
@@ -12,19 +13,18 @@ import {
   Users,
   Trophy,
 } from "lucide-react";
+import { underlineTabClass } from "@/lib/ui-button-styles";
 import { cn } from "@/lib/utils";
 import { QuestForm } from "./quest-form";
-
-const TASK_TYPES = [
-  { value: "twitter_follow", label: "Twitter follow" },
-  { value: "twitter_retweet", label: "Twitter retweet" },
-  { value: "telegram_join", label: "Telegram join" },
-  { value: "discord_join", label: "Discord join" },
-  { value: "submit_email", label: "Submit email" },
-  { value: "submit_canton_address", label: "Canton Party ID" },
-  { value: "visit_website", label: "Visit website" },
-  { value: "quiz_choice", label: "Quiz" },
-];
+import {
+  EARN_HUB_TASK_TYPE_OPTIONS,
+  QUEST_TASK_TYPE_OPTIONS,
+  REWARD_TYPE_OPTIONS,
+  buildQuestTaskTitle,
+  isInviteRewardType,
+  questExportLabel,
+  questTaskTypeLabel,
+} from "@/lib/quest-types";
 
 interface Task {
   id: string;
@@ -53,6 +53,7 @@ interface QuestData {
   rewardType: string;
   maxWinners: number | null;
   tags: string[];
+  questKind?: string;
   tasks: Task[];
   _count: { completions: number; winnerDraws: number };
 }
@@ -64,23 +65,50 @@ export function QuestDetail({ questId }: { questId: string }) {
   const [view, setView] = useState<"overview" | "edit" | "tasks">("overview");
   const [addingTask, setAddingTask] = useState(false);
   const [newTask, setNewTask] = useState({
-    type: "visit_website",
-    title: "",
-    description: "",
+    type: "twitter_follow",
     points: 10,
     target: "",
     correctAnswer: "",
   });
   const [taskSaving, setTaskSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     fetch(`/api/admin/quests/${questId}`)
       .then((r) => r.json())
-      .then((d: QuestData) => setQuest(d))
+      .then((d: QuestData) => {
+        if (d?.questKind === "EARN_HUB") {
+          router.replace("/admin/quest");
+          return;
+        }
+        setQuest(d);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [questId]);
+  }, [questId, router]);
+
+  async function handleExportCsv() {
+    setExporting(true);
+    try {
+      const res = await fetch(`/api/admin/quests/${questId}/export`);
+      const data = (await res.json()) as {
+        csv?: string;
+        filename?: string;
+        quest?: { title: string };
+      };
+      if (!res.ok || !data.csv) return;
+      const blob = new Blob([data.csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = data.filename ?? `quest-${questId}-export.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   async function handleDeleteQuest() {
     if (!confirm("Delete this quest and all its data? This cannot be undone.")) return;
@@ -97,8 +125,8 @@ export function QuestDetail({ questId }: { questId: string }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         type: newTask.type,
-        title: newTask.title,
-        description: newTask.description || null,
+        title: buildQuestTaskTitle(newTask.type, newTask.target),
+        description: null,
         points: newTask.points,
         target: newTask.target || null,
         correctAnswer: newTask.correctAnswer || null,
@@ -108,7 +136,7 @@ export function QuestDetail({ questId }: { questId: string }) {
       const task = (await res.json()) as Task;
       setQuest((prev) => prev ? { ...prev, tasks: [...prev.tasks, task] } : prev);
       setAddingTask(false);
-      setNewTask({ type: "visit_website", title: "", description: "", points: 10, target: "", correctAnswer: "" });
+      setNewTask({ type: "twitter_follow", points: 10, target: "", correctAnswer: "" });
     }
     setTaskSaving(false);
   }
@@ -136,32 +164,56 @@ export function QuestDetail({ questId }: { questId: string }) {
   const inputCls =
     "w-full rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 text-sm outline-none ring-[var(--ring)] focus-visible:ring-2";
 
+  const isEarnHub = quest.questKind === "EARN_HUB";
+  const taskTypeOptions = isEarnHub ? EARN_HUB_TASK_TYPE_OPTIONS : QUEST_TASK_TYPE_OPTIONS;
+  const adminBackHref = isEarnHub ? "/admin/quest" : "/admin/earn";
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3">
           <Link
-            href="/admin"
+            href={adminBackHref}
             className="mt-1 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
           >
             <ChevronLeft className="h-5 w-5" />
           </Link>
           <div>
-            <h1 className="font-[family-name:var(--font-space)] text-xl font-semibold">
+            <h1 className="type-section-title">
               {quest.title}
             </h1>
             <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">{quest.org}</p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => void handleDeleteQuest()}
-          disabled={deleting}
-          className="flex items-center gap-1.5 rounded-xl border border-red-500/30 px-3 py-2 text-xs font-semibold text-red-500 transition-colors hover:bg-red-500/10 disabled:opacity-50"
-        >
-          {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-          Delete
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => void handleExportCsv()}
+            disabled={exporting}
+            className="flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--card)]/80 px-3 py-2 text-xs font-semibold transition-colors hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10 disabled:opacity-50"
+          >
+            {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+            {questExportLabel(quest.rewardType)}
+          </button>
+          {isInviteRewardType(quest.rewardType) && (
+            <Link
+              href={`/admin/quests/${questId}/winners`}
+              className="flex items-center gap-1.5 rounded-full bg-[var(--primary)] px-3 py-2 text-xs font-semibold text-[var(--primary-foreground)] shadow-[0_0_16px_rgb(var(--canton-rgb)/0.18)] transition-opacity hover:opacity-90"
+            >
+              <Trophy className="h-3.5 w-3.5" />
+              Invite codes & draw
+            </Link>
+          )}
+          <button
+            type="button"
+            onClick={() => void handleDeleteQuest()}
+            disabled={deleting}
+            className="flex items-center gap-1.5 rounded-xl border border-red-500/30 px-3 py-2 text-xs font-semibold text-red-500 transition-colors hover:bg-red-500/10 disabled:opacity-50"
+          >
+            {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+            Delete
+          </button>
+        </div>
       </div>
 
       {/* Stats row */}
@@ -174,7 +226,7 @@ export function QuestDetail({ questId }: { questId: string }) {
         ].map((s) => (
           <div key={s.label} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-3">
             <p className="text-xs font-medium text-[var(--muted-foreground)]">{s.label}</p>
-            <p className="mt-1 font-[family-name:var(--font-space)] text-xl font-bold">{s.value}</p>
+            <p className="type-stat mt-1">{s.value}</p>
           </div>
         ))}
       </div>
@@ -186,12 +238,7 @@ export function QuestDetail({ questId }: { questId: string }) {
             key={tab}
             type="button"
             onClick={() => setView(tab)}
-            className={cn(
-              "pb-2.5 text-sm font-semibold capitalize transition-colors",
-              view === tab
-                ? "border-b-2 border-[var(--foreground)] text-[var(--foreground)]"
-                : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
-            )}
+            className={underlineTabClass(view === tab, "capitalize")}
           >
             {tab}
           </button>
@@ -207,6 +254,18 @@ export function QuestDetail({ questId }: { questId: string }) {
       {/* Overview */}
       {view === "overview" && (
         <div className="space-y-4">
+          <div className="rounded-2xl border border-[var(--primary)]/30 bg-[var(--primary)]/[0.06] p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+              Reward type
+            </p>
+            <p className="mt-1 font-semibold text-[var(--foreground)]">
+              {REWARD_TYPE_OPTIONS.find((r) => r.value === quest.rewardType)?.label ??
+                quest.rewardType}
+            </p>
+            <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+              {REWARD_TYPE_OPTIONS.find((r) => r.value === quest.rewardType)?.hint}
+            </p>
+          </div>
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5">
             <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">{quest.description}</p>
             <div className="mt-4 flex flex-wrap gap-2">
@@ -240,7 +299,9 @@ export function QuestDetail({ questId }: { questId: string }) {
             </div>
             <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3">
               <p className="text-xs font-medium text-[var(--muted-foreground)]">Reward type</p>
-              <p className="mt-1 font-semibold">{quest.rewardType}</p>
+              <p className="mt-1 font-semibold">
+                {REWARD_TYPE_OPTIONS.find((r) => r.value === quest.rewardType)?.label ?? quest.rewardType}
+              </p>
             </div>
           </div>
         </div>
@@ -268,7 +329,7 @@ export function QuestDetail({ questId }: { questId: string }) {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="rounded-md bg-[var(--muted)] px-2 py-0.5 text-[10px] font-semibold uppercase">
-                    {TASK_TYPES.find((t) => t.value === task.type)?.label ?? task.type}
+                    {questTaskTypeLabel(task.type)}
                   </span>
                   <span className="text-sm font-semibold">{task.title}</span>
                   <span className="ml-auto text-xs text-[var(--muted-foreground)]">+{task.points} pts</span>
@@ -295,7 +356,7 @@ export function QuestDetail({ questId }: { questId: string }) {
                 <div>
                   <label className="mb-1 block text-xs font-medium">Type</label>
                   <select value={newTask.type} onChange={(e) => setNewTask((p) => ({ ...p, type: e.target.value }))} className={inputCls}>
-                    {TASK_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    {taskTypeOptions.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                   </select>
                 </div>
                 <div>
@@ -303,29 +364,23 @@ export function QuestDetail({ questId }: { questId: string }) {
                   <input type="number" min="1" value={newTask.points} onChange={(e) => setNewTask((p) => ({ ...p, points: Number(e.target.value) }))} className={inputCls} />
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="mb-1 block text-xs font-medium">Title *</label>
-                  <input required value={newTask.title} onChange={(e) => setNewTask((p) => ({ ...p, title: e.target.value }))} placeholder="Task title" className={inputCls} />
+                  <label className="mb-1 block text-xs font-medium">Target / URL / Handle</label>
+                  <input
+                    value={newTask.target}
+                    onChange={(e) => setNewTask((p) => ({ ...p, target: e.target.value }))}
+                    placeholder="@handle or https://..."
+                    className={inputCls}
+                  />
+                  <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                    {buildQuestTaskTitle(newTask.type, newTask.target)}
+                  </p>
                 </div>
-                <div className="sm:col-span-2">
-                  <label className="mb-1 block text-xs font-medium">Description</label>
-                  <input value={newTask.description} onChange={(e) => setNewTask((p) => ({ ...p, description: e.target.value }))} placeholder="Optional" className={inputCls} />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium">Target / URL</label>
-                  <input value={newTask.target} onChange={(e) => setNewTask((p) => ({ ...p, target: e.target.value }))} placeholder="@handle or https://..." className={inputCls} />
-                </div>
-                {newTask.type === "quiz_choice" && (
-                  <div>
-                    <label className="mb-1 block text-xs font-medium">Correct answer (a/b/c)</label>
-                    <input value={newTask.correctAnswer} onChange={(e) => setNewTask((p) => ({ ...p, correctAnswer: e.target.value }))} placeholder="b" className={inputCls} />
-                  </div>
-                )}
               </div>
               <div className="flex gap-2 pt-1">
-                <button type="submit" disabled={taskSaving} className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary-foreground)] disabled:opacity-60">
+                <button type="submit" disabled={taskSaving} className="inline-flex items-center gap-2 rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary-foreground)] shadow-[0_0_16px_rgb(var(--canton-rgb)/0.18)] disabled:opacity-60">
                   {taskSaving && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Save task
                 </button>
-                <button type="button" onClick={() => setAddingTask(false)} className="rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold hover:bg-[var(--muted)]">Cancel</button>
+                <button type="button" onClick={() => setAddingTask(false)} className="rounded-full border border-[var(--border)] bg-[var(--card)]/80 px-4 py-2 text-sm font-semibold hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10">Cancel</button>
               </div>
             </form>
           ) : (

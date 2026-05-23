@@ -367,6 +367,134 @@ export class SpliceValidatorService {
   }
 
   /**
+   * Party ID bound to a Splice wallet user (authoritative for treasury / fee recipient).
+   * GET /api/validator/v0/wallet/user-status
+   */
+  async getWalletPartyId(username: string): Promise<string | null> {
+    if (!this.isConfigured) return null;
+    try {
+      const res = await fetch(`${this.baseUrl}/api/validator/v0/wallet/user-status`, {
+        headers: this.authHeaders(username),
+        signal: AbortSignal.timeout(8_000),
+      });
+      if (!res.ok) return null;
+      const data = (await res.json()) as { party_id?: string };
+      return data.party_id?.trim() || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * One-step CC send when receiver has TransferPreapproval (preferred for platform fees).
+   * POST /api/validator/v0/wallet/transfer-preapproval/send  (as sender)
+   */
+  async sendViaTransferPreapproval(
+    senderUsername: string,
+    receiverPartyId: string,
+    amountCc: number,
+    description: string,
+  ): Promise<{ ok: boolean; referenceId?: string; error?: string }> {
+    if (!this.isConfigured) {
+      return { ok: false, error: 'Splice not configured' };
+    }
+    const url = `${this.baseUrl}/api/validator/v0/wallet/transfer-preapproval/send`;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: this.jsonAuthHeaders(senderUsername),
+        body: JSON.stringify({
+          receiver_party_id: receiverPartyId,
+          amount: amountCc.toString(),
+          description,
+          deduplication_id: randomUUID(),
+        }),
+        signal: AbortSignal.timeout(45_000),
+      });
+      const text = await res.text();
+      if (res.ok) {
+        let referenceId: string | undefined;
+        try {
+          const data = JSON.parse(text) as {
+            transfer_instruction_id?: string;
+            update_id?: string;
+            contract_id?: string;
+          };
+          referenceId =
+            data.transfer_instruction_id ?? data.contract_id ?? data.update_id;
+        } catch {
+          referenceId = undefined;
+        }
+        this.logger.log(
+          `Preapproval send: ${amountCc} CC from @${senderUsername} → ${receiverPartyId.split('::')[0]}`,
+        );
+        return { ok: true, referenceId };
+      }
+      return { ok: false, error: text.slice(0, 300) };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  }
+
+  /**
+   * Collect platform fee into validator treasury (naxweb-validator-1 on TestNet).
+   * Tries direct preapproval send first, then transfer-offer + treasury wallet accept.
+   */
+  async collectPlatformFee(params: {
+    senderUsername: string;
+    feeCc: number;
+    description: string;
+    treasuryPartyId: string;
+    treasuryAcceptUsername: string;
+  }): Promise<{ collected: boolean; ledgerTxId?: string; method?: string; error?: string }> {
+    const { senderUsername, feeCc, description, treasuryPartyId, treasuryAcceptUsername } =
+      params;
+
+    const direct = await this.sendViaTransferPreapproval(
+      senderUsername,
+      treasuryPartyId,
+      feeCc,
+      description,
+    );
+    if (direct.ok) {
+      return {
+        collected: true,
+        ledgerTxId: direct.referenceId,
+        method: 'preapproval_send',
+      };
+    }
+
+    const offerId = await this.createTransferOffer(
+      treasuryPartyId,
+      feeCc,
+      description,
+      undefined,
+      senderUsername,
+    );
+    if (!offerId) {
+      return {
+        collected: false,
+        error: direct.error ?? 'Failed to create fee transfer offer',
+      };
+    }
+
+    const accepted = await this.acceptOfferViaWalletWithRetry(
+      offerId,
+      treasuryAcceptUsername,
+      { attempts: 8, delayMs: 1500 },
+    );
+    if (accepted) {
+      return { collected: true, ledgerTxId: offerId, method: 'transfer_offer' };
+    }
+
+    return {
+      collected: false,
+      ledgerTxId: offerId,
+      error: `Fee offer created but treasury could not accept (${treasuryAcceptUsername})`,
+    };
+  }
+
+  /**
    * Get a user's CC balance from the Splice Wallet API.
    * GET /api/validator/v0/wallet/balance  (as the user)
    */
@@ -508,6 +636,28 @@ export class SpliceValidatorService {
       this.logger.warn(`acceptOfferViaWallet error: ${String(err)}`);
       return false;
     }
+  }
+
+  /** Accept with retries — fee offers may need a short delay before visible in wallet API. */
+  async acceptOfferViaWalletWithRetry(
+    contractId: string,
+    asUsername: string,
+    options?: { attempts?: number; delayMs?: number },
+  ): Promise<boolean> {
+    const attempts = options?.attempts ?? 5;
+    const delayMs = options?.delayMs ?? 1500;
+    for (let i = 0; i < attempts; i++) {
+      if (i > 0) {
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+      if (await this.acceptOfferViaWallet(contractId, asUsername)) {
+        if (i > 0) {
+          this.logger.log(`Offer accepted on retry ${i + 1} as ${asUsername}`);
+        }
+        return true;
+      }
+    }
+    return false;
   }
 
   /**

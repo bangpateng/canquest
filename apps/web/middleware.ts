@@ -2,59 +2,54 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 import { CQ_ACCESS_COOKIE } from '@/lib/auth-cookies';
 
-// ─── Hostname constants ───────────────────────────────────────────────────────
-const MARKETING_HOST = 'canquest.cc';
-const APP_HOST = 'app.canquest.cc';
-
-// Routes that belong to the dapp — never served from the marketing domain
-const APP_ROUTE_PATTERN =
-  /^\/(dashboard|quests|leaderboard|spin|wallet|transactions|settings|login|register|verify-otp)(\/|$)/;
-
-// Routes that require an auth cookie
+/** Routes that require session cookie (JWT verified in platform layout). */
 const PROTECTED_PATTERN =
-  /^\/(dashboard|quests|leaderboard|spin|wallet|transactions|settings)(\/|$)/;
+  /^\/(overview|quest|earn|spin-daily|wallet|leaderboard|setting)(\/|$)/;
 
-/**
- * Edge middleware handles two concerns:
- *
- * 1. **Hostname routing** — keeps canquest.cc (marketing) and app.canquest.cc
- *    (dapp) cleanly separated without needing two separate deployments.
- *
- * 2. **Auth guard** — cookie *presence* check on protected app routes.
- *    Full JWT verification happens in the (app) layout server component.
- */
+/** Legacy app paths → new platform paths */
+const LEGACY_REDIRECTS: Record<string, string> = {
+  '/dashboard': '/overview',
+  '/quests': '/earn',
+  '/spin': '/spin-daily',
+  '/settings': '/setting',
+  '/transactions': '/wallet',
+};
+
 export function middleware(request: NextRequest) {
-  const { pathname, hostname } = request.nextUrl;
+  const { pathname } = request.nextUrl;
 
-  // ── 1. Hostname routing (production only; skip on localhost) ──────────────
-  if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
-    const isMarketingHost =
-      hostname === MARKETING_HOST || hostname === `www.${MARKETING_HOST}`;
-    const isAppHost = hostname === APP_HOST;
-
-    if (isMarketingHost && APP_ROUTE_PATTERN.test(pathname)) {
-      // Someone hit canquest.cc/dashboard etc. → push them to the dapp subdomain
-      const appUrl = new URL(request.url);
-      appUrl.hostname = APP_HOST;
-      return NextResponse.redirect(appUrl, { status: 308 });
-    }
-
-    if (isAppHost && pathname === '/') {
-      // app.canquest.cc/ → go to dashboard (or login if not authed)
-      const token = request.cookies.get(CQ_ACCESS_COOKIE)?.value;
-      const dest = token ? '/dashboard' : '/login';
-      return NextResponse.redirect(new URL(dest, request.url));
-    }
+  // Legacy path redirects (same host — canquest.cc only)
+  if (LEGACY_REDIRECTS[pathname]) {
+    return NextResponse.redirect(new URL(LEGACY_REDIRECTS[pathname], request.url), 308);
+  }
+  if (pathname.startsWith('/quests/')) {
+    const dest = pathname.replace(/^\/quests\//, '/earn/');
+    return NextResponse.redirect(new URL(dest, request.url), 308);
+  }
+  // Campaign detail was briefly at /quest/:id → /earn/:id (/quest alone = Earn hub)
+  if (pathname.startsWith('/quest/') && pathname.length > 7) {
+    const dest = pathname.replace(/^\/quest\//, '/earn/');
+    return NextResponse.redirect(new URL(dest, request.url), 308);
   }
 
-  // ── 2. Auth guard on protected routes ────────────────────────────────────
+  // Auth pages → landing with modal hint
+  if (pathname === '/login' || pathname === '/register') {
+    const url = new URL('/', request.url);
+    url.searchParams.set('auth', pathname === '/register' ? 'register' : 'login');
+    const next = request.nextUrl.searchParams.get('next');
+    if (next) url.searchParams.set('next', next);
+    return NextResponse.redirect(url);
+  }
+
+  // Protected platform routes
   if (!PROTECTED_PATTERN.test(pathname)) return NextResponse.next();
 
   const token = request.cookies.get(CQ_ACCESS_COOKIE)?.value;
   if (!token) {
-    const loginUrl = new URL('/login', request.url);
-    loginUrl.searchParams.set('next', pathname);
-    return NextResponse.redirect(loginUrl);
+    const home = new URL('/', request.url);
+    home.searchParams.set('auth', 'login');
+    if (pathname !== '/') home.searchParams.set('next', pathname);
+    return NextResponse.redirect(home);
   }
 
   return NextResponse.next();
@@ -62,16 +57,11 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Root — needed for the app.canquest.cc/ redirect
     '/',
-    // Auth routes — needed for the hostname cross-redirect
     '/login',
     '/login/:path*',
     '/register',
     '/register/:path*',
-    '/verify-otp',
-    '/verify-otp/:path*',
-    // Protected app routes
     '/dashboard',
     '/dashboard/:path*',
     '/quests',
@@ -86,5 +76,15 @@ export const config = {
     '/transactions/:path*',
     '/settings',
     '/settings/:path*',
+    '/overview',
+    '/overview/:path*',
+    '/quest',
+    '/quest/:path*',
+    '/earn',
+    '/earn/:path*',
+    '/spin-daily',
+    '/spin-daily/:path*',
+    '/setting',
+    '/setting/:path*',
   ],
 };

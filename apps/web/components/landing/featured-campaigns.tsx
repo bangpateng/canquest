@@ -1,80 +1,42 @@
-import { Calendar, Users } from "lucide-react";
+import { ListChecks } from "lucide-react";
+import { FeaturedQuestCarousel } from "@/components/landing/featured-quest-carousel";
+import { LandingShell } from "@/components/landing/landing-shell";
+import { SectionHeader } from "@/components/landing/section-header";
+import { LaunchAppButton } from "@/components/landing/launch-app-button";
+import type { Quest } from "@/lib/quest-types";
 
-const campaigns = [
-  {
-    name: "Canton Builder Season",
-    org: "Network Initiative",
-    reward: "150k points pool",
-    participants: "12.4k",
-    ends: "Jun 12",
-  },
-  {
-    name: "Institutional Onboarding",
-    org: "CanQuest Labs",
-    reward: "WL + CC allocation",
-    participants: "4.1k",
-    ends: "May 28",
-  },
-  {
-    name: "Validator Education",
-    org: "Ecosystem Fund",
-    reward: "Spin tickets",
-    participants: "8.9k",
-    ends: "Jul 01",
-  },
-];
+export function FeaturedCampaigns({ quests }: { quests: Quest[] }) {
+  const live = quests.filter(
+    (q) => q.status === "ACTIVE" || q.status === "COMING_SOON",
+  );
 
-export function FeaturedCampaigns() {
   return (
-    <section
-      id="campaigns"
-      className="border-b border-[var(--border)] bg-[var(--muted)]/40 py-20"
-    >
-      <div className="mx-auto max-w-6xl px-4 sm:px-6">
-        <div className="mb-10 max-w-2xl">
-          <h2 className="font-[family-name:var(--font-space)] text-3xl font-semibold tracking-tight sm:text-4xl">
-            Featured campaigns
-          </h2>
-          <p className="mt-3 text-[var(--muted-foreground)]">
-            High-signal programs with clear reward economics and transparent
-            participation—presented in a layout your compliance team will not
-            cringe at.
-          </p>
-        </div>
-        <div className="grid gap-5 md:grid-cols-3">
-          {campaigns.map((c) => (
-            <article
-              key={c.name}
-              className="group glass-card flex flex-col rounded-2xl p-6 transition-shadow duration-300 hover:shadow-lg"
-            >
-              <div className="mb-4 flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
-                    {c.org}
-                  </p>
-                  <h3 className="mt-1 font-[family-name:var(--font-space)] text-lg font-semibold">
-                    {c.name}
-                  </h3>
-                </div>
-                <span className="rounded-lg bg-[var(--primary)]/15 px-2 py-1 text-xs font-medium text-[var(--foreground)]">
-                  Live
-                </span>
-              </div>
-              <p className="text-sm text-[var(--muted-foreground)]">{c.reward}</p>
-              <div className="mt-6 flex items-center justify-between border-t border-[var(--border)] pt-4 text-sm text-[var(--muted-foreground)]">
-                <span className="inline-flex items-center gap-1.5">
-                  <Users className="h-4 w-4" />
-                  {c.participants}
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <Calendar className="h-4 w-4" />
-                  {c.ends}
-                </span>
-              </div>
-            </article>
-          ))}
-        </div>
-      </div>
+    <section id="campaigns" className="relative border-b border-[var(--border)] py-12 md:py-14">
+      <div className="absolute inset-0 bg-[var(--muted)]/30" />
+      <LandingShell className="relative">
+        <SectionHeader
+          eyebrow="Live programs"
+          title="Featured quests"
+          description="Active and upcoming missions."
+        />
+
+        {live.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card)]/50 px-6 py-14 text-center">
+            <ListChecks className="mx-auto h-8 w-8 text-[var(--muted-foreground)]" />
+            <p className="type-subsection-title mt-4">
+              No live quests yet
+            </p>
+            <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+              Check back soon, or sign in when campaigns go live.
+            </p>
+            <div className="mt-6 flex justify-center">
+              <LaunchAppButton size="lg" showArrow />
+            </div>
+          </div>
+        ) : (
+          <FeaturedQuestCarousel quests={quests} />
+        )}
+      </LandingShell>
     </section>
   );
 }

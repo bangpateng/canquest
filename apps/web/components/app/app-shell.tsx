@@ -7,14 +7,17 @@ import {
   LayoutDashboard,
   ListOrdered,
   Settings,
+  Sparkles,
   Ticket,
   Wallet,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { AppRouteTitle } from "@/components/app/app-route-title";
+import { ROUTES } from "@/lib/app-routes";
 const navItems: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/quests", label: "Quest", icon: Gift },
+  { href: ROUTES.campaignQuests, label: "Earn", icon: Sparkles },
+  { href: ROUTES.earnHub, label: "Quest", icon: Gift },
   { href: "/leaderboard", label: "Leaderboard", icon: ListOrdered },
   { href: "/spin", label: "Spin", icon: Ticket },
   { href: "/wallet", label: "Wallet", icon: Wallet },
@@ -62,7 +65,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <aside className="hidden w-64 shrink-0 border-r border-[var(--border)] bg-[var(--card)]/60 px-3 py-6 md:flex md:flex-col">
         <Link
           href="/"
-          className="mb-8 px-3 font-[family-name:var(--font-space)] text-lg font-semibold tracking-tight"
+          className="type-section-title mb-8 px-3"
         >
           CanQuest
         </Link>

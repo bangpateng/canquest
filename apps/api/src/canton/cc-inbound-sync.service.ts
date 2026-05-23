@@ -125,6 +125,22 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
       const deltaCc = Number(deltaMicro) / 1_000_000;
       const ledgerTxId = `inbound-sync:${userId}:${onChainMicro.toString()}`;
 
+      const recentQuestReward = await this.prisma.ccTransaction.findFirst({
+        where: {
+          userId,
+          type: 'QUEST_REWARD',
+          amountMicroCc: deltaMicro,
+          createdAt: { gte: new Date(Date.now() - 15 * 60_000) },
+        },
+      });
+      if (recentQuestReward) {
+        await this.prisma.ccBalance.update({
+          where: { userId },
+          data: { balanceMicroCc: onChainMicro },
+        });
+        return;
+      }
+
       const dup = await this.prisma.ccTransaction.findFirst({
         where: { ledgerTxId },
       });

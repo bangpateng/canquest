@@ -11,7 +11,7 @@ export default function AdminUsersPage() {
         >
           ← Dashboard
         </Link>
-        <h1 className="mt-2 font-[family-name:var(--font-space)] text-2xl font-semibold">
+        <h1 className="type-page-title mt-2">
           Users
         </h1>
         <p className="mt-1 text-sm text-[var(--muted-foreground)]">

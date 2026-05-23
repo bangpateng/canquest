@@ -39,6 +39,8 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
   private timer: NodeJS.Timeout | null = null;
   private lastOffset: string | number = 0;
   private running = false;
+  /** Avoid log spam when tunnel/API is down — warn once until reachable again */
+  private loggedUnreachable = false;
 
   constructor(
     private readonly config: ConfigService,
@@ -157,8 +159,19 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
         signal: AbortSignal.timeout(10_000),
       });
     } catch (err) {
-      this.logger.debug(`Ledger not reachable during poll: ${String(err)}`);
+      if (!this.loggedUnreachable) {
+        this.loggedUnreachable = true;
+        this.logger.warn(
+          `Ledger not reachable at ${this.baseUrl} (indexer keeps retrying). ` +
+            `If local dev: open SSH tunnel to participant :7575. Detail: ${String(err)}`,
+        );
+      }
       return;
+    }
+
+    if (this.loggedUnreachable) {
+      this.loggedUnreachable = false;
+      this.logger.log(`Ledger reachable again at ${this.baseUrl}`);
     }
 
     if (!res.ok) {
@@ -230,7 +243,7 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
         data: { settledAt: new Date() },
       });
 
-      this.logger.debug(`Indexed TransferOffer archived: ${contractId.slice(0, 16)}… updateId=${updateId}`);
+      this.logger.debug(`Indexed TransferOffer archived: ${contractId.slice(0, 16)}…`);
     }
   }
 

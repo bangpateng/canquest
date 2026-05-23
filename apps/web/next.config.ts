@@ -25,8 +25,7 @@ const nextConfig: NextConfig = {
     ],
   },
 
-  // Vercel multi-domain: both canquest.cc and app.canquest.cc point to this app.
-  // Middleware (middleware.ts) handles hostname-based routing between them.
+  // Single domain: canquest.cc — legacy paths redirect in middleware.ts
 
   webpack: (config, { dev }) => {
     if (dev) {

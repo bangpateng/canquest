@@ -14,8 +14,18 @@ async function upstreamToNext(upstream: Response): Promise<NextResponse> {
   return NextResponse.json(data, { status: upstream.status });
 }
 
+export type NestProxyOptions = {
+  /** Max wait for Nest upstream (default 15s). Canton ledger submits need longer. */
+  upstreamTimeoutMs?: number;
+};
+
 /** Forward to Nest `/api/**` using `cq_access` as Bearer JWT (Route Handlers only). */
-export async function nestWithAccessCookie(req: NextRequest, pathSuffix: string, init: RequestInit): Promise<NextResponse> {
+export async function nestWithAccessCookie(
+  req: NextRequest,
+  pathSuffix: string,
+  init: RequestInit,
+  options?: NestProxyOptions,
+): Promise<NextResponse> {
   const token = req.cookies.get(CQ_ACCESS_COOKIE)?.value;
   if (!token) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
@@ -25,6 +35,30 @@ export async function nestWithAccessCookie(req: NextRequest, pathSuffix: string,
   const headers = new Headers(init.headers);
   headers.set('Authorization', `Bearer ${token}`);
 
-  const upstream = await fetch(url, { ...init, headers, cache: 'no-store' });
-  return upstreamToNext(upstream);
+  const timeoutMs = options?.upstreamTimeoutMs ?? 15_000;
+
+  try {
+    const upstream = await fetch(url, {
+      ...init,
+      headers,
+      cache: 'no-store',
+      signal: init.signal ?? AbortSignal.timeout(timeoutMs),
+    });
+    return upstreamToNext(upstream);
+  } catch (err) {
+    const isTimeout =
+      err instanceof Error &&
+      (err.name === 'TimeoutError' || err.name === 'AbortError' || /timeout/i.test(err.message));
+    if (isTimeout) {
+      return NextResponse.json(
+        {
+          ok: false,
+          message:
+            'Request timed out while waiting for Canton. If you submitted a quest, wait a few seconds and try again.',
+        },
+        { status: 504 },
+      );
+    }
+    throw err;
+  }
 }

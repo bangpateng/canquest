@@ -1,5 +1,4 @@
 import { SettingsAccountPanel } from "@/components/app/settings/settings-account-panel";
-import { CantonTransferPreferences } from "@/components/app/settings/canton-transfer-preferences";
 import { SignOutButton } from "@/components/app/sign-out-button";
 
 export default function SettingsPage() {
@@ -7,16 +6,8 @@ export default function SettingsPage() {
     <div className="mx-auto grid max-w-3xl gap-8 pb-8">
       <SettingsAccountPanel />
 
-      <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 md:p-8">
-        <h3 className="font-[family-name:var(--font-space)] text-lg font-semibold">Canton Transfer Preferences</h3>
-        <p className="mt-1 mb-6 text-sm text-[var(--muted-foreground)]">
-          Configure Canton-native CC settlement options for your wallet.
-        </p>
-        <CantonTransferPreferences variant="full" />
-      </section>
-
       <section className="rounded-2xl border border-[var(--border)] bg-[var(--muted)]/30 p-6 md:p-8">
-        <h3 className="font-[family-name:var(--font-space)] text-lg font-semibold">Sessions</h3>
+        <h3 className="type-section-title">Sessions</h3>
 
         <ul className="mt-4 space-y-3 text-sm">
           <li className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3">
@@ -30,15 +21,9 @@ export default function SettingsPage() {
         </ul>
       </section>
 
-      <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 md:p-8">
-        <h3 className="font-[family-name:var(--font-space)] text-lg font-semibold">Sign out</h3>
-        <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-          End your session on this browser. You can sign in again anytime.
-        </p>
-        <div className="mt-6">
-          <SignOutButton className="w-full shrink-0 sm:w-auto sm:min-w-[10rem]" />
-        </div>
-      </section>
+      <div className="flex justify-center pb-4 pt-2">
+        <SignOutButton variant="link" />
+      </div>
     </div>
   );
 }

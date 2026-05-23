@@ -1,13 +1,12 @@
 "use client";
 
-import { MOCK_USER } from "@/lib/mock-demo";
+import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { formatApiError } from "@/lib/format-api-error";
 import { Loader2, UserRound, ImagePlus } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 
-const STORAGE_KEY = "canquest.profile.avatarDataUrl";
-
-function fileToThumbnailJpeg(file: File, maxPx = 128, quality = 0.82): Promise<string> {
+function fileToThumbnailJpeg(file: File, maxPx = 256, quality = 0.85): Promise<string> {
   return new Promise((resolve, reject) => {
     const objectUrl = URL.createObjectURL(file);
     const img = new Image();
@@ -40,32 +39,66 @@ function fileToThumbnailJpeg(file: File, maxPx = 128, quality = 0.82): Promise<s
   });
 }
 
-export function ProfileAvatarSection() {
+function initialsFrom(name: string): string {
+  return (
+    name
+      .split(/\s+/)
+      .map((w) => w[0] ?? "")
+      .join("")
+      .slice(0, 2)
+      .toUpperCase() || "?"
+  );
+}
+
+type ProfileAvatarSectionProps = {
+  displayName?: string | null;
+  avatarUrl?: string | null;
+  onUpdated?: (avatarUrl: string | null) => void;
+};
+
+export function ProfileAvatarSection({
+  displayName,
+  avatarUrl: initialAvatarUrl,
+  onUpdated,
+}: ProfileAvatarSectionProps) {
   const inputId = useId();
-  const [src, setSrc] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(initialAvatarUrl ?? null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setMounted(true);
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved?.startsWith("data:image")) setSrc(saved);
-    } catch {
-      /* ignore */
-    }
-  }, []);
+    setAvatarUrl(initialAvatarUrl ?? null);
+  }, [initialAvatarUrl]);
+  const [error, setError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  const persist = useCallback((dataUrl: string | null) => {
-    try {
-      if (dataUrl) localStorage.setItem(STORAGE_KEY, dataUrl);
-      else localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      /* quota / private mode */
-    }
-  }, []);
+  const upload = useCallback(
+    async (dataUrl: string) => {
+      setBusy(true);
+      setError(null);
+      try {
+        const res = await fetch("/api/me/avatar", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: dataUrl }),
+        });
+        const raw = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+        if (!res.ok) {
+          setError(formatApiError(raw));
+          return;
+        }
+        const url =
+          typeof raw?.avatarUrl === "string"
+            ? `${raw.avatarUrl}?t=${Date.now()}`
+            : null;
+        setAvatarUrl(url);
+        onUpdated?.(url);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [onUpdated],
+  );
 
   const onPickFile = async (list: FileList | null) => {
     const file = list?.[0];
@@ -76,51 +109,41 @@ export function ProfileAvatarSection() {
       return;
     }
     if (file.size > 4 * 1024 * 1024) {
-      setError("Max 4 MB for demo upload.");
+      setError("Max 4 MB.");
       return;
     }
     setBusy(true);
     try {
       const jpeg = await fileToThumbnailJpeg(file);
-      if (jpeg.length > 380_000) {
-        setError("Processed image still too large — try another photo.");
-        setBusy(false);
-        return;
-      }
-      setSrc(jpeg);
-      persist(jpeg);
+      await upload(jpeg);
     } catch {
       setError("Could not read that image.");
+      setBusy(false);
+    }
+  };
+
+  const clear = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/me/avatar", {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const raw = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+        setError(formatApiError(raw));
+        return;
+      }
+      setAvatarUrl(null);
+      onUpdated?.(null);
+      if (fileRef.current) fileRef.current.value = "";
     } finally {
       setBusy(false);
     }
   };
 
-  const clear = () => {
-    setSrc(null);
-    persist(null);
-    setError(null);
-    if (fileRef.current) fileRef.current.value = "";
-  };
-
-  if (!mounted) {
-    return (
-      <div className="flex items-start gap-5">
-        <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--muted)]">
-          <UserRound className="h-10 w-10 text-[var(--muted-foreground)]" />
-        </div>
-        <p className="text-sm text-[var(--muted-foreground)]">Loading profile…</p>
-      </div>
-    );
-  }
-
-  const initials =
-    MOCK_USER.displayName
-      .split(/\s+/)
-      .map((w) => w[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase() || "?";
+  const initials = initialsFrom(displayName?.trim() || "User");
 
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
@@ -131,7 +154,7 @@ export function ProfileAvatarSection() {
           type="file"
           accept="image/jpeg,image/png,image/webp,image/gif"
           className="sr-only"
-          onChange={(e) => onPickFile(e.target.files)}
+          onChange={(e) => void onPickFile(e.target.files)}
         />
         <div
           className={cn(
@@ -142,16 +165,12 @@ export function ProfileAvatarSection() {
             <div className="flex flex-1 items-center justify-center bg-[var(--card)]">
               <Loader2 className="h-8 w-8 animate-spin text-[var(--muted-foreground)]" />
             </div>
-          ) : src ? (
+          ) : avatarUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={src}
-              alt=""
-              className="h-full w-full object-cover"
-            />
+            <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center gap-1 px-2 text-center">
-              <span className="font-[family-name:var(--font-space)] text-lg font-bold tracking-tight text-[var(--muted-foreground)]">
+              <span className="type-section-title text-[var(--muted-foreground)]">
                 {initials}
               </span>
               <UserRound className="h-6 w-6 text-[var(--muted-foreground)] opacity-50" />
@@ -163,25 +182,27 @@ export function ProfileAvatarSection() {
         <div>
           <p className="text-xs font-medium text-[var(--muted-foreground)]">Profile photo</p>
           <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-            Demo: stored as a thumbnail in your browser until the API persists to R2.
+            Shown on the leaderboard. Stored in your account folder on the server.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <label
             htmlFor={inputId}
             className={cn(
-              "inline-flex cursor-pointer items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-2.5 text-sm font-semibold transition-colors hover:bg-[var(--muted)]",
+              buttonVariants({ size: "sm" }),
+              "cursor-pointer gap-2",
               busy && "pointer-events-none opacity-50",
             )}
           >
             <ImagePlus className="h-4 w-4" />
-            {src ? "Change photo" : "Upload image"}
+            {avatarUrl ? "Change photo" : "Upload image"}
           </label>
-          {src ? (
+          {avatarUrl ? (
             <button
               type="button"
-              onClick={clear}
-              className="rounded-xl border border-[var(--border)] bg-transparent px-4 py-2.5 text-sm font-semibold text-[var(--foreground)] hover:bg-[var(--muted)]"
+              disabled={busy}
+              onClick={() => void clear()}
+              className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "disabled:opacity-50")}
             >
               Remove
             </button>

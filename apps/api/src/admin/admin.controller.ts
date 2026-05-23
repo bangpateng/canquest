@@ -10,7 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { QuestStatus, RewardType } from '../common/prisma-types';
+import { QuestKind, QuestStatus, RewardType } from '../common/prisma-types';
 
 import { AdminService } from './admin.service';
 import { AdminGuard } from './admin.guard';
@@ -30,8 +30,21 @@ export class AdminController {
   /* ── Quest CRUD ── */
 
   @Get('quests')
-  listQuests() {
-    return this.admin.listQuests();
+  listQuests(@Query('kind') kind?: string) {
+    const k = Object.values(QuestKind).includes(kind as QuestKind)
+      ? (kind as QuestKind)
+      : undefined;
+    return this.admin.listQuests(k);
+  }
+
+  @Get('earn-hub')
+  getEarnHub() {
+    return this.admin.getEarnHubQuest();
+  }
+
+  @Post('earn-hub/ensure')
+  ensureEarnHub() {
+    return this.admin.ensureEarnHubQuest();
   }
 
   @Get('quests/:questId')
@@ -53,10 +66,13 @@ export class AdminController {
       rewardCc?: number;
       rewardPool?: string;
       deadline?: string;
+      startsAt?: string | null;
+      endsAt?: string | null;
       status?: QuestStatus;
       rewardType?: RewardType;
       maxWinners?: number;
       tags?: string[];
+      questKind?: QuestKind;
       tasks?: Array<{
         type: string;
         title: string;
@@ -86,6 +102,8 @@ export class AdminController {
       rewardCc?: number;
       rewardPool?: string;
       deadline?: string | null;
+      startsAt?: string | null;
+      endsAt?: string | null;
       status?: QuestStatus;
       rewardType?: RewardType;
       maxWinners?: number | null;
@@ -114,6 +132,8 @@ export class AdminController {
       target?: string;
       order?: number;
       correctAnswer?: string;
+      showNewBadge?: boolean;
+      repeatEvery24h?: boolean;
     },
   ) {
     return this.admin.addTask(questId, body);
@@ -131,6 +151,8 @@ export class AdminController {
       target?: string | null;
       order?: number;
       correctAnswer?: string | null;
+      showNewBadge?: boolean;
+      repeatEvery24h?: boolean;
     },
   ) {
     return this.admin.updateTask(taskId, body);
@@ -146,6 +168,11 @@ export class AdminController {
   @Get('quests/:questId/participants')
   getParticipants(@Param('questId') questId: string) {
     return this.admin.getParticipants(questId);
+  }
+
+  @Get('quests/:questId/export')
+  exportQuestActivity(@Param('questId') questId: string) {
+    return this.admin.exportQuestActivity(questId);
   }
 
   /* ── Winner selection ── */
@@ -191,6 +218,19 @@ export class AdminController {
   @Get('quests/:questId/invite-codes')
   getInviteCodes(@Param('questId') questId: string) {
     return this.admin.getInviteCodes(questId);
+  }
+
+  @Delete('quests/:questId/invite-codes/:codeId')
+  deleteInviteCode(
+    @Param('questId') questId: string,
+    @Param('codeId') codeId: string,
+  ) {
+    return this.admin.deleteInviteCode(questId, codeId);
+  }
+
+  @Delete('quests/:questId/invite-codes')
+  deleteInviteCodes(@Param('questId') questId: string) {
+    return this.admin.deleteInviteCodes(questId);
   }
 
   /* ── User management ── */

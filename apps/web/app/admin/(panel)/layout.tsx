@@ -42,17 +42,22 @@ export default async function AdminPanelLayout({ children }: { children: ReactNo
 
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
-      <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[var(--background)]/95 backdrop-blur-sm">
+      <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[var(--card)]/90 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <div className="flex flex-wrap items-center gap-3">
-            <span className="font-[family-name:var(--font-space)] text-lg font-bold tracking-tight">
-              CanQuest
-            </span>
-            <span className="rounded-md bg-red-500/15 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-red-600 dark:text-red-400">
+            <Link href="/admin" className="flex items-center gap-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-canton-subtle text-xs font-bold text-canton">
+                CQ
+              </span>
+              <span className="type-section-title">
+                CanQuest
+              </span>
+            </Link>
+            <span className="rounded-md border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-400">
               Admin
             </span>
           </div>
-          <nav className="flex shrink-0 items-center gap-4">
+          <nav className="flex shrink-0 items-center gap-5">
             <Link
               href="/admin"
               className="text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
@@ -60,18 +65,30 @@ export default async function AdminPanelLayout({ children }: { children: ReactNo
               Dashboard
             </Link>
             <Link
+              href="/admin/earn"
+              className="text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+            >
+              Earn
+            </Link>
+            <Link
+              href="/admin/quest"
+              className="text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+            >
+              Quest
+            </Link>
+            <Link
               href="/admin/users"
               className="text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
             >
               Users
             </Link>
-            <LogoutButton />
             <Link
-              href="/login"
-              className="text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+              href="/overview"
+              className="text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:text-canton"
             >
-              App login
+              App
             </Link>
+            <LogoutButton />
           </nav>
         </div>
       </header>

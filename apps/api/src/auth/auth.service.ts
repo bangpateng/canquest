@@ -20,6 +20,7 @@ import { createHash, randomBytes } from 'crypto';
 
 import { PrismaService } from '../prisma/prisma.service';
 
+import { ProfileAvatarService } from '../users/profile-avatar.service';
 import { UsersService } from '../users/users.service';
 
 
@@ -33,13 +34,10 @@ const BCRYPT_ROUNDS = 12;
 export class AuthService {
 
   constructor(
-
     private readonly users: UsersService,
-
+    private readonly avatars: ProfileAvatarService,
     private readonly prisma: PrismaService,
-
     private readonly jwt: JwtService,
-
   ) {}
 
 
@@ -118,7 +116,7 @@ export class AuthService {
 
     const user = await this.users.create({
 
-      email: dto.email,
+      email: dto.email.trim().toLowerCase(),
 
       passwordHash,
 
@@ -201,8 +199,10 @@ export class AuthService {
 
 
   async login(dto: { email: string; password: string }) {
+    const email = dto.email.trim().toLowerCase();
+    const password = dto.password;
 
-    const user = await this.users.findByEmail(dto.email);
+    const user = await this.users.findByEmail(email);
 
     if (!user) {
 
@@ -210,7 +210,7 @@ export class AuthService {
 
     }
 
-    const ok = await bcrypt.compare(dto.password, user.passwordHash);
+    const ok = await bcrypt.compare(password, user.passwordHash);
 
     if (!ok) {
 
@@ -288,24 +288,23 @@ export class AuthService {
 
     }
 
+    const earnPoints = await this.users.reconcileEarnPoints(userId);
+
     return {
-
       id: user.id,
-
       email: user.email,
-
       displayName: user.displayName,
-
       username: user.username,
-
       cantonPartyId: user.cantonPartyId,
-
+      twitterUsername: user.twitterUsername,
+      twitterConnectedAt: user.twitterConnectedAt?.toISOString() ?? null,
+      earnPoints,
       emailVerified: user.emailVerified,
-
       createdAt: user.createdAt,
-
+      avatarUrl: this.avatars.hasAvatar(user.avatarPath)
+        ? this.avatars.avatarPublicPath(user.id)
+        : null,
     };
-
   }
 
   private async issueTokens(userId: string, email: string) {

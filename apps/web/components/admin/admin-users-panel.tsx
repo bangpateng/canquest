@@ -177,7 +177,7 @@ export function AdminUsersPanel() {
           type="button"
           onClick={() => void load()}
           disabled={loading}
-          className="rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-semibold hover:bg-[var(--muted)]"
+          className="rounded-full border border-[var(--border)] bg-[var(--card)]/80 px-4 py-2.5 text-sm font-semibold hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10"
         >
           Refresh
         </button>
@@ -248,7 +248,7 @@ export function AdminUsersPanel() {
                     <div className="flex items-center gap-2">
                       <p className="font-semibold">{u.email}</p>
                       {u.isAdmin && (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-700 dark:text-amber-300">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-orange-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-orange-300 dark:text-orange-300">
                           <Shield className="h-3 w-3" />
                           Admin
                         </span>

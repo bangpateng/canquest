@@ -3,7 +3,7 @@
  * Run with: npx ts-node prisma/seed.ts
  * Or via: npx prisma db seed
  */
-import { PrismaClient, QuestStatus } from '@prisma/client';
+import { PrismaClient, QuestKind, QuestStatus, RewardType } from '@prisma/client';
 
 type SeedTask = {
   type: string;
@@ -21,10 +21,16 @@ type SeedQuest = {
   orgSlug: string;
   description: string;
   banner: string;
+  bannerImageUrl?: string;
+  logoUrl?: string;
   rewardCc: number;
   rewardPool: string;
   deadline?: string;
+  startsAt?: Date;
+  endsAt?: Date;
   status: QuestStatus;
+  rewardType?: RewardType;
+  maxWinners?: number;
   tags: string[];
   tasks: SeedTask[];
 };
@@ -33,215 +39,51 @@ const prisma = new PrismaClient();
 
 const QUESTS: SeedQuest[] = [
   {
-    title: 'Canton Builder Season • Wave 3',
-    org: 'Digital Asset Collective',
+    title: 'Alpend',
+    org: 'Private Positions. Open Markets.',
     orgSlug: 'DA',
-    rewardPool: '150 CC · WL spots',
-    rewardCc: 150,
-    deadline: 'Jun 12, 2026',
-    banner:
-      'linear-gradient(135deg, rgba(6,182,212,0.42) 0%, rgba(6,182,212,0.18) 40%, rgba(17,24,39,0.40) 100%)',
     description:
-      'Follow ecosystem accounts, bridge testnet demos, and submit your Canton participant handle for verification.',
-    tags: ['Live', 'Featured'],
+      'Private Positions.\nOpen Markets.\nA decentralized money market on Canton — confidential by design, MEV-free execution.',
+    banner:
+      'linear-gradient(135deg,rgba(6,182,212,0.42) 0%,rgba(6,182,212,0.18) 40%,rgba(17,24,39,0.40) 100%)',
+    bannerImageUrl: '/quest-media/22df0978-96ca-4fe8-8097-d0c782b0f010.jpg',
+    logoUrl: '/quest-media/136e973d-04d8-4700-abb2-1586a2937460.jpg',
+    rewardPool: 'Reward Code 50',
+    rewardCc: 0,
+    deadline: 'Jun 30,2026',
+    startsAt: new Date('2026-05-11T18:16:00.000Z'),
+    endsAt: new Date('2026-06-29T18:16:00.000Z'),
+    rewardType: RewardType.INVITE_CODE_RANDOM,
+    maxWinners: 50,
+    tags: [],
     status: QuestStatus.ACTIVE,
     tasks: [
       {
         type: 'twitter_follow',
-        title: 'Follow @CantonNetwork',
-        description:
-          'Follow the official Canton ecosystem account — verified after your Twitter handle is submitted.',
-        points: 25,
-        target: '@CantonNetwork',
+        title: 'Alpend',
+        points: 10,
+        target: 'https://x.com/alpendhq',
         order: 0,
       },
       {
         type: 'twitter_retweet',
-        title: 'Retweet the Builder Season post',
-        description: 'Amplify Wave 3 announcement; quote tweets welcome.',
-        points: 40,
-        target: 'Post #CQ-BUILDER-W3',
+        title: 'Retweet Post',
+        points: 10,
+        target: 'https://x.com/alpendhq',
         order: 1,
       },
       {
-        type: 'telegram_join',
-        title: 'Join the campaign Telegram',
-        description: 'Stay in the loop for winner announcements.',
-        points: 30,
-        target: 't.me/canquest-builder',
+        type: 'telegram_group',
+        title: 'Join Telegram Group',
+        description: 'https://x.com/alpendhq',
+        points: 10,
         order: 2,
-      },
-      {
-        type: 'discord_join',
-        title: 'Join Discord #builder-quests',
-        description: 'Role sync — verified by CanQuest bot.',
-        points: 35,
-        target: 'discord.gg/canquest-demo',
-        order: 3,
-      },
-      {
-        type: 'submit_canton_address',
-        title: 'Submit your Canton Party ID',
-        description: 'Paste your full Canton participant party ID (includes "::").',
-        points: 50,
-        order: 4,
-      },
-      {
-        type: 'visit_website',
-        title: 'Read the Builder Charter (~2 min)',
-        description: 'Visit the official Canton builder docs.',
-        points: 20,
-        target: 'https://docs.digitalasset.com/build/3.5/index.html',
-        order: 5,
-      },
-    ],
-  },
-  {
-    title: 'Institutional Onboarding Sprint',
-    org: 'CanQuest Labs',
-    orgSlug: 'CQ',
-    rewardPool: '85 CC · FCFS vouchers',
-    rewardCc: 85,
-    deadline: 'May 28, 2026',
-    banner:
-      'linear-gradient(135deg, rgba(6,182,212,0.42) 0%, rgba(6,182,212,0.14) 40%, rgba(17,24,39,0.45) 100%)',
-    description:
-      'KYC-lite email capture + Discord verification. Complete all tasks to earn your reward.',
-    tags: ['High demand'],
-    status: QuestStatus.ACTIVE,
-    tasks: [
-      {
-        type: 'submit_email',
-        title: 'Submit your work email',
-        description: 'Institutional onboarding — domain allowlist checked server-side.',
-        points: 80,
-        order: 0,
-      },
-      {
-        type: 'discord_join',
-        title: 'Discord verification',
-        description: 'Join our Discord and verify your role.',
-        points: 60,
-        order: 1,
-      },
-      {
-        type: 'twitter_follow',
-        title: 'Follow @CanQuestLabs',
-        points: 35,
-        target: '@CanQuestLabs',
-        order: 2,
-      },
-      {
-        type: 'visit_website',
-        title: 'Complete the compliance checklist',
-        description: 'Download manifest + confirm read.',
-        points: 100,
-        order: 3,
-      },
-    ],
-  },
-  {
-    title: 'Validator Education Cohort',
-    org: 'Ecosystem Fund',
-    orgSlug: 'EF',
-    rewardPool: '50 CC · Spin tickets ×5',
-    rewardCc: 50,
-    deadline: 'Jul 1, 2026',
-    banner:
-      'linear-gradient(135deg, rgba(99,102,241,0.35) 0%, rgba(30,58,138,0.45) 100%)',
-    description:
-      'Short reads, quizzes, and a Canton-address submission checkpoint for proof of completion.',
-    tags: ['Learning'],
-    status: QuestStatus.COMING_SOON,
-    tasks: [
-      {
-        type: 'visit_website',
-        title: 'Read: Canton Validator Primer',
-        description: 'Required reading — approx. 5 minutes.',
-        points: 15,
-        target: 'https://docs.digitalasset.com/build/3.5/index.html',
-        order: 0,
-      },
-      {
-        type: 'quiz_choice',
-        title: 'Quiz: What is the role of a Canton validator?',
-        description: 'Choose the correct answer.',
-        points: 40,
-        correctAnswer: 'b',
-        order: 1,
-      },
-      {
-        type: 'telegram_join',
-        title: 'Join the study-group Telegram',
-        points: 25,
-        order: 2,
-      },
-      {
-        type: 'twitter_retweet',
-        title: 'Retweet the cohort kickoff',
-        points: 30,
-        order: 3,
-      },
-      {
-        type: 'submit_canton_address',
-        title: 'Submit your testnet Party ID',
-        description: 'Paste your full Canton party ID with "::".',
-        points: 55,
-        order: 4,
-      },
-      {
-        type: 'visit_website',
-        title: 'Office hours RSVP form',
-        points: 15,
-        order: 5,
-      },
-      {
-        type: 'discord_join',
-        title: 'Join Discord #validator-study',
-        points: 20,
-        order: 6,
       },
       {
         type: 'submit_email',
-        title: 'Email for certificate delivery',
-        points: 25,
-        order: 7,
-      },
-    ],
-  },
-  {
-    title: 'DevConnect Side Quest',
-    org: 'Vala Builders',
-    orgSlug: 'VB',
-    rewardPool: '30 CC · NFT POAP',
-    rewardCc: 30,
-    deadline: 'May 20, 2026',
-    banner:
-      'linear-gradient(135deg, rgba(244,114,182,0.30) 0%, rgba(88,28,135,0.40) 100%)',
-    description:
-      'Check in on-site, post proof link, and join the Telegram group to secure your POAP slot.',
-    tags: ['IRL', 'Limited'],
-    status: QuestStatus.ENDED,
-    tasks: [
-      {
-        type: 'visit_website',
-        title: 'On-site QR check-in',
-        description: 'Scan the kiosk QR code at the event entrance.',
-        points: 120,
-        order: 0,
-      },
-      {
-        type: 'telegram_join',
-        title: 'Announcements channel',
-        points: 40,
-        target: 't.me/canquest-live',
-        order: 1,
-      },
-      {
-        type: 'submit_email',
-        title: 'POAP delivery email',
-        points: 60,
-        order: 2,
+        title: 'Submit Email',
+        points: 10,
+        order: 3,
       },
     ],
   },
@@ -262,10 +104,17 @@ async function main() {
         orgSlug: questData.orgSlug,
         description: questData.description,
         banner: questData.banner,
+        bannerImageUrl: questData.bannerImageUrl ?? null,
+        logoUrl: questData.logoUrl ?? null,
         rewardCc: questData.rewardCc,
         rewardPool: questData.rewardPool,
         deadline: questData.deadline,
+        startsAt: questData.startsAt ?? null,
+        endsAt: questData.endsAt ?? null,
+        rewardType: questData.rewardType ?? RewardType.CC_ONLY,
+        maxWinners: questData.maxWinners ?? null,
         status: questData.status,
+        questKind: QuestKind.CAMPAIGN,
         tags: JSON.stringify(questData.tags),
       },
     });
@@ -298,6 +147,43 @@ async function main() {
     }
 
     console.log(`  ✓ ${questData.title}`);
+  }
+
+  const earnHub = await prisma.quest.findFirst({
+    where: { questKind: QuestKind.EARN_HUB },
+  });
+  if (!earnHub) {
+    await prisma.quest.create({
+      data: {
+        title: 'CanQuest Earn',
+        org: 'CanQuest',
+        orgSlug: 'CQ',
+        description:
+          'Daily check-in, social tasks, and quizzes. Collect points and redeem for CC and other rewards.',
+        banner:
+          'linear-gradient(135deg,rgba(90,217,138,0.35) 0%,rgba(17,24,39,0.9) 100%)',
+        rewardCc: 0,
+        rewardPool: 'Earn points',
+        status: QuestStatus.ACTIVE,
+        rewardType: RewardType.CC_ONLY,
+        questKind: QuestKind.EARN_HUB,
+        tags: JSON.stringify(['earn', 'daily']),
+        tasks: {
+          create: [
+            {
+              type: 'daily_check_in',
+              title: 'Daily check-in',
+              points: 10,
+              order: 0,
+              repeatEvery24h: true,
+            },
+          ],
+        },
+      },
+    });
+    console.log('  ✓ CanQuest Earn hub');
+  } else {
+    console.log('  ✓ CanQuest Earn hub (exists)');
   }
 
   console.log('Done.');

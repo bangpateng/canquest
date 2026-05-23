@@ -12,7 +12,10 @@ import { QuestsModule } from './quests/quests.module';
 import { AdminModule } from './admin/admin.module';
 import { SpinModule } from './spin/spin.module';
 import { LedgerIndexerModule } from './ledger-indexer/ledger-indexer.module';
+import { PublicModule } from './public/public.module';
+import { UploadsModule } from './uploads/uploads.module';
 import { QueueModule } from './queue/queue.module';
+import { TwitterModule } from './twitter/twitter.module';
 import { throttlerConfig } from './common/throttler.config';
 
 /** Load API env from `apps/api/.env` even when npm workspaces run Nest with cwd at repo root. */
@@ -41,6 +44,9 @@ const resolveApiEnvPaths = (): string[] => [
     QueueModule,
     SpinModule,
     LedgerIndexerModule,
+    PublicModule,
+    UploadsModule,
+    TwitterModule,
   ],
     controllers: [AppController],
   providers: [

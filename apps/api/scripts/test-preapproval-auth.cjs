@@ -23,12 +23,20 @@ async function tryAudience(aud) {
 }
 
 (async () => {
-  console.log('URL:', base, 'Host:', host, 'user:', username);
-  for (const aud of [
+  console.log('URL:', base, 'Host:', host, 'wallet user:', username);
+  console.log('Note: CanQuest admin API uses JWT sub=ledger-api-user (see splice-validator.service.ts)\n');
+  const audiences = [...new Set([
     process.env.CANTON_SPLICE_AUDIENCE,
     'https://validator.example.com',
     'https://canton.network.global',
-  ].filter(Boolean)) {
+  ].filter(Boolean))];
+  for (const aud of audiences) {
+    for (const sub of ['ledger-api-user', username]) {
+      const token = jwt.sign({ sub, aud }, secret, { algorithm: 'HS256', expiresIn: '5m' });
+      const headers = { Authorization: `Bearer ${token}`, Host: host };
+      const admin = await fetch(`${base}/api/validator/v0/admin/users`, { headers });
+      console.log(`aud=${aud} sub=${sub} GET admin/users → ${admin.status}`);
+    }
     await tryAudience(aud);
   }
 })();

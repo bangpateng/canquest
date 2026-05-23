@@ -4,32 +4,21 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Loader2, Plus, Trash2, ChevronDown, ChevronUp, Upload } from "lucide-react";
+import {
+  QUEST_TASK_TYPE_OPTIONS,
+  REWARD_TYPE_OPTIONS,
+  buildQuestTaskTitle,
+  DEFAULT_QUEST_BANNER,
+  formatQuestDeadlineDisplay,
+  type RewardType,
+} from "@/lib/quest-types";
 
 type TaskDraft = {
   type: string;
-  title: string;
-  description: string;
   points: number;
   target: string;
   correctAnswer: string;
 };
-
-const TASK_TYPES = [
-  { value: "twitter_follow", label: "Twitter follow" },
-  { value: "twitter_retweet", label: "Twitter retweet" },
-  { value: "telegram_join", label: "Telegram join" },
-  { value: "discord_join", label: "Discord join" },
-  { value: "submit_email", label: "Submit email" },
-  { value: "submit_canton_address", label: "Submit Canton Party ID" },
-  { value: "visit_website", label: "Visit website" },
-  { value: "quiz_choice", label: "Quiz (single choice)" },
-];
-
-const REWARD_TYPES = [
-  { value: "CC_ONLY", label: "CC Only" },
-  { value: "INVITE_CODE", label: "Invite Code Only" },
-  { value: "CC_AND_INVITE", label: "CC + Invite Code" },
-];
 
 const QUEST_STATUSES = [
   { value: "ACTIVE", label: "Active" },
@@ -37,33 +26,12 @@ const QUEST_STATUSES = [
   { value: "ENDED", label: "Ended" },
 ];
 
-const BANNER_PRESETS = [
-  {
-    label: "Canton Blue",
-    value:
-      "linear-gradient(135deg,rgba(6,182,212,0.42) 0%,rgba(6,182,212,0.18) 40%,rgba(17,24,39,0.40) 100%)",
-  },
-  {
-    label: "Violet",
-    value: "linear-gradient(135deg,rgba(99,102,241,0.35) 0%,rgba(30,58,138,0.45) 100%)",
-  },
-  {
-    label: "Rose",
-    value:
-      "linear-gradient(135deg,rgba(244,114,182,0.30) 0%,rgba(88,28,135,0.40) 100%)",
-  },
-  {
-    label: "Emerald",
-    value:
-      "linear-gradient(135deg,rgba(16,185,129,0.35) 0%,rgba(5,78,56,0.45) 100%)",
-  },
-  {
-    label: "Midnight",
-    value: "linear-gradient(135deg,#1e293b,#0f172a)",
-  },
-];
+export type AdminQuestKind = "CAMPAIGN" | "EARN_HUB";
 
 interface QuestFormProps {
+  questKind?: AdminQuestKind;
+  /** After create, redirect to manage page; list link uses redirectBase */
+  redirectBase?: string;
   initialData?: {
     id: string;
     title: string;
@@ -80,10 +48,15 @@ interface QuestFormProps {
     rewardType: string;
     maxWinners: number | null;
     tags: string[];
+    startsAt?: string | null;
+    endsAt?: string | null;
   };
 }
 
-export function QuestForm({ initialData }: QuestFormProps) {
+export function QuestForm({
+  initialData,
+  questKind = "CAMPAIGN",
+}: QuestFormProps) {
   const router = useRouter();
   const isEdit = !!initialData?.id;
 
@@ -92,14 +65,20 @@ export function QuestForm({ initialData }: QuestFormProps) {
     org: initialData?.org ?? "",
     orgSlug: initialData?.orgSlug ?? "",
     description: initialData?.description ?? "",
-    banner: initialData?.banner ?? BANNER_PRESETS[0]!.value,
     bannerImageUrl: initialData?.bannerImageUrl ?? "",
     logoUrl: initialData?.logoUrl ?? "",
     rewardCc: String(initialData?.rewardCc ?? "0"),
     rewardPool: initialData?.rewardPool ?? "",
-    deadline: initialData?.deadline ?? "",
+    startsAt: initialData?.startsAt
+      ? new Date(initialData.startsAt).toISOString().slice(0, 16)
+      : "",
+    endsAt: initialData?.endsAt
+      ? new Date(initialData.endsAt).toISOString().slice(0, 16)
+      : "",
     status: initialData?.status ?? "ACTIVE",
-    rewardType: initialData?.rewardType ?? "CC_ONLY",
+    rewardType: (initialData?.rewardType === "INVITE_CODE"
+      ? "INVITE_CODE_RANDOM"
+      : initialData?.rewardType ?? "CC_ONLY") as RewardType,
     maxWinners: String(initialData?.maxWinners ?? ""),
     tags: (initialData?.tags ?? []).join(", "),
   });
@@ -126,20 +105,37 @@ export function QuestForm({ initialData }: QuestFormProps) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  function updateRewardType(value: string) {
+  function updateRewardType(value: RewardType) {
+    const noCc =
+      value === "WAITLIST_EMAIL" ||
+      value === "INVITE_CODE_RANDOM" ||
+      value === "INVITE_CODE_FCFS";
     setForm((prev) => ({
       ...prev,
       rewardType: value,
-      rewardCc: value === "INVITE_CODE" ? "0" : prev.rewardCc,
+      rewardCc: noCc ? "0" : prev.rewardCc,
     }));
   }
 
-  const showCcField = form.rewardType === "CC_ONLY" || form.rewardType === "CC_AND_INVITE";
+  const showCcField =
+    form.rewardType === "CC_ONLY" || form.rewardType === "CC_AND_INVITE";
+  const needsMaxWinners =
+    form.rewardType !== "WAITLIST_EMAIL" && form.rewardType !== "CC_ONLY";
+
+  const recommendedTaskType =
+    form.rewardType === "WAITLIST_EMAIL"
+      ? "submit_email"
+      : form.rewardType === "CC_ONLY" || form.rewardType === "CC_AND_INVITE"
+        ? "submit_party_id"
+        : null;
+  const hasRecommendedTask =
+    !recommendedTaskType ||
+    tasks.some((t) => t.type === recommendedTaskType);
 
   function addTask() {
     setTasks((prev) => [
       ...prev,
-      { type: "visit_website", title: "", description: "", points: 10, target: "", correctAnswer: "" },
+      { type: "twitter_follow", points: 10, target: "", correctAnswer: "" },
     ]);
     setShowTasks(true);
   }
@@ -163,9 +159,13 @@ export function QuestForm({ initialData }: QuestFormProps) {
       const cc = Number(form.rewardCc) || 0;
       const maxW = form.maxWinners.trim() === "" ? null : Number(form.maxWinners);
 
-      if (rt === "INVITE_CODE") {
+      if (
+        rt === "INVITE_CODE_RANDOM" ||
+        rt === "INVITE_CODE_FCFS" ||
+        rt === "CC_AND_INVITE"
+      ) {
         if (maxW === null || !Number.isFinite(maxW) || maxW < 1) {
-          setError("Invite Code Only: fill in Winner count (at least 1).");
+          setError("Set max winners / FCFS slots (at least 1).");
           setSubmitting(false);
           return;
         }
@@ -175,34 +175,48 @@ export function QuestForm({ initialData }: QuestFormProps) {
         if (cc <= 0) {
           setError(
             rt === "CC_AND_INVITE"
-              ? "CC + Invite Code: CC per winner must be greater than 0."
-              : "CC Only: CC per winner must be greater than 0.",
+              ? "CC + Code: CC amount must be greater than 0."
+              : "Reward CC: CC amount must be greater than 0.",
           );
-          setSubmitting(false);
-          return;
-        }
-        if (maxW === null || !Number.isFinite(maxW) || maxW < 1) {
-          setError(`${rt === "CC_AND_INVITE" ? "CC + Invite Code" : "CC Only"}: fill in Winner count (at least 1).`);
           setSubmitting(false);
           return;
         }
       }
 
-      const rewardCcPayload = rt === "INVITE_CODE" ? 0 : cc;
+      if (form.startsAt && form.endsAt) {
+        const start = new Date(form.startsAt).getTime();
+        const end = new Date(form.endsAt).getTime();
+        if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+          setError("End date/time must be after start date/time.");
+          setSubmitting(false);
+          return;
+        }
+      }
+
+      const rewardCcPayload =
+        rt === "WAITLIST_EMAIL" ||
+        rt === "INVITE_CODE_RANDOM" ||
+        rt === "INVITE_CODE_FCFS"
+          ? 0
+          : cc;
 
       const payload = {
         title: form.title,
         org: form.org,
         orgSlug: form.orgSlug || form.org.slice(0, 3).toUpperCase(),
         description: form.description,
-        banner: form.banner,
+        banner: (isEdit && initialData?.banner) || DEFAULT_QUEST_BANNER,
         bannerImageUrl: form.bannerImageUrl.trim() || null,
         logoUrl: form.logoUrl.trim() || null,
         rewardCc: rewardCcPayload,
         rewardPool:
           form.rewardPool ||
           (rewardCcPayload > 0 ? `${rewardCcPayload} CC` : rt === "INVITE_CODE" ? "Invite codes only" : "TBD"),
-        deadline: form.deadline || null,
+        deadline: form.endsAt
+          ? formatQuestDeadlineDisplay(new Date(form.endsAt).toISOString())
+          : null,
+        startsAt: form.startsAt ? new Date(form.startsAt).toISOString() : null,
+        endsAt: form.endsAt ? new Date(form.endsAt).toISOString() : null,
         status: form.status,
         rewardType: form.rewardType,
         maxWinners: maxW,
@@ -210,11 +224,12 @@ export function QuestForm({ initialData }: QuestFormProps) {
           .split(",")
           .map((t) => t.trim())
           .filter(Boolean),
+        ...(!isEdit && { questKind }),
         ...(tasks.length > 0 && {
           tasks: tasks.map((t, i) => ({
             type: t.type,
-            title: t.title,
-            description: t.description || null,
+            title: buildQuestTaskTitle(t.type, t.target),
+            description: null,
             points: t.points,
             target: t.target || null,
             order: i,
@@ -247,7 +262,7 @@ export function QuestForm({ initialData }: QuestFormProps) {
         return;
       }
 
-      router.push(isEdit ? `/admin/quests/${initialData!.id}` : `/admin/quests/${data.id!}`);
+      router.push(`/admin/quests/${isEdit ? initialData!.id : data.id!}`);
     } catch {
       setError("Network error");
     } finally {
@@ -262,7 +277,7 @@ export function QuestForm({ initialData }: QuestFormProps) {
     <form onSubmit={(e) => void handleSubmit(e)} className="space-y-6">
       {/* Basic Info */}
       <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-4">
-        <h2 className="font-[family-name:var(--font-space)] font-semibold">Basic Info</h2>
+        <h2 className="type-section-title">Basic Info</h2>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
@@ -278,8 +293,15 @@ export function QuestForm({ initialData }: QuestFormProps) {
             <input value={form.orgSlug} onChange={(e) => updateField("orgSlug", e.target.value.toUpperCase())} placeholder="DA" maxLength={4} className={inputCls} />
           </div>
           <div>
-            <label className="mb-1.5 block text-sm font-medium">Deadline (display)</label>
-            <input value={form.deadline} onChange={(e) => updateField("deadline", e.target.value)} placeholder="e.g. Jun 30, 2026" className={inputCls} />
+            <label className="mb-1.5 block text-sm font-medium">Starts at (timeline)</label>
+            <input type="datetime-local" value={form.startsAt} onChange={(e) => updateField("startsAt", e.target.value)} className={inputCls} />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium">Ends at (timeline)</label>
+            <input type="datetime-local" value={form.endsAt} onChange={(e) => updateField("endsAt", e.target.value)} className={inputCls} />
+            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+              Shown on quest cards as the deadline (no separate display field).
+            </p>
           </div>
           <div className="sm:col-span-2">
             <label className="mb-1.5 block text-sm font-medium">Project logo</label>
@@ -294,7 +316,7 @@ export function QuestForm({ initialData }: QuestFormProps) {
                   {form.orgSlug.slice(0, 2) || "—"}
                 </div>
               )}
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-2 text-sm font-semibold transition-colors hover:bg-[var(--muted)]">
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--card)]/80 px-4 py-2 text-sm font-semibold transition-colors hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10">
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp,image/gif"
@@ -353,15 +375,15 @@ export function QuestForm({ initialData }: QuestFormProps) {
 
       {/* Banner */}
       <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-4">
-        <h2 className="font-[family-name:var(--font-space)] font-semibold">Banner</h2>
+        <h2 className="type-section-title">Banner</h2>
 
         <div>
           <label className="mb-1.5 block text-sm font-medium">Event banner image</label>
           <p className="mb-2 text-xs text-[var(--muted-foreground)]">
-            Wide image across the top of the quest card (JPEG, PNG, WebP, GIF, max 4 MB). When set, this replaces the gradient for the hero area.
+            Wide image on the quest card (JPEG, PNG, WebP, GIF, max 4 MB). Optional — cards use a default style without an image.
           </p>
           <div className="flex flex-wrap items-center gap-3">
-            <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-2 text-sm font-semibold transition-colors hover:bg-[var(--muted)]">
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--card)]/80 px-4 py-2 text-sm font-semibold transition-colors hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10">
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp,image/gif"
@@ -399,48 +421,46 @@ export function QuestForm({ initialData }: QuestFormProps) {
           </div>
         </div>
 
-        <div
-          className="h-28 rounded-xl border border-[var(--border)] bg-cover bg-center"
-          style={
-            form.bannerImageUrl
-              ? { backgroundImage: `url("${form.bannerImageUrl}")` }
-              : { background: form.banner }
-          }
-        />
-
-        <p className="text-xs font-medium text-[var(--muted-foreground)]">Fallback gradient (when no banner image)</p>
-        <div className="flex flex-wrap gap-2">
-          {BANNER_PRESETS.map((b) => (
-            <button
-              key={b.value}
-              type="button"
-              onClick={() => updateField("banner", b.value)}
-              className={cn(
-                "h-10 w-28 rounded-xl border-2 transition-all",
-                form.banner === b.value ? "border-[var(--primary)]" : "border-transparent",
-              )}
-              style={{ background: b.value }}
-              title={b.label}
-            />
-          ))}
-        </div>
-        <input value={form.banner} onChange={(e) => updateField("banner", e.target.value)} placeholder="Custom CSS gradient…" className={inputCls} />
+        {form.bannerImageUrl ? (
+          <div
+            className="h-28 rounded-xl border border-[var(--border)] bg-cover bg-center"
+            style={{ backgroundImage: `url("${form.bannerImageUrl}")` }}
+          />
+        ) : null}
       </section>
 
       {/* Reward */}
       <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-4">
-        <h2 className="font-[family-name:var(--font-space)] font-semibold">Reward</h2>
+        <h2 className="type-section-title">Reward</h2>
         <div className="space-y-4">
           <div>
             <label className="mb-1.5 block text-sm font-medium">Reward type</label>
-            <select value={form.rewardType} onChange={(e) => updateRewardType(e.target.value)} className={inputCls}>
-              {REWARD_TYPES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+            <select
+              value={form.rewardType}
+              onChange={(e) => updateRewardType(e.target.value as RewardType)}
+              className={inputCls}
+            >
+              {REWARD_TYPE_OPTIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
             </select>
             <p className="mt-1.5 text-xs text-[var(--muted-foreground)]">
-              {form.rewardType === "INVITE_CODE" && "Invite Code Only — set winner count below. CC is not used."}
-              {form.rewardType === "CC_ONLY" && "CC Only — fill CC per winner and winner count."}
-              {form.rewardType === "CC_AND_INVITE" && "CC + Invite Code — fill CC per winner and winner count (invites handled when distributing)."}
+              {REWARD_TYPE_OPTIONS.find((r) => r.value === form.rewardType)?.hint}
             </p>
+            {recommendedTaskType && !hasRecommendedTask && !isEdit && (
+              <p className="mt-2 rounded-lg bg-orange-500/10 px-3 py-2 text-xs text-orange-200 dark:text-orange-200">
+                Add a{" "}
+                <strong>
+                  {QUEST_TASK_TYPE_OPTIONS.find((o) => o.value === recommendedTaskType)?.label}
+                </strong>{" "}
+                task below so user data is collected for export.
+              </p>
+            )}
+            {(form.rewardType === "INVITE_CODE_RANDOM" ||
+              form.rewardType === "INVITE_CODE") && (
+              <p className="mt-2 text-xs text-[var(--muted-foreground)]">
+                After creating the quest, open <strong>Invite codes & draw</strong> to paste
+                codes and run the random draw.
+              </p>
+            )}
           </div>
           <div className={cn("grid gap-4", showCcField ? "sm:grid-cols-2" : "sm:grid-cols-1 sm:max-w-xs")}>
             {showCcField && (
@@ -458,19 +478,21 @@ export function QuestForm({ initialData }: QuestFormProps) {
                 />
               </div>
             )}
-            <div>
-              <label className="mb-1.5 block text-sm font-medium">Max winners</label>
-              <input
-                type="number"
-                min="1"
-                step="1"
-                required
-                value={form.maxWinners}
-                onChange={(e) => updateField("maxWinners", e.target.value)}
-                placeholder="e.g. 10"
-                className={inputCls}
-              />
-            </div>
+            {needsMaxWinners && (
+              <div>
+                <label className="mb-1.5 block text-sm font-medium">Max winners / FCFS slots</label>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  required={needsMaxWinners}
+                  value={form.maxWinners}
+                  onChange={(e) => updateField("maxWinners", e.target.value)}
+                  placeholder="e.g. 50"
+                  className={inputCls}
+                />
+              </div>
+            )}
           </div>
         </div>
         <div>
@@ -494,7 +516,7 @@ export function QuestForm({ initialData }: QuestFormProps) {
           <button
             type="button"
             onClick={() => setShowTasks((v) => !v)}
-            className="flex w-full items-center justify-between font-[family-name:var(--font-space)] font-semibold"
+            className="type-section-title flex w-full items-center justify-between"
           >
             <span>Tasks ({tasks.length})</span>
             {showTasks ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -517,7 +539,7 @@ export function QuestForm({ initialData }: QuestFormProps) {
                     <div>
                       <label className="mb-1 block text-xs font-medium">Type</label>
                       <select value={task.type} onChange={(e) => updateTask(idx, "type", e.target.value)} className={cn(inputCls, "py-2")}>
-                        {TASK_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                        {QUEST_TASK_TYPE_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                       </select>
                     </div>
                     <div>
@@ -525,23 +547,17 @@ export function QuestForm({ initialData }: QuestFormProps) {
                       <input type="number" min="1" value={task.points} onChange={(e) => updateTask(idx, "points", Number(e.target.value))} className={cn(inputCls, "py-2")} />
                     </div>
                     <div className="sm:col-span-2">
-                      <label className="mb-1 block text-xs font-medium">Title *</label>
-                      <input required value={task.title} onChange={(e) => updateTask(idx, "title", e.target.value)} placeholder="Task title" className={cn(inputCls, "py-2")} />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="mb-1 block text-xs font-medium">Description</label>
-                      <input value={task.description} onChange={(e) => updateTask(idx, "description", e.target.value)} placeholder="Optional instructions" className={cn(inputCls, "py-2")} />
-                    </div>
-                    <div>
                       <label className="mb-1 block text-xs font-medium">Target / URL / Handle</label>
-                      <input value={task.target} onChange={(e) => updateTask(idx, "target", e.target.value)} placeholder="@handle or https://..." className={cn(inputCls, "py-2")} />
+                      <input
+                        value={task.target}
+                        onChange={(e) => updateTask(idx, "target", e.target.value)}
+                        placeholder="@handle or https://..."
+                        className={cn(inputCls, "py-2")}
+                      />
+                      <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                        Label for users: {buildQuestTaskTitle(task.type, task.target)}
+                      </p>
                     </div>
-                    {task.type === "quiz_choice" && (
-                      <div>
-                        <label className="mb-1 block text-xs font-medium">Correct answer (a/b/c)</label>
-                        <input value={task.correctAnswer} onChange={(e) => updateTask(idx, "correctAnswer", e.target.value)} placeholder="b" className={cn(inputCls, "py-2")} />
-                      </div>
-                    )}
                   </div>
                 </div>
               ))}
@@ -568,7 +584,7 @@ export function QuestForm({ initialData }: QuestFormProps) {
       )}
 
       {uploadMsg && (
-        <p className="rounded-xl bg-amber-500/10 px-4 py-3 text-sm font-medium text-amber-900 dark:text-amber-300">
+        <p className="rounded-xl bg-orange-500/10 px-4 py-3 text-sm font-medium text-orange-200 dark:text-orange-300">
           {uploadMsg}
         </p>
       )}
@@ -583,7 +599,7 @@ export function QuestForm({ initialData }: QuestFormProps) {
         <button
           type="submit"
           disabled={submitting}
-          className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-[var(--primary-foreground)] transition-opacity hover:opacity-90 disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-[var(--primary-foreground)] shadow-[0_0_20px_rgb(var(--canton-rgb)/0.18)] transition-opacity hover:opacity-90 disabled:opacity-60"
         >
           {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
           {isEdit ? "Save Changes" : "Create Quest"}
@@ -591,7 +607,7 @@ export function QuestForm({ initialData }: QuestFormProps) {
         <button
           type="button"
           onClick={() => router.back()}
-          className="rounded-xl border border-[var(--border)] px-5 py-2.5 text-sm font-semibold transition-colors hover:bg-[var(--muted)]"
+          className="rounded-full border border-[var(--border)] bg-[var(--card)]/80 px-5 py-2.5 text-sm font-semibold transition-colors hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10"
         >
           Cancel
         </button>

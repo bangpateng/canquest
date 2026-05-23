@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { LedgerQueueService } from '../queue/ledger-queue.service';
+import { UsersService } from '../users/users.service';
 import { randomBytes } from 'crypto';
 
 export interface SpinItemDto {
@@ -38,6 +39,7 @@ export class SpinService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ledgerQueue: LedgerQueueService,
+    private readonly users: UsersService,
   ) {}
 
   // ── Admin: CRUD spin items ──────────────────────────────────────────────────
@@ -132,20 +134,13 @@ export class SpinService {
   ): Promise<SpinResultDto> {
     const spinCost = Number(process.env.SPIN_COST_POINTS ?? DEFAULT_SPIN_COST);
 
-    // Hitung total points user dari verified submissions
-    const submissions = await this.prisma.questSubmission.findMany({
-      where: { userId, status: 'VERIFIED' },
-      include: { task: { select: { points: true } } },
-    });
-    const totalPoints = submissions.reduce((s, sub) => s + sub.task.points, 0);
-
-    // Hitung points yang sudah dipakai spin
+    const totalEarned = await this.users.reconcileEarnPoints(userId);
     const spentResults = await this.prisma.spinResult.findMany({
       where: { userId },
       select: { pointsSpent: true },
     });
     const spentPoints = spentResults.reduce((s, r) => s + r.pointsSpent, 0);
-    const availablePoints = totalPoints - spentPoints;
+    const availablePoints = totalEarned - spentPoints;
 
     if (availablePoints < spinCost) {
       throw new BadRequestException(
@@ -200,6 +195,10 @@ export class SpinService {
       where: { id: item.id },
       data: { wonCount: { increment: 1 } },
     });
+
+    if (item.rewardType === 'points' && item.rewardPoints > 0) {
+      await this.users.creditEarnPoints(userId, item.rewardPoints);
+    }
 
     let jobId: string | null = null;
 

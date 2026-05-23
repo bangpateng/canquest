@@ -13,12 +13,12 @@ export default function SpinPage() {
             Reward engine preview
           </p>
           {SPIN_COMING_SOON && (
-            <span className="rounded-full border border-amber-500/40 bg-amber-500/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900 dark:text-amber-200">
+            <span className="rounded-full border border-orange-500/40 bg-orange-500/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-orange-200 dark:text-orange-200">
               Coming soon
             </span>
           )}
         </div>
-        <h2 className="mt-1 font-[family-name:var(--font-space)] text-2xl font-semibold tracking-tight">
+        <h2 className="type-page-title mt-1">
           Spend points, roll the pool
         </h2>
         <p className="mt-2 text-sm text-[var(--muted-foreground)]">
@@ -43,7 +43,7 @@ export default function SpinPage() {
               role="status"
               className="mx-4 flex max-w-md flex-col rounded-2xl border border-[var(--border)] bg-[var(--card)] p-8 text-center shadow-lg"
             >
-              <p className="font-[family-name:var(--font-space)] text-xl font-semibold text-[var(--foreground)]">
+              <p className="type-section-title text-[var(--foreground)]">
                 Coming soon
               </p>
               <p className="mt-2 text-sm leading-relaxed text-[var(--muted-foreground)]">

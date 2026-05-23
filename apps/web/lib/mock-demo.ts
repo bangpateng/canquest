@@ -21,7 +21,7 @@ export const QUEST_STATUS_BADGE: Record<
   coming_soon: {
     label: "Coming soon",
     className:
-      "bg-amber-500/15 text-amber-900 dark:text-amber-300 border border-amber-500/25",
+      "bg-[rgb(var(--canton-cyan-rgb)/0.12)] text-[rgb(var(--canton-cyan-rgb)/0.95)] border border-[rgb(var(--canton-cyan-rgb)/0.25)]",
   },
   ended: {
     label: "Ended",
@@ -383,10 +383,10 @@ const EXTRA_LEADERBOARD_HANDLES = [
 const PROFILE_GRADIENT_ROTATION = [
   "linear-gradient(145deg, rgb(56 189 248) 0%, rgb(37 99 235) 100%)",
   "linear-gradient(145deg, rgb(251 113 133) 0%, rgb(217 70 239) 100%)",
-  "linear-gradient(145deg, rgb(230 247 104) 0%, rgb(217 245 66) 100%)",
-  "linear-gradient(145deg, rgb(253 224 71) 0%, rgb(217 119 6) 100%)",
+  "linear-gradient(145deg, rgb(90 217 138) 0%, rgb(50 180 120) 100%)",
+  "linear-gradient(145deg, rgb(32 211 195) 0%, rgb(20 150 140) 100%)",
   "linear-gradient(145deg, rgb(167 139 250) 0%, rgb(109 40 217) 100%)",
-  "linear-gradient(145deg, rgb(240 251 138) 0%, rgb(200 218 62) 100%)",
+  "linear-gradient(145deg, rgb(114 232 164) 0%, rgb(90 217 138) 100%)",
 ];
 
 function prettifyLeaderHandle(handle: string) {
@@ -499,7 +499,7 @@ export const MOCK_LEADERBOARD: Record<"weekly" | "monthly" | "all", MockLeaderRo
 };
 
 export const MOCK_SPIN_TIERS = [
-  { name: "Legendary bundle", pct: "0.5%", color: "text-amber-500" },
+  { name: "Legendary bundle", pct: "0.5%", color: "text-canton" },
   { name: "Rare reward", pct: "1.5%", color: "text-violet-500" },
   { name: "CC drop", pct: "3%", color: "text-canton-muted" },
   { name: "WL code", pct: "5%", color: "text-sky-600" },

@@ -2,19 +2,20 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
-import { buttonVariants } from "@/components/ui/button";
+import { ListPagination } from "@/components/app/list-pagination";
 import {
   ArrowDownLeft,
   ArrowUpRight,
-  ChevronLeft,
-  ChevronRight,
   Gift,
   Loader2,
   RefreshCw,
   Zap,
 } from "lucide-react";
+import { usePlatformT } from "@/lib/i18n/platform-provider";
 
-interface TxItem {
+export const TRANSACTIONS_PAGE_SIZE = 5;
+
+export interface TxItem {
   id: string;
   amountMicroCc: string;
   type: "QUEST_REWARD" | "SPIN_REWARD" | "TRANSFER_IN" | "TRANSFER_OUT" | "AIRDROP";
@@ -34,14 +35,12 @@ interface TxPage {
   totalPages: number;
 }
 
-const PAGE_SIZE = 10;
-
-const TX_TYPE_LABEL: Record<TxItem["type"], string> = {
-  QUEST_REWARD: "Quest reward",
-  SPIN_REWARD: "Spin reward",
-  TRANSFER_IN: "Received CC",
-  TRANSFER_OUT: "Sent CC",
-  AIRDROP: "Airdrop",
+const TX_TYPE_KEYS: Record<TxItem["type"], string> = {
+  QUEST_REWARD: "transactions.questReward",
+  SPIN_REWARD: "transactions.spinReward",
+  TRANSFER_IN: "transactions.receivedCc",
+  TRANSFER_OUT: "transactions.sentCc",
+  AIRDROP: "transactions.airdrop",
 };
 
 function TxTypeIcon({ type }: { type: TxItem["type"] }) {
@@ -83,73 +82,120 @@ function amountSign(type: TxItem["type"]): string {
   return type === "TRANSFER_OUT" ? "−" : "+";
 }
 
-export function TransactionsView() {
+type TransactionsViewProps = {
+  /** Full page with section header, or compact block inside wallet */
+  variant?: "page" | "embedded";
+  pageSize?: number;
+  /** Increment to refetch after send/receive */
+  refreshKey?: number;
+  className?: string;
+};
+
+export function TransactionsView({
+  variant = "page",
+  pageSize = TRANSACTIONS_PAGE_SIZE,
+  refreshKey = 0,
+  className,
+}: TransactionsViewProps) {
+  const t = usePlatformT();
+  const embedded = variant === "embedded";
+  const txLabel = (type: TxItem["type"]) => t(TX_TYPE_KEYS[type]);
   const [txPage, setTxPage] = useState<TxPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
 
-  const fetchTxns = useCallback(async (page: number) => {
-    setLoading(true);
-    try {
-      const res = await fetch(
-        `/api/party/transactions?page=${page}&pageSize=${PAGE_SIZE}`,
-        { credentials: "include" },
-      );
-      if (res.ok) setTxPage((await res.json()) as TxPage);
-      else setTxPage({ items: [], total: 0, page, pageSize: PAGE_SIZE, totalPages: 0 });
-    } catch {
-      setTxPage({ items: [], total: 0, page, pageSize: PAGE_SIZE, totalPages: 0 });
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const fetchTxns = useCallback(
+    async (page: number) => {
+      setLoading(true);
+      try {
+        const res = await fetch(
+          `/api/party/transactions?page=${page}&pageSize=${pageSize}`,
+          { credentials: "include" },
+        );
+        if (res.ok) setTxPage((await res.json()) as TxPage);
+        else
+          setTxPage({ items: [], total: 0, page, pageSize, totalPages: 0 });
+      } catch {
+        setTxPage({ items: [], total: 0, page, pageSize, totalPages: 0 });
+      } finally {
+        setLoading(false);
+      }
+    },
+    [pageSize],
+  );
 
   useEffect(() => {
     void fetchTxns(currentPage);
-  }, [fetchTxns, currentPage]);
+  }, [fetchTxns, currentPage, refreshKey]);
 
   function changePage(p: number) {
     setCurrentPage(p);
     void fetchTxns(p);
   }
 
-  return (
-    <div className="space-y-6">
-      <div className="max-w-2xl">
-        <p className="text-sm font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
-          History
-        </p>
-        <h2 className="mt-1 font-[family-name:var(--font-space)] text-2xl font-semibold tracking-tight">
-          CC Transaction log
-        </h2>
-        <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-          All Canton Coin movements including quest rewards, transfers and airdrops.
-        </p>
-      </div>
+  function refresh() {
+    void fetchTxns(currentPage);
+  }
 
-      <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]">
-        <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-4">
-          <p className="text-sm font-semibold text-[var(--foreground)]">
-            {txPage ? `${txPage.total} transactions` : "Transactions"}
+  return (
+    <div className={cn(embedded ? "" : "space-y-6", className)}>
+      {!embedded ? (
+        <div className="max-w-2xl">
+          <p className="text-sm font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+            History
           </p>
+          <h2 className="type-page-title mt-1">
+            CC Transaction log
+          </h2>
+          <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+            All Canton Coin movements including quest rewards, transfers and airdrops.
+          </p>
+        </div>
+      ) : null}
+
+      <div
+        className={cn(
+          "w-full min-w-0 overflow-hidden rounded-2xl border border-[var(--border)]",
+          embedded ? "glass-card" : "bg-[var(--card)]",
+        )}
+      >
+        <div className="flex items-start justify-between gap-3 border-b border-[var(--border)] px-5 py-4">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-[var(--foreground)]">
+              {t("transactions.title")}
+            </p>
+            <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+              {embedded
+                ? "Quest rewards, transfers, spin prizes and airdrops."
+                : txPage
+                  ? `${txPage.total} Canton Coin movements`
+                  : "Canton Coin movements"}
+            </p>
+          </div>
           <button
-            onClick={() => void fetchTxns(currentPage)}
+            type="button"
+            onClick={refresh}
             disabled={loading}
-            className="text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors disabled:opacity-40"
-            aria-label="Refresh"
+            className="mt-0.5 shrink-0 text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)] disabled:opacity-40"
+            aria-label="Refresh transactions"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
           </button>
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="h-6 w-6 animate-spin text-[var(--muted-foreground)]" />
+          <div
+            className={cn(
+              "flex items-center justify-center",
+              embedded ? "py-10" : "py-16",
+            )}
+          >
+            <Loader2 className="h-5 w-5 animate-spin text-[var(--muted-foreground)]" />
           </div>
         ) : !txPage || txPage.items.length === 0 ? (
-          <div className="py-16 text-center">
+          <div className={cn("text-center", embedded ? "py-10" : "py-16")}>
             <p className="text-sm font-medium text-[var(--foreground)]">
-              No transactions yet
+              {t("transactions.empty")}
             </p>
             <p className="mt-1 text-xs text-[var(--muted-foreground)]">
               Complete quests or send/receive CC to see activity here.
@@ -157,17 +203,16 @@ export function TransactionsView() {
           </div>
         ) : (
           <>
-            {/* Desktop table */}
-            <div className="hidden overflow-x-auto md:block">
-              <table className="w-full text-left text-sm">
+            <div className="hidden min-w-0 md:block">
+              <table className="w-full table-fixed text-left text-sm">
                 <thead className="border-b border-[var(--border)] bg-[var(--muted)]/50 text-xs uppercase tracking-wide text-[var(--muted-foreground)]">
                   <tr>
-                    <th className="whitespace-nowrap px-5 py-3 font-medium">Type</th>
-                    <th className="whitespace-nowrap px-5 py-3 font-medium">Amount</th>
-                    <th className="whitespace-nowrap px-5 py-3 font-medium">Description</th>
-                    <th className="whitespace-nowrap px-5 py-3 font-medium">Counterparty</th>
-                    <th className="whitespace-nowrap px-5 py-3 font-medium">Ledger TX</th>
-                    <th className="whitespace-nowrap px-5 py-3 font-medium">When</th>
+                    <th className="whitespace-nowrap px-5 py-3 font-medium">{t("transactions.type")}</th>
+                    <th className="whitespace-nowrap px-5 py-3 font-medium">{t("transactions.amount")}</th>
+                    <th className="whitespace-nowrap px-5 py-3 font-medium">{t("transactions.description")}</th>
+                    <th className="whitespace-nowrap px-5 py-3 font-medium">{t("transactions.counterparty")}</th>
+                    <th className="whitespace-nowrap px-5 py-3 font-medium">{t("transactions.ledgerTx")}</th>
+                    <th className="whitespace-nowrap px-5 py-3 font-medium">{t("transactions.when")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -176,7 +221,6 @@ export function TransactionsView() {
                     const date = new Date(tx.createdAt).toLocaleString("en-GB", {
                       day: "2-digit",
                       month: "short",
-                      year: "numeric",
                       hour: "2-digit",
                       minute: "2-digit",
                     });
@@ -195,12 +239,12 @@ export function TransactionsView() {
                             >
                               <TxTypeIcon type={tx.type} />
                             </span>
-                            <span className="font-medium">{TX_TYPE_LABEL[tx.type]}</span>
+                            <span className="font-medium">{txLabel(tx.type)}</span>
                           </div>
                         </td>
                         <td
                           className={cn(
-                            "px-5 py-3 font-[family-name:var(--font-space)] font-semibold tabular-nums",
+                            "type-display px-5 py-3 text-sm font-semibold tabular-nums",
                             amountColor(tx.type),
                           )}
                         >
@@ -232,7 +276,6 @@ export function TransactionsView() {
               </table>
             </div>
 
-            {/* Mobile list */}
             <ul className="divide-y divide-[var(--border)] md:hidden">
               {txPage.items.map((tx) => {
                 const ccAmt = Math.abs(Number(tx.amountMicroCc)) / 1_000_000;
@@ -261,7 +304,7 @@ export function TransactionsView() {
                     <div className="shrink-0 text-right">
                       <p
                         className={cn(
-                          "font-[family-name:var(--font-space)] text-sm font-semibold tabular-nums",
+                          "type-display text-sm font-semibold tabular-nums",
                           amountColor(tx.type),
                         )}
                       >
@@ -269,7 +312,7 @@ export function TransactionsView() {
                         {ccAmt.toFixed(4)} CC
                       </p>
                       <p className="text-[11px] text-[var(--muted-foreground)]">
-                        {TX_TYPE_LABEL[tx.type]}
+                        {txLabel(tx.type)}
                       </p>
                     </div>
                   </li>
@@ -277,38 +320,14 @@ export function TransactionsView() {
               })}
             </ul>
 
-            {/* Pagination */}
-            {txPage.totalPages > 1 && (
-              <div className="flex items-center justify-between border-t border-[var(--border)] px-5 py-3">
-                <p className="text-xs text-[var(--muted-foreground)]">
-                  Page {txPage.page} of {txPage.totalPages} · {txPage.total} total
-                </p>
-                <div className="flex items-center gap-1">
-                  <button
-                    disabled={currentPage <= 1}
-                    onClick={() => changePage(currentPage - 1)}
-                    className={cn(
-                      buttonVariants({ variant: "secondary", size: "sm" }),
-                      "h-7 w-7 p-0 disabled:opacity-40",
-                    )}
-                    aria-label="Previous page"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </button>
-                  <button
-                    disabled={currentPage >= txPage.totalPages}
-                    onClick={() => changePage(currentPage + 1)}
-                    className={cn(
-                      buttonVariants({ variant: "secondary", size: "sm" }),
-                      "h-7 w-7 p-0 disabled:opacity-40",
-                    )}
-                    aria-label="Next page"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            )}
+            <ListPagination
+              className="px-5 pb-3"
+              page={currentPage}
+              totalPages={txPage.totalPages}
+              total={txPage.total}
+              disabled={loading}
+              onPageChange={changePage}
+            />
           </>
         )}
       </div>

@@ -95,7 +95,7 @@ export function AdminLoginForm() {
         type="submit"
         disabled={loading}
         className={cn(
-          'flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-[var(--primary-foreground)] transition-opacity hover:opacity-90 disabled:opacity-60',
+          'flex w-full items-center justify-center gap-2 rounded-full bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-[var(--primary-foreground)] shadow-[0_0_20px_rgb(var(--canton-rgb)/0.18)] transition-opacity hover:opacity-90 disabled:opacity-60',
         )}
       >
         {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
@@ -107,7 +107,7 @@ export function AdminLoginForm() {
         <span className="font-mono">apps/api/.env</span>.
       </p>
       <p className="text-center text-xs">
-        <Link href="/login" className="text-[var(--primary)] underline-offset-4 hover:underline">
+        <Link href="/?auth=login" className="text-[var(--primary)] underline-offset-4 hover:underline">
           User app login
         </Link>
       </p>

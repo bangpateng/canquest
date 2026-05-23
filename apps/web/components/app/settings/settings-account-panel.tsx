@@ -9,6 +9,8 @@ type Me = {
   displayName?: string | null;
   username?: string | null;
   cantonPartyId?: string | null;
+  twitterUsername?: string | null;
+  avatarUrl?: string | null;
 };
 
 export function SettingsAccountPanel() {
@@ -35,7 +37,7 @@ export function SettingsAccountPanel() {
 
   return (
     <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 md:p-8">
-      <h3 className="font-[family-name:var(--font-space)] text-lg font-semibold">Profile</h3>
+      <h3 className="type-section-title">Profile</h3>
       <p className="mt-1 text-sm text-[var(--muted-foreground)]">
         Your CanQuest account details. To create or manage your Canton wallet, visit the{" "}
         <a href="/wallet" className="text-canton underline underline-offset-2">
@@ -45,7 +47,11 @@ export function SettingsAccountPanel() {
       </p>
 
       <div className="mt-6 rounded-xl border border-[var(--border)] bg-[var(--muted)]/20 p-5">
-        <ProfileAvatarSection />
+        <ProfileAvatarSection
+          displayName={me?.displayName}
+          avatarUrl={me?.avatarUrl}
+          onUpdated={(url) => setMe((prev) => (prev ? { ...prev, avatarUrl: url } : prev))}
+        />
       </div>
 
       <div className="mt-6 grid gap-5 sm:grid-cols-2">
@@ -119,6 +125,7 @@ export function SettingsAccountPanel() {
           {error}
         </p>
       ) : null}
+
     </section>
   );
 }

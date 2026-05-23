@@ -6,7 +6,13 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { QuestStatus, RewardType, SubmissionStatus } from '../common/prisma-types';
+import {
+  QuestKind,
+  QuestStatus,
+  RewardType,
+  SubmissionStatus,
+  normalizeRewardType,
+} from '../common/prisma-types';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { SpliceValidatorService } from '../canton/splice-validator.service';
@@ -27,8 +33,9 @@ export class AdminService {
      QUEST CRUD
   ──────────────────────────────────────────────────────── */
 
-  async listQuests() {
+  async listQuests(kind?: QuestKind) {
     const quests = await this.prisma.quest.findMany({
+      where: kind ? { questKind: kind } : undefined,
       include: {
         tasks: { orderBy: { order: 'asc' } },
         _count: { select: { completions: true, submissions: true } },
@@ -36,6 +43,55 @@ export class AdminService {
       orderBy: { createdAt: 'desc' },
     });
     return quests.map((q) => ({ ...q, tags: this.parseTags(q.tags) }));
+  }
+
+  async getEarnHubQuest() {
+    const q = await this.prisma.quest.findFirst({
+      where: { questKind: QuestKind.EARN_HUB },
+      include: {
+        tasks: { orderBy: { order: 'asc' } },
+        _count: { select: { completions: true, submissions: true } },
+      },
+    });
+    if (!q) return null;
+    return { ...q, tags: this.parseTags(q.tags) };
+  }
+
+  async ensureEarnHubQuest() {
+    const existing = await this.getEarnHubQuest();
+    if (existing) return existing;
+
+    const quest = await this.prisma.quest.create({
+      data: {
+        title: 'CanQuest Earn',
+        org: 'CanQuest',
+        orgSlug: 'CQ',
+        description:
+          'Daily check-in, social tasks, and quizzes. Collect points and redeem for CC and other rewards.',
+        banner: 'linear-gradient(135deg,rgba(90,217,138,0.35) 0%,rgba(17,24,39,0.9) 100%)',
+        rewardCc: 0,
+        rewardPool: 'Earn points',
+        status: QuestStatus.ACTIVE,
+        rewardType: RewardType.CC_ONLY,
+        questKind: QuestKind.EARN_HUB,
+        tags: JSON.stringify(['earn', 'daily']),
+        tasks: {
+          create: [
+            {
+              type: 'daily_check_in',
+              title: 'Daily check-in',
+              points: 10,
+              order: 0,
+            },
+          ],
+        },
+      },
+      include: {
+        tasks: { orderBy: { order: 'asc' } },
+        _count: { select: { completions: true, submissions: true } },
+      },
+    });
+    return { ...quest, tags: this.parseTags(quest.tags) };
   }
 
   async getQuestDetail(questId: string) {
@@ -51,6 +107,20 @@ export class AdminService {
     return { ...q, tags: this.parseTags(q.tags) };
   }
 
+  private assertQuestSchedule(
+    startsAt?: string | null,
+    endsAt?: string | null,
+  ): void {
+    if (!startsAt || !endsAt) return;
+    const start = new Date(startsAt);
+    const end = new Date(endsAt);
+    if (end <= start) {
+      throw new BadRequestException(
+        'End date/time must be after start date/time.',
+      );
+    }
+  }
+
   async createQuest(data: {
     title: string;
     org: string;
@@ -62,10 +132,13 @@ export class AdminService {
     rewardCc?: number;
     rewardPool?: string;
     deadline?: string;
+    startsAt?: string | null;
+    endsAt?: string | null;
     status?: QuestStatus;
     rewardType?: RewardType;
     maxWinners?: number;
     tags?: string[];
+    questKind?: QuestKind;
     tasks?: Array<{
       type: string;
       title: string;
@@ -76,6 +149,18 @@ export class AdminService {
       correctAnswer?: string;
     }>;
   }) {
+    this.assertQuestSchedule(data.startsAt, data.endsAt);
+    const questKind = data.questKind ?? QuestKind.CAMPAIGN;
+    if (questKind === QuestKind.EARN_HUB) {
+      const existing = await this.prisma.quest.findFirst({
+        where: { questKind: QuestKind.EARN_HUB },
+      });
+      if (existing) {
+        throw new ConflictException(
+          'CanQuest Earn hub already exists. Manage it under Admin → Quest.',
+        );
+      }
+    }
     const quest = await this.prisma.quest.create({
       data: {
         title: data.title,
@@ -88,9 +173,12 @@ export class AdminService {
         rewardCc: data.rewardCc ?? 0,
         rewardPool: data.rewardPool ?? (data.rewardCc ? `${data.rewardCc} CC` : 'TBD'),
         deadline: data.deadline ?? null,
+        startsAt: data.startsAt ? new Date(data.startsAt) : null,
+        endsAt: data.endsAt ? new Date(data.endsAt) : null,
         status: data.status ?? QuestStatus.ACTIVE,
         rewardType: data.rewardType ?? RewardType.CC_ONLY,
         maxWinners: data.maxWinners ?? null,
+        questKind,
         tags: JSON.stringify(data.tags ?? []),
         tasks: data.tasks
           ? {
@@ -125,6 +213,8 @@ export class AdminService {
       rewardCc?: number;
       rewardPool?: string;
       deadline?: string | null;
+      startsAt?: string | null;
+      endsAt?: string | null;
       status?: QuestStatus;
       rewardType?: RewardType;
       maxWinners?: number | null;
@@ -133,6 +223,16 @@ export class AdminService {
   ) {
     const existing = await this.prisma.quest.findUnique({ where: { id: questId } });
     if (!existing) throw new NotFoundException('Quest not found');
+
+    const nextStarts =
+      data.startsAt !== undefined
+        ? data.startsAt
+        : existing.startsAt?.toISOString() ?? null;
+    const nextEnds =
+      data.endsAt !== undefined
+        ? data.endsAt
+        : existing.endsAt?.toISOString() ?? null;
+    this.assertQuestSchedule(nextStarts, nextEnds);
 
     const updated = await this.prisma.quest.update({
       where: { id: questId },
@@ -149,6 +249,12 @@ export class AdminService {
         ...(data.rewardCc !== undefined && { rewardCc: data.rewardCc }),
         ...(data.rewardPool !== undefined && { rewardPool: data.rewardPool }),
         ...(data.deadline !== undefined && { deadline: data.deadline }),
+        ...(data.startsAt !== undefined && {
+          startsAt: data.startsAt ? new Date(data.startsAt) : null,
+        }),
+        ...(data.endsAt !== undefined && {
+          endsAt: data.endsAt ? new Date(data.endsAt) : null,
+        }),
         ...(data.status !== undefined && { status: data.status }),
         ...(data.rewardType !== undefined && { rewardType: data.rewardType }),
         ...(data.maxWinners !== undefined && { maxWinners: data.maxWinners }),
@@ -177,11 +283,14 @@ export class AdminService {
       target?: string;
       order?: number;
       correctAnswer?: string;
+      showNewBadge?: boolean;
+      repeatEvery24h?: boolean;
     },
   ) {
     const quest = await this.prisma.quest.findUnique({ where: { id: questId } });
     if (!quest) throw new NotFoundException('Quest not found');
     const count = await this.prisma.questTask.count({ where: { questId } });
+    const repeatEvery24h = data.type === 'daily_check_in';
     return this.prisma.questTask.create({
       data: {
         questId,
@@ -192,6 +301,8 @@ export class AdminService {
         target: data.target ?? null,
         order: data.order ?? count,
         correctAnswer: data.correctAnswer ?? null,
+        showNewBadge: data.showNewBadge ?? false,
+        repeatEvery24h,
       },
     });
   }
@@ -206,8 +317,14 @@ export class AdminService {
       target?: string | null;
       order?: number;
       correctAnswer?: string | null;
+      showNewBadge?: boolean;
+      repeatEvery24h?: boolean;
     },
   ) {
+    const existing = await this.prisma.questTask.findUnique({ where: { id: taskId } });
+    if (!existing) throw new NotFoundException('Task not found');
+    const nextType = data.type ?? existing.type;
+    const repeatEvery24h = nextType === 'daily_check_in';
     return this.prisma.questTask.update({
       where: { id: taskId },
       data: {
@@ -218,6 +335,8 @@ export class AdminService {
         ...(data.target !== undefined && { target: data.target }),
         ...(data.order !== undefined && { order: data.order }),
         ...(data.correctAnswer !== undefined && { correctAnswer: data.correctAnswer }),
+        ...(data.showNewBadge !== undefined && { showNewBadge: data.showNewBadge }),
+        repeatEvery24h,
       },
     });
   }
@@ -230,6 +349,218 @@ export class AdminService {
   /* ────────────────────────────────────────────────────────
      PARTICIPANTS
   ──────────────────────────────────────────────────────── */
+
+  private csvEscape(v: string | number | null | undefined): string {
+    const s = String(v ?? '');
+    return s.includes(',') || s.includes('"') || s.includes('\n')
+      ? `"${s.replace(/"/g, '""')}"`
+      : s;
+  }
+
+  private csvFromRows(header: string[], dataRows: (string | number | null)[][]): string {
+    const lines = [
+      header.join(','),
+      ...dataRows.map((row) => row.map((c) => this.csvEscape(c)).join(',')),
+    ];
+    return lines.join('\n');
+  }
+
+  /** Reward-type CSV export for admin download. */
+  async exportQuestActivity(questId: string) {
+    const quest = await this.prisma.quest.findUnique({
+      where: { id: questId },
+      include: { tasks: { orderBy: { order: 'asc' } } },
+    });
+    if (!quest) throw new NotFoundException('Quest not found');
+
+    const rewardType = normalizeRewardType(quest.rewardType as RewardType);
+
+    const submissions = await this.prisma.questSubmission.findMany({
+      where: { questId, status: SubmissionStatus.VERIFIED },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            username: true,
+            displayName: true,
+            cantonPartyId: true,
+          },
+        },
+        task: { select: { type: true, title: true } },
+      },
+    });
+
+    const completions = await this.prisma.questCompletion.findMany({
+      where: { questId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            username: true,
+            displayName: true,
+            cantonPartyId: true,
+          },
+        },
+      },
+      orderBy: { completedAt: 'asc' },
+    });
+
+    const winners = await this.prisma.winnerDraw.findMany({
+      where: { questId },
+      include: {
+        user: {
+          select: {
+            email: true,
+            username: true,
+            displayName: true,
+            cantonPartyId: true,
+          },
+        },
+      },
+    });
+
+    const proofByUserTask = new Map<string, string>();
+    for (const s of submissions) {
+      if (s.proof) proofByUserTask.set(`${s.userId}:${s.task.type}`, s.proof);
+    }
+
+    let csv: string;
+    let exportKind: string;
+    let filename: string;
+
+    if (rewardType === RewardType.WAITLIST_EMAIL) {
+      exportKind = 'waitlist';
+      filename = `quest-${questId}-waitlist.csv`;
+      const header = [
+        'email',
+        'username',
+        'displayName',
+        'emailFromTask',
+        'cantonPartyId',
+        'completedAt',
+      ];
+      const rows = completions.map((c) => [
+        c.user.email,
+        c.user.username,
+        c.user.displayName,
+        proofByUserTask.get(`${c.userId}:submit_email`) ?? '',
+        c.user.cantonPartyId,
+        c.completedAt.toISOString(),
+      ]);
+      csv = this.csvFromRows(header, rows);
+    } else if (
+      rewardType === RewardType.CC_ONLY ||
+      rewardType === RewardType.CC_AND_INVITE
+    ) {
+      exportKind = 'cc_participants';
+      filename = `quest-${questId}-cc-participants.csv`;
+      const header = [
+        'email',
+        'username',
+        'displayName',
+        'cantonPartyId',
+        'partyIdFromTask',
+        'rewardCc',
+        'completedAt',
+      ];
+      const rows = completions.map((c) => [
+        c.user.email,
+        c.user.username,
+        c.user.displayName,
+        c.user.cantonPartyId,
+        proofByUserTask.get(`${c.userId}:submit_party_id`) ??
+          proofByUserTask.get(`${c.userId}:submit_canton_address`) ??
+          '',
+        String(Number(c.rewardMicroCc) / 1_000_000),
+        c.completedAt.toISOString(),
+      ]);
+      csv = this.csvFromRows(header, rows);
+    } else if (
+      rewardType === RewardType.INVITE_CODE_RANDOM ||
+      rewardType === RewardType.INVITE_CODE
+    ) {
+      exportKind = 'invite_draw';
+      filename = `quest-${questId}-invite-results.csv`;
+      const drawnIds = new Set(winners.map((w) => w.userId));
+      const header = [
+        'email',
+        'username',
+        'displayName',
+        'cantonPartyId',
+        'isWinner',
+        'inviteCode',
+        'drawnAt',
+        'completedAt',
+      ];
+      const winnerRows = winners.map((w) => [
+        w.user.email,
+        w.user.username,
+        w.user.displayName,
+        w.user.cantonPartyId,
+        'yes',
+        w.inviteCode,
+        w.drawnAt.toISOString(),
+        '',
+      ]);
+      const loserRows = completions
+        .filter((c) => !drawnIds.has(c.userId))
+        .map((c) => [
+          c.user.email,
+          c.user.username,
+          c.user.displayName,
+          c.user.cantonPartyId,
+          'no',
+          '',
+          '',
+          c.completedAt.toISOString(),
+        ]);
+      csv = this.csvFromRows(header, [...winnerRows, ...loserRows]);
+    } else {
+      exportKind = 'activity';
+      filename = `quest-${questId}-activity.csv`;
+      const header = [
+        'email',
+        'username',
+        'displayName',
+        'cantonPartyId',
+        'taskType',
+        'taskTitle',
+        'proof',
+        'completedAt',
+      ];
+      const rows = submissions.map((s) => {
+        const completed = completions.find((c) => c.userId === s.userId);
+        return [
+          s.user.email,
+          s.user.username,
+          s.user.displayName,
+          s.user.cantonPartyId,
+          s.task.type,
+          s.task.title,
+          s.proof,
+          completed?.completedAt.toISOString() ?? '',
+        ];
+      });
+      csv = this.csvFromRows(header, rows);
+    }
+
+    return {
+      quest: {
+        id: quest.id,
+        title: quest.title,
+        rewardType,
+        status: quest.status,
+      },
+      exportKind,
+      filename,
+      submissionCount: submissions.length,
+      completionCount: completions.length,
+      winnerCount: winners.length,
+      csv,
+    };
+  }
 
   async getParticipants(questId: string) {
     const quest = await this.prisma.quest.findUnique({
@@ -286,6 +617,21 @@ export class AdminService {
     });
     if (!quest) throw new NotFoundException('Quest not found');
 
+    const rewardType = normalizeRewardType(quest.rewardType as RewardType);
+    if (
+      rewardType === RewardType.INVITE_CODE_RANDOM ||
+      rewardType === RewardType.INVITE_CODE
+    ) {
+      const codeCount = await this.prisma.inviteCodePool.count({
+        where: { questId, userId: null },
+      });
+      if (codeCount === 0) {
+        throw new BadRequestException(
+          'Add invite codes on the Winners page before running a draw.',
+        );
+      }
+    }
+
     let selectedUserIds: string[];
 
     if (params.userIds && params.userIds.length > 0) {
@@ -315,8 +661,9 @@ export class AdminService {
 
     // Get invite codes if needed
     const needCodes =
-      quest.rewardType === RewardType.INVITE_CODE ||
-      quest.rewardType === RewardType.CC_AND_INVITE;
+      rewardType === RewardType.INVITE_CODE_RANDOM ||
+      rewardType === RewardType.INVITE_CODE ||
+      rewardType === RewardType.CC_AND_INVITE;
 
     const availableCodes = needCodes
       ? await this.prisma.inviteCodePool.findMany({
@@ -427,10 +774,15 @@ export class AdminService {
 
       if (draw.ccAmount > 0 && user.cantonPartyId) {
         try {
+          const quest = await this.prisma.quest.findUnique({
+            where: { id: questId },
+            select: { title: true },
+          });
+          const rewardLabel = quest?.title ?? 'Quest';
           const offerContractId = await this.splice.createTransferOffer(
             user.cantonPartyId,
             draw.ccAmount,
-            `Quest winner reward: ${questId}`,
+            rewardLabel,
           );
           if (offerContractId && user.username) {
             ccSent = await this.splice.acceptOfferViaWallet(
@@ -439,12 +791,13 @@ export class AdminService {
             );
             if (ccSent) {
               ledgerTxId = offerContractId;
-              // Record in CcTransaction
               await this.users.recordTransaction({
                 userId: user.id,
                 amountCc: draw.ccAmount,
                 type: 'QUEST_REWARD',
-                description: `Quest winner reward: ${questId}`,
+                description: rewardLabel,
+                referenceId: questId,
+                ledgerTxId: offerContractId,
               });
             }
           }
@@ -522,6 +875,40 @@ export class AdminService {
       assignedTo: c.user ? { email: c.user.email, username: c.user.username } : null,
       assignedAt: c.assignedAt,
     }));
+  }
+
+  async deleteInviteCode(questId: string, codeId: string) {
+    const row = await this.prisma.inviteCodePool.findFirst({
+      where: { id: codeId, questId },
+    });
+    if (!row) throw new NotFoundException('Invite code not found');
+    if (row.userId) {
+      throw new BadRequestException(
+        'This code is already assigned to a user and cannot be deleted.',
+      );
+    }
+    await this.prisma.inviteCodePool.delete({ where: { id: codeId } });
+    return { ok: true, deleted: 1, code: row.code };
+  }
+
+  /** Remove unassigned codes so admin can re-upload. Assigned codes are kept. */
+  async deleteInviteCodes(questId: string) {
+    const quest = await this.prisma.quest.findUnique({ where: { id: questId } });
+    if (!quest) throw new NotFoundException('Quest not found');
+
+    const skippedAssigned = await this.prisma.inviteCodePool.count({
+      where: { questId, userId: { not: null } },
+    });
+
+    const result = await this.prisma.inviteCodePool.deleteMany({
+      where: { questId, userId: null },
+    });
+
+    return {
+      ok: true,
+      deleted: result.count,
+      skippedAssigned,
+    };
   }
 
   /* ────────────────────────────────────────────────────────
@@ -658,14 +1045,32 @@ export class AdminService {
   ──────────────────────────────────────────────────────── */
 
   async getDashboardStats() {
-    const [totalUsers, totalQuests, totalCompletions, totalWinners] =
-      await Promise.all([
-        this.prisma.user.count(),
-        this.prisma.quest.count(),
-        this.prisma.questCompletion.count(),
-        this.prisma.winnerDraw.count({ where: { distributed: true } }),
-      ]);
-    return { totalUsers, totalQuests, totalCompletions, totalWinners };
+    const [
+      totalUsers,
+      campaignQuests,
+      earnHub,
+      totalCompletions,
+      totalWinners,
+    ] = await Promise.all([
+      this.prisma.user.count(),
+      this.prisma.quest.count({ where: { questKind: QuestKind.CAMPAIGN } }),
+      this.prisma.quest.findFirst({
+        where: { questKind: QuestKind.EARN_HUB },
+        include: { _count: { select: { tasks: true, submissions: true } } },
+      }),
+      this.prisma.questCompletion.count(),
+      this.prisma.winnerDraw.count({ where: { distributed: true } }),
+    ]);
+    return {
+      totalUsers,
+      totalQuests: campaignQuests,
+      totalCompletions,
+      totalWinners,
+      campaignQuests,
+      earnHubConfigured: !!earnHub,
+      earnHubTaskCount: earnHub?._count.tasks ?? 0,
+      earnHubSubmissions: earnHub?._count.submissions ?? 0,
+    };
   }
 
   /* ────────────────────────────────────────────────────────

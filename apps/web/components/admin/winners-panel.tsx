@@ -12,7 +12,9 @@ import {
   Ticket,
   UserCheck,
   Plus,
+  Trash2,
 } from "lucide-react";
+import { underlineTabClass } from "@/lib/ui-button-styles";
 import { cn } from "@/lib/utils";
 
 interface Participant {
@@ -65,6 +67,8 @@ export function WinnersPanel({ questId }: { questId: string }) {
   const [generateCount, setGenerateCount] = useState("5");
   const [codePrefix, setCodePrefix] = useState("CQ");
   const [addingCodes, setAddingCodes] = useState(false);
+  const [deletingCodeId, setDeletingCodeId] = useState<string | null>(null);
+  const [deletingAll, setDeletingAll] = useState(false);
 
   const [questTitle, setQuestTitle] = useState("");
   const [message, setMessage] = useState<{ type: "ok" | "err"; text: string } | null>(null);
@@ -193,6 +197,84 @@ export function WinnersPanel({ questId }: { questId: string }) {
     setAddingCodes(false);
   }
 
+  async function refreshCodes() {
+    const fresh = await fetch(`/api/admin/quests/${questId}/invite-codes`).then((r) =>
+      r.json(),
+    ) as InviteCode[];
+    setCodes(Array.isArray(fresh) ? fresh : []);
+  }
+
+  async function handleDeleteCode(code: InviteCode) {
+    if (code.assigned) {
+      setMessage({
+        type: "err",
+        text: "Assigned codes cannot be deleted. Only available codes can be removed.",
+      });
+      return;
+    }
+    if (!confirm(`Delete code "${code.code}"?`)) return;
+
+    setDeletingCodeId(code.id);
+    setMessage(null);
+    const res = await fetch(`/api/admin/quests/${questId}/invite-codes/${code.id}`, {
+      method: "DELETE",
+    });
+    const data = (await res.json()) as { message?: string };
+    if (res.ok) {
+      setCodes((prev) => prev.filter((c) => c.id !== code.id));
+      setMessage({ type: "ok", text: `Deleted ${code.code}.` });
+    } else {
+      setMessage({
+        type: "err",
+        text: data.message ?? "Failed to delete code",
+      });
+    }
+    setDeletingCodeId(null);
+  }
+
+  async function handleDeleteAllAvailable() {
+    const available = codes.filter((c) => !c.assigned).length;
+    if (available === 0) {
+      setMessage({ type: "err", text: "No available codes to delete." });
+      return;
+    }
+    if (
+      !confirm(
+        `Delete all ${available} available code(s)? Assigned codes will be kept.`,
+      )
+    ) {
+      return;
+    }
+
+    setDeletingAll(true);
+    setMessage(null);
+    const res = await fetch(`/api/admin/quests/${questId}/invite-codes`, {
+      method: "DELETE",
+    });
+    const data = (await res.json()) as {
+      deleted?: number;
+      skippedAssigned?: number;
+      message?: string;
+    };
+    if (res.ok) {
+      await refreshCodes();
+      const kept =
+        data.skippedAssigned && data.skippedAssigned > 0
+          ? ` ${data.skippedAssigned} assigned code(s) kept.`
+          : "";
+      setMessage({
+        type: "ok",
+        text: `Deleted ${data.deleted ?? 0} code(s).${kept}`,
+      });
+    } else {
+      setMessage({
+        type: "err",
+        text: data.message ?? "Failed to delete codes",
+      });
+    }
+    setDeletingAll(false);
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -202,6 +284,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
   }
 
   const undistributed = winners.filter((w) => !w.distributed);
+  const availableCodes = codes.filter((c) => !c.assigned).length;
 
   return (
     <div className="space-y-6">
@@ -210,7 +293,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
           <ChevronLeft className="h-5 w-5" />
         </Link>
         <div>
-          <h1 className="font-[family-name:var(--font-space)] text-xl font-semibold">
+          <h1 className="type-section-title">
             Winners & Rewards
           </h1>
           <p className="text-sm text-[var(--muted-foreground)]">{questTitle}</p>
@@ -239,12 +322,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
-            className={cn(
-              "pb-2.5 text-sm font-semibold transition-colors",
-              tab === t.id
-                ? "border-b-2 border-[var(--foreground)] text-[var(--foreground)]"
-                : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
-            )}
+            className={underlineTabClass(tab === t.id)}
           >
             {t.label}
           </button>
@@ -270,7 +348,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
               type="button"
               disabled={drawing || participants.filter((p) => !p.isWinner).length === 0}
               onClick={() => void handleDrawRandom()}
-              className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary-foreground)] disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary-foreground)] shadow-[0_0_16px_rgb(var(--canton-rgb)/0.18)] disabled:opacity-60"
             >
               {drawing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Shuffle className="h-4 w-4" />}
               Random draw
@@ -346,7 +424,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
                 type="button"
                 disabled={distributing !== null}
                 onClick={() => void handleDistribute("all")}
-                className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary-foreground)] disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary-foreground)] shadow-[0_0_16px_rgb(var(--canton-rgb)/0.18)] disabled:opacity-60"
               >
                 {distributing === "all" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 Distribute all
@@ -399,7 +477,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
                             Sent
                           </span>
                         ) : (
-                          <span className="flex items-center gap-1 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                          <span className="flex items-center gap-1 text-xs font-semibold text-orange-400 dark:text-orange-400">
                             <Clock className="h-3.5 w-3.5" />
                             Pending
                           </span>
@@ -436,7 +514,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
         <div className="space-y-5">
           {/* Add codes */}
           <form onSubmit={(e) => void handleAddCodes(e)} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-4">
-            <h3 className="font-[family-name:var(--font-space)] font-semibold">Add invite codes</h3>
+            <h3 className="type-subsection-title">Add invite codes</h3>
             <div className="space-y-3">
               <div>
                 <label className="mb-1.5 block text-sm font-medium">
@@ -467,7 +545,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
             <button
               type="submit"
               disabled={addingCodes}
-              className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary-foreground)] disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary-foreground)] shadow-[0_0_16px_rgb(var(--canton-rgb)/0.18)] disabled:opacity-60"
             >
               {addingCodes ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
               Add codes
@@ -479,27 +557,59 @@ export function WinnersPanel({ questId }: { questId: string }) {
             <p className="py-6 text-center text-sm text-[var(--muted-foreground)]">No invite codes yet.</p>
           ) : (
             <div className="overflow-hidden rounded-2xl border border-[var(--border)]">
-              <div className="border-b border-[var(--border)] bg-[var(--muted)]/50 px-4 py-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--muted)]/50 px-4 py-2.5">
                 <p className="text-xs font-semibold text-[var(--muted-foreground)]">
-                  {codes.filter((c) => !c.assigned).length} available · {codes.filter((c) => c.assigned).length} assigned
+                  {availableCodes} available · {codes.filter((c) => c.assigned).length} assigned
                 </p>
+                {availableCodes > 0 && (
+                  <button
+                    type="button"
+                    disabled={deletingAll || deletingCodeId !== null}
+                    onClick={() => void handleDeleteAllAvailable()}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-[11px] font-semibold text-red-700 transition-colors hover:bg-red-500/15 disabled:opacity-50 dark:text-red-300"
+                  >
+                    {deletingAll ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-3.5 w-3.5" />
+                    )}
+                    Delete all available
+                  </button>
+                )}
               </div>
               <div className="divide-y divide-[var(--border)]">
                 {codes.map((code) => (
-                  <div key={code.id} className="flex items-center justify-between px-4 py-2.5">
-                    <div className="flex items-center gap-3">
+                  <div key={code.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                    <div className="flex min-w-0 items-center gap-3">
                       <Ticket className={cn("h-4 w-4 shrink-0", code.assigned ? "text-[var(--muted-foreground)]" : "text-[var(--primary)]")} />
-                      <span className="font-mono text-sm">{code.code}</span>
+                      <span className="truncate font-mono text-sm">{code.code}</span>
                     </div>
-                    {code.assigned ? (
-                      <span className="text-xs text-[var(--muted-foreground)]">
-                        → {code.assignedTo?.email ?? "assigned"}
-                      </span>
-                    ) : (
-                      <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-300">
-                        Available
-                      </span>
-                    )}
+                    <div className="flex shrink-0 items-center gap-2">
+                      {code.assigned ? (
+                        <span className="text-xs text-[var(--muted-foreground)]">
+                          → {code.assignedTo?.email ?? "assigned"}
+                        </span>
+                      ) : (
+                        <>
+                          <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-300">
+                            Available
+                          </span>
+                          <button
+                            type="button"
+                            disabled={deletingCodeId !== null || deletingAll}
+                            onClick={() => void handleDeleteCode(code)}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition-colors hover:bg-red-500/10 hover:text-red-600 disabled:opacity-40 dark:hover:text-red-400"
+                            aria-label={`Delete ${code.code}`}
+                          >
+                            {deletingCodeId === code.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

@@ -1,8 +1,12 @@
 "use client";
 
+import { ListPagination } from "@/components/app/list-pagination";
+import { filterTabClass } from "@/lib/ui-button-styles";
 import { cn } from "@/lib/utils";
-import { ChevronLeft, ChevronRight, Loader2, Trophy } from "lucide-react";
+import { Loader2, Trophy } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+
+const LEADERBOARD_PAGE_SIZE = 5;
 
 const TABS = [
   { id: "weekly" as const, label: "Weekly" },
@@ -15,7 +19,15 @@ interface LeaderboardRow {
   userId: string;
   username: string;
   displayName: string;
+  cantonPartyId?: string | null;
   points: number;
+  avatarUrl: string | null;
+}
+
+function formatLeaderboardPartyId(partyId: string | null | undefined): string {
+  const p = partyId?.trim();
+  if (!p) return "No wallet";
+  return p;
 }
 
 interface LeaderboardData {
@@ -58,21 +70,39 @@ function ParticipantCell({
   row: LeaderboardRow;
   isCurrentUser: boolean;
 }) {
+  const cacheBust =
+    row.avatarUrl && !row.avatarUrl.includes("?")
+      ? `${row.avatarUrl}?v=${row.userId}`
+      : row.avatarUrl;
+
   return (
     <td className="px-3 py-3">
       <div className="flex items-center gap-3">
         <div
           className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full ring-2 ring-[var(--border)] ring-offset-2 ring-offset-[var(--card)]"
           aria-hidden
-          style={{ backgroundImage: avatarGradient(row.username) }}
+          style={
+            cacheBust
+              ? undefined
+              : { backgroundImage: avatarGradient(row.username) }
+          }
         >
-          <span className="font-[family-name:var(--font-space)] text-xs font-bold tracking-tight text-white drop-shadow-sm">
-            {getInitials(row.displayName)}
-          </span>
+          {cacheBust ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={cacheBust}
+              alt=""
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <span className="type-micro-label text-white drop-shadow-sm">
+              {getInitials(row.displayName)}
+            </span>
+          )}
         </div>
         <div className="min-w-0 leading-tight">
           <div className="flex flex-wrap items-center gap-2 gap-y-1">
-            <span className="font-[family-name:var(--font-space)] font-semibold text-[var(--foreground)]">
+            <span className="type-subsection-title text-[var(--foreground)]">
               {row.displayName}
             </span>
             {isCurrentUser && (
@@ -86,8 +116,8 @@ function ParticipantCell({
               </span>
             )}
           </div>
-          <span className="mt-0.5 block truncate text-xs text-[var(--muted-foreground)]">
-            @{row.username}
+          <span className="mt-0.5 block break-all font-mono text-[11px] leading-snug text-[var(--muted-foreground)]">
+            {formatLeaderboardPartyId(row.cantonPartyId)}
           </span>
         </div>
       </div>
@@ -104,7 +134,7 @@ export function LeaderboardTable() {
 
   // Get current user ID for highlighting
   useEffect(() => {
-    fetch("/api/me", { credentials: "include" })
+    fetch("/api/me", { credentials: "include", signal: AbortSignal.timeout(12_000) })
       .then((r) => r.ok ? r.json() : null)
       .then((d: { id?: string } | null) => { if (d?.id) setCurrentUserId(d.id); })
       .catch(() => {});
@@ -115,13 +145,13 @@ export function LeaderboardTable() {
       setLoading(true);
       try {
         const res = await fetch(
-          `/api/quests/leaderboard?period=${per}&page=${p}&pageSize=10`,
-          { credentials: "include" },
+          `/api/quests/leaderboard?period=${per}&page=${p}&pageSize=${LEADERBOARD_PAGE_SIZE}`,
+          { credentials: "include", signal: AbortSignal.timeout(12_000) },
         );
         if (res.ok) setData((await res.json()) as LeaderboardData);
-        else setData({ rows: [], total: 0, page: p, pageSize: 10 });
+        else setData({ rows: [], total: 0, page: p, pageSize: LEADERBOARD_PAGE_SIZE });
       } catch {
-        setData({ rows: [], total: 0, page: p, pageSize: 10 });
+        setData({ rows: [], total: 0, page: p, pageSize: LEADERBOARD_PAGE_SIZE });
       } finally {
         setLoading(false);
       }
@@ -134,7 +164,9 @@ export function LeaderboardTable() {
     void fetchLeaderboard(1, period);
   }, [period, fetchLeaderboard]);
 
-  const totalPages = data ? Math.max(1, Math.ceil(data.total / (data.pageSize || 10))) : 1;
+  const totalPages = data
+    ? Math.max(1, Math.ceil(data.total / (data.pageSize || LEADERBOARD_PAGE_SIZE)))
+    : 1;
 
   function changePage(newPage: number) {
     setPage(newPage);
@@ -144,21 +176,19 @@ export function LeaderboardTable() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setPeriod(t.id)}
-            className={cn(
-              "rounded-xl px-4 py-2 text-sm font-medium transition-colors",
-              period === t.id
-                ? "bg-[var(--foreground)] text-[var(--background)]"
-                : "border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] hover:bg-[var(--muted)]",
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
+        {TABS.map((t) => {
+          const selected = period === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setPeriod(t.id)}
+              className={filterTabClass(selected)}
+            >
+              {t.label}
+            </button>
+          );
+        })}
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]">
@@ -222,42 +252,15 @@ export function LeaderboardTable() {
           </div>
         )}
 
-        {!loading && totalPages > 1 && (
-          <div className="flex flex-col gap-3 border-t border-[var(--border)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-[var(--muted-foreground)]">
-              Page {page} of {totalPages} · {data?.total ?? 0} total
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => changePage(Math.max(1, page - 1))}
-                disabled={page <= 1}
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-xl border border-[var(--border)] px-3 py-1.5 text-sm font-medium transition-colors",
-                  page <= 1
-                    ? "cursor-not-allowed opacity-40"
-                    : "bg-[var(--card)] hover:bg-[var(--muted)]",
-                )}
-              >
-                <ChevronLeft className="h-4 w-4" aria-hidden />
-                Prev
-              </button>
-              <button
-                type="button"
-                onClick={() => changePage(Math.min(totalPages, page + 1))}
-                disabled={page >= totalPages}
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-xl border border-[var(--border)] px-3 py-1.5 text-sm font-medium transition-colors",
-                  page >= totalPages
-                    ? "cursor-not-allowed opacity-40"
-                    : "bg-[var(--card)] hover:bg-[var(--muted)]",
-                )}
-              >
-                Next
-                <ChevronRight className="h-4 w-4" aria-hidden />
-              </button>
-            </div>
-          </div>
+        {!loading && (
+          <ListPagination
+            className="px-4 pb-3"
+            page={page}
+            totalPages={totalPages}
+            total={data?.total}
+            disabled={loading}
+            onPageChange={changePage}
+          />
         )}
       </div>
     </div>

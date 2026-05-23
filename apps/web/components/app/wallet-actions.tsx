@@ -2,6 +2,7 @@
 
 import { CopyField } from "@/components/app/copy-field";
 import { buttonVariants } from "@/components/ui/button";
+import { iconButtonClass } from "@/lib/ui-button-styles";
 import { cn } from "@/lib/utils";
 import { ArrowDownLeft, ArrowUpRight, CheckCircle2, Loader2, X, AlertCircle } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
@@ -21,7 +22,7 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
   const [sheet, setSheet] = useState<Sheet>(null);
   const [feeCc, setFeeCc] = useState(5);
 
-  // Fetch fee config dari env backend agar sinkron dengan .env
+  // Fetch fee config from backend env so UI stays in sync with .env
   useEffect(() => {
     fetch("/api/party/fee-config", { credentials: "include" })
       .then((r) => r.ok ? r.json() : null)
@@ -81,17 +82,35 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
         }),
       });
 
-              const data = (await res.json()) as { message?: string; error?: string; totalDeducted?: number };
+      const data = (await res.json()) as {
+        message?: string;
+        error?: string;
+        totalDeducted?: number;
+        fee?: number;
+        feeCollected?: boolean;
+        warning?: string;
+        success?: boolean;
+        accepted?: boolean;
+      };
 
-      if (!res.ok) {
+      if (
+        !res.ok ||
+        data.success === false ||
+        data.accepted === false
+      ) {
         setSendState("error");
-        setSendMessage(data.error ?? data.message ?? "Transfer failed. Please try again.");
+        setSendMessage(data.message ?? data.error ?? "Transfer failed. Please try again.");
         return;
       }
 
       setSendState("success");
-      const recipient = (data as { to?: string }).to ?? "recipient";
-      setSendMessage(`Send ${amount} CC to ${recipient} Completed`);
+      setSendMessage(
+        data.message ??
+          `Sent ${amount} CC` +
+            (data.feeCollected && data.fee
+              ? ` (fee ${data.fee} CC, total ${data.totalDeducted ?? amount + data.fee} CC)`
+              : ""),
+      );
       onBalanceRefresh?.();
     } catch {
       setSendState("error");
@@ -101,21 +120,24 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
 
   return (
     <>
-      <div className="flex flex-wrap gap-3">
+      <div className="grid w-full min-w-0 grid-cols-2 gap-3">
         <button
           type="button"
           onClick={openSend}
-          className={cn(buttonVariants({ size: "sm" }), "gap-2")}
+          className={cn(buttonVariants({ size: "sm" }), "w-full justify-center gap-2")}
         >
-          <ArrowUpRight className="h-4 w-4" aria-hidden />
+          <ArrowUpRight className="h-4 w-4 shrink-0" aria-hidden />
           Send CC
         </button>
         <button
           type="button"
           onClick={() => setSheet("receive")}
-          className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "gap-2")}
+          className={cn(
+            buttonVariants({ variant: "secondary", size: "sm" }),
+            "w-full justify-center gap-2",
+          )}
         >
-          <ArrowDownLeft className="h-4 w-4" aria-hidden />
+          <ArrowDownLeft className="h-4 w-4 shrink-0" aria-hidden />
           Receive
         </button>
       </div>
@@ -142,7 +164,7 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
               <div>
                 <h2
                   id={sendTitleId}
-                  className="font-[family-name:var(--font-space)] text-lg font-semibold text-[var(--foreground)]"
+                  className="type-section-title text-[var(--foreground)]"
                 >
                   Send
                 </h2>
@@ -153,7 +175,7 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
               <button
                 type="button"
                 onClick={close}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 text-[var(--foreground)] hover:bg-[var(--muted)]"
+                className={iconButtonClass("h-9 w-9 shrink-0 text-[var(--foreground)]")}
                 aria-label="Close"
               >
                 <X className="h-4 w-4" />
@@ -220,7 +242,7 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
                     onChange={(e) => setCcAmount(e.target.value)}
                     placeholder="e.g. 10"
                     disabled={sendState === "loading"}
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 font-[family-name:var(--font-space)] text-sm tabular-nums text-[var(--foreground)] outline-none ring-offset-[var(--card)] placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--foreground)]/25 disabled:opacity-50"
+                    className="type-display w-full rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 text-sm tabular-nums text-[var(--foreground)] outline-none ring-offset-[var(--card)] placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--foreground)]/25 disabled:opacity-50"
                   />
                 </div>
 
@@ -243,12 +265,12 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
                   />
                 </div>
 
-                {/* Fee notice — nilai dari env TRANSACTION_FEE_CC */}
+                {/* Fee notice — value from env TRANSACTION_FEE_CC */}
                 <div className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/30 px-3 py-2">
                   <p className="text-[11px] text-[var(--muted-foreground)]">
                     <span className="font-medium text-[var(--foreground)]">Platform fee: {feeCc} CC</span>
                     {ccAmount && parseFloat(ccAmount) > 0 && (
-                      <span className="ml-1 font-medium text-amber-500">
+                      <span className="ml-1 font-medium text-canton">
                         · Total: {(parseFloat(ccAmount) + feeCc).toFixed(2)} CC
                       </span>
                     )}
@@ -314,7 +336,7 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
               <div>
                 <h2
                   id={receiveTitleId}
-                  className="font-[family-name:var(--font-space)] text-lg font-semibold text-[var(--foreground)]"
+                  className="type-section-title text-[var(--foreground)]"
                 >
                   Receive CC
                 </h2>
@@ -322,7 +344,7 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
               <button
                 type="button"
                 onClick={close}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 text-[var(--foreground)] hover:bg-[var(--muted)]"
+                className={iconButtonClass("h-9 w-9 shrink-0 text-[var(--foreground)]")}
                 aria-label="Close"
               >
                 <X className="h-4 w-4" />

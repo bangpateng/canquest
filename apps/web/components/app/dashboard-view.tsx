@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { PageTitle, SectionTitle, StatValue } from "@/components/ui/typography";
+import { ROUTES } from "@/lib/app-routes";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -14,6 +16,11 @@ import {
   Trophy,
   Zap,
 } from "lucide-react";
+import { ListPagination } from "@/components/app/list-pagination";
+import { useCcBalance } from "@/lib/hooks/use-cc-balance";
+import { usePlatformT } from "@/lib/i18n/platform-provider";
+
+const ACTIVITY_PAGE_SIZE = 5;
 
 interface Me {
   id?: string;
@@ -21,6 +28,8 @@ interface Me {
   displayName?: string | null;
   username?: string | null;
   cantonPartyId?: string | null;
+  /** Lifetime points — same field as Quest page (`/api/me`, reconciled on server). */
+  earnPoints?: number;
 }
 
 interface DashboardStats {
@@ -37,16 +46,27 @@ interface ActivityItem {
   time: string;
 }
 
-function timeAgo(iso: string): string {
+interface ActivityPage {
+  items: ActivityItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+function timeAgo(
+  iso: string,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60_000);
   const hours = Math.floor(diff / 3_600_000);
   const days = Math.floor(diff / 86_400_000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  if (days === 1) return "Yesterday";
-  return `${days}d ago`;
+  if (mins < 1) return t("time.justNow");
+  if (mins < 60) return t("time.minutesAgo", { n: mins });
+  if (hours < 24) return t("time.hoursAgo", { n: hours });
+  if (days === 1) return t("time.yesterday");
+  return t("time.daysAgo", { n: days });
 }
 
 const ACTIVITY_ICON: Record<ActivityItem["type"], React.ElementType> = {
@@ -61,35 +81,101 @@ const ACTIVITY_COLOR: Record<ActivityItem["type"], string> = {
   cc_transfer: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
 };
 
+const FETCH_TIMEOUT_MS = 12_000;
+
+async function fetchJson<T>(url: string): Promise<{ ok: boolean; data: T | null }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      credentials: "include",
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    const data = (await res.json().catch(() => null)) as T | null;
+    return { ok: res.ok, data: res.ok ? data : null };
+  } catch {
+    return { ok: false, data: null };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export function DashboardView() {
+  const t = usePlatformT();
   const [me, setMe] = useState<Me | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [activities, setActivities] = useState<ActivityItem[]>([]);
-  const [balance, setBalance] = useState<number | null>(null);
+  const [activityData, setActivityData] = useState<ActivityPage | null>(null);
+  const [activityPage, setActivityPage] = useState(1);
+  const [activityLoading, setActivityLoading] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const fetchActivity = useCallback(async (page: number) => {
+    setActivityLoading(true);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+      const res = await fetch(
+        `/api/quests/activity?page=${page}&pageSize=${ACTIVITY_PAGE_SIZE}`,
+        { credentials: "include", signal: controller.signal },
+      );
+      if (res.ok) {
+        setActivityData((await res.json()) as ActivityPage);
+      } else {
+        setActivityData({
+          items: [],
+          total: 0,
+          page,
+          pageSize: ACTIVITY_PAGE_SIZE,
+          totalPages: 1,
+        });
+      }
+    } catch {
+      setActivityData({
+        items: [],
+        total: 0,
+        page,
+        pageSize: ACTIVITY_PAGE_SIZE,
+        totalPages: 1,
+      });
+    } finally {
+      clearTimeout(timer);
+      setActivityLoading(false);
+    }
+  }, []);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
-      const [meRes, statsRes, actRes, balRes] = await Promise.allSettled([
-        fetch("/api/me", { credentials: "include", cache: "no-store" }),
-        fetch("/api/quests/dashboard-stats", { credentials: "include" }),
-        fetch("/api/quests/activity?limit=8", { credentials: "include" }),
-        fetch("/api/party/balance", { credentials: "include" }),
+      const [meResult, statsResult] = await Promise.all([
+        fetchJson<Me>("/api/me"),
+        fetchJson<DashboardStats>("/api/quests/dashboard-stats"),
       ]);
 
-      if (meRes.status === "fulfilled" && meRes.value.ok) {
-        setMe((await meRes.value.json()) as Me);
+      if (meResult.ok && meResult.data) setMe(meResult.data);
+      if (statsResult.ok && statsResult.data) {
+        const earnPoints =
+          typeof meResult.data?.earnPoints === "number"
+            ? meResult.data.earnPoints
+            : statsResult.data.totalPoints;
+        setStats({ ...statsResult.data, totalPoints: earnPoints });
+      } else if (meResult.ok && typeof meResult.data?.earnPoints === "number") {
+        setStats({
+          totalPoints: meResult.data.earnPoints,
+          questsCompleted: 0,
+          txCount: 0,
+          weeklyRank: 0,
+        });
+      } else {
+        setStats({ totalPoints: 0, questsCompleted: 0, txCount: 0, weeklyRank: 0 });
       }
-      if (statsRes.status === "fulfilled" && statsRes.value.ok) {
-        setStats((await statsRes.value.json()) as DashboardStats);
-      }
-      if (actRes.status === "fulfilled" && actRes.value.ok) {
-        setActivities((await actRes.value.json()) as ActivityItem[]);
-      }
-      if (balRes.status === "fulfilled" && balRes.value.ok) {
-        const d = (await balRes.value.json()) as { balance?: number | null };
-        setBalance(d.balance ?? 0);
+
+      if (!meResult.ok && !statsResult.ok) {
+        setLoadError(
+          "Could not load dashboard. Make sure API is running on port 3001 and you are logged in.",
+        );
       }
     } finally {
       setLoading(false);
@@ -100,51 +186,104 @@ export function DashboardView() {
     void fetchAll();
   }, [fetchAll]);
 
+  useEffect(() => {
+    const refreshOnVisible = () => {
+      if (document.visibilityState === "visible") void fetchAll();
+    };
+    window.addEventListener("focus", refreshOnVisible);
+    document.addEventListener("visibilitychange", refreshOnVisible);
+    return () => {
+      window.removeEventListener("focus", refreshOnVisible);
+      document.removeEventListener("visibilitychange", refreshOnVisible);
+    };
+  }, [fetchAll]);
+
+  useEffect(() => {
+    void fetchActivity(activityPage);
+  }, [fetchActivity, activityPage]);
+
+  const lifetimePoints =
+    typeof me?.earnPoints === "number"
+      ? me.earnPoints
+      : (stats?.totalPoints ?? 0);
+
   const hasWallet =
     Boolean(me?.cantonPartyId) && !me?.cantonPartyId?.startsWith("canquest:user:");
 
+  const { balance, loading: balanceLoading } = useCcBalance({ enabled: hasWallet });
+
   const statCards = [
     {
-      title: "Quest points",
-      value: loading ? null : (stats?.totalPoints ?? 0).toLocaleString(),
-      hint: "Lifetime points from verified tasks",
-      icon: TrendingUp,
+      key: "weeklyRank",
+      title: t("dashboard.weeklyRank"),
+      value: loading ? null : stats?.weeklyRank ? `#${stats.weeklyRank}` : "—",
+      hint: t("dashboard.weeklyRankHint"),
+      icon: Trophy,
     },
     {
-      title: "CC Balance",
-      value: loading
+      key: "ccBalance",
+      title: t("dashboard.ccBalance"),
+      value: loading || (hasWallet && balanceLoading)
         ? null
         : !hasWallet
-          ? "No wallet"
+          ? t("dashboard.noWallet")
           : balance !== null
             ? `${balance.toFixed(4)} CC`
             : "—",
-      hint: hasWallet ? "Live from Splice Validator" : "Create wallet first",
+      hint: hasWallet ? t("dashboard.ccBalanceHintLive") : t("dashboard.ccBalanceHintCreate"),
       icon: Coins,
     },
     {
-      title: "Weekly rank",
-      value: loading ? null : stats?.weeklyRank ? `#${stats.weeklyRank}` : "—",
-      hint: "Based on points earned this week",
-      icon: Trophy,
+      key: "ccTransactions",
+      title: t("dashboard.ccTransactions"),
+      value: loading ? null : (stats?.txCount ?? 0).toString(),
+      hint: t("dashboard.ccTransactionsHint"),
+      icon: Zap,
+    },
+    {
+      key: "questsCompleted",
+      title: t("dashboard.questsCompleted"),
+      value: loading ? null : (stats?.questsCompleted ?? 0).toString(),
+      hint: t("dashboard.questsCompletedHint"),
+      icon: Gift,
+    },
+    {
+      key: "questPoints",
+      title: t("dashboard.questPoints"),
+      value: loading ? null : lifetimePoints.toLocaleString(),
+      hint: t("dashboard.questPointsHint"),
+      icon: TrendingUp,
     },
   ];
 
   return (
     <div className="space-y-8">
+      {loadError ? (
+        <div className="rounded-xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm text-orange-200">
+          {loadError}{" "}
+          <button
+            type="button"
+            className="font-semibold underline"
+            onClick={() => void fetchAll()}
+          >
+            Retry
+          </button>
+        </div>
+      ) : null}
+
       {/* Welcome */}
       {!loading && me?.displayName && (
         <div>
-          <h1 className="font-[family-name:var(--font-space)] text-2xl font-semibold tracking-tight">
-            Welcome back, {me.displayName.split(" ")[0]}
-          </h1>
+          <PageTitle>
+            {t("dashboard.welcomeBack", { name: me.displayName.split(" ")[0] })}
+          </PageTitle>
           {me.username && (
             <p className="mt-1 text-sm text-[var(--muted-foreground)]">
               @{me.username}
               {me.cantonPartyId && !me.cantonPartyId.startsWith("canquest:") && (
                 <span className="ml-2 inline-flex items-center gap-1 text-green-600 dark:text-green-400">
                   <CheckCircle2 className="h-3.5 w-3.5" />
-                  Wallet active
+                  {t("dashboard.walletActive")}
                 </span>
               )}
             </p>
@@ -152,103 +291,56 @@ export function DashboardView() {
         </div>
       )}
 
-      {/* Stat cards */}
-      <section className="grid gap-4 sm:grid-cols-3">
+      {/* Stat cards — order: Weekly rank → CC Balance → CC Transactions → Quests completed → Quest points */}
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {statCards.map((c) => {
           const Icon = c.icon;
           return (
             <div
-              key={c.title}
+              key={c.key}
               className="glass-card rounded-2xl border border-[var(--border)] p-6"
             >
               <div className="flex items-center justify-between">
-                <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
-                  {c.title}
-                </p>
+                <p className="type-label">{c.title}</p>
                 <Icon className="h-4 w-4 text-[var(--muted-foreground)]" aria-hidden />
               </div>
-              <p className="mt-2 font-[family-name:var(--font-space)] text-3xl font-semibold tracking-tight">
+              <StatValue className="mt-2">
                 {c.value === null ? (
                   <Loader2 className="h-6 w-6 animate-spin text-[var(--muted-foreground)]" />
                 ) : (
                   c.value
                 )}
-              </p>
+              </StatValue>
               <p className="mt-1 text-xs text-[var(--muted-foreground)]">{c.hint}</p>
             </div>
           );
         })}
       </section>
 
-      {/* Second row: quests completed card */}
-      <section className="grid gap-4 sm:grid-cols-3">
-        <div className="glass-card rounded-2xl border border-[var(--border)] p-6">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
-              Quests completed
-            </p>
-            <Gift className="h-4 w-4 text-[var(--muted-foreground)]" aria-hidden />
-          </div>
-          <p className="mt-2 font-[family-name:var(--font-space)] text-3xl font-semibold tracking-tight">
-            {loading ? (
-              <Loader2 className="h-6 w-6 animate-spin text-[var(--muted-foreground)]" />
-            ) : (
-              (stats?.questsCompleted ?? 0).toString()
-            )}
+      {!hasWallet && !loading ? (
+        <div className="glass-card rounded-2xl border border-orange-500/30 bg-orange-500/5 p-6">
+          <p className="type-label text-orange-300 dark:text-orange-400">
+            {t("dashboard.walletNotCreated")}
           </p>
-          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-            Total quests with all tasks verified
+          <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+            {t("dashboard.walletNotCreatedHint")}
           </p>
+          <Link
+            href="/wallet"
+            className={cn(buttonVariants({ size: "sm" }), "mt-4 gap-1")}
+          >
+            {t("dashboard.createWallet")} <ArrowUpRight className="h-3.5 w-3.5" />
+          </Link>
         </div>
+      ) : null}
 
-        <div className="glass-card rounded-2xl border border-[var(--border)] p-6">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
-              CC Transactions
-            </p>
-            <Zap className="h-4 w-4 text-[var(--muted-foreground)]" aria-hidden />
-          </div>
-          <p className="mt-2 font-[family-name:var(--font-space)] text-3xl font-semibold tracking-tight">
-            {loading ? (
-              <Loader2 className="h-6 w-6 animate-spin text-[var(--muted-foreground)]" />
-            ) : (
-              (stats?.txCount ?? 0).toString()
-            )}
-          </p>
-          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-            Recorded on-chain transfers
-          </p>
-        </div>
-
-        {!hasWallet && !loading && (
-          <div className="glass-card rounded-2xl border border-amber-500/30 bg-amber-500/5 p-6">
-            <p className="text-xs font-medium uppercase tracking-wide text-amber-700 dark:text-amber-400">
-              Wallet not created
-            </p>
-            <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-              Create your Canton wallet to send and receive CC tokens.
-            </p>
-            <Link
-              href="/wallet"
-              className={cn(buttonVariants({ size: "sm" }), "mt-4 gap-1")}
-            >
-              Create Wallet <ArrowUpRight className="h-3.5 w-3.5" />
-            </Link>
-          </div>
-        )}
-      </section>
-
-      {/* Activity + Actions */}
-      <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-        {/* Recent Activity */}
-        <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm">
+      {/* Recent Activity */}
+      <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h2 className="font-[family-name:var(--font-space)] text-lg font-semibold">
-                Recent activity
-              </h2>
+              <SectionTitle>{t("dashboard.recentActivity")}</SectionTitle>
               <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-                Your latest quest completions, tasks, and CC transfers.
+                {t("dashboard.recentActivityHint")}
               </p>
             </div>
             <Link
@@ -258,106 +350,75 @@ export function DashboardView() {
                 "inline-flex shrink-0 gap-1",
               )}
             >
-              View all <ArrowUpRight className="h-3.5 w-3.5" />
+              {t("common.viewAll")} <ArrowUpRight className="h-3.5 w-3.5" />
             </Link>
           </div>
 
-          {loading ? (
+          {activityLoading ? (
             <div className="flex items-center justify-center py-10">
               <Loader2 className="h-5 w-5 animate-spin text-[var(--muted-foreground)]" />
             </div>
-          ) : activities.length === 0 ? (
+          ) : !activityData || activityData.items.length === 0 ? (
             <div className="mt-6 rounded-xl border border-dashed border-[var(--border)] py-10 text-center">
               <p className="text-sm text-[var(--muted-foreground)]">
-                No activity yet — complete a quest to get started!
+                {t("dashboard.noActivity")}
               </p>
-              <Link
-                href="/quests"
-                className={cn(buttonVariants({ size: "sm" }), "mx-auto mt-4 gap-1")}
-              >
-                Browse quests
-              </Link>
+              <div className="mx-auto mt-4 flex flex-wrap justify-center gap-2">
+                <Link
+                  href={ROUTES.campaignQuests}
+                  className={cn(buttonVariants({ size: "sm" }), "gap-1")}
+                >
+                  {t("dashboard.browseEarn")}
+                </Link>
+                <Link
+                  href={ROUTES.earnHub}
+                  className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "gap-1")}
+                >
+                  {t("dashboard.browseQuests")}
+                </Link>
+              </div>
             </div>
           ) : (
-            <ul className="mt-5 divide-y divide-[var(--border)]">
-              {activities.map((item, i) => {
-                const Icon = ACTIVITY_ICON[item.type];
-                const colorClass = ACTIVITY_COLOR[item.type];
-                return (
-                  <li
-                    key={`${item.type}-${item.time}-${i}`}
-                    className="flex items-start gap-3 py-3"
-                  >
-                    <div
-                      className={cn(
-                        "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
-                        colorClass,
-                      )}
+            <>
+              <ul className="mt-5 divide-y divide-[var(--border)]">
+                {activityData.items.map((item, i) => {
+                  const Icon = ACTIVITY_ICON[item.type];
+                  const colorClass = ACTIVITY_COLOR[item.type];
+                  return (
+                    <li
+                      key={`${item.type}-${item.time}-${i}`}
+                      className="flex items-start gap-3 py-3"
                     >
-                      <Icon className="h-4 w-4" aria-hidden />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-[var(--foreground)]">{item.title}</p>
-                      <p className="text-sm text-[var(--muted-foreground)]">{item.detail}</p>
-                    </div>
-                    <p className="shrink-0 text-xs text-[var(--muted-foreground)] pt-0.5">
-                      {timeAgo(item.time)}
-                    </p>
-                  </li>
-                );
-              })}
-            </ul>
+                      <div
+                        className={cn(
+                          "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+                          colorClass,
+                        )}
+                      >
+                        <Icon className="h-4 w-4" aria-hidden />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-[var(--foreground)]">{item.title}</p>
+                        <p className="text-sm text-[var(--muted-foreground)]">{item.detail}</p>
+                      </div>
+                      <p className="shrink-0 text-xs text-[var(--muted-foreground)] pt-0.5">
+                        {timeAgo(item.time, t)}
+                      </p>
+                    </li>
+                  );
+                })}
+              </ul>
+              <ListPagination
+                className="mt-4"
+                page={activityPage}
+                totalPages={activityData.totalPages}
+                total={activityData.total}
+                disabled={activityLoading}
+                onPageChange={setActivityPage}
+              />
+            </>
           )}
-        </section>
-
-        {/* Quick actions */}
-        <section className="flex flex-col gap-4 rounded-2xl border border-[var(--border)] bg-[var(--muted)]/40 p-6">
-          <h2 className="font-[family-name:var(--font-space)] text-lg font-semibold">
-            Quick actions
-          </h2>
-          {loading ? (
-            <div className="flex items-center justify-center py-6">
-              <Loader2 className="h-5 w-5 animate-spin text-[var(--muted-foreground)]" />
-            </div>
-          ) : (
-            <p className="text-sm text-[var(--muted-foreground)]">
-              {me?.displayName
-                ? `Hello, ${me.displayName}`
-                : "Welcome to CanQuest"}{" "}
-              — earn CC rewards by completing verified quests on the Canton Network.
-            </p>
-          )}
-          <div className="mt-auto flex flex-col gap-2">
-            <Link
-              href="/quests"
-              className={cn(buttonVariants({ size: "sm" }), "justify-center gap-2")}
-            >
-              <Gift className="h-4 w-4" />
-              Browse quests
-            </Link>
-            <Link
-              href="/wallet"
-              className={cn(
-                buttonVariants({ variant: "secondary", size: "sm" }),
-                "justify-center gap-2",
-              )}
-            >
-              <Coins className="h-4 w-4" />
-              View wallet
-            </Link>
-            <Link
-              href="/leaderboard"
-              className={cn(
-                buttonVariants({ variant: "secondary", size: "sm" }),
-                "justify-center gap-2",
-              )}
-            >
-              <Trophy className="h-4 w-4" />
-              Leaderboard
-            </Link>
-          </div>
-        </section>
-      </div>
+      </section>
     </div>
   );
 }

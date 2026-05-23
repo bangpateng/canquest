@@ -137,18 +137,18 @@ export class PartyController {
    *   4. After that, all incoming CC transfers go through automatically
    */
   /**
-   * Aktifkan / perbarui TransferPreapproval (CIP-56) untuk user yang login.
-   * Wajib untuk Opsi B: terima CC langsung dari wallet validator tanpa Accept manual.
+   * Enable or refresh TransferPreapproval (CIP-56) for the logged-in user.
+   * Required for direct CC transfers from the validator wallet without manual accept.
    */
   @Post('ensure-preapproval')
   async ensurePreapproval(@Req() req: AuthedReq) {
     const user = await this.users.findById(req.user.userId);
     if (!user?.username || !user.cantonPartyId) {
-      throw new BadRequestException('Buat wallet dulu dari halaman Wallet.');
+      throw new BadRequestException('Create your wallet first from the Wallet page.');
     }
     if (user.cantonPartyId.startsWith('canquest:')) {
       throw new BadRequestException(
-        'Party ID masih placeholder. Jalankan POST /party/allocate saat tunnel Splice aktif.',
+        'Party ID is still a placeholder. Run POST /party/allocate when the Splice tunnel is active.',
       );
     }
 
@@ -158,7 +158,7 @@ export class PartyController {
         active: true,
         partyId: user.cantonPartyId,
         username: user.username,
-        message: 'TransferPreapproval sudah aktif (CIP-56).',
+        message: 'TransferPreapproval is already active (CIP-56).',
       };
     }
 
@@ -167,10 +167,10 @@ export class PartyController {
       const balance = await this.splice.getUserBalance(user.username);
       const hint =
         balance === null || balance <= 0
-          ? ' User perlu saldo CC minimal untuk biaya preapproval (~$1/tahun). Fund dulu dari wallet validator.'
+          ? ' You need a minimum CC balance for the preapproval fee (~$1/year). Fund your wallet from the validator wallet UI first.'
           : '';
       throw new BadRequestException(
-        (created.detail ?? 'Gagal membuat TransferPreapproval.') + hint,
+        (created.detail ?? 'Failed to create TransferPreapproval.') + hint,
       );
     }
 
@@ -183,7 +183,7 @@ export class PartyController {
       partyId: user.cantonPartyId,
       username: user.username,
       message:
-        'TransferPreapproval aktif — CC dari wallet validator bisa masuk langsung (Opsi B / CIP-56).',
+        'TransferPreapproval active — CC from the validator wallet can arrive directly (CIP-56).',
     };
   }
 
@@ -327,22 +327,28 @@ export class PartyController {
     // Menggunakan actAs = user.username sesuai pola CIP-56 Propose-Accept
     const accepted = await this.splice.acceptOfferViaWallet(offerContractId, user.username);
 
-    void this.users.recordTransaction({
-      userId: user.id,
-      amountCc: body.amount,
-      type: 'TRANSFER_IN',
-      description: body.description ?? 'CanQuest reward',
-      counterparty: 'Validator (reward)',
-      ledgerTxId: offerContractId,
-    });
+    if (accepted) {
+      void this.users.recordTransaction({
+        userId: user.id,
+        amountCc: body.amount,
+        type: 'TRANSFER_IN',
+        description: body.description ?? 'CanQuest reward',
+        counterparty: 'Validator (reward)',
+        ledgerTxId: offerContractId,
+      });
+    }
+
+    if (!accepted) {
+      throw new BadRequestException(
+        'Reward transfer failed — offer was not accepted. No transaction was recorded.',
+      );
+    }
 
     return {
       offerContractId,
-      accepted,
+      accepted: true,
       amount: body.amount,
-      message: accepted
-        ? `${body.amount} CC dikirim ke ${user.username}. CC akan tiba di wallet sebentar lagi.`
-        : `Offer dibuat tapi auto-accept gagal — coba lagi atau cek koneksi Splice.`,
+      message: `${body.amount} CC sent to ${user.username}. It should appear in your wallet shortly.`,
     };
   }
 
@@ -394,16 +400,24 @@ export class PartyController {
       if (username === sender.username?.toLowerCase()) {
         throw new BadRequestException('You cannot send CC to yourself.');
       }
-      const resolved = await this.splice.getUserPartyId(username);
+      const dbUser = await this.users.findByUsernameInsensitive(username);
+      const resolved = dbUser?.cantonPartyId ?? (await this.splice.getUserPartyId(username));
       if (!resolved) {
         throw new BadRequestException(`User "@${username}" not found or has no wallet.`);
       }
       recipientPartyId = resolved;
       recipientLabel = `@${username}`;
-      recipientUsername = username;
+      recipientUsername = dbUser?.username ?? username;
     }
 
     const description = body.memo?.trim() || `Sent to ${recipientLabel}`;
+
+    const senderBalance = await this.splice.getUserBalance(sender.username);
+    if (senderBalance !== null && senderBalance < amount + feeCc) {
+      throw new BadRequestException(
+        `Insufficient balance. Need ${amount + feeCc} CC (${amount} transfer + ${feeCc} platform fee).`,
+      );
+    }
 
     // ── Step 1 (Propose): Buat TransferOffer dari pengirim → penerima ──────────
     // actAs = sender.username (sesuai CIP-56 Propose-Accept)
@@ -416,7 +430,7 @@ export class PartyController {
     );
     if (!offerContractId) {
       throw new BadRequestException(
-        'Transfer gagal — tidak bisa membuat offer. Periksa saldo CC Anda.',
+        'Transfer failed — could not create offer. Check your CC balance.',
       );
     }
 
@@ -437,72 +451,115 @@ export class PartyController {
       );
     }
 
-        // Catat riwayat transaksi
-    void this.users.recordTransaction({
-      userId: sender.id,
-      amountCc: amount,
-      type: 'TRANSFER_OUT',
-      description: description,
-      counterparty: recipientLabel,
-      ledgerTxId: offerContractId,
-    });
-
-    // Emit FeaturedAppActivityMarker for CC transfer
-    // Per Canton Module 4: cc_transfer is a meaningful user action
-    // https://docs.canton.network/appdev/modules/m4-featured-app-activity-marker
-    if (sender.cantonPartyId) {
-      void this.featuredActivity
-        .recordActivity('cc_transfer', sender.cantonPartyId, `CC transfer ${amount} CC to ${recipientLabel}`)
-        .catch(() => { /* non-critical */ });
-    }
-
-    // Catat TRANSFER_IN untuk penerima jika terdaftar di CanQuest (username atau party ID)
-    let recipientUser = recipientUsername
-      ? await this.users.findByUsernameInsensitive(recipientUsername)
-      : null;
-    if (!recipientUser) {
-      recipientUser = await this.users.findByPartyId(recipientPartyId);
-    }
-    if (recipientUser) {
+    if (accepted) {
       void this.users.recordTransaction({
-        userId: recipientUser.id,
+        userId: sender.id,
         amountCc: amount,
-        type: 'TRANSFER_IN',
-        description: `Received from @${sender.username}${body.memo ? `: ${body.memo.trim()}` : ''}`,
-        counterparty: `@${sender.username}`,
+        type: 'TRANSFER_OUT',
+        description: description,
+        counterparty: recipientLabel,
         ledgerTxId: offerContractId,
       });
-      if (recipientUser.username) {
-        void this.inboundSync.alignBalanceFromChain(
-          recipientUser.id,
-          recipientUser.username,
+
+      // Emit FeaturedAppActivityMarker for CC transfer
+      if (sender.cantonPartyId) {
+        void this.featuredActivity
+          .recordActivity('cc_transfer', sender.cantonPartyId, `CC transfer ${amount} CC to ${recipientLabel}`)
+          .catch(() => { /* non-critical */ });
+      }
+
+      let recipientUser = recipientUsername
+        ? await this.users.findByUsernameInsensitive(recipientUsername)
+        : null;
+      if (!recipientUser) {
+        recipientUser = await this.users.findByPartyId(recipientPartyId);
+      }
+      if (recipientUser) {
+        void this.users.recordTransaction({
+          userId: recipientUser.id,
+          amountCc: amount,
+          type: 'TRANSFER_IN',
+          description: `Received from @${sender.username}${body.memo ? `: ${body.memo.trim()}` : ''}`,
+          counterparty: `@${sender.username}`,
+          ledgerTxId: offerContractId,
+        });
+        if (recipientUser.username) {
+          void this.inboundSync.alignBalanceFromChain(
+            recipientUser.id,
+            recipientUser.username,
+          );
+        }
+      }
+      if (sender.username) {
+        void this.inboundSync.alignBalanceFromChain(sender.id, sender.username);
+      }
+    }
+
+    if (!accepted) {
+      throw new BadRequestException(
+        'Transfer failed — offer was not accepted. No transaction was recorded in your history.',
+      );
+    }
+
+    let feeCollected = false;
+    let feeWarning: string | undefined;
+    if (feeCc > 0 && validatorPartyId && sender.username) {
+      const feeAcceptUsername =
+        this.config.get<string>('CANTON_FEE_ACCEPT_USERNAME')?.trim() ||
+        this.config.get<string>('CANTON_VALIDATOR_ADMIN_USER')?.trim() ||
+        'administrator';
+
+      let treasuryPartyId =
+        this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
+        this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ||
+        validatorPartyId;
+
+      const walletParty = await this.splice.getWalletPartyId(feeAcceptUsername);
+      if (walletParty && walletParty !== treasuryPartyId) {
+        this.logger.warn(
+          `Fee party mismatch: .env treasury=${treasuryPartyId.split('::')[0]} but Splice user ${feeAcceptUsername} → ${walletParty.split('::')[0]}. Using wallet party.`,
+        );
+        treasuryPartyId = walletParty;
+      } else if (!this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID') && walletParty) {
+        treasuryPartyId = walletParty;
+      }
+
+      const feeResult = await this.splice.collectPlatformFee({
+        senderUsername: sender.username,
+        feeCc,
+        description: `Platform fee for transfer to ${recipientLabel}`,
+        treasuryPartyId,
+        treasuryAcceptUsername: feeAcceptUsername,
+      });
+
+      feeCollected = feeResult.collected;
+      if (feeCollected) {
+        await this.users.recordTransaction({
+          userId: sender.id,
+          amountCc: feeCc,
+          type: 'TRANSFER_OUT',
+          description: `Platform fee (transfer to ${recipientLabel})`,
+          counterparty: treasuryPartyId.split('::')[0],
+          ledgerTxId: feeResult.ledgerTxId,
+        });
+        await this.inboundSync.alignBalanceFromChain(sender.id, sender.username);
+        this.logger.log(
+          `Fee collected (${feeResult.method ?? 'unknown'}): ${sender.username} → ${treasuryPartyId.split('::')[0]} ${feeCc} CC`,
+        );
+      } else {
+        feeWarning = `Transfer succeeded but platform fee (${feeCc} CC) could not be collected.`;
+        this.logger.warn(
+          `Fee failed for ${sender.username}: ${feeResult.error ?? 'unknown'} (treasury ${treasuryPartyId.split('::')[0]})`,
         );
       }
     }
-    if (sender.username) {
-      void this.inboundSync.alignBalanceFromChain(sender.id, sender.username);
-    }
 
-    // ── Step 2: Platform fee sender → validator (async, tidak memblokir respons) ─
-    if (feeCc > 0 && validatorPartyId) {
-      const validatorAdminUser =
-        this.config.get<string>('CANTON_VALIDATOR_ADMIN_USER') ?? 'administrator';
-      void (async () => {
-        const feeOfferId = await this.splice.createTransferOffer(
-          validatorPartyId,
-          feeCc,
-          `Platform fee for transfer to ${recipientLabel}`,
-          undefined,
-          sender.username ?? undefined,
-        );
-        if (feeOfferId) {
-          const ok = await this.splice.acceptOfferViaWallet(feeOfferId, validatorAdminUser);
-          this.logger.log(`Fee collected: ${sender.username ?? 'unknown'} → validator ${feeCc} CC (accepted: ${String(ok)})`);
-        } else {
-          this.logger.warn(`Fee offer creation failed for ${sender.username ?? 'unknown'} — skipping fee.`);
-        }
-      })();
-    }
+    const totalDeducted = amount + (feeCollected ? feeCc : 0);
+    const message = feeCollected
+      ? `${amount} CC sent to ${recipientLabel}. Platform fee: ${feeCc} CC. Total: ${amount + feeCc} CC.`
+      : feeWarning
+        ? `${amount} CC sent to ${recipientLabel}. ${feeWarning}`
+        : `${amount} CC sent to ${recipientLabel}.`;
 
     return {
       success: true,
@@ -510,11 +567,11 @@ export class PartyController {
       to: recipientLabel,
       amount,
       fee: feeCc,
-      totalDeducted: amount + feeCc,
-      accepted,
-      message: accepted
-        ? `${amount} CC sent to ${recipientLabel}. Platform fee: ${feeCc} CC. Total deducted: ${amount + feeCc} CC.`
-        : `Offer created but auto-accept failed — recipient needs to accept from their wallet.`,
+      feeCollected,
+      totalDeducted,
+      accepted: true,
+      message,
+      ...(feeWarning ? { warning: feeWarning } : {}),
     };
   }
 
@@ -568,4 +625,5 @@ export class PartyController {
           : 'Canton OK. Splice Validator API not reachable — check CANTON_VALIDATOR_URL (port 5003 tunnel).',
     };
   }
+
 }

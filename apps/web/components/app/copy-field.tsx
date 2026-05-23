@@ -2,6 +2,7 @@
 
 import { Check, Copy } from "lucide-react";
 import { useState } from "react";
+import { iconButtonClass } from "@/lib/ui-button-styles";
 
 export function CopyField({ value, label }: { value: string; label: string }) {
   const [copied, setCopied] = useState(false);
@@ -17,16 +18,16 @@ export function CopyField({ value, label }: { value: string; label: string }) {
   }
 
   return (
-    <div className="space-y-1.5">
+    <div className="min-w-0 space-y-1.5">
       <p className="text-xs font-medium text-[var(--muted-foreground)]">{label}</p>
-      <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--muted)]/50 px-3 py-2">
-        <code className="min-w-0 flex-1 truncate text-xs font-mono text-[var(--foreground)]">
+      <div className="flex min-w-0 items-center gap-2 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--muted)]/50 px-3 py-2">
+        <code className="min-w-0 flex-1 break-all text-xs font-mono leading-relaxed text-[var(--foreground)] sm:truncate sm:break-normal">
           {value}
         </code>
         <button
           type="button"
           onClick={copy}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] transition-colors hover:bg-[var(--muted)]"
+          className={iconButtonClass("h-8 w-8 shrink-0 text-[var(--foreground)]")}
           aria-label="Copy"
         >
           {copied ? (

@@ -5,6 +5,7 @@ import { CantonLedgerService } from './canton-ledger.service';
 import { SpliceValidatorService } from './splice-validator.service';
 import { FeaturedAppActivityService } from './featured-app-activity.service';
 import { CcInboundSyncService } from './cc-inbound-sync.service';
+import { QuestLedgerService } from './quest-ledger.service';
 
 /**
  * CantonModule wires together:
@@ -22,12 +23,14 @@ import { CcInboundSyncService } from './cc-inbound-sync.service';
     SpliceValidatorService,
     FeaturedAppActivityService,
     CcInboundSyncService,
+    QuestLedgerService,
   ],
   exports: [
     CantonLedgerService,
     SpliceValidatorService,
     FeaturedAppActivityService,
     CcInboundSyncService,
+    QuestLedgerService,
   ],
 })
 export class CantonModule {}

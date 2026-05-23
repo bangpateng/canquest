@@ -2,87 +2,160 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  /** Canton Network primary yellow (brand ref ~#d9f542, rgb 217 245 66) */
-  --canton-rgb: 217 245 66;
-  --canton-ink: 52 58 13;
-  --canton-ink-muted: 72 81 18;
-  --background: #fffef7;
-  --foreground: #111111;
-  --muted: #f8f9fb;
-  --muted-foreground: #666666;
-  --card: #ffffff;
-  --border: rgb(35 35 35 / 8%);
+/* CanQuest — brand green from logo */
+:root,
+.dark {
+  --canton-rgb: 90 217 138;
+  --canton-ink: 184 240 212;
+  --canton-ink-muted: 122 184 154;
+  --canton-cyan-rgb: 32 211 195;
+  --background: #050508;
+  --foreground: #f4f4f8;
+  --muted: #0f1018;
+  --muted-foreground: #8b8ca3;
+  --card: #0c0d14;
+  --border: rgb(148 163 184 / 10%);
   --primary: rgb(var(--canton-rgb));
-  --primary-strong: #e8fb6a;
-  --primary-soft: #efff9f;
-  --primary-foreground: #111111;
-  --accent: #232323;
-  --ring: rgb(var(--canton-rgb));
-  --elevated: rgb(255 255 255 / 72%);
+  --primary-strong: #72e8a4;
+  --primary-soft: rgb(var(--canton-rgb) / 0.15);
+  --primary-foreground: #0a0a0c;
+  --accent: #5eead4;
+  --accent-muted: rgb(var(--canton-cyan-rgb) / 0.12);
+  --ring: rgb(var(--canton-rgb) / 0.5);
+  --elevated: rgb(12 13 20 / 88%);
+  --glow: rgb(var(--canton-rgb) / 0.28);
+  --danger: #f87171;
+  --success: #4ade80;
+  --warn-rgb: 251 146 60;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --canton-rgb: 226 251 92;
-    --canton-ink: 240 248 176;
-    --canton-ink-muted: 224 239 148;
-    --background: #0c0c0c;
-    --foreground: #f4f4f5;
-    --muted: #161616;
-    --muted-foreground: #a1a1aa;
-    --card: #121212;
-    --border: rgb(244 244 245 / 8%);
-    --primary: rgb(var(--canton-rgb));
-    --primary-strong: #f3ff96;
-    --primary-soft: #fafec4;
-    --primary-foreground: #111111;
-    --accent: #ebebeb;
-    --ring: rgb(var(--canton-rgb));
-    --elevated: rgb(18 18 18 / 85%);
-  }
+.light {
+  --canton-rgb: 56 180 120;
+  --canton-ink: 22 101 52;
+  --canton-ink-muted: 74 124 98;
+  --canton-cyan-rgb: 13 148 136;
+  --background: #f4f6fa;
+  --foreground: #0f1117;
+  --muted: #e8ecf4;
+  --muted-foreground: #5c6070;
+  --card: #ffffff;
+  --border: rgb(15 23 42 / 10%);
+  --primary: rgb(var(--canton-rgb));
+  --primary-strong: #2d9a68;
+  --primary-soft: rgb(var(--canton-rgb) / 0.12);
+  --primary-foreground: #ffffff;
+  --accent: #0d9488;
+  --accent-muted: rgb(var(--canton-cyan-rgb) / 0.1);
+  --ring: rgb(var(--canton-rgb) / 0.35);
+  --elevated: rgb(255 255 255 / 92%);
+  --glow: rgb(var(--canton-rgb) / 0.15);
+  --danger: #dc2626;
+  --success: #16a34a;
+  --warn-rgb: 234 88 12;
 }
 
 @layer base {
+  html.dark {
+    color-scheme: dark;
+  }
+  html.light {
+    color-scheme: light;
+  }
   body {
     @apply bg-[var(--background)] text-[var(--foreground)] antialiased;
     font-family: var(--font-inter), system-ui, sans-serif;
+    background-image:
+      radial-gradient(ellipse 120% 80% at 50% -30%, rgb(var(--canton-rgb) / 0.07), transparent 50%),
+      radial-gradient(ellipse 60% 40% at 100% 0%, rgb(var(--canton-cyan-rgb) / 0.05), transparent 45%);
   }
 }
 
 .glass-card {
   background: var(--elevated);
-  backdrop-filter: blur(16px);
+  backdrop-filter: blur(20px);
   border: 1px solid var(--border);
-  box-shadow: 0 12px 40px rgb(17 17 17 / 6%);
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 3%) inset,
+    0 24px 48px rgb(0 0 0 / 35%);
+}
+
+.glass-card-hover {
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.glass-card-hover:hover {
+  border-color: rgb(var(--canton-rgb) / 0.22);
+  box-shadow:
+    0 0 0 1px rgb(var(--canton-rgb) / 8%) inset,
+    0 0 40px rgb(var(--canton-rgb) / 6%),
+    0 24px 48px rgb(0 0 0 / 40%);
 }
 
 .gradient-mesh {
   background:
-    radial-gradient(
-      ellipse 80% 50% at 50% -20%,
-      rgb(235 252 120 / 38%),
-      transparent
-    ),
-    radial-gradient(
-      ellipse 60% 40% at 100% 0%,
-      rgb(var(--canton-rgb) / 22%),
-      transparent
-    ),
-    radial-gradient(
-      ellipse 50% 30% at 0% 100%,
-      rgb(200 225 52 / 14%),
-      transparent
-    );
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgb(var(--canton-rgb) / 0.14), transparent),
+    radial-gradient(ellipse 60% 40% at 100% 0%, rgb(var(--canton-cyan-rgb) / 0.1), transparent),
+    radial-gradient(ellipse 50% 30% at 0% 100%, rgb(var(--canton-rgb) / 0.06), transparent);
 }
 
 .particle-field {
-  background-image: radial-gradient(
-    circle,
-    rgb(17 17 17 / 20%) 1px,
-    transparent 1px
-  );
-  background-size: 24px 24px;
+  background-image: radial-gradient(circle, rgb(244 244 245 / 6%) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.neon-border {
+  box-shadow:
+    0 0 0 1px rgb(var(--canton-rgb) / 0.2),
+    0 0 24px rgb(var(--canton-rgb) / 0.08);
+}
+
+/* App typography scale — use these classes for consistent h1–h4 / labels */
+@layer components {
+  .type-display {
+    font-family: var(--font-space), system-ui, sans-serif;
+    @apply tracking-tight;
+  }
+  .type-toolbar-title {
+    @apply type-display text-base font-semibold sm:text-lg md:text-xl;
+  }
+  .type-hero {
+    @apply type-display text-3xl font-semibold leading-[1.08] sm:text-4xl;
+  }
+  .type-page-title {
+    @apply type-display text-2xl font-semibold leading-tight;
+  }
+  .type-section-title {
+    @apply type-display text-lg font-semibold leading-snug;
+  }
+  .type-subsection-title {
+    @apply type-display text-base font-semibold leading-snug;
+  }
+  .type-card-title {
+    @apply type-display text-sm font-semibold leading-snug;
+  }
+  .type-eyebrow {
+    @apply text-xs font-semibold uppercase tracking-widest text-[var(--muted-foreground)];
+  }
+  .type-eyebrow-brand {
+    @apply text-xs font-semibold uppercase tracking-widest text-canton;
+  }
+  .type-lead {
+    @apply text-sm leading-relaxed text-[var(--muted-foreground)];
+  }
+  .type-body {
+    @apply text-sm leading-relaxed text-[var(--foreground)];
+  }
+  .type-stat {
+    @apply type-display text-2xl font-semibold tabular-nums leading-none;
+  }
+  .type-stat-lg {
+    @apply type-display text-3xl font-semibold tabular-nums leading-none;
+  }
+  .type-label {
+    @apply text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)];
+  }
+  .type-micro-label {
+    @apply text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)];
+  }
 }
 
 @layer utilities {
@@ -92,33 +165,26 @@
   .text-canton-muted {
     color: rgb(var(--canton-ink-muted));
   }
-  /** Positive / accent copy & links aligned to Canton hue */
   .bg-canton-subtle {
-    background-color: rgb(var(--canton-rgb) / 0.12);
+    background-color: rgb(var(--canton-rgb) / 0.1);
   }
   .bg-canton-soft {
-    background-color: rgb(var(--canton-rgb) / 0.2);
+    background-color: rgb(var(--canton-rgb) / 0.16);
   }
   .border-canton-muted {
-    border-color: rgb(var(--canton-rgb) / 0.28);
+    border-color: rgb(var(--canton-rgb) / 0.22);
   }
   .border-canton-strong {
-    border-color: rgb(var(--canton-rgb) / 0.42);
+    border-color: rgb(var(--canton-rgb) / 0.38);
   }
-  .underline-canton {
-    text-decoration-color: rgb(var(--canton-rgb) / 0.45);
-  }
-  .underline-canton-strong {
-    text-decoration-color: rgb(var(--canton-rgb) / 0.72);
-  }
-}
-
-@media (prefers-color-scheme: dark) {
-  .particle-field {
-    background-image: radial-gradient(
-      circle,
-      rgb(244 244 245 / 10%) 1px,
-      transparent 1px
+  .text-gradient-brand {
+    background: linear-gradient(
+      135deg,
+      rgb(var(--canton-rgb)) 0%,
+      rgb(var(--canton-cyan-rgb)) 100%
     );
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
 }

@@ -123,8 +123,10 @@ export class CantonLedgerService {
     userId?: string,
     /** Stable command ID for deduplication. Generates a UUID if not provided. */
     commandId?: string,
+    /** Use transaction-tree endpoint when CreatedEvent contract ids are needed. */
+    waitMode: 'submit-and-wait' | 'submit-and-wait-for-transaction-tree' = 'submit-and-wait',
   ): Promise<{ ok: boolean; status: number; text: string }> {
-    const url = `${this.baseUrl}/v2/commands/submit-and-wait`;
+    const url = `${this.baseUrl}/v2/commands/${waitMode}`;
     const effectiveUserId = userId ?? this.ledgerApiUser;
     const effectiveCommandId = commandId ?? randomUUID();
 
@@ -500,14 +502,17 @@ export class CantonLedgerService {
       actAs,
       undefined,
       commandId,
+      'submit-and-wait-for-transaction-tree',
     );
 
     if (ok) {
       try {
         const parsed = JSON.parse(text) as { updateId?: string; contractId?: string };
+        const contractId =
+          parsed.contractId ?? extractCreatedContractId(text) ?? null;
         return {
           ok: true,
-          contractId: parsed.contractId ?? null,
+          contractId,
           updateId: parsed.updateId ?? null,
         };
       } catch {
@@ -518,6 +523,49 @@ export class CantonLedgerService {
     this.logger.warn(`createContract failed ${status}: ${text.slice(0, 200)}`);
     return { ok: false, contractId: null, updateId: null, error: text.slice(0, 300) };
   }
+}
+
+/** Extract first CreatedEvent contract id from submit-and-wait JSON response. */
+function extractCreatedContractId(responseText: string): string | null {
+  try {
+    const parsed = JSON.parse(responseText) as Record<string, unknown>;
+    if (typeof parsed.contractId === 'string' && parsed.contractId) {
+      return parsed.contractId;
+    }
+    const stack: unknown[] = [parsed];
+    while (stack.length > 0) {
+      const cur = stack.pop();
+      if (!cur || typeof cur !== 'object') continue;
+      if (Array.isArray(cur)) {
+        for (const item of cur) stack.push(item);
+        continue;
+      }
+      const rec = cur as Record<string, unknown>;
+      if (typeof rec.contractId === 'string' && rec.contractId) {
+        // CreatedTreeEvent.value or CreatedEvent payload
+        if (
+          rec.templateId !== undefined ||
+          rec.createArgument !== undefined ||
+          rec.createdEvent !== undefined ||
+          rec.CreatedEvent !== undefined ||
+          rec.CreatedTreeEvent !== undefined ||
+          rec.eventType === 'created'
+        ) {
+          return rec.contractId;
+        }
+        // Wrapper: { CreatedTreeEvent: { value: { contractId, ... } } }
+        const tree = rec.CreatedTreeEvent as Record<string, unknown> | undefined;
+        const inner = tree?.value as Record<string, unknown> | undefined;
+        if (typeof inner?.contractId === 'string' && inner.contractId) {
+          return inner.contractId;
+        }
+      }
+      for (const v of Object.values(rec)) stack.push(v);
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
 }
 
 /** Exponential-backoff sleep helper (milliseconds). */

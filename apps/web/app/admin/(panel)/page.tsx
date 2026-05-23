@@ -1,26 +1,18 @@
-import Link from 'next/link';
-import { cookies } from 'next/headers';
-import { CQ_ADMIN_ACCESS_COOKIE } from '@/lib/auth-cookies';
-import { internalApiBase } from '@/lib/internal-api-url';
-import { Users, Scroll, Trophy, CheckCircle2, Plus } from 'lucide-react';
+import Link from "next/link";
+import { cookies } from "next/headers";
+import { CQ_ADMIN_ACCESS_COOKIE } from "@/lib/auth-cookies";
+import { internalApiBase } from "@/lib/internal-api-url";
+import { Users, Scroll, Trophy, CheckCircle2, Sparkles, Gift, ArrowRight } from "lucide-react";
 
 interface Stats {
   totalUsers: number;
   totalQuests: number;
   totalCompletions: number;
   totalWinners: number;
-}
-
-interface AdminQuest {
-  id: string;
-  title: string;
-  org: string;
-  status: string;
-  rewardCc: number;
-  rewardType: string;
-  maxWinners: number | null;
-  tags: string[];
-  _count: { completions: number };
+  campaignQuests?: number;
+  earnHubConfigured?: boolean;
+  earnHubTaskCount?: number;
+  earnHubSubmissions?: number;
 }
 
 async function fetchAdmin<T>(path: string): Promise<T | null> {
@@ -30,7 +22,7 @@ async function fetchAdmin<T>(path: string): Promise<T | null> {
   try {
     const res = await fetch(`${internalApiBase()}/admin${path}`, {
       headers: { Authorization: `Bearer ${token}` },
-      cache: 'no-store',
+      cache: "no-store",
     });
     if (!res.ok) return null;
     return res.json() as Promise<T>;
@@ -40,55 +32,47 @@ async function fetchAdmin<T>(path: string): Promise<T | null> {
 }
 
 export default async function AdminPage() {
-  const [stats, quests] = await Promise.all([
-    fetchAdmin<Stats>('/stats'),
-    fetchAdmin<AdminQuest[]>('/quests'),
-  ]);
+  const stats = await fetchAdmin<Stats>("/stats");
 
   const statCards = [
-    { label: 'Total Users', value: stats?.totalUsers ?? 0, icon: Users, color: 'text-blue-500' },
-    { label: 'Active Quests', value: stats?.totalQuests ?? 0, icon: Scroll, color: 'text-violet-500' },
-    { label: 'Quest Completions', value: stats?.totalCompletions ?? 0, icon: CheckCircle2, color: 'text-emerald-500' },
-    { label: 'Rewards Distributed', value: stats?.totalWinners ?? 0, icon: Trophy, color: 'text-amber-500' },
+    { label: "Total Users", value: stats?.totalUsers ?? 0, icon: Users, color: "text-blue-500" },
+    {
+      label: "Earn campaigns",
+      value: stats?.campaignQuests ?? stats?.totalQuests ?? 0,
+      icon: Scroll,
+      color: "text-violet-500",
+    },
+    {
+      label: "Quest hub tasks",
+      value: stats?.earnHubTaskCount ?? 0,
+      icon: Gift,
+      color: "text-canton",
+    },
+    {
+      label: "Completions",
+      value: stats?.totalCompletions ?? 0,
+      icon: CheckCircle2,
+      color: "text-emerald-500",
+    },
+    {
+      label: "Rewards sent",
+      value: stats?.totalWinners ?? 0,
+      icon: Trophy,
+      color: "text-canton",
+    },
   ];
-
-  const statusColor: Record<string, string> = {
-    ACTIVE: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
-    COMING_SOON: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
-    ENDED: 'bg-[var(--muted)] text-[var(--muted-foreground)]',
-  };
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-[family-name:var(--font-space)] text-2xl font-semibold">
-            Admin Dashboard
-          </h1>
-          <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-            Manage quests, winners, and reward distribution
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href="/admin/users"
-            className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-semibold transition-colors hover:bg-[var(--muted)]"
-          >
-            <Users className="h-4 w-4" />
-            Manage Users
-          </Link>
-          <Link
-            href="/admin/quests/new"
-            className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-[var(--primary-foreground)] transition-opacity hover:opacity-90"
-          >
-            <Plus className="h-4 w-4" />
-            New Quest
-          </Link>
-        </div>
+      <div>
+        <h1 className="type-page-title">Admin Dashboard</h1>
+        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+          Manage user menu <strong>Earn</strong> (campaigns) and <strong>Quest</strong> (CanQuest
+          Earn hub) from separate sections.
+        </p>
       </div>
 
-      {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {statCards.map((card) => (
           <div
             key={card.label}
@@ -98,86 +82,63 @@ export default async function AdminPage() {
               <p className="text-sm font-medium text-[var(--muted-foreground)]">{card.label}</p>
               <card.icon className={`h-5 w-5 ${card.color}`} />
             </div>
-            <p className="mt-2 font-[family-name:var(--font-space)] text-3xl font-bold tabular-nums">
-              {card.value.toLocaleString()}
-            </p>
+            <p className="type-stat-lg mt-2">{card.value.toLocaleString()}</p>
           </div>
         ))}
       </div>
 
-      {/* Quest list */}
-      <div>
-        <h2 className="mb-4 font-[family-name:var(--font-space)] text-lg font-semibold">
-          All Quests
-        </h2>
-        {!quests || quests.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-[var(--border)] py-14 text-center">
-            <p className="font-semibold text-[var(--muted-foreground)]">No quests yet</p>
-            <Link href="/admin/quests/new" className="mt-3 inline-block text-sm font-medium text-[var(--primary)] underline-offset-4 hover:underline">
-              Create your first quest
-            </Link>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Link
+          href="/admin/earn"
+          className="group rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 transition-colors hover:border-[var(--primary)]/35"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--primary)]/15 text-canton">
+              <Sparkles className="h-5 w-5" />
+            </span>
+            <ArrowRight className="h-5 w-5 text-[var(--muted-foreground)] transition-transform group-hover:translate-x-0.5 group-hover:text-canton" />
           </div>
-        ) : (
-          <div className="overflow-hidden rounded-2xl border border-[var(--border)]">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--border)] bg-[var(--muted)]/50 text-left">
-                  <th className="px-5 py-3 font-semibold">Quest</th>
-                  <th className="px-4 py-3 font-semibold">Status</th>
-                  <th className="px-4 py-3 font-semibold">Reward</th>
-                  <th className="px-4 py-3 font-semibold">Completions</th>
-                  <th className="px-4 py-3 font-semibold">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {quests.map((q, i) => (
-                  <tr
-                    key={q.id}
-                    className={i % 2 === 0 ? 'bg-[var(--card)]' : 'bg-[var(--muted)]/20'}
-                  >
-                    <td className="px-5 py-3">
-                      <p className="font-semibold">{q.title}</p>
-                      <p className="text-xs text-[var(--muted-foreground)]">{q.org}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${statusColor[q.status] ?? ''}`}>
-                        {q.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 tabular-nums">
-                      <span className="font-medium">{q.rewardCc} CC</span>
-                      {q.rewardType !== 'CC_ONLY' && (
-                        <span className="ml-1 text-xs text-[var(--muted-foreground)]">+ codes</span>
-                      )}
-                      {q.maxWinners && (
-                        <span className="ml-1 text-xs text-[var(--muted-foreground)]">({q.maxWinners} max)</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 tabular-nums text-[var(--muted-foreground)]">
-                      {q._count.completions}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <Link
-                          href={`/admin/quests/${q.id}`}
-                          className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-1 text-xs font-semibold transition-colors hover:bg-[var(--muted)]"
-                        >
-                          Manage
-                        </Link>
-                        <Link
-                          href={`/admin/quests/${q.id}/winners`}
-                          className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-1 text-xs font-semibold transition-colors hover:bg-[var(--muted)]"
-                        >
-                          Winners
-                        </Link>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <h2 className="type-section-title mt-4">Earn</h2>
+          <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+            Partner campaigns — create quests, upload banners, invite codes, draw winners, CC
+            rewards.
+          </p>
+          <p className="mt-3 text-xs font-semibold text-canton">
+            {stats?.campaignQuests ?? 0} campaign(s)
+          </p>
+        </Link>
+
+        <Link
+          href="/admin/quest"
+          className="group rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 transition-colors hover:border-violet-500/35"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-500/15 text-violet-300">
+              <Gift className="h-5 w-5" />
+            </span>
+            <ArrowRight className="h-5 w-5 text-[var(--muted-foreground)] transition-transform group-hover:translate-x-0.5 group-hover:text-violet-300" />
           </div>
-        )}
+          <h2 className="type-section-title mt-4">Quest</h2>
+          <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+            CanQuest Earn hub — daily check-in, social tasks, quizzes, earn points (one hub for all
+            users).
+          </p>
+          <p className="mt-3 text-xs font-semibold text-violet-300">
+            {stats?.earnHubConfigured
+              ? `${stats.earnHubTaskCount ?? 0} task(s) · ${stats.earnHubSubmissions ?? 0} submissions`
+              : "Not configured — open to set up"}
+          </p>
+        </Link>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Link
+          href="/admin/users"
+          className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--card)]/80 px-4 py-2.5 text-sm font-semibold transition-colors hover:border-[var(--primary)]/30"
+        >
+          <Users className="h-4 w-4" />
+          Manage users
+        </Link>
       </div>
     </div>
   );

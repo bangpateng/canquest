@@ -10,3 +10,7 @@ export async function POST(req: NextRequest, { params }: P) {
   const body = await req.text();
   return nestWithAdminAccessCookie(req, `/admin/quests/${questId}/invite-codes`, { method: 'POST', body, headers: { 'Content-Type': 'application/json' } });
 }
+export async function DELETE(req: NextRequest, { params }: P) {
+  const { questId } = await params;
+  return nestWithAdminAccessCookie(req, `/admin/quests/${questId}/invite-codes`, { method: 'DELETE' });
+}

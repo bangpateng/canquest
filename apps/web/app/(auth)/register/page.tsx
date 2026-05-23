@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { ArrowRight, Loader2 } from "lucide-react";
+import { AuthCard, authInputClass } from "@/components/auth/auth-card";
 import { buttonVariants } from "@/components/ui/button";
+import { PasswordInput } from "@/components/ui/password-input";
 import { formatApiError } from "@/lib/format-api-error";
 import { cn } from "@/lib/utils";
 
@@ -55,7 +58,7 @@ export default function RegisterPage() {
       }
 
       if (typeof payload.ok === "boolean" && payload.ok === true) {
-        window.location.assign("/dashboard");
+        window.location.assign("/overview");
         return;
       }
 
@@ -97,24 +100,17 @@ export default function RegisterPage() {
         return;
       }
 
-      window.location.assign("/dashboard");
+      window.location.assign("/overview");
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-8 shadow-sm">
-      <div className="space-y-1">
-        <h1 className="font-[family-name:var(--font-space)] text-2xl font-semibold tracking-tight">
-          Create account
-        </h1>
-
-      </div>
-
+    <AuthCard title="Create account" subtitle="Join quests and earn on Canton">
       {error ? (
         <div
-          className="mt-6 rounded-xl border border-[var(--border)] bg-[var(--muted)]/60 px-3 py-2.5 text-sm text-[var(--foreground)]"
+          className="mt-6 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-sm text-red-300"
           role="alert"
         >
           {error}
@@ -122,7 +118,7 @@ export default function RegisterPage() {
       ) : null}
 
       {!pendingOtp ? (
-        <form className="mt-8 space-y-5" onSubmit={onSubmit}>
+        <form className="mt-8 space-y-4" onSubmit={onSubmit}>
           <div className="space-y-1.5">
             <label htmlFor="reg-name" className="text-xs font-medium text-[var(--muted-foreground)]">
               Display name
@@ -136,7 +132,7 @@ export default function RegisterPage() {
               required
               minLength={2}
               maxLength={80}
-              className="w-full rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2.5 text-sm outline-none ring-offset-[var(--card)] placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
+              className={authInputClass}
             />
           </div>
           <div className="space-y-1.5">
@@ -150,39 +146,30 @@ export default function RegisterPage() {
               autoComplete="email"
               placeholder="Your Email"
               required
-              className="w-full rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2.5 text-sm outline-none ring-offset-[var(--card)] placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
+              className={authInputClass}
             />
           </div>
-          <div className="space-y-1.5">
-            <label htmlFor="reg-password" className="text-xs font-medium text-[var(--muted-foreground)]">
-              Password
-            </label>
-            <input
-              id="reg-password"
-              name="password"
-              type="password"
-              autoComplete="new-password"
+          <PasswordInput
+            id="reg-password"
+            label="Password"
+            autoComplete="new-password"
             placeholder="Minimum 8 characters"
-            required
             minLength={8}
-              className="w-full rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2.5 text-sm outline-none ring-offset-[var(--card)] placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
-            />
-          </div>
+            inputClassName="bg-[var(--muted)]/80"
+          />
           <div className="space-y-1.5">
             <label htmlFor="reg-invite" className="text-xs font-medium text-[var(--muted-foreground)]">
-              Invitation code
+              Invite code (optional)
             </label>
             <input
               id="reg-invite"
               name="inviteCode"
               type="text"
-              inputMode="text"
               spellCheck={false}
               autoComplete="off"
-              placeholder="Your Code Invite"
-              className="w-full rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2.5 font-mono text-sm tracking-wide outline-none ring-offset-[var(--card)] placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
+              placeholder="Your invite code"
+              className={authInputClass}
             />
-
           </div>
           <label className="flex cursor-pointer items-start gap-2 text-xs leading-relaxed text-[var(--muted-foreground)]">
             <input
@@ -192,8 +179,17 @@ export default function RegisterPage() {
             />
             <span>I agree to the fictitious Terms for this prototype (no legal effect).</span>
           </label>
-          <button type="submit" disabled={busy} className={cn(buttonVariants({ size: "default" }), "w-full")}>
+          <button
+            type="submit"
+            disabled={busy}
+            className={cn(
+              buttonVariants(),
+              "mt-2 w-full gap-2 rounded-full py-3 font-bold shadow-[0_0_24px_rgb(var(--canton-rgb)/0.2)]",
+            )}
+          >
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             {busy ? "Creating…" : "Create account"}
+            {!busy && <ArrowRight className="h-4 w-4" />}
           </button>
         </form>
       ) : (
@@ -238,22 +234,19 @@ export default function RegisterPage() {
         </form>
       )}
 
-      <p className="mt-6 border-t border-[var(--border)] pt-6 text-center text-sm text-[var(--muted-foreground)]">
-        Already have access?{" "}
-        <Link
-          href="/login"
-          className="font-medium text-canton underline underline-offset-2 decoration-canton hover:decoration-canton-strong"
-        >
-          Sign in
+      <p className="mt-6 text-center text-sm text-[var(--muted-foreground)]">
+        Already have an account?{" "}
+        <Link href="/?auth=login" className="font-semibold text-canton hover:underline">
+          Sign In
         </Link>
       </p>
 
       <Link
         href="/"
-        className="mt-6 block text-center text-xs text-[var(--muted-foreground)] underline-offset-4 hover:underline"
+        className="mt-4 block text-center text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
       >
         ← Back to home
       </Link>
-    </div>
+    </AuthCard>
   );
 }

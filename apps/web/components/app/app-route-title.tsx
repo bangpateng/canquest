@@ -1,13 +1,17 @@
 "use client";
 
+import { ROUTES as APP_ROUTES } from "@/lib/app-routes";
+import { ToolbarTitle, Lead } from "@/components/ui/typography";
 import { usePathname } from "next/navigation";
 
 const ROUTES: { prefix: string; title: string; subtitle: string }[] = [
   { prefix: "/dashboard", title: "Dashboard", subtitle: "Overview & signals" },
-  { prefix: "/quests", title: "Quests", subtitle: "Campaigns & verified tasks" },
+  { prefix: APP_ROUTES.campaignQuests, title: "Earn", subtitle: "Partner campaigns & missions" },
+  { prefix: APP_ROUTES.earnHub, title: "Quest", subtitle: "Daily tasks & redeem" },
+  { prefix: "/quests", title: "Quest", subtitle: "Partner campaigns & missions" },
   { prefix: "/leaderboard", title: "Leaderboard", subtitle: "Rankings & tiers" },
   { prefix: "/spin", title: "Spin rewards", subtitle: "Points → prizes" },
-  { prefix: "/wallet", title: "Wallet", subtitle: "Send, receive & track your balance" },
+  { prefix: "/wallet", title: "Wallet", subtitle: "Send, receive & balance" },
   { prefix: "/transactions", title: "Transactions", subtitle: "Activity log" },
   { prefix: "/settings", title: "Settings", subtitle: "Identity & security" },
 ];
@@ -21,12 +25,8 @@ export function AppRouteTitle() {
 
   return (
     <div>
-      <h1 className="font-[family-name:var(--font-space)] text-lg font-semibold tracking-tight md:text-xl">
-        {match.title}
-      </h1>
-      <p className="hidden text-xs text-[var(--muted-foreground)] sm:block">
-        {match.subtitle}
-      </p>
+      <ToolbarTitle>{match.title}</ToolbarTitle>
+      <Lead className="mt-0.5 hidden sm:block">{match.subtitle}</Lead>
     </div>
   );
 }

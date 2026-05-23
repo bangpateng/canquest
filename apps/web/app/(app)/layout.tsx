@@ -16,13 +16,13 @@ export default async function DappLayout({ children }: { children: ReactNode }) 
   const secret = process.env.JWT_ACCESS_SECRET;
 
   if (!token || !secret) {
-    redirect('/login');
+    redirect('/?auth=login');
   }
 
   try {
     await jwtVerify(token, new TextEncoder().encode(secret), { algorithms: ['HS256'] });
   } catch {
-    redirect('/login');
+    redirect('/?auth=login');
   }
 
   return <AppShell>{children}</AppShell>;

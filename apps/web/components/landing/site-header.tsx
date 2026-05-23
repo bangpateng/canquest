@@ -1,52 +1,174 @@
-import Link from "next/link";
-import { buttonVariants } from "@/components/ui/button";
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Gift, Layers, Shield, X, Zap } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { CanQuestLogo } from "@/components/brand/canquest-logo";
+import { LandingShell } from "@/components/landing/landing-shell";
+import { iconButtonClass } from "@/lib/ui-button-styles";
 import { cn } from "@/lib/utils";
 
-export function SiteHeader() {
+const nav: { href: string; label: string; icon: LucideIcon; description: string }[] = [
+  { href: "#campaigns", label: "Quests", icon: Gift, description: "Featured campaigns" },
+  { href: "#features", label: "Platform", icon: Zap, description: "Product capabilities" },
+  { href: "#canton", label: "Canton", icon: Layers, description: "Ledger infrastructure" },
+  { href: "#security", label: "Security", icon: Shield, description: "Trust & operations" },
+];
+
+function MenuDots() {
   return (
-    <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--background)]/80 backdrop-blur-md">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-        <Link
-          href="/"
-          className="font-[family-name:var(--font-space)] text-lg font-semibold tracking-tight"
-        >
-          CanQuest
-        </Link>
-        <nav className="hidden items-center gap-8 text-sm text-[var(--muted-foreground)] md:flex">
-          <a href="#campaigns" className="hover:text-[var(--foreground)]">
-            Campaigns
-          </a>
-          <a href="#features" className="hover:text-[var(--foreground)]">
-            Platform
-          </a>
-          <a href="#canton" className="hover:text-[var(--foreground)]">
-            Canton
-          </a>
-          <a href="#security" className="hover:text-[var(--foreground)]">
-            Security
-          </a>
-        </nav>
-        <div className="flex max-w-[60%] flex-wrap items-center justify-end gap-1.5 sm:max-w-none sm:gap-2">
-          <Link
-            href="/login"
+    <span className="grid h-4 w-4 grid-cols-2 gap-[3px]" aria-hidden>
+      {[0, 1, 2, 3].map((i) => (
+        <span key={i} className="rounded-[1px] bg-[var(--primary)]" />
+      ))}
+    </span>
+  );
+}
+
+export function SiteHeader() {
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open, close]);
+
+  return (
+    <>
+      <header className="sticky top-0 z-50 bg-[var(--background)]/80 backdrop-blur-xl">
+        <LandingShell className="flex h-16 items-center justify-between gap-4">
+          <div className="flex shrink-0 items-center justify-start">
+            <CanQuestLogo size="lg" href="/" onClick={close} />
+          </div>
+
+          <nav className="hidden flex-1 items-center justify-center gap-1 md:flex" aria-label="Main">
+            {nav.map((item) => (
+              <a
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "rounded-full px-4 py-2 text-sm font-medium text-[var(--muted-foreground)]",
+                  "transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)]",
+                )}
+              >
+                {item.label}
+              </a>
+            ))}
+          </nav>
+
+          <button
+            type="button"
             className={cn(
-              buttonVariants({ variant: "ghost", size: "sm" }),
-              "text-xs sm:text-sm",
+              "relative flex items-center gap-2 rounded-full border px-3.5 py-2 text-sm font-semibold transition-all md:hidden",
+              open
+                ? "border-canton-strong bg-canton-subtle text-canton shadow-[0_0_20px_rgb(var(--canton-rgb)/0.12)]"
+                : "border-[var(--border)] bg-[var(--card)]/90 text-[var(--foreground)] ring-1 ring-white/[0.04] hover:border-canton-muted hover:bg-[var(--muted)]",
             )}
+            aria-expanded={open}
+            aria-controls="landing-mobile-nav"
+            aria-label={open ? "Close menu" : "Open menu"}
+            onClick={() => setOpen((v) => !v)}
           >
-            Sign in
-          </Link>
-          <Link
-            href="/register"
-            className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "text-xs sm:text-sm")}
-          >
-            Register
-          </Link>
-          <Link href="/dashboard" className={cn(buttonVariants({ size: "sm" }), "text-xs sm:text-sm")}>
-            Launch app
-          </Link>
-        </div>
-      </div>
-    </header>
+            <span className="flex h-5 w-5 items-center justify-center">
+              {open ? (
+                <X className="h-4 w-4 text-canton" strokeWidth={2.5} />
+              ) : (
+                <MenuDots />
+              )}
+            </span>
+            <span className="text-xs uppercase tracking-wider">{open ? "Close" : "Menu"}</span>
+          </button>
+        </LandingShell>
+      </header>
+
+      <AnimatePresence>
+        {open ? (
+          <>
+            <motion.button
+              type="button"
+              aria-label="Close menu backdrop"
+              className="fixed inset-0 z-[60] bg-black/65 backdrop-blur-sm md:hidden"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onClick={close}
+            />
+            <motion.nav
+              id="landing-mobile-nav"
+              aria-label="Mobile"
+              className="fixed inset-y-0 right-0 z-[70] flex w-[min(100vw,20rem)] flex-col border-l border-[var(--border)] bg-[var(--card)]/95 shadow-[-24px_0_64px_rgb(0_0_0/0.45)] backdrop-blur-2xl md:hidden"
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              transition={{ type: "spring", damping: 28, stiffness: 320 }}
+            >
+              <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-[rgb(var(--canton-rgb)/0.08)] to-transparent pointer-events-none" />
+
+              <div className="relative flex items-center justify-between border-b border-[var(--border)] px-5 py-4">
+                <CanQuestLogo size="md" href="/" onClick={close} />
+                <button
+                  type="button"
+                  onClick={close}
+                  className={iconButtonClass("h-10 w-10 hover:text-canton")}
+                  aria-label="Close menu"
+                >
+                  <X className="h-5 w-5" strokeWidth={2} />
+                </button>
+              </div>
+
+              <ul className="relative flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-4">
+                {nav.map((item, index) => {
+                  const Icon = item.icon;
+                  return (
+                    <motion.li
+                      key={item.href}
+                      initial={{ opacity: 0, x: 12 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.05 + index * 0.04 }}
+                    >
+                      <a
+                        href={item.href}
+                        onClick={close}
+                        className="group flex items-center gap-4 rounded-2xl px-3 py-3.5 transition-colors hover:bg-[var(--muted)]"
+                      >
+                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-canton-subtle ring-1 ring-[var(--primary)]/15 transition-shadow group-hover:shadow-[0_0_20px_rgb(var(--canton-rgb)/0.12)]">
+                          <Icon className="h-5 w-5 text-canton" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="type-subsection-title block">
+                            {item.label}
+                          </span>
+                          <span className="block text-xs text-[var(--muted-foreground)]">
+                            {item.description}
+                          </span>
+                        </span>
+                      </a>
+                    </motion.li>
+                  );
+                })}
+              </ul>
+
+              <div className="relative border-t border-[var(--border)] px-5 py-4">
+                <p className="text-center text-[10px] uppercase tracking-widest text-[var(--muted-foreground)]">
+                  Canton Network
+                </p>
+              </div>
+            </motion.nav>
+          </>
+        ) : null}
+      </AnimatePresence>
+    </>
   );
 }

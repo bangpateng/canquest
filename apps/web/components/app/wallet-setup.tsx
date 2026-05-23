@@ -5,6 +5,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { formatApiError } from "@/lib/format-api-error";
 import { Loader2, Wallet } from "lucide-react";
 import { useState } from "react";
+import { usePlatformT } from "@/lib/i18n/platform-provider";
 
 interface WalletSetupProps {
   onCreated: () => void;
@@ -15,6 +16,7 @@ interface WalletSetupProps {
  * They enter a username → one click → wallet is generated on the Canton participant.
  */
 export function WalletSetup({ onCreated }: WalletSetupProps) {
+  const t = usePlatformT();
   const [username, setUsername] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,8 +63,8 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
   }
 
   return (
-    <div className="flex min-h-[60vh] items-center justify-center px-4">
-      <div className="w-full max-w-md">
+    <div className="flex min-h-[60vh] w-full min-w-0 items-center justify-center">
+      <div className="w-full min-w-0 max-w-md">
         {/* Icon */}
         <div className="mb-6 flex justify-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-canton/30 bg-canton/10">
@@ -70,7 +72,7 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
           </div>
         </div>
 
-        <h2 className="text-center font-[family-name:var(--font-space)] text-2xl font-semibold">
+        <h2 className="type-page-title text-center">
           Create Your Wallet
         </h2>
         <p className="mt-2 text-center text-sm text-[var(--muted-foreground)]">
@@ -106,7 +108,7 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
 
           {error && (
             <p
-              className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300"
+              className="rounded-xl border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-sm text-orange-300 dark:text-orange-300"
               role="alert"
             >
               {error}
@@ -121,14 +123,14 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
             {step === "creating" ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Generating wallet on Canton Network…
+                {t("wallet.generatingWallet")}
               </>
             ) : step === "done" ? (
-              "Wallet created! Loading…"
+              t("wallet.walletCreatedLoading")
             ) : (
               <>
                 <Wallet className="h-4 w-4" />
-                Generate Wallet
+                {t("wallet.generateWallet")}
               </>
             )}
           </button>

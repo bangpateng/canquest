@@ -9,12 +9,12 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import { QuestStatus } from '../common/prisma-types';
 import { QuestsService } from './quests.service';
 import { UsersService } from '../users/users.service';
-import { SpliceValidatorService } from '../canton/splice-validator.service';
 import { FeaturedAppActivityService } from '../canton/featured-app-activity.service';
 import { LedgerQueueService } from '../queue/ledger-queue.service';
 
@@ -25,15 +25,19 @@ type AuthedReq = Request & { user: { userId: string; email: string } };
 export class QuestsController {
   private readonly logger = new Logger(QuestsController.name);
 
-    constructor(
+  constructor(
     private readonly quests: QuestsService,
     private readonly users: UsersService,
-    private readonly splice: SpliceValidatorService,
     private readonly featuredActivity: FeaturedAppActivityService,
     private readonly ledgerQueue: LedgerQueueService,
+    private readonly config: ConfigService,
   ) {}
 
-    /* ─── Leaderboard ─── */
+  private questSubmitRequiresWallet(): boolean {
+    const flag = this.config.get<string>('QUEST_SUBMIT_REQUIRES_WALLET');
+    if (flag === 'false' || flag === '0') return false;
+    return true;
+  }
 
   @Get('leaderboard')
   async leaderboard(
@@ -51,8 +55,6 @@ export class QuestsController {
     return this.quests.getLeaderboard(validPeriod, p, ps);
   }
 
-  /* ─── User dashboard stats + activity ─── */
-
   @Get('dashboard-stats')
   async dashboardStats(@Req() req: AuthedReq) {
     return this.quests.getUserDashboardStats(req.user.userId);
@@ -61,13 +63,16 @@ export class QuestsController {
   @Get('activity')
   async recentActivity(
     @Req() req: AuthedReq,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
     @Query('limit') limit?: string,
   ) {
-    const l = Math.min(20, Math.max(1, parseInt(limit ?? '8', 10) || 8));
-    return this.quests.getRecentActivity(req.user.userId, l);
+    const p = Math.max(1, parseInt(page ?? '1', 10) || 1);
+    const ps = limit
+      ? Math.min(20, Math.max(1, parseInt(limit, 10) || 5))
+      : Math.min(20, Math.max(1, parseInt(pageSize ?? '5', 10) || 5));
+    return this.quests.getRecentActivity(req.user.userId, p, ps);
   }
-
-  /* ─── Public quest list ─── */
 
   @Get()
   listQuests(@Query('status') status?: string) {
@@ -82,17 +87,41 @@ export class QuestsController {
     return this.quests.getUserAllProgress(req.user.userId);
   }
 
+  @Get('earn-hub')
+  getEarnHub() {
+    return this.quests.getEarnHubQuest();
+  }
+
+  /** Project/event name for wallet labels (quest.title). */
+  @Get(':questId/title')
+  async questTitle(@Param('questId') questId: string) {
+    const title = await this.quests.getQuestTitle(questId);
+    return { questId, title };
+  }
+
   @Get(':questId')
   getQuest(@Param('questId') questId: string) {
     return this.quests.getQuest(questId);
   }
 
   @Get(':questId/progress')
-  questProgress(@Param('questId') questId: string, @Req() req: AuthedReq) {
-    return this.quests.getUserProgress(req.user.userId, questId);
+  async questProgress(@Param('questId') questId: string, @Req() req: AuthedReq) {
+    const p = await this.quests.getUserProgress(req.user.userId, questId);
+    return {
+      completed: p.completed,
+      allTasksVerified: p.allTasksVerified,
+      submissions: p.submissions,
+      rewardStatus: p.rewardStatus,
+      rewardCc: p.rewardCc,
+      cantonLedgerConfigured: p.cantonLedgerConfigured,
+      ledger: this.quests.toApiLedgerProof(p.ledger, p.rewardCc),
+    };
   }
 
-  /* ─── Submit a task ─── */
+  @Get(':questId/reward-status')
+  async rewardStatus(@Param('questId') questId: string, @Req() req: AuthedReq) {
+    return this.quests.getQuestRewardStatus(req.user.userId, questId);
+  }
 
   @Post(':questId/tasks/:taskId/submit')
   async submitTask(
@@ -112,71 +141,97 @@ export class QuestsController {
       proof: body.proof,
     });
 
-        if (alreadyDone) {
+    if (alreadyDone) {
       return { ok: true, status, message: 'Task already completed' };
     }
 
-    // After submitting, check if the whole quest is now complete
-    let rewardInfo: { justCompleted: boolean; rewardCc: number } | null = null;
-    if (status === 'VERIFIED') {
-      // Emit FeaturedAppActivityMarker for task verification
-      // Per Canton Module 4: each meaningful user action earns app rewards
-      // https://docs.canton.network/appdev/modules/m4-featured-app-activity-marker
-      if (user.cantonPartyId) {
-        void this.featuredActivity
-          .recordActivity('task_verified', user.cantonPartyId, `Task ${taskId} in quest ${questId}`)
-          .catch(() => { /* non-critical */ });
-      }
-
-      const { justCompleted, rewardMicroCc } =
-        await this.quests.checkAndCompleteQuest({
-          userId: user.id,
-          questId,
-        });
-
-      if (justCompleted && rewardMicroCc > 0n && user.username) {
-        // Send CC reward via validator
-        const rewardCc = Number(rewardMicroCc) / 1_000_000;
-        this.logger.log(
-          `Sending quest reward: ${rewardCc} CC → ${user.username}`,
-        );
-
-        // Emit FeaturedAppActivityMarker for quest completion
-        if (user.cantonPartyId) {
-          void this.featuredActivity
-            .recordActivity('quest_completed', user.cantonPartyId, `Quest ${questId} completed`)
-            .catch(() => { /* non-critical */ });
-        }
-
-                // Enqueue ke BullMQ — tidak fire-and-forget lagi
-        // BullMQ akan retry otomatis jika ledger error
-        if (user.username && user.cantonPartyId) {
-          void this.ledgerQueue.enqueueCcReward({
-            userId: user.id,
-            username: user.username,
-            cantonPartyId: user.cantonPartyId,
-            amountCc: rewardCc,
-            description: `Quest reward: ${questId}`,
-            referenceId: questId,
-          }).catch((err: unknown) => {
-            this.logger.warn(`Failed to enqueue CC reward: ${String(err)}`);
-          });
-        }
-
-        rewardInfo = { justCompleted: true, rewardCc };
-      } else if (justCompleted) {
-        rewardInfo = { justCompleted: true, rewardCc: 0 };
-      }
+    if (status === 'VERIFIED' && user.cantonPartyId) {
+      void this.featuredActivity
+        .recordActivity('task_verified', user.cantonPartyId, `Task ${taskId} in quest ${questId}`)
+        .catch(() => { /* non-critical */ });
     }
+
+    const allTasksVerified = await this.quests.areAllTasksVerified(user.id, questId);
 
     return {
       ok: true,
       status,
       message:
         status === 'VERIFIED' ? 'Task verified' : 'Task submitted for review',
-      rewardInfo,
+      allTasksVerified,
     };
   }
 
-    // sendQuestReward dihapus — digantikan oleh LedgerQueueService.enqueueCcReward()
+  /**
+   * Final quest submit — Web2 completion in DB; optional DAML proof + CIP-56 CC when enabled.
+   */
+  @Post(':questId/submit')
+  async submitQuest(
+    @Param('questId') questId: string,
+    @Req() req: AuthedReq,
+  ) {
+    const user = await this.users.findById(req.user.userId);
+    if (!user) return { ok: false, message: 'User not found' };
+
+    if (!user.cantonPartyId && this.questSubmitRequiresWallet()) {
+      return {
+        ok: false,
+        message: 'Create your Canton wallet before submitting the quest',
+      };
+    }
+
+    const result = await this.quests.submitQuest({
+      userId: user.id,
+      userPartyId: user.cantonPartyId ?? null,
+      username: user.username,
+      questId,
+    });
+
+    if (!result.ok) {
+      return { ok: false, message: result.message, rewardStatus: result.rewardStatus };
+    }
+
+    if (user.cantonPartyId) {
+      void this.featuredActivity
+        .recordActivity('quest_completed', user.cantonPartyId, `Quest ${questId} submitted`)
+        .catch(() => { /* non-critical */ });
+    }
+
+    if (result.rewardCc > 0 && user.username && user.cantonPartyId) {
+      const questTitle = await this.quests.getQuestTitle(questId);
+      this.logger.log(`Enqueue quest CC reward: ${result.rewardCc} CC → ${user.username}`);
+      void this.ledgerQueue
+        .enqueueCcReward({
+          userId: user.id,
+          username: user.username,
+          cantonPartyId: user.cantonPartyId,
+          amountCc: result.rewardCc,
+          description: questTitle,
+          referenceId: questId,
+        })
+        .catch((err: unknown) => {
+          this.logger.warn(`Failed to enqueue CC reward: ${String(err)}`);
+        });
+    }
+
+    return {
+      ok: true,
+      message: result.message,
+      rewardCc: result.rewardCc,
+      inviteCode: result.inviteCode,
+      rewardStatus: result.rewardStatus,
+      ledger: this.quests.toApiLedgerProof(
+        result.ledger,
+        result.rewardCc,
+        result.rewardCc > 0 && !!(user.username && user.cantonPartyId),
+      ) ?? {
+        enabled: false,
+        participationContractId: null,
+        rewardContractId: null,
+        taskSubmissionCount: 0,
+        cip56Queued: false,
+        errors: result.ledger.errors,
+      },
+    };
+  }
 }

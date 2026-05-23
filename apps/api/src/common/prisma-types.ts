@@ -3,6 +3,12 @@
  * Used instead of @prisma/client enum imports for reliable builds in npm workspaces.
  */
 
+export type QuestKind = 'CAMPAIGN' | 'EARN_HUB';
+export const QuestKind = {
+  CAMPAIGN: 'CAMPAIGN' as QuestKind,
+  EARN_HUB: 'EARN_HUB' as QuestKind,
+};
+
 export type QuestStatus = 'ACTIVE' | 'COMING_SOON' | 'ENDED';
 export const QuestStatus = {
   ACTIVE: 'ACTIVE' as QuestStatus,
@@ -10,12 +16,44 @@ export const QuestStatus = {
   ENDED: 'ENDED' as QuestStatus,
 };
 
-export type RewardType = 'CC_ONLY' | 'INVITE_CODE' | 'CC_AND_INVITE';
+/** User-facing tab status from DB status + schedule (startsAt / endsAt). */
+export function resolveQuestDisplayStatus(
+  q: {
+    status: QuestStatus;
+    startsAt?: Date | string | null;
+    endsAt?: Date | string | null;
+  },
+  now = new Date(),
+): QuestStatus {
+  const startsAt = q.startsAt ? new Date(q.startsAt) : null;
+  const endsAt = q.endsAt ? new Date(q.endsAt) : null;
+  if (endsAt && endsAt < now) return QuestStatus.ENDED;
+  if (startsAt && startsAt > now) return QuestStatus.COMING_SOON;
+  if (q.status === QuestStatus.ENDED) return QuestStatus.ENDED;
+  if (q.status === QuestStatus.COMING_SOON) return QuestStatus.COMING_SOON;
+  return QuestStatus.ACTIVE;
+}
+
+export type RewardType =
+  | 'WAITLIST_EMAIL'
+  | 'INVITE_CODE_RANDOM'
+  | 'INVITE_CODE_FCFS'
+  | 'CC_ONLY'
+  | 'CC_AND_INVITE'
+  | 'INVITE_CODE';
 export const RewardType = {
+  WAITLIST_EMAIL: 'WAITLIST_EMAIL' as RewardType,
+  INVITE_CODE_RANDOM: 'INVITE_CODE_RANDOM' as RewardType,
+  INVITE_CODE_FCFS: 'INVITE_CODE_FCFS' as RewardType,
   CC_ONLY: 'CC_ONLY' as RewardType,
-  INVITE_CODE: 'INVITE_CODE' as RewardType,
   CC_AND_INVITE: 'CC_AND_INVITE' as RewardType,
+  INVITE_CODE: 'INVITE_CODE' as RewardType,
 };
+
+/** Normalize legacy INVITE_CODE → random draw category */
+export function normalizeRewardType(rt: RewardType): RewardType {
+  return rt === 'INVITE_CODE' ? 'INVITE_CODE_RANDOM' : rt;
+}
 
 export type SubmissionStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
 export const SubmissionStatus = {
