@@ -1,5 +1,7 @@
 # CanQuest — deploy on VPS 2 (full stack)
 
+> **Bahasa Indonesia:** panduan lengkap arsitektur VPS1/VPS2 + Vercel → [TUTORIAL_DEPLOY_INDONESIA.md](./TUTORIAL_DEPLOY_INDONESIA.md)
+
 Run **website + API + database** on **VPS 2** (`62.171.185.56`).  
 **Canton ledger + Splice validator** stay on a **separate validator VPS**; VPS 2 reaches them via **SSH tunnel** (localhost `7575` / `8080`).
 

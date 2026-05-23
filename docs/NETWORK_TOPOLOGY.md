@@ -1,5 +1,7 @@
 # CanQuest — network topology (read this first)
 
+> **Tutorial deploy (ID):** [TUTORIAL_DEPLOY_INDONESIA.md](./TUTORIAL_DEPLOY_INDONESIA.md)
+
 ## Rule of thumb
 
 | What | DevNet | TestNet | MainNet |
