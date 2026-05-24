@@ -31,9 +31,14 @@ export function EarnHubPage() {
       setHubError(null);
 
       try {
+        const fetchOpts = {
+          credentials: "include" as const,
+          cache: "no-store" as const,
+          signal: AbortSignal.timeout(12_000),
+        };
         const [hubRes, meRes] = await Promise.all([
-          fetch("/api/quests/earn-hub", { credentials: "include", cache: "no-store" }),
-          fetch("/api/me", { credentials: "include", cache: "no-store" }),
+          fetch("/api/quests/earn-hub", fetchOpts),
+          fetch("/api/me", fetchOpts),
         ]);
 
         if (!cancelled) {

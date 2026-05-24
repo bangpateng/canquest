@@ -107,6 +107,14 @@ export const en: PlatformMessages = {
     generateWallet: "Generate Wallet",
     generatingWallet: "Generating wallet on Canton Network…",
     walletCreatedLoading: "Wallet created! Loading…",
+    profileStale: "Could not refresh your profile",
+    profileStaleHint:
+      "Your wallet is still saved. The validator connection may be down — balance and sends can fail until the tunnel is back.",
+    reconnectTitle: "Reconnect wallet to node",
+    reconnectHint:
+      "Your username is saved but the Canton party was not registered while the node was offline. Reconnect when the tunnel is active.",
+    reconnectBtn: "Connect to Canton node",
+    reconnecting: "Connecting…",
   },
   transactions: {
     title: "Transaction history",

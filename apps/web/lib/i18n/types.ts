@@ -115,6 +115,12 @@ export type PlatformMessages = {
     generateWallet: string;
     generatingWallet: string;
     walletCreatedLoading: string;
+    profileStale: string;
+    profileStaleHint: string;
+    reconnectTitle: string;
+    reconnectHint: string;
+    reconnectBtn: string;
+    reconnecting: string;
   };
   transactions: {
     title: string;

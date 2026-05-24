@@ -18,7 +18,16 @@ import {
 } from "lucide-react";
 import { ListPagination } from "@/components/app/list-pagination";
 import { useCcBalance } from "@/lib/hooks/use-cc-balance";
+import { createRefetchThrottle } from "@/lib/refetch-throttle";
+import {
+  cacheWalletMe,
+  isRealCantonPartyId,
+  readCachedWalletMe,
+} from "@/lib/wallet-session-cache";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
+
+const FOCUS_REFETCH_MIN_MS = 60_000;
+const throttleFocusRefetch = createRefetchThrottle(FOCUS_REFETCH_MIN_MS);
 
 const ACTIVITY_PAGE_SIZE = 5;
 
@@ -103,7 +112,7 @@ async function fetchJson<T>(url: string): Promise<{ ok: boolean; data: T | null 
 
 export function DashboardView() {
   const t = usePlatformT();
-  const [me, setMe] = useState<Me | null>(null);
+  const [me, setMe] = useState<Me | null>(() => readCachedWalletMe());
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [activityData, setActivityData] = useState<ActivityPage | null>(null);
   const [activityPage, setActivityPage] = useState(1);
@@ -145,8 +154,8 @@ export function DashboardView() {
     }
   }, []);
 
-  const fetchAll = useCallback(async () => {
-    setLoading(true);
+  const fetchAll = useCallback(async (opts?: { background?: boolean }) => {
+    if (!opts?.background) setLoading(true);
     setLoadError(null);
     try {
       const [meResult, statsResult] = await Promise.all([
@@ -154,7 +163,13 @@ export function DashboardView() {
         fetchJson<DashboardStats>("/api/quests/dashboard-stats"),
       ]);
 
-      if (meResult.ok && meResult.data) setMe(meResult.data);
+      if (meResult.ok && meResult.data) {
+        setMe(meResult.data);
+        cacheWalletMe(meResult.data);
+      } else {
+        const cached = readCachedWalletMe();
+        if (cached) setMe((prev) => prev ?? cached);
+      }
       if (statsResult.ok && statsResult.data) {
         const earnPoints =
           typeof meResult.data?.earnPoints === "number"
@@ -188,7 +203,8 @@ export function DashboardView() {
 
   useEffect(() => {
     const refreshOnVisible = () => {
-      if (document.visibilityState === "visible") void fetchAll();
+      if (document.visibilityState !== "visible") return;
+      throttleFocusRefetch(() => void fetchAll({ background: true }));
     };
     window.addEventListener("focus", refreshOnVisible);
     document.addEventListener("visibilitychange", refreshOnVisible);
@@ -207,10 +223,12 @@ export function DashboardView() {
       ? me.earnPoints
       : (stats?.totalPoints ?? 0);
 
-  const hasWallet =
-    Boolean(me?.cantonPartyId) && !me?.cantonPartyId?.startsWith("canquest:user:");
+  const hasWallet = isRealCantonPartyId(me?.cantonPartyId);
 
-  const { balance, loading: balanceLoading } = useCcBalance({ enabled: hasWallet });
+  const { balance, loading: balanceLoading } = useCcBalance({
+    enabled: hasWallet,
+    pollIntervalMs: 90_000,
+  });
 
   const statCards = [
     {

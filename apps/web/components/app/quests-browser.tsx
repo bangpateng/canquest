@@ -38,6 +38,7 @@ export function QuestsBrowser() {
 
   useEffect(() => {
     const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12_000);
     setLoading(true);
     Promise.all([
       fetch("/api/quests", { credentials: "include", signal: controller.signal }).then(
@@ -60,7 +61,10 @@ export function QuestsBrowser() {
       })
       .catch(() => {/* ignore abort */})
       .finally(() => setLoading(false));
-    return () => controller.abort();
+    return () => {
+      clearTimeout(timeout);
+      controller.abort();
+    };
   }, []);
 
   const counts = useMemo(() => {

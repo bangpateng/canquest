@@ -11,7 +11,9 @@ export function getBalance() {
 }
 
 export function getLedgerStatus() {
-  return apiFetch<LedgerStatus>('/api/party/ledger-status');
+  return apiFetch<LedgerStatus>('/api/party/ledger-status', {
+    signal: AbortSignal.timeout(5_000),
+  });
 }
 
 export function setUsername(username: string) {

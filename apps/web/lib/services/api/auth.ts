@@ -45,5 +45,5 @@ export function logout() {
 }
 
 export function getMe() {
-  return apiFetch<Me>('/api/me');
+  return apiFetch<Me>('/api/me', { signal: AbortSignal.timeout(8_000) });
 }

@@ -107,6 +107,14 @@ export const id: PlatformMessages = {
     generateWallet: "Buat dompet",
     generatingWallet: "Membuat dompet di Canton Network…",
     walletCreatedLoading: "Dompet dibuat! Memuat…",
+    profileStale: "Profil tidak bisa dimuat ulang",
+    profileStaleHint:
+      "Dompet Anda masih tersimpan. Koneksi ke validator mungkin putus — saldo dan kirim CC bisa gagal sampai tunnel aktif lagi.",
+    reconnectTitle: "Hubungkan ulang dompet ke node",
+    reconnectHint:
+      "Username sudah tersimpan, tetapi party Canton belum terdaftar saat node mati. Hubungkan ulang saat tunnel aktif.",
+    reconnectBtn: "Hubungkan ke node Canton",
+    reconnecting: "Menghubungkan…",
   },
   transactions: {
     title: "Riwayat transaksi",

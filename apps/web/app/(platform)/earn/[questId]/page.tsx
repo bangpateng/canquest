@@ -33,6 +33,7 @@ async function fetchQuest(questId: string): Promise<Quest | null> {
     const res = await fetch(`${apiBase}/quests/${questId}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) return null;
     return res.json() as Promise<Quest>;

@@ -6,6 +6,7 @@ import { formatApiError } from "@/lib/format-api-error";
 import { Loader2, Wallet } from "lucide-react";
 import { useState } from "react";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
+import { cacheWalletMe } from "@/lib/wallet-session-cache";
 
 interface WalletSetupProps {
   onCreated: () => void;
@@ -54,6 +55,12 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
           "Connect the tunnel and use Settings to get a real Party ID."
         );
       }
+
+      cacheWalletMe({
+        username: val,
+        cantonPartyId:
+          typeof raw?.cantonPartyId === "string" ? raw.cantonPartyId : null,
+      });
 
       setStep("done");
       setTimeout(() => onCreated(), 1200);

@@ -7,6 +7,7 @@ import { WalletPreapprovalBanner } from "@/components/app/wallet-preapproval-ban
 import { TransactionsView } from "@/components/app/transactions-view";
 import { CheckCircle2, RefreshCw } from "lucide-react";
 import { useCcBalance } from "@/lib/hooks/use-cc-balance";
+import { isRealCantonPartyId } from "@/lib/wallet-session-cache";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 
 interface WalletDashboardProps {
@@ -16,9 +17,7 @@ interface WalletDashboardProps {
 
 export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
   const t = usePlatformT();
-  const hasWallet = Boolean(
-    me.cantonPartyId && !me.cantonPartyId.startsWith("canquest:user:"),
-  );
+  const hasWallet = isRealCantonPartyId(me.cantonPartyId);
   const {
     balance,
     loading: balanceLoading,
