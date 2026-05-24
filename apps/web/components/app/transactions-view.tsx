@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { ListPagination } from "@/components/app/list-pagination";
@@ -23,6 +24,7 @@ export interface TxItem {
   referenceId: string | null;
   counterparty?: string | null;
   ledgerTxId: string | null;
+  cantonUpdateId?: string | null;
   settledAt: string | null;
   createdAt: string;
 }
@@ -258,13 +260,16 @@ export function TransactionsView({
                           {tx.counterparty ?? tx.referenceId ?? "—"}
                         </td>
                         <td className="px-5 py-3">
-                          {tx.ledgerTxId ? (
-                            <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--muted)]/60 px-2 py-0.5 font-mono text-[10px] text-[var(--muted-foreground)]">
-                              {tx.ledgerTxId.slice(0, 12)}…
-                            </span>
-                          ) : (
-                            <span className="text-xs text-[var(--muted-foreground)]">—</span>
-                          )}
+                          <Link
+                            href={`/transactions/${tx.id}`}
+                            className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--muted)]/60 px-2 py-0.5 font-mono text-[10px] text-[var(--primary)] underline-offset-2 hover:underline"
+                          >
+                            {tx.cantonUpdateId
+                              ? `${tx.cantonUpdateId.slice(0, 10)}…`
+                              : tx.ledgerTxId
+                                ? `${tx.ledgerTxId.slice(0, 10)}…`
+                                : "View"}
+                          </Link>
                         </td>
                         <td className="whitespace-nowrap px-5 py-3 text-xs text-[var(--muted-foreground)]">
                           {date}
@@ -286,7 +291,11 @@ export function TransactionsView({
                   minute: "2-digit",
                 });
                 return (
-                  <li key={tx.id} className="flex items-center gap-4 px-5 py-4">
+                  <li key={tx.id}>
+                    <Link
+                      href={`/transactions/${tx.id}`}
+                      className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-[var(--muted)]/40"
+                    >
                     <div
                       className={cn(
                         "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
@@ -315,6 +324,7 @@ export function TransactionsView({
                         {txLabel(tx.type)}
                       </p>
                     </div>
+                    </Link>
                   </li>
                 );
               })}

@@ -240,7 +240,7 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
           ledgerTxId: contractId,
           settledAt: null,
         },
-        data: { settledAt: new Date() },
+        data: { settledAt: new Date(), cantonUpdateId: updateId },
       });
 
       this.logger.debug(`Indexed TransferOffer archived: ${contractId.slice(0, 16)}…`);

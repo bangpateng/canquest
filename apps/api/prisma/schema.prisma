@@ -79,10 +79,14 @@ model CcTransaction {
   description    String
   /// Reference to the source (questId, spinId, etc.)
   referenceId    String?
-  /// Canton ledger transaction ID after on-chain settlement.
+  /// Offer / contract ID on Canton (e.g. TransferOffer contract).
   ledgerTxId     String?
+  /// Ledger update ID from submit-and-wait / transaction stream (CantonScan).
+  cantonUpdateId String?
   settledAt      DateTime?
   createdAt      DateTime          @default(now())
+
+  @@index([cantonUpdateId])
 }
 
 enum CcTransactionType {

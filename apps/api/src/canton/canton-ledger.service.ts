@@ -523,7 +523,109 @@ export class CantonLedgerService {
     this.logger.warn(`createContract failed ${status}: ${text.slice(0, 200)}`);
     return { ok: false, contractId: null, updateId: null, error: text.slice(0, 300) };
   }
+
+  /**
+   * Scan recent ledger updates for an archived contract (e.g. accepted TransferOffer).
+   */
+  async findUpdateIdForContract(
+    contractId: string,
+    partyId: string,
+    options?: { lookback?: number },
+  ): Promise<string | null> {
+    const lookback = options?.lookback ?? 800;
+    try {
+      const end = (await this.ledgerEnd()) as { offset?: number | string };
+      const endNum = Number(end?.offset ?? 0);
+      const begin = Math.max(0, endNum - lookback);
+      const txs = await this.fetchTransactionUpdates(partyId, begin);
+      for (const tx of txs) {
+        for (const event of tx.events ?? []) {
+          if (event.archived?.contractId === contractId) {
+            return tx.updateId;
+          }
+        }
+      }
+    } catch (err) {
+      this.logger.warn(`findUpdateIdForContract: ${String(err)}`);
+    }
+    return null;
+  }
+
+  /** Load one update's events from the transaction stream (recent window). */
+  async fetchTransactionByUpdateId(
+    updateId: string,
+    partyId: string,
+  ): Promise<{ updateId: string; events: LedgerStreamEvent[] } | null> {
+    const lookback = 1200;
+    try {
+      const end = (await this.ledgerEnd()) as { offset?: number | string };
+      const begin = Math.max(0, Number(end?.offset ?? 0) - lookback);
+      const txs = await this.fetchTransactionUpdates(partyId, begin);
+      const match = txs.find((t) => t.updateId === updateId);
+      if (!match) return null;
+      return { updateId: match.updateId, events: match.events ?? [] };
+    } catch (err) {
+      this.logger.warn(`fetchTransactionByUpdateId: ${String(err)}`);
+      return null;
+    }
+  }
+
+  private async fetchTransactionUpdates(
+    partyId: string,
+    beginExclusive: number,
+  ): Promise<LedgerStreamTransaction[]> {
+    const body = {
+      filter: {
+        filtersByParty: {
+          [partyId]: {
+            cumulative: [
+              {
+                identifierFilter: {
+                  WildcardFilter: {
+                    value: { includeCreatedEventBlob: false },
+                  },
+                },
+              },
+            ],
+          },
+        },
+        filtersForAnyParty: { cumulative: [] },
+      },
+      beginExclusive,
+    };
+
+    const res = await fetch(`${this.baseUrl}/v2/updates/transactions`, {
+      method: 'POST',
+      headers: this.authHeaders(),
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      this.logger.debug(`fetchTransactionUpdates ${res.status}: ${text.slice(0, 120)}`);
+      return [];
+    }
+    const data = (await res.json()) as { transactions?: LedgerStreamTransaction[] };
+    return data.transactions ?? [];
+  }
 }
+
+type LedgerStreamTransaction = {
+  updateId: string;
+  events?: LedgerStreamEvent[];
+};
+
+export type LedgerStreamEvent = {
+  created?: {
+    contractId: string;
+    templateId: string;
+    createArgument?: unknown;
+  };
+  archived?: {
+    contractId: string;
+    templateId: string;
+  };
+};
 
 /** Extract first CreatedEvent contract id from submit-and-wait JSON response. */
 function extractCreatedContractId(responseText: string): string | null {

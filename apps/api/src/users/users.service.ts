@@ -93,6 +93,7 @@ export class UsersService {
     /** Legacy: stored in referenceId when referenceId is omitted (e.g. transfer peer). */
     counterparty?: string;
     ledgerTxId?: string;
+    cantonUpdateId?: string;
   }) {
     const amountMicroCc = BigInt(Math.round(Math.abs(params.amountCc) * 1_000_000));
     const signed =
@@ -109,6 +110,7 @@ export class UsersService {
         description: params.description,
         referenceId,
         ledgerTxId: params.ledgerTxId ?? null,
+        cantonUpdateId: params.cantonUpdateId ?? null,
         settledAt: new Date(),
       },
     });

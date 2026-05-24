@@ -5,6 +5,7 @@ import {
   Controller,
   Get,
   Logger,
+  Param,
   Post,
   Query,
   Req,
@@ -19,6 +20,8 @@ import { CantonLedgerService } from '../canton/canton-ledger.service';
 import { SpliceValidatorService } from '../canton/splice-validator.service';
 import { FeaturedAppActivityService } from '../canton/featured-app-activity.service';
 import { CcInboundSyncService } from '../canton/cc-inbound-sync.service';
+import { CcBalanceService } from '../canton/cc-balance.service';
+import { TransactionDetailService } from '../canton/transaction-detail.service';
 import { UsersService } from '../users/users.service';
 import { CantonPartyBindingDto } from './dto/canton-party-binding.dto';
 import { SetUsernameDto } from './dto/set-username.dto';
@@ -37,6 +40,8 @@ export class PartyController {
     private readonly splice: SpliceValidatorService,
     private readonly featuredActivity: FeaturedAppActivityService,
     private readonly inboundSync: CcInboundSyncService,
+    private readonly ccBalance: CcBalanceService,
+    private readonly txDetail: TransactionDetailService,
     private readonly config: ConfigService,
   ) {}
 
@@ -275,7 +280,8 @@ export class PartyController {
   }
 
   /**
-   * Get the current CC balance for the authenticated user from the Splice Wallet API.
+   * CC balance: PostgreSQL snapshot first (fast), Splice sync in background.
+   * See BALANCE_READ_FROM_DB in apps/api/.env.example.
    */
   @Get('balance')
   async getBalance(@Req() req: AuthedReq) {
@@ -283,9 +289,19 @@ export class PartyController {
     if (!user?.username) {
       return { balance: null, message: 'No wallet found. Create your wallet first.' };
     }
-    await this.inboundSync.syncUser(user.id, user.username, user.cantonPartyId);
-    const balance = await this.splice.getUserBalance(user.username);
-    return { username: user.username, balance, unit: 'CC' };
+    const display = await this.ccBalance.getDisplayBalance(
+      user.id,
+      user.username,
+      user.cantonPartyId,
+    );
+    return {
+      username: user.username,
+      balance: display.balance,
+      unit: 'CC',
+      source: display.source,
+      stale: display.stale,
+      updatedAt: display.updatedAt?.toISOString() ?? null,
+    };
   }
 
   /**
@@ -328,7 +344,7 @@ export class PartyController {
     const accepted = await this.splice.acceptOfferViaWallet(offerContractId, user.username);
 
     if (accepted) {
-      void this.users.recordTransaction({
+      const row = await this.users.recordTransaction({
         userId: user.id,
         amountCc: body.amount,
         type: 'TRANSFER_IN',
@@ -336,6 +352,9 @@ export class PartyController {
         counterparty: 'Validator (reward)',
         ledgerTxId: offerContractId,
       });
+      if (user.cantonPartyId) {
+        void this.txDetail.backfillUpdateId(row.id, offerContractId, user.cantonPartyId);
+      }
     }
 
     if (!accepted) {
@@ -438,6 +457,7 @@ export class PartyController {
     // Jika penerima adalah user CanQuest → pakai acceptOfferViaWallet (actAs = recipientUsername)
     // Jika penerima eksternal (tidak punya username) → fallback ke Canton Ledger API (port 7575)
     let accepted = false;
+    let acceptUpdateId: string | null = null;
     if (recipientUsername) {
       accepted = await this.splice.acceptOfferViaWallet(offerContractId, recipientUsername);
       this.logger.log(
@@ -446,20 +466,25 @@ export class PartyController {
     } else {
       const result = await this.ledger.acceptTransferOffer(offerContractId, recipientPartyId);
       accepted = result.accepted;
+      acceptUpdateId = result.updateId;
       this.logger.log(
         `CC transfer (Ledger API): ${sender.username} → ${recipientLabel} ${amount} CC (accepted: ${String(accepted)})`,
       );
     }
 
     if (accepted) {
-      void this.users.recordTransaction({
+      const outRow = await this.users.recordTransaction({
         userId: sender.id,
         amountCc: amount,
         type: 'TRANSFER_OUT',
         description: description,
         counterparty: recipientLabel,
         ledgerTxId: offerContractId,
+        cantonUpdateId: acceptUpdateId ?? undefined,
       });
+      if (!acceptUpdateId && sender.cantonPartyId) {
+        void this.txDetail.backfillUpdateId(outRow.id, offerContractId, sender.cantonPartyId);
+      }
 
       // Emit FeaturedAppActivityMarker for CC transfer
       if (sender.cantonPartyId) {
@@ -475,14 +500,22 @@ export class PartyController {
         recipientUser = await this.users.findByPartyId(recipientPartyId);
       }
       if (recipientUser) {
-        void this.users.recordTransaction({
+        const inRow = await this.users.recordTransaction({
           userId: recipientUser.id,
           amountCc: amount,
           type: 'TRANSFER_IN',
           description: `Received from @${sender.username}${body.memo ? `: ${body.memo.trim()}` : ''}`,
           counterparty: `@${sender.username}`,
           ledgerTxId: offerContractId,
+          cantonUpdateId: acceptUpdateId ?? undefined,
         });
+        if (recipientUser.cantonPartyId) {
+          void this.txDetail.backfillUpdateId(
+            inRow.id,
+            offerContractId,
+            recipientUser.cantonPartyId,
+          );
+        }
         if (recipientUser.username) {
           void this.inboundSync.alignBalanceFromChain(
             recipientUser.id,
@@ -534,7 +567,7 @@ export class PartyController {
 
       feeCollected = feeResult.collected;
       if (feeCollected) {
-        await this.users.recordTransaction({
+        const feeRow = await this.users.recordTransaction({
           userId: sender.id,
           amountCc: feeCc,
           type: 'TRANSFER_OUT',
@@ -542,6 +575,13 @@ export class PartyController {
           counterparty: treasuryPartyId.split('::')[0],
           ledgerTxId: feeResult.ledgerTxId,
         });
+        if (feeResult.ledgerTxId && sender.cantonPartyId) {
+          void this.txDetail.backfillUpdateId(
+            feeRow.id,
+            feeResult.ledgerTxId,
+            sender.cantonPartyId,
+          );
+        }
         await this.inboundSync.alignBalanceFromChain(sender.id, sender.username);
         this.logger.log(
           `Fee collected (${feeResult.method ?? 'unknown'}): ${sender.username} → ${treasuryPartyId.split('::')[0]} ${feeCc} CC`,
@@ -587,12 +627,18 @@ export class PartyController {
   ) {
     const user = await this.users.findById(req.user.userId);
     if (!user) throw new BadRequestException('User not found.');
-    if (user.username) {
-      await this.inboundSync.syncUser(user.id, user.username, user.cantonPartyId);
-    }
     const p = Math.max(1, parseInt(page ?? '1', 10) || 1);
     const ps = Math.min(20, Math.max(1, parseInt(pageSize ?? '5', 10) || 5));
     return this.users.getTransactions(user.id, p, ps);
+  }
+
+  /**
+   * Internal transaction explorer — DB summary + optional on-chain events.
+   * GET /api/party/transactions/:id
+   */
+  @Get('transactions/:id')
+  async getTransactionById(@Req() req: AuthedReq, @Param('id') id: string) {
+    return this.txDetail.getDetailForUser(req.user.userId, id.trim());
   }
 
   /**

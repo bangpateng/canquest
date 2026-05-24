@@ -5,6 +5,8 @@ import { CantonLedgerService } from './canton-ledger.service';
 import { SpliceValidatorService } from './splice-validator.service';
 import { FeaturedAppActivityService } from './featured-app-activity.service';
 import { CcInboundSyncService } from './cc-inbound-sync.service';
+import { CcBalanceService } from './cc-balance.service';
+import { TransactionDetailService } from './transaction-detail.service';
 import { QuestLedgerService } from './quest-ledger.service';
 
 /**
@@ -23,6 +25,8 @@ import { QuestLedgerService } from './quest-ledger.service';
     SpliceValidatorService,
     FeaturedAppActivityService,
     CcInboundSyncService,
+    CcBalanceService,
+    TransactionDetailService,
     QuestLedgerService,
   ],
   exports: [
@@ -30,6 +34,8 @@ import { QuestLedgerService } from './quest-ledger.service';
     SpliceValidatorService,
     FeaturedAppActivityService,
     CcInboundSyncService,
+    CcBalanceService,
+    TransactionDetailService,
     QuestLedgerService,
   ],
 })

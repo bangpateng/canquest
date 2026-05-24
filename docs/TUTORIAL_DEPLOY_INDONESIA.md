@@ -433,7 +433,7 @@ systemctl start canton-tunnel
 | **1 (sekarang)** | Tunnel + JSON API + Vercel + TestNet |
 | **2** | Upload DAR, party TestNet, tes wallet & quest |
 | **3** | Monitor tunnel, backup DB, `NODE_ENV=production` |
-| **4 (opsional)** | gRPC `@daml/ledger`, WireGuard VPS2↔VPS1 |
+| **4 (opsional)** | VPN privat VPS2↔VPS1, atau gRPC (refactor besar) |
 
 ---
 
