@@ -146,7 +146,7 @@ export const en: PlatformMessages = {
     history: "Recent spins",
     historyEmpty: "No spins yet — try your first roll!",
     noItems: "Spin rewards are not configured yet",
-    noItemsHint: "Ask an admin to set up spin items in the dashboard.",
+    noItemsHint: "Cooming Soon.",
     statusDelivered: "Delivered",
     statusPending: "Processing",
     pointsSpent: "{n} pts spent",
