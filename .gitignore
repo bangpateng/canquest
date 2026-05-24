@@ -35,6 +35,18 @@ infra/**/*.md
 work.md
 *.env.md
 
+# ─── WireGuard (live config & keys on VPS only; *.example is safe template) ──
+infra/wireguard/*
+!infra/wireguard/*.example
+**/wireguard/*.key
+**/*_private.key
+**/*_public.key
+
+# ─── Ops runbooks with VPS IPs / tunnel steps (local copy only) ──────────────
+docs/WIREGUARD*.md
+docs/LANGKAH_STABILKAN_TUNNEL_CANTON.md
+docs/SESSION_HANDOFF.md
+
 # ─── Local-only ops scripts (contain VPS IP / tunnel setup) ──────────────────
 infra/vps2-setup-tunnels.sh
 infra/systemd/
@@ -66,9 +78,15 @@ infra/cleanup.sh
 **/logs/
 **/*.log
 
+# ─── DAML build cache ────────────────────────────────────────────────────────
+packages/daml/.daml/
+
 # ─── Uploads / Media ─────────────────────────────────────────────────────────
 apps/web/public/quest-media/*
 !apps/web/public/quest-media/.gitkeep
+apps/api/uploads/**
+!apps/api/uploads/.gitkeep
+!apps/api/uploads/avatars/.gitkeep
 
 # ─── Vercel ──────────────────────────────────────────────────────────────────
 .vercel

@@ -1,0 +1,14 @@
+# VPS 2 — CanQuest API (replace VPS1_PUBLIC_HOST with validator host)
+# Full steps: keep docs/WIREGUARD_LANGKAH_LENGKAP.md local (not in git).
+# Test WG before stopping SSH canton-tunnel.
+
+[Interface]
+Address = 10.66.66.2/24
+PrivateKey = VPS2_PRIVATE_KEY_HERE
+
+[Peer]
+PublicKey = VPS1_PUBLIC_KEY_HERE
+Endpoint = VPS1_PUBLIC_HOST:51820
+# Docker subnet on VPS 1: docker network inspect bridge → Subnet (often 172.17.0.0/16)
+AllowedIPs = 10.66.66.1/32, 172.17.0.0/16
+PersistentKeepalive = 25
