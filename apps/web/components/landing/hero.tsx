@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 const highlights = [
   { icon: Gift, title: "Quest campaigns", short: "Quests", value: "Earn CC & rewards" },
   { icon: Wallet, title: "Canton wallet", short: "Wallet", value: "Party-bound identity" },
-  { icon: Ticket, title: "Daily spin", short: "Spin", value: "Bonus prizes" },
+  { icon: Ticket, title: "Spin Reward", short: "Spin", value: "Spend points, win prizes" },
 ];
 
 const stats = [

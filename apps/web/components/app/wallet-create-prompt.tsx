@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 const FEATURES = [
   { icon: Gift, label: "Quest", desc: "Daily tasks & points" },
   { icon: Sparkles, label: "Earn", desc: "Partner campaigns" },
-  { icon: Ticket, label: "Daily Spin", desc: "Spend & win points" },
+  { icon: Ticket, label: "Spin Reward", desc: "Spend points, win CC" },
 ] as const;
 
 type WalletCreatePromptProps = {

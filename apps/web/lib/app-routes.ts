@@ -12,4 +12,6 @@ export const ROUTES = {
   earnHub: "/quest",
   /** Rankings — below Wallet in nav */
   leaderboard: "/leaderboard",
+  /** Points wheel — spend earn points for CC / bonus rewards */
+  spinReward: "/spin-reward",
 } as const;

@@ -157,7 +157,7 @@ export function EarnHubPage() {
               Leaderboard
             </Link>
             <Link
-              href="/spin-daily"
+              href={ROUTES.spinReward}
               className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)]/60 px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:border-[var(--border)] hover:text-[var(--foreground)]"
             >
               Spend points

@@ -27,15 +27,15 @@ export function parseTwitterFollowTarget(target: string | null | undefined): str
 export function parseTweetIdFromTarget(target: string | null | undefined): string | null {
   if (!target?.trim()) return null;
   const raw = target.trim();
-  const m = raw.match(/status\/(\d+)/i);
-  if (m?.[1]) return m[1];
+  const inline = raw.match(/status\/(\d{5,})/i);
+  if (inline?.[1]) return inline[1];
   if (/^\d{5,}$/.test(raw)) return raw;
   try {
-    const u = new URL(raw);
+    const u = new URL(raw.startsWith('http') ? raw : `https://${raw}`);
     const parts = u.pathname.split('/').filter(Boolean);
-    const idx = parts.indexOf('status');
-    if (idx >= 0 && parts[idx + 1] && /^\d+$/.test(parts[idx + 1])) {
-      return parts[idx + 1];
+    const statusIdx = parts.indexOf('status');
+    if (statusIdx >= 0 && parts[statusIdx + 1] && /^\d{5,}$/.test(parts[statusIdx + 1])) {
+      return parts[statusIdx + 1];
     }
   } catch {
     /* ignore */

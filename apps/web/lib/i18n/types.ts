@@ -143,7 +143,20 @@ export type PlatformMessages = {
     signOut: string;
   };
   spin: {
-    comingSoon: string;
-    comingSoonHint: string;
+    pageLead: string;
+    pointsAvailable: string;
+    spinCost: string;
+    spinNow: string;
+    spinning: string;
+    rewardsPool: string;
+    history: string;
+    historyEmpty: string;
+    noItems: string;
+    noItemsHint: string;
+    statusDelivered: string;
+    statusPending: string;
+    pointsSpent: string;
+    loadError: string;
+    retry: string;
   };
 };

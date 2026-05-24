@@ -49,8 +49,10 @@ export class TwitterApiService {
     });
     const body = (await res.json().catch(() => ({}))) as TwitterApiEnvelope<T> & T;
     if (!res.ok) {
+      const errBody = body as { message?: string; error?: number };
       const msg =
-        (body as TwitterApiEnvelope<T>).message ??
+        errBody.message?.trim() ||
+        (body as TwitterApiEnvelope<T>).message?.trim() ||
         `Twitter API HTTP ${res.status}`;
       this.logger.warn(`twitterapi.io ${path}: ${msg}`);
       throw new BadRequestException(msg);
@@ -115,17 +117,19 @@ export class TwitterApiService {
     let cursor = '';
     const maxPages = 5;
     for (let page = 0; page < maxPages; page++) {
-      const params: Record<string, string> = { tweet_id: tweetId };
+      const params: Record<string, string> = { tweetId };
       if (cursor) params.cursor = cursor;
 
       const payload = await this.getJson<{
         users?: Array<{ userName?: string; screen_name?: string }>;
+        has_next_page?: boolean;
         next_cursor?: string;
         cursor?: string;
       }>('/twitter/tweet/retweeters', params);
 
       const root = payload as TwitterApiEnvelope<{
         users?: Array<{ userName?: string; screen_name?: string }>;
+        has_next_page?: boolean;
         next_cursor?: string;
         cursor?: string;
       }>;
@@ -136,8 +140,9 @@ export class TwitterApiService {
         if (handle === needle) return true;
       }
 
+      const hasNext = data.has_next_page === true;
       const next = data.next_cursor ?? data.cursor ?? '';
-      if (!next || next === cursor) break;
+      if (!hasNext || !next || next === cursor) break;
       cursor = next;
     }
     return false;
@@ -159,7 +164,9 @@ export class TwitterApiService {
   async verifyRetweetTask(userUsername: string, taskTarget: string | null): Promise<void> {
     const tweetId = parseTweetIdFromTarget(taskTarget);
     if (!tweetId) {
-      throw new BadRequestException('This retweet task has an invalid post URL.');
+      throw new BadRequestException(
+        'This retweet task needs a post URL (e.g. https://x.com/user/status/1234567890), not a profile link.',
+      );
     }
     const retweeted = await this.userRetweetedTweet(userUsername, tweetId);
     if (!retweeted) {

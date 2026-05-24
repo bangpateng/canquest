@@ -30,6 +30,12 @@ export class SpinController {
     return this.spin.listItems();
   }
 
+  /** Points available for spin + cost per spin. */
+  @Get('state')
+  async getState(@Req() req: AuthedReq) {
+    return this.spin.getSpinState(req.user.userId);
+  }
+
   /**
    * Execute spin — user menggunakan points untuk spin.
    * Rate-limited: 5x per menit (ledger tier) untuk cegah abuse.

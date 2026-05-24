@@ -4,13 +4,14 @@ import { CQ_ACCESS_COOKIE } from '@/lib/auth-cookies';
 
 /** Routes that require session cookie (JWT verified in platform layout). */
 const PROTECTED_PATTERN =
-  /^\/(overview|quest|earn|spin-daily|wallet|leaderboard|setting)(\/|$)/;
+  /^\/(overview|quest|earn|spin-reward|spin-daily|wallet|leaderboard|setting)(\/|$)/;
 
 /** Legacy app paths → new platform paths */
 const LEGACY_REDIRECTS: Record<string, string> = {
   '/dashboard': '/overview',
   '/quests': '/earn',
-  '/spin': '/spin-daily',
+  '/spin': '/spin-reward',
+  '/spin-daily': '/spin-reward',
   '/settings': '/setting',
   '/transactions': '/wallet',
 };
@@ -84,6 +85,8 @@ export const config = {
     '/earn/:path*',
     '/spin-daily',
     '/spin-daily/:path*',
+    '/spin-reward',
+    '/spin-reward/:path*',
     '/setting',
     '/setting/:path*',
   ],

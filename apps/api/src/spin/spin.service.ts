@@ -232,6 +232,19 @@ export class SpinService {
     };
   }
 
+  /** Points balance available for spinning (earn minus prior spin spend). */
+  async getSpinState(userId: string) {
+    const spinCost = Number(process.env.SPIN_COST_POINTS ?? DEFAULT_SPIN_COST);
+    const earnPoints = await this.users.reconcileEarnPoints(userId);
+    const spentResults = await this.prisma.spinResult.findMany({
+      where: { userId },
+      select: { pointsSpent: true },
+    });
+    const spentPoints = spentResults.reduce((s, r) => s + r.pointsSpent, 0);
+    const availablePoints = Math.max(0, earnPoints - spentPoints);
+    return { spinCost, earnPoints, spentPoints, availablePoints };
+  }
+
   // ── History ─────────────────────────────────────────────────────────────────
 
   async getUserHistory(userId: string, page = 1, pageSize = 10) {
