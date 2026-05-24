@@ -3,6 +3,12 @@
 import Link from "next/link";
 import { PageTitle, SectionTitle, StatValue } from "@/components/ui/typography";
 import type { QuestRewardStatus, RewardType } from "@/lib/quest-types";
+import {
+  campaignUiKind,
+  isUnluckyState,
+  rewardCodeFromStatus,
+  type CampaignMeta,
+} from "@/lib/campaign-reward";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -89,6 +95,7 @@ export function QuestSubmitSection({
   submitError,
   onSubmit,
   cantonLedgerConfigured = false,
+  campaignEnded = false,
 }: {
   partyId: string | null;
   submitting: boolean;
@@ -96,6 +103,7 @@ export function QuestSubmitSection({
   onSubmit: () => void;
   /** When false, final submit is DB-only (no DAML contracts). */
   cantonLedgerConfigured?: boolean;
+  campaignEnded?: boolean;
 }) {
   return (
     <section className="relative overflow-hidden rounded-2xl border border-[var(--primary)]/40 bg-gradient-to-br from-[var(--primary)]/15 via-[var(--card)] to-[var(--card)] p-6 md:p-8">
@@ -117,9 +125,15 @@ export function QuestSubmitSection({
             : "Final step saves your completion and applies quest rewards."}
         </p>
 
+        {campaignEnded ? (
+          <p className="mx-auto mt-4 max-w-md text-sm text-orange-300">
+            This campaign has ended. Final submit is closed.
+          </p>
+        ) : null}
+
         <button
           type="button"
-          disabled={submitting || !partyId}
+          disabled={submitting || !partyId || campaignEnded}
           onClick={onSubmit}
           className={cn(
             buttonVariants({ size: "lg" }),
@@ -159,22 +173,78 @@ export function QuestSubmittedProof({
   rewardStatus,
   ledger,
   rewardType,
+  campaignMeta,
 }: {
   rewardCc: number | null;
   rewardStatus: QuestRewardStatus | null;
   ledger: QuestLedgerProof | null;
   rewardType?: RewardType | string | null;
+  campaignMeta?: CampaignMeta | null;
 }) {
   const rt = (rewardType ?? "CC_ONLY") as RewardType;
-  const isCcAndInvite =
-    rt === "CC_AND_INVITE" &&
-    Boolean(rewardStatus?.inviteCode) &&
-    (rewardCc ?? 0) > 0;
-
-  const inviteCode = rewardStatus?.inviteCode ?? null;
+  const state = rewardStatus?.state;
+  const inviteCode = rewardCodeFromStatus(rewardStatus);
+  const uiKind = campaignUiKind(rt, campaignMeta?.requiresFcfsClaim ?? false);
   const participationId = ledger?.participationContractId ?? null;
   const [proofOpen, setProofOpen] = useState(false);
-  const showCcReward = isCcAndInvite && (rewardCc ?? 0) > 0;
+
+  const isCcAndInvite =
+    rt === "CC_AND_INVITE" &&
+    Boolean(inviteCode) &&
+    (rewardCc ?? 0) > 0;
+  const showCcReward =
+    (isCcAndInvite && (rewardCc ?? 0) > 0) ||
+    (uiKind === "cc_fcfs" && state === "cc_reward" && (rewardCc ?? 0) > 0);
+
+  if (isUnluckyState(state)) {
+    return (
+      <section className="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] p-8 text-center ring-1 ring-[var(--border)]">
+        <p className="text-lg font-semibold text-[var(--foreground)]">Unlucky</p>
+        <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted-foreground)]">
+          {rewardStatus?.message ??
+            "You were not selected this time. Thanks for participating — try the next campaign."}
+        </p>
+      </section>
+    );
+  }
+
+  if (uiKind === "waitlist_email" && state === "waitlist") {
+    return (
+      <section className="relative overflow-hidden rounded-2xl border border-sky-500/30 bg-gradient-to-b from-sky-500/10 via-[var(--card)] to-[var(--card)] p-8 text-center">
+        <CheckCircle2 className="mx-auto h-10 w-10 text-sky-400" />
+        <PageTitle className="mt-4">You&apos;re on the waitlist</PageTitle>
+        <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted-foreground)]">
+          {rewardStatus?.message ??
+            "Your email is registered. We will contact you if you are selected."}
+        </p>
+      </section>
+    );
+  }
+
+  if (uiKind === "cc_manual" && state === "cc_reward") {
+    return (
+      <section className="relative overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-b from-emerald-500/12 via-[var(--card)] to-[var(--card)] p-8 text-center ring-1 ring-emerald-500/20">
+        <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-400" />
+        <PageTitle className="mt-4">Campaign complete</PageTitle>
+        <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted-foreground)]">
+          {rewardStatus?.message ??
+            `${rewardCc ?? 0} CC will be sent manually by the team via bulk sender. Watch your wallet and email.`}
+        </p>
+      </section>
+    );
+  }
+
+  if (state === "pending_draw") {
+    return (
+      <section className="relative overflow-hidden rounded-2xl border border-amber-500/30 bg-gradient-to-b from-amber-500/10 via-[var(--card)] to-[var(--card)] p-8 text-center">
+        <PageTitle className="mt-2">Submitted — draw pending</PageTitle>
+        <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted-foreground)]">
+          {rewardStatus?.message ??
+            "Admin will run the random draw. Your invite code will appear here if you win."}
+        </p>
+      </section>
+    );
+  }
 
   return (
     <section className="relative overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-b from-emerald-500/12 via-[var(--card)] to-[var(--card)] ring-1 ring-emerald-500/20">
@@ -197,6 +267,9 @@ export function QuestSubmittedProof({
             ? "Your rewards are ready below"
             : rewardStatus?.message ?? "Quest recorded successfully"}
         </p>
+        {uiKind === "waitlist_code" && state === "winner" && inviteCode ? (
+          <p className="mt-1 text-xs text-violet-300">Winner — copy your reward code below.</p>
+        ) : null}
       </div>
 
       <div className="relative space-y-4 px-4 pb-6">

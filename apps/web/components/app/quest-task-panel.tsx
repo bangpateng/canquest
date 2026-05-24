@@ -19,11 +19,16 @@ import {
   isEarnHubSocialType,
   parseQuizChoices,
 } from "@/lib/quest-types";
+import { CampaignFcfsClaimSection } from "@/components/app/campaign-fcfs-claim";
 import {
   QuestSubmitSection,
   QuestSubmittedProof,
   type QuestLedgerProof,
 } from "@/components/app/quest-submit-section";
+import {
+  type CampaignMeta,
+  isCampaignEnded,
+} from "@/lib/campaign-reward";
 import { WalletCreatePromptModal } from "@/components/app/wallet-create-prompt";
 import { CardTitle, SectionTitle, SubsectionTitle } from "@/components/ui/typography";
 import { buttonVariants } from "@/components/ui/button";
@@ -146,6 +151,7 @@ export function QuestTaskPanel({
   const [twitterUsername, setTwitterUsername] = useState<string | null>(
     viewerTwitterUsername,
   );
+  const [campaignMeta, setCampaignMeta] = useState<CampaignMeta | null>(null);
 
   const loadProgress = useCallback(() => {
     setProgressLoading(true);
@@ -166,6 +172,7 @@ export function QuestTaskPanel({
           rewardCc?: number;
           cantonLedgerConfigured?: boolean;
           ledger?: QuestLedgerProof | null;
+          campaignMeta?: CampaignMeta;
           message?: string;
         };
         if (!r.ok) {
@@ -175,6 +182,7 @@ export function QuestTaskPanel({
         setAllTasksVerified(data.allTasksVerified ?? false);
         setCantonLedgerConfigured(Boolean(data.cantonLedgerConfigured));
         if (data.rewardStatus) setRewardStatus(data.rewardStatus);
+        if (data.campaignMeta) setCampaignMeta(data.campaignMeta);
         if (data.completed) {
           setRewardCc(data.rewardCc ?? 0);
           if (data.ledger) setLedgerProof(data.ledger);
@@ -241,6 +249,16 @@ export function QuestTaskPanel({
   );
   const pct = quest.tasks.length ? Math.round((verifiedCount / quest.tasks.length) * 100) : 0;
   const allDone = verifiedCount === quest.tasks.length && quest.tasks.length > 0;
+  const campaignEnded = !isEarnHub && isCampaignEnded(quest, campaignMeta);
+  const requiresFcfsClaim = campaignMeta?.requiresFcfsClaim ?? false;
+  const showFcfsClaim =
+    requiresFcfsClaim &&
+    allDone &&
+    !questCompleted &&
+    !campaignEnded &&
+    (campaignMeta?.remainingSlots ?? 0) > 0;
+  const showClassicSubmit =
+    allDone && !questCompleted && !isEarnHub && !requiresFcfsClaim && !campaignEnded;
 
   function onTaskVerified(taskId: string, sub: QuestSubmission) {
     setSubmissions((prev) => {
@@ -336,6 +354,12 @@ export function QuestTaskPanel({
           </button>
         </div>
       ) : null}
+      {campaignEnded ? (
+        <div className="rounded-xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm text-orange-200">
+          This campaign has ended. New task submissions and claims are disabled.
+        </div>
+      ) : null}
+
       {!isEarnHub ? (
         <div
           className={cn(
@@ -404,6 +428,7 @@ export function QuestTaskPanel({
                 submission={submissions[task.id] ?? null}
                 partyId={partyId}
                 twitterUsername={twitterUsername}
+                campaignEnded={campaignEnded}
                 earnHubLayout
                 onPointsEarned={onPointsEarned}
                 onVerified={(sub) => onTaskVerified(task.id, sub)}
@@ -428,6 +453,7 @@ export function QuestTaskPanel({
                 submission={submissions[task.id] ?? null}
                 partyId={partyId}
                 twitterUsername={twitterUsername}
+                campaignEnded={campaignEnded}
                 onVerified={(sub) => onTaskVerified(task.id, sub)}
               />
             </li>
@@ -435,15 +461,26 @@ export function QuestTaskPanel({
         </ol>
       )}
 
-      {allDone && !questCompleted && !isEarnHub && (
+      {showFcfsClaim ? (
+        <CampaignFcfsClaimSection
+          questId={quest.id}
+          partyId={partyId}
+          rewardCc={quest.rewardCc}
+          campaignMeta={campaignMeta!}
+          onClaimed={() => loadProgress()}
+        />
+      ) : null}
+
+      {showClassicSubmit ? (
         <QuestSubmitSection
           partyId={partyId}
           submitting={submittingQuest}
           submitError={submitError}
           cantonLedgerConfigured={cantonLedgerConfigured}
+          campaignEnded={campaignEnded}
           onSubmit={() => void handleSubmitQuest()}
         />
-      )}
+      ) : null}
 
       {allDone && !questCompleted && isEarnHub ? (
         <p className="text-center text-sm text-[var(--muted-foreground)]">
@@ -457,8 +494,24 @@ export function QuestTaskPanel({
           rewardStatus={rewardStatus}
           ledger={ledgerProof}
           rewardType={quest.rewardType}
+          campaignMeta={campaignMeta}
         />
       )}
+
+      {!questCompleted &&
+        !isEarnHub &&
+        requiresFcfsClaim &&
+        allDone &&
+        !showFcfsClaim &&
+        rewardStatus?.state === "fcfs_missed" ? (
+        <QuestSubmittedProof
+          rewardCc={rewardCc}
+          rewardStatus={rewardStatus}
+          ledger={ledgerProof}
+          rewardType={quest.rewardType}
+          campaignMeta={campaignMeta}
+        />
+      ) : null}
     </div>
   );
 }
@@ -470,6 +523,7 @@ function TaskRow({
   submission,
   partyId,
   twitterUsername = null,
+  campaignEnded = false,
   earnHubLayout = false,
   onPointsEarned,
   onVerified,
@@ -480,6 +534,7 @@ function TaskRow({
   submission: QuestSubmission | null;
   partyId: string | null;
   twitterUsername?: string | null;
+  campaignEnded?: boolean;
   earnHubLayout?: boolean;
   onPointsEarned?: () => void;
   onVerified: (sub: QuestSubmission) => void;
@@ -506,7 +561,17 @@ function TaskRow({
   const [quizWrong, setQuizWrong] = useState<string | null>(null);
   const [cooldownNow, setCooldownNow] = useState(() => Date.now());
   const [walletPromptOpen, setWalletPromptOpen] = useState(false);
+  const [accountSubmitLocked, setAccountSubmitLocked] = useState(false);
   const autoSubmitFired = useRef(false);
+
+  const isAccountDataTask =
+    isEmailTask ||
+    isPartyTask ||
+    taskType === "twitter_follow" ||
+    taskType === "twitter_retweet" ||
+    taskType === "telegram_channel" ||
+    taskType === "telegram_group" ||
+    taskType === "discord_join";
 
   function requireWallet(): boolean {
     if (partyId) return false;
@@ -593,8 +658,10 @@ function TaskRow({
   }
 
   async function handleSubmit(proofValue?: string, opts?: { isQuiz?: boolean }) {
-    if (loading) return;
+    if (loading || campaignEnded) return;
+    if (isAccountDataTask && accountSubmitLocked && !isRepeatable) return;
     if (countdown !== null && countdown > 0) return;
+    if (isAccountDataTask && !opts?.isQuiz) setAccountSubmitLocked(true);
     setLoading(true);
     if (!opts?.isQuiz) {
       setError(null);
@@ -616,6 +683,7 @@ function TaskRow({
 
       if (!res.ok || data.ok === false) {
         const msg = parseApiErrorMessage(data);
+        if (isAccountDataTask && !opts?.isQuiz) setAccountSubmitLocked(false);
         if (opts?.isQuiz && proofValue) {
           setQuizWrong(proofValue);
           setQuizPending(null);
@@ -657,6 +725,7 @@ function TaskRow({
       setStarted(false);
       setCountdown(null);
     } catch {
+      if (isAccountDataTask && !opts?.isQuiz) setAccountSubmitLocked(false);
       if (opts?.isQuiz) {
         setQuizPending(null);
       }
@@ -707,7 +776,9 @@ function TaskRow({
   const needsWallet = !partyId;
   const needsWalletForParty = isPartyTask && !partyId;
   const actionDisabled =
+    campaignEnded ||
     loading ||
+    (isAccountDataTask && accountSubmitLocked && !isRepeatable) ||
     needsTwitter ||
     (needsWalletForParty && !needsWallet) ||
     (needsProofBeforeStart && !proof.trim()) ||

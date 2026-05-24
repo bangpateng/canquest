@@ -13,11 +13,14 @@ import {
   normalizeRewardType,
   resolveQuestDisplayStatus,
 } from '../common/prisma-types';
+import { ConfigService } from '@nestjs/config';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   QuestLedgerService,
   type QuestLedgerSubmitResult,
 } from '../canton/quest-ledger.service';
+import { SpliceValidatorService } from '../canton/splice-validator.service';
 import { ProfileAvatarService } from '../users/profile-avatar.service';
 import { UsersService } from '../users/users.service';
 import { TwitterApiService } from '../twitter/twitter-api.service';
@@ -46,6 +49,12 @@ export interface ActivityItem {
   time: string;
 }
 
+/** Shown to users when FCFS claim cannot complete (slots, balance, ledger). */
+const FCFS_CLAIM_FAIL_MSG =
+  'Claim failed: Transaction reverted by ledger (Slot is full or insufficient balance)';
+
+type PrismaTx = Prisma.TransactionClient;
+
 @Injectable()
 export class QuestsService {
   private readonly logger = new Logger(QuestsService.name);
@@ -56,7 +65,149 @@ export class QuestsService {
     private readonly avatars: ProfileAvatarService,
     private readonly users: UsersService,
     private readonly twitterApi: TwitterApiService,
+    private readonly splice: SpliceValidatorService,
+    private readonly config: ConfigService,
   ) {}
+
+  /** CC FCFS: user pays claim fee on-chain, then receives quest.rewardCc from validator pool. */
+  requiresFcfsCcClaim(quest: {
+    rewardType: RewardType | string;
+    maxWinners: number | null;
+  }): boolean {
+    return (
+      normalizeRewardType(quest.rewardType as RewardType) === RewardType.CC_ONLY &&
+      (quest.maxWinners ?? 0) > 0
+    );
+  }
+
+  isCampaignEnded(quest: {
+    endsAt: Date | null;
+    deadline?: Date | string | null;
+  }): boolean {
+    const raw = quest.endsAt ?? quest.deadline ?? null;
+    if (!raw) return false;
+    const end = raw instanceof Date ? raw : new Date(raw);
+    return !Number.isNaN(end.getTime()) && end < new Date();
+  }
+
+  async getCampaignMeta(questId: string) {
+    const quest = await this.prisma.quest.findUnique({ where: { id: questId } });
+    if (!quest) {
+      return {
+        ended: false,
+        endsAt: null as string | null,
+        remainingSlots: null as number | null,
+        maxWinners: null as number | null,
+        fcfsClaimFeeCc: Number(this.config.get<string>('FCFS_CLAIM_FEE_CC') ?? '3'),
+        requiresFcfsClaim: false,
+      };
+    }
+    const maxWinners = quest.maxWinners;
+    let remainingSlots: number | null = null;
+    if (maxWinners != null && maxWinners > 0) {
+      await this.releaseStaleFcfsReservations(questId);
+      const used = await this.countFcfsSlotsTaken(questId);
+      remainingSlots = this.fcfsSlotsRemaining(maxWinners, used);
+    }
+    const endRaw = quest.endsAt ?? quest.deadline ?? null;
+    const end =
+      endRaw instanceof Date
+        ? endRaw
+        : endRaw
+          ? new Date(endRaw)
+          : null;
+    return {
+      ended: this.isCampaignEnded(quest),
+      endsAt: end && !Number.isNaN(end.getTime()) ? end.toISOString() : null,
+      remainingSlots,
+      maxWinners,
+      fcfsClaimFeeCc: Number(this.config.get<string>('FCFS_CLAIM_FEE_CC') ?? '3'),
+      requiresFcfsClaim: this.requiresFcfsCcClaim(quest),
+    };
+  }
+
+  private fcfsReservationTtlMs(): number {
+    return Number(this.config.get<string>('FCFS_RESERVATION_TTL_MS') ?? '300000');
+  }
+
+  private fcfsSlotsRemaining(maxWinners: number, taken: number): number {
+    return Math.max(0, maxWinners - taken);
+  }
+
+  /** Drop abandoned reservations so slots are not blocked after crashes/timeouts. */
+  private async releaseStaleFcfsReservations(
+    questId: string,
+    tx: PrismaTx | PrismaService = this.prisma,
+  ): Promise<void> {
+    const cutoff = new Date(Date.now() - this.fcfsReservationTtlMs());
+    const result = await tx.winnerDraw.deleteMany({
+      where: { questId, distributed: false, drawnAt: { lt: cutoff } },
+    });
+    if (result.count > 0) {
+      this.logger.log(
+        `FCFS: cleared ${result.count} stale reservation(s) for quest ${questId.slice(0, 8)}`,
+      );
+    }
+  }
+
+  private countFcfsSlotsTaken(questId: string, tx: PrismaTx | PrismaService = this.prisma) {
+    return tx.winnerDraw.count({ where: { questId } });
+  }
+
+  /**
+   * Atomically reserve one FCFS slot (row lock on Quest + slot count).
+   * Prevents two users from taking the last slot at the same time.
+   */
+  private async reserveFcfsSlotLocked(params: {
+    questId: string;
+    userId: string;
+    rewardCc: number;
+    maxWinners: number;
+  }): Promise<
+    | { kind: 'already_claimed' }
+    | { kind: 'reserved'; drawId: string; isNewReservation: boolean }
+  > {
+    const { questId, userId, rewardCc, maxWinners } = params;
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Quest" WHERE id = ${questId} FOR UPDATE`;
+
+      await this.releaseStaleFcfsReservations(questId, tx);
+
+      const existing = await tx.winnerDraw.findUnique({
+        where: { questId_userId: { questId, userId } },
+      });
+      if (existing?.distributed) {
+        return { kind: 'already_claimed' as const };
+      }
+      if (existing && !existing.distributed) {
+        return {
+          kind: 'reserved' as const,
+          drawId: existing.id,
+          isNewReservation: false,
+        };
+      }
+
+      const taken = await this.countFcfsSlotsTaken(questId, tx);
+      if (taken >= maxWinners) {
+        throw new BadRequestException(FCFS_CLAIM_FAIL_MSG);
+      }
+
+      const row = await tx.winnerDraw.create({
+        data: {
+          questId,
+          userId,
+          ccAmount: rewardCc,
+          distributed: false,
+        },
+      });
+      return {
+        kind: 'reserved' as const,
+        drawId: row.id,
+        isNewReservation: true,
+      };
+    });
+  }
 
   /* ─── Quest list / detail ─── */
 
@@ -150,6 +301,7 @@ export class QuestsService {
     ]);
     const completed = !!completion;
     const allTasksVerified = await this.areAllTasksVerified(userId, questId);
+    const campaignMeta = await this.getCampaignMeta(questId);
     return {
       completed,
       allTasksVerified,
@@ -158,6 +310,7 @@ export class QuestsService {
       rewardCc: completion ? Number(completion.rewardMicroCc) / 1_000_000 : 0,
       cantonLedgerConfigured: this.questLedger.isConfigured(),
       ledger: completion ? this.ledgerFromCompletion(completion) : null,
+      campaignMeta,
     };
   }
 
@@ -240,9 +393,16 @@ export class QuestsService {
 
     const quest = await this.prisma.quest.findUnique({
       where: { id: questId },
-      select: { questKind: true },
+      select: { questKind: true, endsAt: true, deadline: true },
     });
     if (!quest) throw new NotFoundException('Quest not found');
+
+    if (
+      quest.questKind === QuestKind.CAMPAIGN &&
+      this.isCampaignEnded(quest)
+    ) {
+      throw new BadRequestException('This campaign has ended. Submissions are closed.');
+    }
 
     const taskType = this.normalizeTaskType(task.type);
     const repeatable24h =
@@ -463,6 +623,27 @@ export class QuestsService {
     });
     if (!quest) throw new NotFoundException('Quest not found');
 
+    if (this.requiresFcfsCcClaim(quest)) {
+      const allDone = await this.areAllTasksVerified(userId, questId);
+      const rewardStatus = await this.getQuestRewardStatus(userId, questId);
+      return {
+        ok: false,
+        message: allDone
+          ? 'Use the Claim reward button to receive your FCFS CC (claim fee applies on-chain).'
+          : 'Complete all tasks before claiming your FCFS reward.',
+        rewardCc: 0,
+        inviteCode: null,
+        rewardStatus,
+        ledger: {
+          ledgerEnabled: false,
+          participationContractId: null,
+          rewardContractId: null,
+          taskSubmissionIds: [],
+          errors: [],
+        },
+      };
+    }
+
     const now = new Date();
     if (quest.startsAt && quest.startsAt > now) {
       return {
@@ -673,14 +854,51 @@ export class QuestsService {
       };
     }
 
+    if (this.requiresFcfsCcClaim(quest)) {
+      const allDone = await this.areAllTasksVerified(userId, questId);
+      if (!allDone) {
+        return {
+          state: 'in_progress' as const,
+          inviteCode: null,
+          message: 'Complete all missions, then claim your FCFS reward.',
+        };
+      }
+      if (draw?.distributed) {
+        return {
+          state: 'cc_reward' as const,
+          inviteCode: null,
+          message:
+            quest.rewardCc > 0
+              ? `${quest.rewardCc} CC was sent to your wallet.`
+              : 'FCFS claim completed.',
+        };
+      }
+      await this.releaseStaleFcfsReservations(questId);
+      const slotsUsed = await this.countFcfsSlotsTaken(questId);
+      const maxW = quest.maxWinners ?? 0;
+      const remaining = this.fcfsSlotsRemaining(maxW, slotsUsed);
+      if (remaining <= 0) {
+        return {
+          state: 'fcfs_missed' as const,
+          inviteCode: null,
+          message: 'All FCFS slots were claimed. Better luck on the next campaign.',
+        };
+      }
+      return {
+        state: 'fcfs_claimable' as const,
+        inviteCode: null,
+        message: `${remaining} slot(s) left — claim now (${this.config.get('FCFS_CLAIM_FEE_CC') ?? '3'} CC fee).`,
+      };
+    }
+
     if (rewardType === RewardType.CC_ONLY) {
       return {
         state: 'cc_reward' as const,
         inviteCode: null,
         message:
           quest.rewardCc > 0
-            ? `${quest.rewardCc} CC is being sent to your wallet (CIP-56).`
-            : 'Quest recorded on Canton ledger.',
+            ? `${quest.rewardCc} CC will be sent manually by the team (bulk sender).`
+            : 'Quest recorded. CC distribution is handled by admin.',
       };
     }
 
@@ -688,6 +906,181 @@ export class QuestsService {
       state: 'completed' as const,
       inviteCode: draw?.inviteCode ?? null,
       message: 'Quest completed.',
+    };
+  }
+
+  /**
+   * FCFS CC claim — reserve slot in DB, charge claim fee, send reward CC (Splice CIP-56).
+   * Rolls back the slot reservation if on-chain steps fail.
+   */
+  async claimFcfsReward(params: {
+    userId: string;
+    username: string | null;
+    cantonPartyId: string | null;
+    questId: string;
+  }): Promise<{
+    ok: boolean;
+    message: string;
+    rewardCc: number;
+    feeCc: number;
+    remainingSlots: number;
+    rewardStatus: Awaited<ReturnType<QuestsService['getQuestRewardStatus']>>;
+  }> {
+    const { userId, questId, username, cantonPartyId } = params;
+    if (!username?.trim() || !cantonPartyId?.trim()) {
+      throw new BadRequestException('Create your Canton wallet before claiming.');
+    }
+
+    const quest = await this.prisma.quest.findUnique({ where: { id: questId } });
+    if (!quest) throw new NotFoundException('Quest not found');
+    if (!this.requiresFcfsCcClaim(quest)) {
+      throw new BadRequestException('This campaign does not use FCFS CC claim.');
+    }
+    if (this.isCampaignEnded(quest)) {
+      throw new BadRequestException('This campaign has ended.');
+    }
+
+    const allDone = await this.areAllTasksVerified(userId, questId);
+    if (!allDone) {
+      throw new BadRequestException('Complete all missions before claiming.');
+    }
+
+    const feeCc = Number(this.config.get<string>('FCFS_CLAIM_FEE_CC') ?? '3');
+    const rewardCc = quest.rewardCc;
+    const maxWinners = quest.maxWinners ?? 0;
+
+    let reserveResult: Awaited<ReturnType<QuestsService['reserveFcfsSlotLocked']>>;
+    try {
+      reserveResult = await this.reserveFcfsSlotLocked({
+        questId,
+        userId,
+        rewardCc,
+        maxWinners,
+      });
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      throw new BadRequestException(FCFS_CLAIM_FAIL_MSG);
+    }
+
+    if (reserveResult.kind === 'already_claimed') {
+      const rewardStatus = await this.getQuestRewardStatus(userId, questId);
+      await this.releaseStaleFcfsReservations(questId);
+      const taken = await this.countFcfsSlotsTaken(questId);
+      return {
+        ok: true,
+        message: 'You already claimed this FCFS reward.',
+        rewardCc,
+        feeCc,
+        remainingSlots: this.fcfsSlotsRemaining(maxWinners, taken),
+        rewardStatus,
+      };
+    }
+
+    const reservedDrawId = reserveResult.drawId;
+    const isNewReservation = reserveResult.isNewReservation;
+
+    const balance = await this.splice.getUserBalance(username);
+    if (balance !== null && balance < feeCc) {
+      if (isNewReservation) {
+        await this.prisma.winnerDraw.delete({ where: { id: reservedDrawId } }).catch(() => {});
+      }
+      throw new BadRequestException(FCFS_CLAIM_FAIL_MSG);
+    }
+
+    const validatorPartyId = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
+    if (!validatorPartyId) {
+      if (isNewReservation) {
+        await this.prisma.winnerDraw.delete({ where: { id: reservedDrawId } }).catch(() => {});
+      }
+      throw new BadRequestException('Validator party is not configured on the server.');
+    }
+
+    try {
+      const feeOfferId = await this.splice.createTransferOffer(
+        validatorPartyId,
+        feeCc,
+        `FCFS claim fee — ${quest.title}`,
+        undefined,
+        username,
+      );
+      if (!feeOfferId) {
+        throw new Error('fee offer failed');
+      }
+      const feeAccepted = await this.splice.acceptOfferViaWallet(feeOfferId, username);
+      if (!feeAccepted) {
+        throw new Error('fee accept failed');
+      }
+
+      await this.users.recordTransaction({
+        userId,
+        amountCc: -feeCc,
+        type: 'TRANSFER_OUT',
+        description: `FCFS claim fee — ${quest.title}`,
+        counterparty: 'Validator (FCFS fee)',
+        ledgerTxId: feeOfferId,
+      });
+
+      const rewardOfferId = await this.splice.createTransferOffer(
+        cantonPartyId,
+        rewardCc,
+        `FCFS reward — ${quest.title}`,
+      );
+      if (!rewardOfferId) {
+        throw new Error('reward offer failed');
+      }
+      const rewardAccepted = await this.splice.acceptOfferViaWallet(
+        rewardOfferId,
+        username,
+      );
+      if (!rewardAccepted) {
+        throw new Error('reward accept failed');
+      }
+
+      await this.users.recordTransaction({
+        userId,
+        amountCc: rewardCc,
+        type: 'QUEST_REWARD',
+        description: `FCFS reward — ${quest.title}`,
+        counterparty: 'Validator (reward pool)',
+        ledgerTxId: rewardOfferId,
+      });
+
+      const rewardMicroCc = BigInt(Math.round(rewardCc * 1_000_000));
+      await this.prisma.$transaction([
+        this.prisma.winnerDraw.update({
+          where: { id: reservedDrawId! },
+          data: { distributed: true, ccAmount: rewardCc },
+        }),
+        this.prisma.questCompletion.upsert({
+          where: { userId_questId: { userId, questId } },
+          create: {
+            userId,
+            questId,
+            rewardMicroCc,
+          },
+          update: { rewardMicroCc },
+        }),
+      ]);
+    } catch (err) {
+      this.logger.warn(`FCFS claim on-chain failed: ${String(err)}`);
+      await this.prisma.winnerDraw
+        .deleteMany({
+          where: { id: reservedDrawId, questId, userId, distributed: false },
+        })
+        .catch(() => {});
+      throw new BadRequestException(FCFS_CLAIM_FAIL_MSG);
+    }
+
+    await this.releaseStaleFcfsReservations(questId);
+    const slotsUsedAfter = await this.countFcfsSlotsTaken(questId);
+    const rewardStatus = await this.getQuestRewardStatus(userId, questId);
+    return {
+      ok: true,
+      message: `${rewardCc} CC sent to your wallet (${feeCc} CC claim fee paid).`,
+      rewardCc,
+      feeCc,
+      remainingSlots: this.fcfsSlotsRemaining(maxWinners, slotsUsedAfter),
+      rewardStatus,
     };
   }
 

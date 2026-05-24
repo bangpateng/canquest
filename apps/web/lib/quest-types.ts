@@ -16,6 +16,7 @@ export type QuestRewardState =
   | "waitlist"
   | "winner_fcfs"
   | "fcfs_missed"
+  | "fcfs_claimable"
   | "winner"
   | "not_winner"
   | "pending_draw"

@@ -12,6 +12,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
 import { AuthGuard } from '@nestjs/passport';
+import { Throttle } from '@nestjs/throttler';
 import { QuestStatus } from '../common/prisma-types';
 import { QuestsService } from './quests.service';
 import { UsersService } from '../users/users.service';
@@ -115,12 +116,29 @@ export class QuestsController {
       rewardCc: p.rewardCc,
       cantonLedgerConfigured: p.cantonLedgerConfigured,
       ledger: this.quests.toApiLedgerProof(p.ledger, p.rewardCc),
+      campaignMeta: p.campaignMeta,
     };
   }
 
   @Get(':questId/reward-status')
   async rewardStatus(@Param('questId') questId: string, @Req() req: AuthedReq) {
-    return this.quests.getQuestRewardStatus(req.user.userId, questId);
+    const rewardStatus = await this.quests.getQuestRewardStatus(req.user.userId, questId);
+    const campaignMeta = await this.quests.getCampaignMeta(questId);
+    return { ...rewardStatus, campaignMeta };
+  }
+
+  /** FCFS CC — claim fee on-chain + reward from pool (first-come slots). */
+  @Post(':questId/claim-fcfs')
+  @Throttle({ ledger: { limit: 5, ttl: 60_000 } })
+  async claimFcfs(@Param('questId') questId: string, @Req() req: AuthedReq) {
+    const user = await this.users.findById(req.user.userId);
+    if (!user) return { ok: false, message: 'User not found' };
+    return this.quests.claimFcfsReward({
+      userId: user.id,
+      username: user.username,
+      cantonPartyId: user.cantonPartyId,
+      questId,
+    });
   }
 
   @Post(':questId/tasks/:taskId/submit')
@@ -197,7 +215,13 @@ export class QuestsController {
         .catch(() => { /* non-critical */ });
     }
 
-    if (result.rewardCc > 0 && user.username && user.cantonPartyId) {
+    const campaignMeta = await this.quests.getCampaignMeta(questId);
+    if (
+      result.rewardCc > 0 &&
+      !campaignMeta.requiresFcfsClaim &&
+      user.username &&
+      user.cantonPartyId
+    ) {
       const questTitle = await this.quests.getQuestTitle(questId);
       this.logger.log(`Enqueue quest CC reward: ${result.rewardCc} CC → ${user.username}`);
       void this.ledgerQueue
