@@ -99,13 +99,36 @@ export type PlatformMessages = {
   earnCampaigns: {
     title: string;
     description: string;
+    badge: string;
+    heroSubtitle: string;
+    dailyTasksLink: string;
     statsAria: string;
     statsLabel: string;
     live: string;
     active: string;
     completed: string;
     total: string;
+    howItWorks: string;
+    rewardCcTitle: string;
+    rewardCcDesc: string;
+    rewardInviteTitle: string;
+    rewardInviteDesc: string;
+    rewardFcfsTitle: string;
+    rewardFcfsDesc: string;
     campaignsHeader: string;
+    campaignsLead: string;
+    progressCompleted: string;
+    loadFailed: string;
+    loadFailedHint: string;
+    noCampaignsHint: string;
+    tryOtherTab: string;
+    showingCount: string;
+    rewardLabel: string;
+    kindFcfs: string;
+    kindCc: string;
+    kindInvite: string;
+    kindWaitlist: string;
+    kindCampaign: string;
     dailyTasks: string;
   };
   wallet: {

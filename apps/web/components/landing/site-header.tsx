@@ -2,18 +2,18 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Gift, Layers, Shield, X, Zap } from "lucide-react";
+import { LayoutGrid, Sparkles, Wallet, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { CanQuestLogo } from "@/components/brand/canquest-logo";
+import { LaunchAppButton } from "@/components/landing/launch-app-button";
 import { LandingShell } from "@/components/landing/landing-shell";
 import { iconButtonClass } from "@/lib/ui-button-styles";
 import { cn } from "@/lib/utils";
 
 const nav: { href: string; label: string; icon: LucideIcon; description: string }[] = [
-  { href: "#campaigns", label: "Quests", icon: Gift, description: "Featured campaigns" },
-  { href: "#features", label: "Platform", icon: Zap, description: "Product capabilities" },
-  { href: "#canton", label: "Canton", icon: Layers, description: "Ledger infrastructure" },
-  { href: "#security", label: "Security", icon: Shield, description: "Trust & operations" },
+  { href: "#campaigns", label: "Earn", icon: Sparkles, description: "Partner campaigns" },
+  { href: "#app", label: "App", icon: LayoutGrid, description: "Menus & features" },
+  { href: "#canton", label: "Wallet", icon: Wallet, description: "Canton & CC" },
 ];
 
 function MenuDots() {
@@ -67,6 +67,10 @@ export function SiteHeader() {
             ))}
           </nav>
 
+          <div className="hidden shrink-0 md:block">
+            <LaunchAppButton showArrow />
+          </div>
+
           <button
             type="button"
             className={cn(
@@ -114,7 +118,7 @@ export function SiteHeader() {
               exit={{ x: "100%" }}
               transition={{ type: "spring", damping: 28, stiffness: 320 }}
             >
-              <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-[rgb(var(--canton-rgb)/0.08)] to-transparent pointer-events-none" />
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-[rgb(var(--canton-rgb)/0.08)] to-transparent" />
 
               <div className="relative flex items-center justify-between border-b border-[var(--border)] px-5 py-4">
                 <CanQuestLogo size="md" href="/" onClick={close} />
@@ -143,13 +147,11 @@ export function SiteHeader() {
                         onClick={close}
                         className="group flex items-center gap-4 rounded-2xl px-3 py-3.5 transition-colors hover:bg-[var(--muted)]"
                       >
-                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-canton-subtle ring-1 ring-[var(--primary)]/15 transition-shadow group-hover:shadow-[0_0_20px_rgb(var(--canton-rgb)/0.12)]">
+                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-canton-subtle ring-1 ring-[var(--primary)]/15">
                           <Icon className="h-5 w-5 text-canton" />
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="type-subsection-title block">
-                            {item.label}
-                          </span>
+                          <span className="type-subsection-title block">{item.label}</span>
                           <span className="block text-xs text-[var(--muted-foreground)]">
                             {item.description}
                           </span>
@@ -160,10 +162,8 @@ export function SiteHeader() {
                 })}
               </ul>
 
-              <div className="relative border-t border-[var(--border)] px-5 py-4">
-                <p className="text-center text-[10px] uppercase tracking-widest text-[var(--muted-foreground)]">
-                  Canton Network
-                </p>
+              <div className="relative space-y-3 border-t border-[var(--border)] px-5 py-4">
+                <LaunchAppButton size="lg" showArrow className="w-full justify-center" />
               </div>
             </motion.nav>
           </>

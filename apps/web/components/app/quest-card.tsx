@@ -2,6 +2,7 @@
 
 import { CardTitle } from "@/components/ui/typography";
 import { ROUTES } from "@/lib/app-routes";
+import { campaignUiKind } from "@/lib/campaign-reward";
 import { QUEST_STATUS_BADGE, type Quest } from "@/lib/quest-types";
 import {
   ArrowRight,
@@ -83,14 +84,43 @@ function rewardAccent(rewardPool: string, rewardType?: string) {
   };
 }
 
+function rewardKindLabel(
+  kind: ReturnType<typeof campaignUiKind>,
+  t: (key: string) => string,
+): string {
+  switch (kind) {
+    case "cc_fcfs":
+      return t("earnCampaigns.kindFcfs");
+    case "cc_manual":
+      return t("earnCampaigns.kindCc");
+    case "waitlist_code":
+      return t("earnCampaigns.kindInvite");
+    case "waitlist_email":
+      return t("earnCampaigns.kindWaitlist");
+    default:
+      return t("earnCampaigns.kindCampaign");
+  }
+}
+
 export function QuestCard({
   quest,
   completed = false,
+  variant = "default",
 }: {
   quest: Quest;
   completed?: boolean;
+  variant?: "default" | "earn";
 }) {
   const t = usePlatformT();
+  const isEarn = variant === "earn";
+  const poolLower = quest.rewardPool.toLowerCase();
+  const requiresFcfs =
+    poolLower.includes("fcfs") ||
+    poolLower.includes("first come") ||
+    quest.rewardType === "INVITE_CODE_FCFS";
+  const uiKind = campaignUiKind(quest.rewardType, requiresFcfs);
+  const kindLabel = rewardKindLabel(uiKind, t);
+
   const canOpen = quest.status === "ACTIVE" || quest.status === "ENDED";
   const statusMeta = QUEST_STATUS_BADGE[quest.status];
   const accent = rewardAccent(quest.rewardPool, quest.rewardType);
@@ -109,6 +139,7 @@ export function QuestCard({
         "group relative flex flex-col overflow-hidden rounded-2xl transition-all duration-300",
         "bg-[var(--card)] ring-1 ring-[var(--border)]",
         "hover:-translate-y-1 hover:ring-[var(--primary)]/25 hover:shadow-[0_0_40px_rgb(var(--canton-rgb)/0.08)]",
+        isEarn && "hover:shadow-[0_12px_48px_rgb(var(--canton-rgb)/0.12)]",
         quest.status === "ENDED" && "opacity-90",
         quest.status === "COMING_SOON" && "opacity-95",
       )}
@@ -123,7 +154,12 @@ export function QuestCard({
       />
 
       {/* Hero */}
-      <div className="relative h-32 shrink-0 overflow-hidden">
+      <div
+        className={cn(
+          "relative shrink-0 overflow-hidden",
+          isEarn ? "h-40 sm:h-44" : "h-32",
+        )}
+      >
         <div
           className="absolute inset-0 bg-cover bg-center transition-transform duration-500 group-hover:scale-105"
           style={
@@ -140,6 +176,12 @@ export function QuestCard({
               "linear-gradient(90deg, transparent 0%, rgb(var(--canton-rgb) / 0.06) 50%, transparent 100%)",
           }}
         />
+
+        {isEarn ? (
+          <span className="absolute left-3 top-3 z-[2] rounded-full border border-white/15 bg-black/45 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white/95 backdrop-blur-md">
+            {kindLabel}
+          </span>
+        ) : null}
 
         {/* Status chip */}
         <span
@@ -167,9 +209,14 @@ export function QuestCard({
       </div>
 
       {/* Body */}
-      <div className="relative flex flex-1 flex-col px-4 pb-4 pt-0">
+      <div
+        className={cn(
+          "relative flex flex-1 flex-col px-4 pb-4 pt-0",
+          isEarn && "px-5 pb-5",
+        )}
+      >
         {/* Logo overlap */}
-        <div className="-mt-6 mb-3 flex items-end gap-3">
+        <div className={cn("-mt-6 mb-3 flex items-end gap-3", isEarn && "-mt-7 gap-3.5")}>
           <QuestLogo
             logoUrl={quest.logoUrl}
             orgSlug={quest.orgSlug}
@@ -179,13 +226,23 @@ export function QuestCard({
             <p className="truncate text-[11px] font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
               {quest.org}
             </p>
-            <CardTitle className="line-clamp-2 text-[var(--foreground)]">
+            <CardTitle
+              className={cn(
+                "line-clamp-2 text-[var(--foreground)]",
+                isEarn && "text-base sm:text-lg",
+              )}
+            >
               {quest.title}
             </CardTitle>
           </div>
         </div>
 
-        <p className="line-clamp-2 text-[13px] leading-relaxed text-[var(--muted-foreground)]">
+        <p
+          className={cn(
+            "line-clamp-2 leading-relaxed text-[var(--muted-foreground)]",
+            isEarn ? "text-sm line-clamp-3" : "text-[13px]",
+          )}
+        >
           {quest.description}
         </p>
 
@@ -215,7 +272,7 @@ export function QuestCard({
           </span>
           <div className="min-w-0">
             <p className="text-[10px] font-semibold uppercase tracking-wider opacity-70">
-              Reward
+              {t("earnCampaigns.rewardLabel")}
             </p>
             <p className="truncate text-sm font-semibold">{quest.rewardPool}</p>
           </div>

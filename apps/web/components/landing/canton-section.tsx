@@ -1,68 +1,38 @@
-import Link from "next/link";
-import { ExternalLink, Layers } from "lucide-react";
+import { Wallet } from "lucide-react";
 import { LandingShell } from "@/components/landing/landing-shell";
 import { SectionHeader } from "@/components/landing/section-header";
 
-const refs = [
-  {
-    label: "Digital Asset build docs (3.5)",
-    href: "https://docs.digitalasset.com/build/3.5/index.html",
-  },
-  {
-    label: "Application development reference",
-    href: "https://docs.digitalasset.com/build/3.5/reference/app-dev/index.html",
-  },
-  {
-    label: "Smart contracts reference",
-    href: "https://docs.digitalasset.com/build/3.5/reference/smart-contracts/index.html",
-  },
+const points = [
+  "Create a Canton party and link it to your CanQuest account",
+  "CC rewards from campaigns and Spin Reward go to your wallet",
+  "Send and receive CC with CIP-56 preapproval when enabled",
+  "Transaction history synced from the ledger",
 ];
 
 export function CantonSection() {
   return (
-    <section id="canton" className="relative border-b border-[var(--border)] py-12 md:py-14">
+    <section id="canton" className="relative py-12 md:py-14">
       <div className="absolute inset-0 bg-[var(--muted)]/40" />
-      <LandingShell className="relative flex flex-col gap-10 lg:flex-row lg:items-center lg:gap-16">
-        <div className="flex-1">
-          <SectionHeader
-            eyebrow="Infrastructure"
-            title="Powered by Canton"
-            description="CanQuest aligns with Digital Asset ledger patterns and DAML module boundaries. Smart contracts evolve in lockstep with official SDK guidance—no fictional custom L2 narratives."
-          />
-          <ul className="space-y-3 text-sm text-[var(--muted-foreground)]">
-            {[
-              "Participant-managed parties and Ledger API workflows",
-              "Event-driven backends; heavy ledger work never blocks HTTP",
-              "Dedicated indexer projects app state off the hot path",
-            ].map((line) => (
+      <LandingShell className="relative">
+        <div className="glass-card mx-auto max-w-3xl rounded-2xl p-8 ring-1 ring-[var(--border)] md:p-10">
+          <div className="flex flex-col items-center text-center">
+            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-canton-subtle ring-1 ring-[var(--primary)]/20">
+              <Wallet className="h-6 w-6 text-canton" />
+            </span>
+            <div className="mt-6">
+              <SectionHeader
+                eyebrow="Wallet"
+                title="Built on Canton"
+                description="CanQuest uses the Canton Network for party identity and CC transfers — the same wallet you manage in the app."
+                align="center"
+              />
+            </div>
+          </div>
+          <ul className="mt-8 space-y-3 text-left text-sm text-[var(--muted-foreground)] sm:mx-auto sm:max-w-md">
+            {points.map((line) => (
               <li key={line} className="flex gap-3">
                 <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-canton" />
                 {line}
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div className="glass-card flex flex-1 flex-col gap-4 rounded-2xl p-8 ring-1 ring-[var(--border)]">
-          <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-canton-subtle">
-              <Layers className="h-5 w-5 text-canton" />
-            </span>
-            <p className="text-xs font-bold uppercase tracking-widest text-[var(--muted-foreground)]">
-              Official references
-            </p>
-          </div>
-          <ul className="space-y-3">
-            {refs.map((r) => (
-              <li key={r.href}>
-                <Link
-                  className="group inline-flex items-center gap-2 text-sm font-medium text-[var(--foreground)] transition-colors hover:text-canton"
-                  href={r.href}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {r.label}
-                  <ExternalLink className="h-3.5 w-3.5 opacity-50 transition-opacity group-hover:opacity-100" />
-                </Link>
               </li>
             ))}
           </ul>

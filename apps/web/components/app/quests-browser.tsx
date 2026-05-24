@@ -1,16 +1,22 @@
 "use client";
 
+import { EarnCampaignRow } from "@/components/app/earn-campaign-row";
+import { EarnCampaignSkeleton } from "@/components/app/earn-campaign-skeleton";
 import { QuestCard } from "@/components/app/quest-card";
 import type { Quest, QuestStatus, UserProgress } from "@/lib/quest-types";
 import { QUEST_STATUS_BADGE } from "@/lib/quest-types";
 import { filterTabClass } from "@/lib/ui-button-styles";
 import { cn } from "@/lib/utils";
 import { ListPagination } from "@/components/app/list-pagination";
+import { buttonVariants } from "@/components/ui/button";
 import { Loader2, Search } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
+import { ROUTES } from "@/lib/app-routes";
 
 const QUEST_PAGE_SIZE = 6;
+const EARN_PAGE_SIZE = 5;
 
 const TABS: { id: QuestStatus; label: string }[] = [
   { id: "ACTIVE", label: "Active" },
@@ -35,30 +41,46 @@ export type EarnCampaignStats = {
 
 export function QuestsBrowser({
   embedded = false,
+  variant = "default",
   onStatsChange,
 }: {
-  /** Render inside Earn panel (no extra page chrome). */
   embedded?: boolean;
+  variant?: "default" | "earn";
   onStatsChange?: (stats: EarnCampaignStats) => void;
 }) {
   const t = usePlatformT();
+  const isEarn = variant === "earn" || embedded;
+  const pageSize = isEarn ? EARN_PAGE_SIZE : QUEST_PAGE_SIZE;
+
   const [status, setStatus] = useState<QuestStatus>("ACTIVE");
   const [query, setQuery] = useState("");
   const [allQuests, setAllQuests] = useState<Quest[]>([]);
   const [progress, setProgress] = useState<UserProgress | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
 
-  useEffect(() => {
+  const loadQuests = useCallback(() => {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 12_000);
     setLoading(true);
+    setLoadError(null);
+
     Promise.all([
       fetch("/api/quests", { credentials: "include", signal: controller.signal }).then(
         async (r) => {
-          const data = await r.json();
-          if (!r.ok) return [] as Quest[];
-          return Array.isArray(data) ? (data as Quest[]) : [];
+          const data = (await r.json().catch(() => ({}))) as Quest[] | { message?: string };
+          if (!r.ok) {
+            const msg =
+              typeof data === "object" &&
+              data !== null &&
+              "message" in data &&
+              typeof data.message === "string"
+                ? data.message
+                : `Could not load campaigns (${r.status})`;
+            throw new Error(msg);
+          }
+          return Array.isArray(data) ? data : [];
         },
       ),
       fetch("/api/quests/my-progress", { credentials: "include", signal: controller.signal }).then(
@@ -74,14 +96,38 @@ export function QuestsBrowser({
         const active = quests.filter((q) => q.status === "ACTIVE").length;
         const completed = prog?.completedQuestIds?.length ?? 0;
         onStatsChange?.({ active, completed, total: quests.length });
+
+        if (quests.length > 0) {
+          const activeCount = quests.filter((q) => q.status === "ACTIVE").length;
+          if (activeCount === 0) {
+            const fallback = TABS.find((tab) => quests.some((q) => q.status === tab.id));
+            if (fallback) setStatus(fallback.id);
+          }
+        }
       })
-      .catch(() => {/* ignore abort */})
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === "AbortError") {
+          setLoadError("Request timed out — is the API running on port 3001?");
+        } else if (err instanceof Error) {
+          setLoadError(err.message);
+        } else {
+          setLoadError("Could not load campaigns");
+        }
+        setAllQuests([]);
+        onStatsChange?.({ active: 0, completed: 0, total: 0 });
+      })
       .finally(() => setLoading(false));
+
     return () => {
       clearTimeout(timeout);
       controller.abort();
     };
-  }, []);
+  }, [onStatsChange]);
+
+  useEffect(() => {
+    const cleanup = loadQuests();
+    return cleanup;
+  }, [loadQuests]);
 
   const counts = useMemo(() => {
     const c: Record<QuestStatus, number> = { ACTIVE: 0, COMING_SOON: 0, ENDED: 0 };
@@ -98,75 +144,157 @@ export function QuestsBrowser({
     setPage(1);
   }, [status, query]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / QUEST_PAGE_SIZE));
-  const pagedQuests = filtered.slice(
-    (page - 1) * QUEST_PAGE_SIZE,
-    page * QUEST_PAGE_SIZE,
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const pagedQuests = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+  const tabRow = (
+    <div
+      className={cn(
+        "flex gap-1 overflow-x-auto p-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+        isEarn
+          ? "rounded-2xl border border-[var(--border)] bg-[var(--muted)]/25"
+          : "gap-2 pb-1 sm:pb-0",
+      )}
+    >
+      {TABS.map((tab) => {
+        const selected = status === tab.id;
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setStatus(tab.id)}
+            className={filterTabClass(
+              selected,
+              isEarn ? "flex-1 justify-center sm:flex-none" : undefined,
+            )}
+          >
+            {QUEST_STATUS_BADGE[tab.id].label}{" "}
+            <span className="tabular-nums opacity-80">({counts[tab.id]})</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  const searchField = (
+    <label
+      className={cn(
+        "relative block w-full shrink-0",
+        isEarn ? "sm:max-w-sm" : "sm:max-w-xs",
+      )}
+    >
+      <span className="sr-only">{t("quests.searchLabel")}</span>
+      <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted-foreground)]" />
+      <input
+        type="search"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder={t("quests.searchPlaceholder")}
+        className={cn(
+          "w-full rounded-xl border border-[var(--border)] bg-[var(--card)] py-2.5 pl-10 pr-3 text-sm outline-none transition-shadow placeholder:text-[var(--muted-foreground)] focus-visible:border-[var(--primary)]/40 focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
+          isEarn && "bg-[var(--background)]/80",
+        )}
+        autoComplete="off"
+      />
+    </label>
   );
 
   return (
-    <div className={embedded ? "w-full min-w-0 space-y-4" : "w-full min-w-0 space-y-5"}>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:pb-0 [&::-webkit-scrollbar]:hidden">
-          {TABS.map((tab) => {
-            const selected = status === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setStatus(tab.id)}
-                className={filterTabClass(selected)}
-              >
-                {QUEST_STATUS_BADGE[tab.id].label}{" "}
-                <span className="tabular-nums opacity-80">({counts[tab.id]})</span>
-              </button>
-            );
-          })}
-        </div>
-        <label className="relative block w-full shrink-0 sm:max-w-xs">
-          <span className="sr-only">{t("quests.searchLabel")}</span>
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted-foreground)]" />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t("quests.searchPlaceholder")}
-            className="w-full rounded-full border border-[var(--border)] bg-[var(--card)]/80 py-2.5 pl-10 pr-3 text-sm outline-none backdrop-blur-sm transition-shadow placeholder:text-[var(--muted-foreground)] focus-visible:border-[var(--primary)]/40 focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
-            autoComplete="off"
-          />
-        </label>
+    <div className={cn("w-full min-w-0", isEarn ? "space-y-5" : "space-y-5")}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        {tabRow}
+        {searchField}
       </div>
 
+      {!loading && filtered.length > 0 && isEarn ? (
+        <p className="text-xs text-[var(--muted-foreground)]">
+          {t("earnCampaigns.showingCount", {
+            count: String(filtered.length),
+            status: QUEST_STATUS_BADGE[status].label.toLowerCase(),
+          })}
+        </p>
+      ) : null}
+
       {loading ? (
-        <div className="flex items-center justify-center py-14">
-          <Loader2 className="h-6 w-6 animate-spin text-canton" />
+        isEarn ? (
+          <ol className="space-y-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <li key={i}>
+                <EarnCampaignSkeleton />
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <div className="flex items-center justify-center py-14">
+            <Loader2 className="h-6 w-6 animate-spin text-canton" />
+          </div>
+        )
+      ) : loadError ? (
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-5 py-8 text-center">
+          <p className="type-subsection-title text-red-200">{t("earnCampaigns.loadFailed")}</p>
+          <p className="mt-2 text-sm text-red-200/80">{loadError}</p>
+          <p className="mt-3 text-xs text-[var(--muted-foreground)]">
+            {t("earnCampaigns.loadFailedHint")}
+          </p>
+          <button
+            type="button"
+            onClick={() => loadQuests()}
+            className={cn(buttonVariants({ size: "sm" }), "mt-4")}
+          >
+            {t("spin.retry")}
+          </button>
         </div>
       ) : filtered.length === 0 ? (
         <div
-          className={
-            embedded
-              ? "rounded-xl border border-dashed border-[var(--border)] bg-[var(--muted)]/20 px-6 py-12 text-center"
-              : "rounded-2xl border border-dashed border-[var(--border)] bg-[var(--muted)]/30 px-6 py-14 text-center"
-          }
+          className={cn(
+            "px-6 py-14 text-center",
+            isEarn
+              ? "rounded-2xl border border-dashed border-[var(--border)] bg-[var(--muted)]/15"
+              : "rounded-2xl border border-dashed border-[var(--border)] bg-[var(--muted)]/30",
+          )}
         >
           <p className="type-subsection-title text-[var(--foreground)]">
-            {t("quests.noMatch")}
+            {query ? t("quests.noMatch") : t("quests.noPrograms")}
           </p>
           <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-            {query ? t("quests.tryAnother") : t("quests.noPrograms")}
+            {query
+              ? t("quests.tryAnother")
+              : allQuests.length === 0
+                ? t("earnCampaigns.noCampaignsHint")
+                : t("earnCampaigns.tryOtherTab")}
           </p>
+          {isEarn && allQuests.length === 0 ? (
+            <Link
+              href={ROUTES.earnHub}
+              className={cn(buttonVariants({ size: "sm" }), "mt-4 inline-flex")}
+            >
+              {t("earnCampaigns.dailyTasks")}
+            </Link>
+          ) : null}
         </div>
       ) : (
         <>
-          <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
-            {pagedQuests.map((q) => (
-              <QuestCard
-                key={q.id}
-                quest={q}
-                completed={progress?.completedQuestIds.includes(q.id) ?? false}
-              />
-            ))}
-          </div>
+          {isEarn ? (
+            <ol className="space-y-3">
+              {pagedQuests.map((q) => (
+                <EarnCampaignRow
+                  key={q.id}
+                  quest={q}
+                  completed={progress?.completedQuestIds.includes(q.id) ?? false}
+                />
+              ))}
+            </ol>
+          ) : (
+            <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+              {pagedQuests.map((q) => (
+                <QuestCard
+                  key={q.id}
+                  quest={q}
+                  completed={progress?.completedQuestIds.includes(q.id) ?? false}
+                />
+              ))}
+            </div>
+          )}
           <ListPagination
             page={page}
             totalPages={totalPages}

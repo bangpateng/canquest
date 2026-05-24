@@ -1,18 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { QuestsBrowser } from "@/components/app/quests-browser";
-import { PageHeader } from "@/components/ui/typography";
+import { QuestsBrowser, type EarnCampaignStats } from "@/components/app/quests-browser";
+import { PageHeader, SubsectionTitle } from "@/components/ui/typography";
 import { ROUTES } from "@/lib/app-routes";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
-import { ArrowRight, Gift, Sparkles, Trophy } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { ArrowRight, Gift, Trophy, Zap } from "lucide-react";
 import { useState } from "react";
-
-type EarnCampaignStats = {
-  active: number;
-  completed: number;
-  total: number;
-};
 
 export function EarnCampaignsPage() {
   const t = usePlatformT();
@@ -22,16 +17,21 @@ export function EarnCampaignsPage() {
     total: 0,
   });
 
+  const completionPct =
+    stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
+
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6">
+    <div className="mx-auto w-full max-w-2xl space-y-6">
       <PageHeader
+        eyebrow={t("earnCampaigns.badge")}
+        eyebrowBrand
         title={t("earnCampaigns.title")}
         description={
           <>
-            {t("earnCampaigns.description")}{" "}
+            {t("earnCampaigns.heroSubtitle")}{" "}
             <Link
               href={ROUTES.earnHub}
-              className="font-medium text-canton underline-offset-2 hover:underline"
+              className="font-semibold text-canton underline-offset-2 hover:underline"
             >
               {t("nav.quests")}
             </Link>
@@ -40,56 +40,48 @@ export function EarnCampaignsPage() {
         }
       />
 
+      {/* Mission-style progress — matches campaign quest detail */}
       <section
-        className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]/40"
+        className="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]/80 p-5 md:p-6"
         aria-label={t("earnCampaigns.statsAria")}
       >
-        <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--muted)]/20 px-4 py-3 sm:px-5">
-          <p className="text-xs font-medium text-[var(--muted-foreground)]">
-            {t("earnCampaigns.statsLabel")}
-          </p>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <span
+              className={cn(
+                "type-section-title flex h-12 w-12 items-center justify-center rounded-xl",
+                stats.completed > 0
+                  ? "bg-[var(--primary)] text-[var(--primary-foreground)] shadow-[0_0_20px_rgb(var(--canton-rgb)/0.3)]"
+                  : "bg-[var(--muted)] text-[var(--muted-foreground)]",
+              )}
+            >
+              {completionPct}%
+            </span>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
+                {t("earnCampaigns.statsLabel")}
+              </p>
+              <SubsectionTitle>
+                {stats.completed} / {stats.total} {t("earnCampaigns.progressCompleted")}
+              </SubsectionTitle>
+              <p className="text-xs text-[var(--muted-foreground)]">
+                {stats.active} {t("earnCampaigns.active")}
+              </p>
+            </div>
+          </div>
           <span className="inline-flex items-center gap-1 rounded-md bg-[var(--primary)]/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-canton">
-            <Sparkles className="h-3 w-3" aria-hidden />
+            <Zap className="h-3 w-3" aria-hidden />
             {t("earnCampaigns.live")}
           </span>
         </div>
-
-        <div className="relative grid gap-px bg-[var(--border)] sm:grid-cols-3">
-          <div className="relative bg-[var(--card)]/80 px-4 py-4 sm:px-5">
-            <div
-              className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_0%_0%,rgb(var(--canton-rgb)/0.1),transparent_60%)]"
-              aria-hidden
-            />
-            <p className="relative text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-              {t("earnCampaigns.active")}
-            </p>
-            <p className="relative mt-1 text-3xl font-semibold tabular-nums text-[var(--foreground)]">
-              {stats.active}
-            </p>
-          </div>
-          <div className="relative bg-[var(--card)]/80 px-4 py-4 sm:px-5">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-              {t("earnCampaigns.completed")}
-            </p>
-            <p className="mt-1 text-3xl font-semibold tabular-nums text-emerald-400/90">
-              {stats.completed}
-            </p>
-          </div>
-          <div className="relative bg-[var(--card)]/80 px-4 py-4 sm:px-5">
-            <div
-              className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_100%_0%,rgb(167_139_250/0.12),transparent_60%)]"
-              aria-hidden
-            />
-            <p className="relative text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-              {t("earnCampaigns.total")}
-            </p>
-            <p className="relative mt-1 text-3xl font-semibold tabular-nums text-[var(--foreground)]">
-              {stats.total}
-            </p>
-          </div>
+        <div className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--muted)] ring-1 ring-[var(--border)]">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-[var(--primary)] to-[var(--primary-strong)] transition-all duration-700 ease-out shadow-[0_0_12px_rgb(var(--canton-rgb)/0.5)]"
+            style={{ width: `${completionPct}%` }}
+          />
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)]/80 bg-[var(--muted)]/10 px-4 py-3 sm:px-5">
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[var(--border)]/80 pt-4">
           <Link
             href={ROUTES.leaderboard}
             className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)]/60 px-3 py-1.5 text-xs font-medium text-[var(--foreground)] transition-colors hover:border-[var(--primary)]/35 hover:bg-[var(--primary)]/8"
@@ -108,15 +100,18 @@ export function EarnCampaignsPage() {
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]/40">
-        <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--muted)]/20 px-4 py-3 sm:px-5">
-          <p className="text-xs font-medium text-[var(--muted-foreground)]">
-            {t("earnCampaigns.campaignsHeader")}
-          </p>
+      <section>
+        <div className="mb-3 flex items-end justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
+              {t("earnCampaigns.campaignsHeader")}
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-[var(--muted-foreground)]">
+              {t("earnCampaigns.campaignsLead")}
+            </p>
+          </div>
         </div>
-        <div className="p-4 sm:p-5">
-          <QuestsBrowser embedded onStatsChange={setStats} />
-        </div>
+        <QuestsBrowser variant="earn" onStatsChange={setStats} />
       </section>
 
       <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--muted)]/15 px-4 py-3.5 text-sm">

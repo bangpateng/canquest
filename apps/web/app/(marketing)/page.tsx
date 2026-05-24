@@ -1,17 +1,15 @@
+import { AppOverviewSection } from "@/components/landing/app-overview-section";
 import { CantonSection } from "@/components/landing/canton-section";
 import { FeaturedQuestsSection } from "@/components/landing/featured-quests-section";
 import { LandingHero } from "@/components/landing/hero";
-import { PlatformFeatures } from "@/components/landing/platform-features";
-import { SecuritySection } from "@/components/landing/security-section";
 
 export default function MarketingHomePage() {
   return (
     <>
       <LandingHero />
       <FeaturedQuestsSection />
-      <PlatformFeatures />
+      <AppOverviewSection />
       <CantonSection />
-      <SecuritySection />
     </>
   );
 }
