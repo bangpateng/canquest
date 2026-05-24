@@ -96,6 +96,18 @@ export type PlatformMessages = {
     viewRecap: string;
     questComplete: string;
   };
+  earnCampaigns: {
+    title: string;
+    description: string;
+    statsAria: string;
+    statsLabel: string;
+    live: string;
+    active: string;
+    completed: string;
+    total: string;
+    campaignsHeader: string;
+    dailyTasks: string;
+  };
   wallet: {
     nodeIssue: string;
     walletActive: string;

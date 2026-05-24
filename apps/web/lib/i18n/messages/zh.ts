@@ -75,6 +75,19 @@ export const zh: PlatformMessages = {
     browseEarn: "前往 Earn",
     browseQuests: "浏览任务",
   },
+  earnCampaigns: {
+    title: "Earn",
+    description:
+      "合作伙伴活动 — 完成任务获得 CC 奖励、邀请码等。每日签到和社交任务在",
+    statsAria: "活动概览",
+    statsLabel: "您的活动",
+    live: "进行中",
+    active: "正在进行",
+    completed: "您已完成",
+    total: "全部项目",
+    campaignsHeader: "合作伙伴活动",
+    dailyTasks: "每日 Quest 任务",
+  },
   quests: {
     searchPlaceholder: "搜索标题、组织、奖池…",
     searchLabel: "搜索任务",

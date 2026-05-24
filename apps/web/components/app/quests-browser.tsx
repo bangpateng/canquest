@@ -27,7 +27,20 @@ function matchesSearch(quest: Quest, q: string) {
     .includes(s);
 }
 
-export function QuestsBrowser() {
+export type EarnCampaignStats = {
+  active: number;
+  completed: number;
+  total: number;
+};
+
+export function QuestsBrowser({
+  embedded = false,
+  onStatsChange,
+}: {
+  /** Render inside Earn panel (no extra page chrome). */
+  embedded?: boolean;
+  onStatsChange?: (stats: EarnCampaignStats) => void;
+}) {
   const t = usePlatformT();
   const [status, setStatus] = useState<QuestStatus>("ACTIVE");
   const [query, setQuery] = useState("");
@@ -58,6 +71,9 @@ export function QuestsBrowser() {
       .then(([quests, prog]) => {
         setAllQuests(quests);
         setProgress(prog);
+        const active = quests.filter((q) => q.status === "ACTIVE").length;
+        const completed = prog?.completedQuestIds?.length ?? 0;
+        onStatsChange?.({ active, completed, total: quests.length });
       })
       .catch(() => {/* ignore abort */})
       .finally(() => setLoading(false));
@@ -89,7 +105,7 @@ export function QuestsBrowser() {
   );
 
   return (
-    <div className="w-full min-w-0 space-y-5">
+    <div className={embedded ? "w-full min-w-0 space-y-4" : "w-full min-w-0 space-y-5"}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:pb-0 [&::-webkit-scrollbar]:hidden">
           {TABS.map((tab) => {
@@ -122,11 +138,17 @@ export function QuestsBrowser() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="h-6 w-6 animate-spin text-[var(--muted-foreground)]" />
+        <div className="flex items-center justify-center py-14">
+          <Loader2 className="h-6 w-6 animate-spin text-canton" />
         </div>
       ) : filtered.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--muted)]/30 px-6 py-14 text-center">
+        <div
+          className={
+            embedded
+              ? "rounded-xl border border-dashed border-[var(--border)] bg-[var(--muted)]/20 px-6 py-12 text-center"
+              : "rounded-2xl border border-dashed border-[var(--border)] bg-[var(--muted)]/30 px-6 py-14 text-center"
+          }
+        >
           <p className="type-subsection-title text-[var(--foreground)]">
             {t("quests.noMatch")}
           </p>

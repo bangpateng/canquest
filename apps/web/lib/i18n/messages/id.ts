@@ -75,6 +75,19 @@ export const id: PlatformMessages = {
     browseEarn: "Buka Earn",
     browseQuests: "Jelajahi quest",
   },
+  earnCampaigns: {
+    title: "Earn",
+    description:
+      "Kampanye partner — selesaikan misi untuk hadiah CC, kode undangan, dan lainnya. Check-in harian dan tugas sosial ada di",
+    statsAria: "Ringkasan kampanye",
+    statsLabel: "Kampanye Anda",
+    live: "Aktif",
+    active: "Sedang berjalan",
+    completed: "Anda selesaikan",
+    total: "Semua program",
+    campaignsHeader: "Kampanye partner",
+    dailyTasks: "Tugas Quest harian",
+  },
   quests: {
     searchPlaceholder: "Cari judul, org, pool…",
     searchLabel: "Cari quest",

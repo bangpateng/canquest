@@ -75,6 +75,19 @@ export const en: PlatformMessages = {
     browseEarn: "Go to Earn",
     browseQuests: "Browse quests",
   },
+  earnCampaigns: {
+    title: "Earn",
+    description:
+      "Partner campaigns — complete missions for CC rewards, invite codes, and more. Daily check-in and social tasks are under",
+    statsAria: "Campaign overview",
+    statsLabel: "Your campaigns",
+    live: "Live",
+    active: "Active now",
+    completed: "You completed",
+    total: "All programs",
+    campaignsHeader: "Partner campaigns",
+    dailyTasks: "Daily Quest tasks",
+  },
   quests: {
     searchPlaceholder: "Search title, org, pool…",
     searchLabel: "Search quests",
