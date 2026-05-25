@@ -24,9 +24,14 @@ export function LaunchAppButton({
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/me", { credentials: "include", cache: "no-store" })
-      .then((r) => {
-        if (!cancelled) setAuthed(r.ok);
+    fetch("/api/auth/session", { credentials: "include", cache: "no-store" })
+      .then(async (r) => {
+        if (cancelled || !r.ok) {
+          if (!cancelled) setAuthed(false);
+          return;
+        }
+        const data = (await r.json()) as { loggedIn?: boolean };
+        if (!cancelled) setAuthed(Boolean(data.loggedIn));
       })
       .catch(() => {
         if (!cancelled) setAuthed(false);
