@@ -13,8 +13,9 @@ import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import { Throttle } from '@nestjs/throttler';
-import { QuestStatus } from '../common/prisma-types';
+import { QuestKind, QuestStatus } from '../common/prisma-types';
 import { WalletRequiredGuard } from '../common/wallet-required.guard';
+import { assertHasRealWallet } from '../common/wallet-policy';
 import { QuestsService } from './quests.service';
 import { UsersService } from '../users/users.service';
 import { FeaturedAppActivityService } from '../canton/featured-app-activity.service';
@@ -39,6 +40,17 @@ export class QuestsController {
     const flag = this.config.get<string>('QUEST_SUBMIT_REQUIRES_WALLET');
     if (flag === 'false' || flag === '0') return false;
     return true;
+  }
+
+  /** Partner campaigns (Earn menu) require a wallet; Quest hub does not. */
+  private async requireWalletForCampaignQuest(
+    questId: string,
+    userId: string,
+  ): Promise<void> {
+    const kind = await this.quests.getQuestKind(questId);
+    if (kind !== QuestKind.CAMPAIGN) return;
+    const user = await this.users.findById(userId);
+    assertHasRealWallet(user?.cantonPartyId);
   }
 
   @Get('leaderboard')
@@ -110,8 +122,8 @@ export class QuestsController {
   }
 
   @Get(':questId/progress')
-  @UseGuards(WalletRequiredGuard)
   async questProgress(@Param('questId') questId: string, @Req() req: AuthedReq) {
+    await this.requireWalletForCampaignQuest(questId, req.user.userId);
     const p = await this.quests.getUserProgress(req.user.userId, questId);
     return {
       completed: p.completed,
@@ -149,7 +161,6 @@ export class QuestsController {
   }
 
   @Post(':questId/tasks/:taskId/submit')
-  @UseGuards(WalletRequiredGuard)
   async submitTask(
     @Param('questId') questId: string,
     @Param('taskId') taskId: string,
@@ -192,7 +203,6 @@ export class QuestsController {
    * Final quest submit — Web2 completion in DB; optional DAML proof + CIP-56 CC when enabled.
    */
   @Post(':questId/submit')
-  @UseGuards(WalletRequiredGuard)
   async submitQuest(
     @Param('questId') questId: string,
     @Req() req: AuthedReq,
@@ -200,7 +210,14 @@ export class QuestsController {
     const user = await this.users.findById(req.user.userId);
     if (!user) return { ok: false, message: 'User not found' };
 
-    if (!user.cantonPartyId && this.questSubmitRequiresWallet()) {
+    const questKind = await this.quests.getQuestKind(questId);
+    await this.requireWalletForCampaignQuest(questId, req.user.userId);
+
+    if (
+      questKind === QuestKind.CAMPAIGN &&
+      !user.cantonPartyId &&
+      this.questSubmitRequiresWallet()
+    ) {
       return {
         ok: false,
         message: 'Create your Canton wallet before submitting the quest',

@@ -237,13 +237,19 @@ export function QuestsBrowser({
               ? t("earnCampaigns.loadFailedHint")
               : loadError}
           </p>
-          <button
-            type="button"
-            onClick={() => loadQuests()}
-            className={cn(buttonVariants({ size: "sm" }), "mt-4")}
-          >
-            {t("spin.retry")}
-          </button>
+          {isEarn && isWalletRequiredLoadError(loadError) ? (
+            <Link href="/wallet" className={cn(buttonVariants({ size: "sm" }), "mt-4")}>
+              {t("dashboard.createWallet")}
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={() => loadQuests()}
+              className={cn(buttonVariants({ size: "sm" }), "mt-4")}
+            >
+              {t("spin.retry")}
+            </button>
+          )}
         </div>
       ) : filtered.length === 0 ? (
         <div

@@ -5,7 +5,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
-import { hasRealWallet } from './wallet-policy';
+import { assertHasRealWallet } from './wallet-policy';
 
 @Injectable()
 export class WalletRequiredGuard implements CanActivate {
@@ -19,11 +19,7 @@ export class WalletRequiredGuard implements CanActivate {
     }
 
     const user = await this.users.findById(userId);
-    if (!hasRealWallet(user?.cantonPartyId)) {
-      throw new ForbiddenException(
-        'Please create your Canton wallet first to access Earn and Spin Reward.',
-      );
-    }
+    assertHasRealWallet(user?.cantonPartyId);
 
     return true;
   }

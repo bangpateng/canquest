@@ -52,7 +52,8 @@ export const en: PlatformMessages = {
   },
   walletGate: {
     title: "Wallet required",
-    description: "Create a wallet for Spin Reward.",
+    description:
+      "Please create your Canton wallet first to access Earn and Spin Reward.",
     createWallet: "Create wallet",
     navLocked: "Create a wallet first",
     quotaRemaining: "{n} wallet slots left today (UTC)",

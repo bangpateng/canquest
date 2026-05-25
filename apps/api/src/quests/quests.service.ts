@@ -266,6 +266,14 @@ export class QuestsService {
     return q?.title ?? 'Quest';
   }
 
+  async getQuestKind(questId: string): Promise<QuestKind | null> {
+    const q = await this.prisma.quest.findUnique({
+      where: { id: questId },
+      select: { questKind: true },
+    });
+    return q?.questKind ?? null;
+  }
+
   /** Batch resolve project names for transaction enrichment */
   async getQuestTitlesByIds(ids: string[]): Promise<Record<string, string>> {
     if (ids.length === 0) return {};
