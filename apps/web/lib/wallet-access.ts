@@ -4,7 +4,7 @@ export function hasRealWallet(cantonPartyId: string | null | undefined): boolean
   return Boolean(id && !id.startsWith("canquest:"));
 }
 
-export const WALLET_GATED_HREFS = ["/earn", "/spin-reward"] as const;
+export const WALLET_GATED_HREFS = ["/spin-reward"] as const;
 
 export function hrefRequiresWallet(href: string): boolean {
   return WALLET_GATED_HREFS.some((p) => href === p || href.startsWith(`${p}/`));

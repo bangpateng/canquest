@@ -52,7 +52,7 @@ export const en: PlatformMessages = {
   },
   walletGate: {
     title: "Wallet required",
-    description: "Create a Canton wallet to continue.",
+    description: "Create a wallet for Spin Reward.",
     createWallet: "Create wallet",
     navLocked: "Create a wallet first",
     quotaRemaining: "{n} wallet slots left today (UTC)",

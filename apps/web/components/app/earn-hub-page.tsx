@@ -3,11 +3,9 @@
 import Link from "next/link";
 import { QuestReferralCard } from "@/components/app/quest-referral-card";
 import { QuestTaskPanel } from "@/components/app/quest-task-panel";
-import { PageHeader } from "@/components/ui/typography";
 import { ROUTES } from "@/lib/app-routes";
 import type { Quest } from "@/lib/quest-types";
 import { cn } from "@/lib/utils";
-import { WalletCreatePromptBanner } from "@/components/app/wallet-create-prompt";
 import { ArrowRight, Loader2, Trophy, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -96,8 +94,6 @@ export function EarnHubPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Quest" />
-
       {/* Points balance — matches Tasks panel chrome */}
       <section
         className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]/40"
@@ -165,8 +161,6 @@ export function EarnHubPage() {
         </div>
       ) : (
         <>
-          {!partyId ? <WalletCreatePromptBanner /> : null}
-
           {hub.status === "ACTIVE" ? (
             hub.tasks.length > 0 ? (
               <QuestTaskPanel

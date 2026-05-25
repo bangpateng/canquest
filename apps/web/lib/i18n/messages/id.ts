@@ -52,7 +52,7 @@ export const id: PlatformMessages = {
   },
   walletGate: {
     title: "Wallet diperlukan",
-    description: "Buat wallet Canton untuk melanjutkan.",
+    description: "Buat wallet untuk Spin Reward.",
     createWallet: "Buat wallet",
     navLocked: "Buat wallet dulu",
     quotaRemaining: "Sisa {n} slot wallet hari ini (UTC)",

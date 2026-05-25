@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { QuestsBrowser, type EarnCampaignStats } from "@/components/app/quests-browser";
-import { PageHeader, SubsectionTitle } from "@/components/ui/typography";
+import { SubsectionTitle } from "@/components/ui/typography";
 import { ROUTES } from "@/lib/app-routes";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { cn } from "@/lib/utils";
@@ -22,8 +22,6 @@ export function EarnCampaignsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t("earnCampaigns.title")} />
-
       {/* Mission-style progress — matches campaign quest detail */}
       <section
         className="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]/80 p-5 md:p-6"

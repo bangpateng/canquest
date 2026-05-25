@@ -2,12 +2,11 @@
 
 import Link from "next/link";
 import { useEffect } from "react";
-import { Gift, Sparkles, Ticket, Wallet, X } from "lucide-react";
+import { Sparkles, Ticket, Wallet, X } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const FEATURES = [
-  { icon: Gift, label: "Quest", desc: "Daily tasks & points" },
+const WALLET_FEATURES = [
   { icon: Sparkles, label: "Earn", desc: "Partner campaigns" },
   { icon: Ticket, label: "Spin Reward", desc: "Spend points, win CC" },
 ] as const;
@@ -97,21 +96,17 @@ function WalletCreatePromptContent({
           <Wallet className="h-5 w-5 text-orange-300" aria-hidden />
         </span>
         <div className="min-w-0 flex-1 pr-6">
-          <p
-            id="wallet-create-prompt-title"
-            className="font-semibold text-orange-100"
-          >
+          <p id="wallet-create-prompt-title" className="font-semibold text-orange-100">
             Create your wallet first
           </p>
-          <p className="mt-1.5 text-sm leading-relaxed text-orange-200/85">
-            You need a Canton wallet on CanQuest before you can earn points. Create one
-            to unlock:
+          <p className="mt-1.5 text-sm text-orange-200/85">
+            Needed for Earn campaigns and Spin Reward.
           </p>
         </div>
       </div>
 
-      <ul className="mt-4 grid gap-2 sm:grid-cols-3">
-        {FEATURES.map(({ icon: Icon, label, desc }) => (
+      <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+        {WALLET_FEATURES.map(({ icon: Icon, label, desc }) => (
           <li
             key={label}
             className="flex items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--background)]/50 px-3 py-2.5"
@@ -124,10 +119,6 @@ function WalletCreatePromptContent({
           </li>
         ))}
       </ul>
-
-      <p className="mt-3 text-xs text-[var(--muted-foreground)]">
-        Choose a username on the Wallet page — your party is created in one step.
-      </p>
 
       <div className={cn("mt-4 flex flex-wrap gap-2", isModal && "sm:justify-end")}>
         <Link
