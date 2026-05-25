@@ -46,7 +46,6 @@ export default function RegisterPage() {
     try {
       const payload = await register({
         email: String(fd.get("email") ?? ""),
-        twitterUsername: String(fd.get("twitterUsername") ?? ""),
         referralCode: referralRaw,
         turnstileToken: turnstileToken ?? "",
       });
@@ -94,7 +93,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <AuthCard title="Create account" subtitle="Email + X username — verify with OTP">
+    <AuthCard title="Create account" subtitle="Email + OTP — connect X in Settings later">
       {error ? (
         <div
           className="mt-6 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-sm text-red-300"
@@ -119,23 +118,6 @@ export default function RegisterPage() {
               required
               className={authInputClass}
             />
-          </div>
-          <div className="space-y-1.5">
-            <label htmlFor="reg-x" className="text-xs font-medium text-[var(--muted-foreground)]">
-              X (Twitter) username
-            </label>
-            <div className="flex rounded-xl border border-[var(--border)] bg-[var(--muted)]/80 focus-within:border-[var(--primary)]/40 focus-within:ring-2 focus-within:ring-[var(--ring)]">
-              <span className="flex items-center pl-3 text-sm text-[var(--muted-foreground)]">@</span>
-              <input
-                id="reg-x"
-                name="twitterUsername"
-                required
-                maxLength={15}
-                pattern="[A-Za-z0-9_]+"
-                placeholder="yourhandle"
-                className="min-w-0 flex-1 bg-transparent py-2.5 pr-3 text-sm outline-none"
-              />
-            </div>
           </div>
           <div className="space-y-1.5">
             <label htmlFor="reg-referral" className="text-xs font-medium text-[var(--muted-foreground)]">

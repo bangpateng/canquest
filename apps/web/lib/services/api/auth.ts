@@ -9,7 +9,13 @@ export interface Me {
   avatarUrl?: string | null;
 }
 
-export function login(email: string, turnstileToken: string) {
+/** Resume session from refresh cookie — no Resend email. */
+export function refreshSession() {
+  return apiFetch<Record<string, unknown>>('/api/auth/refresh', { method: 'POST' });
+}
+
+/** Recovery only when refresh cookie expired (costs 1 Resend email). */
+export function requestSignInCode(email: string, turnstileToken: string) {
   return apiFetch<Record<string, unknown>>('/api/auth/login', {
     method: 'POST',
     json: { email: email.trim().toLowerCase(), turnstileToken },
@@ -18,16 +24,13 @@ export function login(email: string, turnstileToken: string) {
 
 export function register(params: {
   email: string;
-  twitterUsername: string;
   referralCode?: string;
   turnstileToken: string;
 }) {
-  const handle = params.twitterUsername.trim().replace(/^@/, '');
   return apiFetch<Record<string, unknown>>('/api/auth/register', {
     method: 'POST',
     json: {
       email: params.email.trim().toLowerCase(),
-      twitterUsername: handle,
       referralCode: params.referralCode?.trim() || undefined,
       turnstileToken: params.turnstileToken,
     },

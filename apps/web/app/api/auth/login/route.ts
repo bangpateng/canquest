@@ -3,7 +3,7 @@ import { postJsonParse } from '@/lib/internal-api-url';
 import { clientIpFromRequest, verifyTurnstileToken } from '@/lib/turnstile';
 import { NextResponse } from 'next/server';
 
-/** Passwordless login — sends OTP; tokens issued after verify-otp. */
+/** Recovery sign-in only — sends OTP when refresh cookie expired. Normal login uses POST /api/auth/refresh. */
 export async function POST(req: Request) {
   let body: { email?: string; turnstileToken?: string };
   try {

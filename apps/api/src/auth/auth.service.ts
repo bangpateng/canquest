@@ -9,7 +9,6 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
-import { TwitterApiService } from '../twitter/twitter-api.service';
 import { ProfileAvatarService } from '../users/profile-avatar.service';
 import { ReferralService } from '../users/referral.service';
 import { UsersService } from '../users/users.service';
@@ -17,6 +16,8 @@ import { resolvePublicAvatarUrl } from '../users/user-avatar-url';
 import { ResendEmailService } from './resend-email.service';
 
 const BCRYPT_ROUNDS = 12;
+const OTP_TTL_MS = 15 * 60 * 1000;
+const OTP_RESEND_COOLDOWN_MS = 2 * 60 * 1000;
 
 @Injectable()
 export class AuthService {
@@ -29,30 +30,13 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly resend: ResendEmailService,
-    private readonly twitterApi: TwitterApiService,
   ) {}
 
-  async register(dto: {
-    email: string;
-    twitterUsername: string;
-    referralCode?: string;
-  }) {
+  async register(dto: { email: string; referralCode?: string }) {
     const email = dto.email.trim().toLowerCase();
     const existing = await this.users.findByEmail(email);
     if (existing) {
       throw new ConflictException('Email already registered');
-    }
-
-    if (!this.twitterApi.isConfigured()) {
-      throw new BadRequestException(
-        'X profile lookup is not configured (TWITTERAPI_IO_KEY).',
-      );
-    }
-
-    const profile = await this.twitterApi.fetchUserProfile(dto.twitterUsername);
-    const twitterTaken = await this.users.findByTwitterUsername(profile.username);
-    if (twitterTaken) {
-      throw new ConflictException('This X account is already registered');
     }
 
     let referredById: string | null = null;
@@ -72,19 +56,17 @@ export class AuthService {
     const skipOtp = process.env.AUTH_REGISTER_SKIP_OTP === 'true';
     const passwordHash = await bcrypt.hash(randomBytes(32).toString('hex'), BCRYPT_ROUNDS);
     const referralCode = await this.referral.generateUniqueReferralCode();
-    const now = new Date();
+    const localPart = email.split('@')[0] ?? 'User';
+    const displayName =
+      localPart.charAt(0).toUpperCase() + localPart.slice(1, 80).replace(/[.+]/g, ' ');
 
     const user = await this.users.create({
       email,
       passwordHash,
       referredById,
       referralCode,
-      displayName: profile.displayName ?? profile.username,
+      displayName,
       emailVerified: skipOtp,
-      twitterUsername: profile.username,
-      twitterUserId: profile.userId,
-      twitterAvatarUrl: profile.profileImageUrl,
-      twitterConnectedAt: now,
     });
 
     if (skipOtp) {
@@ -100,18 +82,25 @@ export class AuthService {
     };
   }
 
-  /** Passwordless login — sends OTP to registered email. */
+  /**
+   * Recovery sign-in only (uses Resend). Normal return visits use refresh cookies — no email.
+   */
   async login(dto: { email: string }) {
     const email = dto.email.trim().toLowerCase();
     const user = await this.users.findByEmail(email);
     if (!user) {
       throw new UnauthorizedException('No account found for this email');
     }
+    if (!user.emailVerified) {
+      throw new BadRequestException(
+        'Email not verified yet. Complete registration with the code we sent you.',
+      );
+    }
 
     const { devOtp } = await this.issueOtpForUser(user.id, email);
     return {
       userId: user.id,
-      message: 'Sign-in code sent to your email.',
+      message: 'Recovery sign-in code sent to your email.',
       devOtp,
     };
   }
@@ -186,9 +175,19 @@ export class AuthService {
     userId: string,
     email: string,
   ): Promise<{ otp: string; devOtp?: string }> {
+    const user = await this.users.findById(userId);
+    if (user?.otpExpiresAt) {
+      const issuedAt = user.otpExpiresAt.getTime() - OTP_TTL_MS;
+      if (Date.now() - issuedAt < OTP_RESEND_COOLDOWN_MS) {
+        throw new BadRequestException(
+          'Please wait 2 minutes before requesting another code.',
+        );
+      }
+    }
+
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const otpCodeHash = createHash('sha256').update(otp).digest('hex');
-    const otpExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
+    const otpExpiresAt = new Date(Date.now() + OTP_TTL_MS);
     await this.users.setOtpPending(userId, otpCodeHash, otpExpiresAt);
 
     try {

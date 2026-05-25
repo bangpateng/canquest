@@ -6,7 +6,6 @@ import { NextResponse } from 'next/server';
 export async function POST(req: Request) {
   let body: {
     email?: string;
-    twitterUsername?: string;
     referralCode?: string;
     turnstileToken?: string;
   };
