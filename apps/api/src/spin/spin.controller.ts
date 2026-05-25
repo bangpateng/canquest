@@ -9,13 +9,14 @@ import {
 import type { Request } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import { Throttle } from '@nestjs/throttler';
+import { WalletRequiredGuard } from '../common/wallet-required.guard';
 import { SpinService } from './spin.service';
 import { UsersService } from '../users/users.service';
 
 type AuthedReq = Request & { user: { userId: string; email: string } };
 
 @Controller('spin')
-@UseGuards(AuthGuard('jwt'))
+@UseGuards(AuthGuard('jwt'), WalletRequiredGuard)
 export class SpinController {
   constructor(
     private readonly spin: SpinService,

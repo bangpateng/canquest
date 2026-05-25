@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
 import { formatApiError } from "@/lib/format-api-error";
 import { Loader2, Wallet } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { cacheWalletMe } from "@/lib/wallet-session-cache";
 
@@ -22,6 +22,18 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<"idle" | "creating" | "done">("idle");
+  const [quotaRemaining, setQuotaRemaining] = useState<number | null>(null);
+
+  useEffect(() => {
+    void fetch("/api/party/wallet-quota", { credentials: "include", cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { remaining?: number } | null) => {
+        if (data && typeof data.remaining === "number") {
+          setQuotaRemaining(data.remaining);
+        }
+      })
+      .catch(() => undefined);
+  }, []);
 
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
@@ -88,6 +100,21 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
           It cannot be changed later.
         </p>
 
+        {quotaRemaining !== null ? (
+          <p
+            className={cn(
+              "mt-4 rounded-xl border px-3 py-2 text-center text-xs",
+              quotaRemaining > 0
+                ? "border-[var(--border)] bg-[var(--muted)]/30 text-[var(--muted-foreground)]"
+                : "border-orange-500/40 bg-orange-500/10 text-orange-300",
+            )}
+          >
+            {quotaRemaining > 0
+              ? t("walletGate.quotaRemaining", { n: quotaRemaining })
+              : t("walletGate.quotaFull")}
+          </p>
+        ) : null}
+
         <form onSubmit={handleGenerate} className="mt-8 space-y-4">
           <div className="space-y-1.5">
             <label
@@ -124,7 +151,12 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
 
           <button
             type="submit"
-            disabled={busy || step === "done" || username.trim().length < 3}
+            disabled={
+              busy ||
+              step === "done" ||
+              username.trim().length < 3 ||
+              quotaRemaining === 0
+            }
             className={cn(buttonVariants({ size: "lg" }), "w-full gap-2")}
           >
             {step === "creating" ? (

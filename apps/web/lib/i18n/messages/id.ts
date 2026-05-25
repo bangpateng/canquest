@@ -51,6 +51,14 @@ export const id: PlatformMessages = {
     community: "Komunitas",
     leaderboard: "Papan peringkat",
   },
+  walletGate: {
+    title: "Wallet diperlukan",
+    description: "Buat wallet Canton untuk mengakses Earn dan Spin Reward.",
+    createWallet: "Buat wallet",
+    navLocked: "Buat wallet dulu",
+    quotaRemaining: "Sisa {n} slot wallet hari ini (UTC)",
+    quotaFull: "Limit wallet harian habis — coba lagi besok (UTC)",
+  },
   questReferral: {
     aria: "Undang teman",
     title: "Undang teman",

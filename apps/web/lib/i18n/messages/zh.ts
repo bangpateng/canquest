@@ -51,6 +51,14 @@ export const zh: PlatformMessages = {
     community: "社区",
     leaderboard: "排行榜",
   },
+  walletGate: {
+    title: "Wallet required",
+    description: "Create your Canton wallet to access Earn campaigns and Spin Reward.",
+    createWallet: "Create wallet",
+    navLocked: "Create a wallet first",
+    quotaRemaining: "{n} wallet slots left today (UTC)",
+    quotaFull: "Daily wallet limit reached — try again tomorrow (UTC)",
+  },
   questReferral: {
     aria: "Invite friends",
     title: "Invite friends",

@@ -60,6 +60,14 @@ export type PlatformMessages = {
     community: string;
     leaderboard: string;
   };
+  walletGate: {
+    title: string;
+    description: string;
+    createWallet: string;
+    navLocked: string;
+    quotaRemaining: string;
+    quotaFull: string;
+  };
   questReferral: {
     aria: string;
     title: string;

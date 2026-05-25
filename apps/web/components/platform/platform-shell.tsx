@@ -39,6 +39,8 @@ import { logout } from "@/lib/services/api/auth";
 import { PlatformI18nProvider, usePlatformI18n } from "@/lib/i18n/platform-provider";
 
 import { ROUTES } from "@/lib/app-routes";
+import { useWalletAccess } from "@/lib/hooks/use-wallet-access";
+import { hrefRequiresWallet } from "@/lib/wallet-access";
 import { cn } from "@/lib/utils";
 
 
@@ -58,7 +60,13 @@ const navItems: {
 ];
 
 
-function NavLinks({ variant }: { variant: "sidebar" | "mobile" }) {
+function NavLinks({
+  variant,
+  hasWallet,
+}: {
+  variant: "sidebar" | "mobile";
+  hasWallet: boolean;
+}) {
 
   const pathname = usePathname();
 
@@ -90,29 +98,39 @@ function NavLinks({ variant }: { variant: "sidebar" | "mobile" }) {
 
         const label = t(`nav.${key}`);
 
+        const locked = hrefRequiresWallet(href) && !hasWallet;
+
+        const hrefTarget = locked ? `/wallet?from=${encodeURIComponent(href)}` : href;
+
+        const className =
+
+          base +
+
+          (locked
+
+            ? " opacity-60"
+
+            : active
+
+              ? variant === "mobile"
+
+                ? " bg-[var(--primary)]/14 text-[var(--foreground)] ring-1 ring-inset ring-[var(--primary)]/30"
+
+                : " bg-[var(--primary)]/14 text-[var(--foreground)] ring-1 ring-[var(--primary)]/25"
+
+              : " text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]");
+
         return (
 
           <Link
 
             key={href}
 
-            href={href}
+            href={hrefTarget}
 
-            className={
+            title={locked ? t("walletGate.navLocked") : undefined}
 
-              base +
-
-              (active
-
-                ? variant === "mobile"
-
-                  ? " bg-[var(--primary)]/14 text-[var(--foreground)] ring-1 ring-inset ring-[var(--primary)]/30"
-
-                  : " bg-[var(--primary)]/14 text-[var(--foreground)] ring-1 ring-[var(--primary)]/25"
-
-                : " text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]")
-
-            }
+            className={className}
 
           >
 
@@ -158,6 +176,8 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
 
   const { t } = usePlatformI18n();
 
+  const { hasWallet } = useWalletAccess();
+
 
 
   async function handleSignOut() {
@@ -195,7 +215,7 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
 
         <nav className="flex flex-1 flex-col gap-1">
 
-          <NavLinks variant="sidebar" />
+          <NavLinks variant="sidebar" hasWallet={hasWallet} />
 
         </nav>
 
@@ -275,7 +295,7 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
 
         <div className="flex w-full min-w-0 gap-0.5 px-1 py-1">
 
-          <NavLinks variant="mobile" />
+          <NavLinks variant="mobile" hasWallet={hasWallet} />
 
         </div>
 

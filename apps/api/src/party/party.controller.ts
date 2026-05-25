@@ -22,7 +22,9 @@ import { FeaturedAppActivityService } from '../canton/featured-app-activity.serv
 import { CcInboundSyncService } from '../canton/cc-inbound-sync.service';
 import { CcBalanceService } from '../canton/cc-balance.service';
 import { TransactionDetailService } from '../canton/transaction-detail.service';
+import { hasRealWallet } from '../common/wallet-policy';
 import { UsersService } from '../users/users.service';
+import { WalletQuotaService } from './wallet-quota.service';
 import { CantonPartyBindingDto } from './dto/canton-party-binding.dto';
 import { SetUsernameDto } from './dto/set-username.dto';
 
@@ -43,7 +45,14 @@ export class PartyController {
     private readonly ccBalance: CcBalanceService,
     private readonly txDetail: TransactionDetailService,
     private readonly config: ConfigService,
+    private readonly walletQuota: WalletQuotaService,
   ) {}
+
+  @Get('wallet-quota')
+  @SkipThrottle()
+  walletQuotaStatus() {
+    return this.walletQuota.getStatus();
+  }
 
   /**
    * Reserve a username → create Splice wallet user (allocates Party ID + registers in Splice).
@@ -60,6 +69,11 @@ export class PartyController {
     let cantonPartyId: string;
     let isPlaceholder = false;
     let spliceOnboarded = false;
+
+    const existing = await this.users.findById(req.user.userId);
+    if (!hasRealWallet(existing?.cantonPartyId)) {
+      await this.walletQuota.assertSlotAvailable();
+    }
 
     // Preferred path: Splice validator handles party allocation + onboarding in one call.
     const splicePartyId = await this.splice.createWalletUser(body.username);
@@ -83,7 +97,15 @@ export class PartyController {
       }
     }
 
-        await this.users.setPartyId(req.user.userId, cantonPartyId, body.username);
+    await this.users.setPartyId(req.user.userId, cantonPartyId, body.username);
+
+    if (!hasRealWallet(existing?.cantonPartyId) && !isPlaceholder) {
+      await this.walletQuota.recordAllocation({
+        userId: req.user.userId,
+        username: body.username,
+        partyId: cantonPartyId,
+      });
+    }
 
     // Emit FeaturedAppActivityMarker for wallet creation
     // Per Canton Module 4: wallet_created is a meaningful user action
@@ -237,10 +259,21 @@ export class PartyController {
 
     const username = user.username ?? `cq-${user.id.slice(0, 10)}`;
 
+    if (!hasRealWallet(user.cantonPartyId)) {
+      await this.walletQuota.assertSlotAvailable();
+    }
+
     // Try Splice first (preferred — full registration).
     const splicePartyId = await this.splice.createWalletUser(username);
     if (splicePartyId) {
       await this.users.setPartyId(req.user.userId, splicePartyId, user.username ?? undefined);
+      if (!hasRealWallet(user.cantonPartyId)) {
+        await this.walletQuota.recordAllocation({
+          userId: user.id,
+          username,
+          partyId: splicePartyId,
+        });
+      }
       // CIP-56: ensure TransferPreapproval exists for this user
       const preapprovalActive = (await this.splice.createTransferPreapproval(username)).ok;
       return {
@@ -257,6 +290,13 @@ export class PartyController {
     // Fallback: Canton JSON API only.
     const cantonPartyId = await this.ledger.allocateParty(username);
     await this.users.setPartyId(req.user.userId, cantonPartyId, user.username ?? undefined);
+    if (!hasRealWallet(user.cantonPartyId)) {
+      await this.walletQuota.recordAllocation({
+        userId: user.id,
+        username,
+        partyId: cantonPartyId,
+      });
+    }
     return {
       cantonPartyId,
       isPlaceholder: false,

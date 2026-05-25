@@ -14,6 +14,7 @@ import type { Request } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import { Throttle } from '@nestjs/throttler';
 import { QuestStatus } from '../common/prisma-types';
+import { WalletRequiredGuard } from '../common/wallet-required.guard';
 import { QuestsService } from './quests.service';
 import { UsersService } from '../users/users.service';
 import { FeaturedAppActivityService } from '../canton/featured-app-activity.service';
@@ -76,6 +77,7 @@ export class QuestsController {
   }
 
   @Get()
+  @UseGuards(WalletRequiredGuard)
   listQuests(@Query('status') status?: string) {
     const s = Object.values(QuestStatus).includes(status as QuestStatus)
       ? (status as QuestStatus)
@@ -84,6 +86,7 @@ export class QuestsController {
   }
 
   @Get('my-progress')
+  @UseGuards(WalletRequiredGuard)
   async myProgress(@Req() req: AuthedReq) {
     return this.quests.getUserAllProgress(req.user.userId);
   }
@@ -101,11 +104,13 @@ export class QuestsController {
   }
 
   @Get(':questId')
+  @UseGuards(WalletRequiredGuard)
   getQuest(@Param('questId') questId: string) {
     return this.quests.getQuest(questId);
   }
 
   @Get(':questId/progress')
+  @UseGuards(WalletRequiredGuard)
   async questProgress(@Param('questId') questId: string, @Req() req: AuthedReq) {
     const p = await this.quests.getUserProgress(req.user.userId, questId);
     return {
@@ -121,6 +126,7 @@ export class QuestsController {
   }
 
   @Get(':questId/reward-status')
+  @UseGuards(WalletRequiredGuard)
   async rewardStatus(@Param('questId') questId: string, @Req() req: AuthedReq) {
     const rewardStatus = await this.quests.getQuestRewardStatus(req.user.userId, questId);
     const campaignMeta = await this.quests.getCampaignMeta(questId);
@@ -129,6 +135,7 @@ export class QuestsController {
 
   /** FCFS CC — claim fee on-chain + reward from pool (first-come slots). */
   @Post(':questId/claim-fcfs')
+  @UseGuards(WalletRequiredGuard)
   @Throttle({ ledger: { limit: 5, ttl: 60_000 } })
   async claimFcfs(@Param('questId') questId: string, @Req() req: AuthedReq) {
     const user = await this.users.findById(req.user.userId);
@@ -142,6 +149,7 @@ export class QuestsController {
   }
 
   @Post(':questId/tasks/:taskId/submit')
+  @UseGuards(WalletRequiredGuard)
   async submitTask(
     @Param('questId') questId: string,
     @Param('taskId') taskId: string,
@@ -184,6 +192,7 @@ export class QuestsController {
    * Final quest submit — Web2 completion in DB; optional DAML proof + CIP-56 CC when enabled.
    */
   @Post(':questId/submit')
+  @UseGuards(WalletRequiredGuard)
   async submitQuest(
     @Param('questId') questId: string,
     @Req() req: AuthedReq,

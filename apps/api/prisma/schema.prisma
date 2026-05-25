@@ -52,6 +52,20 @@ model User {
   spinResults            SpinResult[]
   referralRewardsGiven   ReferralReward[] @relation("ReferralRewardsGiven")
   referralRewardReceived ReferralReward?  @relation("ReferralRewardReceived")
+  walletAllocations      WalletAllocationLog[]
+}
+
+/// Global daily counter — each row is one Canton/Splice wallet slot consumed (UTC day).
+model WalletAllocationLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  username  String?
+  partyId   String
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([userId])
 }
 
 /// One row per successful referred signup (referrer credited once).
