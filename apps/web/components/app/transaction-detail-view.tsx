@@ -36,7 +36,7 @@ export function TransactionDetailView({ transactionId }: TransactionDetailViewPr
   const { detail, loading, error } = useTransactionDetail(transactionId);
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="mx-auto w-full min-w-0 max-w-2xl space-y-4 sm:space-y-6">
       <Link
         href="/transactions"
         className="inline-flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]"

@@ -80,7 +80,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <header className="flex h-14 items-center border-b border-[var(--border)] px-4 md:h-16 md:px-8">
           <AppRouteTitle />
         </header>
-                <div className="flex-1 space-y-4 p-4 md:p-8">
+                <div className="min-w-0 flex-1 space-y-4 overflow-x-hidden p-4 md:p-8">
           {children}
         </div>
       </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import {
   ExternalLink,
   Loader2,
@@ -13,6 +14,30 @@ import { cn } from "@/lib/utils";
 function shortTemplate(templateId: string): string {
   const parts = templateId.split(":");
   return parts.length >= 2 ? `${parts[parts.length - 2]}:${parts[parts.length - 1]}` : templateId;
+}
+
+function ReceiptField({
+  label,
+  children,
+  mono,
+}: {
+  label: string;
+  children: ReactNode;
+  mono?: boolean;
+}) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[var(--muted-foreground)]">{label}</dt>
+      <dd
+        className={cn(
+          "mt-1 min-w-0 font-medium [overflow-wrap:anywhere]",
+          mono && "font-mono text-xs font-normal",
+        )}
+      >
+        {children}
+      </dd>
+    </div>
+  );
 }
 
 type TransactionDetailContentProps = {
@@ -56,14 +81,19 @@ export function TransactionDetailContent({
     <>
       <div
         className={cn(
-          "rounded-2xl border border-[var(--border)] bg-[var(--card)]",
-          compact ? "p-5" : "p-6",
+          "w-full min-w-0 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]",
+          compact ? "p-4 sm:p-5" : "p-4 sm:p-6",
         )}
       >
         <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
           Transaction receipt
         </p>
-        <h2 className={cn("mt-2 font-semibold text-[var(--foreground)]", compact ? "text-lg" : "type-page-title")}>
+        <h2
+          className={cn(
+            "mt-2 break-words font-semibold text-[var(--foreground)]",
+            compact ? "text-lg" : "type-page-title",
+          )}
+        >
           {detail.description}
         </h2>
         <p
@@ -76,45 +106,37 @@ export function TransactionDetailContent({
           {isOut ? "−" : "+"}
           {ccAmt.toFixed(4)} CC
         </p>
-        <dl className="mt-5 space-y-2.5 text-sm">
-          <div className="flex justify-between gap-4">
-            <dt className="text-[var(--muted-foreground)]">Type</dt>
-            <dd className="font-medium">{detail.type.replace(/_/g, " ")}</dd>
-          </div>
+        <dl className="mt-5 space-y-4 text-sm">
+          <ReceiptField label="Type">{detail.type.replace(/_/g, " ")}</ReceiptField>
           {detail.counterparty ? (
-            <div className="flex justify-between gap-4">
-              <dt className="text-[var(--muted-foreground)]">Counterparty</dt>
-              <dd className="truncate font-mono text-xs">{detail.counterparty}</dd>
-            </div>
+            <ReceiptField label="Counterparty" mono>
+              {detail.counterparty}
+            </ReceiptField>
           ) : null}
-          <div className="flex justify-between gap-4">
-            <dt className="text-[var(--muted-foreground)]">{t("transactions.when")}</dt>
-            <dd>{new Date(detail.createdAt).toLocaleString()}</dd>
-          </div>
-          <div className="flex justify-between gap-4">
-            <dt className="text-[var(--muted-foreground)]">On-chain</dt>
-            <dd className="flex items-center gap-1.5">
+          <ReceiptField label={t("transactions.when")}>
+            {new Date(detail.createdAt).toLocaleString()}
+          </ReceiptField>
+          <ReceiptField label="On-chain">
+            <span className="inline-flex items-center gap-1.5">
               {detail.onChainSettled ? (
                 <>
-                  <ShieldCheck className="h-4 w-4 text-green-500" />
+                  <ShieldCheck className="h-4 w-4 shrink-0 text-green-500" />
                   <span>Settled</span>
                 </>
               ) : (
                 <span className="text-[var(--muted-foreground)]">Pending</span>
               )}
-            </dd>
-          </div>
+            </span>
+          </ReceiptField>
           {detail.ledgerContractId ? (
-            <div className="flex flex-col gap-1">
-              <dt className="text-[var(--muted-foreground)]">Contract ID</dt>
-              <dd className="break-all font-mono text-xs">{detail.ledgerContractId}</dd>
-            </div>
+            <ReceiptField label="Contract ID" mono>
+              {detail.ledgerContractId}
+            </ReceiptField>
           ) : null}
           {detail.cantonUpdateId ? (
-            <div className="flex flex-col gap-1">
-              <dt className="text-[var(--muted-foreground)]">Ledger update ID</dt>
-              <dd className="break-all font-mono text-xs">{detail.cantonUpdateId}</dd>
-            </div>
+            <ReceiptField label="Ledger update ID" mono>
+              {detail.cantonUpdateId}
+            </ReceiptField>
           ) : null}
         </dl>
 
@@ -134,8 +156,8 @@ export function TransactionDetailContent({
       {detail.ledgerEvents.length > 0 ? (
         <div
           className={cn(
-            "rounded-2xl border border-[var(--border)] bg-[var(--card)]",
-            compact ? "mt-4 p-4" : "mt-6 p-6",
+            "w-full min-w-0 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]",
+            compact ? "mt-4 p-4 sm:p-5" : "mt-4 p-4 sm:p-6",
           )}
         >
           <h3 className="text-sm font-semibold">On-chain events</h3>
