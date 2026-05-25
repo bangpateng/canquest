@@ -178,7 +178,7 @@ export const id: PlatformMessages = {
     description: "Deskripsi",
     counterparty: "Pihak lawan",
     ledgerTx: "Ledger TX",
-    when: "Waktu",
+    when: "Tanggal",
     empty: "Belum ada transaksi.",
     page: "Halaman {page} dari {total}",
     questReward: "Hadiah quest",

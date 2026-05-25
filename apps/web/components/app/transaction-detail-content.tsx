@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 
 import type { TransactionDetail } from "@/components/app/transaction-detail-view";
+import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { cn } from "@/lib/utils";
 
 function shortTemplate(templateId: string): string {
@@ -28,6 +29,8 @@ export function TransactionDetailContent({
   error,
   compact = false,
 }: TransactionDetailContentProps) {
+  const t = usePlatformT();
+
   if (loading) {
     return (
       <div className={cn("flex justify-center", compact ? "py-10" : "py-20")}>
@@ -85,7 +88,7 @@ export function TransactionDetailContent({
             </div>
           ) : null}
           <div className="flex justify-between gap-4">
-            <dt className="text-[var(--muted-foreground)]">When</dt>
+            <dt className="text-[var(--muted-foreground)]">{t("transactions.when")}</dt>
             <dd>{new Date(detail.createdAt).toLocaleString()}</dd>
           </div>
           <div className="flex justify-between gap-4">

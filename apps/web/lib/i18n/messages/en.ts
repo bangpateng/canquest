@@ -178,7 +178,7 @@ export const en: PlatformMessages = {
     description: "Description",
     counterparty: "Counterparty",
     ledgerTx: "Ledger TX",
-    when: "When",
+    when: "Date",
     empty: "No transactions yet.",
     page: "Page {page} of {total}",
     questReward: "Quest reward",
