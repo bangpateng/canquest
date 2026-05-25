@@ -19,15 +19,8 @@ interface LeaderboardRow {
   userId: string;
   username: string;
   displayName: string;
-  cantonPartyId?: string | null;
   points: number;
   avatarUrl: string | null;
-}
-
-function formatLeaderboardPartyId(partyId: string | null | undefined): string {
-  const p = partyId?.trim();
-  if (!p) return "No wallet";
-  return p;
 }
 
 interface LeaderboardData {
@@ -116,9 +109,6 @@ function ParticipantCell({
               </span>
             )}
           </div>
-          <span className="mt-0.5 block break-all font-mono text-[11px] leading-snug text-[var(--muted-foreground)]">
-            {formatLeaderboardPartyId(row.cantonPartyId)}
-          </span>
         </div>
       </div>
     </td>
