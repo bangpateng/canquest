@@ -116,7 +116,8 @@ export const es: PlatformMessages = {
     campaignsLead: "",
     progressCompleted: "campañas terminadas",
     loadFailed: "No se pudieron cargar las campañas",
-    loadFailedHint: "Comprueba que la API corre en el puerto 3001 y que JWT_ACCESS_SECRET coincide.",
+    loadFailedHint:
+      "Please create your Canton wallet first to access Earn and Spin Reward.",
     noCampaignsHint: "Sin campañas partner — ejecuta seed o abre Quest para tareas diarias.",
     tryOtherTab: "Prueba otra pestaña o borra la búsqueda.",
     showingCount: "{count} campañas {status}",

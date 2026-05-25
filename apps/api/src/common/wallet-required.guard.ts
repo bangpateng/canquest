@@ -21,7 +21,7 @@ export class WalletRequiredGuard implements CanActivate {
     const user = await this.users.findById(userId);
     if (!hasRealWallet(user?.cantonPartyId)) {
       throw new ForbiddenException(
-        'Create your Canton wallet first to access Earn and Spin Reward.',
+        'Please create your Canton wallet first to access Earn and Spin Reward.',
       );
     }
 

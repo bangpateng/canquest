@@ -115,9 +115,9 @@ export const id: PlatformMessages = {
     campaignsHeader: "Jelajahi kampanye",
     campaignsLead: "",
     progressCompleted: "kampanye selesai",
-    loadFailed: "Gagal memuat kampanye",
+    loadFailed: "Could not load campaigns",
     loadFailedHint:
-      "Pastikan API berjalan, lalu coba lagi.",
+      "Please create your Canton wallet first to access Earn and Spin Reward.",
     noCampaignsHint: "Belum ada kampanye — coba Quest untuk tugas harian.",
     tryOtherTab: "Coba tab lain di atas, atau hapus kata kunci pencarian.",
     showingCount: "{count} kampanye {status}",

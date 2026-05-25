@@ -116,7 +116,8 @@ export const zh: PlatformMessages = {
     campaignsLead: "",
     progressCompleted: "已完成活动",
     loadFailed: "无法加载活动",
-    loadFailedHint: "请确认 API 在 3001 端口运行，且 web/api 的 JWT_ACCESS_SECRET 一致。",
+    loadFailedHint:
+      "Please create your Canton wallet first to access Earn and Spin Reward.",
     noCampaignsHint: "暂无合作伙伴活动 — 运行 seed 或打开 Quest 每日任务。",
     tryOtherTab: "请切换上方标签或清除搜索。",
     showingCount: "{count} 个{status}活动",

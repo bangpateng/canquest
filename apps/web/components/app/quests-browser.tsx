@@ -17,6 +17,11 @@ import { ROUTES } from "@/lib/app-routes";
 const QUEST_PAGE_SIZE = 6;
 const EARN_PAGE_SIZE = 6;
 
+function isWalletRequiredLoadError(message: string | null): boolean {
+  if (!message) return false;
+  return /canton wallet/i.test(message) || /wallet first/i.test(message);
+}
+
 const TABS: { id: QuestStatus; label: string }[] = [
   { id: "ACTIVE", label: "Active" },
   { id: "COMING_SOON", label: "Coming soon" },
@@ -227,9 +232,10 @@ export function QuestsBrowser({
       ) : loadError ? (
         <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-5 py-8 text-center">
           <p className="type-subsection-title text-red-200">{t("earnCampaigns.loadFailed")}</p>
-          <p className="mt-2 text-sm text-red-200/80">{loadError}</p>
-          <p className="mt-3 text-xs text-[var(--muted-foreground)]">
-            {t("earnCampaigns.loadFailedHint")}
+          <p className="mt-2 text-sm text-red-200/80">
+            {isWalletRequiredLoadError(loadError)
+              ? t("earnCampaigns.loadFailedHint")
+              : loadError}
           </p>
           <button
             type="button"

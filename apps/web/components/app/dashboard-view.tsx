@@ -1,13 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { SectionTitle, StatValue } from "@/components/ui/typography";
-import { ROUTES } from "@/lib/app-routes";
-import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
-  ArrowUpRight,
   CheckCircle2,
   Coins,
   Gift,
@@ -317,20 +313,6 @@ export function DashboardView() {
         })}
       </section>
 
-      {!hasWallet && !loading ? (
-        <div className="glass-card rounded-2xl border border-orange-500/30 bg-orange-500/5 p-6">
-          <p className="type-label text-orange-300 dark:text-orange-400">
-            {t("dashboard.walletNotCreated")}
-          </p>
-          <Link
-            href="/wallet"
-            className={cn(buttonVariants({ size: "sm" }), "mt-4 gap-1")}
-          >
-            {t("dashboard.createWallet")} <ArrowUpRight className="h-3.5 w-3.5" />
-          </Link>
-        </div>
-      ) : null}
-
       {/* Recent Activity */}
       <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm">
           <SectionTitle>{t("dashboard.recentActivity")}</SectionTitle>
@@ -344,20 +326,6 @@ export function DashboardView() {
               <p className="text-sm text-[var(--muted-foreground)]">
                 {t("dashboard.noActivity")}
               </p>
-              <div className="mx-auto mt-4 flex flex-wrap justify-center gap-2">
-                <Link
-                  href={ROUTES.campaignQuests}
-                  className={cn(buttonVariants({ size: "sm" }), "gap-1")}
-                >
-                  {t("dashboard.browseEarn")}
-                </Link>
-                <Link
-                  href={ROUTES.earnHub}
-                  className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "gap-1")}
-                >
-                  {t("dashboard.browseQuests")}
-                </Link>
-              </div>
             </div>
           ) : (
             <>

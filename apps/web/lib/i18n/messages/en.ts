@@ -116,7 +116,8 @@ export const en: PlatformMessages = {
     campaignsLead: "",
     progressCompleted: "campaigns finished",
     loadFailed: "Could not load campaigns",
-    loadFailedHint: "Check the API is running, then retry.",
+    loadFailedHint:
+      "Please create your Canton wallet first to access Earn and Spin Reward.",
     noCampaignsHint: "No campaigns yet — try Quest for daily tasks.",
     tryOtherTab: "Try another tab above, or clear your search.",
     showingCount: "{count} {status} campaigns",
