@@ -66,14 +66,18 @@ export class TwitterController {
       );
     }
 
-    const resolved = await this.twitterApi.resolveUser(normalized);
+    const resolved = await this.twitterApi.fetchUserProfile(normalized);
     const now = new Date();
     await this.prisma.user.update({
       where: { id: req.user.userId },
       data: {
         twitterUsername: resolved.username,
         twitterUserId: resolved.userId,
+        twitterAvatarUrl: resolved.profileImageUrl,
         twitterConnectedAt: now,
+        ...(resolved.displayName
+          ? { displayName: resolved.displayName }
+          : {}),
       },
     });
 

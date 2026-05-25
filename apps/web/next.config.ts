@@ -22,6 +22,11 @@ const nextConfig: NextConfig = {
         hostname: "api.canquest.cc",
         pathname: "/quest-media/**",
       },
+      {
+        protocol: "https",
+        hostname: "pbs.twimg.com",
+        pathname: "/**",
+      },
     ],
   },
 

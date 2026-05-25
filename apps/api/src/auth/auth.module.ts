@@ -3,13 +3,16 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { UsersModule } from '../users/users.module';
+import { TwitterModule } from '../twitter/twitter.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { ResendEmailService } from './resend-email.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
   imports: [
     UsersModule,
+    TwitterModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -21,7 +24,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, ResendEmailService, JwtStrategy],
   exports: [AuthService, JwtModule, PassportModule, JwtStrategy],
 })
 export class AuthModule {}

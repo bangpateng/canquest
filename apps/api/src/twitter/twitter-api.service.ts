@@ -6,10 +6,21 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  pickTwitterDisplayName,
+  pickTwitterProfileImage,
+} from './twitter-avatar.util';
+import {
   normalizeTwitterUsername,
   parseTweetIdFromTarget,
   parseTwitterFollowTarget,
 } from './twitter-target.util';
+
+export type TwitterUserProfile = {
+  username: string;
+  userId: string | null;
+  displayName: string | null;
+  profileImageUrl: string | null;
+};
 
 type TwitterApiEnvelope<T> = {
   status?: string;
@@ -67,6 +78,12 @@ export class TwitterApiService {
 
   /** Validate handle exists on X and return canonical username + id when available. */
   async resolveUser(username: string): Promise<{ username: string; userId: string | null }> {
+    const profile = await this.fetchUserProfile(username);
+    return { username: profile.username, userId: profile.userId };
+  }
+
+  /** Full profile for registration / leaderboard avatars (twitterapi.io). */
+  async fetchUserProfile(username: string): Promise<TwitterUserProfile> {
     const name = normalizeTwitterUsername(username);
     if (!name || !/^[a-z0-9_]{1,15}$/i.test(name)) {
       throw new BadRequestException('Invalid X username.');
@@ -86,11 +103,13 @@ export class TwitterApiService {
       nested.username ??
       data.userName ??
       name;
-    const resolved = String(resolvedRaw).replace(/^@/, '');
+    const resolved = normalizeTwitterUsername(String(resolvedRaw).replace(/^@/, ''));
     const idRaw = nested.id ?? nested.userId ?? data.id;
     return {
-      username: normalizeTwitterUsername(resolved),
+      username: resolved,
       userId: idRaw != null ? String(idRaw).trim() : null,
+      displayName: pickTwitterDisplayName(data),
+      profileImageUrl: pickTwitterProfileImage(data),
     };
   }
 

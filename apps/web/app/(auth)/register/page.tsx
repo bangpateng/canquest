@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { clearReferralRef, getReferralRef, storeReferralRef } from "@/lib/referral-ref";
-
 import { ArrowRight, Loader2 } from "lucide-react";
 import { AuthCard, authInputClass } from "@/components/auth/auth-card";
+import { TurnstileField } from "@/components/platform/turnstile-field";
 import { buttonVariants } from "@/components/ui/button";
-import { PasswordInput } from "@/components/ui/password-input";
 import { formatApiError } from "@/lib/format-api-error";
+import { register, verifyOtp } from "@/lib/services/api/auth";
 import { cn } from "@/lib/utils";
 
 type PendingOtp = { userId: string; devOtp?: string };
@@ -18,6 +18,8 @@ export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [pendingOtp, setPendingOtp] = useState<PendingOtp | null>(null);
   const [referralDefault, setReferralDefault] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileKey, setTurnstileKey] = useState(0);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -30,45 +32,26 @@ export default function RegisterPage() {
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+    const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim();
+    if (siteKey && !turnstileToken) {
+      setError("Complete the captcha before continuing.");
+      return;
+    }
 
     const fd = new FormData(e.currentTarget);
-    const displayName = String(fd.get("displayName") ?? "").trim();
-    const email = String(fd.get("email") ?? "").trim();
-    const password = String(fd.get("password") ?? "");
     const referralRaw =
       String(fd.get("referralCode") ?? "").trim() || getReferralRef() || undefined;
 
     setBusy(true);
     try {
-      const res = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          displayName,
-          email,
-          password,
-          referralCode: referralRaw,
-        }),
+      const payload = await register({
+        email: String(fd.get("email") ?? ""),
+        twitterUsername: String(fd.get("twitterUsername") ?? ""),
+        referralCode: referralRaw,
+        turnstileToken: turnstileToken ?? "",
       });
 
-      const payloadUnknown: unknown = await res.json().catch(() => null);
-
-      if (!res.ok) {
-        setError(formatApiError(payloadUnknown, "Registration failed."));
-        return;
-      }
-
-      const payload =
-        payloadUnknown && typeof payloadUnknown === "object"
-          ? (payloadUnknown as Record<string, unknown>)
-          : null;
-
-      if (!payload) {
-        setError("Unexpected response from registration. Try again.");
-        return;
-      }
-
-      if (typeof payload.ok === "boolean" && payload.ok === true) {
+      if (payload.ok === true) {
         clearReferralRef();
         window.location.assign("/overview");
         return;
@@ -84,6 +67,10 @@ export default function RegisterPage() {
       }
 
       setError("Unexpected response from registration. Try again.");
+    } catch (err) {
+      setError(formatApiError(err, "Registration failed."));
+      setTurnstileKey((k) => k + 1);
+      setTurnstileToken(null);
     } finally {
       setBusy(false);
     }
@@ -93,34 +80,21 @@ export default function RegisterPage() {
     e.preventDefault();
     if (!pendingOtp) return;
     setError(null);
-
     const fd = new FormData(e.currentTarget);
-    const code = String(fd.get("code") ?? "").trim();
-
     setBusy(true);
     try {
-      const res = await fetch("/api/auth/verify-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: pendingOtp.userId, code }),
-      });
-
-      const payload = await res.json().catch(() => null);
-
-      if (!res.ok) {
-        setError(formatApiError(payload, "Verification failed."));
-        return;
-      }
-
+      await verifyOtp(pendingOtp.userId, String(fd.get("code") ?? "").trim());
       clearReferralRef();
       window.location.assign("/overview");
+    } catch (err) {
+      setError(formatApiError(err, "Verification failed."));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <AuthCard title="Create account" subtitle="Join quests and earn on Canton">
+    <AuthCard title="Create account" subtitle="Email + X username — verify with OTP">
       {error ? (
         <div
           className="mt-6 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-sm text-red-300"
@@ -133,22 +107,6 @@ export default function RegisterPage() {
       {!pendingOtp ? (
         <form className="mt-8 space-y-4" onSubmit={onSubmit}>
           <div className="space-y-1.5">
-            <label htmlFor="reg-name" className="text-xs font-medium text-[var(--muted-foreground)]">
-              Display name
-            </label>
-            <input
-              id="reg-name"
-              name="displayName"
-              type="text"
-              autoComplete="name"
-              placeholder="Your Name"
-              required
-              minLength={2}
-              maxLength={80}
-              className={authInputClass}
-            />
-          </div>
-          <div className="space-y-1.5">
             <label htmlFor="reg-email" className="text-xs font-medium text-[var(--muted-foreground)]">
               Email
             </label>
@@ -157,19 +115,28 @@ export default function RegisterPage() {
               name="email"
               type="email"
               autoComplete="email"
-              placeholder="Your Email"
+              placeholder="you@example.com"
               required
               className={authInputClass}
             />
           </div>
-          <PasswordInput
-            id="reg-password"
-            label="Password"
-            autoComplete="new-password"
-            placeholder="Minimum 8 characters"
-            minLength={8}
-            inputClassName="bg-[var(--muted)]/80"
-          />
+          <div className="space-y-1.5">
+            <label htmlFor="reg-x" className="text-xs font-medium text-[var(--muted-foreground)]">
+              X (Twitter) username
+            </label>
+            <div className="flex rounded-xl border border-[var(--border)] bg-[var(--muted)]/80 focus-within:border-[var(--primary)]/40 focus-within:ring-2 focus-within:ring-[var(--ring)]">
+              <span className="flex items-center pl-3 text-sm text-[var(--muted-foreground)]">@</span>
+              <input
+                id="reg-x"
+                name="twitterUsername"
+                required
+                maxLength={15}
+                pattern="[A-Za-z0-9_]+"
+                placeholder="yourhandle"
+                className="min-w-0 flex-1 bg-transparent py-2.5 pr-3 text-sm outline-none"
+              />
+            </div>
+          </div>
           <div className="space-y-1.5">
             <label htmlFor="reg-referral" className="text-xs font-medium text-[var(--muted-foreground)]">
               Referral code (optional)
@@ -185,14 +152,7 @@ export default function RegisterPage() {
               className={authInputClass}
             />
           </div>
-          <label className="flex cursor-pointer items-start gap-2 text-xs leading-relaxed text-[var(--muted-foreground)]">
-            <input
-              type="checkbox"
-              required
-              className="mt-1 h-4 w-4 shrink-0 rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--ring)]"
-            />
-            <span>I agree to the fictitious Terms for this prototype (no legal effect).</span>
-          </label>
+          <TurnstileField resetKey={turnstileKey} onToken={setTurnstileToken} />
           <button
             type="submit"
             disabled={busy}
@@ -202,49 +162,32 @@ export default function RegisterPage() {
             )}
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            {busy ? "Creating…" : "Create account"}
+            {busy ? "Sending code…" : "Create account"}
             {!busy && <ArrowRight className="h-4 w-4" />}
           </button>
         </form>
       ) : (
         <form className="mt-8 space-y-5" onSubmit={onVerifyOtp}>
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/30 px-3 py-2.5 text-xs text-[var(--muted-foreground)]">
-            <p>
-              OTP sent (or staged in dev). Enter the six-digit code to verify{" "}
-              <span className="font-mono text-[var(--foreground)]">{pendingOtp.userId.slice(0, 8)}…</span>.
-            </p>
-            {pendingOtp.devOtp ? (
-              <p className="mt-2 font-mono text-sm text-[var(--foreground)]">Dev OTP: {pendingOtp.devOtp}</p>
-            ) : null}
-          </div>
+          {pendingOtp.devOtp ? (
+            <p className="font-mono text-sm text-canton">Dev OTP: {pendingOtp.devOtp}</p>
+          ) : null}
           <div className="space-y-1.5">
             <label htmlFor="reg-otp" className="text-xs font-medium text-[var(--muted-foreground)]">
-              OTP code
+              Verification code
             </label>
             <input
               id="reg-otp"
               name="code"
               inputMode="numeric"
-              pattern="[0-9]{6}"
               maxLength={6}
-              placeholder="••••••"
+              placeholder="000000"
               required
-              className="w-full rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2.5 text-center font-mono text-lg tracking-[0.4em] outline-none ring-offset-[var(--card)] focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2.5 text-center font-mono text-lg tracking-[0.4em] outline-none"
             />
           </div>
-          <div className="flex flex-wrap gap-2">
-            <button type="submit" disabled={busy} className={cn(buttonVariants({ size: "default" }), "flex-1")}>
-              {busy ? "Verifying…" : "Verify & enter app"}
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              className={cn(buttonVariants({ variant: "secondary", size: "default" }))}
-              onClick={() => setPendingOtp(null)}
-            >
-              Back
-            </button>
-          </div>
+          <button type="submit" disabled={busy} className={cn(buttonVariants(), "w-full")}>
+            {busy ? "Verifying…" : "Verify & enter app"}
+          </button>
         </form>
       )}
 
@@ -254,13 +197,6 @@ export default function RegisterPage() {
           Sign In
         </Link>
       </p>
-
-      <Link
-        href="/"
-        className="mt-4 block text-center text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-      >
-        ← Back to home
-      </Link>
     </AuthCard>
   );
 }

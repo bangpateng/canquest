@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { TurnstileField } from "@/components/platform/turnstile-field";
 import { buttonVariants } from "@/components/ui/button";
 import { formatApiError } from "@/lib/format-api-error";
 import { cn } from "@/lib/utils";
@@ -27,6 +28,8 @@ export function SettingsTwitterPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileKey, setTurnstileKey] = useState(0);
 
   const refresh = useCallback(async () => {
     const res = await fetch("/api/twitter/status", {
@@ -49,6 +52,11 @@ export function SettingsTwitterPanel({
     e.preventDefault();
     const val = input.trim().replace(/^@/, "");
     if (!val) return;
+    const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim();
+    if (siteKey && !turnstileToken) {
+      setError("Complete the captcha before connecting.");
+      return;
+    }
     setBusy(true);
     setError(null);
     setSuccess(null);
@@ -57,7 +65,7 @@ export function SettingsTwitterPanel({
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: val }),
+        body: JSON.stringify({ username: val, turnstileToken: turnstileToken ?? "" }),
       });
       const data = (await res.json().catch(() => null)) as {
         ok?: boolean;
@@ -66,6 +74,8 @@ export function SettingsTwitterPanel({
       } | null;
       if (!res.ok) {
         setError(formatApiError(data));
+        setTurnstileKey((k) => k + 1);
+        setTurnstileToken(null);
         return;
       }
       const name = data?.username ?? val;
@@ -74,6 +84,8 @@ export function SettingsTwitterPanel({
       onConnected?.(name);
     } catch {
       setError("Network error — try again.");
+      setTurnstileKey((k) => k + 1);
+      setTurnstileToken(null);
     } finally {
       setBusy(false);
     }
@@ -166,6 +178,7 @@ export function SettingsTwitterPanel({
               />
             </div>
           </div>
+          <TurnstileField resetKey={turnstileKey} onToken={setTurnstileToken} />
           <button
             type="submit"
             disabled={busy || !input.trim()}

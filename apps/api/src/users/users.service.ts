@@ -45,6 +45,10 @@ export class UsersService {
     referredById?: string | null;
     referralCode?: string;
     emailVerified?: boolean;
+    twitterUsername?: string | null;
+    twitterUserId?: string | null;
+    twitterAvatarUrl?: string | null;
+    twitterConnectedAt?: Date | null;
   }) {
     return this.prisma.user.create({
       data: {
@@ -55,7 +59,18 @@ export class UsersService {
         referredById: params.referredById ?? null,
         referralCode: params.referralCode ?? null,
         emailVerified: params.emailVerified ?? false,
+        twitterUsername: params.twitterUsername ?? null,
+        twitterUserId: params.twitterUserId ?? null,
+        twitterAvatarUrl: params.twitterAvatarUrl ?? null,
+        twitterConnectedAt: params.twitterConnectedAt ?? null,
       },
+    });
+  }
+
+  findByTwitterUsername(username: string) {
+    const normalized = username.trim().replace(/^@/, '').toLowerCase();
+    return this.prisma.user.findFirst({
+      where: { twitterUsername: { equals: normalized, mode: 'insensitive' } },
     });
   }
 

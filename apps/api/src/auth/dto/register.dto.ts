@@ -1,42 +1,18 @@
-import { IsEmail, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
-
-
+import { IsEmail, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 export class RegisterDto {
-
-  @IsString()
-
-  @MinLength(2)
-
-  @MaxLength(80)
-
-  displayName!: string;
-
-
-
   @IsEmail()
-
   email!: string;
 
-
-
+  /** X (Twitter) handle — used for profile + quest verification. */
   @IsString()
-
-  @MinLength(8)
-
-  password!: string;
-
-
-
-  /** Friend's referral code (optional) — referrer earns points after you verify email */
+  @MinLength(1)
+  @MaxLength(15)
+  @Matches(/^[a-zA-Z0-9_]+$/, { message: 'X username may only contain letters, numbers, and underscore' })
+  twitterUsername!: string;
 
   @IsOptional()
-
   @IsString()
-
   @MaxLength(32)
-
   referralCode?: string;
-
 }
-

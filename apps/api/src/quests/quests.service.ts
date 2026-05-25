@@ -22,6 +22,7 @@ import {
 } from '../canton/quest-ledger.service';
 import { SpliceValidatorService } from '../canton/splice-validator.service';
 import { ProfileAvatarService } from '../users/profile-avatar.service';
+import { resolvePublicAvatarUrl } from '../users/user-avatar-url';
 import { UsersService } from '../users/users.service';
 import { TwitterApiService } from '../twitter/twitter-api.service';
 
@@ -1189,6 +1190,7 @@ export class QuestsService {
           cantonPartyId: true,
           earnPoints: true,
           avatarPath: true,
+          twitterAvatarUrl: true,
         },
         orderBy: { earnPoints: 'desc' },
       });
@@ -1202,9 +1204,7 @@ export class QuestsService {
         displayName: u.displayName ?? u.username ?? 'Unknown',
         cantonPartyId: u.cantonPartyId,
         points: u.earnPoints,
-        avatarUrl: this.avatars.hasAvatar(u.avatarPath)
-          ? this.avatars.avatarPublicPath(u.id)
-          : null,
+        avatarUrl: resolvePublicAvatarUrl(this.avatars, u),
       }));
       return { rows, total, page, pageSize };
     }
@@ -1282,7 +1282,12 @@ export class QuestsService {
     const userIds = pageRows.map((u) => u.userId);
     const profileRows = await this.prisma.user.findMany({
       where: { id: { in: userIds } },
-      select: { id: true, avatarPath: true, cantonPartyId: true },
+      select: {
+        id: true,
+        avatarPath: true,
+        cantonPartyId: true,
+        twitterAvatarUrl: true,
+      },
     });
     const profileByUser = new Map(profileRows.map((r) => [r.id, r]));
 
@@ -1295,8 +1300,8 @@ export class QuestsService {
         displayName: u.displayName ?? u.username ?? 'Unknown',
         cantonPartyId: profile?.cantonPartyId ?? u.cantonPartyId ?? null,
         points: u.points,
-        avatarUrl: this.avatars.hasAvatar(profile?.avatarPath)
-          ? this.avatars.avatarPublicPath(u.userId)
+        avatarUrl: profile
+          ? resolvePublicAvatarUrl(this.avatars, profile)
           : null,
       };
     });

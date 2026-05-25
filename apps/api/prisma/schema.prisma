@@ -39,6 +39,8 @@ model User {
   /// Linked X (Twitter) handle for social task verification (twitterapi.io).
   twitterUsername   String?   @unique
   twitterUserId     String?
+  /// High-res X avatar URL (pbs.twimg.com, _400x400) — not stored on VPS disk.
+  twitterAvatarUrl  String?
   twitterConnectedAt DateTime?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt

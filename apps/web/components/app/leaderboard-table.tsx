@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { ListPagination } from "@/components/app/list-pagination";
 import { filterTabClass } from "@/lib/ui-button-styles";
 import { cn } from "@/lib/utils";
@@ -56,6 +57,14 @@ function avatarGradient(username: string): string {
   return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length]!;
 }
 
+function isTwitterCdn(url: string): boolean {
+  try {
+    return new URL(url).hostname === "pbs.twimg.com";
+  } catch {
+    return false;
+  }
+}
+
 function ParticipantCell({
   row,
   isCurrentUser,
@@ -67,6 +76,7 @@ function ParticipantCell({
     row.avatarUrl && !row.avatarUrl.includes("?")
       ? `${row.avatarUrl}?v=${row.userId}`
       : row.avatarUrl;
+  const useNextImage = cacheBust && isTwitterCdn(cacheBust);
 
   return (
     <td className="px-3 py-3">
@@ -80,13 +90,18 @@ function ParticipantCell({
               : { backgroundImage: avatarGradient(row.username) }
           }
         >
-          {cacheBust ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+          {useNextImage ? (
+            <Image
               src={cacheBust}
               alt=""
+              width={44}
+              height={44}
               className="h-full w-full object-cover"
+              unoptimized
             />
+          ) : cacheBust ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={cacheBust} alt="" className="h-full w-full object-cover" />
           ) : (
             <span className="type-micro-label text-white drop-shadow-sm">
               {getInitials(row.displayName)}
@@ -135,8 +150,8 @@ export function LeaderboardTable() {
       setLoading(true);
       try {
         const res = await fetch(
-          `/api/quests/leaderboard?period=${per}&page=${p}&pageSize=${LEADERBOARD_PAGE_SIZE}`,
-          { credentials: "include", signal: AbortSignal.timeout(12_000) },
+          `/api/leaderboard?period=${per}&page=${p}&pageSize=${LEADERBOARD_PAGE_SIZE}`,
+          { cache: "no-store", signal: AbortSignal.timeout(12_000) },
         );
         if (res.ok) setData((await res.json()) as LeaderboardData);
         else setData({ rows: [], total: 0, page: p, pageSize: LEADERBOARD_PAGE_SIZE });

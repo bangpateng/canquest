@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { X, Loader2, ArrowRight } from "lucide-react";
 import { useAuthModal, type AuthModalMode } from "@/components/platform/auth-context";
+import { TurnstileField } from "@/components/platform/turnstile-field";
 import { buttonVariants } from "@/components/ui/button";
-import { PasswordInput } from "@/components/ui/password-input";
 import { formatApiError } from "@/lib/format-api-error";
 import { login, register, verifyOtp } from "@/lib/services/api/auth";
 import { clearReferralRef, getReferralRef } from "@/lib/referral-ref";
@@ -18,14 +18,17 @@ const inputClass =
 function Field({
   label,
   children,
+  hint,
 }: {
   label: string;
   children: React.ReactNode;
+  hint?: string;
 }) {
   return (
     <div className="space-y-1.5">
       <label className="text-xs font-medium text-[var(--muted-foreground)]">{label}</label>
       {children}
+      {hint ? <p className="text-[11px] text-[var(--muted-foreground)]">{hint}</p> : null}
     </div>
   );
 }
@@ -36,15 +39,26 @@ export function AuthModal() {
   const [error, setError] = useState<string | null>(null);
   const [pendingOtp, setPendingOtp] = useState<PendingOtp | null>(null);
   const [referralDefault, setReferralDefault] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileKey, setTurnstileKey] = useState(0);
 
   useEffect(() => {
     if (!open) {
       setError(null);
       setPendingOtp(null);
+      setTurnstileToken(null);
     } else {
       setReferralDefault(getReferralRef());
+      setTurnstileKey((k) => k + 1);
     }
   }, [open]);
+
+  useEffect(() => {
+    if (open) {
+      setTurnstileToken(null);
+      setTurnstileKey((k) => k + 1);
+    }
+  }, [open, mode, pendingOtp]);
 
   if (!open) return null;
 
@@ -55,17 +69,42 @@ export function AuthModal() {
     window.location.assign(safe);
   }
 
+  function requireTurnstile(): boolean {
+    const secretConfigured =
+      typeof process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY === "string" &&
+      process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY.length > 0;
+    if (!secretConfigured) return true;
+    if (!turnstileToken) {
+      setError("Complete the captcha before continuing.");
+      return false;
+    }
+    return true;
+  }
+
   async function onLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+    if (!requireTurnstile()) return;
     const fd = new FormData(e.currentTarget);
     setBusy(true);
     try {
-      await login(String(fd.get("email") ?? ""), String(fd.get("password") ?? ""));
-      closeAuth();
-      redirectAfterAuth();
+      const payload = await login(
+        String(fd.get("email") ?? ""),
+        turnstileToken ?? "",
+      );
+      const userId = typeof payload.userId === "string" ? payload.userId : null;
+      if (!userId) {
+        setError("Unexpected response. Try again.");
+        return;
+      }
+      const rawOtp = payload.devOtp;
+      const devOtp =
+        typeof rawOtp === "string" && /^[0-9]{6}$/.test(rawOtp) ? rawOtp : undefined;
+      setPendingOtp({ userId, devOtp });
     } catch (err) {
-      setError(formatApiError(err, "Unable to sign in."));
+      setError(formatApiError(err, "Unable to send sign-in code."));
+      setTurnstileKey((k) => k + 1);
+      setTurnstileToken(null);
     } finally {
       setBusy(false);
     }
@@ -74,16 +113,17 @@ export function AuthModal() {
   async function onRegister(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+    if (!requireTurnstile()) return;
     const fd = new FormData(e.currentTarget);
     setBusy(true);
     try {
       const referralRaw =
         String(fd.get("referralCode") ?? "").trim() || getReferralRef() || undefined;
       const payload = await register({
-        displayName: String(fd.get("displayName") ?? ""),
         email: String(fd.get("email") ?? ""),
-        password: String(fd.get("password") ?? ""),
+        twitterUsername: String(fd.get("twitterUsername") ?? ""),
         referralCode: referralRaw,
+        turnstileToken: turnstileToken ?? "",
       });
       if (payload.ok === true) {
         clearReferralRef();
@@ -102,6 +142,8 @@ export function AuthModal() {
       setError("Unexpected response. Try again.");
     } catch (err) {
       setError(formatApiError(err, "Registration failed."));
+      setTurnstileKey((k) => k + 1);
+      setTurnstileToken(null);
     } finally {
       setBusy(false);
     }
@@ -136,10 +178,10 @@ export function AuthModal() {
       ? "Welcome back"
       : "Create account";
   const subtitle = pendingOtp
-    ? "Enter the 6-digit code we sent you"
+    ? "Enter the 6-digit code we sent to your email"
     : mode === "login"
-      ? "Sign in to continue to CanQuest"
-      : "Join quests and earn on Canton";
+      ? "We will email you a one-time sign-in code"
+      : "Email + X username — passwordless, secured with captcha";
 
   return (
     <div
@@ -158,7 +200,6 @@ export function AuthModal() {
         <div className="gradient-mesh pointer-events-none absolute inset-0 opacity-30" />
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[var(--primary)]/50 to-transparent" />
 
-        {/* Header */}
         <div className="relative px-6 pb-4 pt-6">
           <button
             type="button"
@@ -169,10 +210,7 @@ export function AuthModal() {
           </button>
 
           <div className="pr-8">
-            <h2
-              id="auth-modal-title"
-              className="type-page-title"
-            >
+            <h2 id="auth-modal-title" className="type-page-title">
               {title}
             </h2>
             <p className="mt-1 text-sm text-[var(--muted-foreground)]">{subtitle}</p>
@@ -202,7 +240,6 @@ export function AuthModal() {
           )}
         </div>
 
-        {/* Body */}
         <div className="relative border-t border-[var(--border)] px-6 py-6">
           {error && (
             <div
@@ -248,17 +285,11 @@ export function AuthModal() {
                   type="email"
                   required
                   autoComplete="email"
-                  placeholder="Your Email"
+                  placeholder="you@example.com"
                   className={inputClass}
                 />
               </Field>
-              <PasswordInput
-                id="auth-login-password"
-                label="Password"
-                autoComplete="current-password"
-                placeholder="Your password"
-                inputClassName="bg-[var(--muted)]/80"
-              />
+              <TurnstileField resetKey={turnstileKey} onToken={setTurnstileToken} />
               <button
                 type="submit"
                 disabled={busy}
@@ -268,7 +299,7 @@ export function AuthModal() {
                 )}
               >
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Sign In
+                {busy ? "Sending code…" : "Email me a sign-in code"}
                 {!busy && <ArrowRight className="h-4 w-4" />}
               </button>
               <p className="text-center text-sm text-[var(--muted-foreground)]">
@@ -287,33 +318,35 @@ export function AuthModal() {
             </form>
           ) : (
             <form onSubmit={onRegister} className="space-y-4">
-              <Field label="Display name">
-                <input
-                  name="displayName"
-                  required
-                  autoComplete="name"
-                  placeholder="Your name"
-                  className={inputClass}
-                />
-              </Field>
               <Field label="Email">
                 <input
                   name="email"
                   type="email"
                   required
                   autoComplete="email"
-                  placeholder="Your Email"
+                  placeholder="you@example.com"
                   className={inputClass}
                 />
               </Field>
-              <PasswordInput
-                id="auth-register-password"
-                label="Password"
-                autoComplete="new-password"
-                placeholder="Minimum 8 characters"
-                minLength={8}
-                inputClassName="bg-[var(--muted)]/80"
-              />
+              <Field
+                label="X (Twitter) username"
+                hint="We fetch your public profile photo for the leaderboard — nothing stored on our server."
+              >
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[var(--muted-foreground)]">
+                    @
+                  </span>
+                  <input
+                    name="twitterUsername"
+                    required
+                    autoComplete="username"
+                    placeholder="yourhandle"
+                    maxLength={15}
+                    pattern="[A-Za-z0-9_]+"
+                    className={cn(inputClass, "pl-8")}
+                  />
+                </div>
+              </Field>
               <Field label="Referral code (optional)">
                 <input
                   name="referralCode"
@@ -323,6 +356,7 @@ export function AuthModal() {
                   defaultValue={referralDefault}
                 />
               </Field>
+              <TurnstileField resetKey={turnstileKey} onToken={setTurnstileToken} />
               <button
                 type="submit"
                 disabled={busy}
@@ -332,7 +366,7 @@ export function AuthModal() {
                 )}
               >
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                {busy ? "Creating account…" : "Create account"}
+                {busy ? "Sending code…" : "Create account"}
                 {!busy && <ArrowRight className="h-4 w-4" />}
               </button>
               <p className="text-center text-sm text-[var(--muted-foreground)]">

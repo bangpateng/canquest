@@ -9,34 +9,35 @@ export interface Me {
   avatarUrl?: string | null;
 }
 
-export function login(email: string, password: string) {
-  return apiFetch('/api/auth/login', {
+export function login(email: string, turnstileToken: string) {
+  return apiFetch<Record<string, unknown>>('/api/auth/login', {
     method: 'POST',
-    json: { email: email.trim().toLowerCase(), password },
+    json: { email: email.trim().toLowerCase(), turnstileToken },
   });
 }
 
 export function register(params: {
-  displayName: string;
   email: string;
-  password: string;
+  twitterUsername: string;
   referralCode?: string;
+  turnstileToken: string;
 }) {
+  const handle = params.twitterUsername.trim().replace(/^@/, '');
   return apiFetch<Record<string, unknown>>('/api/auth/register', {
     method: 'POST',
     json: {
-      displayName: params.displayName.trim(),
       email: params.email.trim().toLowerCase(),
-      password: params.password,
+      twitterUsername: handle,
       referralCode: params.referralCode?.trim() || undefined,
+      turnstileToken: params.turnstileToken,
     },
   });
 }
 
-export function verifyOtp(userId: string, otp: string) {
+export function verifyOtp(userId: string, code: string) {
   return apiFetch('/api/auth/verify-otp', {
     method: 'POST',
-    json: { userId, otp },
+    json: { userId, code: code.trim() },
   });
 }
 
