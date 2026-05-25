@@ -34,7 +34,7 @@ model User {
   cantonPartyId  String?
   /// Admin flag — set via ADMIN_EMAILS env or manually.
   isAdmin        Boolean         @default(false)
-  /// CanQuest Earn menu points (redeem / streak — separate from quest task points).
+  /// Lifetime earn points (quest/earn tasks, completion bonus, spin prizes, referral) — synced via PointsService.
   earnPoints     Int             @default(0)
   /// Linked X (Twitter) handle for social task verification (twitterapi.io).
   twitterUsername   String?   @unique

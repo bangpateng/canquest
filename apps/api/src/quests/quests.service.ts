@@ -23,6 +23,7 @@ import {
 import { SpliceValidatorService } from '../canton/splice-validator.service';
 import { ProfileAvatarService } from '../users/profile-avatar.service';
 import { resolvePublicAvatarUrl } from '../users/user-avatar-url';
+import { PointsService } from '../users/points.service';
 import { UsersService } from '../users/users.service';
 import { hydrateTwitterAvatarUrls } from '../twitter/hydrate-twitter-avatars';
 import { TwitterApiService } from '../twitter/twitter-api.service';
@@ -67,6 +68,7 @@ export class QuestsService {
     private readonly questLedger: QuestLedgerService,
     private readonly avatars: ProfileAvatarService,
     private readonly users: UsersService,
+    private readonly points: PointsService,
     private readonly twitterApi: TwitterApiService,
     private readonly splice: SpliceValidatorService,
     private readonly config: ConfigService,
@@ -1182,125 +1184,27 @@ export class QuestsService {
     /* ─── Leaderboard ─── */
 
   /**
-   * Build leaderboard from quest completions + transaction data.
-   * Returns top users sorted by total points (quest submissions * points).
+   * Leaderboard — satu rumus poin untuk weekly / monthly / all-time:
+   * task earn + quest/campaign bonus + spin (points prize) + referral.
    */
   async getLeaderboard(
     period: 'weekly' | 'monthly' | 'all',
     page = 1,
     pageSize = 10,
   ): Promise<{ rows: LeaderboardRow[]; total: number; page: number; pageSize: number }> {
-    if (period === 'all') {
-      const users = await this.prisma.user.findMany({
-        where: { earnPoints: { gt: 0 } },
-        select: {
-          id: true,
-          username: true,
-          displayName: true,
-          twitterUsername: true,
-          cantonPartyId: true,
-          earnPoints: true,
-          twitterAvatarUrl: true,
-        },
-        orderBy: { earnPoints: 'desc' },
-      });
-      const total = users.length;
-      const skip = (page - 1) * pageSize;
-      const pageUsers = users.slice(skip, skip + pageSize);
-      const hydrated = await hydrateTwitterAvatarUrls(
-        this.prisma,
-        this.twitterApi,
-        pageUsers,
-        this.logger,
-      );
-      const rows: LeaderboardRow[] = pageUsers.map((u, i) => ({
-        rank: skip + i + 1,
-        userId: u.id,
-        username: u.username ?? 'unknown',
-        displayName: u.displayName ?? u.username ?? 'Unknown',
-        cantonPartyId: u.cantonPartyId,
-        points: u.earnPoints,
-        avatarUrl: hydrated.get(u.id) ?? resolvePublicAvatarUrl(u),
-        twitterUsername: u.twitterUsername,
-      }));
-      return { rows, total, page, pageSize };
-    }
-
-    const now = new Date();
-    let since: Date | undefined;
-    if (period === 'weekly') {
-      since = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    } else if (period === 'monthly') {
-      since = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    }
-
-    // Period boards: activity in range (tasks + campaign completion bonuses)
-    const subs = await this.prisma.questSubmission.findMany({
-      where: {
-        status: 'VERIFIED',
-        ...(since ? { verifiedAt: { gte: since } } : {}),
-      },
-      include: {
-        task: { select: { points: true } },
-        user: {
-          select: { id: true, username: true, displayName: true, cantonPartyId: true },
-        },
-      },
-    });
-
-    // Aggregate points per user
-    const pointsMap = new Map<
-      string,
-      {
-        userId: string;
-        username: string | null;
-        displayName: string | null;
-        cantonPartyId: string | null;
-        points: number;
-      }
-    >();
-    for (const s of subs) {
-      const existing = pointsMap.get(s.userId);
-      if (existing) {
-        existing.points += s.task.points;
-        if (!existing.cantonPartyId && s.user.cantonPartyId) {
-          existing.cantonPartyId = s.user.cantonPartyId;
-        }
-      } else {
-        pointsMap.set(s.userId, {
-          userId: s.user.id,
-          username: s.user.username,
-          displayName: s.user.displayName,
-          cantonPartyId: s.user.cantonPartyId,
-          points: s.task.points,
-        });
-      }
-    }
-
-    // Also include quest completions (bonus points = rewardCc * 10)
-    const completions = await this.prisma.questCompletion.findMany({
-      where: since ? { completedAt: { gte: since } } : {},
-      include: { quest: { select: { rewardCc: true } } },
-    });
-    for (const c of completions) {
-      const bonus = Math.round(c.quest.rewardCc * 10);
-      const existing = pointsMap.get(c.userId);
-      if (existing) {
-        existing.points += bonus;
-      }
-    }
-
-    // Sort descending
-    const sorted = [...pointsMap.values()].sort((a, b) => b.points - a.points);
+    const since = this.leaderboardSince(period);
+    const aggregated = await this.points.buildPointsByUser(since);
+    const sorted = aggregated.sort((a, b) => b.points - a.points);
     const total = sorted.length;
     const skip = (page - 1) * pageSize;
     const pageRows = sorted.slice(skip, skip + pageSize);
 
-    const userIds = pageRows.map((u) => u.userId);
+    const userIds = pageRows.map((u) => u.id);
     const profileRows = await this.prisma.user.findMany({
       where: { id: { in: userIds } },
       select: {
         id: true,
+        username: true,
         displayName: true,
         twitterUsername: true,
         cantonPartyId: true,
@@ -1316,16 +1220,17 @@ export class QuestsService {
       this.logger,
     );
 
-    const rows: LeaderboardRow[] = pageRows.map((u, i) => {
-      const profile = profileByUser.get(u.userId);
+    const rows: LeaderboardRow[] = pageRows.map((row, i) => {
+      const profile = profileByUser.get(row.id);
       return {
         rank: skip + i + 1,
-        userId: u.userId,
-        username: u.username ?? 'unknown',
-        displayName: profile?.displayName ?? u.displayName ?? u.username ?? 'Unknown',
+        userId: row.id,
+        username: row.username ?? profile?.username ?? 'unknown',
+        displayName:
+          row.displayName ?? profile?.displayName ?? row.username ?? 'Unknown',
         twitterUsername: profile?.twitterUsername ?? null,
-        cantonPartyId: profile?.cantonPartyId ?? u.cantonPartyId ?? null,
-        points: u.points,
+        cantonPartyId: row.cantonPartyId ?? profile?.cantonPartyId ?? null,
+        points: row.points,
         avatarUrl: profile
           ? (hydrated.get(profile.id) ?? resolvePublicAvatarUrl(profile))
           : null,
@@ -1333,6 +1238,14 @@ export class QuestsService {
     });
 
     return { rows, total, page, pageSize };
+  }
+
+  private leaderboardSince(period: 'weekly' | 'monthly' | 'all'): Date | undefined {
+    if (period === 'all') return undefined;
+    const now = Date.now();
+    const ms =
+      period === 'weekly' ? 7 * 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000;
+    return new Date(now - ms);
   }
 
   /* ─── User dashboard stats ─── */
@@ -1371,7 +1284,7 @@ export class QuestsService {
     totalPages: number;
   }> {
     const fetchCap = 100;
-    const [submissions, txs, completions] = await Promise.all([
+    const [submissions, txs, completions, spinWins, referrals] = await Promise.all([
       this.prisma.questSubmission.findMany({
         where: { userId, status: 'VERIFIED' },
         orderBy: { verifiedAt: 'desc' },
@@ -1388,6 +1301,17 @@ export class QuestsService {
         orderBy: { completedAt: 'desc' },
         take: fetchCap,
         include: { quest: { select: { title: true, rewardCc: true } } },
+      }),
+      this.prisma.spinResult.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take: fetchCap,
+        include: { spinItem: { select: { label: true, rewardType: true, rewardPoints: true } } },
+      }),
+      this.prisma.referralReward.findMany({
+        where: { referrerId: userId },
+        orderBy: { createdAt: 'desc' },
+        take: fetchCap,
       }),
     ]);
 
@@ -1408,6 +1332,27 @@ export class QuestsService {
         title: 'Task verified',
         detail: `${s.task.title} · +${s.task.points} pts`,
         time: (s.verifiedAt ?? s.submittedAt).toISOString(),
+      });
+    }
+
+    for (const r of spinWins) {
+      if (r.spinItem.rewardType !== 'points' || (r.spinItem.rewardPoints ?? 0) <= 0) {
+        continue;
+      }
+      items.push({
+        type: 'task_verified',
+        title: 'Spin reward',
+        detail: `${r.spinItem.label} · +${r.spinItem.rewardPoints} pts`,
+        time: r.createdAt.toISOString(),
+      });
+    }
+
+    for (const ref of referrals) {
+      items.push({
+        type: 'task_verified',
+        title: 'Referral reward',
+        detail: `Friend verified · +${ref.points} pts`,
+        time: ref.createdAt.toISOString(),
       });
     }
 

@@ -4,7 +4,8 @@ import {
   looksLikeQuestId,
   parseQuestIdFromRewardDescription,
 } from '../common/quest-reward-labels';
-import { CcTransactionType, SubmissionStatus } from '../common/prisma-types';
+import { CcTransactionType } from '../common/prisma-types';
+import { PointsService } from './points.service';
 import { CC_TRANSACTION_HISTORY_WHERE } from './cc-transaction-visibility';
 import {
   looksLikeCantonPartyId,
@@ -16,7 +17,10 @@ import {
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly points: PointsService,
+  ) {}
 
   findByEmail(email: string) {
     const normalized = email.trim().toLowerCase();
@@ -315,53 +319,8 @@ export class UsersService {
     });
   }
 
-  /**
-   * Align stored earnPoints with verified activity (keeps repeat daily check-ins via Math.max).
-   */
-  async reconcileEarnPoints(userId: string): Promise<number> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { earnPoints: true },
-    });
-    if (!user) return 0;
-
-    const [submissions, completions, spinWins] = await Promise.all([
-      this.prisma.questSubmission.findMany({
-        where: { userId, status: SubmissionStatus.VERIFIED },
-        include: { task: { select: { points: true } } },
-      }),
-      this.prisma.questCompletion.findMany({
-        where: { userId },
-        include: { quest: { select: { rewardCc: true } } },
-      }),
-      this.prisma.spinResult.findMany({
-        where: { userId },
-        include: { spinItem: { select: { rewardType: true, rewardPoints: true } } },
-      }),
-    ]);
-
-    let computed = submissions.reduce((sum, sub) => sum + sub.task.points, 0);
-    computed += completions.reduce(
-      (sum, c) => sum + Math.round(c.quest.rewardCc * 10),
-      0,
-    );
-    computed += spinWins
-      .filter((r) => r.spinItem.rewardType === 'points')
-      .reduce((sum, r) => sum + (r.spinItem.rewardPoints ?? 0), 0);
-
-    const referralSum = await this.prisma.referralReward.aggregate({
-      where: { referrerId: userId },
-      _sum: { points: true },
-    });
-    computed += referralSum._sum.points ?? 0;
-
-    const finalPoints = Math.max(user.earnPoints, computed);
-    if (finalPoints !== user.earnPoints) {
-      await this.prisma.user.update({
-        where: { id: userId },
-        data: { earnPoints: finalPoints },
-      });
-    }
-    return finalPoints;
+  /** Align User.earnPoints with quest + earn + spin + referral activity. */
+  reconcileEarnPoints(userId: string): Promise<number> {
+    return this.points.reconcileUserEarnPoints(userId);
   }
 }
