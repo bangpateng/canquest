@@ -79,6 +79,12 @@
     0 24px 48px rgb(0 0 0 / 35%);
 }
 
+@media (max-width: 768px) {
+  .glass-card {
+    backdrop-filter: blur(8px);
+  }
+}
+
 .glass-card-hover {
   transition: border-color 0.2s, box-shadow 0.2s;
 }
@@ -186,5 +192,103 @@
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+  }
+
+  .landing-fade-in {
+    animation: landing-fade-in-up 0.55s ease-out forwards;
+    opacity: 0;
+  }
+  .landing-fade-in-delay-1 {
+    animation-delay: 0.06s;
+  }
+  .landing-fade-in-delay-2 {
+    animation-delay: 0.12s;
+  }
+  .landing-fade-in-delay-3 {
+    animation-delay: 0.18s;
+  }
+  .landing-fade-in-delay-4 {
+    animation-delay: 0.24s;
+  }
+
+  .landing-menu-backdrop {
+    animation: landing-fade-in 0.2s ease-out forwards;
+  }
+  .landing-menu-panel {
+    animation: landing-slide-in-right 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
+  .landing-carousel-slide {
+    animation: landing-carousel-fade 0.4s ease-out forwards;
+  }
+  .landing-carousel-progress {
+    width: 0;
+    animation-name: landing-carousel-progress;
+    animation-timing-function: linear;
+    animation-fill-mode: forwards;
+  }
+}
+
+@keyframes landing-fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes landing-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes landing-slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes landing-carousel-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes landing-carousel-progress {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-fade-in,
+  .landing-menu-backdrop,
+  .landing-menu-panel,
+  .landing-carousel-slide,
+  .landing-carousel-progress {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+    width: 100%;
+  }
+
+  .particle-field {
+    opacity: 0.35;
   }
 }

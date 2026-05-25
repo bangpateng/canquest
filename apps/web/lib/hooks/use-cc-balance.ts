@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-const DEFAULT_POLL_MS = 15_000;
+const DEFAULT_POLL_MS = 30_000;
 
 type UseCcBalanceOptions = {
   /** When false, no fetch/poll (e.g. user has no wallet yet). */

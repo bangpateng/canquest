@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   LandingQuestCard,
@@ -25,12 +24,10 @@ export function FeaturedQuestCarousel({ quests }: { quests: Quest[] }) {
   const items = liveQuests(quests);
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
-  const [progress, setProgress] = useState(0);
 
   const go = useCallback(
     (delta: number) => {
       if (items.length === 0) return;
-      setProgress(0);
       setIndex((i) => (i + delta + items.length) % items.length);
     },
     [items.length],
@@ -38,28 +35,12 @@ export function FeaturedQuestCarousel({ quests }: { quests: Quest[] }) {
 
   useEffect(() => {
     setIndex((i) => (items.length ? i % items.length : 0));
-    setProgress(0);
   }, [items.length]);
 
   useEffect(() => {
     if (items.length <= 1 || paused) return;
-
-    const start = Date.now();
-    let frame: number;
-
-    const tick = () => {
-      const elapsed = Date.now() - start;
-      const p = Math.min(1, elapsed / ROTATE_MS);
-      setProgress(p);
-      if (p >= 1) {
-        go(1);
-        return;
-      }
-      frame = requestAnimationFrame(tick);
-    };
-
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
+    const id = window.setInterval(() => go(1), ROTATE_MS);
+    return () => window.clearInterval(id);
   }, [index, items.length, paused, go]);
 
   if (items.length === 0) return null;
@@ -70,23 +51,12 @@ export function FeaturedQuestCarousel({ quests }: { quests: Quest[] }) {
     <div
       className="relative"
       onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => {
-        setPaused(false);
-        setProgress(0);
-      }}
+      onMouseLeave={() => setPaused(false)}
     >
       <div className="relative overflow-hidden rounded-2xl">
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.div
-            key={current.id}
-            initial={{ opacity: 0, filter: "blur(8px)" }}
-            animate={{ opacity: 1, filter: "blur(0px)" }}
-            exit={{ opacity: 0, filter: "blur(6px)" }}
-            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-          >
-            <LandingQuestCard quest={current} variant={CARD_VARIANT} />
-          </motion.div>
-        </AnimatePresence>
+        <div key={current.id} className="landing-carousel-slide">
+          <LandingQuestCard quest={current} variant={CARD_VARIANT} />
+        </div>
 
         {items.length > 1 ? (
           <>
@@ -114,8 +84,16 @@ export function FeaturedQuestCarousel({ quests }: { quests: Quest[] }) {
         <div className="mt-5 space-y-3">
           <div className="h-0.5 overflow-hidden rounded-full bg-[var(--muted)]">
             <div
-              className="h-full rounded-full bg-[var(--primary)]"
-              style={{ width: `${progress * 100}%` }}
+              key={`progress-${current.id}-${paused ? "p" : "r"}`}
+              className={cn(
+                "h-full rounded-full bg-[var(--primary)]",
+                !paused && "landing-carousel-progress",
+              )}
+              style={
+                !paused
+                  ? ({ animationDuration: `${ROTATE_MS}ms` } satisfies CSSProperties)
+                  : undefined
+              }
             />
           </div>
           <div className="flex items-center justify-center gap-2">
@@ -125,10 +103,7 @@ export function FeaturedQuestCarousel({ quests }: { quests: Quest[] }) {
                 type="button"
                 aria-label={`Show ${q.title}`}
                 aria-current={i === index ? "true" : undefined}
-                onClick={() => {
-                  setProgress(0);
-                  setIndex(i);
-                }}
+                onClick={() => setIndex(i)}
                 className={cn(
                   "h-2 rounded-full transition-all",
                   i === index

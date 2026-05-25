@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
 import { LayoutGrid, Sparkles, Wallet, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { CanQuestLogo } from "@/components/brand/canquest-logo";
@@ -96,79 +95,64 @@ export function SiteHeader() {
         </LandingShell>
       </header>
 
-      <AnimatePresence>
-        {open ? (
-          <>
-            <motion.button
-              type="button"
-              aria-label="Close menu backdrop"
-              className="fixed inset-0 z-[60] bg-black/65 backdrop-blur-sm md:hidden"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              onClick={close}
-            />
-            <motion.nav
-              id="landing-mobile-nav"
-              aria-label="Mobile"
-              className="fixed inset-y-0 right-0 z-[70] flex w-[min(100vw,20rem)] flex-col border-l border-[var(--border)] bg-[var(--card)]/95 shadow-[-24px_0_64px_rgb(0_0_0/0.45)] backdrop-blur-2xl md:hidden"
-              initial={{ x: "100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "100%" }}
-              transition={{ type: "spring", damping: 28, stiffness: 320 }}
-            >
-              <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-[rgb(var(--canton-rgb)/0.08)] to-transparent" />
+      {open ? (
+        <>
+          <button
+            type="button"
+            aria-label="Close menu backdrop"
+            className="landing-menu-backdrop fixed inset-0 z-[60] bg-black/65 md:hidden"
+            onClick={close}
+          />
+          <nav
+            id="landing-mobile-nav"
+            aria-label="Mobile"
+            className="landing-menu-panel fixed inset-y-0 right-0 z-[70] flex w-[min(100vw,20rem)] flex-col border-l border-[var(--border)] bg-[var(--card)]/95 shadow-[-24px_0_64px_rgb(0_0_0/0.45)] max-md:backdrop-blur-xl md:hidden"
+          >
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-[rgb(var(--canton-rgb)/0.08)] to-transparent" />
 
-              <div className="relative flex items-center justify-between border-b border-[var(--border)] px-5 py-4">
-                <CanQuestLogo size="md" href="/" onClick={close} />
-                <button
-                  type="button"
-                  onClick={close}
-                  className={iconButtonClass("h-10 w-10 hover:text-canton")}
-                  aria-label="Close menu"
-                >
-                  <X className="h-5 w-5" strokeWidth={2} />
-                </button>
-              </div>
+            <div className="relative flex items-center justify-between border-b border-[var(--border)] px-5 py-4">
+              <CanQuestLogo size="md" href="/" onClick={close} />
+              <button
+                type="button"
+                onClick={close}
+                className={iconButtonClass("h-10 w-10 hover:text-canton")}
+                aria-label="Close menu"
+              >
+                <X className="h-5 w-5" strokeWidth={2} />
+              </button>
+            </div>
 
-              <ul className="relative flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-4">
-                {nav.map((item, index) => {
-                  const Icon = item.icon;
-                  return (
-                    <motion.li
-                      key={item.href}
-                      initial={{ opacity: 0, x: 12 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.05 + index * 0.04 }}
+            <ul className="relative flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-4">
+              {nav.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <li key={item.href}>
+                    <a
+                      href={item.href}
+                      onClick={close}
+                      className="group flex items-center gap-4 rounded-2xl px-3 py-3.5 transition-colors hover:bg-[var(--muted)]"
                     >
-                      <a
-                        href={item.href}
-                        onClick={close}
-                        className="group flex items-center gap-4 rounded-2xl px-3 py-3.5 transition-colors hover:bg-[var(--muted)]"
-                      >
-                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-canton-subtle ring-1 ring-[var(--primary)]/15">
-                          <Icon className="h-5 w-5 text-canton" />
+                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-canton-subtle ring-1 ring-[var(--primary)]/15">
+                        <Icon className="h-5 w-5 text-canton" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="type-subsection-title block">{item.label}</span>
+                        <span className="block text-xs text-[var(--muted-foreground)]">
+                          {item.description}
                         </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="type-subsection-title block">{item.label}</span>
-                          <span className="block text-xs text-[var(--muted-foreground)]">
-                            {item.description}
-                          </span>
-                        </span>
-                      </a>
-                    </motion.li>
-                  );
-                })}
-              </ul>
+                      </span>
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
 
-              <div className="relative space-y-3 border-t border-[var(--border)] px-5 py-4">
-                <LaunchAppButton size="lg" showArrow className="w-full justify-center" />
-              </div>
-            </motion.nav>
-          </>
-        ) : null}
-      </AnimatePresence>
+            <div className="relative space-y-3 border-t border-[var(--border)] px-5 py-4">
+              <LaunchAppButton size="lg" showArrow className="w-full justify-center" />
+            </div>
+          </nav>
+        </>
+      ) : null}
     </>
   );
 }

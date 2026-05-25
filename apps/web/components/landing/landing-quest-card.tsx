@@ -54,7 +54,13 @@ function QuestMark({ quest, size = "md" }: { quest: Quest; size?: "md" | "lg" })
   const text = quest.orgSlug.slice(0, 2).toUpperCase();
   if (quest.logoUrl) {
     return (
-      <img src={quest.logoUrl} alt="" className="h-full w-full object-cover" />
+      <img
+        src={quest.logoUrl}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        className="h-full w-full object-cover"
+      />
     );
   }
   return (

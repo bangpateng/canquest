@@ -25,7 +25,7 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
     loading: balanceLoading,
     refresh: fetchBalance,
     refreshWithRetries,
-  } = useCcBalance({ enabled: hasWallet });
+  } = useCcBalance({ enabled: hasWallet, pollIntervalMs: 45_000 });
   const [ccUsdPrice, setCcUsdPrice] = useState(0);
   const [txRefreshKey, setTxRefreshKey] = useState(0);
 

@@ -1,5 +1,5 @@
 import { ListChecks } from "lucide-react";
-import { FeaturedQuestCarousel } from "@/components/landing/featured-quest-carousel";
+import { FeaturedQuestCarouselDynamic } from "@/components/landing/featured-quest-carousel-dynamic";
 import { LandingShell } from "@/components/landing/landing-shell";
 import { SectionHeader } from "@/components/landing/section-header";
 import { LaunchAppButton } from "@/components/landing/launch-app-button";
@@ -33,7 +33,7 @@ export function FeaturedCampaigns({ quests }: { quests: Quest[] }) {
             </div>
           </div>
         ) : (
-          <FeaturedQuestCarousel quests={quests} />
+          <FeaturedQuestCarouselDynamic quests={quests} />
         )}
       </LandingShell>
     </section>

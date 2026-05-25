@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { LaunchAppButton } from "@/components/landing/launch-app-button";
 import { LandingShell } from "@/components/landing/landing-shell";
@@ -10,9 +9,9 @@ import { cn } from "@/lib/utils";
 export function LandingHero() {
   return (
     <section className="relative isolate overflow-hidden border-b border-[var(--border)]">
-      <div className="gradient-mesh particle-field absolute inset-0 opacity-80" />
+      <div className="gradient-mesh particle-field absolute inset-0 opacity-80 max-sm:opacity-50" />
       <div
-        className="pointer-events-none absolute left-1/2 top-0 h-72 w-[min(100%,36rem)] -translate-x-1/2 rounded-full opacity-30 blur-3xl"
+        className="pointer-events-none absolute left-1/2 top-0 h-72 w-[min(100%,36rem)] -translate-x-1/2 rounded-full opacity-30 blur-3xl max-sm:opacity-20"
         style={{
           background:
             "radial-gradient(circle, rgb(var(--canton-rgb) / 0.25) 0%, transparent 70%)",
@@ -20,41 +19,22 @@ export function LandingHero() {
       />
 
       <LandingShell className="relative flex flex-col items-center gap-8 py-12 text-center md:py-16">
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="inline-flex items-center gap-2 rounded-full border border-canton-muted bg-canton-subtle/80 px-4 py-1.5 text-xs font-semibold text-canton backdrop-blur-sm"
-        >
+        <div className="landing-fade-in inline-flex items-center gap-2 rounded-full border border-canton-muted bg-canton-subtle/80 px-4 py-1.5 text-xs font-semibold text-canton backdrop-blur-sm">
           <Sparkles className="h-3.5 w-3.5" />
           CanQuest · Canton Network
-        </motion.div>
+        </div>
 
-        <motion.h1
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-          className="type-hero max-w-3xl"
-        >
+        <h1 className="landing-fade-in landing-fade-in-delay-1 type-hero max-w-3xl">
           Daily quests. Partner campaigns.{" "}
           <span className="text-gradient-brand">Rewards on-chain.</span>
-        </motion.h1>
+        </h1>
 
-        <motion.p
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="max-w-2xl text-base leading-relaxed text-[var(--muted-foreground)] md:text-lg"
-        >
+        <p className="landing-fade-in landing-fade-in-delay-2 max-w-2xl text-base leading-relaxed text-[var(--muted-foreground)] md:text-lg">
           Complete verified tasks, join partner Earn campaigns, climb the leaderboard, and
           receive CC in your Canton wallet — all in one app.
-        </motion.p>
+        </p>
 
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-          className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-center"
-        >
+        <div className="landing-fade-in landing-fade-in-delay-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-center">
           <LaunchAppButton
             size="lg"
             showArrow
@@ -71,16 +51,11 @@ export function LandingHero() {
               <ArrowRight className="h-4 w-4" />
             </span>
           </a>
-        </motion.div>
+        </div>
 
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.22 }}
-          className="text-xs text-[var(--muted-foreground)]"
-        >
+        <p className="landing-fade-in landing-fade-in-delay-4 text-xs text-[var(--muted-foreground)]">
           Sign in to access Overview, Quest, Earn, Spin Reward, Wallet, and Leaderboard.
-        </motion.p>
+        </p>
       </LandingShell>
     </section>
   );
