@@ -17,7 +17,7 @@ export const throttlerConfig: ThrottlerModuleOptions = {
     {
       name: 'default',
       ttl: 60_000,   // 1 menit
-      limit: 120,    // 120 req/menit per IP (2 req/detik)
+      limit: 300,    // 300 req/menit per IP (navigasi menu + BFF; was 120)
     },
     {
       name: 'auth',

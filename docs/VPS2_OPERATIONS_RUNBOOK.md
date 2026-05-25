@@ -24,7 +24,7 @@
 |-----------|-------------|------------------|
 | Whole site / wallet dead for everyone | `curl …/api/health` | **API down** — missing `apps/api/dist/main.js` after `git pull` + `pm2 restart` without build |
 | Wallet slow / flaky under many refreshes | `curl …/api/health/canton` + env | SSH tunnel saturation + Splice sync too aggressive |
-| **`429 Too Many Requests`** on `ledger-status`, `balance`, `fee-config` | Response body `ThrottlerException` | **Rate limit** — dulu seluruh `PartyController` pakai tier `ledger` 30/mnt; refresh wallet >30 req/mnt. Fix: deploy API terbaru (GET pakai default 120/mnt, POST tetap ketat). |
+| **`429 Too Many Requests`** on `ledger-status`, `balance`, `fee-config` | Response body `ThrottlerException` | **Rate limit sengaja** (keamanan), tapi terlalu ketat jika: (1) `PartyController` pakai tier `ledger` 30/mnt, (2) BFF Vercel tanpa `X-Forwarded-For` → semua user satu IP. Fix: deploy API + **redeploy Vercel web** (forward IP), GET wallet `@SkipThrottle`, POST `send-cc` tetap ketat. |
 | Deploy: `address already in use` on `:5432` | `docker compose up` | Postgres **sudah jalan** di VPS. Lanjut: `bash scripts/deploy-vps2.sh --skip-docker` |
 | Brief glitch (~seconds) | `journalctl -u canton-tunnel` | Manual `systemctl restart canton-tunnel` |
 | Ledger OK on VPS 1, bad on VPS 2 | Tunnel from VPS 2 | Tunnel down or wrong Docker IPs in `-L` forwards |

@@ -35,6 +35,14 @@ export async function nestWithAccessCookie(
   const headers = new Headers(init.headers);
   headers.set('Authorization', `Bearer ${token}`);
 
+  // So Nest rate-limits per browser user, not per Vercel/server egress IP.
+  const forwarded =
+    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    req.headers.get('x-real-ip')?.trim();
+  if (forwarded) {
+    headers.set('X-Forwarded-For', forwarded);
+  }
+
   const timeoutMs = options?.upstreamTimeoutMs ?? 15_000;
 
   try {

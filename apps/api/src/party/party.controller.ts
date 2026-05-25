@@ -256,6 +256,7 @@ export class PartyController {
     };
   }
 
+  @SkipThrottle()
   @Get('preapproval-status')
   async preapprovalStatus(@Req() req: AuthedReq) {
     const user = await this.users.findById(req.user.userId);
@@ -383,6 +384,7 @@ export class PartyController {
    * CC balance: PostgreSQL snapshot first (fast), Splice sync in background.
    * See BALANCE_READ_FROM_DB in apps/api/.env.example.
    */
+  @SkipThrottle()
   @Get('balance')
   async getBalance(@Req() req: AuthedReq) {
     const user = await this.users.findById(req.user.userId);
@@ -729,6 +731,7 @@ export class PartyController {
    * Paginated CC transaction history for the authenticated user.
    * GET /api/party/transactions?page=1&pageSize=5
    */
+  @SkipThrottle()
   @Get('transactions')
   async getTransactions(
     @Req() req: AuthedReq,
@@ -746,6 +749,7 @@ export class PartyController {
    * Internal transaction explorer — DB summary + optional on-chain events.
    * GET /api/party/transactions/:id
    */
+  @SkipThrottle()
   @Get('transactions/:id')
   async getTransactionById(@Req() req: AuthedReq, @Param('id') id: string) {
     return this.txDetail.getDetailForUser(req.user.userId, id.trim());
@@ -756,6 +760,7 @@ export class PartyController {
    * Frontend menggunakan ini agar tampilan fee selalu sinkron dengan nilai di .env.
    * GET /api/party/fee-config
    */
+  @SkipThrottle()
   @Get('fee-config')
   getFeeConfig() {
     return {
@@ -765,6 +770,7 @@ export class PartyController {
   }
 
   /** Check reachability of Canton JSON Ledger API and Splice Validator API. */
+  @SkipThrottle()
   @Get('ledger-status')
   async ledgerStatus() {
     const [canton, splice] = await Promise.all([

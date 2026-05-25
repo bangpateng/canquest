@@ -1,13 +1,17 @@
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import helmet from 'helmet';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: ['log', 'warn', 'error', 'debug'],
   });
+
+  // Nginx / Vercel BFF send X-Forwarded-For — needed for fair per-user rate limits.
+  app.set('trust proxy', 1);
 
   // ── Security headers (helmet) ─────────────────────────────────────────────
   // Adds X-DNS-Prefetch-Control, X-Frame-Options, X-Content-Type-Options, etc.
