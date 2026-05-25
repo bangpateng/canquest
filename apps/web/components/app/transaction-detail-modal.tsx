@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { CheckCircle2, X } from "lucide-react";
 
 import { TransactionDetailContent } from "@/components/app/transaction-detail-content";
@@ -72,23 +71,11 @@ export function TransactionDetailModal({
           />
         </div>
 
-        <div className="flex flex-col gap-2 border-t border-[var(--border)] px-5 py-4 sm:flex-row sm:justify-end">
-          {transactionId ? (
-            <Link
-              href={`/transactions/${transactionId}`}
-              className={cn(
-                buttonVariants({ variant: "secondary", size: "sm" }),
-                "w-full justify-center sm:w-auto",
-              )}
-              onClick={onClose}
-            >
-              Open full page
-            </Link>
-          ) : null}
+        <div className="border-t border-[var(--border)] px-5 py-4">
           <button
             type="button"
             onClick={onClose}
-            className={cn(buttonVariants({ size: "sm" }), "w-full justify-center sm:w-auto")}
+            className={cn(buttonVariants({ size: "sm" }), "w-full justify-center")}
           >
             Done
           </button>
