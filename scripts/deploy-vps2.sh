@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Deploy CanQuest (web + API + Postgres + Redis) on VPS 2.
-# Run ON the server after git pull, from repo root:
-#   chmod +x scripts/deploy-vps2.sh
-#   ./scripts/deploy-vps2.sh
+# Deploy CanQuest on VPS 2 (API; optional full web stack).
+# Web on Vercel + GitHub → use --api-only (no build web, no PM2 canquest-web).
+#
+#   bash scripts/deploy-vps2.sh --skip-docker --api-only
 #
 # Options:
+#   --api-only    API only (typical: Vercel hosts apps/web)
 #   --seed        Run prisma seed (quests + earn hub)
 #   --migrate     Use prisma migrate deploy instead of db push
 #   --skip-docker Skip Postgres/Redis compose (DB already on :5432 / :6379)
@@ -17,11 +18,13 @@ cd "$ROOT"
 RUN_SEED=false
 USE_MIGRATE=false
 SKIP_DOCKER=false
+API_ONLY=false
 for arg in "$@"; do
   case "$arg" in
     --seed) RUN_SEED=true ;;
     --migrate) USE_MIGRATE=true ;;
     --skip-docker) SKIP_DOCKER=true ;;
+    --api-only) API_ONLY=true ;;
   esac
 done
 
@@ -62,10 +65,13 @@ if [[ ! -f apps/api/.env ]]; then
   exit 1
 fi
 
-if [[ ! -f apps/web/.env ]]; then
+if ! $API_ONLY && [[ ! -f apps/web/.env ]]; then
   echo "WARN: apps/web/.env missing — creating from infra/env/web.env.production.example"
   cp infra/env/web.env.production.example apps/web/.env
   echo "  Edit apps/web/.env (JWT_ACCESS_SECRET must match API)."
+fi
+if $API_ONLY; then
+  echo "Mode: --api-only (web = Vercel/GitHub; skipping Next build + canquest-web PM2)"
 fi
 
 echo ""
@@ -101,17 +107,26 @@ echo ""
 echo "[4] Build API..."
 npm run build:api
 
-echo ""
-echo "[5] Build Web..."
-npm run build:web
+if ! $API_ONLY; then
+  echo ""
+  echo "[5] Build Web..."
+  npm run build:web
+else
+  echo ""
+  echo "[5] Build Web... skipped (--api-only)"
+fi
 
 echo ""
 echo "[6] PM2 restart..."
 mkdir -p logs
 if command -v pm2 >/dev/null 2>&1; then
   pm2 delete canquest-api 2>/dev/null || true
-  pm2 delete canquest-web 2>/dev/null || true
-  pm2 start infra/pm2.ecosystem.config.js --env production
+  if $API_ONLY; then
+    pm2 start infra/pm2.ecosystem.config.js --only canquest-api --env production
+  else
+    pm2 delete canquest-web 2>/dev/null || true
+    pm2 start infra/pm2.ecosystem.config.js --env production
+  fi
   pm2 save
   pm2 status
 else
@@ -124,7 +139,11 @@ echo "[7] Health checks..."
 sleep 3
 curl -sf "http://127.0.0.1:3001/api/health" && echo "  API :3001 OK" || echo "  API :3001 FAILED"
 curl -sf "http://127.0.0.1:3001/api/health/canton" && echo "  Canton :3001 OK" || echo "  Canton :3001 FAILED (check canton-tunnel)"
-curl -sf -o /dev/null "http://127.0.0.1:3000" && echo "  Web :3000 OK" || echo "  Web :3000 FAILED"
+if $API_ONLY; then
+  echo "  Web :3000 skipped (hosted on Vercel)"
+else
+  curl -sf -o /dev/null "http://127.0.0.1:3000" && echo "  Web :3000 OK" || echo "  Web :3000 FAILED"
+fi
 
 echo ""
 echo "Done. Configure nginx: infra/nginx/canquest.conf"

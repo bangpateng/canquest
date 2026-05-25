@@ -120,8 +120,8 @@ Confirm in logs: `CC inbound sync started (every 120000ms)` — not `30000ms`.
 ```bash
 cd /var/www/canquest
 git pull
-bash scripts/deploy-vps2.sh
-# or: chmod +x scripts/deploy-vps2.sh && ./scripts/deploy-vps2.sh
+bash scripts/deploy-vps2.sh --skip-docker --api-only
+# Web di Vercel — jangan build Next di VPS. Vercel deploy otomatis dari GitHub push.
 ```
 
 Minimum if skipping full script:
