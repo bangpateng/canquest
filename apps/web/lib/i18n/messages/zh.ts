@@ -51,6 +51,17 @@ export const zh: PlatformMessages = {
     community: "社区",
     leaderboard: "排行榜",
   },
+  questReferral: {
+    aria: "Invite friends",
+    title: "Invite friends",
+    perFriend: "pts / friend",
+    lead: "Share your link. When a friend signs up and verifies email, you earn {n} points here.",
+    invited: "Invited",
+    earned: "From referrals",
+    copyLink: "Copy invite link",
+    loadError: "Could not load invite link.",
+    copyError: "Could not copy link.",
+  },
   dashboard: {
     welcomeBack: "欢迎回来，{name}",
     walletActive: "钱包已激活",

@@ -51,6 +51,17 @@ export const es: PlatformMessages = {
     community: "Comunidad",
     leaderboard: "Clasificación",
   },
+  questReferral: {
+    aria: "Invite friends",
+    title: "Invite friends",
+    perFriend: "pts / friend",
+    lead: "Share your link. When a friend signs up and verifies email, you earn {n} points here.",
+    invited: "Invited",
+    earned: "From referrals",
+    copyLink: "Copy invite link",
+    loadError: "Could not load invite link.",
+    copyError: "Could not copy link.",
+  },
   dashboard: {
     welcomeBack: "Bienvenido de nuevo, {name}",
     walletActive: "Billetera activa",

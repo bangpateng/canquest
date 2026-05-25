@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { QuestReferralCard } from "@/components/app/quest-referral-card";
 import { QuestTaskPanel } from "@/components/app/quest-task-panel";
 import { PageHeader } from "@/components/ui/typography";
 import { ROUTES } from "@/lib/app-routes";
@@ -142,7 +143,7 @@ export function EarnHubPage() {
                   <span className="ml-1.5 text-lg font-medium text-canton sm:text-xl">pts</span>
                 </p>
                 <p className="mt-2 text-xs leading-relaxed text-[var(--muted-foreground)]">
-                  Total from Quest tasks, partner Earn campaigns, and spin rewards.
+                  Quest tasks, friend invites, partner Earn campaigns, and spin wins.
                 </p>
               </>
             )}
@@ -166,6 +167,8 @@ export function EarnHubPage() {
           </div>
         </div>
       </section>
+
+      {!loading ? <QuestReferralCard /> : null}
 
       {loading ? (
         <div className="flex items-center justify-center gap-2 py-16 text-sm text-[var(--muted-foreground)]">

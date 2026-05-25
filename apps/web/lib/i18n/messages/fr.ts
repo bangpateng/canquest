@@ -51,6 +51,17 @@ export const fr: PlatformMessages = {
     community: "Communauté",
     leaderboard: "Classement",
   },
+  questReferral: {
+    aria: "Invite friends",
+    title: "Invite friends",
+    perFriend: "pts / friend",
+    lead: "Share your link. When a friend signs up and verifies email, you earn {n} points here.",
+    invited: "Invited",
+    earned: "From referrals",
+    copyLink: "Copy invite link",
+    loadError: "Could not load invite link.",
+    copyError: "Could not copy link.",
+  },
   dashboard: {
     welcomeBack: "Bon retour, {name}",
     walletActive: "Portefeuille actif",

@@ -51,6 +51,17 @@ export const id: PlatformMessages = {
     community: "Komunitas",
     leaderboard: "Papan peringkat",
   },
+  questReferral: {
+    aria: "Undang teman",
+    title: "Undang teman",
+    perFriend: "poin / teman",
+    lead: "Bagikan link kamu. Teman daftar & verifikasi email → kamu dapat {n} poin di sini.",
+    invited: "Diundang",
+    earned: "Dari referral",
+    copyLink: "Salin link undangan",
+    loadError: "Gagal memuat link undangan.",
+    copyError: "Gagal menyalin link.",
+  },
   dashboard: {
     welcomeBack: "Selamat datang kembali, {name}",
     walletActive: "Dompet aktif",

@@ -60,6 +60,17 @@ export type PlatformMessages = {
     community: string;
     leaderboard: string;
   };
+  questReferral: {
+    aria: string;
+    title: string;
+    perFriend: string;
+    lead: string;
+    invited: string;
+    earned: string;
+    copyLink: string;
+    loadError: string;
+    copyError: string;
+  };
   dashboard: {
     welcomeBack: string;
     walletActive: string;
