@@ -2,11 +2,10 @@
 
 import Link from "next/link";
 import { QuestsBrowser, type EarnCampaignStats } from "@/components/app/quests-browser";
-import { SubsectionTitle } from "@/components/ui/typography";
 import { ROUTES } from "@/lib/app-routes";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { cn } from "@/lib/utils";
-import { ArrowRight, Gift, Trophy, Zap } from "lucide-react";
+import { ArrowRight, CheckCircle2, Gift, ListChecks, Sparkles, Trophy, Zap } from "lucide-react";
 import { useState } from "react";
 
 export function EarnCampaignsPage() {
@@ -20,50 +19,68 @@ export function EarnCampaignsPage() {
   const completionPct =
     stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
 
+  const statItems = [
+    {
+      key: "live",
+      label: t("earnCampaigns.live"),
+      value: stats.active,
+      icon: Zap,
+      accent: "text-canton",
+    },
+    {
+      key: "done",
+      label: t("earnCampaigns.completed"),
+      value: stats.completed,
+      icon: CheckCircle2,
+      accent: "text-emerald-400",
+    },
+    {
+      key: "all",
+      label: t("earnCampaigns.total"),
+      value: stats.total,
+      icon: ListChecks,
+      accent: "text-[var(--foreground)]",
+    },
+  ] as const;
+
   return (
     <div className="space-y-6">
-      {/* Mission-style progress — matches campaign quest detail */}
       <section
-        className="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]/80 p-5 md:p-6"
+        className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]/50"
         aria-label={t("earnCampaigns.statsAria")}
       >
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <span
-              className={cn(
-                "type-section-title flex h-12 w-12 items-center justify-center rounded-xl",
-                stats.completed > 0
-                  ? "bg-[var(--primary)] text-[var(--primary-foreground)] shadow-[0_0_20px_rgb(var(--canton-rgb)/0.3)]"
-                  : "bg-[var(--muted)] text-[var(--muted-foreground)]",
-              )}
-            >
-              {completionPct}%
-            </span>
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
-                {t("earnCampaigns.statsLabel")}
+        <div className="grid grid-cols-3 divide-x divide-[var(--border)]">
+          {statItems.map(({ key, label, value, icon: Icon, accent }) => (
+            <div key={key} className="px-3 py-4 text-center sm:px-5 sm:py-5">
+              <Icon className={cn("mx-auto h-4 w-4", accent)} aria-hidden />
+              <p className="mt-2 text-2xl font-semibold tabular-nums leading-none text-[var(--foreground)] sm:text-3xl">
+                {value}
               </p>
-              <SubsectionTitle>
-                {stats.completed} / {stats.total} {t("earnCampaigns.progressCompleted")}
-              </SubsectionTitle>
-              <p className="text-xs text-[var(--muted-foreground)]">
-                {stats.active} {t("earnCampaigns.active")}
+              <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+                {label}
               </p>
             </div>
-          </div>
-          <span className="inline-flex items-center gap-1 rounded-md bg-[var(--primary)]/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-canton">
-            <Zap className="h-3 w-3" aria-hidden />
-            {t("earnCampaigns.live")}
-          </span>
-        </div>
-        <div className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--muted)] ring-1 ring-[var(--border)]">
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-[var(--primary)] to-[var(--primary-strong)] transition-all duration-700 ease-out shadow-[0_0_12px_rgb(var(--canton-rgb)/0.5)]"
-            style={{ width: `${completionPct}%` }}
-          />
+          ))}
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[var(--border)]/80 pt-4">
+        {stats.total > 0 ? (
+          <div className="border-t border-[var(--border)] bg-[var(--muted)]/15 px-4 py-3 sm:px-5">
+            <div className="flex items-center justify-between gap-3 text-xs text-[var(--muted-foreground)]">
+              <span>
+                {stats.completed} / {stats.total} {t("earnCampaigns.progressCompleted")}
+              </span>
+              <span className="font-semibold tabular-nums text-canton">{completionPct}%</span>
+            </div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--muted)]">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-[var(--primary)] to-[var(--primary-strong)] transition-all duration-700"
+                style={{ width: `${completionPct}%` }}
+              />
+            </div>
+          </div>
+        ) : null}
+
+        <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] px-4 py-3 sm:px-5">
           <Link
             href={ROUTES.leaderboard}
             className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)]/60 px-3 py-1.5 text-xs font-medium text-[var(--foreground)] transition-colors hover:border-[var(--primary)]/35 hover:bg-[var(--primary)]/8"
@@ -77,33 +94,19 @@ export function EarnCampaignsPage() {
           >
             <Gift className="h-3.5 w-3.5 text-canton" />
             {t("nav.spin")}
+          </Link>
+          <Link
+            href={ROUTES.earnHub}
+            className="ml-auto inline-flex items-center gap-1 text-xs font-semibold text-canton transition-colors hover:text-[var(--primary-strong)]"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            {t("nav.quests")}
             <ArrowRight className="h-3 w-3" />
           </Link>
         </div>
       </section>
 
-      <section>
-        <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
-          {t("earnCampaigns.campaignsHeader")}
-        </p>
-        <QuestsBrowser variant="earn" onStatsChange={setStats} />
-      </section>
-
-      <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--muted)]/15 px-4 py-3.5 text-sm">
-        <Link
-          href={ROUTES.earnHub}
-          className="font-medium text-[var(--foreground)] transition-colors hover:text-canton"
-        >
-          {t("nav.quests")}
-        </Link>
-        <Link
-          href={ROUTES.earnHub}
-          className="group flex items-center gap-1 text-xs font-semibold text-canton transition-colors hover:text-[var(--primary-strong)]"
-        >
-          {t("earnCampaigns.dailyTasks")}
-          <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-        </Link>
-      </div>
+      <QuestsBrowser variant="earn" onStatsChange={setStats} />
     </div>
   );
 }

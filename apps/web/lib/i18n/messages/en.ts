@@ -116,10 +116,8 @@ export const en: PlatformMessages = {
     campaignsLead: "",
     progressCompleted: "campaigns finished",
     loadFailed: "Could not load campaigns",
-    loadFailedHint:
-      "Check that npm run dev:api is running and JWT_ACCESS_SECRET matches in apps/web and apps/api .env.",
-    noCampaignsHint:
-      "No partner campaigns in the database yet. Run seed on the API, or open Quest for daily tasks.",
+    loadFailedHint: "Check the API is running, then retry.",
+    noCampaignsHint: "No campaigns yet — try Quest for daily tasks.",
     tryOtherTab: "Try another tab above, or clear your search.",
     showingCount: "{count} {status} campaigns",
     rewardLabel: "Reward",

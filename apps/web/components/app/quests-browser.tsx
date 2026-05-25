@@ -1,6 +1,5 @@
 "use client";
 
-import { EarnCampaignRow } from "@/components/app/earn-campaign-row";
 import { EarnCampaignSkeleton } from "@/components/app/earn-campaign-skeleton";
 import { QuestCard } from "@/components/app/quest-card";
 import type { Quest, QuestStatus, UserProgress } from "@/lib/quest-types";
@@ -16,7 +15,7 @@ import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { ROUTES } from "@/lib/app-routes";
 
 const QUEST_PAGE_SIZE = 6;
-const EARN_PAGE_SIZE = 5;
+const EARN_PAGE_SIZE = 6;
 
 const TABS: { id: QuestStatus; label: string }[] = [
   { id: "ACTIVE", label: "Active" },
@@ -180,7 +179,7 @@ export function QuestsBrowser({
     <label
       className={cn(
         "relative block w-full shrink-0",
-        isEarn ? "sm:max-w-sm" : "sm:max-w-xs",
+        isEarn ? "max-w-none" : "sm:max-w-xs",
       )}
     >
       <span className="sr-only">{t("quests.searchLabel")}</span>
@@ -200,30 +199,26 @@ export function QuestsBrowser({
   );
 
   return (
-    <div className={cn("w-full min-w-0", isEarn ? "space-y-5" : "space-y-5")}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-        {tabRow}
-        {searchField}
-      </div>
-
-      {!loading && filtered.length > 0 && isEarn ? (
-        <p className="text-xs text-[var(--muted-foreground)]">
-          {t("earnCampaigns.showingCount", {
-            count: String(filtered.length),
-            status: QUEST_STATUS_BADGE[status].label.toLowerCase(),
-          })}
-        </p>
-      ) : null}
+    <div className={cn("w-full min-w-0", isEarn ? "space-y-4" : "space-y-5")}>
+      {isEarn ? (
+        <div className="space-y-3">
+          {searchField}
+          {tabRow}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          {tabRow}
+          {searchField}
+        </div>
+      )}
 
       {loading ? (
         isEarn ? (
-          <ol className="space-y-4">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <li key={i}>
-                <EarnCampaignSkeleton />
-              </li>
+          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <EarnCampaignSkeleton key={i} />
             ))}
-          </ol>
+          </div>
         ) : (
           <div className="flex items-center justify-center py-14">
             <Loader2 className="h-6 w-6 animate-spin text-canton" />
@@ -275,15 +270,16 @@ export function QuestsBrowser({
       ) : (
         <>
           {isEarn ? (
-            <ol className="space-y-3">
+            <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
               {pagedQuests.map((q) => (
-                <EarnCampaignRow
+                <QuestCard
                   key={q.id}
                   quest={q}
+                  variant="earn"
                   completed={progress?.completedQuestIds.includes(q.id) ?? false}
                 />
               ))}
-            </ol>
+            </div>
           ) : (
             <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
               {pagedQuests.map((q) => (

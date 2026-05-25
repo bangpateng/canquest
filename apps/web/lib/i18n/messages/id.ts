@@ -117,9 +117,8 @@ export const id: PlatformMessages = {
     progressCompleted: "kampanye selesai",
     loadFailed: "Gagal memuat kampanye",
     loadFailedHint:
-      "Pastikan npm run dev:api jalan dan JWT_ACCESS_SECRET sama di apps/web dan apps/api .env.",
-    noCampaignsHint:
-      "Belum ada kampanye partner di database. Jalankan seed di API, atau buka Quest untuk tugas harian.",
+      "Pastikan API berjalan, lalu coba lagi.",
+    noCampaignsHint: "Belum ada kampanye — coba Quest untuk tugas harian.",
     tryOtherTab: "Coba tab lain di atas, atau hapus kata kunci pencarian.",
     showingCount: "{count} kampanye {status}",
     rewardLabel: "Hadiah",
