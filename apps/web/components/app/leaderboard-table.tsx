@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { ListPagination } from "@/components/app/list-pagination";
 import { filterTabClass } from "@/lib/ui-button-styles";
 import { cn } from "@/lib/utils";
@@ -60,13 +59,12 @@ function avatarGradient(username: string): string {
   return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length]!;
 }
 
-function isOptimizableAvatar(url: string): boolean {
-  try {
-    const host = new URL(url).hostname;
-    return host === "pbs.twimg.com" || host === "abs.twimg.com";
-  } catch {
-    return false;
-  }
+/** Twitter CDN URLs must not get extra query params (breaks CDN / optimizers). */
+function leaderboardAvatarSrc(url: string | null): string | null {
+  if (!url?.trim()) return null;
+  const trimmed = url.trim();
+  if (trimmed.includes("twimg.com")) return trimmed;
+  return trimmed;
 }
 
 function ParticipantCell({
@@ -76,11 +74,7 @@ function ParticipantCell({
   row: LeaderboardRow;
   isCurrentUser: boolean;
 }) {
-  const cacheBust =
-    row.avatarUrl && !row.avatarUrl.includes("?")
-      ? `${row.avatarUrl}?v=${row.userId}`
-      : row.avatarUrl;
-  const useNextImage = cacheBust && isOptimizableAvatar(cacheBust);
+  const avatarSrc = leaderboardAvatarSrc(row.avatarUrl);
 
   return (
     <td className="px-3 py-3">
@@ -89,30 +83,22 @@ function ParticipantCell({
           className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full ring-2 ring-[var(--border)] ring-offset-2 ring-offset-[var(--card)]"
           aria-hidden
           style={
-            cacheBust
+            avatarSrc
               ? undefined
               : { backgroundImage: avatarGradient(row.username) }
           }
         >
-          {useNextImage ? (
-            <Image
-              src={cacheBust}
-              alt=""
-              width={LEADERBOARD_AVATAR_PX}
-              height={LEADERBOARD_AVATAR_PX}
-              className="h-full w-full object-cover"
-              sizes="48px"
-            />
-          ) : cacheBust ? (
+          {avatarSrc ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={cacheBust}
+              src={avatarSrc}
               alt=""
               width={LEADERBOARD_AVATAR_PX}
               height={LEADERBOARD_AVATAR_PX}
               className="h-full w-full object-cover"
               loading="lazy"
               decoding="async"
+              referrerPolicy="no-referrer"
             />
           ) : (
             <span className="type-micro-label text-white drop-shadow-sm">

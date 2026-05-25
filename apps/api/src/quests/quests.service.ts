@@ -24,6 +24,7 @@ import { SpliceValidatorService } from '../canton/splice-validator.service';
 import { ProfileAvatarService } from '../users/profile-avatar.service';
 import { resolvePublicAvatarUrl } from '../users/user-avatar-url';
 import { UsersService } from '../users/users.service';
+import { hydrateTwitterAvatarUrls } from '../twitter/hydrate-twitter-avatars';
 import { TwitterApiService } from '../twitter/twitter-api.service';
 
 export interface LeaderboardRow {
@@ -1198,6 +1199,12 @@ export class QuestsService {
       const total = users.length;
       const skip = (page - 1) * pageSize;
       const pageUsers = users.slice(skip, skip + pageSize);
+      const hydrated = await hydrateTwitterAvatarUrls(
+        this.prisma,
+        this.twitterApi,
+        pageUsers,
+        this.logger,
+      );
       const rows: LeaderboardRow[] = pageUsers.map((u, i) => ({
         rank: skip + i + 1,
         userId: u.id,
@@ -1205,7 +1212,7 @@ export class QuestsService {
         displayName: u.displayName ?? u.username ?? 'Unknown',
         cantonPartyId: u.cantonPartyId,
         points: u.earnPoints,
-        avatarUrl: resolvePublicAvatarUrl(u),
+        avatarUrl: hydrated.get(u.id) ?? resolvePublicAvatarUrl(u),
         twitterUsername: u.twitterUsername,
       }));
       return { rows, total, page, pageSize };
@@ -1294,6 +1301,13 @@ export class QuestsService {
     });
     const profileByUser = new Map(profileRows.map((r) => [r.id, r]));
 
+    const hydrated = await hydrateTwitterAvatarUrls(
+      this.prisma,
+      this.twitterApi,
+      profileRows,
+      this.logger,
+    );
+
     const rows: LeaderboardRow[] = pageRows.map((u, i) => {
       const profile = profileByUser.get(u.userId);
       return {
@@ -1304,7 +1318,9 @@ export class QuestsService {
         twitterUsername: profile?.twitterUsername ?? null,
         cantonPartyId: profile?.cantonPartyId ?? u.cantonPartyId ?? null,
         points: u.points,
-        avatarUrl: profile ? resolvePublicAvatarUrl(profile) : null,
+        avatarUrl: profile
+          ? (hydrated.get(profile.id) ?? resolvePublicAvatarUrl(profile))
+          : null,
       };
     });
 

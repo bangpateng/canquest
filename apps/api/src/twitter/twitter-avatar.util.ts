@@ -12,7 +12,11 @@ export function normalizeTwitterAvatarUrl(url: string | null | undefined): strin
     return trimmed.replace(/_400x400|_bigger/i, '_normal');
   }
 
-  return trimmed.replace(/(\.(jpe?g|png|webp))$/i, '_normal$1');
+  if (/profile_images\//i.test(trimmed) && !/_normal|_400x400|_bigger/i.test(trimmed)) {
+    return trimmed.replace(/(\.(jpe?g|png|webp))$/i, '_normal$1');
+  }
+
+  return trimmed;
 }
 
 export function pickTwitterProfileImage(data: Record<string, unknown>): string | null {
