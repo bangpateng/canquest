@@ -4,7 +4,6 @@ export const PLATFORM_LOCALES = [
   { code: "fr", label: "French", native: "Français" },
   { code: "de", label: "German", native: "Deutsch" },
   { code: "pt", label: "Portuguese", native: "Português" },
-  { code: "id", label: "Indonesian", native: "Bahasa Indonesia" },
   { code: "zh", label: "Chinese", native: "中文" },
 ] as const;
 

@@ -35,11 +35,11 @@ export default function RegisterPage() {
     e.preventDefault();
     setError(null);
     if (turnstileRequired === null) {
-      setError("Memuat captcha… coba lagi sebentar.");
+      setError("Loading captcha… try again in a moment.");
       return;
     }
     if (turnstileRequired && !turnstileToken) {
-      setError("Selesaikan captcha terlebih dahulu.");
+      setError("Complete the captcha first.");
       return;
     }
 
@@ -71,9 +71,9 @@ export default function RegisterPage() {
         return;
       }
 
-      setError("Respons tidak terduga. Coba lagi.");
+      setError("Unexpected response. Please try again.");
     } catch (err) {
-      setError(formatApiError(err, "Registrasi gagal."));
+      setError(formatApiError(err, "Registration failed."));
       setTurnstileKey((k) => k + 1);
       setTurnstileToken(null);
     } finally {
@@ -92,14 +92,14 @@ export default function RegisterPage() {
       clearReferralRef();
       window.location.assign("/overview");
     } catch (err) {
-      setError(formatApiError(err, "Verifikasi gagal."));
+      setError(formatApiError(err, "Verification failed."));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <AuthCard title="Buat akun" subtitle="Email, password, OTP verifikasi — X di Settings">
+    <AuthCard title={pendingOtp ? "Verify email" : "Create account"}>
       {error ? (
         <div
           className="mt-6 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-sm text-red-300"
@@ -129,13 +129,13 @@ export default function RegisterPage() {
             id="reg-password"
             label="Password"
             autoComplete="new-password"
-            placeholder="Minimal 8 karakter"
+            placeholder="At least 8 characters"
             minLength={8}
             inputClassName="bg-[var(--muted)]/80"
           />
           <div className="space-y-1.5">
             <label htmlFor="reg-referral" className="text-xs font-medium text-[var(--muted-foreground)]">
-              Kode referral (opsional)
+              Referral code (optional)
             </label>
             <input
               id="reg-referral"
@@ -158,18 +158,21 @@ export default function RegisterPage() {
             )}
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            {busy ? "Mengirim kode…" : "Buat akun"}
+            {busy ? "Sending code…" : "Create account"}
             {!busy && <ArrowRight className="h-4 w-4" />}
           </button>
         </form>
       ) : (
         <form className="mt-8 space-y-5" onSubmit={onVerifyOtp}>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            Enter the 6-digit code from your email
+          </p>
           {pendingOtp.devOtp ? (
             <p className="font-mono text-sm text-canton">Dev OTP: {pendingOtp.devOtp}</p>
           ) : null}
           <div className="space-y-1.5">
             <label htmlFor="reg-otp" className="text-xs font-medium text-[var(--muted-foreground)]">
-              Kode verifikasi
+              Verification code
             </label>
             <input
               id="reg-otp"
@@ -182,13 +185,13 @@ export default function RegisterPage() {
             />
           </div>
           <button type="submit" disabled={busy} className={cn(buttonVariants(), "w-full")}>
-            {busy ? "Memverifikasi…" : "Verifikasi & masuk"}
+            {busy ? "Verifying…" : "Verify & continue"}
           </button>
         </form>
       )}
 
       <p className="mt-6 text-center text-sm text-[var(--muted-foreground)]">
-        Sudah punya akun?{" "}
+        Already have an account?{" "}
         <Link href="/?auth=login" className="font-semibold text-canton hover:underline">
           Sign In
         </Link>

@@ -56,7 +56,7 @@ export function AuthModal() {
   }, [open]);
 
   useEffect(() => {
-    if (open && mode === "register" && !pendingOtp) {
+    if (open && !pendingOtp) {
       setTurnstileToken(null);
       setTurnstileKey((k) => k + 1);
     }
@@ -71,14 +71,14 @@ export function AuthModal() {
     window.location.assign(safe);
   }
 
-  function requireRegisterTurnstile(): boolean {
+  function requireTurnstile(): boolean {
     if (turnstileRequired === null) {
-      setError("Memuat captcha… coba lagi sebentar.");
+      setError("Loading captcha… try again in a moment.");
       return false;
     }
     if (!turnstileRequired) return true;
     if (!turnstileToken) {
-      setError("Selesaikan captcha terlebih dahulu.");
+      setError("Complete the captcha first.");
       return false;
     }
     return true;
@@ -87,14 +87,21 @@ export function AuthModal() {
   async function onLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+    if (!requireTurnstile()) return;
     const fd = new FormData(e.currentTarget);
     setBusy(true);
     try {
-      await login(String(fd.get("email") ?? ""), String(fd.get("password") ?? ""));
+      await login(
+        String(fd.get("email") ?? ""),
+        String(fd.get("password") ?? ""),
+        turnstileToken ?? "",
+      );
       closeAuth();
       redirectAfterAuth();
     } catch (err) {
-      setError(formatApiError(err, "Gagal masuk. Periksa email dan password."));
+      setError(formatApiError(err, "Sign in failed. Check your email and password."));
+      setTurnstileKey((k) => k + 1);
+      setTurnstileToken(null);
     } finally {
       setBusy(false);
     }
@@ -103,7 +110,7 @@ export function AuthModal() {
   async function onRegister(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
-    if (!requireRegisterTurnstile()) return;
+    if (!requireTurnstile()) return;
     const fd = new FormData(e.currentTarget);
     setBusy(true);
     try {
@@ -129,9 +136,9 @@ export function AuthModal() {
         setPendingOtp({ userId, devOtp });
         return;
       }
-      setError("Respons tidak terduga. Coba lagi.");
+      setError("Unexpected response. Please try again.");
     } catch (err) {
-      setError(formatApiError(err, "Registrasi gagal."));
+      setError(formatApiError(err, "Registration failed."));
       setTurnstileKey((k) => k + 1);
       setTurnstileToken(null);
     } finally {
@@ -151,7 +158,7 @@ export function AuthModal() {
       closeAuth();
       redirectAfterAuth();
     } catch (err) {
-      setError(formatApiError(err, "Kode tidak valid."));
+      setError(formatApiError(err, "Invalid code."));
     } finally {
       setBusy(false);
     }
@@ -163,15 +170,10 @@ export function AuthModal() {
   ];
 
   const title = pendingOtp
-    ? "Verifikasi email"
+    ? "Verify email"
     : mode === "login"
-      ? "Selamat datang kembali"
-      : "Buat akun";
-  const subtitle = pendingOtp
-    ? "Masukkan kode 6 digit dari email Anda"
-    : mode === "login"
-      ? "Email dan password — tanpa OTP"
-      : "Daftar dengan email & password, lalu verifikasi OTP";
+      ? "Welcome back"
+      : "Create account";
 
   return (
     <div
@@ -203,7 +205,11 @@ export function AuthModal() {
             <h2 id="auth-modal-title" className="type-page-title">
               {title}
             </h2>
-            <p className="mt-1 text-sm text-[var(--muted-foreground)]">{subtitle}</p>
+            {pendingOtp ? (
+              <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+                Enter the 6-digit code from your email
+              </p>
+            ) : null}
           </div>
 
           {!pendingOtp && (
@@ -247,7 +253,7 @@ export function AuthModal() {
                   Dev OTP: {pendingOtp.devOtp}
                 </p>
               )}
-              <Field label="Kode verifikasi">
+              <Field label="Verification code">
                 <input
                   name="otp"
                   inputMode="numeric"
@@ -263,7 +269,7 @@ export function AuthModal() {
                 className={cn(buttonVariants(), "w-full gap-2 rounded-full py-3 font-bold")}
               >
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Verifikasi & lanjut
+                Verify & continue
                 {!busy && <ArrowRight className="h-4 w-4" />}
               </button>
             </form>
@@ -283,9 +289,10 @@ export function AuthModal() {
                 id="auth-login-password"
                 label="Password"
                 autoComplete="current-password"
-                placeholder="Password Anda"
+                placeholder="Your password"
                 inputClassName="bg-[var(--muted)]/80"
               />
+              <TurnstileField resetKey={turnstileKey} onToken={setTurnstileToken} />
               <button
                 type="submit"
                 disabled={busy}
@@ -295,11 +302,11 @@ export function AuthModal() {
                 )}
               >
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Masuk
+                Sign In
                 {!busy && <ArrowRight className="h-4 w-4" />}
               </button>
               <p className="text-center text-sm text-[var(--muted-foreground)]">
-                Belum punya akun?{" "}
+                No account?{" "}
                 <button
                   type="button"
                   className="font-semibold text-canton hover:underline"
@@ -328,11 +335,11 @@ export function AuthModal() {
                 id="auth-register-password"
                 label="Password"
                 autoComplete="new-password"
-                placeholder="Minimal 8 karakter"
+                placeholder="At least 8 characters"
                 minLength={8}
                 inputClassName="bg-[var(--muted)]/80"
               />
-              <Field label="Kode referral (opsional)">
+              <Field label="Referral code (optional)">
                 <input
                   name="referralCode"
                   autoComplete="off"
@@ -351,14 +358,11 @@ export function AuthModal() {
                 )}
               >
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                {busy ? "Mengirim kode…" : "Buat akun"}
+                {busy ? "Sending code…" : "Create account"}
                 {!busy && <ArrowRight className="h-4 w-4" />}
               </button>
-              <p className="text-center text-xs text-[var(--muted-foreground)]">
-                Hubungkan X di Settings setelah daftar untuk quest & foto leaderboard.
-              </p>
               <p className="text-center text-sm text-[var(--muted-foreground)]">
-                Sudah punya akun?{" "}
+                Already have an account?{" "}
                 <button
                   type="button"
                   className="font-semibold text-canton hover:underline"

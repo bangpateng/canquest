@@ -3,7 +3,6 @@ import { de } from "./messages/de";
 import { en } from "./messages/en";
 import { es } from "./messages/es";
 import { fr } from "./messages/fr";
-import { id } from "./messages/id";
 import { pt } from "./messages/pt";
 import { zh } from "./messages/zh";
 
@@ -16,7 +15,6 @@ export const platformMessages: Record<PlatformLocale, PlatformMessages> = {
   fr,
   de,
   pt,
-  id,
   zh,
 };
 

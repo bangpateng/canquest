@@ -9,10 +9,14 @@ export interface Me {
   avatarUrl?: string | null;
 }
 
-export function login(email: string, password: string) {
+export function login(email: string, password: string, turnstileToken: string) {
   return apiFetch('/api/auth/login', {
     method: 'POST',
-    json: { email: email.trim().toLowerCase(), password },
+    json: {
+      email: email.trim().toLowerCase(),
+      password,
+      turnstileToken,
+    },
   });
 }
 

@@ -2,23 +2,40 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { ArrowRight, Loader2 } from "lucide-react";
 
 import { AuthCard, authInputClass } from "@/components/auth/auth-card";
+import { TurnstileField, useTurnstileRequired } from "@/components/platform/turnstile-field";
 import { buttonVariants } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
 import { formatApiError } from "@/lib/format-api-error";
+import { login } from "@/lib/services/api/auth";
 import { cn } from "@/lib/utils";
 
 function LoginForm() {
   const searchParams = useSearchParams();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileKey, setTurnstileKey] = useState(0);
+  const turnstileRequired = useTurnstileRequired();
+
+  useEffect(() => {
+    setTurnstileKey((k) => k + 1);
+  }, []);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+    if (turnstileRequired === null) {
+      setError("Loading captcha… try again in a moment.");
+      return;
+    }
+    if (turnstileRequired && !turnstileToken) {
+      setError("Complete the captcha first.");
+      return;
+    }
 
     const fd = new FormData(e.currentTarget);
     const email = String(fd.get("email") ?? "").trim().toLowerCase();
@@ -26,30 +43,22 @@ function LoginForm() {
 
     setBusy(true);
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data: unknown = await res.json().catch(() => null);
-
-      if (!res.ok) {
-        setError(formatApiError(data, "Unable to sign in."));
-        return;
-      }
-
+      await login(email, password, turnstileToken ?? "");
       const next = searchParams.get("next");
       const safeNext =
         next?.startsWith("/") && !next.startsWith("//") ? next : "/overview";
       window.location.assign(safeNext);
+    } catch (err) {
+      setError(formatApiError(err, "Unable to sign in."));
+      setTurnstileKey((k) => k + 1);
+      setTurnstileToken(null);
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <AuthCard title="Welcome back" subtitle="Sign in to continue to CanQuest">
+    <AuthCard title="Welcome back">
       {error ? (
         <div
           className="mt-6 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-sm text-red-300"
@@ -69,7 +78,7 @@ function LoginForm() {
             name="email"
             type="email"
             autoComplete="email"
-            placeholder="Your Email"
+            placeholder="you@example.com"
             required
             className={authInputClass}
           />
@@ -81,6 +90,7 @@ function LoginForm() {
           placeholder="Your password"
           inputClassName="bg-[var(--muted)]/80"
         />
+        <TurnstileField resetKey={turnstileKey} onToken={setTurnstileToken} />
         <button
           type="submit"
           disabled={busy}
