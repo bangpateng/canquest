@@ -1,6 +1,7 @@
 # CanQuest — deploy on VPS 2 (full stack)
 
-> **Bahasa Indonesia:** panduan lengkap arsitektur VPS1/VPS2 + Vercel → [TUTORIAL_DEPLOY_INDONESIA.md](./TUTORIAL_DEPLOY_INDONESIA.md)
+> **Bahasa Indonesia:** panduan lengkap arsitektur VPS1/VPS2 + Vercel → [TUTORIAL_DEPLOY_INDONESIA.md](./TUTORIAL_DEPLOY_INDONESIA.md)  
+> **Troubleshooting (disconnect, health, jangan lupa build):** [VPS2_OPERATIONS_RUNBOOK.md](./VPS2_OPERATIONS_RUNBOOK.md)
 
 Run **website + API + database** on **VPS 2** (`62.171.185.56`).  
 **Canton ledger + Splice validator** stay on a **separate validator VPS**; VPS 2 reaches them via **SSH tunnel** (localhost `7575` / `8080`).
@@ -28,6 +29,14 @@ Run **website + API + database** on **VPS 2** (`62.171.185.56`).
 ---
 
 ## 2. First-time server setup (VPS 2)
+
+Deploy from repo root (if `Permission denied`, use `bash scripts/deploy-vps2.sh` or `chmod +x scripts/deploy-vps2.sh` first):
+
+```bash
+cd /var/www/canquest
+git pull
+bash scripts/deploy-vps2.sh
+```
 
 ```bash
 # Node 20+

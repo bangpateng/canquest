@@ -38,7 +38,6 @@ type AuthedReq = Request & { user: { userId: string; email: string } };
 
 @Controller('party')
 @UseGuards(AuthGuard('jwt'))
-@Throttle({ ledger: { limit: 30, ttl: 60_000 } }) // semua ledger ops: 30/mnt
 export class PartyController {
   private readonly logger = new Logger(PartyController.name);
 
@@ -65,6 +64,7 @@ export class PartyController {
    * Single API call to the Splice validator does everything.
    * Falls back to Canton JSON API only, or placeholder, if Splice is unreachable.
    */
+  @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
   @Post('username')
   async setUsername(@Req() req: AuthedReq, @Body() body: SetUsernameDto) {
     const username = normalizeWalletUsername(body.username) ?? '';
@@ -208,6 +208,7 @@ export class PartyController {
    * Enable or refresh TransferPreapproval (CIP-56) for the logged-in user.
    * Required for direct CC transfers from the validator wallet without manual accept.
    */
+  @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
   @Post('ensure-preapproval')
   async ensurePreapproval(@Req() req: AuthedReq) {
     const user = await this.users.findById(req.user.userId);
@@ -293,6 +294,7 @@ export class PartyController {
    * Retry wallet creation — calls Splice validator to allocate + register.
    * Use this if Generate Wallet previously resulted in a placeholder.
    */
+  @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
   @Post('allocate')
   async allocateCantonParty(@Req() req: AuthedReq) {
     const user = await this.users.findById(req.user.userId);
@@ -365,6 +367,7 @@ export class PartyController {
   /**
    * Manually save a Party ID — use when allocating via Canton Console / CLI.
    */
+  @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
   @Post('canton-binding')
   async bindCantonParty(@Req() req: AuthedReq, @Body() body: CantonPartyBindingDto) {
     const cantonPartyId = body.cantonPartyId.trim();
@@ -412,6 +415,7 @@ export class PartyController {
    * Note: In production, this endpoint should require admin privileges.
    * For testing purposes it's self-callable.
    */
+  @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
   @Post('claim-reward')
   async claimReward(
     @Req() req: AuthedReq,
@@ -477,6 +481,7 @@ export class PartyController {
    *   3. Create TransferOffer from sender → validator (fee)
    *   4. Auto-accept fee on behalf of validator
    */
+  @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
   @Post('send-cc')
   async sendCc(
     @Req() req: AuthedReq,

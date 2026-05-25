@@ -6,7 +6,8 @@ import { ThrottlerModuleOptions } from '@nestjs/throttler';
  * Tiga tier berbeda:
  *   - default : endpoint umum (quests, leaderboard, dll)
  *   - auth    : register/login — ketat untuk cegah brute-force
- *   - ledger  : Canton/CC operations — sedang, ledger punya limit sendiri
+ *   - ledger  : POST wallet/Canton mutasi saja (send-cc, allocate) — 10/mnt di controller
+ *               GET balance/ledger-status pakai tier default (120/mnt), bukan ledger tier
  *
  * Digunakan via @Throttle({ auth: ... }) / @Throttle({ ledger: ... }) di controller.
  * Default tier otomatis berlaku untuk semua endpoint tanpa decorator.

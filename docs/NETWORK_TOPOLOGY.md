@@ -2,7 +2,9 @@
 
 > **Full deploy (zero → production):** [GUIDE_DEPLOY_FULL.md](./GUIDE_DEPLOY_FULL.md)  
 > **Tutorial deploy (ID):** [TUTORIAL_DEPLOY_INDONESIA.md](./TUTORIAL_DEPLOY_INDONESIA.md)  
-> **API lambat / diagnosa:** [PERFORMANCE_API.md](./PERFORMANCE_API.md)
+> **API lambat / diagnosa:** [PERFORMANCE_API.md](./PERFORMANCE_API.md)  
+> **Koneksi Splice + Ledger stabil:** [CANTON_STABLE_CONNECTION.md](./CANTON_STABLE_CONNECTION.md)  
+> **Site/wallet putus / deploy ulang:** [VPS2_OPERATIONS_RUNBOOK.md](./VPS2_OPERATIONS_RUNBOOK.md)
 
 ## Rule of thumb
 

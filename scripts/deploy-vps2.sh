@@ -5,8 +5,9 @@
 #   ./scripts/deploy-vps2.sh
 #
 # Options:
-#   --seed     Run prisma seed (quests + earn hub)
-#   --migrate  Use prisma migrate deploy instead of db push
+#   --seed        Run prisma seed (quests + earn hub)
+#   --migrate     Use prisma migrate deploy instead of db push
+#   --skip-docker Skip Postgres/Redis compose (DB already on :5432 / :6379)
 
 set -euo pipefail
 
@@ -15,12 +16,43 @@ cd "$ROOT"
 
 RUN_SEED=false
 USE_MIGRATE=false
+SKIP_DOCKER=false
 for arg in "$@"; do
   case "$arg" in
     --seed) RUN_SEED=true ;;
     --migrate) USE_MIGRATE=true ;;
+    --skip-docker) SKIP_DOCKER=true ;;
   esac
 done
+
+compose_running() {
+  docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'canquest-postgres' \
+    && docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'canquest-redis'
+}
+
+start_compose_if_needed() {
+  if compose_running; then
+    echo "    canquest-postgres + canquest-redis already running — skip compose"
+    return 0
+  fi
+  if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx 'canquest-postgres'; then
+    echo "    Starting existing canquest-postgres / canquest-redis containers..."
+    docker start canquest-postgres canquest-redis 2>/dev/null || true
+    if compose_running; then
+      return 0
+    fi
+  fi
+  if command -v ss >/dev/null 2>&1; then
+    if ss -tln 2>/dev/null | grep -q ':5432 '; then
+      echo "ERROR: Port 5432 already in use (not our running canquest-postgres)."
+      echo "  Check: docker ps -a | grep -E 'postgres|redis'"
+      echo "  Check: ss -tlnp | grep -E '5432|6379'"
+      echo "  If production DB is already up, redeploy with: bash scripts/deploy-vps2.sh --skip-docker"
+      return 1
+    fi
+  fi
+  docker compose -f docker-compose.yml up -d
+}
 
 echo "=== CanQuest VPS 2 deploy ==="
 echo "Root: $ROOT"
@@ -38,7 +70,11 @@ fi
 
 echo ""
 echo "[1] Postgres + Redis (Docker)..."
-docker compose -f docker-compose.yml up -d
+if $SKIP_DOCKER; then
+  echo "    --skip-docker: assuming Postgres/Redis already reachable (apps/api/.env DATABASE_URL)"
+else
+  start_compose_if_needed
+fi
 
 echo ""
 echo "[2] npm install (workspaces)..."
@@ -87,6 +123,7 @@ echo ""
 echo "[7] Health checks..."
 sleep 3
 curl -sf "http://127.0.0.1:3001/api/health" && echo "  API :3001 OK" || echo "  API :3001 FAILED"
+curl -sf "http://127.0.0.1:3001/api/health/canton" && echo "  Canton :3001 OK" || echo "  Canton :3001 FAILED (check canton-tunnel)"
 curl -sf -o /dev/null "http://127.0.0.1:3000" && echo "  Web :3000 OK" || echo "  Web :3000 FAILED"
 
 echo ""
