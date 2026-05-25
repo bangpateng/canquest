@@ -10,7 +10,7 @@ export interface Me {
 }
 
 export function login(email: string, password: string, turnstileToken: string) {
-  return apiFetch('/api/auth/login', {
+  return apiFetch<Record<string, unknown>>('/api/auth/login', {
     method: 'POST',
     json: {
       email: email.trim().toLowerCase(),

@@ -25,5 +25,9 @@ export async function POST(req: Request) {
     return NextResponse.json(data, { status: res.status });
   }
 
+  if (data.needsVerification === true && typeof data.userId === 'string') {
+    return NextResponse.json(data);
+  }
+
   return okWithSessionCookiesOr502(data);
 }

@@ -95,6 +95,24 @@ export class UsersService {
     });
   }
 
+  /** Replace credentials for a user who never completed email OTP verification. */
+  resumeUnverifiedRegistration(
+    userId: string,
+    passwordHash: string,
+    referredById?: string | null,
+  ) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordHash,
+        emailVerified: false,
+        otpCodeHash: null,
+        otpExpiresAt: null,
+        ...(referredById !== undefined ? { referredById } : {}),
+      },
+    });
+  }
+
   async setPartyId(userId: string, cantonPartyId: string, username?: string) {
     return this.prisma.user.update({
       where: { id: userId },

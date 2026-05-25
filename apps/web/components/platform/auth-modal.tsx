@@ -91,11 +91,21 @@ export function AuthModal() {
     const fd = new FormData(e.currentTarget);
     setBusy(true);
     try {
-      await login(
+      const payload = await login(
         String(fd.get("email") ?? ""),
         String(fd.get("password") ?? ""),
         turnstileToken ?? "",
       );
+      if (payload.needsVerification === true) {
+        const userId = typeof payload.userId === "string" ? payload.userId : null;
+        if (userId) {
+          const rawOtp = payload.devOtp;
+          const devOtp =
+            typeof rawOtp === "string" && /^[0-9]{6}$/.test(rawOtp) ? rawOtp : undefined;
+          setPendingOtp({ userId, devOtp });
+          return;
+        }
+      }
       closeAuth();
       redirectAfterAuth();
     } catch (err) {
