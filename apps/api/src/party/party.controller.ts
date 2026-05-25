@@ -22,6 +22,11 @@ import { FeaturedAppActivityService } from '../canton/featured-app-activity.serv
 import { CcInboundSyncService } from '../canton/cc-inbound-sync.service';
 import { CcBalanceService } from '../canton/cc-balance.service';
 import { TransactionDetailService } from '../canton/transaction-detail.service';
+import {
+  cantonPartyIdsEqual,
+  looksLikeCantonPartyId,
+  normalizeCantonPartyId,
+} from '../common/canton-party-id';
 import { hasRealWallet } from '../common/wallet-policy';
 import { UsersService } from '../users/users.service';
 import { WalletQuotaService } from './wallet-quota.service';
@@ -118,6 +123,7 @@ export class PartyController {
 
     try {
       await this.users.setPartyId(req.user.userId, cantonPartyId, username);
+      cantonPartyId = normalizeCantonPartyId(cantonPartyId) ?? cantonPartyId;
     } catch (err: unknown) {
       if (
         err &&
@@ -311,17 +317,18 @@ export class PartyController {
         throw new ConflictException('Party ID Already Taken');
       }
       await this.users.setPartyId(req.user.userId, splicePartyId, user.username ?? undefined);
+      const storedPartyId = normalizeCantonPartyId(splicePartyId) ?? splicePartyId;
       if (!hasRealWallet(user.cantonPartyId)) {
         await this.walletQuota.recordAllocation({
           userId: user.id,
           username,
-          partyId: splicePartyId,
+          partyId: storedPartyId,
         });
       }
       // CIP-56: ensure TransferPreapproval exists for this user
       const preapprovalActive = (await this.splice.createTransferPreapproval(username)).ok;
       return {
-        cantonPartyId: splicePartyId,
+        cantonPartyId: storedPartyId,
         isPlaceholder: false,
         spliceOnboarded: true,
         preapproval: { active: preapprovalActive },
@@ -334,15 +341,16 @@ export class PartyController {
     // Fallback: Canton JSON API only.
     const cantonPartyId = await this.ledger.allocateParty(username);
     await this.users.setPartyId(req.user.userId, cantonPartyId, user.username ?? undefined);
+    const storedPartyId = normalizeCantonPartyId(cantonPartyId) ?? cantonPartyId;
     if (!hasRealWallet(user.cantonPartyId)) {
       await this.walletQuota.recordAllocation({
         userId: user.id,
         username,
-        partyId: cantonPartyId,
+        partyId: storedPartyId,
       });
     }
     return {
-      cantonPartyId,
+      cantonPartyId: storedPartyId,
       isPlaceholder: false,
       spliceOnboarded: false,
       message: 'Party ID allocated on Canton participant. Set CANTON_VALIDATOR_URL for full Splice registration.',
@@ -488,16 +496,19 @@ export class PartyController {
     let recipientLabel: string;
     let recipientUsername: string | null = null;
 
-    if (recipientInput.includes('::')) {
-      if (recipientInput === sender.cantonPartyId) {
+    if (looksLikeCantonPartyId(recipientInput)) {
+      const normalizedRecipient = normalizeCantonPartyId(recipientInput);
+      if (!normalizedRecipient) {
+        throw new BadRequestException('Invalid Party ID format.');
+      }
+      if (cantonPartyIdsEqual(normalizedRecipient, sender.cantonPartyId)) {
         throw new BadRequestException('You cannot send CC to yourself.');
       }
-      recipientPartyId = recipientInput;
-      recipientLabel = recipientInput.split('::')[0] ?? recipientInput;
-      // Cari username dari DB, kalau tidak ada fallback ke bagian sebelum '::' di Party ID
-      // (di Splice, bagian sebelum '::' adalah username/hint yang sama dengan JWT sub)
-      const found = await this.users.findByPartyId(recipientPartyId);
-      recipientUsername = found?.username ?? (recipientInput.split('::')[0] || null);
+      recipientPartyId = normalizedRecipient;
+      recipientLabel = normalizedRecipient.split('::')[0] ?? normalizedRecipient;
+      const found = await this.users.findByPartyId(normalizedRecipient);
+      recipientUsername =
+        found?.username?.toLowerCase() ?? (recipientLabel || null);
     } else {
       const username = recipientInput.replace(/^@/, '').toLowerCase();
       if (username === sender.username?.toLowerCase()) {
@@ -508,9 +519,10 @@ export class PartyController {
       if (!resolved) {
         throw new BadRequestException(`User "@${username}" not found or has no wallet.`);
       }
-      recipientPartyId = resolved;
+      recipientPartyId =
+        normalizeCantonPartyId(resolved) ?? resolved;
       recipientLabel = `@${username}`;
-      recipientUsername = dbUser?.username ?? username;
+      recipientUsername = dbUser?.username?.toLowerCase() ?? username;
     }
 
     const description = body.memo?.trim() || `Sent to ${recipientLabel}`;

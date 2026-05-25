@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { formatPartyIdForDisplay } from "@/lib/canton-party-id";
 import { formatApiError } from "@/lib/format-api-error";
 
 type Me = {
@@ -137,7 +138,7 @@ export function SettingsAccountPanel() {
               loading
                 ? ""
                 : me?.cantonPartyId && !me.cantonPartyId.startsWith("canquest:")
-                  ? me.cantonPartyId
+                  ? formatPartyIdForDisplay(me.cantonPartyId)
                   : "—"
             }
             placeholder={loading ? "Loading…" : "Not created — go to Wallet"}

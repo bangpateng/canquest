@@ -6,6 +6,7 @@ import {
 } from '../common/quest-reward-labels';
 import { CcTransactionType, SubmissionStatus } from '../common/prisma-types';
 import { CC_TRANSACTION_HISTORY_WHERE } from './cc-transaction-visibility';
+import { normalizeCantonPartyId } from '../common/canton-party-id';
 
 @Injectable()
 export class UsersService {
@@ -34,7 +35,11 @@ export class UsersService {
   }
 
   findByPartyId(cantonPartyId: string) {
-    return this.prisma.user.findFirst({ where: { cantonPartyId } });
+    const normalized = normalizeCantonPartyId(cantonPartyId);
+    if (!normalized) return null;
+    return this.prisma.user.findFirst({
+      where: { cantonPartyId: { equals: normalized, mode: 'insensitive' } },
+    });
   }
 
   async create(params: {
@@ -114,9 +119,13 @@ export class UsersService {
   }
 
   async setPartyId(userId: string, cantonPartyId: string, username?: string) {
+    const normalized = normalizeCantonPartyId(cantonPartyId) ?? cantonPartyId.trim();
     return this.prisma.user.update({
       where: { id: userId },
-      data: { cantonPartyId, ...(username !== undefined ? { username } : {}) },
+      data: {
+        cantonPartyId: normalized,
+        ...(username !== undefined ? { username } : {}),
+      },
     });
   }
 

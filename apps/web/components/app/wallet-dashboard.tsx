@@ -7,6 +7,7 @@ import { WalletPreapprovalBanner } from "@/components/app/wallet-preapproval-ban
 import { TransactionsView } from "@/components/app/transactions-view";
 import { CheckCircle2, RefreshCw } from "lucide-react";
 import { useCcBalance } from "@/lib/hooks/use-cc-balance";
+import { formatPartyIdForDisplay } from "@/lib/canton-party-id";
 import { isRealCantonPartyId } from "@/lib/wallet-session-cache";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 
@@ -18,6 +19,7 @@ interface WalletDashboardProps {
 export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
   const t = usePlatformT();
   const hasWallet = isRealCantonPartyId(me.cantonPartyId);
+  const displayPartyId = formatPartyIdForDisplay(me.cantonPartyId);
   const {
     balance,
     loading: balanceLoading,
@@ -54,7 +56,7 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
         <div className="mt-3">
           <CopyField
             label={t("wallet.partyId")}
-            value={hasWallet ? (me.cantonPartyId ?? "—") : "—"}
+            value={hasWallet ? displayPartyId || "—" : "—"}
           />
         </div>
       </div>
@@ -103,7 +105,7 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
       <WalletPreapprovalBanner onActivated={handleBalanceRefresh} />
 
       <WalletActions
-        partyId={me.cantonPartyId ?? ""}
+        partyId={displayPartyId}
         onBalanceRefresh={handleBalanceRefresh}
       />
 

@@ -12,6 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ReferralService } from '../users/referral.service';
 import { UsersService } from '../users/users.service';
 import { resolvePublicAvatarUrl } from '../users/user-avatar-url';
+import { normalizeCantonPartyId } from '../common/canton-party-id';
 import { ResendEmailService } from './resend-email.service';
 
 const BCRYPT_ROUNDS = 12;
@@ -177,7 +178,7 @@ export class AuthService {
       email: user.email,
       displayName: user.displayName,
       username: user.username,
-      cantonPartyId: user.cantonPartyId,
+      cantonPartyId: normalizeCantonPartyId(user.cantonPartyId) ?? user.cantonPartyId,
       twitterUsername: user.twitterUsername,
       twitterConnectedAt: user.twitterConnectedAt?.toISOString() ?? null,
       earnPoints,

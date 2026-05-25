@@ -3,6 +3,10 @@
 import { CopyField } from "@/components/app/copy-field";
 import { buttonVariants } from "@/components/ui/button";
 import { iconButtonClass } from "@/lib/ui-button-styles";
+import {
+  formatPartyIdForDisplay,
+  normalizeSendRecipientInput,
+} from "@/lib/canton-party-id";
 import { cn } from "@/lib/utils";
 import { ArrowDownLeft, ArrowUpRight, CheckCircle2, Loader2, X, AlertCircle } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
@@ -17,6 +21,7 @@ interface WalletActionsProps {
 }
 
 export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps) {
+  const displayPartyId = formatPartyIdForDisplay(partyId);
   const sendTitleId = useId();
   const receiveTitleId = useId();
   const [sheet, setSheet] = useState<Sheet>(null);
@@ -63,9 +68,9 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
 
   async function submitSend(e: React.FormEvent) {
     e.preventDefault();
-    const username = recipientUsername.trim().replace(/^@/, "");
+    const recipient = normalizeSendRecipientInput(recipientUsername);
     const amount = parseFloat(ccAmount.trim());
-    if (!username || !amount || amount <= 0) return;
+    if (!recipient || !amount || amount <= 0) return;
 
     setSendState("loading");
     setSendMessage("");
@@ -76,7 +81,7 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          recipientUsername: username,
+          recipientUsername: recipient,
           amount,
           memo: memo.trim() || undefined,
         }),
@@ -216,6 +221,10 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
                     autoComplete="off"
                     value={recipientUsername}
                     onChange={(e) => setRecipientUsername(e.target.value)}
+                    onBlur={() => {
+                      const n = normalizeSendRecipientInput(recipientUsername);
+                      if (n && n !== recipientUsername.trim()) setRecipientUsername(n);
+                    }}
                     placeholder="@alice or alice::1220…"
                     disabled={sendState === "loading"}
                     className="w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 font-mono text-xs text-[var(--foreground)] outline-none ring-offset-[var(--card)] placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--foreground)]/25 disabled:opacity-50"
@@ -353,7 +362,7 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
 
             <div className="mt-6 flex justify-center rounded-2xl border border-[var(--border)] bg-white p-4 dark:bg-zinc-950">
               <QRCodeSVG
-                value={partyId}
+                value={displayPartyId}
                 size={200}
                 level="M"
                 marginSize={2}
@@ -362,7 +371,7 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
             </div>
 
             <div className="mt-6">
-              <CopyField label="Your Canton Party ID" value={partyId} />
+              <CopyField label="Your Canton Party ID" value={displayPartyId} />
             </div>
 
             <button
