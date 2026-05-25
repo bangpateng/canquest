@@ -35,6 +35,7 @@ import { CanQuestLogo } from "@/components/brand/canquest-logo";
 import { PlatformToolbar } from "@/components/platform/platform-toolbar";
 
 import { logout } from "@/lib/services/api/auth";
+import { clearCachedWalletMe } from "@/lib/wallet-session-cache";
 
 import { platformContentClass } from "@/components/platform/platform-page";
 import { PlatformI18nProvider, usePlatformI18n } from "@/lib/i18n/platform-provider";
@@ -182,6 +183,7 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
 
 
   async function handleSignOut() {
+    clearCachedWalletMe();
     try {
       await Promise.race([
         logout(),

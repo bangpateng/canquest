@@ -19,6 +19,7 @@ import {
   cacheWalletMe,
   isRealCantonPartyId,
   readCachedWalletMe,
+  readLastWalletUserId,
 } from "@/lib/wallet-session-cache";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 
@@ -108,7 +109,7 @@ async function fetchJson<T>(url: string): Promise<{ ok: boolean; data: T | null 
 
 export function DashboardView() {
   const t = usePlatformT();
-  const [me, setMe] = useState<Me | null>(() => readCachedWalletMe());
+  const [me, setMe] = useState<Me | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [activityData, setActivityData] = useState<ActivityPage | null>(null);
   const [activityPage, setActivityPage] = useState(1);
@@ -163,7 +164,7 @@ export function DashboardView() {
         setMe(meResult.data);
         cacheWalletMe(meResult.data);
       } else {
-        const cached = readCachedWalletMe();
+        const cached = readCachedWalletMe(readLastWalletUserId());
         if (cached) setMe((prev) => prev ?? cached);
       }
       if (statsResult.ok && statsResult.data) {

@@ -11,33 +11,28 @@ import {
   hasUsableWalletCache,
   isRealCantonPartyId,
   readCachedWalletMe,
+  readLastWalletUserId,
 } from "@/lib/wallet-session-cache";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 
 type Me = {
+  id?: string;
   username?: string | null;
   cantonPartyId?: string | null;
 };
 
-function initialMe(): Me | null {
-  return readCachedWalletMe();
-}
-
-function shouldShowInitialLoader(): boolean {
-  return !hasUsableWalletCache();
-}
-
 export default function WalletPage() {
   const t = usePlatformT();
-  const [me, setMe] = useState<Me | null>(initialMe);
-  const [loading, setLoading] = useState(shouldShowInitialLoader);
+  const [me, setMe] = useState<Me | null>(null);
+  const [loading, setLoading] = useState(true);
   const [profileStale, setProfileStale] = useState(false);
   const [ledgerStatus, setLedgerStatus] = useState<LedgerStatus | null>(null);
 
   const refresh = useCallback(async () => {
+    const lastUserId = me?.id ?? readLastWalletUserId();
     const canShowWalletWithoutWait =
-      isRealCantonPartyId(me?.cantonPartyId) || hasUsableWalletCache();
+      isRealCantonPartyId(me?.cantonPartyId) || hasUsableWalletCache(lastUserId);
     if (!canShowWalletWithoutWait) setLoading(true);
 
     void getLedgerStatus()
@@ -52,16 +47,18 @@ export default function WalletPage() {
       cacheWalletMe(meData);
       setProfileStale(false);
     } catch {
+      const cached = readCachedWalletMe(lastUserId);
       setMe((prev) => {
-        if (isRealCantonPartyId(prev?.cantonPartyId)) return prev;
-        const cached = readCachedWalletMe();
-        return cached ?? prev;
+        if (prev?.id && prev.id === cached?.userId) return prev;
+        if (cached) return cached;
+        if (prev && !isRealCantonPartyId(prev.cantonPartyId) && !prev.username) return prev;
+        return null;
       });
-      if (hasUsableWalletCache()) setProfileStale(true);
+      if (hasUsableWalletCache(lastUserId)) setProfileStale(true);
     } finally {
       setLoading(false);
     }
-  }, [me?.cantonPartyId]);
+  }, [me?.id, me?.cantonPartyId]);
 
   useEffect(() => {
     void refresh();

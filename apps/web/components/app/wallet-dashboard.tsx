@@ -51,11 +51,12 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
             {t("wallet.walletActive")}
           </p>
         </div>
-        {me.cantonPartyId ? (
-          <div className="mt-3">
-            <CopyField label={t("wallet.partyId")} value={me.cantonPartyId} />
-          </div>
-        ) : null}
+        <div className="mt-3">
+          <CopyField
+            label={t("wallet.partyId")}
+            value={hasWallet ? (me.cantonPartyId ?? "—") : "—"}
+          />
+        </div>
       </div>
 
       <div className="glass-card w-full min-w-0 rounded-2xl border border-[var(--border)] p-6">

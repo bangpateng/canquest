@@ -133,7 +133,13 @@ export function SettingsAccountPanel() {
           <input
             id="settings-party"
             readOnly
-            value={loading ? "" : (me?.cantonPartyId ?? "")}
+            value={
+              loading
+                ? ""
+                : me?.cantonPartyId && !me.cantonPartyId.startsWith("canquest:")
+                  ? me.cantonPartyId
+                  : "—"
+            }
             placeholder={loading ? "Loading…" : "Not created — go to Wallet"}
             className="mt-1.5 w-full rounded-xl border border-[var(--border)] bg-[var(--muted)]/50 px-3 py-2.5 font-mono text-xs outline-none"
           />

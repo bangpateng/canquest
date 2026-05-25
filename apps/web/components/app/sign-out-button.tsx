@@ -5,6 +5,7 @@ import { useState } from "react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
+import { clearCachedWalletMe } from "@/lib/wallet-session-cache";
 
 type SignOutButtonProps = {
   className?: string;
@@ -20,6 +21,7 @@ export function SignOutButton({ className, variant = "button" }: SignOutButtonPr
   async function handleSignOut() {
     setBusy(true);
     try {
+      clearCachedWalletMe();
       await fetch("/api/auth/logout", { method: "POST" });
     } finally {
       router.push("/");

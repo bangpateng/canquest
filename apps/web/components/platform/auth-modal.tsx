@@ -9,6 +9,7 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { formatApiError } from "@/lib/format-api-error";
 import { login, register, verifyOtp } from "@/lib/services/api/auth";
 import { clearReferralRef, getReferralRef } from "@/lib/referral-ref";
+import { clearCachedWalletMe } from "@/lib/wallet-session-cache";
 import { cn } from "@/lib/utils";
 
 type PendingOtp = { userId: string; devOtp?: string };
@@ -106,6 +107,7 @@ export function AuthModal() {
           return;
         }
       }
+      clearCachedWalletMe();
       closeAuth();
       redirectAfterAuth();
     } catch (err) {
@@ -134,6 +136,7 @@ export function AuthModal() {
       });
       if (payload.ok === true) {
         clearReferralRef();
+        clearCachedWalletMe();
         closeAuth();
         redirectAfterAuth();
         return;
@@ -165,6 +168,7 @@ export function AuthModal() {
     try {
       await verifyOtp(pendingOtp.userId, String(fd.get("otp") ?? "").trim());
       clearReferralRef();
+      clearCachedWalletMe();
       closeAuth();
       redirectAfterAuth();
     } catch (err) {
