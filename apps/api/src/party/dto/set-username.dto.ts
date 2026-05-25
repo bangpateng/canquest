@@ -1,6 +1,6 @@
 import { Transform } from 'class-transformer';
 import { IsString, Matches, MaxLength, MinLength } from 'class-validator';
-import { normalizeWalletUsername } from '../common/canton-party-id';
+import { normalizeWalletUsername } from '../../common/canton-party-id';
 
 export class SetUsernameDto {
   @IsString()
