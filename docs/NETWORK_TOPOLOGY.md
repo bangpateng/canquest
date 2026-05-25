@@ -1,7 +1,8 @@
 # CanQuest — network topology (read this first)
 
 > **Full deploy (zero → production):** [GUIDE_DEPLOY_FULL.md](./GUIDE_DEPLOY_FULL.md)  
-> **Tutorial deploy (ID):** [TUTORIAL_DEPLOY_INDONESIA.md](./TUTORIAL_DEPLOY_INDONESIA.md)
+> **Tutorial deploy (ID):** [TUTORIAL_DEPLOY_INDONESIA.md](./TUTORIAL_DEPLOY_INDONESIA.md)  
+> **API lambat / diagnosa:** [PERFORMANCE_API.md](./PERFORMANCE_API.md)
 
 ## Rule of thumb
 

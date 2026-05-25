@@ -1,5 +1,8 @@
 import { Controller, Get } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { SkipThrottle } from '@nestjs/throttler';
+import { CantonLedgerService } from './canton/canton-ledger.service';
+import { SpliceValidatorService } from './canton/splice-validator.service';
 
 /**
  * AppController — health check endpoints.
@@ -9,6 +12,12 @@ import { SkipThrottle } from '@nestjs/throttler';
 @Controller('health')
 @SkipThrottle()
 export class AppController {
+  constructor(
+    private readonly config: ConfigService,
+    private readonly splice: SpliceValidatorService,
+    private readonly ledger: CantonLedgerService,
+  ) {}
+
   /** GET /api/health — liveness probe */
   @Get()
   ok() {
@@ -36,6 +45,56 @@ export class AppController {
       ok: true,
       ts: new Date().toISOString(),
       uptime: Math.floor(process.uptime()),
+    };
+  }
+
+  /**
+   * GET /api/health/canton — diagnose slow wallet/API (Splice + Ledger reachability).
+   * Run on VPS: curl -s http://127.0.0.1:3001/api/health/canton | jq
+   */
+  @Get('canton')
+  async canton() {
+    const started = Date.now();
+    const [spliceReachable, ledgerReachable] = await Promise.all([
+      this.splice.isReachable(),
+      this.ledger.isReachable(),
+    ]);
+    const checkMs = Date.now() - started;
+
+    const balanceFromDb = this.config.get<string>('BALANCE_READ_FROM_DB');
+    const readFromDb =
+      balanceFromDb === undefined || balanceFromDb === '' || balanceFromDb === 'true';
+
+    return {
+      ok: spliceReachable && ledgerReachable,
+      ts: new Date().toISOString(),
+      checkMs,
+      splice: {
+        reachable: spliceReachable,
+        configured: this.splice.isConfigured,
+      },
+      ledger: {
+        reachable: ledgerReachable,
+      },
+      balance: {
+        readFromDb,
+        dbMaxAgeMs: Number(this.config.get<string>('BALANCE_DB_MAX_AGE_MS') ?? '60000'),
+        backgroundDebounceMs: Number(
+          this.config.get<string>('BALANCE_BACKGROUND_DEBOUNCE_MS') ?? '15000',
+        ),
+      },
+      inboundSync: {
+        enabled:
+          this.config.get<string>('CC_INBOUND_SYNC_ENABLED') !== 'false',
+        pollMs: Number(this.config.get<string>('CC_INBOUND_SYNC_POLL_MS') ?? '30000'),
+      },
+      hint: !spliceReachable
+        ? 'Splice unreachable — check WireGuard, CANTON_VALIDATOR_URL, validator on VPS 1.'
+        : !ledgerReachable
+          ? 'Ledger unreachable — check CANTON_JSON_API_URL and participant tunnel.'
+          : readFromDb
+            ? 'Canton OK; balance should be fast from DB with background sync.'
+            : 'Set BALANCE_READ_FROM_DB=true for faster GET /party/balance.',
     };
   }
 }
