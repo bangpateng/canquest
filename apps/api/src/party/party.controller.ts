@@ -61,22 +61,36 @@ export class PartyController {
    */
   @Post('username')
   async setUsername(@Req() req: AuthedReq, @Body() body: SetUsernameDto) {
-    const taken = await this.users.findByUsername(body.username);
+    const username = body.username.trim();
+    const existing = await this.users.findById(req.user.userId);
+    if (!existing) {
+      throw new BadRequestException('User not found');
+    }
+
+    if (hasRealWallet(existing.cantonPartyId)) {
+      throw new ConflictException(
+        'You already have a wallet. Only one wallet is allowed per account.',
+      );
+    }
+
+    const taken = await this.users.findByUsernameInsensitive(username);
     if (taken && taken.id !== req.user.userId) {
-      throw new ConflictException('Username already taken');
+      throw new ConflictException('Party ID Already Taken');
     }
 
     let cantonPartyId: string;
     let isPlaceholder = false;
     let spliceOnboarded = false;
 
-    const existing = await this.users.findById(req.user.userId);
-    if (!hasRealWallet(existing?.cantonPartyId)) {
+    if (!hasRealWallet(existing.cantonPartyId)) {
       await this.walletQuota.assertSlotAvailable();
     }
 
     // Preferred path: Splice validator handles party allocation + onboarding in one call.
-    const splicePartyId = await this.splice.createWalletUser(body.username);
+    const splicePartyId = await this.splice.createWalletUser(username);
+    if (!splicePartyId && (await this.splice.getUserPartyId(username))) {
+      throw new ConflictException('Party ID Already Taken');
+    }
 
     if (splicePartyId) {
       cantonPartyId = splicePartyId;
@@ -86,23 +100,40 @@ export class PartyController {
       const ledgerReachable = await this.ledger.isReachable();
       if (ledgerReachable) {
         try {
-          cantonPartyId = await this.ledger.allocateParty(body.username);
+          cantonPartyId = await this.ledger.allocateParty(username);
         } catch {
-          cantonPartyId = `canquest:user:${body.username}:${req.user.userId.slice(0, 8)}`;
+          cantonPartyId = `canquest:user:${username}:${req.user.userId.slice(0, 8)}`;
           isPlaceholder = true;
         }
       } else {
-        cantonPartyId = `canquest:user:${body.username}:${req.user.userId.slice(0, 8)}`;
+        cantonPartyId = `canquest:user:${username}:${req.user.userId.slice(0, 8)}`;
         isPlaceholder = true;
       }
     }
 
-    await this.users.setPartyId(req.user.userId, cantonPartyId, body.username);
+    const partyOwner = await this.users.findByPartyId(cantonPartyId);
+    if (partyOwner && partyOwner.id !== req.user.userId) {
+      throw new ConflictException('Party ID Already Taken');
+    }
 
-    if (!hasRealWallet(existing?.cantonPartyId) && !isPlaceholder) {
+    try {
+      await this.users.setPartyId(req.user.userId, cantonPartyId, username);
+    } catch (err: unknown) {
+      if (
+        err &&
+        typeof err === 'object' &&
+        'code' in err &&
+        (err as { code: string }).code === 'P2002'
+      ) {
+        throw new ConflictException('Party ID Already Taken');
+      }
+      throw err;
+    }
+
+    if (!hasRealWallet(existing.cantonPartyId) && !isPlaceholder) {
       await this.walletQuota.recordAllocation({
         userId: req.user.userId,
-        username: body.username,
+        username,
         partyId: cantonPartyId,
       });
     }
@@ -111,7 +142,7 @@ export class PartyController {
     // Per Canton Module 4: wallet_created is a meaningful user action
     // https://docs.canton.network/appdev/modules/m4-featured-app-activity-marker
     void this.featuredActivity
-      .recordActivity('wallet_created', cantonPartyId, `Wallet created for @${body.username}`)
+      .recordActivity('wallet_created', cantonPartyId, `Wallet created for @${username}`)
       .catch(() => { /* non-critical */ });
 
     // CIP-56 compliance: auto-create TransferPreapproval so the user can receive
@@ -125,7 +156,7 @@ export class PartyController {
       if (existing) {
         preapprovalActive = true;
       } else {
-        preapprovalActive = (await this.splice.createTransferPreapproval(body.username)).ok;
+        preapprovalActive = (await this.splice.createTransferPreapproval(username)).ok;
       }
     }
 
@@ -143,7 +174,7 @@ export class PartyController {
     }
 
     return {
-      username: body.username,
+      username,
       cantonPartyId,
       isPlaceholder,
       spliceOnboarded,
@@ -257,6 +288,12 @@ export class PartyController {
     const user = await this.users.findById(req.user.userId);
     if (!user) throw new BadRequestException('User not found');
 
+    if (hasRealWallet(user.cantonPartyId)) {
+      throw new ConflictException(
+        'You already have a wallet. Only one wallet is allowed per account.',
+      );
+    }
+
     const username = user.username ?? `cq-${user.id.slice(0, 10)}`;
 
     if (!hasRealWallet(user.cantonPartyId)) {
@@ -265,7 +302,14 @@ export class PartyController {
 
     // Try Splice first (preferred — full registration).
     const splicePartyId = await this.splice.createWalletUser(username);
+    if (!splicePartyId && (await this.splice.getUserPartyId(username))) {
+      throw new ConflictException('Party ID Already Taken');
+    }
     if (splicePartyId) {
+      const partyOwner = await this.users.findByPartyId(splicePartyId);
+      if (partyOwner && partyOwner.id !== req.user.userId) {
+        throw new ConflictException('Party ID Already Taken');
+      }
       await this.users.setPartyId(req.user.userId, splicePartyId, user.username ?? undefined);
       if (!hasRealWallet(user.cantonPartyId)) {
         await this.walletQuota.recordAllocation({

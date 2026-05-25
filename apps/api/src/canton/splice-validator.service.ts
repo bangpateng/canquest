@@ -149,9 +149,8 @@ export class SpliceValidatorService {
     const text = await res.text();
 
     if (res.status === 409) {
-      // User already exists — fetch their party ID via GET
-      this.logger.log(`Splice user already exists: ${username} — fetching party ID`);
-      return this.getUserPartyId(username);
+      this.logger.warn(`Splice wallet username already taken: ${username}`);
+      return null;
     }
 
     if (!res.ok) {

@@ -91,14 +91,7 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
           </div>
         </div>
 
-        <h2 className="type-page-title text-center">
-          Create Your Wallet
-        </h2>
-        <p className="mt-2 text-center text-sm text-[var(--muted-foreground)]">
-          Choose a username — this becomes your identity on the{" "}
-          <strong className="font-medium text-[var(--foreground)]">Canton Network</strong> ledger.
-          It cannot be changed later.
-        </p>
+        <h2 className="type-page-title text-center">Create Your Wallet</h2>
 
         {quotaRemaining !== null ? (
           <p
@@ -173,11 +166,6 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
               </>
             )}
           </button>
-
-          <p className="text-center text-[11px] text-[var(--muted-foreground)]">
-            Your Party ID is allocated on your validator&apos;s Canton participant node via the
-            JSON Ledger API.
-          </p>
         </form>
       </div>
     </div>
