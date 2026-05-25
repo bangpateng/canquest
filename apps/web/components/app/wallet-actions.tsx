@@ -8,7 +8,8 @@ import {
   normalizeSendRecipientInput,
 } from "@/lib/canton-party-id";
 import { cn } from "@/lib/utils";
-import { ArrowDownLeft, ArrowUpRight, CheckCircle2, Loader2, X, AlertCircle } from "lucide-react";
+import { TransactionDetailModal } from "@/components/app/transaction-detail-modal";
+import { ArrowDownLeft, ArrowUpRight, Loader2, X, AlertCircle } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { useCallback, useEffect, useId, useState } from "react";
 
@@ -41,9 +42,16 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
   const [memo, setMemo] = useState("");
   const [sendState, setSendState] = useState<SendState>("idle");
   const [sendMessage, setSendMessage] = useState("");
+  const [successTransactionId, setSuccessTransactionId] = useState<string | null>(null);
 
   const close = useCallback(() => {
     setSheet(null);
+    setSendState("idle");
+    setSendMessage("");
+  }, []);
+
+  const closeSuccessReceipt = useCallback(() => {
+    setSuccessTransactionId(null);
     setSendState("idle");
     setSendMessage("");
   }, []);
@@ -96,6 +104,8 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
         warning?: string;
         success?: boolean;
         accepted?: boolean;
+        transactionId?: string;
+        to?: string;
       };
 
       if (
@@ -108,14 +118,21 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
         return;
       }
 
-      setSendState("success");
-      setSendMessage(
-        data.message ??
-          `Sent ${amount} CC` +
-            (data.feeCollected && data.fee
-              ? ` (fee ${data.fee} CC, total ${data.totalDeducted ?? amount + data.fee} CC)`
-              : ""),
-      );
+      setSheet(null);
+      setSendState("idle");
+      if (typeof data.transactionId === "string" && data.transactionId) {
+        setSuccessTransactionId(data.transactionId);
+      } else {
+        setSendState("success");
+        setSendMessage(
+          data.message ??
+            `Sent ${amount} CC` +
+              (data.feeCollected && data.fee
+                ? ` (fee ${data.fee} CC, total ${data.totalDeducted ?? amount + data.fee} CC)`
+                : ""),
+        );
+        setSheet("send");
+      }
       onBalanceRefresh?.();
     } catch {
       setSendState("error");
@@ -174,7 +191,7 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
                   Send
                 </h2>
                 <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-                  Send Canton Coin by Party ID.
+                  Send CC to a CanQuest @username or any Canton Party ID.
                 </p>
               </div>
               <button
@@ -189,11 +206,7 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
 
             {sendState === "success" ? (
               <div className="mt-6 flex flex-col items-center gap-4 py-4 text-center">
-                <CheckCircle2 className="h-12 w-12 text-green-500" />
                 <p className="text-sm font-medium text-[var(--foreground)]">{sendMessage}</p>
-                <p className="text-xs text-[var(--muted-foreground)]">
-                  The CC will arrive in the recipient&apos;s wallet shortly.
-                </p>
                 <button
                   type="button"
                   onClick={close}
@@ -322,6 +335,14 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
           </div>
         </div>
       ) : null}
+
+      <TransactionDetailModal
+        open={successTransactionId !== null}
+        transactionId={successTransactionId}
+        title="Transfer sent"
+        subtitle="Funds are on the way. Review your receipt below."
+        onClose={closeSuccessReceipt}
+      />
 
       {/* ── RECEIVE DIALOG ── */}
       {sheet === "receive" ? (

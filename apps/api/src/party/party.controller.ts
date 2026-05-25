@@ -559,6 +559,7 @@ export class PartyController {
     // Jika penerima eksternal (tidak punya username) → fallback ke Canton Ledger API (port 7575)
     let accepted = false;
     let acceptUpdateId: string | null = null;
+    let transferTransactionId: string | undefined;
     if (recipientUsername) {
       accepted = await this.splice.acceptOfferViaWallet(offerContractId, recipientUsername);
       this.logger.log(
@@ -583,6 +584,7 @@ export class PartyController {
         ledgerTxId: offerContractId,
         cantonUpdateId: acceptUpdateId ?? undefined,
       });
+      transferTransactionId = outRow.id;
       if (!acceptUpdateId && sender.cantonPartyId) {
         void this.txDetail.backfillUpdateId(outRow.id, offerContractId, sender.cantonPartyId);
       }
@@ -697,10 +699,10 @@ export class PartyController {
 
     const totalDeducted = amount + (feeCollected ? feeCc : 0);
     const message = feeCollected
-      ? `${amount} CC sent to ${recipientLabel}. Platform fee: ${feeCc} CC. Total: ${amount + feeCc} CC.`
+      ? `Sent ${amount} CC to ${recipientLabel} (platform fee ${feeCc} CC).`
       : feeWarning
-        ? `${amount} CC sent to ${recipientLabel}. ${feeWarning}`
-        : `${amount} CC sent to ${recipientLabel}.`;
+        ? `Sent ${amount} CC to ${recipientLabel}. ${feeWarning}`
+        : `Sent ${amount} CC to ${recipientLabel}.`;
 
     return {
       success: true,
@@ -712,6 +714,7 @@ export class PartyController {
       totalDeducted,
       accepted: true,
       message,
+      transactionId: transferTransactionId,
       ...(feeWarning ? { warning: feeWarning } : {}),
     };
   }
