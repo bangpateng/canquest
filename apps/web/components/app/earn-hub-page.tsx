@@ -4,6 +4,7 @@ import Link from "next/link";
 import { QuestReferralCard } from "@/components/app/quest-referral-card";
 import { QuestTaskPanel } from "@/components/app/quest-task-panel";
 import { ROUTES } from "@/lib/app-routes";
+import { hasRealWallet } from "@/lib/wallet-access";
 import type { Quest } from "@/lib/quest-types";
 import { cn } from "@/lib/utils";
 import { ArrowRight, Loader2, Trophy, Zap } from "lucide-react";
@@ -47,7 +48,9 @@ export function EarnHubPage() {
               twitterUsername?: string | null;
               earnPoints?: number;
             };
-            setPartyId(me.cantonPartyId?.trim() || null);
+            setPartyId(
+              hasRealWallet(me.cantonPartyId) ? me.cantonPartyId!.trim() : null,
+            );
             setTwitterUsername(me.twitterUsername?.trim() || null);
             setEarnPoints(typeof me.earnPoints === "number" ? me.earnPoints : 0);
           } else {

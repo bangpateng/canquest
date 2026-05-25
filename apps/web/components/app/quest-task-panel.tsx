@@ -33,6 +33,7 @@ import { WalletCreatePromptModal } from "@/components/app/wallet-create-prompt";
 import { CardTitle, SectionTitle, SubsectionTitle } from "@/components/ui/typography";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { hasRealWallet } from "@/lib/wallet-access";
 import {
   CalendarCheck,
   Check,
@@ -220,8 +221,8 @@ export function QuestTaskPanel({
       .then((r) => (r.ok ? r.json() : null))
       .then(
         (me: { cantonPartyId?: string | null; twitterUsername?: string | null } | null) => {
-          if (viewerPartyId == null && me?.cantonPartyId) {
-            setPartyId(me.cantonPartyId.trim() || null);
+          if (viewerPartyId == null && hasRealWallet(me?.cantonPartyId)) {
+            setPartyId(me!.cantonPartyId!.trim());
           }
           if (viewerTwitterUsername == null) {
             setTwitterUsername(me?.twitterUsername?.trim() || null);
@@ -573,8 +574,13 @@ function TaskRow({
     taskType === "telegram_group" ||
     taskType === "discord_join";
 
+  /** Quest hub (/quest): wallet only for party-ID tasks. Partner campaigns (/earn): wallet required. */
+  const needsWallet = earnHubLayout
+    ? isPartyTask && !hasRealWallet(partyId)
+    : !hasRealWallet(partyId);
+
   function requireWallet(): boolean {
-    if (partyId) return false;
+    if (!needsWallet) return false;
     setWalletPromptOpen(true);
     return true;
   }
@@ -773,14 +779,12 @@ function TaskRow({
 
   const needsProofBeforeStart = isEmailTask || isPartyTask;
   const actionLabel = taskActionButtonLabel(task.type);
-  const needsWallet = !partyId;
-  const needsWalletForParty = isPartyTask && !partyId;
   const actionDisabled =
     campaignEnded ||
     loading ||
     (isAccountDataTask && accountSubmitLocked && !isRepeatable) ||
     needsTwitter ||
-    (needsWalletForParty && !needsWallet) ||
+    (isPartyTask && needsWallet) ||
     (needsProofBeforeStart && !proof.trim()) ||
     (isEmailTask && !proof.includes("@"));
 
