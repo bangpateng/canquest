@@ -1,5 +1,6 @@
 "use client";
 
+import { normalizeWalletUsername } from "@/lib/canton-party-id";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
 import { formatApiError } from "@/lib/format-api-error";
@@ -36,8 +37,8 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
 
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
-    const val = username.trim();
-    if (!val) return;
+    const val = normalizeWalletUsername(username) ?? "";
+    if (!val || val.length < 3) return;
 
     setBusy(true);
     setError(null);
@@ -115,11 +116,18 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
             <input
               id="wallet-username"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={(e) =>
+                setUsername(
+                  e.target.value.replace(/^@/, "").toLowerCase().replace(/[^a-z0-9_]/g, ""),
+                )
+              }
               placeholder="e.g. alex_canton"
               minLength={3}
               maxLength={32}
-              pattern="[a-zA-Z0-9_]+"
+              pattern="[a-z0-9_]+"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
               required
               disabled={busy || step === "done"}
               className="w-full rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3 font-mono text-sm text-[var(--foreground)] outline-none ring-[var(--ring)] placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 disabled:opacity-50"

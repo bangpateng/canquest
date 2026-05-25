@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { formatPartyIdForDisplay } from "@/lib/canton-party-id";
+import { formatPartyIdForDisplay, formatUsernameForDisplay } from "@/lib/canton-party-id";
 import { formatApiError } from "@/lib/format-api-error";
 
 type Me = {
@@ -119,7 +119,7 @@ export function SettingsAccountPanel() {
           <input
             id="settings-username"
             readOnly
-            value={loading ? "" : (me?.username ?? "")}
+            value={loading ? "" : formatUsernameForDisplay(me?.username)}
             placeholder={loading ? "Loading…" : me?.username ? me.username : "Not set — create via Wallet"}
             className="mt-1.5 w-full rounded-xl border border-[var(--border)] bg-[var(--muted)]/50 px-3 py-2.5 font-mono text-sm outline-none"
           />

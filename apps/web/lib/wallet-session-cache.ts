@@ -1,3 +1,8 @@
+import {
+  normalizeCantonPartyId,
+  normalizeWalletUsername,
+} from "./canton-party-id";
+
 /** Cached wallet profile so refresh survives brief API / node outages (per user). */
 
 const STORAGE_PREFIX = "canquest.wallet.me.v2";
@@ -61,8 +66,8 @@ export function cacheWalletMe(
     if (!me.username && !isRealCantonPartyId(me.cantonPartyId)) return;
     const entry: CachedWalletMe = {
       userId,
-      username: me.username ?? null,
-      cantonPartyId: me.cantonPartyId ?? null,
+      username: normalizeWalletUsername(me.username),
+      cantonPartyId: normalizeCantonPartyId(me.cantonPartyId),
     };
     sessionStorage.setItem(`${STORAGE_PREFIX}.${userId}`, JSON.stringify(entry));
   } catch {

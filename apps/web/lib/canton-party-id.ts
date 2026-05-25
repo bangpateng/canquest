@@ -15,6 +15,19 @@ export function formatPartyIdForDisplay(partyId: string | null | undefined): str
   return normalizeCantonPartyId(partyId) ?? "";
 }
 
+export function normalizeWalletUsername(
+  username: string | null | undefined,
+): string | null {
+  if (!username?.trim()) return null;
+  return username.trim().replace(/^@/, "").toLowerCase();
+}
+
+export function formatUsernameForDisplay(
+  username: string | null | undefined,
+): string {
+  return normalizeWalletUsername(username) ?? "";
+}
+
 export function normalizeSendRecipientInput(raw: string): string {
   const trimmed = raw.trim().replace(/^@/, "");
   if (!trimmed) return "";

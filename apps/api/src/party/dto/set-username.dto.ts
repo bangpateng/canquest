@@ -1,11 +1,16 @@
+import { Transform } from 'class-transformer';
 import { IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { normalizeWalletUsername } from '../common/canton-party-id';
 
 export class SetUsernameDto {
   @IsString()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? (normalizeWalletUsername(value) ?? value) : value,
+  )
   @MinLength(3)
   @MaxLength(32)
-  @Matches(/^[a-zA-Z0-9_]+$/, {
-    message: 'username may contain letters, numbers, and underscores',
+  @Matches(/^[a-z0-9_]+$/, {
+    message: 'username may contain lowercase letters, numbers, and underscores',
   })
   username!: string;
 }

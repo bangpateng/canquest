@@ -26,6 +26,7 @@ import {
   cantonPartyIdsEqual,
   looksLikeCantonPartyId,
   normalizeCantonPartyId,
+  normalizeWalletUsername,
 } from '../common/canton-party-id';
 import { hasRealWallet } from '../common/wallet-policy';
 import { UsersService } from '../users/users.service';
@@ -66,7 +67,10 @@ export class PartyController {
    */
   @Post('username')
   async setUsername(@Req() req: AuthedReq, @Body() body: SetUsernameDto) {
-    const username = body.username.trim();
+    const username = normalizeWalletUsername(body.username) ?? '';
+    if (username.length < 3) {
+      throw new BadRequestException('Username must be at least 3 characters.');
+    }
     const existing = await this.users.findById(req.user.userId);
     if (!existing) {
       throw new BadRequestException('User not found');
@@ -300,7 +304,8 @@ export class PartyController {
       );
     }
 
-    const username = user.username ?? `cq-${user.id.slice(0, 10)}`;
+    const username =
+      normalizeWalletUsername(user.username) ?? `cq-${user.id.slice(0, 10)}`;
 
     if (!hasRealWallet(user.cantonPartyId)) {
       await this.walletQuota.assertSlotAvailable();

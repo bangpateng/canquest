@@ -26,3 +26,11 @@ export function cantonPartyIdsEqual(
 export function looksLikeCantonPartyId(value: string): boolean {
   return value.includes('::');
 }
+
+/** Wallet / Canton login name — always stored and displayed lowercase. */
+export function normalizeWalletUsername(
+  username: string | null | undefined,
+): string | null {
+  if (!username?.trim()) return null;
+  return username.trim().replace(/^@/, '').toLowerCase();
+}

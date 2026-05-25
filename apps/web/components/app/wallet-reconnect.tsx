@@ -1,5 +1,6 @@
 "use client";
 
+import { formatUsernameForDisplay } from "@/lib/canton-party-id";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
 import { formatApiError } from "@/lib/format-api-error";
@@ -46,7 +47,9 @@ export function WalletReconnect({ username, onConnected }: WalletReconnectProps)
         <p className="mt-2 text-sm text-[var(--muted-foreground)]">
           {t("wallet.reconnectHint")}
         </p>
-        <p className="mt-4 font-mono text-sm text-[var(--foreground)]">@{username}</p>
+        <p className="mt-4 font-mono text-sm text-[var(--foreground)]">
+          @{formatUsernameForDisplay(username)}
+        </p>
 
         {error ? (
           <p

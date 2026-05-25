@@ -6,7 +6,10 @@ import {
 } from '../common/quest-reward-labels';
 import { CcTransactionType, SubmissionStatus } from '../common/prisma-types';
 import { CC_TRANSACTION_HISTORY_WHERE } from './cc-transaction-visibility';
-import { normalizeCantonPartyId } from '../common/canton-party-id';
+import {
+  normalizeCantonPartyId,
+  normalizeWalletUsername,
+} from '../common/canton-party-id';
 
 @Injectable()
 export class UsersService {
@@ -24,7 +27,9 @@ export class UsersService {
   }
 
   findByUsername(username: string) {
-    return this.prisma.user.findUnique({ where: { username } });
+    const normalized = normalizeWalletUsername(username);
+    if (!normalized) return null;
+    return this.prisma.user.findUnique({ where: { username: normalized } });
   }
 
   /** Case-insensitive username lookup (Send CC / party resolve). */
@@ -124,7 +129,9 @@ export class UsersService {
       where: { id: userId },
       data: {
         cantonPartyId: normalized,
-        ...(username !== undefined ? { username } : {}),
+        ...(username !== undefined
+          ? { username: normalizeWalletUsername(username) }
+          : {}),
       },
     });
   }
