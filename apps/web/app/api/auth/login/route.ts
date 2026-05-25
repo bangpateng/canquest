@@ -1,33 +1,21 @@
 import { okWithSessionCookiesOr502 } from '@/lib/auth-cookies';
 import { postJsonParse } from '@/lib/internal-api-url';
-import { clientIpFromRequest, verifyTurnstileToken } from '@/lib/turnstile';
 import { NextResponse } from 'next/server';
 
-/** Recovery sign-in only — sends OTP when refresh cookie expired. Normal login uses POST /api/auth/refresh. */
+/** Email + password — no Turnstile, no OTP. */
 export async function POST(req: Request) {
-  let body: { email?: string; turnstileToken?: string };
+  let body: { email?: string; password?: string };
   try {
     body = (await req.json()) as typeof body;
   } catch {
     return NextResponse.json({ message: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const captcha = await verifyTurnstileToken(
-    body.turnstileToken,
-    clientIpFromRequest(req),
-  );
-  if (!captcha.ok) return captcha.response;
-
-  const { turnstileToken: _t, ...nestBody } = body;
-  const { res, data } = await postJsonParse<Record<string, unknown>>('/auth/login', nestBody);
+  const { res, data } = await postJsonParse<Record<string, unknown>>('/auth/login', body);
 
   if (!res.ok) {
     return NextResponse.json(data, { status: res.status });
   }
 
-  if (typeof data.accessToken === 'string' && typeof data.refreshToken === 'string') {
-    return okWithSessionCookiesOr502(data);
-  }
-
-  return NextResponse.json(data);
+  return okWithSessionCookiesOr502(data);
 }

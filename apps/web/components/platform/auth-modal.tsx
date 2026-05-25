@@ -1,22 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { X, Loader2, ArrowRight } from "lucide-react";
 import { useAuthModal, type AuthModalMode } from "@/components/platform/auth-context";
 import { TurnstileField, useTurnstileRequired } from "@/components/platform/turnstile-field";
 import { buttonVariants } from "@/components/ui/button";
+import { PasswordInput } from "@/components/ui/password-input";
 import { formatApiError } from "@/lib/format-api-error";
-import {
-  refreshSession,
-  register,
-  requestSignInCode,
-  verifyOtp,
-} from "@/lib/services/api/auth";
+import { login, register, verifyOtp } from "@/lib/services/api/auth";
 import { clearReferralRef, getReferralRef } from "@/lib/referral-ref";
 import { cn } from "@/lib/utils";
 
 type PendingOtp = { userId: string; devOtp?: string };
-type SessionState = "idle" | "checking" | "active" | "expired";
 
 const inputClass =
   "w-full rounded-xl border border-[var(--border)] bg-[var(--muted)]/80 px-3 py-2.5 text-sm outline-none transition-colors placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)]/40 focus-visible:ring-2 focus-visible:ring-[var(--ring)]";
@@ -47,46 +42,13 @@ export function AuthModal() {
   const [referralDefault, setReferralDefault] = useState("");
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileKey, setTurnstileKey] = useState(0);
-  const [sessionState, setSessionState] = useState<SessionState>("idle");
-  const [showRecovery, setShowRecovery] = useState(false);
   const turnstileRequired = useTurnstileRequired();
-
-  const redirectAfterAuth = useCallback(() => {
-    const next = nextPath;
-    const safe =
-      next?.startsWith("/") && !next.startsWith("//") ? next : "/overview";
-    window.location.assign(safe);
-  }, [nextPath]);
-
-  const tryRefreshSession = useCallback(async () => {
-    setSessionState("checking");
-    setError(null);
-    try {
-      const payload = await refreshSession();
-      if (
-        payload.ok === true ||
-        typeof payload.accessToken === "string"
-      ) {
-        setSessionState("active");
-        closeAuth();
-        redirectAfterAuth();
-        return true;
-      }
-      setSessionState("expired");
-      return false;
-    } catch {
-      setSessionState("expired");
-      return false;
-    }
-  }, [closeAuth, redirectAfterAuth]);
 
   useEffect(() => {
     if (!open) {
       setError(null);
       setPendingOtp(null);
       setTurnstileToken(null);
-      setSessionState("idle");
-      setShowRecovery(false);
     } else {
       setReferralDefault(getReferralRef());
       setTurnstileKey((k) => k + 1);
@@ -94,56 +56,45 @@ export function AuthModal() {
   }, [open]);
 
   useEffect(() => {
-    if (!open || mode !== "login" || pendingOtp) return;
-    void tryRefreshSession();
-  }, [open, mode, pendingOtp, tryRefreshSession]);
-
-  useEffect(() => {
-    if (open && (mode === "register" || showRecovery)) {
+    if (open && mode === "register" && !pendingOtp) {
       setTurnstileToken(null);
       setTurnstileKey((k) => k + 1);
     }
-  }, [open, mode, showRecovery, pendingOtp]);
+  }, [open, mode, pendingOtp]);
 
   if (!open) return null;
 
-  function requireTurnstile(): boolean {
+  function redirectAfterAuth() {
+    const next = nextPath;
+    const safe =
+      next?.startsWith("/") && !next.startsWith("//") ? next : "/overview";
+    window.location.assign(safe);
+  }
+
+  function requireRegisterTurnstile(): boolean {
     if (turnstileRequired === null) {
-      setError("Loading captcha… try again in a moment.");
+      setError("Memuat captcha… coba lagi sebentar.");
       return false;
     }
     if (!turnstileRequired) return true;
     if (!turnstileToken) {
-      setError("Complete the captcha before continuing.");
+      setError("Selesaikan captcha terlebih dahulu.");
       return false;
     }
     return true;
   }
 
-  async function onRecoveryLogin(e: React.FormEvent<HTMLFormElement>) {
+  async function onLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
-    if (!requireTurnstile()) return;
     const fd = new FormData(e.currentTarget);
     setBusy(true);
     try {
-      const payload = await requestSignInCode(
-        String(fd.get("email") ?? ""),
-        turnstileToken ?? "",
-      );
-      const userId = typeof payload.userId === "string" ? payload.userId : null;
-      if (!userId) {
-        setError("Unexpected response. Try again.");
-        return;
-      }
-      const rawOtp = payload.devOtp;
-      const devOtp =
-        typeof rawOtp === "string" && /^[0-9]{6}$/.test(rawOtp) ? rawOtp : undefined;
-      setPendingOtp({ userId, devOtp });
+      await login(String(fd.get("email") ?? ""), String(fd.get("password") ?? ""));
+      closeAuth();
+      redirectAfterAuth();
     } catch (err) {
-      setError(formatApiError(err, "Unable to send recovery code."));
-      setTurnstileKey((k) => k + 1);
-      setTurnstileToken(null);
+      setError(formatApiError(err, "Gagal masuk. Periksa email dan password."));
     } finally {
       setBusy(false);
     }
@@ -152,7 +103,7 @@ export function AuthModal() {
   async function onRegister(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
-    if (!requireTurnstile()) return;
+    if (!requireRegisterTurnstile()) return;
     const fd = new FormData(e.currentTarget);
     setBusy(true);
     try {
@@ -160,6 +111,7 @@ export function AuthModal() {
         String(fd.get("referralCode") ?? "").trim() || getReferralRef() || undefined;
       const payload = await register({
         email: String(fd.get("email") ?? ""),
+        password: String(fd.get("password") ?? ""),
         referralCode: referralRaw,
         turnstileToken: turnstileToken ?? "",
       });
@@ -177,9 +129,9 @@ export function AuthModal() {
         setPendingOtp({ userId, devOtp });
         return;
       }
-      setError("Unexpected response. Try again.");
+      setError("Respons tidak terduga. Coba lagi.");
     } catch (err) {
-      setError(formatApiError(err, "Registration failed."));
+      setError(formatApiError(err, "Registrasi gagal."));
       setTurnstileKey((k) => k + 1);
       setTurnstileToken(null);
     } finally {
@@ -199,7 +151,7 @@ export function AuthModal() {
       closeAuth();
       redirectAfterAuth();
     } catch (err) {
-      setError(formatApiError(err, "Invalid code."));
+      setError(formatApiError(err, "Kode tidak valid."));
     } finally {
       setBusy(false);
     }
@@ -211,15 +163,15 @@ export function AuthModal() {
   ];
 
   const title = pendingOtp
-    ? "Verify your email"
+    ? "Verifikasi email"
     : mode === "login"
-      ? "Welcome back"
-      : "Create account";
+      ? "Selamat datang kembali"
+      : "Buat akun";
   const subtitle = pendingOtp
-    ? "Enter the 6-digit code we sent you (register or recovery sign-in)"
+    ? "Masukkan kode 6 digit dari email Anda"
     : mode === "login"
-      ? "We keep you signed in for 30 days — no email unless you need a recovery code"
-      : "Email only — connect X later in Settings for quest tasks";
+      ? "Email dan password — tanpa OTP"
+      : "Daftar dengan email & password, lalu verifikasi OTP";
 
   return (
     <div
@@ -263,7 +215,6 @@ export function AuthModal() {
                   onClick={() => {
                     openAuth(t.id, nextPath);
                     setError(null);
-                    setShowRecovery(false);
                   }}
                   className={cn(
                     "flex-1 rounded-full py-2.5 text-sm font-semibold transition-all",
@@ -296,7 +247,7 @@ export function AuthModal() {
                   Dev OTP: {pendingOtp.devOtp}
                 </p>
               )}
-              <Field label="Verification code">
+              <Field label="Kode verifikasi">
                 <input
                   name="otp"
                   inputMode="numeric"
@@ -312,90 +263,55 @@ export function AuthModal() {
                 className={cn(buttonVariants(), "w-full gap-2 rounded-full py-3 font-bold")}
               >
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Verify & continue
+                Verifikasi & lanjut
                 {!busy && <ArrowRight className="h-4 w-4" />}
               </button>
             </form>
           ) : mode === "login" ? (
-            <div className="space-y-4">
-              {sessionState === "checking" ? (
-                <div className="flex items-center justify-center gap-2 py-8 text-sm text-[var(--muted-foreground)]">
-                  <Loader2 className="h-5 w-5 animate-spin text-canton" />
-                  Checking your session…
-                </div>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => {
-                      setBusy(true);
-                      void tryRefreshSession().finally(() => setBusy(false));
-                    }}
-                    className={cn(
-                      buttonVariants(),
-                      "w-full gap-2 rounded-full py-3 font-bold shadow-[0_0_24px_rgb(var(--canton-rgb)/0.2)]",
-                    )}
-                  >
-                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                    Continue to app
-                    {!busy && <ArrowRight className="h-4 w-4" />}
-                  </button>
-                  <p className="text-center text-xs text-[var(--muted-foreground)]">
-                    Uses your saved sign-in (about 30 days). No email is sent.
-                  </p>
-
-                  {!showRecovery ? (
-                    <button
-                      type="button"
-                      className="w-full text-center text-sm text-canton hover:underline"
-                      onClick={() => {
-                        setShowRecovery(true);
-                        setError(null);
-                      }}
-                    >
-                      Cleared cookies or new device? Email me a recovery code
-                    </button>
-                  ) : (
-                    <form onSubmit={onRecoveryLogin} className="space-y-4 border-t border-[var(--border)] pt-4">
-                      <Field label="Account email">
-                        <input
-                          name="email"
-                          type="email"
-                          required
-                          autoComplete="email"
-                          placeholder="you@example.com"
-                          className={inputClass}
-                        />
-                      </Field>
-                      <TurnstileField resetKey={turnstileKey} onToken={setTurnstileToken} />
-                      <button
-                        type="submit"
-                        disabled={busy}
-                        className={cn(buttonVariants({ variant: "secondary" }), "w-full rounded-full py-3")}
-                      >
-                        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                        Send recovery code (uses 1 email)
-                      </button>
-                    </form>
-                  )}
-                </>
-              )}
+            <form onSubmit={onLogin} className="space-y-4">
+              <Field label="Email">
+                <input
+                  name="email"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  placeholder="you@example.com"
+                  className={inputClass}
+                />
+              </Field>
+              <PasswordInput
+                id="auth-login-password"
+                label="Password"
+                autoComplete="current-password"
+                placeholder="Password Anda"
+                inputClassName="bg-[var(--muted)]/80"
+              />
+              <button
+                type="submit"
+                disabled={busy}
+                className={cn(
+                  buttonVariants(),
+                  "mt-2 w-full gap-2 rounded-full py-3 font-bold shadow-[0_0_24px_rgb(var(--canton-rgb)/0.2)]",
+                )}
+              >
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                Masuk
+                {!busy && <ArrowRight className="h-4 w-4" />}
+              </button>
               <p className="text-center text-sm text-[var(--muted-foreground)]">
-                No account?{" "}
+                Belum punya akun?{" "}
                 <button
                   type="button"
                   className="font-semibold text-canton hover:underline"
                   onClick={() => {
                     openAuth("register", nextPath);
                     setError(null);
-                    setShowRecovery(false);
                   }}
                 >
                   Register
                 </button>
               </p>
-            </div>
+            </form>
           ) : (
             <form onSubmit={onRegister} className="space-y-4">
               <Field label="Email">
@@ -408,7 +324,15 @@ export function AuthModal() {
                   className={inputClass}
                 />
               </Field>
-              <Field label="Referral code (optional)">
+              <PasswordInput
+                id="auth-register-password"
+                label="Password"
+                autoComplete="new-password"
+                placeholder="Minimal 8 karakter"
+                minLength={8}
+                inputClassName="bg-[var(--muted)]/80"
+              />
+              <Field label="Kode referral (opsional)">
                 <input
                   name="referralCode"
                   autoComplete="off"
@@ -427,14 +351,14 @@ export function AuthModal() {
                 )}
               >
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                {busy ? "Sending code…" : "Create account"}
+                {busy ? "Mengirim kode…" : "Buat akun"}
                 {!busy && <ArrowRight className="h-4 w-4" />}
               </button>
               <p className="text-center text-xs text-[var(--muted-foreground)]">
-                Link X in Settings after sign-up for follow/retweet quests and leaderboard photo.
+                Hubungkan X di Settings setelah daftar untuk quest & foto leaderboard.
               </p>
               <p className="text-center text-sm text-[var(--muted-foreground)]">
-                Already have an account?{" "}
+                Sudah punya akun?{" "}
                 <button
                   type="button"
                   className="font-semibold text-canton hover:underline"

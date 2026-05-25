@@ -7,6 +7,7 @@ import { ArrowRight, Loader2 } from "lucide-react";
 import { AuthCard, authInputClass } from "@/components/auth/auth-card";
 import { TurnstileField, useTurnstileRequired } from "@/components/platform/turnstile-field";
 import { buttonVariants } from "@/components/ui/button";
+import { PasswordInput } from "@/components/ui/password-input";
 import { formatApiError } from "@/lib/format-api-error";
 import { register, verifyOtp } from "@/lib/services/api/auth";
 import { cn } from "@/lib/utils";
@@ -34,11 +35,11 @@ export default function RegisterPage() {
     e.preventDefault();
     setError(null);
     if (turnstileRequired === null) {
-      setError("Loading captcha… try again in a moment.");
+      setError("Memuat captcha… coba lagi sebentar.");
       return;
     }
     if (turnstileRequired && !turnstileToken) {
-      setError("Complete the captcha before continuing.");
+      setError("Selesaikan captcha terlebih dahulu.");
       return;
     }
 
@@ -50,6 +51,7 @@ export default function RegisterPage() {
     try {
       const payload = await register({
         email: String(fd.get("email") ?? ""),
+        password: String(fd.get("password") ?? ""),
         referralCode: referralRaw,
         turnstileToken: turnstileToken ?? "",
       });
@@ -69,9 +71,9 @@ export default function RegisterPage() {
         return;
       }
 
-      setError("Unexpected response from registration. Try again.");
+      setError("Respons tidak terduga. Coba lagi.");
     } catch (err) {
-      setError(formatApiError(err, "Registration failed."));
+      setError(formatApiError(err, "Registrasi gagal."));
       setTurnstileKey((k) => k + 1);
       setTurnstileToken(null);
     } finally {
@@ -90,14 +92,14 @@ export default function RegisterPage() {
       clearReferralRef();
       window.location.assign("/overview");
     } catch (err) {
-      setError(formatApiError(err, "Verification failed."));
+      setError(formatApiError(err, "Verifikasi gagal."));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <AuthCard title="Create account" subtitle="Email + OTP — connect X in Settings later">
+    <AuthCard title="Buat akun" subtitle="Email, password, OTP verifikasi — X di Settings">
       {error ? (
         <div
           className="mt-6 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-sm text-red-300"
@@ -123,9 +125,17 @@ export default function RegisterPage() {
               className={authInputClass}
             />
           </div>
+          <PasswordInput
+            id="reg-password"
+            label="Password"
+            autoComplete="new-password"
+            placeholder="Minimal 8 karakter"
+            minLength={8}
+            inputClassName="bg-[var(--muted)]/80"
+          />
           <div className="space-y-1.5">
             <label htmlFor="reg-referral" className="text-xs font-medium text-[var(--muted-foreground)]">
-              Referral code (optional)
+              Kode referral (opsional)
             </label>
             <input
               id="reg-referral"
@@ -148,7 +158,7 @@ export default function RegisterPage() {
             )}
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            {busy ? "Sending code…" : "Create account"}
+            {busy ? "Mengirim kode…" : "Buat akun"}
             {!busy && <ArrowRight className="h-4 w-4" />}
           </button>
         </form>
@@ -159,7 +169,7 @@ export default function RegisterPage() {
           ) : null}
           <div className="space-y-1.5">
             <label htmlFor="reg-otp" className="text-xs font-medium text-[var(--muted-foreground)]">
-              Verification code
+              Kode verifikasi
             </label>
             <input
               id="reg-otp"
@@ -172,13 +182,13 @@ export default function RegisterPage() {
             />
           </div>
           <button type="submit" disabled={busy} className={cn(buttonVariants(), "w-full")}>
-            {busy ? "Verifying…" : "Verify & enter app"}
+            {busy ? "Memverifikasi…" : "Verifikasi & masuk"}
           </button>
         </form>
       )}
 
       <p className="mt-6 text-center text-sm text-[var(--muted-foreground)]">
-        Already have an account?{" "}
+        Sudah punya akun?{" "}
         <Link href="/?auth=login" className="font-semibold text-canton hover:underline">
           Sign In
         </Link>

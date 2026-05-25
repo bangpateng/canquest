@@ -9,21 +9,16 @@ export interface Me {
   avatarUrl?: string | null;
 }
 
-/** Resume session from refresh cookie — no Resend email. */
-export function refreshSession() {
-  return apiFetch<Record<string, unknown>>('/api/auth/refresh', { method: 'POST' });
-}
-
-/** Recovery only when refresh cookie expired (costs 1 Resend email). */
-export function requestSignInCode(email: string, turnstileToken: string) {
-  return apiFetch<Record<string, unknown>>('/api/auth/login', {
+export function login(email: string, password: string) {
+  return apiFetch('/api/auth/login', {
     method: 'POST',
-    json: { email: email.trim().toLowerCase(), turnstileToken },
+    json: { email: email.trim().toLowerCase(), password },
   });
 }
 
 export function register(params: {
   email: string;
+  password: string;
   referralCode?: string;
   turnstileToken: string;
 }) {
@@ -31,6 +26,7 @@ export function register(params: {
     method: 'POST',
     json: {
       email: params.email.trim().toLowerCase(),
+      password: params.password,
       referralCode: params.referralCode?.trim() || undefined,
       turnstileToken: params.turnstileToken,
     },

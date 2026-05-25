@@ -32,7 +32,7 @@ export class AuthService {
     private readonly resend: ResendEmailService,
   ) {}
 
-  async register(dto: { email: string; referralCode?: string }) {
+  async register(dto: { email: string; password: string; referralCode?: string }) {
     const email = dto.email.trim().toLowerCase();
     const existing = await this.users.findByEmail(email);
     if (existing) {
@@ -54,7 +54,7 @@ export class AuthService {
     }
 
     const skipOtp = process.env.AUTH_REGISTER_SKIP_OTP === 'true';
-    const passwordHash = await bcrypt.hash(randomBytes(32).toString('hex'), BCRYPT_ROUNDS);
+    const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
     const referralCode = await this.referral.generateUniqueReferralCode();
     const localPart = email.split('@')[0] ?? 'User';
     const displayName =
@@ -82,27 +82,25 @@ export class AuthService {
     };
   }
 
-  /**
-   * Recovery sign-in only (uses Resend). Normal return visits use refresh cookies — no email.
-   */
-  async login(dto: { email: string }) {
+  async login(dto: { email: string; password: string }) {
     const email = dto.email.trim().toLowerCase();
     const user = await this.users.findByEmail(email);
     if (!user) {
-      throw new UnauthorizedException('No account found for this email');
+      throw new UnauthorizedException('Invalid email or password');
     }
+
+    const ok = await bcrypt.compare(dto.password, user.passwordHash);
+    if (!ok) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
     if (!user.emailVerified) {
-      throw new BadRequestException(
-        'Email not verified yet. Complete registration with the code we sent you.',
+      throw new UnauthorizedException(
+        'Email not verified. Check your inbox for the registration code.',
       );
     }
 
-    const { devOtp } = await this.issueOtpForUser(user.id, email);
-    return {
-      userId: user.id,
-      message: 'Recovery sign-in code sent to your email.',
-      devOtp,
-    };
+    return this.issueTokens(user.id, user.email);
   }
 
   async verifyOtp(userId: string, code: string) {
