@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { TurnstileField } from "@/components/platform/turnstile-field";
+import { TurnstileField, useTurnstileRequired } from "@/components/platform/turnstile-field";
 import { buttonVariants } from "@/components/ui/button";
 import { formatApiError } from "@/lib/format-api-error";
 import { cn } from "@/lib/utils";
@@ -30,6 +30,7 @@ export function SettingsTwitterPanel({
   const [success, setSuccess] = useState<string | null>(null);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileKey, setTurnstileKey] = useState(0);
+  const turnstileRequired = useTurnstileRequired();
 
   const refresh = useCallback(async () => {
     const res = await fetch("/api/twitter/status", {
@@ -52,8 +53,11 @@ export function SettingsTwitterPanel({
     e.preventDefault();
     const val = input.trim().replace(/^@/, "");
     if (!val) return;
-    const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim();
-    if (siteKey && !turnstileToken) {
+    if (turnstileRequired === null) {
+      setError("Loading captcha… try again in a moment.");
+      return;
+    }
+    if (turnstileRequired && !turnstileToken) {
       setError("Complete the captcha before connecting.");
       return;
     }

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { clearReferralRef, getReferralRef, storeReferralRef } from "@/lib/referral-ref";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { AuthCard, authInputClass } from "@/components/auth/auth-card";
-import { TurnstileField } from "@/components/platform/turnstile-field";
+import { TurnstileField, useTurnstileRequired } from "@/components/platform/turnstile-field";
 import { buttonVariants } from "@/components/ui/button";
 import { formatApiError } from "@/lib/format-api-error";
 import { register, verifyOtp } from "@/lib/services/api/auth";
@@ -20,6 +20,7 @@ export default function RegisterPage() {
   const [referralDefault, setReferralDefault] = useState("");
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileKey, setTurnstileKey] = useState(0);
+  const turnstileRequired = useTurnstileRequired();
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -32,8 +33,11 @@ export default function RegisterPage() {
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
-    const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim();
-    if (siteKey && !turnstileToken) {
+    if (turnstileRequired === null) {
+      setError("Loading captcha… try again in a moment.");
+      return;
+    }
+    if (turnstileRequired && !turnstileToken) {
       setError("Complete the captcha before continuing.");
       return;
     }

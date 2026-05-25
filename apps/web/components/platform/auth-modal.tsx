@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { X, Loader2, ArrowRight } from "lucide-react";
 import { useAuthModal, type AuthModalMode } from "@/components/platform/auth-context";
-import { TurnstileField } from "@/components/platform/turnstile-field";
+import { TurnstileField, useTurnstileRequired } from "@/components/platform/turnstile-field";
 import { buttonVariants } from "@/components/ui/button";
 import { formatApiError } from "@/lib/format-api-error";
 import {
@@ -49,6 +49,7 @@ export function AuthModal() {
   const [turnstileKey, setTurnstileKey] = useState(0);
   const [sessionState, setSessionState] = useState<SessionState>("idle");
   const [showRecovery, setShowRecovery] = useState(false);
+  const turnstileRequired = useTurnstileRequired();
 
   const redirectAfterAuth = useCallback(() => {
     const next = nextPath;
@@ -107,8 +108,11 @@ export function AuthModal() {
   if (!open) return null;
 
   function requireTurnstile(): boolean {
-    const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim();
-    if (!siteKey) return true;
+    if (turnstileRequired === null) {
+      setError("Loading captcha… try again in a moment.");
+      return false;
+    }
+    if (!turnstileRequired) return true;
     if (!turnstileToken) {
       setError("Complete the captcha before continuing.");
       return false;
