@@ -20,9 +20,12 @@ export const metadata: Metadata = {
     "Enterprise Web3 quest platform: earn points, compete on leaderboards, and build on the Canton network.",
   metadataBase: new URL("https://canquest.cc"),
   icons: {
-    icon: [{ url: "/favicon.jpg", type: "image/jpeg" }],
-    shortcut: "/favicon.jpg",
-    apple: "/apple-touch-icon.jpg",
+    icon: [
+      { url: "/favicon.ico", sizes: "32x32" },
+      { url: "/favicon.png", type: "image/png", sizes: "512x512" },
+    ],
+    shortcut: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
   },
 };
 
@@ -35,9 +38,9 @@ export default function RootLayout({
     <html lang="en" className="dark" suppressHydrationWarning>
       <head>
         <ThemeInitScript />
-        <link rel="icon" href="/favicon.jpg" type="image/jpeg" />
-        <link rel="shortcut icon" href="/favicon.jpg" />
-        <link rel="apple-touch-icon" href="/apple-touch-icon.jpg" />
+        <link rel="icon" href="/favicon.ico" sizes="32x32" />
+        <link rel="icon" href="/favicon.png" type="image/png" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
       </head>
       <body
         className={`${inter.variable} ${space.variable} min-h-screen antialiased`}

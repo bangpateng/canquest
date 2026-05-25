@@ -37,13 +37,6 @@ const nextConfig: NextConfig = {
 
   // Single domain: canquest.cc — legacy paths redirect in middleware.ts
 
-  async redirects() {
-    return [
-      { source: "/favicon.ico", destination: "/favicon.jpg", permanent: false },
-      { source: "/favicon.png", destination: "/favicon.jpg", permanent: false },
-    ];
-  },
-
   webpack: (config, { dev }) => {
     if (dev) {
       if (process.env.NEXT_WEBPACK_DISABLE_CACHE === "true") {
