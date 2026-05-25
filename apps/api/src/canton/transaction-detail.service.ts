@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { CantonLedgerService, type LedgerStreamEvent } from './canton-ledger.service';
+import { isPlatformFeeTransaction } from '../users/cc-transaction-visibility';
 
 export type LedgerEventSummary = {
   kind: 'created' | 'archived';
@@ -80,7 +81,7 @@ export class TransactionDetailService {
       }),
     ]);
 
-    if (!tx) {
+    if (!tx || isPlatformFeeTransaction(tx.description)) {
       throw new NotFoundException('Transaction not found');
     }
 

@@ -168,8 +168,6 @@ export function EarnHubPage() {
         </div>
       </section>
 
-      {!loading ? <QuestReferralCard /> : null}
-
       {loading ? (
         <div className="flex items-center justify-center gap-2 py-16 text-sm text-[var(--muted-foreground)]">
           <Loader2 className="h-5 w-5 animate-spin text-canton" />
@@ -210,6 +208,8 @@ export function EarnHubPage() {
               Quest is not active right now.
             </p>
           ) : null}
+
+          <QuestReferralCard />
         </>
       )}
 

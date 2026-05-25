@@ -5,6 +5,7 @@ import {
   parseQuestIdFromRewardDescription,
 } from '../common/quest-reward-labels';
 import { CcTransactionType, SubmissionStatus } from '../common/prisma-types';
+import { CC_TRANSACTION_HISTORY_WHERE } from './cc-transaction-visibility';
 
 @Injectable()
 export class UsersService {
@@ -192,14 +193,15 @@ export class UsersService {
   /** Paginated transaction list for a user (newest first). BigInt serialized as string. */
   async getTransactions(userId: string, page: number, pageSize: number) {
     const skip = (page - 1) * pageSize;
+    const where = { userId, ...CC_TRANSACTION_HISTORY_WHERE };
     const [items, total] = await Promise.all([
       this.prisma.ccTransaction.findMany({
-        where: { userId },
+        where,
         orderBy: { createdAt: 'desc' },
         skip,
         take: pageSize,
       }),
-      this.prisma.ccTransaction.count({ where: { userId } }),
+      this.prisma.ccTransaction.count({ where }),
     ]);
     const enriched = await this.enrichQuestRewardDescriptions(items);
     const serialized = enriched.map((tx) => ({
