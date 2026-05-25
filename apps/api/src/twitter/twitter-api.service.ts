@@ -5,10 +5,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import {
-  pickTwitterDisplayName,
-  pickTwitterProfileImage,
-} from './twitter-avatar.util';
+import { pickTwitterDisplayName, pickTwitterProfileImage } from './twitter-avatar.util';
 import {
   normalizeTwitterUsername,
   parseTweetIdFromTarget,

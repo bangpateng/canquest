@@ -9,7 +9,6 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
-import { ProfileAvatarService } from '../users/profile-avatar.service';
 import { ReferralService } from '../users/referral.service';
 import { UsersService } from '../users/users.service';
 import { resolvePublicAvatarUrl } from '../users/user-avatar-url';
@@ -25,7 +24,6 @@ export class AuthService {
 
   constructor(
     private readonly users: UsersService,
-    private readonly avatars: ProfileAvatarService,
     private readonly referral: ReferralService,
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
@@ -165,7 +163,7 @@ export class AuthService {
       earnPoints,
       emailVerified: user.emailVerified,
       createdAt: user.createdAt,
-      avatarUrl: resolvePublicAvatarUrl(this.avatars, user),
+      avatarUrl: resolvePublicAvatarUrl(user),
     };
   }
 

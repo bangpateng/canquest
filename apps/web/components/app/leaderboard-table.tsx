@@ -20,9 +20,12 @@ interface LeaderboardRow {
   userId: string;
   username: string;
   displayName: string;
+  twitterUsername?: string | null;
   points: number;
   avatarUrl: string | null;
 }
+
+const LEADERBOARD_AVATAR_PX = 48;
 
 interface LeaderboardData {
   rows: LeaderboardRow[];
@@ -57,9 +60,10 @@ function avatarGradient(username: string): string {
   return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length]!;
 }
 
-function isTwitterCdn(url: string): boolean {
+function isOptimizableAvatar(url: string): boolean {
   try {
-    return new URL(url).hostname === "pbs.twimg.com";
+    const host = new URL(url).hostname;
+    return host === "pbs.twimg.com" || host === "abs.twimg.com";
   } catch {
     return false;
   }
@@ -76,13 +80,13 @@ function ParticipantCell({
     row.avatarUrl && !row.avatarUrl.includes("?")
       ? `${row.avatarUrl}?v=${row.userId}`
       : row.avatarUrl;
-  const useNextImage = cacheBust && isTwitterCdn(cacheBust);
+  const useNextImage = cacheBust && isOptimizableAvatar(cacheBust);
 
   return (
     <td className="px-3 py-3">
       <div className="flex items-center gap-3">
         <div
-          className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full ring-2 ring-[var(--border)] ring-offset-2 ring-offset-[var(--card)]"
+          className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full ring-2 ring-[var(--border)] ring-offset-2 ring-offset-[var(--card)]"
           aria-hidden
           style={
             cacheBust
@@ -94,14 +98,22 @@ function ParticipantCell({
             <Image
               src={cacheBust}
               alt=""
-              width={44}
-              height={44}
+              width={LEADERBOARD_AVATAR_PX}
+              height={LEADERBOARD_AVATAR_PX}
               className="h-full w-full object-cover"
-              unoptimized
+              sizes="48px"
             />
           ) : cacheBust ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={cacheBust} alt="" className="h-full w-full object-cover" />
+            <img
+              src={cacheBust}
+              alt=""
+              width={LEADERBOARD_AVATAR_PX}
+              height={LEADERBOARD_AVATAR_PX}
+              className="h-full w-full object-cover"
+              loading="lazy"
+              decoding="async"
+            />
           ) : (
             <span className="type-micro-label text-white drop-shadow-sm">
               {getInitials(row.displayName)}
@@ -124,6 +136,9 @@ function ParticipantCell({
               </span>
             )}
           </div>
+          {row.twitterUsername ? (
+            <p className="text-xs text-[var(--muted-foreground)]">@{row.twitterUsername}</p>
+          ) : null}
         </div>
       </div>
     </td>

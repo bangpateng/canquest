@@ -31,6 +31,7 @@ export interface LeaderboardRow {
   userId: string;
   username: string;
   displayName: string;
+  twitterUsername: string | null;
   cantonPartyId: string | null;
   points: number;
   avatarUrl: string | null;
@@ -1187,9 +1188,9 @@ export class QuestsService {
           id: true,
           username: true,
           displayName: true,
+          twitterUsername: true,
           cantonPartyId: true,
           earnPoints: true,
-          avatarPath: true,
           twitterAvatarUrl: true,
         },
         orderBy: { earnPoints: 'desc' },
@@ -1204,7 +1205,8 @@ export class QuestsService {
         displayName: u.displayName ?? u.username ?? 'Unknown',
         cantonPartyId: u.cantonPartyId,
         points: u.earnPoints,
-        avatarUrl: resolvePublicAvatarUrl(this.avatars, u),
+        avatarUrl: resolvePublicAvatarUrl(u),
+        twitterUsername: u.twitterUsername,
       }));
       return { rows, total, page, pageSize };
     }
@@ -1284,7 +1286,8 @@ export class QuestsService {
       where: { id: { in: userIds } },
       select: {
         id: true,
-        avatarPath: true,
+        displayName: true,
+        twitterUsername: true,
         cantonPartyId: true,
         twitterAvatarUrl: true,
       },
@@ -1297,12 +1300,11 @@ export class QuestsService {
         rank: skip + i + 1,
         userId: u.userId,
         username: u.username ?? 'unknown',
-        displayName: u.displayName ?? u.username ?? 'Unknown',
+        displayName: profile?.displayName ?? u.displayName ?? u.username ?? 'Unknown',
+        twitterUsername: profile?.twitterUsername ?? null,
         cantonPartyId: profile?.cantonPartyId ?? u.cantonPartyId ?? null,
         points: u.points,
-        avatarUrl: profile
-          ? resolvePublicAvatarUrl(this.avatars, profile)
-          : null,
+        avatarUrl: profile ? resolvePublicAvatarUrl(profile) : null,
       };
     });
 

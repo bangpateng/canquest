@@ -26,6 +26,24 @@ export class TwitterController {
     private readonly twitterApi: TwitterApiService,
   ) {}
 
+  private async backfillAvatarIfMissing(userId: string, twitterUsername: string) {
+    if (!this.twitterApi.isConfigured()) return null;
+    try {
+      const profile = await this.twitterApi.fetchUserProfile(twitterUsername);
+      if (!profile.profileImageUrl) return null;
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          twitterAvatarUrl: profile.profileImageUrl,
+          ...(profile.userId ? { twitterUserId: profile.userId } : {}),
+        },
+      });
+      return profile.profileImageUrl;
+    } catch {
+      return null;
+    }
+  }
+
   @Get('status')
   async status(@Req() req: AuthedReq) {
     const user = await this.prisma.user.findUnique({
@@ -34,12 +52,23 @@ export class TwitterController {
         twitterUsername: true,
         twitterConnectedAt: true,
         twitterUserId: true,
+        twitterAvatarUrl: true,
       },
     });
+
+    let twitterAvatarUrl = user?.twitterAvatarUrl ?? null;
+    if (user?.twitterUsername && !twitterAvatarUrl) {
+      twitterAvatarUrl = await this.backfillAvatarIfMissing(
+        req.user.userId,
+        user.twitterUsername,
+      );
+    }
+
     return {
       connected: Boolean(user?.twitterUsername),
       username: user?.twitterUsername ?? null,
       connectedAt: user?.twitterConnectedAt?.toISOString() ?? null,
+      avatarUrl: twitterAvatarUrl,
       apiConfigured: this.twitterApi.isConfigured(),
     };
   }
@@ -84,6 +113,7 @@ export class TwitterController {
     return {
       ok: true,
       username: resolved.username,
+      avatarUrl: resolved.profileImageUrl,
       connectedAt: now.toISOString(),
     };
   }
@@ -95,6 +125,7 @@ export class TwitterController {
       data: {
         twitterUsername: null,
         twitterUserId: null,
+        twitterAvatarUrl: null,
         twitterConnectedAt: null,
       },
     });
