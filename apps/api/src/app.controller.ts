@@ -12,11 +12,18 @@ export class AppController {
   /** GET /api/health — liveness probe */
   @Get()
   ok() {
+    const skipOtp = process.env.AUTH_REGISTER_SKIP_OTP === 'true';
+    const resendConfigured = Boolean(process.env.RESEND_API_KEY?.trim());
     return {
       ok: true,
       service: 'canquest-api',
       ts: new Date().toISOString(),
       env: process.env.NODE_ENV ?? 'development',
+      auth: {
+        registerOtpRequired: !skipOtp,
+        resendConfigured,
+        emailReady: skipOtp || resendConfigured,
+      },
     };
   }
 
