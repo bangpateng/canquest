@@ -20,8 +20,11 @@ export const metadata: Metadata = {
     "Enterprise Web3 quest platform: earn points, compete on leaderboards, and build on the Canton network.",
   metadataBase: new URL("https://canquest.cc"),
   icons: {
-    icon: [{ url: "/canquest-mark.svg", type: "image/svg+xml" }],
-    apple: "/canquest-mark.svg",
+    icon: [
+      { url: "/favicon.png", type: "image/png", sizes: "32x32" },
+      { url: "/favicon.png", type: "image/png", sizes: "64x64" },
+    ],
+    apple: "/apple-touch-icon.png",
   },
 };
 
