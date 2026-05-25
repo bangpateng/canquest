@@ -21,6 +21,8 @@ export class AppController {
       env: process.env.NODE_ENV ?? 'development',
       auth: {
         registerOtpRequired: !skipOtp,
+        /** Raw value PM2/Nest sees — must be exactly `false` or unset for OTP emails */
+        registerOtpSkipEnv: process.env.AUTH_REGISTER_SKIP_OTP ?? null,
         resendConfigured,
         emailReady: skipOtp || resendConfigured,
       },
