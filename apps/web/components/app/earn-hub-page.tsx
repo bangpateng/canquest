@@ -1,4 +1,5 @@
 "use client";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import Link from "next/link";
 import { QuestReferralCard } from "@/components/app/quest-referral-card";
@@ -7,7 +8,7 @@ import { ROUTES } from "@/lib/app-routes";
 import { hasRealWallet } from "@/lib/wallet-access";
 import type { Quest } from "@/lib/quest-types";
 import { cn } from "@/lib/utils";
-import { ArrowRight, Loader2, Trophy, Zap } from "lucide-react";
+import { ArrowRight, Trophy, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 
 /**
@@ -118,7 +119,7 @@ export function EarnHubPage() {
           <div className="relative">
             {loading ? (
               <div className="flex h-12 items-center gap-2 text-sm text-[var(--muted-foreground)]">
-                <Loader2 className="h-5 w-5 animate-spin text-canton" />
+                <LoadingSpinner size="lg" />
                 Loading…
               </div>
             ) : (
@@ -155,7 +156,7 @@ export function EarnHubPage() {
 
       {loading ? (
         <div className="flex items-center justify-center gap-2 py-16 text-sm text-[var(--muted-foreground)]">
-          <Loader2 className="h-5 w-5 animate-spin text-canton" />
+          <LoadingSpinner size="lg" />
           Loading tasks…
         </div>
       ) : hubError || !hub ? (

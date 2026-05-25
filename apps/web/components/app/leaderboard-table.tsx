@@ -1,9 +1,10 @@
 "use client";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import { ListPagination } from "@/components/app/list-pagination";
 import { filterTabClass } from "@/lib/ui-button-styles";
 import { cn } from "@/lib/utils";
-import { Loader2, Trophy } from "lucide-react";
+import { Trophy } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 const LEADERBOARD_PAGE_SIZE = 5;
@@ -211,7 +212,7 @@ export function LeaderboardTable() {
 
         {loading ? (
           <div className="flex items-center justify-center py-16">
-            <Loader2 className="h-6 w-6 animate-spin text-[var(--muted-foreground)]" />
+            <LoadingSpinner size="xl" tone="muted" />
           </div>
         ) : !data || data.rows.length === 0 ? (
           <div className="py-16 text-center">

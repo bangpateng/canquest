@@ -1,7 +1,8 @@
 "use client";
+import { InlineLoading } from "@/components/ui/loading-spinner";
 
 import { useCallback, useEffect, useState } from "react";
-import { Copy, Gift, Loader2, UserPlus } from "lucide-react";
+import { Copy, Gift, UserPlus } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { cn } from "@/lib/utils";
@@ -72,10 +73,7 @@ export function QuestReferralCard() {
 
       <div className="px-4 py-4 sm:px-5">
         {loading ? (
-          <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
-            <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
-            {t("common.loading")}
-          </div>
+          <InlineLoading label={t("common.loading")} size="md" />
         ) : error ? (
           <p className="text-sm text-red-400">{error}</p>
         ) : stats ? (

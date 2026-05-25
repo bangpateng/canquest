@@ -1,9 +1,10 @@
 "use client";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { clearReferralRef, getReferralRef, storeReferralRef } from "@/lib/referral-ref";
-import { ArrowRight, Loader2 } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { AuthCard, authInputClass } from "@/components/auth/auth-card";
 import { TurnstileField, useTurnstileRequired } from "@/components/platform/turnstile-field";
 import { buttonVariants } from "@/components/ui/button";
@@ -157,7 +158,7 @@ export default function RegisterPage() {
               "mt-2 w-full gap-2 rounded-full py-3 font-bold shadow-[0_0_24px_rgb(var(--canton-rgb)/0.2)]",
             )}
           >
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {busy ? <LoadingSpinner size="md" /> : null}
             {busy ? "Sending code…" : "Create account"}
             {!busy && <ArrowRight className="h-4 w-4" />}
           </button>

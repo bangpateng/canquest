@@ -1,9 +1,10 @@
 "use client";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatApiError } from "@/lib/format-api-error";
-import { Loader2, UserRound, ImagePlus } from "lucide-react";
+import { UserRound, ImagePlus } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 function fileToThumbnailJpeg(file: File, maxPx = 256, quality = 0.85): Promise<string> {
@@ -163,7 +164,7 @@ export function ProfileAvatarSection({
         >
           {busy ? (
             <div className="flex flex-1 items-center justify-center bg-[var(--card)]">
-              <Loader2 className="h-8 w-8 animate-spin text-[var(--muted-foreground)]" />
+              <LoadingSpinner size="2xl" tone="muted" />
             </div>
           ) : avatarUrl ? (
             // eslint-disable-next-line @next/next/no-img-element

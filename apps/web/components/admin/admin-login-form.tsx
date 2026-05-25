@@ -1,10 +1,11 @@
 'use client';
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import { useSearchParams } from 'next/navigation';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import Link from 'next/link';
-import { Loader2 } from 'lucide-react';
+
 import { cn } from '@/lib/utils';
 
 export function AdminLoginForm() {
@@ -98,7 +99,7 @@ export function AdminLoginForm() {
           'flex w-full items-center justify-center gap-2 rounded-full bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-[var(--primary-foreground)] shadow-[0_0_20px_rgb(var(--canton-rgb)/0.18)] transition-opacity hover:opacity-90 disabled:opacity-60',
         )}
       >
-        {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+        {loading ? <LoadingSpinner size="md" aria-hidden /> : null}
         Sign in
       </button>
       <p className="text-center text-xs text-[var(--muted-foreground)]">

@@ -34,21 +34,8 @@ import { CardTitle, SectionTitle, SubsectionTitle } from "@/components/ui/typogr
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { hasRealWallet } from "@/lib/wallet-access";
-import {
-  CalendarCheck,
-  Check,
-  CheckCircle2,
-  Circle,
-  Fingerprint,
-  HelpCircle,
-  Loader2,
-  Mail,
-  Repeat2,
-  Send,
-  UserPlus,
-  Users,
-  Zap,
-} from "lucide-react";
+import { CalendarCheck, Check, CheckCircle2, Circle, Fingerprint, HelpCircle, Mail, Repeat2, Send, UserPlus, Users, Zap } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -321,7 +308,7 @@ export function QuestTaskPanel({
   if (progressLoading) {
     return (
       <div className="flex items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--card)]/50 py-16">
-        <Loader2 className="h-6 w-6 animate-spin text-[var(--primary-strong)]" />
+        <LoadingSpinner size="xl" tone="muted" />
       </div>
     );
   }
@@ -902,7 +889,7 @@ function TaskRow({
                           : "text-[var(--muted-foreground)] hover:bg-[var(--muted)]/30 hover:text-[var(--foreground)]",
                       )}
                     >
-                      {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                      {isPending ? <LoadingSpinner size="sm" /> : null}
                       {opt}
                     </button>
                   );
@@ -940,7 +927,7 @@ function TaskRow({
                               : "bg-[var(--muted)] text-[var(--muted-foreground)]",
                           )}
                         >
-                          {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : letter}
+                          {isPending ? <LoadingSpinner size="xs" /> : letter}
                         </span>
                         <span className="leading-snug">{label}</span>
                       </button>
@@ -958,7 +945,7 @@ function TaskRow({
                   </p>
                 ) : loading ? (
                   <div className="flex h-9 items-center justify-center gap-2 text-xs text-[var(--muted-foreground)]">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <LoadingSpinner size="sm" />
                     Verifying…
                   </div>
                 ) : (
@@ -1095,7 +1082,7 @@ function TaskRow({
                   disabled
                   className={cn(buttonVariants({ size: "sm" }), "min-w-[5.5rem] rounded-full gap-2")}
                 >
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <LoadingSpinner size="md" />
                 </button>
               ) : (
                 <button
@@ -1151,7 +1138,7 @@ function TaskRow({
                         isWrong && "border-red-500/40 bg-red-500/10 text-red-200 hover:bg-red-500/15",
                       )}
                     >
-                      {isPending ? <Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" /> : null}
+                      {isPending ? <LoadingSpinner size="sm" className="mr-1 inline" /> : null}
                       {opt}
                     </button>
                   );
@@ -1181,7 +1168,7 @@ function TaskRow({
                     )}
                   >
                     {isPending ? (
-                      <Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" />
+                      <LoadingSpinner size="sm" className="mr-1 inline" />
                     ) : (
                       <span className="text-canton">{letter}.</span>
                     )}{" "}

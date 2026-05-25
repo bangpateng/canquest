@@ -3,15 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { SectionTitle, StatValue } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
-import {
-  CheckCircle2,
-  Coins,
-  Gift,
-  Loader2,
-  TrendingUp,
-  Trophy,
-  Zap,
-} from "lucide-react";
+import { CheckCircle2, Coins, Gift, TrendingUp, Trophy, Zap } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { ListPagination } from "@/components/app/list-pagination";
 import { useCcBalance } from "@/lib/hooks/use-cc-balance";
 import { createRefetchThrottle } from "@/lib/refetch-throttle";
@@ -301,7 +294,7 @@ export function DashboardView() {
               </div>
               <StatValue className="mt-2">
                 {c.value === null ? (
-                  <Loader2 className="h-6 w-6 animate-spin text-[var(--muted-foreground)]" />
+                  <LoadingSpinner size="xl" tone="muted" />
                 ) : (
                   c.value
                 )}
@@ -320,7 +313,7 @@ export function DashboardView() {
 
           {activityLoading ? (
             <div className="flex items-center justify-center py-10">
-              <Loader2 className="h-5 w-5 animate-spin text-[var(--muted-foreground)]" />
+              <LoadingSpinner size="lg" />
             </div>
           ) : !activityData || activityData.items.length === 0 ? (
             <div className="mt-6 rounded-xl border border-dashed border-[var(--border)] py-10 text-center">

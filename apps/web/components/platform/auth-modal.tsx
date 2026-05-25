@@ -1,7 +1,8 @@
 "use client";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import { useEffect, useState } from "react";
-import { X, Loader2, ArrowRight } from "lucide-react";
+import { X, ArrowRight } from "lucide-react";
 import { useAuthModal, type AuthModalMode } from "@/components/platform/auth-context";
 import { TurnstileField, useTurnstileRequired } from "@/components/platform/turnstile-field";
 import { buttonVariants } from "@/components/ui/button";
@@ -282,7 +283,7 @@ export function AuthModal() {
                 disabled={busy}
                 className={cn(buttonVariants(), "w-full gap-2 rounded-full py-3 font-bold")}
               >
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {busy ? <LoadingSpinner size="md" /> : null}
                 Verify & continue
                 {!busy && <ArrowRight className="h-4 w-4" />}
               </button>
@@ -315,7 +316,7 @@ export function AuthModal() {
                   "mt-2 w-full gap-2 rounded-full py-3 font-bold shadow-[0_0_24px_rgb(var(--canton-rgb)/0.2)]",
                 )}
               >
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {busy ? <LoadingSpinner size="md" /> : null}
                 Sign In
                 {!busy && <ArrowRight className="h-4 w-4" />}
               </button>
@@ -371,7 +372,7 @@ export function AuthModal() {
                   "mt-2 w-full gap-2 rounded-full py-3 font-bold shadow-[0_0_24px_rgb(var(--canton-rgb)/0.2)]",
                 )}
               >
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {busy ? <LoadingSpinner size="md" /> : null}
                 {busy ? "Sending code…" : "Create account"}
                 {!busy && <ArrowRight className="h-4 w-4" />}
               </button>

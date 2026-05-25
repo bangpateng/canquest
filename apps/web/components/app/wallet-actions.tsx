@@ -1,4 +1,5 @@
 "use client";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import { CopyField } from "@/components/app/copy-field";
 import { buttonVariants } from "@/components/ui/button";
@@ -9,7 +10,7 @@ import {
 } from "@/lib/canton-party-id";
 import { cn } from "@/lib/utils";
 import { TransactionDetailModal } from "@/components/app/transaction-detail-modal";
-import { ArrowDownLeft, ArrowUpRight, Loader2, X, AlertCircle } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, X, AlertCircle } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { useCallback, useEffect, useId, useState } from "react";
 
@@ -314,7 +315,7 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
                   >
                     {sendState === "loading" ? (
                       <>
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <LoadingSpinner size="sm" />
                         Sending…
                       </>
                     ) : (

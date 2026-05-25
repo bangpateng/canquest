@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { Loader2, Plus, Trash2, ChevronDown, ChevronUp, Upload } from "lucide-react";
+import { Plus, Trash2, ChevronDown, ChevronUp, Upload } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import {
   QUEST_TASK_TYPE_OPTIONS,
   REWARD_TYPE_OPTIONS,
@@ -336,7 +337,7 @@ export function QuestForm({
                       .finally(() => setUploadingLogo(false));
                   }}
                 />
-                {uploadingLogo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                {uploadingLogo ? <LoadingSpinner size="md" /> : <Upload className="h-4 w-4" />}
                 Upload logo
               </label>
               {form.logoUrl ? (
@@ -403,7 +404,7 @@ export function QuestForm({
                     .finally(() => setUploadingBanner(false));
                 }}
               />
-              {uploadingBanner ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              {uploadingBanner ? <LoadingSpinner size="md" /> : <Upload className="h-4 w-4" />}
               Upload banner
             </label>
             {form.bannerImageUrl ? (
@@ -601,7 +602,7 @@ export function QuestForm({
           disabled={submitting}
           className="inline-flex items-center gap-2 rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-[var(--primary-foreground)] shadow-[0_0_20px_rgb(var(--canton-rgb)/0.18)] transition-opacity hover:opacity-90 disabled:opacity-60"
         >
-          {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+          {submitting && <LoadingSpinner size="md" />}
           {isEdit ? "Save Changes" : "Create Quest"}
         </button>
         <button

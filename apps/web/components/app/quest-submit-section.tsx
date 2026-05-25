@@ -1,4 +1,5 @@
 "use client";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import Link from "next/link";
 import { PageTitle, SectionTitle, StatValue } from "@/components/ui/typography";
@@ -11,19 +12,7 @@ import {
 } from "@/lib/campaign-reward";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import {
-  ArrowRight,
-  Check,
-  CheckCircle2,
-  ChevronDown,
-  Coins,
-  Copy,
-  Loader2,
-  Rocket,
-  Shield,
-  Sparkles,
-  Ticket,
-} from "lucide-react";
+import { ArrowRight, Check, CheckCircle2, ChevronDown, Coins, Copy, Rocket, Shield, Sparkles, Ticket } from "lucide-react";
 import { useState } from "react";
 
 export type QuestLedgerProof = {
@@ -142,7 +131,7 @@ export function QuestSubmitSection({
           )}
         >
           {submitting ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
+            <LoadingSpinner size="lg" />
           ) : (
             <Rocket className="h-5 w-5" />
           )}

@@ -4,14 +4,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { ListPagination } from "@/components/app/list-pagination";
-import {
-  ArrowDownLeft,
-  ArrowUpRight,
-  Gift,
-  Loader2,
-  RefreshCw,
-  Zap,
-} from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Gift, RefreshCw, Zap } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 
 export const TRANSACTIONS_PAGE_SIZE = 5;
@@ -164,7 +158,11 @@ export function TransactionsView({
             className="mt-0.5 shrink-0 text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)] disabled:opacity-40"
             aria-label="Refresh transactions"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            {loading ? (
+              <LoadingSpinner size="sm" tone="muted" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
           </button>
         </div>
 
@@ -175,7 +173,7 @@ export function TransactionsView({
               embedded ? "py-10" : "py-16",
             )}
           >
-            <Loader2 className="h-5 w-5 animate-spin text-[var(--muted-foreground)]" />
+            <LoadingSpinner size="lg" />
           </div>
         ) : !txPage || txPage.items.length === 0 ? (
           <div className={cn("text-center", embedded ? "py-10" : "py-16")}>

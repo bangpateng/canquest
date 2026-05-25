@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-import { ArrowRight, Loader2 } from "lucide-react";
+import { ArrowRight } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import { AuthCard, authInputClass } from "@/components/auth/auth-card";
 import { TurnstileField, useTurnstileRequired } from "@/components/platform/turnstile-field";
@@ -128,7 +129,7 @@ function LoginForm() {
             disabled={busy}
             className={cn(buttonVariants(), "w-full gap-2 rounded-full py-3 font-bold")}
           >
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {busy ? <LoadingSpinner size="md" /> : null}
             Verify & continue
           </button>
         </form>
@@ -185,7 +186,7 @@ function LoginForm() {
             "mt-2 w-full gap-2 rounded-full py-3 font-bold shadow-[0_0_24px_rgb(var(--canton-rgb)/0.2)]",
           )}
         >
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          {busy ? <LoadingSpinner size="md" /> : null}
           Sign In
           {!busy && <ArrowRight className="h-4 w-4" />}
         </button>

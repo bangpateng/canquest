@@ -13,7 +13,8 @@ import {
   readCachedWalletMe,
   readLastWalletUserId,
 } from "@/lib/wallet-session-cache";
-import { AlertTriangle, Loader2 } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
+import { PageLoading } from "@/components/ui/loading-spinner";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 
 type Me = {
@@ -66,9 +67,7 @@ export default function WalletPage() {
 
   if (loading && !me) {
     return (
-      <div className="flex min-h-[60vh] w-full items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-[var(--muted-foreground)]" />
-      </div>
+      <PageLoading minHeight="min-h-[60vh]" />
     );
   }
 

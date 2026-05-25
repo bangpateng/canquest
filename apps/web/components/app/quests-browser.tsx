@@ -1,4 +1,5 @@
 "use client";
+import { PageLoading } from "@/components/ui/loading-spinner";
 
 import { EarnCampaignSkeleton } from "@/components/app/earn-campaign-skeleton";
 import { QuestCard } from "@/components/app/quest-card";
@@ -8,7 +9,7 @@ import { filterTabClass } from "@/lib/ui-button-styles";
 import { cn } from "@/lib/utils";
 import { ListPagination } from "@/components/app/list-pagination";
 import { buttonVariants } from "@/components/ui/button";
-import { Loader2, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
@@ -225,9 +226,7 @@ export function QuestsBrowser({
             ))}
           </div>
         ) : (
-          <div className="flex items-center justify-center py-14">
-            <Loader2 className="h-6 w-6 animate-spin text-canton" />
-          </div>
+          <PageLoading minHeight="min-h-0" className="py-14" />
         )
       ) : loadError ? (
         <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-5 py-8 text-center">

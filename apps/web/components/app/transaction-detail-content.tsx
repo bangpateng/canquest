@@ -1,11 +1,8 @@
 "use client";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import type { ReactNode } from "react";
-import {
-  ExternalLink,
-  Loader2,
-  ShieldCheck,
-} from "lucide-react";
+import { ExternalLink, ShieldCheck } from "lucide-react";
 
 import type { TransactionDetail } from "@/components/app/transaction-detail-view";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
@@ -59,7 +56,7 @@ export function TransactionDetailContent({
   if (loading) {
     return (
       <div className={cn("flex justify-center", compact ? "py-10" : "py-20")}>
-        <Loader2 className="h-6 w-6 animate-spin text-[var(--muted-foreground)]" />
+        <LoadingSpinner size="xl" tone="muted" />
       </div>
     );
   }

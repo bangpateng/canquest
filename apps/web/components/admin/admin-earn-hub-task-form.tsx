@@ -1,4 +1,5 @@
 "use client";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import {
   earnHubTaskTypeLabel,
@@ -6,7 +7,7 @@ import {
   isEarnHubQuizType,
 } from "@/lib/quest-types";
 import { cn } from "@/lib/utils";
-import { Loader2 } from "lucide-react";
+
 
 export type EarnHubTaskDraft = {
   type: string;
@@ -257,7 +258,7 @@ export function AdminEarnHubTaskForm({
           disabled={saving}
           className="inline-flex items-center gap-2 rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-[var(--primary-foreground)] disabled:opacity-50"
         >
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          {saving ? <LoadingSpinner size="md" /> : null}
           {submitLabel}
         </button>
         {onCancel ? (

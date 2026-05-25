@@ -6,6 +6,7 @@ import { WalletActions } from "@/components/app/wallet-actions";
 import { WalletPreapprovalBanner } from "@/components/app/wallet-preapproval-banner";
 import { TransactionsView } from "@/components/app/transactions-view";
 import { CheckCircle2, RefreshCw } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useCcBalance } from "@/lib/hooks/use-cc-balance";
 import { formatPartyIdForDisplay } from "@/lib/canton-party-id";
 import { isRealCantonPartyId } from "@/lib/wallet-session-cache";
@@ -73,9 +74,11 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
             className="text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)] disabled:opacity-40"
             aria-label={t("wallet.refreshBalance")}
           >
-            <RefreshCw
-              className={`h-3.5 w-3.5 ${balanceLoading ? "animate-spin" : ""}`}
-            />
+            {balanceLoading ? (
+              <LoadingSpinner size="sm" tone="muted" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
           </button>
         </div>
         <p className="type-stat mt-2">

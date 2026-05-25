@@ -5,7 +5,8 @@ import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
 import { formatApiError } from "@/lib/format-api-error";
 import { allocateParty } from "@/lib/services/api/party";
-import { Loader2, RefreshCw, Wallet } from "lucide-react";
+import { RefreshCw, Wallet } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useState } from "react";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 
@@ -68,7 +69,7 @@ export function WalletReconnect({ username, onConnected }: WalletReconnectProps)
         >
           {busy ? (
             <>
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <LoadingSpinner size="md" />
               {t("wallet.reconnecting")}
             </>
           ) : (

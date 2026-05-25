@@ -4,7 +4,8 @@ import { normalizeWalletUsername } from "@/lib/canton-party-id";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
 import { formatApiError } from "@/lib/format-api-error";
-import { Loader2, Wallet } from "lucide-react";
+import { Wallet } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useEffect, useState } from "react";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 
@@ -155,7 +156,7 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
           >
             {step === "creating" ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <LoadingSpinner size="md" />
                 {t("wallet.generatingWallet")}
               </>
             ) : step === "done" ? (

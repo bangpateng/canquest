@@ -2,18 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  ChevronLeft,
-  CheckCircle2,
-  Clock,
-  Loader2,
-  Send,
-  Shuffle,
-  Ticket,
-  UserCheck,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { ChevronLeft, CheckCircle2, Clock, Send, Shuffle, Ticket, UserCheck, Plus, Trash2 } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { underlineTabClass } from "@/lib/ui-button-styles";
 import { cn } from "@/lib/utils";
 
@@ -278,7 +268,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-6 w-6 animate-spin text-[var(--muted-foreground)]" />
+        <LoadingSpinner size="xl" tone="muted" />
       </div>
     );
   }
@@ -350,7 +340,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
               onClick={() => void handleDrawRandom()}
               className="inline-flex items-center gap-2 rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary-foreground)] shadow-[0_0_16px_rgb(var(--canton-rgb)/0.18)] disabled:opacity-60"
             >
-              {drawing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Shuffle className="h-4 w-4" />}
+              {drawing ? <LoadingSpinner size="md" /> : <Shuffle className="h-4 w-4" />}
               Random draw
             </button>
           </div>
@@ -426,7 +416,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
                 onClick={() => void handleDistribute("all")}
                 className="inline-flex items-center gap-2 rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary-foreground)] shadow-[0_0_16px_rgb(var(--canton-rgb)/0.18)] disabled:opacity-60"
               >
-                {distributing === "all" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                {distributing === "all" ? <LoadingSpinner size="md" /> : <Send className="h-4 w-4" />}
                 Distribute all
               </button>
             </div>
@@ -492,7 +482,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
                             className="flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1 text-xs font-semibold hover:bg-[var(--muted)] disabled:opacity-50"
                           >
                             {distributing === w.drawId ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              <LoadingSpinner size="sm" />
                             ) : (
                               <Send className="h-3.5 w-3.5" />
                             )}
@@ -547,7 +537,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
               disabled={addingCodes}
               className="inline-flex items-center gap-2 rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary-foreground)] shadow-[0_0_16px_rgb(var(--canton-rgb)/0.18)] disabled:opacity-60"
             >
-              {addingCodes ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              {addingCodes ? <LoadingSpinner size="md" /> : <Plus className="h-4 w-4" />}
               Add codes
             </button>
           </form>
@@ -569,7 +559,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
                     className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-[11px] font-semibold text-red-700 transition-colors hover:bg-red-500/15 disabled:opacity-50 dark:text-red-300"
                   >
                     {deletingAll ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <LoadingSpinner size="sm" />
                     ) : (
                       <Trash2 className="h-3.5 w-3.5" />
                     )}
@@ -602,7 +592,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
                             aria-label={`Delete ${code.code}`}
                           >
                             {deletingCodeId === code.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <LoadingSpinner size="md" />
                             ) : (
                               <Trash2 className="h-4 w-4" />
                             )}

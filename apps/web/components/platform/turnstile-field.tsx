@@ -2,7 +2,7 @@
 
 import { Turnstile, type TurnstileInstance } from "@marsidev/react-turnstile";
 import { useEffect, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 type TurnstileFieldProps = {
   onToken: (token: string | null) => void;
@@ -45,7 +45,7 @@ export function TurnstileField({ onToken, resetKey = 0 }: TurnstileFieldProps) {
   if (loading) {
     return (
       <div className="flex justify-center py-2">
-        <Loader2 className="h-5 w-5 animate-spin text-[var(--muted-foreground)]" />
+        <LoadingSpinner size="lg" tone="muted" />
       </div>
     );
   }

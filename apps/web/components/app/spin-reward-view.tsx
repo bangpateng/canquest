@@ -1,10 +1,11 @@
 "use client";
+import { LoadingSpinner, PageLoading } from "@/components/ui/loading-spinner";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
-import { Gift, Loader2, Sparkles, Trophy } from "lucide-react";
+import { Gift, Sparkles, Trophy } from "lucide-react";
 
 type SpinItem = {
   id: string;
@@ -151,9 +152,7 @@ export function SpinRewardView() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[40vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-[var(--muted-foreground)]" />
-      </div>
+      <PageLoading minHeight="min-h-[40vh]" />
     );
   }
 
@@ -230,7 +229,7 @@ export function SpinRewardView() {
               >
                 {spinning ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <LoadingSpinner size="md" />
                     {t("spin.spinning")}
                   </>
                 ) : (

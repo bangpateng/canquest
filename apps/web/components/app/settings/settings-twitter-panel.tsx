@@ -1,11 +1,12 @@
 "use client";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import { useCallback, useEffect, useState } from "react";
 import { TurnstileField, useTurnstileRequired } from "@/components/platform/turnstile-field";
 import { buttonVariants } from "@/components/ui/button";
 import { formatApiError } from "@/lib/format-api-error";
 import { cn } from "@/lib/utils";
-import { Loader2, Unlink } from "lucide-react";
+import { Unlink } from "lucide-react";
 
 type TwitterStatus = {
   connected: boolean;
@@ -145,7 +146,7 @@ export function SettingsTwitterPanel({
             onClick={() => void handleDisconnect()}
             className={cn(buttonVariants({ size: "sm", variant: "secondary" }), "gap-1.5")}
           >
-            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unlink className="h-3.5 w-3.5" />}
+            {busy ? <LoadingSpinner size="sm" /> : <Unlink className="h-3.5 w-3.5" />}
             Disconnect
           </button>
         </div>
@@ -175,7 +176,7 @@ export function SettingsTwitterPanel({
             disabled={busy || !input.trim()}
             className={cn(buttonVariants({ size: "sm" }), "gap-2")}
           >
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {busy ? <LoadingSpinner size="md" /> : null}
             Connect X
           </button>
         </form>

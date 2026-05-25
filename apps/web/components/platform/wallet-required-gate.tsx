@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useEffect } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Loader2, Lock, Wallet } from "lucide-react";
+import { Lock, Wallet } from "lucide-react";
+import { PageLoading } from "@/components/ui/loading-spinner";
 import { buttonVariants } from "@/components/ui/button";
 import { useWalletAccess } from "@/lib/hooks/use-wallet-access";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
@@ -29,10 +30,7 @@ export function WalletRequiredGate({ children }: { children: React.ReactNode }) 
 
   if (loading) {
     return (
-      <div className="flex min-h-[40vh] items-center justify-center gap-2 text-sm text-[var(--muted-foreground)]">
-        <Loader2 className="h-5 w-5 animate-spin text-canton" />
-        {t("common.loading")}
-      </div>
+      <PageLoading label={t("common.loading")} minHeight="min-h-[40vh]" />
     );
   }
 

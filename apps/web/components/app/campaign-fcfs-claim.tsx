@@ -1,10 +1,11 @@
 "use client";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { CampaignMeta } from "@/lib/campaign-reward";
-import { Loader2, Rocket, Sparkles } from "lucide-react";
+import { Rocket, Sparkles } from "lucide-react";
 import { useState } from "react";
 
 const FCFS_FAIL_MSG =
@@ -86,7 +87,7 @@ export function CampaignFcfsClaimSection({
           )}
         >
           {isSubmitting ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
+            <LoadingSpinner size="lg" />
           ) : (
             <Rocket className="h-5 w-5" />
           )}

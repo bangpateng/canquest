@@ -1,9 +1,10 @@
 "use client";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatApiError } from "@/lib/format-api-error";
-import { AlertCircle, CheckCircle2, Loader2, ShieldCheck } from "lucide-react";
+import { AlertCircle, CheckCircle2, ShieldCheck } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 
@@ -69,7 +70,7 @@ export function WalletPreapprovalBanner({ onActivated }: WalletPreapprovalBanner
   if (loading) {
     return (
       <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--muted)]/25 px-4 py-3 text-xs text-[var(--muted-foreground)]">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        <LoadingSpinner size="sm" />
         {t("wallet.checkingPreapproval")}
       </div>
     );
@@ -122,7 +123,7 @@ export function WalletPreapprovalBanner({ onActivated }: WalletPreapprovalBanner
         >
           {busy ? (
             <>
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <LoadingSpinner size="sm" />
               {t("wallet.enabling")}
             </>
           ) : (
