@@ -60,11 +60,11 @@ export function QuestReferralCard() {
     >
       <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--muted)]/20 px-4 py-3 sm:px-5">
         <p className="flex items-center gap-2 text-xs font-medium text-[var(--muted-foreground)]">
-          <Gift className="h-3.5 w-3.5 text-canton" aria-hidden />
+          <Gift className="h-3.5 w-3.5 text-emerald-400" aria-hidden />
           {t("questReferral.title")}
         </p>
         {stats && !loading ? (
-          <span className="text-[10px] font-semibold tabular-nums text-canton">
+          <span className="text-xs font-semibold tabular-nums text-emerald-400/90">
             +{stats.pointsPerInvite} {t("questReferral.perFriend")}
           </span>
         ) : null}
@@ -73,7 +73,7 @@ export function QuestReferralCard() {
       <div className="px-4 py-4 sm:px-5">
         {loading ? (
           <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
-            <Loader2 className="h-4 w-4 animate-spin text-canton" />
+            <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
             {t("common.loading")}
           </div>
         ) : error ? (
@@ -86,7 +86,7 @@ export function QuestReferralCard() {
 
             <div className="flex flex-wrap gap-4 text-sm">
               <div className="flex items-center gap-2">
-                <UserPlus className="h-4 w-4 text-canton" aria-hidden />
+                <UserPlus className="h-4 w-4 text-emerald-400" aria-hidden />
                 <span className="text-[var(--muted-foreground)]">{t("questReferral.invited")}</span>
                 <span className="font-bold tabular-nums text-[var(--foreground)]">
                   {stats.invitedCount}
@@ -94,7 +94,7 @@ export function QuestReferralCard() {
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-[var(--muted-foreground)]">{t("questReferral.earned")}</span>
-                <span className="font-bold tabular-nums text-canton">
+                <span className="font-bold tabular-nums text-emerald-400/90">
                   {stats.pointsEarned} pts
                 </span>
               </div>
@@ -122,8 +122,8 @@ export function QuestReferralCard() {
                 type="button"
                 onClick={() => void copyLink()}
                 className={cn(
-                  buttonVariants({ variant: "primary", size: "default" }),
-                  "w-full rounded-xl shadow-[0_0_20px_rgb(var(--canton-rgb)/0.2)]",
+                  buttonVariants({ size: "default" }),
+                  "w-full rounded-lg border-0 bg-emerald-500 text-white hover:bg-emerald-400 focus-visible:ring-emerald-500/40",
                   copied && "brightness-95",
                 )}
               >
