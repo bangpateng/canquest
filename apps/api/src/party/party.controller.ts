@@ -580,7 +580,7 @@ export class PartyController {
         amountCc: amount,
         type: 'TRANSFER_OUT',
         description: description,
-        counterparty: recipientLabel,
+        counterparty: recipientPartyId,
         ledgerTxId: offerContractId,
         cantonUpdateId: acceptUpdateId ?? undefined,
       });
@@ -608,7 +608,8 @@ export class PartyController {
           amountCc: amount,
           type: 'TRANSFER_IN',
           description: `Received from @${sender.username}${body.memo ? `: ${body.memo.trim()}` : ''}`,
-          counterparty: `@${sender.username}`,
+          counterparty:
+            normalizeCantonPartyId(sender.cantonPartyId) ?? sender.cantonPartyId,
           ledgerTxId: offerContractId,
           cantonUpdateId: acceptUpdateId ?? undefined,
         });
@@ -675,7 +676,7 @@ export class PartyController {
           amountCc: feeCc,
           type: 'TRANSFER_OUT',
           description: `Platform fee (transfer to ${recipientLabel})`,
-          counterparty: treasuryPartyId.split('::')[0],
+          counterparty: normalizeCantonPartyId(treasuryPartyId) ?? treasuryPartyId,
           ledgerTxId: feeResult.ledgerTxId,
         });
         if (feeResult.ledgerTxId && sender.cantonPartyId) {

@@ -7,6 +7,7 @@ import {
 import { CcTransactionType, SubmissionStatus } from '../common/prisma-types';
 import { CC_TRANSACTION_HISTORY_WHERE } from './cc-transaction-visibility';
 import {
+  looksLikeCantonPartyId,
   normalizeCantonPartyId,
   normalizeWalletUsername,
 } from '../common/canton-party-id';
@@ -45,6 +46,42 @@ export class UsersService {
     return this.prisma.user.findFirst({
       where: { cantonPartyId: { equals: normalized, mode: 'insensitive' } },
     });
+  }
+
+  /** Full Canton Party ID for transfer counterparty (resolves @username / legacy short labels). */
+  async resolveTransferCounterparty(referenceId: string | null): Promise<string | null> {
+    if (!referenceId?.trim()) return null;
+    const ref = referenceId.trim();
+
+    if (looksLikeCantonPartyId(ref)) {
+      return normalizeCantonPartyId(ref);
+    }
+
+    if (
+      ref.startsWith('Validator') ||
+      ref === 'Canton network' ||
+      ref.includes('(reward)') ||
+      ref.includes('(FCFS') ||
+      ref.includes('(reward pool)')
+    ) {
+      return ref;
+    }
+
+    const username = ref.replace(/^@/, '').toLowerCase();
+    const byUser = await this.findByUsernameInsensitive(username);
+    if (byUser?.cantonPartyId) {
+      return normalizeCantonPartyId(byUser.cantonPartyId);
+    }
+
+    const byPrefix = await this.prisma.user.findFirst({
+      where: { cantonPartyId: { startsWith: `${username}::`, mode: 'insensitive' } },
+      select: { cantonPartyId: true },
+    });
+    if (byPrefix?.cantonPartyId) {
+      return normalizeCantonPartyId(byPrefix.cantonPartyId);
+    }
+
+    return ref;
   }
 
   async create(params: {
@@ -253,10 +290,19 @@ export class UsersService {
       this.prisma.ccTransaction.count({ where }),
     ]);
     const enriched = await this.enrichQuestRewardDescriptions(items);
-    const serialized = enriched.map((tx) => ({
-      ...tx,
-      amountMicroCc: tx.amountMicroCc.toString(),
-    }));
+    const serialized = await Promise.all(
+      enriched.map(async (tx) => {
+        const counterparty =
+          tx.type === 'TRANSFER_IN' || tx.type === 'TRANSFER_OUT'
+            ? await this.resolveTransferCounterparty(tx.referenceId)
+            : null;
+        return {
+          ...tx,
+          amountMicroCc: tx.amountMicroCc.toString(),
+          counterparty,
+        };
+      }),
+    );
     return { items: serialized, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
   }
 

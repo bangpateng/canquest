@@ -3,10 +3,8 @@
 import { CheckCircle2, X } from "lucide-react";
 
 import { TransactionDetailContent } from "@/components/app/transaction-detail-content";
-import { buttonVariants } from "@/components/ui/button";
 import { iconButtonClass } from "@/lib/ui-button-styles";
 import { useTransactionDetail } from "@/lib/hooks/use-transaction-detail";
-import { cn } from "@/lib/utils";
 
 type TransactionDetailModalProps = {
   open: boolean;
@@ -62,23 +60,13 @@ export function TransactionDetailModal({
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-4">
           <TransactionDetailContent
             detail={detail}
             loading={loading}
             error={error}
             compact
           />
-        </div>
-
-        <div className="border-t border-[var(--border)] px-5 py-4">
-          <button
-            type="button"
-            onClick={onClose}
-            className={cn(buttonVariants({ size: "sm" }), "w-full justify-center")}
-          >
-            Done
-          </button>
         </div>
       </div>
     </div>

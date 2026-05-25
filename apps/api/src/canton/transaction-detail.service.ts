@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { UsersService } from '../users/users.service';
 import { CantonLedgerService, type LedgerStreamEvent } from './canton-ledger.service';
 import { isPlatformFeeTransaction } from '../users/cc-transaction-visibility';
 
@@ -37,6 +38,7 @@ export class TransactionDetailService {
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
     private readonly ledger: CantonLedgerService,
+    private readonly users: UsersService,
   ) {
     this.scanTxUrlTemplate =
       config.get<string>('CANTON_SCAN_TX_URL')?.trim() ||
@@ -117,7 +119,7 @@ export class TransactionDetailService {
 
     const counterparty =
       tx.type === 'TRANSFER_IN' || tx.type === 'TRANSFER_OUT'
-        ? tx.referenceId
+        ? await this.users.resolveTransferCounterparty(tx.referenceId)
         : null;
 
     return {
