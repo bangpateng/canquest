@@ -126,19 +126,6 @@ export function SettingsTwitterPanel({
       className="scroll-mt-8 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 md:p-8"
     >
       <h3 className="type-section-title">X (Twitter)</h3>
-      <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-        Connect your X account to complete follow and retweet tasks on Quest and Earn.
-        Verified via{" "}
-        <a
-          href="https://twitterapi.io/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-canton underline-offset-2 hover:underline"
-        >
-          twitterapi.io
-        </a>
-        .
-      </p>
 
       {status.apiConfigured === false ? (
         <p className="mt-4 rounded-xl border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-xs text-orange-200">

@@ -96,21 +96,7 @@ export function EarnHubPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Quest"
-        description={
-          <>
-            Complete tasks, earn points, and redeem rewards. Partner missions are under{" "}
-            <Link
-              href={ROUTES.campaignQuests}
-              className="font-medium text-canton underline-offset-2 hover:underline"
-            >
-              Partner campaigns
-            </Link>
-            .
-          </>
-        }
-      />
+      <PageHeader title="Quest" />
 
       {/* Points balance — matches Tasks panel chrome */}
       <section

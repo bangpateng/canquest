@@ -12,8 +12,7 @@ export const zh: PlatformMessages = {
   },
   leaderboard: {
     title: "排行榜",
-    description:
-      "周榜、月榜或总榜。积分来自 Quest、Earn、活动和转盘。登录后您的行会高亮显示。",
+    description: "",
   },
   shell: {
     platform: "平台",
@@ -96,12 +95,10 @@ export const zh: PlatformMessages = {
   },
   earnCampaigns: {
     title: "Earn",
-    description:
-      "合作伙伴活动 — 完成任务获得 CC 奖励、邀请码等。每日签到和社交任务在",
-    badge: "合作伙伴奖励",
-    heroSubtitle:
-      "完成合作伙伴任务，获得 Canton CC、专属邀请码和候补名额。在下方选择活动并完成所有任务。",
-    dailyTasksLink: "每日 Quest 任务赚取积分",
+    description: "",
+    badge: "",
+    heroSubtitle: "",
+    dailyTasksLink: "",
     statsAria: "活动概览",
     statsLabel: "您的活动",
     live: "进行中",
@@ -116,7 +113,7 @@ export const zh: PlatformMessages = {
     rewardFcfsTitle: "FCFS 领取",
     rewardFcfsDesc: "名额有限 — 尽快领取 CC。",
     campaignsHeader: "浏览活动",
-    campaignsLead: "打开活动完成任务 — 与 Quest 验证任务流程相同。",
+    campaignsLead: "",
     progressCompleted: "已完成活动",
     loadFailed: "无法加载活动",
     loadFailedHint: "请确认 API 在 3001 端口运行，且 web/api 的 JWT_ACCESS_SECRET 一致。",
@@ -197,7 +194,7 @@ export const zh: PlatformMessages = {
     referralCodeOptional: "Friend referral code (optional)",
   },
   spin: {
-    pageLead: "使用任务积分抽取 CC、额外积分等奖励。",
+    pageLead: "",
     pointsAvailable: "可用：{n} 积分",
     spinCost: "每次旋转消耗 {n} 积分",
     spinNow: "立即旋转",

@@ -12,8 +12,7 @@ export const de: PlatformMessages = {
   },
   leaderboard: {
     title: "Bestenliste",
-    description:
-      "Wöchentlich, monatlich oder insgesamt. Punkte aus Quest, Earn, Kampagnen und Spin. Ihre Zeile wird hervorgehoben.",
+    description: "",
   },
   shell: {
     platform: "Plattform",
@@ -96,12 +95,10 @@ export const de: PlatformMessages = {
   },
   earnCampaigns: {
     title: "Earn",
-    description:
-      "Partnerkampagnen — erledige Missionen für CC-Belohnungen, Einladungscodes und mehr. Täglicher Check-in und Social-Aufgaben unter",
-    badge: "Partner-Belohnungen",
-    heroSubtitle:
-      "Schließe Partner-Missionen ab für CC auf Canton, exklusive Einladungscodes und Waitlist-Plätze.",
-    dailyTasksLink: "Tägliche Quest-Aufgaben für Punkte",
+    description: "",
+    badge: "",
+    heroSubtitle: "",
+    dailyTasksLink: "",
     statsAria: "Kampagnenübersicht",
     statsLabel: "Deine Kampagnen",
     live: "Live",
@@ -116,7 +113,7 @@ export const de: PlatformMessages = {
     rewardFcfsTitle: "FCFS-Claim",
     rewardFcfsDesc: "Begrenzte Plätze — schnell CC claimen.",
     campaignsHeader: "Kampagnen durchsuchen",
-    campaignsLead: "Kampagne öffnen und Missionen abschließen — wie Quest-Verifizierung.",
+    campaignsLead: "",
     progressCompleted: "Kampagnen abgeschlossen",
     loadFailed: "Kampagnen konnten nicht geladen werden",
     loadFailedHint: "API auf Port 3001 prüfen; JWT_ACCESS_SECRET in web und api .env muss übereinstimmen.",
@@ -198,7 +195,7 @@ export const de: PlatformMessages = {
     referralCodeOptional: "Friend referral code (optional)",
   },
   spin: {
-    pageLead: "Quest-Punkte einsetzen für CC, Bonuspunkte und andere Preise.",
+    pageLead: "",
     pointsAvailable: "Verfügbar: {n} Pkt.",
     spinCost: "Jeder Spin kostet {n} Pkt.",
     spinNow: "Jetzt drehen",

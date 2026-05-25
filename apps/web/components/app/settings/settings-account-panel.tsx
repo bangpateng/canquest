@@ -37,14 +37,6 @@ export function SettingsAccountPanel() {
   return (
     <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 md:p-8">
       <h3 className="type-section-title">Profile</h3>
-      <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-        Account details. Profile photo comes from your linked X account (Settings → connect X
-        when available). Canton wallet is managed on the{" "}
-        <a href="/wallet" className="text-canton underline underline-offset-2">
-          Wallet
-        </a>{" "}
-        page.
-      </p>
 
       {me?.twitterUsername && me?.avatarUrl ? (
         <div className="mt-6 flex items-center gap-4 rounded-xl border border-[var(--border)] bg-[var(--muted)]/20 p-4">
@@ -63,11 +55,6 @@ export function SettingsAccountPanel() {
             <p className="text-xs text-[var(--muted-foreground)]">@{me.twitterUsername}</p>
           </div>
         </div>
-      ) : me?.twitterUsername ? (
-        <p className="mt-4 text-xs text-[var(--muted-foreground)]">
-          X connected as @{me.twitterUsername} — refresh the page after linking to load your
-          photo.
-        </p>
       ) : null}
 
       <div className="mt-6 grid gap-5 sm:grid-cols-2">

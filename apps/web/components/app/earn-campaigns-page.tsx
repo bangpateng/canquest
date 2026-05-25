@@ -22,23 +22,7 @@ export function EarnCampaignsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow={t("earnCampaigns.badge")}
-        eyebrowBrand
-        title={t("earnCampaigns.title")}
-        description={
-          <>
-            {t("earnCampaigns.heroSubtitle")}{" "}
-            <Link
-              href={ROUTES.earnHub}
-              className="font-semibold text-canton underline-offset-2 hover:underline"
-            >
-              {t("nav.quests")}
-            </Link>
-            .
-          </>
-        }
-      />
+      <PageHeader title={t("earnCampaigns.title")} />
 
       {/* Mission-style progress — matches campaign quest detail */}
       <section
@@ -101,16 +85,9 @@ export function EarnCampaignsPage() {
       </section>
 
       <section>
-        <div className="mb-3 flex items-end justify-between gap-3">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
-              {t("earnCampaigns.campaignsHeader")}
-            </p>
-            <p className="mt-1 text-xs leading-relaxed text-[var(--muted-foreground)]">
-              {t("earnCampaigns.campaignsLead")}
-            </p>
-          </div>
-        </div>
+        <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
+          {t("earnCampaigns.campaignsHeader")}
+        </p>
         <QuestsBrowser variant="earn" onStatsChange={setStats} />
       </section>
 

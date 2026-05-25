@@ -9,10 +9,7 @@ export default function LeaderboardPage() {
 
   return (
     <PlatformPage>
-      <PlatformPageIntro
-        title={t("leaderboard.title")}
-        description={t("leaderboard.description")}
-      />
+      <PlatformPageIntro title={t("leaderboard.title")} />
       <LeaderboardTable />
     </PlatformPage>
   );

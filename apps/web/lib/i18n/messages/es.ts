@@ -12,8 +12,7 @@ export const es: PlatformMessages = {
   },
   leaderboard: {
     title: "Clasificación",
-    description:
-      "Compite semanal, mensual o de todos los tiempos. Puntos de Quest, Earn, campañas y spin. Tu fila se resalta al iniciar sesión.",
+    description: "",
   },
   shell: {
     platform: "Plataforma",
@@ -96,12 +95,10 @@ export const es: PlatformMessages = {
   },
   earnCampaigns: {
     title: "Earn",
-    description:
-      "Campañas de socios — completa misiones por recompensas CC, códigos de invitación y más. El check-in diario y tareas sociales están en",
-    badge: "Recompensas de socios",
-    heroSubtitle:
-      "Completa misiones de socios para ganar CC en Canton, códigos exclusivos y plazas en waitlist.",
-    dailyTasksLink: "Tareas Quest diarias para puntos",
+    description: "",
+    badge: "",
+    heroSubtitle: "",
+    dailyTasksLink: "",
     statsAria: "Resumen de campañas",
     statsLabel: "Tus campañas",
     live: "En vivo",
@@ -116,7 +113,7 @@ export const es: PlatformMessages = {
     rewardFcfsTitle: "Reclamo FCFS",
     rewardFcfsDesc: "Plazas limitadas — reclama CC rápido.",
     campaignsHeader: "Explorar campañas",
-    campaignsLead: "Abre una campaña y completa misiones — igual que las tareas Quest.",
+    campaignsLead: "",
     progressCompleted: "campañas terminadas",
     loadFailed: "No se pudieron cargar las campañas",
     loadFailedHint: "Comprueba que la API corre en el puerto 3001 y que JWT_ACCESS_SECRET coincide.",
@@ -198,7 +195,7 @@ export const es: PlatformMessages = {
     referralCodeOptional: "Friend referral code (optional)",
   },
   spin: {
-    pageLead: "Gasta puntos de quest para ganar CC, puntos extra y otros premios.",
+    pageLead: "",
     pointsAvailable: "Disponible: {n} pts",
     spinCost: "Cada giro cuesta {n} pts",
     spinNow: "Girar ahora",

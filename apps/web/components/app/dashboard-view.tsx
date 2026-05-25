@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { PageTitle, SectionTitle, StatValue } from "@/components/ui/typography";
+import { SectionTitle, StatValue } from "@/components/ui/typography";
 import { ROUTES } from "@/lib/app-routes";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -289,26 +289,6 @@ export function DashboardView() {
         </div>
       ) : null}
 
-      {/* Welcome */}
-      {!loading && me?.displayName && (
-        <div>
-          <PageTitle>
-            {t("dashboard.welcomeBack", { name: me.displayName.split(" ")[0] })}
-          </PageTitle>
-          {me.username && (
-            <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-              @{me.username}
-              {me.cantonPartyId && !me.cantonPartyId.startsWith("canquest:") && (
-                <span className="ml-2 inline-flex items-center gap-1 text-green-600 dark:text-green-400">
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  {t("dashboard.walletActive")}
-                </span>
-              )}
-            </p>
-          )}
-        </div>
-      )}
-
       {/* Stat cards — order: Weekly rank → CC Balance → CC Transactions → Quests completed → Quest points */}
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {statCards.map((c) => {
@@ -329,7 +309,9 @@ export function DashboardView() {
                   c.value
                 )}
               </StatValue>
-              <p className="mt-1 text-xs text-[var(--muted-foreground)]">{c.hint}</p>
+              {c.hint ? (
+                <p className="mt-1 text-xs text-[var(--muted-foreground)]">{c.hint}</p>
+              ) : null}
             </div>
           );
         })}
@@ -339,9 +321,6 @@ export function DashboardView() {
         <div className="glass-card rounded-2xl border border-orange-500/30 bg-orange-500/5 p-6">
           <p className="type-label text-orange-300 dark:text-orange-400">
             {t("dashboard.walletNotCreated")}
-          </p>
-          <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-            {t("dashboard.walletNotCreatedHint")}
           </p>
           <Link
             href="/wallet"
@@ -355,12 +334,7 @@ export function DashboardView() {
       {/* Recent Activity */}
       <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <SectionTitle>{t("dashboard.recentActivity")}</SectionTitle>
-              <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-                {t("dashboard.recentActivityHint")}
-              </p>
-            </div>
+            <SectionTitle>{t("dashboard.recentActivity")}</SectionTitle>
             <Link
               href="/transactions"
               className={cn(

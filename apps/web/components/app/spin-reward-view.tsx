@@ -187,8 +187,6 @@ export function SpinRewardView() {
 
   return (
     <div className="space-y-6">
-      <p className="text-sm text-[var(--muted-foreground)]">{t("spin.pageLead")}</p>
-
       <div className="grid gap-6 lg:grid-cols-[1fr,300px]">
         <div className="glass-card rounded-2xl border border-[var(--border)] p-6 md:p-8">
           <div className="flex flex-col items-center gap-6">
