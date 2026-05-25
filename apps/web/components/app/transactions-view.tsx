@@ -142,17 +142,7 @@ export function TransactionsView({
   return (
     <div className={cn(embedded ? "" : "space-y-6", className)}>
       {!embedded ? (
-        <div className="max-w-2xl">
-          <p className="text-sm font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
-            History
-          </p>
-          <h2 className="type-page-title mt-1">
-            CC Transaction log
-          </h2>
-          <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-            All Canton Coin movements including quest rewards, transfers and airdrops.
-          </p>
-        </div>
+        <h2 className="type-page-title">CC Transaction log</h2>
       ) : null}
 
       <div
@@ -165,13 +155,6 @@ export function TransactionsView({
           <div className="min-w-0">
             <p className="text-sm font-semibold text-[var(--foreground)]">
               {t("transactions.title")}
-            </p>
-            <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
-              {embedded
-                ? "Quest rewards, transfers, spin prizes and airdrops."
-                : txPage
-                  ? `${txPage.total} Canton Coin movements`
-                  : "Canton Coin movements"}
             </p>
           </div>
           <button

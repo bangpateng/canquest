@@ -333,18 +333,7 @@ export function DashboardView() {
 
       {/* Recent Activity */}
       <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <SectionTitle>{t("dashboard.recentActivity")}</SectionTitle>
-            <Link
-              href="/transactions"
-              className={cn(
-                buttonVariants({ variant: "secondary", size: "sm" }),
-                "inline-flex shrink-0 gap-1",
-              )}
-            >
-              {t("common.viewAll")} <ArrowUpRight className="h-3.5 w-3.5" />
-            </Link>
-          </div>
+          <SectionTitle>{t("dashboard.recentActivity")}</SectionTitle>
 
           {activityLoading ? (
             <div className="flex items-center justify-center py-10">
