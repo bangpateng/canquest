@@ -4,8 +4,6 @@ import {
 
   ConflictException,
 
-  ForbiddenException,
-
   Injectable,
 
   UnauthorizedException,
@@ -44,51 +42,10 @@ export class AuthService {
 
 
 
-  private validateInviteCode(invite?: string): void {
-
-    const raw = process.env.INVITE_CODES?.trim();
-
-    if (!raw) {
-
-      if (process.env.NODE_ENV === 'production') {
-
-        throw new BadRequestException(
-
-          'Server misconfiguration: INVITE_CODES must be set in production.',
-
-        );
-
-      }
-
-      return;
-
-    }
-
-    const allowed = raw.split(',').map((s) => s.trim()).filter(Boolean);
-
-    const code = invite?.trim() ?? '';
-
-    if (!code) {
-
-      throw new ForbiddenException('Invitation code is required');
-
-    }
-
-    if (!allowed.includes(code)) {
-
-      throw new ForbiddenException('Invalid invitation code');
-
-    }
-
-  }
-
-
-
   async register(dto: {
     displayName: string;
     email: string;
     password: string;
-    inviteCode?: string;
     referralCode?: string;
   }) {
     const existing = await this.users.findByEmail(dto.email);
@@ -96,8 +53,6 @@ export class AuthService {
     if (existing) {
       throw new ConflictException('Email already registered');
     }
-
-    this.validateInviteCode(dto.inviteCode);
 
     const email = dto.email.trim().toLowerCase();
     let referredById: string | null = null;
@@ -121,7 +76,6 @@ export class AuthService {
     const user = await this.users.create({
       email,
       passwordHash,
-      inviteCode: dto.inviteCode?.trim(),
       referredById,
       referralCode,
       displayName: dto.displayName.trim(),

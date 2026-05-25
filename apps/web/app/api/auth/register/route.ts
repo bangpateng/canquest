@@ -7,7 +7,6 @@ export async function POST(req: Request) {
     displayName?: string;
     email?: string;
     password?: string;
-    inviteCode?: string;
     referralCode?: string;
   };
   try {

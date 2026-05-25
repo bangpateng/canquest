@@ -20,7 +20,6 @@ export function register(params: {
   displayName: string;
   email: string;
   password: string;
-  inviteCode?: string;
   referralCode?: string;
 }) {
   return apiFetch<Record<string, unknown>>('/api/auth/register', {
@@ -29,7 +28,7 @@ export function register(params: {
       displayName: params.displayName.trim(),
       email: params.email.trim().toLowerCase(),
       password: params.password,
-      inviteCode: params.inviteCode?.trim() || undefined,
+      referralCode: params.referralCode?.trim() || undefined,
     },
   });
 }

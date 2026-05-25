@@ -83,7 +83,6 @@ export function AuthModal() {
         displayName: String(fd.get("displayName") ?? ""),
         email: String(fd.get("email") ?? ""),
         password: String(fd.get("password") ?? ""),
-        inviteCode: String(fd.get("inviteCode") ?? "") || undefined,
         referralCode: referralRaw,
       });
       if (payload.ok === true) {
@@ -315,15 +314,7 @@ export function AuthModal() {
                 minLength={8}
                 inputClassName="bg-[var(--muted)]/80"
               />
-              <Field label="Invite code">
-                <input
-                  name="inviteCode"
-                  autoComplete="off"
-                  placeholder="Your invite code"
-                  className={inputClass}
-                />
-              </Field>
-              <Field label="Friend referral code (optional)">
+              <Field label="Referral code (optional)">
                 <input
                   name="referralCode"
                   autoComplete="off"

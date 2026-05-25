@@ -35,7 +35,6 @@ export default function RegisterPage() {
     const displayName = String(fd.get("displayName") ?? "").trim();
     const email = String(fd.get("email") ?? "").trim();
     const password = String(fd.get("password") ?? "");
-    const inviteRaw = String(fd.get("inviteCode") ?? "").trim();
     const referralRaw =
       String(fd.get("referralCode") ?? "").trim() || getReferralRef() || undefined;
 
@@ -48,7 +47,6 @@ export default function RegisterPage() {
           displayName,
           email,
           password,
-          inviteCode: inviteRaw || undefined,
           referralCode: referralRaw,
         }),
       });
@@ -173,22 +171,8 @@ export default function RegisterPage() {
             inputClassName="bg-[var(--muted)]/80"
           />
           <div className="space-y-1.5">
-            <label htmlFor="reg-invite" className="text-xs font-medium text-[var(--muted-foreground)]">
-              Invite code (optional)
-            </label>
-            <input
-              id="reg-invite"
-              name="inviteCode"
-              type="text"
-              spellCheck={false}
-              autoComplete="off"
-              placeholder="Your invite code"
-              className={authInputClass}
-            />
-          </div>
-          <div className="space-y-1.5">
             <label htmlFor="reg-referral" className="text-xs font-medium text-[var(--muted-foreground)]">
-              Friend referral code (optional)
+              Referral code (optional)
             </label>
             <input
               id="reg-referral"

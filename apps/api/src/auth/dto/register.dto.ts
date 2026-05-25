@@ -28,14 +28,6 @@ export class RegisterDto {
 
 
 
-  /** Required when INVITE_CODES is configured on the API */
-
-  @IsOptional()
-
-  @IsString()
-
-  inviteCode?: string;
-
   /** Friend's referral code (optional) — referrer earns points after you verify email */
 
   @IsOptional()
