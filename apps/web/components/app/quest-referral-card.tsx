@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Copy, Gift, Loader2, UserPlus } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { cn } from "@/lib/utils";
 
@@ -99,21 +100,34 @@ export function QuestReferralCard() {
               </div>
             </div>
 
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <code className="min-w-0 flex-1 truncate rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 font-mono text-xs tracking-wider text-[var(--foreground)]">
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-[var(--muted-foreground)]">
+                {t("settings.referralCodeLabel")}
+              </p>
+              <code className="block truncate rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 font-mono text-sm tracking-wider text-[var(--foreground)]">
                 {stats.referralCode}
               </code>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-[var(--muted-foreground)]">
+                {t("settings.referralLinkLabel")}
+              </p>
+              <input
+                readOnly
+                value={stats.referralLink}
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)]/60 px-3 py-2.5 text-xs text-[var(--foreground)] outline-none"
+              />
               <button
                 type="button"
                 onClick={() => void copyLink()}
                 className={cn(
-                  "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-xs font-bold transition-colors",
-                  copied
-                    ? "border border-canton-muted bg-canton-subtle text-canton"
-                    : "bg-canton text-[var(--primary-foreground)] hover:opacity-90",
+                  buttonVariants({ variant: "primary", size: "default" }),
+                  "w-full rounded-xl shadow-[0_0_20px_rgb(var(--canton-rgb)/0.2)]",
+                  copied && "brightness-95",
                 )}
               >
-                <Copy className="h-3.5 w-3.5" />
+                <Copy className="h-4 w-4 shrink-0" aria-hidden />
                 {copied ? t("common.copied") : t("questReferral.copyLink")}
               </button>
             </div>
