@@ -1,5 +1,6 @@
 # CanQuest — network topology (read this first)
 
+> **Full deploy (zero → production):** [GUIDE_DEPLOY_FULL.md](./GUIDE_DEPLOY_FULL.md)  
 > **Tutorial deploy (ID):** [TUTORIAL_DEPLOY_INDONESIA.md](./TUTORIAL_DEPLOY_INDONESIA.md)
 
 ## Rule of thumb
@@ -14,7 +15,7 @@
 \*Use separate DB names or VPS 2 instances if you run multiple networks in parallel. For production you usually pick **one** network (e.g. TestNet) on VPS 2.
 
 **VPS 2 does not change when you switch DevNet → TestNet → MainNet.**  
-You only change **where the SSH tunnel points** and **Canton-related env vars** in `apps/api/.env`.
+You only change **WireGuard peer (VPS 1 IP)**, **Docker Canton URLs** in `apps/api/.env`, and optionally the database name.
 
 ---
 
@@ -44,32 +45,43 @@ These are **different machines** (or different deployments). Never reuse party I
 
 On **VPS 2** only (not the VPS 2 IP):
 
-1. **`/etc/systemd/system/canton-tunnel.service`** — SSH `Host` = validator IP for that network  
-2. **`apps/api/.env`** — copy from the right template:
+1. **WireGuard** on VPS 1 + VPS 2 — `Endpoint` = validator public IP for that network  
+2. **`apps/api/.env`** — `CANTON_JSON_API_URL` / `CANTON_VALIDATOR_URL` = Docker IPs on VPS 1 (not `127.0.0.1` when using WG)  
+3. **`apps/api/.env`** — copy from the right template:
    - TestNet → `infra/env/api.env.testnet.example`
    - MainNet → (future) `infra/env/api.env.mainnet.example`
-3. Re-fetch on validator VPS:
+4. Re-fetch on validator VPS:
    - `CANTON_SPLICE_SECRET`
    - `CANTON_VALIDATOR_PARTY_ID`, `CANTON_APP_PROVIDER_PARTY_ID`, `CANTON_OPERATOR_PARTY_ID`
    - `CANTON_DAML_PACKAGE_ID` (after `upload-daml-dar.cjs` on **that** participant)
-4. Restart: `sudo systemctl restart canton-tunnel` + `pm2 restart all`
+5. Restart: `sudo systemctl restart wg-quick@wg0` + `pm2 delete canquest-api` + `pm2 start ...` (reload `.env`)
 
 **Do not copy** `apps/api/.env` from DevNet to TestNet or MainNet without replacing all Canton fields.
 
 ---
 
-## Tunnel pattern (always on VPS 2)
+## WireGuard pattern (production — recommended)
 
 ```
-VPS 2 localhost          SSH tunnel              Validator VPS (IP varies)
-127.0.0.1:7575    ──────────────────────────►   participant :7575
-127.0.0.1:8080    ──────────────────────────►   splice nginx :80
+VPS 2 (10.66.66.2)     WireGuard VPN          VPS 1 (10.66.66.1)
+API .env URLs    ──────────────────────────►  Docker participant :7575
+  http://172.x.x.x:7575                        Docker nginx :80
 ```
 
-- **Local PC dev:** same pattern via `scripts/tunnel-testnet.ps1` (tunnel to TestNet IP).  
-- **Production:** `infra/systemd/canton-tunnel.service.example` on VPS 2.
+- Templates: `infra/wireguard/wg0-vps1.conf.example`, `wg0-vps2.conf.example`  
+- Full steps: [GUIDE_DEPLOY_FULL.md](./GUIDE_DEPLOY_FULL.md) Phase 2  
+- VPS 2 `AllowedIPs` must include the **Docker subnet** on VPS 1 (e.g. `172.18.0.0/16`)
 
-Docker **internal** IPs (`172.x.x.x`) also differ per validator host — always re-run `docker inspect` on the **target** validator VPS after any rebuild.
+## SSH tunnel (optional / dev only)
+
+```
+127.0.0.1:7575 / :8080  ──SSH -L──►  participant / nginx
+```
+
+- **Local PC dev:** `scripts/tunnel-testnet.ps1`  
+- **Legacy production:** `infra/systemd/canton-tunnel.service.example` — disable if using WireGuard
+
+Docker **internal** IPs (`172.x.x.x`) differ per validator host — always re-run `docker inspect` on the **target** validator VPS after any rebuild.
 
 ---
 
@@ -86,7 +98,7 @@ Docker **internal** IPs (`172.x.x.x`) also differ per validator host — always 
 ## Quick checklist before go-live
 
 - [ ] Confirm which network: TestNet or MainNet (not DevNet `162.250.191.46`)
-- [ ] Tunnel `ExecStart` SSH host = **that network’s validator IP**
+- [ ] WireGuard `Endpoint` = **that network’s validator IP**; `curl` to participant `livez` from VPS 2 OK
 - [ ] `CANTON_*` party IDs from **that** validator only
 - [ ] DAML DAR uploaded to **that** participant
 - [ ] VPS 2 still `62.171.185.56` — DNS unchanged when switching Canton network

@@ -2,6 +2,8 @@
 
 Panduan lengkap: **VPS 1 (node Canton)**, **VPS 2 (API + database)**, **Vercel (website)**.
 
+> **Panduan full dari nol (English, WireGuard + Vercel + clone GitHub):** [GUIDE_DEPLOY_FULL.md](./GUIDE_DEPLOY_FULL.md)
+
 Dokumen teknis pendukung (English):
 
 - [NETWORK_TOPOLOGY.md](./NETWORK_TOPOLOGY.md) — IP per jaringan (DevNet / TestNet / MainNet)

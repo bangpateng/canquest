@@ -28,6 +28,12 @@ npm run dev:web
 - Dapp shell: [http://localhost:3000/dashboard](http://localhost:3000/dashboard) (`app.canquest.com` in production)
 - API health: [http://localhost:3001/api/health](http://localhost:3001/api/health)
 
+## Production deploy (VPS + Vercel)
+
+**Start here:** [docs/GUIDE_DEPLOY_FULL.md](docs/GUIDE_DEPLOY_FULL.md) — clone GitHub, WireGuard, VPS 1 validator, VPS 2 API, Vercel, smoke tests.
+
+Also: [docs/NETWORK_TOPOLOGY.md](docs/NETWORK_TOPOLOGY.md), [docs/TUTORIAL_DEPLOY_INDONESIA.md](docs/TUTORIAL_DEPLOY_INDONESIA.md).
+
 ## Phase 1 (current)
 
 - Monorepo layout, Docker Compose, design system, landing page, dapp shell
