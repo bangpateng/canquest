@@ -41,6 +41,8 @@ export class UsersService {
     passwordHash: string;
     displayName?: string | null;
     inviteCode?: string;
+    referredById?: string | null;
+    referralCode?: string;
     emailVerified?: boolean;
   }) {
     return this.prisma.user.create({
@@ -49,6 +51,8 @@ export class UsersService {
         passwordHash: params.passwordHash,
         displayName: params.displayName ?? null,
         inviteCode: params.inviteCode ?? null,
+        referredById: params.referredById ?? null,
+        referralCode: params.referralCode ?? null,
         emailVerified: params.emailVerified ?? false,
       },
     });
@@ -247,6 +251,12 @@ export class UsersService {
     computed += spinWins
       .filter((r) => r.spinItem.rewardType === 'points')
       .reduce((sum, r) => sum + (r.spinItem.rewardPoints ?? 0), 0);
+
+    const referralSum = await this.prisma.referralReward.aggregate({
+      where: { referrerId: userId },
+      _sum: { points: true },
+    });
+    computed += referralSum._sum.points ?? 0;
 
     const finalPoints = Math.max(user.earnPoints, computed);
     if (finalPoints !== user.earnPoints) {

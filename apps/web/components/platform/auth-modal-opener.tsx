@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuthModal } from "@/components/platform/auth-context";
+import { storeReferralRef } from "@/lib/referral-ref";
 
 /** Opens auth modal when landing URL has ?auth=login|register&next=... */
 export function AuthModalOpener() {
@@ -12,6 +13,8 @@ export function AuthModalOpener() {
   useEffect(() => {
     const auth = searchParams.get("auth");
     const next = searchParams.get("next");
+    const ref = searchParams.get("ref");
+    if (ref) storeReferralRef(ref);
     if (auth === "login" || auth === "register") {
       openAuth(auth, next);
       const url = new URL(window.location.href);

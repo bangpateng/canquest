@@ -21,6 +21,7 @@ export function register(params: {
   email: string;
   password: string;
   inviteCode?: string;
+  referralCode?: string;
 }) {
   return apiFetch<Record<string, unknown>>('/api/auth/register', {
     method: 'POST',

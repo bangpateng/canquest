@@ -20,6 +20,12 @@ model User {
   avatarPath     String?
   passwordHash   String
   inviteCode     String?
+  /// Unique code this user shares for friend referrals (e.g. CQ8X4K2M).
+  referralCode   String?         @unique
+  /// Set when the user registered with someone else's referralCode.
+  referredById   String?
+  referredBy     User?           @relation("UserReferrals", fields: [referredById], references: [id], onDelete: SetNull)
+  referredUsers  User[]          @relation("UserReferrals")
   emailVerified  Boolean         @default(false)
   otpCodeHash    String?
   otpExpiresAt   DateTime?
@@ -43,7 +49,22 @@ model User {
   questSubmissions QuestSubmission[]
   winnerDraws      WinnerDraw[]
   assignedCodes    InviteCodePool[]
-  spinResults      SpinResult[]
+  spinResults            SpinResult[]
+  referralRewardsGiven   ReferralReward[] @relation("ReferralRewardsGiven")
+  referralRewardReceived ReferralReward?  @relation("ReferralRewardReceived")
+}
+
+/// One row per successful referred signup (referrer credited once).
+model ReferralReward {
+  id             String   @id @default(cuid())
+  referrerId     String
+  referrer       User     @relation("ReferralRewardsGiven", fields: [referrerId], references: [id], onDelete: Cascade)
+  referredUserId String   @unique
+  referredUser   User     @relation("ReferralRewardReceived", fields: [referredUserId], references: [id], onDelete: Cascade)
+  points         Int
+  createdAt      DateTime @default(now())
+
+  @@index([referrerId])
 }
 
 model RefreshToken {

@@ -21,6 +21,7 @@ import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 
 import { ProfileAvatarService } from '../users/profile-avatar.service';
+import { ReferralService } from '../users/referral.service';
 import { UsersService } from '../users/users.service';
 
 
@@ -36,6 +37,7 @@ export class AuthService {
   constructor(
     private readonly users: UsersService,
     private readonly avatars: ProfileAvatarService,
+    private readonly referral: ReferralService,
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
   ) {}
@@ -83,57 +85,52 @@ export class AuthService {
 
 
   async register(dto: {
-
     displayName: string;
-
     email: string;
-
     password: string;
-
     inviteCode?: string;
-
+    referralCode?: string;
   }) {
-
     const existing = await this.users.findByEmail(dto.email);
 
     if (existing) {
-
       throw new ConflictException('Email already registered');
-
     }
-
-
 
     this.validateInviteCode(dto.inviteCode);
 
-
+    const email = dto.email.trim().toLowerCase();
+    let referredById: string | null = null;
+    const friendCode = dto.referralCode?.trim();
+    if (friendCode) {
+      const referrer = await this.referral.findReferrerByCode(friendCode);
+      if (!referrer) {
+        throw new BadRequestException('Invalid referral code');
+      }
+      const referrerUser = await this.users.findById(referrer.id);
+      if (referrerUser?.email.toLowerCase() === email) {
+        throw new BadRequestException('You cannot use your own referral code');
+      }
+      referredById = referrer.id;
+    }
 
     const skipOtp = process.env.AUTH_REGISTER_SKIP_OTP === 'true';
-
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
-
-
+    const referralCode = await this.referral.generateUniqueReferralCode();
 
     const user = await this.users.create({
-
-      email: dto.email.trim().toLowerCase(),
-
+      email,
       passwordHash,
-
       inviteCode: dto.inviteCode?.trim(),
-
+      referredById,
+      referralCode,
       displayName: dto.displayName.trim(),
-
       emailVerified: skipOtp,
-
     });
 
-
-
     if (skipOtp) {
-
+      await this.referral.completeReferralForUser(user.id);
       return this.issueTokens(user.id, user.email);
-
     }
 
 
@@ -187,6 +184,8 @@ export class AuthService {
     }
 
     await this.users.setVerified(userId);
+
+    await this.referral.completeReferralForUser(userId);
 
     const fresh = await this.users.findById(userId);
 

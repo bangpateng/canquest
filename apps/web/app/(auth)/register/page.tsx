@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { clearReferralRef, getReferralRef, storeReferralRef } from "@/lib/referral-ref";
 
 import { ArrowRight, Loader2 } from "lucide-react";
 import { AuthCard, authInputClass } from "@/components/auth/auth-card";
@@ -16,6 +17,15 @@ export default function RegisterPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingOtp, setPendingOtp] = useState<PendingOtp | null>(null);
+  const [referralDefault, setReferralDefault] = useState("");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get("ref");
+    if (ref) storeReferralRef(ref);
+    setReferralDefault(getReferralRef());
+  }, []);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -26,6 +36,8 @@ export default function RegisterPage() {
     const email = String(fd.get("email") ?? "").trim();
     const password = String(fd.get("password") ?? "");
     const inviteRaw = String(fd.get("inviteCode") ?? "").trim();
+    const referralRaw =
+      String(fd.get("referralCode") ?? "").trim() || getReferralRef() || undefined;
 
     setBusy(true);
     try {
@@ -37,6 +49,7 @@ export default function RegisterPage() {
           email,
           password,
           inviteCode: inviteRaw || undefined,
+          referralCode: referralRaw,
         }),
       });
 
@@ -58,6 +71,7 @@ export default function RegisterPage() {
       }
 
       if (typeof payload.ok === "boolean" && payload.ok === true) {
+        clearReferralRef();
         window.location.assign("/overview");
         return;
       }
@@ -100,6 +114,7 @@ export default function RegisterPage() {
         return;
       }
 
+      clearReferralRef();
       window.location.assign("/overview");
     } finally {
       setBusy(false);
@@ -168,6 +183,21 @@ export default function RegisterPage() {
               spellCheck={false}
               autoComplete="off"
               placeholder="Your invite code"
+              className={authInputClass}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="reg-referral" className="text-xs font-medium text-[var(--muted-foreground)]">
+              Friend referral code (optional)
+            </label>
+            <input
+              id="reg-referral"
+              name="referralCode"
+              type="text"
+              spellCheck={false}
+              autoComplete="off"
+              placeholder="e.g. CQ8X4K2M"
+              defaultValue={referralDefault}
               className={authInputClass}
             />
           </div>

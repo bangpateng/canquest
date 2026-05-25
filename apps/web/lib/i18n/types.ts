@@ -176,6 +176,19 @@ export type PlatformMessages = {
   settings: {
     signingOut: string;
     signOut: string;
+    referralTitle: string;
+    referralLead: string;
+    referralRewardHint: string;
+    referralInvited: string;
+    referralPointsEarned: string;
+    referralCodeLabel: string;
+    referralLinkLabel: string;
+    referralCopyCode: string;
+    referralCopyLink: string;
+    referralCopied: string;
+    referralLoadError: string;
+    referralCopyError: string;
+    referralCodeOptional: string;
   };
   spin: {
     pageLead: string;

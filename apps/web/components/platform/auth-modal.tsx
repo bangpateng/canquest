@@ -7,6 +7,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
 import { formatApiError } from "@/lib/format-api-error";
 import { login, register, verifyOtp } from "@/lib/services/api/auth";
+import { clearReferralRef, getReferralRef } from "@/lib/referral-ref";
 import { cn } from "@/lib/utils";
 
 type PendingOtp = { userId: string; devOtp?: string };
@@ -34,11 +35,14 @@ export function AuthModal() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingOtp, setPendingOtp] = useState<PendingOtp | null>(null);
+  const [referralDefault, setReferralDefault] = useState("");
 
   useEffect(() => {
     if (!open) {
       setError(null);
       setPendingOtp(null);
+    } else {
+      setReferralDefault(getReferralRef());
     }
   }, [open]);
 
@@ -73,13 +77,17 @@ export function AuthModal() {
     const fd = new FormData(e.currentTarget);
     setBusy(true);
     try {
+      const referralRaw =
+        String(fd.get("referralCode") ?? "").trim() || getReferralRef() || undefined;
       const payload = await register({
         displayName: String(fd.get("displayName") ?? ""),
         email: String(fd.get("email") ?? ""),
         password: String(fd.get("password") ?? ""),
         inviteCode: String(fd.get("inviteCode") ?? "") || undefined,
+        referralCode: referralRaw,
       });
       if (payload.ok === true) {
+        clearReferralRef();
         closeAuth();
         redirectAfterAuth();
         return;
@@ -108,6 +116,7 @@ export function AuthModal() {
     setBusy(true);
     try {
       await verifyOtp(pendingOtp.userId, String(fd.get("otp") ?? "").trim());
+      clearReferralRef();
       closeAuth();
       redirectAfterAuth();
     } catch (err) {
@@ -312,6 +321,15 @@ export function AuthModal() {
                   autoComplete="off"
                   placeholder="Your invite code"
                   className={inputClass}
+                />
+              </Field>
+              <Field label="Friend referral code (optional)">
+                <input
+                  name="referralCode"
+                  autoComplete="off"
+                  placeholder="e.g. CQ8X4K2M"
+                  className={inputClass}
+                  defaultValue={referralDefault}
                 />
               </Field>
               <button

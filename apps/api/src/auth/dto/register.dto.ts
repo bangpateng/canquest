@@ -36,5 +36,15 @@ export class RegisterDto {
 
   inviteCode?: string;
 
+  /** Friend's referral code (optional) — referrer earns points after you verify email */
+
+  @IsOptional()
+
+  @IsString()
+
+  @MaxLength(32)
+
+  referralCode?: string;
+
 }
 

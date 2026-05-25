@@ -8,6 +8,7 @@ export async function POST(req: Request) {
     email?: string;
     password?: string;
     inviteCode?: string;
+    referralCode?: string;
   };
   try {
     body = (await req.json()) as typeof body;
