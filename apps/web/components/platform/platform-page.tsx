@@ -1,7 +1,10 @@
 import { PageHeader } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 
-/** Shared platform content width — matches Earn / Quest / Wallet layout */
+/** Same content column width on every platform menu (Overview, Quest, Earn, …). */
+export const platformContentClass = "mx-auto w-full min-w-0";
+
+/** Shared vertical rhythm for platform pages */
 export function PlatformPage({
   children,
   className,
@@ -10,7 +13,7 @@ export function PlatformPage({
   className?: string;
 }) {
   return (
-    <div className={cn("w-full min-w-0 space-y-6", className)}>{children}</div>
+    <div className={cn(platformContentClass, "space-y-6", className)}>{children}</div>
   );
 }
 

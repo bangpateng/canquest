@@ -21,7 +21,7 @@ export function EarnCampaignsPage() {
     stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
 
   return (
-    <div className="mx-auto w-full max-w-2xl space-y-6">
+    <div className="space-y-6">
       <PageHeader
         eyebrow={t("earnCampaigns.badge")}
         eyebrowBrand

@@ -36,6 +36,7 @@ import { PlatformToolbar } from "@/components/platform/platform-toolbar";
 
 import { logout } from "@/lib/services/api/auth";
 
+import { platformContentClass } from "@/components/platform/platform-page";
 import { PlatformI18nProvider, usePlatformI18n } from "@/lib/i18n/platform-provider";
 
 import { ROUTES } from "@/lib/app-routes";
@@ -279,7 +280,9 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
 
         </header>
 
-        <div className="min-w-0 flex-1 p-4 md:p-8">{children}</div>
+        <div className="min-w-0 flex-1 p-4 md:p-8">
+          <div className={platformContentClass}>{children}</div>
+        </div>
 
       </div>
 

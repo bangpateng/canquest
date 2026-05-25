@@ -67,7 +67,7 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
   const rewardClass = rewardStripClass(quest.rewardType, quest.rewardPool);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8">
+    <div className="space-y-8">
       <Link
         href={ROUTES.campaignQuests}
         className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--card)]/80 px-4 py-2 text-sm font-semibold text-[var(--muted-foreground)] backdrop-blur-sm transition-all hover:border-[var(--primary)]/30 hover:text-[var(--foreground)]"

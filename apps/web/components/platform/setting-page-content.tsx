@@ -13,7 +13,7 @@ export function SettingPageContent() {
 
   return (
 
-    <div className="mx-auto grid w-full min-w-0 max-w-3xl gap-8 pb-8">
+    <div className="grid w-full min-w-0 gap-8 pb-8">
 
       <SettingsAccountPanel />
 
