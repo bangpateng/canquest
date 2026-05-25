@@ -26,17 +26,17 @@ export function SettingsReferralPanel() {
     try {
       const res = await fetch("/api/referral", { credentials: "include" });
       if (!res.ok) {
-        setError(t.settings.referralLoadError);
+        setError(t("settings.referralLoadError"));
         return;
       }
       const data = (await res.json()) as ReferralStats;
       setStats(data);
     } catch {
-      setError(t.settings.referralLoadError);
+      setError(t("settings.referralLoadError"));
     } finally {
       setLoading(false);
     }
-  }, [t.settings.referralLoadError]);
+  }, [t]);
 
   useEffect(() => {
     void load();
@@ -48,7 +48,7 @@ export function SettingsReferralPanel() {
       setCopied(kind);
       setTimeout(() => setCopied(null), 2000);
     } catch {
-      setError(t.settings.referralCopyError);
+      setError(t("settings.referralCopyError"));
     }
   }
 
@@ -62,15 +62,15 @@ export function SettingsReferralPanel() {
           <Gift className="h-5 w-5" aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
-          <h3 className="type-section-title">{t.settings.referralTitle}</h3>
-          <p className="mt-1 text-sm text-[var(--muted-foreground)]">{t.settings.referralLead}</p>
+          <h3 className="type-section-title">{t("settings.referralTitle")}</h3>
+          <p className="mt-1 text-sm text-[var(--muted-foreground)]">{t("settings.referralLead")}</p>
         </div>
       </div>
 
       {loading ? (
         <div className="mt-6 flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
           <Loader2 className="h-4 w-4 animate-spin" />
-          {t.common.loading}
+          {t("common.loading")}
         </div>
       ) : error ? (
         <p className="mt-4 text-sm text-red-400">{error}</p>
@@ -79,7 +79,7 @@ export function SettingsReferralPanel() {
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/30 px-4 py-3">
               <p className="text-xs font-medium text-[var(--muted-foreground)]">
-                {t.settings.referralInvited}
+                {t("settings.referralInvited")}
               </p>
               <p className="mt-1 flex items-center gap-2 text-2xl font-bold tabular-nums">
                 <Users className="h-5 w-5 text-canton" aria-hidden />
@@ -88,7 +88,7 @@ export function SettingsReferralPanel() {
             </div>
             <div className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/30 px-4 py-3">
               <p className="text-xs font-medium text-[var(--muted-foreground)]">
-                {t.settings.referralPointsEarned}
+                {t("settings.referralPointsEarned")}
               </p>
               <p className="mt-1 text-2xl font-bold tabular-nums text-canton">
                 {stats.pointsEarned} pts
@@ -97,12 +97,12 @@ export function SettingsReferralPanel() {
           </div>
 
           <p className="text-sm text-[var(--muted-foreground)]">
-            {t.settings.referralRewardHint.replace("{n}", String(stats.pointsPerInvite))}
+            {t("settings.referralRewardHint", { n: stats.pointsPerInvite })}
           </p>
 
           <div className="space-y-2">
             <p className="text-xs font-medium text-[var(--muted-foreground)]">
-              {t.settings.referralCodeLabel}
+              {t("settings.referralCodeLabel")}
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <code className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/50 px-3 py-2 font-mono text-sm tracking-wider">
@@ -116,14 +116,14 @@ export function SettingsReferralPanel() {
                 )}
               >
                 <Copy className="h-3.5 w-3.5" />
-                {copied === "code" ? t.settings.referralCopied : t.settings.referralCopyCode}
+                {copied === "code" ? t("settings.referralCopied") : t("settings.referralCopyCode")}
               </button>
             </div>
           </div>
 
           <div className="space-y-2">
             <p className="text-xs font-medium text-[var(--muted-foreground)]">
-              {t.settings.referralLinkLabel}
+              {t("settings.referralLinkLabel")}
             </p>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <input
@@ -139,7 +139,7 @@ export function SettingsReferralPanel() {
                 )}
               >
                 <Copy className="h-3.5 w-3.5" />
-                {copied === "link" ? t.settings.referralCopied : t.settings.referralCopyLink}
+                {copied === "link" ? t("settings.referralCopied") : t("settings.referralCopyLink")}
               </button>
             </div>
           </div>
