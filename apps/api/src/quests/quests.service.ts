@@ -75,6 +75,22 @@ export class QuestsService {
     private readonly config: ConfigService,
   ) {}
 
+  /** Map internal fee/ledger errors to a message the user can act on. */
+  private fcfsClaimErrorMessage(detail: string): string {
+    const d = detail.toLowerCase();
+    if (
+      d.includes('fee') ||
+      d.includes('treasury') ||
+      d.includes('validator') ||
+      d.includes('mismatch') ||
+      d.includes('offer') ||
+      d.includes('balance did not increase')
+    ) {
+      return `Claim fee failed: ${detail}`;
+    }
+    return FCFS_CLAIM_FAIL_MSG;
+  }
+
   /** CC FCFS: user pays claim fee on-chain, then receives quest.rewardCc from validator pool. */
   requiresFcfsCcClaim(quest: {
     rewardType: RewardType | string;
@@ -1034,6 +1050,11 @@ export class QuestsService {
     const rewardCc = quest.rewardCc;
     const maxWinners = quest.maxWinners ?? 0;
 
+    const validatorPartyId = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
+    if (!validatorPartyId) {
+      throw new BadRequestException('Validator party is not configured on the server.');
+    }
+
     let reserveResult: Awaited<ReturnType<QuestsService['reserveFcfsSlotLocked']>>;
     try {
       reserveResult = await this.reserveFcfsSlotLocked({
@@ -1048,6 +1069,48 @@ export class QuestsService {
     }
 
     if (reserveResult.kind === 'already_claimed') {
+      const existingDraw = await this.prisma.winnerDraw.findUnique({
+        where: { questId_userId: { questId, userId } },
+      });
+      // Recovery: reward was sent (old bug / admin distribute) but claim fee never recorded.
+      if (
+        existingDraw?.distributed &&
+        !existingDraw.claimFeeLedgerTxId &&
+        feeCc > 0 &&
+        validatorPartyId
+      ) {
+        this.logger.warn(
+          `FCFS fee recovery: user ${userId} quest ${questId} — reward sent without claimFeeLedgerTxId`,
+        );
+        try {
+          const feeTxId = await this.collectClaimFee({
+            userId,
+            username,
+            questTitle: quest.title,
+            feeCc,
+            feeLabel: 'FCFS claim fee (recovery)',
+            validatorPartyId,
+          });
+          await this.prisma.winnerDraw.update({
+            where: { id: existingDraw.id },
+            data: { claimFeeLedgerTxId: feeTxId },
+          });
+          const rewardStatus = await this.getQuestRewardStatus(userId, questId);
+          const taken = await this.countFcfsSlotsTaken(questId);
+          return {
+            ok: true,
+            message: `Claim fee ${feeCc} CC sent to validator (${validatorPartyId.split('::')[0]}).`,
+            rewardCc,
+            feeCc,
+            remainingSlots: this.fcfsSlotsRemaining(maxWinners, taken),
+            rewardStatus,
+          };
+        } catch (err) {
+          const detail = err instanceof Error ? err.message : String(err);
+          throw new BadRequestException(this.fcfsClaimErrorMessage(detail));
+        }
+      }
+
       const rewardStatus = await this.getQuestRewardStatus(userId, questId);
       await this.releaseStaleFcfsReservations(questId);
       const taken = await this.countFcfsSlotsTaken(questId);
@@ -1072,13 +1135,9 @@ export class QuestsService {
       throw new BadRequestException(FCFS_CLAIM_FAIL_MSG);
     }
 
-    const validatorPartyId = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
-    if (!validatorPartyId) {
-      if (isNewReservation) {
-        await this.prisma.winnerDraw.delete({ where: { id: reservedDrawId } }).catch(() => {});
-      }
-      throw new BadRequestException('Validator party is not configured on the server.');
-    }
+    this.logger.log(
+      `FCFS claim start quest=${questId} user=@${username} fee=${feeCc} reward=${rewardCc} validator=${validatorPartyId.split('::')[0]}`,
+    );
 
     try {
       // Best-effort DAML audit: create ClaimSession (operator signs, user observes).
@@ -1179,13 +1238,14 @@ export class QuestsService {
         }),
       ]);
     } catch (err) {
-      this.logger.warn(`FCFS claim on-chain failed: ${String(err)}`);
+      const detail = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`FCFS claim on-chain failed: ${detail}`);
       await this.prisma.winnerDraw
         .deleteMany({
           where: { id: reservedDrawId, questId, userId, distributed: false },
         })
         .catch(() => {});
-      throw new BadRequestException(FCFS_CLAIM_FAIL_MSG);
+      throw new BadRequestException(this.fcfsClaimErrorMessage(detail));
     }
 
     await this.releaseStaleFcfsReservations(questId);
