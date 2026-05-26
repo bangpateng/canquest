@@ -32,7 +32,22 @@ R2_BUCKET_NAME=canquest-media
 R2_PUBLIC_BASE_URL=https://pub-xxxx.r2.dev
 ```
 
+| Variable | Wrong | Correct |
+|----------|--------|---------|
+| `R2_BUCKET_NAME` | `https://pub-xxx.r2.dev` | `canquest-media` (name only) |
+| `R2_PUBLIC_BASE_URL` | bucket name | `https://pub-xxxx.r2.dev` (public URL) |
+| `R2_ACCOUNT_ID` | API token secret | Account ID from R2 overview |
+
 `R2_PUBLIC_BASE_URL` = public URL **without** trailing slash (R2.dev URL or custom domain).
+
+### Verify on VPS
+
+```bash
+cd /var/www/canquest/apps/api
+node scripts/diagnose-r2.cjs
+```
+
+If you see `NoSuchBucket`, fix `R2_BUCKET_NAME` or create the bucket in Cloudflare.
 
 Restart API after saving:
 
