@@ -10,6 +10,7 @@ import type {
 import {
   TASK_ACTION_BUTTON_LABEL,
   TASK_COUNTDOWN_SEC,
+  filterCampaignParticipantTasks,
   formatTaskCountdownSeconds,
   resolveQuestTaskDisplayTitle,
   formatEarnHubCooldown,
@@ -162,6 +163,11 @@ export function QuestTaskPanel({
 }) {
   const t = usePlatformT();
   const isEarnHub = quest.questKind === "EARN_HUB";
+  const taskList = useMemo(
+    () =>
+      isEarnHub ? quest.tasks : filterCampaignParticipantTasks(quest.tasks),
+    [isEarnHub, quest.tasks],
+  );
   const [submissions, setSubmissions] = useState<Record<string, QuestSubmission>>({});
   const [questCompleted, setQuestCompleted] = useState(false);
   const [allTasksVerified, setAllTasksVerified] = useState(false);
@@ -182,8 +188,8 @@ export function QuestTaskPanel({
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
 
   const firstOpenTaskIdx = useMemo(
-    () => quest.tasks.findIndex((t) => submissions[t.id]?.status !== "VERIFIED"),
-    [quest.tasks, submissions],
+    () => taskList.findIndex((t) => submissions[t.id]?.status !== "VERIFIED"),
+    [taskList, submissions],
   );
 
   const isTaskSequentiallyLocked = useCallback(
@@ -274,23 +280,23 @@ export function QuestTaskPanel({
   }, [loadProgress, viewerPartyId, viewerTwitterUsername]);
 
   const verifiedCount = useMemo(
-    () => quest.tasks.filter((t) => submissions[t.id]?.status === "VERIFIED").length,
-    [quest.tasks, submissions],
+    () => taskList.filter((t) => submissions[t.id]?.status === "VERIFIED").length,
+    [taskList, submissions],
   );
   const totalPoints = useMemo(
-    () => quest.tasks.reduce((s, t) => s + t.points, 0),
-    [quest.tasks],
+    () => taskList.reduce((s, t) => s + t.points, 0),
+    [taskList],
   );
   const earnedPoints = useMemo(
     () =>
-      quest.tasks.reduce(
+      taskList.reduce(
         (s, t) => s + (submissions[t.id]?.status === "VERIFIED" ? t.points : 0),
         0,
       ),
-    [quest.tasks, submissions],
+    [taskList, submissions],
   );
-  const pct = quest.tasks.length ? Math.round((verifiedCount / quest.tasks.length) * 100) : 0;
-  const allDone = verifiedCount === quest.tasks.length && quest.tasks.length > 0;
+  const pct = taskList.length ? Math.round((verifiedCount / taskList.length) * 100) : 0;
+  const allDone = verifiedCount === taskList.length && taskList.length > 0;
   const campaignEnded = !isEarnHub && isCampaignEnded(quest, campaignMeta);
   const fcfsSlotsFull =
     !isEarnHub &&
@@ -326,8 +332,8 @@ export function QuestTaskPanel({
   function onTaskVerified(taskId: string, sub: QuestSubmission) {
     setSubmissions((prev) => {
       const next = { ...prev, [taskId]: sub };
-      const count = quest.tasks.filter((t) => next[t.id]?.status === "VERIFIED").length;
-      setAllTasksVerified(count === quest.tasks.length && quest.tasks.length > 0);
+      const count = taskList.filter((t) => next[t.id]?.status === "VERIFIED").length;
+      setAllTasksVerified(count === taskList.length && taskList.length > 0);
       return next;
     });
   }
@@ -476,7 +482,7 @@ export function QuestTaskPanel({
                   Quest tasks
                 </p>
                 <p className="mt-1 text-base font-semibold text-[var(--foreground)]">
-                  {verifiedCount} of {quest.tasks.length} completed
+                  {verifiedCount} of {taskList.length} completed
                 </p>
                 <p className="mt-0.5 text-[10px] text-[var(--muted-foreground)]">
                   Complete tasks in order — one at a time
@@ -500,7 +506,7 @@ export function QuestTaskPanel({
             </div>
           </div>
           <ul className="divide-y divide-[var(--border)]">
-            {quest.tasks.map((task, idx) => (
+            {taskList.map((task, idx) => (
               <TaskRow
                 key={task.id}
                 index={idx + 1}

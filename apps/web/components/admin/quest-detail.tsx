@@ -10,9 +10,10 @@ import { cn } from "@/lib/utils";
 import { QuestForm } from "./quest-form";
 import {
   EARN_HUB_TASK_TYPE_OPTIONS,
-  QUEST_TASK_TYPE_OPTIONS,
+  CAMPAIGN_TASK_TYPE_OPTIONS,
   REWARD_TYPE_OPTIONS,
   buildQuestTaskTitle,
+  isCampaignSocialTaskType,
   isInviteRewardType,
   questExportLabel,
   questTaskTypeLabel,
@@ -162,7 +163,9 @@ export function QuestDetail({ questId }: { questId: string }) {
     "w-full rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 text-sm outline-none ring-[var(--ring)] focus-visible:ring-2";
 
   const isEarnHub = quest.questKind === "EARN_HUB";
-  const taskTypeOptions = isEarnHub ? EARN_HUB_TASK_TYPE_OPTIONS : QUEST_TASK_TYPE_OPTIONS;
+  const taskTypeOptions = isEarnHub
+    ? EARN_HUB_TASK_TYPE_OPTIONS
+    : CAMPAIGN_TASK_TYPE_OPTIONS;
   const adminBackHref = isEarnHub ? "/admin/quest" : "/admin/earn";
 
   return (
@@ -336,6 +339,11 @@ export function QuestDetail({ questId }: { questId: string }) {
                   </span>
                   <span className="ml-auto text-xs text-[var(--muted-foreground)]">+{task.points} pts</span>
                 </div>
+                {!isEarnHub && !isCampaignSocialTaskType(task.type) ? (
+                  <p className="mt-2 text-xs font-medium text-orange-600 dark:text-orange-400">
+                    Hidden from users — delete this task (campaigns are social-only).
+                  </p>
+                ) : null}
                 {task.description && <p className="mt-1 text-xs text-[var(--muted-foreground)]">{task.description}</p>}
                 {task.target && <p className="mt-1 font-mono text-xs">Target: {task.target}</p>}
                 {task.correctAnswer && <p className="mt-1 text-xs text-[var(--muted-foreground)]">Answer: {task.correctAnswer}</p>}

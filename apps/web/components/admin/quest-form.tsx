@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { Plus, Trash2, ChevronDown, ChevronUp, Upload } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import {
-  QUEST_TASK_TYPE_OPTIONS,
+  CAMPAIGN_TASK_TYPE_OPTIONS,
   REWARD_TYPE_OPTIONS,
   buildQuestTaskTitle,
   DEFAULT_QUEST_BANNER,
@@ -177,15 +177,8 @@ export function QuestForm({
     form.rewardType === "CC_AND_INVITE" ||
     form.rewardType === "INVITE_CODE_FCFS";
 
-  const recommendedTaskType =
-    form.rewardType === "WAITLIST_EMAIL"
-      ? "submit_email"
-      : form.rewardType === "CC_ONLY" || form.rewardType === "CC_AND_INVITE"
-        ? "submit_party_id"
-        : null;
-  const hasRecommendedTask =
-    !recommendedTaskType ||
-    tasks.some((t) => t.type === recommendedTaskType);
+  const campaignTaskTypeOptions =
+    questKind === "CAMPAIGN" ? CAMPAIGN_TASK_TYPE_OPTIONS : [];
 
   function addTask() {
     setTasks((prev) => [
@@ -526,13 +519,9 @@ export function QuestForm({
             <p className="mt-1.5 text-xs text-[var(--muted-foreground)]">
               {REWARD_TYPE_OPTIONS.find((r) => r.value === form.rewardType)?.hint}
             </p>
-            {recommendedTaskType && !hasRecommendedTask && !isEdit && (
-              <p className="mt-2 rounded-lg bg-orange-500/10 px-3 py-2 text-xs text-orange-200 dark:text-orange-200">
-                Add a{" "}
-                <strong>
-                  {QUEST_TASK_TYPE_OPTIONS.find((o) => o.value === recommendedTaskType)?.label}
-                </strong>{" "}
-                task below so user data is collected for export.
+            {questKind === "CAMPAIGN" && !isEdit && (
+              <p className="mt-2 text-xs text-[var(--muted-foreground)]">
+                Campaign tasks are social only (X, Telegram, Discord) — titles use your project name.
               </p>
             )}
             {(form.rewardType === "INVITE_CODE_RANDOM" ||
@@ -649,7 +638,7 @@ export function QuestForm({
                     <div>
                       <label className="mb-1 block text-xs font-medium">Type</label>
                       <select value={task.type} onChange={(e) => updateTask(idx, "type", e.target.value)} className={cn(inputCls, "py-2")}>
-                        {QUEST_TASK_TYPE_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                        {campaignTaskTypeOptions.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                       </select>
                     </div>
                     <div>

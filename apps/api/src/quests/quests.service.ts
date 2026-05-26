@@ -38,6 +38,7 @@ import { hydrateTwitterAvatarUrls } from '../twitter/hydrate-twitter-avatars';
 import { TwitterApiService } from '../twitter/twitter-api.service';
 import { R2StorageService } from '../storage/r2-storage.service';
 import { withQuestMediaUrls } from '../storage/quest-media.util';
+import { filterCampaignParticipantTasks } from './campaign-task.util';
 import { parseQuestSocialLinks } from './quest-social-links.util';
 
 export interface LeaderboardRow {
@@ -830,11 +831,16 @@ export class QuestsService {
       where: { id: questId },
       include: { tasks: true },
     });
-    if (!quest || quest.tasks.length === 0) return false;
+    if (!quest) return false;
+    const tasksToCheck =
+      quest.questKind === QuestKind.CAMPAIGN
+        ? filterCampaignParticipantTasks(quest.tasks)
+        : quest.tasks;
+    if (tasksToCheck.length === 0) return false;
     const verified = await this.prisma.questSubmission.findMany({
       where: { userId, questId, status: SubmissionStatus.VERIFIED },
     });
-    return quest.tasks.every((t) => verified.some((s) => s.taskId === t.id));
+    return tasksToCheck.every((t) => verified.some((s) => s.taskId === t.id));
   }
 
   /**

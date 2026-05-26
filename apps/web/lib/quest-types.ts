@@ -158,13 +158,25 @@ export function isEarnHubQuizType(type: string): boolean {
 }
 
 export function isEarnHubSocialType(type: string): boolean {
+  return isCampaignSocialTaskType(type);
+}
+
+/** Partner campaigns (Earn) — social tasks only; no Party ID / email tasks in admin or UI. */
+export function isCampaignSocialTaskType(type: string): boolean {
+  const t = type === "telegram_join" ? "telegram_channel" : type;
   return (
-    type === "twitter_follow" ||
-    type === "twitter_retweet" ||
-    type === "telegram_channel" ||
-    type === "telegram_group" ||
-    type === "discord_join"
+    t === "twitter_follow" ||
+    t === "twitter_retweet" ||
+    t === "telegram_channel" ||
+    t === "telegram_group" ||
+    t === "discord_join"
   );
+}
+
+export function filterCampaignParticipantTasks<T extends { type: string }>(
+  tasks: T[],
+): T[] {
+  return tasks.filter((t) => isCampaignSocialTaskType(t.type));
 }
 
 /** Short label from X / Telegram / Discord URL or handle (universal for any post). */
@@ -521,12 +533,18 @@ export function buildEarnHubTaskPayload(input: {
   };
 }
 
-export const QUEST_TASK_TYPE_OPTIONS: { value: QuestTaskType; label: string }[] = [
-  { value: "twitter_follow", label: "Follow Twitter" },
-  { value: "twitter_retweet", label: "Retweet Post" },
-  { value: "telegram_channel", label: "Join Telegram Channel" },
-  { value: "telegram_group", label: "Join Telegram Group" },
+/** Admin: partner campaign tasks (social only). */
+export const CAMPAIGN_TASK_TYPE_OPTIONS: { value: QuestTaskType; label: string }[] = [
+  { value: "twitter_follow", label: "Follow on X" },
+  { value: "twitter_retweet", label: "Retweet on X" },
+  { value: "telegram_channel", label: "Join Telegram channel" },
+  { value: "telegram_group", label: "Join Telegram group" },
   { value: "discord_join", label: "Join Discord" },
+];
+
+/** Legacy / internal — includes data-collection types not offered for new campaigns. */
+export const QUEST_TASK_TYPE_OPTIONS: { value: QuestTaskType; label: string }[] = [
+  ...CAMPAIGN_TASK_TYPE_OPTIONS,
   { value: "submit_email", label: "Submit Email" },
   { value: "submit_party_id", label: "Submit Party ID (auto-filled)" },
 ];
