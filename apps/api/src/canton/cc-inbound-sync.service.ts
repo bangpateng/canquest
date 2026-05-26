@@ -106,6 +106,51 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * Skip generic "CC received" when FCFS (or similar) already logged fee + reward lines.
+   * Net on-chain delta (e.g. +17) must not appear as a third history row.
+   */
+  private async isExplainedByRecentAppActivity(
+    userId: string,
+    deltaMicro: bigint,
+  ): Promise<boolean> {
+    const since = new Date(Date.now() - 20 * 60_000);
+
+    const exactReward = await this.prisma.ccTransaction.findFirst({
+      where: {
+        userId,
+        type: 'QUEST_REWARD',
+        amountMicroCc: deltaMicro,
+        createdAt: { gte: since },
+      },
+    });
+    if (exactReward) return true;
+
+    const reward = await this.prisma.ccTransaction.findFirst({
+      where: {
+        userId,
+        type: 'QUEST_REWARD',
+        createdAt: { gte: since },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!reward) return false;
+
+    const fee = await this.prisma.ccTransaction.findFirst({
+      where: {
+        userId,
+        type: 'TRANSFER_OUT',
+        createdAt: { gte: since },
+        description: { startsWith: 'Sent ' },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!fee) return false;
+
+    const netMicro = reward.amountMicroCc + fee.amountMicroCc;
+    return netMicro === deltaMicro;
+  }
+
   private async syncUserBalance(userId: string, username: string): Promise<void> {
     const onChain = await this.splice.getUserBalance(username);
     if (onChain === null) return;
@@ -125,15 +170,7 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
       const deltaCc = Number(deltaMicro) / 1_000_000;
       const ledgerTxId = `inbound-sync:${userId}:${onChainMicro.toString()}`;
 
-      const recentQuestReward = await this.prisma.ccTransaction.findFirst({
-        where: {
-          userId,
-          type: 'QUEST_REWARD',
-          amountMicroCc: deltaMicro,
-          createdAt: { gte: new Date(Date.now() - 15 * 60_000) },
-        },
-      });
-      if (recentQuestReward) {
+      if (await this.isExplainedByRecentAppActivity(userId, deltaMicro)) {
         await this.prisma.ccBalance.update({
           where: { userId },
           data: { balanceMicroCc: onChainMicro },

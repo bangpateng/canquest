@@ -78,6 +78,14 @@ function amountSign(type: TxItem["type"]): string {
   return type === "TRANSFER_OUT" ? "−" : "+";
 }
 
+function txDisplayTitle(tx: TxItem, fallback: string): string {
+  const d = tx.description?.trim() ?? "";
+  if (d.startsWith("Sent ") || d.startsWith("Received ")) {
+    return d;
+  }
+  return fallback;
+}
+
 type TransactionsViewProps = {
   /** Full page with section header, or compact block inside wallet */
   variant?: "page" | "embedded";
@@ -222,7 +230,9 @@ export function TransactionsView({
                             >
                               <TxTypeIcon type={tx.type} />
                             </span>
-                            <span className="font-medium">{txLabel(tx.type)}</span>
+                            <span className="font-medium">
+                              {txDisplayTitle(tx, txLabel(tx.type))}
+                            </span>
                           </div>
                         </td>
                         <td
@@ -287,7 +297,7 @@ export function TransactionsView({
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-[var(--foreground)]">
-                        {tx.description}
+                        {txDisplayTitle(tx, tx.description)}
                       </p>
                       <p className="text-xs text-[var(--muted-foreground)]">{date}</p>
                     </div>

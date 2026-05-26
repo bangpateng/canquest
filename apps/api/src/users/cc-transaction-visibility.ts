@@ -3,6 +3,14 @@ export function isPlatformFeeTransaction(description: string): boolean {
   return description.startsWith('Platform fee');
 }
 
-export const CC_TRANSACTION_HISTORY_WHERE = {
-  NOT: { description: { startsWith: 'Platform fee' } },
-} as const;
+import type { Prisma } from '@prisma/client';
+
+export const CC_TRANSACTION_HISTORY_WHERE: Prisma.CcTransactionWhereInput = {
+  NOT: {
+    OR: [
+      { description: { startsWith: 'Platform fee' } },
+      /** Balance-sync net rows (e.g. +17 after FCFS); fee + reward lines are enough. */
+      { ledgerTxId: { startsWith: 'inbound-sync:' } },
+    ],
+  },
+};

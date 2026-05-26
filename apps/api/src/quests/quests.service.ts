@@ -26,6 +26,7 @@ import {
   QuestLedgerService,
   type QuestLedgerSubmitResult,
 } from '../canton/quest-ledger.service';
+import { CcInboundSyncService } from '../canton/cc-inbound-sync.service';
 import { SpliceValidatorService } from '../canton/splice-validator.service';
 import { ProfileAvatarService } from '../users/profile-avatar.service';
 import { resolvePublicAvatarUrl } from '../users/user-avatar-url';
@@ -79,6 +80,7 @@ export class QuestsService {
     private readonly points: PointsService,
     private readonly twitterApi: TwitterApiService,
     private readonly splice: SpliceValidatorService,
+    private readonly inboundSync: CcInboundSyncService,
     private readonly config: ConfigService,
   ) {}
 
@@ -1311,10 +1313,15 @@ export class QuestsService {
         userId,
         amountCc: rewardCc,
         type: 'QUEST_REWARD',
-        description: `FCFS reward — ${quest.title}`,
-        counterparty: 'Validator (reward pool)',
+        description: `Received ${rewardCc} CC reward`,
+        referenceId: questId,
+        counterparty: validatorPartyId.split('::')[0],
         ledgerTxId: rewardOfferId,
       });
+
+      if (username) {
+        await this.inboundSync.alignBalanceFromChain(userId, username);
+      }
 
       const rewardMicroCc = BigInt(Math.round(rewardCc * 1_000_000));
       await this.prisma.$transaction([
@@ -1536,11 +1543,10 @@ export class QuestsService {
     feeLabel: string;
     validatorPartyId: string;
   }): Promise<string> {
-    const description = `${params.feeLabel} — ${params.questTitle}`;
     const feeResult = await this.splice.collectClaimFeeToValidatorParty({
       senderUsername: params.username,
       feeCc: params.feeCc,
-      description,
+      description: `FCFS claim fee — ${params.questTitle}`,
       validatorPartyId: params.validatorPartyId,
     });
 
@@ -1552,9 +1558,9 @@ export class QuestsService {
     const validatorLabel = params.validatorPartyId.split('::')[0];
     await this.users.recordTransaction({
       userId: params.userId,
-      amountCc: -params.feeCc,
+      amountCc: params.feeCc,
       type: 'TRANSFER_OUT',
-      description,
+      description: `Sent ${params.feeCc} CC claim fee`,
       counterparty: validatorLabel,
       ledgerTxId: ledgerTxId || undefined,
     });

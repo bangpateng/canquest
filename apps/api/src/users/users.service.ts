@@ -252,6 +252,10 @@ export class UsersService {
 
     const enriched = items.map((tx) => {
       if (tx.type !== 'QUEST_REWARD') return tx;
+      if (/^Received [\d.]+\sCC reward/.test(tx.description)) {
+        const questId = this.resolveQuestIdForTransaction(tx);
+        return { ...tx, referenceId: questId ?? tx.referenceId };
+      }
       const questId = this.resolveQuestIdForTransaction(tx);
       const title = questId ? titleById.get(questId) : null;
       if (!title) return tx;
