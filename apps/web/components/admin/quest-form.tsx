@@ -125,7 +125,9 @@ export function QuestForm({
   const showCcField =
     form.rewardType === "CC_ONLY" || form.rewardType === "CC_AND_INVITE";
   const needsMaxWinners =
-    form.rewardType !== "WAITLIST_EMAIL" && form.rewardType !== "CC_ONLY";
+    form.rewardType === "CC_ONLY" ||
+    form.rewardType === "CC_AND_INVITE" ||
+    form.rewardType === "INVITE_CODE_FCFS";
 
   const recommendedTaskType =
     form.rewardType === "WAITLIST_EMAIL"

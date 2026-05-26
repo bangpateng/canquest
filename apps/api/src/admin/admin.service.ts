@@ -138,6 +138,23 @@ export class AdminService {
     }
   }
 
+  /** Type 4 (CC FCFS) on Earn requires slots so claim-fcfs + fee run instead of auto-send on submit. */
+  private assertCcFcfsMaxWinners(
+    rewardType: RewardType | string | undefined,
+    maxWinners: number | null | undefined,
+    questKind: QuestKind,
+  ): void {
+    if (questKind !== QuestKind.CAMPAIGN) return;
+    if (normalizeRewardType((rewardType ?? RewardType.CC_ONLY) as RewardType) !== RewardType.CC_ONLY) {
+      return;
+    }
+    if (maxWinners == null || maxWinners < 1) {
+      throw new BadRequestException(
+        'Token CC (FCFS) campaigns require Max winners / FCFS slots ≥ 1 so users claim with fee before receiving CC.',
+      );
+    }
+  }
+
   async createQuest(data: {
     title: string;
     org: string;
@@ -170,6 +187,7 @@ export class AdminService {
   }) {
     this.assertQuestSchedule(data.startsAt, data.endsAt);
     const questKind = data.questKind ?? QuestKind.CAMPAIGN;
+    this.assertCcFcfsMaxWinners(data.rewardType, data.maxWinners, questKind);
     if (questKind === QuestKind.EARN_HUB) {
       const existing = await this.prisma.quest.findFirst({
         where: { questKind: QuestKind.EARN_HUB },
@@ -256,6 +274,10 @@ export class AdminService {
         ? data.endsAt
         : existing.endsAt?.toISOString() ?? null;
     this.assertQuestSchedule(nextStarts, nextEnds);
+    const nextRewardType = data.rewardType ?? existing.rewardType;
+    const nextMaxWinners =
+      data.maxWinners !== undefined ? data.maxWinners : existing.maxWinners;
+    this.assertCcFcfsMaxWinners(nextRewardType, nextMaxWinners, existing.questKind);
 
     const updated = await this.prisma.quest.update({
       where: { id: questId },

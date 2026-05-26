@@ -258,6 +258,11 @@ export class QuestsController {
     }
 
     const campaignMeta = await this.quests.getCampaignMeta(questId);
+    if (result.rewardCc > 0 && campaignMeta.requiresFcfsClaim) {
+      this.logger.log(
+        `Skip auto CC enqueue for ${user.username}: FCFS campaign — use Claim (fee) instead`,
+      );
+    }
     if (
       result.rewardCc > 0 &&
       !campaignMeta.requiresFcfsClaim &&

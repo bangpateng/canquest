@@ -91,15 +91,22 @@ export class QuestsService {
     return FCFS_CLAIM_FAIL_MSG;
   }
 
-  /** CC FCFS: user pays claim fee on-chain, then receives quest.rewardCc from validator pool. */
+  /**
+   * CC FCFS (admin type "4 · Token CC"): user pays claim fee, then receives reward.
+   * Earn campaigns with CC_ONLY always use claim-fcfs — never auto-send on Submit quest.
+   */
   requiresFcfsCcClaim(quest: {
     rewardType: RewardType | string;
     maxWinners: number | null;
+    questKind?: QuestKind | string;
   }): boolean {
-    return (
-      normalizeRewardType(quest.rewardType as RewardType) === RewardType.CC_ONLY &&
-      (quest.maxWinners ?? 0) > 0
-    );
+    if (normalizeRewardType(quest.rewardType as RewardType) !== RewardType.CC_ONLY) {
+      return false;
+    }
+    if (quest.questKind === QuestKind.CAMPAIGN || quest.questKind === 'CAMPAIGN') {
+      return true;
+    }
+    return (quest.maxWinners ?? 0) > 0;
   }
 
   isCampaignEnded(quest: {
