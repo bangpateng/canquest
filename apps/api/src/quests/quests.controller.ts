@@ -148,7 +148,7 @@ export class QuestsController {
   /** FCFS CC — claim fee on-chain + reward from pool (first-come slots). */
   @Post(':questId/claim-fcfs')
   @UseGuards(WalletRequiredGuard)
-  @Throttle({ ledger: { limit: 5, ttl: 60_000 } })
+  @Throttle({ ledger: { limit: 3, ttl: 60_000 } })
   async claimFcfs(@Param('questId') questId: string, @Req() req: AuthedReq) {
     const user = await this.users.findById(req.user.userId);
     if (!user) return { ok: false, message: 'User not found' };

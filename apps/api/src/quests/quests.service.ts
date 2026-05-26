@@ -63,6 +63,8 @@ type PrismaTx = Prisma.TransactionClient;
 @Injectable()
 export class QuestsService {
   private readonly logger = new Logger(QuestsService.name);
+  /** In-process guard (single API instance); DB lock is authoritative. */
+  private readonly fcfsClaimInFlight = new Set<string>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -84,7 +86,9 @@ export class QuestsService {
       d.includes('validator') ||
       d.includes('mismatch') ||
       d.includes('offer') ||
-      d.includes('balance did not increase')
+      d.includes('balance did not increase') ||
+      d.includes('in progress') ||
+      d.includes('reward pool too low')
     ) {
       return `Claim fee failed: ${detail}`;
     }
@@ -191,6 +195,63 @@ export class QuestsService {
 
   private countFcfsSlotsTaken(questId: string, tx: PrismaTx | PrismaService = this.prisma) {
     return tx.winnerDraw.count({ where: { questId } });
+  }
+
+  private fcfsClaimLockKey(questId: string, userId: string): string {
+    return `${questId}:${userId}`;
+  }
+
+  /** DB + memory lock so one user cannot run two on-chain FCFS claims at once. */
+  private async acquireFcfsOnChainLock(params: {
+    drawId: string;
+    questId: string;
+    userId: string;
+  }): Promise<boolean> {
+    const memKey = this.fcfsClaimLockKey(params.questId, params.userId);
+    if (this.fcfsClaimInFlight.has(memKey)) {
+      return false;
+    }
+
+    const staleCutoff = new Date(Date.now() - 120_000);
+    const updated = await this.prisma.winnerDraw.updateMany({
+      where: {
+        id: params.drawId,
+        questId: params.questId,
+        userId: params.userId,
+        distributed: false,
+        OR: [{ fcfsClaimLockedAt: null }, { fcfsClaimLockedAt: { lt: staleCutoff } }],
+      },
+      data: { fcfsClaimLockedAt: new Date() },
+    });
+    if (updated.count !== 1) {
+      return false;
+    }
+    this.fcfsClaimInFlight.add(memKey);
+    return true;
+  }
+
+  private releaseFcfsOnChainLock(questId: string, userId: string, drawId: string): void {
+    this.fcfsClaimInFlight.delete(this.fcfsClaimLockKey(questId, userId));
+    void this.prisma.winnerDraw
+      .updateMany({
+        where: { id: drawId, distributed: false },
+        data: { fcfsClaimLockedAt: null },
+      })
+      .catch(() => {});
+  }
+
+  /** Ensure validator wallet can cover the FCFS reward before sending. */
+  private async assertValidatorRewardPool(rewardCc: number): Promise<void> {
+    const treasuryAcceptUsername =
+      this.config.get<string>('CANTON_FEE_ACCEPT_USERNAME')?.trim() ||
+      this.config.get<string>('CANTON_VALIDATOR_ADMIN_USER')?.trim() ||
+      'administrator';
+    const balance = await this.splice.getUserBalance(treasuryAcceptUsername);
+    if (balance !== null && balance < rewardCc) {
+      throw new Error(
+        `Validator reward pool too low (${balance.toFixed(2)} CC available, need ${rewardCc} CC)`,
+      );
+    }
   }
 
   /**
@@ -1142,11 +1203,33 @@ export class QuestsService {
       throw new BadRequestException(FCFS_CLAIM_FAIL_MSG);
     }
 
+    const maxPayoutExposure = maxWinners * rewardCc;
     this.logger.log(
-      `FCFS claim start quest=${questId} user=@${username} fee=${feeCc} reward=${rewardCc} validator=${validatorPartyId.split('::')[0]}`,
+      `FCFS claim start quest=${questId} user=@${username} fee=${feeCc} reward=${rewardCc} validator=${validatorPartyId.split('::')[0]} (max pool exposure ~${maxPayoutExposure} CC for ${maxWinners} slots)`,
     );
 
+    const onChainLocked = await this.acquireFcfsOnChainLock({
+      drawId: reservedDrawId,
+      questId,
+      userId,
+    });
+    if (!onChainLocked) {
+      if (isNewReservation) {
+        await this.prisma.winnerDraw.delete({ where: { id: reservedDrawId } }).catch(() => {});
+      }
+      throw new BadRequestException(
+        'Claim already in progress. Wait a moment before trying again.',
+      );
+    }
+
     try {
+      const drawNow = await this.prisma.winnerDraw.findUnique({
+        where: { id: reservedDrawId },
+      });
+      if (drawNow?.distributed) {
+        throw new Error('FCFS reward already distributed for this user');
+      }
+
       // Best-effort DAML audit: create ClaimSession (operator signs, user observes).
       let claimSessionId: string | null = null;
       if (this.questLedger.isClaimSessionConfigured()) {
@@ -1184,6 +1267,7 @@ export class QuestsService {
       }
 
       // Step 2: validator wallet sends reward → same user party (only after fee is on validator).
+      await this.assertValidatorRewardPool(rewardCc);
       this.logger.log(
         `Claim fee step 2: ${validatorPartyId.split('::')[0]} → ${cantonPartyId.split('::')[0]} (@${username}, ${rewardCc} CC)`,
       );
@@ -1253,6 +1337,8 @@ export class QuestsService {
         })
         .catch(() => {});
       throw new BadRequestException(this.fcfsClaimErrorMessage(detail));
+    } finally {
+      this.releaseFcfsOnChainLock(questId, userId, reservedDrawId);
     }
 
     await this.releaseStaleFcfsReservations(questId);

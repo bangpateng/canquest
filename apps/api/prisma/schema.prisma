@@ -217,6 +217,8 @@ model WinnerDraw {
   claimSessionContractId String?
   drawnAt      DateTime   @default(now())
   distributedAt DateTime?
+  /// Set while on-chain FCFS claim runs (prevents parallel double-claim / double payout).
+  fcfsClaimLockedAt DateTime?
 
   @@unique([questId, userId])
 }
