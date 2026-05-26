@@ -27,8 +27,6 @@ export function PlatformToolbar() {
 
   return (
     <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-      <TransactionNotifications />
-
       <button
         type="button"
         onClick={toggleTheme}
@@ -91,6 +89,8 @@ export function PlatformToolbar() {
           </ul>
         ) : null}
       </div>
+
+      <TransactionNotifications />
     </div>
   );
 }
