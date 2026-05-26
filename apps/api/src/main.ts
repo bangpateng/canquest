@@ -19,6 +19,8 @@ async function bootstrap() {
     helmet({
       contentSecurityPolicy: false, // managed by Next.js frontend
       crossOriginEmbedderPolicy: false,
+      // Allow canquest.cc to embed quest images from api.canquest.cc (<img>, background-image).
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
     }),
   );
 

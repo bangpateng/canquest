@@ -15,6 +15,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { ROUTES } from "@/lib/app-routes";
+import { resolveQuestMediaUrl } from "@/lib/quest-media-url";
 
 const QUEST_PAGE_SIZE = 6;
 const EARN_PAGE_SIZE = 6;
@@ -29,6 +30,14 @@ const TABS: { id: QuestStatus; label: string }[] = [
   { id: "COMING_SOON", label: "Coming soon" },
   { id: "ENDED", label: "Ended" },
 ];
+
+function normalizeQuestMedia(quest: Quest): Quest {
+  return {
+    ...quest,
+    bannerImageUrl: resolveQuestMediaUrl(quest.bannerImageUrl),
+    logoUrl: resolveQuestMediaUrl(quest.logoUrl),
+  };
+}
 
 function matchesSearch(quest: Quest, q: string) {
   const s = q.trim().toLowerCase();
@@ -86,7 +95,7 @@ export function QuestsBrowser({
                 : `Could not load campaigns (${r.status})`;
             throw new Error(msg);
           }
-          return Array.isArray(data) ? data : [];
+          return Array.isArray(data) ? data.map(normalizeQuestMedia) : [];
         },
       ),
       fetch("/api/quests/my-progress", { credentials: "include", signal: controller.signal }).then(

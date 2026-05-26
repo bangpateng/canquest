@@ -3,10 +3,13 @@ import {
   formatQuestDeadlineDisplay,
   type Quest,
 } from "@/lib/quest-types";
+import { resolveQuestMediaUrl } from "@/lib/quest-media-url";
 
 function normalizeQuest(raw: Quest): Quest {
   return {
     ...raw,
+    bannerImageUrl: resolveQuestMediaUrl(raw.bannerImageUrl),
+    logoUrl: resolveQuestMediaUrl(raw.logoUrl),
     deadline:
       raw.deadline ??
       formatQuestDeadlineDisplay(raw.endsAt) ??

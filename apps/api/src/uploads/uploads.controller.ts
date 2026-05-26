@@ -58,6 +58,7 @@ export class UploadsController {
     res.set({
       'Content-Type': asset.contentType,
       'Cache-Control': 'public, max-age=31536000, immutable',
+      'Cross-Origin-Resource-Policy': 'cross-origin',
     });
     return new StreamableFile(asset.stream);
   }
@@ -82,6 +83,7 @@ export class UploadsController {
     res.set({
       'Content-Type': contentTypeForPath(disk),
       'Cache-Control': 'public, max-age=86400',
+      'Cross-Origin-Resource-Policy': 'cross-origin',
     });
     return new StreamableFile(createReadStream(disk));
   }
