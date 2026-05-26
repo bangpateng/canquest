@@ -30,9 +30,22 @@ const secret = process.env.CANTON_SPLICE_SECRET || 'unsafe';
 const audience = process.env.CANTON_LEDGER_API_AUDIENCE || 'https://canton.network.global';
 const user = process.env.CANTON_LEDGER_API_USER || 'ledger-api-user';
 
-const darPath =
-  process.argv[2] ||
-  path.join(__dirname, '..', '..', '..', 'packages', 'daml', '.daml', 'dist', 'canquest-0.1.1.dar');
+function resolveLatestDar(): string {
+  const distDir = path.join(__dirname, '..', '..', '..', 'packages', 'daml', '.daml', 'dist');
+  try {
+    const files = fs
+      .readdirSync(distDir)
+      .filter((f) => /^canquest-.*\.dar$/.test(f))
+      .map((f) => ({ f, p: path.join(distDir, f), m: fs.statSync(path.join(distDir, f)).mtimeMs }))
+      .sort((a, b) => b.m - a.m);
+    if (files.length > 0) return files[0].p;
+  } catch {
+    /* ignore */
+  }
+  return path.join(distDir, 'canquest-0.1.1.dar');
+}
+
+const darPath = process.argv[2] || resolveLatestDar();
 
 async function main() {
   if (!fs.existsSync(darPath)) {
