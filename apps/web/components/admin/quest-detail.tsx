@@ -303,7 +303,7 @@ export function QuestDetail({ questId }: { questId: string }) {
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3">
-              <p className="text-xs font-medium text-[var(--muted-foreground)]">Reward pool label</p>
+              <p className="text-xs font-medium text-[var(--muted-foreground)]">Reward Pool label</p>
               <p className="mt-1 font-semibold">{quest.rewardPool}</p>
             </div>
             <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3">

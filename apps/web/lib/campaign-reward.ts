@@ -69,7 +69,7 @@ export function getCampaignRewardHeadline(
   if (quest.rewardCc > 0) {
     const perWinner = formatCcPerWinners(quest.rewardCc);
     const pool =
-      poolTotalCc != null && poolTotalCc > 0 ? `${poolTotalCc} CC total pool` : null;
+      poolTotalCc != null && poolTotalCc > 0 ? `${poolTotalCc} CC Reward Pool` : null;
     return { primary: perWinner, secondary: pool };
   }
 

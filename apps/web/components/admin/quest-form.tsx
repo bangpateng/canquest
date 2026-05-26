@@ -632,7 +632,7 @@ export function QuestForm({
           )}
         </div>
         <div>
-          <label className="mb-1.5 block text-sm font-medium">Reward pool label (shown to users)</label>
+          <label className="mb-1.5 block text-sm font-medium">Reward Pool label (shown to users)</label>
           <input
             value={form.rewardPool}
             onChange={(e) => updateField("rewardPool", e.target.value)}
