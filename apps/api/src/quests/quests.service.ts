@@ -1097,12 +1097,14 @@ export class QuestsService {
         }
       }
 
+      // Step 1: user pays claim fee → validator node party (CANTON_VALIDATOR_PARTY_ID).
       const feeTxId = await this.collectClaimFee({
         userId,
         username,
         questTitle: quest.title,
         feeCc,
         feeLabel: 'FCFS claim fee',
+        validatorPartyId,
       });
 
       if (claimSessionId) {
@@ -1115,6 +1117,10 @@ export class QuestsService {
         }
       }
 
+      // Step 2: validator wallet sends reward → user (only after fee is on validator).
+      this.logger.log(
+        `FCFS reward: validator → @${username} (${rewardCc} CC) for quest ${questId}`,
+      );
       const rewardOfferId = await this.splice.createTransferOffer(
         cantonPartyId,
         rewardCc,
@@ -1289,6 +1295,11 @@ export class QuestsService {
       throw new BadRequestException(FCFS_CLAIM_FAIL_MSG);
     }
 
+    const validatorPartyId = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
+    if (!validatorPartyId) {
+      throw new BadRequestException('Validator party is not configured on the server.');
+    }
+
     let feeTxId: string;
     try {
       feeTxId = await this.collectClaimFee({
@@ -1297,6 +1308,7 @@ export class QuestsService {
         questTitle: quest.title,
         feeCc,
         feeLabel: 'Claim fee',
+        validatorPartyId,
       });
     } catch {
       throw new BadRequestException(FCFS_CLAIM_FAIL_MSG);
@@ -1349,8 +1361,8 @@ export class QuestsService {
   }
 
   /**
-   * User → validator claim fee (Splice CIP-56).
-   * Receiver (treasury wallet) must accept — NOT the sender.
+   * User → CANTON_VALIDATOR_PARTY_ID claim fee (offer/accept, same as Send CC).
+   * Validator admin wallet must accept — NOT the claiming user.
    */
   private async collectClaimFee(params: {
     userId: string;
@@ -1358,12 +1370,14 @@ export class QuestsService {
     questTitle: string;
     feeCc: number;
     feeLabel: string;
+    validatorPartyId: string;
   }): Promise<string> {
     const description = `${params.feeLabel} — ${params.questTitle}`;
-    const feeResult = await this.splice.collectPlatformFee({
+    const feeResult = await this.splice.collectClaimFeeToValidatorParty({
       senderUsername: params.username,
       feeCc: params.feeCc,
       description,
+      validatorPartyId: params.validatorPartyId,
     });
 
     if (!feeResult.collected) {
@@ -1371,14 +1385,13 @@ export class QuestsService {
     }
 
     const ledgerTxId = feeResult.ledgerTxId ?? '';
-    const treasuryLabel =
-      feeResult.treasuryPartyId?.split('::')[0] ?? 'treasury';
+    const validatorLabel = params.validatorPartyId.split('::')[0];
     await this.users.recordTransaction({
       userId: params.userId,
       amountCc: -params.feeCc,
       type: 'TRANSFER_OUT',
       description,
-      counterparty: `Validator (${treasuryLabel})`,
+      counterparty: validatorLabel,
       ledgerTxId: ledgerTxId || undefined,
     });
     return ledgerTxId;

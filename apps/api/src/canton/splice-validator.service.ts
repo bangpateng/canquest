@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as jwt from 'jsonwebtoken';
 import { randomUUID } from 'crypto';
+import { cantonPartyIdsEqual } from '../common/canton-party-id';
 
 /**
  * Client for the Splice Validator App REST API.
@@ -469,6 +470,103 @@ export class SpliceValidatorService {
   }
 
   /**
+   * FCFS / invite claim fee: user → CANTON_VALIDATOR_PARTY_ID (your node validator wallet).
+   *
+   * Same CIP-56 offer/accept as Send CC (no preapproval shortcut):
+   *   1. User creates TransferOffer → validator party
+   *   2. Validator admin wallet accepts (incoming CC)
+   *
+   * Use this before sending the reward from the validator wallet to the user.
+   */
+  async collectClaimFeeToValidatorParty(params: {
+    senderUsername: string;
+    feeCc: number;
+    description: string;
+    validatorPartyId: string;
+  }): Promise<{
+    collected: boolean;
+    ledgerTxId?: string;
+    error?: string;
+    validatorPartyId?: string;
+  }> {
+    const validatorPartyId = params.validatorPartyId.trim();
+    if (!validatorPartyId) {
+      return { collected: false, error: 'CANTON_VALIDATOR_PARTY_ID is not set' };
+    }
+
+    const treasuryAcceptUsername =
+      this.config.get<string>('CANTON_FEE_ACCEPT_USERNAME')?.trim() ||
+      this.config.get<string>('CANTON_VALIDATOR_ADMIN_USER')?.trim() ||
+      'administrator';
+
+    const walletParty = await this.getWalletPartyId(treasuryAcceptUsername);
+    if (walletParty && !cantonPartyIdsEqual(walletParty, validatorPartyId)) {
+      const msg =
+        `Claim fee wallet mismatch: CANTON_VALIDATOR_PARTY_ID=${validatorPartyId.split('::')[0]} ` +
+        `but @${treasuryAcceptUsername} wallet is ${walletParty.split('::')[0]}. ` +
+        'Set CANTON_VALIDATOR_PARTY_ID to the party owned by the validator admin wallet.';
+      this.logger.error(msg);
+      return { collected: false, error: msg, validatorPartyId };
+    }
+
+    const balanceBefore = await this.readTreasuryBalanceWithRetry(treasuryAcceptUsername);
+    const validatorLabel = validatorPartyId.split('::')[0];
+
+    this.logger.log(
+      `Claim fee: @${params.senderUsername} → ${validatorLabel} (${params.feeCc} CC)`,
+    );
+
+    const offerId = await this.createTransferOffer(
+      validatorPartyId,
+      params.feeCc,
+      params.description,
+      undefined,
+      params.senderUsername,
+    );
+    if (!offerId) {
+      return {
+        collected: false,
+        error: 'Failed to create claim fee transfer offer (user → validator)',
+        validatorPartyId,
+      };
+    }
+
+    const accepted = await this.acceptOfferViaWalletWithRetry(
+      offerId,
+      treasuryAcceptUsername,
+      { attempts: 10, delayMs: 2000 },
+    );
+    if (!accepted) {
+      return {
+        collected: false,
+        ledgerTxId: offerId,
+        error: `Claim fee offer not accepted by validator wallet (@${treasuryAcceptUsername})`,
+        validatorPartyId,
+      };
+    }
+
+    const verified = await this.verifyTreasuryFeeCredit({
+      treasuryAcceptUsername,
+      feeCc: params.feeCc,
+      balanceBefore,
+      strict: true,
+    });
+    if (!verified) {
+      return {
+        collected: false,
+        ledgerTxId: offerId,
+        error: `Claim fee accepted but ${validatorLabel} balance did not increase`,
+        validatorPartyId,
+      };
+    }
+
+    this.logger.log(
+      `Claim fee received: ${params.feeCc} CC on ${validatorLabel} (@${treasuryAcceptUsername})`,
+    );
+    return { collected: true, ledgerTxId: offerId, validatorPartyId };
+  }
+
+  /**
    * Collect platform fee into validator treasury (naxweb-validator-1 on TestNet).
    * Tries direct preapproval send first, then transfer-offer + treasury wallet accept.
    */
@@ -587,18 +685,43 @@ export class SpliceValidatorService {
     };
   }
 
+  /** Read validator/treasury wallet balance with short retries (Splice API can lag). */
+  private async readTreasuryBalanceWithRetry(
+    username: string,
+    attempts = 4,
+  ): Promise<number | null> {
+    for (let i = 0; i < attempts; i++) {
+      const bal = await this.getUserBalance(username);
+      if (bal !== null) return bal;
+      if (i < attempts - 1) {
+        await new Promise((r) => setTimeout(r, 800));
+      }
+    }
+    return null;
+  }
+
   /** Confirm fee actually landed in the treasury Splice wallet (not just HTTP 200). */
   private async verifyTreasuryFeeCredit(params: {
     treasuryAcceptUsername: string;
     feeCc: number;
     balanceBefore: number | null;
+    /** When true, fail if balance cannot be read or did not increase. */
+    strict?: boolean;
   }): Promise<boolean> {
     if (params.balanceBefore === null) {
+      if (params.strict) {
+        this.logger.error('Treasury fee verify failed: could not read balance before fee');
+        return false;
+      }
       return true;
     }
-    await new Promise((r) => setTimeout(r, 2000));
-    const balanceAfter = await this.getUserBalance(params.treasuryAcceptUsername);
+    await new Promise((r) => setTimeout(r, 2500));
+    const balanceAfter = await this.readTreasuryBalanceWithRetry(params.treasuryAcceptUsername);
     if (balanceAfter === null) {
+      if (params.strict) {
+        this.logger.error('Treasury fee verify failed: could not read balance after fee');
+        return false;
+      }
       return true;
     }
     const minExpected = params.balanceBefore + params.feeCc - 0.000_001;
