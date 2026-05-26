@@ -2,6 +2,7 @@
 import { PageLoading } from "@/components/ui/loading-spinner";
 
 import { EarnCampaignSkeleton } from "@/components/app/earn-campaign-skeleton";
+import { EarnCampaignCard } from "@/components/app/earn-campaign-card";
 import { QuestCard } from "@/components/app/quest-card";
 import type { Quest, QuestStatus, UserProgress } from "@/lib/quest-types";
 import { QUEST_STATUS_BADGE } from "@/lib/quest-types";
@@ -283,10 +284,9 @@ export function QuestsBrowser({
           {isEarn ? (
             <div className="grid items-stretch gap-5 sm:grid-cols-2 xl:grid-cols-3">
               {pagedQuests.map((q) => (
-                <QuestCard
+                <EarnCampaignCard
                   key={q.id}
                   quest={q}
-                  variant="earn"
                   completed={progress?.completedQuestIds.includes(q.id) ?? false}
                   userProgress={progress}
                 />

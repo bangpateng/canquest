@@ -2,13 +2,7 @@
 
 import { CardTitle } from "@/components/ui/typography";
 import { ROUTES } from "@/lib/app-routes";
-import { EarnCampaignRewardPanel } from "@/components/app/earn-campaign-reward-panel";
-import {
-  campaignUiKind,
-  fcfsSlotsTaken,
-  hasParticipatedInQuest,
-  isFcfsSlotsFull,
-} from "@/lib/campaign-reward";
+import { EarnCampaignCard } from "@/components/app/earn-campaign-card";
 import type { UserProgress } from "@/lib/quest-types";
 import { QUEST_STATUS_BADGE, type Quest } from "@/lib/quest-types";
 import {
@@ -91,24 +85,6 @@ function rewardAccent(rewardPool: string, rewardType?: string) {
   };
 }
 
-function rewardKindLabel(
-  kind: ReturnType<typeof campaignUiKind>,
-  t: (key: string) => string,
-): string {
-  switch (kind) {
-    case "cc_fcfs":
-      return t("earnCampaigns.kindFcfs");
-    case "cc_manual":
-      return t("earnCampaigns.kindCc");
-    case "waitlist_code":
-      return t("earnCampaigns.kindInvite");
-    case "waitlist_email":
-      return t("earnCampaigns.kindWaitlist");
-    default:
-      return t("earnCampaigns.kindCampaign");
-  }
-}
-
 export function QuestCard({
   quest,
   completed = false,
@@ -122,41 +98,28 @@ export function QuestCard({
 }) {
   const t = usePlatformT();
   const isEarn = variant === "earn";
-  const summary = quest.campaignSummary;
-  const poolLower = quest.rewardPool.toLowerCase();
-  const requiresFcfs =
-    summary?.requiresFcfsClaim ??
-    (poolLower.includes("fcfs") ||
-      poolLower.includes("first come") ||
-      quest.rewardType === "INVITE_CODE_FCFS");
-  const uiKind = campaignUiKind(quest.rewardType, requiresFcfs);
-  const kindLabel = rewardKindLabel(uiKind, t);
-  const hasParticipated = hasParticipatedInQuest(quest, userProgress);
-  const slotsFull =
-    isEarn &&
-    summary?.requiresFcfsClaim &&
-    isFcfsSlotsFull(summary.remainingSlots, summary.maxWinners);
-  const joinBlocked =
-    slotsFull && !hasParticipated && quest.status === "ACTIVE";
 
-  const canOpen =
-    quest.status === "ACTIVE" || quest.status === "ENDED" || (slotsFull && hasParticipated);
+  if (isEarn) {
+    return (
+      <EarnCampaignCard
+        quest={quest}
+        completed={completed}
+        userProgress={userProgress}
+      />
+    );
+  }
+
+  const canOpen = quest.status === "ACTIVE" || quest.status === "ENDED";
   const statusMeta = QUEST_STATUS_BADGE[quest.status];
   const accent = rewardAccent(quest.rewardPool, quest.rewardType);
   const RewardIcon = accent.icon;
 
-  const slotsMax = summary?.maxWinners ?? 0;
-  const slotsUsed = fcfsSlotsTaken(summary?.remainingSlots, slotsMax);
-
-  const ctaLabel = joinBlocked
-    ? t("earnCampaigns.slotsEnded")
-    : quest.status === "ENDED"
+  const ctaLabel =
+    quest.status === "ENDED"
       ? t("quests.viewRecap")
       : completed
         ? t("quests.questComplete")
-        : hasParticipated && slotsFull
-          ? t("earnCampaigns.viewMyQuest")
-          : t("quests.joinQuest");
+        : t("quests.joinQuest");
 
   return (
     <article
@@ -164,8 +127,7 @@ export function QuestCard({
         "group relative flex h-full flex-col overflow-hidden rounded-2xl transition-all duration-300",
         "bg-[var(--card)] ring-1 ring-[var(--border)]",
         "hover:-translate-y-1 hover:ring-[var(--primary)]/25 hover:shadow-[0_0_40px_rgb(var(--canton-rgb)/0.08)]",
-        isEarn && "hover:shadow-[0_12px_48px_rgb(var(--canton-rgb)/0.12)]",
-        (quest.status === "ENDED" || joinBlocked) && "opacity-90",
+        quest.status === "ENDED" && "opacity-90",
         quest.status === "COMING_SOON" && "opacity-95",
       )}
     >
@@ -182,7 +144,7 @@ export function QuestCard({
       <div
         className={cn(
           "relative shrink-0 overflow-hidden",
-          isEarn ? "h-[7.5rem] sm:h-36" : "h-32",
+          "h-32",
         )}
       >
         <div
@@ -202,24 +164,14 @@ export function QuestCard({
           }}
         />
 
-        {isEarn ? (
-          <span className="absolute left-3 top-3 z-[2] rounded-full border border-white/15 bg-black/45 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white/95 backdrop-blur-md">
-            {kindLabel}
-          </span>
-        ) : null}
-
         {/* Status chip */}
         <span
           className={cn(
             "absolute right-3 top-3 z-[2] rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider backdrop-blur-md",
-            slotsFull && quest.status === "ACTIVE"
-              ? "border border-[var(--border)] bg-[var(--muted)] text-[var(--muted-foreground)]"
-              : statusMeta.className,
+            statusMeta.className,
           )}
         >
-          {slotsFull && quest.status === "ACTIVE"
-            ? t("earnCampaigns.slotsEnded")
-            : statusMeta.label}
+          {statusMeta.label}
         </span>
 
         {/* Tags */}
@@ -241,11 +193,10 @@ export function QuestCard({
       <div
         className={cn(
           "relative flex flex-1 flex-col px-4 pb-4 pt-0",
-          isEarn && "px-4 pb-4 sm:px-5 sm:pb-5",
         )}
       >
         {/* Logo overlap */}
-        <div className={cn("-mt-6 mb-2.5 flex items-end gap-3", isEarn && "-mt-6 sm:-mt-7")}>
+        <div className="-mt-6 mb-2.5 flex items-end gap-3">
           <QuestLogo
             logoUrl={quest.logoUrl}
             orgSlug={quest.orgSlug}
@@ -258,7 +209,6 @@ export function QuestCard({
             <CardTitle
               className={cn(
                 "line-clamp-2 text-[var(--foreground)]",
-                isEarn && "text-[0.95rem] font-semibold leading-snug sm:text-base",
               )}
             >
               {quest.title}
@@ -269,87 +219,50 @@ export function QuestCard({
         <p
           className={cn(
             "line-clamp-2 leading-relaxed text-[var(--muted-foreground)]",
-            isEarn ? "text-xs sm:text-[13px]" : "text-[13px]",
+            "text-[13px]",
           )}
         >
           {quest.description}
         </p>
 
         {/* Meta chips */}
-        <div className={cn("mt-2.5 flex flex-wrap gap-1.5", isEarn && "mt-3 gap-2")}>
-          <span className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--muted)]/50 px-2 py-0.5 text-[10px] text-[var(--muted-foreground)] sm:rounded-lg sm:px-2.5 sm:py-1 sm:text-[11px]">
-            <ListChecks className="h-3 w-3 shrink-0 text-[var(--primary-strong)] sm:h-3.5 sm:w-3.5" />
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          <span className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--muted)]/60 px-2.5 py-1 text-[11px] text-[var(--muted-foreground)]">
+            <ListChecks className="h-3.5 w-3.5 shrink-0 text-[var(--primary-strong)]" />
             {quest.tasks.length} tasks
           </span>
           {quest.deadline && (
-            <span className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--muted)]/50 px-2 py-0.5 text-[10px] text-[var(--muted-foreground)] sm:rounded-lg sm:px-2.5 sm:py-1 sm:text-[11px]">
-              <Calendar className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" />
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--muted)]/60 px-2.5 py-1 text-[11px] text-[var(--muted-foreground)]">
+              <Calendar className="h-3.5 w-3.5 shrink-0" />
               {quest.deadline}
             </span>
           )}
         </div>
 
-        {isEarn ? (
-          <EarnCampaignRewardPanel
-            rewardCc={quest.rewardCc}
-            rewardPool={quest.rewardPool}
-            rewardType={quest.rewardType}
-            summary={summary}
-            labels={{
-              rewardPerWinner: t("earnCampaigns.cardRewardPerWinner"),
-              rewardLabel: t("earnCampaigns.rewardLabel"),
-              fcfsSlots: t("earnCampaigns.cardFcfsSlots"),
-              poolTotal: t("earnCampaigns.cardPoolTotal"),
-              claimFlow: t("earnCampaigns.cardClaimFlow", {
-                fee: String(summary?.fcfsClaimFeeCc ?? 0),
-                reward: String(quest.rewardCc),
-              }),
-              claimFee: t("earnCampaigns.cardClaimFee"),
-              codesRemaining: t("earnCampaigns.cardCodesRemaining", {
-                n: String(summary?.codesRemaining ?? 0),
-              }),
-              invite: t("earnCampaigns.kindInvite"),
-              slotsEnded: t("earnCampaigns.slotsEnded"),
-              slotsClaimed: t("earnCampaigns.slotsClaimed", {
-                used: String(slotsUsed),
-                max: String(slotsMax),
-              }),
-            }}
-          />
-        ) : (
-          <div
-            className={cn(
-              "mt-3 flex items-center gap-2 rounded-xl border bg-gradient-to-r px-3 py-2.5",
-              accent.className,
-            )}
-          >
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-black/20">
-              <RewardIcon className="h-4 w-4" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-wider opacity-70">
-                {t("earnCampaigns.rewardLabel")}
-              </p>
-              <p className="truncate text-sm font-semibold">{quest.rewardPool}</p>
-            </div>
+        <div
+          className={cn(
+            "mt-3 flex items-center gap-2 rounded-xl border bg-gradient-to-r px-3 py-2.5",
+            accent.className,
+          )}
+        >
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-black/20">
+            <RewardIcon className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-wider opacity-70">
+              {t("earnCampaigns.rewardLabel")}
+            </p>
+            <p className="truncate text-sm font-semibold">{quest.rewardPool}</p>
           </div>
-        )}
+        </div>
 
         {/* CTA */}
-        <div className={cn("pt-3.5 sm:pt-4", isEarn ? "mt-auto" : "mt-4")}>
-        {joinBlocked ? (
-          <button
-            type="button"
-            disabled
-            className="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-full border border-[var(--border)] bg-[var(--muted)]/50 py-2.5 text-sm font-bold text-[var(--muted-foreground)] sm:py-3"
-          >
-            {ctaLabel}
-          </button>
-        ) : canOpen ? (
+        <div className="mt-4 pt-3.5 sm:pt-4">
+        {canOpen ? (
           <Link
             href={ROUTES.campaignQuest(quest.id)}
             className={cn(
-              "flex w-full items-center justify-center gap-2 rounded-full py-2.5 text-sm font-bold transition-all sm:py-3",
+              "flex w-full items-center justify-center gap-2 rounded-full py-3 text-sm font-bold transition-all",
               quest.status === "ENDED"
                 ? "border border-[var(--border)] bg-[var(--muted)] text-[var(--foreground)] hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10"
                 : completed
