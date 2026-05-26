@@ -11,6 +11,22 @@ export type CampaignMeta = {
   codesRemaining?: number | null;
 };
 
+/** Earn list cards — mirrors API `campaignSummary` on GET /quests */
+export type QuestCampaignSummary = {
+  requiresFcfsClaim: boolean;
+  requiresPaidInviteClaim: boolean;
+  maxWinners: number | null;
+  remainingSlots: number | null;
+  fcfsClaimFeeCc: number;
+  poolTotalCc: number | null;
+  codesRemaining: number | null;
+};
+
+export function formatPoolTotalLabel(poolTotalCc: number | null, rewardPool: string): string {
+  if (poolTotalCc != null && poolTotalCc > 0) return `${poolTotalCc} CC`;
+  return rewardPool.trim() || "—";
+}
+
 export function getCampaignEndDate(quest: Quest): Date | null {
   const raw = quest.endsAt ?? quest.deadline ?? null;
   if (!raw) return null;

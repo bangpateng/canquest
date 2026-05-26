@@ -40,6 +40,25 @@ export function formatFcfsClaimFeeHint(feeCc: number, rewardCc: number): string 
   return `Pay ${feeCc} CC claim fee on-chain to receive ${rewardCc} CC from the pool`;
 }
 
+/** Total CC allocated when each winner receives rewardCc (FCFS cap × per-winner reward). */
+export function computePoolTotalCc(
+  rewardCc: number,
+  maxWinners: number | null | undefined,
+): number | null {
+  if (rewardCc <= 0 || maxWinners == null || maxWinners < 1) return null;
+  return maxWinners * rewardCc;
+}
+
+export type QuestCampaignSummary = {
+  requiresFcfsClaim: boolean;
+  requiresPaidInviteClaim: boolean;
+  maxWinners: number | null;
+  remainingSlots: number | null;
+  fcfsClaimFeeCc: number;
+  poolTotalCc: number | null;
+  codesRemaining: number | null;
+};
+
 /** Invite / code rewards that require on-chain fee before revealing the code. */
 export function requiresPaidInviteClaim(quest: {
   claimFeeCc?: number | null;

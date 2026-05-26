@@ -281,7 +281,7 @@ export function QuestsBrowser({
       ) : (
         <>
           {isEarn ? (
-            <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid items-stretch gap-5 sm:grid-cols-2 xl:grid-cols-3">
               {pagedQuests.map((q) => (
                 <QuestCard
                   key={q.id}

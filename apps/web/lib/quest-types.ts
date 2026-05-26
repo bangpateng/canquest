@@ -1,5 +1,7 @@
 /** Shared types for the Quest system — mirrors the Prisma / NestJS API shapes. */
 
+import type { QuestCampaignSummary } from "@/lib/campaign-reward";
+
 export type QuestStatus = "ACTIVE" | "COMING_SOON" | "ENDED";
 export type SubmissionStatus = "PENDING" | "VERIFIED" | "REJECTED";
 
@@ -57,6 +59,9 @@ export interface Quest {
   rewardCc: number;
   rewardPool: string;
   rewardType?: RewardType;
+  maxWinners?: number | null;
+  claimFeeCc?: number | null;
+  campaignSummary?: QuestCampaignSummary;
   deadline: string | null;
   startsAt?: string | null;
   endsAt?: string | null;

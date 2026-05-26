@@ -128,6 +128,12 @@ export const de: PlatformMessages = {
     kindWaitlist: "Waitlist",
     kindCampaign: "Kampagne",
     dailyTasks: "Tägliche Quest-Aufgaben",
+    cardRewardPerWinner: "Reward per winner",
+    cardFcfsSlots: "FCFS slots",
+    cardClaimFlow: "Pay {fee} CC fee → receive {reward} CC",
+    cardClaimFee: "Claim fee",
+    cardPoolTotal: "Reward pool",
+    cardCodesRemaining: "{n} invite codes left",
   },
   quests: {
     searchPlaceholder: "Titel, Org, Pool suchen…",

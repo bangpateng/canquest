@@ -129,6 +129,12 @@ export const id: PlatformMessages = {
     kindWaitlist: "Waitlist",
     kindCampaign: "Kampanye",
     dailyTasks: "Tugas Quest harian",
+    cardRewardPerWinner: "Hadiah per pemenang",
+    cardFcfsSlots: "Slot FCFS",
+    cardClaimFlow: "Bayar fee {fee} CC → terima {reward} CC",
+    cardClaimFee: "Biaya klaim",
+    cardPoolTotal: "Pool hadiah",
+    cardCodesRemaining: "{n} kode undangan tersisa",
   },
   quests: {
     searchPlaceholder: "Cari judul, org, pool…",

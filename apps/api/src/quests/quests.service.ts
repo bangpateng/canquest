@@ -17,10 +17,12 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  computePoolTotalCc,
   formatFcfsClaimFeeHint,
   formatFcfsSlotsRemainingLabel,
   requiresPaidInviteClaim,
   resolveClaimFeeCc,
+  type QuestCampaignSummary,
 } from './quest-reward-config';
 import {
   QuestLedgerService,
@@ -330,7 +332,104 @@ export class QuestsService {
       rewardType: normalizeRewardType(q.rewardType as RewardType),
       status: resolveQuestDisplayStatus(q),
     }));
-    return status ? mapped.filter((q) => q.status === status) : mapped;
+    const withSummary = await this.attachCampaignSummaries(mapped);
+    return status
+      ? withSummary.filter((q) => q.status === status)
+      : withSummary;
+  }
+
+  /** Live FCFS slots + pool totals for Earn campaign cards (batched). */
+  private async attachCampaignSummaries<
+    T extends {
+      id: string;
+      rewardType: RewardType | string;
+      rewardCc: number;
+      maxWinners: number | null;
+      claimFeeCc?: number | null;
+      questKind?: QuestKind | string;
+    },
+  >(quests: T[]): Promise<(T & { campaignSummary: QuestCampaignSummary })[]> {
+    if (quests.length === 0) return [];
+
+    const slotQuestIds = quests
+      .filter((q) => (q.maxWinners ?? 0) > 0)
+      .map((q) => q.id);
+
+    const takenByQuest: Record<string, number> = {};
+    if (slotQuestIds.length > 0) {
+      await this.releaseStaleFcfsReservationsBatch(slotQuestIds);
+      const grouped = await this.prisma.winnerDraw.groupBy({
+        by: ['questId'],
+        where: { questId: { in: slotQuestIds } },
+        _count: { _all: true },
+      });
+      for (const row of grouped) {
+        takenByQuest[row.questId] = row._count._all;
+      }
+    }
+
+    const inviteFcfsIds = quests
+      .filter(
+        (q) =>
+          normalizeRewardType(q.rewardType as RewardType) ===
+          RewardType.INVITE_CODE_FCFS,
+      )
+      .map((q) => q.id);
+    const codesByQuest: Record<string, number> = {};
+    if (inviteFcfsIds.length > 0) {
+      const codeCounts = await this.prisma.inviteCodePool.groupBy({
+        by: ['questId'],
+        where: { questId: { in: inviteFcfsIds }, userId: null },
+        _count: { _all: true },
+      });
+      for (const row of codeCounts) {
+        codesByQuest[row.questId] = row._count._all;
+      }
+    }
+
+    return quests.map((q) => {
+      const maxWinners = q.maxWinners;
+      const taken = takenByQuest[q.id] ?? 0;
+      const remainingSlots =
+        maxWinners != null && maxWinners > 0
+          ? this.fcfsSlotsRemaining(maxWinners, taken)
+          : null;
+      const requiresFcfsClaim = this.requiresFcfsCcClaim(q);
+      const summary: QuestCampaignSummary = {
+        requiresFcfsClaim,
+        requiresPaidInviteClaim: requiresPaidInviteClaim(q),
+        maxWinners,
+        remainingSlots,
+        fcfsClaimFeeCc: resolveClaimFeeCc(q) ?? 0,
+        poolTotalCc: computePoolTotalCc(q.rewardCc, maxWinners),
+        codesRemaining:
+          normalizeRewardType(q.rewardType as RewardType) ===
+          RewardType.INVITE_CODE_FCFS
+            ? (codesByQuest[q.id] ?? 0)
+            : null,
+      };
+      return { ...q, campaignSummary: summary };
+    });
+  }
+
+  private async releaseStaleFcfsReservationsBatch(
+    questIds: string[],
+    tx: PrismaTx | PrismaService = this.prisma,
+  ): Promise<void> {
+    if (questIds.length === 0) return;
+    const cutoff = new Date(Date.now() - this.fcfsReservationTtlMs());
+    const result = await tx.winnerDraw.deleteMany({
+      where: {
+        questId: { in: questIds },
+        distributed: false,
+        drawnAt: { lt: cutoff },
+      },
+    });
+    if (result.count > 0) {
+      this.logger.log(
+        `FCFS: cleared ${result.count} stale reservation(s) across ${questIds.length} quest(s)`,
+      );
+    }
   }
 
   async getEarnHubQuest() {

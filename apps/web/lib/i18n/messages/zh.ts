@@ -128,6 +128,12 @@ export const zh: PlatformMessages = {
     kindWaitlist: "候补",
     kindCampaign: "活动",
     dailyTasks: "每日 Quest 任务",
+    cardRewardPerWinner: "Reward per winner",
+    cardFcfsSlots: "FCFS slots",
+    cardClaimFlow: "Pay {fee} CC fee → receive {reward} CC",
+    cardClaimFee: "Claim fee",
+    cardPoolTotal: "Reward pool",
+    cardCodesRemaining: "{n} invite codes left",
   },
   quests: {
     searchPlaceholder: "搜索标题、组织、奖池…",

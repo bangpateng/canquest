@@ -2,6 +2,7 @@
 
 import { CardTitle } from "@/components/ui/typography";
 import { ROUTES } from "@/lib/app-routes";
+import { EarnCampaignRewardPanel } from "@/components/app/earn-campaign-reward-panel";
 import { campaignUiKind } from "@/lib/campaign-reward";
 import { QUEST_STATUS_BADGE, type Quest } from "@/lib/quest-types";
 import {
@@ -113,11 +114,13 @@ export function QuestCard({
 }) {
   const t = usePlatformT();
   const isEarn = variant === "earn";
+  const summary = quest.campaignSummary;
   const poolLower = quest.rewardPool.toLowerCase();
   const requiresFcfs =
-    poolLower.includes("fcfs") ||
-    poolLower.includes("first come") ||
-    quest.rewardType === "INVITE_CODE_FCFS";
+    summary?.requiresFcfsClaim ??
+    (poolLower.includes("fcfs") ||
+      poolLower.includes("first come") ||
+      quest.rewardType === "INVITE_CODE_FCFS");
   const uiKind = campaignUiKind(quest.rewardType, requiresFcfs);
   const kindLabel = rewardKindLabel(uiKind, t);
 
@@ -136,7 +139,7 @@ export function QuestCard({
   return (
     <article
       className={cn(
-        "group relative flex flex-col overflow-hidden rounded-2xl transition-all duration-300",
+        "group relative flex h-full flex-col overflow-hidden rounded-2xl transition-all duration-300",
         "bg-[var(--card)] ring-1 ring-[var(--border)]",
         "hover:-translate-y-1 hover:ring-[var(--primary)]/25 hover:shadow-[0_0_40px_rgb(var(--canton-rgb)/0.08)]",
         isEarn && "hover:shadow-[0_12px_48px_rgb(var(--canton-rgb)/0.12)]",
@@ -157,7 +160,7 @@ export function QuestCard({
       <div
         className={cn(
           "relative shrink-0 overflow-hidden",
-          isEarn ? "h-40 sm:h-44" : "h-32",
+          isEarn ? "h-[7.5rem] sm:h-36" : "h-32",
         )}
       >
         <div
@@ -212,24 +215,24 @@ export function QuestCard({
       <div
         className={cn(
           "relative flex flex-1 flex-col px-4 pb-4 pt-0",
-          isEarn && "px-5 pb-5",
+          isEarn && "px-4 pb-4 sm:px-5 sm:pb-5",
         )}
       >
         {/* Logo overlap */}
-        <div className={cn("-mt-6 mb-3 flex items-end gap-3", isEarn && "-mt-7 gap-3.5")}>
+        <div className={cn("-mt-6 mb-2.5 flex items-end gap-3", isEarn && "-mt-6 sm:-mt-7")}>
           <QuestLogo
             logoUrl={quest.logoUrl}
             orgSlug={quest.orgSlug}
             completed={completed}
           />
           <div className="min-w-0 flex-1 pb-0.5">
-            <p className="truncate text-[11px] font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
+            <p className="truncate text-[10px] font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
               {quest.org}
             </p>
             <CardTitle
               className={cn(
                 "line-clamp-2 text-[var(--foreground)]",
-                isEarn && "text-base sm:text-lg",
+                isEarn && "text-[0.95rem] font-semibold leading-snug sm:text-base",
               )}
             >
               {quest.title}
@@ -240,50 +243,74 @@ export function QuestCard({
         <p
           className={cn(
             "line-clamp-2 leading-relaxed text-[var(--muted-foreground)]",
-            isEarn ? "text-sm line-clamp-3" : "text-[13px]",
+            isEarn ? "text-xs sm:text-[13px]" : "text-[13px]",
           )}
         >
           {quest.description}
         </p>
 
         {/* Meta chips */}
-        <div className="mt-3 flex flex-wrap gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--muted)]/60 px-2.5 py-1 text-[11px] text-[var(--muted-foreground)]">
-            <ListChecks className="h-3.5 w-3.5 shrink-0 text-[var(--primary-strong)]" />
+        <div className={cn("mt-2.5 flex flex-wrap gap-1.5", isEarn && "mt-3 gap-2")}>
+          <span className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--muted)]/50 px-2 py-0.5 text-[10px] text-[var(--muted-foreground)] sm:rounded-lg sm:px-2.5 sm:py-1 sm:text-[11px]">
+            <ListChecks className="h-3 w-3 shrink-0 text-[var(--primary-strong)] sm:h-3.5 sm:w-3.5" />
             {quest.tasks.length} tasks
           </span>
           {quest.deadline && (
-            <span className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--muted)]/60 px-2.5 py-1 text-[11px] text-[var(--muted-foreground)]">
-              <Calendar className="h-3.5 w-3.5 shrink-0" />
+            <span className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--muted)]/50 px-2 py-0.5 text-[10px] text-[var(--muted-foreground)] sm:rounded-lg sm:px-2.5 sm:py-1 sm:text-[11px]">
+              <Calendar className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" />
               {quest.deadline}
             </span>
           )}
         </div>
 
-        {/* Reward strip */}
-        <div
-          className={cn(
-            "mt-3 flex items-center gap-2 rounded-xl border bg-gradient-to-r px-3 py-2.5",
-            accent.className,
-          )}
-        >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-black/20">
-            <RewardIcon className="h-4 w-4" />
-          </span>
-          <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-wider opacity-70">
-              {t("earnCampaigns.rewardLabel")}
-            </p>
-            <p className="truncate text-sm font-semibold">{quest.rewardPool}</p>
+        {isEarn ? (
+          <EarnCampaignRewardPanel
+            rewardCc={quest.rewardCc}
+            rewardPool={quest.rewardPool}
+            rewardType={quest.rewardType}
+            summary={summary}
+            labels={{
+              rewardPerWinner: t("earnCampaigns.cardRewardPerWinner"),
+              rewardLabel: t("earnCampaigns.rewardLabel"),
+              fcfsSlots: t("earnCampaigns.cardFcfsSlots"),
+              poolTotal: t("earnCampaigns.cardPoolTotal"),
+              claimFlow: t("earnCampaigns.cardClaimFlow", {
+                fee: String(summary?.fcfsClaimFeeCc ?? 0),
+                reward: String(quest.rewardCc),
+              }),
+              claimFee: t("earnCampaigns.cardClaimFee"),
+              codesRemaining: t("earnCampaigns.cardCodesRemaining", {
+                n: String(summary?.codesRemaining ?? 0),
+              }),
+              invite: t("earnCampaigns.kindInvite"),
+            }}
+          />
+        ) : (
+          <div
+            className={cn(
+              "mt-3 flex items-center gap-2 rounded-xl border bg-gradient-to-r px-3 py-2.5",
+              accent.className,
+            )}
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-black/20">
+              <RewardIcon className="h-4 w-4" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-wider opacity-70">
+                {t("earnCampaigns.rewardLabel")}
+              </p>
+              <p className="truncate text-sm font-semibold">{quest.rewardPool}</p>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* CTA */}
+        <div className={cn("pt-3.5 sm:pt-4", isEarn ? "mt-auto" : "mt-4")}>
         {canOpen ? (
           <Link
             href={ROUTES.campaignQuest(quest.id)}
             className={cn(
-              "mt-4 flex w-full items-center justify-center gap-2 rounded-full py-3 text-sm font-bold transition-all",
+              "flex w-full items-center justify-center gap-2 rounded-full py-2.5 text-sm font-bold transition-all sm:py-3",
               quest.status === "ENDED"
                 ? "border border-[var(--border)] bg-[var(--muted)] text-[var(--foreground)] hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10"
                 : completed
@@ -298,11 +325,12 @@ export function QuestCard({
           <button
             type="button"
             disabled
-            className="mt-4 flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-full border border-dashed border-[var(--border)] bg-[var(--muted)]/40 py-3 text-sm font-semibold text-[var(--muted-foreground)]"
+            className="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-full border border-dashed border-[var(--border)] bg-[var(--muted)]/40 py-2.5 text-sm font-semibold text-[var(--muted-foreground)] sm:py-3"
           >
             Opens soon
           </button>
         )}
+        </div>
       </div>
     </article>
   );

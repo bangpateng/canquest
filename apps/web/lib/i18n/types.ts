@@ -148,6 +148,12 @@ export type PlatformMessages = {
     kindWaitlist: string;
     kindCampaign: string;
     dailyTasks: string;
+    cardRewardPerWinner: string;
+    cardFcfsSlots: string;
+    cardClaimFlow: string;
+    cardClaimFee: string;
+    cardPoolTotal: string;
+    cardCodesRemaining: string;
   };
   wallet: {
     nodeIssue: string;
