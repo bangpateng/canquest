@@ -38,6 +38,7 @@ import { hydrateTwitterAvatarUrls } from '../twitter/hydrate-twitter-avatars';
 import { TwitterApiService } from '../twitter/twitter-api.service';
 import { R2StorageService } from '../storage/r2-storage.service';
 import { withQuestMediaUrls } from '../storage/quest-media.util';
+import { parseQuestSocialLinks } from './quest-social-links.util';
 
 export interface LeaderboardRow {
   rank: number;
@@ -342,6 +343,7 @@ export class QuestsService {
         {
           ...q,
           tags: this.parseTags(q.tags),
+          socialLinks: parseQuestSocialLinks(q.socialLinks),
           rewardType: normalizeRewardType(q.rewardType as RewardType),
           status: resolveQuestDisplayStatus(q),
         },
@@ -466,6 +468,7 @@ export class QuestsService {
     return {
       ...q,
       tags: this.parseTags(q.tags),
+      socialLinks: parseQuestSocialLinks(q.socialLinks),
       rewardType: normalizeRewardType(q.rewardType as RewardType),
       status: resolveQuestDisplayStatus(q),
     };
@@ -521,6 +524,7 @@ export class QuestsService {
       {
         ...q,
         tags: this.parseTags(q.tags),
+        socialLinks: parseQuestSocialLinks(q.socialLinks),
         rewardType: normalizeRewardType(q.rewardType as RewardType),
       },
       this.storage,

@@ -74,6 +74,7 @@ export class AdminController {
       claimFeeCc?: number | null;
       winnerMessage?: string | null;
       tags?: string[];
+      socialLinks?: Array<{ platform: string; url: string }>;
       questKind?: QuestKind;
       tasks?: Array<{
         type: string;
@@ -112,6 +113,7 @@ export class AdminController {
       claimFeeCc?: number | null;
       winnerMessage?: string | null;
       tags?: string[];
+      socialLinks?: Array<{ platform: string; url: string }>;
     },
   ) {
     return this.admin.updateQuest(questId, body);

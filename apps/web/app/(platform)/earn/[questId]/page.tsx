@@ -1,3 +1,4 @@
+import { CampaignSocialLinks } from "@/components/app/campaign-social-links";
 import { QuestTaskPanel } from "@/components/app/quest-task-panel";
 import { CampaignQuestSidebar } from "@/components/app/campaign-quest-sidebar";
 import { Eyebrow, PageTitle } from "@/components/ui/typography";
@@ -119,6 +120,9 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
         <p className="mt-3 text-sm leading-relaxed text-[var(--muted-foreground)] whitespace-pre-line">
           {quest.description}
         </p>
+        {quest.socialLinks && quest.socialLinks.length > 0 ? (
+          <CampaignSocialLinks links={quest.socialLinks} className="mt-4 pt-1" />
+        ) : null}
       </section>
 
       <CampaignQuestSidebar quest={quest} />

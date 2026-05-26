@@ -1,6 +1,7 @@
 /** Shared types for the Quest system — mirrors the Prisma / NestJS API shapes. */
 
 import type { QuestCampaignSummary } from "@/lib/campaign-reward";
+import type { QuestSocialLink } from "@/lib/quest-social-links";
 
 export type QuestStatus = "ACTIVE" | "COMING_SOON" | "ENDED";
 export type SubmissionStatus = "PENDING" | "VERIFIED" | "REJECTED";
@@ -67,6 +68,7 @@ export interface Quest {
   endsAt?: string | null;
   status: QuestStatus;
   tags: string[];
+  socialLinks?: QuestSocialLink[];
   questKind?: "CAMPAIGN" | "EARN_HUB";
   createdAt: string;
   tasks: QuestTask[];

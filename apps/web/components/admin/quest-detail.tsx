@@ -46,6 +46,7 @@ interface QuestData {
   rewardType: string;
   maxWinners: number | null;
   tags: string[];
+  socialLinks?: { platform: string; url: string }[];
   questKind?: string;
   tasks: Task[];
   _count: { completions: number; winnerDraws: number };

@@ -20,6 +20,12 @@ import { SpliceValidatorService } from '../canton/splice-validator.service';
 import { UsersService } from '../users/users.service';
 import { R2StorageService } from '../storage/r2-storage.service';
 import { withQuestMediaUrls } from '../storage/quest-media.util';
+import {
+  type QuestSocialLink,
+  normalizeQuestSocialLinksForSave,
+  parseQuestSocialLinks,
+  serializeQuestSocialLinks,
+} from '../quests/quest-social-links.util';
 
 @Injectable()
 export class AdminService {
@@ -97,6 +103,7 @@ export class AdminService {
         {
           ...q,
           tags: this.parseTags(q.tags),
+          socialLinks: parseQuestSocialLinks(q.socialLinks),
           codesRemaining: codesByQuest.get(q.id) ?? 0,
         },
         this.storage,
@@ -113,7 +120,10 @@ export class AdminService {
       },
     });
     if (!q) return null;
-    return withQuestMediaUrls({ ...q, tags: this.parseTags(q.tags) }, this.storage);
+    return withQuestMediaUrls(
+      { ...q, tags: this.parseTags(q.tags), socialLinks: parseQuestSocialLinks(q.socialLinks) },
+      this.storage,
+    );
   }
 
   async ensureEarnHubQuest() {
@@ -150,7 +160,14 @@ export class AdminService {
         _count: { select: { completions: true, submissions: true } },
       },
     });
-    return withQuestMediaUrls({ ...quest, tags: this.parseTags(quest.tags) }, this.storage);
+    return withQuestMediaUrls(
+      {
+        ...quest,
+        tags: this.parseTags(quest.tags),
+        socialLinks: parseQuestSocialLinks(quest.socialLinks),
+      },
+      this.storage,
+    );
   }
 
   async getQuestDetail(questId: string) {
@@ -163,7 +180,10 @@ export class AdminService {
       },
     });
     if (!q) throw new NotFoundException('Quest not found');
-    return withQuestMediaUrls({ ...q, tags: this.parseTags(q.tags) }, this.storage);
+    return withQuestMediaUrls(
+      { ...q, tags: this.parseTags(q.tags), socialLinks: parseQuestSocialLinks(q.socialLinks) },
+      this.storage,
+    );
   }
 
   private assertQuestSchedule(
@@ -216,6 +236,7 @@ export class AdminService {
       claimFeeCc?: number | null;
       winnerMessage?: string | null;
       tags?: string[];
+      socialLinks?: QuestSocialLink[];
       questKind?: QuestKind;
     tasks?: Array<{
       type: string;
@@ -261,6 +282,9 @@ export class AdminService {
         winnerMessage: data.winnerMessage?.trim() || null,
         questKind,
         tags: JSON.stringify(data.tags ?? []),
+        socialLinks: serializeQuestSocialLinks(
+          normalizeQuestSocialLinksForSave(data.socialLinks ?? []),
+        ),
         tasks: data.tasks
           ? {
               create: data.tasks.map((t, i) => ({
@@ -278,7 +302,14 @@ export class AdminService {
       include: { tasks: true },
     });
     this.logger.log(`Quest created: ${quest.title} (${quest.id})`);
-    return withQuestMediaUrls({ ...quest, tags: data.tags ?? [] }, this.storage);
+    return withQuestMediaUrls(
+      {
+        ...quest,
+        tags: data.tags ?? [],
+        socialLinks: normalizeQuestSocialLinksForSave(data.socialLinks ?? []),
+      },
+      this.storage,
+    );
   }
 
   async updateQuest(
@@ -302,6 +333,7 @@ export class AdminService {
       claimFeeCc?: number | null;
       winnerMessage?: string | null;
       tags?: string[];
+      socialLinks?: QuestSocialLink[];
     },
   ) {
     const existing = await this.prisma.quest.findUnique({ where: { id: questId } });
@@ -355,10 +387,19 @@ export class AdminService {
           winnerMessage: data.winnerMessage?.trim() || null,
         }),
         ...(data.tags !== undefined && { tags: JSON.stringify(data.tags) }),
+        ...(data.socialLinks !== undefined && {
+          socialLinks: serializeQuestSocialLinks(
+            normalizeQuestSocialLinksForSave(data.socialLinks),
+          ),
+        }),
       },
     });
     return withQuestMediaUrls(
-      { ...updated, tags: this.parseTags(updated.tags) },
+      {
+        ...updated,
+        tags: this.parseTags(updated.tags),
+        socialLinks: parseQuestSocialLinks(updated.socialLinks),
+      },
       this.storage,
     );
   }

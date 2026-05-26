@@ -13,6 +13,8 @@ import {
   formatQuestDeadlineDisplay,
   type RewardType,
 } from "@/lib/quest-types";
+import type { QuestSocialLink } from "@/lib/quest-social-links";
+import { QuestSocialLinksEditor } from "@/components/admin/quest-social-links-editor";
 
 type TaskDraft = {
   type: string;
@@ -51,6 +53,7 @@ interface QuestFormProps {
     claimFeeCc?: number | null;
     winnerMessage?: string | null;
     tags: string[];
+    socialLinks?: QuestSocialLink[];
     startsAt?: string | null;
     endsAt?: string | null;
   };
@@ -88,6 +91,9 @@ export function QuestForm({
     tags: (initialData?.tags ?? []).join(", "),
   });
 
+  const [socialLinks, setSocialLinks] = useState<QuestSocialLink[]>(
+    initialData?.socialLinks ?? [],
+  );
   const [tasks, setTasks] = useState<TaskDraft[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -275,6 +281,9 @@ export function QuestForm({
           .split(",")
           .map((t) => t.trim())
           .filter(Boolean),
+        ...(questKind === "CAMPAIGN" && {
+          socialLinks: socialLinks.filter((l) => l.url.trim()),
+        }),
         ...(!isEdit && { questKind }),
         ...(tasks.length > 0 && {
           tasks: tasks.map((t, i) => ({
@@ -414,6 +423,20 @@ export function QuestForm({
           <label className="mb-1.5 block text-sm font-medium">Description *</label>
           <textarea required rows={3} value={form.description} onChange={(e) => updateField("description", e.target.value)} placeholder="Describe the quest goals and tasks..." className={cn(inputCls, "resize-none")} />
         </div>
+
+        {questKind === "CAMPAIGN" ? (
+          <div>
+            <label className="mb-1.5 block text-sm font-medium">Social links</label>
+            <p className="mb-2 text-xs text-[var(--muted-foreground)]">
+              Small icons shown under About on the campaign page (X, Discord, Telegram, website, etc.).
+            </p>
+            <QuestSocialLinksEditor
+              links={socialLinks}
+              onChange={setSocialLinks}
+              inputCls={inputCls}
+            />
+          </div>
+        ) : null}
 
         <div>
           <label className="mb-1.5 block text-sm font-medium">Tags (comma-separated)</label>

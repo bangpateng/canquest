@@ -154,6 +154,8 @@ model Quest {
   endsAt       DateTime?
   status       QuestStatus @default(ACTIVE)
   tags         String      @default("[]")
+  /// JSON array of { platform, url } — shown under About on campaign detail (admin-configured).
+  socialLinks  String      @default("[]")
   /// Reward category: waitlist email, random invite, FCFS invite, CC, or CC + invite
   rewardType   RewardType  @default(CC_ONLY)
   /// Max number of winners (null = unlimited / all completers rewarded)
