@@ -23,6 +23,15 @@ function formatEnd(quest: Quest): string {
   return quest.deadline ?? "—";
 }
 
+type StatItem = {
+  key: string;
+  icon: typeof Coins;
+  label: string;
+  value: string;
+  valueClassName?: string;
+};
+
+/** Campaign reward + meta — shown above quest tasks (mobile-first, full width). */
 export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
   const statusMeta = QUEST_STATUS_BADGE[quest.status];
   const summary = quest.campaignSummary;
@@ -32,97 +41,107 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
   const slotsMax = summary?.maxWinners ?? 0;
   const slotsFull = isFcfsSlotsFull(summary?.remainingSlots, summary?.maxWinners);
 
+  const stats: StatItem[] = [
+    {
+      key: "tasks",
+      icon: ListChecks,
+      label: "Tasks",
+      value: String(quest.tasks.length),
+    },
+  ];
+
+  if (summary?.requiresFcfsClaim && slotsMax > 0) {
+    stats.push({
+      key: "slots",
+      icon: Users,
+      label: "FCFS slots",
+      value: formatFcfsSlotsFilled(slotsTaken, slotsMax),
+      valueClassName: slotsFull ? "text-[var(--muted-foreground)]" : "text-canton",
+    });
+  }
+
+  if (summary?.requiresFcfsClaim && (summary.fcfsClaimFeeCc ?? 0) > 0) {
+    stats.push({
+      key: "fee",
+      icon: Zap,
+      label: "Claim fee",
+      value: `${summary.fcfsClaimFeeCc} CC`,
+    });
+  }
+
+  stats.push({
+    key: "ends",
+    icon: Calendar,
+    label: "Ends",
+    value: formatEnd(quest),
+    valueClassName: "text-xs leading-snug",
+  });
+
+  stats.push({
+    key: "type",
+    icon: Trophy,
+    label: "Type",
+    value: uiKind === "cc_fcfs" ? "FCFS" : uiKind.replace(/_/g, " "),
+    valueClassName: "uppercase tracking-wide text-[11px]",
+  });
+
   return (
-    <div className="space-y-4">
-      <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]">
-        <div className="border-b border-[var(--border)] bg-gradient-to-br from-[var(--primary)]/10 via-transparent to-transparent px-5 py-4">
+    <section
+      className="w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]"
+      aria-label="Campaign reward"
+    >
+      <div className="flex flex-col gap-4 border-b border-[var(--border)] bg-gradient-to-br from-[var(--primary)]/12 via-transparent to-transparent px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-5">
+        <div className="min-w-0">
           <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
             Campaign reward
           </p>
-          <p className="mt-2 text-2xl font-bold tabular-nums text-[var(--foreground)]">{poolLabel}</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-[var(--foreground)] sm:text-3xl">
+            {poolLabel}
+          </p>
           {quest.rewardCc > 0 ? (
             <p className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-canton">
-              <Coins className="h-4 w-4" aria-hidden />
+              <Coins className="h-4 w-4 shrink-0" aria-hidden />
               {quest.rewardCc} CC per winner
             </p>
           ) : null}
+          {quest.rewardType?.includes("INVITE") ? (
+            <p className="mt-2 flex items-center gap-1.5 text-xs text-violet-300/90">
+              <Ticket className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              Invite code reward
+            </p>
+          ) : null}
         </div>
+        <span
+          className={cn(
+            "inline-flex w-fit shrink-0 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wide",
+            statusMeta.className,
+          )}
+        >
+          {statusMeta.label}
+        </span>
+      </div>
 
-        <dl className="divide-y divide-[var(--border)]">
-          <div className="flex items-center justify-between gap-3 px-5 py-3.5">
-            <dt className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
-              <ListChecks className="h-3.5 w-3.5" aria-hidden />
-              Tasks
+      <div className="grid grid-cols-2 divide-x divide-y divide-[var(--border)] border-[var(--border)] sm:grid-cols-3 lg:grid-cols-5">
+        {stats.map(({ key, icon: Icon, label, value, valueClassName }) => (
+          <div
+            key={key}
+            className="flex min-w-0 flex-col justify-center gap-1 bg-[var(--card)]/80 px-3 py-3 sm:px-4 sm:py-3.5"
+          >
+            <dt className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+              <Icon className="h-3 w-3 shrink-0 opacity-80" aria-hidden />
+              <span className="truncate">{label}</span>
             </dt>
-            <dd className="text-sm font-bold tabular-nums">{quest.tasks.length}</dd>
-          </div>
-
-          {summary?.requiresFcfsClaim && slotsMax > 0 ? (
-            <div className="flex items-center justify-between gap-3 px-5 py-3.5">
-              <dt className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
-                <Users className="h-3.5 w-3.5" aria-hidden />
-                FCFS slots
-              </dt>
-              <dd
-                className={cn(
-                  "text-sm font-bold tabular-nums",
-                  slotsFull ? "text-[var(--muted-foreground)]" : "text-canton",
-                )}
-              >
-                {formatFcfsSlotsFilled(slotsTaken, slotsMax)}
-              </dd>
-            </div>
-          ) : null}
-
-          {summary?.requiresFcfsClaim && (summary.fcfsClaimFeeCc ?? 0) > 0 ? (
-            <div className="flex items-center justify-between gap-3 px-5 py-3.5">
-              <dt className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
-                <Zap className="h-3.5 w-3.5" aria-hidden />
-                Claim fee
-              </dt>
-              <dd className="text-sm font-bold tabular-nums">{summary.fcfsClaimFeeCc} CC</dd>
-            </div>
-          ) : null}
-
-          <div className="flex items-center justify-between gap-3 px-5 py-3.5">
-            <dt className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
-              <Calendar className="h-3.5 w-3.5" aria-hidden />
-              Ends
-            </dt>
-            <dd className="text-right text-xs font-semibold leading-snug">{formatEnd(quest)}</dd>
-          </div>
-
-          <div className="flex items-center justify-between gap-3 px-5 py-3.5">
-            <dt className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
-              <Trophy className="h-3.5 w-3.5" aria-hidden />
-              Type
-            </dt>
-            <dd className="text-xs font-semibold uppercase tracking-wide text-[var(--foreground)]">
-              {uiKind === "cc_fcfs" ? "FCFS" : uiKind.replace(/_/g, " ")}
+            <dd
+              className={cn(
+                "text-sm font-bold tabular-nums text-[var(--foreground)]",
+                valueClassName,
+              )}
+            >
+              {value}
             </dd>
           </div>
-        </dl>
+        ))}
       </div>
-
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)]/80 px-5 py-4">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs text-[var(--muted-foreground)]">Status</span>
-          <span
-            className={cn(
-              "rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",
-              statusMeta.className,
-            )}
-          >
-            {statusMeta.label}
-          </span>
-        </div>
-        {quest.rewardType?.includes("INVITE") ? (
-          <p className="mt-3 flex items-center gap-2 text-xs text-violet-300/90">
-            <Ticket className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            Invite code reward
-          </p>
-        ) : null}
-      </div>
-    </div>
+    </section>
   );
 }

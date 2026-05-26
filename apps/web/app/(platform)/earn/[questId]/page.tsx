@@ -46,7 +46,7 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
   const statusMeta = QUEST_STATUS_BADGE[quest.status];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 pb-10">
+    <div className="mx-auto w-full max-w-lg space-y-5 px-0 pb-28 sm:max-w-2xl sm:space-y-6 md:max-w-3xl lg:max-w-4xl lg:pb-10">
       <Link
         href={ROUTES.campaignQuests}
         className="inline-flex items-center gap-2 text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
@@ -55,9 +55,8 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
         Back to Earn
       </Link>
 
-      {/* Hero — Galxe-style compact header */}
       <header className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]">
-        <div className="relative h-36 sm:h-44 md:h-48">
+        <div className="relative h-32 sm:h-40 md:h-44">
           <div
             className="absolute inset-0 bg-cover bg-center"
             style={
@@ -66,24 +65,24 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
                 : { background: quest.banner }
             }
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-[var(--card)] via-[var(--card)]/75 to-black/20" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[var(--card)] via-[var(--card)]/80 to-black/15" />
         </div>
 
-        <div className="relative px-5 pb-5 pt-0 sm:px-6 sm:pb-6">
-          <div className="-mt-10 flex flex-col gap-4 sm:-mt-12 sm:flex-row sm:items-end sm:gap-5">
+        <div className="relative px-4 pb-4 pt-0 sm:px-5 sm:pb-5">
+          <div className="-mt-9 flex flex-col gap-3 sm:-mt-11 sm:flex-row sm:items-end sm:gap-4">
             {quest.logoUrl ? (
               <img
                 src={quest.logoUrl}
                 alt=""
-                className="h-20 w-20 shrink-0 rounded-2xl border-4 border-[var(--card)] object-cover shadow-lg sm:h-24 sm:w-24"
+                className="h-16 w-16 shrink-0 rounded-xl border-[3px] border-[var(--card)] object-cover shadow-md sm:h-20 sm:w-20 sm:rounded-2xl sm:border-4"
               />
             ) : (
-              <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl border-4 border-[var(--card)] bg-[var(--muted)] text-xl font-bold text-canton shadow-lg sm:h-24 sm:w-24">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border-[3px] border-[var(--card)] bg-[var(--muted)] text-lg font-bold text-canton shadow-md sm:h-20 sm:w-20 sm:rounded-2xl sm:border-4">
                 {quest.orgSlug.slice(0, 2).toUpperCase()}
               </div>
             )}
-            <div className="min-w-0 flex-1 pb-1">
-              <div className="mb-2 flex flex-wrap items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
                 <span
                   className={cn(
                     "rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
@@ -102,36 +101,31 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
                 ))}
               </div>
               <Eyebrow className="text-[var(--muted-foreground)]">{quest.org}</Eyebrow>
-              <PageTitle className="mt-0.5 text-2xl sm:text-3xl">{quest.title}</PageTitle>
+              <PageTitle className="mt-0.5 text-xl leading-tight sm:text-2xl md:text-3xl">
+                {quest.title}
+              </PageTitle>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Main + sidebar */}
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(280px,320px)] lg:items-start">
-        <div className="min-w-0 space-y-6">
-          <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)]/60 p-5 sm:p-6">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-[var(--primary-strong)]" aria-hidden />
-              <h2 className="text-sm font-bold uppercase tracking-wider text-[var(--foreground)]">
-                About
-              </h2>
-            </div>
-            <p className="mt-3 text-sm leading-relaxed text-[var(--muted-foreground)] whitespace-pre-line">
-              {quest.description}
-            </p>
-          </section>
-
-          <section>
-            <QuestTaskPanel quest={quest} />
-          </section>
+      <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)]/60 p-4 sm:p-5">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-[var(--primary-strong)]" aria-hidden />
+          <h2 className="text-sm font-bold uppercase tracking-wider text-[var(--foreground)]">
+            About
+          </h2>
         </div>
+        <p className="mt-3 text-sm leading-relaxed text-[var(--muted-foreground)] whitespace-pre-line">
+          {quest.description}
+        </p>
+      </section>
 
-        <aside className="lg:sticky lg:top-20">
-          <CampaignQuestSidebar quest={quest} />
-        </aside>
-      </div>
+      <CampaignQuestSidebar quest={quest} />
+
+      <section className="min-w-0">
+        <QuestTaskPanel quest={quest} />
+      </section>
     </div>
   );
 }
