@@ -1,10 +1,18 @@
-import type { Quest, QuestRewardState, QuestRewardStatus, RewardType } from "@/lib/quest-types";
+import type {
+  Quest,
+  QuestRewardState,
+  QuestRewardStatus,
+  RewardType,
+  UserProgress,
+} from "@/lib/quest-types";
 
 export type CampaignMeta = {
   ended: boolean;
   endsAt: string | null;
   remainingSlots: number | null;
   maxWinners: number | null;
+  slotsTaken?: number | null;
+  slotsFull?: boolean;
   fcfsClaimFeeCc: number;
   requiresFcfsClaim: boolean;
   requiresPaidInviteClaim?: boolean;
@@ -17,6 +25,8 @@ export type QuestCampaignSummary = {
   requiresPaidInviteClaim: boolean;
   maxWinners: number | null;
   remainingSlots: number | null;
+  slotsTaken?: number | null;
+  slotsFull?: boolean;
   fcfsClaimFeeCc: number;
   poolTotalCc: number | null;
   codesRemaining: number | null;
@@ -57,7 +67,39 @@ export function rewardCodeFromStatus(status: QuestRewardStatus | null): string |
   return status?.inviteCode?.trim() || null;
 }
 
-/** e.g. "2/3 Remaining" — slots left / max FCFS winners */
+export function fcfsSlotsTaken(
+  remaining: number | null | undefined,
+  maxWinners: number | null | undefined,
+): number {
+  const max = maxWinners ?? 0;
+  if (max <= 0) return 0;
+  const left = Math.max(0, Math.min(remaining ?? max, max));
+  return max - left;
+}
+
+export function isFcfsSlotsFull(
+  remaining: number | null | undefined,
+  maxWinners: number | null | undefined,
+): boolean {
+  const max = maxWinners ?? 0;
+  if (max <= 0) return false;
+  return fcfsSlotsTaken(remaining, maxWinners) >= max;
+}
+
+/** Earn cards: winners claimed / max (0/2, 1/2). Shows "Ended" when full. */
+export function formatFcfsSlotsFilled(
+  remaining: number | null | undefined,
+  maxWinners: number | null | undefined,
+  endedLabel = "Ended",
+): string {
+  const max = maxWinners ?? 0;
+  if (max <= 0) return "—";
+  if (isFcfsSlotsFull(remaining, maxWinners)) return endedLabel;
+  const taken = fcfsSlotsTaken(remaining, maxWinners);
+  return `${taken}/${max}`;
+}
+
+/** Claim UI — slots still available */
 export function formatFcfsSlotsRemaining(
   remaining: number,
   maxWinners: number | null | undefined,
@@ -65,7 +107,19 @@ export function formatFcfsSlotsRemaining(
   const max = maxWinners ?? 0;
   if (max <= 0) return "—";
   const left = Math.max(0, Math.min(remaining, max));
-  return `${left}/${max} Remaining`;
+  if (left <= 0) return "Ended";
+  return `${formatFcfsSlotsFilled(remaining, maxWinners)} · ${left} left`;
+}
+
+export function hasParticipatedInQuest(
+  quest: Pick<Quest, "id" | "tasks">,
+  progress: UserProgress | null | undefined,
+): boolean {
+  if (!progress) return false;
+  if (progress.completedQuestIds.includes(quest.id)) return true;
+  const taskIds = new Set(quest.tasks.map((t) => t.id));
+  if (progress.submittedTaskIds.some((id) => taskIds.has(id))) return true;
+  return progress.submissions.some((s) => taskIds.has(s.taskId));
 }
 
 export function formatFcfsClaimFeeHint(feeCc: number, rewardCc: number): string {

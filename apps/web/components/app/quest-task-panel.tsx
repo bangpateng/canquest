@@ -29,7 +29,9 @@ import {
 import {
   type CampaignMeta,
   isCampaignEnded,
+  isFcfsSlotsFull,
 } from "@/lib/campaign-reward";
+import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { WalletCreatePromptModal } from "@/components/app/wallet-create-prompt";
 import { CardTitle, SectionTitle, SubsectionTitle } from "@/components/ui/typography";
 import { buttonVariants } from "@/components/ui/button";
@@ -124,6 +126,7 @@ export function QuestTaskPanel({
   /** Called when an earn-hub task is verified (e.g. refresh points balance). */
   onPointsEarned?: () => void;
 }) {
+  const t = usePlatformT();
   const isEarnHub = quest.questKind === "EARN_HUB";
   const [submissions, setSubmissions] = useState<Record<string, QuestSubmission>>({});
   const [questCompleted, setQuestCompleted] = useState(false);
@@ -239,6 +242,16 @@ export function QuestTaskPanel({
   const pct = quest.tasks.length ? Math.round((verifiedCount / quest.tasks.length) * 100) : 0;
   const allDone = verifiedCount === quest.tasks.length && quest.tasks.length > 0;
   const campaignEnded = !isEarnHub && isCampaignEnded(quest, campaignMeta);
+  const fcfsSlotsFull =
+    !isEarnHub &&
+    Boolean(campaignMeta?.requiresFcfsClaim) &&
+    isFcfsSlotsFull(campaignMeta?.remainingSlots, campaignMeta?.maxWinners);
+  const userParticipated =
+    verifiedCount > 0 ||
+    questCompleted ||
+    Object.keys(submissions).length > 0;
+  const taskSubmissionsBlocked =
+    campaignEnded || (fcfsSlotsFull && !userParticipated);
   const requiresFcfsClaim = campaignMeta?.requiresFcfsClaim ?? false;
   const requiresPaidInviteClaim = campaignMeta?.requiresPaidInviteClaim ?? false;
   const showFcfsClaim =
@@ -359,6 +372,13 @@ export function QuestTaskPanel({
           This campaign has ended. New task submissions and claims are disabled.
         </div>
       ) : null}
+      {fcfsSlotsFull && !campaignEnded && !isEarnHub ? (
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/25 px-4 py-3 text-sm text-[var(--muted-foreground)]">
+          {userParticipated
+            ? t("earnCampaigns.slotsFullBanner")
+            : t("earnCampaigns.slotsFullClosedBanner")}
+        </div>
+      ) : null}
 
       {!isEarnHub ? (
         <div
@@ -428,7 +448,7 @@ export function QuestTaskPanel({
                 submission={submissions[task.id] ?? null}
                 partyId={partyId}
                 twitterUsername={twitterUsername}
-                campaignEnded={campaignEnded}
+                campaignEnded={taskSubmissionsBlocked}
                 earnHubLayout
                 onPointsEarned={onPointsEarned}
                 onVerified={(sub) => onTaskVerified(task.id, sub)}
@@ -453,7 +473,7 @@ export function QuestTaskPanel({
                 submission={submissions[task.id] ?? null}
                 partyId={partyId}
                 twitterUsername={twitterUsername}
-                campaignEnded={campaignEnded}
+                campaignEnded={taskSubmissionsBlocked}
                 onVerified={(sub) => onTaskVerified(task.id, sub)}
               />
             </li>

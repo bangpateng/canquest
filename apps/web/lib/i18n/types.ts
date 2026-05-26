@@ -154,6 +154,11 @@ export type PlatformMessages = {
     cardClaimFee: string;
     cardPoolTotal: string;
     cardCodesRemaining: string;
+    slotsEnded: string;
+    slotsClaimed: string;
+    viewMyQuest: string;
+    slotsFullBanner: string;
+    slotsFullClosedBanner: string;
   };
   wallet: {
     nodeIssue: string;

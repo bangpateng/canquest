@@ -3,7 +3,13 @@
 import { CardTitle } from "@/components/ui/typography";
 import { ROUTES } from "@/lib/app-routes";
 import { EarnCampaignRewardPanel } from "@/components/app/earn-campaign-reward-panel";
-import { campaignUiKind } from "@/lib/campaign-reward";
+import {
+  campaignUiKind,
+  fcfsSlotsTaken,
+  hasParticipatedInQuest,
+  isFcfsSlotsFull,
+} from "@/lib/campaign-reward";
+import type { UserProgress } from "@/lib/quest-types";
 import { QUEST_STATUS_BADGE, type Quest } from "@/lib/quest-types";
 import {
   ArrowRight,
@@ -107,10 +113,12 @@ export function QuestCard({
   quest,
   completed = false,
   variant = "default",
+  userProgress = null,
 }: {
   quest: Quest;
   completed?: boolean;
   variant?: "default" | "earn";
+  userProgress?: UserProgress | null;
 }) {
   const t = usePlatformT();
   const isEarn = variant === "earn";
@@ -123,18 +131,32 @@ export function QuestCard({
       quest.rewardType === "INVITE_CODE_FCFS");
   const uiKind = campaignUiKind(quest.rewardType, requiresFcfs);
   const kindLabel = rewardKindLabel(uiKind, t);
+  const hasParticipated = hasParticipatedInQuest(quest, userProgress);
+  const slotsFull =
+    isEarn &&
+    summary?.requiresFcfsClaim &&
+    isFcfsSlotsFull(summary.remainingSlots, summary.maxWinners);
+  const joinBlocked =
+    slotsFull && !hasParticipated && quest.status === "ACTIVE";
 
-  const canOpen = quest.status === "ACTIVE" || quest.status === "ENDED";
+  const canOpen =
+    quest.status === "ACTIVE" || quest.status === "ENDED" || (slotsFull && hasParticipated);
   const statusMeta = QUEST_STATUS_BADGE[quest.status];
   const accent = rewardAccent(quest.rewardPool, quest.rewardType);
   const RewardIcon = accent.icon;
 
-  const ctaLabel =
-    quest.status === "ENDED"
+  const slotsMax = summary?.maxWinners ?? 0;
+  const slotsUsed = fcfsSlotsTaken(summary?.remainingSlots, slotsMax);
+
+  const ctaLabel = joinBlocked
+    ? t("earnCampaigns.slotsEnded")
+    : quest.status === "ENDED"
       ? t("quests.viewRecap")
       : completed
         ? t("quests.questComplete")
-        : t("quests.joinQuest");
+        : hasParticipated && slotsFull
+          ? t("earnCampaigns.viewMyQuest")
+          : t("quests.joinQuest");
 
   return (
     <article
@@ -143,7 +165,7 @@ export function QuestCard({
         "bg-[var(--card)] ring-1 ring-[var(--border)]",
         "hover:-translate-y-1 hover:ring-[var(--primary)]/25 hover:shadow-[0_0_40px_rgb(var(--canton-rgb)/0.08)]",
         isEarn && "hover:shadow-[0_12px_48px_rgb(var(--canton-rgb)/0.12)]",
-        quest.status === "ENDED" && "opacity-90",
+        (quest.status === "ENDED" || joinBlocked) && "opacity-90",
         quest.status === "COMING_SOON" && "opacity-95",
       )}
     >
@@ -190,10 +212,14 @@ export function QuestCard({
         <span
           className={cn(
             "absolute right-3 top-3 z-[2] rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider backdrop-blur-md",
-            statusMeta.className,
+            slotsFull && quest.status === "ACTIVE"
+              ? "border border-[var(--border)] bg-[var(--muted)] text-[var(--muted-foreground)]"
+              : statusMeta.className,
           )}
         >
-          {statusMeta.label}
+          {slotsFull && quest.status === "ACTIVE"
+            ? t("earnCampaigns.slotsEnded")
+            : statusMeta.label}
         </span>
 
         {/* Tags */}
@@ -283,6 +309,11 @@ export function QuestCard({
                 n: String(summary?.codesRemaining ?? 0),
               }),
               invite: t("earnCampaigns.kindInvite"),
+              slotsEnded: t("earnCampaigns.slotsEnded"),
+              slotsClaimed: t("earnCampaigns.slotsClaimed", {
+                used: String(slotsUsed),
+                max: String(slotsMax),
+              }),
             }}
           />
         ) : (
@@ -306,7 +337,15 @@ export function QuestCard({
 
         {/* CTA */}
         <div className={cn("pt-3.5 sm:pt-4", isEarn ? "mt-auto" : "mt-4")}>
-        {canOpen ? (
+        {joinBlocked ? (
+          <button
+            type="button"
+            disabled
+            className="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-full border border-[var(--border)] bg-[var(--muted)]/50 py-2.5 text-sm font-bold text-[var(--muted-foreground)] sm:py-3"
+          >
+            {ctaLabel}
+          </button>
+        ) : canOpen ? (
           <Link
             href={ROUTES.campaignQuest(quest.id)}
             className={cn(

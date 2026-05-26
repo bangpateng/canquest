@@ -140,6 +140,8 @@ export class QuestsService {
         endsAt: null as string | null,
         remainingSlots: null as number | null,
         maxWinners: null as number | null,
+        slotsTaken: null as number | null,
+        slotsFull: false,
         fcfsClaimFeeCc: 0,
         requiresFcfsClaim: false,
         requiresPaidInviteClaim: false,
@@ -148,10 +150,14 @@ export class QuestsService {
     }
     const maxWinners = quest.maxWinners;
     let remainingSlots: number | null = null;
+    let slotsTaken: number | null = null;
+    let slotsFull = false;
     if (maxWinners != null && maxWinners > 0) {
       await this.releaseStaleFcfsReservations(questId);
       const used = await this.countFcfsSlotsTaken(questId);
       remainingSlots = this.fcfsSlotsRemaining(maxWinners, used);
+      slotsTaken = used;
+      slotsFull = remainingSlots <= 0;
     }
     const endRaw = quest.endsAt ?? quest.deadline ?? null;
     const end =
@@ -165,6 +171,8 @@ export class QuestsService {
       endsAt: end && !Number.isNaN(end.getTime()) ? end.toISOString() : null,
       remainingSlots,
       maxWinners,
+      slotsTaken,
+      slotsFull,
       fcfsClaimFeeCc: resolveClaimFeeCc(quest) ?? 0,
       requiresFcfsClaim: this.requiresFcfsCcClaim(quest),
       requiresPaidInviteClaim: requiresPaidInviteClaim(quest),
@@ -394,12 +402,20 @@ export class QuestsService {
         maxWinners != null && maxWinners > 0
           ? this.fcfsSlotsRemaining(maxWinners, taken)
           : null;
+      const slotsTaken =
+        maxWinners != null && maxWinners > 0 ? taken : null;
+      const slotsFull =
+        remainingSlots != null && maxWinners != null && maxWinners > 0
+          ? remainingSlots <= 0
+          : false;
       const requiresFcfsClaim = this.requiresFcfsCcClaim(q);
       const summary: QuestCampaignSummary = {
         requiresFcfsClaim,
         requiresPaidInviteClaim: requiresPaidInviteClaim(q),
         maxWinners,
         remainingSlots,
+        slotsTaken,
+        slotsFull,
         fcfsClaimFeeCc: resolveClaimFeeCc(q) ?? 0,
         poolTotalCc: computePoolTotalCc(q.rewardCc, maxWinners),
         codesRemaining:
@@ -607,7 +623,13 @@ export class QuestsService {
 
     const quest = await this.prisma.quest.findUnique({
       where: { id: questId },
-      select: { questKind: true, endsAt: true, deadline: true },
+      select: {
+        questKind: true,
+        rewardType: true,
+        maxWinners: true,
+        endsAt: true,
+        deadline: true,
+      },
     });
     if (!quest) throw new NotFoundException('Quest not found');
 
@@ -616,6 +638,26 @@ export class QuestsService {
       this.isCampaignEnded(quest)
     ) {
       throw new BadRequestException('This campaign has ended. Submissions are closed.');
+    }
+
+    if (
+      quest.questKind === QuestKind.CAMPAIGN &&
+      this.requiresFcfsCcClaim(quest) &&
+      (quest.maxWinners ?? 0) > 0
+    ) {
+      await this.releaseStaleFcfsReservations(questId);
+      const used = await this.countFcfsSlotsTaken(questId);
+      const remaining = this.fcfsSlotsRemaining(quest.maxWinners!, used);
+      if (remaining <= 0) {
+        const priorSubs = await this.prisma.questSubmission.count({
+          where: { userId, questId },
+        });
+        if (priorSubs === 0) {
+          throw new BadRequestException(
+            'All reward slots are taken. New participants cannot join this campaign.',
+          );
+        }
+      }
     }
 
     const taskType = this.normalizeTaskType(task.type);

@@ -135,6 +135,13 @@ export const id: PlatformMessages = {
     cardClaimFee: "Biaya klaim",
     cardPoolTotal: "Pool hadiah",
     cardCodesRemaining: "{n} kode undangan tersisa",
+    slotsEnded: "Berakhir",
+    slotsClaimed: "{used}/{max} diklaim",
+    viewMyQuest: "Lihat quest saya",
+    slotsFullBanner:
+      "Semua slot hadiah sudah penuh. Anda masih bisa melihat tugas jika sudah ikut sebelumnya.",
+    slotsFullClosedBanner:
+      "Semua slot hadiah sudah penuh. Peserta baru tidak bisa bergabung.",
   },
   quests: {
     searchPlaceholder: "Cari judul, org, pool…",

@@ -3,8 +3,10 @@
 import type { ReactNode } from "react";
 import type { QuestCampaignSummary } from "@/lib/campaign-reward";
 import {
-  formatFcfsSlotsRemaining,
+  fcfsSlotsTaken,
+  formatFcfsSlotsFilled,
   formatPoolTotalLabel,
+  isFcfsSlotsFull,
 } from "@/lib/campaign-reward";
 import type { RewardType } from "@/lib/quest-types";
 import { cn } from "@/lib/utils";
@@ -111,6 +113,8 @@ export function EarnCampaignRewardPanel({
     claimFee: string;
     codesRemaining: string;
     invite: string;
+    slotsEnded: string;
+    slotsClaimed: string;
   };
 }) {
   const accent = rewardAccent(rewardPool, rewardType);
@@ -146,9 +150,12 @@ export function EarnCampaignRewardPanel({
 
   const slotsMax = summary?.maxWinners ?? 0;
   const slotsLeft = summary?.remainingSlots ?? 0;
+  const slotsUsed = fcfsSlotsTaken(slotsLeft, slotsMax);
+  const slotsFull =
+    summary?.slotsFull ?? isFcfsSlotsFull(slotsLeft, slotsMax);
   const slotsPct =
     showFcfsSlots && slotsMax > 0
-      ? Math.round((Math.max(0, slotsLeft) / slotsMax) * 100)
+      ? Math.round((slotsUsed / slotsMax) * 100)
       : 0;
 
   if (!hasRewardAmount && !hasStats) {
@@ -223,25 +230,35 @@ export function EarnCampaignRewardPanel({
             <StatCell
               icon={Zap}
               label={labels.fcfsSlots}
-              value={formatFcfsSlotsRemaining(slotsLeft, summary!.maxWinners)}
-              accentClass="text-[var(--primary-strong)]"
+              value={formatFcfsSlotsFilled(
+                slotsLeft,
+                summary!.maxWinners,
+                labels.slotsEnded,
+              )}
+              accentClass={
+                slotsFull
+                  ? "text-[var(--muted-foreground)]"
+                  : "text-[var(--primary-strong)]"
+              }
               sub={
-                <div className="space-y-1">
-                  <div className="h-1 overflow-hidden rounded-full bg-[var(--border)]">
-                    <div
-                      className={cn(
-                        "h-full rounded-full transition-all duration-500",
-                        slotsLeft <= 1
-                          ? "bg-gradient-to-r from-amber-500 to-orange-500"
-                          : "bg-gradient-to-r from-[var(--primary)] to-[var(--primary-strong)]",
-                      )}
-                      style={{ width: `${Math.max(4, slotsPct)}%` }}
-                    />
+                slotsFull ? null : (
+                  <div className="space-y-1">
+                    <div className="h-1 overflow-hidden rounded-full bg-[var(--border)]">
+                      <div
+                        className={cn(
+                          "h-full rounded-full transition-all duration-500",
+                          slotsLeft <= 1
+                            ? "bg-gradient-to-r from-amber-500 to-orange-500"
+                            : "bg-gradient-to-r from-[var(--primary)] to-[var(--primary-strong)]",
+                        )}
+                        style={{ width: `${Math.max(4, slotsPct)}%` }}
+                      />
+                    </div>
+                    <p className="text-[10px] tabular-nums text-[var(--muted-foreground)]">
+                      {labels.slotsClaimed}
+                    </p>
                   </div>
-                  <p className="text-[10px] tabular-nums text-[var(--muted-foreground)]">
-                    {slotsLeft}/{slotsMax}
-                  </p>
-                </div>
+                )
               }
               className={statCount >= 3 ? "sm:border-r sm:border-[var(--border)]" : undefined}
             />

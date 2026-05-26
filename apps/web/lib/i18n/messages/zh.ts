@@ -134,6 +134,13 @@ export const zh: PlatformMessages = {
     cardClaimFee: "Claim fee",
     cardPoolTotal: "Reward pool",
     cardCodesRemaining: "{n} invite codes left",
+    slotsEnded: "Ended",
+    slotsClaimed: "{used}/{max} claimed",
+    viewMyQuest: "View my quest",
+    slotsFullBanner:
+      "All reward slots are taken. You can still view your tasks if you already joined.",
+    slotsFullClosedBanner:
+      "All reward slots are taken. New participants cannot join this campaign.",
   },
   quests: {
     searchPlaceholder: "搜索标题、组织、奖池…",

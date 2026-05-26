@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import type { CampaignMeta } from "@/lib/campaign-reward";
 import {
   formatFcfsClaimFeeHint,
+  formatFcfsSlotsFilled,
   formatFcfsSlotsRemaining,
 } from "@/lib/campaign-reward";
 import { Rocket, Sparkles } from "lucide-react";
@@ -35,7 +36,10 @@ export function CampaignFcfsClaimSection({
   const remaining = campaignMeta.remainingSlots ?? 0;
   const maxWinners = campaignMeta.maxWinners;
   const fee = campaignMeta.fcfsClaimFeeCc;
-  const slotsLabel = formatFcfsSlotsRemaining(remaining, maxWinners);
+  const slotsLabel =
+    remaining > 0
+      ? formatFcfsSlotsRemaining(remaining, maxWinners)
+      : formatFcfsSlotsFilled(remaining, maxWinners, "Ended");
   const feeHint = formatFcfsClaimFeeHint(fee, rewardCc);
 
   async function handleFCFSClaim() {

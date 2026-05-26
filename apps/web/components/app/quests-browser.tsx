@@ -288,6 +288,7 @@ export function QuestsBrowser({
                   quest={q}
                   variant="earn"
                   completed={progress?.completedQuestIds.includes(q.id) ?? false}
+                  userProgress={progress}
                 />
               ))}
             </div>

@@ -134,6 +134,13 @@ export const pt: PlatformMessages = {
     cardClaimFee: "Claim fee",
     cardPoolTotal: "Reward pool",
     cardCodesRemaining: "{n} invite codes left",
+    slotsEnded: "Ended",
+    slotsClaimed: "{used}/{max} claimed",
+    viewMyQuest: "View my quest",
+    slotsFullBanner:
+      "All reward slots are taken. You can still view your tasks if you already joined.",
+    slotsFullClosedBanner:
+      "All reward slots are taken. New participants cannot join this campaign.",
   },
   quests: {
     searchPlaceholder: "Buscar título, org, pool…",
