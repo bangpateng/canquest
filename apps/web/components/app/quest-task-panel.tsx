@@ -70,6 +70,24 @@ function taskActionButtonLabel(type: string): string {
   return TASK_ACTION_BUTTON_LABEL[key] ?? TASK_ACTION_BUTTON_LABEL[type] ?? "Open";
 }
 
+function taskTypeSubtitle(type: string): string {
+  const t = normalizeType(type);
+  const labels: Record<string, string> = {
+    twitter_follow: "X (Twitter)",
+    twitter_retweet: "X (Twitter)",
+    telegram_channel: "Telegram",
+    telegram_group: "Telegram",
+    discord_join: "Discord",
+    submit_email: "Email",
+    submit_party_id: "Canton wallet",
+    submit_canton_address: "Canton wallet",
+    daily_check_in: "Daily",
+    quiz_yes_no: "Quiz",
+    quiz_choice: "Quiz",
+  };
+  return labels[t] ?? "Mission";
+}
+
 function openTaskTarget(task: QuestTask, taskType: string) {
   const target = task.target?.trim();
   if (target?.startsWith("http")) {
@@ -380,55 +398,6 @@ export function QuestTaskPanel({
         </div>
       ) : null}
 
-      {!isEarnHub ? (
-        <div
-          className={cn(
-            "relative overflow-hidden rounded-2xl border p-5 md:p-6",
-            allDone
-              ? "border-[var(--primary)]/40 bg-gradient-to-br from-[var(--primary)]/12 to-transparent shadow-[0_0_32px_rgb(var(--canton-rgb)/0.08)]"
-              : "border-[var(--border)] bg-[var(--card)]/80",
-          )}
-        >
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <span
-                className={cn(
-                  "type-section-title flex h-12 w-12 items-center justify-center rounded-xl",
-                  allDone
-                    ? "bg-[var(--primary)] text-[var(--primary-foreground)] shadow-[0_0_20px_rgb(var(--canton-rgb)/0.3)]"
-                    : "bg-[var(--muted)] text-[var(--muted-foreground)]",
-                )}
-              >
-                {pct}%
-              </span>
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
-                  Mission progress
-                </p>
-                <SubsectionTitle>
-                  {verifiedCount} / {quest.tasks.length} verified
-                </SubsectionTitle>
-                <p className="text-xs text-[var(--muted-foreground)]">
-                  +{earnedPoints} / {totalPoints} points
-                </p>
-              </div>
-            </div>
-            {allDone && !questCompleted && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--primary)]/40 bg-[var(--primary)]/15 px-3 py-1 text-xs font-bold text-canton">
-                <Zap className="h-3.5 w-3.5" />
-                Ready to submit
-              </span>
-            )}
-          </div>
-          <div className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--muted)] ring-1 ring-[var(--border)]">
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-[var(--primary)] to-[var(--primary-strong)] transition-all duration-700 ease-out shadow-[0_0_12px_rgb(var(--canton-rgb)/0.5)]"
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-        </div>
-      ) : null}
-
       {/* Task list */}
       {isEarnHub ? (
         <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]/40">
@@ -457,16 +426,38 @@ export function QuestTaskPanel({
           </ul>
         </div>
       ) : (
-        <ol className="relative space-y-4">
-          {quest.tasks.map((task, idx) => (
-            <li key={task.id} className="relative">
-              {idx < quest.tasks.length - 1 ? (
-                <span
-                  className="absolute left-[1.65rem] top-14 bottom-0 w-px bg-gradient-to-b from-[var(--border)] to-transparent"
-                  aria-hidden
-                />
-              ) : null}
+        <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]">
+          <div className="border-b border-[var(--border)] bg-[var(--muted)]/15 px-4 py-4 sm:px-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
+                  Quest tasks
+                </p>
+                <p className="mt-1 text-base font-semibold text-[var(--foreground)]">
+                  {verifiedCount} of {quest.tasks.length} completed
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                {allDone && !questCompleted ? (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-[var(--primary)]/35 bg-[var(--primary)]/12 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-canton">
+                    <Zap className="h-3 w-3" aria-hidden />
+                    Ready
+                  </span>
+                ) : null}
+                <span className="text-sm font-bold tabular-nums text-canton">{pct}%</span>
+              </div>
+            </div>
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--muted)]">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-[var(--primary)] to-[var(--primary-strong)] transition-all duration-500"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          </div>
+          <ul className="divide-y divide-[var(--border)]">
+            {quest.tasks.map((task, idx) => (
               <TaskRow
+                key={task.id}
                 index={idx + 1}
                 questId={quest.id}
                 task={task}
@@ -474,11 +465,12 @@ export function QuestTaskPanel({
                 partyId={partyId}
                 twitterUsername={twitterUsername}
                 campaignEnded={taskSubmissionsBlocked}
+                campaignListLayout
                 onVerified={(sub) => onTaskVerified(task.id, sub)}
               />
-            </li>
-          ))}
-        </ol>
+            ))}
+          </ul>
+        </div>
       )}
 
       {showFcfsClaim ? (
@@ -554,6 +546,7 @@ function TaskRow({
   twitterUsername = null,
   campaignEnded = false,
   earnHubLayout = false,
+  campaignListLayout = false,
   onPointsEarned,
   onVerified,
 }: {
@@ -565,6 +558,7 @@ function TaskRow({
   twitterUsername?: string | null;
   campaignEnded?: boolean;
   earnHubLayout?: boolean;
+  campaignListLayout?: boolean;
   onPointsEarned?: () => void;
   onVerified: (sub: QuestSubmission) => void;
 }) {
@@ -823,6 +817,205 @@ function TaskRow({
         taskCompleted: isOneTimeComplete || onRepeatCooldown,
       })
     : null;
+
+  if (campaignListLayout) {
+    return (
+      <li
+        className={cn(
+          "px-4 py-4 transition-colors sm:px-5",
+          isVerified ? "bg-emerald-500/[0.04]" : "hover:bg-[var(--muted)]/10",
+        )}
+      >
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+          <div className="flex min-w-0 flex-1 items-start gap-3">
+            <span
+              className={cn(
+                "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+                isVerified
+                  ? "bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30"
+                  : "bg-[var(--muted)]/50 text-[var(--muted-foreground)] ring-1 ring-[var(--border)]",
+              )}
+            >
+              {isVerified ? (
+                <Check className="h-5 w-5" strokeWidth={2.5} aria-hidden />
+              ) : (
+                <TaskIcon type={task.type} className="h-4 w-4" />
+              )}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p
+                className={cn(
+                  "text-sm font-semibold leading-snug text-[var(--foreground)]",
+                  isVerified && "text-[var(--muted-foreground)]",
+                )}
+              >
+                {task.title}
+              </p>
+              <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+                {taskTypeSubtitle(task.type)}
+                <span className="mx-1.5 text-[var(--border)]">·</span>
+                <span className="font-medium text-canton">+{task.points} pts</span>
+              </p>
+              {task.description &&
+                !task.description.trim().startsWith("http") &&
+                task.description.trim() !== (task.target ?? "").trim() && (
+                  <p className="mt-1.5 line-clamp-2 text-xs text-[var(--muted-foreground)]">
+                    {task.description}
+                  </p>
+                )}
+            </div>
+          </div>
+
+          <div className="flex shrink-0 items-center justify-end gap-2 sm:pl-2">
+            {isVerified ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-300">
+                <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+                Done
+              </span>
+            ) : isPending ? (
+              <span className="rounded-full border border-orange-500/30 bg-orange-500/10 px-3 py-1.5 text-xs font-semibold text-orange-200">
+                Pending
+              </span>
+            ) : countdown !== null && countdown > 0 ? (
+              <span className="min-w-[5.5rem] rounded-full border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-1.5 text-center text-xs font-semibold tabular-nums text-[var(--muted-foreground)]">
+                {countdown}s
+              </span>
+            ) : loading ? (
+              <span className="flex h-9 min-w-[5.5rem] items-center justify-center rounded-full border border-[var(--border)] bg-[var(--muted)]/40">
+                <LoadingSpinner size="sm" />
+              </span>
+            ) : (
+              <button
+                type="button"
+                disabled={actionDisabled}
+                onClick={startTask}
+                className={cn(
+                  buttonVariants({ size: "sm" }),
+                  "h-9 min-w-[5.5rem] rounded-full px-4 font-bold",
+                )}
+              >
+                {actionLabel}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {!isVerified && isQuizYesNo ? (
+          <div className="mt-3 flex rounded-lg border border-[var(--border)] bg-[var(--background)] p-0.5 sm:ml-[3.25rem]">
+            {(["yes", "no"] as const).map((opt) => {
+              const key = quizAnswerKey(opt, taskType);
+              const isWrong = quizWrong !== null && quizAnswerKey(quizWrong, taskType) === key;
+              const isPendingBtn =
+                loading && quizPending !== null && quizAnswerKey(quizPending, taskType) === key;
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  disabled={loading}
+                  onClick={() => void submitQuizAnswer(opt)}
+                  className={cn(
+                    "flex flex-1 items-center justify-center gap-1.5 rounded-md py-2 text-sm font-medium capitalize transition-colors",
+                    isWrong
+                      ? "bg-red-500/15 text-red-300"
+                      : "text-[var(--muted-foreground)] hover:bg-[var(--muted)]/30 hover:text-[var(--foreground)]",
+                  )}
+                >
+                  {isPendingBtn ? <LoadingSpinner size="sm" /> : null}
+                  {opt}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {!isVerified && isQuizChoice && quizChoices.length > 0 ? (
+          <ul className="mt-3 space-y-1.5 sm:ml-[3.25rem]">
+            {quizChoices.map((label, idx) => {
+              const letter = String.fromCharCode(65 + idx);
+              const key = quizAnswerKey(letter, taskType);
+              const isWrong = quizWrong !== null && quizAnswerKey(quizWrong, taskType) === key;
+              const isPendingBtn =
+                loading && quizPending !== null && quizAnswerKey(quizPending, taskType) === key;
+              return (
+                <li key={letter}>
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => void submitQuizAnswer(letter)}
+                    className={cn(
+                      "flex w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
+                      isWrong
+                        ? "border-red-500/40 bg-red-500/10 text-red-200"
+                        : "border-[var(--border)] bg-[var(--background)] hover:bg-[var(--muted)]/20",
+                    )}
+                  >
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[10px] font-bold bg-[var(--muted)] text-[var(--muted-foreground)]">
+                      {isPendingBtn ? <LoadingSpinner size="xs" /> : letter}
+                    </span>
+                    <span>{label}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
+
+        {!isVerified && isEmailTask ? (
+          <div className="mt-3 sm:ml-[3.25rem]">
+            <input
+              type="email"
+              value={proof}
+              onChange={(e) => setProof(e.target.value)}
+              placeholder="your@email.com"
+              disabled={loading || isVerified}
+              className="w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--background)] px-4 py-2.5 text-sm outline-none focus:border-[var(--primary)]/40 focus:ring-2 focus:ring-[var(--ring)]"
+            />
+          </div>
+        ) : null}
+
+        {!isVerified && isPartyTask ? (
+          <div className="mt-3 sm:ml-[3.25rem]">
+            {needsWallet ? (
+              <button
+                type="button"
+                onClick={() => setWalletPromptOpen(true)}
+                className="w-full max-w-md rounded-xl border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-left text-xs text-orange-300"
+              >
+                Create wallet to verify →
+              </button>
+            ) : (
+              <input
+                type="text"
+                value={proof}
+                readOnly
+                disabled
+                className="w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--muted)]/30 px-3 py-2 font-mono text-xs text-[var(--muted-foreground)]"
+              />
+            )}
+          </div>
+        ) : null}
+
+        {needsTwitter && !isVerified ? (
+          <p className="mt-2 text-xs text-orange-300/90 sm:ml-[3.25rem]">
+            <Link href="/setting#twitter" className="font-semibold underline underline-offset-2">
+              Connect X
+            </Link>{" "}
+            in Settings first.
+          </p>
+        ) : null}
+
+        {error ? <p className="mt-2 text-xs text-red-400 sm:ml-[3.25rem]">{error}</p> : null}
+        {successMsg && !error ? (
+          <p className="mt-2 text-xs font-medium text-emerald-400 sm:ml-[3.25rem]">{successMsg}</p>
+        ) : null}
+
+        <WalletCreatePromptModal
+          open={walletPromptOpen}
+          onClose={() => setWalletPromptOpen(false)}
+        />
+      </li>
+    );
+  }
 
   if (earnHubLayout && earnHubDisplay) {
     return (
