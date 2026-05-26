@@ -34,7 +34,7 @@ const menus: {
     icon: Sparkles,
     title: "Earn",
     description:
-      "Partner campaigns with CC rewards, invite codes, waitlist spots, and FCFS claims.",
+      "Partner campaigns — social missions, project branding, CC / Winners rewards, and FCFS or invite claims.",
     path: ROUTES.campaignQuests,
   },
   {

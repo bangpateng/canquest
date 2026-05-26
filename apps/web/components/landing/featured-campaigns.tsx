@@ -1,5 +1,6 @@
 import { ListChecks } from "lucide-react";
 import { FeaturedQuestCarouselDynamic } from "@/components/landing/featured-quest-carousel-dynamic";
+import { LandingCampaignGrid } from "@/components/landing/landing-campaign-grid";
 import { LandingShell } from "@/components/landing/landing-shell";
 import { SectionHeader } from "@/components/landing/section-header";
 import { LaunchAppButton } from "@/components/landing/launch-app-button";
@@ -17,7 +18,7 @@ export function FeaturedCampaigns({ quests }: { quests: Quest[] }) {
         <SectionHeader
           eyebrow="Earn"
           title="Partner campaigns"
-          description="Live and upcoming partner programs from the Earn menu. Open a campaign to complete missions and claim rewards."
+          description="Real projects on Canton — complete social missions (X, Telegram, Discord), earn quest points, and claim CC rewards. Each campaign uses the partner’s name, banner, logo, and links from admin."
           className="max-w-2xl"
         />
 
@@ -33,7 +34,10 @@ export function FeaturedCampaigns({ quests }: { quests: Quest[] }) {
             </div>
           </div>
         ) : (
-          <FeaturedQuestCarouselDynamic quests={quests} />
+          <>
+            <FeaturedQuestCarouselDynamic quests={quests} />
+            <LandingCampaignGrid quests={quests} />
+          </>
         )}
       </LandingShell>
     </section>

@@ -10,7 +10,9 @@ import {
   Ticket,
   Trophy,
 } from "lucide-react";
+import { CampaignSocialLinks } from "@/components/app/campaign-social-links";
 import { ROUTES } from "@/lib/app-routes";
+import { getLandingCampaignDisplay } from "@/lib/landing-campaign-display";
 import { QUEST_STATUS_BADGE, type Quest } from "@/lib/quest-types";
 import { cn } from "@/lib/utils";
 
@@ -103,6 +105,8 @@ function SpotlightCard({ quest }: { quest: Quest }) {
   const theme = questRewardTheme(quest.rewardPool, quest.rewardType);
   const RewardIcon = theme.icon;
   const canOpen = quest.status === "ACTIVE" || quest.status === "ENDED";
+  const { poolLabel, ccPerWinners, socialTaskCount, questPoints } =
+    getLandingCampaignDisplay(quest);
 
   return (
     <CardWrap quest={quest} canOpen={canOpen}>
@@ -157,21 +161,34 @@ function SpotlightCard({ quest }: { quest: Quest }) {
             <div className="mt-4 flex flex-wrap gap-2">
               <span
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold",
+                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold tabular-nums",
                   theme.badge,
                 )}
               >
                 <RewardIcon className="h-3.5 w-3.5" />
-                {quest.rewardPool}
+                {poolLabel}
               </span>
+              {ccPerWinners ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-canton-muted bg-canton-subtle/80 px-3 py-1 text-xs font-semibold tabular-nums text-canton">
+                  {ccPerWinners}
+                </span>
+              ) : null}
               <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--muted)]/50 px-3 py-1 text-xs text-[var(--muted-foreground)]">
                 <ListChecks className="h-3.5 w-3.5 text-canton" />
-                {quest.tasks.length} tasks
+                {socialTaskCount} social {socialTaskCount === 1 ? "mission" : "missions"}
               </span>
+              {questPoints > 0 ? (
+                <span className="inline-flex items-center rounded-full border border-[var(--border)] bg-[var(--muted)]/50 px-3 py-1 text-xs font-semibold tabular-nums text-canton">
+                  +{questPoints} pts
+                </span>
+              ) : null}
             </div>
+            {quest.socialLinks && quest.socialLinks.length > 0 ? (
+              <CampaignSocialLinks links={quest.socialLinks} className="mt-4" />
+            ) : null}
             {canOpen ? (
               <span className="mt-6 inline-flex w-fit items-center gap-2 rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-bold text-[var(--primary-foreground)] shadow-[0_0_28px_rgb(var(--canton-rgb)/0.35)] transition-all group-hover:gap-3">
-                Join quest
+                View campaign
                 <ArrowRight className="h-4 w-4" />
               </span>
             ) : (
@@ -192,6 +209,8 @@ function CinematicCard({ quest }: { quest: Quest }) {
   const theme = questRewardTheme(quest.rewardPool, quest.rewardType);
   const RewardIcon = theme.icon;
   const canOpen = quest.status === "ACTIVE" || quest.status === "ENDED";
+  const { poolLabel, ccPerWinners, socialTaskCount, questPoints } =
+    getLandingCampaignDisplay(quest);
 
   return (
     <CardWrap quest={quest} canOpen={canOpen}>
@@ -233,25 +252,35 @@ function CinematicCard({ quest }: { quest: Quest }) {
               {quest.description}
             </p>
 
-            <div className="mt-5 flex flex-wrap items-center gap-3">
+            <div className="mt-5 flex flex-wrap items-center gap-2">
               <span
                 className={cn(
-                  "inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-1.5 text-sm font-semibold backdrop-blur-md",
+                  "inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-1.5 text-sm font-semibold tabular-nums backdrop-blur-md",
                   theme.accent,
                 )}
               >
                 <RewardIcon className="h-4 w-4" />
-                {quest.rewardPool}
+                {poolLabel}
               </span>
-              <span className="text-xs text-white/55">
-                {quest.tasks.length} tasks
+              {ccPerWinners ? (
+                <span className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold tabular-nums text-canton backdrop-blur-md">
+                  {ccPerWinners}
+                </span>
+              ) : null}
+              <span className="text-xs text-white/60">
+                {socialTaskCount} social {socialTaskCount === 1 ? "mission" : "missions"}
+                {questPoints > 0 ? ` · +${questPoints} pts` : ""}
                 {quest.deadline ? ` · ${quest.deadline}` : ""}
               </span>
             </div>
 
+            {quest.socialLinks && quest.socialLinks.length > 0 ? (
+              <CampaignSocialLinks links={quest.socialLinks} className="mt-4" />
+            ) : null}
+
             {canOpen ? (
               <span className="mt-6 inline-flex items-center gap-2 rounded-full bg-[var(--primary)] px-6 py-3 text-sm font-bold text-[var(--primary-foreground)] shadow-[0_0_40px_rgb(var(--canton-rgb)/0.4)] transition-all group-hover:gap-3 group-hover:brightness-110">
-                Join quest
+                View campaign
                 <ArrowRight className="h-4 w-4" />
               </span>
             ) : (

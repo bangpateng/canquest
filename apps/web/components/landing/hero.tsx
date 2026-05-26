@@ -25,13 +25,13 @@ export function LandingHero() {
         </div>
 
         <h1 className="landing-fade-in landing-fade-in-delay-1 type-hero max-w-3xl">
-          Daily quests. Partner campaigns.{" "}
-          <span className="text-gradient-brand">Rewards on-chain.</span>
+          Partner campaigns on Canton.{" "}
+          <span className="text-gradient-brand">Social missions. CC rewards.</span>
         </h1>
 
         <p className="landing-fade-in landing-fade-in-delay-2 max-w-2xl text-base leading-relaxed text-[var(--muted-foreground)] md:text-lg">
-          Complete verified tasks, join partner Earn campaigns, climb the leaderboard, and
-          receive CC in your Canton wallet — all in one app.
+          Join live partner programs — follow on X, join Telegram or Discord, earn quest points,
+          and claim CC to your wallet. Daily CanQuest tasks and Spin Reward live in the same app.
         </p>
 
         <div className="landing-fade-in landing-fade-in-delay-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-center">
@@ -47,7 +47,7 @@ export function LandingHero() {
                 "inline-flex gap-2 rounded-full border-[var(--border)] bg-[var(--card)]/60 backdrop-blur-sm",
               )}
             >
-              Partner campaigns
+              Browse campaigns
               <ArrowRight className="h-4 w-4" />
             </span>
           </a>

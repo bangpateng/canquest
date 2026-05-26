@@ -4,9 +4,9 @@ import { SectionHeader } from "@/components/landing/section-header";
 
 const points = [
   "Create a Canton party and link it to your CanQuest account",
-  "CC rewards from campaigns and Spin Reward go to your wallet",
+  "CC from partner Earn campaigns (FCFS claim) and Spin Reward land in your wallet",
+  "Complete social missions on campaigns — rewards use the partner project name",
   "Send and receive CC with CIP-56 preapproval when enabled",
-  "Transaction history synced from the ledger",
 ];
 
 export function CantonSection() {
