@@ -1348,7 +1348,10 @@ export class QuestsService {
     };
   }
 
-  /** User → validator claim fee (Splice TransferOffer). */
+  /**
+   * User → validator claim fee (Splice CIP-56).
+   * Receiver (treasury wallet) must accept — NOT the sender.
+   */
   private async collectClaimFee(params: {
     userId: string;
     username: string;
@@ -1360,25 +1363,44 @@ export class QuestsService {
     if (!validatorPartyId) {
       throw new Error('Validator party not configured');
     }
-    const feeOfferId = await this.splice.createTransferOffer(
-      validatorPartyId,
-      params.feeCc,
-      `${params.feeLabel} — ${params.questTitle}`,
-      undefined,
-      params.username,
-    );
-    if (!feeOfferId) throw new Error('fee offer failed');
-    const feeAccepted = await this.splice.acceptOfferViaWallet(feeOfferId, params.username);
-    if (!feeAccepted) throw new Error('fee accept failed');
+
+    const feeAcceptUsername =
+      this.config.get<string>('CANTON_FEE_ACCEPT_USERNAME')?.trim() ||
+      this.config.get<string>('CANTON_VALIDATOR_ADMIN_USER')?.trim() ||
+      'administrator';
+
+    let treasuryPartyId =
+      this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
+      validatorPartyId;
+
+    const walletParty = await this.splice.getWalletPartyId(feeAcceptUsername);
+    if (walletParty) {
+      treasuryPartyId = walletParty;
+    }
+
+    const description = `${params.feeLabel} — ${params.questTitle}`;
+    const feeResult = await this.splice.collectPlatformFee({
+      senderUsername: params.username,
+      feeCc: params.feeCc,
+      description,
+      treasuryPartyId,
+      treasuryAcceptUsername: feeAcceptUsername,
+    });
+
+    if (!feeResult.collected) {
+      throw new Error(feeResult.error ?? 'fee collect failed');
+    }
+
+    const ledgerTxId = feeResult.ledgerTxId ?? '';
     await this.users.recordTransaction({
       userId: params.userId,
       amountCc: -params.feeCc,
       type: 'TRANSFER_OUT',
-      description: `${params.feeLabel} — ${params.questTitle}`,
+      description,
       counterparty: 'Validator (claim fee)',
-      ledgerTxId: feeOfferId,
+      ledgerTxId: ledgerTxId || undefined,
     });
-    return feeOfferId;
+    return ledgerTxId;
   }
 
   /* ─── Admin: create/seed quests ─── */
