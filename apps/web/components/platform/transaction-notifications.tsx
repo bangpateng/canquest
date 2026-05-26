@@ -99,6 +99,8 @@ export function TransactionNotifications() {
     useTransactionNotifications();
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties | null>(null);
 
   const unread = feed?.unreadCount ?? 0;
 
@@ -109,6 +111,37 @@ export function TransactionNotifications() {
     document.addEventListener("mousedown", onPointerDown);
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, []);
+
+  useEffect(() => {
+    if (!open) {
+      setMenuStyle(null);
+      return;
+    }
+    const el = buttonRef.current;
+    if (!el) return;
+
+    const place = () => {
+      const rect = el.getBoundingClientRect();
+      const gap = 8;
+      const top = Math.max(gap, rect.bottom + gap);
+      const right = Math.max(gap, window.innerWidth - rect.right);
+      setMenuStyle({
+        position: "fixed",
+        top,
+        right,
+        zIndex: 60,
+        width: "min(calc(100vw - 1rem), 22rem)",
+      });
+    };
+
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open]);
 
   const markedThisOpen = useRef(false);
   useEffect(() => {
@@ -146,6 +179,7 @@ export function TransactionNotifications() {
     <>
       <div className="relative" ref={panelRef}>
         <button
+          ref={buttonRef}
           type="button"
           onClick={() => setOpen((o) => !o)}
           className={cn(iconButtonClass("relative h-9 w-9"))}
@@ -165,7 +199,11 @@ export function TransactionNotifications() {
           <div
             role="dialog"
             aria-label={t("notifications.title")}
-            className="absolute right-0 top-full z-50 mt-1.5 w-[min(100vw-2rem,22rem)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-lg"
+            style={menuStyle ?? undefined}
+            className={cn(
+              "overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-lg",
+              menuStyle ? "" : "absolute right-0 top-full z-50 mt-1.5 w-[min(100vw-2rem,22rem)]",
+            )}
           >
             <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2.5">
               <p className="text-sm font-semibold text-[var(--foreground)]">
