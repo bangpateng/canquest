@@ -1359,32 +1359,11 @@ export class QuestsService {
     feeCc: number;
     feeLabel: string;
   }): Promise<string> {
-    const validatorPartyId = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
-    if (!validatorPartyId) {
-      throw new Error('Validator party not configured');
-    }
-
-    const feeAcceptUsername =
-      this.config.get<string>('CANTON_FEE_ACCEPT_USERNAME')?.trim() ||
-      this.config.get<string>('CANTON_VALIDATOR_ADMIN_USER')?.trim() ||
-      'administrator';
-
-    let treasuryPartyId =
-      this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
-      validatorPartyId;
-
-    const walletParty = await this.splice.getWalletPartyId(feeAcceptUsername);
-    if (walletParty) {
-      treasuryPartyId = walletParty;
-    }
-
     const description = `${params.feeLabel} — ${params.questTitle}`;
     const feeResult = await this.splice.collectPlatformFee({
       senderUsername: params.username,
       feeCc: params.feeCc,
       description,
-      treasuryPartyId,
-      treasuryAcceptUsername: feeAcceptUsername,
     });
 
     if (!feeResult.collected) {
@@ -1392,12 +1371,14 @@ export class QuestsService {
     }
 
     const ledgerTxId = feeResult.ledgerTxId ?? '';
+    const treasuryLabel =
+      feeResult.treasuryPartyId?.split('::')[0] ?? 'treasury';
     await this.users.recordTransaction({
       userId: params.userId,
       amountCc: -params.feeCc,
       type: 'TRANSFER_OUT',
       description,
-      counterparty: 'Validator (claim fee)',
+      counterparty: `Validator (${treasuryLabel})`,
       ledgerTxId: ledgerTxId || undefined,
     });
     return ledgerTxId;

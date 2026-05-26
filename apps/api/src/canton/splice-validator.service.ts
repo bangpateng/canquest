@@ -436,6 +436,39 @@ export class SpliceValidatorService {
   }
 
   /**
+   * Resolve treasury wallet for platform / claim fees (same rules as Send CC).
+   * Prefer Splice user-status party for CANTON_FEE_ACCEPT_USERNAME over stale .env IDs.
+   */
+  async resolveTreasuryFeeTarget(): Promise<{
+    treasuryPartyId: string;
+    treasuryAcceptUsername: string;
+  } | null> {
+    const validatorPartyId = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
+    if (!validatorPartyId) return null;
+
+    const treasuryAcceptUsername =
+      this.config.get<string>('CANTON_FEE_ACCEPT_USERNAME')?.trim() ||
+      this.config.get<string>('CANTON_VALIDATOR_ADMIN_USER')?.trim() ||
+      'administrator';
+
+    let treasuryPartyId =
+      this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
+      validatorPartyId;
+
+    const walletParty = await this.getWalletPartyId(treasuryAcceptUsername);
+    if (walletParty && walletParty !== treasuryPartyId) {
+      this.logger.warn(
+        `Fee party mismatch: .env treasury=${treasuryPartyId.split('::')[0]} but Splice user ${treasuryAcceptUsername} → ${walletParty.split('::')[0]}. Using wallet party.`,
+      );
+      treasuryPartyId = walletParty;
+    } else if (!this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() && walletParty) {
+      treasuryPartyId = walletParty;
+    }
+
+    return { treasuryPartyId, treasuryAcceptUsername };
+  }
+
+  /**
    * Collect platform fee into validator treasury (naxweb-validator-1 on TestNet).
    * Tries direct preapproval send first, then transfer-offer + treasury wallet accept.
    */
@@ -443,11 +476,34 @@ export class SpliceValidatorService {
     senderUsername: string;
     feeCc: number;
     description: string;
-    treasuryPartyId: string;
-    treasuryAcceptUsername: string;
-  }): Promise<{ collected: boolean; ledgerTxId?: string; method?: string; error?: string }> {
-    const { senderUsername, feeCc, description, treasuryPartyId, treasuryAcceptUsername } =
-      params;
+    /** Optional override; normally resolved via resolveTreasuryFeeTarget(). */
+    treasuryPartyId?: string;
+    treasuryAcceptUsername?: string;
+  }): Promise<{
+    collected: boolean;
+    ledgerTxId?: string;
+    method?: string;
+    error?: string;
+    treasuryPartyId?: string;
+  }> {
+    const { senderUsername, feeCc, description } = params;
+
+    const resolved =
+      params.treasuryPartyId && params.treasuryAcceptUsername
+        ? {
+            treasuryPartyId: params.treasuryPartyId,
+            treasuryAcceptUsername: params.treasuryAcceptUsername,
+          }
+        : await this.resolveTreasuryFeeTarget();
+
+    if (!resolved) {
+      return { collected: false, error: 'Treasury / validator party not configured' };
+    }
+
+    const { treasuryPartyId, treasuryAcceptUsername } = resolved;
+    const treasuryLabel = treasuryPartyId.split('::')[0];
+
+    const balanceBefore = await this.getUserBalance(treasuryAcceptUsername);
 
     const direct = await this.sendViaTransferPreapproval(
       senderUsername,
@@ -456,11 +512,25 @@ export class SpliceValidatorService {
       description,
     );
     if (direct.ok) {
-      return {
-        collected: true,
-        ledgerTxId: direct.referenceId,
-        method: 'preapproval_send',
-      };
+      const verified = await this.verifyTreasuryFeeCredit({
+        treasuryAcceptUsername,
+        feeCc,
+        balanceBefore,
+      });
+      if (verified) {
+        this.logger.log(
+          `Platform fee ${feeCc} CC via preapproval_send → ${treasuryLabel} (@${treasuryAcceptUsername})`,
+        );
+        return {
+          collected: true,
+          ledgerTxId: direct.referenceId,
+          method: 'preapproval_send',
+          treasuryPartyId,
+        };
+      }
+      this.logger.warn(
+        `Preapproval fee send returned OK but treasury balance did not increase; trying transfer offer`,
+      );
     }
 
     const offerId = await this.createTransferOffer(
@@ -474,6 +544,7 @@ export class SpliceValidatorService {
       return {
         collected: false,
         error: direct.error ?? 'Failed to create fee transfer offer',
+        treasuryPartyId,
       };
     }
 
@@ -482,15 +553,62 @@ export class SpliceValidatorService {
       treasuryAcceptUsername,
       { attempts: 8, delayMs: 1500 },
     );
-    if (accepted) {
-      return { collected: true, ledgerTxId: offerId, method: 'transfer_offer' };
+    if (!accepted) {
+      return {
+        collected: false,
+        ledgerTxId: offerId,
+        error: `Fee offer created but treasury could not accept (${treasuryAcceptUsername})`,
+        treasuryPartyId,
+      };
     }
 
+    const verified = await this.verifyTreasuryFeeCredit({
+      treasuryAcceptUsername,
+      feeCc,
+      balanceBefore,
+    });
+    if (!verified) {
+      return {
+        collected: false,
+        ledgerTxId: offerId,
+        error: `Fee offer accepted but treasury balance did not increase (@${treasuryAcceptUsername})`,
+        treasuryPartyId,
+      };
+    }
+
+    this.logger.log(
+      `Platform fee ${feeCc} CC via transfer_offer → ${treasuryLabel} (@${treasuryAcceptUsername})`,
+    );
     return {
-      collected: false,
+      collected: true,
       ledgerTxId: offerId,
-      error: `Fee offer created but treasury could not accept (${treasuryAcceptUsername})`,
+      method: 'transfer_offer',
+      treasuryPartyId,
     };
+  }
+
+  /** Confirm fee actually landed in the treasury Splice wallet (not just HTTP 200). */
+  private async verifyTreasuryFeeCredit(params: {
+    treasuryAcceptUsername: string;
+    feeCc: number;
+    balanceBefore: number | null;
+  }): Promise<boolean> {
+    if (params.balanceBefore === null) {
+      return true;
+    }
+    await new Promise((r) => setTimeout(r, 2000));
+    const balanceAfter = await this.getUserBalance(params.treasuryAcceptUsername);
+    if (balanceAfter === null) {
+      return true;
+    }
+    const minExpected = params.balanceBefore + params.feeCc - 0.000_001;
+    if (balanceAfter + 0.000_001 < minExpected) {
+      this.logger.error(
+        `Treasury fee verify failed: before=${params.balanceBefore} after=${balanceAfter} expected>=${minExpected}`,
+      );
+      return false;
+    }
+    return true;
   }
 
   /**

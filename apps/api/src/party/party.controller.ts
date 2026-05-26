@@ -648,42 +648,22 @@ export class PartyController {
     let feeCollected = false;
     let feeWarning: string | undefined;
     if (feeCc > 0 && validatorPartyId && sender.username) {
-      const feeAcceptUsername =
-        this.config.get<string>('CANTON_FEE_ACCEPT_USERNAME')?.trim() ||
-        this.config.get<string>('CANTON_VALIDATOR_ADMIN_USER')?.trim() ||
-        'administrator';
-
-      let treasuryPartyId =
-        this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
-        this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ||
-        validatorPartyId;
-
-      const walletParty = await this.splice.getWalletPartyId(feeAcceptUsername);
-      if (walletParty && walletParty !== treasuryPartyId) {
-        this.logger.warn(
-          `Fee party mismatch: .env treasury=${treasuryPartyId.split('::')[0]} but Splice user ${feeAcceptUsername} → ${walletParty.split('::')[0]}. Using wallet party.`,
-        );
-        treasuryPartyId = walletParty;
-      } else if (!this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID') && walletParty) {
-        treasuryPartyId = walletParty;
-      }
-
       const feeResult = await this.splice.collectPlatformFee({
         senderUsername: sender.username,
         feeCc,
         description: `Platform fee for transfer to ${recipientLabel}`,
-        treasuryPartyId,
-        treasuryAcceptUsername: feeAcceptUsername,
       });
 
       feeCollected = feeResult.collected;
+      const feeTreasuryPartyId = feeResult.treasuryPartyId ?? validatorPartyId;
       if (feeCollected) {
         const feeRow = await this.users.recordTransaction({
           userId: sender.id,
           amountCc: feeCc,
           type: 'TRANSFER_OUT',
           description: `Platform fee (transfer to ${recipientLabel})`,
-          counterparty: normalizeCantonPartyId(treasuryPartyId) ?? treasuryPartyId,
+          counterparty:
+            normalizeCantonPartyId(feeTreasuryPartyId) ?? feeTreasuryPartyId,
           ledgerTxId: feeResult.ledgerTxId,
         });
         if (feeResult.ledgerTxId && sender.cantonPartyId) {
@@ -695,12 +675,12 @@ export class PartyController {
         }
         await this.inboundSync.alignBalanceFromChain(sender.id, sender.username);
         this.logger.log(
-          `Fee collected (${feeResult.method ?? 'unknown'}): ${sender.username} → ${treasuryPartyId.split('::')[0]} ${feeCc} CC`,
+          `Fee collected (${feeResult.method ?? 'unknown'}): ${sender.username} → ${feeTreasuryPartyId.split('::')[0]} ${feeCc} CC`,
         );
       } else {
         feeWarning = `Transfer succeeded but platform fee (${feeCc} CC) could not be collected.`;
         this.logger.warn(
-          `Fee failed for ${sender.username}: ${feeResult.error ?? 'unknown'} (treasury ${treasuryPartyId.split('::')[0]})`,
+          `Fee failed for ${sender.username}: ${feeResult.error ?? 'unknown'} (treasury ${feeTreasuryPartyId.split('::')[0]})`,
         );
       }
     }
