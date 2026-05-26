@@ -71,6 +71,8 @@ export class AdminController {
       status?: QuestStatus;
       rewardType?: RewardType;
       maxWinners?: number;
+      claimFeeCc?: number | null;
+      winnerMessage?: string | null;
       tags?: string[];
       questKind?: QuestKind;
       tasks?: Array<{
@@ -107,6 +109,8 @@ export class AdminController {
       status?: QuestStatus;
       rewardType?: RewardType;
       maxWinners?: number | null;
+      claimFeeCc?: number | null;
+      winnerMessage?: string | null;
       tags?: string[];
     },
   ) {

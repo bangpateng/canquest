@@ -160,6 +160,22 @@ export class QuestsController {
     });
   }
 
+  /** Paid claim for invite / waitlist code (2 CC default fee). */
+  @Post(':questId/claim-invite')
+  @UseGuards(WalletRequiredGuard)
+  @Throttle({ ledger: { limit: 5, ttl: 60_000 } })
+  async claimInvite(@Param('questId') questId: string, @Req() req: AuthedReq) {
+    await this.requireWalletForCampaignQuest(questId, req.user.userId);
+    const user = await this.users.findById(req.user.userId);
+    if (!user) return { ok: false, message: 'User not found' };
+    return this.quests.claimInviteReward({
+      userId: user.id,
+      username: user.username,
+      cantonPartyId: user.cantonPartyId,
+      questId,
+    });
+  }
+
   @Post(':questId/tasks/:taskId/submit')
   async submitTask(
     @Param('questId') questId: string,

@@ -48,6 +48,8 @@ interface QuestFormProps {
     status: string;
     rewardType: string;
     maxWinners: number | null;
+    claimFeeCc?: number | null;
+    winnerMessage?: string | null;
     tags: string[];
     startsAt?: string | null;
     endsAt?: string | null;
@@ -81,6 +83,8 @@ export function QuestForm({
       ? "INVITE_CODE_RANDOM"
       : initialData?.rewardType ?? "CC_ONLY") as RewardType,
     maxWinners: String(initialData?.maxWinners ?? ""),
+    claimFeeCc: initialData?.claimFeeCc != null ? String(initialData.claimFeeCc) : "",
+    winnerMessage: initialData?.winnerMessage ?? "",
     tags: (initialData?.tags ?? []).join(", "),
   });
 
@@ -221,6 +225,8 @@ export function QuestForm({
         status: form.status,
         rewardType: form.rewardType,
         maxWinners: maxW,
+        claimFeeCc: form.claimFeeCc.trim() ? Number(form.claimFeeCc) : null,
+        winnerMessage: form.winnerMessage.trim() || null,
         tags: form.tags
           .split(",")
           .map((t) => t.trim())
@@ -494,7 +500,36 @@ export function QuestForm({
                 />
               </div>
             )}
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">Claim fee (CC on-chain)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.5"
+                value={form.claimFeeCc}
+                onChange={(e) => updateField("claimFeeCc", e.target.value)}
+                placeholder={
+                  form.rewardType === "CC_ONLY" ? "Default 3" : "Default 2 (code types)"
+                }
+                className={inputCls}
+              />
+              <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                Kosongkan = default per tipe (kode 2 CC, token FCFS 3 CC).
+              </p>
+            </div>
           </div>
+          {form.rewardType === "WAITLIST_EMAIL" && (
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">Pesan pemenang (custom)</label>
+              <textarea
+                value={form.winnerMessage}
+                onChange={(e) => updateField("winnerMessage", e.target.value)}
+                rows={3}
+                placeholder="Contoh: Silakan cek inbox email untuk langkah KYC."
+                className={cn(inputCls, "resize-y")}
+              />
+            </div>
+          )}
         </div>
         <div>
           <label className="mb-1.5 block text-sm font-medium">Reward pool label (shown to users)</label>

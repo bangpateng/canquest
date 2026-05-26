@@ -158,6 +158,10 @@ model Quest {
   rewardType   RewardType  @default(CC_ONLY)
   /// Max number of winners (null = unlimited / all completers rewarded)
   maxWinners   Int?
+  /// On-chain claim fee (CC) before user receives code/CC; null = use reward-type default (2 code / 3 token FCFS).
+  claimFeeCc   Float?
+  /// Custom message shown to raffle/email winners (admin dashboard).
+  winnerMessage String?
   /// CAMPAIGN = partner campaigns (user menu Earn). EARN_HUB = CanQuest daily tasks (user menu Quest).
   questKind    QuestKind   @default(CAMPAIGN)
   createdAt    DateTime    @default(now())
@@ -207,6 +211,8 @@ model WinnerDraw {
   distributed  Boolean    @default(false)
   /// Canton ledger TX id after CC distribution
   ledgerTxId   String?
+  /// TransferOffer id for user-paid claim fee (invite/code or FCFS claim).
+  claimFeeLedgerTxId String?
   drawnAt      DateTime   @default(now())
   distributedAt DateTime?
 

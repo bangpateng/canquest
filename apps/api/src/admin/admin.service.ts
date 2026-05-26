@@ -15,6 +15,7 @@ import {
 } from '../common/prisma-types';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { requiresPaidInviteClaim } from '../quests/quest-reward-config';
 import { SpliceValidatorService } from '../canton/splice-validator.service';
 import { UsersService } from '../users/users.service';
 
@@ -38,11 +39,27 @@ export class AdminService {
       where: kind ? { questKind: kind } : undefined,
       include: {
         tasks: { orderBy: { order: 'asc' } },
-        _count: { select: { completions: true, submissions: true } },
+        _count: { select: { completions: true, submissions: true, inviteCodes: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
-    return quests.map((q) => ({ ...q, tags: this.parseTags(q.tags) }));
+    const questIds = quests.map((q) => q.id);
+    const unassigned =
+      questIds.length > 0
+        ? await this.prisma.inviteCodePool.groupBy({
+            by: ['questId'],
+            where: { questId: { in: questIds }, userId: null },
+            _count: { _all: true },
+          })
+        : [];
+    const codesByQuest = new Map(
+      unassigned.map((r) => [r.questId, r._count._all]),
+    );
+    return quests.map((q) => ({
+      ...q,
+      tags: this.parseTags(q.tags),
+      codesRemaining: codesByQuest.get(q.id) ?? 0,
+    }));
   }
 
   async getEarnHubQuest() {
@@ -136,9 +153,11 @@ export class AdminService {
     endsAt?: string | null;
     status?: QuestStatus;
     rewardType?: RewardType;
-    maxWinners?: number;
-    tags?: string[];
-    questKind?: QuestKind;
+      maxWinners?: number;
+      claimFeeCc?: number | null;
+      winnerMessage?: string | null;
+      tags?: string[];
+      questKind?: QuestKind;
     tasks?: Array<{
       type: string;
       title: string;
@@ -178,6 +197,8 @@ export class AdminService {
         status: data.status ?? QuestStatus.ACTIVE,
         rewardType: data.rewardType ?? RewardType.CC_ONLY,
         maxWinners: data.maxWinners ?? null,
+        claimFeeCc: data.claimFeeCc ?? null,
+        winnerMessage: data.winnerMessage?.trim() || null,
         questKind,
         tags: JSON.stringify(data.tags ?? []),
         tasks: data.tasks
@@ -218,6 +239,8 @@ export class AdminService {
       status?: QuestStatus;
       rewardType?: RewardType;
       maxWinners?: number | null;
+      claimFeeCc?: number | null;
+      winnerMessage?: string | null;
       tags?: string[];
     },
   ) {
@@ -258,6 +281,10 @@ export class AdminService {
         ...(data.status !== undefined && { status: data.status }),
         ...(data.rewardType !== undefined && { rewardType: data.rewardType }),
         ...(data.maxWinners !== undefined && { maxWinners: data.maxWinners }),
+        ...(data.claimFeeCc !== undefined && { claimFeeCc: data.claimFeeCc }),
+        ...(data.winnerMessage !== undefined && {
+          winnerMessage: data.winnerMessage?.trim() || null,
+        }),
         ...(data.tags !== undefined && { tags: JSON.stringify(data.tags) }),
       },
     });
@@ -665,12 +692,15 @@ export class AdminService {
       rewardType === RewardType.INVITE_CODE ||
       rewardType === RewardType.CC_AND_INVITE;
 
-    const availableCodes = needCodes
-      ? await this.prisma.inviteCodePool.findMany({
-          where: { questId, userId: null },
-          take: selectedUserIds.length,
-        })
-      : [];
+    const deferCodeAssignment = requiresPaidInviteClaim(quest);
+
+    const availableCodes =
+      needCodes && !deferCodeAssignment
+        ? await this.prisma.inviteCodePool.findMany({
+            where: { questId, userId: null },
+            take: selectedUserIds.length,
+          })
+        : [];
 
     // Upsert WinnerDraw for each selected user
     const results: Array<{
@@ -682,12 +712,19 @@ export class AdminService {
 
     for (let i = 0; i < selectedUserIds.length; i++) {
       const uid = selectedUserIds[i]!;
-      const code = availableCodes[i] ?? null;
+      const code = deferCodeAssignment ? null : (availableCodes[i] ?? null);
 
       const existing = await this.prisma.winnerDraw.findUnique({
         where: { questId_userId: { questId, userId: uid } },
       });
       if (existing) continue;
+
+      if (code) {
+        await this.prisma.inviteCodePool.update({
+          where: { id: code.id },
+          data: { userId: uid, assignedAt: new Date() },
+        });
+      }
 
       await this.prisma.winnerDraw.create({
         data: {
@@ -698,13 +735,6 @@ export class AdminService {
           distributed: false,
         },
       });
-
-      if (code) {
-        await this.prisma.inviteCodePool.update({
-          where: { id: code.id },
-          data: { userId: uid, assignedAt: new Date() },
-        });
-      }
 
       const user = await this.users.findById(uid);
       if (user) results.push({ userId: uid, email: user.email, ccAmount: quest.rewardCc, inviteCode: code?.code ?? null });

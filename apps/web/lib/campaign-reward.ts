@@ -7,6 +7,8 @@ export type CampaignMeta = {
   maxWinners: number | null;
   fcfsClaimFeeCc: number;
   requiresFcfsClaim: boolean;
+  requiresPaidInviteClaim?: boolean;
+  codesRemaining?: number | null;
 };
 
 export function getCampaignEndDate(quest: Quest): Date | null {

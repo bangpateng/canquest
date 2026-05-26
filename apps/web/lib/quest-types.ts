@@ -526,32 +526,33 @@ export const QUEST_TASK_TYPE_OPTIONS: { value: QuestTaskType; label: string }[] 
 
 export const REWARD_TYPE_OPTIONS: { value: RewardType; label: string; hint: string }[] = [
   {
-    value: "CC_ONLY",
-    label: "Reward CC",
+    value: "INVITE_CODE_FCFS",
+    label: "1 · Kode waitlist (FCFS)",
     hint:
-      "Users’ Party ID is auto-filled on web. Download CSV: email + Canton Party ID. CC sent on quest submit (CIP-56).",
-  },
-  {
-    value: "WAITLIST_EMAIL",
-    label: "Reward Waitlist",
-    hint:
-      "Add a Submit Email task. Download CSV: account email + email submitted in the quest.",
+      "User selesaikan sosial → submit quest → bayar claim fee (default 2 CC) → dapat kode dari pool. Upload kode di Winners.",
   },
   {
     value: "INVITE_CODE_RANDOM",
-    label: "Reward Code Invite (random)",
+    label: "2 · Kode waitlist (raffle)",
     hint:
-      "Winners page: paste invite codes → Random draw. Winners see their code on the quest page; others get a not-selected message.",
+      "Setelah event: admin Draw Winners → pemenang bayar claim fee → kode muncul. Yang kalah: You Not Lucky.",
   },
   {
-    value: "INVITE_CODE_FCFS",
-    label: "Reward FCFS",
-    hint: "First N quest submitters get a code immediately. Manage codes on the Winners page.",
+    value: "WAITLIST_EMAIL",
+    label: "3 · Waitlist email (raffle)",
+    hint:
+      "Task Submit Email + pesan kustom pemenang (winner message). Draw di admin; pemenang lihat pesan admin.",
+  },
+  {
+    value: "CC_ONLY",
+    label: "4 · Token CC (FCFS)",
+    hint:
+      "Max winners = slot FCFS. User claim dengan fee (default 3 CC) → CC dari pool validator. Bukan bulk manual.",
   },
   {
     value: "CC_AND_INVITE",
-    label: "Reward CC + Code (FCFS)",
-    hint: "CC on submit + FCFS invite codes. CSV export includes Party ID; codes on Winners page.",
+    label: "5 · CC + kode (FCFS campuran)",
+    hint: "CC + invite (legacy). Untuk kampanye baru lebih baik pisah tipe 1 dan 4.",
   },
 ];
 

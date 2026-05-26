@@ -8,7 +8,8 @@ export interface AdminQuestRow {
   rewardCc: number;
   rewardType: string;
   maxWinners: number | null;
-  _count: { completions: number };
+  codesRemaining?: number;
+  _count: { completions: number; inviteCodes?: number };
 }
 
 const statusColor: Record<string, string> = {
@@ -80,6 +81,13 @@ export function AdminQuestTable({
                   <span className="ml-1 text-xs text-[var(--muted-foreground)]">
                     ({q.maxWinners} max)
                   </span>
+                ) : null}
+                {typeof q.codesRemaining === "number" &&
+                (q.rewardType.includes("INVITE") || q.rewardType === "CC_AND_INVITE") ? (
+                  <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+                    Sisa kode: {q.codesRemaining}
+                    {q._count.inviteCodes != null ? ` / ${q._count.inviteCodes}` : ""}
+                  </p>
                 ) : null}
               </td>
               <td className="px-4 py-3 tabular-nums text-[var(--muted-foreground)]">

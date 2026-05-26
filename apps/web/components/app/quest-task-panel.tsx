@@ -20,6 +20,7 @@ import {
   parseQuizChoices,
 } from "@/lib/quest-types";
 import { CampaignFcfsClaimSection } from "@/components/app/campaign-fcfs-claim";
+import { CampaignInviteClaimSection } from "@/components/app/campaign-invite-claim";
 import {
   QuestSubmitSection,
   QuestSubmittedProof,
@@ -239,14 +240,25 @@ export function QuestTaskPanel({
   const allDone = verifiedCount === quest.tasks.length && quest.tasks.length > 0;
   const campaignEnded = !isEarnHub && isCampaignEnded(quest, campaignMeta);
   const requiresFcfsClaim = campaignMeta?.requiresFcfsClaim ?? false;
+  const requiresPaidInviteClaim = campaignMeta?.requiresPaidInviteClaim ?? false;
   const showFcfsClaim =
     requiresFcfsClaim &&
     allDone &&
     !questCompleted &&
     !campaignEnded &&
     (campaignMeta?.remainingSlots ?? 0) > 0;
+  const showInviteClaim =
+    requiresPaidInviteClaim &&
+    questCompleted &&
+    !isEarnHub &&
+    rewardStatus?.state === "fcfs_claimable" &&
+    (campaignMeta?.codesRemaining ?? 0) > 0;
   const showClassicSubmit =
-    allDone && !questCompleted && !isEarnHub && !requiresFcfsClaim && !campaignEnded;
+    allDone &&
+    !questCompleted &&
+    !isEarnHub &&
+    !requiresFcfsClaim &&
+    !campaignEnded;
 
   function onTaskVerified(taskId: string, sub: QuestSubmission) {
     setSubmissions((prev) => {
@@ -455,6 +467,15 @@ export function QuestTaskPanel({
           partyId={partyId}
           rewardCc={quest.rewardCc}
           campaignMeta={campaignMeta!}
+          onClaimed={() => loadProgress()}
+        />
+      ) : null}
+
+      {showInviteClaim && campaignMeta ? (
+        <CampaignInviteClaimSection
+          questId={quest.id}
+          partyId={partyId}
+          campaignMeta={campaignMeta}
           onClaimed={() => loadProgress()}
         />
       ) : null}
