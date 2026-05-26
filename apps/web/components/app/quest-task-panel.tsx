@@ -23,6 +23,7 @@ import {
   parseQuizChoices,
 } from "@/lib/quest-types";
 import { CampaignFcfsClaimSection } from "@/components/app/campaign-fcfs-claim";
+import { TaskPointsLabel } from "@/components/app/task-points-label";
 import { CampaignInviteClaimSection } from "@/components/app/campaign-invite-claim";
 import {
   QuestSubmitSection,
@@ -474,37 +475,38 @@ export function QuestTaskPanel({
           </ul>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]">
-          <div className="border-b border-[var(--border)] bg-[var(--muted)]/15 px-4 py-4 sm:px-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
-                  Quest tasks
-                </p>
-                <p className="mt-1 text-base font-semibold text-[var(--foreground)]">
-                  {verifiedCount} of {taskList.length} completed
-                </p>
-                <p className="mt-0.5 text-[10px] text-[var(--muted-foreground)]">
-                  Complete tasks in order — one at a time
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                {allDone && !questCompleted ? (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-[var(--primary)]/35 bg-[var(--primary)]/12 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-canton">
-                    <Zap className="h-3 w-3" aria-hidden />
-                    Ready
-                  </span>
-                ) : null}
-                <span className="text-sm font-bold tabular-nums text-canton">{pct}%</span>
-              </div>
+        <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]/40">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--muted)]/20 px-4 py-3 sm:px-5">
+            <div>
+              <p className="text-xs font-medium text-[var(--muted-foreground)]">
+                Tasks to complete
+              </p>
+              <p className="mt-0.5 text-[10px] text-[var(--muted-foreground)]/80">
+                One at a time — finish each task before the next unlocks
+              </p>
             </div>
-            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--muted)]">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-[var(--primary)] to-[var(--primary-strong)] transition-all duration-500"
-                style={{ width: `${pct}%` }}
-              />
+            <div className="flex items-center gap-2">
+              {allDone && !questCompleted ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-[var(--primary)]/35 bg-[var(--primary)]/12 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-canton">
+                  <Zap className="h-3 w-3" aria-hidden />
+                  Ready
+                </span>
+              ) : null}
+              <p className="text-xs font-semibold tabular-nums text-[var(--foreground)]">
+                {verifiedCount}/{taskList.length}
+              </p>
             </div>
           </div>
+          {taskList.length > 0 ? (
+            <div className="border-b border-[var(--border)] px-4 py-2 sm:px-5">
+              <div className="h-1 overflow-hidden rounded-full bg-[var(--muted)]">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-[var(--primary)] to-[var(--primary-strong)] transition-all duration-500"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            </div>
+          ) : null}
           <ul className="divide-y divide-[var(--border)]">
             {taskList.map((task, idx) => (
               <TaskRow
@@ -820,7 +822,7 @@ function TaskRow({
       setCooldownNow(Date.now());
       setSuccessMsg(
         isDailyCheckIn || isRepeatable
-          ? `+${task.points} points! Come back in 24 hours for more.`
+          ? `+${task.points} pts! Come back in 24 hours for more.`
           : "Correct! Points awarded.",
       );
       setStarted(false);
@@ -901,8 +903,8 @@ function TaskRow({
     return (
       <li
         className={cn(
-          "px-4 py-4 transition-colors sm:px-5",
-          isVerified ? "bg-emerald-500/[0.04]" : "hover:bg-[var(--muted)]/10",
+          "px-4 py-4 transition-colors sm:px-5 sm:py-4",
+          isVerified ? "bg-emerald-500/[0.025]" : "hover:bg-[var(--muted)]/15",
           sequentiallyLocked && !isVerified && "opacity-55",
         )}
       >
@@ -912,8 +914,8 @@ function TaskRow({
               className={cn(
                 "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
                 isVerified
-                  ? "bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30"
-                  : "bg-[var(--muted)]/50 text-[var(--muted-foreground)] ring-1 ring-[var(--border)]",
+                  ? "bg-emerald-500/12 text-emerald-400"
+                  : "bg-[var(--muted)]/45 text-[var(--muted-foreground)]",
               )}
             >
               {isVerified ? (
@@ -923,18 +925,19 @@ function TaskRow({
               )}
             </span>
             <div className="min-w-0 flex-1">
-              <p
-                className={cn(
-                  "text-sm font-semibold leading-snug text-[var(--foreground)]",
-                  isVerified && "text-[var(--muted-foreground)]",
-                )}
-              >
-                {displayTitle}
-              </p>
-              <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+              <div className="flex items-start justify-between gap-2">
+                <p
+                  className={cn(
+                    "text-sm font-medium leading-snug text-[var(--foreground)]",
+                    isVerified && "text-[var(--muted-foreground)] line-through",
+                  )}
+                >
+                  {displayTitle}
+                </p>
+                <TaskPointsLabel points={task.points} complete={isVerified} />
+              </div>
+              <p className="mt-0.5 text-[11px] text-[var(--muted-foreground)]">
                 {taskTypeSubtitle(task.type)}
-                <span className="mx-1.5 text-[var(--border)]">·</span>
-                <span className="font-medium text-canton">+{task.points} pts</span>
               </p>
               {task.description &&
                 !task.description.trim().startsWith("http") &&
@@ -1161,14 +1164,10 @@ function TaskRow({
                   ) : null}
                 </div>
               </div>
-              <span
-                className={cn(
-                  "shrink-0 text-xs font-semibold tabular-nums",
-                  isOneTimeComplete || onRepeatCooldown ? "text-emerald-400/90" : "text-canton",
-                )}
-              >
-                +{task.points}
-              </span>
+              <TaskPointsLabel
+                points={task.points}
+                complete={isOneTimeComplete || onRepeatCooldown}
+              />
             </div>
             {isOneTimeComplete ? (
               <p className="mt-1 text-[11px] font-medium text-emerald-400/80">Completed</p>
@@ -1180,7 +1179,7 @@ function TaskRow({
             ) : null}
             {canRepeatNow ? (
               <p className="mt-1 text-[11px] text-canton">
-                Ready again — check in for +{task.points} points
+                Ready again — check in for +{task.points} pts
               </p>
             ) : null}
 
@@ -1401,9 +1400,7 @@ function TaskRow({
                   <span className="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-[10px] font-bold uppercase text-emerald-300">
                     Verified
                   </span>
-                  <span className="rounded-lg bg-[var(--primary)]/15 px-2.5 py-1 text-xs font-bold tabular-nums text-canton">
-                    +{task.points} pts
-                  </span>
+                  <TaskPointsLabel points={task.points} complete />
                 </>
               ) : sequentiallyLocked ? (
                 <span className="inline-flex min-w-[5.5rem] items-center justify-center gap-1 rounded-full border border-[var(--border)] bg-[var(--muted)]/30 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[var(--muted-foreground)]">

@@ -2,6 +2,7 @@ import {
   campaignUiKind,
   fcfsSlotsTaken,
   formatFcfsSlotsFilled,
+  formatCcPerWinners,
   formatPoolTotalLabel,
   isFcfsSlotsFull,
 } from "@/lib/campaign-reward";
@@ -99,9 +100,9 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
             {poolLabel}
           </p>
           {quest.rewardCc > 0 ? (
-            <p className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-canton">
-              <Coins className="h-4 w-4 shrink-0" aria-hidden />
-              {quest.rewardCc} CC per winner
+            <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold tabular-nums text-canton sm:text-sm">
+              <Coins className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
+              {formatCcPerWinners(quest.rewardCc)}
             </p>
           ) : null}
           {quest.rewardType?.includes("INVITE") ? (

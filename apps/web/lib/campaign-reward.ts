@@ -37,6 +37,12 @@ export function formatPoolTotalLabel(poolTotalCc: number | null, rewardPool: str
   return rewardPool.trim() || "—";
 }
 
+/** e.g. `10 CC / Winners` — campaign reward line under pool total. */
+export function formatCcPerWinners(rewardCc: number): string {
+  if (rewardCc <= 0) return "";
+  return `${rewardCc} CC / Winners`;
+}
+
 export function getCampaignEndDate(quest: Quest): Date | null {
   const raw = quest.endsAt ?? quest.deadline ?? null;
   if (!raw) return null;

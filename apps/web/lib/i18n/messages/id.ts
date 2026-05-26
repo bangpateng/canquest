@@ -129,7 +129,7 @@ export const id: PlatformMessages = {
     kindWaitlist: "Waitlist",
     kindCampaign: "Kampanye",
     dailyTasks: "Tugas Quest harian",
-    cardRewardPerWinner: "Hadiah per pemenang",
+    cardRewardPerWinner: "CC / Winners",
     cardFcfsSlots: "Slot FCFS",
     cardClaimFlow: "Bayar fee {fee} CC → terima {reward} CC",
     cardClaimFee: "Biaya klaim",

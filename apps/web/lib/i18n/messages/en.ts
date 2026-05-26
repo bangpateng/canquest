@@ -129,7 +129,7 @@ export const en: PlatformMessages = {
     kindWaitlist: "Waitlist",
     kindCampaign: "Campaign",
     dailyTasks: "Daily Quest tasks",
-    cardRewardPerWinner: "Reward per winner",
+    cardRewardPerWinner: "CC / Winners",
     cardFcfsSlots: "FCFS slots",
     cardClaimFlow: "Pay {fee} CC fee → receive {reward} CC",
     cardClaimFee: "Claim fee",

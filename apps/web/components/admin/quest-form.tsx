@@ -535,7 +535,7 @@ export function QuestForm({
           <div className={cn("grid gap-4", showCcField ? "sm:grid-cols-2" : "sm:grid-cols-1 sm:max-w-xs")}>
             {showCcField && (
               <div>
-                <label className="mb-1.5 block text-sm font-medium">CC per winner</label>
+                <label className="mb-1.5 block text-sm font-medium">CC / Winners</label>
                 <input
                   type="number"
                   min="1"
