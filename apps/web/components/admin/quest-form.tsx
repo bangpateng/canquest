@@ -6,11 +6,12 @@ import { cn } from "@/lib/utils";
 import { Plus, Trash2, ChevronDown, ChevronUp, Upload } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import {
-  CAMPAIGN_TASK_TYPE_OPTIONS,
+  QUEST_TASK_TYPE_OPTIONS,
   REWARD_TYPE_OPTIONS,
   buildQuestTaskTitle,
   DEFAULT_QUEST_BANNER,
   formatQuestDeadlineDisplay,
+  resolveQuestProjectName,
   type RewardType,
 } from "@/lib/quest-types";
 import type { QuestSocialLink } from "@/lib/quest-social-links";
@@ -38,6 +39,7 @@ interface QuestFormProps {
   initialData?: {
     id: string;
     title: string;
+    projectName?: string | null;
     org: string;
     orgSlug: string;
     description: string;
@@ -68,6 +70,7 @@ export function QuestForm({
 
   const [form, setForm] = useState({
     title: initialData?.title ?? "",
+    projectName: initialData?.projectName ?? "",
     org: initialData?.org ?? "",
     orgSlug: initialData?.orgSlug ?? "",
     description: initialData?.description ?? "",
@@ -177,8 +180,24 @@ export function QuestForm({
     form.rewardType === "CC_AND_INVITE" ||
     form.rewardType === "INVITE_CODE_FCFS";
 
-  const campaignTaskTypeOptions =
-    questKind === "CAMPAIGN" ? CAMPAIGN_TASK_TYPE_OPTIONS : [];
+  const recommendedTaskType =
+    questKind === "CAMPAIGN" && form.rewardType === "WAITLIST_EMAIL"
+      ? "submit_email"
+      : questKind === "CAMPAIGN" &&
+          (form.rewardType === "CC_ONLY" || form.rewardType === "CC_AND_INVITE")
+        ? "submit_party_id"
+        : null;
+  const hasRecommendedTask =
+    !recommendedTaskType ||
+    tasks.some((t) => t.type === recommendedTaskType);
+
+  const taskTitleContext = {
+    projectName: resolveQuestProjectName({
+      title: form.title,
+      projectName: form.projectName,
+    }),
+    questKind,
+  };
 
   function addTask() {
     setTasks((prev) => [
@@ -250,6 +269,9 @@ export function QuestForm({
 
       const payload = {
         title: form.title,
+        ...(questKind === "CAMPAIGN" && {
+          projectName: form.projectName.trim() || null,
+        }),
         org: form.org,
         orgSlug: form.orgSlug || form.org.slice(0, 3).toUpperCase(),
         description: form.description,
@@ -281,10 +303,7 @@ export function QuestForm({
         ...(tasks.length > 0 && {
           tasks: tasks.map((t, i) => ({
             type: t.type,
-            title: buildQuestTaskTitle(t.type, t.target, {
-              projectName: form.title,
-              questKind,
-            }),
+            title: buildQuestTaskTitle(t.type, t.target, taskTitleContext),
             description: null,
             points: t.points,
             target: t.target || null,
@@ -337,9 +356,23 @@ export function QuestForm({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1.5 block text-sm font-medium">Quest title *</label>
-            <input required value={form.title} onChange={(e) => updateField("title", e.target.value)} placeholder="e.g. Canton Builder Season Wave 3" className={inputCls} />
+            <label className="mb-1.5 block text-sm font-medium">Campaign title *</label>
+            <input required value={form.title} onChange={(e) => updateField("title", e.target.value)} placeholder="e.g. Alpend on Canton — Wave 1" className={inputCls} />
           </div>
+          {questKind === "CAMPAIGN" ? (
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">Project name</label>
+              <input
+                value={form.projectName}
+                onChange={(e) => updateField("projectName", e.target.value)}
+                placeholder="e.g. Alpend"
+                className={inputCls}
+              />
+              <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                Used in social task titles: Follow, Retweet, Telegram, Discord. Leave empty to use campaign title.
+              </p>
+            </div>
+          ) : null}
           <div>
             <label className="mb-1.5 block text-sm font-medium">Organization *</label>
             <input required value={form.org} onChange={(e) => updateField("org", e.target.value)} placeholder="e.g. Digital Asset Collective" className={inputCls} />
@@ -519,9 +552,13 @@ export function QuestForm({
             <p className="mt-1.5 text-xs text-[var(--muted-foreground)]">
               {REWARD_TYPE_OPTIONS.find((r) => r.value === form.rewardType)?.hint}
             </p>
-            {questKind === "CAMPAIGN" && !isEdit && (
-              <p className="mt-2 text-xs text-[var(--muted-foreground)]">
-                Campaign tasks are social only (X, Telegram, Discord) — titles use your project name.
+            {recommendedTaskType && !hasRecommendedTask && !isEdit && questKind === "CAMPAIGN" && (
+              <p className="mt-2 rounded-lg bg-orange-500/10 px-3 py-2 text-xs text-orange-200 dark:text-orange-200">
+                Add a{" "}
+                <strong>
+                  {QUEST_TASK_TYPE_OPTIONS.find((o) => o.value === recommendedTaskType)?.label}
+                </strong>{" "}
+                task below so user data is collected for export.
               </p>
             )}
             {(form.rewardType === "INVITE_CODE_RANDOM" ||
@@ -638,7 +675,7 @@ export function QuestForm({
                     <div>
                       <label className="mb-1 block text-xs font-medium">Type</label>
                       <select value={task.type} onChange={(e) => updateTask(idx, "type", e.target.value)} className={cn(inputCls, "py-2")}>
-                        {campaignTaskTypeOptions.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                        {QUEST_TASK_TYPE_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                       </select>
                     </div>
                     <div>
@@ -655,10 +692,7 @@ export function QuestForm({
                       />
                       <p className="mt-1 text-xs text-[var(--muted-foreground)]">
                         Label for users:{" "}
-                        {buildQuestTaskTitle(task.type, task.target, {
-                          projectName: form.title,
-                          questKind,
-                        })}
+                        {buildQuestTaskTitle(task.type, task.target, taskTitleContext)}
                       </p>
                     </div>
                   </div>

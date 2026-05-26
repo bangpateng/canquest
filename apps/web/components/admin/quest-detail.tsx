@@ -10,11 +10,11 @@ import { cn } from "@/lib/utils";
 import { QuestForm } from "./quest-form";
 import {
   EARN_HUB_TASK_TYPE_OPTIONS,
-  CAMPAIGN_TASK_TYPE_OPTIONS,
+  QUEST_TASK_TYPE_OPTIONS,
   REWARD_TYPE_OPTIONS,
   buildQuestTaskTitle,
-  isCampaignSocialTaskType,
   isInviteRewardType,
+  resolveQuestProjectName,
   questExportLabel,
   questTaskTypeLabel,
   resolveQuestTaskDisplayTitle,
@@ -34,6 +34,7 @@ interface Task {
 interface QuestData {
   id: string;
   title: string;
+  projectName?: string | null;
   org: string;
   orgSlug: string;
   description: string;
@@ -121,7 +122,7 @@ export function QuestDetail({ questId }: { questId: string }) {
       body: JSON.stringify({
         type: newTask.type,
         title: buildQuestTaskTitle(newTask.type, newTask.target, {
-          projectName: quest.title,
+          projectName: projectNameForTasks,
           questKind: quest.questKind ?? "CAMPAIGN",
         }),
         description: null,
@@ -165,7 +166,10 @@ export function QuestDetail({ questId }: { questId: string }) {
   const isEarnHub = quest.questKind === "EARN_HUB";
   const taskTypeOptions = isEarnHub
     ? EARN_HUB_TASK_TYPE_OPTIONS
-    : CAMPAIGN_TASK_TYPE_OPTIONS;
+    : QUEST_TASK_TYPE_OPTIONS;
+  const projectNameForTasks = quest
+    ? resolveQuestProjectName(quest)
+    : "";
   const adminBackHref = isEarnHub ? "/admin/quest" : "/admin/earn";
 
   return (
@@ -182,7 +186,12 @@ export function QuestDetail({ questId }: { questId: string }) {
             <h1 className="type-section-title">
               {quest.title}
             </h1>
-            <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">{quest.org}</p>
+            <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
+              {quest.org}
+              {quest.projectName?.trim() ? (
+                <span className="text-canton"> · Project: {quest.projectName.trim()}</span>
+              ) : null}
+            </p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -330,7 +339,7 @@ export function QuestDetail({ questId }: { questId: string }) {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="rounded-md bg-[var(--muted)] px-2 py-0.5 text-[10px] font-semibold uppercase">
                     {questTaskTypeLabel(task.type, {
-                      projectName: quest.title,
+                      projectName: projectNameForTasks,
                       questKind: quest.questKind ?? "CAMPAIGN",
                     })}
                   </span>
@@ -339,11 +348,6 @@ export function QuestDetail({ questId }: { questId: string }) {
                   </span>
                   <span className="ml-auto text-xs text-[var(--muted-foreground)]">+{task.points} pts</span>
                 </div>
-                {!isEarnHub && !isCampaignSocialTaskType(task.type) ? (
-                  <p className="mt-2 text-xs font-medium text-orange-600 dark:text-orange-400">
-                    Hidden from users — delete this task (campaigns are social-only).
-                  </p>
-                ) : null}
                 {task.description && <p className="mt-1 text-xs text-[var(--muted-foreground)]">{task.description}</p>}
                 {task.target && <p className="mt-1 font-mono text-xs">Target: {task.target}</p>}
                 {task.correctAnswer && <p className="mt-1 text-xs text-[var(--muted-foreground)]">Answer: {task.correctAnswer}</p>}
@@ -383,7 +387,7 @@ export function QuestDetail({ questId }: { questId: string }) {
                   />
                   <p className="mt-1 text-xs text-[var(--muted-foreground)]">
                     {buildQuestTaskTitle(newTask.type, newTask.target, {
-                      projectName: quest.title,
+                      projectName: projectNameForTasks,
                       questKind: quest.questKind ?? "CAMPAIGN",
                     })}
                   </p>

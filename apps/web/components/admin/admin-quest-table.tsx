@@ -3,6 +3,7 @@ import Link from "next/link";
 export interface AdminQuestRow {
   id: string;
   title: string;
+  projectName?: string | null;
   org: string;
   status: string;
   rewardCc: number;
@@ -48,7 +49,8 @@ export function AdminQuestTable({
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-[var(--border)] bg-[var(--muted)]/50 text-left">
-            <th className="px-5 py-3 font-semibold">Title</th>
+            <th className="px-5 py-3 font-semibold">Campaign</th>
+            <th className="px-4 py-3 font-semibold">Project</th>
             <th className="px-4 py-3 font-semibold">Status</th>
             <th className="px-4 py-3 font-semibold">Reward</th>
             <th className="px-4 py-3 font-semibold">Completions</th>
@@ -64,6 +66,9 @@ export function AdminQuestTable({
               <td className="px-5 py-3">
                 <p className="font-semibold">{q.title}</p>
                 <p className="text-xs text-[var(--muted-foreground)]">{q.org}</p>
+              </td>
+              <td className="px-4 py-3 text-sm text-[var(--muted-foreground)]">
+                {q.projectName?.trim() || "—"}
               </td>
               <td className="px-4 py-3">
                 <span

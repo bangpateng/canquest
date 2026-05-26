@@ -138,6 +138,8 @@ enum CcTransactionType {
 model Quest {
   id           String      @id @default(cuid())
   title        String
+  /// Short partner name for social task titles (Follow X, Join Discord, etc.). Falls back to title when empty.
+  projectName  String?
   org          String
   orgSlug      String
   description  String

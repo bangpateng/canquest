@@ -219,6 +219,7 @@ export class AdminService {
 
   async createQuest(data: {
     title: string;
+    projectName?: string | null;
     org: string;
     orgSlug: string;
     description: string;
@@ -264,6 +265,7 @@ export class AdminService {
     const quest = await this.prisma.quest.create({
       data: {
         title: data.title,
+        projectName: data.projectName?.trim() || null,
         org: data.org,
         orgSlug: data.orgSlug,
         description: data.description,
@@ -316,6 +318,7 @@ export class AdminService {
     questId: string,
     data: {
       title?: string;
+      projectName?: string | null;
       org?: string;
       orgSlug?: string;
       description?: string;
@@ -362,6 +365,9 @@ export class AdminService {
       where: { id: questId },
       data: {
         ...(data.title !== undefined && { title: data.title }),
+        ...(data.projectName !== undefined && {
+          projectName: data.projectName?.trim() || null,
+        }),
         ...(data.org !== undefined && { org: data.org }),
         ...(data.orgSlug !== undefined && { orgSlug: data.orgSlug }),
         ...(data.description !== undefined && { description: data.description }),

@@ -51,6 +51,8 @@ export interface QuestTask {
 export interface Quest {
   id: string;
   title: string;
+  /** Partner name in social task titles (Follow, Retweet, Telegram, Discord). */
+  projectName?: string | null;
   org: string;
   orgSlug: string;
   description: string;
@@ -615,17 +617,33 @@ export function formatTaskCountdownSeconds(seconds: number): string {
 }
 
 export type QuestTaskTitleContext = {
-  /** Campaign / project name from admin (Quest title field). */
+  /** Partner name from admin `projectName` (or quest title). */
   projectName?: string | null;
   questKind?: "CAMPAIGN" | "EARN_HUB";
 };
+
+/** Resolve display name for campaign social task labels. */
+export function resolveQuestProjectName(
+  quest: Pick<Quest, "title" | "projectName">,
+): string {
+  return quest.projectName?.trim() || quest.title;
+}
+
+/** Social tasks use the partner project name in titles. */
+export function usesCampaignProjectNameInTitle(type: string): boolean {
+  return isCampaignSocialTaskType(type);
+}
 
 function normalizeTaskType(type: string): string {
   return type === "telegram_join" ? "telegram_channel" : type;
 }
 
-/** Partner campaign task labels — use project name, not "CanQuest". */
+/** Partner campaign task labels — project name only on social types. */
 function campaignTaskTypeLabel(type: string, projectName: string): string {
+  if (!usesCampaignProjectNameInTitle(type)) {
+    const opt = QUEST_TASK_TYPE_OPTIONS.find((t) => t.value === type);
+    return opt?.label ?? type.replace(/_/g, " ");
+  }
   const name = projectName.trim() || "Project";
   switch (normalizeTaskType(type)) {
     case "twitter_follow":
@@ -638,11 +656,6 @@ function campaignTaskTypeLabel(type: string, projectName: string): string {
       return `Join Telegram group ${name}`;
     case "discord_join":
       return `Join Discord ${name}`;
-    case "submit_email":
-      return `Submit email for ${name}`;
-    case "submit_party_id":
-    case "submit_canton_address":
-      return `Submit Party ID for ${name}`;
     default:
       return QUEST_TASK_TYPE_OPTIONS.find((t) => t.value === type)?.label ?? type.replace(/_/g, " ");
   }
@@ -692,11 +705,12 @@ export function buildQuestTaskTitle(
 /** Title shown to users — fixes legacy DB rows that still say "CanQuest". */
 export function resolveQuestTaskDisplayTitle(
   task: Pick<QuestTask, "type" | "title" | "target">,
-  quest: Pick<Quest, "title" | "questKind">,
+  quest: Pick<Quest, "title" | "projectName" | "questKind">,
 ): string {
   if (quest.questKind === "EARN_HUB") return task.title;
+  if (!usesCampaignProjectNameInTitle(task.type)) return task.title;
   return buildQuestTaskTitle(task.type, task.target, {
-    projectName: quest.title,
+    projectName: resolveQuestProjectName(quest),
     questKind: "CAMPAIGN",
   });
 }

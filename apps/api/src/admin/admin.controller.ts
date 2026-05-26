@@ -58,6 +58,7 @@ export class AdminController {
     @Body()
     body: {
       title: string;
+      projectName?: string | null;
       org: string;
       orgSlug: string;
       description: string;
@@ -97,6 +98,7 @@ export class AdminController {
     @Body()
     body: {
       title?: string;
+      projectName?: string | null;
       org?: string;
       orgSlug?: string;
       description?: string;

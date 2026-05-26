@@ -105,7 +105,7 @@ function SpotlightCard({ quest }: { quest: Quest }) {
   const theme = questRewardTheme(quest.rewardPool, quest.rewardType);
   const RewardIcon = theme.icon;
   const canOpen = quest.status === "ACTIVE" || quest.status === "ENDED";
-  const { poolLabel, ccPerWinners, socialTaskCount, questPoints } =
+  const { poolLabel, ccPerWinners, socialTaskCount, taskCount, questPoints } =
     getLandingCampaignDisplay(quest);
 
   return (
@@ -175,7 +175,10 @@ function SpotlightCard({ quest }: { quest: Quest }) {
               ) : null}
               <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--muted)]/50 px-3 py-1 text-xs text-[var(--muted-foreground)]">
                 <ListChecks className="h-3.5 w-3.5 text-canton" />
-                {socialTaskCount} social {socialTaskCount === 1 ? "mission" : "missions"}
+                {taskCount} {taskCount === 1 ? "task" : "tasks"}
+                {socialTaskCount > 0 && socialTaskCount < taskCount
+                  ? ` · ${socialTaskCount} social`
+                  : ""}
               </span>
               {questPoints > 0 ? (
                 <span className="inline-flex items-center rounded-full border border-[var(--border)] bg-[var(--muted)]/50 px-3 py-1 text-xs font-semibold tabular-nums text-canton">
@@ -209,7 +212,7 @@ function CinematicCard({ quest }: { quest: Quest }) {
   const theme = questRewardTheme(quest.rewardPool, quest.rewardType);
   const RewardIcon = theme.icon;
   const canOpen = quest.status === "ACTIVE" || quest.status === "ENDED";
-  const { poolLabel, ccPerWinners, socialTaskCount, questPoints } =
+  const { poolLabel, ccPerWinners, socialTaskCount, taskCount, questPoints } =
     getLandingCampaignDisplay(quest);
 
   return (
@@ -268,7 +271,10 @@ function CinematicCard({ quest }: { quest: Quest }) {
                 </span>
               ) : null}
               <span className="text-xs text-white/60">
-                {socialTaskCount} social {socialTaskCount === 1 ? "mission" : "missions"}
+                {taskCount} {taskCount === 1 ? "task" : "tasks"}
+                {socialTaskCount > 0 && socialTaskCount < taskCount
+                  ? ` · ${socialTaskCount} social`
+                  : ""}
                 {questPoints > 0 ? ` · +${questPoints} pts` : ""}
                 {quest.deadline ? ` · ${quest.deadline}` : ""}
               </span>
