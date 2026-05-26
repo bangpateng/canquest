@@ -63,6 +63,19 @@ async function main() {
   console.log('R2_PUBLIC_BASE_URL:', publicBase ?? '(missing)');
   console.log('R2_ENDPOINT:', endpoint ?? '(missing)');
 
+  const rawPublic = process.env.R2_PUBLIC_BASE_URL?.trim()?.replace(/\/$/, '');
+  if (rawPublic && /\.r2\.cloudflarestorage\.com/i.test(rawPublic)) {
+    console.error(
+      '\nFAIL: R2_PUBLIC_BASE_URL is the S3 API endpoint (private). Browsers cannot load images from it.',
+    );
+    console.error(
+      'Fix: Cloudflare → R2 → bucket canquest-assets → Settings → Public access → Enable → copy',
+    );
+    console.error('     the https://pub-xxxxxxxx.r2.dev URL into R2_PUBLIC_BASE_URL');
+    console.error('     (keep R2_ENDPOINT unset or as the cloudflarestorage.com URL for API only).');
+    process.exit(1);
+  }
+
   if (!accountId || !accessKeyId || !secretAccessKey || !bucket || !endpoint) {
     console.error('\nFAIL: Fill all R2_* vars in apps/api/.env');
     process.exit(1);
@@ -112,10 +125,12 @@ async function main() {
     process.exit(1);
   }
 
-  if (publicBase) {
-    console.log(`\nPublic URL example: ${publicBase}/quests/your-file.webp`);
+  if (!publicBase) {
+    console.error('\nWARN: R2_PUBLIC_BASE_URL missing — set pub-….r2.dev public URL');
+    process.exit(1);
   }
-  console.log('\nAll checks passed.');
+  console.log(`\nPublic URL example (for DB): ${publicBase}/quests/your-file.webp`);
+  console.log('\nAll checks passed. Restart: pm2 restart canquest-api');
 }
 
 main().catch((e) => {

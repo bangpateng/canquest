@@ -53,6 +53,21 @@ export function normalizeR2BucketName(raw: string | undefined | null): string | 
   return s || null;
 }
 
+/** S3 API host — for PutObject only, not browser-visible URLs. */
+export function isR2S3ApiEndpoint(url: string): boolean {
+  return /\.r2\.cloudflarestorage\.com/i.test(url);
+}
+
+/** Public CDN / r2.dev URL shown in Earn cards (not the cloudflarestorage.com API host). */
+export function normalizeR2PublicBaseUrl(raw: string | undefined | null): string | null {
+  if (!raw?.trim()) return null;
+  const base = raw.trim().replace(/\/$/, '');
+  if (isR2S3ApiEndpoint(base)) {
+    return null;
+  }
+  return base;
+}
+
 @Injectable()
 export class R2StorageService implements OnModuleInit {
   private readonly logger = new Logger(R2StorageService.name);
@@ -69,14 +84,22 @@ export class R2StorageService implements OnModuleInit {
     const accessKeyId = config.get<string>('R2_ACCESS_KEY_ID')?.trim();
     const secretAccessKey = config.get<string>('R2_SECRET_ACCESS_KEY')?.trim();
     this.bucket = normalizeR2BucketName(config.get<string>('R2_BUCKET_NAME'));
-    const publicBase = config.get<string>('R2_PUBLIC_BASE_URL')?.trim();
-    this.publicBase = publicBase ? publicBase.replace(/\/$/, '') : null;
+    const publicBaseRaw = config.get<string>('R2_PUBLIC_BASE_URL')?.trim();
+    this.publicBase = normalizeR2PublicBaseUrl(publicBaseRaw);
 
     const endpoint =
       config.get<string>('R2_ENDPOINT')?.trim() ||
       (accountId
         ? `https://${accountId}.r2.cloudflarestorage.com`
         : null);
+
+    if (publicBaseRaw && !this.publicBase && isR2S3ApiEndpoint(publicBaseRaw)) {
+      this.logger.error(
+        'R2_PUBLIC_BASE_URL is the S3 API endpoint (….r2.cloudflarestorage.com). ' +
+          'Use the public bucket URL from R2 → bucket → Settings → Public access (https://pub-….r2.dev). ' +
+          'Uploads are disabled until fixed.',
+      );
+    }
 
     if (
       accountId &&
@@ -205,6 +228,13 @@ export class R2StorageService implements OnModuleInit {
         this.mapUploadError(err);
       }
       return `${this.publicBase}/${key}`;
+    }
+
+    const publicBaseRaw = this.config.get<string>('R2_PUBLIC_BASE_URL')?.trim();
+    if (publicBaseRaw && isR2S3ApiEndpoint(publicBaseRaw.replace(/\/$/, ''))) {
+      throw new BadRequestException(
+        'R2_PUBLIC_BASE_URL must be the public bucket URL (https://pub-….r2.dev), not the S3 API endpoint. Fix apps/api/.env and restart API.',
+      );
     }
 
     await mkdir(this.localDir, { recursive: true });
