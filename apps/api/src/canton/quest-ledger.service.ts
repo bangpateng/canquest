@@ -11,6 +11,12 @@ export interface QuestLedgerSubmitResult {
   errors: string[];
 }
 
+export interface ClaimSessionLedgerResult {
+  ledgerEnabled: boolean;
+  sessionContractId: string | null;
+  errors: string[];
+}
+
 /**
  * Records quest completion on Canton via DAML templates in packages/daml/Main.daml.
  * CIP-56 CC disbursement is handled separately by SpliceValidatorService (TransferPreapproval).
@@ -41,6 +47,117 @@ export class QuestLedgerService {
     const enabled = this.config.get<string>('QUEST_LEDGER_ENABLED');
     if (enabled === 'false' || enabled === '0') return false;
     return !!(this.packageId && this.operatorPartyId);
+  }
+
+  /** When false, claim audit skips ClaimSession DAML contract. */
+  isClaimSessionConfigured(): boolean {
+    const enabled = this.config.get<string>('CLAIM_SESSION_LEDGER_ENABLED');
+    if (enabled === 'false' || enabled === '0') return false;
+    return !!(this.packageId && this.operatorPartyId);
+  }
+
+  /**
+   * Create a ClaimSession for FCFS/invite claim audit trail.
+   * Best-effort: returns errors but does not throw.
+   */
+  async createClaimSession(params: {
+    questId: string;
+    userPartyId: string;
+    claimKind: 'fcfs_cc' | 'invite_code';
+    feeCc: number;
+    rewardCc: number;
+  }): Promise<ClaimSessionLedgerResult> {
+    const pkg = this.packageId;
+    const operator = this.operatorPartyId;
+    const result: ClaimSessionLedgerResult = {
+      ledgerEnabled: false,
+      sessionContractId: null,
+      errors: [],
+    };
+
+    if (!pkg || !operator) {
+      result.errors.push('Canton DAML package or operator party not configured');
+      return result;
+    }
+    const reachable = await this.ledger.isReachable();
+    if (!reachable) {
+      result.errors.push('Canton JSON Ledger API unreachable');
+      return result;
+    }
+
+    result.ledgerEnabled = true;
+    await this.ledger.grantUserRights(operator).catch((err) =>
+      this.logger.warn(`grantUserRights(operator) failed: ${String(err)}`),
+    );
+
+    const tpl = `${pkg}:Main:ClaimSession`;
+    const createdAt = new Date().toISOString();
+    const res = await this.ledger.createContract(
+      tpl,
+      {
+        operator,
+        user: params.userPartyId,
+        questId: params.questId,
+        claimKind: params.claimKind,
+        feeCc: String(params.feeCc),
+        rewardCc: String(params.rewardCc),
+        createdAt,
+        feePaidAt: null,
+        feeTxId: null,
+        rewardSentAt: null,
+        rewardTxId: null,
+        status: 'INIT',
+      },
+      [operator],
+      `claim-session-${randomUUID()}`,
+    );
+
+    if (res.ok && res.contractId) {
+      result.sessionContractId = res.contractId;
+      return result;
+    }
+    result.errors.push(res.error ?? 'Failed to create ClaimSession');
+    return result;
+  }
+
+  /** Mark fee paid (with tx id) on ClaimSession. Best-effort. */
+  async markClaimFeePaid(params: {
+    sessionContractId: string;
+    feeTxId: string;
+  }): Promise<{ ok: boolean; errors: string[] }> {
+    const pkg = this.packageId;
+    const operator = this.operatorPartyId;
+    if (!pkg || !operator) return { ok: false, errors: ['Canton DAML not configured'] };
+    const templateId = `${pkg}:Main:ClaimSession`;
+    const { ok, text } = await this.ledger.exerciseChoice(
+      params.sessionContractId,
+      templateId,
+      'ClaimSession_MarkFeePaidWithTx',
+      params.feeTxId,
+      [operator],
+      `claim-fee-paid-${randomUUID()}`,
+    );
+    return ok ? { ok: true, errors: [] } : { ok: false, errors: [text.slice(0, 200)] };
+  }
+
+  /** Mark reward sent (with tx id) on ClaimSession. Best-effort. */
+  async markClaimRewardSent(params: {
+    sessionContractId: string;
+    rewardTxId: string;
+  }): Promise<{ ok: boolean; errors: string[] }> {
+    const pkg = this.packageId;
+    const operator = this.operatorPartyId;
+    if (!pkg || !operator) return { ok: false, errors: ['Canton DAML not configured'] };
+    const templateId = `${pkg}:Main:ClaimSession`;
+    const { ok, text } = await this.ledger.exerciseChoice(
+      params.sessionContractId,
+      templateId,
+      'ClaimSession_MarkRewardSentWithTx',
+      params.rewardTxId,
+      [operator],
+      `claim-reward-sent-${randomUUID()}`,
+    );
+    return ok ? { ok: true, errors: [] } : { ok: false, errors: [text.slice(0, 200)] };
   }
 
   /**

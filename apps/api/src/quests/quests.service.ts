@@ -1081,6 +1081,22 @@ export class QuestsService {
     }
 
     try {
+      // Best-effort DAML audit: create ClaimSession (operator signs, user observes).
+      let claimSessionId: string | null = null;
+      if (this.questLedger.isClaimSessionConfigured()) {
+        const cs = await this.questLedger.createClaimSession({
+          questId,
+          userPartyId: cantonPartyId,
+          claimKind: 'fcfs_cc',
+          feeCc,
+          rewardCc,
+        });
+        claimSessionId = cs.sessionContractId;
+        if (cs.errors.length > 0) {
+          this.logger.warn(`ClaimSession create warnings: ${cs.errors.join(' | ')}`);
+        }
+      }
+
       const feeTxId = await this.collectClaimFee({
         userId,
         username,
@@ -1088,6 +1104,16 @@ export class QuestsService {
         feeCc,
         feeLabel: 'FCFS claim fee',
       });
+
+      if (claimSessionId) {
+        const marked = await this.questLedger.markClaimFeePaid({
+          sessionContractId: claimSessionId,
+          feeTxId,
+        });
+        if (!marked.ok) {
+          this.logger.warn(`ClaimSession fee mark failed: ${marked.errors.join(' | ')}`);
+        }
+      }
 
       const rewardOfferId = await this.splice.createTransferOffer(
         cantonPartyId,
@@ -1103,6 +1129,16 @@ export class QuestsService {
       );
       if (!rewardAccepted) {
         throw new Error('reward accept failed');
+      }
+
+      if (claimSessionId) {
+        const marked = await this.questLedger.markClaimRewardSent({
+          sessionContractId: claimSessionId,
+          rewardTxId: rewardOfferId,
+        });
+        if (!marked.ok) {
+          this.logger.warn(`ClaimSession reward mark failed: ${marked.errors.join(' | ')}`);
+        }
       }
 
       await this.users.recordTransaction({
@@ -1123,6 +1159,7 @@ export class QuestsService {
             ccAmount: rewardCc,
             claimFeeLedgerTxId: feeTxId,
             ledgerTxId: rewardOfferId,
+            ...(claimSessionId ? { claimSessionContractId: claimSessionId } : {}),
           },
         }),
         this.prisma.questCompletion.upsert({

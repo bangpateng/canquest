@@ -46,3 +46,56 @@ template QuestReward
       controller operator
       do
         return ()
+
+-- | Audit trail for claim flows (FCFS / invite claim).
+-- The operator signs to record state transitions; the user is an observer.
+template ClaimSession
+  with
+    operator      : Party
+    user          : Party
+    questId       : Text
+    claimKind     : Text
+    feeCc         : Decimal
+    rewardCc      : Decimal
+    createdAt     : Text
+    feePaidAt     : Optional Text
+    feeTxId       : Optional Text
+    rewardSentAt  : Optional Text
+    rewardTxId    : Optional Text
+    status        : Text
+  where
+    signatory operator
+    observer user
+    ensure feeCc >= 0.0 && rewardCc >= 0.0
+
+    choice ClaimSession_MarkFeePaid : ContractId ClaimSession
+      controller operator
+      do
+        create this with
+          feePaidAt = Some createdAt
+          status = "FEE_PAID"
+
+    choice ClaimSession_MarkFeePaidWithTx : ContractId ClaimSession
+      with
+        txId : Text
+      controller operator
+      do
+        create this with
+          feePaidAt = Some createdAt
+          feeTxId = Some txId
+          status = "FEE_PAID"
+
+    choice ClaimSession_MarkRewardSentWithTx : ContractId ClaimSession
+      with
+        txId : Text
+      controller operator
+      do
+        create this with
+          rewardSentAt = Some createdAt
+          rewardTxId = Some txId
+          status = "REWARD_SENT"
+
+    choice ClaimSession_Archive : ()
+      controller operator
+      do
+        return ()

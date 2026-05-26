@@ -213,6 +213,8 @@ model WinnerDraw {
   ledgerTxId   String?
   /// TransferOffer id for user-paid claim fee (invite/code or FCFS claim).
   claimFeeLedgerTxId String?
+  /// DAML ClaimSession contract id (audit/state machine).
+  claimSessionContractId String?
   drawnAt      DateTime   @default(now())
   distributedAt DateTime?
 
