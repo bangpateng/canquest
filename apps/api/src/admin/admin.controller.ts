@@ -14,6 +14,7 @@ import { QuestKind, QuestStatus, RewardType } from '../common/prisma-types';
 
 import { AdminService } from './admin.service';
 import { AdminGuard } from './admin.guard';
+import type { QuestSocialLinkInput } from '../quests/quest-social-links.util';
 
 @Controller('admin')
 @UseGuards(AuthGuard('admin-jwt'), AdminGuard)
@@ -74,7 +75,7 @@ export class AdminController {
       claimFeeCc?: number | null;
       winnerMessage?: string | null;
       tags?: string[];
-      socialLinks?: Array<{ platform: string; url: string }>;
+      socialLinks?: QuestSocialLinkInput[];
       questKind?: QuestKind;
       tasks?: Array<{
         type: string;
@@ -113,7 +114,7 @@ export class AdminController {
       claimFeeCc?: number | null;
       winnerMessage?: string | null;
       tags?: string[];
-      socialLinks?: Array<{ platform: string; url: string }>;
+      socialLinks?: QuestSocialLinkInput[];
     },
   ) {
     return this.admin.updateQuest(questId, body);

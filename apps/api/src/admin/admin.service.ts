@@ -21,7 +21,7 @@ import { UsersService } from '../users/users.service';
 import { R2StorageService } from '../storage/r2-storage.service';
 import { withQuestMediaUrls } from '../storage/quest-media.util';
 import {
-  type QuestSocialLink,
+  type QuestSocialLinkInput,
   normalizeQuestSocialLinksForSave,
   parseQuestSocialLinks,
   serializeQuestSocialLinks,
@@ -236,7 +236,7 @@ export class AdminService {
       claimFeeCc?: number | null;
       winnerMessage?: string | null;
       tags?: string[];
-      socialLinks?: QuestSocialLink[];
+      socialLinks?: QuestSocialLinkInput[];
       questKind?: QuestKind;
     tasks?: Array<{
       type: string;
@@ -333,7 +333,7 @@ export class AdminService {
       claimFeeCc?: number | null;
       winnerMessage?: string | null;
       tags?: string[];
-      socialLinks?: QuestSocialLink[];
+      socialLinks?: QuestSocialLinkInput[];
     },
   ) {
     const existing = await this.prisma.quest.findUnique({ where: { id: questId } });

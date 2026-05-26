@@ -17,6 +17,12 @@ export interface QuestSocialLink {
   url: string;
 }
 
+/** Raw payload from admin HTTP API before validation. */
+export type QuestSocialLinkInput = {
+  platform: string;
+  url: string;
+};
+
 const PLATFORM_SET = new Set<string>(QUEST_SOCIAL_PLATFORMS);
 
 function isPlatform(v: string): v is QuestSocialPlatform {
