@@ -41,6 +41,21 @@ export function rewardCodeFromStatus(status: QuestRewardStatus | null): string |
   return status?.inviteCode?.trim() || null;
 }
 
+/** e.g. "2/3 Remaining" — slots left / max FCFS winners */
+export function formatFcfsSlotsRemaining(
+  remaining: number,
+  maxWinners: number | null | undefined,
+): string {
+  const max = maxWinners ?? 0;
+  if (max <= 0) return "—";
+  const left = Math.max(0, Math.min(remaining, max));
+  return `${left}/${max} Remaining`;
+}
+
+export function formatFcfsClaimFeeHint(feeCc: number, rewardCc: number): string {
+  return `Pay ${feeCc} CC claim fee on-chain to receive ${rewardCc} CC from the pool`;
+}
+
 export function campaignUiKind(
   rewardType: RewardType | string | undefined,
   requiresFcfsClaim: boolean,

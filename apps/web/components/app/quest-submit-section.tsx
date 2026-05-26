@@ -6,6 +6,8 @@ import { PageTitle, SectionTitle, StatValue } from "@/components/ui/typography";
 import type { QuestRewardStatus, RewardType } from "@/lib/quest-types";
 import {
   campaignUiKind,
+  formatFcfsClaimFeeHint,
+  formatFcfsSlotsRemaining,
   isUnluckyState,
   rewardCodeFromStatus,
   type CampaignMeta,
@@ -184,6 +186,33 @@ export function QuestSubmittedProof({
   const showCcReward =
     (isCcAndInvite && (rewardCc ?? 0) > 0) ||
     (uiKind === "cc_fcfs" && state === "cc_reward" && (rewardCc ?? 0) > 0);
+  const fcfsSlotsLabel =
+    uiKind === "cc_fcfs" && campaignMeta
+      ? formatFcfsSlotsRemaining(
+          campaignMeta.remainingSlots ?? 0,
+          campaignMeta.maxWinners,
+        )
+      : null;
+  const fcfsFeeHint =
+    uiKind === "cc_fcfs" && campaignMeta
+      ? formatFcfsClaimFeeHint(campaignMeta.fcfsClaimFeeCc, rewardCc ?? 0)
+      : null;
+
+  if (uiKind === "cc_fcfs" && state === "cc_reward" && fcfsSlotsLabel) {
+    return (
+      <section className="relative overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-b from-emerald-500/12 via-[var(--card)] to-[var(--card)] p-8 text-center ring-1 ring-emerald-500/20">
+        <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-400" />
+        <p className="mt-4 text-base font-semibold text-[var(--foreground)]">
+          {fcfsSlotsLabel}
+        </p>
+        {fcfsFeeHint ? (
+          <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted-foreground)]">
+            {fcfsFeeHint}
+          </p>
+        ) : null}
+      </section>
+    );
+  }
 
   if (isUnluckyState(state)) {
     return (
@@ -282,7 +311,7 @@ export function QuestSubmittedProof({
           </div>
         )}
 
-        {showCcReward && (
+        {showCcReward && uiKind !== "cc_fcfs" && (
           <div className="flex items-center gap-4 rounded-2xl border border-[var(--primary)]/30 bg-gradient-to-r from-[var(--primary)]/15 to-[rgb(var(--canton-cyan-rgb)/0.08)] p-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--primary)]/25">
               <Coins className="h-6 w-6 text-canton" />
@@ -300,7 +329,10 @@ export function QuestSubmittedProof({
           </div>
         )}
 
-        {!isCcAndInvite && rewardStatus?.message && !inviteCode && (
+        {!isCcAndInvite &&
+          rewardStatus?.message &&
+          !inviteCode &&
+          uiKind !== "cc_fcfs" && (
           <p className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3 text-center text-sm font-medium">
             {rewardStatus.message}
           </p>

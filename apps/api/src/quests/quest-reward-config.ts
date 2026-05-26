@@ -26,6 +26,20 @@ export function resolveClaimFeeCc(quest: {
   return defaultClaimFeeCc(quest.rewardType);
 }
 
+/** e.g. "2/3 Remaining" — FCFS slots left / max winners */
+export function formatFcfsSlotsRemainingLabel(
+  remaining: number,
+  maxWinners: number,
+): string {
+  const max = Math.max(1, maxWinners);
+  const left = Math.max(0, Math.min(remaining, max));
+  return `${left}/${max} Remaining`;
+}
+
+export function formatFcfsClaimFeeHint(feeCc: number, rewardCc: number): string {
+  return `Pay ${feeCc} CC claim fee on-chain to receive ${rewardCc} CC from the pool`;
+}
+
 /** Invite / code rewards that require on-chain fee before revealing the code. */
 export function requiresPaidInviteClaim(quest: {
   claimFeeCc?: number | null;

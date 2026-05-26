@@ -16,7 +16,12 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { requiresPaidInviteClaim, resolveClaimFeeCc } from './quest-reward-config';
+import {
+  formatFcfsClaimFeeHint,
+  formatFcfsSlotsRemainingLabel,
+  requiresPaidInviteClaim,
+  resolveClaimFeeCc,
+} from './quest-reward-config';
 import {
   QuestLedgerService,
   type QuestLedgerSubmitResult,
@@ -1033,12 +1038,16 @@ export class QuestsService {
         };
       }
       if (draw?.distributed) {
+        const maxW = quest.maxWinners ?? 0;
+        const slotsUsed = await this.countFcfsSlotsTaken(questId);
+        const remaining = this.fcfsSlotsRemaining(maxW, slotsUsed);
+        const fee = resolveClaimFeeCc(quest) ?? 3;
         return {
           state: 'cc_reward' as const,
           inviteCode: null,
           message:
-            quest.rewardCc > 0
-              ? `${quest.rewardCc} CC was sent to your wallet.`
+            maxW > 0
+              ? `${formatFcfsSlotsRemainingLabel(remaining, maxW)}\n${formatFcfsClaimFeeHint(fee, quest.rewardCc)}`
               : 'FCFS claim completed.',
         };
       }
@@ -1053,10 +1062,11 @@ export class QuestsService {
           message: 'All FCFS slots were claimed. Better luck on the next campaign.',
         };
       }
+      const fee = resolveClaimFeeCc(quest) ?? 3;
       return {
         state: 'fcfs_claimable' as const,
         inviteCode: null,
-        message: `${remaining} slot(s) left — claim now (${resolveClaimFeeCc(quest) ?? 3} CC fee).`,
+        message: `${formatFcfsSlotsRemainingLabel(remaining, maxW)}\n${formatFcfsClaimFeeHint(fee, quest.rewardCc)}`,
       };
     }
 
@@ -1344,12 +1354,13 @@ export class QuestsService {
     await this.releaseStaleFcfsReservations(questId);
     const slotsUsedAfter = await this.countFcfsSlotsTaken(questId);
     const rewardStatus = await this.getQuestRewardStatus(userId, questId);
+    const remainingAfter = this.fcfsSlotsRemaining(maxWinners, slotsUsedAfter);
     return {
       ok: true,
-      message: `${rewardCc} CC sent to your wallet (${feeCc} CC claim fee paid).`,
+      message: `${formatFcfsSlotsRemainingLabel(remainingAfter, maxWinners)}\n${formatFcfsClaimFeeHint(feeCc, rewardCc)}`,
       rewardCc,
       feeCc,
-      remainingSlots: this.fcfsSlotsRemaining(maxWinners, slotsUsedAfter),
+      remainingSlots: remainingAfter,
       rewardStatus,
     };
   }
