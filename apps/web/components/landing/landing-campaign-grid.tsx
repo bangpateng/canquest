@@ -28,7 +28,7 @@ function CampaignMark({ quest }: { quest: Quest }) {
 function CompactCampaignCard({ quest }: { quest: Quest }) {
   const statusMeta = QUEST_STATUS_BADGE[quest.status];
   const canOpen = quest.status === "ACTIVE" || quest.status === "ENDED";
-  const { poolLabel, ccPerWinners, socialTaskCount, taskCount, questPoints } =
+  const { rewardPrimary, rewardSecondary, socialTaskCount, taskCount, questPoints } =
     getLandingCampaignDisplay(quest);
 
   const inner = (
@@ -76,11 +76,11 @@ function CompactCampaignCard({ quest }: { quest: Quest }) {
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center gap-1 rounded-md border border-canton-muted bg-canton-subtle px-2 py-0.5 text-xs font-semibold tabular-nums text-canton">
             <Coins className="h-3 w-3 shrink-0" aria-hidden />
-            {poolLabel}
+            {rewardPrimary}
           </span>
-          {ccPerWinners ? (
-            <span className="text-[11px] font-semibold tabular-nums text-canton">
-              {ccPerWinners}
+          {rewardSecondary ? (
+            <span className="text-[11px] text-[var(--muted-foreground)]">
+              {rewardSecondary}
             </span>
           ) : null}
         </div>

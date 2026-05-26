@@ -1,7 +1,4 @@
-import {
-  formatCcPerWinners,
-  formatPoolTotalLabel,
-} from "@/lib/campaign-reward";
+import { getCampaignRewardHeadline } from "@/lib/campaign-reward";
 import {
   isCampaignSocialTaskType,
   resolveQuestProjectName,
@@ -13,20 +10,18 @@ export function getLandingCampaignDisplay(quest: Quest) {
   const socialTasks = quest.tasks.filter((t) => isCampaignSocialTaskType(t.type));
   const socialTaskCount = socialTasks.length;
   const questPoints = quest.tasks.reduce((sum, t) => sum + t.points, 0);
-  const poolLabel = formatPoolTotalLabel(
+  const rewardHeadline = getCampaignRewardHeadline(
+    quest,
     quest.campaignSummary?.poolTotalCc ?? null,
-    quest.rewardPool,
   );
-  const ccPerWinners =
-    quest.rewardCc > 0 ? formatCcPerWinners(quest.rewardCc) : null;
   const projectName = resolveQuestProjectName(quest);
 
   return {
     socialTaskCount,
     taskCount: quest.tasks.length,
     questPoints,
-    poolLabel,
-    ccPerWinners,
+    rewardPrimary: rewardHeadline.primary,
+    rewardSecondary: rewardHeadline.secondary,
     projectName,
   };
 }

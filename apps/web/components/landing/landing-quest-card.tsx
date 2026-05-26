@@ -105,7 +105,7 @@ function SpotlightCard({ quest }: { quest: Quest }) {
   const theme = questRewardTheme(quest.rewardPool, quest.rewardType);
   const RewardIcon = theme.icon;
   const canOpen = quest.status === "ACTIVE" || quest.status === "ENDED";
-  const { poolLabel, ccPerWinners, socialTaskCount, taskCount, questPoints } =
+  const { rewardPrimary, rewardSecondary, socialTaskCount, taskCount, questPoints } =
     getLandingCampaignDisplay(quest);
 
   return (
@@ -166,11 +166,11 @@ function SpotlightCard({ quest }: { quest: Quest }) {
                 )}
               >
                 <RewardIcon className="h-3.5 w-3.5" />
-                {poolLabel}
+                {rewardPrimary}
               </span>
-              {ccPerWinners ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-canton-muted bg-canton-subtle/80 px-3 py-1 text-xs font-semibold tabular-nums text-canton">
-                  {ccPerWinners}
+              {rewardSecondary ? (
+                <span className="inline-flex items-center rounded-full border border-[var(--border)] bg-[var(--muted)]/50 px-3 py-1 text-xs text-[var(--muted-foreground)]">
+                  {rewardSecondary}
                 </span>
               ) : null}
               <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--muted)]/50 px-3 py-1 text-xs text-[var(--muted-foreground)]">
@@ -212,7 +212,7 @@ function CinematicCard({ quest }: { quest: Quest }) {
   const theme = questRewardTheme(quest.rewardPool, quest.rewardType);
   const RewardIcon = theme.icon;
   const canOpen = quest.status === "ACTIVE" || quest.status === "ENDED";
-  const { poolLabel, ccPerWinners, socialTaskCount, taskCount, questPoints } =
+  const { rewardPrimary, rewardSecondary, socialTaskCount, taskCount, questPoints } =
     getLandingCampaignDisplay(quest);
 
   return (
@@ -263,11 +263,11 @@ function CinematicCard({ quest }: { quest: Quest }) {
                 )}
               >
                 <RewardIcon className="h-4 w-4" />
-                {poolLabel}
+                {rewardPrimary}
               </span>
-              {ccPerWinners ? (
-                <span className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold tabular-nums text-canton backdrop-blur-md">
-                  {ccPerWinners}
+              {rewardSecondary ? (
+                <span className="inline-flex rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs text-white/60 backdrop-blur-md">
+                  {rewardSecondary}
                 </span>
               ) : null}
               <span className="text-xs text-white/60">

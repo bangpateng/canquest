@@ -43,6 +43,47 @@ export function formatCcPerWinners(rewardCc: number): string {
   return `${rewardCc} CC / Winners`;
 }
 
+export function sumQuestTaskPoints(tasks: { points: number }[]): number {
+  return tasks.reduce((sum, t) => sum + t.points, 0);
+}
+
+/** Admin sometimes types total quest points (e.g. 40) in reward pool — not CC. */
+export function isLikelyPointsPoolLabel(
+  rewardPool: string,
+  taskPointsSum: number,
+): boolean {
+  const trimmed = rewardPool.trim();
+  if (!/^\d+$/.test(trimmed)) return false;
+  return Number(trimmed) === taskPointsSum;
+}
+
+/**
+ * Campaign reward hero — CC for winners, not quest points (points stay on tasks + leaderboard).
+ */
+export function getCampaignRewardHeadline(
+  quest: Pick<Quest, "rewardCc" | "rewardPool" | "tasks" | "rewardType">,
+  poolTotalCc: number | null | undefined,
+): { primary: string; secondary: string | null } {
+  const ptsSum = sumQuestTaskPoints(quest.tasks);
+
+  if (quest.rewardCc > 0) {
+    const perWinner = formatCcPerWinners(quest.rewardCc);
+    const pool =
+      poolTotalCc != null && poolTotalCc > 0 ? `${poolTotalCc} CC total pool` : null;
+    return { primary: perWinner, secondary: pool };
+  }
+
+  if (isLikelyPointsPoolLabel(quest.rewardPool, ptsSum)) {
+    return {
+      primary: "Leaderboard points from tasks",
+      secondary: `+${ptsSum} pts total across tasks`,
+    };
+  }
+
+  const label = formatPoolTotalLabel(poolTotalCc ?? null, quest.rewardPool);
+  return { primary: label, secondary: null };
+}
+
 export function getCampaignEndDate(quest: Quest): Date | null {
   const raw = quest.endsAt ?? quest.deadline ?? null;
   if (!raw) return null;

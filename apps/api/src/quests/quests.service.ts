@@ -520,15 +520,19 @@ export class QuestsService {
       include: { tasks: { orderBy: { order: 'asc' } } },
     });
     if (!q) throw new NotFoundException('Quest not found');
-    return withQuestMediaUrls(
+    const mapped = withQuestMediaUrls(
       {
         ...q,
         tags: this.parseTags(q.tags),
         socialLinks: parseQuestSocialLinks(q.socialLinks),
         rewardType: normalizeRewardType(q.rewardType as RewardType),
+        status: resolveQuestDisplayStatus(q),
       },
       this.storage,
     );
+    if (mapped.questKind !== QuestKind.CAMPAIGN) return mapped;
+    const [withSummary] = await this.attachCampaignSummaries([mapped]);
+    return withSummary;
   }
 
   /* ─── User progress ─── */

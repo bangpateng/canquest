@@ -2,8 +2,7 @@ import {
   campaignUiKind,
   fcfsSlotsTaken,
   formatFcfsSlotsFilled,
-  formatCcPerWinners,
-  formatPoolTotalLabel,
+  getCampaignRewardHeadline,
   isFcfsSlotsFull,
 } from "@/lib/campaign-reward";
 import type { Quest } from "@/lib/quest-types";
@@ -37,7 +36,10 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
   const statusMeta = QUEST_STATUS_BADGE[quest.status];
   const summary = quest.campaignSummary;
   const uiKind = campaignUiKind(quest.rewardType, quest.rewardPool);
-  const poolLabel = formatPoolTotalLabel(summary?.poolTotalCc ?? null, quest.rewardPool);
+  const rewardHeadline = getCampaignRewardHeadline(
+    quest,
+    summary?.poolTotalCc ?? null,
+  );
   const slotsTaken = fcfsSlotsTaken(summary?.remainingSlots, summary?.maxWinners);
   const slotsMax = summary?.maxWinners ?? 0;
   const slotsFull = isFcfsSlotsFull(summary?.remainingSlots, summary?.maxWinners);
@@ -96,13 +98,17 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
           <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
             Campaign reward
           </p>
-          <p className="mt-1 text-2xl font-bold tabular-nums text-[var(--foreground)] sm:text-3xl">
-            {poolLabel}
+          <p className="mt-1 flex items-center gap-2 text-2xl font-bold tabular-nums text-[var(--foreground)] sm:text-3xl">
+            {quest.rewardCc > 0 ? (
+              <Coins className="h-6 w-6 shrink-0 text-canton sm:h-7 sm:w-7" aria-hidden />
+            ) : null}
+            <span className={quest.rewardCc > 0 ? "text-canton" : undefined}>
+              {rewardHeadline.primary}
+            </span>
           </p>
-          {quest.rewardCc > 0 ? (
-            <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold tabular-nums text-canton sm:text-sm">
-              <Coins className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
-              {formatCcPerWinners(quest.rewardCc)}
+          {rewardHeadline.secondary ? (
+            <p className="mt-1 text-xs font-medium text-[var(--muted-foreground)]">
+              {rewardHeadline.secondary}
             </p>
           ) : null}
           {quest.rewardType?.includes("INVITE") ? (

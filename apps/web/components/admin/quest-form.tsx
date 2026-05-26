@@ -638,11 +638,16 @@ export function QuestForm({
             onChange={(e) => updateField("rewardPool", e.target.value)}
             placeholder={
               showCcField
-                ? `e.g. ${form.rewardCc || "…"} CC · WL spots`
+                ? `e.g. ${Number(form.maxWinners) > 0 && form.rewardCc ? `${Number(form.rewardCc) * Number(form.maxWinners)} CC pool` : `${form.rewardCc || "…"} CC`}`
                 : "e.g. WL spots · invite codes"
             }
             className={inputCls}
           />
+          {questKind === "CAMPAIGN" ? (
+            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+              Use CC wording here (not quest points). Task points (+10 pts) show on each task and count toward the leaderboard automatically.
+            </p>
+          ) : null}
         </div>
       </section>
 
