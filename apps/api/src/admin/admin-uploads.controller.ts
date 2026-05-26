@@ -1,6 +1,8 @@
 import {
   BadRequestException,
+  Body,
   Controller,
+  Delete,
   Post,
   UploadedFile,
   UseGuards,
@@ -39,5 +41,23 @@ export class AdminUploadsController {
       originalName: file.originalname,
     });
     return { url, storage: this.storage.isR2Enabled() ? 'r2' : 'local' };
+  }
+
+  /** Remove a quest banner/logo from R2 (or local dev) when replaced or cleared in admin. */
+  @Delete('quest-asset')
+  async deleteQuestAsset(
+    @Body() body: { url?: string },
+  ): Promise<{ deleted: boolean }> {
+    const url = body?.url?.trim();
+    if (!url) {
+      throw new BadRequestException('Missing url');
+    }
+    if (!this.storage.resolveManagedQuestAsset(url)) {
+      throw new BadRequestException(
+        'URL is not a managed quest upload (only R2 /quests/… or local quest-media files can be deleted)',
+      );
+    }
+    const deleted = await this.storage.deleteQuestAssetByUrl(url);
+    return { deleted };
   }
 }

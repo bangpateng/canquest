@@ -106,6 +106,48 @@ export function QuestForm({
     return data.url;
   }
 
+  async function deleteQuestAsset(url: string): Promise<void> {
+    const trimmed = url.trim();
+    if (!trimmed) return;
+    const res = await fetch("/api/admin/uploads/quest-asset", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: trimmed }),
+    });
+    const data = (await res.json()) as { message?: string };
+    if (!res.ok) throw new Error(data.message ?? "Failed to remove image from storage");
+  }
+
+  /** Delete storage object when replacing an upload not yet saved on the quest. */
+  function discardUnsavedQuestAsset(url: string, savedUrl: string | null | undefined) {
+    const trimmed = url.trim();
+    const saved = (savedUrl ?? "").trim();
+    if (!trimmed || trimmed === saved) return;
+    void deleteQuestAsset(trimmed).catch((err: unknown) => {
+      setUploadMsg(err instanceof Error ? err.message : "Could not delete previous image");
+    });
+  }
+
+  function removeQuestAsset(
+    field: "bannerImageUrl" | "logoUrl",
+    currentUrl: string,
+    savedUrl: string | null | undefined,
+  ) {
+    const trimmed = currentUrl.trim();
+    updateField(field, "");
+    setUploadMsg(null);
+    if (!trimmed) return;
+    void deleteQuestAsset(trimmed)
+      .then(() => {
+        if (isEdit && trimmed === (savedUrl ?? "").trim()) {
+          setUploadMsg("Image removed from storage. Save the campaign to update Earn.");
+        }
+      })
+      .catch((err: unknown) => {
+        setUploadMsg(err instanceof Error ? err.message : "Could not remove image from storage");
+      });
+  }
+
   function updateField(key: keyof typeof form, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
@@ -337,8 +379,12 @@ export function QuestForm({
                     if (!f) return;
                     setUploadMsg(null);
                     setUploadingLogo(true);
+                    const previous = form.logoUrl;
                     void uploadQuestAsset(f)
-                      .then((url) => updateField("logoUrl", url))
+                      .then((url) => {
+                        discardUnsavedQuestAsset(previous, initialData?.logoUrl);
+                        updateField("logoUrl", url);
+                      })
                       .catch((err: unknown) =>
                         setUploadMsg(err instanceof Error ? err.message : "Logo upload failed"),
                       )
@@ -351,10 +397,7 @@ export function QuestForm({
               {form.logoUrl ? (
                 <button
                   type="button"
-                  onClick={() => {
-                    updateField("logoUrl", "");
-                    setUploadMsg(null);
-                  }}
+                  onClick={() => removeQuestAsset("logoUrl", form.logoUrl, initialData?.logoUrl)}
                   className="text-sm font-medium text-red-600 hover:underline dark:text-red-400"
                 >
                   Remove logo
@@ -404,8 +447,12 @@ export function QuestForm({
                   if (!f) return;
                   setUploadMsg(null);
                   setUploadingBanner(true);
+                  const previous = form.bannerImageUrl;
                   void uploadQuestAsset(f)
-                    .then((url) => updateField("bannerImageUrl", url))
+                    .then((url) => {
+                      discardUnsavedQuestAsset(previous, initialData?.bannerImageUrl);
+                      updateField("bannerImageUrl", url);
+                    })
                     .catch((err: unknown) =>
                       setUploadMsg(err instanceof Error ? err.message : "Banner upload failed"),
                     )
@@ -418,10 +465,9 @@ export function QuestForm({
             {form.bannerImageUrl ? (
               <button
                 type="button"
-                onClick={() => {
-                  updateField("bannerImageUrl", "");
-                  setUploadMsg(null);
-                }}
+                onClick={() =>
+                  removeQuestAsset("bannerImageUrl", form.bannerImageUrl, initialData?.bannerImageUrl)
+                }
                 className="text-sm font-medium text-red-600 hover:underline dark:text-red-400"
               >
                 Remove banner image

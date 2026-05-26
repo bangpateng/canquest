@@ -8,13 +8,21 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  DeleteObjectCommand,
+  GetObjectCommand,
   HeadBucketCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   S3Client,
   S3ServiceException,
 } from '@aws-sdk/client-s3';
-import { mkdir, writeFile } from 'fs/promises';
+import { mkdir, unlink, writeFile } from 'fs/promises';
 import path from 'path';
+import type { Readable } from 'stream';
+
+export const QUEST_ASSET_KEY_PREFIX = 'quests/';
+
+const QUEST_MEDIA_FILENAME = /^[0-9a-f-]{36}\.(jpe?g|png|webp|gif)$/i;
 
 const ALLOWED_MIME = new Set([
   'image/jpeg',
@@ -29,6 +37,14 @@ const EXT_BY_MIME: Record<string, string> = {
   'image/webp': 'webp',
   'image/gif': 'gif',
 };
+
+function contentTypeForQuestKey(key: string): string {
+  const lower = key.toLowerCase();
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.gif')) return 'image/gif';
+  return 'image/jpeg';
+}
 
 export type QuestImageUpload = {
   buffer: Buffer;
@@ -101,22 +117,19 @@ export class R2StorageService implements OnModuleInit {
       );
     }
 
-    if (
-      accountId &&
-      accessKeyId &&
-      secretAccessKey &&
-      this.bucket &&
-      endpoint &&
-      this.publicBase
-    ) {
+    if (accountId && accessKeyId && secretAccessKey && this.bucket && endpoint) {
       this.client = new S3Client({
         region: 'auto',
         endpoint,
         credentials: { accessKeyId, secretAccessKey },
         forcePathStyle: true,
       });
+      const serveVia =
+        this.publicBase != null
+          ? `public ${this.publicBase} (also API proxy)`
+          : 'API proxy only — set R2_PUBLIC_BASE_URL optional';
       this.logger.log(
-        `Cloudflare R2 enabled (bucket="${this.bucket}", account=${accountId}, public=${this.publicBase})`,
+        `Cloudflare R2 enabled (bucket="${this.bucket}", account=${accountId}, ${serveVia})`,
       );
     } else {
       this.client = null;
@@ -131,7 +144,61 @@ export class R2StorageService implements OnModuleInit {
   }
 
   isR2Enabled(): boolean {
-    return this.client != null && !!this.bucket && !!this.publicBase;
+    return this.client != null && !!this.bucket;
+  }
+
+  getApiPublicBase(): string {
+    return (
+      this.config.get<string>('API_PUBLIC_BASE_URL')?.replace(/\/$/, '') ||
+      `http://127.0.0.1:${this.config.get<string>('PORT') ?? '3001'}`
+    );
+  }
+
+  /** Browser-visible URL — served by GET /api/uploads/quests/:filename from R2. */
+  buildQuestAssetServeUrl(key: string): string {
+    const filename = key.startsWith(QUEST_ASSET_KEY_PREFIX)
+      ? key.slice(QUEST_ASSET_KEY_PREFIX.length)
+      : key;
+    return `${this.getApiPublicBase()}/api/uploads/quests/${filename}`;
+  }
+
+  /**
+   * Map DB URL (r2.dev, API, or legacy) to a URL the web app can load.
+   * Fixes broken pub-….r2.dev links when public access does not match the bucket.
+   */
+  normalizeQuestMediaUrl(url: string | null | undefined): string | null {
+    if (!url?.trim()) return null;
+    const resolved = this.resolveManagedQuestAsset(url);
+    if (!resolved) return url.trim();
+    if (resolved.kind === 'r2') {
+      return this.buildQuestAssetServeUrl(resolved.key);
+    }
+    const filename = path.basename(resolved.filePath);
+    return `${this.getApiPublicBase()}/api/uploads/quest-media/${filename}`;
+  }
+
+  async getQuestAssetStream(
+    key: string,
+  ): Promise<{ stream: Readable; contentType: string } | null> {
+    if (!this.isR2Enabled()) return null;
+    try {
+      const out = await this.client!.send(
+        new GetObjectCommand({ Bucket: this.bucket!, Key: key }),
+      );
+      if (!out.Body) return null;
+      return {
+        stream: out.Body as Readable,
+        contentType: out.ContentType ?? contentTypeForQuestKey(key),
+      };
+    } catch (err) {
+      if (
+        err instanceof S3ServiceException &&
+        (err.name === 'NoSuchKey' || err.name === 'NotFound')
+      ) {
+        return null;
+      }
+      throw err;
+    }
   }
 
   async onModuleInit(): Promise<void> {
@@ -169,6 +236,39 @@ export class R2StorageService implements OnModuleInit {
       return err.message;
     }
     return err instanceof Error ? err.message : String(err);
+  }
+
+  /** Ensures the object exists in R2 and is reachable via R2_PUBLIC_BASE_URL (same bucket). */
+  private async assertPublicObjectReadable(key: string): Promise<void> {
+    try {
+      await this.client!.send(
+        new HeadObjectCommand({ Bucket: this.bucket!, Key: key }),
+      );
+    } catch (err) {
+      this.mapUploadError(err);
+    }
+
+    const publicUrl = `${this.publicBase}/${key}`;
+    let res: Response;
+    try {
+      res = await fetch(publicUrl, { method: 'HEAD', redirect: 'follow' });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new ServiceUnavailableException(
+        `Image uploaded but public URL check failed (${msg}). Verify R2_PUBLIC_BASE_URL and bucket public access.`,
+      );
+    }
+
+    if (res.ok) return;
+
+    const hint =
+      res.status === 404
+        ? `R2_PUBLIC_BASE_URL (${this.publicBase}) does not serve objects from bucket "${this.bucket}". ` +
+          'In Cloudflare → R2 → open that bucket → Settings → Public access → enable and copy the pub-….r2.dev URL from the same bucket, then restart the API and re-upload.'
+        : `Public URL returned HTTP ${res.status}. Check bucket public access or custom domain.`;
+
+    this.logger.error(`R2 public URL not readable: ${publicUrl} → ${res.status}`);
+    throw new BadRequestException(`R2 public URL not reachable: ${hint}`);
   }
 
   private mapUploadError(err: unknown): never {
@@ -227,7 +327,10 @@ export class R2StorageService implements OnModuleInit {
       } catch (err) {
         this.mapUploadError(err);
       }
-      return `${this.publicBase}/${key}`;
+      if (this.publicBase) {
+        await this.assertPublicObjectReadable(key);
+      }
+      return this.buildQuestAssetServeUrl(key);
     }
 
     const publicBaseRaw = this.config.get<string>('R2_PUBLIC_BASE_URL')?.trim();
@@ -246,5 +349,83 @@ export class R2StorageService implements OnModuleInit {
       this.config.get<string>('API_PUBLIC_BASE_URL')?.replace(/\/$/, '') ||
       `http://127.0.0.1:${this.config.get<string>('PORT') ?? '3001'}`;
     return `${apiPublic}/api/uploads/quest-media/${filename}`;
+  }
+
+  /**
+   * Returns R2 object key or local filename when `url` is a quest asset we uploaded.
+   * Ignores external paths (e.g. /quest-media/ on Vercel static).
+   */
+  resolveManagedQuestAsset(url: string): { kind: 'r2'; key: string } | { kind: 'local'; filePath: string } | null {
+    const trimmed = url.trim();
+    if (!trimmed) return null;
+
+    let pathname: string;
+    try {
+      if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+        pathname = new URL(trimmed).pathname;
+      } else if (trimmed.startsWith('/')) {
+        pathname = trimmed;
+      } else {
+        return null;
+      }
+    } catch {
+      return null;
+    }
+
+    const segments = pathname.split('/').filter(Boolean);
+    const questsIdx = segments.indexOf('quests');
+    if (questsIdx >= 0 && segments.length === questsIdx + 2) {
+      const filename = segments[questsIdx + 1];
+      if (QUEST_MEDIA_FILENAME.test(filename) && this.isR2Enabled()) {
+        return { kind: 'r2', key: `${QUEST_ASSET_KEY_PREFIX}${filename}` };
+      }
+    }
+
+    const mediaIdx = segments.indexOf('quest-media');
+    if (mediaIdx >= 0 && segments.length === mediaIdx + 2) {
+      const filename = segments[mediaIdx + 1];
+      if (QUEST_MEDIA_FILENAME.test(filename)) {
+        return { kind: 'local', filePath: path.join(this.localDir, filename) };
+      }
+    }
+
+    return null;
+  }
+
+  /** Delete a previously uploaded quest banner/logo (R2 or local dev). Best-effort, idempotent. */
+  async deleteQuestAssetByUrl(url: string | null | undefined): Promise<boolean> {
+    const resolved = url?.trim() ? this.resolveManagedQuestAsset(url) : null;
+    if (!resolved) return false;
+
+    if (resolved.kind === 'r2') {
+      if (!this.isR2Enabled()) {
+        this.logger.warn(`Skip R2 delete (not configured): ${url}`);
+        return false;
+      }
+      try {
+        await this.client!.send(
+          new DeleteObjectCommand({ Bucket: this.bucket!, Key: resolved.key }),
+        );
+        this.logger.log(`Deleted R2 quest asset: ${resolved.key}`);
+        return true;
+      } catch (err) {
+        const detail = this.formatS3Error(err);
+        this.logger.warn(`R2 delete failed for ${resolved.key}: ${detail}`);
+        return false;
+      }
+    }
+
+    try {
+      await unlink(resolved.filePath);
+      this.logger.log(`Deleted local quest asset: ${resolved.filePath}`);
+      return true;
+    } catch (err) {
+      const code = err && typeof err === 'object' && 'code' in err ? (err as NodeJS.ErrnoException).code : null;
+      if (code === 'ENOENT') return true;
+      this.logger.warn(
+        `Local delete failed for ${resolved.filePath}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return false;
+    }
   }
 }

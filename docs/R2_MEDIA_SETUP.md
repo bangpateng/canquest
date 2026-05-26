@@ -49,6 +49,8 @@ node scripts/diagnose-r2.cjs
 
 If you see `NoSuchBucket`, fix `R2_BUCKET_NAME` or create the bucket in Cloudflare.
 
+If you see **public URL returned HTTP 404**, upload works but Earn images stay empty. Each bucket has its **own** `https://pub-….r2.dev` URL. `R2_PUBLIC_BASE_URL` must be copied from **the same bucket** as `R2_BUCKET_NAME` (Settings → Public access → Enable). Re-upload banner/logo after fixing.
+
 Restart API after saving:
 
 ```bash
@@ -62,7 +64,11 @@ On boot you should see: `Cloudflare R2 enabled (bucket=…, public=…)`.
 1. Admin → Earn → create/edit campaign.
 2. Upload **logo** and **banner** (JPEG/PNG/WebP/GIF, max 5 MB).
 3. BFF `POST /api/admin/uploads/quest-asset` → Nest `POST /api/admin/uploads/quest-asset` → R2.
-4. Returned URL is saved on the quest (e.g. `https://pub-….r2.dev/quests/uuid.webp`).
+4. Returned URL is saved on the quest as **`https://api.canquest.cc/api/uploads/quests/{uuid}.webp`** (API streams the file from R2). You do **not** need a working `pub-….r2.dev` URL for Earn/admin previews to work.
+
+`R2_PUBLIC_BASE_URL` is optional. If set, uploads are also checked against that URL; images are still served through the API for reliability.
+
+Replacing or removing banner/logo in admin deletes the previous object from R2 (or local `quest-media/` in dev). Deleting a campaign removes its images too. Save the campaign after **Remove** so the database matches storage.
 
 ## 5. Local dev (no R2)
 

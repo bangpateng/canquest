@@ -6,6 +6,44 @@ export const runtime = 'nodejs';
 
 const MAX_BYTES = 5 * 1024 * 1024;
 
+export async function DELETE(req: NextRequest) {
+  const token = req.cookies.get(CQ_ADMIN_ACCESS_COOKIE)?.value;
+  if (!token) {
+    return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+  }
+
+  let body: { url?: string };
+  try {
+    body = (await req.json()) as { url?: string };
+  } catch {
+    return NextResponse.json({ message: 'Expected JSON body' }, { status: 400 });
+  }
+
+  const url = `${internalApiBase()}/admin/uploads/quest-asset`;
+  try {
+    const res = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ url: body.url }),
+      cache: 'no-store',
+    });
+    const text = await res.text();
+    let data: unknown = {};
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      data = { message: text || res.statusText };
+    }
+    return NextResponse.json(data, { status: res.status });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'API unreachable';
+    return NextResponse.json({ message: `Gateway error: ${message}` }, { status: 502 });
+  }
+}
+
 export async function POST(req: NextRequest) {
   const token = req.cookies.get(CQ_ADMIN_ACCESS_COOKIE)?.value;
   if (!token) {

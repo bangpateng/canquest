@@ -24,6 +24,7 @@ if (fs.existsSync(envPath)) {
 const {
   S3Client,
   HeadBucketCommand,
+  HeadObjectCommand,
   ListBucketsCommand,
   PutObjectCommand,
   DeleteObjectCommand,
@@ -129,6 +130,44 @@ async function main() {
     console.error('\nWARN: R2_PUBLIC_BASE_URL missing — set pub-….r2.dev public URL');
     process.exit(1);
   }
+
+  const testKey = `quests/_diagnose-public-${Date.now()}.txt`;
+  const publicUrl = `${publicBase}/${testKey}`;
+  try {
+    await client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: testKey,
+        Body: Buffer.from('canquest-public-check'),
+        ContentType: 'text/plain',
+      }),
+    );
+    await client.send(new HeadObjectCommand({ Bucket: bucket, Key: testKey }));
+    console.log(`OK: test object in bucket "${bucket}"`);
+
+    const res = await fetch(publicUrl, { method: 'HEAD', redirect: 'follow' });
+    if (!res.ok) {
+      console.error(`\nFAIL: Public URL returned HTTP ${res.status}`);
+      console.error('URL tested:', publicUrl);
+      console.error(
+        '\nThis is why Earn images are blank: upload succeeds but browsers get 404.',
+      );
+      console.error(
+        'Fix: Cloudflare → R2 → open bucket "' +
+          bucket +
+          '" → Settings → Public access → Enable → copy THAT bucket\'s pub-….r2.dev URL into R2_PUBLIC_BASE_URL.',
+      );
+      console.error('Do not reuse a pub-….r2.dev URL from a different bucket.');
+      await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: testKey }));
+      process.exit(1);
+    }
+    console.log('OK: public URL reachable:', publicUrl);
+    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: testKey }));
+  } catch (e) {
+    console.error('\nFAIL: public URL round-trip —', e.message || e);
+    process.exit(1);
+  }
+
   console.log(`\nPublic URL example (for DB): ${publicBase}/quests/your-file.webp`);
   console.log('\nAll checks passed. Restart: pm2 restart canquest-api');
 }

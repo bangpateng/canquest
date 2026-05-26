@@ -18,6 +18,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { requiresPaidInviteClaim } from '../quests/quest-reward-config';
 import { SpliceValidatorService } from '../canton/splice-validator.service';
 import { UsersService } from '../users/users.service';
+import { R2StorageService } from '../storage/r2-storage.service';
+import { withQuestMediaUrls } from '../storage/quest-media.util';
 
 @Injectable()
 export class AdminService {
@@ -28,7 +30,42 @@ export class AdminService {
     private readonly splice: SpliceValidatorService,
     private readonly users: UsersService,
     private readonly config: ConfigService,
+    private readonly storage: R2StorageService,
   ) {}
+
+  /** Drop replaced/removed banner & logo from R2 when not referenced by another quest. */
+  private async cleanupQuestMediaUrls(
+    questId: string,
+    previous: { bannerImageUrl: string | null; logoUrl: string | null },
+    next: { bannerImageUrl?: string | null; logoUrl?: string | null },
+  ): Promise<void> {
+    const tasks: Array<{ field: 'bannerImageUrl' | 'logoUrl'; old: string | null; neu: string | null }> = [];
+
+    if (next.bannerImageUrl !== undefined) {
+      const neu = next.bannerImageUrl?.trim() || null;
+      const old = previous.bannerImageUrl?.trim() || null;
+      if (old && old !== neu) tasks.push({ field: 'bannerImageUrl', old, neu });
+    }
+    if (next.logoUrl !== undefined) {
+      const neu = next.logoUrl?.trim() || null;
+      const old = previous.logoUrl?.trim() || null;
+      if (old && old !== neu) tasks.push({ field: 'logoUrl', old, neu });
+    }
+
+    for (const { field, old } of tasks) {
+      const inUse = await this.prisma.quest.count({
+        where: {
+          id: { not: questId },
+          OR: [{ bannerImageUrl: old }, { logoUrl: old }],
+        },
+      });
+      if (inUse > 0) {
+        this.logger.warn(`Skip delete ${field} asset still used by another quest: ${old}`);
+        continue;
+      }
+      await this.storage.deleteQuestAssetByUrl(old);
+    }
+  }
 
   /* ────────────────────────────────────────────────────────
      QUEST CRUD
@@ -55,11 +92,16 @@ export class AdminService {
     const codesByQuest = new Map(
       unassigned.map((r) => [r.questId, r._count._all]),
     );
-    return quests.map((q) => ({
-      ...q,
-      tags: this.parseTags(q.tags),
-      codesRemaining: codesByQuest.get(q.id) ?? 0,
-    }));
+    return quests.map((q) =>
+      withQuestMediaUrls(
+        {
+          ...q,
+          tags: this.parseTags(q.tags),
+          codesRemaining: codesByQuest.get(q.id) ?? 0,
+        },
+        this.storage,
+      ),
+    );
   }
 
   async getEarnHubQuest() {
@@ -71,7 +113,7 @@ export class AdminService {
       },
     });
     if (!q) return null;
-    return { ...q, tags: this.parseTags(q.tags) };
+    return withQuestMediaUrls({ ...q, tags: this.parseTags(q.tags) }, this.storage);
   }
 
   async ensureEarnHubQuest() {
@@ -108,7 +150,7 @@ export class AdminService {
         _count: { select: { completions: true, submissions: true } },
       },
     });
-    return { ...quest, tags: this.parseTags(quest.tags) };
+    return withQuestMediaUrls({ ...quest, tags: this.parseTags(quest.tags) }, this.storage);
   }
 
   async getQuestDetail(questId: string) {
@@ -121,7 +163,7 @@ export class AdminService {
       },
     });
     if (!q) throw new NotFoundException('Quest not found');
-    return { ...q, tags: this.parseTags(q.tags) };
+    return withQuestMediaUrls({ ...q, tags: this.parseTags(q.tags) }, this.storage);
   }
 
   private assertQuestSchedule(
@@ -236,7 +278,7 @@ export class AdminService {
       include: { tasks: true },
     });
     this.logger.log(`Quest created: ${quest.title} (${quest.id})`);
-    return { ...quest, tags: data.tags ?? [] };
+    return withQuestMediaUrls({ ...quest, tags: data.tags ?? [] }, this.storage);
   }
 
   async updateQuest(
@@ -279,6 +321,11 @@ export class AdminService {
       data.maxWinners !== undefined ? data.maxWinners : existing.maxWinners;
     this.assertCcFcfsMaxWinners(nextRewardType, nextMaxWinners, existing.questKind);
 
+    await this.cleanupQuestMediaUrls(questId, existing, {
+      bannerImageUrl: data.bannerImageUrl,
+      logoUrl: data.logoUrl,
+    });
+
     const updated = await this.prisma.quest.update({
       where: { id: questId },
       data: {
@@ -310,10 +357,21 @@ export class AdminService {
         ...(data.tags !== undefined && { tags: JSON.stringify(data.tags) }),
       },
     });
-    return { ...updated, tags: this.parseTags(updated.tags) };
+    return withQuestMediaUrls(
+      { ...updated, tags: this.parseTags(updated.tags) },
+      this.storage,
+    );
   }
 
   async deleteQuest(questId: string) {
+    const existing = await this.prisma.quest.findUnique({ where: { id: questId } });
+    if (!existing) throw new NotFoundException('Quest not found');
+
+    await this.cleanupQuestMediaUrls(questId, existing, {
+      bannerImageUrl: null,
+      logoUrl: null,
+    });
+
     await this.prisma.quest.delete({ where: { id: questId } });
     return { deleted: true };
   }

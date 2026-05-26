@@ -12,12 +12,14 @@ import { createReadStream, existsSync } from 'fs';
 import path from 'path';
 import { ConfigService } from '@nestjs/config';
 import { ProfileAvatarService, contentTypeForPath } from '../users/profile-avatar.service';
+import { R2StorageService } from '../storage/r2-storage.service';
 
 @Controller('uploads')
 export class UploadsController {
   constructor(
     private readonly avatars: ProfileAvatarService,
     private readonly config: ConfigService,
+    private readonly storage: R2StorageService,
   ) {}
 
   /** Public avatar image — safe user id only (cuid). */
@@ -36,6 +38,28 @@ export class UploadsController {
       'Cache-Control': 'public, max-age=3600',
     });
     return new StreamableFile(createReadStream(disk));
+  }
+
+  /** Stream quest banner/logo from Cloudflare R2 (works even when r2.dev public URL is misconfigured). */
+  @Get('quests/:filename')
+  @SkipThrottle()
+  async serveQuestR2Asset(
+    @Param('filename') filename: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    if (!/^[a-f0-9-]{36}\.(jpg|jpeg|png|webp|gif)$/i.test(filename)) {
+      throw new NotFoundException();
+    }
+    const key = `quests/${filename}`;
+    const asset = await this.storage.getQuestAssetStream(key);
+    if (!asset) {
+      throw new NotFoundException();
+    }
+    res.set({
+      'Content-Type': asset.contentType,
+      'Cache-Control': 'public, max-age=31536000, immutable',
+    });
+    return new StreamableFile(asset.stream);
   }
 
   /** Local dev fallback when R2 is not configured. */

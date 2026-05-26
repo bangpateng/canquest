@@ -36,6 +36,8 @@ import { PointsService } from '../users/points.service';
 import { UsersService } from '../users/users.service';
 import { hydrateTwitterAvatarUrls } from '../twitter/hydrate-twitter-avatars';
 import { TwitterApiService } from '../twitter/twitter-api.service';
+import { R2StorageService } from '../storage/r2-storage.service';
+import { withQuestMediaUrls } from '../storage/quest-media.util';
 
 export interface LeaderboardRow {
   rank: number;
@@ -84,6 +86,7 @@ export class QuestsService {
     private readonly splice: SpliceValidatorService,
     private readonly inboundSync: CcInboundSyncService,
     private readonly config: ConfigService,
+    private readonly storage: R2StorageService,
   ) {}
 
   /** Map internal fee/ledger errors to a message the user can act on. */
@@ -334,12 +337,17 @@ export class QuestsService {
       include: { tasks: { orderBy: { order: 'asc' } } },
       orderBy: { createdAt: 'desc' },
     });
-    const mapped = quests.map((q) => ({
-      ...q,
-      tags: this.parseTags(q.tags),
-      rewardType: normalizeRewardType(q.rewardType as RewardType),
-      status: resolveQuestDisplayStatus(q),
-    }));
+    const mapped = quests.map((q) =>
+      withQuestMediaUrls(
+        {
+          ...q,
+          tags: this.parseTags(q.tags),
+          rewardType: normalizeRewardType(q.rewardType as RewardType),
+          status: resolveQuestDisplayStatus(q),
+        },
+        this.storage,
+      ),
+    );
     const withSummary = await this.attachCampaignSummaries(mapped);
     return status
       ? withSummary.filter((q) => q.status === status)
@@ -509,11 +517,14 @@ export class QuestsService {
       include: { tasks: { orderBy: { order: 'asc' } } },
     });
     if (!q) throw new NotFoundException('Quest not found');
-    return {
-      ...q,
-      tags: this.parseTags(q.tags),
-      rewardType: normalizeRewardType(q.rewardType as RewardType),
-    };
+    return withQuestMediaUrls(
+      {
+        ...q,
+        tags: this.parseTags(q.tags),
+        rewardType: normalizeRewardType(q.rewardType as RewardType),
+      },
+      this.storage,
+    );
   }
 
   /* ─── User progress ─── */

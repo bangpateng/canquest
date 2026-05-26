@@ -27,6 +27,16 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: "https",
+        hostname: "api.canquest.cc",
+        pathname: "/api/uploads/quests/**",
+      },
+      {
+        protocol: "https",
+        hostname: "*.r2.dev",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
         hostname: "pbs.twimg.com",
         pathname: "/**",
       },
