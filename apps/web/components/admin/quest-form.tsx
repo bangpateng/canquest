@@ -315,7 +315,7 @@ export function QuestForm({
           <div className="sm:col-span-2">
             <label className="mb-1.5 block text-sm font-medium">Project logo</label>
             <p className="mb-2 text-xs text-[var(--muted-foreground)]">
-              Square image (JPEG, PNG, WebP, GIF, max 4 MB). Shown on quest cards next to the title. Leave empty to use org initials.
+              Square image (JPEG, PNG, WebP, GIF, max 5 MB). Uploaded to Cloudflare R2. Leave empty to use org initials.
             </p>
             <div className="flex flex-wrap items-center gap-3">
               {form.logoUrl ? (
@@ -389,7 +389,7 @@ export function QuestForm({
         <div>
           <label className="mb-1.5 block text-sm font-medium">Event banner image</label>
           <p className="mb-2 text-xs text-[var(--muted-foreground)]">
-            Wide image on the quest card (JPEG, PNG, WebP, GIF, max 4 MB). Optional — cards use a default style without an image.
+            Wide image on Earn cards (JPEG, PNG, WebP, GIF, max 5 MB). Uploaded to Cloudflare R2. Optional — gradient fallback if empty.
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--card)]/80 px-4 py-2 text-sm font-semibold transition-colors hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10">

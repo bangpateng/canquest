@@ -15,6 +15,7 @@ import { SpinModule } from './spin/spin.module';
 import { LedgerIndexerModule } from './ledger-indexer/ledger-indexer.module';
 import { PublicModule } from './public/public.module';
 import { UploadsModule } from './uploads/uploads.module';
+import { StorageModule } from './storage/storage.module';
 import { QueueModule } from './queue/queue.module';
 import { TwitterModule } from './twitter/twitter.module';
 import { throttlerConfig } from './common/throttler.config';
@@ -47,6 +48,7 @@ const resolveApiEnvPaths = (): string[] => [
     LedgerIndexerModule,
     PublicModule,
     UploadsModule,
+    StorageModule,
     TwitterModule,
   ],
     controllers: [AppController],
