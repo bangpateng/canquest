@@ -448,7 +448,6 @@ export function QuestTaskPanel({
               <TaskRow
                 key={task.id}
                 index={idx + 1}
-                taskIndex={idx}
                 questId={quest.id}
                 task={task}
                 submission={submissions[task.id] ?? null}
@@ -503,7 +502,6 @@ export function QuestTaskPanel({
               <TaskRow
                 key={task.id}
                 index={idx + 1}
-                taskIndex={idx}
                 questId={quest.id}
                 task={task}
                 submission={submissions[task.id] ?? null}
@@ -588,7 +586,6 @@ export function QuestTaskPanel({
 
 function TaskRow({
   index,
-  taskIndex,
   questId,
   task,
   submission,
@@ -603,7 +600,6 @@ function TaskRow({
   onVerified,
 }: {
   index: number;
-  taskIndex: number;
   questId: string;
   task: QuestTask;
   submission: QuestSubmission | null;
