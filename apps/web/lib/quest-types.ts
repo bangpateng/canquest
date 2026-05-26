@@ -588,6 +588,12 @@ export function isInviteRewardType(rewardType: RewardType | string): boolean {
 
 export const TASK_COUNTDOWN_SEC = 5;
 
+/** Countdown label shown while verifying social / link tasks. */
+export function formatTaskCountdownSeconds(seconds: number): string {
+  const n = Math.max(0, Math.floor(seconds));
+  return n === 1 ? "1 second" : `${n} seconds`;
+}
+
 /** Short label on the task action button (replaces +pts until verified). */
 /** Admin/UI label for a quest task type. */
 export function questTaskTypeLabel(type: string): string {

@@ -10,6 +10,7 @@ import type {
 import {
   TASK_ACTION_BUTTON_LABEL,
   TASK_COUNTDOWN_SEC,
+  formatTaskCountdownSeconds,
   formatEarnHubCooldown,
   getEarnHubRepeatCooldownMs,
   getEarnHubTaskRowDisplay,
@@ -37,7 +38,21 @@ import { CardTitle, SectionTitle, SubsectionTitle } from "@/components/ui/typogr
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { hasRealWallet } from "@/lib/wallet-access";
-import { CalendarCheck, Check, CheckCircle2, Circle, Fingerprint, HelpCircle, Mail, Repeat2, Send, UserPlus, Users, Zap } from "lucide-react";
+import {
+  CalendarCheck,
+  Check,
+  CheckCircle2,
+  Circle,
+  Fingerprint,
+  HelpCircle,
+  Lock,
+  Mail,
+  Repeat2,
+  Send,
+  UserPlus,
+  Users,
+  Zap,
+} from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -162,6 +177,22 @@ export function QuestTaskPanel({
     viewerTwitterUsername,
   );
   const [campaignMeta, setCampaignMeta] = useState<CampaignMeta | null>(null);
+  /** While a task is counting down or submitting, no other task can be started. */
+  const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
+
+  const firstOpenTaskIdx = useMemo(
+    () => quest.tasks.findIndex((t) => submissions[t.id]?.status !== "VERIFIED"),
+    [quest.tasks, submissions],
+  );
+
+  const isTaskSequentiallyLocked = useCallback(
+    (taskIndex: number, taskId: string) => {
+      if (firstOpenTaskIdx >= 0 && taskIndex !== firstOpenTaskIdx) return true;
+      if (busyTaskId != null && busyTaskId !== taskId) return true;
+      return false;
+    },
+    [firstOpenTaskIdx, busyTaskId],
+  );
 
   const loadProgress = useCallback(() => {
     setProgressLoading(true);
@@ -402,7 +433,12 @@ export function QuestTaskPanel({
       {isEarnHub ? (
         <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]/40">
           <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--muted)]/20 px-4 py-3 sm:px-5">
-            <p className="text-xs font-medium text-[var(--muted-foreground)]">Tasks to complete</p>
+            <div>
+              <p className="text-xs font-medium text-[var(--muted-foreground)]">Tasks to complete</p>
+              <p className="mt-0.5 text-[10px] text-[var(--muted-foreground)]/80">
+                One at a time — finish each task before the next unlocks
+              </p>
+            </div>
             <p className="text-xs font-semibold tabular-nums text-[var(--foreground)]">
               {verifiedCount}/{quest.tasks.length}
             </p>
@@ -412,12 +448,17 @@ export function QuestTaskPanel({
               <TaskRow
                 key={task.id}
                 index={idx + 1}
+                taskIndex={idx}
                 questId={quest.id}
                 task={task}
                 submission={submissions[task.id] ?? null}
                 partyId={partyId}
                 twitterUsername={twitterUsername}
                 campaignEnded={taskSubmissionsBlocked}
+                sequentiallyLocked={isTaskSequentiallyLocked(idx, task.id)}
+                onBusyChange={(busy) =>
+                  setBusyTaskId((prev) => (busy ? task.id : prev === task.id ? null : prev))
+                }
                 earnHubLayout
                 onPointsEarned={onPointsEarned}
                 onVerified={(sub) => onTaskVerified(task.id, sub)}
@@ -435,6 +476,9 @@ export function QuestTaskPanel({
                 </p>
                 <p className="mt-1 text-base font-semibold text-[var(--foreground)]">
                   {verifiedCount} of {quest.tasks.length} completed
+                </p>
+                <p className="mt-0.5 text-[10px] text-[var(--muted-foreground)]">
+                  Complete tasks in order — one at a time
                 </p>
               </div>
               <div className="flex items-center gap-3">
@@ -459,12 +503,17 @@ export function QuestTaskPanel({
               <TaskRow
                 key={task.id}
                 index={idx + 1}
+                taskIndex={idx}
                 questId={quest.id}
                 task={task}
                 submission={submissions[task.id] ?? null}
                 partyId={partyId}
                 twitterUsername={twitterUsername}
                 campaignEnded={taskSubmissionsBlocked}
+                sequentiallyLocked={isTaskSequentiallyLocked(idx, task.id)}
+                onBusyChange={(busy) =>
+                  setBusyTaskId((prev) => (busy ? task.id : prev === task.id ? null : prev))
+                }
                 campaignListLayout
                 onVerified={(sub) => onTaskVerified(task.id, sub)}
               />
@@ -539,6 +588,7 @@ export function QuestTaskPanel({
 
 function TaskRow({
   index,
+  taskIndex,
   questId,
   task,
   submission,
@@ -547,10 +597,13 @@ function TaskRow({
   campaignEnded = false,
   earnHubLayout = false,
   campaignListLayout = false,
+  sequentiallyLocked = false,
+  onBusyChange,
   onPointsEarned,
   onVerified,
 }: {
   index: number;
+  taskIndex: number;
   questId: string;
   task: QuestTask;
   submission: QuestSubmission | null;
@@ -559,6 +612,8 @@ function TaskRow({
   campaignEnded?: boolean;
   earnHubLayout?: boolean;
   campaignListLayout?: boolean;
+  sequentiallyLocked?: boolean;
+  onBusyChange?: (busy: boolean) => void;
   onPointsEarned?: () => void;
   onVerified: (sub: QuestSubmission) => void;
 }) {
@@ -586,6 +641,15 @@ function TaskRow({
   const [walletPromptOpen, setWalletPromptOpen] = useState(false);
   const [accountSubmitLocked, setAccountSubmitLocked] = useState(false);
   const autoSubmitFired = useRef(false);
+
+  useEffect(() => {
+    const busy = loading || (countdown !== null && countdown > 0);
+    onBusyChange?.(busy);
+  }, [loading, countdown, onBusyChange]);
+
+  useEffect(() => {
+    return () => onBusyChange?.(false);
+  }, [onBusyChange]);
 
   const isAccountDataTask =
     isEmailTask ||
@@ -652,6 +716,7 @@ function TaskRow({
         (!isPartyTask || proof.includes("::"));
 
   function startTask() {
+    if (sequentiallyLocked) return;
     if (requireWallet()) return;
     if (requireTwitter()) return;
     if (isPartyTask && !partyId) return;
@@ -676,6 +741,7 @@ function TaskRow({
   }
 
   async function submitQuizAnswer(answer: string) {
+    if (sequentiallyLocked) return;
     if (requireWallet()) return;
     if (loading || isVerified || quizExpired) return;
     setQuizPending(answer);
@@ -803,12 +869,16 @@ function TaskRow({
   const actionLabel = taskActionButtonLabel(task.type);
   const actionDisabled =
     campaignEnded ||
+    sequentiallyLocked ||
     loading ||
     (isAccountDataTask && accountSubmitLocked && !isRepeatable) ||
     needsTwitter ||
     (isPartyTask && needsWallet) ||
     (needsProofBeforeStart && !proof.trim()) ||
     (isEmailTask && !proof.includes("@"));
+
+  const lockedHint =
+    sequentiallyLocked && !isVerified ? "Complete previous tasks first (one at a time)" : null;
 
   const quizExpired = earnHubLayout && isQuiz && !isVerified && isEarnHubQuizExpired(task);
 
@@ -824,6 +894,7 @@ function TaskRow({
         className={cn(
           "px-4 py-4 transition-colors sm:px-5",
           isVerified ? "bg-emerald-500/[0.04]" : "hover:bg-[var(--muted)]/10",
+          sequentiallyLocked && !isVerified && "opacity-55",
         )}
       >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
@@ -863,6 +934,12 @@ function TaskRow({
                     {task.description}
                   </p>
                 )}
+              {lockedHint ? (
+                <p className="mt-1.5 flex items-center gap-1 text-[11px] text-[var(--muted-foreground)]">
+                  <Lock className="h-3 w-3 shrink-0" aria-hidden />
+                  {lockedHint}
+                </p>
+              ) : null}
             </div>
           </div>
 
@@ -876,9 +953,17 @@ function TaskRow({
               <span className="rounded-full border border-orange-500/30 bg-orange-500/10 px-3 py-1.5 text-xs font-semibold text-orange-200">
                 Pending
               </span>
+            ) : sequentiallyLocked ? (
+              <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center gap-1 rounded-full border border-[var(--border)] bg-[var(--muted)]/30 px-3 text-[10px] font-bold uppercase tracking-wide text-[var(--muted-foreground)]">
+                <Lock className="h-3 w-3" aria-hidden />
+                Locked
+              </span>
             ) : countdown !== null && countdown > 0 ? (
-              <span className="min-w-[5.5rem] rounded-full border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-1.5 text-center text-xs font-semibold tabular-nums text-[var(--muted-foreground)]">
-                {countdown}s
+              <span
+                className="min-w-[6.5rem] rounded-full border border-canton/30 bg-canton/10 px-3 py-1.5 text-center text-xs font-semibold tabular-nums text-canton"
+                aria-live="polite"
+              >
+                {formatTaskCountdownSeconds(countdown)}
               </span>
             ) : loading ? (
               <span className="flex h-9 min-w-[5.5rem] items-center justify-center rounded-full border border-[var(--border)] bg-[var(--muted)]/40">
@@ -911,10 +996,11 @@ function TaskRow({
                 <button
                   key={opt}
                   type="button"
-                  disabled={loading}
+                  disabled={loading || sequentiallyLocked}
                   onClick={() => void submitQuizAnswer(opt)}
                   className={cn(
                     "flex flex-1 items-center justify-center gap-1.5 rounded-md py-2 text-sm font-medium capitalize transition-colors",
+                    sequentiallyLocked && "cursor-not-allowed opacity-50",
                     isWrong
                       ? "bg-red-500/15 text-red-300"
                       : "text-[var(--muted-foreground)] hover:bg-[var(--muted)]/30 hover:text-[var(--foreground)]",
@@ -940,7 +1026,7 @@ function TaskRow({
                 <li key={letter}>
                   <button
                     type="button"
-                    disabled={loading}
+                    disabled={loading || sequentiallyLocked}
                     onClick={() => void submitQuizAnswer(letter)}
                     className={cn(
                       "flex w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
@@ -1025,6 +1111,7 @@ function TaskRow({
           isOneTimeComplete || onRepeatCooldown
             ? "bg-emerald-500/[0.025]"
             : "hover:bg-[var(--muted)]/15",
+          sequentiallyLocked && !isVerified && "opacity-55",
         )}
       >
         <div className="flex gap-3">
@@ -1113,11 +1200,11 @@ function TaskRow({
                     <button
                       key={opt}
                       type="button"
-                      disabled={loading || quizExpired}
+                      disabled={loading || quizExpired || sequentiallyLocked}
                       onClick={() => void submitQuizAnswer(opt)}
                       className={cn(
                         "flex flex-1 items-center justify-center gap-1.5 rounded-md py-2 text-sm font-medium capitalize transition-colors",
-                        quizExpired && "cursor-not-allowed opacity-50",
+                        (quizExpired || sequentiallyLocked) && "cursor-not-allowed opacity-50",
                         isWrong
                           ? "bg-red-500/15 text-red-300 ring-1 ring-inset ring-red-500/35"
                           : "text-[var(--muted-foreground)] hover:bg-[var(--muted)]/30 hover:text-[var(--foreground)]",
@@ -1143,7 +1230,7 @@ function TaskRow({
                     <li key={letter}>
                       <button
                         type="button"
-                        disabled={loading || quizExpired}
+                        disabled={loading || quizExpired || sequentiallyLocked}
                         onClick={() => void submitQuizAnswer(letter)}
                         className={cn(
                           "flex w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
@@ -1174,8 +1261,16 @@ function TaskRow({
             {!isQuiz && (!isVerified || canRepeatNow) && !onRepeatCooldown ? (
               <div className="mt-3">
                 {countdown !== null && countdown > 0 ? (
-                  <p className="py-2 text-center text-xs text-[var(--muted-foreground)]">
-                    Verifying… {countdown}s
+                  <p
+                    className="py-2 text-center text-sm font-semibold tabular-nums text-canton"
+                    aria-live="polite"
+                  >
+                    {formatTaskCountdownSeconds(countdown)}
+                  </p>
+                ) : sequentiallyLocked ? (
+                  <p className="flex items-center justify-center gap-1 py-2 text-center text-xs text-[var(--muted-foreground)]">
+                    <Lock className="h-3 w-3" aria-hidden />
+                    {lockedHint}
                   </p>
                 ) : loading ? (
                   <div className="flex h-9 items-center justify-center gap-2 text-xs text-[var(--muted-foreground)]">
@@ -1198,7 +1293,7 @@ function TaskRow({
                         : "Check in"
                       : isTwitterTask
                         ? countdown !== null && countdown > 0
-                          ? `Open X · ${countdown}s`
+                          ? formatTaskCountdownSeconds(countdown)
                           : `Verify · ${actionLabel}`
                         : `Continue · ${actionLabel}`}
                   </button>
@@ -1244,7 +1339,9 @@ function TaskRow({
         isPending && "border-orange-500/30 bg-orange-500/5",
         !isVerified &&
           !isPending &&
+          !sequentiallyLocked &&
           "border-[var(--border)] hover:border-[var(--primary)]/25 hover:shadow-[0_0_24px_rgb(var(--canton-rgb)/0.06)]",
+        sequentiallyLocked && !isVerified && "opacity-55",
       )}
     >
       <div className="flex gap-4">
@@ -1299,16 +1396,22 @@ function TaskRow({
                     +{task.points} pts
                   </span>
                 </>
+              ) : sequentiallyLocked ? (
+                <span className="inline-flex min-w-[5.5rem] items-center justify-center gap-1 rounded-full border border-[var(--border)] bg-[var(--muted)]/30 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[var(--muted-foreground)]">
+                  <Lock className="h-3 w-3" aria-hidden />
+                  Locked
+                </span>
               ) : isQuiz ? null : countdown !== null && countdown > 0 ? (
                 <button
                   type="button"
                   disabled
                   className={cn(
                     buttonVariants({ size: "sm" }),
-                    "min-w-[5.5rem] rounded-full cursor-wait",
+                    "min-w-[6.5rem] rounded-full cursor-wait tabular-nums",
                   )}
+                  aria-live="polite"
                 >
-                  {countdown}s…
+                  {formatTaskCountdownSeconds(countdown)}
                 </button>
               ) : loading ? (
                 <button
@@ -1340,6 +1443,13 @@ function TaskRow({
             </p>
           )}
 
+          {lockedHint ? (
+            <p className="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
+              <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              {lockedHint}
+            </p>
+          ) : null}
+
           {needsTwitter && !isVerified ? (
             <p className="text-xs text-orange-300/90">
               <Link href="/setting#twitter" className="font-semibold underline underline-offset-2">
@@ -1361,7 +1471,7 @@ function TaskRow({
                     <button
                       key={opt}
                       type="button"
-                      disabled={loading}
+                      disabled={loading || sequentiallyLocked}
                       onClick={() => void submitQuizAnswer(opt)}
                       className={cn(
                         buttonVariants({
@@ -1369,6 +1479,7 @@ function TaskRow({
                           size: "sm",
                         }),
                         "min-w-[4.5rem] rounded-full capitalize",
+                        sequentiallyLocked && "cursor-not-allowed opacity-50",
                         isWrong && "border-red-500/40 bg-red-500/10 text-red-200 hover:bg-red-500/15",
                       )}
                     >
@@ -1393,7 +1504,7 @@ function TaskRow({
                   <button
                     key={letter}
                     type="button"
-                    disabled={loading}
+                    disabled={loading || sequentiallyLocked}
                     onClick={() => void submitQuizAnswer(letter)}
                     className={cn(
                       buttonVariants({ variant: "secondary", size: "sm" }),
