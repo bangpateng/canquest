@@ -1117,9 +1117,9 @@ export class QuestsService {
         }
       }
 
-      // Step 2: validator wallet sends reward → user (only after fee is on validator).
+      // Step 2: validator wallet sends reward → same user party (only after fee is on validator).
       this.logger.log(
-        `FCFS reward: validator → @${username} (${rewardCc} CC) for quest ${questId}`,
+        `Claim fee step 2: ${validatorPartyId.split('::')[0]} → ${cantonPartyId.split('::')[0]} (@${username}, ${rewardCc} CC)`,
       );
       const rewardOfferId = await this.splice.createTransferOffer(
         cantonPartyId,

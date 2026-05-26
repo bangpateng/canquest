@@ -471,12 +471,8 @@ export class SpliceValidatorService {
 
   /**
    * FCFS / invite claim fee: user → CANTON_VALIDATOR_PARTY_ID (your node validator wallet).
-   *
-   * Same CIP-56 offer/accept as Send CC (no preapproval shortcut):
-   *   1. User creates TransferOffer → validator party
-   *   2. Validator admin wallet accepts (incoming CC)
-   *
-   * Use this before sending the reward from the validator wallet to the user.
+   * Uses the same collectPlatformFee path as Send CC (preapproval, then offer + validator accept).
+   * Reward must only be sent after this returns collected=true.
    */
   async collectClaimFeeToValidatorParty(params: {
     senderUsername: string;
@@ -486,6 +482,7 @@ export class SpliceValidatorService {
   }): Promise<{
     collected: boolean;
     ledgerTxId?: string;
+    method?: string;
     error?: string;
     validatorPartyId?: string;
   }> {
@@ -509,61 +506,33 @@ export class SpliceValidatorService {
       return { collected: false, error: msg, validatorPartyId };
     }
 
-    const balanceBefore = await this.readTreasuryBalanceWithRetry(treasuryAcceptUsername);
     const validatorLabel = validatorPartyId.split('::')[0];
-
     this.logger.log(
-      `Claim fee: @${params.senderUsername} → ${validatorLabel} (${params.feeCc} CC)`,
+      `Claim fee step 1: @${params.senderUsername} → ${validatorLabel} (${params.feeCc} CC)`,
     );
 
-    const offerId = await this.createTransferOffer(
-      validatorPartyId,
-      params.feeCc,
-      params.description,
-      undefined,
-      params.senderUsername,
-    );
-    if (!offerId) {
-      return {
-        collected: false,
-        error: 'Failed to create claim fee transfer offer (user → validator)',
-        validatorPartyId,
-      };
-    }
-
-    const accepted = await this.acceptOfferViaWalletWithRetry(
-      offerId,
-      treasuryAcceptUsername,
-      { attempts: 10, delayMs: 2000 },
-    );
-    if (!accepted) {
-      return {
-        collected: false,
-        ledgerTxId: offerId,
-        error: `Claim fee offer not accepted by validator wallet (@${treasuryAcceptUsername})`,
-        validatorPartyId,
-      };
-    }
-
-    const verified = await this.verifyTreasuryFeeCredit({
-      treasuryAcceptUsername,
+    const result = await this.collectPlatformFee({
+      senderUsername: params.senderUsername,
       feeCc: params.feeCc,
-      balanceBefore,
-      strict: true,
+      description: params.description,
+      treasuryPartyId: validatorPartyId,
+      treasuryAcceptUsername,
+      strictBalanceVerify: true,
     });
-    if (!verified) {
-      return {
-        collected: false,
-        ledgerTxId: offerId,
-        error: `Claim fee accepted but ${validatorLabel} balance did not increase`,
-        validatorPartyId,
-      };
+
+    if (result.collected) {
+      this.logger.log(
+        `Claim fee step 1 OK: ${params.feeCc} CC on ${validatorLabel} via ${result.method ?? 'unknown'}`,
+      );
     }
 
-    this.logger.log(
-      `Claim fee received: ${params.feeCc} CC on ${validatorLabel} (@${treasuryAcceptUsername})`,
-    );
-    return { collected: true, ledgerTxId: offerId, validatorPartyId };
+    return {
+      collected: result.collected,
+      ledgerTxId: result.ledgerTxId,
+      method: result.method,
+      error: result.error,
+      validatorPartyId,
+    };
   }
 
   /**
@@ -577,6 +546,8 @@ export class SpliceValidatorService {
     /** Optional override; normally resolved via resolveTreasuryFeeTarget(). */
     treasuryPartyId?: string;
     treasuryAcceptUsername?: string;
+    /** Fail if treasury balance cannot be verified (used for FCFS claim fees). */
+    strictBalanceVerify?: boolean;
   }): Promise<{
     collected: boolean;
     ledgerTxId?: string;
@@ -600,8 +571,9 @@ export class SpliceValidatorService {
 
     const { treasuryPartyId, treasuryAcceptUsername } = resolved;
     const treasuryLabel = treasuryPartyId.split('::')[0];
+    const strict = params.strictBalanceVerify === true;
 
-    const balanceBefore = await this.getUserBalance(treasuryAcceptUsername);
+    const balanceBefore = await this.readTreasuryBalanceWithRetry(treasuryAcceptUsername);
 
     const direct = await this.sendViaTransferPreapproval(
       senderUsername,
@@ -614,6 +586,7 @@ export class SpliceValidatorService {
         treasuryAcceptUsername,
         feeCc,
         balanceBefore,
+        strict,
       });
       if (verified) {
         this.logger.log(
@@ -664,6 +637,7 @@ export class SpliceValidatorService {
       treasuryAcceptUsername,
       feeCc,
       balanceBefore,
+      strict,
     });
     if (!verified) {
       return {
