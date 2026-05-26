@@ -7,6 +7,14 @@ import {
 import { CcTransactionType } from '../common/prisma-types';
 import { PointsService } from './points.service';
 import { CC_TRANSACTION_HISTORY_WHERE } from './cc-transaction-visibility';
+import type { Prisma } from '@prisma/client';
+
+/** CC events surfaced in the platform notification bell. */
+export const NOTIFICATION_TX_TYPES: CcTransactionType[] = [
+  'QUEST_REWARD',
+  'SPIN_REWARD',
+  'TRANSFER_IN',
+];
 import {
   looksLikeCantonPartyId,
   normalizeCantonPartyId,
@@ -282,6 +290,70 @@ export class UsersService {
     }
 
     return enriched;
+  }
+
+  private notificationWhere(userId: string): Prisma.CcTransactionWhereInput {
+    return {
+      userId,
+      type: { in: NOTIFICATION_TX_TYPES },
+      ...CC_TRANSACTION_HISTORY_WHERE,
+    };
+  }
+
+  /** Recent CC rewards/transfers for the notification bell + unread badge. */
+  async getNotifications(userId: string, limit = 12) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { notificationsLastSeenAt: true },
+    });
+    const lastSeenAt = user?.notificationsLastSeenAt ?? null;
+    const where = this.notificationWhere(userId);
+
+    const [items, unreadCount] = await Promise.all([
+      this.prisma.ccTransaction.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: Math.min(30, Math.max(1, limit)),
+      }),
+      lastSeenAt
+        ? this.prisma.ccTransaction.count({
+            where: { ...where, createdAt: { gt: lastSeenAt } },
+          })
+        : this.prisma.ccTransaction.count({ where }),
+    ]);
+
+    const enriched = await this.enrichQuestRewardDescriptions(items);
+    const serialized = await Promise.all(
+      enriched.map(async (tx) => {
+        const counterparty =
+          tx.type === 'TRANSFER_IN'
+            ? await this.resolveTransferCounterparty(tx.referenceId)
+            : null;
+        return {
+          id: tx.id,
+          type: tx.type,
+          description: tx.description,
+          amountMicroCc: tx.amountMicroCc.toString(),
+          referenceId: tx.referenceId,
+          counterparty,
+          createdAt: tx.createdAt.toISOString(),
+        };
+      }),
+    );
+
+    return {
+      unreadCount,
+      lastSeenAt: lastSeenAt?.toISOString() ?? null,
+      items: serialized,
+    };
+  }
+
+  async markNotificationsSeen(userId: string) {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { notificationsLastSeenAt: new Date() },
+    });
+    return { ok: true as const };
   }
 
   /** Paginated transaction list for a user (newest first). BigInt serialized as string. */

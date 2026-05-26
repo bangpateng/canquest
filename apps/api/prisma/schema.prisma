@@ -42,6 +42,8 @@ model User {
   /// High-res X avatar URL (pbs.twimg.com, _400x400) — not stored on VPS disk.
   twitterAvatarUrl  String?
   twitterConnectedAt DateTime?
+  /// Last time the user opened or dismissed in-app CC notifications (bell).
+  notificationsLastSeenAt DateTime?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   refreshTokens    RefreshToken[]

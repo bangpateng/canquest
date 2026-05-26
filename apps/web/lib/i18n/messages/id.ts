@@ -28,6 +28,16 @@ export const id: PlatformMessages = {
     label: "Bahasa",
     select: "Pilih bahasa",
   },
+  notifications: {
+    title: "Notifikasi",
+    aria: "Notifikasi",
+    empty: "Belum ada hadiah baru.",
+    markRead: "Tandai semua dibaca",
+    viewWallet: "Lihat dompet",
+    toastEarn: "Hadiah Earn: +{amount} CC",
+    toastSpin: "Hadiah Spin: +{amount} CC",
+    toastReceived: "Diterima +{amount} CC",
+  },
   common: {
     loading: "Memuat…",
     viewAll: "Lihat semua",

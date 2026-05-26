@@ -28,6 +28,16 @@ export const zh: PlatformMessages = {
     label: "语言",
     select: "选择语言",
   },
+  notifications: {
+    title: "通知",
+    aria: "通知",
+    empty: "暂无新奖励。",
+    markRead: "全部标为已读",
+    viewWallet: "查看钱包",
+    toastEarn: "Earn 奖励：+{amount} CC",
+    toastSpin: "Spin 奖励：+{amount} CC",
+    toastReceived: "收到 +{amount} CC",
+  },
   common: {
     loading: "加载中…",
     viewAll: "查看全部",

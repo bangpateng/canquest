@@ -7,6 +7,7 @@ import { usePlatformI18n } from "@/lib/i18n/platform-provider";
 import type { PlatformLocale } from "@/lib/i18n";
 import { iconButtonClass, toolbarMenuButtonClass } from "@/lib/ui-button-styles";
 import { cn } from "@/lib/utils";
+import { TransactionNotifications } from "@/components/platform/transaction-notifications";
 
 export function PlatformToolbar() {
   const { theme, toggleTheme } = useTheme();
@@ -26,6 +27,8 @@ export function PlatformToolbar() {
 
   return (
     <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+      <TransactionNotifications />
+
       <button
         type="button"
         onClick={toggleTheme}

@@ -708,6 +708,31 @@ export class PartyController {
   }
 
   /**
+   * CC notification feed (earn rewards, spin wins, inbound transfers).
+   * GET /api/party/notifications?limit=12
+   */
+  @SkipThrottle()
+  @Get('notifications')
+  async getNotifications(
+    @Req() req: AuthedReq,
+    @Query('limit') limit?: string,
+  ) {
+    const user = await this.users.findById(req.user.userId);
+    if (!user) throw new BadRequestException('User not found.');
+    const n = Math.min(30, Math.max(1, parseInt(limit ?? '12', 10) || 12));
+    return this.users.getNotifications(user.id, n);
+  }
+
+  /** Mark all notification bell items as seen. POST /api/party/notifications/seen */
+  @SkipThrottle()
+  @Post('notifications/seen')
+  async markNotificationsSeen(@Req() req: AuthedReq) {
+    const user = await this.users.findById(req.user.userId);
+    if (!user) throw new BadRequestException('User not found.');
+    return this.users.markNotificationsSeen(user.id);
+  }
+
+  /**
    * Paginated CC transaction history for the authenticated user.
    * GET /api/party/transactions?page=1&pageSize=5
    */

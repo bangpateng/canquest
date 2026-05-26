@@ -28,6 +28,16 @@ export const pt: PlatformMessages = {
     label: "Idioma",
     select: "Selecionar idioma",
   },
+  notifications: {
+    title: "Notificações",
+    aria: "Notificações",
+    empty: "Ainda não há novas recompensas.",
+    markRead: "Marcar tudo como lido",
+    viewWallet: "Ver carteira",
+    toastEarn: "Recompensa Earn: +{amount} CC",
+    toastSpin: "Recompensa Spin: +{amount} CC",
+    toastReceived: "Recebido +{amount} CC",
+  },
   common: {
     loading: "Carregando…",
     viewAll: "Ver tudo",

@@ -37,6 +37,16 @@ export type PlatformMessages = {
     label: string;
     select: string;
   };
+  notifications: {
+    title: string;
+    aria: string;
+    empty: string;
+    markRead: string;
+    viewWallet: string;
+    toastEarn: string;
+    toastSpin: string;
+    toastReceived: string;
+  };
   common: {
     loading: string;
     viewAll: string;
