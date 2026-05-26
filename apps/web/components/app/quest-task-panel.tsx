@@ -11,6 +11,7 @@ import {
   TASK_ACTION_BUTTON_LABEL,
   TASK_COUNTDOWN_SEC,
   formatTaskCountdownSeconds,
+  resolveQuestTaskDisplayTitle,
   formatEarnHubCooldown,
   getEarnHubRepeatCooldownMs,
   getEarnHubTaskRowDisplay,
@@ -449,6 +450,7 @@ export function QuestTaskPanel({
                 key={task.id}
                 index={idx + 1}
                 questId={quest.id}
+                quest={quest}
                 task={task}
                 submission={submissions[task.id] ?? null}
                 partyId={partyId}
@@ -503,6 +505,7 @@ export function QuestTaskPanel({
                 key={task.id}
                 index={idx + 1}
                 questId={quest.id}
+                quest={quest}
                 task={task}
                 submission={submissions[task.id] ?? null}
                 partyId={partyId}
@@ -587,6 +590,7 @@ export function QuestTaskPanel({
 function TaskRow({
   index,
   questId,
+  quest,
   task,
   submission,
   partyId,
@@ -601,6 +605,7 @@ function TaskRow({
 }: {
   index: number;
   questId: string;
+  quest: Quest;
   task: QuestTask;
   submission: QuestSubmission | null;
   partyId: string | null;
@@ -878,6 +883,8 @@ function TaskRow({
 
   const quizExpired = earnHubLayout && isQuiz && !isVerified && isEarnHubQuizExpired(task);
 
+  const displayTitle = resolveQuestTaskDisplayTitle(task, quest);
+
   const earnHubDisplay = earnHubLayout
     ? getEarnHubTaskRowDisplay(task, {
         taskCompleted: isOneTimeComplete || onRepeatCooldown,
@@ -916,7 +923,7 @@ function TaskRow({
                   isVerified && "text-[var(--muted-foreground)]",
                 )}
               >
-                {task.title}
+                {displayTitle}
               </p>
               <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
                 {taskTypeSubtitle(task.type)}
@@ -1371,7 +1378,7 @@ function TaskRow({
                 </span>
               )}
               <div className="min-w-0">
-                <CardTitle>{task.title}</CardTitle>
+                <CardTitle>{displayTitle}</CardTitle>
                 {task.description &&
                   !task.description.trim().startsWith("http") &&
                   task.description.trim() !== (task.target ?? "").trim() && (

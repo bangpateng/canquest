@@ -16,6 +16,7 @@ import {
   isInviteRewardType,
   questExportLabel,
   questTaskTypeLabel,
+  resolveQuestTaskDisplayTitle,
 } from "@/lib/quest-types";
 
 interface Task {
@@ -117,7 +118,10 @@ export function QuestDetail({ questId }: { questId: string }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         type: newTask.type,
-        title: buildQuestTaskTitle(newTask.type, newTask.target),
+        title: buildQuestTaskTitle(newTask.type, newTask.target, {
+          projectName: quest.title,
+          questKind: quest.questKind ?? "CAMPAIGN",
+        }),
         description: null,
         points: newTask.points,
         target: newTask.target || null,
@@ -321,9 +325,14 @@ export function QuestDetail({ questId }: { questId: string }) {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="rounded-md bg-[var(--muted)] px-2 py-0.5 text-[10px] font-semibold uppercase">
-                    {questTaskTypeLabel(task.type)}
+                    {questTaskTypeLabel(task.type, {
+                      projectName: quest.title,
+                      questKind: quest.questKind ?? "CAMPAIGN",
+                    })}
                   </span>
-                  <span className="text-sm font-semibold">{task.title}</span>
+                  <span className="text-sm font-semibold">
+                    {resolveQuestTaskDisplayTitle(task, quest)}
+                  </span>
                   <span className="ml-auto text-xs text-[var(--muted-foreground)]">+{task.points} pts</span>
                 </div>
                 {task.description && <p className="mt-1 text-xs text-[var(--muted-foreground)]">{task.description}</p>}
@@ -364,7 +373,10 @@ export function QuestDetail({ questId }: { questId: string }) {
                     className={inputCls}
                   />
                   <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                    {buildQuestTaskTitle(newTask.type, newTask.target)}
+                    {buildQuestTaskTitle(newTask.type, newTask.target, {
+                      projectName: quest.title,
+                      questKind: quest.questKind ?? "CAMPAIGN",
+                    })}
                   </p>
                 </div>
               </div>

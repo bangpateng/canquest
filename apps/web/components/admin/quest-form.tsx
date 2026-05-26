@@ -279,7 +279,10 @@ export function QuestForm({
         ...(tasks.length > 0 && {
           tasks: tasks.map((t, i) => ({
             type: t.type,
-            title: buildQuestTaskTitle(t.type, t.target),
+            title: buildQuestTaskTitle(t.type, t.target, {
+              projectName: form.title,
+              questKind,
+            }),
             description: null,
             points: t.points,
             target: t.target || null,
@@ -639,7 +642,11 @@ export function QuestForm({
                         className={cn(inputCls, "py-2")}
                       />
                       <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                        Label for users: {buildQuestTaskTitle(task.type, task.target)}
+                        Label for users:{" "}
+                        {buildQuestTaskTitle(task.type, task.target, {
+                          projectName: form.title,
+                          questKind,
+                        })}
                       </p>
                     </div>
                   </div>

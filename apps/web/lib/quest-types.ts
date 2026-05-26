@@ -594,24 +594,91 @@ export function formatTaskCountdownSeconds(seconds: number): string {
   return n === 1 ? "1 second" : `${n} seconds`;
 }
 
-/** Short label on the task action button (replaces +pts until verified). */
+export type QuestTaskTitleContext = {
+  /** Campaign / project name from admin (Quest title field). */
+  projectName?: string | null;
+  questKind?: "CAMPAIGN" | "EARN_HUB";
+};
+
+function normalizeTaskType(type: string): string {
+  return type === "telegram_join" ? "telegram_channel" : type;
+}
+
+/** Partner campaign task labels — use project name, not "CanQuest". */
+function campaignTaskTypeLabel(type: string, projectName: string): string {
+  const name = projectName.trim() || "Project";
+  switch (normalizeTaskType(type)) {
+    case "twitter_follow":
+      return `Follow ${name} on X`;
+    case "twitter_retweet":
+      return `Retweet ${name} on X`;
+    case "telegram_channel":
+      return `Join Telegram ${name}`;
+    case "telegram_group":
+      return `Join Telegram group ${name}`;
+    case "discord_join":
+      return `Join Discord ${name}`;
+    case "submit_email":
+      return `Submit email for ${name}`;
+    case "submit_party_id":
+    case "submit_canton_address":
+      return `Submit Party ID for ${name}`;
+    default:
+      return QUEST_TASK_TYPE_OPTIONS.find((t) => t.value === type)?.label ?? type.replace(/_/g, " ");
+  }
+}
+
+function shouldAppendTargetToTitle(type: string, target: string): boolean {
+  const t = normalizeTaskType(type);
+  if (t === "twitter_follow" || t === "twitter_retweet") return true;
+  if (target.startsWith("@")) return true;
+  if (target.startsWith("http") && (t === "twitter_follow" || t === "twitter_retweet")) return true;
+  return false;
+}
+
 /** Admin/UI label for a quest task type. */
-export function questTaskTypeLabel(type: string): string {
-  const earn = EARN_HUB_TASK_TYPE_OPTIONS.find((t) => t.value === type);
-  if (earn) return earn.label;
+export function questTaskTypeLabel(type: string, ctx?: QuestTaskTitleContext): string {
+  if (ctx?.questKind === "CAMPAIGN") {
+    return campaignTaskTypeLabel(type, ctx.projectName ?? "");
+  }
+  if (ctx?.questKind === "EARN_HUB") {
+    const earn = EARN_HUB_TASK_TYPE_OPTIONS.find((t) => t.value === type);
+    if (earn) return earn.label;
+  }
+  if (ctx?.projectName?.trim()) {
+    return campaignTaskTypeLabel(type, ctx.projectName);
+  }
   const opt = QUEST_TASK_TYPE_OPTIONS.find((t) => t.value === type);
   if (opt) return opt.label;
+  const earn = EARN_HUB_TASK_TYPE_OPTIONS.find((t) => t.value === type);
+  if (earn) return earn.label;
   if (type === "telegram_join") return "Join Telegram Channel";
   return type.replace(/_/g, " ");
 }
 
-/** Auto title when admin does not enter one (Type + target). */
-export function buildQuestTaskTitle(type: string, target?: string | null): string {
-  const label = questTaskTypeLabel(type);
+/** Auto title when admin saves a task (campaign uses project name). */
+export function buildQuestTaskTitle(
+  type: string,
+  target?: string | null,
+  ctx?: QuestTaskTitleContext,
+): string {
+  const label = questTaskTypeLabel(type, ctx);
   const t = target?.trim();
-  if (!t) return label;
+  if (!t || !shouldAppendTargetToTitle(type, t)) return label;
   const short = t.length > 48 ? `${t.slice(0, 45)}…` : t;
   return `${label} — ${short}`;
+}
+
+/** Title shown to users — fixes legacy DB rows that still say "CanQuest". */
+export function resolveQuestTaskDisplayTitle(
+  task: Pick<QuestTask, "type" | "title" | "target">,
+  quest: Pick<Quest, "title" | "questKind">,
+): string {
+  if (quest.questKind === "EARN_HUB") return task.title;
+  return buildQuestTaskTitle(task.type, task.target, {
+    projectName: quest.title,
+    questKind: "CAMPAIGN",
+  });
 }
 
 /** Display deadline on cards from Ends at (replaces manual deadline field). */
