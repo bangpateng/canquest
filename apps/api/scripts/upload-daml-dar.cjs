@@ -30,7 +30,7 @@ const secret = process.env.CANTON_SPLICE_SECRET || 'unsafe';
 const audience = process.env.CANTON_LEDGER_API_AUDIENCE || 'https://canton.network.global';
 const user = process.env.CANTON_LEDGER_API_USER || 'ledger-api-user';
 
-function resolveLatestDar(): string {
+function resolveLatestDar() {
   const distDir = path.join(__dirname, '..', '..', '..', 'packages', 'daml', '.daml', 'dist');
   try {
     const files = fs
