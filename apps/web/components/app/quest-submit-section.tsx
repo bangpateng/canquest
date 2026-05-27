@@ -8,10 +8,12 @@ import {
   campaignUiKind,
   formatFcfsClaimFeeHint,
   formatFcfsSlotsRemaining,
+  isFcfsSlotsFull,
   isUnluckyState,
   rewardCodeFromStatus,
   type CampaignMeta,
 } from "@/lib/campaign-reward";
+import { CampaignFcfsRewardCard } from "@/components/app/campaign-fcfs-reward-card";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ArrowRight, Check, CheckCircle2, ChevronDown, Coins, Copy, Rocket, Shield, Sparkles, Ticket } from "lucide-react";
@@ -199,18 +201,19 @@ export function QuestSubmittedProof({
       : null;
 
   if (uiKind === "cc_fcfs" && state === "cc_reward" && fcfsSlotsLabel) {
+    const slotsFull = campaignMeta
+      ? isFcfsSlotsFull(campaignMeta.remainingSlots, campaignMeta.maxWinners)
+      : fcfsSlotsLabel.toLowerCase().includes("ended");
     return (
-      <section className="relative overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-b from-emerald-500/12 via-[var(--card)] to-[var(--card)] p-8 text-center ring-1 ring-emerald-500/20">
-        <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-400" />
-        <p className="mt-4 text-base font-semibold text-[var(--foreground)]">
-          {fcfsSlotsLabel}
-        </p>
-        {fcfsFeeHint ? (
-          <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted-foreground)]">
-            {fcfsFeeHint}
-          </p>
-        ) : null}
-      </section>
+      <CampaignFcfsRewardCard
+        mode="status"
+        slotsLabel={fcfsSlotsLabel}
+        description={
+          slotsFull
+            ? "All reward slots are taken. Thanks for completing the campaign tasks."
+            : fcfsFeeHint
+        }
+      />
     );
   }
 
