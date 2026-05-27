@@ -403,7 +403,7 @@ export class UsersService {
           questId: d.questId,
           questTitle: d.quest.title,
           code,
-          description: `Kode kamu sudah siap — copy kodenya di sini.`,
+          description: `You successfully claimed a code for "${d.quest.title}". Your code is ready: ${code}`,
           createdAt,
           unread,
         };
@@ -441,7 +441,7 @@ export class UsersService {
     const { rewardType, questTitle, rewardCc, winnerMessage, won, userDraw } = params;
     if (!won) {
       return {
-        description: `Belum beruntung di ${questTitle}. Coba lagi di campaign berikutnya!`,
+        description: `Not selected for ${questTitle}. Better luck next time.`,
         rewardCc: null,
       };
     }
@@ -449,8 +449,8 @@ export class UsersService {
     if (rewardType === RewardType.CC_MANUAL) {
       return {
         description: userDraw?.distributed
-          ? `Beruntung! Kamu menang ${rewardCc} CC dari ${questTitle}.`
-          : `Beruntung! Kamu menang ${rewardCc} CC — buka campaign untuk claim reward.`,
+          ? `You won ${rewardCc} CC from ${questTitle}.`
+          : `You won ${rewardCc} CC — open the campaign to claim your reward.`,
         rewardCc: rewardCc > 0 ? rewardCc : null,
       };
     }
@@ -461,12 +461,12 @@ export class UsersService {
     ) {
       if (userDraw?.inviteCode) {
         return {
-          description: `Beruntung! Kode undangan kamu di ${questTitle} sudah siap.`,
+          description: `You won ${questTitle}. Your code is ready.`,
           rewardCc: null,
         };
       }
       return {
-        description: `Beruntung! Kamu menang undian di ${questTitle} — buka campaign untuk claim kode.`,
+        description: `You won ${questTitle} — open the campaign to claim your code.`,
         rewardCc: null,
       };
     }
@@ -476,13 +476,13 @@ export class UsersService {
       return {
         description:
           custom ??
-          `Beruntung! Kamu terpilih di ${questTitle} — buka campaign untuk detail selanjutnya.`,
+          `You were selected for ${questTitle} — open the campaign for next steps.`,
         rewardCc: null,
       };
     }
 
     return {
-      description: `Beruntung! Kamu terpilih di ${questTitle}.`,
+      description: `You were selected for ${questTitle}.`,
       rewardCc: null,
     };
   }

@@ -143,6 +143,7 @@ export const id: PlatformMessages = {
     dailyTasks: "Tugas Quest harian",
     cardRewardPerWinner: "CC / Winners",
     cardFcfsSlots: "Slot FCFS",
+    cardCodes: "Kode",
     cardRaffleWinners: "Pemenang",
     cardRaffleWinnersMax: "Maks {max}",
     slotsSelected: "{used}/{max} terpilih",

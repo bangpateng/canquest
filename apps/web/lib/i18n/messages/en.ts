@@ -143,6 +143,7 @@ export const en: PlatformMessages = {
     dailyTasks: "Daily Quest tasks",
     cardRewardPerWinner: "CC / Winners",
     cardFcfsSlots: "FCFS slots",
+    cardCodes: "Codes",
     cardRaffleWinners: "Winners",
     cardRaffleWinnersMax: "{max} max",
     slotsSelected: "{used}/{max} selected",

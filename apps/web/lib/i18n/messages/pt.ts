@@ -142,6 +142,7 @@ export const pt: PlatformMessages = {
     dailyTasks: "Tarefas Quest diárias",
     cardRewardPerWinner: "Reward per winner",
     cardFcfsSlots: "FCFS slots",
+    cardCodes: "Codes",
     cardRaffleWinners: "Winners",
     cardClaimFlow: "Pay {fee} CC fee → receive {reward} CC",
     cardClaimFee: "Claim fee",

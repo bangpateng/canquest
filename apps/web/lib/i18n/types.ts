@@ -164,6 +164,7 @@ export type PlatformMessages = {
     dailyTasks: string;
     cardRewardPerWinner: string;
     cardFcfsSlots: string;
+    cardCodes: string;
     cardRaffleWinners: string;
     cardRaffleWinnersMax: string;
     slotsSelected: string;

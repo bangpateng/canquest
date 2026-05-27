@@ -142,6 +142,7 @@ export const de: PlatformMessages = {
     dailyTasks: "Tägliche Quest-Aufgaben",
     cardRewardPerWinner: "Reward per winner",
     cardFcfsSlots: "FCFS slots",
+    cardCodes: "Codes",
     cardRaffleWinners: "Winners",
     cardClaimFlow: "Pay {fee} CC fee → receive {reward} CC",
     cardClaimFee: "Claim fee",

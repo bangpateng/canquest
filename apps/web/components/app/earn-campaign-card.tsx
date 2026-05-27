@@ -152,6 +152,9 @@ export function EarnCampaignCard({
     summary != null &&
     slotsMax > 0 &&
     summary.remainingSlots != null;
+  const isCodeFcfs = quest.rewardType === "INVITE_CODE_FCFS";
+  const showCodeFcfs =
+    isCodeFcfs && summary != null && slotsMax > 0 && summary.remainingSlots != null;
   const showRaffleWinners = isDrawCcRaffle && slotsMax > 0;
   const raffleWinnersLabel =
     winnersDrawn > 0
@@ -166,7 +169,8 @@ export function EarnCampaignCard({
   const showPool = poolLabel !== "—" || (summary?.poolTotalCc ?? 0) > 0;
   const showCodes =
     summary?.codesRemaining != null &&
-    (quest.rewardType === "INVITE_CODE_FCFS" || summary.requiresPaidInviteClaim);
+    !isCodeFcfs &&
+    summary.requiresPaidInviteClaim;
 
   const slotsPct = slotsMax > 0 ? Math.round((slotsUsed / slotsMax) * 100) : 0;
 
@@ -299,9 +303,9 @@ export function EarnCampaignCard({
         </div>
 
         {/* Metrics strip — no claim fee */}
-        {(showFcfs || showRaffleWinners || showPool || showCodes || (quest.rewardCc <= 0 && quest.rewardPool)) && (
+        {(showFcfs || showCodeFcfs || showRaffleWinners || showPool || showCodes || (quest.rewardCc <= 0 && quest.rewardPool)) && (
           <div className="mt-3 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--muted)]/20">
-            <div className="flex divide-x divide-[var(--border)]">
+            <div className="grid grid-cols-2 divide-x divide-y divide-[var(--border)] sm:flex sm:divide-y-0">
               {quest.rewardCc <= 0 && quest.rewardPool ? (
                 <Metric
                   label={t("earnCampaigns.rewardLabel")}
@@ -329,6 +333,19 @@ export function EarnCampaignCard({
                   icon={Zap}
                   accent={slotsFull ? undefined : "text-[var(--primary-strong)]"}
                   muted={slotsFull}
+                />
+              ) : null}
+              {showCodeFcfs ? (
+                <Metric
+                  label={t("earnCampaigns.cardCodes")}
+                  value={formatFcfsSlotsFilled(
+                    slotsLeft,
+                    summary!.maxWinners,
+                    t("earnCampaigns.slotsEnded"),
+                  )}
+                  icon={Ticket}
+                  accent={slotsLeft <= 0 ? undefined : "text-[var(--primary-strong)]"}
+                  muted={slotsLeft <= 0}
                 />
               ) : null}
               {showPool ? (
@@ -382,6 +399,20 @@ export function EarnCampaignCard({
                         ? "bg-gradient-to-r from-amber-500 to-orange-500"
                         : "bg-gradient-to-r from-[var(--primary)] to-[var(--primary-strong)]",
                     )}
+                    style={{ width: `${Math.max(6, slotsPct)}%` }}
+                  />
+                </div>
+              </div>
+            ) : null}
+            {showCodeFcfs && slotsLeft > 0 ? (
+              <div className="border-t border-[var(--border)] px-3 py-2 sm:px-4">
+                <div className="mb-1 flex justify-between text-[10px] tabular-nums text-[var(--muted-foreground)]">
+                  <span>{t("earnCampaigns.slotsClaimed", { used: String(slotsUsed), max: String(slotsMax) })}</span>
+                  <span>{slotsPct}%</span>
+                </div>
+                <div className="h-1 overflow-hidden rounded-full bg-[var(--border)]">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-[var(--primary)] to-[var(--primary-strong)] transition-all duration-500"
                     style={{ width: `${Math.max(6, slotsPct)}%` }}
                   />
                 </div>

@@ -142,7 +142,7 @@ export const zh: PlatformMessages = {
     dailyTasks: "每日 Quest 任务",
     cardRewardPerWinner: "Reward per winner",
     cardFcfsSlots: "FCFS slots",
-    cardRaffleWinners: "Winners",
+    cardCodes: "Codes",
     cardRaffleWinners: "Winners",
     cardClaimFlow: "Pay {fee} CC fee → receive {reward} CC",
     cardClaimFee: "Claim fee",
