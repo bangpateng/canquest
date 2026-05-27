@@ -346,7 +346,7 @@ export function QuestSubmittedProof({
           <div className="rounded-2xl border border-violet-500/35 bg-gradient-to-br from-violet-500/15 to-[var(--card)] p-5">
             <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-violet-300/80">
               <Ticket className="h-4 w-4" />
-              Your invite code
+              Your code
             </div>
             <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <StatValue className="text-3xl tracking-wide text-[var(--foreground)]">

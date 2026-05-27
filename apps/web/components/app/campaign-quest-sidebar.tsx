@@ -125,7 +125,7 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
           {quest.rewardType?.includes("INVITE") ? (
             <p className="mt-2 flex items-center gap-1.5 text-xs text-violet-300/90">
               <Ticket className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              Invite code reward
+              Code reward
             </p>
           ) : null}
         </div>

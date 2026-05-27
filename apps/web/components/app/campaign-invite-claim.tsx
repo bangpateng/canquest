@@ -62,7 +62,7 @@ export function CampaignInviteClaimSection({
   return (
     <CampaignFcfsRewardCard
       mode="claim"
-      sectionLabel="Invite code"
+      sectionLabel="Code FCFS"
       slotsLabel={codes > 0 ? `${codes} code(s) left` : "No codes left"}
       description={codes > 0 ? feeHint : "No codes left in the pool."}
       rewardCc={0}
