@@ -906,13 +906,18 @@ export class AdminService {
       where: { id: questId },
       select: { rewardType: true },
     });
-    if (
-      quest &&
-      normalizeRewardType(quest.rewardType as RewardType) === RewardType.CC_MANUAL
-    ) {
-      throw new BadRequestException(
-        'CC raffle winners claim rewards on the quest page — use Draw Winners only.',
-      );
+    if (quest) {
+      const rt = normalizeRewardType(quest.rewardType as RewardType);
+      if (
+        rt === RewardType.CC_MANUAL ||
+        rt === RewardType.INVITE_CODE_RANDOM ||
+        rt === RewardType.INVITE_CODE ||
+        rt === RewardType.WAITLIST_EMAIL
+      ) {
+        throw new BadRequestException(
+          'Raffle campaigns: use Draw Winners only — winners claim or view results on the quest page.',
+        );
+      }
     }
 
     const draws = await this.prisma.winnerDraw.findMany({

@@ -356,7 +356,73 @@ export class UsersService {
     };
   }
 
-  /** CC raffle draw results — winners/losers notified after admin draw. */
+  /** Raffle draw results — winners/losers notified after admin draw. */
+  private isRaffleDrawRewardType(rt: RewardType): boolean {
+    return (
+      rt === RewardType.CC_MANUAL ||
+      rt === RewardType.INVITE_CODE_RANDOM ||
+      rt === RewardType.INVITE_CODE ||
+      rt === RewardType.WAITLIST_EMAIL
+    );
+  }
+
+  private buildDrawAlertDescription(params: {
+    rewardType: RewardType;
+    questTitle: string;
+    rewardCc: number;
+    winnerMessage: string | null;
+    won: boolean;
+    userDraw: { distributed: boolean; inviteCode: string | null } | null;
+  }): { description: string; rewardCc: number | null } {
+    const { rewardType, questTitle, rewardCc, winnerMessage, won, userDraw } = params;
+    if (!won) {
+      return {
+        description: `Belum beruntung di ${questTitle}. Coba lagi di campaign berikutnya!`,
+        rewardCc: null,
+      };
+    }
+
+    if (rewardType === RewardType.CC_MANUAL) {
+      return {
+        description: userDraw?.distributed
+          ? `Beruntung! Kamu menang ${rewardCc} CC dari ${questTitle}.`
+          : `Beruntung! Kamu menang ${rewardCc} CC — buka campaign untuk claim reward.`,
+        rewardCc: rewardCc > 0 ? rewardCc : null,
+      };
+    }
+
+    if (
+      rewardType === RewardType.INVITE_CODE_RANDOM ||
+      rewardType === RewardType.INVITE_CODE
+    ) {
+      if (userDraw?.inviteCode) {
+        return {
+          description: `Beruntung! Kode undangan kamu di ${questTitle} sudah siap.`,
+          rewardCc: null,
+        };
+      }
+      return {
+        description: `Beruntung! Kamu menang undian di ${questTitle} — buka campaign untuk claim kode.`,
+        rewardCc: null,
+      };
+    }
+
+    if (rewardType === RewardType.WAITLIST_EMAIL) {
+      const custom = winnerMessage?.trim();
+      return {
+        description:
+          custom ??
+          `Beruntung! Kamu terpilih di ${questTitle} — buka campaign untuk detail selanjutnya.`,
+        rewardCc: null,
+      };
+    }
+
+    return {
+      description: `Beruntung! Kamu terpilih di ${questTitle}.`,
+      rewardCc: null,
+    };
+  }
+
   private async getDrawAlerts(
     userId: string,
     lastSeenAt: Date | null,
@@ -378,7 +444,13 @@ export class UsersService {
       select: {
         questId: true,
         quest: {
-          select: { id: true, title: true, rewardType: true, rewardCc: true },
+          select: {
+            id: true,
+            title: true,
+            rewardType: true,
+            rewardCc: true,
+            winnerMessage: true,
+          },
         },
       },
     });
@@ -397,7 +469,7 @@ export class UsersService {
 
     for (const c of completions) {
       const rt = normalizeRewardType(c.quest.rewardType as RewardType);
-      if (rt !== RewardType.CC_MANUAL) continue;
+      if (!this.isRaffleDrawRewardType(rt)) continue;
 
       const latestDraw = await this.prisma.winnerDraw.findFirst({
         where: { questId: c.questId },
@@ -410,34 +482,27 @@ export class UsersService {
       });
       const drawnAt = latestDraw.drawnAt;
       const unread = !lastSeenAt || drawnAt > lastSeenAt;
+      const won = Boolean(userDraw);
+      const { description, rewardCc } = this.buildDrawAlertDescription({
+        rewardType: rt,
+        questTitle: c.quest.title,
+        rewardCc: c.quest.rewardCc,
+        winnerMessage: c.quest.winnerMessage,
+        won,
+        userDraw,
+      });
 
-      if (userDraw) {
-        alerts.push({
-          kind: 'draw',
-          id: `draw-win-${c.questId}`,
-          drawKind: 'win',
-          questId: c.questId,
-          questTitle: c.quest.title,
-          rewardCc: c.quest.rewardCc > 0 ? c.quest.rewardCc : null,
-          description: userDraw.distributed
-            ? `Beruntung! Kamu menang ${c.quest.rewardCc} CC dari ${c.quest.title}.`
-            : `Beruntung! Kamu menang ${c.quest.rewardCc} CC — buka campaign untuk claim reward.`,
-          createdAt: drawnAt.toISOString(),
-          unread,
-        });
-      } else {
-        alerts.push({
-          kind: 'draw',
-          id: `draw-loss-${c.questId}`,
-          drawKind: 'loss',
-          questId: c.questId,
-          questTitle: c.quest.title,
-          rewardCc: null,
-          description: `Belum beruntung di ${c.quest.title}. Coba lagi di campaign berikutnya!`,
-          createdAt: drawnAt.toISOString(),
-          unread,
-        });
-      }
+      alerts.push({
+        kind: 'draw',
+        id: won ? `draw-win-${c.questId}` : `draw-loss-${c.questId}`,
+        drawKind: won ? 'win' : 'loss',
+        questId: c.questId,
+        questTitle: c.quest.title,
+        rewardCc,
+        description,
+        createdAt: drawnAt.toISOString(),
+        unread,
+      });
     }
 
     return alerts;

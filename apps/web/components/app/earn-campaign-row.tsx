@@ -11,7 +11,12 @@ import Link from "next/link";
 
 function rewardAccent(rewardPool: string, rewardType?: RewardType) {
   const pool = rewardPool.toLowerCase();
-  if (rewardType === "CC_ONLY" || rewardType === "CC_AND_INVITE" || pool.includes("cc")) {
+  if (
+    rewardType === "CC_ONLY" ||
+    rewardType === "CC_MANUAL" ||
+    rewardType === "CC_AND_INVITE" ||
+    pool.includes("cc")
+  ) {
     return {
       icon: Coins,
       footer: "from-[var(--primary)]/10 via-transparent to-transparent border-[var(--primary)]/20",
@@ -41,15 +46,20 @@ function rewardAccent(rewardPool: string, rewardType?: RewardType) {
 
 function kindLabel(
   kind: ReturnType<typeof campaignUiKind>,
+  rewardType: string | undefined,
   t: (key: string) => string,
 ): string {
   switch (kind) {
     case "cc_fcfs":
       return t("earnCampaigns.kindFcfs");
+    case "cc_manual_draw":
+      return t("earnCampaigns.kindRaffle");
     case "cc_manual":
       return t("earnCampaigns.kindCc");
     case "waitlist_code":
-      return t("earnCampaigns.kindInvite");
+      return rewardType === "INVITE_CODE_FCFS"
+        ? t("earnCampaigns.kindInvite")
+        : t("earnCampaigns.kindRaffle");
     case "waitlist_email":
       return t("earnCampaigns.kindWaitlist");
     default:
@@ -115,7 +125,7 @@ export function EarnCampaignRow({
         : t("quests.joinQuest");
 
   const metaParts = [
-    kindLabel(uiKind, t),
+    kindLabel(uiKind, quest.rewardType, t),
     `${quest.tasks.length} tasks`,
     quest.deadline ?? null,
   ].filter(Boolean) as string[];

@@ -156,6 +156,7 @@ export type PlatformMessages = {
     kindCc: string;
     kindInvite: string;
     kindWaitlist: string;
+    kindRaffle: string;
     kindCampaign: string;
     dailyTasks: string;
     cardRewardPerWinner: string;

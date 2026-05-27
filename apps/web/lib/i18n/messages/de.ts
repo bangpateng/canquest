@@ -136,6 +136,7 @@ export const de: PlatformMessages = {
     kindCc: "CC",
     kindInvite: "Einladung",
     kindWaitlist: "Waitlist",
+    kindRaffle: "Verlosung",
     kindCampaign: "Kampagne",
     dailyTasks: "Tägliche Quest-Aufgaben",
     cardRewardPerWinner: "Reward per winner",

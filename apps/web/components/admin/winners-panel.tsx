@@ -277,7 +277,11 @@ export function WinnersPanel({ questId }: { questId: string }) {
 
   const undistributed = winners.filter((w) => !w.distributed);
   const availableCodes = codes.filter((c) => !c.assigned).length;
-  const isCcRaffle = questRewardType === "CC_MANUAL";
+  const isRaffleQuest =
+    questRewardType === "CC_MANUAL" ||
+    questRewardType === "INVITE_CODE_RANDOM" ||
+    questRewardType === "INVITE_CODE" ||
+    questRewardType === "WAITLIST_EMAIL";
 
   return (
     <div className="space-y-6">
@@ -408,13 +412,13 @@ export function WinnersPanel({ questId }: { questId: string }) {
       {/* Winners tab */}
       {tab === "winners" && (
         <div className="space-y-4">
-          {isCcRaffle ? (
+          {isRaffleQuest ? (
             <p className="rounded-2xl border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
-              CC raffle: winners claim rewards on the quest page after you run Draw Winners.
-              Do not use Send / Distribute here.
+              Raffle / waitlist: run Draw Winners, then winners open the quest page to claim
+              codes, CC, or read the winner message. Do not use Send / Distribute here.
             </p>
           ) : null}
-          {undistributed.length > 0 && !isCcRaffle && (
+          {undistributed.length > 0 && !isRaffleQuest && (
             <div className="flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
               <p className="text-sm font-medium">
                 {undistributed.length} winner(s) pending reward distribution
@@ -483,7 +487,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        {!w.distributed && !isCcRaffle && (
+                        {!w.distributed && !isRaffleQuest && (
                           <button
                             type="button"
                             disabled={distributing !== null}

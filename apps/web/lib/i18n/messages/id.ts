@@ -137,6 +137,7 @@ export const id: PlatformMessages = {
     kindCc: "CC",
     kindInvite: "Undangan",
     kindWaitlist: "Waitlist",
+    kindRaffle: "Undian",
     kindCampaign: "Kampanye",
     dailyTasks: "Tugas Quest harian",
     cardRewardPerWinner: "CC / Winners",

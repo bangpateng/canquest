@@ -136,6 +136,7 @@ export const zh: PlatformMessages = {
     kindCc: "CC",
     kindInvite: "邀请",
     kindWaitlist: "候补",
+    kindRaffle: "抽奖",
     kindCampaign: "活动",
     dailyTasks: "每日 Quest 任务",
     cardRewardPerWinner: "Reward per winner",

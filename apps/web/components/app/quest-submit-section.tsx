@@ -229,6 +229,19 @@ export function QuestSubmittedProof({
     );
   }
 
+  if (uiKind === "waitlist_email" && state === "winner") {
+    return (
+      <section className="relative overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-b from-emerald-500/12 via-[var(--card)] to-[var(--card)] p-8 text-center ring-1 ring-emerald-500/20">
+        <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-400" />
+        <PageTitle className="mt-4">Congratulations — you&apos;re selected!</PageTitle>
+        <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted-foreground)]">
+          {rewardStatus?.message ??
+            "You were selected in the draw. Check your email or the message below for next steps."}
+        </p>
+      </section>
+    );
+  }
+
   if (uiKind === "waitlist_email" && state === "waitlist") {
     return (
       <section className="relative overflow-hidden rounded-2xl border border-sky-500/30 bg-gradient-to-b from-sky-500/10 via-[var(--card)] to-[var(--card)] p-8 text-center">
