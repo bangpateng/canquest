@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CheckCircle2, Coins, Rocket } from "lucide-react";
+import { CheckCircle2, Coins } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -83,11 +83,7 @@ export function CampaignFcfsRewardCard({
               "w-full shrink-0 gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold sm:w-auto sm:min-w-[9.5rem]",
             )}
           >
-            {isSubmitting ? (
-              <LoadingSpinner size="sm" />
-            ) : (
-              <Rocket className="h-4 w-4" aria-hidden />
-            )}
+            {isSubmitting ? <LoadingSpinner size="sm" /> : null}
             {isSubmitting ? "Claiming…" : (claimButtonLabel ?? `Claim ${rewardCc} CC`)}
           </button>
         ) : null}
