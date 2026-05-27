@@ -181,6 +181,7 @@ export function QuestForm({
     form.rewardType === "CC_ONLY" ||
     form.rewardType === "CC_MANUAL" ||
     form.rewardType === "CC_AND_INVITE" ||
+    form.rewardType === "INVITE_CODE_RANDOM" ||
     form.rewardType === "INVITE_CODE_FCFS";
 
   const recommendedTaskType =
