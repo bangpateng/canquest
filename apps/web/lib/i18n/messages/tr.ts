@@ -143,6 +143,7 @@ export const tr: PlatformMessages = {
     kindCampaign: "Kampanya",
     dailyTasks: "Günlük Görev görevleri",
     cardRewardPerWinner: "CC / Kazanan",
+    cardRewardPerUserCode: "1 Kod",
     cardFcfsSlots: "FCFS slotları",
     cardCodes: "Kodlar",
     cardRaffleWinners: "Kazananlar",

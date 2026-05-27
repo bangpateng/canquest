@@ -142,6 +142,7 @@ export const en: PlatformMessages = {
     kindCampaign: "Campaign",
     dailyTasks: "Daily Quest tasks",
     cardRewardPerWinner: "CC / Winners",
+    cardRewardPerUserCode: "1 Code",
     cardFcfsSlots: "FCFS slots",
     cardCodes: "Codes",
     cardRaffleWinners: "Winners",

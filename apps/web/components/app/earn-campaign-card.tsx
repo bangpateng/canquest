@@ -188,6 +188,13 @@ export function EarnCampaignCard({
       ? t("earnCampaigns.slotsEnded")
       : statusMeta.label;
 
+  const bannerRewardText =
+    quest.rewardCc > 0
+      ? null
+      : isCodeFcfs
+        ? t("earnCampaigns.cardRewardPerUserCode")
+        : quest.rewardPool;
+
   const inner = (
     <article
       className={cn(
@@ -236,7 +243,7 @@ export function EarnCampaignCard({
         </span>
 
         {/* Reward highlight on banner (Galxe-style) */}
-        {quest.rewardCc > 0 || quest.rewardPool ? (
+        {quest.rewardCc > 0 || bannerRewardText ? (
           <div className="absolute bottom-3 right-3 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-lg border border-white/10 bg-black/50 px-2.5 py-1.5 backdrop-blur-md">
             <RewardIcon className={cn("h-4 w-4 shrink-0", theme.accent)} />
             <div className="min-w-0 text-right">
@@ -250,7 +257,7 @@ export function EarnCampaignCard({
                 </p>
               ) : (
                 <p className={cn("truncate text-sm font-bold leading-tight", theme.accent)}>
-                  {quest.rewardPool}
+                  {bannerRewardText}
                 </p>
               )}
             </div>

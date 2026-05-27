@@ -159,6 +159,7 @@ export type PlatformMessages = {
     kindCampaign: string;
     dailyTasks: string;
     cardRewardPerWinner: string;
+    cardRewardPerUserCode: string;
     cardFcfsSlots: string;
     cardCodes: string;
     cardRaffleWinners: string;
