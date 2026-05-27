@@ -83,6 +83,12 @@ export default async function AdminPanelLayout({ children }: { children: ReactNo
               Users
             </Link>
             <Link
+              href="/admin/wallet-invites"
+              className="text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+            >
+              Wallet codes
+            </Link>
+            <Link
               href="/overview"
               className="text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:text-canton"
             >

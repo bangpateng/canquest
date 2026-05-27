@@ -57,6 +57,21 @@ model User {
   referralRewardsGiven   ReferralReward[] @relation("ReferralRewardsGiven")
   referralRewardReceived ReferralReward?  @relation("ReferralRewardReceived")
   walletAllocations      WalletAllocationLog[]
+  redeemedWalletInvites  WalletInviteCode[]  @relation("WalletInviteRedemptions")
+}
+
+/// One-time codes required to create a Canton wallet (admin-generated).
+model WalletInviteCode {
+  id           String    @id @default(cuid())
+  code         String    @unique
+  note         String?
+  createdAt    DateTime  @default(now())
+  redeemedAt   DateTime?
+  redeemedById String?
+  redeemedBy   User?     @relation("WalletInviteRedemptions", fields: [redeemedById], references: [id], onDelete: SetNull)
+
+  @@index([redeemedAt])
+  @@index([createdAt])
 }
 
 /// Global daily counter — each row is one Canton/Splice wallet slot consumed (UTC day).

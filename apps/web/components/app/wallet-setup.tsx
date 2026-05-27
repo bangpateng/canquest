@@ -3,6 +3,7 @@
 import { normalizeWalletUsername } from "@/lib/canton-party-id";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
+import { inputClass } from "@/lib/ui-tokens";
 import { formatApiError } from "@/lib/format-api-error";
 import { Wallet } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -15,22 +16,23 @@ interface WalletSetupProps {
 
 /**
  * Shown when a user has no Canton Party ID yet.
- * They enter a username → one click → wallet is generated on the Canton participant.
+ * Requires a one-time wallet invite code (admin-generated) + username.
  */
 export function WalletSetup({ onCreated }: WalletSetupProps) {
   const t = usePlatformT();
   const [username, setUsername] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<"idle" | "creating" | "done">("idle");
-  const [quotaRemaining, setQuotaRemaining] = useState<number | null>(null);
+  const [needsInvite, setNeedsInvite] = useState(true);
 
   useEffect(() => {
-    void fetch("/api/party/wallet-quota", { credentials: "include", cache: "no-store" })
+    void fetch("/api/party/wallet-access", { credentials: "include", cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
-      .then((data: { remaining?: number } | null) => {
-        if (data && typeof data.remaining === "number") {
-          setQuotaRemaining(data.remaining);
+      .then((data: { hasRedeemedInvite?: boolean } | null) => {
+        if (data && typeof data.hasRedeemedInvite === "boolean") {
+          setNeedsInvite(!data.hasRedeemedInvite);
         }
       })
       .catch(() => undefined);
@@ -40,6 +42,7 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
     e.preventDefault();
     const val = normalizeWalletUsername(username) ?? "";
     if (!val || val.length < 3) return;
+    if (needsInvite && inviteCode.trim().length < 4) return;
 
     setBusy(true);
     setError(null);
@@ -50,7 +53,10 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: val }),
+        body: JSON.stringify({
+          username: val,
+          ...(needsInvite ? { walletInviteCode: inviteCode.trim() } : {}),
+        }),
       });
 
       const raw = (await res.json().catch(() => null)) as Record<string, unknown> | null;
@@ -62,10 +68,9 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
       }
 
       if (raw?.isPlaceholder === true) {
-        // Canton not reachable → show warning but still proceed
         setError(
           "Wallet created with a placeholder Party ID — your SSH tunnel to the Canton participant is not active. " +
-          "Connect the tunnel and use Settings to get a real Party ID."
+            "Connect the tunnel and use Settings to get a real Party ID.",
         );
       }
 
@@ -79,31 +84,43 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
   return (
     <div className="flex min-h-[60vh] w-full min-w-0 items-center justify-center">
       <div className="w-full min-w-0 max-w-md">
-        {/* Icon */}
         <div className="mb-6 flex justify-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-canton/30 bg-canton/10">
             <Wallet className="h-8 w-8 text-canton" />
           </div>
         </div>
 
-        <h2 className="type-page-title text-center">Create Your Wallet</h2>
-
-        {quotaRemaining !== null ? (
-          <p
-            className={cn(
-              "mt-4 rounded-xl border px-3 py-2 text-center text-xs",
-              quotaRemaining > 0
-                ? "border-[var(--border)] bg-[var(--muted)]/30 text-[var(--muted-foreground)]"
-                : "border-orange-500/40 bg-orange-500/10 text-orange-300",
-            )}
-          >
-            {quotaRemaining > 0
-              ? t("walletGate.quotaRemaining", { n: quotaRemaining })
-              : t("walletGate.quotaFull")}
-          </p>
-        ) : null}
+        <h2 className="type-page-title text-center">{t("wallet.createTitle")}</h2>
+        <p className="mt-2 text-center text-sm text-[var(--muted-foreground)]">
+          {needsInvite ? t("wallet.inviteCodeHint") : t("wallet.inviteCodeRetryHint")}
+        </p>
 
         <form onSubmit={handleGenerate} className="mt-8 space-y-4">
+          {needsInvite ? (
+            <div className="space-y-1.5">
+              <label
+                htmlFor="wallet-invite-code"
+                className="text-xs font-medium text-[var(--muted-foreground)]"
+              >
+                {t("wallet.inviteCodeLabel")}
+              </label>
+              <input
+                id="wallet-invite-code"
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                placeholder="WQ-XXXXXXXX"
+                minLength={4}
+                maxLength={64}
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
+                required
+                disabled={busy || step === "done"}
+                className={cn(inputClass, "font-mono uppercase")}
+              />
+            </div>
+          ) : null}
+
           <div className="space-y-1.5">
             <label
               htmlFor="wallet-username"
@@ -131,18 +148,18 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
               spellCheck={false}
               required
               disabled={busy || step === "done"}
-              className="w-full rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3 font-mono text-sm text-[var(--foreground)] outline-none ring-[var(--ring)] placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 disabled:opacity-50"
+              className={cn(inputClass, "font-mono")}
             />
           </div>
 
-          {error && (
+          {error ? (
             <p
-              className="rounded-xl border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-sm text-orange-300 dark:text-orange-300"
+              className="rounded-xl border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-sm text-orange-300"
               role="alert"
             >
               {error}
             </p>
-          )}
+          ) : null}
 
           <button
             type="submit"
@@ -150,7 +167,7 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
               busy ||
               step === "done" ||
               username.trim().length < 3 ||
-              quotaRemaining === 0
+              (needsInvite && inviteCode.trim().length < 4)
             }
             className={cn(buttonVariants({ size: "lg" }), "w-full gap-2")}
           >

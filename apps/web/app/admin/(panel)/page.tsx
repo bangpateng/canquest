@@ -2,7 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { CQ_ADMIN_ACCESS_COOKIE } from "@/lib/auth-cookies";
 import { internalApiBase } from "@/lib/internal-api-url";
-import { Users, Scroll, Trophy, CheckCircle2, Sparkles, Gift, ArrowRight } from "lucide-react";
+import { Users, Scroll, Trophy, CheckCircle2, Sparkles, Gift, ArrowRight, KeyRound } from "lucide-react";
 
 interface Stats {
   totalUsers: number;
@@ -138,6 +138,13 @@ export default async function AdminPage() {
         >
           <Users className="h-4 w-4" />
           Manage users
+        </Link>
+        <Link
+          href="/admin/wallet-invites"
+          className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--card)]/80 px-4 py-2.5 text-sm font-semibold transition-colors hover:border-[var(--primary)]/30"
+        >
+          <KeyRound className="h-4 w-4" />
+          Wallet invite codes
         </Link>
       </div>
     </div>

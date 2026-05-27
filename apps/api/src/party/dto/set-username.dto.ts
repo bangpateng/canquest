@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 import { normalizeWalletUsername } from '../../common/canton-party-id';
 
 export class SetUsernameDto {
@@ -13,4 +13,10 @@ export class SetUsernameDto {
     message: 'username may contain lowercase letters, numbers, and underscores',
   })
   username!: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(4)
+  @MaxLength(64)
+  walletInviteCode?: string;
 }

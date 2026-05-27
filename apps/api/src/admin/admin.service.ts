@@ -1250,6 +1250,78 @@ export class AdminService {
   }
 
   /* ────────────────────────────────────────────────────────
+     WALLET INVITE CODES (wallet creation gate)
+  ──────────────────────────────────────────────────────── */
+
+  async listWalletInviteCodes() {
+    const codes = await this.prisma.walletInviteCode.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        redeemedBy: {
+          select: { id: true, email: true, username: true },
+        },
+      },
+    });
+    const available = codes.filter((c) => !c.redeemedAt).length;
+    return {
+      total: codes.length,
+      available,
+      used: codes.length - available,
+      codes: codes.map((c) => ({
+        id: c.id,
+        code: c.code,
+        note: c.note,
+        createdAt: c.createdAt.toISOString(),
+        redeemedAt: c.redeemedAt?.toISOString() ?? null,
+        redeemedBy: c.redeemedBy
+          ? {
+              id: c.redeemedBy.id,
+              email: c.redeemedBy.email,
+              username: c.redeemedBy.username,
+            }
+          : null,
+      })),
+    };
+  }
+
+  async generateWalletInviteCodes(params: {
+    count?: number;
+    codes?: string[];
+    note?: string;
+  }) {
+    const note = params.note?.trim() || null;
+    const rawList =
+      params.codes?.map((c) => c.trim().toUpperCase()).filter(Boolean) ??
+      this.generateCodes(Math.min(Math.max(params.count ?? 1, 1), 500), 'WQ');
+
+    const created: string[] = [];
+    const skipped: string[] = [];
+
+    for (const code of rawList) {
+      try {
+        await this.prisma.walletInviteCode.create({
+          data: { code, note },
+        });
+        created.push(code);
+      } catch {
+        skipped.push(code);
+      }
+    }
+
+    return { created: created.length, skipped: skipped.length, codes: created };
+  }
+
+  async deleteWalletInviteCode(id: string) {
+    const row = await this.prisma.walletInviteCode.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('Wallet invite code not found');
+    if (row.redeemedAt) {
+      throw new BadRequestException('Cannot delete a code that has already been used.');
+    }
+    await this.prisma.walletInviteCode.delete({ where: { id } });
+    return { ok: true };
+  }
+
+  /* ────────────────────────────────────────────────────────
      HELPERS
   ──────────────────────────────────────────────────────── */
 

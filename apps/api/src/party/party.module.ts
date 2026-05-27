@@ -4,12 +4,12 @@ import { CantonModule } from '../canton/canton.module';
 import { AuthModule } from '../auth/auth.module';
 import { UsersModule } from '../users/users.module';
 import { PartyController } from './party.controller';
-import { WalletQuotaService } from './wallet-quota.service';
+import { WalletInviteCodeService } from './wallet-invite-code.service';
 
 @Module({
   imports: [UsersModule, AuthModule, CantonModule, ConfigModule],
   controllers: [PartyController],
-  providers: [WalletQuotaService],
-  exports: [WalletQuotaService],
+  providers: [WalletInviteCodeService],
+  exports: [WalletInviteCodeService],
 })
 export class PartyModule {}

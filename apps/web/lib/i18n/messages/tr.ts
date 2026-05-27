@@ -68,6 +68,7 @@ export const tr: PlatformMessages = {
     navLocked: "Önce cüzdan oluşturun",
     quotaRemaining: "Bugün {n} cüzdan hakkı kaldı (UTC)",
     quotaFull: "Günlük cüzdan limiti doldu — yarın tekrar deneyin (UTC)",
+    inviteRequired: "Cüzdan davet kodu gerekli",
   },
   questReferral: {
     aria: "Arkadaş davet et",
@@ -177,6 +178,11 @@ export const tr: PlatformMessages = {
     campaignEndedWinnerClaim: "Bu kampanya sona erdi.",
   },
   wallet: {
+    createTitle: "Cüzdanınızı Oluşturun",
+    inviteCodeLabel: "Cüzdan davet kodu",
+    inviteCodeHint:
+      "Canton cüzdanınızı oluşturmak için ekipten aldığınız tek kullanımlık davet kodunu girin.",
+    inviteCodeRetryHint: "Kullanıcı adınızla cüzdan kurulumunu tamamlayın (davet zaten kabul edildi).",
     nodeIssue: "Düğüm bağlantı sorunu",
     walletActive: "Cüzdan Aktif",
     partyId: "Canton Party ID",

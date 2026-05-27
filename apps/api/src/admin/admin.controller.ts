@@ -242,6 +242,26 @@ export class AdminController {
     return this.admin.deleteInviteCodes(questId);
   }
 
+  /* ── Wallet invite codes (wallet creation) ── */
+
+  @Get('wallet-invites')
+  listWalletInvites() {
+    return this.admin.listWalletInviteCodes();
+  }
+
+  @Post('wallet-invites')
+  generateWalletInvites(
+    @Body()
+    body: { count?: number; codes?: string[]; note?: string },
+  ) {
+    return this.admin.generateWalletInviteCodes(body);
+  }
+
+  @Delete('wallet-invites/:id')
+  deleteWalletInvite(@Param('id') id: string) {
+    return this.admin.deleteWalletInviteCode(id);
+  }
+
   /* ── User management ── */
 
   @Get('users')

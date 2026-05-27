@@ -63,11 +63,12 @@ export const en: PlatformMessages = {
   walletGate: {
     title: "Wallet required",
     description:
-      "Please create your Canton wallet first to access Earn and Spin Reward.",
+      "Create your Canton wallet with a team invite code to access Earn and Spin Reward.",
     createWallet: "Create wallet",
     navLocked: "Create a wallet first",
     quotaRemaining: "{n} wallet slots left today (UTC)",
     quotaFull: "Daily wallet limit reached — try again tomorrow (UTC)",
+    inviteRequired: "Wallet invite code required",
   },
   questReferral: {
     aria: "Invite friends",
@@ -176,6 +177,10 @@ export const en: PlatformMessages = {
     campaignEndedWinnerClaim: "This campaign has ended.",
   },
   wallet: {
+    createTitle: "Create Your Wallet",
+    inviteCodeLabel: "Wallet invite code",
+    inviteCodeHint: "Enter the one-time invite code from the team to create your Canton wallet.",
+    inviteCodeRetryHint: "Finish wallet setup with your username (invite already accepted).",
     nodeIssue: "Node connection issue",
     walletActive: "Wallet Active",
     partyId: "Canton Party ID",

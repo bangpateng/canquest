@@ -72,6 +72,7 @@ export type PlatformMessages = {
     navLocked: string;
     quotaRemaining: string;
     quotaFull: string;
+    inviteRequired: string;
   };
   questReferral: {
     aria: string;
@@ -177,6 +178,10 @@ export type PlatformMessages = {
     slotsFullClosedBanner: string;
   };
   wallet: {
+    createTitle: string;
+    inviteCodeLabel: string;
+    inviteCodeHint: string;
+    inviteCodeRetryHint: string;
     nodeIssue: string;
     walletActive: string;
     partyId: string;

@@ -30,7 +30,8 @@ import {
 } from '../common/canton-party-id';
 import { hasRealWallet } from '../common/wallet-policy';
 import { UsersService } from '../users/users.service';
-import { WalletQuotaService } from './wallet-quota.service';
+import { WalletInviteCodeService } from './wallet-invite-code.service';
+import { AllocateWalletDto } from './dto/allocate-wallet.dto';
 import { CantonPartyBindingDto } from './dto/canton-party-binding.dto';
 import { SetUsernameDto } from './dto/set-username.dto';
 
@@ -50,13 +51,17 @@ export class PartyController {
     private readonly ccBalance: CcBalanceService,
     private readonly txDetail: TransactionDetailService,
     private readonly config: ConfigService,
-    private readonly walletQuota: WalletQuotaService,
+    private readonly walletInvites: WalletInviteCodeService,
   ) {}
 
-  @Get('wallet-quota')
+  @Get('wallet-access')
   @SkipThrottle()
-  walletQuotaStatus() {
-    return this.walletQuota.getStatus();
+  async walletAccessStatus(@Req() req: AuthedReq) {
+    const hasRedeemedInvite = await this.walletInvites.userHasRedeemedInvite(req.user.userId);
+    return {
+      requiresInviteCode: true,
+      hasRedeemedInvite,
+    };
   }
 
   /**
@@ -92,7 +97,7 @@ export class PartyController {
     let spliceOnboarded = false;
 
     if (!hasRealWallet(existing.cantonPartyId)) {
-      await this.walletQuota.assertSlotAvailable();
+      await this.walletInvites.assertCanCreateWallet(req.user.userId, body.walletInviteCode);
     }
 
     // Preferred path: Splice validator handles party allocation + onboarding in one call.
@@ -141,7 +146,11 @@ export class PartyController {
     }
 
     if (!hasRealWallet(existing.cantonPartyId) && !isPlaceholder) {
-      await this.walletQuota.recordAllocation({
+      await this.walletInvites.redeemAfterWalletCreated(
+        req.user.userId,
+        body.walletInviteCode,
+      );
+      await this.walletInvites.recordAllocation({
         userId: req.user.userId,
         username,
         partyId: cantonPartyId,
@@ -297,7 +306,7 @@ export class PartyController {
    */
   @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
   @Post('allocate')
-  async allocateCantonParty(@Req() req: AuthedReq) {
+  async allocateCantonParty(@Req() req: AuthedReq, @Body() body: AllocateWalletDto) {
     const user = await this.users.findById(req.user.userId);
     if (!user) throw new BadRequestException('User not found');
 
@@ -311,7 +320,7 @@ export class PartyController {
       normalizeWalletUsername(user.username) ?? `cq-${user.id.slice(0, 10)}`;
 
     if (!hasRealWallet(user.cantonPartyId)) {
-      await this.walletQuota.assertSlotAvailable();
+      await this.walletInvites.assertCanCreateWallet(req.user.userId, body.walletInviteCode);
     }
 
     // Try Splice first (preferred — full registration).
@@ -327,7 +336,11 @@ export class PartyController {
       await this.users.setPartyId(req.user.userId, splicePartyId, user.username ?? undefined);
       const storedPartyId = normalizeCantonPartyId(splicePartyId) ?? splicePartyId;
       if (!hasRealWallet(user.cantonPartyId)) {
-        await this.walletQuota.recordAllocation({
+        await this.walletInvites.redeemAfterWalletCreated(
+          user.id,
+          body.walletInviteCode,
+        );
+        await this.walletInvites.recordAllocation({
           userId: user.id,
           username,
           partyId: storedPartyId,
@@ -351,7 +364,8 @@ export class PartyController {
     await this.users.setPartyId(req.user.userId, cantonPartyId, user.username ?? undefined);
     const storedPartyId = normalizeCantonPartyId(cantonPartyId) ?? cantonPartyId;
     if (!hasRealWallet(user.cantonPartyId)) {
-      await this.walletQuota.recordAllocation({
+      await this.walletInvites.redeemAfterWalletCreated(user.id, body.walletInviteCode);
+      await this.walletInvites.recordAllocation({
         userId: user.id,
         username,
         partyId: storedPartyId,
