@@ -1445,12 +1445,19 @@ export class QuestsService {
     const reservedDrawId = reserveResult.drawId;
     const isNewReservation = reserveResult.isNewReservation;
 
-    const balance = await this.splice.getUserBalance(username);
-    if (balance !== null && balance < feeCc) {
-      if (isNewReservation) {
-        await this.prisma.winnerDraw.delete({ where: { id: reservedDrawId } }).catch(() => {});
+    const reservedDraw = await this.prisma.winnerDraw.findUnique({
+      where: { id: reservedDrawId },
+    });
+    const feeAlreadyPaid = Boolean(reservedDraw?.claimFeeLedgerTxId);
+
+    if (!feeAlreadyPaid) {
+      const balance = await this.splice.getUserBalance(username);
+      if (balance !== null && balance < feeCc) {
+        if (isNewReservation) {
+          await this.prisma.winnerDraw.delete({ where: { id: reservedDrawId } }).catch(() => {});
+        }
+        throw new BadRequestException(FCFS_CLAIM_FAIL_MSG);
       }
-      throw new BadRequestException(FCFS_CLAIM_FAIL_MSG);
     }
 
     const maxPayoutExposure = maxWinners * rewardCc;
@@ -1497,14 +1504,25 @@ export class QuestsService {
       }
 
       // Step 1: user pays claim fee → validator node party (CANTON_VALIDATOR_PARTY_ID).
-      const feeTxId = await this.collectClaimFee({
-        userId,
-        username,
-        questTitle: quest.title,
-        feeCc,
-        feeLabel: 'FCFS claim fee',
-        validatorPartyId,
-      });
+      // If the fee was already paid (previous attempt), skip collecting again.
+      const feeTxId =
+        drawNow?.claimFeeLedgerTxId ??
+        (await this.collectClaimFee({
+          userId,
+          username,
+          questTitle: quest.title,
+          feeCc,
+          feeLabel: 'FCFS claim fee',
+          validatorPartyId,
+        }));
+
+      // Persist fee TX early so retries don't double-charge and slot stays reserved.
+      if (!drawNow?.claimFeeLedgerTxId) {
+        await this.prisma.winnerDraw.updateMany({
+          where: { id: reservedDrawId, questId, userId, distributed: false, claimFeeLedgerTxId: null },
+          data: { claimFeeLedgerTxId: feeTxId },
+        });
+      }
 
       if (claimSessionId) {
         const marked = await this.questLedger.markClaimFeePaid({
@@ -1588,7 +1606,15 @@ export class QuestsService {
       this.logger.warn(`FCFS claim on-chain failed: ${detail}`);
       await this.prisma.winnerDraw
         .deleteMany({
-          where: { id: reservedDrawId, questId, userId, distributed: false },
+          // Only release the slot when the claim fee was NOT collected.
+          // If fee was paid, keep the reservation so the user can retry without losing the slot.
+          where: {
+            id: reservedDrawId,
+            questId,
+            userId,
+            distributed: false,
+            claimFeeLedgerTxId: null,
+          },
         })
         .catch(() => {});
       throw new BadRequestException(this.fcfsClaimErrorMessage(detail));
@@ -1880,9 +1906,12 @@ export class QuestsService {
     }
 
     const feeCc = resolveClaimFeeCc(quest) ?? 2;
-    const balance = await this.splice.getUserBalance(username);
-    if (balance !== null && balance < feeCc) {
-      throw new BadRequestException(FCFS_CLAIM_FAIL_MSG);
+    const feeAlreadyPaid = Boolean(existingDraw?.claimFeeLedgerTxId);
+    if (!feeAlreadyPaid) {
+      const balance = await this.splice.getUserBalance(username);
+      if (balance !== null && balance < feeCc) {
+        throw new BadRequestException(FCFS_CLAIM_FAIL_MSG);
+      }
     }
 
     const validatorPartyId = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
@@ -1891,28 +1920,47 @@ export class QuestsService {
     }
 
     let feeTxId: string;
-    try {
-      feeTxId = await this.collectClaimFee({
-        userId,
-        username,
-        questTitle: quest.title,
-        feeCc,
-        feeLabel: 'Claim fee',
-        validatorPartyId,
+    if (existingDraw?.claimFeeLedgerTxId) {
+      feeTxId = existingDraw.claimFeeLedgerTxId;
+    } else {
+      try {
+        feeTxId = await this.collectClaimFee({
+          userId,
+          username,
+          questTitle: quest.title,
+          feeCc,
+          feeLabel: 'Claim fee',
+          validatorPartyId,
+        });
+      } catch {
+        throw new BadRequestException(FCFS_CLAIM_FAIL_MSG);
+      }
+
+      // Persist fee TX early so retries don't double-charge.
+      await this.prisma.winnerDraw.upsert({
+        where: { questId_userId: { questId, userId } },
+        create: {
+          questId,
+          userId,
+          ccAmount: quest.rewardCc,
+          distributed: false,
+          claimFeeLedgerTxId: feeTxId,
+        },
+        update: {
+          claimFeeLedgerTxId: feeTxId,
+        },
       });
-    } catch {
-      throw new BadRequestException(FCFS_CLAIM_FAIL_MSG);
-    }
-
-    const codeRow = await this.prisma.inviteCodePool.findFirst({
-      where: { questId, userId: null },
-      orderBy: { createdAt: 'asc' },
-    });
-    if (!codeRow) {
-      throw new BadRequestException('No invite codes available.');
     }
 
     try {
+      const codeRow = await this.prisma.inviteCodePool.findFirst({
+        where: { questId, userId: null },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (!codeRow) {
+        throw new BadRequestException('No invite codes available.');
+      }
+
       await this.prisma.$transaction([
         this.prisma.inviteCodePool.update({
           where: { id: codeRow.id },
@@ -1943,8 +1991,8 @@ export class QuestsService {
     const rewardStatus = await this.getQuestRewardStatus(userId, questId);
     return {
       ok: true,
-      message: `Your code: ${codeRow.code} (${feeCc} CC fee paid).`,
-      inviteCode: codeRow.code,
+      message: `Your code is ready. (${feeCc} CC fee paid).`,
+      inviteCode: (await this.prisma.winnerDraw.findUnique({ where: { questId_userId: { questId, userId } } }))?.inviteCode ?? null,
       feeCc,
       rewardStatus,
     };
