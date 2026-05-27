@@ -25,11 +25,13 @@ type PlatformI18nContextValue = {
 
 const PlatformI18nContext = createContext<PlatformI18nContextValue | null>(null);
 
+const REMOVED_LOCALES = new Set(["id", "es", "fr", "de", "pt", "zh"]);
+
 function readStoredLocale(): PlatformLocale {
   if (typeof window === "undefined") return DEFAULT_PLATFORM_LOCALE;
   try {
     const stored = localStorage.getItem(PLATFORM_LOCALE_STORAGE_KEY);
-    if (stored === "id") return DEFAULT_PLATFORM_LOCALE;
+    if (stored && REMOVED_LOCALES.has(stored)) return DEFAULT_PLATFORM_LOCALE;
     if (stored && PLATFORM_LOCALES.some((l) => l.code === stored)) {
       return stored as PlatformLocale;
     }

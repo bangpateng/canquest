@@ -151,7 +151,7 @@ export const en: PlatformMessages = {
     cardClaimFee: "Claim fee",
     cardPoolTotal: "Reward Pool",
     cardCodesRemaining: "{n} invite codes left",
-    slotsEnded: "Ended",
+    slotsEnded: "Full Claimed",
     slotsClaimed: "{used}/{max} claimed",
     viewMyQuest: "View my quest",
     slotsFullBanner:

@@ -1,21 +1,13 @@
 import type { PlatformLocale, PlatformMessages } from "./types";
-import { de } from "./messages/de";
 import { en } from "./messages/en";
-import { es } from "./messages/es";
-import { fr } from "./messages/fr";
-import { pt } from "./messages/pt";
-import { zh } from "./messages/zh";
+import { tr } from "./messages/tr";
 
 export type { PlatformLocale, PlatformMessages };
 export { PLATFORM_LOCALES } from "./types";
 
 export const platformMessages: Record<PlatformLocale, PlatformMessages> = {
   en,
-  es,
-  fr,
-  de,
-  pt,
-  zh,
+  tr,
 };
 
 export const DEFAULT_PLATFORM_LOCALE: PlatformLocale = "en";

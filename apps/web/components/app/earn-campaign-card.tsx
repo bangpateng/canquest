@@ -236,17 +236,23 @@ export function EarnCampaignCard({
         </span>
 
         {/* Reward highlight on banner (Galxe-style) */}
-        {quest.rewardCc > 0 ? (
-          <div className="absolute bottom-3 right-3 flex items-center gap-2 rounded-lg border border-white/10 bg-black/50 px-2.5 py-1.5 backdrop-blur-md">
-            <RewardIcon className={cn("h-4 w-4", theme.accent)} />
-            <div className="text-right">
+        {quest.rewardCc > 0 || quest.rewardPool ? (
+          <div className="absolute bottom-3 right-3 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-lg border border-white/10 bg-black/50 px-2.5 py-1.5 backdrop-blur-md">
+            <RewardIcon className={cn("h-4 w-4 shrink-0", theme.accent)} />
+            <div className="min-w-0 text-right">
               <p className="text-[9px] font-semibold uppercase tracking-wider text-white/60">
                 {t("earnCampaigns.rewardLabel")}
               </p>
-              <p className={cn("text-lg font-bold leading-none tabular-nums", theme.accent)}>
-                {quest.rewardCc}
-                <span className="ml-0.5 text-xs font-semibold text-white/70">CC</span>
-              </p>
+              {quest.rewardCc > 0 ? (
+                <p className={cn("text-lg font-bold leading-none tabular-nums", theme.accent)}>
+                  {quest.rewardCc}
+                  <span className="ml-0.5 text-xs font-semibold text-white/70">CC</span>
+                </p>
+              ) : (
+                <p className={cn("truncate text-sm font-bold leading-tight", theme.accent)}>
+                  {quest.rewardPool}
+                </p>
+              )}
             </div>
           </div>
         ) : null}
@@ -296,17 +302,9 @@ export function EarnCampaignCard({
         </div>
 
         {/* Metrics strip — no claim fee */}
-        {(showFcfs || showCodeFcfs || showRaffleWinners || showPool || showCodes || (quest.rewardCc <= 0 && quest.rewardPool)) && (
+        {(showFcfs || showCodeFcfs || showRaffleWinners || showPool || showCodes) && (
           <div className="mt-3 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--muted)]/20">
             <div className="grid grid-cols-2 divide-x divide-y divide-[var(--border)] sm:flex sm:divide-y-0">
-              {quest.rewardCc <= 0 && quest.rewardPool ? (
-                <Metric
-                  label={t("earnCampaigns.rewardLabel")}
-                  value={quest.rewardPool}
-                  icon={RewardIcon}
-                  accent={theme.accent}
-                />
-              ) : null}
               {showRaffleWinners ? (
                 <Metric
                   label={t("earnCampaigns.cardRaffleWinners")}

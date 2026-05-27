@@ -36,7 +36,7 @@ export function CampaignFcfsClaimSection({
   const slotsLabel =
     remaining > 0
       ? formatFcfsSlotsRemaining(remaining, maxWinners)
-      : formatFcfsSlotsFilled(remaining, maxWinners, "Ended");
+      : formatFcfsSlotsFilled(remaining, maxWinners, "Full Claimed");
   const feeHint = canClaim ? formatFcfsClaimFeeHint(fee, rewardCc) : null;
 
   async function handleFCFSClaim() {

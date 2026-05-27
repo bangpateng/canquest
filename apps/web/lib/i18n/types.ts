@@ -1,10 +1,6 @@
 export const PLATFORM_LOCALES = [
   { code: "en", label: "English", native: "English" },
-  { code: "es", label: "Spanish", native: "Español" },
-  { code: "fr", label: "French", native: "Français" },
-  { code: "de", label: "German", native: "Deutsch" },
-  { code: "pt", label: "Portuguese", native: "Português" },
-  { code: "zh", label: "Chinese", native: "中文" },
+  { code: "tr", label: "Turkish", native: "Türkçe" },
 ] as const;
 
 export type PlatformLocale = (typeof PLATFORM_LOCALES)[number]["code"];

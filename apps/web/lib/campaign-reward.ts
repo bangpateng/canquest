@@ -139,7 +139,7 @@ export function isFcfsSlotsFull(
 export function formatFcfsSlotsFilled(
   remaining: number | null | undefined,
   maxWinners: number | null | undefined,
-  endedLabel = "Ended",
+  endedLabel = "Full Claimed",
 ): string {
   const max = maxWinners ?? 0;
   if (max <= 0) return "—";
@@ -156,7 +156,7 @@ export function formatFcfsSlotsRemaining(
   const max = maxWinners ?? 0;
   if (max <= 0) return "—";
   const left = Math.max(0, Math.min(remaining, max));
-  if (left <= 0) return "Ended";
+  if (left <= 0) return "Full Claimed";
   return `${formatFcfsSlotsFilled(remaining, maxWinners)} · ${left} left`;
 }
 
