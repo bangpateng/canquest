@@ -134,7 +134,7 @@ export const es: PlatformMessages = {
     rewardLabel: "Recompensa",
     kindFcfs: "FCFS",
     kindCc: "CC",
-    kindInvite: "Invitación",
+    kindInvite: "Code FCFS",
     kindWaitlist: "Waitlist",
     kindRaffle: "Sorteo",
     kindCcRaffle: "CC Raffle",

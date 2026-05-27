@@ -6,7 +6,7 @@ import { campaignUiKind } from "@/lib/campaign-reward";
 import { QUEST_STATUS_BADGE, type Quest, type RewardType } from "@/lib/quest-types";
 import { cn } from "@/lib/utils";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
-import { ArrowRight, CheckCircle2, Coins, Sparkles, Ticket, Trophy } from "lucide-react";
+import { ArrowRight, Coins, Sparkles, Ticket, Trophy } from "lucide-react";
 import Link from "next/link";
 
 function rewardAccent(rewardPool: string, rewardType?: RewardType) {
@@ -67,21 +67,10 @@ function kindLabel(
   }
 }
 
-function CampaignLogo({
-  quest,
-  completed,
-}: {
-  quest: Quest;
-  completed?: boolean;
-}) {
+function CampaignLogo({ quest }: { quest: Quest }) {
   return (
     <div
-      className={cn(
-        "relative h-12 w-12 shrink-0 overflow-hidden rounded-2xl ring-1",
-        completed
-          ? "bg-emerald-500/10 ring-emerald-500/30"
-          : "bg-[var(--muted)]/80 ring-[var(--border)]",
-      )}
+      className="relative h-12 w-12 shrink-0 overflow-hidden rounded-2xl bg-[var(--muted)]/80"
     >
       {quest.logoUrl ? (
         <img src={quest.logoUrl} alt="" className="h-full w-full object-cover" />
@@ -90,11 +79,6 @@ function CampaignLogo({
           {quest.orgSlug.slice(0, 2).toUpperCase()}
         </span>
       )}
-      {completed ? (
-        <span className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white ring-2 ring-[var(--card)]">
-          <CheckCircle2 className="h-2.5 w-2.5" strokeWidth={3} />
-        </span>
-      ) : null}
     </div>
   );
 }
@@ -149,7 +133,7 @@ export function EarnCampaignRow({
         <div className="p-4 sm:p-5">
           {/* Header */}
           <div className="flex gap-3.5 sm:gap-4">
-            <CampaignLogo quest={quest} completed={completed} />
+          <CampaignLogo quest={quest} />
 
             <div className="min-w-0 flex-1">
               <div className="flex items-start justify-between gap-3">

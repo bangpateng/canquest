@@ -16,7 +16,6 @@ import { cn } from "@/lib/utils";
 import {
   ArrowRight,
   Calendar,
-  CheckCircle2,
   Coins,
   ListChecks,
   Sparkles,
@@ -258,8 +257,7 @@ export function EarnCampaignCard({
         <div className="flex gap-3">
           <div
             className={cn(
-              "relative h-11 w-11 shrink-0 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--muted)]",
-              completed && "ring-2 ring-emerald-500/40",
+              "relative h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-[var(--muted)]",
             )}
           >
             {quest.logoUrl ? (
@@ -269,11 +267,6 @@ export function EarnCampaignCard({
                 {quest.orgSlug.slice(0, 2).toUpperCase()}
               </span>
             )}
-            {completed ? (
-              <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white ring-2 ring-[var(--card)]">
-                <CheckCircle2 className="h-2.5 w-2.5" strokeWidth={3} />
-              </span>
-            ) : null}
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-[11px] font-medium text-[var(--muted-foreground)]">

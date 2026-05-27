@@ -134,7 +134,7 @@ export const zh: PlatformMessages = {
     rewardLabel: "奖励",
     kindFcfs: "FCFS",
     kindCc: "CC",
-    kindInvite: "邀请",
+    kindInvite: "Code FCFS",
     kindWaitlist: "候补",
     kindRaffle: "抽奖",
     kindCcRaffle: "CC Raffle",
