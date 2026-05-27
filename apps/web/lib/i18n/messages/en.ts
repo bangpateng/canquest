@@ -138,10 +138,14 @@ export const en: PlatformMessages = {
     kindInvite: "Invite",
     kindWaitlist: "Waitlist",
     kindRaffle: "Raffle",
+    kindCcRaffle: "CC Raffle",
     kindCampaign: "Campaign",
     dailyTasks: "Daily Quest tasks",
     cardRewardPerWinner: "CC / Winners",
     cardFcfsSlots: "FCFS slots",
+    cardRaffleWinners: "Winners",
+    cardRaffleWinnersMax: "{max} max",
+    slotsSelected: "{used}/{max} selected",
     cardClaimFlow: "Pay {fee} CC fee → receive {reward} CC",
     cardClaimFee: "Claim fee",
     cardPoolTotal: "Reward Pool",
@@ -165,6 +169,10 @@ export const en: PlatformMessages = {
     viewQuest: "View quest",
     viewRecap: "View recap",
     questComplete: "Quest complete",
+    campaignEndedClosed:
+      "This campaign has ended. New task submissions and FCFS claims are closed.",
+    campaignEndedWinnerClaim:
+      "This campaign has ended. You can still claim your raffle reward below.",
   },
   wallet: {
     nodeIssue: "Node connection issue",
@@ -244,5 +252,7 @@ export const en: PlatformMessages = {
     pointsSpent: "{n} pts spent",
     loadError: "Could not load spin rewards.",
     retry: "Retry",
+    comingSoon: "Coming soon",
+    comingSoonHint: "Spin Reward is not available yet. Check back later.",
   },
 };

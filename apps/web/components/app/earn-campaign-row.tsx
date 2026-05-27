@@ -53,7 +53,7 @@ function kindLabel(
     case "cc_fcfs":
       return t("earnCampaigns.kindFcfs");
     case "cc_manual_draw":
-      return t("earnCampaigns.kindRaffle");
+      return t("earnCampaigns.kindCcRaffle");
     case "cc_manual":
       return t("earnCampaigns.kindCc");
     case "waitlist_code":

@@ -5,7 +5,7 @@ export function hasRealWallet(cantonPartyId: string | null | undefined): boolean
 }
 
 /** Routes that require a Canton wallet (logged-in account is not enough). */
-export const WALLET_GATED_HREFS = ["/earn", "/spin-reward"] as const;
+export const WALLET_GATED_HREFS = ["/earn"] as const;
 
 export function hrefRequiresWallet(href: string): boolean {
   return WALLET_GATED_HREFS.some((p) => href === p || href.startsWith(`${p}/`));

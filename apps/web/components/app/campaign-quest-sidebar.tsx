@@ -1,4 +1,5 @@
 import {
+  campaignTypeDisplayValue,
   campaignUiKind,
   fcfsSlotsTaken,
   formatFcfsSlotsFilled,
@@ -33,7 +34,9 @@ type StatItem = {
 /** Campaign reward + meta — shown above quest tasks (mobile-first, full width). */
 export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
   const summary = quest.campaignSummary;
-  const uiKind = campaignUiKind(quest.rewardType, quest.rewardPool);
+  const requiresFcfs = summary?.requiresFcfsClaim ?? false;
+  const requiresDrawCc = summary?.requiresDrawCcClaim ?? false;
+  const uiKind = campaignUiKind(quest.rewardType, requiresFcfs);
   const rewardHeadline = getCampaignRewardHeadline(
     quest,
     summary?.poolTotalCc ?? null,
@@ -51,7 +54,7 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
     },
   ];
 
-  if (summary?.requiresFcfsClaim && slotsMax > 0) {
+  if (requiresFcfs && slotsMax > 0) {
     stats.push({
       key: "slots",
       icon: Users,
@@ -61,7 +64,17 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
     });
   }
 
-  if (summary?.requiresFcfsClaim && (summary.fcfsClaimFeeCc ?? 0) > 0) {
+  if (requiresDrawCc && slotsMax > 0) {
+    stats.push({
+      key: "winners",
+      icon: Users,
+      label: "Winners",
+      value: `${slotsMax} max`,
+      valueClassName: "text-canton",
+    });
+  }
+
+  if ((requiresFcfs || requiresDrawCc) && (summary?.fcfsClaimFeeCc ?? 0) > 0) {
     stats.push({
       key: "fee",
       icon: Zap,
@@ -82,7 +95,7 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
     key: "type",
     icon: Trophy,
     label: "Type",
-    value: uiKind === "cc_fcfs" ? "FCFS" : uiKind.replace(/_/g, " "),
+    value: campaignTypeDisplayValue(uiKind, quest.rewardType),
     valueClassName: "uppercase tracking-wide text-[11px]",
   });
 

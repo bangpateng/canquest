@@ -138,10 +138,14 @@ export const id: PlatformMessages = {
     kindInvite: "Undangan",
     kindWaitlist: "Waitlist",
     kindRaffle: "Undian",
+    kindCcRaffle: "CC Raffle",
     kindCampaign: "Kampanye",
     dailyTasks: "Tugas Quest harian",
     cardRewardPerWinner: "CC / Winners",
     cardFcfsSlots: "Slot FCFS",
+    cardRaffleWinners: "Pemenang",
+    cardRaffleWinnersMax: "Maks {max}",
+    slotsSelected: "{used}/{max} terpilih",
     cardClaimFlow: "Bayar fee {fee} CC → terima {reward} CC",
     cardClaimFee: "Biaya klaim",
     cardPoolTotal: "Reward Pool",
@@ -165,6 +169,10 @@ export const id: PlatformMessages = {
     viewQuest: "Lihat quest",
     viewRecap: "Lihat ringkasan",
     questComplete: "Quest selesai",
+    campaignEndedClosed:
+      "Campaign ini sudah berakhir. Pengiriman task baru dan klaim FCFS ditutup.",
+    campaignEndedWinnerClaim:
+      "Campaign ini sudah berakhir. Kamu masih bisa klaim hadiah raffle di bawah.",
   },
   wallet: {
     nodeIssue: "Masalah koneksi node",
@@ -244,5 +252,7 @@ export const id: PlatformMessages = {
     pointsSpent: "{n} poin dipakai",
     loadError: "Gagal memuat Spin Reward.",
     retry: "Coba lagi",
+    comingSoon: "Coming soon",
+    comingSoonHint: "Spin Reward belum tersedia. Cek kembali nanti.",
   },
 };

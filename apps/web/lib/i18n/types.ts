@@ -123,6 +123,8 @@ export type PlatformMessages = {
     viewQuest: string;
     viewRecap: string;
     questComplete: string;
+    campaignEndedClosed: string;
+    campaignEndedWinnerClaim: string;
   };
   earnCampaigns: {
     title: string;
@@ -157,10 +159,14 @@ export type PlatformMessages = {
     kindInvite: string;
     kindWaitlist: string;
     kindRaffle: string;
+    kindCcRaffle: string;
     kindCampaign: string;
     dailyTasks: string;
     cardRewardPerWinner: string;
     cardFcfsSlots: string;
+    cardRaffleWinners: string;
+    cardRaffleWinnersMax: string;
+    slotsSelected: string;
     cardClaimFlow: string;
     cardClaimFee: string;
     cardPoolTotal: string;
@@ -246,5 +252,7 @@ export type PlatformMessages = {
     pointsSpent: string;
     loadError: string;
     retry: string;
+    comingSoon: string;
+    comingSoonHint: string;
   };
 };

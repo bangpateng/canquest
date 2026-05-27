@@ -175,6 +175,26 @@ export function formatFcfsClaimFeeHint(feeCc: number, rewardCc: number): string 
   return `Pay ${feeCc} CC claim fee on-chain to receive ${rewardCc} CC from the pool`;
 }
 
+export function campaignTypeDisplayValue(
+  uiKind: ReturnType<typeof campaignUiKind>,
+  rewardType?: string | null,
+): string {
+  switch (uiKind) {
+    case "cc_fcfs":
+      return "FCFS";
+    case "cc_manual_draw":
+      return "CC Raffle";
+    case "waitlist_email":
+      return "Waitlist";
+    case "waitlist_code":
+      return rewardType === "INVITE_CODE_FCFS" ? "Invite FCFS" : "Invite Raffle";
+    case "cc_manual":
+      return "CC Manual";
+    default:
+      return "Campaign";
+  }
+}
+
 export function campaignUiKind(
   rewardType: RewardType | string | undefined,
   requiresFcfsClaim: boolean,

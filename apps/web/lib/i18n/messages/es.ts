@@ -137,10 +137,12 @@ export const es: PlatformMessages = {
     kindInvite: "Invitación",
     kindWaitlist: "Waitlist",
     kindRaffle: "Sorteo",
+    kindCcRaffle: "CC Raffle",
     kindCampaign: "Campaña",
     dailyTasks: "Tareas Quest diarias",
     cardRewardPerWinner: "Reward per winner",
     cardFcfsSlots: "FCFS slots",
+    cardRaffleWinners: "Winners",
     cardClaimFlow: "Pay {fee} CC fee → receive {reward} CC",
     cardClaimFee: "Claim fee",
     cardPoolTotal: "Reward Pool",
@@ -164,6 +166,10 @@ export const es: PlatformMessages = {
     viewQuest: "Ver misión",
     viewRecap: "Ver resumen",
     questComplete: "Misión completada",
+    campaignEndedClosed:
+      "Esta campaña ha terminado. Las nuevas entregas y los claims FCFS están cerrados.",
+    campaignEndedWinnerClaim:
+      "Esta campaña ha terminado. Aún puedes reclamar tu premio del sorteo abajo.",
   },
   wallet: {
     nodeIssue: "Problema de conexión al nodo",
@@ -235,5 +241,7 @@ export const es: PlatformMessages = {
     pointsSpent: "{n} pts gastados",
     loadError: "No se pudo cargar Spin Reward.",
     retry: "Reintentar",
+    comingSoon: "Coming soon",
+    comingSoonHint: "Spin Reward aún no está disponible. Vuelve más tarde.",
   },
 };
