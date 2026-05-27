@@ -51,9 +51,9 @@ export function EarnCampaignsPage() {
       >
         <div className="grid grid-cols-3 divide-x divide-[var(--border)]">
           {statItems.map(({ key, label, value, icon: Icon, accent }) => (
-            <div key={key} className="px-3 py-4 text-center sm:px-5 sm:py-5">
+            <div key={key} className="px-3 py-3 text-center sm:px-5 sm:py-4">
               <Icon className={cn("mx-auto h-4 w-4", accent)} aria-hidden />
-              <p className="mt-2 text-2xl font-semibold tabular-nums leading-none text-[var(--foreground)] sm:text-3xl">
+              <p className="mt-1.5 text-xl font-semibold tabular-nums leading-none text-[var(--foreground)] sm:text-2xl">
                 {value}
               </p>
               <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
@@ -64,14 +64,14 @@ export function EarnCampaignsPage() {
         </div>
 
         {stats.total > 0 ? (
-          <div className="border-t border-[var(--border)] bg-[var(--muted)]/15 px-4 py-3 sm:px-5">
+          <div className="border-t border-[var(--border)] bg-[var(--muted)]/15 px-4 py-2.5 sm:px-5">
             <div className="flex items-center justify-between gap-3 text-xs text-[var(--muted-foreground)]">
               <span>
                 {stats.completed} / {stats.total} {t("earnCampaigns.progressCompleted")}
               </span>
               <span className="font-semibold tabular-nums text-canton">{completionPct}%</span>
             </div>
-            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--muted)]">
+            <div className="mt-2 h-1 overflow-hidden rounded-full bg-[var(--muted)]">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-[var(--primary)] to-[var(--primary-strong)] transition-all duration-700"
                 style={{ width: `${completionPct}%` }}
@@ -80,7 +80,7 @@ export function EarnCampaignsPage() {
           </div>
         ) : null}
 
-        <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] px-4 py-3 sm:px-5">
+        <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] px-4 py-2.5 sm:px-5">
           <Link
             href={ROUTES.leaderboard}
             className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)]/60 px-3 py-1.5 text-xs font-medium text-[var(--foreground)] transition-colors hover:border-[var(--primary)]/35 hover:bg-[var(--primary)]/8"

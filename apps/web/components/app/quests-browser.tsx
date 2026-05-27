@@ -232,9 +232,9 @@ export function QuestsBrowser({
   return (
     <div className={cn("w-full min-w-0", isEarn ? "space-y-4" : "space-y-5")}>
       {isEarn ? (
-        <div className="space-y-3">
-          {searchField}
-          {tabRow}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="sm:order-2 sm:w-[22rem]">{searchField}</div>
+          <div className="sm:order-1 sm:flex-1">{tabRow}</div>
         </div>
       ) : (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">

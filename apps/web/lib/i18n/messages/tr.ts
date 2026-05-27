@@ -172,10 +172,8 @@ export const tr: PlatformMessages = {
     viewQuest: "Görevi görüntüle",
     viewRecap: "Özeti görüntüle",
     questComplete: "Görev tamamlandı",
-    campaignEndedClosed:
-      "Bu kampanya sona erdi. Yeni görev gönderimi ve FCFS talepleri kapalı.",
-    campaignEndedWinnerClaim:
-      "Bu kampanya sona erdi. Çekiliş ödülünüzü aşağıdan hâlâ talep edebilirsiniz.",
+    campaignEndedClosed: "Bu kampanya sona erdi.",
+    campaignEndedWinnerClaim: "Bu kampanya sona erdi.",
   },
   wallet: {
     nodeIssue: "Düğüm bağlantı sorunu",

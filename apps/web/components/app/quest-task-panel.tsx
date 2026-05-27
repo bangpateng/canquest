@@ -324,10 +324,6 @@ export function QuestTaskPanel({
     questCompleted &&
     !isEarnHub &&
     rewardStatus?.state === "fcfs_claimable";
-  const canClaimRaffleAfterEnd =
-    questCompleted &&
-    rewardStatus?.state === "fcfs_claimable" &&
-    (requiresDrawCcClaim || requiresPaidInviteClaim);
   const showClassicSubmit =
     allDone &&
     !questCompleted &&
@@ -431,9 +427,7 @@ export function QuestTaskPanel({
       ) : null}
       {campaignEnded ? (
         <div className="rounded-xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm text-orange-200">
-          {canClaimRaffleAfterEnd
-            ? t("quests.campaignEndedWinnerClaim")
-            : t("quests.campaignEndedClosed")}
+          {t("quests.campaignEndedClosed")}
         </div>
       ) : null}
       {fcfsSlotsFull && !campaignEnded && !isEarnHub ? (

@@ -18,6 +18,7 @@ import { CampaignQuestStatusCard } from "@/components/app/campaign-quest-status-
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ArrowRight, Check, CheckCircle2, ChevronDown, Clock, Coins, Copy, Rocket, Shield, Sparkles, Ticket } from "lucide-react";
+import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { useState } from "react";
 
 export type QuestLedgerProof = {
@@ -99,6 +100,8 @@ export function QuestSubmitSection({
   cantonLedgerConfigured?: boolean;
   campaignEnded?: boolean;
 }) {
+  const t = usePlatformT();
+
   return (
     <section className="relative overflow-hidden rounded-2xl border border-[var(--primary)]/40 bg-gradient-to-br from-[var(--primary)]/15 via-[var(--card)] to-[var(--card)] p-6 md:p-8">
       <div
@@ -121,7 +124,7 @@ export function QuestSubmitSection({
 
         {campaignEnded ? (
           <p className="mx-auto mt-4 max-w-md text-sm text-orange-300">
-            This campaign has ended. Final submit is closed.
+            {t("quests.campaignEndedClosed")}
           </p>
         ) : null}
 

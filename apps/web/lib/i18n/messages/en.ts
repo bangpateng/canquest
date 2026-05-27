@@ -171,10 +171,8 @@ export const en: PlatformMessages = {
     viewQuest: "View quest",
     viewRecap: "View recap",
     questComplete: "Quest complete",
-    campaignEndedClosed:
-      "This campaign has ended. New task submissions and FCFS claims are closed.",
-    campaignEndedWinnerClaim:
-      "This campaign has ended. You can still claim your raffle reward below.",
+    campaignEndedClosed: "This campaign has ended.",
+    campaignEndedWinnerClaim: "This campaign has ended.",
   },
   wallet: {
     nodeIssue: "Node connection issue",
