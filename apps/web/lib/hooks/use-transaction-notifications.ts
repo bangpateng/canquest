@@ -24,7 +24,17 @@ export type NotificationDraw = {
   createdAt: string;
 };
 
-export type NotificationItem = NotificationTx | NotificationDraw;
+export type NotificationCode = {
+  kind: "code";
+  id: string;
+  questId: string;
+  questTitle: string;
+  code: string;
+  description: string;
+  createdAt: string;
+};
+
+export type NotificationItem = NotificationTx | NotificationDraw | NotificationCode;
 
 export type NotificationFeed = {
   unreadCount: number;
@@ -36,7 +46,7 @@ const DEFAULT_POLL_MS = 28_000;
 
 type ToastPayload = {
   id: string;
-  kind: "transaction" | "draw";
+  kind: "transaction" | "draw" | "code";
   drawKind?: "win" | "loss";
   txType?: NotificationTx["type"];
   amountCc: number;
@@ -89,6 +99,13 @@ export function useTransactionNotifications(
                 drawKind: item.drawKind,
                 amountCc: item.rewardCc ?? 0,
                 description: item.description,
+              });
+            } else if (item.kind === "code") {
+              fresh.push({
+                id: item.id,
+                kind: "code",
+                amountCc: 0,
+                description: `${item.questTitle}: ${item.code}`,
               });
             } else {
               fresh.push({

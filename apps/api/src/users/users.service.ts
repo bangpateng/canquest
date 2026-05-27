@@ -309,7 +309,7 @@ export class UsersService {
     const lastSeenAt = user?.notificationsLastSeenAt ?? null;
     const where = this.notificationWhere(userId);
 
-    const [items, unreadTxCount, drawAlerts] = await Promise.all([
+    const [items, unreadTxCount, drawAlerts, codeClaimAlerts] = await Promise.all([
       this.prisma.ccTransaction.findMany({
         where,
         orderBy: { createdAt: 'desc' },
@@ -321,6 +321,7 @@ export class UsersService {
           })
         : this.prisma.ccTransaction.count({ where }),
       this.getDrawAlerts(userId, lastSeenAt),
+      this.getCodeClaimAlerts(userId, lastSeenAt),
     ]);
 
     const enriched = await this.enrichQuestRewardDescriptions(items);
@@ -343,17 +344,80 @@ export class UsersService {
       }),
     );
 
-    const merged = [...serializedTx, ...drawAlerts]
+    const merged = [...serializedTx, ...drawAlerts, ...codeClaimAlerts]
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, Math.min(30, Math.max(1, limit)));
 
     const unreadDrawCount = drawAlerts.filter((a) => a.unread).length;
+    const unreadCodeCount = codeClaimAlerts.filter((a) => a.unread).length;
 
     return {
-      unreadCount: unreadTxCount + unreadDrawCount,
+      unreadCount: unreadTxCount + unreadDrawCount + unreadCodeCount,
       lastSeenAt: lastSeenAt?.toISOString() ?? null,
       items: merged,
     };
+  }
+
+  /** Paid code claims — user paid claim fee and received a code from the pool. */
+  private async getCodeClaimAlerts(
+    userId: string,
+    lastSeenAt: Date | null,
+  ): Promise<
+    Array<{
+      kind: 'code';
+      id: string;
+      questId: string;
+      questTitle: string;
+      code: string;
+      description: string;
+      createdAt: string;
+      unread: boolean;
+    }>
+  > {
+    const draws = await this.prisma.winnerDraw.findMany({
+      where: {
+        userId,
+        inviteCode: { not: null },
+        claimFeeLedgerTxId: { not: null },
+        quest: { rewardType: { in: ['INVITE_CODE_FCFS', 'INVITE_CODE_RANDOM', 'INVITE_CODE'] } },
+      },
+      select: {
+        questId: true,
+        inviteCode: true,
+        drawnAt: true,
+        quest: { select: { title: true } },
+      },
+      orderBy: { drawnAt: 'desc' },
+      take: 30,
+    });
+
+    return draws
+      .map((d) => {
+        const createdAt = d.drawnAt.toISOString();
+        const unread = !lastSeenAt || d.drawnAt > lastSeenAt;
+        const code = (d.inviteCode ?? '').trim();
+        if (!code) return null;
+        return {
+          kind: 'code' as const,
+          id: `code-claim-${d.questId}`,
+          questId: d.questId,
+          questTitle: d.quest.title,
+          code,
+          description: `Kode kamu sudah siap — copy kodenya di sini.`,
+          createdAt,
+          unread,
+        };
+      })
+      .filter(Boolean) as Array<{
+        kind: 'code';
+        id: string;
+        questId: string;
+        questTitle: string;
+        code: string;
+        description: string;
+        createdAt: string;
+        unread: boolean;
+      }>;
   }
 
   /** Raffle draw results — winners/losers notified after admin draw. */

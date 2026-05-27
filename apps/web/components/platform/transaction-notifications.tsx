@@ -7,6 +7,7 @@ import {
   Bell,
   Gift,
   Sparkles,
+  Ticket,
   X,
 } from "lucide-react";
 import { iconButtonClass } from "@/lib/ui-button-styles";
@@ -84,6 +85,32 @@ function NotificationRow({ item }: { item: NotificationItem }) {
               +{item.rewardCc} CC
             </span>
           ) : null}
+        </Link>
+      </li>
+    );
+  }
+
+  if (item.kind === "code") {
+    return (
+      <li className="border-b border-[var(--border)] last:border-b-0">
+        <Link
+          href={`/earn/${item.questId}`}
+          className="flex items-start gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--primary)]/8"
+        >
+          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-500/15 text-violet-700 dark:text-violet-300">
+            <Ticket className="h-4 w-4" aria-hidden />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-medium text-[var(--foreground)]">
+              {item.description}
+            </span>
+            <span className="mt-0.5 block text-xs text-[var(--muted-foreground)]">
+              {item.questTitle} · {timeAgo(item.createdAt, t)}
+            </span>
+            <span className="mt-1 block truncate font-mono text-xs text-[var(--foreground)]">
+              {item.code}
+            </span>
+          </span>
         </Link>
       </li>
     );
@@ -199,7 +226,7 @@ export function TransactionNotifications() {
   }, [toasts, dismissToast]);
 
   function toastMessage(toast: (typeof toasts)[number]) {
-    if (toast.kind === "draw") {
+    if (toast.kind === "draw" || toast.kind === "code") {
       return toast.description;
     }
     const amount = toast.amountCc.toLocaleString(undefined, {

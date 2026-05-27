@@ -366,13 +366,27 @@ export class QuestsService {
 
   /** FCFS campaigns with no slots left surface as ENDED (Earn tabs + detail header). */
   private applyCampaignListStatus<
-    T extends { status: QuestStatus; campaignSummary?: QuestCampaignSummary },
+    T extends {
+      status: QuestStatus;
+      rewardType?: RewardType | string;
+      campaignSummary?: QuestCampaignSummary;
+    },
   >(q: T): T {
+    const rt = q.rewardType ? normalizeRewardType(q.rewardType as RewardType) : null;
+    const isCodeFcfs = rt === RewardType.INVITE_CODE_FCFS;
+    const codeSlotsFull =
+      isCodeFcfs &&
+      q.status === QuestStatus.ACTIVE &&
+      (q.campaignSummary?.slotsFull ||
+        (q.campaignSummary?.codesRemaining != null && q.campaignSummary.codesRemaining <= 0));
     if (
       q.campaignSummary?.requiresFcfsClaim &&
       q.campaignSummary.slotsFull &&
       q.status === QuestStatus.ACTIVE
     ) {
+      return { ...q, status: QuestStatus.ENDED };
+    }
+    if (codeSlotsFull) {
       return { ...q, status: QuestStatus.ENDED };
     }
     return q;
@@ -1153,7 +1167,7 @@ export class QuestsService {
           return {
             state: 'fcfs_missed' as const,
             inviteCode: null,
-            message: 'All invite slots were claimed. Better luck next time.',
+            message: 'Full claimed — all codes have been taken.',
           };
         }
         const fee = resolveClaimFeeCc(quest) ?? 2;
@@ -1166,7 +1180,7 @@ export class QuestsService {
       return {
         state: 'fcfs_missed' as const,
         inviteCode: null,
-        message: 'All invite slots were filled before you submitted.',
+        message: 'Full claimed — all codes have been taken.',
       };
     }
 
