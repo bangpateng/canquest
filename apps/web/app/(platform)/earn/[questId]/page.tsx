@@ -21,7 +21,8 @@ async function fetchQuest(questId: string): Promise<Quest | null> {
   const apiBase = internalApiBase();
 
   try {
-    const res = await fetch(`${apiBase}/quests/${questId}`, {
+    const url = token ? `${apiBase}/quests/${questId}` : `${apiBase}/earn/public/${questId}`;
+    const res = await fetch(url, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),

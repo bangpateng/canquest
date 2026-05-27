@@ -14,6 +14,7 @@ import { AdminModule } from './admin/admin.module';
 import { SpinModule } from './spin/spin.module';
 import { LedgerIndexerModule } from './ledger-indexer/ledger-indexer.module';
 import { PublicModule } from './public/public.module';
+import { EarnModule } from './earn/earn.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { StorageModule } from './storage/storage.module';
 import { QueueModule } from './queue/queue.module';
@@ -41,6 +42,7 @@ const resolveApiEnvPaths = (): string[] => [
     CantonModule,
     PartyModule,
     QuestsModule,
+    EarnModule,
     AdminModule,
     // ── New modules ─────────────────────────────────────────────
     QueueModule,
