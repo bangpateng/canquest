@@ -1,4 +1,4 @@
-import { nestWithAccessCookie } from "@/lib/nest-proxy";
+import { nestWithAccessCookie } from "@/lib/nest-proxy-cookie-jwt";
 import type { NextRequest } from "next/server";
 
 export async function GET(req: NextRequest) {
