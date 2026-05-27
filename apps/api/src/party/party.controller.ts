@@ -95,11 +95,14 @@ export class PartyController {
     let cantonPartyId: string;
     let isPlaceholder = false;
     let spliceOnboarded = false;
+    const needsInviteFlow = !hasRealWallet(existing.cantonPartyId);
+    const inviteCode = body.walletInviteCode;
 
-    if (!hasRealWallet(existing.cantonPartyId)) {
-      await this.walletInvites.assertCanCreateWallet(req.user.userId, body.walletInviteCode);
+    if (needsInviteFlow) {
+      await this.walletInvites.assertCanCreateWallet(req.user.userId, inviteCode);
     }
 
+    try {
     // Preferred path: Splice validator handles party allocation + onboarding in one call.
     const splicePartyId = await this.splice.createWalletUser(username);
     if (!splicePartyId && (await this.splice.getUserPartyId(username))) {
@@ -145,16 +148,17 @@ export class PartyController {
       throw err;
     }
 
-    if (!hasRealWallet(existing.cantonPartyId) && !isPlaceholder) {
-      await this.walletInvites.redeemAfterWalletCreated(
-        req.user.userId,
-        body.walletInviteCode,
-      );
-      await this.walletInvites.recordAllocation({
-        userId: req.user.userId,
-        username,
-        partyId: cantonPartyId,
-      });
+    if (needsInviteFlow) {
+      if (!isPlaceholder) {
+        await this.walletInvites.redeemAfterWalletCreated(req.user.userId, inviteCode);
+        await this.walletInvites.recordAllocation({
+          userId: req.user.userId,
+          username,
+          partyId: cantonPartyId,
+        });
+      } else {
+        await this.walletInvites.releaseReservation(req.user.userId, inviteCode);
+      }
     }
 
     // Emit FeaturedAppActivityMarker for wallet creation
@@ -200,6 +204,12 @@ export class PartyController {
       preapproval: { active: preapprovalActive },
       message,
     };
+    } catch (err) {
+      if (needsInviteFlow) {
+        await this.walletInvites.releaseReservation(req.user.userId, inviteCode);
+      }
+      throw err;
+    }
   }
 
   /**
@@ -319,10 +329,14 @@ export class PartyController {
     const username =
       normalizeWalletUsername(user.username) ?? `cq-${user.id.slice(0, 10)}`;
 
-    if (!hasRealWallet(user.cantonPartyId)) {
-      await this.walletInvites.assertCanCreateWallet(req.user.userId, body.walletInviteCode);
+    const needsInviteFlow = !hasRealWallet(user.cantonPartyId);
+    const inviteCode = body.walletInviteCode;
+
+    if (needsInviteFlow) {
+      await this.walletInvites.assertCanCreateWallet(req.user.userId, inviteCode);
     }
 
+    try {
     // Try Splice first (preferred — full registration).
     const splicePartyId = await this.splice.createWalletUser(username);
     if (!splicePartyId && (await this.splice.getUserPartyId(username))) {
@@ -335,11 +349,8 @@ export class PartyController {
       }
       await this.users.setPartyId(req.user.userId, splicePartyId, user.username ?? undefined);
       const storedPartyId = normalizeCantonPartyId(splicePartyId) ?? splicePartyId;
-      if (!hasRealWallet(user.cantonPartyId)) {
-        await this.walletInvites.redeemAfterWalletCreated(
-          user.id,
-          body.walletInviteCode,
-        );
+      if (needsInviteFlow) {
+        await this.walletInvites.redeemAfterWalletCreated(user.id, inviteCode);
         await this.walletInvites.recordAllocation({
           userId: user.id,
           username,
@@ -363,8 +374,8 @@ export class PartyController {
     const cantonPartyId = await this.ledger.allocateParty(username);
     await this.users.setPartyId(req.user.userId, cantonPartyId, user.username ?? undefined);
     const storedPartyId = normalizeCantonPartyId(cantonPartyId) ?? cantonPartyId;
-    if (!hasRealWallet(user.cantonPartyId)) {
-      await this.walletInvites.redeemAfterWalletCreated(user.id, body.walletInviteCode);
+    if (needsInviteFlow) {
+      await this.walletInvites.redeemAfterWalletCreated(user.id, inviteCode);
       await this.walletInvites.recordAllocation({
         userId: user.id,
         username,
@@ -377,6 +388,12 @@ export class PartyController {
       spliceOnboarded: false,
       message: 'Party ID allocated on Canton participant. Set CANTON_VALIDATOR_URL for full Splice registration.',
     };
+    } catch (err) {
+      if (needsInviteFlow) {
+        await this.walletInvites.releaseReservation(req.user.userId, inviteCode);
+      }
+      throw err;
+    }
   }
 
   /**

@@ -179,7 +179,8 @@ export const en: PlatformMessages = {
   wallet: {
     createTitle: "Create Your Wallet",
     inviteCodeLabel: "Wallet invite code",
-    inviteCodeHint: "Enter the one-time invite code from the team to create your Canton wallet.",
+    inviteCodeHint:
+      "Enter your wallet invite code from the team. The code is only used up after your wallet is created successfully.",
     inviteCodeRetryHint: "Finish wallet setup with your username (invite already accepted).",
     nodeIssue: "Node connection issue",
     walletActive: "Wallet Active",

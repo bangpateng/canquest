@@ -181,7 +181,7 @@ export const tr: PlatformMessages = {
     createTitle: "Cüzdanınızı Oluşturun",
     inviteCodeLabel: "Cüzdan davet kodu",
     inviteCodeHint:
-      "Canton cüzdanınızı oluşturmak için ekipten aldığınız tek kullanımlık davet kodunu girin.",
+      "Ekipten aldığınız cüzdan davet kodunu girin. Kod yalnızca cüzdan başarıyla oluşturulduktan sonra kullanılmış sayılır.",
     inviteCodeRetryHint: "Kullanıcı adınızla cüzdan kurulumunu tamamlayın (davet zaten kabul edildi).",
     nodeIssue: "Düğüm bağlantı sorunu",
     walletActive: "Cüzdan Aktif",

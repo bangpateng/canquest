@@ -1273,6 +1273,8 @@ export class AdminService {
         note: c.note,
         createdAt: c.createdAt.toISOString(),
         redeemedAt: c.redeemedAt?.toISOString() ?? null,
+        reservedAt: c.reservedAt?.toISOString() ?? null,
+        reservedById: c.reservedById,
         redeemedBy: c.redeemedBy
           ? {
               id: c.redeemedBy.id,

@@ -13,8 +13,8 @@ export default function AdminWalletInvitesPage() {
         </Link>
         <h1 className="type-page-title mt-2">Wallet invite codes</h1>
         <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-          Generate one-time codes users must enter to create a Canton wallet. No daily limit —
-          each code can only be used once.
+          Generate invite codes for wallet creation. One code = one user after a successful
+          wallet. Failed attempts do not consume the code.
         </p>
       </div>
       <AdminWalletInvitesPanel />

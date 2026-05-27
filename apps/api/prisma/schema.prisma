@@ -61,6 +61,7 @@ model User {
 }
 
 /// One-time codes required to create a Canton wallet (admin-generated).
+/// Consumed only after a real wallet is created (redeemedAt set). Failed attempts release the reservation.
 model WalletInviteCode {
   id           String    @id @default(cuid())
   code         String    @unique
@@ -69,8 +70,12 @@ model WalletInviteCode {
   redeemedAt   DateTime?
   redeemedById String?
   redeemedBy   User?     @relation("WalletInviteRedemptions", fields: [redeemedById], references: [id], onDelete: SetNull)
+  /// Temporary hold while user is creating a wallet (not consumed until success).
+  reservedById String?
+  reservedAt   DateTime?
 
   @@index([redeemedAt])
+  @@index([reservedById])
   @@index([createdAt])
 }
 

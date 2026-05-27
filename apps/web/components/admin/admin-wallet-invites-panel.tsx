@@ -13,8 +13,16 @@ type WalletInviteRow = {
   note: string | null;
   createdAt: string;
   redeemedAt: string | null;
+  reservedAt: string | null;
+  reservedById: string | null;
   redeemedBy: { email: string; username: string | null } | null;
 };
+
+function rowStatus(row: WalletInviteRow): string {
+  if (row.redeemedAt) return "Used";
+  if (row.reservedById) return "In progress";
+  return "Available";
+}
 
 type ListResponse = {
   total: number;
@@ -150,7 +158,8 @@ export function AdminWalletInvitesPanel() {
       >
         <h2 className="type-subsection-title">Generate codes</h2>
         <p className="text-sm text-[var(--muted-foreground)]">
-          Users must enter one of these codes when creating a Canton wallet. Each code works once.
+          Each code is tied to one user when wallet creation succeeds. If creation fails or is
+          incomplete, the same code can be used again.
         </p>
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -251,8 +260,10 @@ export function AdminWalletInvitesPanel() {
                   <tr key={row.id} className="hover:bg-[var(--muted)]/10">
                     <td className="px-4 py-2.5 font-mono text-xs">{row.code}</td>
                     <td className="px-4 py-2.5">
-                      {row.redeemedAt ? (
+                      {rowStatus(row) === "Used" ? (
                         <span className="text-[var(--muted-foreground)]">Used</span>
+                      ) : rowStatus(row) === "In progress" ? (
+                        <span className="text-amber-300/90">In progress</span>
                       ) : (
                         <span className="font-medium text-canton">Available</span>
                       )}
