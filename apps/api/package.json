@@ -6,7 +6,7 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "build": "npx nest build && node -e \"require('fs').accessSync('dist/main.js')\"",
+    "build": "npm run prisma:generate && npx nest build && node -e \"require('fs').accessSync('dist/main.js')\"",
     "build:api": "npm run build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "node -r ./register-module-path.cjs ./node_modules/@nestjs/cli/bin/nest.js start",
