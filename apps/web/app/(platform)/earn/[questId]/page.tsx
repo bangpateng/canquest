@@ -1,3 +1,4 @@
+import { PlatformPage } from "@/components/platform/platform-page";
 import { CampaignSocialLinks } from "@/components/app/campaign-social-links";
 import { QuestTaskPanel } from "@/components/app/quest-task-panel";
 import { CampaignQuestSidebar } from "@/components/app/campaign-quest-sidebar";
@@ -53,7 +54,7 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
   const statusMeta = QUEST_STATUS_BADGE[quest.status];
 
   return (
-    <div className="mx-auto w-full max-w-lg space-y-5 px-0 pb-28 sm:max-w-2xl sm:space-y-6 md:max-w-3xl lg:max-w-4xl lg:pb-10">
+    <PlatformPage className="space-y-5 sm:space-y-6">
       <Link
         href={ROUTES.campaignQuests}
         className="inline-flex items-center gap-2 text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
@@ -159,6 +160,6 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
           </div>
         )}
       </section>
-    </div>
+    </PlatformPage>
   );
 }

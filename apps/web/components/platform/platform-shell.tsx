@@ -170,9 +170,9 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
 
   return (
 
-    <div className="flex min-h-screen bg-[var(--background)]">
+    <div className="flex min-h-screen items-start bg-[var(--background)]">
 
-      <aside className="hidden w-64 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--card)]/80 px-3 py-6 backdrop-blur-xl md:flex">
+      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--card)]/80 px-3 py-6 backdrop-blur-xl md:flex">
 
         <div className="mb-2 min-w-0 px-3">
 
@@ -216,7 +216,7 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
 
 
 
-      <div className="flex min-h-screen min-w-0 flex-1 flex-col overflow-x-hidden pb-20 md:pb-0">
+      <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden pb-20 md:pb-0">
 
         <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--background)]/85 px-4 backdrop-blur-md md:h-16 md:px-8">
 
@@ -236,9 +236,9 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
 
         </header>
 
-        <div className="min-w-0 flex-1 p-4 md:p-8">
+        <main className="min-w-0 p-4 md:p-8">
           <div className={platformContentClass}>{children}</div>
-        </div>
+        </main>
 
       </div>
 
