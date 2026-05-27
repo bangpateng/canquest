@@ -578,7 +578,7 @@ export function QuestTaskPanel({
         </p>
       ) : null}
 
-      {questCompleted && !isEarnHub && (
+      {questCompleted && !isEarnHub && !showCcDrawClaim && !showInviteClaim && (
         <QuestSubmittedProof
           rewardCc={rewardCc}
           rewardStatus={rewardStatus}

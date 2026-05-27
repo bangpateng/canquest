@@ -17,6 +17,10 @@ type CampaignFcfsRewardCardProps = {
   error?: string | null;
   success?: string | null;
   onClaim?: () => void;
+  /** Override section label (default: FCFS reward). */
+  sectionLabel?: string;
+  /** Override claim button label. */
+  claimButtonLabel?: string;
 };
 
 export function CampaignFcfsRewardCard({
@@ -30,6 +34,8 @@ export function CampaignFcfsRewardCard({
   error = null,
   success = null,
   onClaim,
+  sectionLabel = "FCFS reward",
+  claimButtonLabel,
 }: CampaignFcfsRewardCardProps) {
   const isStatus = mode === "status";
   const showClaimButton = mode === "claim" && canClaim && onClaim;
@@ -61,7 +67,7 @@ export function CampaignFcfsRewardCard({
           </div>
           <div className="min-w-0">
             <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
-              FCFS reward
+              {sectionLabel}
             </p>
             <p className="mt-0.5 text-sm font-semibold leading-snug text-[var(--foreground)]">
               {slotsLabel}
@@ -89,7 +95,7 @@ export function CampaignFcfsRewardCard({
             ) : (
               <Rocket className="h-4 w-4" aria-hidden />
             )}
-            {isSubmitting ? "Claiming…" : `Claim ${rewardCc} CC`}
+            {isSubmitting ? "Claiming…" : (claimButtonLabel ?? `Claim ${rewardCc} CC`)}
           </button>
         ) : null}
       </div>

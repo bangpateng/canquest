@@ -14,9 +14,10 @@ import {
   type CampaignMeta,
 } from "@/lib/campaign-reward";
 import { CampaignFcfsRewardCard } from "@/components/app/campaign-fcfs-reward-card";
+import { CampaignQuestStatusCard } from "@/components/app/campaign-quest-status-card";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ArrowRight, Check, CheckCircle2, ChevronDown, Coins, Copy, Rocket, Shield, Sparkles, Ticket } from "lucide-react";
+import { ArrowRight, Check, CheckCircle2, ChevronDown, Clock, Coins, Copy, Rocket, Shield, Sparkles, Ticket } from "lucide-react";
 import { useState } from "react";
 
 export type QuestLedgerProof = {
@@ -219,13 +220,15 @@ export function QuestSubmittedProof({
 
   if (isUnluckyState(state)) {
     return (
-      <section className="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] p-8 text-center ring-1 ring-[var(--border)]">
-        <p className="text-lg font-semibold text-[var(--foreground)]">Unlucky</p>
-        <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted-foreground)]">
-          {rewardStatus?.message ??
-            "You were not selected this time. Thanks for participating — try the next campaign."}
-        </p>
-      </section>
+      <CampaignQuestStatusCard
+        tone="neutral"
+        label="Draw result"
+        title="Not selected this time"
+        description={
+          "You were not selected in the raffle draw. Thanks for participating — better luck on the next campaign."
+        }
+        icon={CheckCircle2}
+      />
     );
   }
 
@@ -255,29 +258,31 @@ export function QuestSubmittedProof({
     );
   }
 
+  if (uiKind === "cc_manual_draw" && state === "fcfs_claimable") {
+    return null;
+  }
+
   if (uiKind === "cc_manual_draw" && state === "waitlist") {
     return (
-      <section className="relative overflow-hidden rounded-2xl border border-sky-500/30 bg-gradient-to-b from-sky-500/10 via-[var(--card)] to-[var(--card)] p-8 text-center">
-        <CheckCircle2 className="mx-auto h-10 w-10 text-sky-400" />
-        <PageTitle className="mt-4">Quest submitted</PageTitle>
-        <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted-foreground)]">
-          {rewardStatus?.message ??
-            "Winners will be announced after the event ends."}
-        </p>
-      </section>
+      <CampaignQuestStatusCard
+        tone="sky"
+        label="Quest submitted"
+        title="Entry recorded"
+        description="Winners will be announced after the event ends."
+        icon={CheckCircle2}
+      />
     );
   }
 
   if (uiKind === "cc_manual_draw" && state === "cc_reward") {
     return (
-      <section className="relative overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-b from-emerald-500/12 via-[var(--card)] to-[var(--card)] p-8 text-center ring-1 ring-emerald-500/20">
-        <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-400" />
-        <PageTitle className="mt-4">Congratulations!</PageTitle>
-        <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted-foreground)]">
-          {rewardStatus?.message ??
-            `${rewardCc ?? 0} CC sent to your wallet.`}
-        </p>
-      </section>
+      <CampaignQuestStatusCard
+        tone="emerald"
+        label="Raffle reward"
+        title="Reward claimed"
+        description={`${rewardCc ?? 0} CC has been sent to your wallet.`}
+        icon={CheckCircle2}
+      />
     );
   }
 
@@ -295,18 +300,18 @@ export function QuestSubmittedProof({
   }
 
   if (state === "pending_draw") {
-    const pendingMessage =
+    const pendingDescription =
       uiKind === "cc_manual_draw"
-        ? "Event ended. Winners will be announced after admin runs the draw."
-        : rewardStatus?.message ??
-          "Admin will run the random draw. Your invite code will appear here if you win.";
+        ? "The event has ended. Winners will be announced after the admin runs the draw."
+        : "The admin will run the random draw. Your reward will appear here if you are selected.";
     return (
-      <section className="relative overflow-hidden rounded-2xl border border-amber-500/30 bg-gradient-to-b from-amber-500/10 via-[var(--card)] to-[var(--card)] p-8 text-center">
-        <PageTitle className="mt-2">Submitted — draw pending</PageTitle>
-        <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted-foreground)]">
-          {pendingMessage}
-        </p>
-      </section>
+      <CampaignQuestStatusCard
+        tone="amber"
+        label="Draw pending"
+        title="Submitted — awaiting draw"
+        description={pendingDescription}
+        icon={Clock}
+      />
     );
   }
 

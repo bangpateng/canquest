@@ -1229,7 +1229,7 @@ export class QuestsService {
         return {
           state: 'fcfs_claimable' as const,
           inviteCode: null,
-          message: `Selamat! Kamu menang ${quest.rewardCc} CC. Bayar ${fee} CC claim fee untuk menerima reward.`,
+          message: `You won ${quest.rewardCc} CC. Pay ${fee} CC claim fee to receive your reward.`,
         };
       }
       const drawsHeld = await this.prisma.winnerDraw.count({ where: { questId } });
@@ -1237,20 +1237,20 @@ export class QuestsService {
         return {
           state: 'not_winner' as const,
           inviteCode: null,
-          message: 'You Not Lucky',
+          message: 'You were not selected in the raffle draw.',
         };
       }
       if (this.isCampaignEnded(quest)) {
         return {
           state: 'pending_draw' as const,
           inviteCode: null,
-          message: 'Event selesai. Pemenang akan diumumkan setelah admin draw.',
+          message: 'The event has ended. Winners will be announced after the admin draw.',
         };
       }
       return {
         state: 'waitlist' as const,
         inviteCode: null,
-        message: 'Pemenang akan diumumkan setelah event berakhir.',
+        message: 'Winners will be announced after the event ends.',
       };
     }
 
