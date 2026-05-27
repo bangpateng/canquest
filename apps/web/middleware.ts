@@ -6,6 +6,8 @@ import { CQ_ACCESS_COOKIE } from '@/lib/auth-cookies';
 const PROTECTED_PATTERN =
   /^\/(overview|quest|earn|spin-reward|spin-daily|wallet|leaderboard|setting)(\/|$)/;
 
+const PUBLIC_EARN_DETAIL_PATTERN = /^\/earn\/[^/]+\/?$/;
+
 /** Legacy app paths → new platform paths */
 const LEGACY_REDIRECTS: Record<string, string> = {
   '/dashboard': '/overview',
@@ -44,6 +46,7 @@ export function middleware(request: NextRequest) {
 
   // Protected platform routes
   if (!PROTECTED_PATTERN.test(pathname)) return NextResponse.next();
+  if (PUBLIC_EARN_DETAIL_PATTERN.test(pathname)) return NextResponse.next();
 
   const token = request.cookies.get(CQ_ACCESS_COOKIE)?.value;
   if (!token) {

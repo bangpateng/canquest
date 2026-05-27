@@ -40,6 +40,9 @@ async function fetchQuest(questId: string): Promise<Quest | null> {
 
 export default async function CampaignQuestDetailPage(props: PageProps) {
   const { questId } = await props.params;
+  const cookieStore = await cookies();
+  const token = cookieStore.get(CQ_ACCESS_COOKIE)?.value;
+  const isAuthed = Boolean(token);
   const quest = await fetchQuest(questId);
 
   if (!quest) notFound();
@@ -128,7 +131,30 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
       <CampaignQuestSidebar quest={quest} />
 
       <section className="min-w-0">
-        <QuestTaskPanel quest={quest} />
+        {isAuthed ? (
+          <QuestTaskPanel quest={quest} />
+        ) : (
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)]/60 p-5 text-center">
+            <h2 className="type-section-title">Sign in to participate</h2>
+            <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+              You can view this campaign publicly, but you’ll need an account to complete missions and claim rewards.
+            </p>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-center">
+              <Link
+                href={`/?auth=register&next=${encodeURIComponent(`/earn/${questId}`)}`}
+                className="rounded-xl bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-[var(--primary-foreground)]"
+              >
+                Sign up
+              </Link>
+              <Link
+                href={`/?auth=login&next=${encodeURIComponent(`/earn/${questId}`)}`}
+                className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-2.5 text-sm font-semibold"
+              >
+                Sign in
+              </Link>
+            </div>
+          </div>
+        )}
       </section>
     </div>
   );
