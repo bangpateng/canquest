@@ -7,25 +7,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import {
-
   Compass,
-
   Gift,
-
   LayoutGrid,
-
   Settings,
-
   Ticket,
-
   Trophy,
-
   Wallet,
-
-  LogOut,
-
   Sparkles,
-
 } from "lucide-react";
 
 import type { LucideIcon } from "lucide-react";
@@ -33,9 +22,6 @@ import type { LucideIcon } from "lucide-react";
 import { CanQuestLogo } from "@/components/brand/canquest-logo";
 
 import { PlatformToolbar } from "@/components/platform/platform-toolbar";
-
-import { logout } from "@/lib/services/api/auth";
-import { clearCachedWalletMe } from "@/lib/wallet-session-cache";
 
 import { platformContentClass } from "@/components/platform/platform-page";
 import { PlatformI18nProvider, usePlatformI18n } from "@/lib/i18n/platform-provider";
@@ -182,22 +168,6 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
 
 
 
-  async function handleSignOut() {
-    clearCachedWalletMe();
-    try {
-      await Promise.race([
-        logout(),
-        new Promise<void>((resolve) => setTimeout(resolve, 3000)),
-      ]);
-    } catch {
-      /* still redirect */
-    } finally {
-      window.location.href = "/";
-    }
-  }
-
-
-
   return (
 
     <div className="flex min-h-screen bg-[var(--background)]">
@@ -237,22 +207,6 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
             {t("shell.landing")}
 
           </Link>
-
-          <button
-
-            type="button"
-
-            onClick={() => void handleSignOut()}
-
-            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
-
-          >
-
-            <LogOut className="h-4 w-4" />
-
-            {t("shell.signOut")}
-
-          </button>
 
           <p className="px-3 text-[10px] text-[var(--muted-foreground)]">canquest.cc</p>
 
