@@ -1,7 +1,6 @@
 import {
   campaignTypeDisplayValue,
   campaignUiKind,
-  fcfsSlotsTaken,
   formatFcfsSlotsFilled,
   getCampaignRewardHeadline,
   isFcfsSlotsFull,
@@ -35,15 +34,16 @@ type StatItem = {
 export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
   const summary = quest.campaignSummary;
   const requiresFcfs = summary?.requiresFcfsClaim ?? false;
+  const requiresPaidInvite = summary?.requiresPaidInviteClaim ?? false;
   const requiresDrawCc = summary?.requiresDrawCcClaim ?? false;
   const uiKind = campaignUiKind(quest.rewardType, requiresFcfs);
   const rewardHeadline = getCampaignRewardHeadline(
     quest,
     summary?.poolTotalCc ?? null,
   );
-  const slotsTaken = fcfsSlotsTaken(summary?.remainingSlots, summary?.maxWinners);
   const slotsMax = summary?.maxWinners ?? 0;
   const slotsFull = isFcfsSlotsFull(summary?.remainingSlots, summary?.maxWinners);
+  const showFcfsSlots = (requiresFcfs || requiresPaidInvite) && slotsMax > 0;
 
   const stats: StatItem[] = [
     {
@@ -54,12 +54,12 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
     },
   ];
 
-  if (requiresFcfs && slotsMax > 0) {
+  if (showFcfsSlots) {
     stats.push({
       key: "slots",
       icon: Users,
       label: "FCFS slots",
-      value: formatFcfsSlotsFilled(slotsTaken, slotsMax),
+      value: formatFcfsSlotsFilled(summary?.remainingSlots, slotsMax),
       valueClassName: slotsFull ? "text-[var(--muted-foreground)]" : "text-canton",
     });
   }
@@ -74,7 +74,7 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
     });
   }
 
-  if ((requiresFcfs || requiresDrawCc) && (summary?.fcfsClaimFeeCc ?? 0) > 0) {
+  if ((showFcfsSlots || requiresDrawCc) && (summary?.fcfsClaimFeeCc ?? 0) > 0) {
     stats.push({
       key: "fee",
       icon: Zap,
