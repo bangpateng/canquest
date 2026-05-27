@@ -15,6 +15,7 @@ export type CampaignMeta = {
   slotsFull?: boolean;
   fcfsClaimFeeCc: number;
   requiresFcfsClaim: boolean;
+  requiresDrawCcClaim?: boolean;
   requiresPaidInviteClaim?: boolean;
   codesRemaining?: number | null;
 };
@@ -22,6 +23,7 @@ export type CampaignMeta = {
 /** Earn list cards — mirrors API `campaignSummary` on GET /quests */
 export type QuestCampaignSummary = {
   requiresFcfsClaim: boolean;
+  requiresDrawCcClaim?: boolean;
   requiresPaidInviteClaim: boolean;
   maxWinners: number | null;
   remainingSlots: number | null;
@@ -176,7 +178,7 @@ export function formatFcfsClaimFeeHint(feeCc: number, rewardCc: number): string 
 export function campaignUiKind(
   rewardType: RewardType | string | undefined,
   requiresFcfsClaim: boolean,
-): "waitlist_email" | "waitlist_code" | "cc_manual" | "cc_fcfs" | "other" {
+): "waitlist_email" | "waitlist_code" | "cc_manual" | "cc_manual_draw" | "cc_fcfs" | "other" {
   if (requiresFcfsClaim) return "cc_fcfs";
   switch (rewardType) {
     case "WAITLIST_EMAIL":
@@ -184,6 +186,8 @@ export function campaignUiKind(
     case "INVITE_CODE_RANDOM":
     case "INVITE_CODE":
       return "waitlist_code";
+    case "CC_MANUAL":
+      return "cc_manual_draw";
     case "CC_ONLY":
       return "cc_manual";
     case "INVITE_CODE_FCFS":

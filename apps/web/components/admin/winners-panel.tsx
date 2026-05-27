@@ -61,6 +61,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
   const [deletingAll, setDeletingAll] = useState(false);
 
   const [questTitle, setQuestTitle] = useState("");
+  const [questRewardType, setQuestRewardType] = useState("");
   const [message, setMessage] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
   useEffect(() => {
@@ -71,8 +72,9 @@ export function WinnersPanel({ questId }: { questId: string }) {
       fetch(`/api/admin/quests/${questId}/winners`).then((r) => r.json()),
       fetch(`/api/admin/quests/${questId}/invite-codes`).then((r) => r.json()),
     ])
-      .then(([quest, p, w, c]: [{ title: string }, Participant[], Winner[], InviteCode[]]) => {
+      .then(([quest, p, w, c]: [{ title: string; rewardType?: string }, Participant[], Winner[], InviteCode[]]) => {
         setQuestTitle(quest.title ?? "");
+        setQuestRewardType(quest.rewardType ?? "");
         setParticipants(Array.isArray(p) ? p : []);
         setWinners(Array.isArray(w) ? w : []);
         setCodes(Array.isArray(c) ? c : []);
@@ -275,6 +277,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
 
   const undistributed = winners.filter((w) => !w.distributed);
   const availableCodes = codes.filter((c) => !c.assigned).length;
+  const isCcRaffle = questRewardType === "CC_MANUAL";
 
   return (
     <div className="space-y-6">
@@ -405,7 +408,13 @@ export function WinnersPanel({ questId }: { questId: string }) {
       {/* Winners tab */}
       {tab === "winners" && (
         <div className="space-y-4">
-          {undistributed.length > 0 && (
+          {isCcRaffle ? (
+            <p className="rounded-2xl border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
+              CC raffle: winners claim rewards on the quest page after you run Draw Winners.
+              Do not use Send / Distribute here.
+            </p>
+          ) : null}
+          {undistributed.length > 0 && !isCcRaffle && (
             <div className="flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
               <p className="text-sm font-medium">
                 {undistributed.length} winner(s) pending reward distribution
@@ -474,7 +483,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        {!w.distributed && (
+                        {!w.distributed && !isCcRaffle && (
                           <button
                             type="button"
                             disabled={distributing !== null}

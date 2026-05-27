@@ -606,6 +606,7 @@ export class AdminService {
       csv = this.csvFromRows(header, rows);
     } else if (
       rewardType === RewardType.CC_ONLY ||
+      rewardType === RewardType.CC_MANUAL ||
       rewardType === RewardType.CC_AND_INVITE
     ) {
       exportKind = 'cc_participants';
@@ -901,6 +902,19 @@ export class AdminService {
   ──────────────────────────────────────────────────────── */
 
   async distributeRewards(questId: string, drawIds?: string[]) {
+    const quest = await this.prisma.quest.findUnique({
+      where: { id: questId },
+      select: { rewardType: true },
+    });
+    if (
+      quest &&
+      normalizeRewardType(quest.rewardType as RewardType) === RewardType.CC_MANUAL
+    ) {
+      throw new BadRequestException(
+        'CC raffle winners claim rewards on the quest page — use Draw Winners only.',
+      );
+    }
+
     const draws = await this.prisma.winnerDraw.findMany({
       where: {
         questId,

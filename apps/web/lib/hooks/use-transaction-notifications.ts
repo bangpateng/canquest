@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export type NotificationTx = {
+  kind: "transaction";
   id: string;
   type: "QUEST_REWARD" | "SPIN_REWARD" | "TRANSFER_IN";
   description: string;
@@ -12,17 +13,32 @@ export type NotificationTx = {
   createdAt: string;
 };
 
+export type NotificationDraw = {
+  kind: "draw";
+  id: string;
+  drawKind: "win" | "loss";
+  questId: string;
+  questTitle: string;
+  rewardCc: number | null;
+  description: string;
+  createdAt: string;
+};
+
+export type NotificationItem = NotificationTx | NotificationDraw;
+
 export type NotificationFeed = {
   unreadCount: number;
   lastSeenAt: string | null;
-  items: NotificationTx[];
+  items: NotificationItem[];
 };
 
 const DEFAULT_POLL_MS = 28_000;
 
 type ToastPayload = {
   id: string;
-  type: NotificationTx["type"];
+  kind: "transaction" | "draw";
+  drawKind?: "win" | "loss";
+  txType?: NotificationTx["type"];
   amountCc: number;
   description: string;
 };
@@ -61,23 +77,34 @@ export function useTransactionNotifications(
 
         if (initialPollDone.current) {
           const fresh: ToastPayload[] = [];
-          for (const tx of data.items) {
-            if (knownIds.current.has(tx.id)) continue;
-            knownIds.current.add(tx.id);
-            const created = new Date(tx.createdAt).getTime();
+          for (const item of data.items) {
+            if (knownIds.current.has(item.id)) continue;
+            knownIds.current.add(item.id);
+            const created = new Date(item.createdAt).getTime();
             if (Date.now() - created > 120_000) continue;
-            fresh.push({
-              id: tx.id,
-              type: tx.type,
-              amountCc: Math.abs(Number(tx.amountMicroCc)) / 1_000_000,
-              description: tx.description,
-            });
+            if (item.kind === "draw") {
+              fresh.push({
+                id: item.id,
+                kind: "draw",
+                drawKind: item.drawKind,
+                amountCc: item.rewardCc ?? 0,
+                description: item.description,
+              });
+            } else {
+              fresh.push({
+                id: item.id,
+                kind: "transaction",
+                txType: item.type,
+                amountCc: Math.abs(Number(item.amountMicroCc)) / 1_000_000,
+                description: item.description,
+              });
+            }
           }
           if (fresh.length > 0) {
             setToasts((prev) => [...fresh, ...prev].slice(0, 3));
           }
         } else {
-          for (const tx of data.items) knownIds.current.add(tx.id);
+          for (const item of data.items) knownIds.current.add(item.id);
           initialPollDone.current = true;
         }
 

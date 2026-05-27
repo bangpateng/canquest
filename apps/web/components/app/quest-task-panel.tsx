@@ -22,6 +22,7 @@ import {
   parseQuizChoices,
 } from "@/lib/quest-types";
 import { CampaignFcfsClaimSection } from "@/components/app/campaign-fcfs-claim";
+import { CampaignDrawCcClaimSection } from "@/components/app/campaign-draw-cc-claim";
 import { TaskPointsLabel } from "@/components/app/task-points-label";
 import { CampaignInviteClaimSection } from "@/components/app/campaign-invite-claim";
 import {
@@ -304,6 +305,7 @@ export function QuestTaskPanel({
   const taskSubmissionsBlocked =
     campaignEnded || (fcfsSlotsFull && !userParticipated);
   const requiresFcfsClaim = campaignMeta?.requiresFcfsClaim ?? false;
+  const requiresDrawCcClaim = campaignMeta?.requiresDrawCcClaim ?? false;
   const requiresPaidInviteClaim = campaignMeta?.requiresPaidInviteClaim ?? false;
   const showFcfsClaim =
     requiresFcfsClaim &&
@@ -317,6 +319,11 @@ export function QuestTaskPanel({
     !isEarnHub &&
     rewardStatus?.state === "fcfs_claimable" &&
     (campaignMeta?.codesRemaining ?? 0) > 0;
+  const showCcDrawClaim =
+    requiresDrawCcClaim &&
+    questCompleted &&
+    !isEarnHub &&
+    rewardStatus?.state === "fcfs_claimable";
   const showClassicSubmit =
     allDone &&
     !questCompleted &&
@@ -539,6 +546,16 @@ export function QuestTaskPanel({
         <CampaignInviteClaimSection
           questId={quest.id}
           partyId={partyId}
+          campaignMeta={campaignMeta}
+          onClaimed={() => loadProgress()}
+        />
+      ) : null}
+
+      {showCcDrawClaim && campaignMeta ? (
+        <CampaignDrawCcClaimSection
+          questId={quest.id}
+          partyId={partyId}
+          rewardCc={quest.rewardCc}
           campaignMeta={campaignMeta}
           onClaimed={() => loadProgress()}
         />

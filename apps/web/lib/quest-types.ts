@@ -11,6 +11,7 @@ export type RewardType =
   | "INVITE_CODE_RANDOM"
   | "INVITE_CODE_FCFS"
   | "CC_ONLY"
+  | "CC_MANUAL"
   | "CC_AND_INVITE"
   | "INVITE_CODE";
 
@@ -577,9 +578,15 @@ export const REWARD_TYPE_OPTIONS: { value: RewardType; label: string; hint: stri
       "Max winners = slot FCFS. User claim dengan fee (default 3 CC) → CC dari pool validator. Bukan bulk manual.",
   },
   {
+    value: "CC_MANUAL",
+    label: "5 · Token CC (raffle / manual draw)",
+    hint:
+      "Setelah event: admin Draw Winners → pemenang dapat notifikasi & claim CC (bukan FCFS). Yang kalah: You Not Lucky.",
+  },
+  {
     value: "CC_AND_INVITE",
-    label: "5 · CC + kode (FCFS campuran)",
-    hint: "CC + invite (legacy). Untuk kampanye baru lebih baik pisah tipe 1 dan 4.",
+    label: "6 · CC + kode (FCFS campuran · legacy)",
+    hint: "CC + invite (legacy). Untuk kampanye baru lebih baik pisah tipe 1, 4, dan 5.",
   },
 ];
 
@@ -589,6 +596,7 @@ export function questExportLabel(rewardType: RewardType | string): string {
     case "WAITLIST_EMAIL":
       return "Download waitlist CSV";
     case "CC_ONLY":
+    case "CC_MANUAL":
     case "CC_AND_INVITE":
       return "Download CC + Party ID CSV";
     case "INVITE_CODE_RANDOM":

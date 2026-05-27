@@ -181,6 +181,21 @@ export class QuestsController {
     });
   }
 
+  /** Raffle CC — admin draw winner pays claim fee + receives reward CC. */
+  @Post(':questId/claim-draw-cc')
+  @UseGuards(WalletRequiredGuard)
+  @Throttle({ ledger: { limit: 3, ttl: 60_000 } })
+  async claimDrawCc(@Param('questId') questId: string, @Req() req: AuthedReq) {
+    const user = await this.users.findById(req.user.userId);
+    if (!user) return { ok: false, message: 'User not found' };
+    return this.quests.claimDrawCcReward({
+      userId: user.id,
+      username: user.username,
+      cantonPartyId: user.cantonPartyId,
+      questId,
+    });
+  }
+
   @Post(':questId/tasks/:taskId/submit')
   async submitTask(
     @Param('questId') questId: string,
@@ -271,6 +286,7 @@ export class QuestsController {
     if (
       result.rewardCc > 0 &&
       !campaignMeta.requiresFcfsClaim &&
+      !campaignMeta.requiresDrawCcClaim &&
       user.username &&
       user.cantonPartyId
     ) {

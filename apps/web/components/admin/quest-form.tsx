@@ -174,9 +174,12 @@ export function QuestForm({
   }
 
   const showCcField =
-    form.rewardType === "CC_ONLY" || form.rewardType === "CC_AND_INVITE";
+    form.rewardType === "CC_ONLY" ||
+    form.rewardType === "CC_MANUAL" ||
+    form.rewardType === "CC_AND_INVITE";
   const needsMaxWinners =
     form.rewardType === "CC_ONLY" ||
+    form.rewardType === "CC_MANUAL" ||
     form.rewardType === "CC_AND_INVITE" ||
     form.rewardType === "INVITE_CODE_FCFS";
 
@@ -184,7 +187,9 @@ export function QuestForm({
     questKind === "CAMPAIGN" && form.rewardType === "WAITLIST_EMAIL"
       ? "submit_email"
       : questKind === "CAMPAIGN" &&
-          (form.rewardType === "CC_ONLY" || form.rewardType === "CC_AND_INVITE")
+          (form.rewardType === "CC_ONLY" ||
+            form.rewardType === "CC_MANUAL" ||
+            form.rewardType === "CC_AND_INVITE")
         ? "submit_party_id"
         : null;
   const hasRecommendedTask =
@@ -229,6 +234,7 @@ export function QuestForm({
       if (
         rt === "INVITE_CODE_RANDOM" ||
         rt === "INVITE_CODE_FCFS" ||
+        rt === "CC_MANUAL" ||
         rt === "CC_AND_INVITE"
       ) {
         if (maxW === null || !Number.isFinite(maxW) || maxW < 1) {
@@ -238,7 +244,7 @@ export function QuestForm({
         }
       }
 
-      if (rt === "CC_ONLY" || rt === "CC_AND_INVITE") {
+      if (rt === "CC_ONLY" || rt === "CC_MANUAL" || rt === "CC_AND_INVITE") {
         if (cc <= 0) {
           setError(
             rt === "CC_AND_INVITE"
@@ -609,7 +615,9 @@ export function QuestForm({
                 value={form.claimFeeCc}
                 onChange={(e) => updateField("claimFeeCc", e.target.value)}
                 placeholder={
-                  form.rewardType === "CC_ONLY" ? "Default 3" : "Default 2 (code types)"
+                  form.rewardType === "CC_ONLY" || form.rewardType === "CC_MANUAL"
+                    ? "Default 3"
+                    : "Default 2 (code types)"
                 }
                 className={inputCls}
               />

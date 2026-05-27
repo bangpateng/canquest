@@ -6,12 +6,14 @@ import {
   ArrowDownLeft,
   Bell,
   Gift,
+  Sparkles,
   X,
 } from "lucide-react";
 import { iconButtonClass } from "@/lib/ui-button-styles";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import {
   useTransactionNotifications,
+  type NotificationItem,
   type NotificationTx,
 } from "@/lib/hooks/use-transaction-notifications";
 import { cn } from "@/lib/utils";
@@ -48,12 +50,46 @@ function txLabel(
   }
 }
 
-function NotificationRow({
-  tx,
-}: {
-  tx: NotificationTx;
-}) {
+function NotificationRow({ item }: { item: NotificationItem }) {
   const t = usePlatformT();
+
+  if (item.kind === "draw") {
+    const isWin = item.drawKind === "win";
+    return (
+      <li className="border-b border-[var(--border)] last:border-b-0">
+        <Link
+          href={`/earn/${item.questId}`}
+          className="flex items-start gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--primary)]/8"
+        >
+          <span
+            className={cn(
+              "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
+              isWin
+                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                : "bg-[var(--muted)] text-[var(--muted-foreground)]",
+            )}
+          >
+            <Sparkles className="h-4 w-4" aria-hidden />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-medium text-[var(--foreground)]">
+              {item.description}
+            </span>
+            <span className="mt-0.5 block text-xs text-[var(--muted-foreground)]">
+              {item.questTitle} · {timeAgo(item.createdAt, t)}
+            </span>
+          </span>
+          {isWin && item.rewardCc != null && item.rewardCc > 0 ? (
+            <span className="shrink-0 text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+              +{item.rewardCc} CC
+            </span>
+          ) : null}
+        </Link>
+      </li>
+    );
+  }
+
+  const tx = item;
   const ccAmt = Math.abs(Number(tx.amountMicroCc)) / 1_000_000;
   const title = tx.description?.trim() || txLabel(tx, t);
 
@@ -163,13 +199,16 @@ export function TransactionNotifications() {
   }, [toasts, dismissToast]);
 
   function toastMessage(toast: (typeof toasts)[number]) {
+    if (toast.kind === "draw") {
+      return toast.description;
+    }
     const amount = toast.amountCc.toLocaleString(undefined, {
       maximumFractionDigits: 6,
     });
-    if (toast.type === "QUEST_REWARD") {
+    if (toast.txType === "QUEST_REWARD") {
       return t("notifications.toastEarn", { amount });
     }
-    if (toast.type === "SPIN_REWARD") {
+    if (toast.txType === "SPIN_REWARD") {
       return t("notifications.toastSpin", { amount });
     }
     return t("notifications.toastReceived", { amount });
@@ -230,8 +269,8 @@ export function TransactionNotifications() {
               </p>
             ) : (
               <ul className="max-h-80 overflow-y-auto">
-                {feed.items.map((tx) => (
-                  <NotificationRow key={tx.id} tx={tx} />
+                {feed.items.map((item) => (
+                  <NotificationRow key={item.id} item={item} />
                 ))}
               </ul>
             )}

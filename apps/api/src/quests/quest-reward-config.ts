@@ -10,6 +10,7 @@ export function defaultClaimFeeCc(rewardType: RewardType | string): number | nul
     case RewardType.CC_AND_INVITE:
       return 2;
     case RewardType.CC_ONLY:
+    case RewardType.CC_MANUAL:
       return 3;
     default:
       return null;
@@ -74,6 +75,7 @@ export function computePoolTotalCc(
 
 export type QuestCampaignSummary = {
   requiresFcfsClaim: boolean;
+  requiresDrawCcClaim: boolean;
   requiresPaidInviteClaim: boolean;
   maxWinners: number | null;
   remainingSlots: number | null;

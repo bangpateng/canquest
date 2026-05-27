@@ -48,6 +48,7 @@ export type RewardType =
   | 'INVITE_CODE_RANDOM'
   | 'INVITE_CODE_FCFS'
   | 'CC_ONLY'
+  | 'CC_MANUAL'
   | 'CC_AND_INVITE'
   | 'INVITE_CODE';
 export const RewardType = {
@@ -55,6 +56,7 @@ export const RewardType = {
   INVITE_CODE_RANDOM: 'INVITE_CODE_RANDOM' as RewardType,
   INVITE_CODE_FCFS: 'INVITE_CODE_FCFS' as RewardType,
   CC_ONLY: 'CC_ONLY' as RewardType,
+  CC_MANUAL: 'CC_MANUAL' as RewardType,
   CC_AND_INVITE: 'CC_AND_INVITE' as RewardType,
   INVITE_CODE: 'INVITE_CODE' as RewardType,
 };

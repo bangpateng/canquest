@@ -126,6 +126,11 @@ export class QuestsService {
     return (quest.maxWinners ?? 0) > 0;
   }
 
+  /** CC raffle (admin type "5 · Token CC manual"): admin draw after event; winners claim CC. */
+  requiresDrawCcClaim(quest: { rewardType: RewardType | string }): boolean {
+    return normalizeRewardType(quest.rewardType as RewardType) === RewardType.CC_MANUAL;
+  }
+
   isCampaignEnded(quest: {
     endsAt: Date | null;
     deadline?: Date | string | null;
@@ -148,6 +153,7 @@ export class QuestsService {
         slotsFull: false,
         fcfsClaimFeeCc: 0,
         requiresFcfsClaim: false,
+        requiresDrawCcClaim: false,
         requiresPaidInviteClaim: false,
         codesRemaining: null as number | null,
       };
@@ -179,6 +185,7 @@ export class QuestsService {
       slotsFull,
       fcfsClaimFeeCc: resolveClaimFeeCc(quest) ?? 0,
       requiresFcfsClaim: this.requiresFcfsCcClaim(quest),
+      requiresDrawCcClaim: this.requiresDrawCcClaim(quest),
       requiresPaidInviteClaim: requiresPaidInviteClaim(quest),
       codesRemaining: await this.countAvailableInviteCodes(questId),
     };
@@ -436,6 +443,7 @@ export class QuestsService {
       const requiresFcfsClaim = this.requiresFcfsCcClaim(q);
       const summary: QuestCampaignSummary = {
         requiresFcfsClaim,
+        requiresDrawCcClaim: this.requiresDrawCcClaim(q),
         requiresPaidInviteClaim: requiresPaidInviteClaim(q),
         maxWinners,
         remainingSlots,
@@ -1205,6 +1213,47 @@ export class QuestsService {
       };
     }
 
+    if (rewardType === RewardType.CC_MANUAL) {
+      if (draw?.distributed) {
+        return {
+          state: 'cc_reward' as const,
+          inviteCode: null,
+          message:
+            quest.rewardCc > 0
+              ? `${quest.rewardCc} CC sent to your wallet.`
+              : 'CC reward claim completed.',
+        };
+      }
+      if (draw) {
+        const fee = resolveClaimFeeCc(quest) ?? 3;
+        return {
+          state: 'fcfs_claimable' as const,
+          inviteCode: null,
+          message: `Selamat! Kamu menang ${quest.rewardCc} CC. Bayar ${fee} CC claim fee untuk menerima reward.`,
+        };
+      }
+      const drawsHeld = await this.prisma.winnerDraw.count({ where: { questId } });
+      if (drawsHeld > 0) {
+        return {
+          state: 'not_winner' as const,
+          inviteCode: null,
+          message: 'You Not Lucky',
+        };
+      }
+      if (this.isCampaignEnded(quest)) {
+        return {
+          state: 'pending_draw' as const,
+          inviteCode: null,
+          message: 'Event selesai. Pemenang akan diumumkan setelah admin draw.',
+        };
+      }
+      return {
+        state: 'waitlist' as const,
+        inviteCode: null,
+        message: 'Pemenang akan diumumkan setelah event berakhir.',
+      };
+    }
+
     if (this.requiresFcfsCcClaim(quest)) {
       const allDone = await this.areAllTasksVerified(userId, questId);
       if (!allDone) {
@@ -1545,6 +1594,187 @@ export class QuestsService {
       remainingSlots: remainingAfter,
       rewardStatus,
     };
+  }
+
+  /**
+   * CC raffle claim — winner selected by admin draw pays claim fee, receives reward CC.
+   */
+  async claimDrawCcReward(params: {
+    userId: string;
+    username: string | null;
+    cantonPartyId: string | null;
+    questId: string;
+  }): Promise<{
+    ok: boolean;
+    message: string;
+    rewardCc: number;
+    feeCc: number;
+    rewardStatus: Awaited<ReturnType<QuestsService['getQuestRewardStatus']>>;
+  }> {
+    const { userId, questId, username, cantonPartyId } = params;
+    if (!username?.trim() || !cantonPartyId?.trim()) {
+      throw new BadRequestException('Create your Canton wallet before claiming.');
+    }
+
+    const quest = await this.prisma.quest.findUnique({ where: { id: questId } });
+    if (!quest) throw new NotFoundException('Quest not found');
+    if (!this.requiresDrawCcClaim(quest)) {
+      throw new BadRequestException('This campaign does not use raffle CC claim.');
+    }
+
+    const completion = await this.prisma.questCompletion.findUnique({
+      where: { userId_questId: { userId, questId } },
+    });
+    if (!completion) {
+      throw new BadRequestException('Submit the quest before claiming your reward.');
+    }
+
+    const draw = await this.prisma.winnerDraw.findUnique({
+      where: { questId_userId: { questId, userId } },
+    });
+    if (!draw) {
+      throw new BadRequestException('You were not selected in the raffle draw.');
+    }
+    if (draw.distributed) {
+      const rewardStatus = await this.getQuestRewardStatus(userId, questId);
+      return {
+        ok: true,
+        message: 'You already claimed this reward.',
+        rewardCc: quest.rewardCc,
+        feeCc: 0,
+        rewardStatus,
+      };
+    }
+
+    const feeCc = resolveClaimFeeCc(quest) ?? 3;
+    const rewardCc = quest.rewardCc;
+    const validatorPartyId = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
+    if (!validatorPartyId) {
+      throw new BadRequestException('Validator party is not configured on the server.');
+    }
+
+    const balance = await this.splice.getUserBalance(username);
+    if (balance !== null && balance < feeCc) {
+      throw new BadRequestException(FCFS_CLAIM_FAIL_MSG);
+    }
+
+    this.logger.log(
+      `Draw CC claim start quest=${questId} user=@${username} fee=${feeCc} reward=${rewardCc}`,
+    );
+
+    try {
+      let claimSessionId: string | null = null;
+      if (this.questLedger.isClaimSessionConfigured()) {
+        const cs = await this.questLedger.createClaimSession({
+          questId,
+          userPartyId: cantonPartyId,
+          claimKind: 'fcfs_cc',
+          feeCc,
+          rewardCc,
+        });
+        claimSessionId = cs.sessionContractId;
+        if (cs.errors.length > 0) {
+          this.logger.warn(`ClaimSession create warnings: ${cs.errors.join(' | ')}`);
+        }
+      }
+
+      const feeTxId = await this.collectClaimFee({
+        userId,
+        username,
+        questTitle: quest.title,
+        feeCc,
+        feeLabel: 'Raffle claim fee',
+        validatorPartyId,
+      });
+
+      if (claimSessionId) {
+        const marked = await this.questLedger.markClaimFeePaid({
+          sessionContractId: claimSessionId,
+          feeTxId,
+        });
+        if (!marked.ok) {
+          this.logger.warn(`ClaimSession fee mark failed: ${marked.errors.join(' | ')}`);
+        }
+      }
+
+      await this.assertValidatorRewardPool(rewardCc);
+      const rewardOfferId = await this.splice.createTransferOffer(
+        cantonPartyId,
+        rewardCc,
+        `Raffle reward — ${quest.title}`,
+      );
+      if (!rewardOfferId) {
+        throw new Error('reward offer failed');
+      }
+      const rewardAccepted = await this.splice.acceptOfferViaWallet(
+        rewardOfferId,
+        username,
+      );
+      if (!rewardAccepted) {
+        throw new Error('reward accept failed');
+      }
+
+      if (claimSessionId) {
+        const marked = await this.questLedger.markClaimRewardSent({
+          sessionContractId: claimSessionId,
+          rewardTxId: rewardOfferId,
+        });
+        if (!marked.ok) {
+          this.logger.warn(`ClaimSession reward mark failed: ${marked.errors.join(' | ')}`);
+        }
+      }
+
+      await this.users.recordTransaction({
+        userId,
+        amountCc: rewardCc,
+        type: 'QUEST_REWARD',
+        description: `Received ${rewardCc} CC raffle reward`,
+        referenceId: questId,
+        counterparty: validatorPartyId.split('::')[0],
+        ledgerTxId: rewardOfferId,
+      });
+
+      if (username) {
+        await this.inboundSync.alignBalanceFromChain(userId, username);
+      }
+
+      const rewardMicroCc = BigInt(Math.round(rewardCc * 1_000_000));
+      await this.prisma.$transaction([
+        this.prisma.winnerDraw.update({
+          where: { id: draw.id },
+          data: {
+            distributed: true,
+            ccAmount: rewardCc,
+            claimFeeLedgerTxId: feeTxId,
+            ledgerTxId: rewardOfferId,
+            distributedAt: new Date(),
+            ...(claimSessionId ? { claimSessionContractId: claimSessionId } : {}),
+          },
+        }),
+        this.prisma.questCompletion.upsert({
+          where: { userId_questId: { userId, questId } },
+          create: {
+            userId,
+            questId,
+            rewardMicroCc,
+            completedAt: completion.completedAt,
+          },
+          update: { rewardMicroCc },
+        }),
+      ]);
+
+      const rewardStatus = await this.getQuestRewardStatus(userId, questId);
+      return {
+        ok: true,
+        message: `${rewardCc} CC sent to your wallet.`,
+        rewardCc,
+        feeCc,
+        rewardStatus,
+      };
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      throw new BadRequestException(this.fcfsClaimErrorMessage(detail));
+    }
   }
 
   /**

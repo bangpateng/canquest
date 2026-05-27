@@ -242,6 +242,32 @@ export function QuestSubmittedProof({
     );
   }
 
+  if (uiKind === "cc_manual_draw" && state === "waitlist") {
+    return (
+      <section className="relative overflow-hidden rounded-2xl border border-sky-500/30 bg-gradient-to-b from-sky-500/10 via-[var(--card)] to-[var(--card)] p-8 text-center">
+        <CheckCircle2 className="mx-auto h-10 w-10 text-sky-400" />
+        <PageTitle className="mt-4">Quest submitted</PageTitle>
+        <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted-foreground)]">
+          {rewardStatus?.message ??
+            "Winners will be announced after the event ends."}
+        </p>
+      </section>
+    );
+  }
+
+  if (uiKind === "cc_manual_draw" && state === "cc_reward") {
+    return (
+      <section className="relative overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-b from-emerald-500/12 via-[var(--card)] to-[var(--card)] p-8 text-center ring-1 ring-emerald-500/20">
+        <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-400" />
+        <PageTitle className="mt-4">Congratulations!</PageTitle>
+        <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted-foreground)]">
+          {rewardStatus?.message ??
+            `${rewardCc ?? 0} CC sent to your wallet.`}
+        </p>
+      </section>
+    );
+  }
+
   if (uiKind === "cc_manual" && state === "cc_reward") {
     return (
       <section className="relative overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-b from-emerald-500/12 via-[var(--card)] to-[var(--card)] p-8 text-center ring-1 ring-emerald-500/20">
@@ -256,12 +282,16 @@ export function QuestSubmittedProof({
   }
 
   if (state === "pending_draw") {
+    const pendingMessage =
+      uiKind === "cc_manual_draw"
+        ? "Event ended. Winners will be announced after admin runs the draw."
+        : rewardStatus?.message ??
+          "Admin will run the random draw. Your invite code will appear here if you win.";
     return (
       <section className="relative overflow-hidden rounded-2xl border border-amber-500/30 bg-gradient-to-b from-amber-500/10 via-[var(--card)] to-[var(--card)] p-8 text-center">
         <PageTitle className="mt-2">Submitted — draw pending</PageTitle>
         <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted-foreground)]">
-          {rewardStatus?.message ??
-            "Admin will run the random draw. Your invite code will appear here if you win."}
+          {pendingMessage}
         </p>
       </section>
     );

@@ -184,6 +184,8 @@ enum RewardType {
   INVITE_CODE_RANDOM
   INVITE_CODE_FCFS
   CC_ONLY
+  /// Raffle CC — admin draw after event; winners claim on-chain
+  CC_MANUAL
   CC_AND_INVITE
   /// @deprecated Use INVITE_CODE_RANDOM — kept for existing rows
   INVITE_CODE

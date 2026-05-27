@@ -4,7 +4,7 @@ import {
   looksLikeQuestId,
   parseQuestIdFromRewardDescription,
 } from '../common/quest-reward-labels';
-import { CcTransactionType } from '../common/prisma-types';
+import { CcTransactionType, RewardType, normalizeRewardType } from '../common/prisma-types';
 import { PointsService } from './points.service';
 import { CC_TRANSACTION_HISTORY_WHERE } from './cc-transaction-visibility';
 import type { Prisma } from '@prisma/client';
@@ -300,7 +300,7 @@ export class UsersService {
     };
   }
 
-  /** Recent CC rewards/transfers for the notification bell + unread badge. */
+  /** Recent CC rewards/transfers + raffle draw results for the notification bell. */
   async getNotifications(userId: string, limit = 12) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -309,7 +309,7 @@ export class UsersService {
     const lastSeenAt = user?.notificationsLastSeenAt ?? null;
     const where = this.notificationWhere(userId);
 
-    const [items, unreadCount] = await Promise.all([
+    const [items, unreadTxCount, drawAlerts] = await Promise.all([
       this.prisma.ccTransaction.findMany({
         where,
         orderBy: { createdAt: 'desc' },
@@ -320,16 +320,18 @@ export class UsersService {
             where: { ...where, createdAt: { gt: lastSeenAt } },
           })
         : this.prisma.ccTransaction.count({ where }),
+      this.getDrawAlerts(userId, lastSeenAt),
     ]);
 
     const enriched = await this.enrichQuestRewardDescriptions(items);
-    const serialized = await Promise.all(
+    const serializedTx = await Promise.all(
       enriched.map(async (tx) => {
         const counterparty =
           tx.type === 'TRANSFER_IN'
             ? await this.resolveTransferCounterparty(tx.referenceId)
             : null;
         return {
+          kind: 'transaction' as const,
           id: tx.id,
           type: tx.type,
           description: tx.description,
@@ -341,11 +343,104 @@ export class UsersService {
       }),
     );
 
+    const merged = [...serializedTx, ...drawAlerts]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, Math.min(30, Math.max(1, limit)));
+
+    const unreadDrawCount = drawAlerts.filter((a) => a.unread).length;
+
     return {
-      unreadCount,
+      unreadCount: unreadTxCount + unreadDrawCount,
       lastSeenAt: lastSeenAt?.toISOString() ?? null,
-      items: serialized,
+      items: merged,
     };
+  }
+
+  /** CC raffle draw results — winners/losers notified after admin draw. */
+  private async getDrawAlerts(
+    userId: string,
+    lastSeenAt: Date | null,
+  ): Promise<
+    Array<{
+      kind: 'draw';
+      id: string;
+      drawKind: 'win' | 'loss';
+      questId: string;
+      questTitle: string;
+      rewardCc: number | null;
+      description: string;
+      createdAt: string;
+      unread: boolean;
+    }>
+  > {
+    const completions = await this.prisma.questCompletion.findMany({
+      where: { userId },
+      select: {
+        questId: true,
+        quest: {
+          select: { id: true, title: true, rewardType: true, rewardCc: true },
+        },
+      },
+    });
+
+    const alerts: Array<{
+      kind: 'draw';
+      id: string;
+      drawKind: 'win' | 'loss';
+      questId: string;
+      questTitle: string;
+      rewardCc: number | null;
+      description: string;
+      createdAt: string;
+      unread: boolean;
+    }> = [];
+
+    for (const c of completions) {
+      const rt = normalizeRewardType(c.quest.rewardType as RewardType);
+      if (rt !== RewardType.CC_MANUAL) continue;
+
+      const latestDraw = await this.prisma.winnerDraw.findFirst({
+        where: { questId: c.questId },
+        orderBy: { drawnAt: 'desc' },
+      });
+      if (!latestDraw) continue;
+
+      const userDraw = await this.prisma.winnerDraw.findUnique({
+        where: { questId_userId: { questId: c.questId, userId } },
+      });
+      const drawnAt = latestDraw.drawnAt;
+      const unread = !lastSeenAt || drawnAt > lastSeenAt;
+
+      if (userDraw) {
+        alerts.push({
+          kind: 'draw',
+          id: `draw-win-${c.questId}`,
+          drawKind: 'win',
+          questId: c.questId,
+          questTitle: c.quest.title,
+          rewardCc: c.quest.rewardCc > 0 ? c.quest.rewardCc : null,
+          description: userDraw.distributed
+            ? `Beruntung! Kamu menang ${c.quest.rewardCc} CC dari ${c.quest.title}.`
+            : `Beruntung! Kamu menang ${c.quest.rewardCc} CC — buka campaign untuk claim reward.`,
+          createdAt: drawnAt.toISOString(),
+          unread,
+        });
+      } else {
+        alerts.push({
+          kind: 'draw',
+          id: `draw-loss-${c.questId}`,
+          drawKind: 'loss',
+          questId: c.questId,
+          questTitle: c.quest.title,
+          rewardCc: null,
+          description: `Belum beruntung di ${c.quest.title}. Coba lagi di campaign berikutnya!`,
+          createdAt: drawnAt.toISOString(),
+          unread,
+        });
+      }
+    }
+
+    return alerts;
   }
 
   async markNotificationsSeen(userId: string) {
