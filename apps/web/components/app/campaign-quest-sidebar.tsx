@@ -1,3 +1,4 @@
+import { CcRewardLogo } from "@/components/app/cc-reward-logo";
 import {
   campaignTypeDisplayValue,
   campaignUiKind,
@@ -5,9 +6,11 @@ import {
   getCampaignRewardHeadline,
   isFcfsSlotsFull,
 } from "@/lib/campaign-reward";
+import { isCcTokenRewardQuest } from "@/lib/cc-reward-logo";
 import type { Quest } from "@/lib/quest-types";
 import { cn } from "@/lib/utils";
-import { Calendar, Coins, ListChecks, Ticket, Trophy, Users, Zap } from "lucide-react";
+import { Calendar, ListChecks, Ticket, Trophy, Users, Zap } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 function formatEnd(quest: Quest): string {
   if (quest.endsAt) {
@@ -24,7 +27,7 @@ function formatEnd(quest: Quest): string {
 
 type StatItem = {
   key: string;
-  icon: typeof Coins;
+  icon: LucideIcon;
   label: string;
   value: string;
   valueClassName?: string;
@@ -110,8 +113,8 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
             Campaign reward
           </p>
           <p className="mt-1 flex items-center gap-2 text-2xl font-bold tabular-nums text-[var(--foreground)] sm:text-3xl">
-            {quest.rewardCc > 0 ? (
-              <Coins className="h-6 w-6 shrink-0 text-canton sm:h-7 sm:w-7" aria-hidden />
+            {isCcTokenRewardQuest(quest) ? (
+              <CcRewardLogo className="sm:h-7 sm:w-7" size={28} />
             ) : null}
             <span className={quest.rewardCc > 0 ? "text-canton" : undefined}>
               {rewardHeadline.primary}

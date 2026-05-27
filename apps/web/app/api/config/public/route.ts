@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getCcRewardLogoUrl } from '@/lib/cc-reward-logo';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,5 +11,8 @@ export async function GET() {
     process.env.CF_TURNSTILE_SITE_KEY?.trim() ||
     '';
 
-  return NextResponse.json({ turnstileSiteKey });
+  return NextResponse.json({
+    turnstileSiteKey,
+    ccRewardLogoUrl: getCcRewardLogoUrl(),
+  });
 }

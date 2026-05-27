@@ -17,7 +17,8 @@ import { CampaignFcfsRewardCard } from "@/components/app/campaign-fcfs-reward-ca
 import { CampaignQuestStatusCard } from "@/components/app/campaign-quest-status-card";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ArrowRight, Check, CheckCircle2, ChevronDown, Clock, Coins, Copy, Rocket, Shield, Sparkles, Ticket } from "lucide-react";
+import { CcRewardLogo } from "@/components/app/cc-reward-logo";
+import { ArrowRight, Check, CheckCircle2, ChevronDown, Clock, Copy, Rocket, Shield, Sparkles, Ticket } from "lucide-react";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { useState } from "react";
 
@@ -368,7 +369,7 @@ export function QuestSubmittedProof({
         {showCcReward && uiKind !== "cc_fcfs" && (
           <div className="flex items-center gap-4 rounded-2xl border border-[var(--primary)]/30 bg-gradient-to-r from-[var(--primary)]/15 to-[rgb(var(--canton-cyan-rgb)/0.08)] p-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--primary)]/25">
-              <Coins className="h-6 w-6 text-canton" />
+              <CcRewardLogo size={24} />
             </div>
             <div className="min-w-0 flex-1 text-left">
               <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">

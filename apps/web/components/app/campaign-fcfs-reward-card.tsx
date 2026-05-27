@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { CheckCircle2, Coins } from "lucide-react";
+import { CcRewardLogo } from "@/components/app/cc-reward-logo";
+import { CheckCircle2 } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -55,7 +56,7 @@ export function CampaignFcfsRewardCard({
             {isStatus ? (
               <CheckCircle2 className="h-4 w-4" aria-hidden />
             ) : (
-              <Coins className="h-4 w-4" aria-hidden />
+              <CcRewardLogo size={16} />
             )}
           </div>
           <div className="min-w-0">

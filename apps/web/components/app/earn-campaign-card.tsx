@@ -12,6 +12,7 @@ import {
 import { ROUTES } from "@/lib/app-routes";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { QUEST_STATUS_BADGE, type Quest, type UserProgress } from "@/lib/quest-types";
+import { CcRewardLogo } from "@/components/app/cc-reward-logo";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -34,11 +35,17 @@ function rewardTheme(rewardPool: string, rewardType?: string) {
     rewardType === "CC_AND_INVITE" ||
     pool.includes("cc")
   ) {
-    return { icon: Coins, accent: "text-canton", chip: "bg-canton-soft text-canton border-canton-muted" };
+    return {
+      icon: Coins,
+      isCcToken: true,
+      accent: "text-canton",
+      chip: "bg-canton-soft text-canton border-canton-muted",
+    };
   }
   if (rewardType?.includes("INVITE") || pool.includes("invite") || pool.includes("fcfs")) {
     return {
       icon: Ticket,
+      isCcToken: false,
       accent: "text-violet-300",
       chip: "bg-violet-500/15 text-violet-200 border-violet-500/25",
     };
@@ -46,15 +53,33 @@ function rewardTheme(rewardPool: string, rewardType?: string) {
   if (rewardType === "WAITLIST_EMAIL" || pool.includes("waitlist")) {
     return {
       icon: Sparkles,
+      isCcToken: false,
       accent: "text-cyan-300",
       chip: "bg-cyan-500/12 text-cyan-200 border-cyan-500/25",
     };
   }
   return {
     icon: Trophy,
+    isCcToken: false,
     accent: "text-canton",
     chip: "bg-canton-soft text-canton border-canton-muted",
   };
+}
+
+function CampaignRewardIcon({
+  theme,
+  className,
+  size = 16,
+}: {
+  theme: ReturnType<typeof rewardTheme>;
+  className?: string;
+  size?: number;
+}) {
+  if (theme.isCcToken) {
+    return <CcRewardLogo className={className} size={size} />;
+  }
+  const Icon = theme.icon;
+  return <Icon className={className} aria-hidden />;
 }
 
 function kindLabel(
@@ -84,19 +109,25 @@ function Metric({
   label,
   value,
   icon: Icon,
+  useCcLogo,
   accent,
   muted,
 }: {
   label: string;
   value: string;
   icon: typeof Coins;
+  useCcLogo?: boolean;
   accent?: string;
   muted?: boolean;
 }) {
   return (
     <div className="min-w-0 flex-1 px-3 py-2.5 first:pl-0 last:pr-0 sm:px-4 sm:py-3">
       <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
-        <Icon className={cn("h-3 w-3 shrink-0 opacity-70", accent)} aria-hidden />
+        {useCcLogo ? (
+          <CcRewardLogo className="opacity-90" size={12} />
+        ) : (
+          <Icon className={cn("h-3 w-3 shrink-0 opacity-70", accent)} aria-hidden />
+        )}
         <span className="truncate">{label}</span>
       </div>
       <p
@@ -133,7 +164,6 @@ export function EarnCampaignCard({
         quest.rewardType === "INVITE_CODE_FCFS");
   const uiKind = campaignUiKind(quest.rewardType, requiresFcfs);
   const theme = rewardTheme(quest.rewardPool, quest.rewardType);
-  const RewardIcon = theme.icon;
 
   const hasParticipated = hasParticipatedInQuest(quest, userProgress);
   const slotsMax = summary?.maxWinners ?? 0;
@@ -246,7 +276,7 @@ export function EarnCampaignCard({
         {/* Reward highlight on banner (Galxe-style) */}
         {quest.rewardCc > 0 || bannerRewardText ? (
           <div className="absolute bottom-3 right-3 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-lg border border-white/10 bg-black/50 px-2.5 py-1.5 backdrop-blur-md">
-            <RewardIcon className={cn("h-4 w-4 shrink-0", theme.accent)} />
+            <CampaignRewardIcon theme={theme} className={cn("shrink-0", theme.accent)} size={16} />
             <div className="min-w-0 text-right">
               <p className="text-[9px] font-semibold uppercase tracking-wider text-white/60">
                 {t("earnCampaigns.rewardLabel")}

@@ -40,6 +40,27 @@ export class UploadsController {
     return new StreamableFile(createReadStream(disk));
   }
 
+  /** CC token icon for Earn / campaign reward UI (R2 key from CC_REWARD_LOGO_R2_KEY). */
+  @Get('cc-reward-logo')
+  @SkipThrottle()
+  async serveCcRewardLogo(@Res({ passthrough: true }) res: Response) {
+    const key =
+      this.config.get<string>('CC_REWARD_LOGO_R2_KEY')?.trim() || 'quests/C (1).png';
+    if (!/^quests\/[a-zA-Z0-9 ()_.-]+\.(png|jpg|jpeg|webp|gif|svg)$/i.test(key)) {
+      throw new NotFoundException();
+    }
+    const asset = await this.storage.getQuestAssetStream(key);
+    if (!asset) {
+      throw new NotFoundException();
+    }
+    res.set({
+      'Content-Type': asset.contentType,
+      'Cache-Control': 'public, max-age=86400',
+      'Cross-Origin-Resource-Policy': 'cross-origin',
+    });
+    return new StreamableFile(asset.stream);
+  }
+
   /** Stream quest banner/logo from Cloudflare R2 (works even when r2.dev public URL is misconfigured). */
   @Get('quests/:filename')
   @SkipThrottle()
