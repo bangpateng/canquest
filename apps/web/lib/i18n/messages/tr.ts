@@ -111,6 +111,7 @@ export const tr: PlatformMessages = {
     heroSubtitle: "",
     dailyTasksLink: "",
     statsAria: "Kampanya özeti",
+    filterAria: "Kampanyaları filtrele",
     statsLabel: "Kampanyalarınız",
     live: "Canlı",
     active: "Şu an canlı",

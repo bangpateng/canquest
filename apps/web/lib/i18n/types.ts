@@ -129,6 +129,7 @@ export type PlatformMessages = {
     heroSubtitle: string;
     dailyTasksLink: string;
     statsAria: string;
+    filterAria: string;
     statsLabel: string;
     live: string;
     active: string;

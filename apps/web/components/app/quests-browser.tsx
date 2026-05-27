@@ -10,7 +10,7 @@ import { filterTabClass } from "@/lib/ui-button-styles";
 import { cn } from "@/lib/utils";
 import { ListPagination } from "@/components/app/list-pagination";
 import { buttonVariants } from "@/components/ui/button";
-import { Search } from "lucide-react";
+import { CheckCircle2, Search } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
@@ -48,20 +48,12 @@ function matchesSearch(quest: Quest, q: string) {
     .includes(s);
 }
 
-export type EarnCampaignStats = {
-  active: number;
-  completed: number;
-  total: number;
-};
-
 export function QuestsBrowser({
   embedded = false,
   variant = "default",
-  onStatsChange,
 }: {
   embedded?: boolean;
   variant?: "default" | "earn";
-  onStatsChange?: (stats: EarnCampaignStats) => void;
 }) {
   const t = usePlatformT();
   const isEarn = variant === "earn" || embedded;
@@ -74,6 +66,7 @@ export function QuestsBrowser({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const [completionStats, setCompletionStats] = useState({ completed: 0, total: 0 });
 
   const loadQuests = useCallback(() => {
     const controller = new AbortController();
@@ -121,9 +114,8 @@ export function QuestsBrowser({
       .then(([quests, prog]) => {
         setAllQuests(quests);
         setProgress(prog);
-        const active = quests.filter((q) => q.status === "ACTIVE").length;
         const completed = prog?.completedQuestIds?.length ?? 0;
-        onStatsChange?.({ active, completed, total: quests.length });
+        setCompletionStats({ completed, total: quests.length });
 
         if (quests.length > 0) {
           const activeCount = quests.filter((q) => q.status === "ACTIVE").length;
@@ -144,7 +136,7 @@ export function QuestsBrowser({
           setLoadError("Could not load campaigns");
         }
         setAllQuests([]);
-        onStatsChange?.({ active: 0, completed: 0, total: 0 });
+        setCompletionStats({ completed: 0, total: 0 });
       })
       .finally(() => setLoading(false));
 
@@ -152,7 +144,7 @@ export function QuestsBrowser({
       clearTimeout(timeout);
       controller.abort();
     };
-  }, [onStatsChange]);
+  }, []);
 
   useEffect(() => {
     const cleanup = loadQuests();
@@ -182,7 +174,7 @@ export function QuestsBrowser({
       className={cn(
         "flex gap-1 overflow-x-auto p-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
         isEarn
-          ? "rounded-2xl border border-[var(--border)] bg-[var(--muted)]/25"
+          ? "rounded-xl bg-[var(--muted)]/30 p-1"
           : "gap-2 pb-1 sm:pb-0",
       )}
     >
@@ -195,7 +187,9 @@ export function QuestsBrowser({
             onClick={() => setStatus(tab.id)}
             className={filterTabClass(
               selected,
-              isEarn ? "flex-1 justify-center sm:flex-none" : undefined,
+              isEarn
+                ? "flex-1 justify-center px-3 py-1.5 text-xs sm:flex-none sm:px-4 sm:py-2 sm:text-sm"
+                : undefined,
             )}
           >
             {QUEST_STATUS_BADGE[tab.id].label}{" "}
@@ -229,13 +223,29 @@ export function QuestsBrowser({
     </label>
   );
 
+  const completionChip =
+    isEarn && completionStats.total > 0 ? (
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold tabular-nums text-emerald-300">
+        <CheckCircle2 className="h-3 w-3" aria-hidden />
+        {completionStats.completed}/{completionStats.total}
+      </span>
+    ) : null;
+
   return (
     <div className={cn("w-full min-w-0", isEarn ? "space-y-4" : "space-y-5")}>
       {isEarn ? (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="sm:order-2 sm:w-[22rem]">{searchField}</div>
-          <div className="sm:order-1 sm:flex-1">{tabRow}</div>
-        </div>
+        <section
+          className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--card)]/40 p-3 sm:p-4"
+          aria-label={t("earnCampaigns.filterAria")}
+        >
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-4">
+            <div className="flex min-w-0 items-center gap-2 lg:flex-1">
+              <div className="min-w-0 flex-1">{tabRow}</div>
+              {completionChip}
+            </div>
+            <div className="lg:w-72 lg:shrink-0">{searchField}</div>
+          </div>
+        </section>
       ) : (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
           {tabRow}

@@ -111,6 +111,7 @@ export const en: PlatformMessages = {
     heroSubtitle: "",
     dailyTasksLink: "",
     statsAria: "Campaign overview",
+    filterAria: "Filter campaigns",
     statsLabel: "Your campaigns",
     live: "Live",
     active: "Live now",
