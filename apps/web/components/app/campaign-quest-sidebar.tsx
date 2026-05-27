@@ -6,7 +6,6 @@ import {
   isFcfsSlotsFull,
 } from "@/lib/campaign-reward";
 import type { Quest } from "@/lib/quest-types";
-import { QUEST_STATUS_BADGE } from "@/lib/quest-types";
 import { cn } from "@/lib/utils";
 import { Calendar, Coins, ListChecks, Ticket, Trophy, Users, Zap } from "lucide-react";
 
@@ -33,7 +32,6 @@ type StatItem = {
 
 /** Campaign reward + meta — shown above quest tasks (mobile-first, full width). */
 export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
-  const statusMeta = QUEST_STATUS_BADGE[quest.status];
   const summary = quest.campaignSummary;
   const uiKind = campaignUiKind(quest.rewardType, quest.rewardPool);
   const rewardHeadline = getCampaignRewardHeadline(

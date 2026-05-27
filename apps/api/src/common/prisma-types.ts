@@ -36,7 +36,7 @@ export function resolveQuestDisplayStatus(
   const hasDeadline = Boolean(deadline && Number.isFinite(deadline.getTime()));
 
   if (endsAt && endsAt < now) return QuestStatus.ENDED;
-  if (!endsAt && hasDeadline && deadline! < now) return QuestStatus.ENDED;
+  if (hasDeadline && deadline! < now) return QuestStatus.ENDED;
   if (startsAt && startsAt > now) return QuestStatus.COMING_SOON;
   if (q.status === QuestStatus.ENDED) return QuestStatus.ENDED;
   if (q.status === QuestStatus.COMING_SOON) return QuestStatus.COMING_SOON;

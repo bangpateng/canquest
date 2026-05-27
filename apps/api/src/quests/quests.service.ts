@@ -351,9 +351,24 @@ export class QuestsService {
       ),
     );
     const withSummary = await this.attachCampaignSummaries(mapped);
+    const withStatus = withSummary.map((q) => this.applyCampaignListStatus(q));
     return status
-      ? withSummary.filter((q) => q.status === status)
-      : withSummary;
+      ? withStatus.filter((q) => q.status === status)
+      : withStatus;
+  }
+
+  /** FCFS campaigns with no slots left surface as ENDED (Earn tabs + detail header). */
+  private applyCampaignListStatus<
+    T extends { status: QuestStatus; campaignSummary?: QuestCampaignSummary },
+  >(q: T): T {
+    if (
+      q.campaignSummary?.requiresFcfsClaim &&
+      q.campaignSummary.slotsFull &&
+      q.status === QuestStatus.ACTIVE
+    ) {
+      return { ...q, status: QuestStatus.ENDED };
+    }
+    return q;
   }
 
   /** Live FCFS slots + pool totals for Earn campaign cards (batched). */
@@ -532,7 +547,7 @@ export class QuestsService {
     );
     if (mapped.questKind !== QuestKind.CAMPAIGN) return mapped;
     const [withSummary] = await this.attachCampaignSummaries([mapped]);
-    return withSummary;
+    return this.applyCampaignListStatus(withSummary);
   }
 
   /* ─── User progress ─── */
