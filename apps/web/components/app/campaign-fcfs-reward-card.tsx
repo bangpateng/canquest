@@ -84,7 +84,7 @@ export function CampaignFcfsRewardCard({
             )}
           >
             {isSubmitting ? <LoadingSpinner size="sm" /> : null}
-            {isSubmitting ? "Claiming…" : (claimButtonLabel ?? `Claim ${rewardCc} CC`)}
+            {isSubmitting ? "Claiming…" : (claimButtonLabel ?? "Claim")}
           </button>
         ) : null}
       </div>

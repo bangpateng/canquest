@@ -191,9 +191,6 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
                 >
                   Send
                 </h2>
-                <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-                  Send CC to a CanQuest @username or any Canton Party ID.
-                </p>
               </div>
               <button
                 type="button"
@@ -224,9 +221,6 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
                     className="text-xs font-medium text-[var(--muted-foreground)]"
                   >
                     Recipient
-                    <span className="ml-1 font-normal text-[var(--muted-foreground)]/70">
-                      (@username or Party ID)
-                    </span>
                   </label>
                   <textarea
                     id="wallet-send-recipient"
@@ -243,10 +237,6 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
                     disabled={sendState === "loading"}
                     className="w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 font-mono text-xs text-[var(--foreground)] outline-none ring-offset-[var(--card)] placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--foreground)]/25 disabled:opacity-50"
                   />
-                  <p className="text-[11px] text-[var(--muted-foreground)]">
-                    Enter <strong>@username</strong> for CanQuest users, or paste the full
-                    <strong> Party ID</strong> (e.g. <code>alice::1220…</code>) for any Canton party.
-                  </p>
                 </div>
 
                 <div className="space-y-2">
@@ -254,7 +244,7 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
                     htmlFor="wallet-send-amount"
                     className="text-xs font-medium text-[var(--muted-foreground)]"
                   >
-                    Amount (CC)
+                    Amount
                   </label>
                   <input
                     id="wallet-send-amount"
@@ -319,7 +309,7 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
                         Sending…
                       </>
                     ) : (
-                      "Send CC"
+                      "Send"
                     )}
                   </button>
                   <button

@@ -72,7 +72,7 @@ export function CampaignDrawCcClaimSection({
       isSubmitting={isSubmitting}
       error={error}
       success={success}
-      claimButtonLabel={`Claim ${rewardCc} CC (${fee} CC fee)`}
+      claimButtonLabel="Claim"
       onClaim={() => void handleClaim()}
     />
   );

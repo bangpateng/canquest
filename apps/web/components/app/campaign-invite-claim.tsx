@@ -72,7 +72,7 @@ export function CampaignInviteClaimSection({
       isSubmitting={isSubmitting}
       error={error}
       success={success}
-      claimButtonLabel={`Claim code (${fee} CC fee)`}
+      claimButtonLabel="Claim"
       onClaim={() => void handleClaim()}
     />
   );
