@@ -57,7 +57,7 @@ export default async function AdminPanelLayout({ children }: { children: ReactNo
               Admin
             </span>
           </div>
-          <nav className="flex shrink-0 items-center gap-5">
+          <nav className="flex max-w-full flex-wrap items-center justify-end gap-x-5 gap-y-2">
             <Link
               href="/admin"
               className="text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
@@ -84,7 +84,7 @@ export default async function AdminPanelLayout({ children }: { children: ReactNo
             </Link>
             <Link
               href="/admin/wallet-invites"
-              className="text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+              className="text-sm font-semibold text-canton transition-colors hover:text-[var(--primary-strong)]"
             >
               Wallet codes
             </Link>
