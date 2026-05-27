@@ -132,7 +132,7 @@ export const zh: PlatformMessages = {
     tryOtherTab: "请切换上方标签或清除搜索。",
     showingCount: "{count} 个{status}活动",
     rewardLabel: "奖励",
-    kindFcfs: "FCFS",
+    kindFcfs: "CC FCFS",
     kindCc: "CC",
     kindInvite: "Code FCFS",
     kindWaitlist: "候补",

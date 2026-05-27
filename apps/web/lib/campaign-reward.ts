@@ -181,7 +181,7 @@ export function campaignTypeDisplayValue(
 ): string {
   switch (uiKind) {
     case "cc_fcfs":
-      return "FCFS";
+      return "CC FCFS";
     case "cc_manual_draw":
       return "CC Raffle";
     case "waitlist_email":

@@ -132,7 +132,7 @@ export const fr: PlatformMessages = {
     tryOtherTab: "Essayez un autre onglet ou effacez la recherche.",
     showingCount: "{count} campagnes {status}",
     rewardLabel: "Récompense",
-    kindFcfs: "FCFS",
+    kindFcfs: "CC FCFS",
     kindCc: "CC",
     kindInvite: "Code FCFS",
     kindWaitlist: "Waitlist",

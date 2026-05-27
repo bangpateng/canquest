@@ -133,7 +133,7 @@ export const id: PlatformMessages = {
     tryOtherTab: "Coba tab lain di atas, atau hapus kata kunci pencarian.",
     showingCount: "{count} kampanye {status}",
     rewardLabel: "Hadiah",
-    kindFcfs: "FCFS",
+    kindFcfs: "CC FCFS",
     kindCc: "CC",
     kindInvite: "Code FCFS",
     kindWaitlist: "Waitlist",

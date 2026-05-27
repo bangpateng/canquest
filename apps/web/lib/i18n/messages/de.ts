@@ -132,7 +132,7 @@ export const de: PlatformMessages = {
     tryOtherTab: "Anderen Tab wählen oder Suche leeren.",
     showingCount: "{count} {status} Kampagnen",
     rewardLabel: "Belohnung",
-    kindFcfs: "FCFS",
+    kindFcfs: "CC FCFS",
     kindCc: "CC",
     kindInvite: "Code FCFS",
     kindWaitlist: "Waitlist",
