@@ -187,7 +187,7 @@ export function campaignTypeDisplayValue(
     case "waitlist_email":
       return "Waitlist";
     case "waitlist_code":
-      return rewardType === "INVITE_CODE_FCFS" ? "Code FCFS" : "Code Raffle";
+      return rewardType === "INVITE_CODE_FCFS" ? "WAITLIST FCFS" : "WAITLIST RAFFLE";
     case "cc_manual":
       return "CC Manual";
     default:

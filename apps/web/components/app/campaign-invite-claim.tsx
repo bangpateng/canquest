@@ -4,6 +4,7 @@ import { useState } from "react";
 import { formatFcfsClaimFeeHint } from "@/lib/campaign-reward";
 import type { CampaignMeta } from "@/lib/campaign-reward";
 import { CampaignFcfsRewardCard } from "@/components/app/campaign-fcfs-reward-card";
+import { usePlatformT } from "@/lib/i18n/platform-provider";
 
 const CLAIM_FAIL_MSG =
   "Claim failed: Transaction reverted by ledger (Slot is full or insufficient balance)";
@@ -62,7 +63,7 @@ export function CampaignInviteClaimSection({
   return (
     <CampaignFcfsRewardCard
       mode="claim"
-      sectionLabel="Code FCFS"
+      sectionLabel={t("earnCampaigns.kindInvite")}
       slotsLabel={codes > 0 ? `${codes} code(s) left` : "No codes left"}
       description={codes > 0 ? feeHint : "No codes left in the pool."}
       rewardCc={0}
