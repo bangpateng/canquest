@@ -11,7 +11,7 @@ export default function AdminWalletInvitesPage() {
         >
           ← Dashboard
         </Link>
-        <h1 className="type-page-title mt-2">Wallet invite codes</h1>
+        <h1 className="type-page-title mt-2">Generate wallet codes</h1>
         <p className="mt-1 text-sm text-[var(--muted-foreground)]">
           Generate invite codes for wallet creation. One code = one user after a successful
           wallet. Failed attempts do not consume the code.

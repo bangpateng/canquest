@@ -87,7 +87,25 @@ export default async function AdminPage() {
         ))}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <Link
+          href="/admin/wallet-invites"
+          className="group rounded-2xl border border-canton/35 bg-canton/5 p-6 transition-colors hover:border-canton/55 hover:bg-canton/10 md:col-span-2 xl:col-span-1"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-canton/15 text-canton">
+              <KeyRound className="h-5 w-5" />
+            </span>
+            <ArrowRight className="h-5 w-5 text-canton transition-transform group-hover:translate-x-0.5" />
+          </div>
+          <h2 className="type-section-title mt-4">Generate wallet codes</h2>
+          <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+            Create one-time invite codes users need before creating a Canton wallet. One code = one
+            user after successful wallet setup.
+          </p>
+          <p className="mt-3 text-xs font-semibold text-canton">Open generator →</p>
+        </Link>
+
         <Link
           href="/admin/earn"
           className="group rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 transition-colors hover:border-[var(--primary)]/35"
