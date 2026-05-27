@@ -22,12 +22,21 @@ export function resolveQuestDisplayStatus(
     status: QuestStatus;
     startsAt?: Date | string | null;
     endsAt?: Date | string | null;
+    /** Legacy/admin-friendly date label; may be parseable as a real date. */
+    deadline?: string | null;
   },
   now = new Date(),
 ): QuestStatus {
   const startsAt = q.startsAt ? new Date(q.startsAt) : null;
   const endsAt = q.endsAt ? new Date(q.endsAt) : null;
+  const deadline =
+    !endsAt && q.deadline?.trim()
+      ? new Date(q.deadline)
+      : null;
+  const hasDeadline = Boolean(deadline && Number.isFinite(deadline.getTime()));
+
   if (endsAt && endsAt < now) return QuestStatus.ENDED;
+  if (!endsAt && hasDeadline && deadline! < now) return QuestStatus.ENDED;
   if (startsAt && startsAt > now) return QuestStatus.COMING_SOON;
   if (q.status === QuestStatus.ENDED) return QuestStatus.ENDED;
   if (q.status === QuestStatus.COMING_SOON) return QuestStatus.COMING_SOON;

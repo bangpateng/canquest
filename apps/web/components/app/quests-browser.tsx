@@ -77,7 +77,7 @@ export function QuestsBrowser({
 
   const loadQuests = useCallback(() => {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 12_000);
+    const timeout = setTimeout(() => controller.abort(), 30_000);
     setLoading(true);
     setLoadError(null);
 
@@ -86,6 +86,19 @@ export function QuestsBrowser({
         async (r) => {
           const data = (await r.json().catch(() => ({}))) as Quest[] | { message?: string };
           if (!r.ok) {
+            if (r.status === 429) {
+              throw new Error("Too many requests — wait a few seconds and refresh.");
+            }
+            if (r.status === 403) {
+              throw new Error(
+                typeof data === "object" &&
+                  data !== null &&
+                  "message" in data &&
+                  typeof data.message === "string"
+                  ? data.message
+                  : "Please create your Canton wallet first to access Earn.",
+              );
+            }
             const msg =
               typeof data === "object" &&
               data !== null &&
@@ -122,7 +135,9 @@ export function QuestsBrowser({
       })
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") {
-          setLoadError("Request timed out — is the API running on port 3001?");
+          setLoadError(
+            "Request timed out — is the API running on port 3001? (First load after restart can take up to 30s.)",
+          );
         } else if (err instanceof Error) {
           setLoadError(err.message);
         } else {

@@ -12,7 +12,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
 import { AuthGuard } from '@nestjs/passport';
-import { Throttle } from '@nestjs/throttler';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { QuestKind, QuestStatus } from '../common/prisma-types';
 import { WalletRequiredGuard } from '../common/wallet-required.guard';
 import { assertHasRealWallet } from '../common/wallet-policy';
@@ -53,6 +53,7 @@ export class QuestsController {
     assertHasRealWallet(user?.cantonPartyId);
   }
 
+  @SkipThrottle()
   @Get('leaderboard')
   async leaderboard(
     @Query('period') period?: string,
@@ -69,11 +70,13 @@ export class QuestsController {
     return this.quests.getLeaderboard(validPeriod, p, ps);
   }
 
+  @SkipThrottle()
   @Get('dashboard-stats')
   async dashboardStats(@Req() req: AuthedReq) {
     return this.quests.getUserDashboardStats(req.user.userId);
   }
 
+  @SkipThrottle()
   @Get('activity')
   async recentActivity(
     @Req() req: AuthedReq,
@@ -88,6 +91,7 @@ export class QuestsController {
     return this.quests.getRecentActivity(req.user.userId, p, ps);
   }
 
+  @SkipThrottle()
   @Get()
   @UseGuards(WalletRequiredGuard)
   listQuests(@Query('status') status?: string) {
@@ -103,6 +107,7 @@ export class QuestsController {
     return this.quests.getUserAllProgress(req.user.userId);
   }
 
+  @SkipThrottle()
   @Get('earn-hub')
   getEarnHub() {
     return this.quests.getEarnHubQuest();

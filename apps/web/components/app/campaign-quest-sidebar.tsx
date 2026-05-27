@@ -118,14 +118,6 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
             </p>
           ) : null}
         </div>
-        <span
-          className={cn(
-            "inline-flex w-fit shrink-0 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wide",
-            statusMeta.className,
-          )}
-        >
-          {statusMeta.label}
-        </span>
       </div>
 
       <div className="grid grid-cols-2 divide-x divide-y divide-[var(--border)] border-[var(--border)] sm:grid-cols-3 lg:grid-cols-5">
