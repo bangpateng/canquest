@@ -138,7 +138,7 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)]/60 p-5 text-center">
             <h2 className="type-section-title">Sign in to participate</h2>
             <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-              You can view this campaign publicly, but you’ll need an account to complete missions and claim rewards.
+              You need an account to complete missions and claim rewards.
             </p>
             <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-center">
               <Link
