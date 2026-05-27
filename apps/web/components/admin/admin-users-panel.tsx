@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Search, Trash2, Shield } from 'lucide-react';
+import { buttonVariants } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import { inputClass } from '@/lib/ui-tokens';
 
 interface AdminUserRow {
   id: string;
@@ -170,14 +173,14 @@ export function AdminUsersPanel() {
               setSearch(e.target.value);
               setPage(1);
             }}
-            className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] py-2.5 pl-10 pr-4 text-sm"
+            className={cn(inputClass, "py-2.5 pl-10 pr-4")}
           />
         </div>
         <button
           type="button"
           onClick={() => void load()}
           disabled={loading}
-          className="rounded-full border border-[var(--border)] bg-[var(--card)]/80 px-4 py-2.5 text-sm font-semibold hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10"
+          className={buttonVariants({ variant: "secondary" })}
         >
           Refresh
         </button>
@@ -185,7 +188,7 @@ export function AdminUsersPanel() {
           type="button"
           onClick={() => void deleteSelected()}
           disabled={busy || selected.size === 0}
-          className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+          className={cn(buttonVariants({ variant: "danger" }), "gap-2 bg-red-600 text-white hover:bg-red-500 disabled:opacity-50")}
         >
           <Trash2 className="h-4 w-4" />
           Delete selected ({selected.size})

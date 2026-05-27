@@ -4,6 +4,7 @@ import { CampaignSocialLinks } from "@/components/app/campaign-social-links";
 import { ROUTES } from "@/lib/app-routes";
 import { getLandingCampaignDisplay } from "@/lib/landing-campaign-display";
 import { QUEST_STATUS_BADGE, type Quest } from "@/lib/quest-types";
+import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 function CampaignMark({ quest }: { quest: Quest }) {
@@ -111,7 +112,7 @@ function CompactCampaignCard({ quest }: { quest: Quest }) {
         ) : null}
 
         {canOpen ? (
-          <span className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--primary)] py-2.5 text-sm font-semibold text-[var(--primary-foreground)] transition-all group-hover:brightness-110">
+          <span className={cn(buttonVariants({ size: "block" }), "mt-4 gap-2 group-hover:brightness-110")}>
             View campaign
             <ArrowRight className="h-4 w-4" />
           </span>

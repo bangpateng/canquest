@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, Download, Edit, Plus, Trash2, Users, Trophy } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { buttonVariants } from "@/components/ui/button";
 import { underlineTabClass } from "@/lib/ui-button-styles";
 import { cn } from "@/lib/utils";
 import { QuestForm } from "./quest-form";
@@ -199,7 +200,7 @@ export function QuestDetail({ questId }: { questId: string }) {
             type="button"
             onClick={() => void handleExportCsv()}
             disabled={exporting}
-            className="flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--card)]/80 px-3 py-2 text-xs font-semibold transition-colors hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10 disabled:opacity-50"
+            className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "gap-1.5")}
           >
             {exporting ? <LoadingSpinner size="sm" /> : <Download className="h-3.5 w-3.5" />}
             {questExportLabel(quest.rewardType)}
@@ -207,7 +208,7 @@ export function QuestDetail({ questId }: { questId: string }) {
           {isInviteRewardType(quest.rewardType) && (
             <Link
               href={`/admin/quests/${questId}/winners`}
-              className="flex items-center gap-1.5 rounded-full bg-[var(--primary)] px-3 py-2 text-xs font-semibold text-[var(--primary-foreground)] shadow-[0_0_16px_rgb(var(--canton-rgb)/0.18)] transition-opacity hover:opacity-90"
+              className={cn(buttonVariants({ size: "sm" }), "gap-1.5")}
             >
               <Trophy className="h-3.5 w-3.5" />
               Invite codes & draw
@@ -394,10 +395,10 @@ export function QuestDetail({ questId }: { questId: string }) {
                 </div>
               </div>
               <div className="flex gap-2 pt-1">
-                <button type="submit" disabled={taskSaving} className="inline-flex items-center gap-2 rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary-foreground)] shadow-[0_0_16px_rgb(var(--canton-rgb)/0.18)] disabled:opacity-60">
+                <button type="submit" disabled={taskSaving} className={cn(buttonVariants(), "gap-2 disabled:opacity-60")}>
                   {taskSaving && <LoadingSpinner size="sm" />} Save task
                 </button>
-                <button type="button" onClick={() => setAddingTask(false)} className="rounded-full border border-[var(--border)] bg-[var(--card)]/80 px-4 py-2 text-sm font-semibold hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10">Cancel</button>
+                <button type="button" onClick={() => setAddingTask(false)} className={buttonVariants({ variant: "secondary" })}>Cancel</button>
               </div>
             </form>
           ) : (

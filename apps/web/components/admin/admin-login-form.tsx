@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import Link from 'next/link';
 
+import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 export function AdminLoginForm() {
@@ -96,7 +97,7 @@ export function AdminLoginForm() {
         type="submit"
         disabled={loading}
         className={cn(
-          'flex w-full items-center justify-center gap-2 rounded-full bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-[var(--primary-foreground)] shadow-[0_0_20px_rgb(var(--canton-rgb)/0.18)] transition-opacity hover:opacity-90 disabled:opacity-60',
+          cn(buttonVariants(), 'w-full gap-2'),
         )}
       >
         {loading ? <LoadingSpinner size="md" aria-hidden /> : null}

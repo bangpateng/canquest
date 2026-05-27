@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Plus, Trash2, ChevronDown, ChevronUp, Upload } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -750,7 +751,7 @@ export function QuestForm({
         <button
           type="submit"
           disabled={submitting}
-          className="inline-flex items-center gap-2 rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-[var(--primary-foreground)] shadow-[0_0_20px_rgb(var(--canton-rgb)/0.18)] transition-opacity hover:opacity-90 disabled:opacity-60"
+          className={cn(buttonVariants(), "gap-2 disabled:opacity-60")}
         >
           {submitting && <LoadingSpinner size="md" />}
           {isEdit ? "Save Changes" : "Create Quest"}
@@ -758,7 +759,7 @@ export function QuestForm({
         <button
           type="button"
           onClick={() => router.back()}
-          className="rounded-full border border-[var(--border)] bg-[var(--card)]/80 px-5 py-2.5 text-sm font-semibold transition-colors hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10"
+          className={buttonVariants({ variant: "secondary" })}
         >
           Cancel
         </button>

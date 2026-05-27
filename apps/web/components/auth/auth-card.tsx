@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
+import { inputClass, surfaceCardClass } from "@/lib/ui-tokens";
 import { cn } from "@/lib/utils";
 
-export const authInputClass =
-  "w-full rounded-xl border border-[var(--border)] bg-[var(--muted)]/80 px-3 py-2.5 text-sm outline-none transition-colors placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)]/40 focus-visible:ring-2 focus-visible:ring-[var(--ring)]";
+/** @deprecated Use inputClass from @/lib/ui-tokens or Input from @/components/ui/input */
+export const authInputClass = inputClass;
 
 export function AuthCard({
   title,
@@ -18,7 +19,8 @@ export function AuthCard({
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] p-8 shadow-[0_0_40px_rgb(0_0_0/0.35)]",
+        "relative overflow-hidden p-8 shadow-[0_0_40px_rgb(0_0_0/0.35)]",
+        surfaceCardClass,
         className,
       )}
     >

@@ -8,16 +8,25 @@ export const buttonVariants = cva(
     variants: {
       variant: {
         primary:
-          "bg-[var(--primary)] text-[var(--primary-foreground)] shadow-[0_0_20px_rgb(var(--canton-rgb)/0.18)] hover:brightness-105 active:scale-[0.99]",
+          "bg-[var(--primary)] text-[var(--primary-foreground)] shadow-[0_0_20px_rgb(var(--canton-rgb)/0.18)] hover:brightness-105 hover:shadow-[0_0_24px_rgb(var(--canton-rgb)/0.28)] active:scale-[0.99]",
         secondary:
           "border border-[var(--border)] bg-[var(--card)]/80 text-[var(--foreground)] hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10",
         ghost:
           "text-[var(--foreground)] hover:bg-[var(--primary)]/10 hover:text-[var(--foreground)]",
+        success:
+          "border border-emerald-500/35 bg-emerald-500/10 text-emerald-300 hover:border-emerald-500/45 hover:bg-emerald-500/15",
+        muted:
+          "border border-[var(--border)] bg-[var(--muted)]/40 text-[var(--muted-foreground)] cursor-default",
+        dashed:
+          "border border-dashed border-[var(--border)] bg-transparent text-[var(--muted-foreground)] cursor-not-allowed",
+        danger:
+          "border border-red-500/30 bg-red-500/10 text-red-300 hover:border-red-500/45 hover:bg-red-500/15",
       },
       size: {
         default: "h-11 px-5 text-sm",
         sm: "h-9 px-4 text-xs",
         lg: "h-12 px-8 text-base",
+        block: "h-11 w-full px-5 text-sm",
       },
     },
     defaultVariants: { variant: "primary", size: "default" },

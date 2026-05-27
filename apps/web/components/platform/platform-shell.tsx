@@ -72,7 +72,7 @@ function NavLinks({
 
       ? "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all"
 
-      : "flex min-w-0 flex-1 basis-0 flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-[9px] font-medium transition-all sm:px-2 sm:text-[10px]";
+      : "flex min-w-0 flex-1 basis-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[9px] font-medium transition-all sm:px-2 sm:text-[10px]";
 
 
 

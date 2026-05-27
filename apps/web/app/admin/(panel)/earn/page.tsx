@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { cookies } from "next/headers";
 import { Plus, Sparkles } from "lucide-react";
 import { CQ_ADMIN_ACCESS_COOKIE } from "@/lib/auth-cookies";
@@ -40,7 +42,7 @@ export default async function AdminEarnPage() {
         </div>
         <Link
           href="/admin/earn/new"
-          className="inline-flex items-center gap-2 rounded-full bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-[var(--primary-foreground)] shadow-[0_0_20px_rgb(var(--canton-rgb)/0.18)] transition-opacity hover:opacity-90"
+          className={cn(buttonVariants(), "gap-2")}
         >
           <Plus className="h-4 w-4" />
           New campaign

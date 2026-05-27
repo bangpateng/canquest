@@ -7,6 +7,8 @@ import { CQ_ACCESS_COOKIE } from "@/lib/auth-cookies";
 import { internalApiBase } from "@/lib/internal-api-url";
 import { resolveQuestMediaUrl } from "@/lib/quest-media-url";
 import { QUEST_STATUS_BADGE, type Quest } from "@/lib/quest-types";
+import { buttonVariants } from "@/components/ui/button";
+import { surfaceCardClass } from "@/lib/ui-tokens";
 import { cn } from "@/lib/utils";
 import { ArrowLeft, Sparkles } from "lucide-react";
 import Link from "next/link";
@@ -135,7 +137,7 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
         {isAuthed ? (
           <QuestTaskPanel quest={quest} />
         ) : (
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)]/60 p-5 text-center">
+          <div className={cn(surfaceCardClass, "bg-[var(--card)]/60 p-5 text-center")}>
             <h2 className="type-section-title">Sign in to participate</h2>
             <p className="mt-2 text-sm text-[var(--muted-foreground)]">
               You need an account to complete missions and claim rewards.
@@ -143,13 +145,13 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
             <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-center">
               <Link
                 href={`/?auth=register&next=${encodeURIComponent(`/earn/${questId}`)}`}
-                className="rounded-xl bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-[var(--primary-foreground)]"
+                className={buttonVariants()}
               >
                 Sign up
               </Link>
               <Link
                 href={`/?auth=login&next=${encodeURIComponent(`/earn/${questId}`)}`}
-                className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-2.5 text-sm font-semibold"
+                className={buttonVariants({ variant: "secondary" })}
               >
                 Sign in
               </Link>

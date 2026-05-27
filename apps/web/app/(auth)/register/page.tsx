@@ -153,10 +153,7 @@ export default function RegisterPage() {
           <button
             type="submit"
             disabled={busy}
-            className={cn(
-              buttonVariants(),
-              "mt-2 w-full gap-2 rounded-full py-3 font-bold shadow-[0_0_24px_rgb(var(--canton-rgb)/0.2)]",
-            )}
+            className={cn(buttonVariants({ size: "block" }), "mt-2 gap-2")}
           >
             {busy ? <LoadingSpinner size="md" /> : null}
             {busy ? "Sending code…" : "Create account"}

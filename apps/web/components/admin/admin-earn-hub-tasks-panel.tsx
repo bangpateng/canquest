@@ -1,6 +1,8 @@
 "use client";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   AdminEarnHubTaskForm,
   type EarnHubTaskDraft,
@@ -15,7 +17,6 @@ import {
   parseQuizChoices,
   validateEarnHubTaskDraft,
 } from "@/lib/quest-types";
-import { cn } from "@/lib/utils";
 import { GripVertical, Pencil, Plus, Trash2 } from "lucide-react";
 
 export interface EarnHubTask {
@@ -93,7 +94,7 @@ export function AdminEarnHubTasksPanel({
           type="button"
           onClick={onEnsureHub}
           disabled={ensuring}
-          className="mt-6 inline-flex items-center gap-2 rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-[var(--primary-foreground)] disabled:opacity-50"
+          className={cn(buttonVariants(), "mt-6 gap-2 disabled:opacity-50")}
         >
           {ensuring ? <LoadingSpinner size="md" /> : <Plus className="h-4 w-4" />}
           Set up Quest hub

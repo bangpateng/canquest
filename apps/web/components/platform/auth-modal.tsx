@@ -11,12 +11,10 @@ import { formatApiError } from "@/lib/format-api-error";
 import { login, register, verifyOtp } from "@/lib/services/api/auth";
 import { clearReferralRef, getReferralRef } from "@/lib/referral-ref";
 import { clearCachedWalletMe } from "@/lib/wallet-session-cache";
+import { inputClass } from "@/lib/ui-tokens";
 import { cn } from "@/lib/utils";
 
 type PendingOtp = { userId: string; devOtp?: string };
-
-const inputClass =
-  "w-full rounded-xl border border-[var(--border)] bg-[var(--muted)]/80 px-3 py-2.5 text-sm outline-none transition-colors placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)]/40 focus-visible:ring-2 focus-visible:ring-[var(--ring)]";
 
 function Field({
   label,
@@ -281,7 +279,7 @@ export function AuthModal() {
               <button
                 type="submit"
                 disabled={busy}
-                className={cn(buttonVariants(), "w-full gap-2 rounded-full py-3 font-bold")}
+                className={cn(buttonVariants({ size: "block" }), "gap-2")}
               >
                 {busy ? <LoadingSpinner size="md" /> : null}
                 Verify & continue
@@ -311,10 +309,7 @@ export function AuthModal() {
               <button
                 type="submit"
                 disabled={busy}
-                className={cn(
-                  buttonVariants(),
-                  "mt-2 w-full gap-2 rounded-full py-3 font-bold shadow-[0_0_24px_rgb(var(--canton-rgb)/0.2)]",
-                )}
+                className={cn(buttonVariants({ size: "block" }), "mt-2 gap-2")}
               >
                 {busy ? <LoadingSpinner size="md" /> : null}
                 Sign In
@@ -367,10 +362,7 @@ export function AuthModal() {
               <button
                 type="submit"
                 disabled={busy}
-                className={cn(
-                  buttonVariants(),
-                  "mt-2 w-full gap-2 rounded-full py-3 font-bold shadow-[0_0_24px_rgb(var(--canton-rgb)/0.2)]",
-                )}
+                className={cn(buttonVariants({ size: "block" }), "mt-2 gap-2")}
               >
                 {busy ? <LoadingSpinner size="md" /> : null}
                 {busy ? "Sending code…" : "Create account"}

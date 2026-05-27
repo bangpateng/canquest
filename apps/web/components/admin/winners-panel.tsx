@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, CheckCircle2, Clock, Send, Shuffle, Ticket, UserCheck, Plus, Trash2 } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { buttonVariants } from "@/components/ui/button";
 import { underlineTabClass } from "@/lib/ui-button-styles";
 import { cn } from "@/lib/utils";
 
@@ -347,7 +348,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
               type="button"
               disabled={drawing || participants.filter((p) => !p.isWinner).length === 0}
               onClick={() => void handleDrawRandom()}
-              className="inline-flex items-center gap-2 rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary-foreground)] shadow-[0_0_16px_rgb(var(--canton-rgb)/0.18)] disabled:opacity-60"
+              className={cn(buttonVariants(), "gap-2 disabled:opacity-60")}
             >
               {drawing ? <LoadingSpinner size="md" /> : <Shuffle className="h-4 w-4" />}
               Random draw
@@ -429,7 +430,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
                 type="button"
                 disabled={distributing !== null}
                 onClick={() => void handleDistribute("all")}
-                className="inline-flex items-center gap-2 rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary-foreground)] shadow-[0_0_16px_rgb(var(--canton-rgb)/0.18)] disabled:opacity-60"
+                className={cn(buttonVariants(), "gap-2 disabled:opacity-60")}
               >
                 {distributing === "all" ? <LoadingSpinner size="md" /> : <Send className="h-4 w-4" />}
                 Distribute all
@@ -537,7 +538,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
             <button
               type="submit"
               disabled={addingCodes || !codesInput.trim()}
-              className="inline-flex items-center gap-2 rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary-foreground)] shadow-[0_0_16px_rgb(var(--canton-rgb)/0.18)] disabled:opacity-60"
+              className={cn(buttonVariants(), "gap-2 disabled:opacity-60")}
             >
               {addingCodes ? <LoadingSpinner size="md" /> : <Plus className="h-4 w-4" />}
               Save codes

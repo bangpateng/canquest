@@ -6,6 +6,7 @@ import {
   EARN_HUB_TASK_TYPE_OPTIONS,
   isEarnHubQuizType,
 } from "@/lib/quest-types";
+import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 
@@ -256,7 +257,7 @@ export function AdminEarnHubTaskForm({
         <button
           type="submit"
           disabled={saving}
-          className="inline-flex items-center gap-2 rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-[var(--primary-foreground)] disabled:opacity-50"
+          className={cn(buttonVariants(), "gap-2 disabled:opacity-50")}
         >
           {saving ? <LoadingSpinner size="md" /> : null}
           {submitLabel}
@@ -266,7 +267,7 @@ export function AdminEarnHubTaskForm({
             type="button"
             disabled={saving}
             onClick={onCancel}
-            className="rounded-full border border-[var(--border)] px-5 py-2.5 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+            className={buttonVariants({ variant: "secondary" })}
           >
             Cancel
           </button>

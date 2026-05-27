@@ -1,6 +1,7 @@
 "use client";
 
 import { Plus, Trash2 } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   QUEST_SOCIAL_PLATFORM_OPTIONS,
@@ -84,7 +85,7 @@ export function QuestSocialLinksEditor({ links, onChange, inputCls }: Props) {
               ?.value ?? draft.platform;
           onChange([...links, { platform: nextPlatform, url: "" }]);
         }}
-        className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--card)]/80 px-4 py-2 text-sm font-semibold transition-colors hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10 disabled:opacity-50"
+        className={cn(buttonVariants({ variant: "secondary" }), "gap-2 disabled:opacity-50")}
       >
         <Plus className="h-4 w-4" />
         Add social link

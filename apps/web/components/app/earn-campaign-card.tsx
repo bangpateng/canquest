@@ -12,6 +12,7 @@ import {
 import { ROUTES } from "@/lib/app-routes";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { QUEST_STATUS_BADGE, type Quest, type UserProgress } from "@/lib/quest-types";
+import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   ArrowRight,
@@ -421,25 +422,29 @@ export function EarnCampaignCard({
 
         <div className="mt-auto pt-4">
           {joinBlocked ? (
-            <span className="flex w-full items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 py-2.5 text-sm font-semibold text-[var(--muted-foreground)]">
+            <span className={cn(buttonVariants({ variant: "muted", size: "block" }))}>
               {ctaLabel}
             </span>
           ) : canOpen ? (
             <span
               className={cn(
-                "flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold transition-colors",
-                quest.status === "ENDED"
-                  ? "border border-[var(--border)] bg-[var(--muted)]/50 text-[var(--foreground)]"
-                  : completed
-                    ? "border border-emerald-500/35 bg-emerald-500/10 text-emerald-300"
-                    : "bg-[var(--primary)] text-[var(--primary-foreground)] group-hover:brightness-110",
+                buttonVariants({
+                  variant:
+                    quest.status === "ENDED"
+                      ? "secondary"
+                      : completed
+                        ? "success"
+                        : "primary",
+                  size: "block",
+                }),
+                "gap-2 group-hover:brightness-110",
               )}
             >
               {ctaLabel}
               <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
             </span>
           ) : (
-            <span className="flex w-full cursor-not-allowed items-center justify-center rounded-xl border border-dashed border-[var(--border)] py-2.5 text-sm font-semibold text-[var(--muted-foreground)]">
+            <span className={cn(buttonVariants({ variant: "dashed", size: "block" }))}>
               Opens soon
             </span>
           )}

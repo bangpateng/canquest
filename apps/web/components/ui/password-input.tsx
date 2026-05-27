@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { inputClass } from "@/lib/ui-tokens";
 import { cn } from "@/lib/utils";
 
 export function PasswordInput({
@@ -44,10 +45,7 @@ export function PasswordInput({
           placeholder={placeholder}
           required={required}
           minLength={minLength}
-          className={cn(
-            "w-full rounded-xl border border-[var(--border)] bg-[var(--muted)] px-3 py-2.5 pr-11 text-sm outline-none transition-colors placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
-            inputClassName,
-          )}
+          className={cn(inputClass, "bg-[var(--muted)]/80 pr-11", inputClassName)}
         />
         <button
           type="button"

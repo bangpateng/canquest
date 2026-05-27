@@ -127,7 +127,7 @@ function LoginForm() {
           <button
             type="submit"
             disabled={busy}
-            className={cn(buttonVariants(), "w-full gap-2 rounded-full py-3 font-bold")}
+            className={cn(buttonVariants({ size: "block" }), "gap-2")}
           >
             {busy ? <LoadingSpinner size="md" /> : null}
             Verify & continue
@@ -181,10 +181,7 @@ function LoginForm() {
         <button
           type="submit"
           disabled={busy}
-          className={cn(
-            buttonVariants(),
-            "mt-2 w-full gap-2 rounded-full py-3 font-bold shadow-[0_0_24px_rgb(var(--canton-rgb)/0.2)]",
-          )}
+          className={cn(buttonVariants({ size: "block" }), "mt-2 gap-2")}
         >
           {busy ? <LoadingSpinner size="md" /> : null}
           Sign In

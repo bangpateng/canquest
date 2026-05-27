@@ -114,6 +114,13 @@
     0 0 24px rgb(var(--canton-rgb) / 0.08);
 }
 
+/*
+ * UI radius tokens (apply via lib/ui-tokens.ts + buttonVariants):
+ * - Buttons / pills → rounded-full
+ * - Inputs / inset blocks → rounded-xl
+ * - Cards / panels → rounded-2xl
+ */
+
 /* App typography scale — use these classes for consistent h1–h4 / labels */
 @layer components {
   .type-display {

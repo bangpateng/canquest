@@ -7,6 +7,7 @@ import { QuestCard } from "@/components/app/quest-card";
 import type { Quest, QuestStatus, UserProgress } from "@/lib/quest-types";
 import { QUEST_STATUS_BADGE } from "@/lib/quest-types";
 import { filterTabClass } from "@/lib/ui-button-styles";
+import { inputClass, surfaceToolbarClass } from "@/lib/ui-tokens";
 import { cn } from "@/lib/utils";
 import { ListPagination } from "@/components/app/list-pagination";
 import { buttonVariants } from "@/components/ui/button";
@@ -214,10 +215,7 @@ export function QuestsBrowser({
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder={t("quests.searchPlaceholder")}
-        className={cn(
-          "w-full rounded-xl border border-[var(--border)] bg-[var(--card)] py-2.5 pl-10 pr-3 text-sm outline-none transition-shadow placeholder:text-[var(--muted-foreground)] focus-visible:border-[var(--primary)]/40 focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
-          isEarn && "bg-[var(--background)]/80",
-        )}
+        className={cn(inputClass, "py-2.5 pl-10 pr-3", isEarn && "bg-[var(--background)]/80")}
         autoComplete="off"
       />
     </label>
@@ -235,7 +233,7 @@ export function QuestsBrowser({
     <div className={cn("w-full min-w-0", isEarn ? "space-y-4" : "space-y-5")}>
       {isEarn ? (
         <section
-          className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--card)]/40 p-3 sm:p-4"
+          className={cn(surfaceToolbarClass, "space-y-3 p-3 sm:p-4")}
           aria-label={t("earnCampaigns.filterAria")}
         >
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-4">
