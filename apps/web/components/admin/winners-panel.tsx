@@ -54,8 +54,6 @@ export function WinnersPanel({ questId }: { questId: string }) {
   const [distributing, setDistributing] = useState<string | "all" | null>(null);
 
   const [codesInput, setCodesInput] = useState("");
-  const [generateCount, setGenerateCount] = useState("5");
-  const [codePrefix, setCodePrefix] = useState("CQ");
   const [addingCodes, setAddingCodes] = useState(false);
   const [deletingCodeId, setDeletingCodeId] = useState<string | null>(null);
   const [deletingAll, setDeletingAll] = useState(false);
@@ -167,10 +165,14 @@ export function WinnersPanel({ questId }: { questId: string }) {
     e.preventDefault();
     setAddingCodes(true);
     setMessage(null);
-    const body =
-      codesInput.trim()
-        ? { codes: codesInput.split(/[\n,]+/).map((c) => c.trim()).filter(Boolean) }
-        : { generateCount: Number(generateCount), prefix: codePrefix };
+    const body = {
+      codes: codesInput.split(/[\n,]+/).map((c) => c.trim()).filter(Boolean),
+    };
+    if (body.codes.length === 0) {
+      setMessage({ type: "err", text: "Paste at least one code first." });
+      setAddingCodes(false);
+      return;
+    }
 
     const res = await fetch(`/api/admin/quests/${questId}/invite-codes`, {
       method: "POST",
@@ -531,27 +533,14 @@ export function WinnersPanel({ questId }: { questId: string }) {
                   className="w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2.5 font-mono text-sm outline-none focus-visible:ring-2"
                 />
               </div>
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-[var(--muted-foreground)]">— or —</span>
-              </div>
-              <div className="flex flex-wrap gap-3">
-                <div>
-                  <label className="mb-1 block text-xs font-medium">Auto-generate count</label>
-                  <input type="number" min="1" max="500" value={generateCount} onChange={(e) => setGenerateCount(e.target.value)} className="w-24 rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 text-sm outline-none" />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium">Prefix</label>
-                  <input value={codePrefix} onChange={(e) => setCodePrefix(e.target.value.toUpperCase())} maxLength={6} className="w-24 rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 text-sm font-mono outline-none" />
-                </div>
-              </div>
             </div>
             <button
               type="submit"
-              disabled={addingCodes}
+              disabled={addingCodes || !codesInput.trim()}
               className="inline-flex items-center gap-2 rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary-foreground)] shadow-[0_0_16px_rgb(var(--canton-rgb)/0.18)] disabled:opacity-60"
             >
               {addingCodes ? <LoadingSpinner size="md" /> : <Plus className="h-4 w-4" />}
-              Add codes
+              Save codes
             </button>
           </form>
 
