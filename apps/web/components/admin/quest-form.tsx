@@ -642,20 +642,46 @@ export function QuestForm({
           )}
         </div>
         <div>
-          <label className="mb-1.5 block text-sm font-medium">Reward Pool label (shown to users)</label>
+          <label className="mb-1.5 block text-sm font-medium">
+            {form.rewardType === "INVITE_CODE_FCFS" ||
+            form.rewardType === "INVITE_CODE_RANDOM" ||
+            form.rewardType === "INVITE_CODE" ||
+            form.rewardType === "CC_AND_INVITE" ||
+            form.rewardType === "WAITLIST_EMAIL"
+              ? "Reward Pool (spots / access count shown to users)"
+              : "Reward Pool label (shown to users)"}
+          </label>
           <input
             value={form.rewardPool}
             onChange={(e) => updateField("rewardPool", e.target.value)}
             placeholder={
               showCcField
                 ? `e.g. ${Number(form.maxWinners) > 0 && form.rewardCc ? `${Number(form.rewardCc) * Number(form.maxWinners)} CC pool` : `${form.rewardCc || "…"} CC`}`
-                : "e.g. WL spots · invite codes"
+                : form.rewardType === "WAITLIST_EMAIL"
+                  ? "e.g. 5"
+                  : form.rewardType === "INVITE_CODE_FCFS" ||
+                      form.rewardType === "INVITE_CODE_RANDOM" ||
+                      form.rewardType === "INVITE_CODE" ||
+                      form.rewardType === "CC_AND_INVITE"
+                    ? "e.g. 5"
+                    : "e.g. WL spots"
             }
             className={inputCls}
           />
           {questKind === "CAMPAIGN" ? (
             <p className="mt-1 text-xs text-[var(--muted-foreground)]">
               Use CC wording here (not quest points). Task points (+10 pts) show on each task and count toward the leaderboard automatically.
+            </p>
+          ) : null}
+          {questKind === "CAMPAIGN" &&
+          (form.rewardType === "WAITLIST_EMAIL" ||
+            form.rewardType === "INVITE_CODE_FCFS" ||
+            form.rewardType === "INVITE_CODE_RANDOM" ||
+            form.rewardType === "INVITE_CODE" ||
+            form.rewardType === "CC_AND_INVITE") ? (
+            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+              Tip: set <strong>Max winners</strong> to the number of winners (or FCFS slots). Set
+              <strong> Reward Pool</strong> to the total spots/codes count shown on cards.
             </p>
           ) : null}
         </div>
