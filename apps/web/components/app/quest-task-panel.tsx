@@ -488,7 +488,7 @@ export function QuestTaskPanel({
             </div>
             <div className="flex items-center gap-2">
               {allDone && !questCompleted ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-[var(--primary)]/35 bg-[var(--primary)]/12 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-canton">
+                <span className="inline-flex items-center gap-1 rounded-full bg-[var(--primary)]/12 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-canton">
                   <Zap className="h-3 w-3" aria-hidden />
                   Ready
                 </span>
@@ -976,23 +976,23 @@ function TaskRow({
                 Done
               </span>
             ) : isPending ? (
-              <span className="rounded-full border border-orange-500/30 bg-orange-500/10 px-3 py-1.5 text-xs font-semibold text-orange-200">
+              <span className="rounded-full bg-orange-500/10 px-3 py-1.5 text-xs font-semibold text-orange-200">
                 Pending
               </span>
             ) : sequentiallyLocked ? (
-              <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center gap-1 rounded-full border border-[var(--border)] bg-[var(--muted)]/30 px-3 text-[10px] font-bold uppercase tracking-wide text-[var(--muted-foreground)]">
+              <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center gap-1 rounded-full bg-[var(--muted)]/30 px-3 text-[10px] font-bold uppercase tracking-wide text-[var(--muted-foreground)]">
                 <Lock className="h-3 w-3" aria-hidden />
                 Locked
               </span>
             ) : countdown !== null && countdown > 0 ? (
               <span
-                className="min-w-[6.5rem] rounded-full border border-canton/30 bg-canton/10 px-3 py-1.5 text-center text-xs font-semibold tabular-nums text-canton"
+                className="min-w-[6.5rem] rounded-full bg-canton/10 px-3 py-1.5 text-center text-xs font-semibold tabular-nums text-canton"
                 aria-live="polite"
               >
                 {formatTaskCountdownSeconds(countdown)}
               </span>
             ) : loading ? (
-              <span className="flex h-9 min-w-[5.5rem] items-center justify-center rounded-full border border-[var(--border)] bg-[var(--muted)]/40">
+              <span className="flex h-9 min-w-[5.5rem] items-center justify-center rounded-full bg-[var(--muted)]/40">
                 <LoadingSpinner size="sm" />
               </span>
             ) : (
@@ -1012,7 +1012,7 @@ function TaskRow({
         </div>
 
         {!isVerified && isQuizYesNo ? (
-          <div className="mt-3 flex rounded-lg border border-[var(--border)] bg-[var(--background)] p-0.5 sm:ml-[3.25rem]">
+          <div className="mt-3 flex rounded-full bg-[var(--muted)]/35 p-1 sm:ml-[3.25rem]">
             {(["yes", "no"] as const).map((opt) => {
               const key = quizAnswerKey(opt, taskType);
               const isWrong = quizWrong !== null && quizAnswerKey(quizWrong, taskType) === key;
@@ -1025,11 +1025,11 @@ function TaskRow({
                   disabled={loading || sequentiallyLocked}
                   onClick={() => void submitQuizAnswer(opt)}
                   className={cn(
-                    "flex flex-1 items-center justify-center gap-1.5 rounded-md py-2 text-sm font-medium capitalize transition-colors",
+                    "flex flex-1 items-center justify-center gap-1.5 rounded-full py-2 text-sm font-medium capitalize transition-colors",
                     sequentiallyLocked && "cursor-not-allowed opacity-50",
                     isWrong
                       ? "bg-red-500/15 text-red-300"
-                      : "text-[var(--muted-foreground)] hover:bg-[var(--muted)]/30 hover:text-[var(--foreground)]",
+                      : "text-[var(--muted-foreground)] hover:bg-[var(--background)]/50 hover:text-[var(--foreground)]",
                   )}
                 >
                   {isPendingBtn ? <LoadingSpinner size="sm" /> : null}
@@ -1055,10 +1055,10 @@ function TaskRow({
                     disabled={loading || sequentiallyLocked}
                     onClick={() => void submitQuizAnswer(letter)}
                     className={cn(
-                      "flex w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
+                      "flex w-full items-center gap-2.5 rounded-xl bg-[var(--muted)]/25 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--muted)]/35",
                       isWrong
-                        ? "border-red-500/40 bg-red-500/10 text-red-200"
-                        : "border-[var(--border)] bg-[var(--background)] hover:bg-[var(--muted)]/20",
+                        ? "bg-red-500/10 text-red-200 hover:bg-red-500/15"
+                        : "text-[var(--foreground)]",
                     )}
                   >
                     <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[10px] font-bold bg-[var(--muted)] text-[var(--muted-foreground)]">
@@ -1080,7 +1080,7 @@ function TaskRow({
               onChange={(e) => setProof(e.target.value)}
               placeholder="your@email.com"
               disabled={loading || isVerified}
-              className="w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--background)] px-4 py-2.5 text-sm outline-none focus:border-[var(--primary)]/40 focus:ring-2 focus:ring-[var(--ring)]"
+              className="w-full max-w-md rounded-full bg-[var(--muted)]/35 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[var(--ring)]"
             />
           </div>
         ) : null}
@@ -1091,7 +1091,7 @@ function TaskRow({
               <button
                 type="button"
                 onClick={() => setWalletPromptOpen(true)}
-                className="w-full max-w-md rounded-xl border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-left text-xs text-orange-300"
+                className="w-full max-w-md rounded-full bg-orange-500/10 px-4 py-2.5 text-left text-xs text-orange-300"
               >
                 Create wallet to verify →
               </button>
@@ -1101,7 +1101,7 @@ function TaskRow({
                 value={proof}
                 readOnly
                 disabled
-                className="w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--muted)]/30 px-3 py-2 font-mono text-xs text-[var(--muted-foreground)]"
+                className="w-full max-w-md rounded-full bg-[var(--muted)]/30 px-4 py-2.5 font-mono text-xs text-[var(--muted-foreground)]"
               />
             )}
           </div>
@@ -1283,21 +1283,26 @@ function TaskRow({
             {!isQuiz && (!isVerified || canRepeatNow) && !onRepeatCooldown ? (
               <div className="mt-3">
                 {countdown !== null && countdown > 0 ? (
-                  <p
-                    className="py-2 text-center text-sm font-semibold tabular-nums text-canton"
-                    aria-live="polite"
-                  >
-                    {formatTaskCountdownSeconds(countdown)}
-                  </p>
+                  <div className="flex justify-end">
+                    <span
+                      className="min-w-[6.5rem] rounded-full bg-canton/10 px-3 py-2 text-center text-xs font-semibold tabular-nums text-canton"
+                      aria-live="polite"
+                    >
+                      {formatTaskCountdownSeconds(countdown)}
+                    </span>
+                  </div>
                 ) : sequentiallyLocked ? (
-                  <p className="flex items-center justify-center gap-1 py-2 text-center text-xs text-[var(--muted-foreground)]">
-                    <Lock className="h-3 w-3" aria-hidden />
-                    {lockedHint}
-                  </p>
+                  <div className="flex justify-end">
+                    <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center gap-1 rounded-full bg-[var(--muted)]/30 px-3 text-[10px] font-bold uppercase tracking-wide text-[var(--muted-foreground)]">
+                      <Lock className="h-3 w-3" aria-hidden />
+                      Locked
+                    </span>
+                  </div>
                 ) : loading ? (
-                  <div className="flex h-9 items-center justify-center gap-2 text-xs text-[var(--muted-foreground)]">
-                    <LoadingSpinner size="sm" />
-                    Verifying…
+                  <div className="flex justify-end">
+                    <span className="flex h-9 min-w-[5.5rem] items-center justify-center rounded-full bg-[var(--muted)]/40">
+                      <LoadingSpinner size="sm" />
+                    </span>
                   </div>
                 ) : (
                   <button
@@ -1306,18 +1311,14 @@ function TaskRow({
                     onClick={startTask}
                     className={cn(
                       buttonVariants({ size: "sm" }),
-                      "h-9 w-full rounded-lg font-medium disabled:opacity-50",
+                      "h-9 w-full rounded-full font-bold disabled:opacity-50",
                     )}
                   >
                     {isDailyCheckIn
                       ? canRepeatNow
                         ? "Check in again"
                         : "Check in"
-                      : isTwitterTask
-                        ? countdown !== null && countdown > 0
-                          ? formatTaskCountdownSeconds(countdown)
-                          : `Verify · ${actionLabel}`
-                        : `Continue · ${actionLabel}`}
+                      : actionLabel}
                   </button>
                 )}
               </div>

@@ -104,24 +104,8 @@ export function QuestSubmitSection({
   const t = usePlatformT();
 
   return (
-    <section className="relative overflow-hidden rounded-2xl border border-[var(--primary)]/40 bg-gradient-to-br from-[var(--primary)]/15 via-[var(--card)] to-[var(--card)] p-6 md:p-8">
-      <div
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgb(var(--canton-rgb)/0.2)_0%,transparent_60%)]"
-        aria-hidden
-      />
-      <div className="relative text-center">
-        <span className="inline-flex items-center gap-2 rounded-full border border-[var(--primary)]/30 bg-[var(--primary)]/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-canton">
-          <Sparkles className="h-3.5 w-3.5" />
-          All missions verified
-        </span>
-        <SectionTitle as="h4" className="mt-4">
-          {cantonLedgerConfigured ? "Submit to Canton" : "Submit quest"}
-        </SectionTitle>
-        <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted-foreground)]">
-          {cantonLedgerConfigured
-            ? "Final step records your participation on-chain and triggers rewards."
-            : "Final step saves your completion and applies quest rewards."}
-        </p>
+    <section className="py-4">
+      <div className="text-center">
 
         {campaignEnded ? (
           <p className="mx-auto mt-4 max-w-md text-sm text-orange-300">
@@ -135,7 +119,7 @@ export function QuestSubmitSection({
           onClick={onSubmit}
           className={cn(
             buttonVariants({ size: "lg" }),
-            "mt-8 w-full max-w-sm gap-2 rounded-full py-6 text-base font-bold",
+            "w-full max-w-sm gap-2 rounded-full py-6 text-base font-bold",
             "shadow-[0_0_40px_rgb(var(--canton-rgb)/0.35)] hover:shadow-[0_0_48px_rgb(var(--canton-rgb)/0.45)]",
           )}
         >
@@ -144,7 +128,7 @@ export function QuestSubmitSection({
           ) : (
             <Rocket className="h-5 w-5" />
           )}
-          {submitting ? "Submitting…" : "Submit quest"}
+          {submitting ? "Submitting…" : "Submit"}
           {!submitting && <ArrowRight className="h-4 w-4" />}
         </button>
 
