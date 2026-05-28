@@ -1,44 +1,32 @@
-import { ArrowRight } from "lucide-react";
 import { LaunchAppButton } from "@/components/landing/launch-app-button";
 import { LandingSection } from "@/components/landing/landing-section";
-import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 
 export function LandingCtaSection() {
   return (
     <LandingSection className="border-b-0">
-      <div className="relative overflow-hidden rounded-3xl border border-[var(--primary)]/25 bg-gradient-to-br from-[var(--primary)]/12 via-[var(--card)] to-[var(--card)] px-6 py-10 text-center sm:px-10 sm:py-12 md:px-14">
+      <div className="relative overflow-hidden rounded-3xl border border-[var(--primary)]/20 bg-[var(--card)] px-6 py-12 text-center sm:px-12 sm:py-14">
         <div
-          className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full opacity-40 blur-3xl"
+          className="pointer-events-none absolute inset-0 opacity-60"
           style={{
-            background: "radial-gradient(circle, rgb(var(--canton-rgb) / 0.35), transparent 70%)",
+            background:
+              "radial-gradient(ellipse 70% 80% at 50% 0%, rgb(var(--canton-rgb) / 0.15), transparent)",
           }}
           aria-hidden
         />
-        <p className="type-eyebrow-brand">Get started</p>
-        <h2 className="type-display mx-auto mt-3 max-w-xl text-2xl font-bold leading-tight tracking-tight text-[var(--foreground)] sm:text-3xl">
-          Join campaigns and claim CC on Canton
-        </h2>
-        <p className="mx-auto mt-3 max-w-lg text-sm leading-relaxed text-[var(--muted-foreground)] sm:text-base">
-          Sign in to complete partner missions, earn points, and use your wallet in one app.
-        </p>
-        <div className="relative mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <LaunchAppButton
-            size="lg"
-            showArrow
-            className="w-full rounded-full px-8 sm:w-auto"
-          />
-          <a href="#campaigns" className="inline-flex w-full justify-center sm:w-auto">
-            <span
-              className={cn(
-                buttonVariants({ variant: "secondary", size: "lg" }),
-                "inline-flex w-full gap-2 rounded-full sm:w-auto",
-              )}
-            >
-              Browse campaigns
-              <ArrowRight className="h-4 w-4" />
-            </span>
-          </a>
+        <div className="relative">
+          <h2 className="type-display text-2xl font-bold tracking-tight sm:text-3xl">
+            Open CanQuest
+          </h2>
+          <p className="mx-auto mt-3 max-w-md text-sm text-[var(--muted-foreground)] sm:text-base">
+            Free to join — pick up where you left off or start with the carousel above.
+          </p>
+          <div className="mt-8 flex justify-center">
+            <LaunchAppButton
+              size="lg"
+              showArrow
+              className="rounded-full px-10 font-bold shadow-[0_0_32px_rgb(var(--canton-rgb)/0.25)]"
+            />
+          </div>
         </div>
       </div>
     </LandingSection>

@@ -10,9 +10,9 @@ import { iconButtonClass } from "@/lib/ui-button-styles";
 import { cn } from "@/lib/utils";
 
 const nav: { href: string; label: string; icon: LucideIcon; description: string }[] = [
-  { href: "#campaigns", label: "Earn", icon: Sparkles, description: "Partner campaigns" },
-  { href: "#app", label: "App", icon: LayoutGrid, description: "Menus & features" },
-  { href: "#canton", label: "Wallet", icon: Wallet, description: "Canton & CC" },
+  { href: "#campaigns", label: "Earn", icon: Sparkles, description: "Live drops" },
+  { href: "#app", label: "App", icon: LayoutGrid, description: "Tabs & tools" },
+  { href: "#canton", label: "Wallet", icon: Wallet, description: "Party & transfers" },
 ];
 
 function MenuDots() {

@@ -146,13 +146,10 @@ export function LandingCampaignGrid({ quests }: { quests: Quest[] }) {
 
   return (
     <div>
-      <div className="mb-5 flex items-end justify-between gap-4">
-        <div>
-          <p className="type-eyebrow-brand">All campaigns</p>
-          <p className="type-subsection-title mt-1">Browse every live partner quest</p>
-        </div>
+      <div className="mb-5 flex items-center justify-between gap-4">
+        <p className="type-subsection-title">More drops</p>
         <p className="shrink-0 text-sm tabular-nums text-[var(--muted-foreground)]">
-          {live.length} live
+          {live.length} active
         </p>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:gap-5">

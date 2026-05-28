@@ -15,8 +15,8 @@ export function FeaturedCampaigns({ quests }: { quests: Quest[] }) {
     <LandingSection id="campaigns" variant="muted">
       <SectionHeader
         eyebrow="Earn"
-        title="Partner campaigns"
-        description="Real projects on Canton — complete social missions, earn points, and claim CC. Each campaign uses the partner’s branding from admin."
+        title="Live partner drops"
+        description="Each card is a separate project — open one to see tasks, slots, and how rewards are paid out."
         align="center"
         className="max-w-2xl"
       />
@@ -24,9 +24,9 @@ export function FeaturedCampaigns({ quests }: { quests: Quest[] }) {
       {live.length === 0 ? (
         <div className="mx-auto max-w-lg rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card)]/50 px-6 py-14 text-center">
           <ListChecks className="mx-auto h-8 w-8 text-[var(--muted-foreground)]" aria-hidden />
-          <p className="type-subsection-title mt-4">No live campaigns yet</p>
+          <p className="type-subsection-title mt-4">Nothing live right now</p>
           <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-            Sign in and open Earn, or check back when new partner quests go live.
+            New drops are added from admin — check back soon or open the app to browse all.
           </p>
           <div className="mt-6 flex justify-center">
             <LaunchAppButton size="lg" showArrow />
