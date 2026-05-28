@@ -260,7 +260,7 @@ export function QuestCard({
         <div className="mt-4 pt-3.5 sm:pt-4">
         {canOpen ? (
           <Link
-            href={ROUTES.campaignQuest(quest.id)}
+            href={ROUTES.campaignQuest(quest.id, quest.title)}
             className={cn(
               "flex w-full items-center justify-center gap-2 rounded-full py-3 text-sm font-bold transition-all",
               quest.status === "ENDED"

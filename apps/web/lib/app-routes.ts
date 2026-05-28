@@ -1,3 +1,5 @@
+import { slugify } from "@/lib/slug";
+
 /**
  * User-facing routes — menu label matches URL path; content is swapped per product:
  *
@@ -7,7 +9,8 @@
 export const ROUTES = {
   /** Partner campaigns — open from Earn menu */
   campaignQuests: "/earn",
-  campaignQuest: (questId: string) => `/earn/${questId}`,
+  campaignQuest: (questId: string, slug?: string) =>
+    slug?.trim() ? `/earn/${questId}-${slugify(slug)}` : `/earn/${questId}`,
   /** CanQuest Earn hub — open from Quest menu */
   earnHub: "/quest",
   /** Rankings — below Wallet in nav */

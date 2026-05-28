@@ -91,7 +91,7 @@ function CardWrap({
   }
   return (
     <Link
-      href={ROUTES.campaignQuest(quest.id)}
+      href={ROUTES.campaignQuest(quest.id, quest.title)}
       className="block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
     >
       {children}

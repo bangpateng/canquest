@@ -17,6 +17,7 @@ import {
   type NotificationItem,
   type NotificationTx,
 } from "@/lib/hooks/use-transaction-notifications";
+import { ROUTES } from "@/lib/app-routes";
 import { cn } from "@/lib/utils";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
@@ -59,7 +60,7 @@ function NotificationRow({ item }: { item: NotificationItem }) {
     return (
       <li className="border-b border-[var(--border)] last:border-b-0">
         <Link
-          href={`/earn/${item.questId}`}
+          href={ROUTES.campaignQuest(item.questId, item.questTitle)}
           className="flex items-start gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--primary)]/8"
         >
           <span
@@ -94,7 +95,7 @@ function NotificationRow({ item }: { item: NotificationItem }) {
     return (
       <li className="border-b border-[var(--border)] last:border-b-0">
         <Link
-          href={`/earn/${item.questId}`}
+          href={ROUTES.campaignQuest(item.questId, item.questTitle)}
           className="flex items-start gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--primary)]/8"
         >
           <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-500/15 text-violet-700 dark:text-violet-300">

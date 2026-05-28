@@ -7,13 +7,14 @@ import { ROUTES } from "@/lib/app-routes";
 import { CQ_ACCESS_COOKIE } from "@/lib/auth-cookies";
 import { internalApiBase } from "@/lib/internal-api-url";
 import { resolveQuestMediaUrl } from "@/lib/quest-media-url";
+import { slugify } from "@/lib/slug";
 import { QUEST_STATUS_BADGE, type Quest } from "@/lib/quest-types";
 import { buttonVariants } from "@/components/ui/button";
 import { surfaceCardClass } from "@/lib/ui-tokens";
 import { cn } from "@/lib/utils";
 import { ArrowLeft, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { cookies } from "next/headers";
 
 type PageProps = { params: Promise<{ questId: string }> };
@@ -43,7 +44,8 @@ async function fetchQuest(questId: string): Promise<Quest | null> {
 }
 
 export default async function CampaignQuestDetailPage(props: PageProps) {
-  const { questId } = await props.params;
+  const { questId: questIdParam } = await props.params;
+  const questId = questIdParam.split("-")[0] ?? questIdParam;
   const cookieStore = await cookies();
   const token = cookieStore.get(CQ_ACCESS_COOKIE)?.value;
   const isAuthed = Boolean(token);
@@ -51,6 +53,12 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
 
   if (!quest) notFound();
 
+  const canonical = `${quest.id}-${slugify(quest.title)}`;
+  if (questIdParam !== canonical) {
+    redirect(ROUTES.campaignQuest(quest.id, quest.title));
+  }
+
+  const canonicalPath = ROUTES.campaignQuest(quest.id, quest.title);
   const statusMeta = QUEST_STATUS_BADGE[quest.status];
 
   return (
@@ -145,13 +153,13 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
             </p>
             <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-center">
               <Link
-                href={`/?auth=register&next=${encodeURIComponent(`/earn/${questId}`)}`}
+                href={`/?auth=register&next=${encodeURIComponent(canonicalPath)}`}
                 className={buttonVariants()}
               >
                 Sign up
               </Link>
               <Link
-                href={`/?auth=login&next=${encodeURIComponent(`/earn/${questId}`)}`}
+                href={`/?auth=login&next=${encodeURIComponent(canonicalPath)}`}
                 className={buttonVariants({ variant: "secondary" })}
               >
                 Sign in

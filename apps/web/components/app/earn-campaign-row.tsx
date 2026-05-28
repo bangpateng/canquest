@@ -166,7 +166,7 @@ export function EarnCampaignRow({
 
                 {canOpen ? (
                   <Link
-                    href={ROUTES.campaignQuest(quest.id)}
+                    href={ROUTES.campaignQuest(quest.id, quest.title)}
                     className={cn(
                       buttonVariants({ size: "sm" }),
                       "shrink-0 rounded-full px-5 font-bold",
@@ -197,7 +197,7 @@ export function EarnCampaignRow({
         {/* Reward footer */}
         {canOpen ? (
           <Link
-            href={ROUTES.campaignQuest(quest.id)}
+            href={ROUTES.campaignQuest(quest.id, quest.title)}
             className={cn(
               "flex items-center gap-3 border-t bg-gradient-to-r px-4 py-3 transition-colors sm:px-5",
               accent.footer,

@@ -129,7 +129,7 @@ function CompactCampaignCard({ quest }: { quest: Quest }) {
 
   return (
     <Link
-      href={ROUTES.campaignQuest(quest.id)}
+      href={ROUTES.campaignQuest(quest.id, quest.title)}
       className="block h-full rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
     >
       {inner}
