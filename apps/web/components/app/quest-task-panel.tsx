@@ -950,6 +950,9 @@ function TaskRow({
               <p className="mt-0.5 text-[11px] text-[var(--muted-foreground)]">
                 {taskTypeSubtitle(task.type)}
               </p>
+              {isVerified ? (
+                <p className="mt-1 text-[11px] font-medium text-emerald-300/90">Completed</p>
+              ) : null}
               {task.description &&
                 !task.description.trim().startsWith("http") &&
                 task.description.trim() !== (task.target ?? "").trim() && (
