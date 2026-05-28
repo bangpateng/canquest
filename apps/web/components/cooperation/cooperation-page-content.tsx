@@ -309,7 +309,7 @@ export function CooperationPageContent() {
                         href={link.href}
                         target="_blank"
                         rel="noreferrer"
-                        className={cn(buttonVariants({ variant: "secondary" }), "rounded-full")}
+                        className={buttonVariants({ variant: "secondary" })}
                       >
                         {link.label}
                       </a>

@@ -2,7 +2,7 @@
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import { useEffect, useState } from "react";
-import { X, ArrowRight } from "lucide-react";
+import { X } from "lucide-react";
 import { useAuthModal, type AuthModalMode } from "@/components/platform/auth-context";
 import { TurnstileField, useTurnstileRequired } from "@/components/platform/turnstile-field";
 import { buttonVariants } from "@/components/ui/button";
@@ -238,7 +238,7 @@ export function AuthModal() {
                   className={cn(
                     "flex-1 rounded-full py-2.5 text-sm font-semibold transition-all",
                     mode === t.id
-                      ? "bg-[var(--primary)] text-[var(--primary-foreground)] shadow-[0_0_16px_rgb(var(--canton-rgb)/0.25)]"
+                      ? "bg-emerald-500 text-white"
                       : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
                   )}
                 >
@@ -283,7 +283,6 @@ export function AuthModal() {
               >
                 {busy ? <LoadingSpinner size="md" /> : null}
                 Verify & continue
-                {!busy && <ArrowRight className="h-4 w-4" />}
               </button>
             </form>
           ) : mode === "login" ? (
@@ -313,7 +312,6 @@ export function AuthModal() {
               >
                 {busy ? <LoadingSpinner size="md" /> : null}
                 Sign In
-                {!busy && <ArrowRight className="h-4 w-4" />}
               </button>
               <p className="text-center text-sm text-[var(--muted-foreground)]">
                 No account?{" "}
@@ -366,7 +364,6 @@ export function AuthModal() {
               >
                 {busy ? <LoadingSpinner size="md" /> : null}
                 {busy ? "Sending code…" : "Create account"}
-                {!busy && <ArrowRight className="h-4 w-4" />}
               </button>
               <p className="text-center text-sm text-[var(--muted-foreground)]">
                 Already have an account?{" "}

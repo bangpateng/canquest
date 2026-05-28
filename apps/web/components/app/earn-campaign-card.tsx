@@ -16,7 +16,6 @@ import { CcRewardLogo } from "@/components/app/cc-reward-logo";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
-  ArrowRight,
   Calendar,
   Coins,
   ListChecks,
@@ -457,11 +456,9 @@ export function EarnCampaignCard({
                         : "primary",
                   size: "block",
                 }),
-                "gap-2 group-hover:brightness-110",
               )}
             >
               {ctaLabel}
-              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
             </span>
           ) : (
             <span className={cn(buttonVariants({ variant: "dashed", size: "block" }))}>

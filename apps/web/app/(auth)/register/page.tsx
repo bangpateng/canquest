@@ -4,7 +4,6 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { clearReferralRef, getReferralRef, storeReferralRef } from "@/lib/referral-ref";
-import { ArrowRight } from "lucide-react";
 import { AuthCard, authInputClass } from "@/components/auth/auth-card";
 import { TurnstileField, useTurnstileRequired } from "@/components/platform/turnstile-field";
 import { buttonVariants } from "@/components/ui/button";
@@ -157,7 +156,6 @@ export default function RegisterPage() {
           >
             {busy ? <LoadingSpinner size="md" /> : null}
             {busy ? "Sending code…" : "Create account"}
-            {!busy && <ArrowRight className="h-4 w-4" />}
           </button>
         </form>
       ) : (

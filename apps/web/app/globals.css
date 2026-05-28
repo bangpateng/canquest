@@ -116,7 +116,8 @@
 
 /*
  * UI radius tokens (apply via lib/ui-tokens.ts + buttonVariants):
- * - Buttons / pills → rounded-full
+ * - Buttons / primary CTAs → rounded-lg
+ * - Pills / filter chips → rounded-full
  * - Inputs / inset blocks → rounded-xl
  * - Cards / panels → rounded-2xl
  */

@@ -67,7 +67,7 @@ export function SiteHeader() {
           </nav>
 
           <div className="hidden shrink-0 md:block">
-            <LaunchAppButton showArrow />
+            <LaunchAppButton />
           </div>
 
           <button
@@ -148,7 +148,7 @@ export function SiteHeader() {
             </ul>
 
             <div className="relative space-y-3 border-t border-[var(--border)] px-5 py-4">
-              <LaunchAppButton size="lg" showArrow className="w-full justify-center" />
+              <LaunchAppButton size="lg" className="w-full justify-center" />
             </div>
           </nav>
         </>

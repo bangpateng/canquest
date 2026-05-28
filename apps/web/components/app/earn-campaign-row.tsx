@@ -6,7 +6,7 @@ import { campaignUiKind } from "@/lib/campaign-reward";
 import { QUEST_STATUS_BADGE, type Quest, type RewardType } from "@/lib/quest-types";
 import { cn } from "@/lib/utils";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
-import { ArrowRight, Coins, Sparkles, Ticket, Trophy } from "lucide-react";
+import { Coins, Sparkles, Ticket, Trophy } from "lucide-react";
 import Link from "next/link";
 
 function rewardAccent(rewardPool: string, rewardType?: RewardType) {
@@ -168,11 +168,11 @@ export function EarnCampaignRow({
                   <Link
                     href={ROUTES.campaignQuest(quest.id, quest.title)}
                     className={cn(
-                      buttonVariants({ size: "sm" }),
-                      "shrink-0 rounded-full px-5 font-bold",
-                      completed
-                        ? "border border-emerald-500/35 bg-emerald-500/10 text-emerald-300 shadow-none hover:brightness-100"
-                        : "shadow-[0_0_20px_rgb(var(--canton-rgb)/0.12)]",
+                      buttonVariants({
+                        size: "sm",
+                        variant: completed ? "success" : "primary",
+                      }),
+                      "shrink-0 px-5 font-bold",
                     )}
                   >
                     {ctaLabel}
@@ -210,9 +210,8 @@ export function EarnCampaignRow({
             <span className={cn("min-w-0 flex-1 truncate text-sm font-semibold", accent.value)}>
               {quest.rewardPool}
             </span>
-            <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-[var(--foreground)]/80 transition-colors group-hover:text-canton">
+            <span className="inline-flex shrink-0 items-center text-xs font-semibold text-[var(--foreground)]/80 transition-colors group-hover:text-canton">
               {t("quests.viewQuest")}
-              <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
             </span>
           </Link>
         ) : (

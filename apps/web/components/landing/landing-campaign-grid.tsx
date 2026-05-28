@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Calendar, Coins, ListChecks } from "lucide-react";
+import { Calendar, Coins, ListChecks } from "lucide-react";
 import { CampaignSocialLinks } from "@/components/app/campaign-social-links";
 import { ROUTES } from "@/lib/app-routes";
 import { getLandingCampaignDisplay } from "@/lib/landing-campaign-display";
@@ -112,9 +112,8 @@ function CompactCampaignCard({ quest }: { quest: Quest }) {
         ) : null}
 
         {canOpen ? (
-          <span className={cn(buttonVariants({ size: "block" }), "mt-4 gap-2 group-hover:brightness-110")}>
+          <span className={cn(buttonVariants({ size: "block" }), "mt-4")}>
             View campaign
-            <ArrowRight className="h-4 w-4" />
           </span>
         ) : (
           <span className="mt-4 block text-center text-sm font-medium text-[var(--muted-foreground)]">

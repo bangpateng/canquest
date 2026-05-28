@@ -126,7 +126,6 @@ function WalletCreatePromptContent({
           onClick={onDismiss}
           className={cn(
             buttonVariants({ size: "sm" }),
-            "gap-2 rounded-full bg-canton text-[var(--primary-foreground)] hover:bg-canton/90",
           )}
         >
           <Wallet className="h-4 w-4" />

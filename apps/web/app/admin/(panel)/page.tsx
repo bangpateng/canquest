@@ -2,7 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { CQ_ADMIN_ACCESS_COOKIE } from "@/lib/auth-cookies";
 import { internalApiBase } from "@/lib/internal-api-url";
-import { Users, Scroll, Trophy, CheckCircle2, Sparkles, Gift, ArrowRight, KeyRound } from "lucide-react";
+import { Users, Scroll, Trophy, CheckCircle2, Sparkles, Gift, KeyRound } from "lucide-react";
 
 interface Stats {
   totalUsers: number;
@@ -96,7 +96,6 @@ export default async function AdminPage() {
             <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-canton/15 text-canton">
               <KeyRound className="h-5 w-5" />
             </span>
-            <ArrowRight className="h-5 w-5 text-canton transition-transform group-hover:translate-x-0.5" />
           </div>
           <h2 className="type-section-title mt-4">Generate wallet codes</h2>
           <p className="mt-2 text-sm text-[var(--muted-foreground)]">
@@ -114,7 +113,6 @@ export default async function AdminPage() {
             <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--primary)]/15 text-canton">
               <Sparkles className="h-5 w-5" />
             </span>
-            <ArrowRight className="h-5 w-5 text-[var(--muted-foreground)] transition-transform group-hover:translate-x-0.5 group-hover:text-canton" />
           </div>
           <h2 className="type-section-title mt-4">Earn</h2>
           <p className="mt-2 text-sm text-[var(--muted-foreground)]">
@@ -134,7 +132,6 @@ export default async function AdminPage() {
             <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-500/15 text-violet-300">
               <Gift className="h-5 w-5" />
             </span>
-            <ArrowRight className="h-5 w-5 text-[var(--muted-foreground)] transition-transform group-hover:translate-x-0.5 group-hover:text-violet-300" />
           </div>
           <h2 className="type-section-title mt-4">Quest</h2>
           <p className="mt-2 text-sm text-[var(--muted-foreground)]">

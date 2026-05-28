@@ -2,17 +2,21 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { forwardRef } from "react";
 import { cn } from "@/lib/utils";
 
+/** Solid green CTA — matches “Copy invite link” and all primary actions site-wide. */
+export const solidPrimaryButtonClass =
+  "inline-flex items-center justify-center gap-2 rounded-lg border-0 bg-emerald-500 font-semibold text-white transition-colors hover:bg-emerald-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] active:bg-emerald-600 disabled:pointer-events-none disabled:opacity-50";
+
 export const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 rounded-full font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
         primary:
-          "bg-[var(--primary)] text-[var(--primary-foreground)] shadow-[0_0_20px_rgb(var(--canton-rgb)/0.18)] hover:brightness-105 hover:shadow-[0_0_24px_rgb(var(--canton-rgb)/0.28)] active:scale-[0.99]",
+          "border-0 bg-emerald-500 text-white hover:bg-emerald-400 active:bg-emerald-600",
         secondary:
           "border border-[var(--border)] bg-[var(--card)]/80 text-[var(--foreground)] hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10",
         ghost:
-          "text-[var(--foreground)] hover:bg-[var(--primary)]/10 hover:text-[var(--foreground)]",
+          "border-0 bg-transparent text-[var(--foreground)] hover:bg-[var(--primary)]/10 hover:text-[var(--foreground)]",
         success:
           "border border-emerald-500/35 bg-emerald-500/10 text-emerald-300 hover:border-emerald-500/45 hover:bg-emerald-500/15",
         muted:

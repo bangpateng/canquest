@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-import { ArrowRight } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import { AuthCard, authInputClass } from "@/components/auth/auth-card";
@@ -185,7 +184,6 @@ function LoginForm() {
         >
           {busy ? <LoadingSpinner size="md" /> : null}
           Sign In
-          {!busy && <ArrowRight className="h-4 w-4" />}
         </button>
       </form>
 

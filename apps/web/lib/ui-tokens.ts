@@ -4,7 +4,8 @@ import { cn } from "@/lib/utils";
  * CanQuest UI tokens — single source for radius, surfaces, inputs.
  *
  * Radius rules:
- * - Buttons / pills → rounded-full (use buttonVariants)
+ * - Buttons / primary CTAs → rounded-lg (use buttonVariants)
+ * - Pills / filter chips → rounded-full
  * - Inputs / inset blocks → rounded-xl
  * - Cards / panels → rounded-2xl
  */

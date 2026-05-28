@@ -18,7 +18,7 @@ import { CampaignQuestStatusCard } from "@/components/app/campaign-quest-status-
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { CcRewardLogo } from "@/components/app/cc-reward-logo";
-import { ArrowRight, Check, CheckCircle2, ChevronDown, Clock, Copy, Rocket, Shield, Sparkles, Ticket } from "lucide-react";
+import { Check, CheckCircle2, ChevronDown, Clock, Copy, Shield, Sparkles, Ticket } from "lucide-react";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { useState } from "react";
 
@@ -63,10 +63,8 @@ function CopyButton({
       onClick={() => void copy()}
       aria-label={label}
       className={cn(
-        "inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-xs font-bold transition-all",
-        copied
-          ? "bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/40"
-          : "bg-[var(--primary)] text-[var(--primary-foreground)] hover:brightness-110",
+        buttonVariants({ size: "sm" }),
+        copied && "brightness-95",
         className,
       )}
     >
@@ -117,19 +115,10 @@ export function QuestSubmitSection({
           type="button"
           disabled={submitting || !partyId || campaignEnded}
           onClick={onSubmit}
-          className={cn(
-            buttonVariants({ size: "lg" }),
-            "w-full max-w-sm gap-2 rounded-full py-6 text-base font-bold",
-            "shadow-[0_0_40px_rgb(var(--canton-rgb)/0.35)] hover:shadow-[0_0_48px_rgb(var(--canton-rgb)/0.45)]",
-          )}
+          className={cn(buttonVariants({ size: "lg" }), "w-full max-w-sm py-6 text-base")}
         >
-          {submitting ? (
-            <LoadingSpinner size="lg" />
-          ) : (
-            <Rocket className="h-5 w-5" />
-          )}
+          {submitting ? <LoadingSpinner size="lg" /> : null}
           {submitting ? "Submitting…" : "Submit"}
-          {!submitting && <ArrowRight className="h-4 w-4" />}
         </button>
 
         {!partyId && (

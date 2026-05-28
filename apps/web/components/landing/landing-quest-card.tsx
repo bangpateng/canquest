@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import {
-  ArrowRight,
   Calendar,
   Coins,
   ListChecks,
@@ -11,6 +10,7 @@ import {
   Trophy,
 } from "lucide-react";
 import { CampaignSocialLinks } from "@/components/app/campaign-social-links";
+import { buttonVariants } from "@/components/ui/button";
 import { ROUTES } from "@/lib/app-routes";
 import { getLandingCampaignDisplay } from "@/lib/landing-campaign-display";
 import { QUEST_STATUS_BADGE, type Quest } from "@/lib/quest-types";
@@ -190,9 +190,8 @@ function SpotlightCard({ quest }: { quest: Quest }) {
               <CampaignSocialLinks links={quest.socialLinks} className="mt-4" />
             ) : null}
             {canOpen ? (
-              <span className="mt-6 inline-flex w-fit items-center gap-2 rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-bold text-[var(--primary-foreground)] shadow-[0_0_28px_rgb(var(--canton-rgb)/0.35)] transition-all group-hover:gap-3">
+              <span className={cn(buttonVariants({ size: "default" }), "mt-6 w-fit")}>
                 View campaign
-                <ArrowRight className="h-4 w-4" />
               </span>
             ) : (
               <span className="mt-6 text-sm font-semibold text-[var(--muted-foreground)]">
@@ -285,9 +284,8 @@ function CinematicCard({ quest }: { quest: Quest }) {
             ) : null}
 
             {canOpen ? (
-              <span className="mt-6 inline-flex items-center gap-2 rounded-full bg-[var(--primary)] px-6 py-3 text-sm font-bold text-[var(--primary-foreground)] shadow-[0_0_40px_rgb(var(--canton-rgb)/0.4)] transition-all group-hover:gap-3 group-hover:brightness-110">
+              <span className={cn(buttonVariants({ size: "lg" }), "mt-6")}>
                 View campaign
-                <ArrowRight className="h-4 w-4" />
               </span>
             ) : (
               <span className="mt-6 inline-block rounded-full border border-dashed border-white/30 px-6 py-3 text-sm font-semibold text-white/60">

@@ -81,7 +81,7 @@ export function CampaignFcfsRewardCard({
             onClick={onClaim}
             className={cn(
               buttonVariants({ size: "default" }),
-              "w-full shrink-0 gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold sm:w-auto sm:min-w-[9.5rem]",
+              "w-full shrink-0 gap-2 sm:w-auto sm:min-w-[9.5rem]",
             )}
           >
             {isSubmitting ? <LoadingSpinner size="sm" /> : null}

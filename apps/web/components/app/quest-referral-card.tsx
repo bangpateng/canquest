@@ -119,11 +119,7 @@ export function QuestReferralCard() {
               <button
                 type="button"
                 onClick={() => void copyLink()}
-                className={cn(
-                  buttonVariants({ size: "default" }),
-                  "w-full rounded-lg border-0 bg-emerald-500 text-white hover:bg-emerald-400 focus-visible:ring-emerald-500/40",
-                  copied && "brightness-95",
-                )}
+                className={cn(buttonVariants({ size: "block" }), copied && "brightness-95")}
               >
                 <Copy className="h-4 w-4 shrink-0" aria-hidden />
                 {copied ? t("common.copied") : t("questReferral.copyLink")}

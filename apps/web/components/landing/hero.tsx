@@ -1,6 +1,5 @@
 "use client";
 
-import { ArrowRight } from "lucide-react";
 import { LaunchAppButton } from "@/components/landing/launch-app-button";
 import { LandingShell } from "@/components/landing/landing-shell";
 import { buttonVariants } from "@/components/ui/button";
@@ -40,16 +39,15 @@ export function LandingHero() {
         </ol>
 
         <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <LaunchAppButton size="lg" showArrow className="w-full rounded-full px-8 sm:w-auto" />
+          <LaunchAppButton size="lg" className="w-full rounded-full px-8 sm:w-auto" />
           <a href="#campaigns" className="inline-flex w-full justify-center sm:w-auto">
             <span
               className={cn(
                 buttonVariants({ variant: "secondary", size: "lg" }),
-                "inline-flex w-full gap-2 rounded-full sm:w-auto",
+                "inline-flex w-full rounded-full sm:w-auto",
               )}
             >
               View campaigns
-              <ArrowRight className="h-4 w-4 shrink-0" aria-hidden />
             </span>
           </a>
         </div>

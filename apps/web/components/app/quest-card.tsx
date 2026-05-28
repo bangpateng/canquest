@@ -1,12 +1,12 @@
 "use client";
 
+import { buttonVariants } from "@/components/ui/button";
 import { CardTitle } from "@/components/ui/typography";
 import { ROUTES } from "@/lib/app-routes";
 import { EarnCampaignCard } from "@/components/app/earn-campaign-card";
 import type { UserProgress } from "@/lib/quest-types";
 import { QUEST_STATUS_BADGE, type Quest } from "@/lib/quest-types";
 import {
-  ArrowRight,
   Calendar,
   CheckCircle2,
   Coins,
@@ -262,16 +262,19 @@ export function QuestCard({
           <Link
             href={ROUTES.campaignQuest(quest.id, quest.title)}
             className={cn(
-              "flex w-full items-center justify-center gap-2 rounded-full py-3 text-sm font-bold transition-all",
-              quest.status === "ENDED"
-                ? "border border-[var(--border)] bg-[var(--muted)] text-[var(--foreground)] hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10"
-                : completed
-                  ? "border border-emerald-500/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/20"
-                  : "bg-[var(--primary)] text-[var(--primary-foreground)] shadow-[0_0_24px_rgb(var(--canton-rgb)/0.25)] hover:brightness-110 hover:shadow-[0_0_32px_rgb(var(--canton-rgb)/0.35)]",
+              buttonVariants({
+                size: "block",
+                variant:
+                  quest.status === "ENDED"
+                    ? "secondary"
+                    : completed
+                      ? "success"
+                      : "primary",
+              }),
+              "py-3",
             )}
           >
             {ctaLabel}
-            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
           </Link>
         ) : (
           <button

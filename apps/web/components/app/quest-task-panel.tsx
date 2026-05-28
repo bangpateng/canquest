@@ -1003,7 +1003,7 @@ function TaskRow({
                 onClick={startTask}
                 className={cn(
                   buttonVariants({ size: "sm" }),
-                  "h-9 min-w-[5.5rem] rounded-full px-4 font-bold",
+                  "h-9 min-w-[5.5rem] px-4 font-bold",
                 )}
               >
                 {actionLabel}
@@ -1312,7 +1312,7 @@ function TaskRow({
                     onClick={startTask}
                     className={cn(
                       buttonVariants({ size: "sm" }),
-                      "h-9 w-full rounded-full font-bold disabled:opacity-50",
+                      "h-9 w-full font-bold disabled:opacity-50",
                     )}
                   >
                     {isDailyCheckIn
@@ -1439,7 +1439,7 @@ function TaskRow({
                 <button
                   type="button"
                   disabled
-                  className={cn(buttonVariants({ size: "sm" }), "min-w-[5.5rem] rounded-full gap-2")}
+                  className={cn(buttonVariants({ size: "sm" }), "min-w-[5.5rem] gap-2")}
                 >
                   <LoadingSpinner size="md" />
                 </button>
@@ -1450,7 +1450,7 @@ function TaskRow({
                   onClick={startTask}
                   className={cn(
                     buttonVariants({ size: "sm" }),
-                    "min-w-[5.5rem] rounded-full font-bold shadow-[0_0_16px_rgb(var(--canton-rgb)/0.15)]",
+                    "min-w-[5.5rem] font-bold",
                   )}
                 >
                   {actionLabel}

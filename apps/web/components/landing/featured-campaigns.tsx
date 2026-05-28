@@ -26,7 +26,7 @@ export function FeaturedCampaigns({ quests }: { quests: Quest[] }) {
           <p className="mt-4 font-semibold text-[var(--foreground)]">No campaigns live</p>
           <p className="mt-1 text-sm text-[var(--muted-foreground)]">Check back later.</p>
           <div className="mt-6">
-            <LaunchAppButton size="lg" showArrow />
+            <LaunchAppButton size="lg" />
           </div>
         </div>
       ) : (

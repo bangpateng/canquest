@@ -253,7 +253,7 @@ export function DocsPageContent() {
             </li>
           </ol>
           <div className="pt-2">
-            <LaunchAppButton size="default" showArrow className="rounded-full" />
+            <LaunchAppButton size="default" className="rounded-full" />
           </div>
         </DocsSection>
 

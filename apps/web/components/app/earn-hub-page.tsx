@@ -8,7 +8,7 @@ import { ROUTES } from "@/lib/app-routes";
 import { hasRealWallet } from "@/lib/wallet-access";
 import type { Quest } from "@/lib/quest-types";
 import { cn } from "@/lib/utils";
-import { ArrowRight, Trophy, Zap } from "lucide-react";
+import { Trophy, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 
 /**
@@ -148,7 +148,6 @@ export function EarnHubPage() {
               className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)]/60 px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:border-[var(--border)] hover:text-[var(--foreground)]"
             >
               Spend points
-              <ArrowRight className="h-3 w-5" />
             </Link>
           </div>
         </div>
@@ -209,7 +208,6 @@ export function EarnHubPage() {
           className="group flex items-center gap-1 text-xs font-semibold text-canton transition-colors hover:text-[var(--primary-strong)]"
         >
           Partner campaigns
-          <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
         </Link>
       </div>
     </div>
