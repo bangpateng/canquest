@@ -6,7 +6,7 @@ import { LandingShell } from "@/components/landing/landing-shell";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const STEPS = ["Pick a campaign", "Complete tasks", "Receive CC"] as const;
+const STEPS = ["Pick a campaign", "Complete tasks", "Receive CC & Waitlist Access"] as const;
 
 export function LandingHero() {
   return (

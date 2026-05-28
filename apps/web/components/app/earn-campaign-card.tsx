@@ -156,7 +156,7 @@ export function EarnCampaignCard({
   const poolLower = quest.rewardPool.toLowerCase();
   const isDrawCcRaffle =
     quest.rewardType === "CC_MANUAL" || Boolean(summary?.requiresDrawCcClaim);
-  const isAccessReward =
+  const isCodeReward =
     quest.rewardType === "INVITE_CODE_FCFS" ||
     quest.rewardType === "INVITE_CODE_RANDOM" ||
     quest.rewardType === "INVITE_CODE" ||
@@ -188,10 +188,9 @@ export function EarnCampaignCard({
     slotsMax > 0 &&
     summary.remainingSlots != null;
   const isCodeFcfs = quest.rewardType === "INVITE_CODE_FCFS";
-  const showAccessFcfs = isCodeFcfs && showFcfs;
   const showWaitlistEmailWinners = quest.rewardType === "WAITLIST_EMAIL" && slotsMax > 0;
   const showWaitlistRaffleWinners =
-    !isDrawCcRaffle && isAccessReward && !requiresFcfs && slotsMax > 0;
+    !isDrawCcRaffle && isCodeReward && !requiresFcfs && slotsMax > 0;
   const showRaffleWinners =
     (isDrawCcRaffle || showWaitlistRaffleWinners || showWaitlistEmailWinners) && slotsMax > 0;
   const raffleWinnersLabel =
@@ -207,8 +206,8 @@ export function EarnCampaignCard({
     slotsMax > 0 ? Math.round((winnersDrawn / slotsMax) * 100) : 0;
   const poolLabel = formatPoolTotalLabel(summary?.poolTotalCc ?? null, quest.rewardPool);
   const poolDisplay =
-    isAccessReward && /^\d+(\.\d+)?$/.test(poolLabel.trim())
-      ? `${poolLabel.trim()} ${t("earnCampaigns.accessLabel")}`
+    isCodeReward && /^\d+(\.\d+)?$/.test(poolLabel.trim())
+      ? `${poolLabel.trim()} ${t("earnCampaigns.codeLabel")}`
       : poolLabel;
   const showPool = poolLabel !== "—" || (summary?.poolTotalCc ?? 0) > 0;
   const showCodes =
@@ -236,7 +235,7 @@ export function EarnCampaignCard({
   const bannerRewardText =
     quest.rewardCc > 0
       ? null
-      : isAccessReward
+      : isCodeReward
         ? t("earnCampaigns.cardRewardPerUserCode")
         : quest.rewardPool;
 
