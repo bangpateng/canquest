@@ -915,7 +915,7 @@ function TaskRow({
       <li
         className={cn(
           "px-4 py-4 transition-colors sm:px-5 sm:py-4",
-          isVerified ? "bg-emerald-500/[0.025]" : "hover:bg-[var(--muted)]/15",
+          isVerified ? "bg-emerald-500/10" : "hover:bg-[var(--muted)]/15",
           sequentiallyLocked && !isVerified && "opacity-55",
         )}
       >
@@ -940,7 +940,7 @@ function TaskRow({
                 <p
                   className={cn(
                     "text-sm font-medium leading-snug text-[var(--foreground)]",
-                    isVerified && "text-[var(--muted-foreground)] line-through",
+                    isVerified && "text-[var(--foreground)] line-through opacity-80",
                   )}
                 >
                   {displayTitle}
@@ -1132,7 +1132,7 @@ function TaskRow({
         className={cn(
           "px-4 py-4 transition-colors sm:px-5 sm:py-4",
           isOneTimeComplete || onRepeatCooldown
-            ? "bg-emerald-500/[0.025]"
+            ? "bg-emerald-500/10"
             : "hover:bg-[var(--muted)]/15",
           sequentiallyLocked && !isVerified && "opacity-55",
         )}
@@ -1163,7 +1163,7 @@ function TaskRow({
                   <p
                     className={cn(
                       "text-sm font-medium leading-snug text-[var(--foreground)]",
-                      isOneTimeComplete && "text-[var(--muted-foreground)] line-through",
+                      isOneTimeComplete && "text-[var(--foreground)] line-through opacity-80",
                     )}
                   >
                     {earnHubDisplay.headline}
