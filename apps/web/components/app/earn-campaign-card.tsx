@@ -192,7 +192,9 @@ export function EarnCampaignCard({
   const showWaitlistRaffleWinners =
     !isDrawCcRaffle && isCodeReward && !requiresFcfs && slotsMax > 0;
   const showRaffleWinners =
-    (isDrawCcRaffle || showWaitlistRaffleWinners || showWaitlistEmailWinners) && slotsMax > 0;
+    !isCodeFcfs &&
+    (isDrawCcRaffle || showWaitlistRaffleWinners || showWaitlistEmailWinners) &&
+    slotsMax > 0;
   const raffleWinnersLabel =
     showWaitlistRaffleWinners || showWaitlistEmailWinners
       ? String(slotsMax)
