@@ -234,17 +234,6 @@
     animation-timing-function: linear;
     animation-fill-mode: forwards;
   }
-
-  .landing-float {
-    animation: landing-float 6s ease-in-out infinite;
-  }
-  .landing-float-slow {
-    animation: landing-float 8s ease-in-out infinite;
-    animation-delay: -2s;
-  }
-  .landing-marquee-track {
-    animation: landing-marquee 32s linear infinite;
-  }
 }
 
 @keyframes landing-fade-in-up {
@@ -294,34 +283,12 @@
   }
 }
 
-@keyframes landing-float {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-10px);
-  }
-}
-
-@keyframes landing-marquee {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-50%);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .landing-fade-in,
   .landing-menu-backdrop,
   .landing-menu-panel,
   .landing-carousel-slide,
-  .landing-carousel-progress,
-  .landing-float,
-  .landing-float-slow,
-  .landing-marquee-track {
+  .landing-carousel-progress {
     animation: none !important;
     opacity: 1;
     transform: none;

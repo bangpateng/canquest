@@ -146,12 +146,9 @@ export function LandingCampaignGrid({ quests }: { quests: Quest[] }) {
 
   return (
     <div>
-      <div className="mb-5 flex items-center justify-between gap-4">
-        <p className="type-subsection-title">More drops</p>
-        <p className="shrink-0 text-sm tabular-nums text-[var(--muted-foreground)]">
-          {live.length} active
-        </p>
-      </div>
+      <p className="mb-4 text-sm font-medium text-[var(--muted-foreground)]">
+        All live ({live.length})
+      </p>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:gap-5">
         {live.map((quest) => (
           <CompactCampaignCard key={quest.id} quest={quest} />

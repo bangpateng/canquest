@@ -1,53 +1,36 @@
-import { ArrowUpRight, Wallet } from "lucide-react";
 import { CcRewardLogo } from "@/components/app/cc-reward-logo";
 import { LandingSection } from "@/components/landing/landing-section";
-
-const points = [
-  "One party ID tied to your profile",
-  "Payouts from drops and spin land in the same balance",
-  "Send to @usernames or full Party IDs",
-  "Optional preapproval for faster claim flows",
-];
 
 export function CantonSection() {
   return (
     <LandingSection id="canton" variant="muted" className="border-b-0">
-      <div className="glass-card overflow-hidden rounded-3xl ring-1 ring-[var(--border)]">
-        <div className="grid gap-8 p-6 sm:p-8 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] md:items-center md:gap-10 lg:p-10">
-          <div className="text-center md:text-left">
-            <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-canton-subtle ring-1 ring-[var(--primary)]/20 md:mx-0">
-              <CcRewardLogo size={32} />
+      <div className="mx-auto max-w-lg text-center">
+        <CcRewardLogo size={36} className="mx-auto" />
+        <h2 className="type-display mt-5 text-xl font-bold sm:text-2xl">Canton wallet</h2>
+        <p className="mt-2 text-sm leading-relaxed text-[var(--muted-foreground)]">
+          Your party ID holds CC from campaign claims and spin prizes. Send to other users when
+          you are ready.
+        </p>
+        <ul className="mt-6 space-y-2 text-left text-sm text-[var(--muted-foreground)]">
+          <li className="flex gap-2">
+            <span className="text-canton" aria-hidden>
+              ·
             </span>
-            <p className="type-eyebrow-brand mt-6">Infrastructure</p>
-            <h2 className="type-display mt-2 text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
-              Canton-backed wallet
-            </h2>
-            <p className="mt-3 text-sm leading-relaxed text-[var(--muted-foreground)] sm:text-base">
-              Identity and transfers run on the Canton Network — not a separate custodial
-              balance.
-            </p>
-          </div>
-
-          <ul className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--muted)]/20 p-5 sm:p-6">
-            {points.map((line) => (
-              <li
-                key={line}
-                className="flex gap-3 text-sm leading-relaxed text-[var(--muted-foreground)]"
-              >
-                <ArrowUpRight
-                  className="mt-0.5 h-4 w-4 shrink-0 text-canton"
-                  aria-hidden
-                />
-                <span>{line}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <div className="flex items-center justify-center gap-2 border-t border-[var(--border)] bg-[var(--muted)]/15 px-4 py-3 text-xs text-[var(--muted-foreground)]">
-          <Wallet className="h-3.5 w-3.5 shrink-0 text-canton" aria-hidden />
-          Ledger-backed party · CC transfers
-        </div>
+            One wallet for every reward type
+          </li>
+          <li className="flex gap-2">
+            <span className="text-canton" aria-hidden>
+              ·
+            </span>
+            On-chain balance, not a separate points balance
+          </li>
+          <li className="flex gap-2">
+            <span className="text-canton" aria-hidden>
+              ·
+            </span>
+            Preapproval available for faster claims
+          </li>
+        </ul>
       </div>
     </LandingSection>
   );

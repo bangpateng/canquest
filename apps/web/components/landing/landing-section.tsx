@@ -20,16 +20,13 @@ export function LandingSection({
   return (
     <section
       id={id}
-      className={cn("relative scroll-mt-20 border-b border-[var(--border)]", className)}
+      className={cn(
+        "scroll-mt-20 border-b border-[var(--border)]",
+        variant === "muted" && "bg-[var(--muted)]/15",
+        className,
+      )}
     >
-      {variant === "muted" ? (
-        <div className="pointer-events-none absolute inset-0 bg-[var(--muted)]/25" aria-hidden />
-      ) : null}
-      <LandingShell
-        className={cn("relative py-14 sm:py-16 md:py-20 lg:py-24", shellClassName)}
-      >
-        {children}
-      </LandingShell>
+      <LandingShell className={cn("py-12 md:py-16", shellClassName)}>{children}</LandingShell>
     </section>
   );
 }

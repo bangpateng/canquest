@@ -16,24 +16,22 @@ export function SectionHeader({
   return (
     <div
       className={cn(
-        align === "center"
-          ? "mx-auto mb-10 max-w-2xl text-center md:mb-12"
-          : "mb-10 max-w-2xl md:mb-12",
+        align === "center" ? "mx-auto max-w-xl text-center" : "max-w-xl",
         className,
       )}
     >
       {eyebrow ? <p className="type-eyebrow-brand">{eyebrow}</p> : null}
       <h2
         className={cn(
-          "type-display font-bold tracking-tight text-[var(--foreground)]",
+          "font-bold tracking-tight text-[var(--foreground)]",
           eyebrow ? "mt-2" : "",
-          "text-2xl leading-tight sm:text-3xl lg:text-4xl",
+          "text-xl sm:text-2xl",
         )}
       >
         {title}
       </h2>
       {description ? (
-        <p className="mt-3 text-sm leading-relaxed text-[var(--muted-foreground)] sm:text-base sm:leading-relaxed">
+        <p className="mt-2 text-sm leading-relaxed text-[var(--muted-foreground)]">
           {description}
         </p>
       ) : null}
