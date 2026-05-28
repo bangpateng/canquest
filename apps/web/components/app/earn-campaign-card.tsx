@@ -161,9 +161,12 @@ export function EarnCampaignCard({
     quest.rewardType === "INVITE_CODE_RANDOM" ||
     quest.rewardType === "INVITE_CODE" ||
     quest.rewardType === "CC_AND_INVITE";
+  const isCodeFcfs = quest.rewardType === "INVITE_CODE_FCFS";
   const requiresFcfs = isDrawCcRaffle
     ? false
-    : summary?.requiresFcfsClaim ??
+    : isCodeFcfs
+      ? true
+      : summary?.requiresFcfsClaim ??
       (poolLower.includes("fcfs") ||
         poolLower.includes("first come") ||
         quest.rewardType === "INVITE_CODE_FCFS");
@@ -187,7 +190,6 @@ export function EarnCampaignCard({
     summary != null &&
     slotsMax > 0 &&
     summary.remainingSlots != null;
-  const isCodeFcfs = quest.rewardType === "INVITE_CODE_FCFS";
   const showWaitlistEmailWinners = quest.rewardType === "WAITLIST_EMAIL" && slotsMax > 0;
   const showWaitlistRaffleWinners =
     !isDrawCcRaffle && isCodeReward && !requiresFcfs && slotsMax > 0;
