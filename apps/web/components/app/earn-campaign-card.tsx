@@ -156,6 +156,12 @@ export function EarnCampaignCard({
   const poolLower = quest.rewardPool.toLowerCase();
   const isDrawCcRaffle =
     quest.rewardType === "CC_MANUAL" || Boolean(summary?.requiresDrawCcClaim);
+  const isCodeReward =
+    quest.rewardType === "INVITE_CODE_FCFS" ||
+    quest.rewardType === "INVITE_CODE_RANDOM" ||
+    quest.rewardType === "INVITE_CODE" ||
+    quest.rewardType === "WAITLIST_EMAIL" ||
+    quest.rewardType === "CC_AND_INVITE";
   const requiresFcfs = isDrawCcRaffle
     ? false
     : summary?.requiresFcfsClaim ??
@@ -185,14 +191,18 @@ export function EarnCampaignCard({
   const isCodeFcfs = quest.rewardType === "INVITE_CODE_FCFS";
   const showCodeFcfs =
     isCodeFcfs && summary != null && slotsMax > 0 && summary.remainingSlots != null;
-  const showRaffleWinners = isDrawCcRaffle && slotsMax > 0;
+  const showWaitlistRaffleWinners =
+    !isDrawCcRaffle && isCodeReward && !requiresFcfs && slotsMax > 0;
+  const showRaffleWinners = (isDrawCcRaffle || showWaitlistRaffleWinners) && slotsMax > 0;
   const raffleWinnersLabel =
-    winnersDrawn > 0
-      ? t("earnCampaigns.slotsSelected", {
-          used: String(winnersDrawn),
-          max: String(slotsMax),
-        })
-      : t("earnCampaigns.cardRaffleWinnersMax", { max: String(slotsMax) });
+    showWaitlistRaffleWinners
+      ? String(slotsMax)
+      : winnersDrawn > 0
+        ? t("earnCampaigns.slotsSelected", {
+            used: String(winnersDrawn),
+            max: String(slotsMax),
+          })
+        : String(slotsMax);
   const rafflePct =
     slotsMax > 0 ? Math.round((winnersDrawn / slotsMax) * 100) : 0;
   const poolLabel = formatPoolTotalLabel(summary?.poolTotalCc ?? null, quest.rewardPool);
@@ -222,7 +232,7 @@ export function EarnCampaignCard({
   const bannerRewardText =
     quest.rewardCc > 0
       ? null
-      : isCodeFcfs
+      : isCodeFcfs || isCodeReward
         ? t("earnCampaigns.cardRewardPerUserCode")
         : quest.rewardPool;
 
@@ -395,7 +405,7 @@ export function EarnCampaignCard({
                 />
               ) : null}
             </div>
-            {showRaffleWinners && winnersDrawn > 0 ? (
+            {isDrawCcRaffle && showRaffleWinners && winnersDrawn > 0 ? (
               <div className="border-t border-[var(--border)] px-3 py-2 sm:px-4">
                 <div className="mb-1 flex justify-between text-[10px] tabular-nums text-[var(--muted-foreground)]">
                   <span>
