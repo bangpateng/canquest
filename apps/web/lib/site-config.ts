@@ -62,3 +62,22 @@ export function getSiteSocialLinks(): SiteSocialLink[] {
 
   return links;
 }
+
+/** Contact channels for /cooperation — Twitter and Telegram only. */
+export function getCooperationContactLinks(): { label: string; href: string }[] {
+  const out: { label: string; href: string }[] = [];
+
+  const twitter = process.env.NEXT_PUBLIC_TWITTER_URL;
+  if (twitter?.trim()) {
+    const href = normalizeTwitterUrl(twitter);
+    if (href) out.push({ label: "Our Twitter", href });
+  }
+
+  const telegram = process.env.NEXT_PUBLIC_TELEGRAM_URL;
+  if (telegram?.trim()) {
+    const href = normalizeTelegramUrl(telegram);
+    if (href) out.push({ label: "Our Telegram", href });
+  }
+
+  return out;
+}
