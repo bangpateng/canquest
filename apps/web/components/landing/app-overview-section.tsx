@@ -7,7 +7,7 @@ import {
   Wallet,
   type LucideIcon,
 } from "lucide-react";
-import { LandingShell } from "@/components/landing/landing-shell";
+import { LandingSection } from "@/components/landing/landing-section";
 import { SectionHeader } from "@/components/landing/section-header";
 import { ROUTES } from "@/lib/app-routes";
 
@@ -15,82 +15,69 @@ const menus: {
   icon: LucideIcon;
   title: string;
   description: string;
-  path: string;
 }[] = [
   {
     icon: LayoutGrid,
     title: "Overview",
     description: "Points, weekly rank, CC balance, and recent activity in one dashboard.",
-    path: "/overview",
   },
   {
     icon: Gift,
     title: "Quest",
     description:
-      "Daily and social tasks — check-in, X follow/retweet, Telegram, quizzes. Earn points.",
-    path: ROUTES.earnHub,
+      "Daily and social tasks — check-in, X, Telegram, quizzes. Earn points in the hub.",
   },
   {
     icon: Sparkles,
     title: "Earn",
     description:
-      "Partner campaigns — social missions, project branding, CC / Winners rewards, and FCFS or invite claims.",
-    path: ROUTES.campaignQuests,
+      "Partner campaigns with branding, CC rewards, FCFS claims, and invite codes.",
   },
   {
     icon: Ticket,
     title: "Spin Reward",
     description: "Spend quest points on the wheel for CC, bonus points, and other prizes.",
-    path: ROUTES.spinReward,
   },
   {
     icon: Wallet,
     title: "Wallet",
     description: "Create your Canton party, view balance, send and receive CC on-chain.",
-    path: "/wallet",
   },
   {
     icon: Trophy,
     title: "Leaderboard",
     description: "Weekly, monthly, and all-time rankings from quest and campaign points.",
-    path: ROUTES.leaderboard,
   },
 ];
 
 export function AppOverviewSection() {
   return (
-    <section id="app" className="border-b border-[var(--border)] py-12 md:py-16">
-      <LandingShell>
-        <SectionHeader
-          eyebrow="In the app"
-          title="Everything in one place"
-          description="These are the same sections you see after signing in — no extra menus or hidden pages."
-          align="center"
-        />
+    <LandingSection id="app">
+      <SectionHeader
+        eyebrow="In the app"
+        title="Everything in one place"
+        description="The same sections you see after signing in — no hidden pages or extra installs."
+        align="center"
+      />
 
-        <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {menus.map((item) => {
-            const Icon = item.icon;
-            return (
-              <div
-                key={item.path}
-                className="glass-card glass-card-hover flex flex-col rounded-2xl p-5 ring-1 ring-[var(--border)]"
-              >
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-canton-subtle ring-1 ring-[var(--primary)]/15">
-                  <Icon className="h-5 w-5 text-canton" />
+      <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:gap-5">
+        {menus.map((item) => {
+          const Icon = item.icon;
+          return (
+            <li key={item.title}>
+              <article className="glass-card glass-card-hover flex h-full flex-col rounded-2xl p-5 ring-1 ring-[var(--border)] sm:p-6">
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-canton-subtle ring-1 ring-[var(--primary)]/15">
+                  <Icon className="h-5 w-5 text-canton" aria-hidden />
                 </span>
                 <h3 className="type-section-title mt-4">{item.title}</h3>
                 <p className="mt-2 flex-1 text-sm leading-relaxed text-[var(--muted-foreground)]">
                   {item.description}
                 </p>
-                <p className="mt-3 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-                  {item.path}
-                </p>
-              </div>
-            );
-          })}
-        </div>
-      </LandingShell>
-    </section>
+              </article>
+            </li>
+          );
+        })}
+      </ul>
+    </LandingSection>
   );
 }

@@ -145,11 +145,17 @@ export function LandingCampaignGrid({ quests }: { quests: Quest[] }) {
   if (live.length <= 1) return null;
 
   return (
-    <div className="mt-10">
-      <p className="mb-4 text-sm font-medium text-[var(--muted-foreground)]">
-        All partner campaigns
-      </p>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div>
+      <div className="mb-5 flex items-end justify-between gap-4">
+        <div>
+          <p className="type-eyebrow-brand">All campaigns</p>
+          <p className="type-subsection-title mt-1">Browse every live partner quest</p>
+        </div>
+        <p className="shrink-0 text-sm tabular-nums text-[var(--muted-foreground)]">
+          {live.length} live
+        </p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:gap-5">
         {live.map((quest) => (
           <CompactCampaignCard key={quest.id} quest={quest} />
         ))}

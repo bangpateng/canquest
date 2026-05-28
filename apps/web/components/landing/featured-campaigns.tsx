@@ -1,7 +1,7 @@
 import { ListChecks } from "lucide-react";
 import { FeaturedQuestCarouselDynamic } from "@/components/landing/featured-quest-carousel-dynamic";
 import { LandingCampaignGrid } from "@/components/landing/landing-campaign-grid";
-import { LandingShell } from "@/components/landing/landing-shell";
+import { LandingSection } from "@/components/landing/landing-section";
 import { SectionHeader } from "@/components/landing/section-header";
 import { LaunchAppButton } from "@/components/landing/launch-app-button";
 import type { Quest } from "@/lib/quest-types";
@@ -12,34 +12,32 @@ export function FeaturedCampaigns({ quests }: { quests: Quest[] }) {
   );
 
   return (
-    <section id="campaigns" className="relative border-b border-[var(--border)] py-12 md:py-14">
-      <div className="absolute inset-0 bg-[var(--muted)]/30" />
-      <LandingShell className="relative">
-        <SectionHeader
-          eyebrow="Earn"
-          title="Partner campaigns"
-          description="Real projects on Canton — complete social missions (X, Telegram, Discord), earn quest points, and claim CC rewards. Each campaign uses the partner’s name, banner, logo, and links from admin."
-          className="max-w-2xl"
-        />
+    <LandingSection id="campaigns" variant="muted">
+      <SectionHeader
+        eyebrow="Earn"
+        title="Partner campaigns"
+        description="Real projects on Canton — complete social missions, earn points, and claim CC. Each campaign uses the partner’s branding from admin."
+        align="center"
+        className="max-w-2xl"
+      />
 
-        {live.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card)]/50 px-6 py-14 text-center">
-            <ListChecks className="mx-auto h-8 w-8 text-[var(--muted-foreground)]" />
-            <p className="type-subsection-title mt-4">No live campaigns yet</p>
-            <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-              Sign in and check the Earn page, or come back when new partner quests go live.
-            </p>
-            <div className="mt-6 flex justify-center">
-              <LaunchAppButton size="lg" showArrow />
-            </div>
+      {live.length === 0 ? (
+        <div className="mx-auto max-w-lg rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card)]/50 px-6 py-14 text-center">
+          <ListChecks className="mx-auto h-8 w-8 text-[var(--muted-foreground)]" aria-hidden />
+          <p className="type-subsection-title mt-4">No live campaigns yet</p>
+          <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+            Sign in and open Earn, or check back when new partner quests go live.
+          </p>
+          <div className="mt-6 flex justify-center">
+            <LaunchAppButton size="lg" showArrow />
           </div>
-        ) : (
-          <>
-            <FeaturedQuestCarouselDynamic quests={quests} />
-            <LandingCampaignGrid quests={quests} />
-          </>
-        )}
-      </LandingShell>
-    </section>
+        </div>
+      ) : (
+        <div className="space-y-10 md:space-y-12">
+          <FeaturedQuestCarouselDynamic quests={quests} />
+          <LandingCampaignGrid quests={quests} />
+        </div>
+      )}
+    </LandingSection>
   );
 }

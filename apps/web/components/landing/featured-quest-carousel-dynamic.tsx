@@ -11,7 +11,7 @@ const FeaturedQuestCarousel = dynamic(
   {
     loading: () => (
       <div
-        className="h-[min(340px,78vw)] animate-pulse rounded-2xl bg-[var(--muted)]/40 md:h-[400px]"
+        className="aspect-[16/10] max-h-[min(420px,72vw)] w-full animate-pulse rounded-2xl bg-[var(--muted)]/40 sm:aspect-[2/1]"
         aria-hidden
       />
     ),

@@ -1,3 +1,4 @@
+import { CanQuestLogo } from "@/components/brand/canquest-logo";
 import { LandingShell } from "@/components/landing/landing-shell";
 import { getSiteSocialLinks } from "@/lib/site-config";
 
@@ -6,7 +7,13 @@ export function SiteFooter() {
 
   return (
     <footer className="border-t border-[var(--border)] bg-[var(--muted)]/20">
-      <LandingShell className="flex flex-col gap-8 py-10">
+      <LandingShell className="flex flex-col gap-8 py-12 md:py-14">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <CanQuestLogo size="md" href="/" />
+          <p className="max-w-md text-sm text-[var(--muted-foreground)]">
+            Partner campaigns and daily quests on Canton — earn points and claim CC in one app.
+          </p>
+        </div>
         {social.length > 0 ? (
           <nav
             className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-[var(--muted-foreground)]"

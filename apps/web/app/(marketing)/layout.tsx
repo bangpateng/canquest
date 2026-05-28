@@ -10,7 +10,7 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
   return (
     <AuthProvider>
       <SiteHeader />
-      <main>{children}</main>
+      <main className="flex flex-col">{children}</main>
       <SiteFooter />
       <AuthModal />
       <Suspense fallback={null}>
