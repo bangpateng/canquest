@@ -199,6 +199,8 @@ export function campaignUiKind(
   rewardType: RewardType | string | undefined,
   requiresFcfsClaim: boolean,
 ): "waitlist_email" | "waitlist_code" | "cc_manual" | "cc_manual_draw" | "cc_fcfs" | "other" {
+  // Invite-code FCFS should look like FCFS, but not be labeled as "CC FCFS".
+  if (rewardType === "INVITE_CODE_FCFS") return "waitlist_code";
   if (requiresFcfsClaim) return "cc_fcfs";
   switch (rewardType) {
     case "WAITLIST_EMAIL":
