@@ -547,6 +547,7 @@ export function QuestTaskPanel({
           questId={quest.id}
           partyId={partyId}
           campaignMeta={campaignMeta}
+          rewardType={quest.rewardType}
           onClaimed={() => loadProgress()}
         />
       ) : null}

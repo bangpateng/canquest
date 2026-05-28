@@ -13,16 +13,24 @@ export function CampaignInviteClaimSection({
   questId,
   partyId,
   campaignMeta,
+  rewardType,
   onClaimed,
 }: {
   questId: string;
   partyId: string | null;
   campaignMeta: CampaignMeta;
+  rewardType?: string | null;
   onClaimed: () => void;
 }) {
+  const t = usePlatformT();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  const sectionLabel =
+    rewardType === "INVITE_CODE_FCFS"
+      ? t("earnCampaigns.kindInvite")
+      : t("earnCampaigns.kindRaffle");
 
   const fee = campaignMeta.fcfsClaimFeeCc;
   const codes = campaignMeta.codesRemaining ?? 0;
@@ -63,7 +71,7 @@ export function CampaignInviteClaimSection({
   return (
     <CampaignFcfsRewardCard
       mode="claim"
-      sectionLabel={t("earnCampaigns.kindInvite")}
+      sectionLabel={sectionLabel}
       slotsLabel={codes > 0 ? `${codes} code(s) left` : "No codes left"}
       description={codes > 0 ? feeHint : "No codes left in the pool."}
       rewardCc={0}
