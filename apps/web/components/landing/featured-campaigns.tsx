@@ -1,6 +1,7 @@
 import { ListChecks } from "lucide-react";
 import { FeaturedQuestCarouselDynamic } from "@/components/landing/featured-quest-carousel-dynamic";
 import { LandingCampaignGrid } from "@/components/landing/landing-campaign-grid";
+import { LandingReveal } from "@/components/landing/landing-reveal";
 import { LandingSection } from "@/components/landing/landing-section";
 import { SectionHeader } from "@/components/landing/section-header";
 import { LaunchAppButton } from "@/components/landing/launch-app-button";
@@ -13,6 +14,7 @@ export function FeaturedCampaigns({ quests }: { quests: Quest[] }) {
 
   return (
     <LandingSection id="campaigns" variant="muted">
+      <LandingReveal>
       <SectionHeader
         eyebrow="Earn"
         title="Live partner drops"
@@ -38,6 +40,7 @@ export function FeaturedCampaigns({ quests }: { quests: Quest[] }) {
           <LandingCampaignGrid quests={quests} />
         </div>
       )}
+      </LandingReveal>
     </LandingSection>
   );
 }

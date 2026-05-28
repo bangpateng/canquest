@@ -7,6 +7,7 @@ import {
   Wallet,
   type LucideIcon,
 } from "lucide-react";
+import { LandingReveal } from "@/components/landing/landing-reveal";
 import { LandingSection } from "@/components/landing/landing-section";
 import { SectionHeader } from "@/components/landing/section-header";
 
@@ -53,6 +54,7 @@ const menus: {
 export function AppOverviewSection() {
   return (
     <LandingSection id="app">
+      <LandingReveal>
       <SectionHeader
         eyebrow="Product"
         title="Six tabs, one account"
@@ -61,11 +63,17 @@ export function AppOverviewSection() {
       />
 
       <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:gap-5">
-        {menus.map((item) => {
+        {menus.map((item, index) => {
           const Icon = item.icon;
           return (
             <li key={item.title} className={item.className}>
-              <article className="glass-card glass-card-hover flex h-full flex-col rounded-2xl p-5 ring-1 ring-[var(--border)] sm:p-6">
+              <article className="glass-card glass-card-hover group relative flex h-full flex-col overflow-hidden rounded-2xl p-5 ring-1 ring-[var(--border)] sm:p-6">
+                <span
+                  className="pointer-events-none absolute -right-2 -top-3 select-none text-5xl font-bold tabular-nums text-[var(--foreground)]/[0.04] transition-colors group-hover:text-canton/[0.08]"
+                  aria-hidden
+                >
+                  {String(index + 1).padStart(2, "0")}
+                </span>
                 <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-canton-subtle ring-1 ring-[var(--primary)]/15">
                   <Icon className="h-5 w-5 text-canton" aria-hidden />
                 </span>
@@ -78,6 +86,7 @@ export function AppOverviewSection() {
           );
         })}
       </ul>
+      </LandingReveal>
     </LandingSection>
   );
 }
