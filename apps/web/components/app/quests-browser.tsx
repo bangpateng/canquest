@@ -173,10 +173,8 @@ export function QuestsBrowser({
   const tabRow = (
     <div
       className={cn(
-        "flex gap-1 overflow-x-auto p-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-        isEarn
-          ? "rounded-xl bg-[var(--muted)]/30 p-1"
-          : "gap-2 pb-1 sm:pb-0",
+        "flex overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+        isEarn ? "gap-2" : "gap-2 pb-1 sm:pb-0",
       )}
     >
       {TABS.map((tab) => {
@@ -189,7 +187,7 @@ export function QuestsBrowser({
             className={filterTabClass(
               selected,
               isEarn
-                ? "flex-1 justify-center px-3 py-1.5 text-xs sm:flex-none sm:px-4 sm:py-2 sm:text-sm"
+                ? "justify-center px-3 py-1.5 text-xs sm:px-3.5 sm:py-2 sm:text-sm"
                 : undefined,
             )}
           >
@@ -233,15 +231,15 @@ export function QuestsBrowser({
     <div className={cn("w-full min-w-0", isEarn ? "space-y-4" : "space-y-5")}>
       {isEarn ? (
         <section
-          className={cn(surfaceToolbarClass, "space-y-3 p-3 sm:p-4")}
+          className={cn(surfaceToolbarClass, "p-3 sm:p-4")}
           aria-label={t("earnCampaigns.filterAria")}
         >
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-4">
-            <div className="flex min-w-0 items-center gap-2 lg:flex-1">
-              <div className="min-w-0 flex-1">{tabRow}</div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+            <div className="flex min-w-0 items-center gap-2">
+              <div className="min-w-0">{tabRow}</div>
               {completionChip}
             </div>
-            <div className="lg:w-72 lg:shrink-0">{searchField}</div>
+            <div className="sm:ml-auto sm:w-72 sm:shrink-0">{searchField}</div>
           </div>
         </section>
       ) : (
