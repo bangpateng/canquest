@@ -35,7 +35,7 @@ function resolveLatestDar() {
   try {
     const files = fs
       .readdirSync(distDir)
-      .filter((f) => /^canquest-.*\.dar$/.test(f))
+      .filter((f) => /^canquest(-v2)?-.*\.dar$/.test(f))
       .map((f) => ({ f, p: path.join(distDir, f), m: fs.statSync(path.join(distDir, f)).mtimeMs }))
       .sort((a, b) => b.m - a.m);
     if (files.length > 0) return files[0].p;
@@ -77,9 +77,18 @@ async function main() {
 
   console.log('Upload OK:', text || res.status);
   console.log('');
-  const pkg = process.env.CANTON_DAML_PACKAGE_ID || '(run daml damlc inspect-dar on the .dar)';
+
+  // Extract main package id from DAR filename suffix when possible
+  const darName = path.basename(darPath);
+  const idMatch = darName.match(/-([a-f0-9]{64})\.dar$/i);
+  const pkgFromDar = idMatch ? idMatch[1] : null;
+
   console.log('Add to apps/api/.env:');
-  console.log('CANTON_DAML_PACKAGE_ID=' + pkg);
+  if (pkgFromDar) {
+    console.log('CANTON_DAML_PACKAGE_ID=' + pkgFromDar);
+  } else {
+    console.log('CANTON_DAML_PACKAGE_ID=<run: npm run daml:inspect>');
+  }
   console.log('CANTON_OPERATOR_PARTY_ID=' + (process.env.CANTON_VALIDATOR_PARTY_ID || '<operator-party>'));
   console.log('Then restart: npm run start:dev');
 }

@@ -1,0 +1,20 @@
+-- | Quest participation audit trail (Canton M3 authorization: operator signs, user observes).
+module CanQuest.Quest.Participation where
+
+-- | Records that a user started a quest. Keyed by (user, questId) for idempotent lookup.
+template QuestParticipation
+  with
+    operator   : Party
+    user       : Party
+    questId    : Text
+    questKind  : Text
+    startedAt  : Text
+  where
+    signatory operator
+    observer user
+    ensure questId /= "" && questKind /= ""
+
+    choice QuestParticipation_Archive : ()
+      controller operator
+      do
+        return ()

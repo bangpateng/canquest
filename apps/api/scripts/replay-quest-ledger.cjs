@@ -7,6 +7,12 @@ const path = require('path');
 const jwt = require('jsonwebtoken');
 const { PrismaClient } = require('@prisma/client');
 
+const TPL = {
+  QuestParticipation: 'CanQuest.Quest.Participation:QuestParticipation',
+  QuestTaskSubmission: 'CanQuest.Quest.Task:QuestTaskSubmission',
+  QuestCompletion: 'CanQuest.Quest.Completion:QuestCompletion',
+};
+
 function loadEnv() {
   const envPath = path.join(__dirname, '..', '.env');
   for (const line of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
@@ -52,7 +58,7 @@ const questId = process.argv[2];
 const userParty = process.argv[3];
 
 async function create(label, templateSuffix, createArguments, commandId) {
-  const templateId = `${pkg}:Main:${templateSuffix}`;
+  const templateId = `${pkg}:${templateSuffix}`;
   const res = await fetch(`${baseUrl}/v2/commands/submit-and-wait-for-transaction-tree`, {
     method: 'POST',
     headers: {
@@ -93,16 +99,19 @@ async function main() {
     where: { questId, status: 'VERIFIED' },
     take: 5,
   });
+  const questKind = quest.questKind === 'EARN_HUB' ? 'EARN_HUB' : 'CAMPAIGN';
+  const now = new Date().toISOString();
   console.log('Quest', quest.title, 'tasks', quest.tasks.length);
 
-  const p = await create(
+  await create(
     'participation',
-    'QuestParticipation',
+    TPL.QuestParticipation,
     {
       operator,
       user: userParty,
       questId,
-      startedAt: new Date().toISOString(),
+      questKind,
+      startedAt: now,
     },
     `quest-participation-${questId}-${userParty}`,
   );
@@ -111,19 +120,35 @@ async function main() {
     const sub = subs.find((s) => s.taskId === task.id);
     await create(
       `task ${task.id}`,
-      'QuestTaskSubmission',
+      TPL.QuestTaskSubmission,
       {
         operator,
         user: userParty,
         questId,
         taskId: task.id,
+        taskType: task.type,
         proof: sub?.proof ?? '',
-        submittedAt: new Date().toISOString(),
+        submittedAt: now,
         verified: true,
       },
       `quest-task-sub-${questId}-${task.id}-${userParty}`,
     );
   }
+
+  await create(
+    'completion',
+    TPL.QuestCompletion,
+    {
+      operator,
+      user: userParty,
+      questId,
+      questKind,
+      rewardCc: String(quest.rewardCc),
+      taskCount: quest.tasks.length,
+      completedAt: now,
+    },
+    `quest-completion-${questId}-${userParty}`,
+  );
 
   await prisma.$disconnect();
 }

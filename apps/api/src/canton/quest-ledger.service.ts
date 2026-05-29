@@ -3,11 +3,28 @@ import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { CantonLedgerService } from './canton-ledger.service';
 
+/** DAML module paths per packages/daml/daml/CanQuest/ layout (Canton M3 building/packaging). */
+const TPL = {
+  QuestParticipation: 'CanQuest.Quest.Participation:QuestParticipation',
+  QuestTaskSubmission: 'CanQuest.Quest.Task:QuestTaskSubmission',
+  QuestReward: 'CanQuest.Quest.Reward:QuestReward',
+  QuestCompletion: 'CanQuest.Quest.Completion:QuestCompletion',
+  ClaimSession: 'CanQuest.Reward.ClaimSession:ClaimSession',
+} as const;
+
 export interface QuestLedgerSubmitResult {
   ledgerEnabled: boolean;
   participationContractId: string | null;
+  completionContractId: string | null;
   rewardContractId: string | null;
   taskSubmissionIds: string[];
+  errors: string[];
+}
+
+export interface QuestTaskLedgerResult {
+  ledgerEnabled: boolean;
+  participationContractId: string | null;
+  taskSubmissionContractId: string | null;
   errors: string[];
 }
 
@@ -18,8 +35,9 @@ export interface ClaimSessionLedgerResult {
 }
 
 /**
- * Records quest completion on Canton via DAML templates in packages/daml/Main.daml.
- * CIP-56 CC disbursement is handled separately by SpliceValidatorService (TransferPreapproval).
+ * Records quest/earn activity on Canton via DAML templates in packages/daml/.
+ * Follows Canton M3 authorization: operator signs (signatory), user observes.
+ * CIP-56 CC disbursement is handled separately by SpliceValidatorService.
  */
 @Injectable()
 export class QuestLedgerService {
@@ -42,7 +60,12 @@ export class QuestLedgerService {
     return id || null;
   }
 
-  /** When false, quest submit skips DAML contracts (wallet / Splice CC still works). */
+  private templateId(suffix: (typeof TPL)[keyof typeof TPL]): string | null {
+    const pkg = this.packageId;
+    return pkg ? `${pkg}:${suffix}` : null;
+  }
+
+  /** When false, quest ledger writes are skipped (wallet / Splice CC still works). */
   isConfigured(): boolean {
     const enabled = this.config.get<string>('QUEST_LEDGER_ENABLED');
     if (enabled === 'false' || enabled === '0') return false;
@@ -56,8 +79,181 @@ export class QuestLedgerService {
     return !!(this.packageId && this.operatorPartyId);
   }
 
+  private async ensureReachable(): Promise<string | null> {
+    const reachable = await this.ledger.isReachable();
+    return reachable ? null : 'Canton JSON Ledger API unreachable';
+  }
+
+  /** Find existing contract id in ACS by matching createArgument fields. */
+  private findContractId(
+    contracts: unknown[],
+    match: (args: Record<string, unknown>) => boolean,
+  ): string | null {
+    for (const entry of contracts) {
+      if (!entry || typeof entry !== 'object') continue;
+      const stack: unknown[] = [entry];
+      while (stack.length) {
+        const cur = stack.pop();
+        if (!cur || typeof cur !== 'object') continue;
+        if (Array.isArray(cur)) {
+          stack.push(...cur);
+          continue;
+        }
+        const obj = cur as Record<string, unknown>;
+        const args =
+          (obj.createArgument as Record<string, unknown> | undefined) ??
+          ((obj.CreatedTreeEvent as Record<string, unknown> | undefined)?.createArgument as
+            | Record<string, unknown>
+            | undefined) ??
+          ((obj.CreatedEvent as Record<string, unknown> | undefined)?.createArgument as
+            | Record<string, unknown>
+            | undefined);
+        const cid =
+          typeof obj.contractId === 'string'
+            ? obj.contractId
+            : typeof (obj.CreatedTreeEvent as Record<string, unknown> | undefined)?.contractId ===
+                'string'
+              ? ((obj.CreatedTreeEvent as Record<string, unknown>).contractId as string)
+              : null;
+        if (args && cid && match(args)) return cid;
+        for (const v of Object.values(obj)) stack.push(v);
+      }
+    }
+    return null;
+  }
+
+  /** Idempotent: create QuestParticipation or return existing (contract key: user + questId). */
+  async ensureParticipation(params: {
+    questId: string;
+    questKind: 'EARN_HUB' | 'CAMPAIGN';
+    userPartyId: string;
+  }): Promise<{ contractId: string | null; error?: string }> {
+    if (!this.isConfigured()) {
+      return { contractId: null, error: 'Quest ledger disabled' };
+    }
+    const tpl = this.templateId(TPL.QuestParticipation);
+    const operator = this.operatorPartyId;
+    if (!tpl || !operator) {
+      return { contractId: null, error: 'Canton DAML package or operator party not configured' };
+    }
+    const reachErr = await this.ensureReachable();
+    if (reachErr) return { contractId: null, error: reachErr };
+
+    await this.ledger.grantUserRights(operator).catch((err) =>
+      this.logger.warn(`grantUserRights(operator) failed: ${String(err)}`),
+    );
+
+    const existing = this.findContractId(
+      await this.ledger.queryActiveContracts(tpl, [operator]),
+      (args) =>
+        args.user === params.userPartyId &&
+        args.questId === params.questId,
+    );
+    if (existing) return { contractId: existing };
+
+    const res = await this.ledger.createContract(
+      tpl,
+      {
+        operator,
+        user: params.userPartyId,
+        questId: params.questId,
+        questKind: params.questKind,
+        startedAt: new Date().toISOString(),
+      },
+      [operator],
+      `quest-participation-${params.questId}-${params.userPartyId}`,
+    );
+    if (res.ok && res.contractId) return { contractId: res.contractId };
+    return {
+      contractId: null,
+      error: this.formatLedgerError(res.error, 'Failed to create QuestParticipation'),
+    };
+  }
+
   /**
-   * Create a ClaimSession for FCFS/invite claim audit trail.
+   * Record a verified task on ledger (best-effort, per Canton audit trail).
+   * Creates participation on first task if missing.
+   */
+  async recordTaskSubmission(params: {
+    questId: string;
+    questKind: 'EARN_HUB' | 'CAMPAIGN';
+    taskId: string;
+    taskType: string;
+    proof: string | null;
+    userPartyId: string;
+  }): Promise<QuestTaskLedgerResult> {
+    const result: QuestTaskLedgerResult = {
+      ledgerEnabled: false,
+      participationContractId: null,
+      taskSubmissionContractId: null,
+      errors: [],
+    };
+    if (!this.isConfigured()) return result;
+
+    const tpl = this.templateId(TPL.QuestTaskSubmission);
+    const operator = this.operatorPartyId;
+    if (!tpl || !operator) {
+      result.errors.push('Canton DAML package or operator party not configured');
+      return result;
+    }
+    const reachErr = await this.ensureReachable();
+    if (reachErr) {
+      result.errors.push(reachErr);
+      return result;
+    }
+
+    result.ledgerEnabled = true;
+
+    const part = await this.ensureParticipation({
+      questId: params.questId,
+      questKind: params.questKind,
+      userPartyId: params.userPartyId,
+    });
+    result.participationContractId = part.contractId;
+    if (part.error && !part.contractId) result.errors.push(part.error);
+
+    const existingTask = this.findContractId(
+      await this.ledger.queryActiveContracts(tpl, [operator]),
+      (args) =>
+        args.user === params.userPartyId &&
+        args.questId === params.questId &&
+        args.taskId === params.taskId,
+    );
+    if (existingTask) {
+      result.taskSubmissionContractId = existingTask;
+      return result;
+    }
+
+    const subRes = await this.ledger.createContract(
+      tpl,
+      {
+        operator,
+        user: params.userPartyId,
+        questId: params.questId,
+        taskId: params.taskId,
+        taskType: params.taskType,
+        proof: params.proof ?? '',
+        submittedAt: new Date().toISOString(),
+        verified: true,
+      },
+      [operator],
+      `quest-task-sub-${params.questId}-${params.taskId}-${randomUUID()}`,
+    );
+    if (subRes.ok && subRes.contractId) {
+      result.taskSubmissionContractId = subRes.contractId;
+    } else {
+      result.errors.push(
+        this.formatLedgerError(
+          subRes.error,
+          `Failed to record task submission ${params.taskId}`,
+        ),
+      );
+    }
+    return result;
+  }
+
+  /**
+   * Create ClaimSession for FCFS/invite claim audit trail.
    * Best-effort: returns errors but does not throw.
    */
   async createClaimSession(params: {
@@ -67,21 +263,22 @@ export class QuestLedgerService {
     feeCc: number;
     rewardCc: number;
   }): Promise<ClaimSessionLedgerResult> {
-    const pkg = this.packageId;
-    const operator = this.operatorPartyId;
     const result: ClaimSessionLedgerResult = {
       ledgerEnabled: false,
       sessionContractId: null,
       errors: [],
     };
+    if (!this.isClaimSessionConfigured()) return result;
 
-    if (!pkg || !operator) {
+    const tpl = this.templateId(TPL.ClaimSession);
+    const operator = this.operatorPartyId;
+    if (!tpl || !operator) {
       result.errors.push('Canton DAML package or operator party not configured');
       return result;
     }
-    const reachable = await this.ledger.isReachable();
-    if (!reachable) {
-      result.errors.push('Canton JSON Ledger API unreachable');
+    const reachErr = await this.ensureReachable();
+    if (reachErr) {
+      result.errors.push(reachErr);
       return result;
     }
 
@@ -90,7 +287,6 @@ export class QuestLedgerService {
       this.logger.warn(`grantUserRights(operator) failed: ${String(err)}`),
     );
 
-    const tpl = `${pkg}:Main:ClaimSession`;
     const createdAt = new Date().toISOString();
     const res = await this.ledger.createContract(
       tpl,
@@ -125,15 +321,19 @@ export class QuestLedgerService {
     sessionContractId: string;
     feeTxId: string;
   }): Promise<{ ok: boolean; errors: string[] }> {
-    const pkg = this.packageId;
+    if (!this.isClaimSessionConfigured()) {
+      return { ok: false, errors: ['Claim session ledger disabled'] };
+    }
+    const templateId = this.templateId(TPL.ClaimSession);
     const operator = this.operatorPartyId;
-    if (!pkg || !operator) return { ok: false, errors: ['Canton DAML not configured'] };
-    const templateId = `${pkg}:Main:ClaimSession`;
+    if (!templateId || !operator) {
+      return { ok: false, errors: ['Canton DAML not configured'] };
+    }
     const { ok, text } = await this.ledger.exerciseChoice(
       params.sessionContractId,
       templateId,
       'ClaimSession_MarkFeePaidWithTx',
-      params.feeTxId,
+      { paidAt: new Date().toISOString(), txId: params.feeTxId },
       [operator],
       `claim-fee-paid-${randomUUID()}`,
     );
@@ -145,147 +345,207 @@ export class QuestLedgerService {
     sessionContractId: string;
     rewardTxId: string;
   }): Promise<{ ok: boolean; errors: string[] }> {
-    const pkg = this.packageId;
+    if (!this.isClaimSessionConfigured()) {
+      return { ok: false, errors: ['Claim session ledger disabled'] };
+    }
+    const templateId = this.templateId(TPL.ClaimSession);
     const operator = this.operatorPartyId;
-    if (!pkg || !operator) return { ok: false, errors: ['Canton DAML not configured'] };
-    const templateId = `${pkg}:Main:ClaimSession`;
+    if (!templateId || !operator) {
+      return { ok: false, errors: ['Canton DAML not configured'] };
+    }
     const { ok, text } = await this.ledger.exerciseChoice(
       params.sessionContractId,
       templateId,
       'ClaimSession_MarkRewardSentWithTx',
-      params.rewardTxId,
+      { sentAt: new Date().toISOString(), txId: params.rewardTxId },
       [operator],
       `claim-reward-sent-${randomUUID()}`,
     );
     return ok ? { ok: true, errors: [] } : { ok: false, errors: [text.slice(0, 200)] };
   }
 
+  /** Operator marks QuestReward claimed after CIP-56 payout (propose-accept completion). */
+  async markRewardClaimed(params: {
+    rewardContractId: string;
+    payoutTxId: string;
+  }): Promise<{ ok: boolean; errors: string[] }> {
+    if (!this.isConfigured()) {
+      return { ok: false, errors: ['Quest ledger disabled'] };
+    }
+    const templateId = this.templateId(TPL.QuestReward);
+    const operator = this.operatorPartyId;
+    if (!templateId || !operator) {
+      return { ok: false, errors: ['Canton DAML not configured'] };
+    }
+    const { ok, text } = await this.ledger.exerciseChoice(
+      params.rewardContractId,
+      templateId,
+      'QuestReward_MarkClaimedWithTx',
+      { txId: params.payoutTxId, claimedAt: new Date().toISOString() },
+      [operator],
+      `quest-reward-claimed-${randomUUID()}`,
+    );
+    return ok ? { ok: true, errors: [] } : { ok: false, errors: [text.slice(0, 200)] };
+  }
+
   /**
-   * Create QuestParticipation, QuestTaskSubmission (per task), and QuestReward on ledger.
-   * Best-effort: partial success is returned in the result object.
+   * Create QuestCompletion, QuestTaskSubmission (per task), QuestReward on ledger.
+   * Participation is ensured idempotently. Best-effort partial success.
    */
   async recordQuestCompletion(params: {
     questId: string;
+    questKind: 'EARN_HUB' | 'CAMPAIGN';
     questTitle: string;
     rewardCc: number;
     userPartyId: string;
     taskIds: string[];
-    proofs: Array<{ taskId: string; proof: string | null }>;
+    proofs: Array<{ taskId: string; taskType: string; proof: string | null }>;
   }): Promise<QuestLedgerSubmitResult> {
-    const pkg = this.packageId;
-    const operator = this.operatorPartyId;
     const result: QuestLedgerSubmitResult = {
       ledgerEnabled: false,
       participationContractId: null,
+      completionContractId: null,
       rewardContractId: null,
       taskSubmissionIds: [],
       errors: [],
     };
 
-    if (!pkg || !operator) {
-      result.errors.push('Canton DAML package or operator party not configured');
+    if (!this.isConfigured()) return result;
+
+    const operator = this.operatorPartyId;
+    if (!operator) {
+      result.errors.push('Canton operator party not configured');
       return result;
     }
-
-    const reachable = await this.ledger.isReachable();
-    if (!reachable) {
-      result.errors.push('Canton JSON Ledger API unreachable');
+    const reachErr = await this.ensureReachable();
+    if (reachErr) {
+      result.errors.push(reachErr);
       return result;
     }
 
     result.ledgerEnabled = true;
-    // Operator-only actAs: templates use signatory operator + observer user.
-    const actAs = [operator];
     await this.ledger.grantUserRights(operator).catch((err) =>
       this.logger.warn(`grantUserRights(operator) failed: ${String(err)}`),
     );
 
-    const participationTpl = `${pkg}:Main:QuestParticipation`;
-    const participationRes = await this.ledger.createContract(
-      participationTpl,
-      {
-        operator,
-        user: params.userPartyId,
-        questId: params.questId,
-        startedAt: new Date().toISOString(),
-      },
-      actAs,
-      `quest-participation-${randomUUID()}`,
-    );
-
-    if (!participationRes.ok) {
-      result.errors.push(
-        this.formatLedgerError(
-          participationRes.error,
-          'Failed to create QuestParticipation',
-        ),
-      );
-    } else if (participationRes.contractId) {
-      result.participationContractId = participationRes.contractId;
-    } else {
-      result.errors.push(
-        'QuestParticipation submitted but contract id missing — restart API (latest Canton ledger client).',
-      );
+    const part = await this.ensureParticipation({
+      questId: params.questId,
+      questKind: params.questKind,
+      userPartyId: params.userPartyId,
+    });
+    result.participationContractId = part.contractId;
+    if (part.error && !part.contractId) {
+      result.errors.push(part.error);
     }
 
-    const submissionTpl = `${pkg}:Main:QuestTaskSubmission`;
-    for (const { taskId, proof } of params.proofs) {
-      const subRes = await this.ledger.createContract(
-        submissionTpl,
-        {
-          operator,
-          user: params.userPartyId,
-          questId: params.questId,
-          taskId,
-          proof: proof ?? '',
-          submittedAt: new Date().toISOString(),
-          verified: true,
-        },
-        actAs,
-        `quest-task-sub-${randomUUID()}`,
+    const submissionTpl = this.templateId(TPL.QuestTaskSubmission);
+    if (submissionTpl) {
+      const existingContracts = await this.ledger.queryActiveContracts(submissionTpl, [operator]);
+      for (const { taskId, taskType, proof } of params.proofs) {
+        const existing = this.findContractId(
+          existingContracts,
+          (args) =>
+            args.user === params.userPartyId &&
+            args.questId === params.questId &&
+            args.taskId === taskId,
+        );
+        if (existing) {
+          result.taskSubmissionIds.push(existing);
+          continue;
+        }
+        const subRes = await this.ledger.createContract(
+          submissionTpl,
+          {
+            operator,
+            user: params.userPartyId,
+            questId: params.questId,
+            taskId,
+            taskType,
+            proof: proof ?? '',
+            submittedAt: new Date().toISOString(),
+            verified: true,
+          },
+          [operator],
+          `quest-task-sub-${randomUUID()}`,
+        );
+        if (subRes.ok && subRes.contractId) {
+          result.taskSubmissionIds.push(subRes.contractId);
+        } else if (subRes.ok) {
+          result.errors.push(
+            `Task ${taskId}: on-chain write ok but contract id missing — restart API.`,
+          );
+        } else {
+          result.errors.push(
+            this.formatLedgerError(
+              subRes.error,
+              `Failed to record task submission ${taskId}`,
+            ),
+          );
+        }
+      }
+    }
+
+    const completionTpl = this.templateId(TPL.QuestCompletion);
+    if (completionTpl) {
+      const existingCompletion = this.findContractId(
+        await this.ledger.queryActiveContracts(completionTpl, [operator]),
+        (args) =>
+          args.user === params.userPartyId && args.questId === params.questId,
       );
-      if (subRes.ok && subRes.contractId) {
-        result.taskSubmissionIds.push(subRes.contractId);
-      } else if (subRes.ok) {
-        result.errors.push(
-          `Task ${taskId}: on-chain write ok but contract id missing — restart API.`,
-        );
+      if (existingCompletion) {
+        result.completionContractId = existingCompletion;
       } else {
-        result.errors.push(
-          this.formatLedgerError(
-            subRes.error,
-            `Failed to record task submission ${taskId}`,
-          ),
+        const completionRes = await this.ledger.createContract(
+          completionTpl,
+          {
+            operator,
+            user: params.userPartyId,
+            questId: params.questId,
+            questKind: params.questKind,
+            rewardCc: String(params.rewardCc),
+            taskCount: params.proofs.length,
+            completedAt: new Date().toISOString(),
+          },
+          [operator],
+          `quest-completion-${randomUUID()}`,
         );
+        if (completionRes.ok && completionRes.contractId) {
+          result.completionContractId = completionRes.contractId;
+        } else {
+          result.errors.push(
+            completionRes.error ?? 'Failed to create QuestCompletion',
+          );
+        }
       }
     }
 
     if (params.rewardCc > 0) {
-      const rewardTpl = `${pkg}:Main:QuestReward`;
-      const rewardRes = await this.ledger.createContract(
-        rewardTpl,
-        {
-          operator,
-          user: params.userPartyId,
-          questId: params.questId,
-          rewardCc: params.rewardCc,
-          completedAt: new Date().toISOString(),
-          claimed: false,
-        },
-        [operator],
-        `quest-reward-${randomUUID()}`,
-      );
-      if (rewardRes.ok && rewardRes.contractId) {
-        result.rewardContractId = rewardRes.contractId;
-        // Claim requires user controller — skip if ledger user cannot act as user party.
-        // CC payout uses CIP-56 TransferPreapproval separately.
-      } else {
-        result.errors.push(rewardRes.error ?? 'Failed to create QuestReward');
+      const rewardTpl = this.templateId(TPL.QuestReward);
+      if (rewardTpl) {
+        const rewardRes = await this.ledger.createContract(
+          rewardTpl,
+          {
+            operator,
+            user: params.userPartyId,
+            questId: params.questId,
+            rewardCc: String(params.rewardCc),
+            completedAt: new Date().toISOString(),
+            claimed: false,
+            payoutTxId: null,
+          },
+          [operator],
+          `quest-reward-${randomUUID()}`,
+        );
+        if (rewardRes.ok && rewardRes.contractId) {
+          result.rewardContractId = rewardRes.contractId;
+        } else {
+          result.errors.push(rewardRes.error ?? 'Failed to create QuestReward');
+        }
       }
     }
 
     this.logger.log(
-      `Quest ledger: quest=${params.questId} participation=${result.participationContractId ?? 'none'} reward=${result.rewardContractId ?? 'none'}`,
+      `Quest ledger: quest=${params.questId} participation=${result.participationContractId ?? 'none'} completion=${result.completionContractId ?? 'none'} reward=${result.rewardContractId ?? 'none'}`,
     );
 
     return result;

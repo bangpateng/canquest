@@ -9,6 +9,7 @@ import {
   JOB_ACCEPT_OFFER,
 } from './queue.constants';
 import { SpliceValidatorService } from '../canton/splice-validator.service';
+import { QuestLedgerService } from '../canton/quest-ledger.service';
 import { UsersService } from '../users/users.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -61,6 +62,7 @@ export class LedgerJobProcessor {
     private readonly splice: SpliceValidatorService,
     private readonly users: UsersService,
     private readonly prisma: PrismaService,
+    private readonly questLedger: QuestLedgerService,
   ) {}
 
   // ── Send CC Reward ───────────────────────────────────────────────────────────
@@ -97,6 +99,24 @@ export class LedgerJobProcessor {
       description,
       ledgerTxId: offerContractId,
     });
+
+    if (referenceId && this.questLedger.isConfigured()) {
+      const completion = await this.prisma.questCompletion.findUnique({
+        where: { userId_questId: { userId, questId: referenceId } },
+        select: { ledgerRewardId: true },
+      });
+      if (completion?.ledgerRewardId) {
+        const marked = await this.questLedger.markRewardClaimed({
+          rewardContractId: completion.ledgerRewardId,
+          payoutTxId: offerContractId,
+        });
+        if (!marked.ok) {
+          this.logger.warn(
+            `[Job ${job.id}] QuestReward mark claimed: ${marked.errors.join(' | ')}`,
+          );
+        }
+      }
+    }
 
     this.logger.log(
       `[Job ${job.id}] ✅ ${amountCc} CC → @${username} accepted=${String(accepted)} txId=${offerContractId.slice(0, 16)}…`,

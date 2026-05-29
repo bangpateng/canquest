@@ -1,0 +1,111 @@
+-- | Integration tests for CanQuest DAML templates (Canton M3 testing module).
+module CanQuest.Test.QuestFlow where
+
+import CanQuest.Quest.Participation
+import CanQuest.Quest.Task
+import CanQuest.Quest.Reward
+import CanQuest.Quest.Completion
+import CanQuest.Reward.ClaimSession
+import Daml.Script
+
+questFlowTest : Script ()
+questFlowTest = do
+  operator <- allocateParty "CanQuestOperator"
+  alice <- allocateParty "Alice"
+
+  let questId = "quest-earn-hub-1"
+  let questKind = "EARN_HUB"
+  let now = "2026-05-30T12:00:00Z"
+
+  -- Participation (operator signs, user observes)
+  partCid <- submit operator do
+    createCmd QuestParticipation with
+      operator
+      user = alice
+      questId
+      questKind
+      startedAt = now
+
+  -- Task submission per verified task
+  submit operator do
+    createCmd QuestTaskSubmission with
+      operator
+      user = alice
+      questId
+      taskId = "task-daily-check-in"
+      taskType = "daily_check_in"
+      proof = "checked_in"
+      submittedAt = now
+      verified = True
+
+  -- Completion certificate
+  submit operator do
+    createCmd QuestCompletion with
+      operator
+      user = alice
+      questId
+      questKind
+      rewardCc = 0.0
+      taskCount = 1
+      completedAt = now
+
+  -- Zero-reward quest (earn hub) — no QuestReward contract required
+  submitMustFail operator do
+    createCmd QuestReward with
+      operator
+      user = alice
+      questId
+      rewardCc = -1.0
+      completedAt = now
+      claimed = False
+      payoutTxId = None
+
+  -- Campaign reward + operator marks claimed after CIP-56 payout
+  rewardCid <- submit operator do
+    createCmd QuestReward with
+      operator
+      user = alice
+      questId = "quest-campaign-fcfs"
+      rewardCc = 5.0
+      completedAt = now
+      claimed = False
+      payoutTxId = None
+
+  submit operator do
+    exerciseCmd rewardCid QuestReward_MarkClaimedWithTx with
+      txId = "cip56-tx-abc"
+      claimedAt = now
+
+  -- ClaimSession state machine: INIT → FEE_PAID → REWARD_SENT
+  sessionCid <- submit operator do
+    createCmd ClaimSession with
+      operator
+      user = alice
+      questId = "quest-campaign-fcfs"
+      claimKind = "fcfs_cc"
+      feeCc = 3.0
+      rewardCc = 5.0
+      createdAt = now
+      feePaidAt = None
+      feeTxId = None
+      rewardSentAt = None
+      rewardTxId = None
+      status = "INIT"
+
+  sessionFeePaid <- submit operator do
+    exerciseCmd sessionCid ClaimSession_MarkFeePaidWithTx with
+      paidAt = now
+      txId = "fee-tx-1"
+
+  submit operator do
+    exerciseCmd sessionFeePaid ClaimSession_MarkRewardSentWithTx with
+      sentAt = now
+      txId = "reward-tx-1"
+
+  -- Invalid transition must fail
+  submitMustFail operator do
+    exerciseCmd sessionCid ClaimSession_MarkRewardSentWithTx with
+      sentAt = now
+      txId = "skip-fee"
+
+  pure ()

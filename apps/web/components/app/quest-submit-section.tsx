@@ -25,6 +25,7 @@ import { useState } from "react";
 export type QuestLedgerProof = {
   enabled: boolean;
   participationContractId: string | null;
+  completionContractId: string | null;
   rewardContractId: string | null;
   taskSubmissionCount: number;
   cip56Queued: boolean;
@@ -157,6 +158,8 @@ export function QuestSubmittedProof({
   const inviteCode = rewardCodeFromStatus(rewardStatus);
   const uiKind = campaignUiKind(rt, campaignMeta?.requiresFcfsClaim ?? false);
   const participationId = ledger?.participationContractId ?? null;
+  const completionId = ledger?.completionContractId ?? null;
+  const taskCount = ledger?.taskSubmissionCount ?? 0;
   const [proofOpen, setProofOpen] = useState(false);
 
   const isCcAndInvite =
@@ -366,7 +369,7 @@ export function QuestSubmittedProof({
           </p>
         )}
 
-        {participationId && (
+        {(participationId || completionId) && (
           <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]/80">
             <button
               type="button"
@@ -376,10 +379,15 @@ export function QuestSubmittedProof({
               <span className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
                 <Shield className="h-3.5 w-3.5" />
                 On-chain proof
+                {taskCount > 0 ? (
+                  <span className="font-normal normal-case tracking-normal text-[var(--muted-foreground)]">
+                    · {taskCount} task{taskCount === 1 ? "" : "s"}
+                  </span>
+                ) : null}
               </span>
               <span className="flex items-center gap-2">
                 <code className="font-mono text-[11px] text-[var(--muted-foreground)]">
-                  {shortLedgerId(participationId)}
+                  {shortLedgerId(participationId ?? completionId ?? "")}
                 </code>
                 <ChevronDown
                   className={cn(
@@ -390,16 +398,33 @@ export function QuestSubmittedProof({
               </span>
             </button>
             {proofOpen && (
-              <div className="border-t border-[var(--border)] bg-[var(--muted)]/20 px-4 py-3">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
-                  QuestParticipation
-                </p>
-                <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                  <code className="break-all font-mono text-[11px] leading-relaxed">
-                    {participationId}
-                  </code>
-                  <CopyButton value={participationId} className="self-start" />
-                </div>
+              <div className="space-y-3 border-t border-[var(--border)] bg-[var(--muted)]/20 px-4 py-3">
+                {participationId ? (
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
+                      QuestParticipation
+                    </p>
+                    <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <code className="break-all font-mono text-[11px] leading-relaxed">
+                        {participationId}
+                      </code>
+                      <CopyButton value={participationId} className="self-start" />
+                    </div>
+                  </div>
+                ) : null}
+                {completionId ? (
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
+                      QuestCompletion
+                    </p>
+                    <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <code className="break-all font-mono text-[11px] leading-relaxed">
+                        {completionId}
+                      </code>
+                      <CopyButton value={completionId} className="self-start" />
+                    </div>
+                  </div>
+                ) : null}
               </div>
             )}
           </div>

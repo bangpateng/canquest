@@ -319,6 +319,7 @@ export class QuestsController {
       ) ?? {
         enabled: false,
         participationContractId: null,
+        completionContractId: null,
         rewardContractId: null,
         taskSubmissionCount: 0,
         cip56Queued: false,

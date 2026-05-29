@@ -612,10 +612,93 @@ export class QuestsService {
     return {
       ledgerEnabled: this.questLedger.isConfigured() && hasOnChain,
       participationContractId: completion.ledgerParticipationId,
+      completionContractId: null,
       rewardContractId: completion.ledgerRewardId,
       taskSubmissionIds,
       errors: [],
     };
+  }
+
+  private emptyLedgerResult(errors: string[] = []): QuestLedgerSubmitResult {
+    return {
+      ledgerEnabled: false,
+      participationContractId: null,
+      completionContractId: null,
+      rewardContractId: null,
+      taskSubmissionIds: [],
+      errors,
+    };
+  }
+
+  private damlQuestKind(kind: QuestKind): 'EARN_HUB' | 'CAMPAIGN' {
+    return kind === QuestKind.EARN_HUB ? 'EARN_HUB' : 'CAMPAIGN';
+  }
+
+  /** FCFS/invite claims skip submitQuest — record DAML completion + mark reward after CIP-56 payout. */
+  private async syncCampaignLedgerAfterPayout(params: {
+    userId: string;
+    questId: string;
+    userPartyId: string;
+    rewardCc: number;
+    payoutTxId: string;
+  }): Promise<void> {
+    if (!this.questLedger.isConfigured()) return;
+
+    const quest = await this.prisma.quest.findUnique({
+      where: { id: params.questId },
+      include: { tasks: true },
+    });
+    if (!quest) return;
+
+    const submissions = await this.prisma.questSubmission.findMany({
+      where: {
+        userId: params.userId,
+        questId: params.questId,
+        status: SubmissionStatus.VERIFIED,
+      },
+    });
+
+    const ledgerResult = await this.questLedger.recordQuestCompletion({
+      questId: params.questId,
+      questKind: this.damlQuestKind(quest.questKind),
+      questTitle: quest.title,
+      rewardCc: params.rewardCc,
+      userPartyId: params.userPartyId,
+      taskIds: quest.tasks.map((t) => t.id),
+      proofs: submissions.map((s) => {
+        const t = quest.tasks.find((qt) => qt.id === s.taskId);
+        return {
+          taskId: s.taskId,
+          taskType: t ? this.normalizeTaskType(t.type) : 'unknown',
+          proof: s.proof,
+        };
+      }),
+    });
+
+    if (ledgerResult.errors.length > 0) {
+      this.logger.warn(
+        `Campaign ledger sync: quest=${params.questId} ${ledgerResult.errors.join(' | ')}`,
+      );
+    }
+
+    await this.prisma.questCompletion.updateMany({
+      where: { userId: params.userId, questId: params.questId },
+      data: {
+        ledgerParticipationId: ledgerResult.participationContractId,
+        ledgerRewardId: ledgerResult.rewardContractId,
+        ledgerTaskSubmissionIds: ledgerResult.taskSubmissionIds,
+      },
+    });
+
+    if (ledgerResult.rewardContractId) {
+      const marked = await this.questLedger.markRewardClaimed({
+        rewardContractId: ledgerResult.rewardContractId,
+        payoutTxId: params.payoutTxId,
+      });
+      if (!marked.ok) {
+        this.logger.warn(`QuestReward mark claimed: ${marked.errors.join(' | ')}`);
+      }
+    }
   }
 
   private parseLedgerTaskIds(raw: unknown): string[] {
@@ -634,6 +717,7 @@ export class QuestsService {
   ): {
     enabled: boolean;
     participationContractId: string | null;
+    completionContractId: string | null;
     rewardContractId: string | null;
     taskSubmissionCount: number;
     cip56Queued: boolean;
@@ -643,6 +727,7 @@ export class QuestsService {
     return {
       enabled: ledger.ledgerEnabled,
       participationContractId: ledger.participationContractId,
+      completionContractId: ledger.completionContractId,
       rewardContractId: ledger.rewardContractId,
       taskSubmissionCount: ledger.taskSubmissionIds.length,
       cip56Queued: cip56Queued ?? rewardCc > 0,
@@ -748,6 +833,20 @@ export class QuestsService {
             },
           });
           await this.users.creditEarnPoints(userId, task.points);
+          if (userPartyId && this.questLedger.isConfigured()) {
+            void this.questLedger
+              .recordTaskSubmission({
+                questId,
+                questKind: this.damlQuestKind(quest.questKind),
+                taskId,
+                taskType,
+                proof: proof?.trim() || 'checked_in',
+                userPartyId,
+              })
+              .catch((err) =>
+                this.logger.warn(`Daily check-in ledger: ${String(err)}`),
+              );
+          }
           this.logger.log(
             `Task re-submitted (24h repeat): user=${userId.slice(0, 8)} task=${taskId}`,
           );
@@ -809,6 +908,26 @@ export class QuestsService {
 
     if (autoVerify) {
       await this.users.creditEarnPoints(userId, task.points);
+    }
+
+    if (
+      autoVerify &&
+      userPartyId &&
+      this.questLedger.isConfigured()
+    ) {
+      const taskLedger = await this.questLedger.recordTaskSubmission({
+        questId,
+        questKind: this.damlQuestKind(quest.questKind),
+        taskId,
+        taskType,
+        proof: proof ?? null,
+        userPartyId,
+      });
+      if (taskLedger.errors.length > 0) {
+        this.logger.warn(
+          `Task ledger: quest=${questId} task=${taskId} ${taskLedger.errors.join(' | ')}`,
+        );
+      }
     }
 
     this.logger.log(
@@ -919,13 +1038,7 @@ export class QuestsService {
         rewardCc: 0,
         inviteCode: null,
         rewardStatus: await this.getQuestRewardStatus(userId, questId),
-        ledger: {
-          ledgerEnabled: false,
-          participationContractId: null,
-          rewardContractId: null,
-          taskSubmissionIds: [],
-          errors: ['Tasks incomplete'],
-        },
+        ledger: this.emptyLedgerResult(['Tasks incomplete']),
       };
     }
 
@@ -946,13 +1059,7 @@ export class QuestsService {
         rewardCc: 0,
         inviteCode: null,
         rewardStatus,
-        ledger: {
-          ledgerEnabled: false,
-          participationContractId: null,
-          rewardContractId: null,
-          taskSubmissionIds: [],
-          errors: [],
-        },
+        ledger: this.emptyLedgerResult(),
       };
     }
 
@@ -964,13 +1071,7 @@ export class QuestsService {
         rewardCc: 0,
         inviteCode: null,
         rewardStatus: await this.getQuestRewardStatus(userId, questId),
-        ledger: {
-          ledgerEnabled: false,
-          participationContractId: null,
-          rewardContractId: null,
-          taskSubmissionIds: [],
-          errors: [],
-        },
+        ledger: this.emptyLedgerResult(),
       };
     }
     if (quest.endsAt && quest.endsAt < now) {
@@ -980,13 +1081,7 @@ export class QuestsService {
         rewardCc: 0,
         inviteCode: null,
         rewardStatus: await this.getQuestRewardStatus(userId, questId),
-        ledger: {
-          ledgerEnabled: false,
-          participationContractId: null,
-          rewardContractId: null,
-          taskSubmissionIds: [],
-          errors: [],
-        },
+        ledger: this.emptyLedgerResult(),
       };
     }
 
@@ -1035,22 +1130,24 @@ export class QuestsService {
       }
     }
 
-    let ledgerResult: Awaited<ReturnType<QuestLedgerService['recordQuestCompletion']>> = {
-      ledgerEnabled: false,
-      participationContractId: null,
-      rewardContractId: null,
-      taskSubmissionIds: [],
-      errors: [],
-    };
+    let ledgerResult: QuestLedgerSubmitResult = this.emptyLedgerResult();
 
-    if (userPartyId) {
+    if (userPartyId && this.questLedger.isConfigured()) {
       ledgerResult = await this.questLedger.recordQuestCompletion({
         questId,
+        questKind: this.damlQuestKind(quest.questKind),
         questTitle: quest.title,
         rewardCc,
         userPartyId,
         taskIds: quest.tasks.map((t) => t.id),
-        proofs: submissions.map((s) => ({ taskId: s.taskId, proof: s.proof })),
+        proofs: submissions.map((s) => {
+          const t = quest.tasks.find((qt) => qt.id === s.taskId);
+          return {
+            taskId: s.taskId,
+            taskType: t ? this.normalizeTaskType(t.type) : 'unknown',
+            proof: s.proof,
+          };
+        }),
       });
     }
 
@@ -1601,6 +1698,18 @@ export class QuestsService {
           update: { rewardMicroCc },
         }),
       ]);
+
+      if (cantonPartyId) {
+        void this.syncCampaignLedgerAfterPayout({
+          userId,
+          questId,
+          userPartyId: cantonPartyId,
+          rewardCc,
+          payoutTxId: rewardOfferId,
+        }).catch((err) =>
+          this.logger.warn(`FCFS ledger sync failed: ${String(err)}`),
+        );
+      }
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       this.logger.warn(`FCFS claim on-chain failed: ${detail}`);
@@ -1802,6 +1911,18 @@ export class QuestsService {
           update: { rewardMicroCc },
         }),
       ]);
+
+      if (cantonPartyId) {
+        void this.syncCampaignLedgerAfterPayout({
+          userId,
+          questId,
+          userPartyId: cantonPartyId,
+          rewardCc,
+          payoutTxId: rewardOfferId,
+        }).catch((err) =>
+          this.logger.warn(`Draw CC ledger sync failed: ${String(err)}`),
+        );
+      }
 
       const rewardStatus = await this.getQuestRewardStatus(userId, questId);
       return {

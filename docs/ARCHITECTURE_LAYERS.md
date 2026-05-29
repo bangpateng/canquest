@@ -56,7 +56,7 @@ Register/login (Web2)
 | Flag | Fungsi |
 |------|--------|
 | `FEATURED_APP_MARKERS_ENABLED=true` | Marker aktivitas per task / quest selesai (featured app) |
-| `QUEST_LEDGER_ENABLED=true` + `CANTON_DAML_PACKAGE_ID` | Kontrak `QuestParticipation`, `QuestTaskSubmission`, dll. |
+| `QUEST_LEDGER_ENABLED=true` + `CANTON_DAML_PACKAGE_ID` | Kontrak `QuestParticipation`, `QuestTaskSubmission`, `QuestCompletion`, `QuestReward` (modul `CanQuest.*`) |
 
 Urutan disarankan: **Web2 stabil** → **wallet production-ready** → **markers** → **DAML audit trail**.
 

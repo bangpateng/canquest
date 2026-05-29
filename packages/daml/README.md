@@ -1,70 +1,121 @@
 # CanQuest DAML package
 
-This folder holds DAML sources for Canton. **Implement real templates, signatories, and choices using [Digital Asset documentation](https://docs.digitalasset.com/build/3.5/index.html)**—do not treat `Placeholder` as production logic.
+Canton Network smart contracts for Quest (`/quest`) and Earn campaign (`/earn`) audit trails.
 
-Suggested layout (from `work.md`):
+**Documentation:** [Canton Module 3 — Daml fundamentals](https://docs.canton.network/appdev/modules/m3-dev-environment)
 
-- `User/` — `UserAccount`, `PartyBinding`
-- `Quest/` — `QuestCampaign`, `QuestTask`, `QuestCompletion`
-- `Reward/` — `RewardPool`, `SpinReward`
-- `Wallet/` — `TransferRequest`, `TreasuryFee`
-- `Admin/` — `AdminPermission`
-- `Audit/` — `AuditLog`
+## Module layout (Canton M3 building/packaging)
 
-## Build
+| Module | Template | Purpose |
+|--------|----------|---------|
+| `CanQuest.Quest.Participation` | `QuestParticipation` | User started a quest (key: user + questId) |
+| `CanQuest.Quest.Task` | `QuestTaskSubmission` | Verified task proof (key: user + questId + taskId) |
+| `CanQuest.Quest.Completion` | `QuestCompletion` | Quest finished certificate |
+| `CanQuest.Quest.Reward` | `QuestReward` | CC entitlement; `QuestReward_MarkClaimedWithTx` after CIP-56 payout |
+| `CanQuest.Reward.ClaimSession` | `ClaimSession` | FCFS/invite claim state machine (INIT → FEE_PAID → REWARD_SENT) |
 
-With the [DAML SDK](https://docs.digitalasset.com/) installed (match `sdk-version` in `daml.yaml`, currently **3.3.0**):
+**Authorization model (M3):** operator = signatory, user = observer. Operator backend submits via JSON Ledger API; user sees all audit contracts.
+
+## Build (Windows — tanpa install DAML SDK)
+
+Anda **tidak perlu** `daml` di PATH. Pakai **Docker** (sudah ada script di repo):
+
+```powershell
+cd apps\api
+npm run daml:build
+```
+
+Output: `packages\daml\.daml\dist\canquest-0.1.3.dar`
+
+Ambil **package ID** (64 hex):
+
+```powershell
+docker run --rm -v "${PWD}\..\..\packages\daml:/project" -w /project digitalasset/daml-sdk:3.3.0-snapshot.20250930.0 bash -lc "/home/daml/.daml/bin/daml damlc inspect-dar .daml/dist/canquest-0.1.3.dar"
+```
+
+Cari baris `main package id:` di output.
+
+## Deploy ke mana?
+
+DAR **tidak** di-deploy ke Vercel/web. DAR di-upload ke **Canton Participant** di **VPS validator** (TestNet CanQuest):
+
+| Langkah | Di mana | Port |
+|---------|---------|------|
+| Build `.dar` | Laptop Windows (Docker) atau VPS app | — |
+| Upload DAR | **Participant Canton** di VPS validator | **7575** |
+| Set env + restart | VPS app (Nest API) atau laptop dev | **3001** |
+
+**TestNet validator:** `162.250.190.204` (lihat `docs/CANTON_TESTNET.md`).
+
+### 1. Buka tunnel (terminal terpisah, tetap hidup)
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\tunnel-testnet.ps1 -ParticipantIp 172.19.0.5 -NginxIp 172.19.0.6
+```
+
+(Ganti IP participant/nginx jika berbeda — cek dengan `docker inspect` di VPS validator.)
+
+Verifikasi:
+
+```powershell
+curl http://127.0.0.1:7575/livez
+```
+
+### 2. Upload DAR ke participant
+
+Pastikan `apps/api/.env` punya `CANTON_JSON_API_URL=http://127.0.0.1:7575` dan `CANTON_SPLICE_SECRET=...`.
+
+```powershell
+cd apps\api
+npm run daml:upload
+```
+
+Atau manual:
+
+```powershell
+node scripts/upload-daml-dar.cjs
+```
+
+### 3. Isi `.env` API + nyalakan ledger
+
+```env
+CANTON_DAML_PACKAGE_ID=<main package id dari inspect-dar>
+CANTON_OPERATOR_PARTY_ID=<sama dengan CANTON_VALIDATOR_PARTY_ID>
+QUEST_LEDGER_ENABLED=true
+CLAIM_SESSION_LEDGER_ENABLED=true
+```
+
+Restart API: `npm run start:dev` (dev) atau `pm2 restart canquest-api` (production VPS).
+
+---
+
+## Build (Linux / VPS — DAML SDK terinstall)
 
 ```bash
 cd packages/daml
 daml build
+daml test
 ```
 
-Output: `.daml/dist/canquest-0.1.0.dar`
+## API integration
 
-## `CANTON_DAML_PACKAGE_ID` — what it is
+| Event | DAML action |
+|-------|-------------|
+| Task verified | `QuestTaskSubmission` + ensure `QuestParticipation` |
+| Quest submit (earn hub) | `QuestCompletion` (+ `QuestReward` if rewardCc > 0) |
+| FCFS / draw CC claim | `ClaimSession` + completion sync + mark reward claimed |
+| Auto CC enqueue | `QuestReward_MarkClaimedWithTx` after Splice transfer |
 
-It is the **main package ID** (64-character hex hash) of that `.dar` after it is compiled. The API uses it to create contracts, e.g.:
+See `apps/api/src/canton/quest-ledger.service.ts`.
 
-`{packageId}:Main:QuestParticipation`
+## Template IDs (JSON Ledger API)
 
-Without this env var, quest submit still works in PostgreSQL, but **no on-chain DAML proof**.
+After deploy, templates are referenced as:
 
-## Get the package ID (after `daml build`)
-
-```bash
-cd packages/daml
-daml damlc inspect-dar .daml/dist/canquest-0.1.0.dar
 ```
-
-Look for **`main package id:`** in the output, or JSON:
-
-```bash
-daml damlc inspect-dar --json .daml/dist/canquest-0.1.0.dar
+{packageId}:CanQuest.Quest.Participation:QuestParticipation
+{packageId}:CanQuest.Quest.Task:QuestTaskSubmission
+{packageId}:CanQuest.Quest.Completion:QuestCompletion
+{packageId}:CanQuest.Quest.Reward:QuestReward
+{packageId}:CanQuest.Reward.ClaimSession:ClaimSession
 ```
-
-Copy `main_package_id` into `apps/api/.env`:
-
-```env
-CANTON_DAML_PACKAGE_ID=47fc5f9b...your64hex...
-CANTON_OPERATOR_PARTY_ID=naxweb-validator-1::12200dd7e3932d1c7cba834862f5faa97e3afd63f5d8085e4f5a85aba22cbdeaa016
-```
-
-(`CANTON_OPERATOR_PARTY_ID` = same as `CANTON_VALIDATOR_PARTY_ID` / app provider on your node.)
-
-## Upload DAR to the participant (ledger must be reachable)
-
-With SSH tunnel to participant JSON API (port **7575**):
-
-```bash
-# DevNet / hs-256-unsafe — adjust host/port to your tunnel
-daml ledger upload-dar \
-  --host 127.0.0.1 --port 7575 \
-  .daml/dist/canquest-0.1.0.dar
-```
-
-Or use the HTTP packages API per [Manage Daml packages](https://docs.digitalasset.com/build/3.4/sdlc-howtos/applications/develop/manage-daml-packages.html).
-
-Restart the Nest API after updating `.env`.
-
-Docs: [Choose Your Path](https://docs.canton.network/appdev/get-started/choose-your-path) · [Module 3 contracts](https://docs.canton.network/appdev/modules/m3-dev-environment)

@@ -1,0 +1,40 @@
+-- | Quest reward entitlement (propose-accept pattern: operator records, user acknowledges).
+module CanQuest.Quest.Reward where
+
+-- | Reward entitlement created when a quest is completed.
+-- CC payout via Splice CIP-56 is recorded separately via QuestReward_MarkClaimedWithTx.
+template QuestReward
+  with
+    operator    : Party
+    user        : Party
+    questId     : Text
+    rewardCc    : Decimal
+    completedAt : Text
+    claimed     : Bool
+    payoutTxId  : Optional Text
+  where
+    signatory operator
+    observer user
+    ensure rewardCc >= 0.0 && questId /= ""
+
+    choice QuestReward_Claim : ContractId QuestReward
+      controller user
+      do
+        assertMsg "Reward already claimed" (not claimed)
+        create this with claimed = True
+
+    choice QuestReward_MarkClaimedWithTx : ContractId QuestReward
+      with
+        txId : Text
+        claimedAt : Text
+      controller operator
+      do
+        assertMsg "Reward already claimed" (not claimed)
+        create this with
+          claimed = True
+          payoutTxId = Some txId
+
+    choice QuestReward_Archive : ()
+      controller operator
+      do
+        return ()
