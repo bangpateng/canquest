@@ -49,7 +49,8 @@ docs/SESSION_HANDOFF.md
 
 # ─── Local-only ops scripts (contain VPS IP / tunnel setup) ──────────────────
 infra/vps2-setup-tunnels.sh
-infra/systemd/
+infra/systemd/*
+!infra/systemd/canton-tunnel.service.example
 infra/deploy.sh
 infra/redeploy.sh
 infra/cleanup.sh
