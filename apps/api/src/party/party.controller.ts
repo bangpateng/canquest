@@ -27,6 +27,8 @@ import {
   looksLikeCantonPartyId,
   normalizeCantonPartyId,
   normalizeWalletUsername,
+  participantSuffixFromParty,
+  participantSuffixesMatch,
   spliceWalletUsernameFromParty,
 } from '../common/canton-party-id';
 import { hasRealWallet } from '../common/wallet-policy';
@@ -54,6 +56,31 @@ export class PartyController {
     private readonly config: ConfigService,
     private readonly walletInvites: WalletInviteCodeService,
   ) {}
+
+  /**
+   * Reject wallets allocated on the wrong Canton participant (7575 tunnel ≠ TestNet validator).
+   * TestNet validator suffix example: …1220cc5cc83730c8d5fb167626147133848cf69be6962f143be0c39d3e11a8546e8d
+   */
+  private assertPartyOnValidatorParticipant(partyId: string): void {
+    if (partyId.startsWith('canquest:')) return;
+    const anchor =
+      this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ||
+      this.config.get<string>('CANTON_APP_PROVIDER_PARTY_ID')?.trim();
+    if (!anchor || !partyId.includes('::')) return;
+    if (participantSuffixesMatch(partyId, anchor)) return;
+
+    const expected = participantSuffixFromParty(anchor);
+    const got = participantSuffixFromParty(partyId);
+    this.logger.error(
+      `Party participant mismatch: got …${got?.slice(-16) ?? '?'} expected …${expected?.slice(-16) ?? '?'}`,
+    );
+    throw new BadRequestException(
+      'Wallet was created on the wrong Canton participant (suffix after :: does not match your TestNet validator). ' +
+        'Both SSH tunnels must target the same validator stack on 162.250.190.204: ' +
+        '7575 → participant container, 8080 → nginx (wallet.localhost). ' +
+        'Do not use DevNet (162.250.191.46). Re-run tunnel-testnet.ps1 with correct Docker IPs, then create a new wallet.',
+    );
+  }
 
   @Get('wallet-access')
   @SkipThrottle()
@@ -132,6 +159,10 @@ export class PartyController {
     const partyOwner = await this.users.findByPartyId(cantonPartyId);
     if (partyOwner && partyOwner.id !== req.user.userId) {
       throw new ConflictException('Party ID Already Taken');
+    }
+
+    if (!isPlaceholder) {
+      this.assertPartyOnValidatorParticipant(cantonPartyId);
     }
 
     try {
@@ -372,6 +403,7 @@ export class PartyController {
       throw new ConflictException('Party ID Already Taken');
     }
     if (splicePartyId) {
+      this.assertPartyOnValidatorParticipant(splicePartyId);
       const partyOwner = await this.users.findByPartyId(splicePartyId);
       if (partyOwner && partyOwner.id !== req.user.userId) {
         throw new ConflictException('Party ID Already Taken');
@@ -399,8 +431,9 @@ export class PartyController {
       };
     }
 
-    // Fallback: Canton JSON API only.
+    // Fallback: Canton JSON API only (often wrong participant if 7575 tunnel ≠ Splice stack).
     const cantonPartyId = await this.ledger.allocateParty(username);
+    this.assertPartyOnValidatorParticipant(cantonPartyId);
     await this.users.setPartyId(req.user.userId, cantonPartyId, user.username ?? undefined);
     const storedPartyId = normalizeCantonPartyId(cantonPartyId) ?? cantonPartyId;
     if (needsInviteFlow) {
@@ -432,6 +465,7 @@ export class PartyController {
   @Post('canton-binding')
   async bindCantonParty(@Req() req: AuthedReq, @Body() body: CantonPartyBindingDto) {
     const cantonPartyId = body.cantonPartyId.trim();
+    this.assertPartyOnValidatorParticipant(cantonPartyId);
     await this.users.setPartyId(req.user.userId, cantonPartyId);
     return {
       cantonPartyId,

@@ -48,3 +48,23 @@ export function spliceWalletUsernameFromParty(
   if (sep <= 0) return null;
   return normalized.slice(0, sep);
 }
+
+/** Participant fingerprint — part after `::` (same for all parties on one node). */
+export function participantSuffixFromParty(
+  partyId: string | null | undefined,
+): string | null {
+  const normalized = normalizeCantonPartyId(partyId);
+  if (!normalized) return null;
+  const sep = normalized.indexOf('::');
+  if (sep < 0) return null;
+  return normalized.slice(sep + 2);
+}
+
+export function participantSuffixesMatch(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): boolean {
+  const sa = participantSuffixFromParty(a);
+  const sb = participantSuffixFromParty(b);
+  return !!sa && !!sb && sa === sb;
+}

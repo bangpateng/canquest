@@ -12,7 +12,7 @@
 | Role | Host | Notes |
 |------|------|--------|
 | **VPS 2 — app** | `62.171.185.56` | Nest `:3001`, PM2 `canquest-api`, `canton-tunnel.service` |
-| **VPS 1 — validator** | `162.250.190.204` | Docker: participant `172.18.0.6:7575`, nginx `172.18.0.7:80` |
+| **VPS 1 — validator** | `162.250.190.204` | Docker: participant `172.18.0.5:7575`, nginx `172.18.0.7:80` |
 
 `canton-tunnel` runs **only on VPS 2**, not on VPS 1.
 
@@ -64,7 +64,7 @@ pm2 logs canquest-api --lines 40 --nostream
 On **VPS 1** (validator only):
 
 ```bash
-curl -sf http://172.18.0.6:7575/livez && echo " participant OK"
+curl -sf http://172.18.0.5:7575/livez && echo " participant OK"
 curl -sf -o /dev/null -w "nginx %{http_code}\n" http://172.18.0.7:80/
 ```
 
@@ -75,7 +75,7 @@ docker inspect -f '{{.Name}} {{range .NetworkSettings.Networks}}{{.IPAddress}}{{
   $(docker ps -q) | grep -E 'participant|nginx'
 ```
 
-Expected TestNet (May 2026): participant `172.18.0.6`, nginx `172.18.0.7`.
+Expected TestNet (May 2026): participant `172.18.0.5`, nginx `172.18.0.7` — always re-run `docker inspect` after compose restart.
 
 ---
 
@@ -140,7 +140,7 @@ pm2 save
 ## `canton-tunnel.service` (VPS 2 only)
 
 - Unit path: `/etc/systemd/system/canton-tunnel.service`
-- Forwards: `127.0.0.1:7575` → `172.18.0.6:7575`, `127.0.0.1:8080` → `172.18.0.7:80` on VPS 1
+- Forwards: `127.0.0.1:7575` → `172.18.0.5:7575`, `127.0.0.1:8080` → `172.18.0.7:80` on VPS 1 (TestNet)
 - Should include: `ServerAliveInterval=30`, `Restart=always`
 - Restart only when needed; each restart = few seconds ledger unavailable on VPS 2
 

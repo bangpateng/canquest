@@ -9,7 +9,7 @@ Validator TestNet IP: **`162.250.190.204`**
 
 | Container | IP |
 |-----------|-----|
-| `splice-validator-participant-1` | `172.18.0.6` |
+| `splice-validator-participant-1` | `172.18.0.5` (run `docker inspect` — may differ) |
 | `splice-validator-nginx-1` | `172.18.0.7` |
 
 Auth: `hs-256-unsafe`, `secret = "unsafe"` (typical TestNet compose).
@@ -75,13 +75,13 @@ Catat:
 Ganti `PARTICIPANT_IP` dan `NGINX_IP` dari langkah 1:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\tunnel-testnet.ps1 -ParticipantIp 172.18.0.6 -NginxIp 172.18.0.7
+powershell -ExecutionPolicy Bypass -File scripts\tunnel-testnet.ps1 -ParticipantIp 172.18.0.5 -NginxIp 172.18.0.7
 ```
 
 Setara manual:
 
 ```powershell
-ssh -N -L 7575:172.18.0.6:7575 -L 8080:172.18.0.7:80 root@162.250.190.204
+ssh -N -L 7575:172.18.0.5:7575 -L 8080:172.18.0.7:80 root@162.250.190.204
 ```
 
 Verifikasi (terminal lain):
@@ -173,6 +173,7 @@ Di VPS yang menjalankan CanQuest API, tunnel ke `162.250.190.204` (bukan IP publ
 | Validator 404 / HTML | Tambah `CANTON_VALIDATOR_HOST_HEADER=wallet.localhost` |
 | Wallet placeholder `canquest:user:...` | Splice tidak reachable |
 | Transfer gagal | Saldo CC TestNet, preapproval, tunnel 8080 |
+| User party `::12200dd7…` bukan `::1220cc5c…` | Tunnel **7575** ke participant **salah** (DevNet / container lain). Jalankan `node apps/api/scripts/diagnose-participant-suffix.cjs` — suffix user harus sama dengan `CANTON_VALIDATOR_PARTY_ID` |
 
 ---
 
