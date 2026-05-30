@@ -73,11 +73,10 @@ export class FeaturedAppActivityService {
    * Requires CANTON_APP_PROVIDER_PARTY_ID to be set in addition to the
    * standard Canton JSON API settings.
    */
-  /** App-reward layer (quest/task markers). Off during Web2 quest focus — wallet still uses Splice. */
+  /** App-reward layer (quest/task markers). Off by default — enable only on featured-app MainNet. */
   get isEnabled(): boolean {
     const flag = this.config.get<string>('FEATURED_APP_MARKERS_ENABLED');
-    if (flag === 'false' || flag === '0') return false;
-    return true;
+    return flag === 'true' || flag === '1';
   }
 
   get isConfigured(): boolean {

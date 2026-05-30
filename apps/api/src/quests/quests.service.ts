@@ -927,6 +927,10 @@ export class QuestsService {
         this.logger.warn(
           `Task ledger: quest=${questId} task=${taskId} ${taskLedger.errors.join(' | ')}`,
         );
+      } else if (taskLedger.taskSubmissionContractId) {
+        this.logger.log(
+          `Task ledger OK: quest=${questId} task=${taskId} submission=${taskLedger.taskSubmissionContractId.slice(0, 24)}…`,
+        );
       }
     }
 
