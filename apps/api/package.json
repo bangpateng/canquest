@@ -28,6 +28,7 @@
     "demo:e2e": "node scripts/e2e-reward-demos.cjs --admin-draw",
     "demo:dedupe-txs": "node scripts/dedupe-quest-wallet-txs.cjs",
     "canton:get-validator-party": "node scripts/get-validator-party-id.cjs",
+    "quest:operator": "node scripts/ensure-quest-operator.cjs canquest-operator",
     "daml:build": "docker run --rm -v \"../../packages/daml:/project\" -w /project digitalasset/daml-sdk:3.3.0-snapshot.20250930.0 bash -lc \"/home/daml/.daml/bin/daml build\"",
     "daml:inspect": "docker run --rm -v \"../../packages/daml:/project\" -w /project digitalasset/daml-sdk:3.3.0-snapshot.20250930.0 bash -lc \"/home/daml/.daml/bin/daml damlc inspect-dar .daml/dist/canquest-v2-0.1.0.dar\"",
     "daml:upload": "node scripts/upload-daml-dar.cjs"

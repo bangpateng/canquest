@@ -331,9 +331,11 @@ export class CantonLedgerService {
       method: 'POST',
       headers: this.authHeaders(),
       body: JSON.stringify({
+        identityProviderId: '',
+        userId: this.ledgerApiUser,
         rights: [
-          { CanActAs: { party: partyId } },
-          { CanReadAs: { party: partyId } },
+          { kind: { CanActAs: { value: { party: partyId } } } },
+          { kind: { CanReadAs: { value: { party: partyId } } } },
         ],
       }),
       signal: AbortSignal.timeout(10_000),
@@ -437,8 +439,10 @@ export class CantonLedgerService {
           {
             identifierFilter: {
               TemplateFilter: {
-                templateId,
-                includeCreatedEventBlob: true,
+                value: {
+                  templateId,
+                  includeCreatedEventBlob: true,
+                },
               },
             },
           },

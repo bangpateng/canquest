@@ -80,9 +80,20 @@ node scripts/upload-daml-dar.cjs
 
 ```env
 CANTON_DAML_PACKAGE_ID=<main package id dari inspect-dar>
-CANTON_OPERATOR_PARTY_ID=<sama dengan CANTON_VALIDATOR_PARTY_ID>
+# Treasury / fees (validator wallet):
+CANTON_VALIDATOR_PARTY_ID=naxweb-validator-1::1220cc5c…
+# DAML signatory (terpisah — buat via Splice user canquest-operator):
+CANTON_OPERATOR_PARTY_ID=canquest-operator::1220cc5c…
 QUEST_LEDGER_ENABLED=true
 CLAIM_SESSION_LEDGER_ENABLED=true
+```
+
+Buat operator terpisah (tunnel 7575+8080 harus hidup):
+
+```bash
+cd apps/api
+npm run quest:operator
+# salin CANTON_OPERATOR_PARTY_ID ke .env
 ```
 
 Restart API: `npm run start:dev` (dev) atau `pm2 restart canquest-api` (production VPS).
