@@ -241,11 +241,29 @@ export class PartyController {
       );
     }
 
-    const walletUsername =
+    const preferredUsername =
       spliceWalletUsernameFromParty(user.cantonPartyId) ??
       normalizeWalletUsername(user.username);
-    if (!walletUsername) {
+    if (!preferredUsername) {
       throw new BadRequestException('Could not resolve Splice wallet username for this party.');
+    }
+
+    let walletUsername =
+      (await this.splice.resolveWalletUsernameForParty(user.cantonPartyId)) ??
+      preferredUsername;
+
+    if (!(await this.splice.canAccessWalletAs(walletUsername))) {
+      const onboard = await this.splice.ensureSpliceWalletUser(
+        preferredUsername,
+        user.cantonPartyId,
+      );
+      if (!onboard.ok) {
+        this.logger.warn(
+          `ensurePreapproval onboard failed user=${user.id.slice(0, 8)} @${preferredUsername}: ${onboard.detail ?? ''}`,
+        );
+        throw new BadRequestException(onboard.detail ?? 'Wallet not registered in Splice.');
+      }
+      walletUsername = onboard.username ?? preferredUsername;
     }
 
     const existing = await this.splice.hasTransferPreapproval(user.cantonPartyId);

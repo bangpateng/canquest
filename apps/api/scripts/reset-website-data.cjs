@@ -19,6 +19,7 @@ const doQuests = process.argv.includes('--quests');
 const doWallet = process.argv.includes('--wallet-history');
 const doDemos = process.argv.includes('--demos');
 const doUsers = process.argv.includes('--users');
+const doUsersAll = process.argv.includes('--users-all');
 
 function protectedEmails() {
   const raw = process.env.ADMIN_EMAILS ?? '';
@@ -84,6 +85,22 @@ async function deleteDemoQuests() {
   return { questsDeleted: r.count, titles: demos.map((q) => q.title) };
 }
 
+async function resetWalletInvitesAndAllocations() {
+  const invites = await prisma.walletInviteCode.updateMany({
+    data: {
+      redeemedAt: null,
+      redeemedById: null,
+      reservedAt: null,
+      reservedById: null,
+    },
+  });
+  const allocs = await prisma.walletAllocationLog.deleteMany({});
+  return {
+    walletInvitesReset: invites.count,
+    walletAllocationLogsDeleted: allocs.count,
+  };
+}
+
 async function deleteNonAdminUsers() {
   const guard = protectedEmails();
   const users = await prisma.user.findMany({
@@ -93,12 +110,21 @@ async function deleteNonAdminUsers() {
     .filter((u) => !u.isAdmin && !guard.has(u.email.toLowerCase()))
     .map((u) => u.id);
   if (ids.length === 0) return { usersDeleted: 0 };
+  await prisma.referralReward.deleteMany({ where: { OR: [{ referrerId: { in: ids } }, { referredUserId: { in: ids } }] } });
   const r = await prisma.user.deleteMany({ where: { id: { in: ids } } });
   return { usersDeleted: r.count };
 }
 
+async function deleteAllUsers() {
+  const n = await prisma.user.count();
+  if (n === 0) return { usersDeleted: 0 };
+  await prisma.referralReward.deleteMany({});
+  const r = await prisma.user.deleteMany({});
+  return { usersDeleted: r.count };
+}
+
 async function main() {
-  if (!doQuests && !doWallet && !doDemos && !doUsers) {
+  if (!doQuests && !doWallet && !doDemos && !doUsers && !doUsersAll) {
     console.log(`
 CanQuest data reset — pick at least one flag:
 
@@ -106,10 +132,13 @@ CanQuest data reset — pick at least one flag:
   --wallet-history   CcTransaction + CcBalance rows (Canton wallet parties unchanged; inbound sync refills balance)
   --demos            Delete quests whose title/org looks like demo/test
   --users            Delete all users except admin (ADMIN_EMAILS / isAdmin)
+  --users-all        Delete EVERY user row (including admin) — full re-register
+
+With --users or --users-all, wallet invite reservations and allocation logs are also cleared.
 
 Examples:
-  node scripts/reset-website-data.cjs --dry-run --quests --wallet-history
-  node scripts/reset-website-data.cjs --apply --quests --wallet-history
+  node scripts/reset-website-data.cjs --dry-run --quests --wallet-history --users-all
+  node scripts/reset-website-data.cjs --apply --quests --wallet-history --users-all
 `);
     process.exit(0);
   }
@@ -145,7 +174,17 @@ Examples:
     console.log(results.demos);
   }
 
-  if (doUsers) {
+  if (doUsers || doUsersAll) {
+    console.log('\n→ Reset wallet invites + daily allocation logs…');
+    results.walletInvites = await resetWalletInvitesAndAllocations();
+    console.log(results.walletInvites);
+  }
+
+  if (doUsersAll) {
+    console.log('\n→ Delete ALL users (including admin)…');
+    results.users = await deleteAllUsers();
+    console.log(results.users);
+  } else if (doUsers) {
     console.log('\n→ Delete non-admin users…');
     results.users = await deleteNonAdminUsers();
     console.log(results.users);

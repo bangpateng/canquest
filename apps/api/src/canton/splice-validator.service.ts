@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as jwt from 'jsonwebtoken';
 import { randomUUID } from 'crypto';
-import { cantonPartyIdsEqual, normalizeCantonPartyId } from '../common/canton-party-id';
+import { cantonPartyIdsEqual, normalizeCantonPartyId, spliceWalletUsernameFromParty } from '../common/canton-party-id';
 
 /**
  * Client for the Splice Validator App REST API.
@@ -87,9 +87,13 @@ export class SpliceValidatorService {
 
   /** JWT token for admin operations — signed with the Splice hs-256-unsafe shared secret. */
   private adminToken(subject = 'ledger-api-user'): string {
-    if (!this.secret) throw new Error('CANTON_SPLICE_SECRET is not set');
     const audience =
       this.config.get<string>('CANTON_SPLICE_AUDIENCE') ?? 'https://validator.example.com';
+    return this.signToken(subject, audience);
+  }
+
+  private signToken(subject: string, audience: string): string {
+    if (!this.secret) throw new Error('CANTON_SPLICE_SECRET is not set');
     return jwt.sign(
       { sub: subject, aud: audience },
       this.secret,
@@ -97,19 +101,174 @@ export class SpliceValidatorService {
     );
   }
 
-  /** Auth headers (Authorization + optional Host override). */
-  private authHeaders(subject?: string): Record<string, string> {
-    return this.baseHeaders({
-      Authorization: `Bearer ${this.adminToken(subject)}`,
-    });
+  /** Audiences to try for per-user wallet JWT (403 often means wrong aud or user not onboarded). */
+  private walletAudiences(): string[] {
+    return [
+      ...new Set(
+        [
+          this.config.get<string>('CANTON_SPLICE_WALLET_AUDIENCE'),
+          this.config.get<string>('CANTON_SPLICE_AUDIENCE'),
+          'https://validator.example.com',
+          'https://canton.network.global',
+        ].filter(Boolean),
+      ),
+    ] as string[];
   }
 
-  /** Auth + Content-Type headers. */
+  private authHeadersForToken(token: string, json = false): Record<string, string> {
+    const extra: Record<string, string> = { Authorization: `Bearer ${token}` };
+    if (json) extra['Content-Type'] = 'application/json';
+    return this.baseHeaders(extra);
+  }
+
+  /** Auth headers (Authorization + optional Host override). */
+  private authHeaders(subject?: string): Record<string, string> {
+    return this.authHeadersForToken(this.adminToken(subject ?? 'ledger-api-user'));
+  }
+
+  /** Auth + Content-Type headers (admin unless a wallet username is passed). */
   private jsonAuthHeaders(subject?: string): Record<string, string> {
-    return this.baseHeaders({
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${this.adminToken(subject)}`,
-    });
+    if (!subject) {
+      return this.authHeadersForToken(this.adminToken(), true);
+    }
+    const aud = this.walletAudiences()[0] ?? 'https://validator.example.com';
+    return this.authHeadersForToken(this.signToken(subject, aud), true);
+  }
+
+  /** True when wallet/user-status accepts JWT for this Splice username. */
+  async canAccessWalletAs(username: string): Promise<boolean> {
+    if (!this.isConfigured) return false;
+    for (const aud of this.walletAudiences()) {
+      try {
+        const res = await fetch(`${this.baseUrl}/api/validator/v0/wallet/user-status`, {
+          headers: this.authHeadersForToken(this.signToken(username, aud)),
+          signal: AbortSignal.timeout(8_000),
+        });
+        if (res.ok) return true;
+      } catch {
+        /* try next audience */
+      }
+    }
+    return false;
+  }
+
+  /** Usernames registered in Splice (GET /admin/users). */
+  async listSpliceUsernames(): Promise<string[]> {
+    if (!this.isConfigured) return [];
+    try {
+      const res = await fetch(`${this.baseUrl}/api/validator/v0/admin/users`, {
+        headers: this.authHeaders(),
+        signal: AbortSignal.timeout(8_000),
+      });
+      if (!res.ok) return [];
+      const data = (await res.json()) as { usernames?: string[] };
+      return data.usernames ?? [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Map a Canton party ID to the Splice wallet username that can act on-chain.
+   * Party hint (before ::) is not always the registered Splice name.
+   */
+  async resolveWalletUsernameForParty(partyId: string): Promise<string | null> {
+    const normalized = normalizeCantonPartyId(partyId);
+    if (!normalized) return null;
+
+    const hint = spliceWalletUsernameFromParty(partyId);
+    if (hint && (await this.canAccessWalletAs(hint))) {
+      const walletParty = await this.getWalletPartyId(hint);
+      if (!walletParty || cantonPartyIdsEqual(walletParty, normalized)) return hint;
+    }
+
+    for (const name of await this.listSpliceUsernames()) {
+      if (hint && name.toLowerCase() === hint.toLowerCase() && (await this.canAccessWalletAs(name))) {
+        return name;
+      }
+      const walletParty = await this.getWalletPartyId(name);
+      if (
+        walletParty &&
+        cantonPartyIdsEqual(walletParty, normalized) &&
+        (await this.canAccessWalletAs(name))
+      ) {
+        return name;
+      }
+      const adminParty = await this.getUserPartyId(name);
+      if (
+        adminParty &&
+        cantonPartyIdsEqual(adminParty, normalized) &&
+        (await this.canAccessWalletAs(name))
+      ) {
+        return name;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Ensure a username can call wallet APIs (onboard via Splice if missing).
+   * Does not change the user's stored party ID when Splice would allocate a new one.
+   */
+  async ensureSpliceWalletUser(
+    preferredUsername: string,
+    expectedPartyId?: string,
+  ): Promise<{ ok: boolean; username?: string; detail?: string }> {
+    const normalized = expectedPartyId
+      ? normalizeCantonPartyId(expectedPartyId)
+      : null;
+
+    const resolved = normalized
+      ? await this.resolveWalletUsernameForParty(expectedPartyId!)
+      : null;
+    if (resolved) return { ok: true, username: resolved };
+
+    if (await this.canAccessWalletAs(preferredUsername)) {
+      return { ok: true, username: preferredUsername };
+    }
+
+    const createdPartyId = await this.createWalletUser(preferredUsername);
+    if (createdPartyId) {
+      if (normalized && !cantonPartyIdsEqual(createdPartyId, normalized)) {
+        return {
+          ok: false,
+          detail:
+            `Splice registered @${preferredUsername} with a different party than your wallet. ` +
+            'Use Splice Wallet UI to create preapproval, or contact admin.',
+        };
+      }
+      if (await this.canAccessWalletAs(preferredUsername)) {
+        return { ok: true, username: preferredUsername };
+      }
+    }
+
+    const spliceUsers = await this.listSpliceUsernames();
+    const inList = spliceUsers.some(
+      (u) => u.toLowerCase() === preferredUsername.toLowerCase(),
+    );
+    const walletUi = this.walletUiUrl;
+
+    if (inList) {
+      return {
+        ok: false,
+        detail:
+          `@${preferredUsername} is listed in Splice but wallet API returns 403. ` +
+          (walletUi
+            ? `Open ${walletUi}, log in as @${preferredUsername}, and create preapproval there.`
+            : 'Create preapproval via Splice Wallet UI.'),
+      };
+    }
+
+    return {
+      ok: false,
+      detail:
+        `Wallet @${preferredUsername} is not registered in Splice (Canton-only party). ` +
+        'Your wallet was likely created while Splice was offline. ' +
+        (walletUi
+          ? `Open ${walletUi} to onboard, or delete and recreate the wallet when the Splice tunnel is active.`
+          : 'Recreate the wallet when the Splice tunnel is active.'),
+    };
   }
 
   /**
@@ -150,6 +309,13 @@ export class SpliceValidatorService {
     const text = await res.text();
 
     if (res.status === 409) {
+      const existingParty = await this.getUserPartyId(username);
+      if (existingParty) {
+        this.logger.warn(
+          `Splice wallet username already exists: ${username} → ${existingParty}`,
+        );
+        return existingParty;
+      }
       this.logger.warn(`Splice wallet username already taken: ${username}`);
       return null;
     }
@@ -373,17 +539,23 @@ export class SpliceValidatorService {
    */
   async getWalletPartyId(username: string): Promise<string | null> {
     if (!this.isConfigured) return null;
-    try {
-      const res = await fetch(`${this.baseUrl}/api/validator/v0/wallet/user-status`, {
-        headers: this.authHeaders(username),
-        signal: AbortSignal.timeout(8_000),
-      });
-      if (!res.ok) return null;
-      const data = (await res.json()) as { party_id?: string };
-      return data.party_id?.trim() || null;
-    } catch {
-      return null;
+    for (const aud of this.walletAudiences()) {
+      try {
+        const res = await fetch(`${this.baseUrl}/api/validator/v0/wallet/user-status`, {
+          headers: this.authHeadersForToken(this.signToken(username, aud)),
+          signal: AbortSignal.timeout(8_000),
+        });
+        if (!res.ok) {
+          if (res.status === 401 || res.status === 403) continue;
+          return null;
+        }
+        const data = (await res.json()) as { party_id?: string };
+        return data.party_id?.trim() || null;
+      } catch {
+        /* try next audience */
+      }
     }
+    return null;
   }
 
   /**
@@ -715,17 +887,23 @@ export class SpliceValidatorService {
    */
     async getUserBalance(username: string): Promise<number | null> {
     if (!this.isConfigured) return null;
-    try {
-      const res = await fetch(`${this.baseUrl}/api/validator/v0/wallet/balance`, {
-        headers: this.authHeaders(username),
-        signal: AbortSignal.timeout(8_000),
-      });
-      if (!res.ok) return null;
-      const data = (await res.json()) as { effective_unlocked_qty?: string };
-      return data.effective_unlocked_qty ? parseFloat(data.effective_unlocked_qty) : 0;
-    } catch {
-      return null;
+    for (const aud of this.walletAudiences()) {
+      try {
+        const res = await fetch(`${this.baseUrl}/api/validator/v0/wallet/balance`, {
+          headers: this.authHeadersForToken(this.signToken(username, aud)),
+          signal: AbortSignal.timeout(8_000),
+        });
+        if (!res.ok) {
+          if (res.status === 401 || res.status === 403) continue;
+          return null;
+        }
+        const data = (await res.json()) as { effective_unlocked_qty?: string };
+        return data.effective_unlocked_qty ? parseFloat(data.effective_unlocked_qty) : 0;
+      } catch {
+        /* try next audience */
+      }
     }
+    return null;
   }
 
   /**
@@ -779,29 +957,34 @@ export class SpliceValidatorService {
     try {
       let lastStatus = 0;
       let lastText = '';
-      for (const path of paths) {
-        const res = await fetch(`${this.baseUrl}${path}`, {
-          method: 'POST',
-          headers: this.jsonAuthHeaders(username),
-          body: '{}',
-          signal: AbortSignal.timeout(15_000),
-        });
-        const text = await res.text();
-        lastStatus = res.status;
-        lastText = text;
+      for (const aud of this.walletAudiences()) {
+        for (const path of paths) {
+          const res = await fetch(`${this.baseUrl}${path}`, {
+            method: 'POST',
+            headers: this.authHeadersForToken(this.signToken(username, aud), true),
+            body: '{}',
+            signal: AbortSignal.timeout(15_000),
+          });
+          const text = await res.text();
+          lastStatus = res.status;
+          lastText = text;
 
-        if (res.ok) {
-          this.logger.log(`TransferPreapproval created for @${username} (CIP-56) via ${path}`);
-          return { ok: true, status: res.status };
+          if (res.ok) {
+            this.logger.log(
+              `TransferPreapproval created for @${username} (CIP-56) via ${path} aud=${aud}`,
+            );
+            return { ok: true, status: res.status };
+          }
+
+          if (res.status === 409) {
+            this.logger.log(`TransferPreapproval already active for @${username}`);
+            return { ok: true, status: 409 };
+          }
+
+          if (res.status === 401 || res.status === 403) continue;
+          if (res.status !== 404) break;
         }
-
-        // 409 = already exists — that's fine, user is already CIP-56 compliant
-        if (res.status === 409) {
-          this.logger.log(`TransferPreapproval already active for @${username}`);
-          return { ok: true, status: 409 };
-        }
-
-        if (res.status !== 404) break;
+        if (lastStatus !== 404 && lastStatus !== 401 && lastStatus !== 403) break;
       }
 
       let detail = lastText.slice(0, 300);
@@ -809,8 +992,11 @@ export class SpliceValidatorService {
         detail =
           'Endpoint preapproval tidak ditemukan di validator (versi Splice?). Buat lewat Splice Wallet UI.';
       } else if (lastStatus === 401 || lastStatus === 403) {
-        detail =
-          'Auth Splice gagal — wallet JWT sub must match Splice username (party hint before ::).';
+        const spliceUsers = await this.listSpliceUsernames();
+        const listed = spliceUsers.some((u) => u.toLowerCase() === username.toLowerCase());
+        detail = listed
+          ? `@${username} ada di Splice tapi wallet API menolak (403). Buat preapproval lewat Splice Wallet UI.`
+          : `@${username} belum terdaftar di Splice Wallet (Party ID hanya di Canton ledger). Buat ulang wallet saat tunnel Splice aktif.`;
       }
       this.logger.warn(
         `createTransferPreapproval ${lastStatus} for @${username}: ${lastText.slice(0, 200)}`,
