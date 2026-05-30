@@ -84,13 +84,14 @@ async function main() {
   const pkgFromDar = idMatch ? idMatch[1] : null;
 
   console.log('Add to apps/api/.env:');
+  console.log('CANTON_DAML_PACKAGE_NAME=canquest-v2');
   if (pkgFromDar) {
     console.log('CANTON_DAML_PACKAGE_ID=' + pkgFromDar);
   } else {
     console.log('CANTON_DAML_PACKAGE_ID=<run: npm run daml:inspect>');
   }
-  console.log('CANTON_OPERATOR_PARTY_ID=' + (process.env.CANTON_VALIDATOR_PARTY_ID || '<operator-party>'));
-  console.log('Then restart: npm run start:dev');
+  console.log('CANTON_OPERATOR_PARTY_ID=<run: npm run quest:operator>');
+  console.log('Then: node scripts/verify-daml-package.cjs && pm2 restart canquest-api');
 }
 
 main().catch((e) => {

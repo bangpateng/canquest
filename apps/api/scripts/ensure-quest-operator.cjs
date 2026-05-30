@@ -40,9 +40,10 @@ const secret = process.env.CANTON_SPLICE_SECRET || 'unsafe';
 const spliceAud = process.env.CANTON_SPLICE_AUDIENCE || 'https://validator.example.com';
 const ledgerAud = process.env.CANTON_LEDGER_API_AUDIENCE || 'https://canton.network.global';
 const ledgerUser = process.env.CANTON_LEDGER_API_USER || 'ledger-api-user';
-const pkg = process.env.CANTON_DAML_PACKAGE_ID?.trim();
+const pkgName = process.env.CANTON_DAML_PACKAGE_NAME?.trim() || 'canquest-v2';
+const pkgRef = pkgName.startsWith('#') ? pkgName : `#${pkgName}`;
 const validatorAnchor = process.env.CANTON_VALIDATOR_PARTY_ID?.trim();
-const TASK_TPL = 'CanQuest.Quest.Task:QuestTaskSubmission';
+const TASK_TPL = `${pkgRef}:CanQuest.Quest.Task:QuestTaskSubmission`;
 
 function partySuffix(partyId) {
   const i = partyId?.indexOf('::');
@@ -137,11 +138,7 @@ async function grantUserRights(partyId) {
 }
 
 async function probeSubmit(partyId) {
-  if (!pkg) {
-    console.log('Skip ledger probe — CANTON_DAML_PACKAGE_ID not set');
-    return false;
-  }
-  const templateId = `${pkg}:${TASK_TPL}`;
+  const templateId = TASK_TPL;
   const res = await fetch(`${ledgerBase}/v2/commands/submit-and-wait`, {
     method: 'POST',
     headers: ledgerHeaders(),

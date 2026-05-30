@@ -42,41 +42,53 @@ export interface ClaimSessionLedgerResult {
 @Injectable()
 export class QuestLedgerService {
   private readonly logger = new Logger(QuestLedgerService.name);
+  private operatorFallbackWarned = false;
 
   constructor(
     private readonly ledger: CantonLedgerService,
     private readonly config: ConfigService,
   ) {}
 
-  private get packageId(): string | null {
-    const id = this.config.get<string>('CANTON_DAML_PACKAGE_ID')?.trim();
-    return id || null;
+  /**
+   * Package-name template ref for Canton 3.x (e.g. #canquest-v2:CanQuest.Quest.Task:QuestTaskSubmission).
+   * Hash package-id refs often fail ACS TemplateFilter with INVALID_FIELD on JSON API v2.
+   */
+  private get damlPackageRef(): string | null {
+    const name = this.config.get<string>('CANTON_DAML_PACKAGE_NAME')?.trim();
+    if (name) return name.startsWith('#') ? name : `#${name}`;
+    return '#canquest-v2';
   }
 
   private get operatorPartyId(): string | null {
-    const id =
-      this.config.get<string>('CANTON_OPERATOR_PARTY_ID')?.trim() ||
-      this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
-    return id || null;
+    const dedicated = this.config.get<string>('CANTON_OPERATOR_PARTY_ID')?.trim();
+    if (dedicated) return dedicated;
+    const validator = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
+    if (validator && !this.operatorFallbackWarned) {
+      this.operatorFallbackWarned = true;
+      this.logger.warn(
+        'CANTON_OPERATOR_PARTY_ID unset — DAML uses CANTON_VALIDATOR_PARTY_ID. Run: npm run quest:operator',
+      );
+    }
+    return validator || null;
   }
 
   private templateId(suffix: (typeof TPL)[keyof typeof TPL]): string | null {
-    const pkg = this.packageId;
-    return pkg ? `${pkg}:${suffix}` : null;
+    const ref = this.damlPackageRef;
+    return ref ? `${ref}:${suffix}` : null;
   }
 
   /** When false, quest ledger writes are skipped (wallet / Splice CC still works). */
   isConfigured(): boolean {
     const enabled = this.config.get<string>('QUEST_LEDGER_ENABLED');
     if (enabled === 'false' || enabled === '0') return false;
-    return !!(this.packageId && this.operatorPartyId);
+    return !!(this.damlPackageRef && this.operatorPartyId);
   }
 
   /** When false, claim audit skips ClaimSession DAML contract. */
   isClaimSessionConfigured(): boolean {
     const enabled = this.config.get<string>('CLAIM_SESSION_LEDGER_ENABLED');
     if (enabled === 'false' || enabled === '0') return false;
-    return !!(this.packageId && this.operatorPartyId);
+    return !!(this.damlPackageRef && this.operatorPartyId);
   }
 
   private async ensureReachable(): Promise<string | null> {
