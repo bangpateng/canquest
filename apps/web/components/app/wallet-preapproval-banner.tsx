@@ -60,6 +60,14 @@ export function WalletPreapprovalBanner({ onActivated }: WalletPreapprovalBanner
         setError(formatApiError(raw));
         return;
       }
+      if (raw && raw.active === true) {
+        setStatus((prev) => ({
+          ...prev,
+          hasWallet: true,
+          isPlaceholder: false,
+          preapproval: { active: true, message: String(raw.message ?? '') },
+        }));
+      }
       await load();
       onActivated?.();
     } finally {

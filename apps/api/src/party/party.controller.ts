@@ -27,6 +27,7 @@ import {
   looksLikeCantonPartyId,
   normalizeCantonPartyId,
   normalizeWalletUsername,
+  spliceWalletUsernameFromParty,
 } from '../common/canton-party-id';
 import { hasRealWallet } from '../common/wallet-policy';
 import { UsersService } from '../users/users.service';
@@ -231,7 +232,7 @@ export class PartyController {
   @Post('ensure-preapproval')
   async ensurePreapproval(@Req() req: AuthedReq) {
     const user = await this.users.findById(req.user.userId);
-    if (!user?.username || !user.cantonPartyId) {
+    if (!user?.cantonPartyId) {
       throw new BadRequestException('Create your wallet first from the Wallet page.');
     }
     if (user.cantonPartyId.startsWith('canquest:')) {
@@ -240,23 +241,33 @@ export class PartyController {
       );
     }
 
+    const walletUsername =
+      spliceWalletUsernameFromParty(user.cantonPartyId) ??
+      normalizeWalletUsername(user.username);
+    if (!walletUsername) {
+      throw new BadRequestException('Could not resolve Splice wallet username for this party.');
+    }
+
     const existing = await this.splice.hasTransferPreapproval(user.cantonPartyId);
     if (existing) {
       return {
         active: true,
         partyId: user.cantonPartyId,
-        username: user.username,
+        username: walletUsername,
         message: 'TransferPreapproval is already active (CIP-56).',
       };
     }
 
-    const created = await this.splice.createTransferPreapproval(user.username);
+    const created = await this.splice.createTransferPreapproval(walletUsername);
     if (!created.ok) {
-      const balance = await this.splice.getUserBalance(user.username);
+      const chainBalance = await this.splice.getUserBalance(walletUsername);
       const hint =
-        balance === null || balance <= 0
-          ? ' You need a minimum CC balance for the preapproval fee (~$1/year). Fund your wallet from the validator wallet UI first.'
-          : '';
+        chainBalance === null || chainBalance <= 0
+          ? ` On-chain balance for @${walletUsername} is ${chainBalance ?? 0} CC — need funds for the preapproval fee (~$1/year). UI balance may be a DB snapshot.`
+          : ` On-chain balance: ${chainBalance} CC (@${walletUsername}).`;
+      this.logger.warn(
+        `ensurePreapproval failed user=${user.id.slice(0, 8)} wallet=@${walletUsername} status=${created.status ?? '?'} ${created.detail ?? ''}`,
+      );
       throw new BadRequestException(
         (created.detail ?? 'Failed to create TransferPreapproval.') + hint,
       );
@@ -269,7 +280,7 @@ export class PartyController {
     return {
       active: true,
       partyId: user.cantonPartyId,
-      username: user.username,
+      username: walletUsername,
       message:
         'TransferPreapproval active — CC from the validator wallet can arrive directly (CIP-56).',
     };
@@ -347,7 +358,7 @@ export class PartyController {
       if (partyOwner && partyOwner.id !== req.user.userId) {
         throw new ConflictException('Party ID Already Taken');
       }
-      await this.users.setPartyId(req.user.userId, splicePartyId, user.username ?? undefined);
+      await this.users.setPartyId(req.user.userId, splicePartyId, username);
       const storedPartyId = normalizeCantonPartyId(splicePartyId) ?? splicePartyId;
       if (needsInviteFlow) {
         await this.walletInvites.redeemAfterWalletCreated(user.id, inviteCode);

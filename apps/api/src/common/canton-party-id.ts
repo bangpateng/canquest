@@ -34,3 +34,17 @@ export function normalizeWalletUsername(
   if (!username?.trim()) return null;
   return username.trim().replace(/^@/, '').toLowerCase();
 }
+
+/**
+ * Splice wallet JWT `sub` matches the party hint (prefix before `::`).
+ * Use this when DB username may differ from the name used at wallet onboarding.
+ */
+export function spliceWalletUsernameFromParty(
+  partyId: string | null | undefined,
+): string | null {
+  const normalized = normalizeCantonPartyId(partyId);
+  if (!normalized) return null;
+  const sep = normalized.indexOf('::');
+  if (sep <= 0) return null;
+  return normalized.slice(0, sep);
+}

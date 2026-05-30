@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as jwt from 'jsonwebtoken';
 import { randomUUID } from 'crypto';
-import { cantonPartyIdsEqual } from '../common/canton-party-id';
+import { cantonPartyIdsEqual, normalizeCantonPartyId } from '../common/canton-party-id';
 
 /**
  * Client for the Splice Validator App REST API.
@@ -215,8 +215,9 @@ export class SpliceValidatorService {
     partyId: string,
   ): Promise<{ expiresAt?: string; provider?: string } | null> {
     if (!this.isConfigured) return null;
+    const normalized = normalizeCantonPartyId(partyId) ?? partyId.trim();
     try {
-      const encoded = encodeURIComponent(partyId);
+      const encoded = encodeURIComponent(normalized);
             const res = await fetch(
         `${this.baseUrl}/api/validator/v0/admin/transfer-preapprovals/by-party/${encoded}`,
         {
@@ -771,39 +772,50 @@ export class SpliceValidatorService {
     if (!this.isConfigured) {
       return { ok: false, detail: 'CANTON_VALIDATOR_URL atau CANTON_SPLICE_SECRET belum di-set.' };
     }
+    const paths = [
+      '/api/validator/v0/wallet/transfer-preapproval',
+      '/api/validator/v0/wallet/transfer-preapprovals',
+    ];
     try {
-      const res = await fetch(
-        `${this.baseUrl}/api/validator/v0/wallet/transfer-preapproval`,
-        {
+      let lastStatus = 0;
+      let lastText = '';
+      for (const path of paths) {
+        const res = await fetch(`${this.baseUrl}${path}`, {
           method: 'POST',
           headers: this.jsonAuthHeaders(username),
           body: '{}',
           signal: AbortSignal.timeout(15_000),
-        },
-      );
-      const text = await res.text();
+        });
+        const text = await res.text();
+        lastStatus = res.status;
+        lastText = text;
 
-      if (res.ok) {
-        this.logger.log(`TransferPreapproval created for @${username} (CIP-56)`);
-        return { ok: true, status: res.status };
+        if (res.ok) {
+          this.logger.log(`TransferPreapproval created for @${username} (CIP-56) via ${path}`);
+          return { ok: true, status: res.status };
+        }
+
+        // 409 = already exists — that's fine, user is already CIP-56 compliant
+        if (res.status === 409) {
+          this.logger.log(`TransferPreapproval already active for @${username}`);
+          return { ok: true, status: 409 };
+        }
+
+        if (res.status !== 404) break;
       }
 
-      // 409 = already exists — that's fine, user is already CIP-56 compliant
-      if (res.status === 409) {
-        this.logger.log(`TransferPreapproval already active for @${username}`);
-        return { ok: true, status: 409 };
-      }
-
-      let detail = text.slice(0, 300);
-      if (res.status === 404) {
+      let detail = lastText.slice(0, 300);
+      if (lastStatus === 404) {
         detail =
           'Endpoint preapproval tidak ditemukan di validator (versi Splice?). Buat lewat Splice Wallet UI.';
-      } else if (res.status === 401 || res.status === 403) {
+      } else if (lastStatus === 401 || lastStatus === 403) {
         detail =
-          'Auth Splice gagal — untuk DevNet set CANTON_SPLICE_AUDIENCE=https://validator.example.com';
+          'Auth Splice gagal — wallet JWT sub must match Splice username (party hint before ::).';
       }
-      this.logger.warn(`createTransferPreapproval ${res.status} for @${username}: ${text.slice(0, 200)}`);
-      return { ok: false, status: res.status, detail };
+      this.logger.warn(
+        `createTransferPreapproval ${lastStatus} for @${username}: ${lastText.slice(0, 200)}`,
+      );
+      return { ok: false, status: lastStatus, detail };
     } catch (err) {
       const msg = String(err);
       this.logger.warn(`createTransferPreapproval error for @${username}: ${msg}`);
