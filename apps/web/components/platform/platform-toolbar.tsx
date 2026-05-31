@@ -5,8 +5,8 @@ import { Globe, Moon, Sun } from "lucide-react";
 import { useTheme } from "@/components/providers/theme-provider";
 import { usePlatformI18n } from "@/lib/i18n/platform-provider";
 import type { PlatformLocale } from "@/lib/i18n";
-import { iconButtonClass, toolbarMenuButtonClass } from "@/lib/ui-button-styles";
-import { cn } from "@/lib/utils";
+import { iconButtonClass, toolbarMenuButtonClass } from "@/lib/ui/ui-button-styles";
+import { cn } from "@/lib/utils/utils";
 import { TransactionNotifications } from "@/components/platform/transaction-notifications";
 
 export function PlatformToolbar() {

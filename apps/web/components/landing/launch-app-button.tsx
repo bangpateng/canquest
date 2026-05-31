@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import { useAuthModal } from "@/components/platform/auth-context";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/utils";
 
 type LaunchAppButtonProps = {
   size?: "sm" | "lg";

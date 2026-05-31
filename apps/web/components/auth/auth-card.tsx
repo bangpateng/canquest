@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { inputClass, surfaceCardClass } from "@/lib/ui-tokens";
-import { cn } from "@/lib/utils";
+import { inputClass, surfaceCardClass } from "@/lib/ui/ui-tokens";
+import { cn } from "@/lib/utils/utils";
 
 /** @deprecated Use inputClass from @/lib/ui-tokens or Input from @/components/ui/input */
 export const authInputClass = inputClass;

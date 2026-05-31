@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { jwtVerify } from 'jose';
 
 import { AdminLoginForm } from '@/components/admin/admin-login-form';
-import { CQ_ADMIN_ACCESS_COOKIE } from '@/lib/auth-cookies';
+import { CQ_ADMIN_ACCESS_COOKIE } from '@/lib/auth/auth-cookies';
 
 export default async function AdminLoginPage() {
   const jar = await cookies();

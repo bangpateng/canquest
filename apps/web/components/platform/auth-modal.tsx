@@ -7,12 +7,12 @@ import { useAuthModal, type AuthModalMode } from "@/components/platform/auth-con
 import { TurnstileField, useTurnstileRequired } from "@/components/platform/turnstile-field";
 import { buttonVariants } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
-import { formatApiError } from "@/lib/format-api-error";
+import { formatApiError } from "@/lib/api/format-api-error";
 import { login, register, verifyOtp } from "@/lib/services/api/auth";
-import { clearReferralRef, getReferralRef } from "@/lib/referral-ref";
-import { clearCachedWalletMe } from "@/lib/wallet-session-cache";
-import { inputClass } from "@/lib/ui-tokens";
-import { cn } from "@/lib/utils";
+import { clearReferralRef, getReferralRef } from "@/lib/routing/referral-ref";
+import { clearCachedWalletMe } from "@/lib/auth/wallet-session-cache";
+import { inputClass } from "@/lib/ui/ui-tokens";
+import { cn } from "@/lib/utils/utils";
 
 type PendingOtp = { userId: string; devOtp?: string };
 

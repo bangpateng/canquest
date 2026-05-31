@@ -8,7 +8,7 @@ import { PageLoading } from "@/components/ui/loading-spinner";
 import { buttonVariants } from "@/components/ui/button";
 import { useWalletAccess } from "@/lib/hooks/use-wallet-access";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/utils";
 
 export function WalletRequiredGate({ children }: { children: React.ReactNode }) {
   const { hasWallet, loading } = useWalletAccess();

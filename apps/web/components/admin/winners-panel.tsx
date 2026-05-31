@@ -5,8 +5,8 @@ import Link from "next/link";
 import { ChevronLeft, CheckCircle2, Clock, Send, Shuffle, Ticket, UserCheck, Plus, Trash2 } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { buttonVariants } from "@/components/ui/button";
-import { underlineTabClass } from "@/lib/ui-button-styles";
-import { cn } from "@/lib/utils";
+import { underlineTabClass } from "@/lib/ui/ui-button-styles";
+import { cn } from "@/lib/utils/utils";
 
 interface Participant {
   userId: string;

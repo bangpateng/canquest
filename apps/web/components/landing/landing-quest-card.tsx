@@ -9,12 +9,12 @@ import {
   Ticket,
   Trophy,
 } from "lucide-react";
-import { CampaignSocialLinks } from "@/components/app/campaign-social-links";
+import { CampaignSocialLinks } from "@/components/app/campaign/campaign-social-links";
 import { buttonVariants } from "@/components/ui/button";
-import { ROUTES } from "@/lib/app-routes";
-import { getLandingCampaignDisplay } from "@/lib/landing-campaign-display";
-import { QUEST_STATUS_BADGE, type Quest } from "@/lib/quest-types";
-import { cn } from "@/lib/utils";
+import { ROUTES } from "@/lib/routing/app-routes";
+import { getLandingCampaignDisplay } from "@/lib/marketing/landing-campaign-display";
+import { QUEST_STATUS_BADGE, type Quest } from "@/lib/quest/quest-types";
+import { cn } from "@/lib/utils/utils";
 
 export type LandingQuestCardVariant = "spotlight" | "cinematic";
 

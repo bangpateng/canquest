@@ -1,5 +1,5 @@
 import { SettingsAccountPanel } from "@/components/app/settings/settings-account-panel";
-import { SignOutButton } from "@/components/app/sign-out-button";
+import { SignOutButton } from "@/components/app/shell/sign-out-button";
 
 export default function SettingsPage() {
   return (

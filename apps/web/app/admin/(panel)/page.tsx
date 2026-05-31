@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { CQ_ADMIN_ACCESS_COOKIE } from "@/lib/auth-cookies";
-import { internalApiBase } from "@/lib/internal-api-url";
+import { CQ_ADMIN_ACCESS_COOKIE } from "@/lib/auth/auth-cookies";
+import { internalApiBase } from "@/lib/api/internal-api-url";
 import { Users, Scroll, Trophy, CheckCircle2, Sparkles, Gift, KeyRound } from "lucide-react";
 
 interface Stats {

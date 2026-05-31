@@ -1,4 +1,4 @@
-import { EarnCampaignsPage } from "@/components/app/earn-campaigns-page";
+import { EarnCampaignsPage } from "@/components/app/earn/earn-campaigns-page";
 import { PlatformPage } from "@/components/platform/platform-page";
 import { WalletRequiredGate } from "@/components/platform/wallet-required-gate";
 import { Suspense } from "react";

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Space_Grotesk } from "next/font/google";
-import { Providers } from "@/components/providers";
-import { ThemeInitScript } from "@/components/theme-init-script";
+import { Providers } from "@/components/providers/providers";
+import { ThemeInitScript } from "@/components/providers/theme-init-script";
 import "./globals.css";
 
 const inter = Inter({

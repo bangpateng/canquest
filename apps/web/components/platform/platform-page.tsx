@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/ui/typography";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/utils";
 
 /** Same content column width on every platform menu (Overview, Quest, Earn, …). */
 export const platformContentClass = "mx-auto w-full min-w-0";

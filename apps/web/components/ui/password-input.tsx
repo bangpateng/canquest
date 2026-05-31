@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { inputClass } from "@/lib/ui-tokens";
-import { cn } from "@/lib/utils";
+import { inputClass } from "@/lib/ui/ui-tokens";
+import { cn } from "@/lib/utils/utils";
 
 export function PasswordInput({
   id,

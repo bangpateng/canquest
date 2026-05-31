@@ -13,8 +13,8 @@ import Link from "next/link";
 import { DocsMobileNav, DocsSidebar } from "@/components/docs/docs-sidebar";
 import { LaunchAppButton } from "@/components/landing/launch-app-button";
 import { LandingShell } from "@/components/landing/landing-shell";
-import { ROUTES } from "@/lib/app-routes";
-import { cn } from "@/lib/utils";
+import { ROUTES } from "@/lib/routing/app-routes";
+import { cn } from "@/lib/utils/utils";
 
 type MenuItem = {
   icon: LucideIcon;

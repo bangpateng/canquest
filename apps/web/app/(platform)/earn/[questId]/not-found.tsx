@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import { Lead, PageTitle } from "@/components/ui/typography";
-import { ROUTES } from "@/lib/app-routes";
-import { cn } from "@/lib/utils";
+import { ROUTES } from "@/lib/routing/app-routes";
+import { cn } from "@/lib/utils/utils";
 
 export default function CampaignQuestNotFound() {
   return (

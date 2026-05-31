@@ -3,7 +3,7 @@
 import { LaunchAppButton } from "@/components/landing/launch-app-button";
 import { LandingShell } from "@/components/landing/landing-shell";
 import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/utils";
 
 const STEPS = ["Pick a campaign", "Complete tasks", "Receive CC & Waitlist Access"] as const;
 

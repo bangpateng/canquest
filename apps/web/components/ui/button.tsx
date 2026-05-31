@@ -1,6 +1,6 @@
 import { cva, type VariantProps } from "class-variance-authority";
 import { forwardRef } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/utils";
 
 /** Solid green CTA — matches “Copy invite link” and all primary actions site-wide. */
 export const solidPrimaryButtonClass =

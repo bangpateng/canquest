@@ -1,6 +1,6 @@
 import { forwardRef } from "react";
-import { inputClass } from "@/lib/ui-tokens";
-import { cn } from "@/lib/utils";
+import { inputClass } from "@/lib/ui/ui-tokens";
+import { cn } from "@/lib/utils/utils";
 
 export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {}
 

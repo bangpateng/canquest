@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { DOCS_NAV } from "@/components/docs/docs-nav";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/utils";
 
 function DocsNavItems({ className, onNavigate }: { className?: string; onNavigate?: () => void }) {
   return (

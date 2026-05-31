@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuthModal } from "@/components/platform/auth-context";
-import { storeReferralRef } from "@/lib/referral-ref";
+import { storeReferralRef } from "@/lib/routing/referral-ref";
 
 /** Opens auth modal when landing URL has ?auth=login|register&next=... */
 export function AuthModalOpener() {

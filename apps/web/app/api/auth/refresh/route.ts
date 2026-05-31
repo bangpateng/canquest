@@ -1,5 +1,5 @@
-import { CQ_REFRESH_COOKIE, okWithSessionCookiesOr502 } from '@/lib/auth-cookies';
-import { postJsonParse } from '@/lib/internal-api-url';
+import { CQ_REFRESH_COOKIE, okWithSessionCookiesOr502 } from '@/lib/auth/auth-cookies';
+import { postJsonParse } from '@/lib/api/internal-api-url';
 import { type NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {

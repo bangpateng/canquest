@@ -1,5 +1,5 @@
-import { CQ_ADMIN_ACCESS_COOKIE } from '@/lib/auth-cookies';
-import { internalApiBase } from '@/lib/internal-api-url';
+import { CQ_ADMIN_ACCESS_COOKIE } from '@/lib/auth/auth-cookies';
+import { internalApiBase } from '@/lib/api/internal-api-url';
 import { type NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';

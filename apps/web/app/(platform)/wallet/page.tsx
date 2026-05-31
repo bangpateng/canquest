@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { WalletSetup } from "@/components/app/wallet-setup";
-import { WalletDashboard } from "@/components/app/wallet-dashboard";
-import { WalletReconnect } from "@/components/app/wallet-reconnect";
+import { WalletSetup } from "@/components/app/wallet/wallet-setup";
+import { WalletDashboard } from "@/components/app/wallet/wallet-dashboard";
+import { WalletReconnect } from "@/components/app/wallet/wallet-reconnect";
 import { PlatformPage } from "@/components/platform/platform-page";
 import { getMe, getLedgerStatus, type LedgerStatus } from "@/lib/services/api";
 import {
@@ -12,7 +12,7 @@ import {
   isRealCantonPartyId,
   readCachedWalletMe,
   readLastWalletUserId,
-} from "@/lib/wallet-session-cache";
+} from "@/lib/auth/wallet-session-cache";
 import { AlertTriangle } from "lucide-react";
 import { PageLoading } from "@/components/ui/loading-spinner";
 import { usePlatformT } from "@/lib/i18n/platform-provider";

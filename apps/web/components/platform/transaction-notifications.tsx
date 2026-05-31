@@ -10,15 +10,15 @@ import {
   Ticket,
   X,
 } from "lucide-react";
-import { iconButtonClass } from "@/lib/ui-button-styles";
+import { iconButtonClass } from "@/lib/ui/ui-button-styles";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import {
   useTransactionNotifications,
   type NotificationItem,
   type NotificationTx,
 } from "@/lib/hooks/use-transaction-notifications";
-import { ROUTES } from "@/lib/app-routes";
-import { cn } from "@/lib/utils";
+import { ROUTES } from "@/lib/routing/app-routes";
+import { cn } from "@/lib/utils/utils";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 function timeAgo(

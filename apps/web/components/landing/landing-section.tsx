@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { LandingShell } from "@/components/landing/landing-shell";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/utils";
 
 type LandingSectionProps = {
   id?: string;

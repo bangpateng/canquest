@@ -1,5 +1,5 @@
 import { apiFetch } from './client';
-import type { Quest } from '@/lib/quest-types';
+import type { Quest } from '@/lib/quest/quest-types';
 
 export interface DashboardStats {
   totalPoints: number;

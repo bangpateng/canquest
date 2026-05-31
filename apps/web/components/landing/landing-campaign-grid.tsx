@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { Calendar, Coins, ListChecks } from "lucide-react";
-import { CampaignSocialLinks } from "@/components/app/campaign-social-links";
-import { ROUTES } from "@/lib/app-routes";
-import { getLandingCampaignDisplay } from "@/lib/landing-campaign-display";
-import { QUEST_STATUS_BADGE, type Quest } from "@/lib/quest-types";
+import { CampaignSocialLinks } from "@/components/app/campaign/campaign-social-links";
+import { ROUTES } from "@/lib/routing/app-routes";
+import { getLandingCampaignDisplay } from "@/lib/marketing/landing-campaign-display";
+import { QUEST_STATUS_BADGE, type Quest } from "@/lib/quest/quest-types";
 import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/utils";
 
 function CampaignMark({ quest }: { quest: Quest }) {
   if (quest.logoUrl) {

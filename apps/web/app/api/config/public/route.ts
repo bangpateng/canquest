@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getCcRewardLogoUrl } from '@/lib/cc-reward-logo';
+import { getCcRewardLogoUrl } from '@/lib/canton/cc-reward-logo';
 
 export const dynamic = 'force-dynamic';
 

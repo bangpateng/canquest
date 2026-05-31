@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { hasRealWallet } from "@/lib/wallet-access";
+import { hasRealWallet } from "@/lib/auth/wallet-access";
 
 type MeWallet = {
   cantonPartyId?: string | null;

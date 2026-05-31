@@ -1,4 +1,4 @@
-import { DashboardView } from "@/components/app/dashboard-view";
+import { DashboardView } from "@/components/app/dashboard/dashboard-view";
 import { PlatformPage } from "@/components/platform/platform-page";
 
 export default function OverviewPage() {

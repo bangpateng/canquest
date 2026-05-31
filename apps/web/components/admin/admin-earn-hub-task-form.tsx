@@ -5,9 +5,9 @@ import {
   earnHubTaskTypeLabel,
   EARN_HUB_TASK_TYPE_OPTIONS,
   isEarnHubQuizType,
-} from "@/lib/quest-types";
+} from "@/lib/quest/quest-types";
 import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/utils";
 
 
 export type EarnHubTaskDraft = {

@@ -3,7 +3,7 @@ import { FeaturedQuestCarouselDynamic } from "@/components/landing/featured-ques
 import { LandingSection } from "@/components/landing/landing-section";
 import { SectionHeader } from "@/components/landing/section-header";
 import { LaunchAppButton } from "@/components/landing/launch-app-button";
-import type { Quest } from "@/lib/quest-types";
+import type { Quest } from "@/lib/quest/quest-types";
 
 export function FeaturedCampaigns({ quests }: { quests: Quest[] }) {
   const live = quests.filter(

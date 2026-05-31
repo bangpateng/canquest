@@ -3,7 +3,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { jwtVerify } from "jose";
-import { CQ_ADMIN_ACCESS_COOKIE } from "@/lib/auth-cookies";
+import { CQ_ADMIN_ACCESS_COOKIE } from "@/lib/auth/auth-cookies";
 import { AdminNav } from "@/components/admin/admin-nav";
 
 function LogoutButton() {

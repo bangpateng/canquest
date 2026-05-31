@@ -6,8 +6,8 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft, Download, Edit, Plus, Trash2, Users, Trophy } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { buttonVariants } from "@/components/ui/button";
-import { underlineTabClass } from "@/lib/ui-button-styles";
-import { cn } from "@/lib/utils";
+import { underlineTabClass } from "@/lib/ui/ui-button-styles";
+import { cn } from "@/lib/utils/utils";
 import { QuestForm } from "./quest-form";
 import {
   EARN_HUB_TASK_TYPE_OPTIONS,
@@ -19,7 +19,7 @@ import {
   questExportLabel,
   questTaskTypeLabel,
   resolveQuestTaskDisplayTitle,
-} from "@/lib/quest-types";
+} from "@/lib/quest/quest-types";
 
 interface Task {
   id: string;

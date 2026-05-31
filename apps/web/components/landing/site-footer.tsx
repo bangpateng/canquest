@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { CanQuestLogo } from "@/components/brand/canquest-logo";
+import { CanQuestLogo } from "@/components/ui/canquest-logo";
 import { LandingShell } from "@/components/landing/landing-shell";
-import { getSiteSocialLinks } from "@/lib/site-config";
+import { getSiteSocialLinks } from "@/lib/config/site-config";
 
 export function SiteFooter() {
   const social = getSiteSocialLinks();

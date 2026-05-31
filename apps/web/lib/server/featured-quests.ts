@@ -1,9 +1,9 @@
-import { internalApiBase } from "@/lib/internal-api-url";
+import { internalApiBase } from "@/lib/api/internal-api-url";
 import {
   formatQuestDeadlineDisplay,
   type Quest,
-} from "@/lib/quest-types";
-import { resolveQuestMediaUrl } from "@/lib/quest-media-url";
+} from "@/lib/quest/quest-types";
+import { resolveQuestMediaUrl } from "@/lib/quest/quest-media-url";
 
 function normalizeQuest(raw: Quest): Quest {
   return {

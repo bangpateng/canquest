@@ -2,8 +2,8 @@
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { formatApiError } from "@/lib/format-api-error";
+import { cn } from "@/lib/utils/utils";
+import { formatApiError } from "@/lib/api/format-api-error";
 import { UserRound, ImagePlus } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 

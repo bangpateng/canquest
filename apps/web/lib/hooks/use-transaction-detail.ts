@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import type { TransactionDetail } from "@/components/app/transaction-detail-view";
+import type { TransactionDetail } from "@/components/app/wallet/transaction-detail-view";
 
 export function useTransactionDetail(transactionId: string | null) {
   const [detail, setDetail] = useState<TransactionDetail | null>(null);

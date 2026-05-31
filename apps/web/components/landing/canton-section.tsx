@@ -1,4 +1,4 @@
-import { CcRewardLogo } from "@/components/app/cc-reward-logo";
+import { CcRewardLogo } from "@/components/app/campaign/cc-reward-logo";
 import { LandingSection } from "@/components/landing/landing-section";
 
 export function CantonSection() {

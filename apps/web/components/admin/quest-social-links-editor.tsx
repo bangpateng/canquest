@@ -2,13 +2,13 @@
 
 import { Plus, Trash2 } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/utils";
 import {
   QUEST_SOCIAL_PLATFORM_OPTIONS,
   emptySocialLinkDraft,
   type QuestSocialLink,
   type QuestSocialPlatform,
-} from "@/lib/quest-social-links";
+} from "@/lib/quest/quest-social-links";
 
 type Props = {
   links: QuestSocialLink[];

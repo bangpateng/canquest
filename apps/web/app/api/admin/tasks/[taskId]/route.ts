@@ -1,5 +1,5 @@
 import { type NextRequest } from 'next/server';
-import { nestWithAdminAccessCookie } from '@/lib/nest-proxy-admin-access';
+import { nestWithAdminAccessCookie } from '@/lib/auth/nest-proxy-admin-access';
 type P = { params: Promise<{ taskId: string }> };
 export async function PATCH(req: NextRequest, { params }: P) {
   const { taskId } = await params;

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { COOPERATION_NAV } from "@/components/cooperation/cooperation-nav";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/utils";
 
 function CooperationNavItems({
   className,

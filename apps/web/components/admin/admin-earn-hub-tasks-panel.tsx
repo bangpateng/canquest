@@ -2,7 +2,7 @@
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/utils";
 import {
   AdminEarnHubTaskForm,
   type EarnHubTaskDraft,
@@ -16,7 +16,7 @@ import {
   isEarnHubQuizType,
   parseQuizChoices,
   validateEarnHubTaskDraft,
-} from "@/lib/quest-types";
+} from "@/lib/quest/quest-types";
 import { GripVertical, Pencil, Plus, Trash2 } from "lucide-react";
 
 export interface EarnHubTask {

@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/utils";
 import { cookies } from "next/headers";
 import { Plus, Sparkles } from "lucide-react";
-import { CQ_ADMIN_ACCESS_COOKIE } from "@/lib/auth-cookies";
-import { internalApiBase } from "@/lib/internal-api-url";
+import { CQ_ADMIN_ACCESS_COOKIE } from "@/lib/auth/auth-cookies";
+import { internalApiBase } from "@/lib/api/internal-api-url";
 import { AdminQuestTable, type AdminQuestRow } from "@/components/admin/admin-quest-table";
 
 async function fetchCampaigns(): Promise<AdminQuestRow[] | null> {

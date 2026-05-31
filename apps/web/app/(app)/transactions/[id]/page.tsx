@@ -1,4 +1,4 @@
-import { TransactionDetailView } from "@/components/app/transaction-detail-view";
+import { TransactionDetailView } from "@/components/app/wallet/transaction-detail-view";
 
 type PageProps = {
   params: Promise<{ id: string }>;

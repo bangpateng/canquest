@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { formatPartyIdForDisplay, formatUsernameForDisplay } from "@/lib/canton-party-id";
-import { formatApiError } from "@/lib/format-api-error";
+import { formatPartyIdForDisplay, formatUsernameForDisplay } from "@/lib/canton/canton-party-id";
+import { formatApiError } from "@/lib/api/format-api-error";
 
 type Me = {
   email?: string;

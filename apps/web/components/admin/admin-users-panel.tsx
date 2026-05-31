@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Search, Trash2, Shield } from 'lucide-react';
 import { buttonVariants } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
-import { inputClass } from '@/lib/ui-tokens';
+import { cn } from '@/lib/utils/utils';
+import { inputClass } from '@/lib/ui/ui-tokens';
 
 interface AdminUserRow {
   id: string;

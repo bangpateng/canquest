@@ -3,14 +3,14 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { clearReferralRef, getReferralRef, storeReferralRef } from "@/lib/referral-ref";
+import { clearReferralRef, getReferralRef, storeReferralRef } from "@/lib/routing/referral-ref";
 import { AuthCard, authInputClass } from "@/components/auth/auth-card";
 import { TurnstileField, useTurnstileRequired } from "@/components/platform/turnstile-field";
 import { buttonVariants } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
-import { formatApiError } from "@/lib/format-api-error";
+import { formatApiError } from "@/lib/api/format-api-error";
 import { register, verifyOtp } from "@/lib/services/api/auth";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/utils";
 
 type PendingOtp = { userId: string; devOtp?: string };
 

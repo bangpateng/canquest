@@ -19,17 +19,17 @@ import {
 
 import type { LucideIcon } from "lucide-react";
 
-import { CanQuestLogo } from "@/components/brand/canquest-logo";
+import { CanQuestLogo } from "@/components/ui/canquest-logo";
 
 import { PlatformToolbar } from "@/components/platform/platform-toolbar";
 
 import { platformContentClass } from "@/components/platform/platform-page";
 import { PlatformI18nProvider, usePlatformI18n } from "@/lib/i18n/platform-provider";
 
-import { ROUTES } from "@/lib/app-routes";
+import { ROUTES } from "@/lib/routing/app-routes";
 import { useWalletAccess } from "@/lib/hooks/use-wallet-access";
-import { hrefRequiresWallet } from "@/lib/wallet-access";
-import { cn } from "@/lib/utils";
+import { hrefRequiresWallet } from "@/lib/auth/wallet-access";
+import { cn } from "@/lib/utils/utils";
 
 
 

@@ -6,9 +6,9 @@ import { redirect } from 'next/navigation';
 
 import { jwtVerify } from 'jose';
 
-import { AppShell } from '@/components/app/app-shell';
+import { AppShell } from '@/components/app/shell/app-shell';
 
-import { CQ_ACCESS_COOKIE } from '@/lib/auth-cookies';
+import { CQ_ACCESS_COOKIE } from '@/lib/auth/auth-cookies';
 
 export default async function DappLayout({ children }: { children: ReactNode }) {
   const jar = await cookies();

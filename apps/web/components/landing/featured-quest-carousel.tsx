@@ -6,8 +6,8 @@ import {
   LandingQuestCard,
   type LandingQuestCardVariant,
 } from "@/components/landing/landing-quest-card";
-import type { Quest } from "@/lib/quest-types";
-import { cn } from "@/lib/utils";
+import type { Quest } from "@/lib/quest/quest-types";
+import { cn } from "@/lib/utils/utils";
 
 const ROTATE_MS = 5000;
 

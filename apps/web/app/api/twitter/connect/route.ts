@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { nestWithAccessCookie } from '@/lib/nest-proxy-cookie-jwt';
-import { clientIpFromRequest, verifyTurnstileToken } from '@/lib/turnstile';
+import { nestWithAccessCookie } from '@/lib/auth/nest-proxy-cookie-jwt';
+import { clientIpFromRequest, verifyTurnstileToken } from '@/lib/api/turnstile';
 
 export const dynamic = 'force-dynamic';
 

@@ -1,8 +1,8 @@
 "use client";
 
 import { buttonVariants } from "@/components/ui/button";
-import { inputClass } from "@/lib/ui-tokens";
-import { cn } from "@/lib/utils";
+import { inputClass } from "@/lib/ui/ui-tokens";
+import { cn } from "@/lib/utils/utils";
 import { Copy, Plus, Trash2 } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useCallback, useEffect, useState } from "react";

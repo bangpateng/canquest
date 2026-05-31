@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { LayoutGrid, Sparkles, Wallet, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { CanQuestLogo } from "@/components/brand/canquest-logo";
+import { CanQuestLogo } from "@/components/ui/canquest-logo";
 import { LaunchAppButton } from "@/components/landing/launch-app-button";
 import { LandingShell } from "@/components/landing/landing-shell";
-import { iconButtonClass } from "@/lib/ui-button-styles";
-import { cn } from "@/lib/utils";
+import { iconButtonClass } from "@/lib/ui/ui-button-styles";
+import { cn } from "@/lib/utils/utils";
 
 const nav: { href: string; label: string; icon: LucideIcon; description: string }[] = [
   { href: "#campaigns", label: "Earn", icon: Sparkles, description: "Campaigns" },

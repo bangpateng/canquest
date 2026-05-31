@@ -1,6 +1,6 @@
 "use client";
 
-import { ROUTES as APP_ROUTES } from "@/lib/app-routes";
+import { ROUTES as APP_ROUTES } from "@/lib/routing/app-routes";
 import { ToolbarTitle, Lead } from "@/components/ui/typography";
 import { usePathname } from "next/navigation";
 

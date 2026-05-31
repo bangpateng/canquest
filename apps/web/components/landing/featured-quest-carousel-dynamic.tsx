@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import type { Quest } from "@/lib/quest-types";
+import type { Quest } from "@/lib/quest/quest-types";
 
 const FeaturedQuestCarousel = dynamic(
   () =>

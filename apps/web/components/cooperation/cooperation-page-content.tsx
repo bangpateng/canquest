@@ -16,8 +16,8 @@ import {
 } from "@/components/cooperation/cooperation-sidebar";
 import { LandingShell } from "@/components/landing/landing-shell";
 import { buttonVariants } from "@/components/ui/button";
-import { getCooperationContactLinks } from "@/lib/site-config";
-import { cn } from "@/lib/utils";
+import { getCooperationContactLinks } from "@/lib/config/site-config";
+import { cn } from "@/lib/utils/utils";
 
 const OFFERINGS: { icon: LucideIcon; title: string; description: string }[] = [
   {

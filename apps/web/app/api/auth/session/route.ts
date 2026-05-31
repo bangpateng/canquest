@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
-import { CQ_ACCESS_COOKIE } from '@/lib/auth-cookies';
-import { nestWithAccessCookie } from '@/lib/nest-proxy-cookie-jwt';
+import { CQ_ACCESS_COOKIE } from '@/lib/auth/auth-cookies';
+import { nestWithAccessCookie } from '@/lib/auth/nest-proxy-cookie-jwt';
 
 export const dynamic = 'force-dynamic';
 

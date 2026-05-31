@@ -1,6 +1,6 @@
-import { okWithSessionCookiesOr502 } from '@/lib/auth-cookies';
-import { postJsonParse } from '@/lib/internal-api-url';
-import { clientIpFromRequest, verifyTurnstileToken } from '@/lib/turnstile';
+import { okWithSessionCookiesOr502 } from '@/lib/auth/auth-cookies';
+import { postJsonParse } from '@/lib/api/internal-api-url';
+import { clientIpFromRequest, verifyTurnstileToken } from '@/lib/api/turnstile';
 import { NextResponse } from 'next/server';
 
 export async function POST(req: Request) {

@@ -4,8 +4,8 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useCallback, useEffect, useState } from "react";
 import { TurnstileField, useTurnstileRequired } from "@/components/platform/turnstile-field";
 import { buttonVariants } from "@/components/ui/button";
-import { formatApiError } from "@/lib/format-api-error";
-import { cn } from "@/lib/utils";
+import { formatApiError } from "@/lib/api/format-api-error";
+import { cn } from "@/lib/utils/utils";
 import { Unlink } from "lucide-react";
 
 type TwitterStatus = {

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/utils";
 import { Plus, Trash2, ChevronDown, ChevronUp, Upload } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import {
@@ -14,8 +14,8 @@ import {
   formatQuestDeadlineDisplay,
   resolveQuestProjectName,
   type RewardType,
-} from "@/lib/quest-types";
-import type { QuestSocialLink } from "@/lib/quest-social-links";
+} from "@/lib/quest/quest-types";
+import type { QuestSocialLink } from "@/lib/quest/quest-social-links";
 import { QuestSocialLinksEditor } from "@/components/admin/quest-social-links-editor";
 
 type TaskDraft = {

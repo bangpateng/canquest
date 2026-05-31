@@ -3,8 +3,8 @@ import { type NextRequest, NextResponse } from 'next/server';
 import {
   clearAdminAccessCookie,
   setAdminAccessCookie,
-} from '@/lib/auth-cookies';
-import { internalApiBase } from '@/lib/internal-api-url';
+} from '@/lib/auth/auth-cookies';
+import { internalApiBase } from '@/lib/api/internal-api-url';
 
 export async function POST(req: NextRequest) {
   const body = await req.text();

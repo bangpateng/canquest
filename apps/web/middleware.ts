@@ -1,20 +1,21 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
-import { CQ_ACCESS_COOKIE } from '@/lib/auth-cookies';
+import { CQ_ACCESS_COOKIE } from '@/lib/auth/auth-cookies';
 
 /** Routes that require session cookie (JWT verified in platform layout). */
 const PROTECTED_PATTERN =
-  /^\/(overview|quest|earn|spin-reward|spin-daily|wallet|leaderboard|setting)(\/|$)/;
+  /^\/(overview|quests|earn|spin\/reward|spin\/daily|wallet|leaderboard|settings)(\/|$)/;
 
 const PUBLIC_EARN_DETAIL_PATTERN = /^\/earn\/[^/]+\/?$/;
 
 /** Legacy app paths → new platform paths */
 const LEGACY_REDIRECTS: Record<string, string> = {
   '/dashboard': '/overview',
-  '/quests': '/earn',
-  '/spin': '/spin-reward',
-  '/spin-daily': '/spin-reward',
-  '/settings': '/setting',
+  '/quest': '/quests',
+  '/spin': '/spin/reward',
+  '/spin-daily': '/spin/daily',
+  '/spin-reward': '/spin/reward',
+  '/setting': '/settings',
   '/transactions': '/wallet',
 };
 
@@ -25,13 +26,10 @@ export function middleware(request: NextRequest) {
   if (LEGACY_REDIRECTS[pathname]) {
     return NextResponse.redirect(new URL(LEGACY_REDIRECTS[pathname], request.url), 308);
   }
-  if (pathname.startsWith('/quests/')) {
+  // Legacy: /quests/:id was briefly campaign detail → /earn/:id
+  // Note: /quests alone is now the earn hub, only /quests/:id redirects
+  if (pathname.startsWith('/quests/') && pathname.length > 8) {
     const dest = pathname.replace(/^\/quests\//, '/earn/');
-    return NextResponse.redirect(new URL(dest, request.url), 308);
-  }
-  // Campaign detail was briefly at /quest/:id → /earn/:id (/quest alone = Earn hub)
-  if (pathname.startsWith('/quest/') && pathname.length > 7) {
-    const dest = pathname.replace(/^\/quest\//, '/earn/');
     return NextResponse.redirect(new URL(dest, request.url), 308);
   }
 
@@ -86,11 +84,11 @@ export const config = {
     '/quest/:path*',
     '/earn',
     '/earn/:path*',
+    '/setting',
+    '/setting/:path*',
     '/spin-daily',
     '/spin-daily/:path*',
     '/spin-reward',
     '/spin-reward/:path*',
-    '/setting',
-    '/setting/:path*',
   ],
 };
