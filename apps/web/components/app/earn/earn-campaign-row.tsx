@@ -118,10 +118,10 @@ export function EarnCampaignRow({
     <li>
       <article
         className={cn(
-          "group relative overflow-hidden rounded-2xl border transition-all duration-300",
+          "group relative overflow-hidden rounded-3xl border transition-all duration-300",
           completed
             ? "border-emerald-500/25 bg-gradient-to-b from-emerald-500/[0.06] to-[var(--card)]/90"
-            : "border-[var(--border)] bg-[var(--card)]/60 hover:border-[var(--primary)]/20 hover:bg-[var(--card)]/90",
+            : "border-white/5 bg-[var(--card)]/60 hover:border-[var(--primary)]/20 hover:bg-[var(--card)]/90",
           quest.status === "COMING_SOON" && "opacity-90",
         )}
       >
@@ -130,24 +130,24 @@ export function EarnCampaignRow({
           aria-hidden
         />
 
-        <div className="p-4 sm:p-5">
+        <div className="p-6">
           {/* Header */}
-          <div className="flex gap-3.5 sm:gap-4">
+          <div className="flex gap-5">
           <CampaignLogo quest={quest} />
 
             <div className="min-w-0 flex-1">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 pr-2">
-                  <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 pr-3">
+                  <p className="truncate text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
                     {quest.org}
                   </p>
-                  <h3 className="type-card-title mt-1 line-clamp-1 text-[var(--foreground)] sm:text-base">
+                  <h3 className="mt-2 line-clamp-1 text-lg font-bold text-slate-100 sm:text-xl">
                     {quest.title}
                   </h3>
                 </div>
                 <span
                   className={cn(
-                    "shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide",
+                    "shrink-0 rounded-xl px-3 py-1 text-xs font-bold uppercase tracking-wide",
                     statusMeta.className,
                   )}
                 >
@@ -155,12 +155,12 @@ export function EarnCampaignRow({
                 </span>
               </div>
 
-              <p className="mt-1.5 line-clamp-2 text-[13px] leading-relaxed text-[var(--muted-foreground)]">
+              <p className="mt-3 line-clamp-2 text-sm font-medium leading-relaxed text-slate-400">
                 {quest.description}
               </p>
 
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                <p className="text-[11px] leading-relaxed text-[var(--muted-foreground)]">
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
+                <p className="text-sm font-medium leading-relaxed text-slate-400">
                   {metaParts.join(" · ")}
                 </p>
 
@@ -172,7 +172,7 @@ export function EarnCampaignRow({
                         size: "sm",
                         variant: completed ? "success" : "primary",
                       }),
-                      "shrink-0 px-5 font-bold",
+                      "shrink-0 px-6 font-bold",
                     )}
                   >
                     {ctaLabel}
@@ -183,7 +183,7 @@ export function EarnCampaignRow({
                     disabled
                     className={cn(
                       buttonVariants({ variant: "secondary", size: "sm" }),
-                      "shrink-0 cursor-not-allowed rounded-full opacity-50",
+                      "shrink-0 cursor-not-allowed rounded-2xl opacity-50",
                     )}
                   >
                     Soon
@@ -199,32 +199,32 @@ export function EarnCampaignRow({
           <Link
             href={ROUTES.campaignQuest(quest.id, quest.title)}
             className={cn(
-              "flex items-center gap-3 border-t bg-gradient-to-r px-4 py-3 transition-colors sm:px-5",
+              "flex items-center gap-4 border-t bg-gradient-to-r px-6 py-4 transition-colors",
               accent.footer,
               "hover:bg-[var(--muted)]/10",
             )}
           >
-            <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
+            <span className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
               {t("earnCampaigns.rewardLabel")}
             </span>
-            <span className={cn("min-w-0 flex-1 truncate text-sm font-semibold", accent.value)}>
+            <span className={cn("min-w-0 flex-1 truncate text-base font-bold", accent.value)}>
               {quest.rewardPool}
             </span>
-            <span className="inline-flex shrink-0 items-center text-xs font-semibold text-[var(--foreground)]/80 transition-colors group-hover:text-canton">
+            <span className="inline-flex shrink-0 items-center text-sm font-semibold text-slate-100 transition-colors group-hover:text-canton">
               {t("quests.viewQuest")}
             </span>
           </Link>
         ) : (
           <div
             className={cn(
-              "flex items-center gap-3 border-t bg-gradient-to-r px-4 py-3 sm:px-5",
+              "flex items-center gap-4 border-t bg-gradient-to-r px-6 py-4",
               accent.footer,
             )}
           >
-            <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
+            <span className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
               {t("earnCampaigns.rewardLabel")}
             </span>
-            <span className={cn("min-w-0 flex-1 truncate text-sm font-semibold", accent.value)}>
+            <span className={cn("min-w-0 flex-1 truncate text-base font-bold", accent.value)}>
               {quest.rewardPool}
             </span>
           </div>

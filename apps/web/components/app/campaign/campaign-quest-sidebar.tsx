@@ -104,49 +104,49 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
 
   return (
     <section
-      className="w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]"
+      className="w-full overflow-hidden rounded-3xl border border-white/5 bg-[var(--card)]"
       aria-label="Campaign reward"
     >
-      <div className="border-b border-[var(--border)] bg-gradient-to-br from-[var(--primary)]/12 via-transparent to-transparent px-4 py-4 sm:px-5 sm:py-5">
+      <div className="border-b border-slate-800/80 bg-gradient-to-br from-[var(--primary)]/12 via-transparent to-transparent px-6 py-6">
         <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
             Campaign reward
           </p>
-          <p className="mt-1 flex items-center gap-2 text-2xl font-bold tabular-nums text-[var(--foreground)] sm:text-3xl">
+          <p className="mt-2 flex items-center gap-3 text-3xl font-bold tabular-nums text-slate-100 sm:text-4xl">
             {isCcTokenRewardQuest(quest) ? (
-              <CcRewardLogo className="sm:h-7 sm:w-7" size={28} />
+              <CcRewardLogo className="sm:h-8 sm:w-8" size={32} />
             ) : null}
             <span className={quest.rewardCc > 0 ? "text-canton" : undefined}>
               {rewardHeadline.primary}
             </span>
           </p>
           {rewardHeadline.secondary ? (
-            <p className="mt-1 text-xs font-medium text-[var(--muted-foreground)]">
+            <p className="mt-2 text-sm font-medium text-slate-400">
               {rewardHeadline.secondary}
             </p>
           ) : null}
           {quest.rewardType?.includes("INVITE") ? (
-            <p className="mt-2 flex items-center gap-1.5 text-xs text-violet-300/90">
-              <Ticket className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            <p className="mt-3 flex items-center gap-2 text-sm font-medium text-violet-300">
+              <Ticket className="h-4 w-4 shrink-0" aria-hidden />
               Code reward
             </p>
           ) : null}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 divide-x divide-y divide-[var(--border)] border-[var(--border)] sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 divide-x divide-y divide-slate-800/80 border-slate-800/80 sm:grid-cols-3 lg:grid-cols-5">
         {stats.map(({ key, icon: Icon, label, value, valueClassName }) => (
           <div
             key={key}
-            className="flex min-w-0 flex-col justify-center gap-1 bg-[var(--card)]/80 px-3 py-3 sm:px-4 sm:py-3.5"
+            className="flex min-w-0 flex-col justify-center gap-2 bg-[var(--card)]/80 px-4 py-4"
           >
-            <dt className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
-              <Icon className="h-3 w-3 shrink-0 opacity-80" aria-hidden />
+            <dt className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <Icon className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
               <span className="truncate">{label}</span>
             </dt>
             <dd
               className={cn(
-                "text-sm font-bold tabular-nums text-[var(--foreground)]",
+                "text-base font-bold tabular-nums text-slate-100",
                 valueClassName,
               )}
             >

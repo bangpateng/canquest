@@ -56,65 +56,65 @@ export function QuestReferralCard() {
 
   return (
     <section
-      className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]/40"
+      className="overflow-hidden rounded-3xl border border-white/5 bg-[var(--card)]/40"
       aria-label={t("questReferral.aria")}
     >
-      <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--muted)]/20 px-4 py-3 sm:px-5">
-        <p className="flex items-center gap-2 text-xs font-medium text-[var(--muted-foreground)]">
-          <Gift className="h-3.5 w-3.5 text-emerald-400" aria-hidden />
+      <div className="flex items-center justify-between border-b border-slate-800/80 bg-[var(--muted)]/20 px-6 py-4">
+        <p className="flex items-center gap-3 text-sm font-medium text-slate-400">
+          <Gift className="h-4 w-4 text-emerald-400" aria-hidden />
           {t("questReferral.title")}
         </p>
         {stats && !loading ? (
-          <span className="text-xs font-semibold tabular-nums text-emerald-400/90">
+          <span className="text-sm font-semibold tabular-nums text-emerald-400/90">
             +{stats.pointsPerInvite} {t("questReferral.perFriend")}
           </span>
         ) : null}
       </div>
 
-      <div className="px-4 py-4 sm:px-5">
+      <div className="px-6 py-6">
         {loading ? (
           <InlineLoading label={t("common.loading")} size="md" />
         ) : error ? (
-          <p className="text-sm text-red-400">{error}</p>
+          <p className="text-sm font-medium text-red-400">{error}</p>
         ) : stats ? (
-          <div className="space-y-4">
-            <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
+          <div className="space-y-6">
+            <p className="text-sm font-medium leading-relaxed text-slate-400">
               {t("questReferral.lead", { n: stats.pointsPerInvite })}
             </p>
 
-            <div className="flex flex-wrap gap-4 text-sm">
-              <div className="flex items-center gap-2">
-                <UserPlus className="h-4 w-4 text-emerald-400" aria-hidden />
-                <span className="text-[var(--muted-foreground)]">{t("questReferral.invited")}</span>
-                <span className="font-bold tabular-nums text-[var(--foreground)]">
+            <div className="flex flex-wrap gap-5 text-base">
+              <div className="flex items-center gap-3">
+                <UserPlus className="h-5 w-5 text-emerald-400" aria-hidden />
+                <span className="text-slate-400">{t("questReferral.invited")}</span>
+                <span className="font-bold tabular-nums text-slate-100">
                   {stats.invitedCount}
                 </span>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[var(--muted-foreground)]">{t("questReferral.earned")}</span>
+              <div className="flex items-center gap-3">
+                <span className="text-slate-400">{t("questReferral.earned")}</span>
                 <span className="font-bold tabular-nums text-emerald-400/90">
                   {stats.pointsEarned} pts
                 </span>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-[var(--muted-foreground)]">
+            <div className="space-y-3">
+              <p className="text-sm font-medium text-slate-400">
                 {t("settings.referralCodeLabel")}
               </p>
-              <code className="block truncate rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 font-mono text-sm tracking-wider text-[var(--foreground)]">
+              <code className="block truncate rounded-2xl border border-white/5 bg-[var(--muted)]/40 px-4 py-3 font-mono text-base font-medium tracking-wider text-slate-100">
                 {stats.referralCode}
               </code>
             </div>
 
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-[var(--muted-foreground)]">
+            <div className="space-y-3">
+              <p className="text-sm font-medium text-slate-400">
                 {t("settings.referralLinkLabel")}
               </p>
               <input
                 readOnly
                 value={stats.referralLink}
-                className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)]/60 px-3 py-2.5 text-xs text-[var(--foreground)] outline-none"
+                className="w-full rounded-2xl border border-white/5 bg-[var(--background)]/60 px-4 py-3 text-sm font-medium text-slate-100 outline-none"
               />
               <button
                 type="button"

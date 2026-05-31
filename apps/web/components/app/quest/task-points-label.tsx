@@ -12,13 +12,13 @@ export function TaskPointsLabel({ points, complete, className }: Props) {
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-baseline gap-0.5 text-xs font-semibold tabular-nums",
-        complete ? "text-emerald-400/90" : "text-canton",
+        "inline-flex shrink-0 items-baseline gap-1 text-sm font-bold tabular-nums",
+        complete ? "text-emerald-400" : "text-canton",
         className,
       )}
     >
       +{points}
-      <span className="text-[10px] font-medium leading-none text-canton/90">pts</span>
+      <span className="text-xs font-semibold leading-none text-canton">pts</span>
     </span>
   );
 }

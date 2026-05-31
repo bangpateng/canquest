@@ -84,23 +84,23 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
   return (
     <div className="flex min-h-[60vh] w-full min-w-0 items-center justify-center">
       <div className="w-full min-w-0 max-w-md">
-        <div className="mb-6 flex justify-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-canton/30 bg-canton/10">
-            <Wallet className="h-8 w-8 text-canton" />
+        <div className="mb-8 flex justify-center">
+          <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-white/5 bg-canton/10">
+            <Wallet className="h-10 w-10 text-canton" />
           </div>
         </div>
 
-        <h2 className="type-page-title text-center">{t("wallet.createTitle")}</h2>
-        <p className="mt-2 text-center text-sm text-[var(--muted-foreground)]">
+        <h2 className="text-center text-2xl font-bold text-slate-100">{t("wallet.createTitle")}</h2>
+        <p className="mt-3 text-center text-sm font-medium text-slate-400">
           {needsInvite ? t("wallet.inviteCodeHint") : t("wallet.inviteCodeRetryHint")}
         </p>
 
-        <form onSubmit={handleGenerate} className="mt-8 space-y-4">
+        <form onSubmit={handleGenerate} className="mt-10 space-y-6">
           {needsInvite ? (
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <label
                 htmlFor="wallet-invite-code"
-                className="text-xs font-medium text-[var(--muted-foreground)]"
+                className="text-sm font-medium text-slate-400"
               >
                 {t("wallet.inviteCodeLabel")}
               </label>
@@ -121,13 +121,13 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
             </div>
           ) : null}
 
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             <label
               htmlFor="wallet-username"
-              className="text-xs font-medium text-[var(--muted-foreground)]"
+              className="text-sm font-medium text-slate-400"
             >
               Username{" "}
-              <span className="font-normal text-[var(--muted-foreground)]/70">
+              <span className="font-normal text-slate-500">
                 (letters, numbers, underscore · 3–32 chars)
               </span>
             </label>
@@ -154,7 +154,7 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
 
           {error ? (
             <p
-              className="rounded-xl border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-sm text-orange-300"
+              className="rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm font-medium text-orange-300"
               role="alert"
             >
               {error}
@@ -180,7 +180,7 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
               t("wallet.walletCreatedLoading")
             ) : (
               <>
-                <Wallet className="h-4 w-4" />
+                <Wallet className="h-5 w-5" />
                 {t("wallet.generateWallet")}
               </>
             )}

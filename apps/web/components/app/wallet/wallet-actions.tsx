@@ -143,13 +143,13 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
 
   return (
     <>
-      <div className="grid w-full min-w-0 grid-cols-2 gap-3">
+      <div className="grid w-full min-w-0 grid-cols-2 gap-4">
         <button
           type="button"
           onClick={openSend}
           className={cn(buttonVariants({ size: "sm" }), "w-full justify-center gap-2")}
         >
-          <ArrowUpRight className="h-4 w-4 shrink-0" aria-hidden />
+          <ArrowUpRight className="h-5 w-5 shrink-0" aria-hidden />
           Send CC
         </button>
         <button
@@ -160,7 +160,7 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
             "w-full justify-center gap-2",
           )}
         >
-          <ArrowDownLeft className="h-4 w-4 shrink-0" aria-hidden />
+          <ArrowDownLeft className="h-5 w-5 shrink-0" aria-hidden />
           Receive
         </button>
       </div>
@@ -181,13 +181,13 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
             role="dialog"
             aria-modal="true"
             aria-labelledby={sendTitleId}
-            className="relative z-10 my-auto w-full max-h-[min(90vh,90dvh)] max-w-md overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-xl"
+            className="relative z-10 my-auto w-full max-h-[min(90vh,90dvh)] max-w-md overflow-y-auto rounded-3xl border border-white/5 bg-[var(--card)] p-8 shadow-xl"
           >
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start justify-between gap-4">
               <div>
                 <h2
                   id={sendTitleId}
-                  className="type-section-title text-[var(--foreground)]"
+                  className="text-xl font-bold text-slate-100"
                 >
                   Send
                 </h2>
@@ -214,11 +214,11 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
                 </button>
               </div>
             ) : (
-              <form onSubmit={submitSend} className="mt-6 space-y-4">
-                                <div className="space-y-2">
+              <form onSubmit={submitSend} className="mt-8 space-y-6">
+                                <div className="space-y-3">
                   <label
                     htmlFor="wallet-send-recipient"
-                    className="text-xs font-medium text-[var(--muted-foreground)]"
+                    className="text-sm font-medium text-slate-400"
                   >
                     Recipient
                   </label>
@@ -235,14 +235,14 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
                     }}
                     placeholder="@alice or alice::1220…"
                     disabled={sendState === "loading"}
-                    className="w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 font-mono text-xs text-[var(--foreground)] outline-none ring-offset-[var(--card)] placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--foreground)]/25 disabled:opacity-50"
+                    className="w-full resize-none rounded-2xl border border-white/5 bg-[var(--muted)]/40 px-4 py-3 font-mono text-sm font-medium text-slate-100 outline-none ring-offset-[var(--card)] placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
                   />
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <label
                     htmlFor="wallet-send-amount"
-                    className="text-xs font-medium text-[var(--muted-foreground)]"
+                    className="text-sm font-medium text-slate-400"
                   >
                     Amount
                   </label>
@@ -255,17 +255,17 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
                     onChange={(e) => setCcAmount(e.target.value)}
                     placeholder="e.g. 10"
                     disabled={sendState === "loading"}
-                    className="type-display w-full rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 text-sm tabular-nums text-[var(--foreground)] outline-none ring-offset-[var(--card)] placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--foreground)]/25 disabled:opacity-50"
+                    className="w-full rounded-2xl border border-white/5 bg-[var(--muted)]/40 px-4 py-3 text-base font-bold tabular-nums text-slate-100 outline-none ring-offset-[var(--card)] placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
                   />
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <label
                     htmlFor="wallet-send-memo"
-                    className="text-xs font-medium text-[var(--muted-foreground)]"
+                    className="text-sm font-medium text-slate-400"
                   >
                     Memo{" "}
-                    <span className="font-normal text-[var(--muted-foreground)]/70">(optional)</span>
+                    <span className="font-normal text-slate-500">(optional)</span>
                   </label>
                   <input
                     id="wallet-send-memo"
@@ -274,16 +274,16 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
                     onChange={(e) => setMemo(e.target.value)}
                     placeholder=""
                     disabled={sendState === "loading"}
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 text-sm text-[var(--foreground)] outline-none ring-offset-[var(--card)] placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--foreground)]/25 disabled:opacity-50"
+                    className="w-full rounded-2xl border border-white/5 bg-[var(--muted)]/40 px-4 py-3 text-base font-medium text-slate-100 outline-none ring-offset-[var(--card)] placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
                   />
                 </div>
 
                 {/* Fee notice — value from env TRANSACTION_FEE_CC */}
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/30 px-3 py-2">
-                  <p className="text-[11px] text-[var(--muted-foreground)]">
-                    <span className="font-medium text-[var(--foreground)]">Platform fee: {feeCc} CC</span>
+                <div className="rounded-2xl border border-white/5 bg-[var(--muted)]/30 px-4 py-3">
+                  <p className="text-sm font-medium text-slate-400">
+                    <span className="font-semibold text-slate-100">Platform fee: {feeCc} CC</span>
                     {ccAmount && parseFloat(ccAmount) > 0 && (
-                      <span className="ml-1 font-medium text-canton">
+                      <span className="ml-2 font-semibold text-canton">
                         · Total: {(parseFloat(ccAmount) + feeCc).toFixed(2)} CC
                       </span>
                     )}
@@ -291,13 +291,13 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
                 </div>
 
                 {sendState === "error" && (
-                  <div className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3">
-                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
-                    <p className="text-xs text-red-500">{sendMessage}</p>
+                  <div className="flex items-start gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-4">
+                    <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
+                    <p className="text-sm font-medium text-red-400">{sendMessage}</p>
                   </div>
                 )}
 
-                <div className="flex flex-wrap gap-2 pt-2">
+                <div className="flex flex-wrap gap-3 pt-3">
                   <button
                     type="submit"
                     disabled={sendState === "loading"}
@@ -351,13 +351,13 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
             role="dialog"
             aria-modal="true"
             aria-labelledby={receiveTitleId}
-            className="relative z-10 my-auto w-full max-h-[min(90vh,90dvh)] max-w-md overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-xl"
+            className="relative z-10 my-auto w-full max-h-[min(90vh,90dvh)] max-w-md overflow-y-auto rounded-3xl border border-white/5 bg-[var(--card)] p-8 shadow-xl"
           >
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start justify-between gap-4">
               <div>
                 <h2
                   id={receiveTitleId}
-                  className="type-section-title text-[var(--foreground)]"
+                  className="text-xl font-bold text-slate-100"
                 >
                   Receive CC
                 </h2>
@@ -372,7 +372,7 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
               </button>
             </div>
 
-            <div className="mt-6 flex justify-center rounded-2xl border border-[var(--border)] bg-white p-4 dark:bg-zinc-950">
+            <div className="mt-8 flex justify-center rounded-3xl border border-white/5 bg-white p-6 dark:bg-zinc-950">
               <QRCodeSVG
                 value={displayPartyId}
                 size={200}
@@ -382,7 +382,7 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
               />
             </div>
 
-            <div className="mt-6">
+            <div className="mt-8">
               <CopyField label="Your Canton Party ID" value={displayPartyId} />
             </div>
 
@@ -391,7 +391,7 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
               onClick={close}
               className={cn(
                 buttonVariants({ variant: "secondary", size: "sm" }),
-                "mt-6 w-full sm:w-auto",
+                "mt-8 w-full sm:w-auto",
               )}
             >
               Done

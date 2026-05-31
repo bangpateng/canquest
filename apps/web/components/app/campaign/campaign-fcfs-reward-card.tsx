@@ -42,32 +42,32 @@ export function CampaignFcfsRewardCard({
   const showClaimButton = mode === "claim" && canClaim && onClaim;
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]/40 px-4 py-3.5 sm:px-5 sm:py-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-        <div className="flex min-w-0 items-start gap-3">
+    <section className="overflow-hidden rounded-3xl border border-white/5 bg-[var(--card)]/40 px-6 py-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-5">
+        <div className="flex min-w-0 items-start gap-4">
           <div
             className={cn(
-              "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+              "mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl",
               isStatus
-                ? "bg-[var(--muted)]/60 text-[var(--muted-foreground)]"
+                ? "bg-[var(--muted)]/60 text-slate-400"
                 : "bg-[var(--primary)]/15 text-canton",
             )}
           >
             {isStatus ? (
-              <CheckCircle2 className="h-4 w-4" aria-hidden />
+              <CheckCircle2 className="h-5 w-5" aria-hidden />
             ) : (
-              <CcRewardLogo size={16} />
+              <CcRewardLogo size={20} />
             )}
           </div>
           <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
               {sectionLabel}
             </p>
-            <p className="mt-0.5 text-sm font-semibold leading-snug text-[var(--foreground)]">
+            <p className="mt-1 text-base font-bold leading-snug text-slate-100">
               {slotsLabel}
             </p>
             {description ? (
-              <p className="mt-1 text-xs leading-relaxed text-[var(--muted-foreground)]">
+              <p className="mt-2 text-sm font-medium leading-relaxed text-slate-400">
                 {description}
               </p>
             ) : null}
@@ -91,7 +91,7 @@ export function CampaignFcfsRewardCard({
       </div>
 
       {mode === "claim" && !partyId ? (
-        <p className="mt-3 text-xs text-orange-300">
+        <p className="mt-4 text-sm font-medium text-orange-300">
           <Link href="/wallet" className="font-semibold underline underline-offset-2">
             Create your wallet
           </Link>{" "}
@@ -100,13 +100,13 @@ export function CampaignFcfsRewardCard({
       ) : null}
 
       {error ? (
-        <p className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-300">
+        <p className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-300">
           {error}
         </p>
       ) : null}
 
       {success ? (
-        <p className="mt-3 whitespace-pre-line rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-300">
+        <p className="mt-4 whitespace-pre-line rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-300">
           {success}
         </p>
       ) : null}

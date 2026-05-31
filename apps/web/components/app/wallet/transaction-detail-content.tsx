@@ -24,11 +24,11 @@ function ReceiptField({
 }) {
   return (
     <div className="min-w-0">
-      <dt className="text-[var(--muted-foreground)]">{label}</dt>
+      <dt className="text-sm font-medium text-slate-400">{label}</dt>
       <dd
         className={cn(
-          "mt-1 min-w-0 font-medium [overflow-wrap:anywhere]",
-          mono && "font-mono text-xs font-normal",
+          "mt-2 min-w-0 text-base font-semibold text-slate-100 [overflow-wrap:anywhere]",
+          mono && "font-mono text-sm font-medium",
         )}
       >
         {children}
@@ -55,7 +55,7 @@ export function TransactionDetailContent({
 
   if (loading) {
     return (
-      <div className={cn("flex justify-center", compact ? "py-10" : "py-20")}>
+      <div className={cn("flex justify-center", compact ? "py-12" : "py-24")}>
         <LoadingSpinner size="xl" tone="muted" />
       </div>
     );
@@ -63,8 +63,8 @@ export function TransactionDetailContent({
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 text-center">
-        <p className="text-sm text-[var(--muted-foreground)]">{error}</p>
+      <div className="rounded-3xl border border-white/5 bg-[var(--card)] p-8 text-center">
+        <p className="text-sm font-medium text-slate-400">{error}</p>
       </div>
     );
   }
@@ -78,32 +78,32 @@ export function TransactionDetailContent({
     <>
       <div
         className={cn(
-          "w-full min-w-0 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]",
-          compact ? "p-4 sm:p-5" : "p-4 sm:p-6",
+          "w-full min-w-0 overflow-hidden rounded-3xl border border-white/5 bg-[var(--card)]",
+          compact ? "p-6" : "p-8",
         )}
       >
-        <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+        <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
           Transaction receipt
         </p>
         <h2
           className={cn(
-            "mt-2 break-words font-semibold text-[var(--foreground)]",
-            compact ? "text-lg" : "type-page-title",
+            "mt-3 break-words font-bold text-slate-100",
+            compact ? "text-xl" : "text-2xl",
           )}
         >
           {detail.description}
         </h2>
         <p
           className={cn(
-            "mt-3 font-semibold tabular-nums",
-            compact ? "text-xl" : "type-display text-2xl",
+            "mt-4 font-bold tabular-nums",
+            compact ? "text-2xl" : "text-3xl",
             isOut ? "text-red-500" : "text-green-500",
           )}
         >
           {isOut ? "−" : "+"}
           {ccAmt.toFixed(4)} CC
         </p>
-        <dl className="mt-5 space-y-4 text-sm">
+        <dl className="mt-6 space-y-5">
           <ReceiptField label="Type">{detail.type.replace(/_/g, " ")}</ReceiptField>
           {detail.counterparty ? (
             <ReceiptField label="Counterparty" mono>
@@ -114,14 +114,14 @@ export function TransactionDetailContent({
             {new Date(detail.createdAt).toLocaleString()}
           </ReceiptField>
           <ReceiptField label="On-chain">
-            <span className="inline-flex items-center gap-1.5">
+            <span className="inline-flex items-center gap-2">
               {detail.onChainSettled ? (
                 <>
-                  <ShieldCheck className="h-4 w-4 shrink-0 text-green-500" />
-                  <span>Settled</span>
+                  <ShieldCheck className="h-5 w-5 shrink-0 text-green-500" />
+                  <span className="font-semibold">Settled</span>
                 </>
               ) : (
-                <span className="text-[var(--muted-foreground)]">Pending</span>
+                <span className="font-medium text-slate-400">Pending</span>
               )}
             </span>
           </ReceiptField>
@@ -142,10 +142,10 @@ export function TransactionDetailContent({
             href={detail.cantonScanUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-2.5 text-sm font-medium transition-colors hover:bg-[var(--muted)] sm:w-auto"
+            className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-white/5 bg-[var(--muted)]/40 px-5 py-3 text-sm font-semibold text-slate-100 transition-colors hover:bg-[var(--muted)] sm:w-auto"
           >
             View on CantonScan
-            <ExternalLink className="h-4 w-4" />
+            <ExternalLink className="h-5 w-5" />
           </a>
         ) : null}
       </div>
@@ -153,19 +153,19 @@ export function TransactionDetailContent({
       {detail.ledgerEvents.length > 0 ? (
         <div
           className={cn(
-            "w-full min-w-0 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]",
-            compact ? "mt-4 p-4 sm:p-5" : "mt-4 p-4 sm:p-6",
+            "w-full min-w-0 overflow-hidden rounded-3xl border border-white/5 bg-[var(--card)]",
+            compact ? "mt-5 p-6" : "mt-5 p-8",
           )}
         >
-          <h3 className="text-sm font-semibold">On-chain events</h3>
-          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+          <h3 className="text-base font-bold text-slate-100">On-chain events</h3>
+          <p className="mt-2 text-sm font-medium text-slate-400">
             Contract lifecycle visible to your wallet.
           </p>
-          <ul className="mt-3 divide-y divide-[var(--border)]">
+          <ul className="mt-4 divide-y divide-slate-800/80">
             {detail.ledgerEvents.map((ev, i) => (
-              <li key={`${ev.contractId}-${i}`} className="py-2.5 text-sm">
-                <p className="font-medium capitalize">{ev.kind}</p>
-                <p className="mt-0.5 font-mono text-xs text-[var(--muted-foreground)]">
+              <li key={`${ev.contractId}-${i}`} className="py-3">
+                <p className="text-base font-semibold capitalize text-slate-100">{ev.kind}</p>
+                <p className="mt-1 font-mono text-sm font-medium text-slate-400">
                   {shortTemplate(ev.templateId)}
                 </p>
               </li>
@@ -173,7 +173,7 @@ export function TransactionDetailContent({
           </ul>
         </div>
       ) : detail.ledgerFetchError ? (
-        <p className="mt-3 text-xs text-[var(--muted-foreground)]">{detail.ledgerFetchError}</p>
+        <p className="mt-4 text-sm font-medium text-slate-400">{detail.ledgerFetchError}</p>
       ) : null}
     </>
   );

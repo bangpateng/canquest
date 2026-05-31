@@ -103,11 +103,11 @@ export function QuestSubmitSection({
   const t = usePlatformT();
 
   return (
-    <section className="py-4">
+    <section className="py-6">
       <div className="text-center">
 
         {campaignEnded ? (
-          <p className="mx-auto mt-4 max-w-md text-sm text-orange-300">
+          <p className="mx-auto mt-6 max-w-md text-sm font-medium text-orange-300">
             {t("quests.campaignEndedClosed")}
           </p>
         ) : null}
@@ -116,14 +116,14 @@ export function QuestSubmitSection({
           type="button"
           disabled={submitting || !partyId || campaignEnded}
           onClick={onSubmit}
-          className={cn(buttonVariants({ size: "lg" }), "w-full max-w-sm py-6 text-base")}
+          className={cn(buttonVariants({ size: "lg" }), "w-full max-w-sm py-7 text-lg font-bold")}
         >
           {submitting ? <LoadingSpinner size="lg" /> : null}
           {submitting ? "Submitting…" : "Submit"}
         </button>
 
         {!partyId && (
-          <p className="mt-4 text-xs text-orange-300">
+          <p className="mt-6 text-sm font-medium text-orange-300">
             <Link href="/wallet" className="font-semibold underline underline-offset-2">
               Create your wallet
             </Link>{" "}
@@ -131,7 +131,7 @@ export function QuestSubmitSection({
           </p>
         )}
         {submitError && (
-          <p className="mx-auto mt-4 max-w-md rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-xs font-medium text-red-300">
+          <p className="mx-auto mt-6 max-w-md rounded-2xl border border-red-500/30 bg-red-500/10 px-6 py-3 text-sm font-medium text-red-300">
             {submitError}
           </p>
         )}
@@ -268,10 +268,10 @@ export function QuestSubmittedProof({
 
   if (uiKind === "cc_manual" && state === "cc_reward") {
     return (
-      <section className="relative overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-b from-emerald-500/12 via-[var(--card)] to-[var(--card)] p-8 text-center ring-1 ring-emerald-500/20">
-        <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-400" />
-        <PageTitle className="mt-4">Campaign complete</PageTitle>
-        <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted-foreground)]">
+      <section className="relative overflow-hidden rounded-3xl border border-emerald-500/30 bg-gradient-to-b from-emerald-500/12 via-[var(--card)] to-[var(--card)] p-10 text-center ring-1 ring-emerald-500/20">
+        <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-400" />
+        <PageTitle className="mt-6 text-2xl font-bold text-slate-100">Campaign complete</PageTitle>
+        <p className="mx-auto mt-3 max-w-md text-sm font-medium text-slate-400">
           {rewardStatus?.message ??
             `${rewardCc ?? 0} CC will be sent manually by the team via bulk sender. Watch your wallet and email.`}
         </p>
@@ -296,46 +296,46 @@ export function QuestSubmittedProof({
   }
 
   return (
-    <section className="relative overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-b from-emerald-500/12 via-[var(--card)] to-[var(--card)] ring-1 ring-emerald-500/20">
+    <section className="relative overflow-hidden rounded-3xl border border-emerald-500/30 bg-gradient-to-b from-emerald-500/12 via-[var(--card)] to-[var(--card)] ring-1 ring-emerald-500/20">
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-[radial-gradient(ellipse_at_top,rgb(var(--canton-rgb)/0.25)_0%,transparent_70%)]"
+        className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-[radial-gradient(ellipse_at_top,rgb(var(--canton-rgb)/0.25)_0%,transparent_70%)]"
         aria-hidden
       />
 
-      <div className="relative px-6 pb-4 pt-8 text-center">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--primary)] shadow-[0_0_32px_rgb(var(--canton-rgb)/0.4)] ring-4 ring-[var(--primary)]/20">
+      <div className="relative px-8 pb-6 pt-10 text-center">
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-[var(--primary)] shadow-[0_0_32px_rgb(var(--canton-rgb)/0.4)] ring-4 ring-[var(--primary)]/20">
           <CheckCircle2
-            className="h-8 w-8 text-[var(--primary-foreground)]"
+            className="h-10 w-10 text-[var(--primary-foreground)]"
             strokeWidth={2.5}
             aria-hidden
           />
         </div>
-        <PageTitle className="mt-5">Congratulations!</PageTitle>
-        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+        <PageTitle className="mt-6 text-2xl font-bold text-slate-100">Congratulations!</PageTitle>
+        <p className="mt-2 text-sm font-medium text-slate-400">
           {showCcReward || inviteCode
             ? "Your rewards are ready below"
             : rewardStatus?.message ?? "Quest recorded successfully"}
         </p>
         {uiKind === "waitlist_code" && state === "winner" && inviteCode ? (
-          <p className="mt-1 text-xs text-violet-300">Winner — copy your reward code below.</p>
+          <p className="mt-2 text-sm font-medium text-violet-300">Winner — copy your reward code below.</p>
         ) : null}
       </div>
 
-      <div className="relative space-y-4 px-4 pb-6">
+      <div className="relative space-y-6 px-6 pb-8">
         {inviteCode && (
-          <div className="rounded-2xl border border-violet-500/35 bg-gradient-to-br from-violet-500/15 to-[var(--card)] p-5">
-            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-violet-300/80">
-              <Ticket className="h-4 w-4" />
+          <div className="rounded-3xl border border-violet-500/35 bg-gradient-to-br from-violet-500/15 to-[var(--card)] p-6">
+            <div className="flex items-center gap-3 text-xs font-bold uppercase tracking-wider text-violet-300/80">
+              <Ticket className="h-5 w-5" />
               Your code
             </div>
-            <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <StatValue className="text-3xl tracking-wide text-[var(--foreground)]">
+            <div className="mt-5 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+              <StatValue className="text-4xl font-bold tracking-wide text-slate-100">
                 {inviteCode}
               </StatValue>
               <CopyButton value={inviteCode} />
             </div>
             {isCcAndInvite && (
-              <p className="mt-3 text-sm text-[var(--muted-foreground)]">
+              <p className="mt-4 text-sm font-medium text-slate-400">
                 {rewardStatus?.message}
               </p>
             )}
@@ -343,17 +343,17 @@ export function QuestSubmittedProof({
         )}
 
         {showCcReward && uiKind !== "cc_fcfs" && (
-          <div className="flex items-center gap-4 rounded-2xl border border-[var(--primary)]/30 bg-gradient-to-r from-[var(--primary)]/15 to-[rgb(var(--canton-cyan-rgb)/0.08)] p-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--primary)]/25">
-              <CcRewardLogo size={24} />
+          <div className="flex items-center gap-5 rounded-3xl border border-[var(--primary)]/30 bg-gradient-to-r from-[var(--primary)]/15 to-[rgb(var(--canton-cyan-rgb)/0.08)] p-6">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[var(--primary)]/25">
+              <CcRewardLogo size={28} />
             </div>
             <div className="min-w-0 flex-1 text-left">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
                 CC reward
               </p>
-              <StatValue className="text-canton">+{rewardCc} CC</StatValue>
-              <p className="mt-0.5 flex items-center gap-1 text-sm text-[var(--muted-foreground)]">
-                <Sparkles className="h-3.5 w-3.5 text-[var(--primary-strong)]" />
+              <StatValue className="text-2xl font-bold text-canton">+{rewardCc} CC</StatValue>
+              <p className="mt-1 flex items-center gap-2 text-sm font-medium text-slate-400">
+                <Sparkles className="h-4 w-4 text-canton" />
                 Sent to your wallet
               </p>
             </div>
@@ -364,34 +364,34 @@ export function QuestSubmittedProof({
           rewardStatus?.message &&
           !inviteCode &&
           uiKind !== "cc_fcfs" && (
-          <p className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3 text-center text-sm font-medium">
+          <p className="rounded-2xl border border-white/5 bg-[var(--muted)]/40 px-6 py-4 text-center text-sm font-medium text-slate-100">
             {rewardStatus.message}
           </p>
         )}
 
         {(participationId || completionId) && (
-          <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]/80">
+          <div className="overflow-hidden rounded-2xl border border-white/5 bg-[var(--card)]/80">
             <button
               type="button"
               onClick={() => setProofOpen((o) => !o)}
-              className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left transition-colors hover:bg-[var(--muted)]/30"
+              className="flex w-full items-center justify-between gap-4 px-6 py-4 text-left transition-colors hover:bg-[var(--muted)]/30"
             >
-              <span className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
-                <Shield className="h-3.5 w-3.5" />
+              <span className="flex items-center gap-3 text-xs font-bold uppercase tracking-wider text-slate-400">
+                <Shield className="h-4 w-4" />
                 On-chain proof
                 {taskCount > 0 ? (
-                  <span className="font-normal normal-case tracking-normal text-[var(--muted-foreground)]">
+                  <span className="font-normal normal-case tracking-normal text-slate-400">
                     · {taskCount} task{taskCount === 1 ? "" : "s"}
                   </span>
                 ) : null}
               </span>
-              <span className="flex items-center gap-2">
-                <code className="font-mono text-[11px] text-[var(--muted-foreground)]">
+              <span className="flex items-center gap-3">
+                <code className="font-mono text-sm font-medium text-slate-400">
                   {shortLedgerId(participationId ?? completionId ?? "")}
                 </code>
                 <ChevronDown
                   className={cn(
-                    "h-4 w-4 text-[var(--muted-foreground)] transition-transform",
+                    "h-5 w-5 text-slate-400 transition-transform",
                     proofOpen && "rotate-180",
                   )}
                 />

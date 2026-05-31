@@ -25,8 +25,8 @@ export function AppRouteTitle() {
 
   return (
     <div>
-      <ToolbarTitle>{match.title}</ToolbarTitle>
-      <Lead className="mt-0.5 hidden sm:block">{match.subtitle}</Lead>
+      <ToolbarTitle className="text-xl font-bold text-slate-100">{match.title}</ToolbarTitle>
+      <Lead className="mt-1 hidden text-sm font-medium text-slate-400 sm:block">{match.subtitle}</Lead>
     </div>
   );
 }

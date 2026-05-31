@@ -53,33 +53,33 @@ export function CampaignQuestStatusCard({
   return (
     <section
       className={cn(
-        "rounded-xl border bg-[var(--card)] px-4 py-3.5 sm:px-5 sm:py-4",
+        "rounded-3xl border bg-[var(--card)] px-6 py-5",
         styles.border,
       )}
     >
-      <div className="flex min-w-0 items-start gap-3">
+      <div className="flex min-w-0 items-start gap-4">
         <div
           className={cn(
-            "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+            "mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl",
             styles.iconBg,
             styles.iconColor,
           )}
         >
-          <Icon className="h-4 w-4" aria-hidden />
+          <Icon className="h-5 w-5" aria-hidden />
         </div>
         <div className="min-w-0">
           <p
             className={cn(
-              "text-[10px] font-bold uppercase tracking-wider",
+              "text-xs font-bold uppercase tracking-wider",
               styles.labelColor,
             )}
           >
             {label}
           </p>
-          <p className="mt-0.5 text-sm font-semibold leading-snug text-[var(--foreground)]">
+          <p className="mt-1 text-base font-bold leading-snug text-slate-100">
             {title}
           </p>
-          <p className="mt-1 text-xs leading-relaxed text-[var(--muted-foreground)]">
+          <p className="mt-2 text-sm font-medium leading-relaxed text-slate-400">
             {description}
           </p>
         </div>

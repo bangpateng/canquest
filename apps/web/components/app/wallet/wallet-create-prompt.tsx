@@ -19,7 +19,7 @@ export function WalletCreatePromptBanner({ className }: WalletCreatePromptProps)
   return (
     <div
       className={cn(
-        "rounded-2xl border border-orange-500/30 bg-orange-500/10 p-5 sm:p-6",
+        "rounded-3xl border border-orange-500/30 bg-orange-500/10 p-6 sm:p-8",
         className,
       )}
       role="status"
@@ -65,14 +65,14 @@ export function WalletCreatePromptModal({
         aria-label="Close"
         onClick={onClose}
       />
-      <div className="relative w-full max-w-md rounded-2xl border border-orange-500/25 bg-[var(--card)] p-6 shadow-2xl shadow-black/40">
+      <div className="relative w-full max-w-md rounded-3xl border border-orange-500/25 bg-[var(--card)] p-8 shadow-2xl shadow-black/40">
         <button
           type="button"
           onClick={onClose}
-          className="absolute right-3 top-3 rounded-lg p-1.5 text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+          className="absolute right-4 top-4 rounded-2xl p-2 text-slate-400 transition-colors hover:bg-[var(--muted)] hover:text-slate-100"
           aria-label="Close"
         >
-          <X className="h-4 w-4" />
+          <X className="h-5 w-5" />
         </button>
         <WalletCreatePromptContent variant="modal" onDismiss={onClose} />
       </div>
@@ -90,37 +90,37 @@ function WalletCreatePromptContent({
   const isModal = variant === "modal";
 
   return (
-    <div className={cn(isModal ? "pt-1" : "")}>
-      <div className="flex items-start gap-3">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-orange-500/15 ring-1 ring-orange-500/25">
-          <Wallet className="h-5 w-5 text-orange-300" aria-hidden />
+    <div className={cn(isModal ? "pt-2" : "")}>
+      <div className="flex items-start gap-4">
+        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-orange-500/15 ring-1 ring-orange-500/25">
+          <Wallet className="h-6 w-6 text-orange-300" aria-hidden />
         </span>
-        <div className="min-w-0 flex-1 pr-6">
-          <p id="wallet-create-prompt-title" className="font-semibold text-orange-100">
+        <div className="min-w-0 flex-1 pr-8">
+          <p id="wallet-create-prompt-title" className="text-lg font-bold text-orange-100">
             Create your wallet first
           </p>
-          <p className="mt-1.5 text-sm text-orange-200/85">
+          <p className="mt-2 text-sm font-medium text-orange-200/85">
             Needed for Earn campaigns and Spin Reward.
           </p>
         </div>
       </div>
 
-      <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+      <ul className="mt-6 grid gap-3 sm:grid-cols-2">
         {WALLET_FEATURES.map(({ icon: Icon, label, desc }) => (
           <li
             key={label}
-            className="flex items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--background)]/50 px-3 py-2.5"
+            className="flex items-center gap-3 rounded-2xl border border-white/5 bg-[var(--background)]/50 px-4 py-3"
           >
-            <Icon className="h-4 w-4 shrink-0 text-canton" aria-hidden />
+            <Icon className="h-5 w-5 shrink-0 text-canton" aria-hidden />
             <div className="min-w-0">
-              <p className="text-xs font-semibold text-[var(--foreground)]">{label}</p>
-              <p className="text-[10px] text-[var(--muted-foreground)]">{desc}</p>
+              <p className="text-sm font-semibold text-slate-100">{label}</p>
+              <p className="text-xs font-medium text-slate-400">{desc}</p>
             </div>
           </li>
         ))}
       </ul>
 
-      <div className={cn("mt-4 flex flex-wrap gap-2", isModal && "sm:justify-end")}>
+      <div className={cn("mt-6 flex flex-wrap gap-3", isModal && "sm:justify-end")}>
         <Link
           href="/wallet"
           onClick={onDismiss}
@@ -128,7 +128,7 @@ function WalletCreatePromptContent({
             buttonVariants({ size: "sm" }),
           )}
         >
-          <Wallet className="h-4 w-4" />
+          <Wallet className="h-5 w-5" />
           Create wallet
         </Link>
         {isModal ? (
@@ -137,7 +137,7 @@ function WalletCreatePromptContent({
             onClick={onDismiss}
             className={cn(
               buttonVariants({ size: "sm", variant: "ghost" }),
-              "rounded-full text-[var(--muted-foreground)]",
+              "rounded-2xl text-slate-400",
             )}
           >
             Not now

@@ -39,22 +39,22 @@ export function WalletReconnect({ username, onConnected }: WalletReconnectProps)
   return (
     <div className="flex min-h-[60vh] w-full min-w-0 items-center justify-center">
       <div className="w-full min-w-0 max-w-md text-center">
-        <div className="mb-6 flex justify-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-orange-500/30 bg-orange-500/10">
-            <Wallet className="h-8 w-8 text-orange-400" />
+        <div className="mb-8 flex justify-center">
+          <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-orange-500/30 bg-orange-500/10">
+            <Wallet className="h-10 w-10 text-orange-400" />
           </div>
         </div>
-        <h2 className="type-page-title">{t("wallet.reconnectTitle")}</h2>
-        <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+        <h2 className="text-2xl font-bold text-slate-100">{t("wallet.reconnectTitle")}</h2>
+        <p className="mt-3 text-sm font-medium text-slate-400">
           {t("wallet.reconnectHint")}
         </p>
-        <p className="mt-4 font-mono text-sm text-[var(--foreground)]">
+        <p className="mt-5 font-mono text-base font-semibold text-slate-100">
           @{formatUsernameForDisplay(username)}
         </p>
 
         {error ? (
           <p
-            className="mt-4 rounded-xl border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-sm text-orange-300"
+            className="mt-6 rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm font-medium text-orange-300"
             role="alert"
           >
             {error}
@@ -65,7 +65,7 @@ export function WalletReconnect({ username, onConnected }: WalletReconnectProps)
           type="button"
           disabled={busy}
           onClick={() => void handleReconnect()}
-          className={cn(buttonVariants({ size: "lg" }), "mt-8 w-full gap-2")}
+          className={cn(buttonVariants({ size: "lg" }), "mt-10 w-full gap-2")}
         >
           {busy ? (
             <>
@@ -74,7 +74,7 @@ export function WalletReconnect({ username, onConnected }: WalletReconnectProps)
             </>
           ) : (
             <>
-              <RefreshCw className="h-4 w-4" />
+              <RefreshCw className="h-5 w-5" />
               {t("wallet.reconnectBtn")}
             </>
           )}

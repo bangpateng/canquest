@@ -77,7 +77,7 @@ export function WalletPreapprovalBanner({ onActivated }: WalletPreapprovalBanner
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--muted)]/25 px-4 py-3 text-xs text-[var(--muted-foreground)]">
+      <div className="flex items-center gap-3 rounded-2xl border border-white/5 bg-[var(--muted)]/25 px-6 py-4 text-sm font-medium text-slate-400">
         <LoadingSpinner size="sm" />
         {t("wallet.checkingPreapproval")}
       </div>
@@ -88,11 +88,11 @@ export function WalletPreapprovalBanner({ onActivated }: WalletPreapprovalBanner
 
   if (status.isPlaceholder) {
     return (
-      <div className="flex gap-3 rounded-xl border border-orange-500/30 bg-orange-500/10 px-4 py-3">
-        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-orange-400" />
-        <div className="text-xs text-orange-300">
-          <p className="font-medium">{t("wallet.walletNotConnected")}</p>
-          <p className="mt-1 opacity-90">{t("wallet.walletNotConnectedHint")}</p>
+      <div className="flex gap-4 rounded-2xl border border-orange-500/30 bg-orange-500/10 px-6 py-4">
+        <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-orange-400" />
+        <div className="text-sm font-medium text-orange-300">
+          <p className="font-semibold">{t("wallet.walletNotConnected")}</p>
+          <p className="mt-2 opacity-90">{t("wallet.walletNotConnectedHint")}</p>
         </div>
       </div>
     );
@@ -102,21 +102,21 @@ export function WalletPreapprovalBanner({ onActivated }: WalletPreapprovalBanner
 
   if (active) {
     return (
-      <div className="flex w-full min-w-0 gap-3 rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3">
-        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
-        <div className="min-w-0 text-xs text-green-200">
-          <p className="font-medium">{t("wallet.cip56Active")}</p>
+      <div className="flex w-full min-w-0 gap-4 rounded-2xl border border-green-500/30 bg-green-500/10 px-6 py-4">
+        <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-500" />
+        <div className="min-w-0 text-sm font-medium text-green-200">
+          <p className="font-semibold">{t("wallet.cip56Active")}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/25 px-4 py-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <ShieldCheck className="h-4 w-4 shrink-0 text-[var(--muted-foreground)]" />
-          <p className="text-sm font-medium text-[var(--foreground)]">
+    <div className="rounded-2xl border border-white/5 bg-[var(--muted)]/25 px-6 py-5">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-4">
+          <ShieldCheck className="h-5 w-5 shrink-0 text-slate-400" />
+          <p className="text-base font-semibold text-slate-100">
             {t("wallet.enablePreapproval")}
           </p>
         </div>
@@ -139,7 +139,7 @@ export function WalletPreapprovalBanner({ onActivated }: WalletPreapprovalBanner
           )}
         </button>
       </div>
-      {error ? <p className="mt-3 text-xs text-red-400">{error}</p> : null}
+      {error ? <p className="mt-4 text-sm font-medium text-red-400">{error}</p> : null}
     </div>
   );
 }

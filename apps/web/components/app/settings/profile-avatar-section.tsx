@@ -147,7 +147,7 @@ export function ProfileAvatarSection({
   const initials = initialsFrom(displayName?.trim() || "User");
 
   return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+    <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
       <div className="relative shrink-0">
         <input
           ref={fileRef}
@@ -159,7 +159,7 @@ export function ProfileAvatarSection({
         />
         <div
           className={cn(
-            "relative flex h-28 w-28 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--muted)] shadow-inner sm:h-32 sm:w-32",
+            "relative flex h-32 w-32 overflow-hidden rounded-3xl border border-white/5 bg-[var(--muted)] shadow-inner sm:h-36 sm:w-36",
           )}
         >
           {busy ? (
@@ -170,23 +170,23 @@ export function ProfileAvatarSection({
             // eslint-disable-next-line @next/next/no-img-element
             <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
           ) : (
-            <div className="flex flex-1 flex-col items-center justify-center gap-1 px-2 text-center">
-              <span className="type-section-title text-[var(--muted-foreground)]">
+            <div className="flex flex-1 flex-col items-center justify-center gap-2 px-3 text-center">
+              <span className="text-xl font-bold text-slate-400">
                 {initials}
               </span>
-              <UserRound className="h-6 w-6 text-[var(--muted-foreground)] opacity-50" />
+              <UserRound className="h-7 w-7 text-slate-400 opacity-50" />
             </div>
           )}
         </div>
       </div>
-      <div className="min-w-0 flex-1 space-y-3">
+      <div className="min-w-0 flex-1 space-y-4">
         <div>
-          <p className="text-xs font-medium text-[var(--muted-foreground)]">Profile photo</p>
-          <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+          <p className="text-sm font-medium text-slate-400">Profile photo</p>
+          <p className="mt-2 text-sm font-medium text-slate-400">
             Shown on the leaderboard. Stored in your account folder on the server.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-3">
           <label
             htmlFor={inputId}
             className={cn(
@@ -195,7 +195,7 @@ export function ProfileAvatarSection({
               busy && "pointer-events-none opacity-50",
             )}
           >
-            <ImagePlus className="h-4 w-4" />
+            <ImagePlus className="h-5 w-5" />
             {avatarUrl ? "Change photo" : "Upload image"}
           </label>
           {avatarUrl ? (
