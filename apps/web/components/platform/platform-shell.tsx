@@ -41,10 +41,10 @@ const navItems: {
   { href: "/overview", key: "overview", icon: LayoutGrid },
   { href: ROUTES.campaignQuests, key: "earn", icon: Sparkles },
   { href: ROUTES.earnHub, key: "quests", icon: Gift },
-  { href: "/spin-reward", key: "spin", icon: Ticket },
+  { href: ROUTES.spinReward, key: "spin", icon: Ticket },
   { href: "/wallet", key: "wallet", icon: Wallet },
   { href: ROUTES.leaderboard, key: "leaderboard", icon: Trophy },
-  { href: "/setting", key: "settings", icon: Settings },
+  { href: "/settings", key: "settings", icon: Settings },
 ];
 
 
