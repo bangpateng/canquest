@@ -207,13 +207,16 @@ export function QuestsBrowser({
       )}
     >
       <span className="sr-only">{t("quests.searchLabel")}</span>
-      <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted-foreground)]" />
+      <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
       <input
         type="search"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder={t("quests.searchPlaceholder")}
-        className={cn(inputClass, "py-2.5 pl-10 pr-3", isEarn && "bg-[var(--background)]/80")}
+        placeholder="Search"
+        className={cn(
+          "w-full rounded-2xl border border-white/5 bg-[var(--muted)]/50 py-3 pl-12 pr-4 text-base font-medium text-slate-100 outline-none placeholder:text-slate-500 focus:border-[var(--primary)]/40 focus:ring-2 focus:ring-[var(--ring)]",
+          isEarn && "bg-[var(--background)]/80",
+        )}
         autoComplete="off"
       />
     </label>
