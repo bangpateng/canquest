@@ -35,6 +35,9 @@ export class AuthService {
   ) {}
 
   async register(dto: { email: string; password: string; referralCode?: string }) {
+    if (process.env.AUTH_REGISTER_ENABLED === 'false') {
+      throw new BadRequestException('Registration is currently disabled');
+    }
     const email = dto.email.trim().toLowerCase();
     const existing = await this.users.findByEmail(email);
     if (existing?.emailVerified) {
