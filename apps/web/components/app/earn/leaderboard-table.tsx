@@ -78,10 +78,10 @@ function ParticipantCell({
   const avatarSrc = leaderboardAvatarSrc(row.avatarUrl);
 
   return (
-    <td className="px-3 py-3">
-      <div className="flex items-center gap-3">
+    <td className="px-6 py-4">
+      <div className="flex items-center gap-4">
         <div
-          className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full ring-2 ring-[var(--border)] ring-offset-2 ring-offset-[var(--card)]"
+          className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full ring-2 ring-white/10 ring-offset-2 ring-offset-[var(--card)]"
           aria-hidden
           style={
             avatarSrc
@@ -102,29 +102,29 @@ function ParticipantCell({
               referrerPolicy="no-referrer"
             />
           ) : (
-            <span className="type-micro-label text-white drop-shadow-sm">
+            <span className="text-xs font-bold uppercase tracking-wider text-white drop-shadow-sm">
               {getInitials(row.displayName)}
             </span>
           )}
         </div>
         <div className="min-w-0 leading-tight">
-          <div className="flex flex-wrap items-center gap-2 gap-y-1">
-            <span className="type-subsection-title text-[var(--foreground)]">
+          <div className="flex flex-wrap items-center gap-3 gap-y-1">
+            <span className="text-base font-semibold text-slate-100">
               {row.displayName}
             </span>
             {isCurrentUser && (
-              <span className="rounded-md bg-[var(--primary)]/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--foreground)]">
+              <span className="rounded-lg bg-[var(--primary)]/20 px-2 py-1 text-xs font-bold uppercase tracking-wide text-slate-100">
                 You
               </span>
             )}
             {row.rank <= 3 && (
-              <span className="text-sm">
+              <span className="text-base">
                 {row.rank === 1 ? "🥇" : row.rank === 2 ? "🥈" : "🥉"}
               </span>
             )}
           </div>
           {row.twitterUsername ? (
-            <p className="text-xs text-[var(--muted-foreground)]">@{row.twitterUsername}</p>
+            <p className="mt-1 text-sm font-medium text-slate-400">@{row.twitterUsername}</p>
           ) : null}
         </div>
       </div>
@@ -181,8 +181,8 @@ export function LeaderboardTable() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
+    <div className="space-y-6">
+      <div className="flex flex-wrap gap-3">
         {TABS.map((t) => {
           const selected = period === t.id;
           return (
@@ -198,39 +198,39 @@ export function LeaderboardTable() {
         })}
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]">
-        <div className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3 text-sm font-medium">
-          <Trophy className="h-4 w-4 text-[var(--muted-foreground)]" />
+      <div className="overflow-hidden rounded-3xl border border-white/5 bg-[var(--card)]">
+        <div className="flex items-center gap-3 border-b border-slate-800/80 bg-[var(--muted)]/40 px-6 py-4 text-base font-semibold text-slate-100">
+          <Trophy className="h-5 w-5 text-slate-400" />
           Top participants ·{" "}
           {period === "all" ? "All time" : period === "weekly" ? "Weekly" : "Monthly"}
           {data && (
-            <span className="ml-auto text-xs text-[var(--muted-foreground)]">
+            <span className="ml-auto text-sm font-medium text-slate-400">
               {data.total} participants
             </span>
           )}
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-16">
+          <div className="flex items-center justify-center py-20">
             <LoadingSpinner size="xl" tone="muted" />
           </div>
         ) : !data || data.rows.length === 0 ? (
-          <div className="py-16 text-center">
-            <p className="text-sm font-medium text-[var(--foreground)]">
+          <div className="py-20 text-center">
+            <p className="text-base font-semibold text-slate-100">
               No participants yet
             </p>
-            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+            <p className="mt-2 text-sm font-medium text-slate-400">
               Complete quests to appear on the leaderboard.
             </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[320px] text-left">
-              <thead className="text-xs uppercase tracking-wide text-[var(--muted-foreground)]">
+              <thead className="text-sm font-semibold uppercase tracking-wide text-slate-400">
                 <tr>
-                  <th className="whitespace-nowrap px-3 py-2 font-medium">#</th>
-                  <th className="min-w-[12rem] px-3 py-2 font-medium">Participant</th>
-                  <th className="whitespace-nowrap px-3 py-2 text-right font-medium">Points</th>
+                  <th className="whitespace-nowrap px-6 py-4 font-semibold">#</th>
+                  <th className="min-w-[12rem] px-6 py-4 font-semibold">Participant</th>
+                  <th className="whitespace-nowrap px-6 py-4 text-right font-semibold">Points</th>
                 </tr>
               </thead>
               <tbody>
@@ -240,15 +240,15 @@ export function LeaderboardTable() {
                     <tr
                       key={row.userId}
                       className={cn(
-                        "border-t border-[var(--border)]",
+                        "border-t border-slate-800/80",
                         isCurrentUser && "bg-[var(--primary)]/6",
                       )}
                     >
-                      <td className="px-3 py-3 text-sm tabular-nums font-medium">
+                      <td className="px-6 py-4 text-base tabular-nums font-semibold text-slate-100">
                         {row.rank}
                       </td>
                       <ParticipantCell row={row} isCurrentUser={isCurrentUser} />
-                      <td className="px-3 py-3 text-right text-sm tabular-nums font-medium">
+                      <td className="px-6 py-4 text-right text-base tabular-nums font-semibold text-slate-100">
                         {row.points.toLocaleString()}
                       </td>
                     </tr>
@@ -261,7 +261,7 @@ export function LeaderboardTable() {
 
         {!loading && (
           <ListPagination
-            className="px-4 pb-3"
+            className="px-6 pb-4"
             page={page}
             totalPages={totalPages}
             total={data?.total}

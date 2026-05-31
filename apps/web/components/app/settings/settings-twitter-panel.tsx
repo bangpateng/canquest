@@ -124,47 +124,47 @@ export function SettingsTwitterPanel({
   return (
     <section
       id="twitter"
-      className="scroll-mt-8 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 md:p-8"
+      className="scroll-mt-8 rounded-3xl border border-white/5 bg-[var(--card)] p-8 md:p-10"
     >
-      <h3 className="type-section-title">X (Twitter)</h3>
+      <h3 className="text-xl font-bold text-slate-100">X (Twitter)</h3>
 
       {status.apiConfigured === false ? (
-        <p className="mt-4 rounded-xl border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-xs text-orange-200">
+        <p className="mt-6 rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm font-medium text-orange-200">
           Twitter verification is not configured on this server yet.
         </p>
       ) : null}
 
       {status.connected && status.username ? (
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-3">
+        <div className="mt-8 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-6 py-4">
           <div>
-            <p className="text-xs font-medium text-emerald-300/90">Connected</p>
-            <p className="mt-0.5 font-mono text-sm text-[var(--foreground)]">@{status.username}</p>
+            <p className="text-sm font-semibold text-emerald-300/90">Connected</p>
+            <p className="mt-1 font-mono text-base font-semibold text-slate-100">@{status.username}</p>
           </div>
           <button
             type="button"
             disabled={busy}
             onClick={() => void handleDisconnect()}
-            className={cn(buttonVariants({ size: "sm", variant: "secondary" }), "gap-1.5")}
+            className={cn(buttonVariants({ size: "sm", variant: "secondary" }), "gap-2")}
           >
-            {busy ? <LoadingSpinner size="sm" /> : <Unlink className="h-3.5 w-3.5" />}
+            {busy ? <LoadingSpinner size="sm" /> : <Unlink className="h-4 w-4" />}
             Disconnect
           </button>
         </div>
       ) : (
-        <form onSubmit={(e) => void handleConnect(e)} className="mt-5 space-y-3">
+        <form onSubmit={(e) => void handleConnect(e)} className="mt-8 space-y-4">
           <div>
-            <label htmlFor="twitter-handle" className="text-xs font-medium text-[var(--muted-foreground)]">
+            <label htmlFor="twitter-handle" className="text-sm font-medium text-slate-400">
               X username
             </label>
-            <div className="mt-1.5 flex rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 focus-within:border-[var(--primary)]/40 focus-within:ring-2 focus-within:ring-[var(--ring)]">
-              <span className="flex items-center pl-3 text-sm text-[var(--muted-foreground)]">@</span>
+            <div className="mt-2 flex rounded-2xl border border-white/5 bg-[var(--muted)]/40 focus-within:border-[var(--primary)]/40 focus-within:ring-2 focus-within:ring-[var(--ring)]">
+              <span className="flex items-center pl-4 text-base font-medium text-slate-400">@</span>
               <input
                 id="twitter-handle"
                 value={input}
                 onChange={(e) => setInput(e.target.value.replace(/^@/, ""))}
                 placeholder="your_handle"
                 disabled={busy}
-                className="min-w-0 flex-1 bg-transparent py-2.5 pr-3 text-sm outline-none"
+                className="min-w-0 flex-1 bg-transparent py-3 pr-4 text-base font-medium text-slate-100 outline-none"
                 autoComplete="off"
                 spellCheck={false}
               />
@@ -183,12 +183,12 @@ export function SettingsTwitterPanel({
       )}
 
       {error ? (
-        <p className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+        <p className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-300">
           {error}
         </p>
       ) : null}
       {success ? (
-        <p className="mt-3 text-xs font-medium text-emerald-400">{success}</p>
+        <p className="mt-4 text-sm font-semibold text-emerald-400">{success}</p>
       ) : null}
     </section>
   );

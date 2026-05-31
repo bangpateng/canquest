@@ -97,55 +97,55 @@ export function EarnHubPage() {
   const loading = hubLoading || meLoading;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Points balance — matches Tasks panel chrome */}
       <section
-        className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]/40"
+        className="overflow-hidden rounded-3xl border border-white/5 bg-[var(--card)]/40"
         aria-label="Points balance"
       >
-        <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--muted)]/20 px-4 py-3 sm:px-5">
-          <p className="text-xs font-medium text-[var(--muted-foreground)]">Your points</p>
-          <span className="inline-flex items-center gap-1 rounded-md bg-[var(--primary)]/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-canton">
-            <Zap className="h-3 w-3" aria-hidden />
+        <div className="flex items-center justify-between border-b border-slate-800/80 bg-[var(--muted)]/20 px-6 py-4">
+          <p className="text-sm font-medium text-slate-400">Your points</p>
+          <span className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--primary)]/12 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-canton">
+            <Zap className="h-4 w-4" aria-hidden />
             Lifetime
           </span>
         </div>
 
-        <div className="relative px-4 py-5 sm:px-6">
+        <div className="relative px-6 py-8">
           <div
             className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_100%_0%,rgb(var(--canton-rgb)/0.12),transparent_55%)]"
             aria-hidden
           />
           <div className="relative">
             {loading ? (
-              <div className="flex h-12 items-center gap-2 text-sm text-[var(--muted-foreground)]">
+              <div className="flex h-14 items-center gap-3 text-base font-medium text-slate-400">
                 <LoadingSpinner size="lg" />
                 Loading…
               </div>
             ) : (
               <>
-                <p className="text-4xl font-semibold tabular-nums leading-none tracking-tight text-[var(--foreground)] sm:text-[44px]">
+                <p className="text-5xl font-bold tabular-nums leading-none tracking-tight text-slate-100 sm:text-6xl">
                   {earnPoints.toLocaleString()}
-                  <span className="ml-1.5 text-lg font-medium text-canton sm:text-xl">pts</span>
+                  <span className="ml-2 text-xl font-semibold text-canton sm:text-2xl">pts</span>
                 </p>
-                <p className="mt-2 text-xs leading-relaxed text-[var(--muted-foreground)]">
+                <p className="mt-3 text-sm font-medium leading-relaxed text-slate-400">
                   Quest tasks, friend invites, partner Earn campaigns, and spin wins.
                 </p>
               </>
             )}
           </div>
 
-          <div className="relative mt-4 flex flex-wrap items-center gap-2 border-t border-[var(--border)]/80 pt-4">
+          <div className="relative mt-6 flex flex-wrap items-center gap-3 border-t border-slate-800/80 pt-6">
             <Link
               href={ROUTES.leaderboard}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)]/60 px-3 py-1.5 text-xs font-medium text-[var(--foreground)] transition-colors hover:border-[var(--primary)]/35 hover:bg-[var(--primary)]/8"
+              className="inline-flex items-center gap-2 rounded-2xl border border-white/5 bg-[var(--background)]/60 px-4 py-2 text-sm font-medium text-slate-100 transition-colors hover:border-[var(--primary)]/35 hover:bg-[var(--primary)]/8"
             >
-              <Trophy className="h-3.5 w-3.5 text-canton" />
+              <Trophy className="h-4 w-4 text-canton" />
               Leaderboard
             </Link>
             <Link
               href={ROUTES.spinReward}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)]/60 px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:border-[var(--border)] hover:text-[var(--foreground)]"
+              className="inline-flex items-center gap-2 rounded-2xl border border-white/5 bg-[var(--background)]/60 px-4 py-2 text-sm font-medium text-slate-400 transition-colors hover:border-white/10 hover:text-slate-100"
             >
               Spend points
             </Link>
@@ -154,13 +154,13 @@ export function EarnHubPage() {
       </section>
 
       {loading ? (
-        <div className="flex items-center justify-center gap-2 py-16 text-sm text-[var(--muted-foreground)]">
+        <div className="flex items-center justify-center gap-3 py-20 text-base font-medium text-slate-400">
           <LoadingSpinner size="lg" />
           Loading tasks…
         </div>
       ) : hubError || !hub ? (
-        <div className="rounded-2xl border border-dashed border-[var(--border)] py-14 text-center">
-          <p className="text-sm text-[var(--muted-foreground)]">{hubError ?? "No Quest hub yet."}</p>
+        <div className="rounded-3xl border border-dashed border-slate-800/80 py-16 text-center">
+          <p className="text-sm font-medium text-slate-400">{hubError ?? "No Quest hub yet."}</p>
         </div>
       ) : (
         <>
@@ -182,12 +182,12 @@ export function EarnHubPage() {
                 }}
               />
             ) : (
-              <p className="py-10 text-center text-sm text-[var(--muted-foreground)]">
+              <p className="py-12 text-center text-sm font-medium text-slate-400">
                 No tasks yet. Check back soon.
               </p>
             )
           ) : hub.status !== "ACTIVE" ? (
-            <p className="py-10 text-center text-sm text-[var(--muted-foreground)]">
+            <p className="py-12 text-center text-sm font-medium text-slate-400">
               Quest is not active right now.
             </p>
           ) : null}
@@ -196,16 +196,16 @@ export function EarnHubPage() {
         </>
       )}
 
-      <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--muted)]/15 px-4 py-3.5 text-sm">
+      <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/5 bg-[var(--muted)]/15 px-6 py-4 text-base">
         <Link
           href={ROUTES.earnHub}
-          className="font-medium text-[var(--foreground)] transition-colors hover:text-canton"
+          className="font-semibold text-slate-100 transition-colors hover:text-canton"
         >
           Earn
         </Link>
         <Link
           href={ROUTES.campaignQuests}
-          className="group flex items-center gap-1 text-xs font-semibold text-canton transition-colors hover:text-[var(--primary-strong)]"
+          className="group flex items-center gap-1.5 text-sm font-semibold text-canton transition-colors hover:text-[var(--primary-strong)]"
         >
           Partner campaigns
         </Link>

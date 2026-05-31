@@ -124,8 +124,8 @@ export function QuestCard({
   return (
     <article
       className={cn(
-        "group relative flex h-full flex-col overflow-hidden rounded-2xl transition-all duration-300",
-        "bg-[var(--card)] ring-1 ring-[var(--border)]",
+        "group relative flex h-full flex-col overflow-hidden rounded-3xl transition-all duration-300",
+        "bg-[var(--card)] ring-1 ring-white/5",
         "hover:-translate-y-1 hover:ring-[var(--primary)]/25 hover:shadow-[0_0_40px_rgb(var(--canton-rgb)/0.08)]",
         quest.status === "ENDED" && "opacity-90",
         quest.status === "COMING_SOON" && "opacity-95",
@@ -133,7 +133,7 @@ export function QuestCard({
     >
       {/* Hover glow border */}
       <div
-        className="pointer-events-none absolute inset-0 rounded-2xl opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+        className="pointer-events-none absolute inset-0 rounded-3xl opacity-0 transition-opacity duration-300 group-hover:opacity-100"
         style={{
           background:
             "linear-gradient(135deg, rgb(var(--canton-rgb) / 0.12) 0%, transparent 40%, rgb(167 139 250 / 0.08) 100%)",
@@ -144,7 +144,7 @@ export function QuestCard({
       <div
         className={cn(
           "relative shrink-0 overflow-hidden",
-          "h-32",
+          "h-36",
         )}
       >
         <div
@@ -167,7 +167,7 @@ export function QuestCard({
         {/* Status chip */}
         <span
           className={cn(
-            "absolute right-3 top-3 z-[2] rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider backdrop-blur-md",
+            "absolute right-4 top-4 z-[2] rounded-xl px-3 py-1.5 text-xs font-bold uppercase tracking-wider backdrop-blur-md",
             statusMeta.className,
           )}
         >
@@ -176,11 +176,11 @@ export function QuestCard({
 
         {/* Tags */}
         {quest.tags.length > 0 && (
-          <div className="absolute bottom-2 left-3 right-14 z-[2] flex flex-wrap gap-1">
+          <div className="absolute bottom-3 left-4 right-16 z-[2] flex flex-wrap gap-1.5">
             {quest.tags.slice(0, 4).map((t) => (
               <span
                 key={t}
-                className="rounded-md border border-white/10 bg-black/40 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white/90 backdrop-blur-sm"
+                className="rounded-lg border border-white/10 bg-black/40 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-white/90 backdrop-blur-sm"
               >
                 {t}
               </span>
@@ -192,23 +192,23 @@ export function QuestCard({
       {/* Body */}
       <div
         className={cn(
-          "relative flex flex-1 flex-col px-4 pb-4 pt-0",
+          "relative flex flex-1 flex-col px-6 pb-6 pt-0",
         )}
       >
         {/* Logo overlap */}
-        <div className="-mt-6 mb-2.5 flex items-end gap-3">
+        <div className="-mt-7 mb-3 flex items-end gap-4">
           <QuestLogo
             logoUrl={quest.logoUrl}
             orgSlug={quest.orgSlug}
             completed={completed}
           />
-          <div className="min-w-0 flex-1 pb-0.5">
-            <p className="truncate text-[10px] font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
+          <div className="min-w-0 flex-1 pb-1">
+            <p className="truncate text-xs font-semibold uppercase tracking-wider text-slate-400">
               {quest.org}
             </p>
             <CardTitle
               className={cn(
-                "line-clamp-2 text-[var(--foreground)]",
+                "line-clamp-2 text-xl font-bold text-slate-100",
               )}
             >
               {quest.title}
@@ -218,22 +218,22 @@ export function QuestCard({
 
         <p
           className={cn(
-            "line-clamp-2 leading-relaxed text-[var(--muted-foreground)]",
-            "text-[13px]",
+            "line-clamp-2 leading-relaxed text-slate-400",
+            "text-sm font-medium",
           )}
         >
           {quest.description}
         </p>
 
         {/* Meta chips */}
-        <div className="mt-2.5 flex flex-wrap gap-1.5">
-          <span className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--muted)]/60 px-2.5 py-1 text-[11px] text-[var(--muted-foreground)]">
-            <ListChecks className="h-3.5 w-3.5 shrink-0 text-[var(--primary-strong)]" />
+        <div className="mt-4 flex flex-wrap gap-2">
+          <span className="inline-flex items-center gap-2 rounded-2xl border border-white/5 bg-[var(--muted)]/60 px-3 py-1.5 text-sm font-medium text-slate-400">
+            <ListChecks className="h-4 w-4 shrink-0 text-canton" />
             {quest.tasks.length} tasks
           </span>
           {quest.deadline && (
-            <span className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--muted)]/60 px-2.5 py-1 text-[11px] text-[var(--muted-foreground)]">
-              <Calendar className="h-3.5 w-3.5 shrink-0" />
+            <span className="inline-flex items-center gap-2 rounded-2xl border border-white/5 bg-[var(--muted)]/60 px-3 py-1.5 text-sm font-medium text-slate-400">
+              <Calendar className="h-4 w-4 shrink-0" />
               {quest.deadline}
             </span>
           )}
@@ -241,23 +241,23 @@ export function QuestCard({
 
         <div
           className={cn(
-            "mt-3 flex items-center gap-2 rounded-xl border bg-gradient-to-r px-3 py-2.5",
+            "mt-4 flex items-center gap-3 rounded-2xl border bg-gradient-to-r px-4 py-3",
             accent.className,
           )}
         >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-black/20">
-            <RewardIcon className="h-4 w-4" />
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-black/20">
+            <RewardIcon className="h-5 w-5" />
           </span>
           <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-wider opacity-70">
+            <p className="text-xs font-semibold uppercase tracking-wider opacity-70">
               {t("earnCampaigns.rewardLabel")}
             </p>
-            <p className="truncate text-sm font-semibold">{quest.rewardPool}</p>
+            <p className="truncate text-base font-bold text-slate-100">{quest.rewardPool}</p>
           </div>
         </div>
 
         {/* CTA */}
-        <div className="mt-4 pt-3.5 sm:pt-4">
+        <div className="mt-6 pt-4">
         {canOpen ? (
           <Link
             href={ROUTES.campaignQuest(quest.id, quest.title)}
@@ -271,7 +271,7 @@ export function QuestCard({
                       ? "success"
                       : "primary",
               }),
-              "py-3",
+              "py-3.5",
             )}
           >
             {ctaLabel}
@@ -280,7 +280,7 @@ export function QuestCard({
           <button
             type="button"
             disabled
-            className="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-full border border-dashed border-[var(--border)] bg-[var(--muted)]/40 py-2.5 text-sm font-semibold text-[var(--muted-foreground)] sm:py-3"
+            className="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-800/80 bg-[var(--muted)]/40 py-3 text-base font-semibold text-slate-400"
           >
             Opens soon
           </button>

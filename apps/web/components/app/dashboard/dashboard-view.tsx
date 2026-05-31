@@ -267,7 +267,7 @@ export function DashboardView() {
   return (
     <div className="space-y-8">
       {loadError ? (
-        <div className="rounded-xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm text-orange-200">
+        <div className="rounded-2xl border border-orange-500/30 bg-orange-500/10 px-6 py-4 text-sm text-orange-200">
           {loadError}{" "}
           <button
             type="button"
@@ -280,19 +280,19 @@ export function DashboardView() {
       ) : null}
 
       {/* Stat cards — order: Weekly rank → CC Balance → CC Transactions → Quests completed → Quest points */}
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      <section className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {statCards.map((c) => {
           const Icon = c.icon;
           return (
             <div
               key={c.key}
-              className="glass-card rounded-2xl border border-[var(--border)] p-6"
+              className="glass-card rounded-3xl border border-white/5 p-6"
             >
               <div className="flex items-center justify-between">
-                <p className="type-label">{c.title}</p>
-                <Icon className="h-4 w-4 text-[var(--muted-foreground)]" aria-hidden />
+                <p className="text-sm font-medium text-slate-400">{c.title}</p>
+                <Icon className="h-5 w-5 text-slate-500" aria-hidden />
               </div>
-              <StatValue className="mt-2">
+              <StatValue className="mt-3 text-2xl font-bold text-slate-100">
                 {c.value === null ? (
                   <LoadingSpinner size="xl" tone="muted" />
                 ) : (
@@ -300,7 +300,7 @@ export function DashboardView() {
                 )}
               </StatValue>
               {c.hint ? (
-                <p className="mt-1 text-xs text-[var(--muted-foreground)]">{c.hint}</p>
+                <p className="mt-2 text-sm font-medium text-slate-400">{c.hint}</p>
               ) : null}
             </div>
           );
@@ -308,43 +308,43 @@ export function DashboardView() {
       </section>
 
       {/* Recent Activity */}
-      <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm">
-          <SectionTitle>{t("dashboard.recentActivity")}</SectionTitle>
+      <section className="rounded-3xl border border-white/5 bg-[var(--card)] p-8 shadow-sm">
+          <SectionTitle className="text-xl font-bold text-slate-100">{t("dashboard.recentActivity")}</SectionTitle>
 
           {activityLoading ? (
-            <div className="flex items-center justify-center py-10">
+            <div className="flex items-center justify-center py-12">
               <LoadingSpinner size="lg" />
             </div>
           ) : !activityData || activityData.items.length === 0 ? (
-            <div className="mt-6 rounded-xl border border-dashed border-[var(--border)] py-10 text-center">
-              <p className="text-sm text-[var(--muted-foreground)]">
+            <div className="mt-8 rounded-2xl border border-dashed border-slate-800/80 py-12 text-center">
+              <p className="text-sm font-medium text-slate-400">
                 {t("dashboard.noActivity")}
               </p>
             </div>
           ) : (
             <>
-              <ul className="mt-5 divide-y divide-[var(--border)]">
+              <ul className="mt-6 divide-y divide-slate-800/80">
                 {activityData.items.map((item, i) => {
                   const Icon = ACTIVITY_ICON[item.type];
                   const colorClass = ACTIVITY_COLOR[item.type];
                   return (
                     <li
                       key={`${item.type}-${item.time}-${i}`}
-                      className="flex items-start gap-3 py-3"
+                      className="flex items-start gap-4 py-4"
                     >
                       <div
                         className={cn(
-                          "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+                          "mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl",
                           colorClass,
                         )}
                       >
-                        <Icon className="h-4 w-4" aria-hidden />
+                        <Icon className="h-5 w-5" aria-hidden />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="font-medium text-[var(--foreground)]">{item.title}</p>
-                        <p className="text-sm text-[var(--muted-foreground)]">{item.detail}</p>
+                        <p className="text-base font-semibold text-slate-100">{item.title}</p>
+                        <p className="mt-1 text-sm font-medium text-slate-400">{item.detail}</p>
                       </div>
-                      <p className="shrink-0 text-xs text-[var(--muted-foreground)] pt-0.5">
+                      <p className="shrink-0 text-sm font-medium text-slate-400 pt-1">
                         {timeAgo(item.time, t)}
                       </p>
                     </li>
@@ -352,7 +352,7 @@ export function DashboardView() {
                 })}
               </ul>
               <ListPagination
-                className="mt-4"
+                className="mt-6"
                 page={activityPage}
                 totalPages={activityData.totalPages}
                 total={activityData.total}

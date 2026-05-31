@@ -440,19 +440,19 @@ export function QuestTaskPanel({
 
       {/* Task list */}
       {isEarnHub ? (
-        <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]/40">
-          <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--muted)]/20 px-4 py-3 sm:px-5">
+        <div className="overflow-hidden rounded-3xl border border-white/5 bg-[var(--card)]/40">
+          <div className="flex items-center justify-between border-b border-slate-800/80 bg-[var(--muted)]/20 px-6 py-4">
             <div>
-              <p className="text-xs font-medium text-[var(--muted-foreground)]">Tasks to complete</p>
-              <p className="mt-0.5 text-[10px] text-[var(--muted-foreground)]/80">
+              <p className="text-sm font-medium text-slate-400">Tasks to complete</p>
+              <p className="mt-1 text-xs font-medium text-slate-500">
                 One at a time — finish each task before the next unlocks
               </p>
             </div>
-            <p className="text-xs font-semibold tabular-nums text-[var(--foreground)]">
+            <p className="text-base font-semibold tabular-nums text-slate-100">
               {verifiedCount}/{quest.tasks.length}
             </p>
           </div>
-          <ul className="divide-y divide-[var(--border)]">
+          <ul className="divide-y divide-slate-800/80">
             {quest.tasks.map((task, idx) => (
               <TaskRow
                 key={task.id}
@@ -476,31 +476,31 @@ export function QuestTaskPanel({
           </ul>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]/40">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--muted)]/20 px-4 py-3 sm:px-5">
+        <div className="overflow-hidden rounded-3xl border border-white/5 bg-[var(--card)]/40">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800/80 bg-[var(--muted)]/20 px-6 py-4">
             <div>
-              <p className="text-xs font-medium text-[var(--muted-foreground)]">
+              <p className="text-sm font-medium text-slate-400">
                 Tasks to complete
               </p>
-              <p className="mt-0.5 text-[10px] text-[var(--muted-foreground)]/80">
+              <p className="mt-1 text-xs font-medium text-slate-500">
                 One at a time — finish each task before the next unlocks
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               {allDone && !questCompleted ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-[var(--primary)]/12 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-canton">
-                  <Zap className="h-3 w-3" aria-hidden />
+                <span className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--primary)]/12 px-3 py-1 text-xs font-bold uppercase tracking-wide text-canton">
+                  <Zap className="h-4 w-4" aria-hidden />
                   Ready
                 </span>
               ) : null}
-              <p className="text-xs font-semibold tabular-nums text-[var(--foreground)]">
+              <p className="text-base font-semibold tabular-nums text-slate-100">
                 {verifiedCount}/{quest.tasks.length}
               </p>
             </div>
           </div>
           {quest.tasks.length > 0 ? (
-            <div className="border-b border-[var(--border)] px-4 py-2 sm:px-5">
-              <div className="h-1 overflow-hidden rounded-full bg-[var(--muted)]">
+            <div className="border-b border-slate-800/80 px-6 py-3">
+              <div className="h-1.5 overflow-hidden rounded-full bg-[var(--muted)]">
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-[var(--primary)] to-[var(--primary-strong)] transition-all duration-500"
                   style={{ width: `${pct}%` }}
@@ -508,7 +508,7 @@ export function QuestTaskPanel({
               </div>
             </div>
           ) : null}
-          <ul className="divide-y divide-[var(--border)]">
+          <ul className="divide-y divide-slate-800/80">
             {quest.tasks.map((task, idx) => (
               <TaskRow
                 key={task.id}
@@ -915,19 +915,19 @@ function TaskRow({
     return (
       <li
         className={cn(
-          "px-4 py-4 transition-colors sm:px-5 sm:py-4",
+          "px-6 py-5 transition-colors",
           isVerified ? "bg-emerald-500/10" : "hover:bg-[var(--muted)]/15",
           sequentiallyLocked && !isVerified && "opacity-55",
         )}
       >
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-          <div className="flex min-w-0 flex-1 items-start gap-3">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-5">
+          <div className="flex min-w-0 flex-1 items-start gap-4">
             <span
               className={cn(
-                "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+                "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl",
                 isVerified
                   ? "bg-emerald-500/12 text-emerald-400"
-                  : "bg-[var(--muted)]/45 text-[var(--muted-foreground)]",
+                  : "bg-[var(--muted)]/45 text-slate-400",
               )}
             >
               {isVerified ? (
@@ -937,40 +937,40 @@ function TaskRow({
               )}
             </span>
             <div className="min-w-0 flex-1">
-              <div className="flex items-start justify-between gap-2">
+              <div className="flex items-start justify-between gap-3">
                 <p
                   className={cn(
-                    "text-sm font-medium leading-snug text-[var(--foreground)]",
-                    isVerified && "text-[var(--foreground)] line-through opacity-80",
+                    "text-base font-semibold leading-snug text-slate-100",
+                    isVerified && "text-slate-100 line-through opacity-80",
                   )}
                 >
                   {displayTitle}
                 </p>
                 <TaskPointsLabel points={task.points} complete={isVerified} />
               </div>
-              <p className="mt-0.5 text-[11px] text-[var(--muted-foreground)]">
+              <p className="mt-1 text-sm font-medium text-slate-400">
                 {taskTypeSubtitle(task.type)}
               </p>
               {isVerified ? (
-                <p className="mt-1 text-[11px] font-medium text-emerald-300/90">Completed</p>
+                <p className="mt-2 text-sm font-medium text-emerald-300/90">Completed</p>
               ) : null}
               {task.description &&
                 !task.description.trim().startsWith("http") &&
                 task.description.trim() !== (task.target ?? "").trim() && (
-                  <p className="mt-1.5 line-clamp-2 text-xs text-[var(--muted-foreground)]">
+                  <p className="mt-2 line-clamp-2 text-sm font-medium text-slate-400">
                     {task.description}
                   </p>
                 )}
               {lockedHint ? (
-                <p className="mt-1.5 flex items-center gap-1 text-[11px] text-[var(--muted-foreground)]">
-                  <Lock className="h-3 w-3 shrink-0" aria-hidden />
+                <p className="mt-2 flex items-center gap-1.5 text-sm font-medium text-slate-400">
+                  <Lock className="h-4 w-4 shrink-0" aria-hidden />
                   {lockedHint}
                 </p>
               ) : null}
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center justify-end gap-2 sm:pl-2">
+          <div className="flex shrink-0 items-center justify-end gap-3 sm:pl-3">
             {isVerified ? (
               <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-300">
                 <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
@@ -1134,21 +1134,21 @@ function TaskRow({
     return (
       <li
         className={cn(
-          "px-4 py-4 transition-colors sm:px-5 sm:py-4",
+          "px-6 py-5 transition-colors",
           isOneTimeComplete || onRepeatCooldown
             ? "bg-emerald-500/10"
             : "hover:bg-[var(--muted)]/15",
           sequentiallyLocked && !isVerified && "opacity-55",
         )}
       >
-        <div className="flex gap-3">
+        <div className="flex gap-4">
           <div className="relative shrink-0">
             <span
               className={cn(
-                "flex h-10 w-10 items-center justify-center rounded-xl",
+                "flex h-12 w-12 items-center justify-center rounded-2xl",
                 isOneTimeComplete || onRepeatCooldown
                   ? "bg-emerald-500/12 text-emerald-400"
-                  : "bg-[var(--muted)]/45 text-[var(--muted-foreground)]",
+                  : "bg-[var(--muted)]/45 text-slate-400",
               )}
             >
               <TaskIcon type={task.type} className="h-4 w-4" />
@@ -1161,19 +1161,19 @@ function TaskRow({
           </div>
 
           <div className="min-w-0 flex-1">
-            <div className="flex items-start justify-between gap-2">
+            <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-3">
                   <p
                     className={cn(
-                      "text-sm font-medium leading-snug text-[var(--foreground)]",
-                      isOneTimeComplete && "text-[var(--foreground)] line-through opacity-80",
+                      "text-base font-semibold leading-snug text-slate-100",
+                      isOneTimeComplete && "text-slate-100 line-through opacity-80",
                     )}
                   >
                     {earnHubDisplay.headline}
                   </p>
                   {earnHubDisplay.showNew ? (
-                    <span className="shrink-0 rounded-md bg-canton/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-canton">
+                    <span className="shrink-0 rounded-lg bg-canton/20 px-2 py-1 text-xs font-bold uppercase tracking-wide text-canton">
                       New
                     </span>
                   ) : null}
@@ -1185,28 +1185,28 @@ function TaskRow({
               />
             </div>
             {isOneTimeComplete ? (
-              <p className="mt-1 text-[11px] font-medium text-emerald-400/80">Completed</p>
+              <p className="mt-2 text-sm font-medium text-emerald-400/80">Completed</p>
             ) : null}
             {onRepeatCooldown ? (
-              <p className="mt-1 text-[11px] font-medium text-emerald-400/80">
+              <p className="mt-2 text-sm font-medium text-emerald-400/80">
                 Checked in — available again in {formatEarnHubCooldown(repeatCooldownMs)}
               </p>
             ) : null}
             {canRepeatNow ? (
-              <p className="mt-1 text-[11px] text-canton">
+              <p className="mt-2 text-sm font-medium text-canton">
                 Ready again — check in for +{task.points} pts
               </p>
             ) : null}
 
             {quizExpired ? (
-              <p className="mt-2 text-[11px] text-orange-300/90">
+              <p className="mt-3 text-sm font-medium text-orange-300/90">
                 Quiz ended — points were only available for 24 hours. Your balance is unchanged if
                 you did not complete it in time.
               </p>
             ) : null}
 
             {!isVerified && !quizExpired && isQuiz ? (
-              <p className="mt-2 text-[11px] text-[var(--muted-foreground)]">
+              <p className="mt-3 text-sm font-medium text-slate-400">
                 Wrong answers earn no points — keep trying until you pick the correct one (within
                 24 hours).
               </p>
@@ -1357,25 +1357,25 @@ function TaskRow({
   return (
     <div
       className={cn(
-        "group relative rounded-2xl border bg-[var(--card)]/90 p-5 transition-all duration-300 backdrop-blur-sm",
+        "group relative rounded-3xl border bg-[var(--card)]/90 p-6 transition-all duration-300 backdrop-blur-sm",
         isVerified &&
           "border-emerald-500/35 bg-gradient-to-br from-emerald-500/8 to-transparent ring-1 ring-emerald-500/20",
         isPending && "border-orange-500/30 bg-orange-500/5",
         !isVerified &&
           !isPending &&
           !sequentiallyLocked &&
-          "border-[var(--border)] hover:border-[var(--primary)]/25 hover:shadow-[0_0_24px_rgb(var(--canton-rgb)/0.06)]",
+          "border-white/5 hover:border-[var(--primary)]/25 hover:shadow-[0_0_24px_rgb(var(--canton-rgb)/0.06)]",
         sequentiallyLocked && !isVerified && "opacity-55",
       )}
     >
-      <div className="flex gap-4">
+      <div className="flex gap-5">
         {/* Step badge */}
         <div
           className={cn(
-            "flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-xl text-xs font-bold",
+            "flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-2xl text-sm font-bold",
             isVerified
               ? "bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/40"
-              : "bg-[var(--muted)] text-[var(--muted-foreground)] ring-1 ring-[var(--border)]",
+              : "bg-[var(--muted)] text-slate-400 ring-1 ring-white/5",
           )}
         >
           {isVerified ? (
@@ -1390,27 +1390,27 @@ function TaskRow({
           )}
         </div>
 
-        <div className="min-w-0 flex-1 space-y-3">
-          <div className="flex flex-wrap items-start gap-2">
-            <div className="flex min-w-0 flex-1 items-start gap-2">
+        <div className="min-w-0 flex-1 space-y-4">
+          <div className="flex flex-wrap items-start gap-3">
+            <div className="flex min-w-0 flex-1 items-start gap-3">
               {!isVerified && (
-                <span className="mt-0.5 text-[var(--muted-foreground)]">
+                <span className="mt-1 text-slate-400">
                   <TaskIcon type={task.type} />
                 </span>
               )}
               <div className="min-w-0">
-                <CardTitle>{displayTitle}</CardTitle>
+                <CardTitle className="text-xl font-bold text-slate-100">{displayTitle}</CardTitle>
                 {task.description &&
                   !task.description.trim().startsWith("http") &&
                   task.description.trim() !== (task.target ?? "").trim() && (
-                    <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+                    <p className="mt-2 text-sm font-medium text-slate-400">
                       {task.description}
                     </p>
                   )}
               </div>
             </div>
 
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <div className="flex shrink-0 flex-wrap items-center gap-3">
               {isVerified ? (
                 <>
                   <span className="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-[10px] font-bold uppercase text-emerald-300">
@@ -1460,20 +1460,20 @@ function TaskRow({
           </div>
 
           {!isVerified && isQuiz && (
-            <p className="text-xs text-[var(--muted-foreground)]">
+            <p className="text-sm font-medium text-slate-400">
               Wrong answers earn no points — keep trying until you get it right.
             </p>
           )}
 
           {lockedHint ? (
-            <p className="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
-              <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            <p className="flex items-center gap-2 text-sm font-medium text-slate-400">
+              <Lock className="h-4 w-4 shrink-0" aria-hidden />
               {lockedHint}
             </p>
           ) : null}
 
           {needsTwitter && !isVerified ? (
-            <p className="text-xs text-orange-300/90">
+            <p className="text-sm font-medium text-orange-300/90">
               <Link href="/setting#twitter" className="font-semibold underline underline-offset-2">
                 Connect X (Twitter)
               </Link>{" "}

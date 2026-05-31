@@ -142,20 +142,20 @@ export function TransactionsView({
   }
 
   return (
-    <div className={cn(embedded ? "" : "space-y-6", className)}>
+    <div className={cn(embedded ? "" : "space-y-8", className)}>
       {!embedded ? (
-        <h2 className="type-page-title">CC Transaction log</h2>
+        <h2 className="text-2xl font-bold text-slate-100">CC Transaction log</h2>
       ) : null}
 
       <div
         className={cn(
-          "w-full min-w-0 overflow-hidden rounded-2xl border border-[var(--border)]",
+          "w-full min-w-0 overflow-hidden rounded-3xl border border-white/5",
           embedded ? "glass-card" : "bg-[var(--card)]",
         )}
       >
-        <div className="flex items-start justify-between gap-3 border-b border-[var(--border)] px-5 py-4">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-800/80 px-6 py-5">
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-[var(--foreground)]">
+            <p className="text-base font-semibold text-slate-100">
               {t("transactions.title")}
             </p>
           </div>
@@ -163,13 +163,13 @@ export function TransactionsView({
             type="button"
             onClick={refresh}
             disabled={loading}
-            className="mt-0.5 shrink-0 text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)] disabled:opacity-40"
+            className="mt-1 shrink-0 text-slate-400 transition-colors hover:text-slate-100 disabled:opacity-40"
             aria-label="Refresh transactions"
           >
             {loading ? (
               <LoadingSpinner size="sm" tone="muted" />
             ) : (
-              <RefreshCw className="h-3.5 w-3.5" />
+              <RefreshCw className="h-4 w-4" />
             )}
           </button>
         </div>
@@ -178,32 +178,32 @@ export function TransactionsView({
           <div
             className={cn(
               "flex items-center justify-center",
-              embedded ? "py-10" : "py-16",
+              embedded ? "py-12" : "py-20",
             )}
           >
             <LoadingSpinner size="lg" />
           </div>
         ) : !txPage || txPage.items.length === 0 ? (
-          <div className={cn("text-center", embedded ? "py-10" : "py-16")}>
-            <p className="text-sm font-medium text-[var(--foreground)]">
+          <div className={cn("text-center", embedded ? "py-12" : "py-20")}>
+            <p className="text-base font-semibold text-slate-100">
               {t("transactions.empty")}
             </p>
-            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+            <p className="mt-2 text-sm font-medium text-slate-400">
               Complete quests or send/receive CC to see activity here.
             </p>
           </div>
         ) : (
           <>
             <div className="hidden min-w-0 md:block">
-              <table className="w-full table-fixed text-left text-sm">
-                <thead className="border-b border-[var(--border)] bg-[var(--muted)]/50 text-xs uppercase tracking-wide text-[var(--muted-foreground)]">
+              <table className="w-full table-fixed text-left text-base">
+                <thead className="border-b border-slate-800/80 bg-[var(--muted)]/50 text-sm font-semibold uppercase tracking-wide text-slate-400">
                   <tr>
-                    <th className="whitespace-nowrap px-5 py-3 font-medium">{t("transactions.type")}</th>
-                    <th className="whitespace-nowrap px-5 py-3 font-medium">{t("transactions.amount")}</th>
-                    <th className="whitespace-nowrap px-5 py-3 font-medium">{t("transactions.description")}</th>
-                    <th className="whitespace-nowrap px-5 py-3 font-medium">{t("transactions.counterparty")}</th>
-                    <th className="whitespace-nowrap px-5 py-3 font-medium">{t("transactions.ledgerTx")}</th>
-                    <th className="whitespace-nowrap px-5 py-3 font-medium">{t("transactions.when")}</th>
+                    <th className="whitespace-nowrap px-6 py-4 font-semibold">{t("transactions.type")}</th>
+                    <th className="whitespace-nowrap px-6 py-4 font-semibold">{t("transactions.amount")}</th>
+                    <th className="whitespace-nowrap px-6 py-4 font-semibold">{t("transactions.description")}</th>
+                    <th className="whitespace-nowrap px-6 py-4 font-semibold">{t("transactions.counterparty")}</th>
+                    <th className="whitespace-nowrap px-6 py-4 font-semibold">{t("transactions.ledgerTx")}</th>
+                    <th className="whitespace-nowrap px-6 py-4 font-semibold">{t("transactions.when")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -218,42 +218,42 @@ export function TransactionsView({
                     return (
                       <tr
                         key={tx.id}
-                        className="border-t border-[var(--border)] transition-colors hover:bg-[var(--muted)]/40"
+                        className="border-t border-slate-800/80 transition-colors hover:bg-[var(--muted)]/40"
                       >
-                        <td className="px-5 py-3">
-                          <div className="flex items-center gap-2">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
                             <span
                               className={cn(
-                                "flex h-7 w-7 items-center justify-center rounded-lg",
+                                "flex h-9 w-9 items-center justify-center rounded-2xl",
                                 txIconBg(tx.type),
                               )}
                             >
                               <TxTypeIcon type={tx.type} />
                             </span>
-                            <span className="font-medium">
+                            <span className="text-base font-semibold text-slate-100">
                               {txDisplayTitle(tx, txLabel(tx.type))}
                             </span>
                           </div>
                         </td>
                         <td
                           className={cn(
-                            "type-display px-5 py-3 text-sm font-semibold tabular-nums",
+                            "px-6 py-4 text-base font-bold tabular-nums",
                             amountColor(tx.type),
                           )}
                         >
                           {amountSign(tx.type)}
                           {ccAmt.toFixed(4)} CC
                         </td>
-                        <td className="max-w-[12rem] truncate px-5 py-3 text-[var(--muted-foreground)]">
+                        <td className="max-w-[12rem] truncate px-6 py-4 text-sm font-medium text-slate-400">
                           {tx.description}
                         </td>
-                        <td className="max-w-[10rem] truncate px-5 py-3 font-mono text-xs text-[var(--muted-foreground)]">
+                        <td className="max-w-[10rem] truncate px-6 py-4 font-mono text-sm font-medium text-slate-400">
                           {tx.counterparty ?? tx.referenceId ?? "—"}
                         </td>
-                        <td className="px-5 py-3">
+                        <td className="px-6 py-4">
                           <Link
                             href={`/transactions/${tx.id}`}
-                            className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--muted)]/60 px-2 py-0.5 font-mono text-[10px] text-[var(--primary)] underline-offset-2 hover:underline"
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-white/5 bg-[var(--muted)]/60 px-3 py-1 font-mono text-xs font-medium text-canton underline-offset-2 hover:underline"
                           >
                             {tx.cantonUpdateId
                               ? `${tx.cantonUpdateId.slice(0, 10)}…`
@@ -262,7 +262,7 @@ export function TransactionsView({
                                 : "View"}
                           </Link>
                         </td>
-                        <td className="whitespace-nowrap px-5 py-3 text-xs text-[var(--muted-foreground)]">
+                        <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-400">
                           {date}
                         </td>
                       </tr>
@@ -272,7 +272,7 @@ export function TransactionsView({
               </table>
             </div>
 
-            <ul className="divide-y divide-[var(--border)] md:hidden">
+            <ul className="divide-y divide-slate-800/80 md:hidden">
               {txPage.items.map((tx) => {
                 const ccAmt = Math.abs(Number(tx.amountMicroCc)) / 1_000_000;
                 const date = new Date(tx.createdAt).toLocaleString("en-GB", {
@@ -285,33 +285,33 @@ export function TransactionsView({
                   <li key={tx.id}>
                     <Link
                       href={`/transactions/${tx.id}`}
-                      className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-[var(--muted)]/40"
+                      className="flex items-center gap-5 px-6 py-5 transition-colors hover:bg-[var(--muted)]/40"
                     >
                     <div
                       className={cn(
-                        "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
+                        "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl",
                         txIconBg(tx.type),
                       )}
                     >
                       <TxTypeIcon type={tx.type} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-[var(--foreground)]">
+                      <p className="truncate text-base font-semibold text-slate-100">
                         {txDisplayTitle(tx, tx.description)}
                       </p>
-                      <p className="text-xs text-[var(--muted-foreground)]">{date}</p>
+                      <p className="mt-1 text-sm font-medium text-slate-400">{date}</p>
                     </div>
                     <div className="shrink-0 text-right">
                       <p
                         className={cn(
-                          "type-display text-sm font-semibold tabular-nums",
+                          "text-base font-bold tabular-nums",
                           amountColor(tx.type),
                         )}
                       >
                         {amountSign(tx.type)}
                         {ccAmt.toFixed(4)} CC
                       </p>
-                      <p className="text-[11px] text-[var(--muted-foreground)]">
+                      <p className="mt-1 text-sm font-medium text-slate-400">
                         {txLabel(tx.type)}
                       </p>
                     </div>
@@ -322,7 +322,7 @@ export function TransactionsView({
             </ul>
 
             <ListPagination
-              className="px-5 pb-3"
+              className="px-6 pb-4"
               page={currentPage}
               totalPages={txPage.totalPages}
               total={txPage.total}
