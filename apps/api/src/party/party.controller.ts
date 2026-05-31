@@ -22,6 +22,7 @@ import { FeaturedAppActivityService } from '../canton/featured-app-activity.serv
 import { CcInboundSyncService } from '../canton/cc-inbound-sync.service';
 import { CcBalanceService } from '../canton/cc-balance.service';
 import { TransactionDetailService } from '../canton/transaction-detail.service';
+import { QuestLedgerService } from '../canton/quest-ledger.service';
 import {
   cantonPartyIdsEqual,
   looksLikeCantonPartyId,
@@ -55,6 +56,7 @@ export class PartyController {
     private readonly txDetail: TransactionDetailService,
     private readonly config: ConfigService,
     private readonly walletInvites: WalletInviteCodeService,
+    private readonly questLedger: QuestLedgerService,
   ) {}
 
   /**
@@ -213,6 +215,22 @@ export class PartyController {
       } else {
         preapprovalActive = (await this.splice.createTransferPreapproval(username)).ok;
       }
+    }
+
+    // Record PartyRegistration on Canton ledger (Canton M3 pattern)
+    // This creates an audit trail of the wallet creation with invite code
+    if (!isPlaceholder && needsInviteFlow) {
+      void this.questLedger
+        .recordPartyRegistration({
+          userPartyId: cantonPartyId,
+          username,
+          inviteCode: inviteCode ?? '',
+          spliceOnboarded,
+          preapprovalActive,
+        })
+        .catch((err: unknown) => {
+          this.logger.warn(`PartyRegistration ledger record failed: ${String(err)}`);
+        });
     }
 
     let message: string;
@@ -741,6 +759,7 @@ export class PartyController {
 
     let feeCollected = false;
     let feeWarning: string | undefined;
+    let feeLedgerTxId: string | undefined;
     if (feeCc > 0 && validatorPartyId && sender.username) {
       const feeResult = await this.splice.collectPlatformFee({
         senderUsername: sender.username,
@@ -749,6 +768,7 @@ export class PartyController {
       });
 
       feeCollected = feeResult.collected;
+      feeLedgerTxId = feeResult.ledgerTxId;
       const feeTreasuryPartyId = feeResult.treasuryPartyId ?? validatorPartyId;
       if (feeCollected) {
         const feeRow = await this.users.recordTransaction({
@@ -785,6 +805,26 @@ export class PartyController {
       : feeWarning
         ? `Sent ${amount} CC to ${recipientLabel}. ${feeWarning}`
         : `Sent ${amount} CC to ${recipientLabel}.`;
+
+    // Record CC transfer on Canton ledger (Canton M3 pattern)
+    // Creates CcTransferRecord contract for audit trail
+    if (sender.cantonPartyId && accepted) {
+      void this.questLedger
+        .recordCcTransfer({
+          senderPartyId: sender.cantonPartyId,
+          recipientPartyId,
+          amountCc: amount,
+          feeCc: feeCollected ? feeCc : 0,
+          totalDeductedCc: totalDeducted,
+          memo: body.memo?.trim(),
+          transferTxId: offerContractId,
+          feeTxId: feeLedgerTxId,
+          transferKind: 'USER_TO_USER',
+        })
+        .catch((err: unknown) => {
+          this.logger.warn(`CcTransferRecord ledger record failed: ${String(err)}`);
+        });
+    }
 
     return {
       success: true,

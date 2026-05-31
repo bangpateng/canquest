@@ -1,0 +1,116 @@
+-- | CC token transfer contract with platform fee mechanism.
+-- Follows Canton M3 patterns and CIP-56 propose-accept flow.
+-- Records transfer details including platform fee for audit trail.
+module CanQuest.Wallet.CcTransfer where
+
+-- | Records a CC transfer between parties with platform fee.
+-- Created after successful transfer completion for audit purposes.
+template CcTransferRecord
+  with
+    operator         : Party
+    sender           : Party
+    recipient        : Party
+    amountCc         : Decimal
+    feeCc            : Decimal
+    totalDeductedCc  : Decimal
+    memo             : Optional Text
+    transferTxId     : Text
+    feeTxId          : Optional Text
+    transferredAt    : Text
+    transferKind     : Text  -- "USER_TO_USER", "REWARD", "CLAIM_FEE"
+  where
+    signatory operator
+    observer sender
+    observer recipient
+    ensure amountCc > 0.0 && feeCc >= 0.0 && transferTxId /= ""
+
+    -- | Archive the transfer record
+    choice CcTransferRecord_Archive : ()
+      controller operator
+      do
+        return ()
+
+-- | Platform fee configuration contract.
+-- Admin can update fee settings on-chain.
+template PlatformFeeConfig
+  with
+    operator        : Party
+    feeCc           : Decimal
+    feeRecipient    : Party  -- Treasury/validator party
+    updatedAt       : Text
+    version         : Int
+  where
+    signatory operator
+    ensure feeCc >= 0.0 && version > 0
+
+    -- | Update the platform fee
+    choice PlatformFeeConfig_Update : ContractId PlatformFeeConfig
+      with
+        newFeeCc       : Decimal
+        newRecipient   : Party
+        updatedAt      : Text
+      controller operator
+      do
+        create this with
+          feeCc = newFeeCc
+          feeRecipient = newRecipient
+          updatedAt = updatedAt
+          version = version + 1
+
+    -- | Archive old config
+    choice PlatformFeeConfig_Archive : ()
+      controller operator
+      do
+        return ()
+
+-- | Transfer offer with explicit fee handling.
+-- Extends standard CIP-56 TransferOffer pattern with fee details.
+template CcTransferOfferWithFee
+  with
+    operator         : Party
+    sender           : Party
+    recipient        : Party
+    amountCc         : Decimal
+    feeCc            : Decimal
+    memo             : Optional Text
+    createdAt        : Text
+    expiresAt        : Optional Text
+    status           : Text  -- "PENDING", "ACCEPTED", "REJECTED", "EXPIRED"
+  where
+    signatory operator
+    observer sender
+    observer recipient
+    ensure amountCc > 0.0 && feeCc >= 0.0
+
+    -- | Recipient accepts the transfer
+    choice CcTransferOfferWithFee_Accept : ContractId CcTransferOfferWithFee
+      with
+        acceptedAt : Text
+      controller recipient
+      do
+        assertMsg "Offer not pending" (status == "PENDING")
+        create this with
+          status = "ACCEPTED"
+
+    -- | Recipient rejects the transfer
+    choice CcTransferOfferWithFee_Reject : ContractId CcTransferOfferWithFee
+      with
+        rejectedAt : Text
+      controller recipient
+      do
+        assertMsg "Offer not pending" (status == "PENDING")
+        create this with
+          status = "REJECTED"
+
+    -- | Operator cancels the offer
+    choice CcTransferOfferWithFee_Cancel : ()
+      controller operator
+      do
+        assertMsg "Cannot cancel accepted offer" (status == "PENDING")
+        return ()
+
+    -- | Archive the offer
+    choice CcTransferOfferWithFee_Archive : ()
+      controller operator
+      do
+        return ()

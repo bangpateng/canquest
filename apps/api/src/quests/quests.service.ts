@@ -1604,6 +1604,51 @@ export class QuestsService {
         }
       }
 
+      // NEW: Create EarnClaimSession for earn-specific audit trail (Canton M3 pattern)
+      let earnClaimSessionId: string | null = null;
+      if (this.questLedger.isClaimSessionConfigured()) {
+        const ecs = await this.questLedger.createEarnClaimSession({
+          userPartyId: cantonPartyId,
+          campaignId: questId,
+          claimKind: 'CC_FCFS',
+          feeCc,
+          rewardCc,
+        });
+        earnClaimSessionId = ecs.contractId;
+        if (ecs.error) {
+          this.logger.warn(`EarnClaimSession create warning: ${ecs.error}`);
+        }
+      }
+
+      // NEW: Create FcfsSlotReservation on ledger for slot tracking
+      if (this.questLedger.isConfigured() && maxWinners > 0) {
+        const slotIndex = await this.countFcfsSlotsTaken(questId) - 1; // Current slot index
+        const expiresAt = new Date(Date.now() + this.fcfsReservationTtlMs()).toISOString();
+        const slotRes = await this.questLedger.createFcfsSlotReservation({
+          userPartyId: cantonPartyId,
+          campaignId: questId,
+          slotIndex,
+          expiresAt,
+        });
+        if (slotRes.error) {
+          this.logger.warn(`FcfsSlotReservation create warning: ${slotRes.error}`);
+        }
+      }
+
+      // NEW: Create CcRewardEntitlement for CC reward tracking
+      if (this.questLedger.isConfigured()) {
+        const entitlementRes = await this.questLedger.createCcRewardEntitlement({
+          userPartyId: cantonPartyId,
+          campaignId: questId,
+          rewardCc,
+          feeCc,
+          claimKind: 'CC_FCFS',
+        });
+        if (entitlementRes.error) {
+          this.logger.warn(`CcRewardEntitlement create warning: ${entitlementRes.error}`);
+        }
+      }
+
       // Step 1: user pays claim fee → validator node party (CANTON_VALIDATOR_PARTY_ID).
       // If the fee was already paid (previous attempt), skip collecting again.
       const feeTxId =
@@ -1635,6 +1680,17 @@ export class QuestsService {
         }
       }
 
+      // NEW: Mark EarnClaimSession fee paid
+      if (earnClaimSessionId) {
+        const earnFeeMarked = await this.questLedger.markEarnClaimFeePaid({
+          sessionContractId: earnClaimSessionId,
+          feeTxId,
+        });
+        if (!earnFeeMarked.ok) {
+          this.logger.warn(`EarnClaimSession fee mark failed: ${earnFeeMarked.errors.join(' | ')}`);
+        }
+      }
+
       // Step 2: validator wallet sends reward → same user party (only after fee is on validator).
       await this.assertValidatorRewardPool(rewardCc);
       this.logger.log(
@@ -1663,6 +1719,17 @@ export class QuestsService {
         });
         if (!marked.ok) {
           this.logger.warn(`ClaimSession reward mark failed: ${marked.errors.join(' | ')}`);
+        }
+      }
+
+      // NEW: Mark EarnClaimSession reward sent
+      if (earnClaimSessionId) {
+        const earnMarked = await this.questLedger.markEarnClaimRewardSent({
+          sessionContractId: earnClaimSessionId,
+          rewardTxId: rewardOfferId,
+        });
+        if (!earnMarked.ok) {
+          this.logger.warn(`EarnClaimSession reward mark failed: ${earnMarked.errors.join(' | ')}`);
         }
       }
 
@@ -1831,6 +1898,48 @@ export class QuestsService {
         }
       }
 
+      // NEW: Create EarnClaimSession for CC Raffle audit trail (Canton M3 pattern)
+      let earnClaimSessionId: string | null = null;
+      if (this.questLedger.isClaimSessionConfigured()) {
+        const ecs = await this.questLedger.createEarnClaimSession({
+          userPartyId: cantonPartyId,
+          campaignId: questId,
+          claimKind: 'CC_RAFFLE',
+          feeCc,
+          rewardCc,
+        });
+        earnClaimSessionId = ecs.contractId;
+        if (ecs.error) {
+          this.logger.warn(`EarnClaimSession (CC_RAFFLE) create warning: ${ecs.error}`);
+        }
+      }
+
+      // NEW: Create RaffleWinner on ledger for winner tracking
+      if (this.questLedger.isConfigured()) {
+        const winnerRes = await this.questLedger.createRaffleWinner({
+          userPartyId: cantonPartyId,
+          campaignId: questId,
+          rewardCc,
+        });
+        if (winnerRes.error) {
+          this.logger.warn(`RaffleWinner create warning: ${winnerRes.error}`);
+        }
+      }
+
+      // NEW: Create CcRewardEntitlement for CC raffle reward tracking
+      if (this.questLedger.isConfigured()) {
+        const entitlementRes = await this.questLedger.createCcRewardEntitlement({
+          userPartyId: cantonPartyId,
+          campaignId: questId,
+          rewardCc,
+          feeCc,
+          claimKind: 'CC_RAFFLE',
+        });
+        if (entitlementRes.error) {
+          this.logger.warn(`CcRewardEntitlement (CC_RAFFLE) create warning: ${entitlementRes.error}`);
+        }
+      }
+
       const feeTxId = await this.collectClaimFee({
         userId,
         username,
@@ -1847,6 +1956,17 @@ export class QuestsService {
         });
         if (!marked.ok) {
           this.logger.warn(`ClaimSession fee mark failed: ${marked.errors.join(' | ')}`);
+        }
+      }
+
+      // NEW: Mark EarnClaimSession fee paid for CC Raffle
+      if (earnClaimSessionId) {
+        const earnFeeMarked = await this.questLedger.markEarnClaimFeePaid({
+          sessionContractId: earnClaimSessionId,
+          feeTxId,
+        });
+        if (!earnFeeMarked.ok) {
+          this.logger.warn(`EarnClaimSession (CC_RAFFLE) fee mark failed: ${earnFeeMarked.errors.join(' | ')}`);
         }
       }
 
@@ -1874,6 +1994,17 @@ export class QuestsService {
         });
         if (!marked.ok) {
           this.logger.warn(`ClaimSession reward mark failed: ${marked.errors.join(' | ')}`);
+        }
+      }
+
+      // NEW: Mark EarnClaimSession reward sent for CC Raffle
+      if (earnClaimSessionId) {
+        const earnRewardMarked = await this.questLedger.markEarnClaimRewardSent({
+          sessionContractId: earnClaimSessionId,
+          rewardTxId: rewardOfferId,
+        });
+        if (!earnRewardMarked.ok) {
+          this.logger.warn(`EarnClaimSession (CC_RAFFLE) reward mark failed: ${earnRewardMarked.errors.join(' | ')}`);
         }
       }
 
@@ -2077,6 +2208,69 @@ export class QuestsService {
       });
     }
 
+    // NEW: Determine claim kind for Code rewards (CODE_FCFS or CODE_RAFFLE)
+    const codeClaimKind: 'CODE_FCFS' | 'CODE_RAFFLE' =
+      rewardType === RewardType.INVITE_CODE_FCFS ? 'CODE_FCFS' : 'CODE_RAFFLE';
+
+    // NEW: Create EarnClaimSession for Code reward audit trail (Canton M3 pattern)
+    let earnClaimSessionId: string | null = null;
+    if (this.questLedger.isClaimSessionConfigured()) {
+      const ecs = await this.questLedger.createEarnClaimSession({
+        userPartyId: cantonPartyId,
+        campaignId: questId,
+        claimKind: codeClaimKind,
+        feeCc,
+        rewardCc: 0, // Code rewards don't have CC amount
+      });
+      earnClaimSessionId = ecs.contractId;
+      if (ecs.error) {
+        this.logger.warn(`EarnClaimSession (${codeClaimKind}) create warning: ${ecs.error}`);
+      }
+    }
+
+    // NEW: Mark EarnClaimSession fee paid for Code rewards
+    if (earnClaimSessionId) {
+      const earnFeeMarked = await this.questLedger.markEarnClaimFeePaid({
+        sessionContractId: earnClaimSessionId,
+        feeTxId,
+      });
+      if (!earnFeeMarked.ok) {
+        this.logger.warn(`EarnClaimSession (${codeClaimKind}) fee mark failed: ${earnFeeMarked.errors.join(' | ')}`);
+      }
+    }
+
+    // NEW: Create RaffleWinner on ledger for Code Raffle winner tracking
+    if (this.questLedger.isConfigured() && codeClaimKind === 'CODE_RAFFLE') {
+      const winnerRes = await this.questLedger.createRaffleWinner({
+        userPartyId: cantonPartyId,
+        campaignId: questId,
+        rewardCc: 0,
+      });
+      if (winnerRes.error) {
+        this.logger.warn(`RaffleWinner (CODE_RAFFLE) create warning: ${winnerRes.error}`);
+      }
+    }
+
+    // NEW: Create FcfsSlotReservation on ledger for Code FCFS slot tracking
+    if (this.questLedger.isConfigured() && codeClaimKind === 'CODE_FCFS') {
+      const maxW = quest.maxWinners ?? 0;
+      if (maxW > 0) {
+        const slotIndex = await this.prisma.winnerDraw.count({
+          where: { questId, inviteCode: { not: null } },
+        });
+        const expiresAt = new Date(Date.now() + this.fcfsReservationTtlMs()).toISOString();
+        const slotRes = await this.questLedger.createFcfsSlotReservation({
+          userPartyId: cantonPartyId,
+          campaignId: questId,
+          slotIndex,
+          expiresAt,
+        });
+        if (slotRes.error) {
+          this.logger.warn(`FcfsSlotReservation (CODE_FCFS) create warning: ${slotRes.error}`);
+        }
+      }
+    }
+
     try {
       const codeRow = await this.prisma.inviteCodePool.findFirst({
         where: { questId, userId: null },
@@ -2108,6 +2302,20 @@ export class QuestsService {
           },
         }),
       ]);
+
+      // NEW: Create CodeRewardEntitlement on ledger after code is assigned
+      if (this.questLedger.isConfigured() && codeRow) {
+        const entitlementRes = await this.questLedger.createCodeRewardEntitlement({
+          userPartyId: cantonPartyId,
+          campaignId: questId,
+          code: codeRow.code,
+          feeTxId,
+          claimKind: codeClaimKind,
+        });
+        if (entitlementRes.error) {
+          this.logger.warn(`CodeRewardEntitlement (${codeClaimKind}) create warning: ${entitlementRes.error}`);
+        }
+      }
     } catch (err) {
       this.logger.warn(`claimInviteReward DB failed: ${String(err)}`);
       throw new BadRequestException(FCFS_CLAIM_FAIL_MSG);

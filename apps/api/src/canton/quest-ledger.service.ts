@@ -5,11 +5,26 @@ import { CantonLedgerService } from './canton-ledger.service';
 
 /** DAML module paths per packages/daml/daml/CanQuest/ layout (Canton M3 building/packaging). */
 const TPL = {
+  // Existing Quest contracts
   QuestParticipation: 'CanQuest.Quest.Participation:QuestParticipation',
   QuestTaskSubmission: 'CanQuest.Quest.Task:QuestTaskSubmission',
   QuestReward: 'CanQuest.Quest.Reward:QuestReward',
   QuestCompletion: 'CanQuest.Quest.Completion:QuestCompletion',
   ClaimSession: 'CanQuest.Reward.ClaimSession:ClaimSession',
+  // New Wallet contracts (Canton M3 patterns)
+  PartyRegistration: 'CanQuest.Wallet.PartyRegistration:PartyRegistration',
+  WalletInviteCode: 'CanQuest.Wallet.PartyRegistration:WalletInviteCode',
+  CcTransferRecord: 'CanQuest.Wallet.CcTransfer:CcTransferRecord',
+  PlatformFeeConfig: 'CanQuest.Wallet.CcTransfer:PlatformFeeConfig',
+  // New Earn contracts (4 task types: CC FCFS, CC Raffle, Code FCFS, Code Raffle)
+  EarnCampaign: 'CanQuest.Earn.EarnTask:EarnCampaign',
+  EarnTaskCompletion: 'CanQuest.Earn.EarnTask:EarnTaskCompletion',
+  FcfsSlotReservation: 'CanQuest.Earn.EarnTask:FcfsSlotReservation',
+  RaffleWinner: 'CanQuest.Earn.EarnTask:RaffleWinner',
+  EarnClaimSession: 'CanQuest.Earn.ClaimFlow:EarnClaimSession',
+  CodeRewardPool: 'CanQuest.Earn.ClaimFlow:CodeRewardPool',
+  CodeRewardEntitlement: 'CanQuest.Earn.ClaimFlow:CodeRewardEntitlement',
+  CcRewardEntitlement: 'CanQuest.Earn.ClaimFlow:CcRewardEntitlement',
 } as const;
 
 export interface QuestLedgerSubmitResult {
@@ -574,5 +589,575 @@ export class QuestLedgerService {
       /* use raw slice */
     }
     return `${fallback}: ${raw.slice(0, 120)}`;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // NEW WALLET CONTRACTS (Canton M3 patterns)
+  // ═══════════════════════════════════════════════════════════════
+
+  /**
+   * Record Party ID registration with invite code on ledger.
+   * Creates PartyRegistration contract after successful wallet creation.
+   */
+  async recordPartyRegistration(params: {
+    userPartyId: string;
+    username: string;
+    inviteCode: string;
+    spliceOnboarded: boolean;
+    preapprovalActive: boolean;
+  }): Promise<{ contractId: string | null; error?: string }> {
+    if (!this.isConfigured()) {
+      return { contractId: null, error: 'Quest ledger disabled' };
+    }
+    const tpl = this.templateId(TPL.PartyRegistration);
+    const operator = this.operatorPartyId;
+    if (!tpl || !operator) {
+      return { contractId: null, error: 'Canton DAML package or operator party not configured' };
+    }
+    const reachErr = await this.ensureReachable();
+    if (reachErr) return { contractId: null, error: reachErr };
+
+    await this.ledger.grantUserRights(operator).catch((err) =>
+      this.logger.warn(`grantUserRights(operator) failed: ${String(err)}`),
+    );
+
+    const res = await this.ledger.createContract(
+      tpl,
+      {
+        operator,
+        user: params.userPartyId,
+        username: params.username,
+        partyId: params.userPartyId,
+        inviteCode: params.inviteCode,
+        registeredAt: new Date().toISOString(),
+        spliceOnboarded: params.spliceOnboarded,
+        preapprovalActive: params.preapprovalActive,
+      },
+      [operator],
+      `party-registration-${params.username}-${randomUUID()}`,
+    );
+
+    if (res.ok && res.contractId) {
+      this.logger.log(
+        `PartyRegistration created: @${params.username} → ${params.userPartyId.split('::')[0]}`,
+      );
+      return { contractId: res.contractId };
+    }
+    return {
+      contractId: null,
+      error: this.formatLedgerError(res.error, 'Failed to create PartyRegistration'),
+    };
+  }
+
+  /**
+   * Record CC transfer with platform fee on ledger.
+   * Creates CcTransferRecord contract after successful transfer.
+   */
+  async recordCcTransfer(params: {
+    senderPartyId: string;
+    recipientPartyId: string;
+    amountCc: number;
+    feeCc: number;
+    totalDeductedCc: number;
+    memo?: string;
+    transferTxId: string;
+    feeTxId?: string;
+    transferKind: 'USER_TO_USER' | 'REWARD' | 'CLAIM_FEE';
+  }): Promise<{ contractId: string | null; error?: string }> {
+    if (!this.isConfigured()) {
+      return { contractId: null, error: 'Quest ledger disabled' };
+    }
+    const tpl = this.templateId(TPL.CcTransferRecord);
+    const operator = this.operatorPartyId;
+    if (!tpl || !operator) {
+      return { contractId: null, error: 'Canton DAML package or operator party not configured' };
+    }
+    const reachErr = await this.ensureReachable();
+    if (reachErr) return { contractId: null, error: reachErr };
+
+    const res = await this.ledger.createContract(
+      tpl,
+      {
+        operator,
+        sender: params.senderPartyId,
+        recipient: params.recipientPartyId,
+        amountCc: String(params.amountCc),
+        feeCc: String(params.feeCc),
+        totalDeductedCc: String(params.totalDeductedCc),
+        memo: params.memo ?? null,
+        transferTxId: params.transferTxId,
+        feeTxId: params.feeTxId ?? null,
+        transferredAt: new Date().toISOString(),
+        transferKind: params.transferKind,
+      },
+      [operator],
+      `cc-transfer-${randomUUID()}`,
+    );
+
+    if (res.ok && res.contractId) {
+      this.logger.log(
+        `CcTransferRecord: ${params.amountCc} CC from ${params.senderPartyId.split('::')[0]} → ${params.recipientPartyId.split('::')[0]}`,
+      );
+      return { contractId: res.contractId };
+    }
+    return {
+      contractId: null,
+      error: this.formatLedgerError(res.error, 'Failed to create CcTransferRecord'),
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // NEW EARN CONTRACTS (4 task types: CC FCFS, CC Raffle, Code FCFS, Code Raffle)
+  // ═══════════════════════════════════════════════════════════════
+
+  /**
+   * Create EarnCampaign contract on ledger.
+   * Called by admin when creating a new earn campaign.
+   */
+  async createEarnCampaign(params: {
+    campaignId: string;
+    title: string;
+    taskType: 'CC_FCFS' | 'CC_RAFFLE' | 'CODE_FCFS' | 'CODE_RAFFLE';
+    rewardCc: number;
+    maxWinners?: number;
+    claimFeeCc: number;
+    startsAt?: string;
+    endsAt?: string;
+  }): Promise<{ contractId: string | null; error?: string }> {
+    if (!this.isConfigured()) {
+      return { contractId: null, error: 'Quest ledger disabled' };
+    }
+    const tpl = this.templateId(TPL.EarnCampaign);
+    const operator = this.operatorPartyId;
+    if (!tpl || !operator) {
+      return { contractId: null, error: 'Canton DAML package or operator party not configured' };
+    }
+    const reachErr = await this.ensureReachable();
+    if (reachErr) return { contractId: null, error: reachErr };
+
+    const res = await this.ledger.createContract(
+      tpl,
+      {
+        operator,
+        campaignId: params.campaignId,
+        title: params.title,
+        taskType: params.taskType,
+        rewardCc: String(params.rewardCc),
+        maxWinners: params.maxWinners ?? null,
+        claimFeeCc: String(params.claimFeeCc),
+        startsAt: params.startsAt ?? null,
+        endsAt: params.endsAt ?? null,
+        createdAt: new Date().toISOString(),
+        status: 'ACTIVE',
+      },
+      [operator],
+      `earn-campaign-${params.campaignId}`,
+    );
+
+    if (res.ok && res.contractId) {
+      this.logger.log(`EarnCampaign created: ${params.title} (${params.taskType})`);
+      return { contractId: res.contractId };
+    }
+    return {
+      contractId: null,
+      error: this.formatLedgerError(res.error, 'Failed to create EarnCampaign'),
+    };
+  }
+
+  /**
+   * Record earn task completion on ledger.
+   * Created when user completes all social media tasks for an earn campaign.
+   */
+  async recordEarnTaskCompletion(params: {
+    userPartyId: string;
+    campaignId: string;
+    taskIds: string[];
+    proofs: string[];
+  }): Promise<{ contractId: string | null; error?: string }> {
+    if (!this.isConfigured()) {
+      return { contractId: null, error: 'Quest ledger disabled' };
+    }
+    const tpl = this.templateId(TPL.EarnTaskCompletion);
+    const operator = this.operatorPartyId;
+    if (!tpl || !operator) {
+      return { contractId: null, error: 'Canton DAML package or operator party not configured' };
+    }
+    const reachErr = await this.ensureReachable();
+    if (reachErr) return { contractId: null, error: reachErr };
+
+    const res = await this.ledger.createContract(
+      tpl,
+      {
+        operator,
+        user: params.userPartyId,
+        campaignId: params.campaignId,
+        taskIds: params.taskIds,
+        proofs: params.proofs,
+        completedAt: new Date().toISOString(),
+        verified: true,
+      },
+      [operator],
+      `earn-task-completion-${params.campaignId}-${randomUUID()}`,
+    );
+
+    if (res.ok && res.contractId) {
+      this.logger.log(
+        `EarnTaskCompletion: user=${params.userPartyId.split('::')[0]} campaign=${params.campaignId}`,
+      );
+      return { contractId: res.contractId };
+    }
+    return {
+      contractId: null,
+      error: this.formatLedgerError(res.error, 'Failed to create EarnTaskCompletion'),
+    };
+  }
+
+  /**
+   * Create FCFS slot reservation on ledger.
+   * Prevents double-claiming when slots are limited.
+   */
+  async createFcfsSlotReservation(params: {
+    userPartyId: string;
+    campaignId: string;
+    slotIndex: number;
+    expiresAt: string;
+  }): Promise<{ contractId: string | null; error?: string }> {
+    if (!this.isConfigured()) {
+      return { contractId: null, error: 'Quest ledger disabled' };
+    }
+    const tpl = this.templateId(TPL.FcfsSlotReservation);
+    const operator = this.operatorPartyId;
+    if (!tpl || !operator) {
+      return { contractId: null, error: 'Canton DAML package or operator party not configured' };
+    }
+    const reachErr = await this.ensureReachable();
+    if (reachErr) return { contractId: null, error: reachErr };
+
+    const res = await this.ledger.createContract(
+      tpl,
+      {
+        operator,
+        user: params.userPartyId,
+        campaignId: params.campaignId,
+        slotIndex: params.slotIndex,
+        reservedAt: new Date().toISOString(),
+        expiresAt: params.expiresAt,
+        status: 'RESERVED',
+      },
+      [operator],
+      `fcfs-slot-${params.campaignId}-${params.slotIndex}`,
+    );
+
+    if (res.ok && res.contractId) {
+      this.logger.log(
+        `FcfsSlotReservation: slot=${params.slotIndex} campaign=${params.campaignId} user=${params.userPartyId.split('::')[0]}`,
+      );
+      return { contractId: res.contractId };
+    }
+    return {
+      contractId: null,
+      error: this.formatLedgerError(res.error, 'Failed to create FcfsSlotReservation'),
+    };
+  }
+
+  /**
+   * Create RaffleWinner contract on ledger.
+   * Called by admin after drawing winners for a raffle campaign.
+   */
+  async createRaffleWinner(params: {
+    userPartyId: string;
+    campaignId: string;
+    rewardCc: number;
+    inviteCode?: string;
+  }): Promise<{ contractId: string | null; error?: string }> {
+    if (!this.isConfigured()) {
+      return { contractId: null, error: 'Quest ledger disabled' };
+    }
+    const tpl = this.templateId(TPL.RaffleWinner);
+    const operator = this.operatorPartyId;
+    if (!tpl || !operator) {
+      return { contractId: null, error: 'Canton DAML package or operator party not configured' };
+    }
+    const reachErr = await this.ensureReachable();
+    if (reachErr) return { contractId: null, error: reachErr };
+
+    const res = await this.ledger.createContract(
+      tpl,
+      {
+        operator,
+        user: params.userPartyId,
+        campaignId: params.campaignId,
+        drawnAt: new Date().toISOString(),
+        rewardCc: String(params.rewardCc),
+        inviteCode: params.inviteCode ?? null,
+        status: 'DRAWN',
+      },
+      [operator],
+      `raffle-winner-${params.campaignId}-${randomUUID()}`,
+    );
+
+    if (res.ok && res.contractId) {
+      this.logger.log(
+        `RaffleWinner: user=${params.userPartyId.split('::')[0]} campaign=${params.campaignId}`,
+      );
+      return { contractId: res.contractId };
+    }
+    return {
+      contractId: null,
+      error: this.formatLedgerError(res.error, 'Failed to create RaffleWinner'),
+    };
+  }
+
+  /**
+   * Create EarnClaimSession for earn reward claims.
+   * Tracks the complete flow: task completion → fee payment → reward delivery.
+   */
+  async createEarnClaimSession(params: {
+    userPartyId: string;
+    campaignId: string;
+    claimKind: 'CC_FCFS' | 'CC_RAFFLE' | 'CODE_FCFS' | 'CODE_RAFFLE';
+    feeCc: number;
+    rewardCc: number;
+    rewardCode?: string;
+  }): Promise<{ contractId: string | null; error?: string }> {
+    if (!this.isClaimSessionConfigured()) {
+      return { contractId: null, error: 'Claim session ledger disabled' };
+    }
+    const tpl = this.templateId(TPL.EarnClaimSession);
+    const operator = this.operatorPartyId;
+    if (!tpl || !operator) {
+      return { contractId: null, error: 'Canton DAML package or operator party not configured' };
+    }
+    const reachErr = await this.ensureReachable();
+    if (reachErr) return { contractId: null, error: reachErr };
+
+    const res = await this.ledger.createContract(
+      tpl,
+      {
+        operator,
+        user: params.userPartyId,
+        campaignId: params.campaignId,
+        claimKind: params.claimKind,
+        feeCc: String(params.feeCc),
+        rewardCc: String(params.rewardCc),
+        rewardCode: params.rewardCode ?? null,
+        createdAt: new Date().toISOString(),
+        feePaidAt: null,
+        feeTxId: null,
+        rewardSentAt: null,
+        rewardTxId: null,
+        status: 'INIT',
+      },
+      [operator],
+      `earn-claim-session-${randomUUID()}`,
+    );
+
+    if (res.ok && res.contractId) {
+      this.logger.log(
+        `EarnClaimSession: user=${params.userPartyId.split('::')[0]} campaign=${params.campaignId} kind=${params.claimKind}`,
+      );
+      return { contractId: res.contractId };
+    }
+    return {
+      contractId: null,
+      error: this.formatLedgerError(res.error, 'Failed to create EarnClaimSession'),
+    };
+  }
+
+  /**
+   * Mark fee paid on EarnClaimSession.
+   */
+  async markEarnClaimFeePaid(params: {
+    sessionContractId: string;
+    feeTxId: string;
+  }): Promise<{ ok: boolean; errors: string[] }> {
+    if (!this.isClaimSessionConfigured()) {
+      return { ok: false, errors: ['Claim session ledger disabled'] };
+    }
+    const templateId = this.templateId(TPL.EarnClaimSession);
+    const operator = this.operatorPartyId;
+    if (!templateId || !operator) {
+      return { ok: false, errors: ['Canton DAML not configured'] };
+    }
+    const { ok, text } = await this.ledger.exerciseChoice(
+      params.sessionContractId,
+      templateId,
+      'EarnClaimSession_MarkFeePaid',
+      { paidAt: new Date().toISOString(), txId: params.feeTxId },
+      [operator],
+      `earn-claim-fee-paid-${randomUUID()}`,
+    );
+    return ok ? { ok: true, errors: [] } : { ok: false, errors: [text.slice(0, 200)] };
+  }
+
+  /**
+   * Mark reward sent on EarnClaimSession.
+   */
+  async markEarnClaimRewardSent(params: {
+    sessionContractId: string;
+    rewardTxId: string;
+  }): Promise<{ ok: boolean; errors: string[] }> {
+    if (!this.isClaimSessionConfigured()) {
+      return { ok: false, errors: ['Claim session ledger disabled'] };
+    }
+    const templateId = this.templateId(TPL.EarnClaimSession);
+    const operator = this.operatorPartyId;
+    if (!templateId || !operator) {
+      return { ok: false, errors: ['Canton DAML not configured'] };
+    }
+    const { ok, text } = await this.ledger.exerciseChoice(
+      params.sessionContractId,
+      templateId,
+      'EarnClaimSession_MarkRewardSent',
+      { sentAt: new Date().toISOString(), txId: params.rewardTxId },
+      [operator],
+      `earn-claim-reward-sent-${randomUUID()}`,
+    );
+    return ok ? { ok: true, errors: [] } : { ok: false, errors: [text.slice(0, 200)] };
+  }
+
+  /**
+   * Create CodeRewardPool contract on ledger.
+   * Called by admin when uploading codes for Code FCFS or Code Raffle campaigns.
+   */
+  async createCodeRewardPool(params: {
+    campaignId: string;
+    codes: string[];
+  }): Promise<{ contractId: string | null; error?: string }> {
+    if (!this.isConfigured()) {
+      return { contractId: null, error: 'Quest ledger disabled' };
+    }
+    const tpl = this.templateId(TPL.CodeRewardPool);
+    const operator = this.operatorPartyId;
+    if (!tpl || !operator) {
+      return { contractId: null, error: 'Canton DAML package or operator party not configured' };
+    }
+    const reachErr = await this.ensureReachable();
+    if (reachErr) return { contractId: null, error: reachErr };
+
+    const res = await this.ledger.createContract(
+      tpl,
+      {
+        operator,
+        campaignId: params.campaignId,
+        codes: params.codes,
+        assignedCodes: [],
+        createdAt: new Date().toISOString(),
+      },
+      [operator],
+      `code-reward-pool-${params.campaignId}`,
+    );
+
+    if (res.ok && res.contractId) {
+      this.logger.log(
+        `CodeRewardPool: campaign=${params.campaignId} codes=${params.codes.length}`,
+      );
+      return { contractId: res.contractId };
+    }
+    return {
+      contractId: null,
+      error: this.formatLedgerError(res.error, 'Failed to create CodeRewardPool'),
+    };
+  }
+
+  /**
+   * Create CodeRewardEntitlement contract on ledger.
+   * Created when user successfully claims a code reward.
+   */
+  async createCodeRewardEntitlement(params: {
+    userPartyId: string;
+    campaignId: string;
+    code: string;
+    feeTxId: string;
+    claimKind: 'CODE_FCFS' | 'CODE_RAFFLE';
+  }): Promise<{ contractId: string | null; error?: string }> {
+    if (!this.isConfigured()) {
+      return { contractId: null, error: 'Quest ledger disabled' };
+    }
+    const tpl = this.templateId(TPL.CodeRewardEntitlement);
+    const operator = this.operatorPartyId;
+    if (!tpl || !operator) {
+      return { contractId: null, error: 'Canton DAML package or operator party not configured' };
+    }
+    const reachErr = await this.ensureReachable();
+    if (reachErr) return { contractId: null, error: reachErr };
+
+    const res = await this.ledger.createContract(
+      tpl,
+      {
+        operator,
+        user: params.userPartyId,
+        campaignId: params.campaignId,
+        code: params.code,
+        claimedAt: new Date().toISOString(),
+        feeTxId: params.feeTxId,
+        claimKind: params.claimKind,
+      },
+      [operator],
+      `code-reward-entitlement-${randomUUID()}`,
+    );
+
+    if (res.ok && res.contractId) {
+      this.logger.log(
+        `CodeRewardEntitlement: user=${params.userPartyId.split('::')[0]} code=${params.code}`,
+      );
+      return { contractId: res.contractId };
+    }
+    return {
+      contractId: null,
+      error: this.formatLedgerError(res.error, 'Failed to create CodeRewardEntitlement'),
+    };
+  }
+
+  /**
+   * Create CcRewardEntitlement contract on ledger.
+   * Created when user is eligible for CC reward (CC FCFS or CC Raffle).
+   */
+  async createCcRewardEntitlement(params: {
+    userPartyId: string;
+    campaignId: string;
+    rewardCc: number;
+    feeCc: number;
+    claimKind: 'CC_FCFS' | 'CC_RAFFLE';
+  }): Promise<{ contractId: string | null; error?: string }> {
+    if (!this.isConfigured()) {
+      return { contractId: null, error: 'Quest ledger disabled' };
+    }
+    const tpl = this.templateId(TPL.CcRewardEntitlement);
+    const operator = this.operatorPartyId;
+    if (!tpl || !operator) {
+      return { contractId: null, error: 'Canton DAML package or operator party not configured' };
+    }
+    const reachErr = await this.ensureReachable();
+    if (reachErr) return { contractId: null, error: reachErr };
+
+    const res = await this.ledger.createContract(
+      tpl,
+      {
+        operator,
+        user: params.userPartyId,
+        campaignId: params.campaignId,
+        rewardCc: String(params.rewardCc),
+        feeCc: String(params.feeCc),
+        claimedAt: null,
+        feeTxId: null,
+        rewardTxId: null,
+        claimKind: params.claimKind,
+        status: 'PENDING',
+      },
+      [operator],
+      `cc-reward-entitlement-${randomUUID()}`,
+    );
+
+    if (res.ok && res.contractId) {
+      this.logger.log(
+        `CcRewardEntitlement: user=${params.userPartyId.split('::')[0]} reward=${params.rewardCc} CC`,
+      );
+      return { contractId: res.contractId };
+    }
+    return {
+      contractId: null,
+      error: this.formatLedgerError(res.error, 'Failed to create CcRewardEntitlement'),
+    };
   }
 }

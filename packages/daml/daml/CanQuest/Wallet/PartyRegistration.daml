@@ -1,0 +1,95 @@
+-- | Party registration contract for tracking Party ID creation with invite codes.
+-- Follows Canton M3 authorization pattern: operator signs, user observes.
+-- This contract records the binding between a user's invite code, username, and Canton Party ID.
+module CanQuest.Wallet.PartyRegistration where
+
+-- | Records that a user created their Canton wallet using an invite code.
+-- Keyed by (user, partyId) for idempotent lookup.
+template PartyRegistration
+  with
+    operator       : Party
+    user           : Party
+    username       : Text
+    partyId        : Text
+    inviteCode     : Text
+    registeredAt   : Text
+    spliceOnboarded : Bool
+    preapprovalActive : Bool
+  where
+    signatory operator
+    observer user
+    ensure partyId /= "" && username /= "" && inviteCode /= ""
+
+    -- | Archive the registration (e.g., if wallet is reset)
+    choice PartyRegistration_Archive : ()
+      controller operator
+      do
+        return ()
+
+    -- | Update preapproval status after initial registration
+    choice PartyRegistration_UpdatePreapproval : ContractId PartyRegistration
+      with
+        newPreapprovalActive : Bool
+        updatedAt            : Text
+      controller operator
+      do
+        create this with
+          preapprovalActive = newPreapprovalActive
+          registeredAt = updatedAt
+
+-- | Invite code pool contract - tracks available codes issued by admin.
+-- Each code can only be redeemed once for wallet creation.
+template WalletInviteCode
+  with
+    operator    : Party
+    code        : Text
+    note        : Optional Text
+    createdAt   : Text
+    redeemedBy  : Optional Party
+    redeemedAt  : Optional Text
+    reservedBy  : Optional Party
+    reservedAt  : Optional Text
+  where
+    signatory operator
+    ensure code /= ""
+
+    -- | Reserve the code for a user (temporary hold during wallet creation)
+    choice WalletInviteCode_Reserve : ContractId WalletInviteCode
+      with
+        userId     : Party
+        reservedAt : Text
+      controller operator
+      do
+        assertMsg "Code already redeemed" (redeemedBy == None)
+        assertMsg "Code already reserved" (reservedBy == None)
+        create this with
+          reservedBy = Some userId
+          reservedAt = Some reservedAt
+
+    -- | Release a reservation (failed wallet creation)
+    choice WalletInviteCode_ReleaseReservation : ContractId WalletInviteCode
+      controller operator
+      do
+        create this with
+          reservedBy = None
+          reservedAt = None
+
+    -- | Mark code as redeemed after successful wallet creation
+    choice WalletInviteCode_Redeem : ContractId WalletInviteCode
+      with
+        userId     : Party
+        redeemedAt : Text
+      controller operator
+      do
+        assertMsg "Code already redeemed" (redeemedBy == None)
+        create this with
+          redeemedBy = Some userId
+          redeemedAt = Some redeemedAt
+          reservedBy = None
+          reservedAt = None
+
+    -- | Archive the code (admin cleanup)
+    choice WalletInviteCode_Archive : ()
+      controller operator
+      do
+        return ()
