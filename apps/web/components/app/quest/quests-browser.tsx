@@ -231,18 +231,26 @@ export function QuestsBrowser({
     ) : null;
 
   return (
-    <div className={cn("w-full min-w-0", isEarn ? "space-y-6 md:space-y-8" : "space-y-8 md:space-y-10")}>
+    <div 
+      className={cn("w-full min-w-0 max-w-full overflow-x-hidden", isEarn ? "space-y-6 md:space-y-8" : "space-y-8 md:space-y-10")} 
+      style={{ 
+        maxWidth: '100vw', 
+        overflowX: 'hidden',
+        contain: 'layout style paint'
+      }}
+    >
       {isEarn ? (
         <section
-          className={cn("rounded-3xl border border-white/[0.08] bg-slate-900/40 p-5 backdrop-blur-xl sm:p-6", surfaceToolbarClass)}
+          className={cn("w-full max-w-full overflow-hidden rounded-3xl border border-white/[0.08] bg-slate-900/40 p-4 backdrop-blur-xl sm:p-5 md:p-6", surfaceToolbarClass)}
           aria-label={t("earnCampaigns.filterAria")}
+          style={{ maxWidth: '100%', overflow: 'hidden', contain: 'layout style paint' }}
         >
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="min-w-0">{tabRow}</div>
+          <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 md:gap-6">
+            <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:gap-3">
+              <div className="min-w-0 flex-1 overflow-hidden sm:flex-none">{tabRow}</div>
               {completionChip}
             </div>
-            <div className="sm:ml-auto sm:w-80 sm:shrink-0">{searchField}</div>
+            <div className="w-full sm:ml-auto sm:w-72 md:w-80 sm:shrink-0">{searchField}</div>
           </div>
         </section>
       ) : (
@@ -312,24 +320,62 @@ export function QuestsBrowser({
       ) : (
         <>
           {isEarn ? (
-            <div className="grid items-stretch gap-5 sm:grid-cols-2 sm:gap-6 xl:grid-cols-3">
+            <div 
+              className="grid w-full grid-cols-1 items-stretch gap-4 overflow-hidden sm:grid-cols-2 sm:gap-6 xl:grid-cols-3" 
+              style={{ 
+                maxWidth: '100%', 
+                overflow: 'hidden', 
+                width: '100%',
+                contain: 'layout style paint'
+              }}
+            >
               {pagedQuests.map((q) => (
-                <EarnCampaignCard
-                  key={q.id}
-                  quest={q}
-                  completed={progress?.completedQuestIds.includes(q.id) ?? false}
-                  userProgress={progress}
-                />
+                <div 
+                  key={q.id} 
+                  className="w-full min-w-0 overflow-hidden" 
+                  style={{ 
+                    maxWidth: '100%', 
+                    width: '100%', 
+                    overflow: 'hidden', 
+                    wordBreak: 'break-word',
+                    contain: 'layout style paint'
+                  }}
+                >
+                  <EarnCampaignCard
+                    quest={q}
+                    completed={progress?.completedQuestIds.includes(q.id) ?? false}
+                    userProgress={progress}
+                  />
+                </div>
               ))}
             </div>
           ) : (
-            <div className="grid gap-6 sm:grid-cols-2 sm:gap-8 xl:grid-cols-3">
+            <div 
+              className="grid w-full grid-cols-1 gap-6 overflow-hidden sm:grid-cols-2 sm:gap-8 xl:grid-cols-3" 
+              style={{ 
+                maxWidth: '100%', 
+                overflow: 'hidden', 
+                width: '100%',
+                contain: 'layout style paint'
+              }}
+            >
               {pagedQuests.map((q) => (
-                <QuestCard
-                  key={q.id}
-                  quest={q}
-                  completed={progress?.completedQuestIds.includes(q.id) ?? false}
-                />
+                <div 
+                  key={q.id} 
+                  className="w-full min-w-0 overflow-hidden" 
+                  style={{ 
+                    maxWidth: '100%', 
+                    width: '100%', 
+                    overflow: 'hidden', 
+                    wordBreak: 'break-word',
+                    contain: 'layout style paint'
+                  }}
+                >
+                  <QuestCard
+                    quest={q}
+                    completed={progress?.completedQuestIds.includes(q.id) ?? false}
+                  />
+                </div>
               ))}
             </div>
           )}

@@ -120,18 +120,18 @@ function Metric({
   muted?: boolean;
 }) {
   return (
-    <div className="min-w-0 flex-1 px-2.5 py-2 first:pl-0 last:pr-0 sm:px-3 sm:py-2.5 md:px-4 md:py-3">
-      <div className="flex items-center gap-1 text-[9px] font-medium uppercase tracking-wider text-[var(--muted-foreground)] sm:gap-1.5 sm:text-[10px]">
+    <div className="min-w-0 flex-1 overflow-hidden px-1.5 py-1.5 first:pl-0 last:pr-0 sm:px-3 sm:py-2.5 md:px-4 md:py-3">
+      <div className="flex items-center gap-0.5 text-[8px] font-medium uppercase tracking-wider text-[var(--muted-foreground)] sm:gap-1.5 sm:text-[10px]">
         {useCcLogo ? (
-          <CcRewardLogo className="opacity-90" size={10} />
+          <CcRewardLogo className="shrink-0 opacity-90" size={8} />
         ) : (
-          <Icon className={cn("h-2.5 w-2.5 shrink-0 opacity-70 sm:h-3 sm:w-3", accent)} aria-hidden />
+          <Icon className={cn("h-2 w-2 shrink-0 opacity-70 sm:h-3 sm:w-3", accent)} aria-hidden />
         )}
         <span className="truncate">{label}</span>
       </div>
       <p
         className={cn(
-          "mt-0.5 truncate text-xs font-bold tabular-nums sm:mt-1 sm:text-sm md:text-base",
+          "mt-0.5 truncate text-[10px] font-bold tabular-nums sm:mt-1 sm:text-sm md:text-base",
           muted ? "text-[var(--muted-foreground)]" : accent ?? "text-[var(--foreground)]",
         )}
       >
@@ -245,16 +245,23 @@ export function EarnCampaignCard({
   const inner = (
     <article
       className={cn(
-        "group relative flex h-full flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-slate-900/40 backdrop-blur-xl sm:rounded-3xl",
+        "group relative flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden break-words rounded-2xl border border-white/[0.08] bg-slate-900/40 backdrop-blur-xl sm:rounded-3xl",
         "transition-all duration-300 ease-out",
         canOpen &&
           !joinBlocked &&
           "hover:-translate-y-0.5 hover:border-[rgb(var(--canton-rgb)/0.35)] hover:shadow-[0_20px_50px_rgb(0_0_0/0.35),0_0_0_1px_rgb(var(--canton-rgb)/0.12)]",
         (quest.status === "ENDED" || joinBlocked) && "opacity-[0.92]",
       )}
+      style={{ 
+        width: '100%', 
+        maxWidth: '100%', 
+        boxSizing: 'border-box',
+        contain: 'layout style paint',
+        overflowWrap: 'anywhere'
+      }}
     >
       {/* Banner */}
-      <div className="relative h-[4.5rem] shrink-0 overflow-hidden sm:h-[8rem] md:h-[9.5rem]">
+      <div className="relative h-[3.5rem] shrink-0 overflow-hidden sm:h-[8rem] md:h-[9.5rem]">
         <div
           className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-[1.03]"
           style={
@@ -291,7 +298,10 @@ export function EarnCampaignCard({
 
         {/* Reward highlight on banner (Galxe-style) */}
         {quest.rewardCc > 0 || bannerRewardText ? (
-          <div className="absolute bottom-3 right-3 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-xl border border-white/10 bg-black/50 px-2.5 py-1.5 backdrop-blur-md sm:bottom-4 sm:right-4 sm:max-w-[calc(100%-2rem)] sm:gap-3 sm:rounded-2xl sm:px-3 sm:py-2">
+          <div 
+            className="absolute bottom-3 right-3 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-xl border border-white/10 bg-black/50 px-2.5 py-1.5 backdrop-blur-md sm:bottom-4 sm:right-4 sm:max-w-[calc(100%-2rem)] sm:gap-3 sm:rounded-2xl sm:px-3 sm:py-2"
+            style={{ maxWidth: 'calc(100% - 1.5rem)', overflow: 'hidden' }}
+          >
             <CampaignRewardIcon theme={theme} className={cn("shrink-0", theme.accent)} size={14} />
             <div className="min-w-0 text-right">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-white/60 sm:text-xs">
@@ -313,11 +323,19 @@ export function EarnCampaignCard({
       </div>
 
       {/* Body */}
-      <div className="flex flex-1 flex-col px-3 pb-3 pt-2 sm:px-5 sm:pb-6 sm:pt-4 md:px-6">
-        <div className="flex gap-2 sm:gap-4">
+      <div 
+        className="flex w-full min-w-0 flex-1 flex-col overflow-hidden px-3 pb-3 pt-2 sm:px-5 sm:pb-6 sm:pt-4 md:px-6" 
+        style={{ 
+          width: '100%', 
+          maxWidth: '100%', 
+          boxSizing: 'border-box',
+          contain: 'layout style paint'
+        }}
+      >
+        <div className="flex w-full min-w-0 gap-2 sm:gap-4">
           <div
             className={cn(
-              "relative h-8 w-8 shrink-0 overflow-hidden rounded-lg bg-[var(--muted)] sm:h-14 sm:w-14 sm:rounded-2xl",
+              "relative h-7 w-7 shrink-0 overflow-hidden rounded-lg bg-[var(--muted)] sm:h-14 sm:w-14 sm:rounded-2xl",
             )}
           >
             {quest.logoUrl ? (
@@ -328,11 +346,11 @@ export function EarnCampaignCard({
               </span>
             )}
           </div>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 overflow-hidden">
             <p className="truncate text-[10px] font-medium text-slate-500 sm:text-sm">
               {quest.org}
             </p>
-            <h3 className="line-clamp-1 text-xs font-bold leading-tight text-slate-100 sm:mt-1 sm:line-clamp-2 sm:text-lg md:text-xl">
+            <h3 className="line-clamp-1 break-words text-xs font-bold leading-tight text-slate-100 sm:mt-1 sm:line-clamp-2 sm:text-lg md:text-xl">
               {quest.title}
             </h3>
           </div>
@@ -357,8 +375,14 @@ export function EarnCampaignCard({
 
         {/* Metrics strip — no claim fee */}
         {(showFcfs || showRaffleWinners || showPool || showCodes) && (
-          <div className="mt-2 overflow-hidden rounded-lg border border-white/[0.06] bg-white/[0.02] sm:mt-4 sm:rounded-2xl">
-            <div className="grid grid-cols-2 divide-x divide-y divide-white/[0.04] sm:flex sm:divide-y-0">
+          <div 
+            className="mt-2 w-full min-w-0 overflow-hidden rounded-lg border border-white/[0.06] bg-white/[0.02] sm:mt-4 sm:rounded-2xl"
+            style={{ maxWidth: '100%', contain: 'layout style paint' }}
+          >
+            <div 
+              className="grid w-full min-w-0 grid-cols-1 divide-y divide-white/[0.04] sm:grid-cols-2 sm:divide-x sm:divide-y-0"
+              style={{ maxWidth: '100%', overflow: 'hidden' }}
+            >
               {showRaffleWinners ? (
                 <Metric
                   label={t("earnCampaigns.cardRaffleWinners")}
@@ -478,7 +502,7 @@ export function EarnCampaignCard({
   return (
     <Link
       href={ROUTES.campaignQuest(quest.id, quest.title)}
-      className="block h-full rounded-3xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+      className="block h-full w-full min-w-0 max-w-full overflow-hidden rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] sm:rounded-3xl"
     >
       {inner}
     </Link>

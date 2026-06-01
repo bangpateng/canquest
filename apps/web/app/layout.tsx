@@ -37,15 +37,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
+    <html lang="en" className="dark overflow-x-hidden" suppressHydrationWarning>
       <head>
         <ThemeInitScript />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
         <link rel="icon" href="/favicon.ico" sizes="32x32" />
         <link rel="icon" href="/favicon.png" type="image/png" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
       </head>
       <body
-        className={`${inter.variable} ${space.variable} min-h-screen antialiased`}
+        className={`${inter.variable} ${space.variable} min-h-screen antialiased overflow-x-hidden`}
+        style={{ overflowX: 'hidden', maxWidth: '100vw' }}
       >
         <Providers>{children}</Providers>
       </body>

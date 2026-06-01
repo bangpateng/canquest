@@ -216,7 +216,7 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
 
 
 
-      <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden pb-24 md:pb-0">
+      <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden pb-24 md:pb-0" style={{ maxWidth: '100vw', overflowX: 'hidden' }}>
 
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-4 border-b border-white/[0.06] bg-[var(--background)]/90 px-4 backdrop-blur-2xl sm:px-6 md:h-[4.5rem] md:px-8 lg:px-10">
 
@@ -236,8 +236,8 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
 
         </header>
 
-        <main className="min-w-0 p-4 sm:p-6 md:p-8 lg:p-10">
-          <div className={platformContentClass}>{children}</div>
+        <main className="min-w-0 w-full max-w-full overflow-x-hidden p-4 sm:p-6 md:p-8 lg:p-10" style={{ maxWidth: '100%', overflowX: 'hidden' }}>
+          <div className={platformContentClass} style={{ maxWidth: '100%', overflowX: 'hidden' }}>{children}</div>
         </main>
 
       </div>
