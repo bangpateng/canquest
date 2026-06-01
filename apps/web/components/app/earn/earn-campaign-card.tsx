@@ -254,7 +254,7 @@ export function EarnCampaignCard({
       )}
     >
       {/* Banner */}
-      <div className="relative h-[7rem] shrink-0 overflow-hidden sm:h-[8.5rem] md:h-[9.5rem]">
+      <div className="relative h-[4.5rem] shrink-0 overflow-hidden sm:h-[8rem] md:h-[9.5rem]">
         <div
           className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-[1.03]"
           style={
@@ -313,51 +313,51 @@ export function EarnCampaignCard({
       </div>
 
       {/* Body */}
-      <div className="flex flex-1 flex-col px-4 pb-5 pt-3 sm:px-5 sm:pb-6 sm:pt-4 md:px-6">
-        <div className="flex gap-3 sm:gap-4">
+      <div className="flex flex-1 flex-col px-3 pb-3 pt-2 sm:px-5 sm:pb-6 sm:pt-4 md:px-6">
+        <div className="flex gap-2 sm:gap-4">
           <div
             className={cn(
-              "relative h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-[var(--muted)] sm:h-14 sm:w-14 sm:rounded-2xl",
+              "relative h-8 w-8 shrink-0 overflow-hidden rounded-lg bg-[var(--muted)] sm:h-14 sm:w-14 sm:rounded-2xl",
             )}
           >
             {quest.logoUrl ? (
               <img src={quest.logoUrl} alt="" className="h-full w-full object-cover" />
             ) : (
-              <span className="flex h-full w-full items-center justify-center text-sm font-bold text-canton sm:text-base">
+              <span className="flex h-full w-full items-center justify-center text-[10px] font-bold text-canton sm:text-base">
                 {quest.orgSlug.slice(0, 2).toUpperCase()}
               </span>
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-medium text-slate-500 sm:text-sm">
+            <p className="truncate text-[10px] font-medium text-slate-500 sm:text-sm">
               {quest.org}
             </p>
-            <h3 className="mt-0.5 line-clamp-2 text-base font-bold leading-snug text-slate-100 sm:mt-1 sm:text-lg md:text-xl">
+            <h3 className="line-clamp-1 text-xs font-bold leading-tight text-slate-100 sm:mt-1 sm:line-clamp-2 sm:text-lg md:text-xl">
               {quest.title}
             </h3>
           </div>
         </div>
 
-        <p className="mt-2.5 line-clamp-2 text-xs font-medium leading-relaxed text-slate-500 sm:mt-3 sm:text-sm">
+        <p className="mt-2 hidden line-clamp-2 text-sm font-medium leading-relaxed text-slate-500 sm:mt-3 sm:block">
           {quest.description}
         </p>
 
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs font-medium text-slate-500 sm:mt-4 sm:gap-x-4 sm:gap-y-2 sm:text-sm">
-          <span className="inline-flex items-center gap-1 sm:gap-1.5">
-            <ListChecks className="h-3.5 w-3.5 text-canton sm:h-4 sm:w-4" />
+        <div className="mt-2 flex items-center gap-2 text-[10px] font-medium text-slate-500 sm:mt-4 sm:gap-4 sm:text-sm">
+          <span className="inline-flex items-center gap-0.5 sm:gap-1.5">
+            <ListChecks className="h-2.5 w-2.5 text-canton sm:h-4 sm:w-4" />
             {quest.tasks.length} tasks
           </span>
           {quest.deadline ? (
-            <span className="inline-flex items-center gap-1 sm:gap-1.5">
-              <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              {quest.deadline}
+            <span className="inline-flex items-center gap-0.5 sm:gap-1.5">
+              <Calendar className="h-2.5 w-2.5 sm:h-4 sm:w-4" />
+              <span className="truncate">{quest.deadline}</span>
             </span>
           ) : null}
         </div>
 
         {/* Metrics strip — no claim fee */}
         {(showFcfs || showRaffleWinners || showPool || showCodes) && (
-          <div className="mt-3 overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02] sm:mt-4 sm:rounded-2xl">
+          <div className="mt-2 overflow-hidden rounded-lg border border-white/[0.06] bg-white/[0.02] sm:mt-4 sm:rounded-2xl">
             <div className="grid grid-cols-2 divide-x divide-y divide-white/[0.04] sm:flex sm:divide-y-0">
               {showRaffleWinners ? (
                 <Metric
@@ -439,9 +439,9 @@ export function EarnCampaignCard({
           </div>
         )}
 
-        <div className="mt-auto pt-4 sm:pt-6">
+        <div className="mt-auto pt-2 sm:pt-6">
           {joinBlocked ? (
-            <span className={cn(buttonVariants({ variant: "muted", size: "block" }), "rounded-xl text-sm sm:rounded-2xl sm:text-base")}>
+            <span className={cn(buttonVariants({ variant: "muted", size: "block" }), "rounded-lg py-2 text-xs sm:rounded-2xl sm:py-2.5 sm:text-base")}>
               {ctaLabel}
             </span>
           ) : canOpen ? (
@@ -456,13 +456,13 @@ export function EarnCampaignCard({
                         : "primary",
                   size: "block",
                 }),
-                "rounded-xl text-sm sm:rounded-2xl sm:text-base",
+                "rounded-lg py-2 text-xs sm:rounded-2xl sm:py-2.5 sm:text-base",
               )}
             >
               {ctaLabel}
             </span>
           ) : (
-            <span className={cn(buttonVariants({ variant: "dashed", size: "block" }), "rounded-xl text-sm sm:rounded-2xl sm:text-base")}>
+            <span className={cn(buttonVariants({ variant: "dashed", size: "block" }), "rounded-lg py-2 text-xs sm:rounded-2xl sm:py-2.5 sm:text-base")}>
               Opens soon
             </span>
           )}
