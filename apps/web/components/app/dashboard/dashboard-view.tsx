@@ -265,13 +265,13 @@ export function DashboardView() {
   ];
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 md:space-y-10">
       {loadError ? (
-        <div className="rounded-2xl border border-orange-500/30 bg-orange-500/10 px-6 py-4 text-sm text-orange-200">
+        <div className="rounded-3xl border border-orange-500/20 bg-orange-500/5 px-6 py-5 text-sm font-medium text-orange-200 backdrop-blur-xl">
           {loadError}{" "}
           <button
             type="button"
-            className="font-semibold underline"
+            className="font-semibold underline decoration-orange-400/50 underline-offset-4 transition-colors hover:text-orange-100"
             onClick={() => void fetchAll()}
           >
             Retry
@@ -280,19 +280,19 @@ export function DashboardView() {
       ) : null}
 
       {/* Stat cards — order: Weekly rank → CC Balance → CC Transactions → Quests completed → Quest points */}
-      <section className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 lg:gap-6 xl:grid-cols-5">
         {statCards.map((c) => {
           const Icon = c.icon;
           return (
             <div
               key={c.key}
-              className="glass-card rounded-3xl border border-white/5 p-6"
+              className="group relative overflow-hidden rounded-3xl border border-white/[0.08] bg-slate-900/40 p-6 backdrop-blur-xl transition-all duration-300 hover:border-white/[0.12] hover:bg-slate-900/60"
             >
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium text-slate-400">{c.title}</p>
-                <Icon className="h-5 w-5 text-slate-500" aria-hidden />
+                <Icon className="h-5 w-5 text-slate-500 transition-colors group-hover:text-slate-400" aria-hidden />
               </div>
-              <StatValue className="mt-3 text-2xl font-bold text-slate-100">
+              <StatValue className="mt-4 text-3xl font-bold tracking-tight text-slate-100 sm:text-4xl">
                 {c.value === null ? (
                   <LoadingSpinner size="xl" tone="muted" />
                 ) : (
@@ -300,7 +300,7 @@ export function DashboardView() {
                 )}
               </StatValue>
               {c.hint ? (
-                <p className="mt-2 text-sm font-medium text-slate-400">{c.hint}</p>
+                <p className="mt-3 text-sm font-medium leading-relaxed text-slate-500">{c.hint}</p>
               ) : null}
             </div>
           );
@@ -308,33 +308,35 @@ export function DashboardView() {
       </section>
 
       {/* Recent Activity */}
-      <section className="rounded-3xl border border-white/5 bg-[var(--card)] p-8 shadow-sm">
-          <SectionTitle className="text-xl font-bold text-slate-100">{t("dashboard.recentActivity")}</SectionTitle>
+      <section className="overflow-hidden rounded-3xl border border-white/[0.08] bg-slate-900/40 backdrop-blur-xl">
+          <div className="border-b border-white/[0.06] bg-white/[0.02] px-8 py-5">
+            <SectionTitle className="text-xl font-semibold tracking-tight text-slate-100">{t("dashboard.recentActivity")}</SectionTitle>
+          </div>
 
           {activityLoading ? (
-            <div className="flex items-center justify-center py-12">
+            <div className="flex items-center justify-center py-20">
               <LoadingSpinner size="lg" />
             </div>
           ) : !activityData || activityData.items.length === 0 ? (
-            <div className="mt-8 rounded-2xl border border-dashed border-slate-800/80 py-12 text-center">
-              <p className="text-sm font-medium text-slate-400">
+            <div className="px-8 py-20 text-center">
+              <p className="text-sm font-medium text-slate-500">
                 {t("dashboard.noActivity")}
               </p>
             </div>
           ) : (
-            <>
-              <ul className="mt-6 divide-y divide-slate-800/80">
+            <div className="p-8">
+              <ul className="space-y-1">
                 {activityData.items.map((item, i) => {
                   const Icon = ACTIVITY_ICON[item.type];
                   const colorClass = ACTIVITY_COLOR[item.type];
                   return (
                     <li
                       key={`${item.type}-${item.time}-${i}`}
-                      className="flex items-start gap-4 py-4"
+                      className="group flex items-start gap-4 rounded-2xl px-4 py-4 transition-colors hover:bg-white/[0.02]"
                     >
                       <div
                         className={cn(
-                          "mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl",
+                          "mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl",
                           colorClass,
                         )}
                       >
@@ -342,9 +344,9 @@ export function DashboardView() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="text-base font-semibold text-slate-100">{item.title}</p>
-                        <p className="mt-1 text-sm font-medium text-slate-400">{item.detail}</p>
+                        <p className="mt-1 text-sm font-medium text-slate-500">{item.detail}</p>
                       </div>
-                      <p className="shrink-0 text-sm font-medium text-slate-400 pt-1">
+                      <p className="shrink-0 pt-1 text-sm font-medium text-slate-500">
                         {timeAgo(item.time, t)}
                       </p>
                     </li>
@@ -352,14 +354,14 @@ export function DashboardView() {
                 })}
               </ul>
               <ListPagination
-                className="mt-6"
+                className="mt-8"
                 page={activityPage}
                 totalPages={activityData.totalPages}
                 total={activityData.total}
                 disabled={activityLoading}
                 onPageChange={setActivityPage}
               />
-            </>
+            </div>
           )}
       </section>
     </div>

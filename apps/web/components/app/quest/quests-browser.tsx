@@ -231,10 +231,10 @@ export function QuestsBrowser({
     ) : null;
 
   return (
-    <div className={cn("w-full min-w-0", isEarn ? "space-y-6" : "space-y-8")}>
+    <div className={cn("w-full min-w-0", isEarn ? "space-y-6 md:space-y-8" : "space-y-8 md:space-y-10")}>
       {isEarn ? (
         <section
-          className={cn(surfaceToolbarClass, "p-4 sm:p-6")}
+          className={cn("rounded-3xl border border-white/[0.08] bg-slate-900/40 p-5 backdrop-blur-xl sm:p-6", surfaceToolbarClass)}
           aria-label={t("earnCampaigns.filterAria")}
         >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
@@ -254,31 +254,31 @@ export function QuestsBrowser({
 
       {loading ? (
         isEarn ? (
-          <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-5 sm:grid-cols-2 sm:gap-6 xl:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
               <EarnCampaignSkeleton key={i} />
             ))}
           </div>
         ) : (
-          <PageLoading minHeight="min-h-0" className="py-16" />
+          <PageLoading minHeight="min-h-0" className="py-20" />
         )
       ) : loadError ? (
-        <div className="rounded-3xl border border-red-500/30 bg-red-500/10 px-6 py-10 text-center">
-          <p className="text-xl font-bold text-red-200">{t("earnCampaigns.loadFailed")}</p>
-          <p className="mt-3 text-sm font-medium text-red-200/80">
+        <div className="rounded-3xl border border-red-500/20 bg-red-500/5 px-6 py-12 text-center backdrop-blur-xl sm:py-14">
+          <p className="text-xl font-bold tracking-tight text-red-200 sm:text-2xl">{t("earnCampaigns.loadFailed")}</p>
+          <p className="mt-3 text-sm font-medium leading-relaxed text-red-200/70 sm:text-base">
             {isWalletRequiredLoadError(loadError)
               ? t("earnCampaigns.loadFailedHint")
               : loadError}
           </p>
           {isEarn && isWalletRequiredLoadError(loadError) ? (
-            <Link href="/wallet" className={cn(buttonVariants({ size: "sm" }), "mt-6")}>
+            <Link href="/wallet" className={cn(buttonVariants({ size: "sm" }), "mt-8 rounded-2xl")}>
               {t("dashboard.createWallet")}
             </Link>
           ) : (
             <button
               type="button"
               onClick={() => loadQuests()}
-              className={cn(buttonVariants({ size: "sm" }), "mt-6")}
+              className={cn(buttonVariants({ size: "sm" }), "mt-8 rounded-2xl")}
             >
               {t("spin.retry")}
             </button>
@@ -287,16 +287,13 @@ export function QuestsBrowser({
       ) : filtered.length === 0 ? (
         <div
           className={cn(
-            "px-8 py-16 text-center",
-            isEarn
-              ? "rounded-3xl border border-dashed border-slate-800/80 bg-[var(--muted)]/15"
-              : "rounded-3xl border border-dashed border-slate-800/80 bg-[var(--muted)]/30",
+            "rounded-3xl border border-dashed border-white/[0.08] bg-white/[0.02] px-8 py-20 text-center backdrop-blur-xl",
           )}
         >
-          <p className="text-xl font-bold text-slate-100">
+          <p className="text-xl font-bold tracking-tight text-slate-100 sm:text-2xl">
             {query ? t("quests.noMatch") : t("quests.noPrograms")}
           </p>
-          <p className="mt-3 text-sm font-medium text-slate-400">
+          <p className="mx-auto mt-3 max-w-md text-sm font-medium leading-relaxed text-slate-500 sm:text-base">
             {query
               ? t("quests.tryAnother")
               : allQuests.length === 0
@@ -306,7 +303,7 @@ export function QuestsBrowser({
           {isEarn && allQuests.length === 0 ? (
             <Link
               href={ROUTES.earnHub}
-              className={cn(buttonVariants({ size: "sm" }), "mt-6 inline-flex")}
+              className={cn(buttonVariants({ size: "sm" }), "mt-8 inline-flex rounded-2xl")}
             >
               {t("earnCampaigns.dailyTasks")}
             </Link>
@@ -315,7 +312,7 @@ export function QuestsBrowser({
       ) : (
         <>
           {isEarn ? (
-            <div className="grid items-stretch gap-6 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid items-stretch gap-5 sm:grid-cols-2 sm:gap-6 xl:grid-cols-3">
               {pagedQuests.map((q) => (
                 <EarnCampaignCard
                   key={q.id}
@@ -326,7 +323,7 @@ export function QuestsBrowser({
               ))}
             </div>
           ) : (
-            <div className="grid gap-8 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-6 sm:grid-cols-2 sm:gap-8 xl:grid-cols-3">
               {pagedQuests.map((q) => (
                 <QuestCard
                   key={q.id}

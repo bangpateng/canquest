@@ -13,13 +13,13 @@ export function SettingPageContent() {
 
   return (
 
-    <div className="grid w-full min-w-0 gap-8 pb-8">
+    <div className="grid w-full min-w-0 gap-6 pb-10 md:gap-8">
 
       <SettingsAccountPanel />
 
       <SettingsTwitterPanel />
 
-      <div className="flex justify-center pb-4 pt-2">
+      <div className="flex justify-center pb-4 pt-4">
 
         <SignOutButton variant="link" />
 

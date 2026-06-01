@@ -46,15 +46,15 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
   }, [refreshWithRetries, onRefresh]);
 
   return (
-    <div className="w-full min-w-0 space-y-8">
-      <div className="glass-card w-full min-w-0 rounded-3xl border border-white/5 p-8">
+    <div className="w-full min-w-0 space-y-6 md:space-y-8">
+      <div className="w-full min-w-0 overflow-hidden rounded-3xl border border-white/[0.08] bg-slate-900/40 p-6 backdrop-blur-xl sm:p-8 md:p-10">
         <div className="flex items-center gap-3">
           <CheckCircle2 className="h-5 w-5 shrink-0 text-green-500" />
-          <p className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+          <p className="text-sm font-semibold uppercase tracking-wider text-slate-400">
             {t("wallet.walletActive")}
           </p>
         </div>
-        <div className="mt-4">
+        <div className="mt-5">
           <CopyField
             label={t("wallet.partyId")}
             value={hasWallet ? displayPartyId || "—" : "—"}
@@ -62,16 +62,16 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
         </div>
       </div>
 
-      <div className="glass-card w-full min-w-0 rounded-3xl border border-white/5 p-8">
+      <div className="w-full min-w-0 overflow-hidden rounded-3xl border border-white/[0.08] bg-slate-900/40 p-6 backdrop-blur-xl sm:p-8 md:p-10">
         <div className="flex items-center justify-between gap-3">
-          <p className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+          <p className="text-sm font-semibold uppercase tracking-wider text-slate-400">
             {t("wallet.balance")}
           </p>
           <button
             type="button"
             onClick={() => void fetchBalance()}
             disabled={balanceLoading}
-            className="text-slate-400 transition-colors hover:text-slate-100 disabled:opacity-40"
+            className="rounded-xl p-2 text-slate-400 transition-all hover:bg-white/[0.04] hover:text-slate-100 disabled:opacity-40"
             aria-label={t("wallet.refreshBalance")}
           >
             {balanceLoading ? (
@@ -81,20 +81,20 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
             )}
           </button>
         </div>
-        <p className="mt-3 text-3xl font-bold tabular-nums leading-none text-slate-100">
+        <p className="mt-4 text-3xl font-bold tabular-nums leading-none tracking-tight text-slate-100 sm:text-4xl md:text-5xl">
           {balanceLoading ? (
-            <span className="text-slate-400">—</span>
+            <span className="text-slate-500">—</span>
           ) : (
             <>
               {balance?.toFixed(4) ?? "0.0000"}{" "}
-              <span className="text-xl font-semibold text-slate-400">
+              <span className="text-lg font-semibold text-slate-500 sm:text-xl">
                 CC
               </span>
             </>
           )}
         </p>
         {!balanceLoading && ccUsdPrice > 0 && balance !== null ? (
-          <p className="mt-2 text-sm font-medium text-slate-400">
+          <p className="mt-3 text-sm font-medium text-slate-500">
             ≈ $
             {(balance * ccUsdPrice).toLocaleString("en-US", {
               minimumFractionDigits: 2,

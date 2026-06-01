@@ -70,9 +70,9 @@ function NavLinks({
 
     variant === "sidebar"
 
-      ? "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all"
+      ? "flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-all duration-200"
 
-      : "flex min-w-0 flex-1 basis-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[9px] font-medium transition-all sm:px-2 sm:text-[10px]";
+      : "flex min-w-0 flex-1 basis-0 flex-col items-center justify-center gap-1.5 rounded-2xl px-1.5 py-2.5 text-[9px] font-medium transition-all duration-200 sm:px-2 sm:text-[10px]";
 
 
 
@@ -96,17 +96,17 @@ function NavLinks({
 
           (locked
 
-            ? " opacity-60"
+            ? " opacity-50"
 
             : active
 
               ? variant === "mobile"
 
-                ? " bg-[var(--primary)]/14 text-[var(--foreground)] ring-1 ring-inset ring-[var(--primary)]/30"
+                ? " bg-[var(--primary)]/12 text-[var(--foreground)] shadow-sm shadow-[var(--primary)]/5 ring-1 ring-inset ring-[var(--primary)]/20"
 
-                : " bg-[var(--primary)]/14 text-[var(--foreground)] ring-1 ring-[var(--primary)]/25"
+                : " bg-[var(--primary)]/10 text-[var(--foreground)] shadow-sm shadow-[var(--primary)]/5 ring-1 ring-[var(--primary)]/15"
 
-              : " text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]");
+              : " text-[var(--muted-foreground)] hover:bg-white/[0.04] hover:text-[var(--foreground)]");
 
         return (
 
@@ -170,35 +170,35 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
 
   return (
 
-    <div className="flex min-h-screen items-start bg-[var(--background)]">
+    <div className="flex min-h-screen items-start overflow-x-hidden bg-[var(--background)]">
 
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--card)]/80 px-3 py-6 backdrop-blur-xl md:flex">
+      <aside className="sticky top-0 hidden h-screen w-72 shrink-0 flex-col border-r border-white/[0.06] bg-slate-950/80 px-5 py-8 backdrop-blur-2xl md:flex">
 
-        <div className="mb-2 min-w-0 px-3">
+        <div className="mb-4 min-w-0 px-2">
 
           <CanQuestLogo size="lg" href="/overview" className="w-full" />
 
         </div>
 
-        <p className="mb-6 px-3 text-[10px] uppercase tracking-widest text-[var(--muted-foreground)]">
+        <p className="mb-8 px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">
 
           {t("shell.platform")}
 
         </p>
 
-        <nav className="flex flex-1 flex-col gap-1">
+        <nav className="flex flex-1 flex-col gap-1.5">
 
           <NavLinks variant="sidebar" hasWallet={hasWallet} />
 
         </nav>
 
-        <div className="mt-auto space-y-2 border-t border-[var(--border)] pt-4">
+        <div className="mt-auto space-y-1 border-t border-white/[0.06] pt-6">
 
           <Link
 
             href="/"
 
-            className="flex items-center gap-2 rounded-xl px-3 py-2 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+            className="flex items-center gap-3 rounded-2xl px-3 py-2.5 text-xs font-medium text-slate-500 transition-colors hover:bg-white/[0.04] hover:text-slate-300"
 
           >
 
@@ -208,7 +208,7 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
 
           </Link>
 
-          <p className="px-3 text-[10px] text-[var(--muted-foreground)]">canquest.cc</p>
+          <p className="px-3 pt-2 text-[10px] font-medium text-slate-600">canquest.cc</p>
 
         </div>
 
@@ -216,9 +216,9 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
 
 
 
-      <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden pb-20 md:pb-0">
+      <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden pb-24 md:pb-0">
 
-        <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--background)]/85 px-4 backdrop-blur-md md:h-16 md:px-8">
+        <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-4 border-b border-white/[0.06] bg-[var(--background)]/90 px-4 backdrop-blur-2xl sm:px-6 md:h-[4.5rem] md:px-8 lg:px-10">
 
           <CanQuestLogo
 
@@ -236,7 +236,7 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
 
         </header>
 
-        <main className="min-w-0 p-4 md:p-8">
+        <main className="min-w-0 p-4 sm:p-6 md:p-8 lg:p-10">
           <div className={platformContentClass}>{children}</div>
         </main>
 
@@ -246,13 +246,13 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
 
       <nav
 
-        className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--border)] bg-[var(--card)]/95 backdrop-blur-md md:hidden"
+        className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/[0.06] bg-slate-950/95 backdrop-blur-2xl md:hidden"
 
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
 
       >
 
-        <div className="flex w-full min-w-0 gap-0.5 px-1 py-1">
+        <div className="flex w-full min-w-0 gap-0.5 px-2 py-2">
 
           <NavLinks variant="mobile" hasWallet={hasWallet} />
 

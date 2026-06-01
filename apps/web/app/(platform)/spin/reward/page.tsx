@@ -11,15 +11,15 @@ export default function SpinRewardPage() {
     <PlatformPage>
       <div
         role="status"
-        className="mx-auto flex min-h-[50vh] max-w-md flex-col items-center justify-center px-4 text-center"
+        className="mx-auto flex min-h-[60vh] max-w-lg flex-col items-center justify-center px-4 text-center"
       >
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--muted)]/30">
-          <Ticket className="h-7 w-7 text-canton" aria-hidden />
+        <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-white/[0.08] bg-slate-900/40 backdrop-blur-xl">
+          <Ticket className="h-10 w-10 text-canton" aria-hidden />
         </div>
-        <span className="mt-6 rounded-full border border-orange-500/40 bg-orange-500/15 px-3 py-1 text-xs font-bold uppercase tracking-wide text-orange-200">
+        <span className="mt-8 rounded-full border border-orange-500/20 bg-orange-500/10 px-4 py-2 text-xs font-bold uppercase tracking-wider text-orange-200 backdrop-blur-xl">
           {t("spin.comingSoon")}
         </span>
-        <p className="mt-3 text-sm leading-relaxed text-[var(--muted-foreground)]">
+        <p className="mt-4 max-w-sm text-sm font-medium leading-relaxed text-slate-500 sm:text-base">
           {t("spin.comingSoonHint")}
         </p>
       </div>
