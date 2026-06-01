@@ -260,8 +260,8 @@ export function EarnCampaignCard({
         overflowWrap: 'anywhere'
       }}
     >
-      {/* Banner */}
-      <div className="relative h-[3.5rem] shrink-0 overflow-hidden sm:h-[8rem] md:h-[9.5rem]">
+      {/* Banner - Diubah h-[3.5rem] menjadi h-[6.5rem] agar elemen tidak bertumpuk */}
+      <div className="relative h-[6.5rem] shrink-0 overflow-hidden sm:h-[8rem] md:h-[9.5rem]">
         <div
           className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-[1.03]"
           style={
@@ -296,24 +296,24 @@ export function EarnCampaignCard({
           {statusLabel}
         </span>
 
-        {/* Reward highlight on banner (Galxe-style) */}
+        {/* Reward highlight on banner - Dioptimalkan paddings & hidden label khusus mobile */}
         {quest.rewardCc > 0 || bannerRewardText ? (
           <div 
-            className="absolute bottom-3 right-3 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-xl border border-white/10 bg-black/50 px-2.5 py-1.5 backdrop-blur-md sm:bottom-4 sm:right-4 sm:max-w-[calc(100%-2rem)] sm:gap-3 sm:rounded-2xl sm:px-3 sm:py-2"
-            style={{ maxWidth: 'calc(100% - 1.5rem)', overflow: 'hidden' }}
+            className="absolute bottom-2 right-2 flex max-w-[calc(100%-1rem)] items-center gap-1.5 rounded-lg border border-white/10 bg-black/60 px-2 py-1 backdrop-blur-md sm:bottom-4 sm:right-4 sm:max-w-[calc(100%-2rem)] sm:gap-3 sm:rounded-2xl sm:px-3 sm:py-2"
+            style={{ maxWidth: 'calc(100% - 1rem)', overflow: 'hidden' }}
           >
-            <CampaignRewardIcon theme={theme} className={cn("shrink-0", theme.accent)} size={14} />
+            <CampaignRewardIcon theme={theme} className={cn("shrink-0", theme.accent)} size={12} />
             <div className="min-w-0 text-right">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-white/60 sm:text-xs">
+              <p className="hidden text-[9px] font-semibold uppercase tracking-wider text-white/60 sm:block sm:text-xs">
                 {t("earnCampaigns.rewardLabel")}
               </p>
               {quest.rewardCc > 0 ? (
-                <p className={cn("text-lg font-bold leading-none tabular-nums sm:text-xl", theme.accent)}>
+                <p className={cn("text-sm font-bold leading-none tabular-nums sm:text-xl", theme.accent)}>
                   {quest.rewardCc}
-                  <span className="ml-0.5 text-xs font-semibold text-white/70 sm:ml-1 sm:text-sm">CC</span>
+                  <span className="ml-0.5 text-[10px] font-semibold text-white/70 sm:ml-1 sm:text-sm">CC</span>
                 </p>
               ) : (
-                <p className={cn("truncate text-sm font-bold leading-tight sm:text-base", theme.accent)}>
+                <p className={cn("truncate text-xs font-bold leading-tight sm:text-base", theme.accent)}>
                   {bannerRewardText}
                 </p>
               )}
@@ -324,7 +324,7 @@ export function EarnCampaignCard({
 
       {/* Body */}
       <div 
-        className="flex w-full min-w-0 flex-1 flex-col overflow-hidden px-3 pb-3 pt-2 sm:px-5 sm:pb-6 sm:pt-4 md:px-6" 
+        className="flex w-full min-w-0 flex-1 flex-col overflow-hidden px-3 pb-3 pt-3 sm:px-5 sm:pb-6 sm:pt-4 md:px-6" 
         style={{ 
           width: '100%', 
           maxWidth: '100%', 
@@ -332,10 +332,10 @@ export function EarnCampaignCard({
           contain: 'layout style paint'
         }}
       >
-        <div className="flex w-full min-w-0 gap-2 sm:gap-4">
+        <div className="flex w-full min-w-0 items-center gap-2.5 sm:gap-4">
           <div
             className={cn(
-              "relative h-7 w-7 shrink-0 overflow-hidden rounded-lg bg-[var(--muted)] sm:h-14 sm:w-14 sm:rounded-2xl",
+              "relative h-9 w-9 shrink-0 overflow-hidden rounded-lg bg-[var(--muted)] sm:h-14 sm:w-14 sm:rounded-2xl",
             )}
           >
             {quest.logoUrl ? (
@@ -346,11 +346,11 @@ export function EarnCampaignCard({
               </span>
             )}
           </div>
-          <div className="min-w-0 flex-1 overflow-hidden">
+          <div className="min-w-0 flex-1">
             <p className="truncate text-[10px] font-medium text-slate-500 sm:text-sm">
               {quest.org}
             </p>
-            <h3 className="line-clamp-1 break-words text-xs font-bold leading-tight text-slate-100 sm:mt-1 sm:line-clamp-2 sm:text-lg md:text-xl">
+            <h3 className="line-clamp-2 break-words text-sm font-bold leading-tight text-slate-100 sm:mt-1 sm:text-lg md:text-xl">
               {quest.title}
             </h3>
           </div>
@@ -360,28 +360,28 @@ export function EarnCampaignCard({
           {quest.description}
         </p>
 
-        <div className="mt-2 flex items-center gap-2 text-[10px] font-medium text-slate-500 sm:mt-4 sm:gap-4 sm:text-sm">
-          <span className="inline-flex items-center gap-0.5 sm:gap-1.5">
-            <ListChecks className="h-2.5 w-2.5 text-canton sm:h-4 sm:w-4" />
+        <div className="mt-3 flex items-center gap-3 text-[10px] font-medium text-slate-500 sm:mt-4 sm:gap-4 sm:text-sm">
+          <span className="inline-flex items-center gap-1 sm:gap-1.5">
+            <ListChecks className="h-3 w-3 text-canton sm:h-4 sm:w-4" />
             {quest.tasks.length} tasks
           </span>
           {quest.deadline ? (
-            <span className="inline-flex items-center gap-0.5 sm:gap-1.5">
-              <Calendar className="h-2.5 w-2.5 sm:h-4 sm:w-4" />
+            <span className="inline-flex items-center gap-1 sm:gap-1.5">
+              <Calendar className="h-3 w-3 sm:h-4 sm:w-4" />
               <span className="truncate">{quest.deadline}</span>
             </span>
           ) : null}
         </div>
 
-        {/* Metrics strip — no claim fee */}
+        {/* Metrics strip */}
         {(showFcfs || showRaffleWinners || showPool || showCodes) && (
           <div 
-            className="mt-2 w-full min-w-0 overflow-hidden rounded-lg border border-white/[0.06] bg-white/[0.02] sm:mt-4 sm:rounded-2xl"
+            className="mt-3 w-full min-w-0 overflow-hidden rounded-lg border border-white/[0.06] bg-white/[0.02] sm:mt-4 sm:rounded-2xl"
             style={{ maxWidth: '100%', contain: 'layout style paint' }}
           >
             <div 
-              className="grid w-full min-w-0 grid-cols-1 divide-y divide-white/[0.04] sm:grid-cols-2 sm:divide-x sm:divide-y-0"
-              style={{ maxWidth: '100%', overflow: 'hidden' }}
+              className="grid w-full min-w-0 grid-cols-2 divide-x divide-white/[0.04] overflow-hidden"
+              style={{ maxWidth: '100%' }}
             >
               {showRaffleWinners ? (
                 <Metric
@@ -423,8 +423,8 @@ export function EarnCampaignCard({
               ) : null}
             </div>
             {isDrawCcRaffle && showRaffleWinners && winnersDrawn > 0 ? (
-              <div className="border-t border-white/[0.04] px-3 py-2.5 sm:px-4 sm:py-3">
-                <div className="mb-1 flex justify-between text-[10px] font-medium tabular-nums text-slate-500 sm:mb-1.5 sm:text-xs">
+              <div className="border-t border-white/[0.04] px-3 py-2 sm:px-4 sm:py-3">
+                <div className="mb-1 flex justify-between text-[9px] font-medium tabular-nums text-slate-500 sm:text-xs">
                   <span>
                     {t("earnCampaigns.slotsSelected", {
                       used: String(winnersDrawn),
@@ -442,8 +442,8 @@ export function EarnCampaignCard({
               </div>
             ) : null}
             {showFcfs && !slotsFull ? (
-              <div className="border-t border-white/[0.04] px-3 py-2.5 sm:px-4 sm:py-3">
-                <div className="mb-1 flex justify-between text-[10px] font-medium tabular-nums text-slate-500 sm:mb-1.5 sm:text-xs">
+              <div className="border-t border-white/[0.04] px-3 py-2 sm:px-4 sm:py-3">
+                <div className="mb-1 flex justify-between text-[9px] font-medium tabular-nums text-slate-500 sm:text-xs">
                   <span>{t("earnCampaigns.slotsClaimed", { used: String(slotsUsed), max: String(slotsMax) })}</span>
                   <span>{slotsPct}%</span>
                 </div>
@@ -463,7 +463,7 @@ export function EarnCampaignCard({
           </div>
         )}
 
-        <div className="mt-auto pt-2 sm:pt-6">
+        <div className="mt-auto pt-3 sm:pt-6">
           {joinBlocked ? (
             <span className={cn(buttonVariants({ variant: "muted", size: "block" }), "rounded-lg py-2 text-xs sm:rounded-2xl sm:py-2.5 sm:text-base")}>
               {ctaLabel}
