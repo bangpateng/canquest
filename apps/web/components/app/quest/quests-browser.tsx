@@ -241,11 +241,11 @@ export function QuestsBrowser({
     >
       {isEarn ? (
         <section
-          className={cn("w-full max-w-full overflow-hidden rounded-3xl border border-white/[0.08] bg-slate-900/40 p-4 backdrop-blur-xl sm:p-5 md:p-6", surfaceToolbarClass)}
+          className={cn("w-full max-w-full overflow-hidden rounded-3xl border border-white/[0.08] bg-slate-900/40 p-3 sm:p-5 md:p-6", surfaceToolbarClass)}
           aria-label={t("earnCampaigns.filterAria")}
           style={{ maxWidth: '100%', overflow: 'hidden', contain: 'layout style paint' }}
         >
-          <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 md:gap-6">
+          <div className="flex w-full flex-col gap-4 sm:flex-row sm:items-center sm:gap-4 md:gap-6">
             <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:gap-3">
               <div className="min-w-0 flex-1 overflow-hidden sm:flex-none">{tabRow}</div>
               {completionChip}
@@ -321,7 +321,7 @@ export function QuestsBrowser({
         <>
           {isEarn ? (
             <div 
-              className="grid w-full grid-cols-1 items-stretch gap-4 overflow-hidden sm:grid-cols-2 sm:gap-6 xl:grid-cols-3" 
+              className="grid w-full min-w-0 grid-cols-1 items-stretch gap-4 px-1 sm:grid-cols-2 sm:gap-6 sm:px-0 xl:grid-cols-3" 
               style={{ 
                 maxWidth: '100%', 
                 overflow: 'hidden', 
@@ -351,7 +351,7 @@ export function QuestsBrowser({
             </div>
           ) : (
             <div 
-              className="grid w-full grid-cols-1 gap-6 overflow-hidden sm:grid-cols-2 sm:gap-8 xl:grid-cols-3" 
+              className="grid w-full min-w-0 grid-cols-1 gap-5 px-1 sm:grid-cols-2 sm:gap-8 sm:px-0 xl:grid-cols-3" 
               style={{ 
                 maxWidth: '100%', 
                 overflow: 'hidden', 
