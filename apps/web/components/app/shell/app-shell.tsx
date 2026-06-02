@@ -32,7 +32,7 @@ function NavLinks({ variant }: { variant: "sidebar" | "mobile" }) {
   const base =
     variant === "sidebar"
       ? "flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold transition-colors"
-      : "flex flex-col items-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-semibold transition-colors";
+      : "flex flex-col items-center justify-center gap-1 py-1 px-0.5 sm:px-2 transition-colors";
 
   return (
     <>
@@ -46,12 +46,15 @@ function NavLinks({ variant }: { variant: "sidebar" | "mobile" }) {
               base +
               (active
                 ? " bg-[var(--primary)]/12 text-slate-100"
-                : " text-slate-400 hover:bg-[var(--muted)] hover:text-slate-100") +
-              (variant === "mobile" ? " min-w-[4.5rem] shrink-0" : "")
+                : " text-slate-400 hover:bg-[var(--muted)] hover:text-slate-100")
             }
           >
-            <Icon className={variant === "sidebar" ? "h-5 w-5 shrink-0" : "h-5 w-5"} />
-            {variant === "mobile" ? <span>{label}</span> : label}
+            <Icon className={variant === "sidebar" ? "h-5 w-5 shrink-0" : "h-5 w-5 shrink-0 sm:h-6 sm:w-6"} />
+            {variant === "mobile" ? (
+              <span className="text-[10px] sm:text-xs font-medium tracking-tight whitespace-nowrap text-center leading-tight">{label}</span>
+            ) : (
+              label
+            )}
           </Link>
         );
       })}
@@ -84,8 +87,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </div>
-      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/5 bg-[var(--card)]/95 backdrop-blur-md md:hidden">
-        <div className="flex max-w-full gap-1 overflow-x-auto px-2 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-slate-900/80 backdrop-blur-xl border-t border-white/5 px-2 py-2 sm:px-4 md:hidden">
+        <div className="grid grid-cols-7 w-full justify-between items-center mx-auto max-w-md gap-0.5">
           <NavLinks variant="mobile" />
         </div>
       </nav>

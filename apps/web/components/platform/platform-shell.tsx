@@ -52,7 +52,7 @@ function NavLinks({
   const base =
     variant === "sidebar"
       ? "flex items-center gap-3 rounded-2xl px-4 py-3.5 text-sm font-semibold transition-all duration-200"
-      : "flex min-w-0 flex-1 basis-0 flex-col items-center justify-center gap-1.5 rounded-2xl px-2 py-3 text-[10px] font-semibold transition-all duration-200 sm:text-xs";
+      : "flex flex-col items-center justify-center gap-1 py-1 px-0.5 sm:px-2 transition-all duration-200";
 
   return (
     <>
@@ -82,11 +82,11 @@ function NavLinks({
               className={
                 variant === "sidebar"
                   ? cn("h-5 w-5 shrink-0", active && "text-[var(--primary)]")
-                  : "h-5 w-5 shrink-0"
+                  : "h-5 w-5 shrink-0 sm:h-6 sm:w-6"
               }
             />
             {variant === "mobile" ? (
-              <span className="max-w-full truncate text-center leading-tight">{label}</span>
+              <span className="text-[10px] sm:text-xs font-medium tracking-tight whitespace-nowrap text-center leading-tight">{label}</span>
             ) : (
               label
             )}
@@ -147,10 +147,10 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
 
       {/* Mobile Bottom Navigation */}
       <nav
-        className="fixed bottom-0 left-0 right-0 z-40 w-full max-w-full border-t border-white/[0.06] bg-slate-950/95 backdrop-blur-2xl md:hidden"
+        className="fixed bottom-0 left-0 right-0 z-50 bg-slate-900/80 backdrop-blur-xl border-t border-white/5 px-2 py-2 sm:px-4 md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
-        <div className="flex w-full min-w-0 max-w-full gap-1 px-2 py-2">
+        <div className="grid grid-cols-7 w-full justify-between items-center mx-auto max-w-md gap-0.5">
           <NavLinks variant="mobile" hasWallet={hasWallet} />
         </div>
       </nav>
