@@ -223,7 +223,7 @@ export function EarnCampaignCard({
   const ctaLabel = joinBlocked
     ? t("earnCampaigns.slotsEnded")
     : quest.status === "ENDED"
-      ? t("quests.viewRecap")
+      ? "View"
       : completed
         ? t("quests.questComplete")
         : hasParticipated && slotsFull

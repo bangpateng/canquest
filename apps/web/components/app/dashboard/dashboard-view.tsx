@@ -266,16 +266,6 @@ export function DashboardView() {
   return (
     <div className="w-full max-w-full overflow-x-hidden font-sans">
       <div className="w-full min-h-screen max-w-7xl mx-auto">
-        {/* Page Header */}
-        <header className="mb-6 md:mb-8">
-          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-white">
-            {t("dashboard.title") || "Dashboard"}
-          </h1>
-          <p className="mt-2 text-xs sm:text-sm text-slate-400 font-normal leading-relaxed">
-            {t("dashboard.subtitle") || "Track your progress and achievements"}
-          </p>
-        </header>
-
         <div className="space-y-5 md:space-y-6">
           {/* Error Banner */}
           {loadError ? (

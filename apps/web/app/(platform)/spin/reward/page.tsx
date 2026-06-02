@@ -9,16 +9,6 @@ export default function SpinRewardPage() {
 
   return (
     <PlatformPage>
-      {/* Page Header */}
-      <header className="mb-6 md:mb-8">
-        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-white font-sans">
-          Spin Reward
-        </h1>
-        <p className="mt-2 text-xs sm:text-sm text-slate-400 font-normal leading-relaxed">
-          Spend your points and win exclusive rewards
-        </p>
-      </header>
-
       {/* Coming Soon State — Premium Glassmorphic Card */}
       <div className="w-full max-w-full overflow-hidden rounded-3xl border border-white/5 bg-slate-900/40 backdrop-blur-xl shadow-2xl shadow-black/40">
         <div
