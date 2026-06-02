@@ -82,11 +82,11 @@ function NavLinks({
               className={
                 variant === "sidebar"
                   ? cn("h-5 w-5 shrink-0", active && "text-[var(--primary)]")
-                  : "h-5 w-5 shrink-0 sm:h-6 sm:w-6"
+                  : "h-5 w-5 shrink-0"
               }
             />
             {variant === "mobile" ? (
-              <span className="text-[10px] sm:text-xs font-medium tracking-tight whitespace-nowrap text-center leading-tight">{label}</span>
+              <span className="text-[10px] tracking-tight whitespace-nowrap text-center leading-tight">{label}</span>
             ) : (
               label
             )}

@@ -181,7 +181,7 @@ export function LeaderboardTable() {
   }
 
   return (
-    <div className="space-y-6 md:space-y-8">
+    <div className="w-full max-w-full overflow-x-hidden space-y-6 md:space-y-8">
       <div className="flex flex-wrap gap-2.5">
         {TABS.map((t) => {
           const selected = period === t.id;
@@ -198,41 +198,56 @@ export function LeaderboardTable() {
         })}
       </div>
 
-      <div className="overflow-hidden rounded-3xl border border-white/[0.08] bg-slate-900/40 backdrop-blur-xl">
-        <div className="flex items-center gap-3 border-b border-white/[0.06] bg-white/[0.02] px-6 py-5 text-base font-semibold text-slate-100 sm:px-8">
-          <Trophy className="h-5 w-5 text-slate-500" />
-          <span className="tracking-tight">Top participants</span>
-          <span className="text-sm font-medium text-slate-500">
-            · {period === "all" ? "All time" : period === "weekly" ? "Weekly" : "Monthly"}
-          </span>
+      <div className="w-full max-w-full overflow-hidden rounded-3xl border border-white/5 bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-black/40">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 border-b border-white/[0.06] bg-white/[0.02] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]/20">
+              <Trophy className="h-5 w-5 text-[var(--primary)]" />
+            </div>
+            <div>
+              <h2 className="text-base sm:text-lg font-semibold tracking-tight text-white">
+                Top participants
+              </h2>
+              <p className="text-xs sm:text-sm font-medium text-slate-500">
+                {period === "all" ? "All time" : period === "weekly" ? "Weekly" : "Monthly"}
+              </p>
+            </div>
+          </div>
           {data && (
-            <span className="ml-auto text-sm font-medium text-slate-500">
+            <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10 sm:ml-auto">
               {data.total} participants
             </span>
           )}
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-24">
+          <div className="flex items-center justify-center py-20 sm:py-24 md:py-28">
             <LoadingSpinner size="xl" tone="muted" />
           </div>
         ) : !data || data.rows.length === 0 ? (
-          <div className="py-24 text-center">
-            <p className="text-base font-semibold text-slate-100">
-              No participants yet
-            </p>
-            <p className="mt-2 text-sm font-medium text-slate-500">
-              Complete quests to appear on the leaderboard.
-            </p>
+          <div className="px-5 py-20 sm:py-24 md:py-28 text-center">
+            <div className="flex flex-col items-center gap-4">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/5 ring-1 ring-white/10">
+                <Trophy className="h-8 w-8 text-slate-500" />
+              </div>
+              <div>
+                <p className="text-base sm:text-lg font-semibold text-slate-100">
+                  No participants yet
+                </p>
+                <p className="mt-2 text-xs sm:text-sm font-medium text-slate-500">
+                  Complete quests to appear on the leaderboard.
+                </p>
+              </div>
+            </div>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="w-full overflow-x-auto">
             <table className="w-full min-w-[320px] text-left">
-              <thead className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <thead className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="whitespace-nowrap px-6 py-5 font-semibold sm:px-8">#</th>
-                  <th className="min-w-[12rem] px-4 py-5 font-semibold">Participant</th>
-                  <th className="whitespace-nowrap px-6 py-5 text-right font-semibold sm:px-8">Points</th>
+                  <th className="whitespace-nowrap px-4 py-4 font-semibold sm:px-6 sm:py-5 md:px-8">#</th>
+                  <th className="min-w-[12rem] px-3 py-4 font-semibold sm:px-4 sm:py-5">Participant</th>
+                  <th className="whitespace-nowrap px-4 py-4 text-right font-semibold sm:px-6 sm:py-5 md:px-8">Points</th>
                 </tr>
               </thead>
               <tbody>
@@ -242,15 +257,15 @@ export function LeaderboardTable() {
                     <tr
                       key={row.userId}
                       className={cn(
-                        "border-t border-white/[0.04] transition-colors hover:bg-white/[0.02]",
-                        isCurrentUser && "bg-[var(--primary)]/5",
+                        "border-t border-white/[0.04] transition-all duration-200 hover:bg-white/[0.03]",
+                        isCurrentUser && "bg-[var(--primary)]/5 hover:bg-[var(--primary)]/8",
                       )}
                     >
-                      <td className="px-6 py-5 text-base tabular-nums font-semibold text-slate-100 sm:px-8">
+                      <td className="px-4 py-4 text-sm sm:text-base tabular-nums font-semibold text-slate-100 sm:px-6 sm:py-5 md:px-8">
                         {row.rank}
                       </td>
                       <ParticipantCell row={row} isCurrentUser={isCurrentUser} />
-                      <td className="px-6 py-5 text-right text-base tabular-nums font-bold text-slate-100 sm:px-8">
+                      <td className="px-4 py-4 text-right text-sm sm:text-base tabular-nums font-bold text-slate-100 sm:px-6 sm:py-5 md:px-8">
                         {row.points.toLocaleString()}
                       </td>
                     </tr>
@@ -261,15 +276,17 @@ export function LeaderboardTable() {
           </div>
         )}
 
-        {!loading && (
-          <ListPagination
-            className="px-6 pb-6 sm:px-8"
-            page={page}
-            totalPages={totalPages}
-            total={data?.total}
-            disabled={loading}
-            onPageChange={changePage}
-          />
+        {!loading && data && data.rows.length > 0 && (
+          <div className="border-t border-white/[0.06] bg-white/[0.02]">
+            <ListPagination
+              className="px-5 py-5 sm:px-6 sm:py-6 md:px-8"
+              page={page}
+              totalPages={totalPages}
+              total={data?.total}
+              disabled={loading}
+              onPageChange={changePage}
+            />
+          </div>
         )}
       </div>
     </div>

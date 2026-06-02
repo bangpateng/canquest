@@ -93,38 +93,38 @@ export function EarnHubPage() {
   const loading = hubLoading || meLoading;
 
   return (
-    <div className="w-full max-w-full space-y-6 md:space-y-8 lg:space-y-10">
-      {/* Points balance - Premium glassmorphic card */}
+    <div className="w-full max-w-full min-w-0 overflow-x-hidden space-y-6 md:space-y-8">
+      {/* Points balance - Premium Hero Bento Card */}
       <section
-        className="w-full overflow-hidden rounded-3xl border border-white/[0.05] bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-black/40"
+        className="w-full max-w-full overflow-hidden rounded-3xl border border-white/5 bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-black/40"
         aria-label="Points balance"
       >
-        <div className="flex items-center justify-between border-b border-white/[0.06] bg-white/[0.02] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
-          <p className="text-sm font-medium text-slate-400">Your points</p>
-          <span className="inline-flex items-center gap-1.5 rounded-2xl bg-[var(--primary)]/10 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-canton sm:px-4">
-            <Zap className="h-4 w-4" aria-hidden />
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-white/[0.06] bg-white/[0.02] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
+          <h2 className="text-base sm:text-lg font-semibold tracking-tight text-white">Your points</h2>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--primary)]/10 px-3 py-1.5 text-[10px] sm:text-xs font-bold uppercase tracking-wider text-[var(--primary)] border border-[var(--primary)]/20">
+            <Zap className="h-3 w-3 sm:h-4 sm:w-4" aria-hidden />
             Lifetime
           </span>
         </div>
 
-        <div className="relative px-5 py-8 sm:px-6 sm:py-10 md:px-8 md:py-12 lg:py-14">
+        <div className="relative px-5 py-8 sm:px-6 sm:py-10 md:px-8 md:py-12">
           <div
             className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_100%_0%,rgb(var(--canton-rgb)/0.10),transparent_60%)]"
             aria-hidden
           />
           <div className="relative">
             {loading ? (
-              <div className="flex h-16 items-center gap-3 text-base font-medium text-slate-400">
+              <div className="flex h-16 items-center gap-3 text-sm sm:text-base font-medium text-slate-400">
                 <LoadingSpinner size="lg" />
                 Loading…
               </div>
             ) : (
               <>
-                <p className="text-4xl font-bold tabular-nums leading-none tracking-tighter text-white sm:text-5xl md:text-6xl lg:text-7xl">
+                <p className="text-4xl font-extrabold tabular-nums leading-none tracking-tight text-white sm:text-5xl md:text-6xl lg:text-7xl">
                   {earnPoints.toLocaleString()}
-                  <span className="ml-2 text-lg font-semibold text-canton sm:ml-3 sm:text-xl md:text-2xl lg:text-3xl">pts</span>
+                  <span className="ml-2 text-lg font-semibold text-[var(--primary)] sm:ml-3 sm:text-xl md:text-2xl lg:text-3xl">pts</span>
                 </p>
-                <p className="mt-3 max-w-2xl text-sm font-medium leading-relaxed text-slate-500 sm:mt-4 sm:text-base">
+                <p className="mt-3 max-w-2xl text-xs sm:text-sm font-normal leading-relaxed text-slate-400 sm:mt-4">
                   Quest tasks, friend invites, partner Earn campaigns, and spin wins.
                 </p>
               </>
@@ -134,14 +134,14 @@ export function EarnHubPage() {
           <div className="relative mt-6 flex flex-wrap items-center gap-3 border-t border-white/[0.06] pt-6 sm:mt-8 sm:pt-8">
             <Link
               href={ROUTES.leaderboard}
-              className="inline-flex items-center gap-2 rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:border-[var(--primary)]/25 hover:bg-[var(--primary)]/8 sm:px-5 sm:py-3"
+              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10 sm:px-5 sm:py-3"
             >
-              <Trophy className="h-4 w-4 text-canton" />
+              <Trophy className="h-4 w-4 text-[var(--primary)]" />
               Leaderboard
             </Link>
             <Link
               href={ROUTES.spinReward}
-              className="inline-flex items-center gap-2 rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-sm font-semibold text-slate-400 transition-all duration-200 hover:border-white/[0.12] hover:text-white sm:px-5 sm:py-3"
+              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-semibold text-slate-400 transition-all duration-200 hover:border-white/[0.15] hover:text-white hover:bg-white/[0.06] sm:px-5 sm:py-3"
             >
               Spend points
             </Link>

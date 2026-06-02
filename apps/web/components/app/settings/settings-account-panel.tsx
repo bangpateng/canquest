@@ -36,12 +36,12 @@ export function SettingsAccountPanel() {
   }, [refresh]);
 
   return (
-    <section className="w-full overflow-hidden rounded-3xl border border-white/[0.05] bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-black/40">
+    <section className="w-full max-w-full overflow-hidden rounded-3xl border border-white/5 bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-black/40">
       <div className="border-b border-white/[0.06] bg-white/[0.02] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
-        <h3 className="text-lg font-semibold tracking-tight text-white sm:text-xl">Profile</h3>
+        <h3 className="text-base sm:text-lg font-semibold tracking-tight text-white">Profile</h3>
       </div>
 
-      <div className="p-5 sm:p-6 md:p-8 lg:p-10">
+      <div className="p-5 sm:p-6 md:p-8">
         {me?.twitterUsername && me?.avatarUrl ? (
           <div className="mb-6 flex items-center gap-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 sm:mb-8 sm:gap-5 sm:p-5">
             <img
@@ -51,11 +51,11 @@ export function SettingsAccountPanel() {
               height={64}
               className="h-14 w-14 shrink-0 rounded-full object-cover ring-2 ring-white/10 sm:h-16 sm:w-16"
             />
-            <div>
-              <p className="text-base font-semibold text-white sm:text-lg">
+            <div className="min-w-0">
+              <p className="text-base font-semibold text-white sm:text-lg truncate">
                 {me.displayName ?? me.twitterUsername}
               </p>
-              <p className="mt-1 text-sm font-medium text-slate-500">@{me.twitterUsername}</p>
+              <p className="mt-1 text-sm font-medium text-slate-500 truncate">@{me.twitterUsername}</p>
             </div>
           </div>
         ) : null}

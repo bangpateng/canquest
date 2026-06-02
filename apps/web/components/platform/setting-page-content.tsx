@@ -12,21 +12,15 @@ import { SignOutButton } from "@/components/app/shell/sign-out-button";
 export function SettingPageContent() {
 
   return (
-
-    <div className="grid w-full min-w-0 gap-6 pb-10 md:gap-8">
-
+    <div className="w-full max-w-full min-w-0 overflow-x-hidden space-y-6 pb-10 md:space-y-8">
       <SettingsAccountPanel />
 
       <SettingsTwitterPanel />
 
       <div className="flex justify-center pb-4 pt-4">
-
         <SignOutButton variant="link" />
-
       </div>
-
     </div>
-
   );
 
 }

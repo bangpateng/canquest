@@ -46,16 +46,18 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
   }, [refreshWithRetries, onRefresh]);
 
   return (
-    <div className="w-full max-w-full min-w-0 space-y-6 md:space-y-8">
-      {/* Wallet Status Card */}
-      <div className="w-full max-w-full overflow-hidden rounded-3xl border border-white/[0.05] bg-slate-900/70 p-5 backdrop-blur-xl shadow-2xl shadow-black/40 sm:p-6 md:p-8 lg:p-10">
-        <div className="flex items-center gap-3">
-          <CheckCircle2 className="h-5 w-5 shrink-0 text-green-500" />
-          <p className="text-xs font-bold uppercase tracking-wider text-slate-400 sm:text-sm">
+    <div className="w-full max-w-full min-w-0 overflow-x-hidden space-y-6 md:space-y-8">
+      {/* Wallet Status Card - Premium Bento Design */}
+      <div className="w-full max-w-full overflow-hidden rounded-3xl border border-white/5 bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-black/40 p-5 sm:p-6 md:p-8">
+        <div className="flex items-center gap-3 mb-5 sm:mb-6">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-500/10 ring-1 ring-emerald-500/20">
+            <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-400" />
+          </div>
+          <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
             {t("wallet.walletActive")}
-          </p>
+          </span>
         </div>
-        <div className="mt-5 sm:mt-6">
+        <div>
           <CopyField
             label={t("wallet.partyId")}
             value={hasWallet ? displayPartyId || "—" : "—"}
@@ -63,48 +65,54 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
         </div>
       </div>
 
-      {/* Balance Card - Premium glassmorphic design */}
-      <div className="w-full max-w-full overflow-hidden rounded-3xl border border-white/[0.05] bg-slate-900/70 p-5 backdrop-blur-xl shadow-2xl shadow-black/40 sm:p-6 md:p-8 lg:p-10">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-xs font-bold uppercase tracking-wider text-slate-400 sm:text-sm">
+      {/* Balance Card - Hero Bento Feature */}
+      <div className="w-full max-w-full overflow-hidden rounded-3xl border border-white/5 bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-black/40 p-6 sm:p-8 md:p-10 lg:p-12">
+        <div className="flex items-center justify-between gap-3 mb-6 sm:mb-8">
+          <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
             {t("wallet.balance")}
-          </p>
+          </span>
           <button
             type="button"
             onClick={() => void fetchBalance()}
             disabled={balanceLoading}
-            className="rounded-xl p-2 text-slate-400 transition-all hover:bg-white/[0.04] hover:text-slate-100 disabled:opacity-40"
+            className="rounded-2xl p-2.5 text-slate-400 transition-all duration-200 hover:bg-white/[0.06] hover:text-slate-100 disabled:opacity-40 ring-1 ring-white/10 hover:ring-white/20"
             aria-label={t("wallet.refreshBalance")}
           >
             {balanceLoading ? (
               <LoadingSpinner size="sm" tone="muted" />
             ) : (
-              <RefreshCw className="h-4 w-4" />
+              <RefreshCw className="h-4 w-4 sm:h-5 sm:w-5" />
             )}
           </button>
         </div>
-        <p className="mt-4 text-4xl font-bold tabular-nums leading-none tracking-tight text-white sm:mt-5 sm:text-5xl md:text-6xl lg:text-7xl">
-          {balanceLoading ? (
-            <span className="text-slate-500">—</span>
-          ) : (
-            <>
-              {balance?.toFixed(4) ?? "0.0000"}{" "}
-              <span className="text-xl font-semibold text-slate-500 sm:text-2xl md:text-3xl">
-                CC
-              </span>
-            </>
-          )}
-        </p>
-        {!balanceLoading && ccUsdPrice > 0 && balance !== null ? (
-          <p className="mt-3 text-sm font-medium text-slate-500 sm:mt-4 sm:text-base">
-            ≈ $
-            {(balance * ccUsdPrice).toLocaleString("en-US", {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}{" "}
-            USD
+        <div className="relative">
+          <div
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_0%,rgb(var(--canton-rgb)/0.12),transparent_70%)]"
+            aria-hidden
+          />
+          <p className="relative text-4xl font-extrabold tabular-nums leading-none tracking-tight text-white sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl">
+            {balanceLoading ? (
+              <span className="text-slate-500">—</span>
+            ) : (
+              <>
+                {balance?.toFixed(4) ?? "0.0000"}{" "}
+                <span className="text-xl font-semibold text-slate-500 sm:text-2xl md:text-3xl lg:text-4xl">
+                  CC
+                </span>
+              </>
+            )}
           </p>
-        ) : null}
+          {!balanceLoading && ccUsdPrice > 0 && balance !== null ? (
+            <p className="relative mt-4 text-sm font-medium text-slate-500 sm:mt-5 sm:text-base md:text-lg">
+              ≈ $
+              {(balance * ccUsdPrice).toLocaleString("en-US", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}{" "}
+              USD
+            </p>
+          ) : null}
+        </div>
       </div>
 
       <WalletPreapprovalBanner onActivated={handleBalanceRefresh} />

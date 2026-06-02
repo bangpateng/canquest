@@ -74,9 +74,9 @@ const ACTIVITY_ICON: Record<ActivityItem["type"], React.ElementType> = {
 };
 
 const ACTIVITY_COLOR: Record<ActivityItem["type"], string> = {
-  quest_completed: "bg-[var(--primary)]/15 text-[var(--foreground)]",
-  task_verified: "bg-green-500/10 text-green-600 dark:text-green-400",
-  cc_transfer: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+  quest_completed: "bg-[var(--primary)]/15 text-[var(--primary)]",
+  task_verified: "bg-emerald-500/15 text-emerald-400",
+  cc_transfer: "bg-blue-500/15 text-blue-400",
 };
 
 const FETCH_TIMEOUT_MS = 12_000;
@@ -264,49 +264,68 @@ export function DashboardView() {
   ];
 
   return (
-    <div className="w-full max-w-full overflow-x-hidden">
+    <div className="w-full max-w-full overflow-x-hidden font-sans">
       <div className="w-full min-h-screen px-4 py-6 sm:p-6 md:p-8 lg:p-10 max-w-7xl mx-auto">
+        {/* Page Header */}
+        <header className="mb-6 md:mb-8">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-white">
+            {t("dashboard.title") || "Dashboard"}
+          </h1>
+          <p className="mt-2 text-xs sm:text-sm text-slate-400 font-normal leading-relaxed">
+            {t("dashboard.subtitle") || "Track your progress and achievements"}
+          </p>
+        </header>
+
         <div className="space-y-6 md:space-y-8">
-          {/* Error Banner */}
+          {/* Error Banner - Premium Alert Design */}
           {loadError ? (
-            <div className="rounded-3xl border border-orange-500/20 bg-orange-500/5 px-5 py-4 backdrop-blur-xl shadow-2xl shadow-black/40 sm:px-6 sm:py-5">
-              <p className="text-sm font-medium text-orange-200 leading-relaxed">
-                {loadError}{" "}
+            <div className="rounded-3xl border border-orange-500/20 bg-orange-500/10 backdrop-blur-xl shadow-2xl shadow-black/40 px-5 py-4 sm:px-6 sm:py-5 transition-all duration-300">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-orange-500/20">
+                  <svg className="h-5 w-5 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-orange-200 leading-relaxed">
+                    {loadError}
+                  </p>
+                </div>
                 <button
                   type="button"
-                  className="font-semibold underline decoration-orange-400/50 underline-offset-4 transition-colors hover:text-orange-100"
+                  className="shrink-0 rounded-2xl bg-orange-500/20 px-4 py-2.5 text-sm font-semibold text-orange-200 transition-all duration-200 hover:bg-orange-500/30 hover:text-orange-100"
                   onClick={() => void fetchAll()}
                 >
                   Retry
                 </button>
-              </p>
+              </div>
             </div>
           ) : null}
 
-          {/* Premium Bento Grid - Asymmetrical Stats Layout */}
-          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-            {/* Hero Stat Card - Weekly Rank (Spans 2 columns on large screens) */}
-            <div className="lg:col-span-2 lg:row-span-2 rounded-3xl border border-white/5 bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-black/40 transition-all duration-300 hover:border-white/10 hover:shadow-black/50 p-6 sm:p-8 md:p-10">
+          {/* Premium Bento Box Grid - Asymmetric Masonry Layout */}
+          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 md:gap-6 lg:gap-8">
+            {/* Hero Card - Weekly Rank (Large Feature) */}
+            <div className="sm:col-span-2 lg:col-span-7 lg:row-span-2 bg-slate-900/70 backdrop-blur-xl border border-white/5 rounded-3xl shadow-2xl shadow-black/40 transition-all duration-300 hover:border-white/10 hover:shadow-black/50 p-6 sm:p-8 md:p-10 group">
               <div className="flex flex-col h-full justify-between">
                 <div>
                   <div className="flex items-center gap-3 mb-6">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--primary)]/10">
-                      <Trophy className="h-6 w-6 text-[var(--primary)]" aria-hidden />
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--primary)]/20 to-[var(--primary)]/5 ring-1 ring-white/10 transition-all duration-300 group-hover:ring-white/20">
+                      <Trophy className="h-7 w-7 text-[var(--primary)]" aria-hidden />
                     </div>
                     <div>
-                      <p className="text-xs sm:text-sm font-medium text-slate-500 uppercase tracking-wider">
+                      <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
                         {statCards[0].title}
-                      </p>
+                      </span>
                     </div>
                   </div>
                   
-                  <div className="mt-4">
+                  <div className="mt-8">
                     {statCards[0].value === null ? (
-                      <div className="flex items-center h-20">
+                      <div className="flex items-center h-24">
                         <LoadingSpinner size="xl" tone="muted" />
                       </div>
                     ) : (
-                      <p className="text-5xl sm:text-6xl md:text-7xl font-extrabold tracking-tight text-white">
+                      <p className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-extrabold tracking-tight text-white">
                         {statCards[0].value}
                       </p>
                     )}
@@ -314,68 +333,79 @@ export function DashboardView() {
                 </div>
                 
                 {statCards[0].hint ? (
-                  <p className="mt-6 text-xs sm:text-sm font-normal leading-relaxed text-slate-400">
+                  <p className="mt-8 text-xs sm:text-sm text-slate-400 font-normal leading-relaxed line-clamp-2">
                     {statCards[0].hint}
                   </p>
                 ) : null}
               </div>
             </div>
 
-            {/* CC Balance Card - Prominent Display */}
-            <div className="lg:row-span-2 rounded-3xl border border-white/5 bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-black/40 transition-all duration-300 hover:border-white/10 hover:shadow-black/50 p-5 sm:p-6 md:p-8">
-              <div className="flex items-start justify-between mb-4">
-                <p className="text-xs sm:text-sm font-medium text-slate-500 uppercase tracking-wider">
-                  {statCards[1].title}
-                </p>
-                <Coins className="h-5 w-5 text-slate-500" aria-hidden />
-              </div>
-              
-              <div className="mt-6">
-                {statCards[1].value === null ? (
-                  <div className="flex items-center h-16">
-                    <LoadingSpinner size="lg" tone="muted" />
+            {/* CC Balance Card - Prominent Secondary Feature */}
+            <div className="sm:col-span-2 lg:col-span-5 lg:row-span-2 bg-slate-900/70 backdrop-blur-xl border border-white/5 rounded-3xl shadow-2xl shadow-black/40 transition-all duration-300 hover:border-white/10 hover:shadow-black/50 p-5 sm:p-6 md:p-8 group">
+              <div className="flex flex-col h-full">
+                <div className="flex items-start justify-between mb-4">
+                  <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
+                    {statCards[1].title}
+                  </span>
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 ring-1 ring-blue-500/20 transition-all duration-300 group-hover:ring-blue-500/30">
+                    <Coins className="h-5 w-5 text-blue-400" aria-hidden />
                   </div>
-                ) : (
-                  <p className="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight text-white break-words">
-                    {statCards[1].value}
+                </div>
+                
+                <div className="mt-6 flex-1 flex items-center">
+                  {statCards[1].value === null ? (
+                    <LoadingSpinner size="lg" tone="muted" />
+                  ) : (
+                    <p className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight text-white break-words">
+                      {statCards[1].value}
+                    </p>
+                  )}
+                </div>
+                
+                {statCards[1].hint ? (
+                  <p className="mt-6 text-xs sm:text-sm text-slate-400 font-normal leading-relaxed line-clamp-2">
+                    {statCards[1].hint}
                   </p>
-                )}
+                ) : null}
               </div>
-              
-              {statCards[1].hint ? (
-                <p className="mt-4 text-xs sm:text-sm font-normal leading-relaxed text-slate-400">
-                  {statCards[1].hint}
-                </p>
-              ) : null}
             </div>
 
-            {/* Compact Stat Cards - Grid of 3 */}
+            {/* Compact Stat Cards - Bento Grid of 3 */}
             {statCards.slice(2).map((card) => {
               const Icon = card.icon;
+              const iconColors = {
+                ccTransactions: "bg-purple-500/10 text-purple-400 ring-purple-500/20",
+                questsCompleted: "bg-emerald-500/10 text-emerald-400 ring-emerald-500/20",
+                questPoints: "bg-amber-500/10 text-amber-400 ring-amber-500/20",
+              };
+              const colorClass = iconColors[card.key as keyof typeof iconColors] || "bg-slate-500/10 text-slate-400 ring-slate-500/20";
+              
               return (
                 <div
                   key={card.key}
-                  className="rounded-3xl border border-white/5 bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-black/40 transition-all duration-300 hover:border-white/10 hover:shadow-black/50 p-5 sm:p-6"
+                  className="lg:col-span-4 bg-slate-900/70 backdrop-blur-xl border border-white/5 rounded-3xl shadow-2xl shadow-black/40 transition-all duration-300 hover:border-white/10 hover:shadow-black/50 p-5 sm:p-6 group"
                 >
-                  <div className="flex items-start justify-between mb-3">
-                    <p className="text-xs sm:text-sm font-medium text-slate-500">
+                  <div className="flex items-start justify-between mb-4">
+                    <span className="text-xs sm:text-sm font-medium text-slate-500 tracking-tight">
                       {card.title}
-                    </p>
-                    <Icon className="h-4 w-4 text-slate-500" aria-hidden />
+                    </span>
+                    <div className={cn("flex h-9 w-9 items-center justify-center rounded-xl ring-1 transition-all duration-300", colorClass)}>
+                      <Icon className="h-4 w-4" aria-hidden />
+                    </div>
                   </div>
                   
-                  <div className="mt-3">
+                  <div className="mt-4">
                     {card.value === null ? (
                       <LoadingSpinner size="lg" tone="muted" />
                     ) : (
-                      <p className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+                      <p className="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight text-white">
                         {card.value}
                       </p>
                     )}
                   </div>
                   
                   {card.hint ? (
-                    <p className="mt-3 text-xs font-normal leading-relaxed text-slate-500">
+                    <p className="mt-4 text-xs text-slate-500 font-normal leading-relaxed line-clamp-2">
                       {card.hint}
                     </p>
                   ) : null}
@@ -385,53 +415,65 @@ export function DashboardView() {
           </section>
 
           {/* Recent Activity - Premium Glassmorphic Card */}
-          <section className="w-full overflow-hidden rounded-3xl border border-white/5 bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-black/40">
+          <section className="w-full overflow-hidden bg-slate-900/70 backdrop-blur-xl border border-white/5 rounded-3xl shadow-2xl shadow-black/40">
             <div className="border-b border-white/5 bg-white/[0.02] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
-              <h2 className="text-base sm:text-lg font-semibold tracking-tight text-white">
-                {t("dashboard.recentActivity")}
-              </h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-base sm:text-lg font-semibold tracking-tight text-white">
+                  {t("dashboard.recentActivity")}
+                </h2>
+                <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-500 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
+                  Latest
+                </span>
+              </div>
             </div>
 
             {activityLoading ? (
-              <div className="flex items-center justify-center py-16 sm:py-20">
+              <div className="flex items-center justify-center py-16 sm:py-20 md:py-24">
                 <LoadingSpinner size="lg" />
               </div>
             ) : !activityData || activityData.items.length === 0 ? (
-              <div className="px-5 py-16 text-center sm:px-6 sm:py-20 md:px-8">
-                <p className="text-sm font-medium text-slate-500">
-                  {t("dashboard.noActivity")}
-                </p>
+              <div className="px-5 py-16 sm:py-20 md:py-24 text-center">
+                <div className="flex flex-col items-center gap-4">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/5 ring-1 ring-white/10">
+                    <svg className="h-8 w-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                    </svg>
+                  </div>
+                  <p className="text-sm font-medium text-slate-500">
+                    {t("dashboard.noActivity")}
+                  </p>
+                </div>
               </div>
             ) : (
               <div className="p-5 sm:p-6 md:p-8">
-                <ul className="space-y-2">
+                <ul className="space-y-3">
                   {activityData.items.map((item, i) => {
                     const Icon = ACTIVITY_ICON[item.type];
                     const colorClass = ACTIVITY_COLOR[item.type];
                     return (
                       <li
                         key={`${item.type}-${item.time}-${i}`}
-                        className="group flex flex-col sm:flex-row sm:items-start gap-3 rounded-2xl px-4 py-4 transition-all duration-200 hover:bg-white/[0.02] sm:gap-4"
+                        className="group flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4 rounded-2xl px-4 py-4 transition-all duration-200 hover:bg-white/[0.03] border border-transparent hover:border-white/5"
                       >
                         <div
                           className={cn(
-                            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl sm:rounded-2xl",
+                            "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ring-1 ring-white/10 transition-all duration-200 group-hover:scale-105",
                             colorClass,
                           )}
                         >
                           <Icon className="h-5 w-5" aria-hidden />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm sm:text-base font-semibold text-white leading-snug">
+                          <p className="text-sm sm:text-base font-semibold text-white leading-snug tracking-tight">
                             {item.title}
                           </p>
-                          <p className="mt-1 text-xs sm:text-sm font-normal text-slate-500 leading-relaxed">
+                          <p className="mt-1.5 text-xs sm:text-sm text-slate-400 font-normal leading-relaxed line-clamp-2">
                             {item.detail}
                           </p>
                         </div>
-                        <p className="shrink-0 text-xs sm:text-sm font-medium text-slate-500 sm:pt-1">
+                        <span className="shrink-0 text-xs sm:text-sm font-medium text-slate-500 sm:pt-1 whitespace-nowrap">
                           {timeAgo(item.time, t)}
-                        </p>
+                        </span>
                       </li>
                     );
                   })}
