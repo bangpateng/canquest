@@ -87,8 +87,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </div>
-      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-slate-900/80 backdrop-blur-xl border-t border-white/5 px-2 py-2 sm:px-4 md:hidden">
-        <div className="grid grid-cols-7 w-full justify-between items-center mx-auto max-w-md gap-0.5">
+      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-slate-900/80 backdrop-blur-xl border-t border-white/5 py-1.5 px-0.5 sm:px-2 md:hidden">
+        <div className="grid grid-cols-7 w-full justify-between items-center mx-auto max-w-md">
           <NavLinks variant="mobile" />
         </div>
       </nav>

@@ -145,12 +145,12 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
         </main>
       </div>
 
-      {/* Mobile Bottom Navigation */}
+      {/* Mobile Bottom Navigation - Premium Fixed Design */}
       <nav
-        className="fixed bottom-0 left-0 right-0 z-50 bg-slate-900/80 backdrop-blur-xl border-t border-white/5 px-2 py-2 sm:px-4 md:hidden"
-        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+        className="fixed bottom-0 left-0 right-0 z-50 bg-slate-900/80 backdrop-blur-xl border-t border-white/5 py-1.5 px-0.5 sm:px-2 md:hidden"
+        style={{ paddingBottom: "env(safe-area-inset-bottom, 0.5rem)" }}
       >
-        <div className="grid grid-cols-7 w-full justify-between items-center mx-auto max-w-md gap-0.5">
+        <div className="grid grid-cols-7 w-full justify-between items-center mx-auto max-w-md">
           <NavLinks variant="mobile" hasWallet={hasWallet} />
         </div>
       </nav>
