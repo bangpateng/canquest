@@ -116,9 +116,9 @@ export function EarnHubPage() {
               </div>
             ) : (
               <>
-                <p className="text-4xl font-extrabold tabular-nums leading-none tracking-tight text-white sm:text-5xl md:text-6xl lg:text-7xl">
+                <p className="text-3xl font-extrabold tabular-nums leading-none tracking-tight text-white sm:text-4xl md:text-5xl">
                   {earnPoints.toLocaleString()}
-                  <span className="ml-2 text-lg font-semibold text-[var(--primary)] sm:ml-3 sm:text-xl md:text-2xl lg:text-3xl">pts</span>
+                  <span className="ml-2 text-base font-semibold text-[var(--primary)] sm:ml-2.5 sm:text-lg md:text-xl">pts</span>
                 </p>
                 <p className="mt-3 max-w-2xl text-xs sm:text-sm font-normal leading-relaxed text-slate-400 sm:mt-4">
                   Quest tasks, friend invites, partner Earn campaigns, and spin wins.

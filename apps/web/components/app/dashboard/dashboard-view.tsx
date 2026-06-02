@@ -315,7 +315,7 @@ export function DashboardView() {
                         <LoadingSpinner size="xl" tone="muted" />
                       </div>
                     ) : (
-                      <p className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-extrabold tracking-tight text-white">
+                      <p className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-white">
                         {statCards[0].value}
                       </p>
                     )}

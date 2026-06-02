@@ -90,13 +90,13 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
             className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_0%,rgb(var(--canton-rgb)/0.12),transparent_70%)]"
             aria-hidden
           />
-          <p className="relative text-4xl font-extrabold tabular-nums leading-none tracking-tight text-white sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl">
+          <p className="relative text-3xl font-extrabold tabular-nums leading-none tracking-tight text-white sm:text-4xl md:text-5xl">
             {balanceLoading ? (
               <span className="text-slate-500">—</span>
             ) : (
               <>
                 {balance?.toFixed(4) ?? "0.0000"}{" "}
-                <span className="text-xl font-semibold text-slate-500 sm:text-2xl md:text-3xl lg:text-4xl">
+                <span className="text-base font-semibold text-slate-500 sm:text-lg md:text-xl">
                   CC
                 </span>
               </>
