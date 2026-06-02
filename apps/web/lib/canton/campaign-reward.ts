@@ -45,6 +45,11 @@ export function formatCcPerWinners(rewardCc: number): string {
   return `${rewardCc} CC / Winners`;
 }
 
+/** e.g. `1 Code / Winners` — campaign reward line for invite/code reward types. */
+export function formatCodePerWinners(): string {
+  return "1 Code / Winners";
+}
+
 export function sumQuestTaskPoints(tasks: { points: number }[]): number {
   return tasks.reduce((sum, t) => sum + t.points, 0);
 }

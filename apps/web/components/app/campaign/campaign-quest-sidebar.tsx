@@ -2,6 +2,7 @@ import { CcRewardLogo } from "@/components/app/campaign/cc-reward-logo";
 import {
   campaignTypeDisplayValue,
   campaignUiKind,
+  formatCodePerWinners,
   formatFcfsSlotsFilled,
   getCampaignRewardHeadline,
   isFcfsSlotsFull,
@@ -9,7 +10,7 @@ import {
 import { isCcTokenRewardQuest } from "@/lib/canton/cc-reward-logo";
 import type { Quest } from "@/lib/quest/quest-types";
 import { cn } from "@/lib/utils/utils";
-import { Calendar, ListChecks, Ticket, Trophy, Users, Zap } from "lucide-react";
+import { Calendar, ListChecks, Trophy, Users, Zap } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 function formatEnd(quest: Quest): string {
@@ -112,23 +113,19 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
           <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
             Campaign reward
           </p>
-          <p className="mt-2 flex items-center gap-3 text-3xl font-bold tabular-nums text-slate-100 sm:text-4xl">
+          <p className="mt-2 flex items-center gap-3 text-3xl font-bold tabular-nums text-white sm:text-4xl">
             {isCcTokenRewardQuest(quest) ? (
               <CcRewardLogo className="sm:h-8 sm:w-8" size={32} />
             ) : null}
-            <span className={quest.rewardCc > 0 ? "text-canton" : undefined}>
-              {rewardHeadline.primary}
+            <span>
+              {quest.rewardType?.includes("INVITE")
+                ? formatCodePerWinners()
+                : rewardHeadline.primary}
             </span>
           </p>
           {rewardHeadline.secondary ? (
             <p className="mt-2 text-sm font-medium text-slate-400">
               {rewardHeadline.secondary}
-            </p>
-          ) : null}
-          {quest.rewardType?.includes("INVITE") ? (
-            <p className="mt-3 flex items-center gap-2 text-sm font-medium text-violet-300">
-              <Ticket className="h-4 w-4 shrink-0" aria-hidden />
-              Code reward
             </p>
           ) : null}
         </div>
