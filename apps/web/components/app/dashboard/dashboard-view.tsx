@@ -264,105 +264,191 @@ export function DashboardView() {
   ];
 
   return (
-    <div className="w-full max-w-full space-y-6 md:space-y-8 lg:space-y-10">
-      {loadError ? (
-        <div className="rounded-3xl border border-orange-500/20 bg-orange-500/5 px-5 py-4 text-sm font-medium text-orange-200 backdrop-blur-xl sm:px-6 sm:py-5">
-          {loadError}{" "}
-          <button
-            type="button"
-            className="font-semibold underline decoration-orange-400/50 underline-offset-4 transition-colors hover:text-orange-100"
-            onClick={() => void fetchAll()}
-          >
-            Retry
-          </button>
-        </div>
-      ) : null}
+    <div className="w-full max-w-full overflow-x-hidden">
+      <div className="w-full min-h-screen px-4 py-6 sm:p-6 md:p-8 lg:p-10 max-w-7xl mx-auto">
+        <div className="space-y-6 md:space-y-8">
+          {/* Error Banner */}
+          {loadError ? (
+            <div className="rounded-3xl border border-orange-500/20 bg-orange-500/5 px-5 py-4 backdrop-blur-xl shadow-2xl shadow-black/40 sm:px-6 sm:py-5">
+              <p className="text-sm font-medium text-orange-200 leading-relaxed">
+                {loadError}{" "}
+                <button
+                  type="button"
+                  className="font-semibold underline decoration-orange-400/50 underline-offset-4 transition-colors hover:text-orange-100"
+                  onClick={() => void fetchAll()}
+                >
+                  Retry
+                </button>
+              </p>
+            </div>
+          ) : null}
 
-      {/* Stat cards grid - Premium responsive layout */}
-      <section className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 lg:gap-6 xl:grid-cols-5">
-        {statCards.map((c) => {
-          const Icon = c.icon;
-          return (
-            <div
-              key={c.key}
-              className="group relative overflow-hidden rounded-3xl border border-white/[0.05] bg-slate-900/70 p-5 backdrop-blur-xl transition-all duration-300 hover:border-white/[0.12] hover:bg-slate-900/80 hover:shadow-2xl hover:shadow-black/40 sm:p-6 md:p-8"
-            >
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-medium text-slate-400 sm:text-sm">{c.title}</p>
-                <Icon className="h-5 w-5 text-slate-500 transition-colors group-hover:text-slate-400" aria-hidden />
+          {/* Premium Bento Grid - Asymmetrical Stats Layout */}
+          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+            {/* Hero Stat Card - Weekly Rank (Spans 2 columns on large screens) */}
+            <div className="lg:col-span-2 lg:row-span-2 rounded-3xl border border-white/5 bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-black/40 transition-all duration-300 hover:border-white/10 hover:shadow-black/50 p-6 sm:p-8 md:p-10">
+              <div className="flex flex-col h-full justify-between">
+                <div>
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--primary)]/10">
+                      <Trophy className="h-6 w-6 text-[var(--primary)]" aria-hidden />
+                    </div>
+                    <div>
+                      <p className="text-xs sm:text-sm font-medium text-slate-500 uppercase tracking-wider">
+                        {statCards[0].title}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-4">
+                    {statCards[0].value === null ? (
+                      <div className="flex items-center h-20">
+                        <LoadingSpinner size="xl" tone="muted" />
+                      </div>
+                    ) : (
+                      <p className="text-5xl sm:text-6xl md:text-7xl font-extrabold tracking-tight text-white">
+                        {statCards[0].value}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                
+                {statCards[0].hint ? (
+                  <p className="mt-6 text-xs sm:text-sm font-normal leading-relaxed text-slate-400">
+                    {statCards[0].hint}
+                  </p>
+                ) : null}
               </div>
-              <StatValue className="mt-3 text-3xl font-bold tracking-tight text-slate-100 sm:mt-4 sm:text-4xl md:text-5xl">
-                {c.value === null ? (
-                  <LoadingSpinner size="xl" tone="muted" />
+            </div>
+
+            {/* CC Balance Card - Prominent Display */}
+            <div className="lg:row-span-2 rounded-3xl border border-white/5 bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-black/40 transition-all duration-300 hover:border-white/10 hover:shadow-black/50 p-5 sm:p-6 md:p-8">
+              <div className="flex items-start justify-between mb-4">
+                <p className="text-xs sm:text-sm font-medium text-slate-500 uppercase tracking-wider">
+                  {statCards[1].title}
+                </p>
+                <Coins className="h-5 w-5 text-slate-500" aria-hidden />
+              </div>
+              
+              <div className="mt-6">
+                {statCards[1].value === null ? (
+                  <div className="flex items-center h-16">
+                    <LoadingSpinner size="lg" tone="muted" />
+                  </div>
                 ) : (
-                  c.value
+                  <p className="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight text-white break-words">
+                    {statCards[1].value}
+                  </p>
                 )}
-              </StatValue>
-              {c.hint ? (
-                <p className="mt-2 text-xs font-medium leading-relaxed text-slate-500 sm:mt-3 sm:text-sm">{c.hint}</p>
+              </div>
+              
+              {statCards[1].hint ? (
+                <p className="mt-4 text-xs sm:text-sm font-normal leading-relaxed text-slate-400">
+                  {statCards[1].hint}
+                </p>
               ) : null}
             </div>
-          );
-        })}
-      </section>
 
-      {/* Recent Activity - Premium glassmorphic card */}
-      <section className="w-full overflow-hidden rounded-3xl border border-white/[0.05] bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-black/40">
-        <div className="border-b border-white/[0.06] bg-white/[0.02] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
-          <SectionTitle className="text-lg font-semibold tracking-tight text-slate-100 sm:text-xl">{t("dashboard.recentActivity")}</SectionTitle>
-        </div>
-
-        {activityLoading ? (
-          <div className="flex items-center justify-center py-16 sm:py-20">
-            <LoadingSpinner size="lg" />
-          </div>
-        ) : !activityData || activityData.items.length === 0 ? (
-          <div className="px-5 py-16 text-center sm:px-6 sm:py-20 md:px-8">
-            <p className="text-sm font-medium text-slate-500">
-              {t("dashboard.noActivity")}
-            </p>
-          </div>
-        ) : (
-          <div className="p-5 sm:p-6 md:p-8">
-            <ul className="space-y-1">
-              {activityData.items.map((item, i) => {
-                const Icon = ACTIVITY_ICON[item.type];
-                const colorClass = ACTIVITY_COLOR[item.type];
-                return (
-                  <li
-                    key={`${item.type}-${item.time}-${i}`}
-                    className="group flex items-start gap-3 rounded-2xl px-3 py-3 transition-colors hover:bg-white/[0.02] sm:gap-4 sm:px-4 sm:py-4"
-                  >
-                    <div
-                      className={cn(
-                        "mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl sm:h-11 sm:w-11",
-                        colorClass,
-                      )}
-                    >
-                      <Icon className="h-5 w-5" aria-hidden />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-slate-100 sm:text-base">{item.title}</p>
-                      <p className="mt-1 text-xs font-medium text-slate-500 sm:text-sm">{item.detail}</p>
-                    </div>
-                    <p className="shrink-0 pt-1 text-xs font-medium text-slate-500 sm:text-sm">
-                      {timeAgo(item.time, t)}
+            {/* Compact Stat Cards - Grid of 3 */}
+            {statCards.slice(2).map((card) => {
+              const Icon = card.icon;
+              return (
+                <div
+                  key={card.key}
+                  className="rounded-3xl border border-white/5 bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-black/40 transition-all duration-300 hover:border-white/10 hover:shadow-black/50 p-5 sm:p-6"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <p className="text-xs sm:text-sm font-medium text-slate-500">
+                      {card.title}
                     </p>
-                  </li>
-                );
-              })}
-            </ul>
-            <ListPagination
-              className="mt-6 sm:mt-8"
-              page={activityPage}
-              totalPages={activityData.totalPages}
-              total={activityData.total}
-              disabled={activityLoading}
-              onPageChange={setActivityPage}
-            />
-          </div>
-        )}
-      </section>
+                    <Icon className="h-4 w-4 text-slate-500" aria-hidden />
+                  </div>
+                  
+                  <div className="mt-3">
+                    {card.value === null ? (
+                      <LoadingSpinner size="lg" tone="muted" />
+                    ) : (
+                      <p className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+                        {card.value}
+                      </p>
+                    )}
+                  </div>
+                  
+                  {card.hint ? (
+                    <p className="mt-3 text-xs font-normal leading-relaxed text-slate-500">
+                      {card.hint}
+                    </p>
+                  ) : null}
+                </div>
+              );
+            })}
+          </section>
+
+          {/* Recent Activity - Premium Glassmorphic Card */}
+          <section className="w-full overflow-hidden rounded-3xl border border-white/5 bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-black/40">
+            <div className="border-b border-white/5 bg-white/[0.02] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
+              <h2 className="text-base sm:text-lg font-semibold tracking-tight text-white">
+                {t("dashboard.recentActivity")}
+              </h2>
+            </div>
+
+            {activityLoading ? (
+              <div className="flex items-center justify-center py-16 sm:py-20">
+                <LoadingSpinner size="lg" />
+              </div>
+            ) : !activityData || activityData.items.length === 0 ? (
+              <div className="px-5 py-16 text-center sm:px-6 sm:py-20 md:px-8">
+                <p className="text-sm font-medium text-slate-500">
+                  {t("dashboard.noActivity")}
+                </p>
+              </div>
+            ) : (
+              <div className="p-5 sm:p-6 md:p-8">
+                <ul className="space-y-2">
+                  {activityData.items.map((item, i) => {
+                    const Icon = ACTIVITY_ICON[item.type];
+                    const colorClass = ACTIVITY_COLOR[item.type];
+                    return (
+                      <li
+                        key={`${item.type}-${item.time}-${i}`}
+                        className="group flex flex-col sm:flex-row sm:items-start gap-3 rounded-2xl px-4 py-4 transition-all duration-200 hover:bg-white/[0.02] sm:gap-4"
+                      >
+                        <div
+                          className={cn(
+                            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl sm:rounded-2xl",
+                            colorClass,
+                          )}
+                        >
+                          <Icon className="h-5 w-5" aria-hidden />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm sm:text-base font-semibold text-white leading-snug">
+                            {item.title}
+                          </p>
+                          <p className="mt-1 text-xs sm:text-sm font-normal text-slate-500 leading-relaxed">
+                            {item.detail}
+                          </p>
+                        </div>
+                        <p className="shrink-0 text-xs sm:text-sm font-medium text-slate-500 sm:pt-1">
+                          {timeAgo(item.time, t)}
+                        </p>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <ListPagination
+                  className="mt-6 sm:mt-8"
+                  page={activityPage}
+                  totalPages={activityData.totalPages}
+                  total={activityData.total}
+                  disabled={activityLoading}
+                  onPageChange={setActivityPage}
+                />
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
     </div>
   );
 }
