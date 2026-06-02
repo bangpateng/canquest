@@ -265,7 +265,7 @@ export function DashboardView() {
 
   return (
     <div className="w-full max-w-full overflow-x-hidden font-sans">
-      <div className="w-full min-h-screen px-4 py-6 sm:p-6 md:p-8 lg:p-10 max-w-7xl mx-auto">
+      <div className="w-full min-h-screen max-w-7xl mx-auto">
         {/* Page Header */}
         <header className="mb-6 md:mb-8">
           <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-white">
@@ -276,12 +276,12 @@ export function DashboardView() {
           </p>
         </header>
 
-        <div className="space-y-6 md:space-y-8">
-          {/* Error Banner - Premium Alert Design */}
+        <div className="space-y-5 md:space-y-6">
+          {/* Error Banner */}
           {loadError ? (
-            <div className="rounded-3xl border border-orange-500/20 bg-orange-500/10 backdrop-blur-xl shadow-2xl shadow-black/40 px-5 py-4 sm:px-6 sm:py-5 transition-all duration-300">
+            <div className="rounded-2xl border border-orange-500/20 bg-orange-500/10 backdrop-blur-xl shadow-xl shadow-black/30 px-5 py-4 sm:px-6 sm:py-5">
               <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-orange-500/20">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-500/20">
                   <svg className="h-5 w-5 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                   </svg>
@@ -293,7 +293,7 @@ export function DashboardView() {
                 </div>
                 <button
                   type="button"
-                  className="shrink-0 rounded-2xl bg-orange-500/20 px-4 py-2.5 text-sm font-semibold text-orange-200 transition-all duration-200 hover:bg-orange-500/30 hover:text-orange-100"
+                  className="shrink-0 rounded-lg bg-orange-500/20 px-4 py-2 text-sm font-semibold text-orange-200 transition-all duration-200 hover:bg-orange-500/30 hover:text-orange-100"
                   onClick={() => void fetchAll()}
                 >
                   Retry
@@ -302,10 +302,10 @@ export function DashboardView() {
             </div>
           ) : null}
 
-          {/* Premium Bento Box Grid - Asymmetric Masonry Layout */}
-          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 md:gap-6 lg:gap-8">
-            {/* Hero Card - Weekly Rank (Large Feature) */}
-            <div className="sm:col-span-2 lg:col-span-7 lg:row-span-2 bg-slate-900/70 backdrop-blur-xl border border-white/5 rounded-3xl shadow-2xl shadow-black/40 transition-all duration-300 hover:border-white/10 hover:shadow-black/50 p-6 sm:p-8 md:p-10 group">
+          {/* Premium Bento Box Grid — Asymmetric Masonry Layout */}
+          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 md:gap-5">
+            {/* Hero Card — Weekly Rank (Large Feature) */}
+            <div className="sm:col-span-2 lg:col-span-7 lg:row-span-2 bg-slate-900/40 backdrop-blur-xl border border-white/5 rounded-3xl shadow-2xl shadow-black/40 transition-all duration-300 hover:border-white/10 hover:shadow-black/50 p-6 sm:p-8 md:p-10 group">
               <div className="flex flex-col h-full justify-between">
                 <div>
                   <div className="flex items-center gap-3 mb-6">
@@ -318,7 +318,7 @@ export function DashboardView() {
                       </span>
                     </div>
                   </div>
-                  
+
                   <div className="mt-8">
                     {statCards[0].value === null ? (
                       <div className="flex items-center h-24">
@@ -331,7 +331,7 @@ export function DashboardView() {
                     )}
                   </div>
                 </div>
-                
+
                 {statCards[0].hint ? (
                   <p className="mt-8 text-xs sm:text-sm text-slate-400 font-normal leading-relaxed line-clamp-2">
                     {statCards[0].hint}
@@ -340,18 +340,18 @@ export function DashboardView() {
               </div>
             </div>
 
-            {/* CC Balance Card - Prominent Secondary Feature */}
-            <div className="sm:col-span-2 lg:col-span-5 lg:row-span-2 bg-slate-900/70 backdrop-blur-xl border border-white/5 rounded-3xl shadow-2xl shadow-black/40 transition-all duration-300 hover:border-white/10 hover:shadow-black/50 p-5 sm:p-6 md:p-8 group">
+            {/* CC Balance Card — Prominent Secondary Feature */}
+            <div className="sm:col-span-2 lg:col-span-5 lg:row-span-2 bg-slate-900/40 backdrop-blur-xl border border-white/5 rounded-3xl shadow-2xl shadow-black/40 transition-all duration-300 hover:border-white/10 hover:shadow-black/50 p-5 sm:p-6 md:p-8 group">
               <div className="flex flex-col h-full">
                 <div className="flex items-start justify-between mb-4">
                   <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
                     {statCards[1].title}
                   </span>
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 ring-1 ring-blue-500/20 transition-all duration-300 group-hover:ring-blue-500/30">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10 ring-1 ring-blue-500/20 transition-all duration-300 group-hover:ring-blue-500/30">
                     <Coins className="h-5 w-5 text-blue-400" aria-hidden />
                   </div>
                 </div>
-                
+
                 <div className="mt-6 flex-1 flex items-center">
                   {statCards[1].value === null ? (
                     <LoadingSpinner size="lg" tone="muted" />
@@ -361,7 +361,7 @@ export function DashboardView() {
                     </p>
                   )}
                 </div>
-                
+
                 {statCards[1].hint ? (
                   <p className="mt-6 text-xs sm:text-sm text-slate-400 font-normal leading-relaxed line-clamp-2">
                     {statCards[1].hint}
@@ -370,7 +370,7 @@ export function DashboardView() {
               </div>
             </div>
 
-            {/* Compact Stat Cards - Bento Grid of 3 */}
+            {/* Compact Stat Cards — Bento Grid of 3 */}
             {statCards.slice(2).map((card) => {
               const Icon = card.icon;
               const iconColors = {
@@ -379,21 +379,21 @@ export function DashboardView() {
                 questPoints: "bg-amber-500/10 text-amber-400 ring-amber-500/20",
               };
               const colorClass = iconColors[card.key as keyof typeof iconColors] || "bg-slate-500/10 text-slate-400 ring-slate-500/20";
-              
+
               return (
                 <div
                   key={card.key}
-                  className="lg:col-span-4 bg-slate-900/70 backdrop-blur-xl border border-white/5 rounded-3xl shadow-2xl shadow-black/40 transition-all duration-300 hover:border-white/10 hover:shadow-black/50 p-5 sm:p-6 group"
+                  className="lg:col-span-4 bg-slate-900/40 backdrop-blur-xl border border-white/5 rounded-3xl shadow-2xl shadow-black/40 transition-all duration-300 hover:border-white/10 hover:shadow-black/50 p-5 sm:p-6 group"
                 >
                   <div className="flex items-start justify-between mb-4">
                     <span className="text-xs sm:text-sm font-medium text-slate-500 tracking-tight">
                       {card.title}
                     </span>
-                    <div className={cn("flex h-9 w-9 items-center justify-center rounded-xl ring-1 transition-all duration-300", colorClass)}>
+                    <div className={cn("flex h-9 w-9 items-center justify-center rounded-lg ring-1 transition-all duration-300", colorClass)}>
                       <Icon className="h-4 w-4" aria-hidden />
                     </div>
                   </div>
-                  
+
                   <div className="mt-4">
                     {card.value === null ? (
                       <LoadingSpinner size="lg" tone="muted" />
@@ -403,7 +403,7 @@ export function DashboardView() {
                       </p>
                     )}
                   </div>
-                  
+
                   {card.hint ? (
                     <p className="mt-4 text-xs text-slate-500 font-normal leading-relaxed line-clamp-2">
                       {card.hint}
@@ -414,8 +414,8 @@ export function DashboardView() {
             })}
           </section>
 
-          {/* Recent Activity - Premium Glassmorphic Card */}
-          <section className="w-full overflow-hidden bg-slate-900/70 backdrop-blur-xl border border-white/5 rounded-3xl shadow-2xl shadow-black/40">
+          {/* Recent Activity — Premium Glassmorphic Card */}
+          <section className="w-full overflow-hidden bg-slate-900/40 backdrop-blur-xl border border-white/5 rounded-3xl shadow-2xl shadow-black/40">
             <div className="border-b border-white/5 bg-white/[0.02] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
               <div className="flex items-center justify-between">
                 <h2 className="text-base sm:text-lg font-semibold tracking-tight text-white">
@@ -446,18 +446,18 @@ export function DashboardView() {
               </div>
             ) : (
               <div className="p-5 sm:p-6 md:p-8">
-                <ul className="space-y-3">
+                <ul className="space-y-2">
                   {activityData.items.map((item, i) => {
                     const Icon = ACTIVITY_ICON[item.type];
                     const colorClass = ACTIVITY_COLOR[item.type];
                     return (
                       <li
                         key={`${item.type}-${item.time}-${i}`}
-                        className="group flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4 rounded-2xl px-4 py-4 transition-all duration-200 hover:bg-white/[0.03] border border-transparent hover:border-white/5"
+                        className="group flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4 rounded-xl px-4 py-4 transition-all duration-200 hover:bg-white/[0.03] border border-transparent hover:border-white/5"
                       >
                         <div
                           className={cn(
-                            "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ring-1 ring-white/10 transition-all duration-200 group-hover:scale-105",
+                            "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ring-1 ring-white/10 transition-all duration-200 group-hover:scale-105",
                             colorClass,
                           )}
                         >

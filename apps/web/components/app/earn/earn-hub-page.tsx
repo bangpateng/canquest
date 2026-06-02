@@ -93,16 +93,16 @@ export function EarnHubPage() {
   const loading = hubLoading || meLoading;
 
   return (
-    <div className="w-full max-w-full min-w-0 overflow-x-hidden space-y-6 md:space-y-8">
-      {/* Points balance - Premium Hero Bento Card */}
+    <div className="w-full max-w-full min-w-0 overflow-x-hidden space-y-5 md:space-y-6 font-sans">
+      {/* Points Balance — Premium Hero Bento Card */}
       <section
-        className="w-full max-w-full overflow-hidden rounded-3xl border border-white/5 bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-black/40"
+        className="w-full max-w-full overflow-hidden rounded-3xl border border-white/5 bg-slate-900/40 backdrop-blur-xl shadow-2xl shadow-black/40"
         aria-label="Points balance"
       >
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-white/[0.06] bg-white/[0.02] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-white/[0.05] bg-white/[0.02] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
           <h2 className="text-base sm:text-lg font-semibold tracking-tight text-white">Your points</h2>
           <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--primary)]/10 px-3 py-1.5 text-[10px] sm:text-xs font-bold uppercase tracking-wider text-[var(--primary)] border border-[var(--primary)]/20">
-            <Zap className="h-3 w-3 sm:h-4 sm:w-4" aria-hidden />
+            <Zap className="h-3 w-3 sm:h-3.5 sm:w-3.5" aria-hidden />
             Lifetime
           </span>
         </div>
@@ -131,17 +131,17 @@ export function EarnHubPage() {
             )}
           </div>
 
-          <div className="relative mt-6 flex flex-wrap items-center gap-3 border-t border-white/[0.06] pt-6 sm:mt-8 sm:pt-8">
+          <div className="relative mt-6 flex flex-wrap items-center gap-3 border-t border-white/[0.05] pt-6 sm:mt-8 sm:pt-8">
             <Link
               href={ROUTES.leaderboard}
-              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10 sm:px-5 sm:py-3"
+              className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10 sm:px-5 sm:py-3"
             >
               <Trophy className="h-4 w-4 text-[var(--primary)]" />
               Leaderboard
             </Link>
             <Link
               href={ROUTES.spinReward}
-              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-semibold text-slate-400 transition-all duration-200 hover:border-white/[0.15] hover:text-white hover:bg-white/[0.06] sm:px-5 sm:py-3"
+              className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-semibold text-slate-400 transition-all duration-200 hover:border-white/[0.15] hover:text-white hover:bg-white/[0.06] sm:px-5 sm:py-3"
             >
               Spend points
             </Link>
@@ -192,7 +192,8 @@ export function EarnHubPage() {
         </>
       )}
 
-      <div className="flex items-center justify-between gap-4 rounded-3xl border border-white/[0.08] bg-white/[0.02] px-5 py-4 backdrop-blur-xl sm:px-6 sm:py-5 md:px-8">
+      {/* Footer Nav Strip */}
+      <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-5 py-4 backdrop-blur-xl sm:px-6 sm:py-5 md:px-8">
         <Link
           href={ROUTES.earnHub}
           className="text-base font-semibold text-white transition-colors hover:text-canton"

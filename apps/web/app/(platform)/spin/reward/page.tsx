@@ -9,22 +9,42 @@ export default function SpinRewardPage() {
 
   return (
     <PlatformPage>
-      <div
-        role="status"
-        className="mx-auto flex min-h-[60vh] max-w-2xl flex-col items-center justify-center px-4 text-center"
-      >
-        <div className="flex h-24 w-24 items-center justify-center rounded-3xl border border-white/5 bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-black/40 ring-1 ring-white/10">
-          <Ticket className="h-12 w-12 text-[var(--primary)]" aria-hidden />
-        </div>
-        <span className="mt-8 inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-orange-300 bg-orange-500/10 px-4 py-2 rounded-full border border-orange-500/20 backdrop-blur-xl">
-          {t("spin.comingSoon")}
-        </span>
-        <h2 className="mt-6 text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-white">
-          Spin & Win Feature
-        </h2>
-        <p className="mt-4 max-w-md text-sm font-normal leading-relaxed text-slate-400 sm:text-base">
-          {t("spin.comingSoonHint")}
+      {/* Page Header */}
+      <header className="mb-6 md:mb-8">
+        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-white font-sans">
+          Spin Reward
+        </h1>
+        <p className="mt-2 text-xs sm:text-sm text-slate-400 font-normal leading-relaxed">
+          Spend your points and win exclusive rewards
         </p>
+      </header>
+
+      {/* Coming Soon State — Premium Glassmorphic Card */}
+      <div className="w-full max-w-full overflow-hidden rounded-3xl border border-white/5 bg-slate-900/40 backdrop-blur-xl shadow-2xl shadow-black/40">
+        <div
+          role="status"
+          className="flex min-h-[50vh] flex-col items-center justify-center px-6 py-16 text-center sm:py-20 md:py-24"
+        >
+          {/* Icon Block */}
+          <div className="flex h-20 w-20 items-center justify-center rounded-2xl border border-white/[0.06] bg-slate-800/60 backdrop-blur-xl shadow-xl shadow-black/30 ring-1 ring-white/10 sm:h-24 sm:w-24">
+            <Ticket className="h-10 w-10 text-[var(--primary)] sm:h-12 sm:w-12" aria-hidden />
+          </div>
+
+          {/* Coming Soon Badge */}
+          <span className="mt-8 inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-orange-300 bg-orange-500/10 px-4 py-2 rounded-full border border-orange-500/20 backdrop-blur-xl">
+            {t("spin.comingSoon")}
+          </span>
+
+          {/* Title */}
+          <h2 className="mt-5 text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-white">
+            Spin &amp; Win Feature
+          </h2>
+
+          {/* Description */}
+          <p className="mt-4 max-w-md text-sm font-normal leading-relaxed text-slate-400 sm:text-base">
+            {t("spin.comingSoonHint")}
+          </p>
+        </div>
       </div>
     </PlatformPage>
   );

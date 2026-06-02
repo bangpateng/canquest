@@ -245,7 +245,7 @@ export function EarnCampaignCard({
   const inner = (
     <article
       className={cn(
-        "group relative flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden rounded-2xl border border-white/[0.05] bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-black/40 sm:rounded-3xl",
+        "group relative flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden rounded-2xl border border-white/[0.05] bg-slate-900/40 backdrop-blur-xl shadow-2xl shadow-black/40",
         "transition-all duration-300 ease-out",
         canOpen &&
           !joinBlocked &&
@@ -253,7 +253,7 @@ export function EarnCampaignCard({
         (quest.status === "ENDED" || joinBlocked) && "opacity-90",
       )}
     >
-      {/* Banner - Premium responsive heights */}
+      {/* Banner */}
       <div className="relative h-32 shrink-0 overflow-hidden sm:h-36 md:h-40 lg:h-44">
         <div
           className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105"
@@ -270,7 +270,7 @@ export function EarnCampaignCard({
         <div className="absolute left-3 top-3 flex flex-wrap gap-1.5 sm:left-4 sm:top-4 sm:gap-2">
           <span
             className={cn(
-              "rounded-xl border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide backdrop-blur-xl sm:px-3 sm:py-1.5 sm:text-xs",
+              "rounded-md border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide backdrop-blur-xl sm:px-3 sm:py-1.5 sm:text-xs",
               theme.chip,
             )}
           >
@@ -280,7 +280,7 @@ export function EarnCampaignCard({
 
         <span
           className={cn(
-            "absolute right-3 top-3 rounded-xl px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide backdrop-blur-xl sm:right-4 sm:top-4 sm:px-3 sm:py-1.5 sm:text-xs",
+            "absolute right-3 top-3 rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide backdrop-blur-xl sm:right-4 sm:top-4 sm:px-3 sm:py-1.5 sm:text-xs",
             slotsFull && quest.status === "ACTIVE"
               ? "border border-white/5 bg-black/60 text-slate-400"
               : "border border-white/10 bg-black/50 text-white",
@@ -292,7 +292,7 @@ export function EarnCampaignCard({
 
         {/* Reward highlight on banner */}
         {quest.rewardCc > 0 || bannerRewardText ? (
-          <div className="absolute bottom-3 right-3 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-xl border border-white/10 bg-black/70 px-3 py-2 backdrop-blur-xl sm:bottom-4 sm:right-4 sm:gap-3 sm:px-4 sm:py-2.5">
+          <div className="absolute bottom-3 right-3 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-lg border border-white/10 bg-black/70 px-3 py-2 backdrop-blur-xl sm:bottom-4 sm:right-4 sm:gap-3 sm:px-4 sm:py-2.5">
             <CampaignRewardIcon theme={theme} className={cn("shrink-0", theme.accent)} size={14} />
             <div className="min-w-0 text-right">
               <p className="hidden text-[9px] font-bold uppercase tracking-wider text-white/60 sm:block sm:text-[10px]">
@@ -313,12 +313,12 @@ export function EarnCampaignCard({
         ) : null}
       </div>
 
-      {/* Body - Premium spacing */}
+      {/* Body */}
       <div className="flex w-full min-w-0 flex-1 flex-col px-4 pb-5 pt-4 sm:px-5 sm:pb-6 sm:pt-5 md:px-6 md:pb-7">
         <div className="flex w-full min-w-0 items-center gap-3 sm:gap-4">
           <div
             className={cn(
-              "relative h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-slate-800/80 sm:h-14 sm:w-14 sm:rounded-2xl",
+              "relative h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-slate-800/80 sm:h-14 sm:w-14 sm:rounded-xl",
             )}
           >
             {quest.logoUrl ? (
@@ -356,9 +356,9 @@ export function EarnCampaignCard({
           ) : null}
         </div>
 
-        {/* Metrics strip - Premium glassmorphic */}
+        {/* Metrics strip */}
         {(showFcfs || showRaffleWinners || showPool || showCodes) && (
-          <div className="mt-4 w-full min-w-0 overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] sm:mt-5">
+          <div className="mt-4 w-full min-w-0 overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02] sm:mt-5">
             <div className="grid w-full min-w-0 grid-cols-2 divide-x divide-white/[0.04]">
               {showRaffleWinners ? (
                 <Metric
@@ -440,9 +440,10 @@ export function EarnCampaignCard({
           </div>
         )}
 
+        {/* CTA Button — GREEN buttons use rounded-md (blocky/square-edged) */}
         <div className="mt-auto pt-4 sm:pt-5">
           {joinBlocked ? (
-            <span className={cn(buttonVariants({ variant: "muted", size: "block" }), "rounded-2xl py-3 text-sm font-semibold sm:text-base")}>
+            <span className={cn(buttonVariants({ variant: "muted", size: "block" }), "rounded-md py-3 text-sm font-semibold sm:text-base")}>
               {ctaLabel}
             </span>
           ) : canOpen ? (
@@ -457,13 +458,13 @@ export function EarnCampaignCard({
                         : "primary",
                   size: "block",
                 }),
-                "rounded-2xl py-3 text-sm font-semibold sm:text-base",
+                "rounded-md py-3 text-sm font-semibold sm:text-base",
               )}
             >
               {ctaLabel}
             </span>
           ) : (
-            <span className={cn(buttonVariants({ variant: "dashed", size: "block" }), "rounded-2xl py-3 text-sm font-semibold sm:text-base")}>
+            <span className={cn(buttonVariants({ variant: "dashed", size: "block" }), "rounded-md py-3 text-sm font-semibold sm:text-base")}>
               Opens soon
             </span>
           )}
@@ -479,7 +480,7 @@ export function EarnCampaignCard({
   return (
     <Link
       href={ROUTES.campaignQuest(quest.id, quest.title)}
-      className="block h-full w-full min-w-0 max-w-full overflow-hidden rounded-2xl sm:rounded-3xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+      className="block h-full w-full min-w-0 max-w-full overflow-hidden rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
     >
       {inner}
     </Link>

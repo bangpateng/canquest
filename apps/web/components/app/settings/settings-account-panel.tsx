@@ -36,14 +36,16 @@ export function SettingsAccountPanel() {
   }, [refresh]);
 
   return (
-    <section className="w-full max-w-full overflow-hidden rounded-3xl border border-white/5 bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-black/40">
-      <div className="border-b border-white/[0.06] bg-white/[0.02] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
+    <section className="w-full max-w-full overflow-hidden rounded-3xl border border-white/5 bg-slate-900/40 backdrop-blur-xl shadow-2xl shadow-black/40">
+      {/* Section Header */}
+      <div className="border-b border-white/[0.05] bg-white/[0.02] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
         <h3 className="text-base sm:text-lg font-semibold tracking-tight text-white">Profile</h3>
       </div>
 
       <div className="p-5 sm:p-6 md:p-8">
+        {/* Twitter Avatar Row */}
         {me?.twitterUsername && me?.avatarUrl ? (
-          <div className="mb-6 flex items-center gap-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 sm:mb-8 sm:gap-5 sm:p-5">
+          <div className="mb-6 flex items-center gap-4 rounded-2xl border border-white/[0.05] bg-white/[0.02] p-4 sm:mb-8 sm:gap-5 sm:p-5">
             <img
               src={me.avatarUrl}
               alt=""
@@ -60,6 +62,7 @@ export function SettingsAccountPanel() {
           </div>
         ) : null}
 
+        {/* Fields Grid */}
         <div className="grid gap-4 sm:grid-cols-2 sm:gap-5 md:gap-6">
           <div>
             <label
@@ -73,7 +76,7 @@ export function SettingsAccountPanel() {
               readOnly
               value={loading ? "" : (me?.email ?? "")}
               placeholder={loading ? "Loading…" : "—"}
-              className="mt-2 w-full rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-sm font-medium text-white outline-none transition-colors focus:border-white/[0.12] sm:py-3.5 sm:text-base"
+              className="mt-2 w-full rounded-xl border border-white/[0.05] bg-white/[0.02] px-4 py-2.5 text-sm font-medium text-white outline-none transition-all duration-200 focus:border-white/[0.10] sm:py-3 sm:text-base"
             />
           </div>
           <div>
@@ -88,7 +91,7 @@ export function SettingsAccountPanel() {
               readOnly
               value={loading ? "" : (me?.displayName ?? "")}
               placeholder={loading ? "Loading…" : "—"}
-              className="mt-2 w-full rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-sm font-medium text-white outline-none transition-colors focus:border-white/[0.12] sm:py-3.5 sm:text-base"
+              className="mt-2 w-full rounded-xl border border-white/[0.05] bg-white/[0.02] px-4 py-2.5 text-sm font-medium text-white outline-none transition-all duration-200 focus:border-white/[0.10] sm:py-3 sm:text-base"
             />
           </div>
           <div>
@@ -108,7 +111,7 @@ export function SettingsAccountPanel() {
                     ? `@${me.twitterUsername}`
                     : "Not linked — use Quest / Earn to connect"
               }
-              className="mt-2 w-full rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 font-mono text-sm font-medium text-white outline-none transition-colors focus:border-white/[0.12] sm:py-3.5 sm:text-base"
+              className="mt-2 w-full rounded-xl border border-white/[0.05] bg-white/[0.02] px-4 py-2.5 font-mono text-sm font-medium text-white outline-none transition-all duration-200 focus:border-white/[0.10] sm:py-3 sm:text-base"
             />
           </div>
           <div>
@@ -123,7 +126,7 @@ export function SettingsAccountPanel() {
               readOnly
               value={loading ? "" : formatUsernameForDisplay(me?.username)}
               placeholder={loading ? "Loading…" : me?.username ? me.username : "Not set — create via Wallet"}
-              className="mt-2 w-full rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 font-mono text-sm font-medium text-white outline-none transition-colors focus:border-white/[0.12] sm:py-3.5 sm:text-base"
+              className="mt-2 w-full rounded-xl border border-white/[0.05] bg-white/[0.02] px-4 py-2.5 font-mono text-sm font-medium text-white outline-none transition-all duration-200 focus:border-white/[0.10] sm:py-3 sm:text-base"
             />
           </div>
           <div className="sm:col-span-2">
@@ -144,14 +147,14 @@ export function SettingsAccountPanel() {
                     : "—"
               }
               placeholder={loading ? "Loading…" : "Not created — go to Wallet"}
-              className="mt-2 w-full rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 font-mono text-xs font-medium text-white outline-none transition-colors focus:border-white/[0.12] sm:py-3.5 sm:text-sm"
+              className="mt-2 w-full rounded-xl border border-white/[0.05] bg-white/[0.02] px-4 py-2.5 font-mono text-xs font-medium text-white outline-none transition-all duration-200 focus:border-white/[0.10] sm:py-3 sm:text-sm"
             />
           </div>
         </div>
 
         {error ? (
           <p
-            className="mt-5 rounded-2xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm font-medium text-red-300 sm:mt-6 sm:px-5 sm:py-4"
+            className="mt-5 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm font-medium text-red-300 sm:mt-6 sm:px-5 sm:py-4"
             role="alert"
           >
             {error}

@@ -207,15 +207,15 @@ export function QuestsBrowser({
       )}
     >
       <span className="sr-only">{t("quests.searchLabel")}</span>
-      <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+      <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
       <input
         type="search"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search"
         className={cn(
-          "w-full rounded-2xl border border-white/5 bg-[var(--muted)]/50 py-3 pl-12 pr-4 text-base font-medium text-slate-100 outline-none placeholder:text-slate-500 focus:border-[var(--primary)]/40 focus:ring-2 focus:ring-[var(--ring)]",
-          isEarn && "bg-[var(--background)]/80",
+          "w-full rounded-xl border border-white/[0.06] bg-slate-900/40 py-2.5 pl-11 pr-4 text-sm font-medium text-slate-100 outline-none placeholder:text-slate-500 focus:border-[var(--primary)]/40 focus:ring-2 focus:ring-[var(--ring)] transition-all duration-200 backdrop-blur-xl",
+          isEarn && "bg-[var(--background)]/60",
         )}
         autoComplete="off"
       />
@@ -231,18 +231,18 @@ export function QuestsBrowser({
     ) : null;
 
   return (
-    <div className={cn("w-full max-w-full overflow-hidden px-1 sm:px-0", isEarn ? "space-y-4 sm:space-y-6 md:space-y-8" : "space-y-6 sm:space-y-8 md:space-y-10")}>
+    <div className={cn("w-full max-w-full overflow-hidden", isEarn ? "space-y-4 sm:space-y-5 md:space-y-6" : "space-y-5 sm:space-y-6 md:space-y-8")}>
       {isEarn ? (
         <section
-          className="w-full overflow-hidden rounded-2xl border border-white/[0.08] bg-slate-900/40 p-3 backdrop-blur-xl sm:rounded-3xl sm:p-5 md:p-6"
+          className="w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-slate-900/40 p-3 backdrop-blur-xl sm:p-4 md:p-5"
           aria-label={t("earnCampaigns.filterAria")}
         >
-          <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 md:gap-6">
+          <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
             <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:gap-3">
               <div className="min-w-0 flex-1 overflow-hidden sm:flex-none">{tabRow}</div>
               {completionChip}
             </div>
-            <div className="w-full sm:ml-auto sm:w-72 md:w-80 sm:shrink-0">{searchField}</div>
+            <div className="w-full sm:ml-auto sm:w-64 md:w-72 sm:shrink-0">{searchField}</div>
           </div>
         </section>
       ) : (
@@ -254,7 +254,7 @@ export function QuestsBrowser({
 
       {loading ? (
         isEarn ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
               <EarnCampaignSkeleton key={i} />
             ))}
@@ -263,7 +263,7 @@ export function QuestsBrowser({
           <PageLoading minHeight="min-h-0" className="py-20" />
         )
       ) : loadError ? (
-        <div className="rounded-2xl border border-red-500/20 bg-red-500/5 px-4 py-10 text-center backdrop-blur-xl sm:rounded-3xl sm:px-6 sm:py-14">
+        <div className="rounded-2xl border border-red-500/20 bg-red-500/5 px-4 py-10 text-center backdrop-blur-xl sm:px-6 sm:py-14">
           <p className="text-lg font-bold tracking-tight text-red-200 sm:text-xl md:text-2xl">{t("earnCampaigns.loadFailed")}</p>
           <p className="mt-2 text-sm font-medium leading-relaxed text-red-200/70 sm:mt-3 sm:text-base">
             {isWalletRequiredLoadError(loadError)
@@ -271,21 +271,21 @@ export function QuestsBrowser({
               : loadError}
           </p>
           {isEarn && isWalletRequiredLoadError(loadError) ? (
-            <Link href="/wallet" className={cn(buttonVariants({ size: "sm" }), "mt-6 rounded-xl sm:mt-8 sm:rounded-2xl")}>
+            <Link href="/wallet" className={cn(buttonVariants({ size: "sm" }), "mt-6 rounded-md sm:mt-8")}>
               {t("dashboard.createWallet")}
             </Link>
           ) : (
             <button
               type="button"
               onClick={() => loadQuests()}
-              className={cn(buttonVariants({ size: "sm" }), "mt-6 rounded-xl sm:mt-8 sm:rounded-2xl")}
+              className={cn(buttonVariants({ size: "sm" }), "mt-6 rounded-md sm:mt-8")}
             >
               {t("spin.retry")}
             </button>
           )}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-white/[0.08] bg-white/[0.02] px-4 py-16 text-center backdrop-blur-xl sm:rounded-3xl sm:px-8 sm:py-20">
+        <div className="rounded-2xl border border-dashed border-white/[0.08] bg-white/[0.02] px-4 py-16 text-center backdrop-blur-xl sm:px-8 sm:py-20">
           <p className="text-lg font-bold tracking-tight text-slate-100 sm:text-xl md:text-2xl">
             {query ? t("quests.noMatch") : t("quests.noPrograms")}
           </p>
@@ -299,7 +299,7 @@ export function QuestsBrowser({
           {isEarn && allQuests.length === 0 ? (
             <Link
               href={ROUTES.earnHub}
-              className={cn(buttonVariants({ size: "sm" }), "mt-6 inline-flex rounded-xl sm:mt-8 sm:rounded-2xl")}
+              className={cn(buttonVariants({ size: "sm" }), "mt-6 inline-flex rounded-md sm:mt-8")}
             >
               {t("earnCampaigns.dailyTasks")}
             </Link>
@@ -308,7 +308,7 @@ export function QuestsBrowser({
       ) : (
         <>
           {isEarn ? (
-            <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-5 md:gap-6 xl:grid-cols-3">
+            <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 md:gap-6 xl:grid-cols-3">
               {pagedQuests.map((q) => (
                 <div key={q.id} className="w-full overflow-hidden">
                   <EarnCampaignCard
@@ -320,7 +320,7 @@ export function QuestsBrowser({
               ))}
             </div>
           ) : (
-            <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 md:gap-8 xl:grid-cols-3">
+            <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 md:gap-6 xl:grid-cols-3">
               {pagedQuests.map((q) => (
                 <div key={q.id} className="w-full overflow-hidden">
                   <QuestCard

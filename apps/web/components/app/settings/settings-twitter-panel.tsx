@@ -124,21 +124,22 @@ export function SettingsTwitterPanel({
   return (
     <section
       id="twitter"
-      className="scroll-mt-8 overflow-hidden rounded-3xl border border-white/[0.08] bg-slate-900/40 backdrop-blur-xl"
+      className="scroll-mt-8 overflow-hidden rounded-3xl border border-white/5 bg-slate-900/40 backdrop-blur-xl shadow-2xl shadow-black/40"
     >
-      <div className="border-b border-white/[0.06] bg-white/[0.02] px-6 py-5 sm:px-8">
-        <h3 className="text-xl font-semibold tracking-tight text-slate-100">X (Twitter)</h3>
+      {/* Section Header */}
+      <div className="border-b border-white/[0.05] bg-white/[0.02] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
+        <h3 className="text-base sm:text-lg font-semibold tracking-tight text-white">X (Twitter)</h3>
       </div>
 
-      <div className="p-6 sm:p-8 md:p-10">
+      <div className="p-5 sm:p-6 md:p-8">
         {status.apiConfigured === false ? (
-          <p className="rounded-2xl border border-orange-500/20 bg-orange-500/5 px-5 py-4 text-sm font-medium text-orange-200">
+          <p className="rounded-xl border border-orange-500/20 bg-orange-500/5 px-5 py-4 text-sm font-medium text-orange-200">
             Twitter verification is not configured on this server yet.
           </p>
         ) : null}
 
         {status.connected && status.username ? (
-          <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-emerald-500/15 bg-emerald-500/5 px-6 py-5">
+          <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-emerald-500/15 bg-emerald-500/5 px-5 py-4 sm:px-6 sm:py-5">
             <div>
               <p className="text-sm font-semibold text-emerald-300/80">Connected</p>
               <p className="mt-1 font-mono text-base font-semibold text-slate-100">@{status.username}</p>
@@ -147,19 +148,19 @@ export function SettingsTwitterPanel({
               type="button"
               disabled={busy}
               onClick={() => void handleDisconnect()}
-              className={cn(buttonVariants({ size: "sm", variant: "secondary" }), "gap-2 rounded-2xl")}
+              className={cn(buttonVariants({ size: "sm", variant: "secondary" }), "gap-2 rounded-lg")}
             >
               {busy ? <LoadingSpinner size="sm" /> : <Unlink className="h-4 w-4" />}
               Disconnect
             </button>
           </div>
         ) : (
-          <form onSubmit={(e) => void handleConnect(e)} className="space-y-5">
+          <form onSubmit={(e) => void handleConnect(e)} className="space-y-4">
             <div>
               <label htmlFor="twitter-handle" className="text-sm font-medium text-slate-500">
                 X username
               </label>
-              <div className="mt-2 flex rounded-2xl border border-white/[0.06] bg-white/[0.02] transition-colors focus-within:border-[var(--primary)]/30 focus-within:ring-2 focus-within:ring-[var(--ring)]">
+              <div className="mt-2 flex rounded-xl border border-white/[0.05] bg-white/[0.02] transition-all duration-200 focus-within:border-[var(--primary)]/30 focus-within:ring-2 focus-within:ring-[var(--ring)]">
                 <span className="flex items-center pl-4 text-base font-medium text-slate-500">@</span>
                 <input
                   id="twitter-handle"
@@ -167,7 +168,7 @@ export function SettingsTwitterPanel({
                   onChange={(e) => setInput(e.target.value.replace(/^@/, ""))}
                   placeholder="your_handle"
                   disabled={busy}
-                  className="min-w-0 flex-1 bg-transparent py-3.5 pr-4 text-base font-medium text-slate-100 outline-none"
+                  className="min-w-0 flex-1 bg-transparent py-3 pr-4 text-base font-medium text-slate-100 outline-none"
                   autoComplete="off"
                   spellCheck={false}
                 />
@@ -177,7 +178,7 @@ export function SettingsTwitterPanel({
             <button
               type="submit"
               disabled={busy || !input.trim()}
-              className={cn(buttonVariants({ size: "sm" }), "gap-2 rounded-2xl")}
+              className={cn(buttonVariants({ size: "sm" }), "gap-2 rounded-lg")}
             >
               {busy ? <LoadingSpinner size="md" /> : null}
               Connect X
@@ -186,12 +187,12 @@ export function SettingsTwitterPanel({
         )}
 
         {error ? (
-          <p className="mt-5 rounded-2xl border border-red-500/20 bg-red-500/5 px-5 py-4 text-sm font-medium text-red-300">
+          <p className="mt-5 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm font-medium text-red-300 sm:mt-6 sm:px-5 sm:py-4">
             {error}
           </p>
         ) : null}
         {success ? (
-          <p className="mt-5 text-sm font-semibold text-emerald-400">{success}</p>
+          <p className="mt-4 text-sm font-semibold text-emerald-400">{success}</p>
         ) : null}
       </div>
     </section>
