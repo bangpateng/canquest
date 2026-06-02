@@ -245,7 +245,7 @@ export function EarnCampaignCard({
   const inner = (
     <article
       className={cn(
-        "group relative flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden rounded-3xl border border-white/[0.05] bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-black/40",
+        "group relative flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden rounded-2xl border border-white/[0.05] bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-black/40 sm:rounded-3xl",
         "transition-all duration-300 ease-out",
         canOpen &&
           !joinBlocked &&
@@ -479,7 +479,7 @@ export function EarnCampaignCard({
   return (
     <Link
       href={ROUTES.campaignQuest(quest.id, quest.title)}
-      className="block h-full w-full min-w-0 max-w-full overflow-hidden rounded-3xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+      className="block h-full w-full min-w-0 max-w-full overflow-hidden rounded-2xl sm:rounded-3xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
     >
       {inner}
     </Link>
