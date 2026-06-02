@@ -1,0 +1,216 @@
+-- ============================================================
+-- CanQuest DAML Contract -- module Main
+-- Package: canquest-v2  |  SDK: 3.3.0-snapshot.20250930.0
+--
+-- Templates:
+--   1. UserAccount      -- akun user dengan poin
+--   2. Mission          -- misi FCFS dengan kuota terbatas
+--   3. DailyLuckySpin   -- spin harian (1x per hari)
+--
+-- Authorization pattern (Canton M3):
+--   signatory admin  -- operator yang menandatangani semua kontrak
+--   observer user    -- user hanya bisa melihat, tidak bisa submit sendiri
+--
+-- CATATAN: Canton Network SDK 3.3.x tidak mendukung contract keys.
+-- Idempotency check dilakukan di sisi API (quest-ledger.service.ts).
+-- ============================================================
+
+module Main where
+
+import Daml.Script
+import DA.Date
+
+-- ==========================================
+-- 1. TEMPLATE USER ACCOUNT
+-- ==========================================
+
+-- | Akun user yang menyimpan total poin.
+-- signatory admin      : operator platform yang membuat dan mengelola akun
+-- observer userAddress : user bisa melihat saldo poinnya sendiri
+template UserAccount
+  with
+    admin        : Party
+    userAddress  : Party
+    username     : Text
+    totalPoints  : Int
+  where
+    signatory admin
+    observer userAddress
+
+    -- | Tambah poin ke akun user setelah menyelesaikan misi atau spin.
+    -- Hanya admin yang bisa memanggil choice ini.
+    choice RewardUser : ContractId UserAccount
+      with
+        pointsToAdd : Int
+      controller admin
+      do
+        assertMsg "Poin yang ditambahkan harus lebih dari 0!" (pointsToAdd > 0)
+        create this with totalPoints = totalPoints + pointsToAdd
+
+
+-- ==========================================
+-- 2. TEMPLATE MISI FCFS (First Come First Served)
+-- ==========================================
+
+-- | Misi dengan sistem FCFS -- siapa cepat dia dapat.
+-- Admin membuat misi dengan kuota terbatas.
+-- Ketika kuota habis, klaim berikutnya akan GAGAL otomatis.
+template Mission
+  with
+    admin         : Party
+    missionId     : Text
+    rewardPoints  : Int
+    maxQuota      : Int
+    currentClaims : Int
+  where
+    signatory admin
+
+    -- | Klaim misi FCFS.
+    -- Validasi ketat: jika kuota sudah penuh, transaksi GAGAL dan di-revert.
+    -- Mengembalikan (ContractId Mission baru, ContractId UserAccount baru).
+    choice ClaimMission : (ContractId Mission, ContractId UserAccount)
+      with
+        user       : Party
+        accountCid : ContractId UserAccount
+      controller admin
+      do
+        assertMsg "Waduh Bro, kuota misi FCFS ini sudah habis!" (currentClaims < maxQuota)
+
+        newAccountCid <- exercise accountCid RewardUser
+          with pointsToAdd = rewardPoints
+
+        newMissionCid <- create this
+          with currentClaims = currentClaims + 1
+
+        pure (newMissionCid, newAccountCid)
+
+
+-- ==========================================
+-- 3. TEMPLATE DAILY LUCKY SPIN
+-- ==========================================
+
+-- | Sistem spin harian -- user hanya boleh spin 1x per hari.
+-- Admin mencatat tanggal spin terakhir.
+-- Jika user mencoba spin di hari yang sama, transaksi GAGAL.
+template DailyLuckySpin
+  with
+    admin        : Party
+    userAddress  : Party
+    lastSpinDate : Date
+  where
+    signatory admin
+    observer userAddress
+
+    -- | Eksekusi spin harian.
+    -- Validasi: currentDate harus BERBEDA dari lastSpinDate.
+    -- Memberikan spinReward poin ke akun user.
+    -- Memperbarui lastSpinDate ke tanggal hari ini.
+    -- Mengembalikan (ContractId DailyLuckySpin baru, ContractId UserAccount baru).
+    choice ExecuteSpin : (ContractId DailyLuckySpin, ContractId UserAccount)
+      with
+        currentDate : Date
+        accountCid  : ContractId UserAccount
+        spinReward  : Int
+      controller admin
+      do
+        assertMsg "Sabar Bro, Anda sudah melakukan Spin hari ini. Coba lagi besok!" (currentDate /= lastSpinDate)
+        assertMsg "Spin reward harus lebih dari 0!" (spinReward > 0)
+
+        newAccountCid <- exercise accountCid RewardUser
+          with pointsToAdd = spinReward
+
+        newSpinCid <- create this with lastSpinDate = currentDate
+
+        pure (newSpinCid, newAccountCid)
+
+
+-- ==========================================
+-- 4. SKENARIO PENGUJIAN LENGKAP (DAML TEST SUITE)
+-- ==========================================
+
+-- | Test suite lengkap untuk semua template.
+-- Menguji: happy path, edge case, dan proteksi keamanan.
+-- Semua skenario harus PASS agar kontrak siap deploy.
+testFullWorkflow : Script ()
+testFullWorkflow = script do
+
+  admin <- allocateParty "Admin"
+  budi  <- allocateParty "Budi_User"
+  iwan  <- allocateParty "Iwan_User"
+
+  -- (b) Daftarkan akun baru untuk Budi dan Iwan
+  budiAccCid <- submit admin do
+    createCmd UserAccount with
+      admin
+      userAddress  = budi
+      username     = "BudiNAX"
+      totalPoints  = 0
+
+  iwanAccCid <- submit admin do
+    createCmd UserAccount with
+      admin
+      userAddress  = iwan
+      username     = "IwanWeb3"
+      totalPoints  = 0
+
+  -- (c) Admin buat Misi FCFS -- kuota hanya 1 pemenang
+  missionCid <- submit admin do
+    createCmd Mission with
+      admin
+      missionId     = "MISSION_001"
+      rewardPoints  = 100
+      maxQuota      = 1
+      currentClaims = 0
+
+  -- (d) Budi klaim misi pertama -> HARUS SUKSES
+  (missionCid2, budiAccCid2) <- submit admin do
+    exerciseCmd missionCid ClaimMission with
+      user       = budi
+      accountCid = budiAccCid
+
+  -- (e) Iwan coba klaim misi yang sama -> HARUS GAGAL (kuota habis)
+  submitMustFail admin do
+    exerciseCmd missionCid2 ClaimMission with
+      user       = iwan
+      accountCid = iwanAccCid
+
+  -- (f) Setup Daily Lucky Spin untuk Budi (tanggal awal: 1 Mei 2026)
+  let t1 = date 2026 May 1
+  spinCid <- submit admin do
+    createCmd DailyLuckySpin with
+      admin
+      userAddress  = budi
+      lastSpinDate = t1
+
+  -- (g) Budi spin di hari baru (2 Mei 2026) -> HARUS SUKSES
+  -- ExecuteSpin mengonsumsi spinCid dan budiAccCid2, menghasilkan spinCid2 dan budiAccCid3
+  let t2 = date 2026 May 2
+  (spinCid2, budiAccCid3) <- submit admin do
+    exerciseCmd spinCid ExecuteSpin with
+      currentDate = t2
+      accountCid  = budiAccCid2
+      spinReward  = 50
+
+  -- (h) Budi coba spin lagi di hari yang sama -> HARUS GAGAL
+  submitMustFail admin do
+    exerciseCmd spinCid2 ExecuteSpin with
+      currentDate = t2
+      accountCid  = budiAccCid3
+      spinReward  = 50
+
+  -- (i) Budi spin lagi di hari berikutnya (3 Mei) -> HARUS SUKSES
+  -- Pakai spinCid2 dan budiAccCid3 (contract terbaru setelah step g)
+  let t3 = date 2026 May 3
+  (spinCid3, budiAccCid4) <- submit admin do
+    exerciseCmd spinCid2 ExecuteSpin with
+      currentDate = t3
+      accountCid  = budiAccCid3
+      spinReward  = 75
+
+  -- (j) Validasi: reward 0 harus GAGAL
+  -- Pakai budiAccCid4 (contract terbaru setelah step i)
+  submitMustFail admin do
+    exerciseCmd budiAccCid4 RewardUser with
+      pointsToAdd = 0
+
+  pure ()

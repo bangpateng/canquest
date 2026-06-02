@@ -1,417 +1,249 @@
-# DAML Contracts Documentation
+# DAML Contracts Documentation — CanQuest v0.2.0
 
 ## Overview
 
-This document describes the DAML contracts implemented for the CanQuest platform following Canton Network Module 3 (M3) contract templates and design patterns.
+Dokumen ini menjelaskan DAML contracts yang diimplementasikan untuk platform CanQuest.
+Contract menggunakan **module Main** (satu file) dengan 3 template utama.
 
-**Documentation Reference:** https://docs.canton.network/appdev/modules/m3-contract-templates
+**File contract:** [`packages/daml/daml/Main.daml`](../packages/daml/daml/Main.daml)  
+**Package:** `canquest-v2` v0.2.0  
+**SDK:** `3.3.0-snapshot.20250930.0`  
+**Test:** `testFullWorkflow` — 10 skenario, semua harus PASS
 
-## Contract Architecture
+---
 
-The contracts are organized into the following modules:
+## Arsitektur Contract
 
 ```
-packages/daml/daml/CanQuest/
-├── Quest/                    # Existing quest-related contracts
-│   ├── Completion.daml       # Quest completion certificates
-│   ├── Participation.daml    # Quest participation audit trail
-│   ├── Reward.daml           # Quest reward entitlements
-│   └── Task.daml             # Per-task submission audit
-├── Reward/
-│   └── ClaimSession.daml     # FCFS/invite claim state machine
-├── Wallet/                   # NEW: Wallet and transfer contracts
-│   ├── PartyRegistration.daml # Party ID creation with invite codes
-│   └── CcTransfer.daml       # CC token transfers with fees
-└── Earn/                     # NEW: Earn task contracts
-    ├── EarnTask.daml         # Campaign and task completion
-    └── ClaimFlow.daml        # Claim flow state machines
+packages/daml/
+├── daml.yaml          ← SDK version, package name, version
+└── daml/
+    └── Main.daml      ← Semua template dalam satu file
+        ├── UserAccount      (template 1)
+        ├── Mission          (template 2)
+        └── DailyLuckySpin   (template 3)
 ```
 
-## Module 1: Wallet Contracts
+### Authorization Pattern (Canton M3)
 
-### PartyRegistration
-
-**File:** [`packages/daml/daml/CanQuest/Wallet/PartyRegistration.daml`](../packages/daml/daml/CanQuest/Wallet/PartyRegistration.daml)
-
-Records that a user created their Canton wallet using an invite code.
-
-**Fields:**
-- `operator`: Party (signatory) - Platform operator
-- `user`: Party (observer) - The user who created the wallet
-- `username`: Text - Splice wallet username
-- `partyId`: Text - Canton Party ID
-- `inviteCode`: Text - Invite code used for wallet creation
-- `registeredAt`: Text - ISO timestamp
-- `spliceOnboarded`: Bool - Whether registered in Splice
-- `preapprovalActive`: Bool - Whether TransferPreapproval is active
-
-**Choices:**
-- `PartyRegistration_Archive`: Archive the registration
-- `PartyRegistration_UpdatePreapproval`: Update preapproval status
-
-### WalletInviteCode
-
-**File:** [`packages/daml/daml/CanQuest/Wallet/PartyRegistration.daml`](../packages/daml/daml/CanQuest/Wallet/PartyRegistration.daml)
-
-Tracks available invite codes issued by admin for wallet creation.
-
-**Fields:**
-- `operator`: Party (signatory)
-- `code`: Text - The invite code
-- `note`: Optional Text - Admin note
-- `createdAt`: Text
-- `redeemedBy`: Optional Party
-- `redeemedAt`: Optional Text
-- `reservedBy`: Optional Party - Temporary hold during wallet creation
-- `reservedAt`: Optional Text
-
-**Choices:**
-- `WalletInviteCode_Reserve`: Reserve code for a user
-- `WalletInviteCode_ReleaseReservation`: Release reservation
-- `WalletInviteCode_Redeem`: Mark as redeemed
-- `WalletInviteCode_Archive`: Archive the code
-
-### CcTransferRecord
-
-**File:** [`packages/daml/daml/CanQuest/Wallet/CcTransfer.daml`](../packages/daml/daml/CanQuest/Wallet/CcTransfer.daml)
-
-Records a CC transfer between parties with platform fee.
-
-**Fields:**
-- `operator`: Party (signatory)
-- `sender`: Party (observer)
-- `recipient`: Party (observer)
-- `amountCc`: Decimal - Transfer amount
-- `feeCc`: Decimal - Platform fee
-- `totalDeductedCc`: Decimal - Total deducted from sender
-- `memo`: Optional Text
-- `transferTxId`: Text - Canton ledger transaction ID
-- `feeTxId`: Optional Text - Fee transaction ID
-- `transferredAt`: Text
-- `transferKind`: Text - "USER_TO_USER", "REWARD", "CLAIM_FEE"
-
-**Choices:**
-- `CcTransferRecord_Archive`: Archive the record
-
-### PlatformFeeConfig
-
-**File:** [`packages/daml/daml/CanQuest/Wallet/CcTransfer.daml`](../packages/daml/daml/CanQuest/Wallet/CcTransfer.daml)
-
-Platform fee configuration contract.
-
-**Fields:**
-- `operator`: Party (signatory)
-- `feeCc`: Decimal - Current fee amount
-- `feeRecipient`: Party - Treasury/validator party
-- `updatedAt`: Text
-- `version`: Int
-
-**Choices:**
-- `PlatformFeeConfig_Update`: Update fee settings
-- `PlatformFeeConfig_Archive`: Archive old config
-
-## Module 2: Earn Task Contracts
-
-### EarnCampaign
-
-**File:** [`packages/daml/daml/CanQuest/Earn/EarnTask.daml`](../packages/daml/daml/CanQuest/Earn/EarnTask.daml)
-
-Earn campaign configuration contract.
-
-**Fields:**
-- `operator`: Party (signatory)
-- `campaignId`: Text
-- `title`: Text
-- `taskType`: Text - "CC_FCFS", "CC_RAFFLE", "CODE_FCFS", "CODE_RAFFLE"
-- `rewardCc`: Decimal
-- `maxWinners`: Optional Int
-- `claimFeeCc`: Decimal
-- `startsAt`: Optional Text
-- `endsAt`: Optional Text
-- `createdAt`: Text
-- `status`: Text - "ACTIVE", "ENDED", "PAUSED"
-
-**Choices:**
-- `EarnCampaign_SetStatus`: Update campaign status
-- `EarnCampaign_UpdateFee`: Update claim fee
-- `EarnCampaign_Archive`: Archive the campaign
-
-### EarnTaskCompletion
-
-**File:** [`packages/daml/daml/CanQuest/Earn/EarnTask.daml`](../packages/daml/daml/CanQuest/Earn/EarnTask.daml)
-
-Task completion record for earn campaigns.
-
-**Fields:**
-- `operator`: Party (signatory)
-- `user`: Party (observer)
-- `campaignId`: Text
-- `taskIds`: [Text]
-- `proofs`: [Text]
-- `completedAt`: Text
-- `verified`: Bool
-
-**Choices:**
-- `EarnTaskCompletion_Verify`: Mark tasks as verified
-- `EarnTaskCompletion_Archive`: Archive the record
-
-### FcfsSlotReservation
-
-**File:** [`packages/daml/daml/CanQuest/Earn/EarnTask.daml`](../packages/daml/daml/CanQuest/Earn/EarnTask.daml)
-
-FCFS claim slot reservation to prevent double-claiming.
-
-**Fields:**
-- `operator`: Party (signatory)
-- `user`: Party (observer)
-- `campaignId`: Text
-- `slotIndex`: Int
-- `reservedAt`: Text
-- `expiresAt`: Text
-- `status`: Text - "RESERVED", "CLAIMED", "EXPIRED"
-
-**Choices:**
-- `FcfsSlotReservation_Claim`: Mark slot as claimed
-- `FcfsSlotReservation_Expire`: Release expired reservation
-- `FcfsSlotReservation_Archive`: Archive the reservation
-
-### RaffleWinner
-
-**File:** [`packages/daml/daml/CanQuest/Earn/EarnTask.daml`](../packages/daml/daml/CanQuest/Earn/EarnTask.daml)
-
-Raffle winner record created by admin after drawing winners.
-
-**Fields:**
-- `operator`: Party (signatory)
-- `user`: Party (observer)
-- `campaignId`: Text
-- `drawnAt`: Text
-- `rewardCc`: Decimal
-- `inviteCode`: Optional Text - For Code Raffle
-- `status`: Text - "DRAWN", "CLAIMED", "FORFEITED"
-
-**Choices:**
-- `RaffleWinner_Claim`: Mark winner as claimed
-- `RaffleWinner_Forfeit`: Mark winner as forfeited
-- `RaffleWinner_Archive`: Archive the record
-
-## Module 3: Claim Flow Contracts
-
-### EarnClaimSession
-
-**File:** [`packages/daml/daml/CanQuest/Earn/ClaimFlow.daml`](../packages/daml/daml/CanQuest/Earn/ClaimFlow.daml)
-
-Claim session for earn task rewards with state machine.
-
-**Fields:**
-- `operator`: Party (signatory)
-- `user`: Party (observer)
-- `campaignId`: Text
-- `claimKind`: Text - "CC_FCFS", "CC_RAFFLE", "CODE_FCFS", "CODE_RAFFLE"
-- `feeCc`: Decimal
-- `rewardCc`: Decimal
-- `rewardCode`: Optional Text - For code rewards
-- `createdAt`: Text
-- `feePaidAt`: Optional Text
-- `feeTxId`: Optional Text
-- `rewardSentAt`: Optional Text
-- `rewardTxId`: Optional Text
-- `status`: Text - "INIT", "FEE_PAID", "REWARD_SENT", "COMPLETED", "CANCELLED"
-
-**State Machine:**
 ```
-INIT → FEE_PAID → REWARD_SENT → COMPLETED
-  ↓
-CANCELLED
+signatory admin     ← operator platform — menandatangani semua kontrak
+observer  user      ← user hanya bisa melihat, tidak bisa submit sendiri
 ```
 
-**Choices:**
-- `EarnClaimSession_MarkFeePaid`: Mark fee as paid
-- `EarnClaimSession_MarkRewardSent`: Mark reward as sent
-- `EarnClaimSession_Complete`: Mark claim as completed
-- `EarnClaimSession_Cancel`: Cancel the claim session
-- `EarnClaimSession_Archive`: Archive the session
+Backend (NestJS API di VPS 2) submit semua command sebagai `admin` (operator party).
+User hanya menjadi observer — mereka bisa melihat kontrak mereka di ledger.
 
-### CodeRewardPool
+---
 
-**File:** [`packages/daml/daml/CanQuest/Earn/ClaimFlow.daml`](../packages/daml/daml/CanQuest/Earn/ClaimFlow.daml)
+## Template 1: UserAccount
 
-Code reward pool for Code FCFS and Code Raffle campaigns.
+**Fungsi:** Menyimpan akun user dengan total poin yang dikumpulkan.
 
-**Fields:**
-- `operator`: Party (signatory)
-- `campaignId`: Text
-- `codes`: [Text] - Available codes
-- `assignedCodes`: [(Text, Party, Text)] - (code, user, assignedAt)
-- `createdAt`: Text
+```daml
+template UserAccount
+  with
+    admin        : Party   -- operator platform
+    userAddress  : Party   -- wallet address / party user
+    username     : Text    -- nama tampilan user
+    totalPoints  : Int     -- total poin yang dikumpulkan
+```
 
-**Choices:**
-- `CodeRewardPool_AddCodes`: Add codes to the pool
-- `CodeRewardPool_AssignCode`: Assign a code to a user
-- `CodeRewardPool_Archive`: Archive the pool
-
-### CodeRewardEntitlement
-
-**File:** [`packages/daml/daml/CanQuest/Earn/ClaimFlow.daml`](../packages/daml/daml/CanQuest/Earn/ClaimFlow.daml)
-
-Code reward entitlement created when user claims a code.
-
-**Fields:**
-- `operator`: Party (signatory)
-- `user`: Party (observer)
-- `campaignId`: Text
-- `code`: Text
-- `claimedAt`: Text
-- `feeTxId`: Text
-- `claimKind`: Text - "CODE_FCFS" or "CODE_RAFFLE"
+**Contract Key:** `(admin, userAddress) : (Party, Party)`  
+→ Satu user hanya punya satu akun per admin (idempoten).
 
 **Choices:**
-- `CodeRewardEntitlement_Archive`: Archive the entitlement
+| Choice | Controller | Fungsi |
+|--------|-----------|--------|
+| `RewardUser` | admin | Tambah poin ke akun user |
 
-### CcRewardEntitlement
+**Validasi di RewardUser:**
+- `pointsToAdd > 0` — tidak boleh tambah 0 atau negatif
 
-**File:** [`packages/daml/daml/CanQuest/Earn/ClaimFlow.daml`](../packages/daml/daml/CanQuest/Earn/ClaimFlow.daml)
+**Dipanggil dari API:**
+- `QuestLedgerService.ensureUserAccount()` — saat user register/buat wallet
+- `QuestLedgerService.rewardUser()` — setelah quest selesai / spin / klaim misi
 
-CC reward entitlement with claim fee tracking.
+---
 
-**Fields:**
-- `operator`: Party (signatory)
-- `user`: Party (observer)
-- `campaignId`: Text
-- `rewardCc`: Decimal
-- `feeCc`: Decimal
-- `claimedAt`: Optional Text
-- `feeTxId`: Optional Text
-- `rewardTxId`: Optional Text
-- `claimKind`: Text - "CC_FCFS" or "CC_RAFFLE"
-- `status`: Text - "PENDING", "FEE_PAID", "REWARDED"
+## Template 2: Mission
+
+**Fungsi:** Misi FCFS (First Come First Served) dengan kuota terbatas.
+
+```daml
+template Mission
+  with
+    admin         : Party  -- operator platform
+    missionId     : Text   -- ID unik misi
+    rewardPoints  : Int    -- poin per klaim
+    maxQuota      : Int    -- kuota maksimal pemenang
+    currentClaims : Int    -- jumlah klaim yang sudah terjadi
+```
+
+**Contract Key:** `(admin, missionId) : (Party, Text)`  
+⚠️ **PENTING:** Key type adalah `(Party, Text)` — bukan `(Party, Party)` karena `missionId` bertipe `Text`.
 
 **Choices:**
-- `CcRewardEntitlement_MarkFeePaid`: Mark fee as paid
-- `CcRewardEntitlement_MarkRewarded`: Mark reward as sent
-- `CcRewardEntitlement_Archive`: Archive the entitlement
+| Choice | Controller | Fungsi |
+|--------|-----------|--------|
+| `ClaimMission` | admin | Klaim slot FCFS, update counter |
 
-## Earn Task Types
+**Validasi di ClaimMission:**
+- `currentClaims < maxQuota` — tolak jika kuota sudah habis
+- Mengembalikan `(ContractId Mission, ContractId UserAccount)` — keduanya diperbarui
 
-The platform supports 4 earn task types:
+**Dipanggil dari API:**
+- `QuestLedgerService.createMission()` — saat admin buat campaign baru
+- `QuestLedgerService.claimMission()` — saat user klaim reward FCFS
 
-### 1. CC FCFS (First-Come-First-Served)
+---
 
-**Flow:**
-1. User completes social media tasks
-2. User claims reward (pays 3 CC fee)
-3. User receives CC reward immediately
+## Template 3: DailyLuckySpin
 
-**Contracts Used:**
-- `EarnCampaign` (taskType: "CC_FCFS")
-- `EarnTaskCompletion`
-- `FcfsSlotReservation`
-- `EarnClaimSession` (claimKind: "CC_FCFS")
-- `CcRewardEntitlement`
+**Fungsi:** Sistem spin harian — user hanya boleh spin 1x per hari.
 
-### 2. CC Raffle
+```daml
+template DailyLuckySpin
+  with
+    admin        : Party  -- operator platform
+    userAddress  : Party  -- user yang memiliki spin ini
+    lastSpinDate : Date   -- tanggal terakhir user melakukan spin
+```
 
-**Flow:**
-1. User completes social media tasks
-2. Admin draws winners randomly
-3. Winners pay 3 CC fee
-4. Winners receive CC reward
+**Contract Key:** `(admin, userAddress) : (Party, Party)`  
+→ Satu spin record per user per admin.
 
-**Contracts Used:**
-- `EarnCampaign` (taskType: "CC_RAFFLE")
-- `EarnTaskCompletion`
-- `RaffleWinner`
-- `EarnClaimSession` (claimKind: "CC_RAFFLE")
-- `CcRewardEntitlement`
+**Choices:**
+| Choice | Controller | Fungsi |
+|--------|-----------|--------|
+| `ExecuteSpin` | admin | Eksekusi spin, update tanggal |
 
-### 3. Code FCFS
+**Validasi di ExecuteSpin:**
+- `currentDate /= lastSpinDate` — tolak jika sudah spin hari ini
+- `spinReward > 0` — reward harus positif
 
-**Flow:**
-1. User completes social media tasks
-2. User claims reward (pays 3 CC fee)
-3. User receives invite code immediately
+**Dipanggil dari API:**
+- `QuestLedgerService.ensureDailySpinContract()` — saat user pertama kali akses spin
+- `QuestLedgerService.executeDailySpin()` — saat user klik tombol spin
 
-**Contracts Used:**
-- `EarnCampaign` (taskType: "CODE_FCFS")
-- `EarnTaskCompletion`
-- `FcfsSlotReservation`
-- `CodeRewardPool`
-- `EarnClaimSession` (claimKind: "CODE_FCFS")
-- `CodeRewardEntitlement`
+---
 
-### 4. Code Raffle
+## Test Suite (testFullWorkflow)
 
-**Flow:**
-1. User completes social media tasks
-2. Admin draws winners randomly
-3. Winners pay 3 CC fee
-4. Winners receive invite code
+File: `packages/daml/daml/Main.daml` — fungsi `testFullWorkflow`
 
-**Contracts Used:**
-- `EarnCampaign` (taskType: "CODE_RAFFLE")
-- `EarnTaskCompletion`
-- `RaffleWinner`
-- `CodeRewardPool`
-- `EarnClaimSession` (claimKind: "CODE_RAFFLE")
-- `CodeRewardEntitlement`
+| # | Skenario | Expected |
+|---|----------|----------|
+| b | Buat akun Budi & Iwan | ✅ SUKSES |
+| c | Admin buat Misi FCFS kuota=1 | ✅ SUKSES |
+| d | Budi klaim misi pertama | ✅ SUKSES |
+| e | Iwan klaim misi yang sama (kuota habis) | ❌ GAGAL (assertMsg) |
+| f | Setup DailyLuckySpin untuk Budi (1 Mei) | ✅ SUKSES |
+| g | Budi spin di hari baru (2 Mei) | ✅ SUKSES |
+| h | Budi spin lagi di hari yang sama (2 Mei) | ❌ GAGAL (assertMsg) |
+| i | Budi spin di hari berikutnya (3 Mei) | ✅ SUKSES |
+| j | RewardUser dengan pointsToAdd=0 | ❌ GAGAL (assertMsg) |
+
+---
+
+## Build & Deploy
+
+### 1. Build .dar (di Local PC)
+
+```powershell
+cd packages\daml
+dpm install package          # Install SDK dari daml.yaml
+dpm build                    # Output: .daml/dist/canquest-v2-0.2.0.dar
+dpm test                     # Jalankan testFullWorkflow — semua harus PASS
+```
+
+### 2. Ambil Package ID
+
+```powershell
+dpm damlc inspect .daml\dist\canquest-v2-0.2.0.dar --json | findstr packageId
+```
+
+### 3. Upload ke Canton Participant (VPS 1)
+
+Tunnel harus hidup dulu:
+```powershell
+# Terminal 1 (biarkan hidup):
+ssh -N -L 7575:172.18.0.5:7575 -L 8080:172.18.0.7:80 root@162.250.190.204
+
+# Terminal 2 (upload):
+curl -X POST `
+  -H "Authorization: Bearer <JWT_TOKEN>" `
+  -H "Content-Type: application/octet-stream" `
+  --data-binary @packages\daml\.daml\dist\canquest-v2-0.2.0.dar `
+  http://127.0.0.1:7575/v1/packages
+```
+
+### 4. Update `.env` di VPS 2
+
+```env
+CANTON_DAML_PACKAGE_NAME=canquest-v2
+CANTON_DAML_PACKAGE_ID=<64-hex dari dpm build>
+CANTON_OPERATOR_PARTY_ID=<dari node scripts/ensure-quest-operator.cjs>
+QUEST_LEDGER_ENABLED=true
+CLAIM_SESSION_LEDGER_ENABLED=true
+```
+
+### 5. Restart API
+
+```bash
+pm2 restart canquest-api
+pm2 logs canquest-api | grep -E "UserAccount|Mission|DailyLuckySpin"
+```
+
+---
+
+## Template IDs (JSON Ledger API)
+
+Setelah deploy, template direferensikan sebagai:
+
+```
+#canquest-v2:Main:UserAccount
+#canquest-v2:Main:Mission
+#canquest-v2:Main:DailyLuckySpin
+```
+
+Atau dengan package hash ID:
+```
+<packageId>:Main:UserAccount
+<packageId>:Main:Mission
+<packageId>:Main:DailyLuckySpin
+```
+
+---
 
 ## API Integration
 
-The [`QuestLedgerService`](../apps/api/src/canton/quest-ledger.service.ts) provides methods to interact with these contracts:
+| Event | DAML Action | Method |
+|-------|-------------|--------|
+| User register / buat wallet | Buat `UserAccount` | `ensureUserAccount()` |
+| Quest selesai / reward | Exercise `RewardUser` | `rewardUser()` |
+| Admin buat campaign FCFS | Buat `Mission` | `createMission()` |
+| User klaim FCFS | Exercise `ClaimMission` | `claimMission()` |
+| User pertama kali spin | Buat `DailyLuckySpin` | `ensureDailySpinContract()` |
+| User klik spin | Exercise `ExecuteSpin` | `executeDailySpin()` |
 
-### Wallet Methods
+---
 
-- `recordPartyRegistration()`: Record wallet creation with invite code
-- `recordCcTransfer()`: Record CC transfer with platform fee
+## Bug Fixes dari Versi Sebelumnya
 
-### Earn Methods
+| Bug | Versi Lama | Versi Baru (v0.2.0) |
+|-----|-----------|---------------------|
+| Mission key type salah | `key (admin, missionId) : (Party, Party)` | `key (admin, missionId) : (Party, Text)` |
+| Tidak ada validasi RewardUser | Bisa tambah 0 poin | `assertMsg (pointsToAdd > 0)` |
+| Import tidak perlu | `import DA.Time` (tidak dipakai) | Hanya `import DA.Date` |
+| Module terfragmentasi | 10+ file di CanQuest.* | Satu file `Main.daml` |
 
-- `createEarnCampaign()`: Create earn campaign on ledger
-- `recordEarnTaskCompletion()`: Record task completion
-- `createFcfsSlotReservation()`: Reserve FCFS slot
-- `createRaffleWinner()`: Record raffle winner
-- `createEarnClaimSession()`: Create claim session
-- `markEarnClaimFeePaid()`: Mark fee as paid
-- `markEarnClaimRewardSent()`: Mark reward as sent
-- `createCodeRewardPool()`: Create code pool
-- `createCodeRewardEntitlement()`: Record code entitlement
-- `createCcRewardEntitlement()`: Record CC entitlement
-
-## Canton M3 Design Patterns
-
-All contracts follow Canton Module 3 design patterns:
-
-1. **Authorization Pattern**: Operator signs (signatory), user observes
-2. **State Machine Pattern**: Explicit status transitions with assertions
-3. **Audit Trail Pattern**: Immutable records of all actions
-4. **Idempotency**: Contract keys prevent duplicate operations
-
-## Building and Deploying
-
-```bash
-cd packages/daml
-daml build
-daml codegen js --output-directory=daml-js .daml/dist/canquest-v2-0.1.0.dar
-```
-
-## Environment Configuration
-
-Set these environment variables in `apps/api/.env`:
-
-```env
-# Canton DAML Configuration
-CANTON_DAML_PACKAGE_NAME=canquest-v2
-CANTON_OPERATOR_PARTY_ID=your-operator-party-id
-QUEST_LEDGER_ENABLED=true
-CLAIM_SESSION_LEDGER_ENABLED=true
-
-# Platform Fee (default 3 CC)
-TRANSACTION_FEE_CC=3
-```
+---
 
 ## References
 
-- [Canton Network Documentation](https://docs.canton.network/)
-- [Module 3: Contract Templates](https://docs.canton.network/appdev/modules/m3-contract-templates)
-- [Module 4: JSON API Tutorial](https://docs.canton.network/appdev/modules/m4-json-api-tutorial)
-- [Module 7: Canton Coin Preapprovals](https://docs.canton.network/appdev/modules/m7-canton-coin-preapprovals)
+- [DAML Documentation](https://docs.daml.com/)
+- [Canton Network M3 Dev Environment](https://docs.canton.network/appdev/modules/m3-dev-environment)
+- [Canton Network M4 Building Apps](https://docs.canton.network/appdev/modules/m4-building-apps-intro)
+- [DAML SDK Setup Guide](./DAML_SDK_SETUP.md)
+- [Canton TestNet Guide](./CANTON_TESTNET.md)
