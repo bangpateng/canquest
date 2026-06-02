@@ -575,6 +575,16 @@ export class QuestLedgerService {
     return { contractId: null };
   }
 
+  /** @deprecated — CodeRewardEntitlement not in canquest-v3, no-op stub */
+  async createCodeRewardEntitlement(params: {
+    questId?: string;
+    userPartyId: string;
+    rewardCode?: string;
+    rewardOfferId?: string;
+  }): Promise<{ contractId: string | null; error?: string }> {
+    return { contractId: null };
+  }
+
   /** @deprecated — no-op stub */
   async markEarnClaimFeePaid(params: {
     sessionContractId: string;
