@@ -544,6 +544,53 @@ export class QuestLedgerService {
     return { ledgerEnabled: false, sessionContractId: null, errors: ['Legacy method: use claimMission()'] };
   }
 
+  /** @deprecated — EarnClaimSession not in canquest-v3, no-op stub */
+  async createEarnClaimSession(params: {
+    questId?: string;
+    userPartyId: string;
+    claimKind?: string;
+    feeCc?: number;
+    rewardCc?: number;
+  }): Promise<{ contractId: string | null; error?: string }> {
+    return { contractId: null };
+  }
+
+  /** @deprecated — FcfsSlotReservation not in canquest-v3, no-op stub */
+  async createFcfsSlotReservation(params: {
+    questId?: string;
+    userPartyId: string;
+    expiresAt?: string;
+    slotIndex?: number;
+  }): Promise<{ contractId: string | null; error?: string }> {
+    return { contractId: null };
+  }
+
+  /** @deprecated — CcRewardEntitlement not in canquest-v3, no-op stub */
+  async createCcRewardEntitlement(params: {
+    questId?: string;
+    userPartyId: string;
+    rewardCc?: number;
+    rewardOfferId?: string;
+  }): Promise<{ contractId: string | null; error?: string }> {
+    return { contractId: null };
+  }
+
+  /** @deprecated — no-op stub */
+  async markEarnClaimFeePaid(params: {
+    sessionContractId: string;
+    feeTxId: string;
+  }): Promise<{ ok: boolean; errors: string[] }> {
+    return { ok: true, errors: [] };
+  }
+
+  /** @deprecated — no-op stub */
+  async markEarnClaimRewardSent(params: {
+    sessionContractId: string;
+    rewardTxId: string;
+  }): Promise<{ ok: boolean; errors: string[] }> {
+    return { ok: true, errors: [] };
+  }
+
   /** @deprecated */
   async markClaimFeePaid(params: {
     sessionContractId: string;
