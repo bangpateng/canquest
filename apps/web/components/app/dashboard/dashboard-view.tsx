@@ -27,7 +27,6 @@ interface Me {
   displayName?: string | null;
   username?: string | null;
   cantonPartyId?: string | null;
-  /** Lifetime points — same field as Quest page (`/api/me`, reconciled on server). */
   earnPoints?: number;
 }
 
@@ -265,9 +264,9 @@ export function DashboardView() {
   ];
 
   return (
-    <div className="space-y-8 md:space-y-10">
+    <div className="w-full max-w-full space-y-6 md:space-y-8 lg:space-y-10">
       {loadError ? (
-        <div className="rounded-3xl border border-orange-500/20 bg-orange-500/5 px-6 py-5 text-sm font-medium text-orange-200 backdrop-blur-xl">
+        <div className="rounded-3xl border border-orange-500/20 bg-orange-500/5 px-5 py-4 text-sm font-medium text-orange-200 backdrop-blur-xl sm:px-6 sm:py-5">
           {loadError}{" "}
           <button
             type="button"
@@ -279,20 +278,20 @@ export function DashboardView() {
         </div>
       ) : null}
 
-      {/* Stat cards — order: Weekly rank → CC Balance → CC Transactions → Quests completed → Quest points */}
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 lg:gap-6 xl:grid-cols-5">
+      {/* Stat cards grid - Premium responsive layout */}
+      <section className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 lg:gap-6 xl:grid-cols-5">
         {statCards.map((c) => {
           const Icon = c.icon;
           return (
             <div
               key={c.key}
-              className="group relative overflow-hidden rounded-3xl border border-white/[0.08] bg-slate-900/40 p-6 backdrop-blur-xl transition-all duration-300 hover:border-white/[0.12] hover:bg-slate-900/60"
+              className="group relative overflow-hidden rounded-3xl border border-white/[0.05] bg-slate-900/70 p-5 backdrop-blur-xl transition-all duration-300 hover:border-white/[0.12] hover:bg-slate-900/80 hover:shadow-2xl hover:shadow-black/40 sm:p-6 md:p-8"
             >
               <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-slate-400">{c.title}</p>
+                <p className="text-xs font-medium text-slate-400 sm:text-sm">{c.title}</p>
                 <Icon className="h-5 w-5 text-slate-500 transition-colors group-hover:text-slate-400" aria-hidden />
               </div>
-              <StatValue className="mt-4 text-3xl font-bold tracking-tight text-slate-100 sm:text-4xl">
+              <StatValue className="mt-3 text-3xl font-bold tracking-tight text-slate-100 sm:mt-4 sm:text-4xl md:text-5xl">
                 {c.value === null ? (
                   <LoadingSpinner size="xl" tone="muted" />
                 ) : (
@@ -300,69 +299,69 @@ export function DashboardView() {
                 )}
               </StatValue>
               {c.hint ? (
-                <p className="mt-3 text-sm font-medium leading-relaxed text-slate-500">{c.hint}</p>
+                <p className="mt-2 text-xs font-medium leading-relaxed text-slate-500 sm:mt-3 sm:text-sm">{c.hint}</p>
               ) : null}
             </div>
           );
         })}
       </section>
 
-      {/* Recent Activity */}
-      <section className="overflow-hidden rounded-3xl border border-white/[0.08] bg-slate-900/40 backdrop-blur-xl">
-          <div className="border-b border-white/[0.06] bg-white/[0.02] px-8 py-5">
-            <SectionTitle className="text-xl font-semibold tracking-tight text-slate-100">{t("dashboard.recentActivity")}</SectionTitle>
-          </div>
+      {/* Recent Activity - Premium glassmorphic card */}
+      <section className="w-full overflow-hidden rounded-3xl border border-white/[0.05] bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-black/40">
+        <div className="border-b border-white/[0.06] bg-white/[0.02] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
+          <SectionTitle className="text-lg font-semibold tracking-tight text-slate-100 sm:text-xl">{t("dashboard.recentActivity")}</SectionTitle>
+        </div>
 
-          {activityLoading ? (
-            <div className="flex items-center justify-center py-20">
-              <LoadingSpinner size="lg" />
-            </div>
-          ) : !activityData || activityData.items.length === 0 ? (
-            <div className="px-8 py-20 text-center">
-              <p className="text-sm font-medium text-slate-500">
-                {t("dashboard.noActivity")}
-              </p>
-            </div>
-          ) : (
-            <div className="p-8">
-              <ul className="space-y-1">
-                {activityData.items.map((item, i) => {
-                  const Icon = ACTIVITY_ICON[item.type];
-                  const colorClass = ACTIVITY_COLOR[item.type];
-                  return (
-                    <li
-                      key={`${item.type}-${item.time}-${i}`}
-                      className="group flex items-start gap-4 rounded-2xl px-4 py-4 transition-colors hover:bg-white/[0.02]"
+        {activityLoading ? (
+          <div className="flex items-center justify-center py-16 sm:py-20">
+            <LoadingSpinner size="lg" />
+          </div>
+        ) : !activityData || activityData.items.length === 0 ? (
+          <div className="px-5 py-16 text-center sm:px-6 sm:py-20 md:px-8">
+            <p className="text-sm font-medium text-slate-500">
+              {t("dashboard.noActivity")}
+            </p>
+          </div>
+        ) : (
+          <div className="p-5 sm:p-6 md:p-8">
+            <ul className="space-y-1">
+              {activityData.items.map((item, i) => {
+                const Icon = ACTIVITY_ICON[item.type];
+                const colorClass = ACTIVITY_COLOR[item.type];
+                return (
+                  <li
+                    key={`${item.type}-${item.time}-${i}`}
+                    className="group flex items-start gap-3 rounded-2xl px-3 py-3 transition-colors hover:bg-white/[0.02] sm:gap-4 sm:px-4 sm:py-4"
+                  >
+                    <div
+                      className={cn(
+                        "mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl sm:h-11 sm:w-11",
+                        colorClass,
+                      )}
                     >
-                      <div
-                        className={cn(
-                          "mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl",
-                          colorClass,
-                        )}
-                      >
-                        <Icon className="h-5 w-5" aria-hidden />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-base font-semibold text-slate-100">{item.title}</p>
-                        <p className="mt-1 text-sm font-medium text-slate-500">{item.detail}</p>
-                      </div>
-                      <p className="shrink-0 pt-1 text-sm font-medium text-slate-500">
-                        {timeAgo(item.time, t)}
-                      </p>
-                    </li>
-                  );
-                })}
-              </ul>
-              <ListPagination
-                className="mt-8"
-                page={activityPage}
-                totalPages={activityData.totalPages}
-                total={activityData.total}
-                disabled={activityLoading}
-                onPageChange={setActivityPage}
-              />
-            </div>
-          )}
+                      <Icon className="h-5 w-5" aria-hidden />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-slate-100 sm:text-base">{item.title}</p>
+                      <p className="mt-1 text-xs font-medium text-slate-500 sm:text-sm">{item.detail}</p>
+                    </div>
+                    <p className="shrink-0 pt-1 text-xs font-medium text-slate-500 sm:text-sm">
+                      {timeAgo(item.time, t)}
+                    </p>
+                  </li>
+                );
+              })}
+            </ul>
+            <ListPagination
+              className="mt-6 sm:mt-8"
+              page={activityPage}
+              totalPages={activityData.totalPages}
+              total={activityData.total}
+              disabled={activityLoading}
+              onPageChange={setActivityPage}
+            />
+          </div>
+        )}
       </section>
     </div>
   );

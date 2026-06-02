@@ -120,19 +120,19 @@ function Metric({
   muted?: boolean;
 }) {
   return (
-    <div className="min-w-0 flex-1 overflow-hidden px-1.5 py-1.5 first:pl-0 last:pr-0 sm:px-3 sm:py-2.5 md:px-4 md:py-3">
-      <div className="flex items-center gap-0.5 text-[8px] font-medium uppercase tracking-wider text-[var(--muted-foreground)] sm:gap-1.5 sm:text-[10px]">
+    <div className="min-w-0 flex-1 overflow-hidden px-2 py-2 first:pl-0 last:pr-0 sm:px-3 sm:py-3 md:px-4">
+      <div className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wider text-slate-400 sm:gap-1.5 sm:text-[10px]">
         {useCcLogo ? (
-          <CcRewardLogo className="shrink-0 opacity-90" size={8} />
+          <CcRewardLogo className="shrink-0 opacity-90" size={10} />
         ) : (
-          <Icon className={cn("h-2 w-2 shrink-0 opacity-70 sm:h-3 sm:w-3", accent)} aria-hidden />
+          <Icon className={cn("h-3 w-3 shrink-0 opacity-70", accent)} aria-hidden />
         )}
         <span className="truncate">{label}</span>
       </div>
       <p
         className={cn(
-          "mt-0.5 truncate text-[10px] font-bold tabular-nums sm:mt-1 sm:text-sm md:text-base",
-          muted ? "text-[var(--muted-foreground)]" : accent ?? "text-[var(--foreground)]",
+          "mt-1 truncate text-xs font-bold tabular-nums sm:text-sm md:text-base",
+          muted ? "text-slate-400" : accent ?? "text-white",
         )}
       >
         {value}
@@ -245,38 +245,32 @@ export function EarnCampaignCard({
   const inner = (
     <article
       className={cn(
-        "group relative flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden break-words rounded-2xl border border-white/[0.08] bg-slate-900/40 backdrop-blur-xl sm:rounded-3xl",
+        "group relative flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden rounded-3xl border border-white/[0.05] bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-black/40",
         "transition-all duration-300 ease-out",
         canOpen &&
           !joinBlocked &&
-          "hover:-translate-y-0.5 hover:border-[rgb(var(--canton-rgb)/0.35)] hover:shadow-[0_20px_50px_rgb(0_0_0/0.35),0_0_0_1px_rgb(var(--canton-rgb)/0.12)]",
-        (quest.status === "ENDED" || joinBlocked) && "opacity-[0.92]",
+          "hover:-translate-y-1 hover:border-[rgb(var(--canton-rgb)/0.25)] hover:shadow-[0_24px_60px_rgb(0_0_0/0.4),0_0_0_1px_rgb(var(--canton-rgb)/0.15)]",
+        (quest.status === "ENDED" || joinBlocked) && "opacity-90",
       )}
-      style={{ 
-        width: '100%', 
-        maxWidth: '100%', 
-        boxSizing: 'border-box',
-        contain: 'layout style paint',
-        overflowWrap: 'anywhere'
-      }}
     >
-      {/* Banner - Diubah h-[3.5rem] menjadi h-[6.5rem] agar elemen tidak bertumpuk */}
-      <div className="relative h-[6.5rem] shrink-0 overflow-hidden sm:h-[8rem] md:h-[9.5rem]">
+      {/* Banner - Premium responsive heights */}
+      <div className="relative h-32 shrink-0 overflow-hidden sm:h-36 md:h-40 lg:h-44">
         <div
-          className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-[1.03]"
+          className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105"
           style={
             quest.bannerImageUrl
               ? { backgroundImage: `url("${quest.bannerImageUrl}")` }
               : { background: quest.banner }
           }
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-[var(--card)] via-[var(--card)]/55 to-black/25" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_100%_0%,rgb(var(--canton-rgb)/0.15),transparent_55%)]" />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-black/30" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_100%_0%,rgb(var(--canton-rgb)/0.12),transparent_60%)]" />
 
+        {/* Type & Status badges */}
         <div className="absolute left-3 top-3 flex flex-wrap gap-1.5 sm:left-4 sm:top-4 sm:gap-2">
           <span
             className={cn(
-              "rounded-lg border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide backdrop-blur-md sm:rounded-xl sm:px-3 sm:py-1 sm:text-xs",
+              "rounded-xl border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide backdrop-blur-xl sm:px-3 sm:py-1.5 sm:text-xs",
               theme.chip,
             )}
           >
@@ -286,34 +280,31 @@ export function EarnCampaignCard({
 
         <span
           className={cn(
-            "absolute right-3 top-3 rounded-lg px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide backdrop-blur-md sm:right-4 sm:top-4 sm:rounded-xl sm:px-3 sm:py-1 sm:text-xs",
+            "absolute right-3 top-3 rounded-xl px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide backdrop-blur-xl sm:right-4 sm:top-4 sm:px-3 sm:py-1.5 sm:text-xs",
             slotsFull && quest.status === "ACTIVE"
-              ? "border border-white/5 bg-black/50 text-slate-400"
-              : "border border-white/10 bg-black/45 text-white/95",
+              ? "border border-white/5 bg-black/60 text-slate-400"
+              : "border border-white/10 bg-black/50 text-white",
             !(slotsFull && quest.status === "ACTIVE") && statusMeta.className,
           )}
         >
           {statusLabel}
         </span>
 
-        {/* Reward highlight on banner - Dioptimalkan paddings & hidden label khusus mobile */}
+        {/* Reward highlight on banner */}
         {quest.rewardCc > 0 || bannerRewardText ? (
-          <div 
-            className="absolute bottom-2 right-2 flex max-w-[calc(100%-1rem)] items-center gap-1.5 rounded-lg border border-white/10 bg-black/60 px-2 py-1 backdrop-blur-md sm:bottom-4 sm:right-4 sm:max-w-[calc(100%-2rem)] sm:gap-3 sm:rounded-2xl sm:px-3 sm:py-2"
-            style={{ maxWidth: 'calc(100% - 1rem)', overflow: 'hidden' }}
-          >
-            <CampaignRewardIcon theme={theme} className={cn("shrink-0", theme.accent)} size={12} />
+          <div className="absolute bottom-3 right-3 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-xl border border-white/10 bg-black/70 px-3 py-2 backdrop-blur-xl sm:bottom-4 sm:right-4 sm:gap-3 sm:px-4 sm:py-2.5">
+            <CampaignRewardIcon theme={theme} className={cn("shrink-0", theme.accent)} size={14} />
             <div className="min-w-0 text-right">
-              <p className="hidden text-[9px] font-semibold uppercase tracking-wider text-white/60 sm:block sm:text-xs">
+              <p className="hidden text-[9px] font-bold uppercase tracking-wider text-white/60 sm:block sm:text-[10px]">
                 {t("earnCampaigns.rewardLabel")}
               </p>
               {quest.rewardCc > 0 ? (
-                <p className={cn("text-sm font-bold leading-none tabular-nums sm:text-xl", theme.accent)}>
+                <p className={cn("text-base font-bold leading-none tabular-nums sm:text-xl md:text-2xl", theme.accent)}>
                   {quest.rewardCc}
-                  <span className="ml-0.5 text-[10px] font-semibold text-white/70 sm:ml-1 sm:text-sm">CC</span>
+                  <span className="ml-1 text-xs font-semibold text-white/70 sm:text-sm">CC</span>
                 </p>
               ) : (
-                <p className={cn("truncate text-xs font-bold leading-tight sm:text-base", theme.accent)}>
+                <p className={cn("truncate text-sm font-bold leading-tight sm:text-base", theme.accent)}>
                   {bannerRewardText}
                 </p>
               )}
@@ -322,45 +313,37 @@ export function EarnCampaignCard({
         ) : null}
       </div>
 
-      {/* Body */}
-      <div 
-        className="flex w-full min-w-0 flex-1 flex-col overflow-hidden px-3 pb-3 pt-3 sm:px-5 sm:pb-6 sm:pt-4 md:px-6" 
-        style={{ 
-          width: '100%', 
-          maxWidth: '100%', 
-          boxSizing: 'border-box',
-          contain: 'layout style paint'
-        }}
-      >
-        <div className="flex w-full min-w-0 items-center gap-2.5 sm:gap-4">
+      {/* Body - Premium spacing */}
+      <div className="flex w-full min-w-0 flex-1 flex-col px-4 pb-5 pt-4 sm:px-5 sm:pb-6 sm:pt-5 md:px-6 md:pb-7">
+        <div className="flex w-full min-w-0 items-center gap-3 sm:gap-4">
           <div
             className={cn(
-              "relative h-9 w-9 shrink-0 overflow-hidden rounded-lg bg-[var(--muted)] sm:h-14 sm:w-14 sm:rounded-2xl",
+              "relative h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-slate-800/80 sm:h-14 sm:w-14 sm:rounded-2xl",
             )}
           >
             {quest.logoUrl ? (
               <img src={quest.logoUrl} alt="" className="h-full w-full object-cover" />
             ) : (
-              <span className="flex h-full w-full items-center justify-center text-[10px] font-bold text-canton sm:text-base">
+              <span className="flex h-full w-full items-center justify-center text-xs font-bold text-canton sm:text-base">
                 {quest.orgSlug.slice(0, 2).toUpperCase()}
               </span>
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[10px] font-medium text-slate-500 sm:text-sm">
+            <p className="truncate text-[10px] font-semibold text-slate-500 sm:text-xs">
               {quest.org}
             </p>
-            <h3 className="line-clamp-2 break-words text-sm font-bold leading-tight text-slate-100 sm:mt-1 sm:text-lg md:text-xl">
+            <h3 className="line-clamp-2 text-sm font-bold leading-tight text-white sm:mt-0.5 sm:text-base md:text-lg">
               {quest.title}
             </h3>
           </div>
         </div>
 
-        <p className="mt-2 hidden line-clamp-2 text-sm font-medium leading-relaxed text-slate-500 sm:mt-3 sm:block">
+        <p className="mt-3 hidden line-clamp-2 text-sm font-medium leading-relaxed text-slate-400 sm:block">
           {quest.description}
         </p>
 
-        <div className="mt-3 flex items-center gap-3 text-[10px] font-medium text-slate-500 sm:mt-4 sm:gap-4 sm:text-sm">
+        <div className="mt-3 flex items-center gap-3 text-[10px] font-semibold text-slate-500 sm:mt-4 sm:gap-4 sm:text-xs">
           <span className="inline-flex items-center gap-1 sm:gap-1.5">
             <ListChecks className="h-3 w-3 text-canton sm:h-4 sm:w-4" />
             {quest.tasks.length} tasks
@@ -373,16 +356,10 @@ export function EarnCampaignCard({
           ) : null}
         </div>
 
-        {/* Metrics strip */}
+        {/* Metrics strip - Premium glassmorphic */}
         {(showFcfs || showRaffleWinners || showPool || showCodes) && (
-          <div 
-            className="mt-3 w-full min-w-0 overflow-hidden rounded-lg border border-white/[0.06] bg-white/[0.02] sm:mt-4 sm:rounded-2xl"
-            style={{ maxWidth: '100%', contain: 'layout style paint' }}
-          >
-            <div 
-              className="grid w-full min-w-0 grid-cols-2 divide-x divide-white/[0.04] overflow-hidden"
-              style={{ maxWidth: '100%' }}
-            >
+          <div className="mt-4 w-full min-w-0 overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] sm:mt-5">
+            <div className="grid w-full min-w-0 grid-cols-2 divide-x divide-white/[0.04]">
               {showRaffleWinners ? (
                 <Metric
                   label={t("earnCampaigns.cardRaffleWinners")}
@@ -423,8 +400,8 @@ export function EarnCampaignCard({
               ) : null}
             </div>
             {isDrawCcRaffle && showRaffleWinners && winnersDrawn > 0 ? (
-              <div className="border-t border-white/[0.04] px-3 py-2 sm:px-4 sm:py-3">
-                <div className="mb-1 flex justify-between text-[9px] font-medium tabular-nums text-slate-500 sm:text-xs">
+              <div className="border-t border-white/[0.04] px-3 py-2.5 sm:px-4 sm:py-3">
+                <div className="mb-1.5 flex justify-between text-[9px] font-semibold tabular-nums text-slate-500 sm:text-xs">
                   <span>
                     {t("earnCampaigns.slotsSelected", {
                       used: String(winnersDrawn),
@@ -433,7 +410,7 @@ export function EarnCampaignCard({
                   </span>
                   <span>{rafflePct}%</span>
                 </div>
-                <div className="h-1 overflow-hidden rounded-full bg-white/[0.06] sm:h-1.5">
+                <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
                   <div
                     className="h-full rounded-full bg-gradient-to-r from-[var(--primary)] to-[var(--primary-strong)] transition-all duration-500"
                     style={{ width: `${Math.max(6, rafflePct)}%` }}
@@ -442,12 +419,12 @@ export function EarnCampaignCard({
               </div>
             ) : null}
             {showFcfs && !slotsFull ? (
-              <div className="border-t border-white/[0.04] px-3 py-2 sm:px-4 sm:py-3">
-                <div className="mb-1 flex justify-between text-[9px] font-medium tabular-nums text-slate-500 sm:text-xs">
+              <div className="border-t border-white/[0.04] px-3 py-2.5 sm:px-4 sm:py-3">
+                <div className="mb-1.5 flex justify-between text-[9px] font-semibold tabular-nums text-slate-500 sm:text-xs">
                   <span>{t("earnCampaigns.slotsClaimed", { used: String(slotsUsed), max: String(slotsMax) })}</span>
                   <span>{slotsPct}%</span>
                 </div>
-                <div className="h-1 overflow-hidden rounded-full bg-white/[0.06] sm:h-1.5">
+                <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
                   <div
                     className={cn(
                       "h-full rounded-full transition-all duration-500",
@@ -463,9 +440,9 @@ export function EarnCampaignCard({
           </div>
         )}
 
-        <div className="mt-auto pt-3 sm:pt-6">
+        <div className="mt-auto pt-4 sm:pt-5">
           {joinBlocked ? (
-            <span className={cn(buttonVariants({ variant: "muted", size: "block" }), "rounded-lg py-2 text-xs sm:rounded-2xl sm:py-2.5 sm:text-base")}>
+            <span className={cn(buttonVariants({ variant: "muted", size: "block" }), "rounded-2xl py-3 text-sm font-semibold sm:text-base")}>
               {ctaLabel}
             </span>
           ) : canOpen ? (
@@ -480,13 +457,13 @@ export function EarnCampaignCard({
                         : "primary",
                   size: "block",
                 }),
-                "rounded-lg py-2 text-xs sm:rounded-2xl sm:py-2.5 sm:text-base",
+                "rounded-2xl py-3 text-sm font-semibold sm:text-base",
               )}
             >
               {ctaLabel}
             </span>
           ) : (
-            <span className={cn(buttonVariants({ variant: "dashed", size: "block" }), "rounded-lg py-2 text-xs sm:rounded-2xl sm:py-2.5 sm:text-base")}>
+            <span className={cn(buttonVariants({ variant: "dashed", size: "block" }), "rounded-2xl py-3 text-sm font-semibold sm:text-base")}>
               Opens soon
             </span>
           )}
@@ -502,7 +479,7 @@ export function EarnCampaignCard({
   return (
     <Link
       href={ROUTES.campaignQuest(quest.id, quest.title)}
-      className="block h-full w-full min-w-0 max-w-full overflow-hidden rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] sm:rounded-3xl"
+      className="block h-full w-full min-w-0 max-w-full overflow-hidden rounded-3xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
     >
       {inner}
     </Link>
