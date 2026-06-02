@@ -222,14 +222,6 @@ export function QuestsBrowser({
     </label>
   );
 
-  const completionChip =
-    isEarn && completionStats.total > 0 ? (
-      <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold tabular-nums text-emerald-300">
-        <CheckCircle2 className="h-3 w-3" aria-hidden />
-        {completionStats.completed}/{completionStats.total}
-      </span>
-    ) : null;
-
   return (
     <div className={cn("w-full max-w-full overflow-hidden", isEarn ? "space-y-4 sm:space-y-5 md:space-y-6" : "space-y-5 sm:space-y-6 md:space-y-8")}>
       {isEarn ? (
@@ -237,12 +229,8 @@ export function QuestsBrowser({
           className="w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-slate-900/40 p-3 backdrop-blur-xl sm:p-4 md:p-5"
           aria-label={t("earnCampaigns.filterAria")}
         >
-          <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-            <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:gap-3">
-              <div className="min-w-0 flex-1 overflow-hidden sm:flex-none">{tabRow}</div>
-              {completionChip}
-            </div>
-            <div className="w-full sm:ml-auto sm:w-64 md:w-72 sm:shrink-0">{searchField}</div>
+          <div className="flex w-full min-w-0 items-center gap-2 sm:gap-3">
+            <div className="min-w-0 flex-1 overflow-hidden">{tabRow}</div>
           </div>
         </section>
       ) : (

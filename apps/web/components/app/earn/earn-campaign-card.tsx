@@ -313,8 +313,8 @@ export function EarnCampaignCard({
         ) : null}
       </div>
 
-      {/* Body */}
-      <div className="flex w-full min-w-0 flex-1 flex-col px-4 pb-5 pt-4 sm:px-5 sm:pb-6 sm:pt-5 md:px-6 md:pb-7">
+      {/* Body — flex-col justify-between so CTA is always pinned to bottom */}
+      <div className="flex w-full min-w-0 flex-1 flex-col justify-between px-4 pb-5 pt-4 sm:px-5 sm:pb-6 sm:pt-5 md:px-6 md:pb-7">
         <div className="flex w-full min-w-0 items-center gap-3 sm:gap-4">
           <div
             className={cn(
@@ -440,10 +440,15 @@ export function EarnCampaignCard({
           </div>
         )}
 
-        {/* CTA Button — GREEN buttons use rounded-md (blocky/square-edged) */}
-        <div className="mt-auto pt-4 sm:pt-5">
+        {/* CTA Button — fixed h-12 w-full on ALL states for perfect symmetry across tabs */}
+        <div className="mt-4">
           {joinBlocked ? (
-            <span className={cn(buttonVariants({ variant: "muted", size: "block" }), "rounded-md py-3 text-sm font-semibold sm:text-base")}>
+            <span
+              className={cn(
+                buttonVariants({ variant: "muted", size: "block" }),
+                "flex h-12 w-full items-center justify-center rounded-xl text-sm font-semibold",
+              )}
+            >
               {ctaLabel}
             </span>
           ) : canOpen ? (
@@ -458,13 +463,18 @@ export function EarnCampaignCard({
                         : "primary",
                   size: "block",
                 }),
-                "rounded-md py-3 text-sm font-semibold sm:text-base",
+                "flex h-12 w-full items-center justify-center rounded-xl text-sm font-semibold",
               )}
             >
               {ctaLabel}
             </span>
           ) : (
-            <span className={cn(buttonVariants({ variant: "dashed", size: "block" }), "rounded-md py-3 text-sm font-semibold sm:text-base")}>
+            <span
+              className={cn(
+                buttonVariants({ variant: "dashed", size: "block" }),
+                "flex h-12 w-full items-center justify-center rounded-xl text-sm font-semibold",
+              )}
+            >
               Opens soon
             </span>
           )}

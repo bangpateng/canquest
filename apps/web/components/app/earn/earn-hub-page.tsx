@@ -99,12 +99,8 @@ export function EarnHubPage() {
         className="w-full max-w-full overflow-hidden rounded-3xl border border-white/5 bg-slate-900/40 backdrop-blur-xl shadow-2xl shadow-black/40"
         aria-label="Points balance"
       >
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-white/[0.05] bg-white/[0.02] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
+        <div className="border-b border-white/[0.05] bg-white/[0.02] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
           <h2 className="text-base sm:text-lg font-semibold tracking-tight text-white">Your points</h2>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--primary)]/10 px-3 py-1.5 text-[10px] sm:text-xs font-bold uppercase tracking-wider text-[var(--primary)] border border-[var(--primary)]/20">
-            <Zap className="h-3 w-3 sm:h-3.5 sm:w-3.5" aria-hidden />
-            Lifetime
-          </span>
         </div>
 
         <div className="relative px-5 py-8 sm:px-6 sm:py-10 md:px-8 md:py-12">
