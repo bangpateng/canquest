@@ -1,4 +1,4 @@
-sdk-version: 3.3.0-snapshot.20250930.0
+sdk-version: 3.3.0
 # Package name canquest-v3 — module Main (v1.1.0)
 # v1.0.0: UserAccount, Mission, DailyLuckySpin
 # v1.1.0: UserAccount (earnedPoints+spentPoints+DebitSpinCost),
