@@ -547,10 +547,12 @@ export class QuestLedgerService {
   /** @deprecated — EarnClaimSession not in canquest-v3, no-op stub */
   async createEarnClaimSession(params: {
     questId?: string;
+    campaignId?: string;
     userPartyId: string;
     claimKind?: string;
     feeCc?: number;
     rewardCc?: number;
+    [key: string]: unknown;
   }): Promise<{ contractId: string | null; error?: string }> {
     return { contractId: null };
   }
@@ -558,9 +560,11 @@ export class QuestLedgerService {
   /** @deprecated — FcfsSlotReservation not in canquest-v3, no-op stub */
   async createFcfsSlotReservation(params: {
     questId?: string;
+    campaignId?: string;
     userPartyId: string;
     expiresAt?: string;
     slotIndex?: number;
+    [key: string]: unknown;
   }): Promise<{ contractId: string | null; error?: string }> {
     return { contractId: null };
   }
@@ -568,9 +572,11 @@ export class QuestLedgerService {
   /** @deprecated — CcRewardEntitlement not in canquest-v3, no-op stub */
   async createCcRewardEntitlement(params: {
     questId?: string;
+    campaignId?: string;
     userPartyId: string;
     rewardCc?: number;
     rewardOfferId?: string;
+    [key: string]: unknown;
   }): Promise<{ contractId: string | null; error?: string }> {
     return { contractId: null };
   }
@@ -578,9 +584,11 @@ export class QuestLedgerService {
   /** @deprecated — CodeRewardEntitlement not in canquest-v3, no-op stub */
   async createCodeRewardEntitlement(params: {
     questId?: string;
+    campaignId?: string;
     userPartyId: string;
     rewardCode?: string;
     rewardOfferId?: string;
+    [key: string]: unknown;
   }): Promise<{ contractId: string | null; error?: string }> {
     return { contractId: null };
   }
@@ -590,8 +598,33 @@ export class QuestLedgerService {
     userPartyId: string;
     username?: string;
     partyHint?: string;
+    inviteCode?: string;
+    [key: string]: unknown;
   }): Promise<{ ok: boolean; contractId: string | null; errors: string[] }> {
     return { ok: true, contractId: null, errors: [] };
+  }
+
+  /** @deprecated — recordCcTransfer not in canquest-v3, no-op stub */
+  async recordCcTransfer(params: {
+    senderPartyId?: string;
+    receiverPartyId?: string;
+    amount?: number;
+    txId?: string;
+    [key: string]: unknown;
+  }): Promise<{ ok: boolean; contractId: string | null; errors: string[] }> {
+    return { ok: true, contractId: null, errors: [] };
+  }
+
+  /** @deprecated — createRaffleWinner not in canquest-v3, no-op stub */
+  async createRaffleWinner(params: {
+    userPartyId: string;
+    questId?: string;
+    campaignId?: string;
+    rewardCc?: number;
+    txId?: string;
+    [key: string]: unknown;
+  }): Promise<{ contractId: string | null; error?: string }> {
+    return { contractId: null };
   }
 
   /** @deprecated — no-op stub */
