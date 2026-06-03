@@ -2,23 +2,22 @@
 -- CanQuest DAML Contract -- module Main
 -- Package: canquest-v3  |  SDK: 3.4.11
 --
--- Templates:
---   1. UserAccount      -- akun user dengan poin (earned & spent)
---   2. Mission          -- misi FCFS dengan kuota terbatas
---   3. SpinExecution    -- eksekusi spin (debit points, catat reward)
---   4. SpinCcReward     -- bukti on-chain CC reward dari spin
+-- Templates (v1.1.0 — upgrade dari v1.0.0):
+--   1. UserAccount      -- akun user dengan poin (earned & spent) [UPDATED]
+--   2. Mission          -- misi FCFS dengan kuota terbatas [SAMA]
+--   3. DailyLuckySpin   -- spin harian legacy (DIPERTAHANKAN untuk upgrade compatibility)
+--   4. SpinExecution    -- eksekusi spin baru (debit points, catat reward) [BARU]
+--   5. SpinCcReward     -- bukti on-chain CC reward dari spin [BARU]
+--
+-- UPGRADE RULES (Canton):
+--   - Template yang ada di v1.0.0 HARUS tetap ada di v1.1.0
+--   - DailyLuckySpin dipertahankan agar upgrade valid
+--   - Template baru (SpinExecution, SpinCcReward) ditambahkan
+--   - UserAccount di-upgrade: tambah earnedPoints, spentPoints, DebitSpinCost
 --
 -- Authorization pattern (Canton M3):
 --   signatory admin  -- operator yang menandatangani semua kontrak
 --   observer user    -- user hanya bisa melihat, tidak bisa submit sendiri
---
--- KEAMANAN:
---   - Semua choice dikontrol oleh admin (tidak ada self-service user)
---   - Validasi ketat di setiap choice (assertMsg)
---   - spinCost selalu > 0, reward selalu valid
---   - Double-spend dicegah: setiap SpinExecution punya spinResultId unik
---   - Leaderboard points = earnedPoints (tidak bisa dikurangi spin)
---   - Available points = earnedPoints - totalSpent (hanya untuk spin gate)
 --
 -- CATATAN: Canton Network SDK 3.4.11
 -- Idempotency check dilakukan di sisi API (quest-ledger.service.ts).
@@ -28,7 +27,7 @@
 module Main where
 
 -- ==========================================
--- 1. TEMPLATE USER ACCOUNT
+-- 1. TEMPLATE USER ACCOUNT [UPDATED v1.1.0]
 -- ==========================================
 
 -- | Akun user yang menyimpan total poin yang diraih (earnedPoints)
@@ -47,7 +46,6 @@ template UserAccount
     observer userAddress
 
     -- | Tambah poin ke akun user setelah menyelesaikan quest/misi/spin win.
-    -- Hanya admin yang bisa memanggil choice ini.
     choice RewardUser : ContractId UserAccount
       with
         pointsToAdd : Int
@@ -59,7 +57,6 @@ template UserAccount
         create this with earnedPoints = earnedPoints + pointsToAdd
 
     -- | Debit poin untuk spin (catat pengeluaran).
-    -- Validasi: user harus punya cukup available points.
     choice DebitSpinCost : ContractId UserAccount
       with
         spinCost : Int
@@ -72,12 +69,9 @@ template UserAccount
 
 
 -- ==========================================
--- 2. TEMPLATE MISI FCFS (First Come First Served)
+-- 2. TEMPLATE MISI FCFS [SAMA seperti v1.0.0]
 -- ==========================================
 
--- | Misi dengan sistem FCFS -- siapa cepat dia dapat.
--- Admin membuat misi dengan kuota terbatas.
--- Ketika kuota habis, klaim berikutnya akan GAGAL otomatis.
 template Mission
   with
     admin         : Party
@@ -88,9 +82,6 @@ template Mission
   where
     signatory admin
 
-    -- | Klaim misi FCFS.
-    -- Validasi ketat: jika kuota sudah penuh, transaksi GAGAL dan di-revert.
-    -- Mengembalikan (ContractId Mission baru, ContractId UserAccount baru).
     choice ClaimMission : (ContractId Mission, ContractId UserAccount)
       with
         user       : Party
@@ -111,19 +102,39 @@ template Mission
 
 
 -- ==========================================
--- 3. TEMPLATE SPIN EXECUTION
+-- 3. TEMPLATE DAILY LUCKY SPIN [DIPERTAHANKAN dari v1.0.0]
+-- ==========================================
+
+-- | LEGACY: Dipertahankan untuk upgrade compatibility dengan v1.0.0.
+-- Canton tidak mengizinkan upgrade yang menghapus template.
+-- Untuk spin baru, gunakan SpinExecution (template 4).
+template DailyLuckySpin
+  with
+    admin        : Party
+    userAddress  : Party
+    lastSpinDate : Int   -- epoch day (bukan Date agar kompatibel)
+  where
+    signatory admin
+    observer userAddress
+
+    -- | Legacy spin choice — dipertahankan untuk upgrade compatibility.
+    choice ExecuteSpinLegacy : ContractId DailyLuckySpin
+      with
+        currentDay : Int
+        spinReward : Int
+      controller admin
+      do
+        assertMsg "Sudah spin hari ini!" (currentDay /= lastSpinDate)
+        assertMsg "Spin reward harus > 0!" (spinReward > 0)
+        create this with lastSpinDate = currentDay
+
+
+-- ==========================================
+-- 4. TEMPLATE SPIN EXECUTION [BARU v1.1.0]
 -- ==========================================
 
 -- | Bukti on-chain bahwa satu putaran spin telah dieksekusi.
--- Mencatat: siapa yang spin, berapa cost, item apa yang menang, reward apa.
 -- Setiap spin punya spinResultId unik (dari DB) untuk mencegah double-spend.
---
--- KEAMANAN ANTI-MANIPULASI:
---   - spinResultId unik per spin (idempotency key dari API)
---   - spinCost selalu > 0 (tidak bisa spin gratis)
---   - rewardType harus valid: "cc" | "points" | "invite_code" | "none"
---   - Hanya admin yang bisa membuat kontrak ini
---   - User tidak bisa membuat atau memodifikasi kontrak ini
 template SpinExecution
   with
     admin        : Party
@@ -141,11 +152,10 @@ template SpinExecution
     signatory admin
     observer userAddress
 
-    -- | Konfirmasi CC reward sudah dikirim ke ledger.
-    -- Dipanggil setelah BullMQ job berhasil kirim CC via Splice.
+    -- | Konfirmasi CC reward sudah dikirim ke ledger via Splice.
     choice ConfirmCcDelivered : ContractId SpinCcReward
       with
-        spliceTxId : Text   -- Canton/Splice transaction ID
+        spliceTxId : Text
       controller admin
       do
         assertMsg "rewardType harus 'cc' untuk konfirmasi CC!" (rewardType == "cc")
@@ -162,21 +172,20 @@ template SpinExecution
 
 
 -- ==========================================
--- 4. TEMPLATE SPIN CC REWARD
+-- 5. TEMPLATE SPIN CC REWARD [BARU v1.1.0]
 -- ==========================================
 
 -- | Bukti on-chain bahwa CC reward dari spin sudah dikirim.
--- Dibuat oleh ConfirmCcDelivered setelah Splice TX berhasil.
--- Ini adalah audit trail permanen di ledger.
+-- Audit trail permanen di ledger.
 template SpinCcReward
   with
     admin        : Party
     userAddress  : Party
     username     : Text
-    spinResultId : Text    -- Referensi ke SpinExecution
-    rewardCc     : Decimal -- Jumlah CC yang dikirim
-    spliceTxId   : Text    -- Canton/Splice TX ID sebagai bukti
-    deliveredAt  : Text    -- ISO timestamp pengiriman
+    spinResultId : Text
+    rewardCc     : Decimal
+    spliceTxId   : Text
+    deliveredAt  : Text
   where
     signatory admin
     observer userAddress
