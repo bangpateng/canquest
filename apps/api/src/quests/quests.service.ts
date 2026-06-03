@@ -2463,8 +2463,9 @@ export class QuestsService {
     pageSize = 10,
   ): Promise<{ rows: LeaderboardRow[]; total: number; page: number; pageSize: number }> {
     const since = this.leaderboardSince(period);
-    const aggregated = await this.points.buildPointsByUser(since);
-    const sorted = aggregated.sort((a, b) => b.points - a.points);
+    // Net points = earnPoints - spin cost spent (satu sumber kebenaran untuk leaderboard)
+    const aggregated = await this.points.buildNetPointsByUser(since);
+    const sorted = aggregated; // buildNetPointsByUser sudah sorted desc
     const total = sorted.length;
     const skip = (page - 1) * pageSize;
     const pageRows = sorted.slice(skip, skip + pageSize);

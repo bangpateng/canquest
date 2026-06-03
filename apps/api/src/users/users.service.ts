@@ -623,4 +623,12 @@ export class UsersService {
   reconcileEarnPoints(userId: string): Promise<number> {
     return this.points.reconcileUserEarnPoints(userId);
   }
+
+  /**
+   * Net spendable points = earnPoints - total spin cost spent.
+   * Satu-satunya sumber kebenaran untuk semua halaman (dashboard, quest, spin, leaderboard).
+   */
+  getNetPoints(userId: string): Promise<number> {
+    return this.points.getNetPoints(userId);
+  }
 }

@@ -178,7 +178,8 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException();
     }
-    const earnPoints = await this.users.reconcileEarnPoints(userId);
+    // Net points = earnPoints - spin cost spent (satu sumber kebenaran)
+    const earnPoints = await this.users.getNetPoints(userId);
     return {
       id: user.id,
       email: user.email,
