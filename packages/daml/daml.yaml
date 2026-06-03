@@ -1,16 +1,21 @@
 sdk-version: 3.4.11
-# Package name canquest-v3 — module Main (v1.1.0)
-# v1.0.0: UserAccount, Mission, DailyLuckySpin
-# v1.1.0: UserAccount (earnedPoints+spentPoints+DebitSpinCost),
-#          Mission, SpinExecution, SpinCcReward
-# Templates baru: SpinExecution (audit on-chain per spin), SpinCcReward (bukti CC delivery)
-# Test:      testFullWorkflow (Daml.Script)
-name: canquest-v3
+# Package: canquest-v4 — module Main (v1.0.0)
+# Package BARU (bukan upgrade canquest-v3) karena Canton upgrade rules
+# tidak mengizinkan perubahan struktur template/choice yang sudah di-upload.
+#
+# Templates:
+#   1. UserAccount      -- akun user dengan poin (earned & spent)
+#   2. Mission          -- misi FCFS dengan kuota terbatas
+#   3. DailyLuckySpin   -- spin harian (dipertahankan dari v3)
+#   4. SpinExecution    -- eksekusi spin baru (audit on-chain)
+#   5. SpinCcReward     -- bukti CC reward via Splice
+#
+# Test: Test.daml (terpisah agar daml-script tidak ikut upload)
+# Canton Network docs: https://docs.canton.network/appdev/modules/m3-building-packaging
+name: canquest-v4
 source: daml
-version: 1.1.0
+version: 1.0.0
 dependencies:
   - daml-prim
   - daml-stdlib
   - daml-script
-# Canton Network documentation reference:
-# https://docs.canton.network/appdev/modules/m3-building-packaging

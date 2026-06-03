@@ -35,7 +35,7 @@ function resolveLatestDar() {
   try {
     const files = fs
       .readdirSync(distDir)
-      .filter((f) => /^canquest(-v2)?-.*\.dar$/.test(f))
+      .filter((f) => /^canquest(-v\d+)?-.*\.dar$/.test(f))
       .map((f) => ({ f, p: path.join(distDir, f), m: fs.statSync(path.join(distDir, f)).mtimeMs }))
       .sort((a, b) => b.m - a.m);
     if (files.length > 0) return files[0].p;
