@@ -125,7 +125,7 @@ export default async function AdminPage() {
         </Link>
 
         <Link
-          href="/admin/quest"
+          href="/admin/quests"
           className="group rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 transition-colors hover:border-violet-500/35"
         >
           <div className="flex items-start justify-between gap-3">

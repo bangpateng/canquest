@@ -14,7 +14,7 @@ const NAV_ITEMS: {
 }[] = [
   { href: "/admin", label: "Dashboard", icon: LayoutGrid, exact: true },
   { href: "/admin/earn", label: "Earn campaigns", icon: Scroll, exact: false },
-  { href: "/admin/quest", label: "Quest hub", icon: Gift, exact: false },
+  { href: "/admin/quests", label: "Quest hub", icon: Gift, exact: false },
   { href: "/admin/spin", label: "Spin & Win", icon: Ticket, exact: false },
   { href: "/admin/users", label: "Users", icon: Users, exact: false },
   {
