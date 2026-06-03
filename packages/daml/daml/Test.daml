@@ -1,0 +1,156 @@
+-- ============================================================
+-- CanQuest DAML Test Suite -- module Test
+-- Package: canquest-v3  |  SDK: 3.4.11
+--
+-- Test suite terpisah dari template utama (Main.daml).
+-- Dipisah agar daml-script tidak ikut ter-upload ke ledger production.
+--
+-- Jalankan: dpm test
+-- ============================================================
+
+module Test where
+
+import Daml.Script
+import Main
+
+-- | Test suite lengkap untuk semua template.
+-- Menguji: happy path, edge case, dan proteksi keamanan.
+-- Semua skenario harus PASS agar kontrak siap deploy.
+testFullWorkflow : Script ()
+testFullWorkflow = script do
+
+  admin <- allocateParty "Admin"
+  budi  <- allocateParty "Budi_User"
+  iwan  <- allocateParty "Iwan_User"
+
+  -- (a) Daftarkan akun baru untuk Budi dan Iwan
+  budiAccCid <- submit admin do
+    createCmd UserAccount with
+      admin
+      userAddress  = budi
+      username     = "BudiNAX"
+      earnedPoints = 0
+      spentPoints  = 0
+
+  iwanAccCid <- submit admin do
+    createCmd UserAccount with
+      admin
+      userAddress  = iwan
+      username     = "IwanWeb3"
+      earnedPoints = 0
+      spentPoints  = 0
+
+  -- (b) Budi selesaikan quest -> dapat 500 poin
+  budiAccCid2 <- submit admin do
+    exerciseCmd budiAccCid RewardUser with
+      pointsToAdd = 500
+      reason      = "quest_completion"
+
+  -- (c) Admin buat Misi FCFS -- kuota hanya 1 pemenang
+  missionCid <- submit admin do
+    createCmd Mission with
+      admin
+      missionId     = "MISSION_001"
+      rewardPoints  = 100
+      maxQuota      = 1
+      currentClaims = 0
+
+  -- (d) Budi klaim misi pertama -> HARUS SUKSES (dapat +100 poin)
+  (missionCid2, budiAccCid3) <- submit admin do
+    exerciseCmd missionCid ClaimMission with
+      user       = budi
+      accountCid = budiAccCid2
+
+  -- (e) Iwan coba klaim misi yang sama -> HARUS GAGAL (kuota habis)
+  submitMustFail admin do
+    exerciseCmd missionCid2 ClaimMission with
+      user       = iwan
+      accountCid = iwanAccCid
+
+  -- (f) Budi spin pertama (cost 50 poin, menang 25 CC)
+  -- Budi punya 600 earned, 0 spent -> available = 600 -> cukup untuk spin
+  budiAccCid4 <- submit admin do
+    exerciseCmd budiAccCid3 DebitSpinCost with
+      spinCost = 50
+
+  spinExec1Cid <- submit admin do
+    createCmd SpinExecution with
+      admin
+      userAddress  = budi
+      username     = "BudiNAX"
+      spinResultId = "SPIN_RESULT_001"
+      spinItemId   = "ITEM_25CC"
+      spinItemLabel= "25 CC"
+      rewardType   = "cc"
+      rewardCc     = 25.0
+      rewardPoints = 0
+      spinCost     = 50
+      executedAt   = "2026-06-04T00:00:00Z"
+
+  -- (g) Konfirmasi CC reward sudah dikirim via Splice
+  _spinReward1Cid <- submit admin do
+    exerciseCmd spinExec1Cid ConfirmCcDelivered with
+      spliceTxId = "SPLICE_TX_ABC123"
+
+  -- (h) Budi spin kedua (cost 50 poin, menang 100 points bonus)
+  budiAccCid5 <- submit admin do
+    exerciseCmd budiAccCid4 DebitSpinCost with
+      spinCost = 50
+
+  spinExec2Cid <- submit admin do
+    createCmd SpinExecution with
+      admin
+      userAddress  = budi
+      username     = "BudiNAX"
+      spinResultId = "SPIN_RESULT_002"
+      spinItemId   = "ITEM_100PTS"
+      spinItemLabel= "100 Bonus Points"
+      rewardType   = "points"
+      rewardCc     = 0.0
+      rewardPoints = 100
+      spinCost     = 50
+      executedAt   = "2026-06-04T01:00:00Z"
+
+  -- (i) Kredit bonus points ke akun Budi
+  budiAccCid6 <- submit admin do
+    exerciseCmd budiAccCid5 RewardUser with
+      pointsToAdd = 100
+      reason      = "spin_win"
+
+  -- (j) ConfirmCcDelivered harus GAGAL jika rewardType bukan "cc"
+  submitMustFail admin do
+    exerciseCmd spinExec2Cid ConfirmCcDelivered with
+      spliceTxId = "SPLICE_TX_INVALID"
+
+  -- (k) DebitSpinCost harus GAGAL jika poin tidak cukup
+  -- Iwan punya 0 earned, 0 spent -> available = 0 -> tidak cukup
+  submitMustFail admin do
+    exerciseCmd iwanAccCid DebitSpinCost with
+      spinCost = 50
+
+  -- (l) RewardUser dengan 0 poin harus GAGAL
+  submitMustFail admin do
+    exerciseCmd budiAccCid6 RewardUser with
+      pointsToAdd = 0
+      reason      = "invalid"
+
+  -- (m) SpinExecution dengan spliceTxId kosong harus GAGAL
+  spinExecBadCid <- submit admin do
+    createCmd SpinExecution with
+      admin
+      userAddress  = budi
+      username     = "BudiNAX"
+      spinResultId = "SPIN_RESULT_003"
+      spinItemId   = "ITEM_25CC"
+      spinItemLabel= "25 CC"
+      rewardType   = "cc"
+      rewardCc     = 25.0
+      rewardPoints = 0
+      spinCost     = 50
+      executedAt   = "2026-06-04T02:00:00Z"
+
+  submitMustFail admin do
+    exerciseCmd spinExecBadCid ConfirmCcDelivered with
+      spliceTxId = ""
+
+  pure ()
