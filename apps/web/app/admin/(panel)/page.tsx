@@ -2,7 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { CQ_ADMIN_ACCESS_COOKIE } from "@/lib/auth/auth-cookies";
 import { internalApiBase } from "@/lib/api/internal-api-url";
-import { Users, Scroll, Trophy, CheckCircle2, Sparkles, Gift, KeyRound } from "lucide-react";
+import { Users, Scroll, Trophy, CheckCircle2, Sparkles, Gift, KeyRound, Ticket } from "lucide-react";
 
 interface Stats {
   totalUsers: number;
@@ -142,6 +142,24 @@ export default async function AdminPage() {
             {stats?.earnHubConfigured
               ? `${stats.earnHubTaskCount ?? 0} task(s) · ${stats.earnHubSubmissions ?? 0} submissions`
               : "Not configured — open to set up"}
+          </p>
+        </Link>
+
+        <Link
+          href="/admin/spin"
+          className="group rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 transition-colors hover:border-purple-500/35"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-purple-500/15 text-purple-300">
+              <Ticket className="h-5 w-5" />
+            </span>
+          </div>
+          <h2 className="type-section-title mt-4">Spin &amp; Win</h2>
+          <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+            Manage spin wheel prizes — add CC rewards, bonus points, set probabilities and inventory limits.
+          </p>
+          <p className="mt-3 text-xs font-semibold text-purple-300">
+            Manage prizes →
           </p>
         </Link>
       </div>
