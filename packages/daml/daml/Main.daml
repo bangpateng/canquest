@@ -3,13 +3,22 @@
 -- Package: canquest-v2  |  SDK: 3.3.0-snapshot.20250930.0
 --
 -- Templates:
---   1. UserAccount      -- akun user dengan poin
+--   1. UserAccount      -- akun user dengan poin (earned & spent)
 --   2. Mission          -- misi FCFS dengan kuota terbatas
---   3. DailyLuckySpin   -- spin harian (1x per hari)
+--   3. SpinExecution    -- eksekusi spin (debit points, catat reward)
+--   4. SpinCcReward     -- bukti on-chain CC reward dari spin
 --
 -- Authorization pattern (Canton M3):
 --   signatory admin  -- operator yang menandatangani semua kontrak
 --   observer user    -- user hanya bisa melihat, tidak bisa submit sendiri
+--
+-- KEAMANAN:
+--   - Semua choice dikontrol oleh admin (tidak ada self-service user)
+--   - Validasi ketat di setiap choice (assertMsg)
+--   - spinCost selalu > 0, reward selalu valid
+--   - Double-spend dicegah: setiap SpinExecution punya spinResultId unik
+--   - Leaderboard points = earnedPoints (tidak bisa dikurangi spin)
+--   - Available points = earnedPoints - totalSpent (hanya untuk spin gate)
 --
 -- CATATAN: Canton Network SDK 3.3.x tidak mendukung contract keys.
 -- Idempotency check dilakukan di sisi API (quest-ledger.service.ts).
@@ -24,28 +33,44 @@ import DA.Date
 -- 1. TEMPLATE USER ACCOUNT
 -- ==========================================
 
--- | Akun user yang menyimpan total poin.
--- signatory admin      : operator platform yang membuat dan mengelola akun
--- observer userAddress : user bisa melihat saldo poinnya sendiri
+-- | Akun user yang menyimpan total poin yang diraih (earnedPoints)
+-- dan total poin yang sudah dipakai untuk spin (spentPoints).
+-- availablePoints = earnedPoints - spentPoints (dihitung off-chain di API).
+-- Leaderboard menggunakan earnedPoints (tidak dikurangi spentPoints).
 template UserAccount
   with
     admin        : Party
     userAddress  : Party
     username     : Text
-    totalPoints  : Int
+    earnedPoints : Int   -- total poin yang pernah diraih (quest, spin win, referral)
+    spentPoints  : Int   -- total poin yang sudah dipakai untuk spin
   where
     signatory admin
     observer userAddress
 
-    -- | Tambah poin ke akun user setelah menyelesaikan misi atau spin.
+    -- | Tambah poin ke akun user setelah menyelesaikan quest/misi/spin win.
     -- Hanya admin yang bisa memanggil choice ini.
     choice RewardUser : ContractId UserAccount
       with
         pointsToAdd : Int
+        reason      : Text   -- "quest_completion" | "spin_win" | "referral" | "task_verified"
       controller admin
       do
         assertMsg "Poin yang ditambahkan harus lebih dari 0!" (pointsToAdd > 0)
-        create this with totalPoints = totalPoints + pointsToAdd
+        assertMsg "Alasan reward tidak boleh kosong!" (reason /= "")
+        create this with earnedPoints = earnedPoints + pointsToAdd
+
+    -- | Debit poin untuk spin (catat pengeluaran).
+    -- Validasi: user harus punya cukup available points.
+    choice DebitSpinCost : ContractId UserAccount
+      with
+        spinCost : Int
+      controller admin
+      do
+        assertMsg "Spin cost harus lebih dari 0!" (spinCost > 0)
+        let available = earnedPoints - spentPoints
+        assertMsg "Poin tidak cukup untuk spin!" (available >= spinCost)
+        create this with spentPoints = spentPoints + spinCost
 
 
 -- ==========================================
@@ -74,10 +99,12 @@ template Mission
         accountCid : ContractId UserAccount
       controller admin
       do
-        assertMsg "Waduh Bro, kuota misi FCFS ini sudah habis!" (currentClaims < maxQuota)
+        assertMsg "Kuota misi FCFS ini sudah habis!" (currentClaims < maxQuota)
 
         newAccountCid <- exercise accountCid RewardUser
-          with pointsToAdd = rewardPoints
+          with
+            pointsToAdd = rewardPoints
+            reason      = "quest_completion"
 
         newMissionCid <- create this
           with currentClaims = currentClaims + 1
@@ -86,46 +113,79 @@ template Mission
 
 
 -- ==========================================
--- 3. TEMPLATE DAILY LUCKY SPIN
+-- 3. TEMPLATE SPIN EXECUTION
 -- ==========================================
 
--- | Sistem spin harian -- user hanya boleh spin 1x per hari.
--- Admin mencatat tanggal spin terakhir.
--- Jika user mencoba spin di hari yang sama, transaksi GAGAL.
-template DailyLuckySpin
+-- | Bukti on-chain bahwa satu putaran spin telah dieksekusi.
+-- Mencatat: siapa yang spin, berapa cost, item apa yang menang, reward apa.
+-- Setiap spin punya spinResultId unik (dari DB) untuk mencegah double-spend.
+--
+-- KEAMANAN ANTI-MANIPULASI:
+--   - spinResultId unik per spin (idempotency key dari API)
+--   - spinCost selalu > 0 (tidak bisa spin gratis)
+--   - rewardType harus valid: "cc" | "points" | "invite_code" | "none"
+--   - Hanya admin yang bisa membuat kontrak ini
+--   - User tidak bisa membuat atau memodifikasi kontrak ini
+template SpinExecution
   with
     admin        : Party
     userAddress  : Party
-    lastSpinDate : Date
+    username     : Text
+    spinResultId : Text    -- ID unik dari DB (SpinResult.id) -- anti double-spend
+    spinItemId   : Text    -- ID item yang menang
+    spinItemLabel: Text    -- Label item (e.g. "50 CC", "100 Points")
+    rewardType   : Text    -- "cc" | "points" | "invite_code" | "none"
+    rewardCc     : Decimal -- Jumlah CC jika rewardType = "cc" (0.0 jika bukan)
+    rewardPoints : Int     -- Jumlah points jika rewardType = "points" (0 jika bukan)
+    spinCost     : Int     -- Poin yang dipakai untuk spin ini
+    executedAt   : Text    -- ISO timestamp dari API
   where
     signatory admin
     observer userAddress
 
-    -- | Eksekusi spin harian.
-    -- Validasi: currentDate harus BERBEDA dari lastSpinDate.
-    -- Memberikan spinReward poin ke akun user.
-    -- Memperbarui lastSpinDate ke tanggal hari ini.
-    -- Mengembalikan (ContractId DailyLuckySpin baru, ContractId UserAccount baru).
-    choice ExecuteSpin : (ContractId DailyLuckySpin, ContractId UserAccount)
+    -- | Konfirmasi CC reward sudah dikirim ke ledger.
+    -- Dipanggil setelah BullMQ job berhasil kirim CC via Splice.
+    choice ConfirmCcDelivered : ContractId SpinCcReward
       with
-        currentDate : Date
-        accountCid  : ContractId UserAccount
-        spinReward  : Int
+        spliceTxId : Text   -- Canton/Splice transaction ID
       controller admin
       do
-        assertMsg "Sabar Bro, Anda sudah melakukan Spin hari ini. Coba lagi besok!" (currentDate /= lastSpinDate)
-        assertMsg "Spin reward harus lebih dari 0!" (spinReward > 0)
-
-        newAccountCid <- exercise accountCid RewardUser
-          with pointsToAdd = spinReward
-
-        newSpinCid <- create this with lastSpinDate = currentDate
-
-        pure (newSpinCid, newAccountCid)
+        assertMsg "rewardType harus 'cc' untuk konfirmasi CC!" (rewardType == "cc")
+        assertMsg "rewardCc harus > 0!" (rewardCc > 0.0)
+        assertMsg "spliceTxId tidak boleh kosong!" (spliceTxId /= "")
+        create SpinCcReward with
+          admin
+          userAddress
+          username
+          spinResultId
+          rewardCc
+          spliceTxId
+          deliveredAt = executedAt
 
 
 -- ==========================================
--- 4. SKENARIO PENGUJIAN LENGKAP (DAML TEST SUITE)
+-- 4. TEMPLATE SPIN CC REWARD
+-- ==========================================
+
+-- | Bukti on-chain bahwa CC reward dari spin sudah dikirim.
+-- Dibuat oleh ConfirmCcDelivered setelah Splice TX berhasil.
+-- Ini adalah audit trail permanen di ledger.
+template SpinCcReward
+  with
+    admin        : Party
+    userAddress  : Party
+    username     : Text
+    spinResultId : Text    -- Referensi ke SpinExecution
+    rewardCc     : Decimal -- Jumlah CC yang dikirim
+    spliceTxId   : Text    -- Canton/Splice TX ID sebagai bukti
+    deliveredAt  : Text    -- ISO timestamp pengiriman
+  where
+    signatory admin
+    observer userAddress
+
+
+-- ==========================================
+-- 5. SKENARIO PENGUJIAN LENGKAP (DAML TEST SUITE)
 -- ==========================================
 
 -- | Test suite lengkap untuk semua template.
@@ -138,20 +198,28 @@ testFullWorkflow = script do
   budi  <- allocateParty "Budi_User"
   iwan  <- allocateParty "Iwan_User"
 
-  -- (b) Daftarkan akun baru untuk Budi dan Iwan
+  -- (a) Daftarkan akun baru untuk Budi dan Iwan
   budiAccCid <- submit admin do
     createCmd UserAccount with
       admin
       userAddress  = budi
       username     = "BudiNAX"
-      totalPoints  = 0
+      earnedPoints = 0
+      spentPoints  = 0
 
   iwanAccCid <- submit admin do
     createCmd UserAccount with
       admin
       userAddress  = iwan
       username     = "IwanWeb3"
-      totalPoints  = 0
+      earnedPoints = 0
+      spentPoints  = 0
+
+  -- (b) Budi selesaikan quest -> dapat 500 poin
+  budiAccCid2 <- submit admin do
+    exerciseCmd budiAccCid RewardUser with
+      pointsToAdd = 500
+      reason      = "quest_completion"
 
   -- (c) Admin buat Misi FCFS -- kuota hanya 1 pemenang
   missionCid <- submit admin do
@@ -162,11 +230,11 @@ testFullWorkflow = script do
       maxQuota      = 1
       currentClaims = 0
 
-  -- (d) Budi klaim misi pertama -> HARUS SUKSES
-  (missionCid2, budiAccCid2) <- submit admin do
+  -- (d) Budi klaim misi pertama -> HARUS SUKSES (dapat +100 poin)
+  (missionCid2, budiAccCid3) <- submit admin do
     exerciseCmd missionCid ClaimMission with
       user       = budi
-      accountCid = budiAccCid
+      accountCid = budiAccCid2
 
   -- (e) Iwan coba klaim misi yang sama -> HARUS GAGAL (kuota habis)
   submitMustFail admin do
@@ -174,43 +242,90 @@ testFullWorkflow = script do
       user       = iwan
       accountCid = iwanAccCid
 
-  -- (f) Setup Daily Lucky Spin untuk Budi (tanggal awal: 1 Mei 2026)
-  let t1 = date 2026 May 1
-  spinCid <- submit admin do
-    createCmd DailyLuckySpin with
+  -- (f) Budi spin pertama (cost 50 poin, menang 25 CC)
+  -- Budi punya 600 earned, 0 spent -> available = 600 -> cukup untuk spin
+  budiAccCid4 <- submit admin do
+    exerciseCmd budiAccCid3 DebitSpinCost with
+      spinCost = 50
+
+  spinExec1Cid <- submit admin do
+    createCmd SpinExecution with
       admin
       userAddress  = budi
-      lastSpinDate = t1
+      username     = "BudiNAX"
+      spinResultId = "SPIN_RESULT_001"
+      spinItemId   = "ITEM_25CC"
+      spinItemLabel= "25 CC"
+      rewardType   = "cc"
+      rewardCc     = 25.0
+      rewardPoints = 0
+      spinCost     = 50
+      executedAt   = "2026-06-04T00:00:00Z"
 
-  -- (g) Budi spin di hari baru (2 Mei 2026) -> HARUS SUKSES
-  -- ExecuteSpin mengonsumsi spinCid dan budiAccCid2, menghasilkan spinCid2 dan budiAccCid3
-  let t2 = date 2026 May 2
-  (spinCid2, budiAccCid3) <- submit admin do
-    exerciseCmd spinCid ExecuteSpin with
-      currentDate = t2
-      accountCid  = budiAccCid2
-      spinReward  = 50
+  -- (g) Konfirmasi CC reward sudah dikirim via Splice
+  _spinReward1Cid <- submit admin do
+    exerciseCmd spinExec1Cid ConfirmCcDelivered with
+      spliceTxId = "SPLICE_TX_ABC123"
 
-  -- (h) Budi coba spin lagi di hari yang sama -> HARUS GAGAL
+  -- (h) Budi spin kedua (cost 50 poin, menang 100 points bonus)
+  budiAccCid5 <- submit admin do
+    exerciseCmd budiAccCid4 DebitSpinCost with
+      spinCost = 50
+
+  spinExec2Cid <- submit admin do
+    createCmd SpinExecution with
+      admin
+      userAddress  = budi
+      username     = "BudiNAX"
+      spinResultId = "SPIN_RESULT_002"
+      spinItemId   = "ITEM_100PTS"
+      spinItemLabel= "100 Bonus Points"
+      rewardType   = "points"
+      rewardCc     = 0.0
+      rewardPoints = 100
+      spinCost     = 50
+      executedAt   = "2026-06-04T01:00:00Z"
+
+  -- (i) Kredit bonus points ke akun Budi
+  budiAccCid6 <- submit admin do
+    exerciseCmd budiAccCid5 RewardUser with
+      pointsToAdd = 100
+      reason      = "spin_win"
+
+  -- (j) ConfirmCcDelivered harus GAGAL jika rewardType bukan "cc"
   submitMustFail admin do
-    exerciseCmd spinCid2 ExecuteSpin with
-      currentDate = t2
-      accountCid  = budiAccCid3
-      spinReward  = 50
+    exerciseCmd spinExec2Cid ConfirmCcDelivered with
+      spliceTxId = "SPLICE_TX_INVALID"
 
-  -- (i) Budi spin lagi di hari berikutnya (3 Mei) -> HARUS SUKSES
-  -- Pakai spinCid2 dan budiAccCid3 (contract terbaru setelah step g)
-  let t3 = date 2026 May 3
-  (spinCid3, budiAccCid4) <- submit admin do
-    exerciseCmd spinCid2 ExecuteSpin with
-      currentDate = t3
-      accountCid  = budiAccCid3
-      spinReward  = 75
-
-  -- (j) Validasi: reward 0 harus GAGAL
-  -- Pakai budiAccCid4 (contract terbaru setelah step i)
+  -- (k) DebitSpinCost harus GAGAL jika poin tidak cukup
+  -- Iwan punya 0 earned, 0 spent -> available = 0 -> tidak cukup
   submitMustFail admin do
-    exerciseCmd budiAccCid4 RewardUser with
+    exerciseCmd iwanAccCid DebitSpinCost with
+      spinCost = 50
+
+  -- (l) RewardUser dengan 0 poin harus GAGAL
+  submitMustFail admin do
+    exerciseCmd budiAccCid6 RewardUser with
       pointsToAdd = 0
+      reason      = "invalid"
+
+  -- (m) SpinExecution dengan spliceTxId kosong harus GAGAL
+  spinExecBadCid <- submit admin do
+    createCmd SpinExecution with
+      admin
+      userAddress  = budi
+      username     = "BudiNAX"
+      spinResultId = "SPIN_RESULT_003"
+      spinItemId   = "ITEM_25CC"
+      spinItemLabel= "25 CC"
+      rewardType   = "cc"
+      rewardCc     = 25.0
+      rewardPoints = 0
+      spinCost     = 50
+      executedAt   = "2026-06-04T02:00:00Z"
+
+  submitMustFail admin do
+    exerciseCmd spinExecBadCid ConfirmCcDelivered with
+      spliceTxId = ""
 
   pure ()

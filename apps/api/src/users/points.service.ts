@@ -145,29 +145,19 @@ export class PointsService {
   }
 
   /**
-   * Net points untuk semua user — dipakai leaderboard.
-   * Kurangi spin cost dari total earned per user.
+   * Earned points untuk semua user — dipakai leaderboard.
+   *
+   * DESAIN: Leaderboard mengukur PRESTASI (total yang pernah diraih),
+   * bukan saldo. Spin cost TIDAK dikurangi di sini karena:
+   * 1. Sinkron dengan earnPoints yang ditampilkan di dashboard
+   * 2. Tidak bisa dimanipulasi (spin tidak bisa "menghapus" ranking)
+   * 3. Weekly/monthly filter tetap akurat (hanya earned dalam periode)
+   *
+   * Net available (earned - spin spent) hanya untuk halaman Spin & Dashboard.
    */
   async buildNetPointsByUser(since?: Date): Promise<PointsAggregateRow[]> {
-    const [earned, spentRows] = await Promise.all([
-      this.buildPointsByUser(since),
-      // Hanya ambil spin spent tanpa filter since (spin cost selalu dikurangi dari total)
-      this.prisma.spinResult.groupBy({
-        by: ['userId'],
-        _sum: { pointsSpent: true },
-      }),
-    ]);
-
-    const spentMap = new Map<string, number>();
-    for (const r of spentRows) {
-      spentMap.set(r.userId, r._sum.pointsSpent ?? 0);
-    }
-
+    const earned = await this.buildPointsByUser(since);
     return earned
-      .map((row) => ({
-        ...row,
-        points: Math.max(0, row.points - (spentMap.get(row.id) ?? 0)),
-      }))
       .filter((r) => r.points > 0)
       .sort((a, b) => b.points - a.points);
   }
