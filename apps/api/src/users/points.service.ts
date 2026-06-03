@@ -145,46 +145,36 @@ export class PointsService {
   }
 
   /**
-   * Earned points untuk semua user — dipakai leaderboard.
+   * Net points per user untuk leaderboard — SINKRON dengan spin & dashboard.
    *
-   * SUMBER KEBENARAN TUNGGAL: Pakai User.earnPoints (sudah di-reconcile dari
-   * semua sumber: quest, spin, referral, manual credit) agar sinkron dengan
-   * dashboard, spin, dan quest.
+   * Net = earnPoints - total spin cost spent (sama persis dengan halaman Spin).
+   * Berlaku untuk semua periode (weekly, monthly, all).
    *
-   * Untuk filter weekly/monthly: tetap pakai buildPointsByUser(since) karena
-   * User.earnPoints tidak punya timestamp. Lifetime ("all") pakai earnPoints.
-   *
-   * Spin cost TIDAK dikurangi — leaderboard mengukur PRESTASI (total diraih).
+   * Untuk weekly/monthly: hitung earned dalam periode, kurangi spin cost
+   * dalam periode yang sama.
    */
   async buildNetPointsByUser(since?: Date): Promise<PointsAggregateRow[]> {
-    // Untuk filter periode (weekly/monthly), tetap hitung dari activity records
-    if (since) {
-      const earned = await this.buildPointsByUser(since);
-      return earned
-        .filter((r) => r.points > 0)
-        .sort((a, b) => b.points - a.points);
-    }
+    // 1. Hitung earned points per user (dari activity records dalam periode)
+    const earnedRows = await this.buildPointsByUser(since);
+    if (earnedRows.length === 0) return [];
 
-    // Untuk lifetime ("all"): pakai User.earnPoints sebagai sumber kebenaran tunggal
-    // agar sinkron dengan dashboard, spin, dan quest
-    const users = await this.prisma.user.findMany({
-      where: { earnPoints: { gt: 0 } },
-      select: {
-        id: true,
-        username: true,
-        displayName: true,
-        cantonPartyId: true,
-        earnPoints: true,
-      },
+    // 2. Hitung total spin cost per user dalam periode yang sama
+    const spinSpentRows = await this.prisma.spinResult.groupBy({
+      by: ['userId'],
+      where: since ? { createdAt: { gte: since } } : {},
+      _sum: { pointsSpent: true },
     });
 
-    return users
-      .map((u) => ({
-        id: u.id,
-        username: u.username,
-        displayName: u.displayName,
-        cantonPartyId: u.cantonPartyId,
-        points: u.earnPoints,
+    const spentMap = new Map<string, number>();
+    for (const row of spinSpentRows) {
+      spentMap.set(row.userId, row._sum.pointsSpent ?? 0);
+    }
+
+    // 3. Net = earned - spin cost (min 0)
+    return earnedRows
+      .map((r) => ({
+        ...r,
+        points: Math.max(0, r.points - (spentMap.get(r.id) ?? 0)),
       }))
       .filter((r) => r.points > 0)
       .sort((a, b) => b.points - a.points);
