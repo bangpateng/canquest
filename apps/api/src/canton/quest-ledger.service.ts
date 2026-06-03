@@ -585,6 +585,15 @@ export class QuestLedgerService {
     return { contractId: null };
   }
 
+  /** @deprecated — recordPartyRegistration not in canquest-v3, no-op stub */
+  async recordPartyRegistration(params: {
+    userPartyId: string;
+    username?: string;
+    partyHint?: string;
+  }): Promise<{ ok: boolean; contractId: string | null; errors: string[] }> {
+    return { ok: true, contractId: null, errors: [] };
+  }
+
   /** @deprecated — no-op stub */
   async markEarnClaimFeePaid(params: {
     sessionContractId: string;
