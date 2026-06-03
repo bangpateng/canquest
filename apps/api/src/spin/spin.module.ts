@@ -7,9 +7,10 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
 import { UsersModule } from '../users/users.module';
 import { QueueModule } from '../queue/queue.module';
+import { CantonModule } from '../canton/canton.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, UsersModule, QueueModule, ConfigModule],
+  imports: [PrismaModule, AuthModule, UsersModule, QueueModule, ConfigModule, CantonModule],
   controllers: [SpinController, SpinAdminController],
   providers: [SpinService],
   exports: [SpinService],

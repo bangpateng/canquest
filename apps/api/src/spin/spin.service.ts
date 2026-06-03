@@ -6,6 +6,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { LedgerQueueService } from '../queue/ledger-queue.service';
 import { UsersService } from '../users/users.service';
+import { QuestLedgerService } from '../canton/quest-ledger.service';
 import { randomBytes } from 'crypto';
 
 export interface SpinItemDto {
@@ -40,6 +41,7 @@ export class SpinService {
     private readonly prisma: PrismaService,
     private readonly ledgerQueue: LedgerQueueService,
     private readonly users: UsersService,
+    private readonly questLedger: QuestLedgerService,
   ) {}
 
   // ── Admin: CRUD spin items ──────────────────────────────────────────────────
@@ -246,6 +248,13 @@ export class SpinService {
       }
     }
 
+    // ── DAML Ledger: catat spin on-chain (best-effort, tidak block user) ──────
+    if (cantonPartyId) {
+      this.recordSpinOnLedger(cantonPartyId, result.id, item, spinCost).catch((err) =>
+        this.logger.warn(`DAML spin record failed (non-blocking): ${String(err)}`),
+      );
+    }
+
     this.logger.log(
       `Spin: user=${userId.slice(0, 8)} won="${item.label}" type=${item.rewardType} ${item.rewardCc > 0 ? item.rewardCc + ' CC' : ''} jobId=${jobId ?? 'none'}`,
     );
@@ -310,6 +319,56 @@ export class SpinService {
       this.prisma.spinResult.count({ where: { delivered: false } }),
     ]);
     return { totalSpins, ccDelivered, pending };
+  }
+
+  // ── DAML Ledger Integration ─────────────────────────────────────────────────
+
+  /**
+   * Catat spin ke DAML ledger menggunakan DailyLuckySpin + ExecuteSpin.
+   * Best-effort: error tidak memblokir user.
+   *
+   * Flow:
+   *   1. Ensure DailyLuckySpin contract ada untuk user ini
+   *   2. Exercise ExecuteSpin choice dengan tanggal hari ini
+   */
+  private async recordSpinOnLedger(
+    cantonPartyId: string,
+    spinResultId: string,
+    item: SpinItemDto,
+    spinCost: number,
+  ): Promise<void> {
+    if (!this.questLedger.isClaimSessionConfigured()) return;
+
+    const today = new Date().toISOString().split('T')[0]; // "YYYY-MM-DD"
+
+    // 1. Ensure DailyLuckySpin contract ada
+    const spinContract = await this.questLedger.ensureDailySpinContract({
+      userPartyId: cantonPartyId,
+      initialDate: today,
+    });
+
+    if (!spinContract.contractId) {
+      this.logger.warn(
+        `DAML: DailyLuckySpin contract not found for ${cantonPartyId.slice(0, 16)}... errors: ${spinContract.errors.join(', ')}`,
+      );
+      return;
+    }
+
+    // 2. Exercise ExecuteSpin — reward = spinCost (poin yang dipakai)
+    const spinResult = await this.questLedger.executeDailySpin({
+      spinContractId:  spinContract.contractId,
+      accountContractId: spinContract.contractId, // DailyLuckySpin tidak butuh accountCid terpisah
+      currentDate:     today,
+      spinReward:      item.rewardPoints > 0 ? item.rewardPoints : spinCost,
+    });
+
+    if (spinResult.contractId) {
+      this.logger.log(
+        `DAML ExecuteSpin OK: spinResultId=${spinResultId.slice(0, 8)} contractId=${spinResult.contractId.slice(0, 16)}...`,
+      );
+    } else if (spinResult.errors.length > 0) {
+      this.logger.warn(`DAML ExecuteSpin errors: ${spinResult.errors.join(', ')}`);
+    }
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
