@@ -162,7 +162,7 @@ export class SpinService {
     username: string | null,
     cantonPartyId: string | null,
   ): Promise<SpinResultDto> {
-    const spinCost = Number(process.env.SPIN_COST_POINTS ?? DEFAULT_SPIN_COST);
+    const spinCost = await this.getSpinCost();
 
     const totalEarned = await this.users.reconcileEarnPoints(userId);
     const spentResults = await this.prisma.spinResult.findMany({
@@ -271,7 +271,7 @@ export class SpinService {
 
   /** Points balance available for spinning (earn minus prior spin spend). */
   async getSpinState(userId: string) {
-    const spinCost = Number(process.env.SPIN_COST_POINTS ?? DEFAULT_SPIN_COST);
+    const spinCost = await this.getSpinCost();
     const earnPoints = await this.users.reconcileEarnPoints(userId);
     const spentResults = await this.prisma.spinResult.findMany({
       where: { userId },
