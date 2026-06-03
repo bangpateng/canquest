@@ -364,6 +364,13 @@ model SpinResult {
   createdAt    DateTime    @default(now())
 }
 
+/// Key-value store untuk konfigurasi aplikasi (spin cost, dll).
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
 /// Tracks which quests each user has completed.
 model QuestCompletion {
   id            String   @id @default(cuid())

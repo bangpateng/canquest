@@ -73,4 +73,17 @@ export class SpinAdminController {
   getStats() {
     return this.spin.getAdminStats();
   }
+
+  @Get('settings')
+  getSettings() {
+    return this.spin.getSettings();
+  }
+
+  @Patch('settings')
+  updateSettings(@Body() body: { spinCost?: number }) {
+    if (body.spinCost !== undefined) {
+      return this.spin.updateSpinCost(body.spinCost).then((spinCost) => ({ spinCost }));
+    }
+    return this.spin.getSettings();
+  }
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Plus, Trash2, Pencil, X, Check, AlertCircle, Ticket } from "lucide-react";
+import { Plus, Trash2, Pencil, X, Check, AlertCircle, Ticket, Settings2, Save } from "lucide-react";
 import { cn } from "@/lib/utils/utils";
 
 interface SpinItem {
@@ -21,6 +21,10 @@ interface SpinStats {
   totalSpins: number;
   ccDelivered: number;
   pending: number;
+}
+
+interface SpinSettings {
+  spinCost: number;
 }
 
 const REWARD_TYPES = [
@@ -47,6 +51,7 @@ const emptyForm = {
 export default function AdminSpinPage() {
   const [items, setItems] = useState<SpinItem[]>([]);
   const [stats, setStats] = useState<SpinStats | null>(null);
+  const [settings, setSettings] = useState<SpinSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -55,17 +60,30 @@ export default function AdminSpinPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Cost per spin editor
+  const [spinCostInput, setSpinCostInput] = useState("");
+  const [savingCost, setSavingCost] = useState(false);
+  const [costSaved, setCostSaved] = useState(false);
+  const [costError, setCostError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [itemsRes, statsRes] = await Promise.all([
+      const [itemsRes, statsRes, settingsRes] = await Promise.all([
         fetch("/api/admin/spin/items", { credentials: "include" }),
         fetch("/api/admin/spin/stats", { credentials: "include" }),
+        fetch("/api/admin/spin/settings", { credentials: "include" }),
       ]);
       if (itemsRes.ok) setItems((await itemsRes.json()) as SpinItem[]);
       if (statsRes.ok) setStats((await statsRes.json()) as SpinStats);
+      if (settingsRes.ok) {
+        const s = (await settingsRes.json()) as SpinSettings;
+        setSettings(s);
+        setSpinCostInput(String(s.spinCost));
+      }
     } catch {
       setError("Failed to load spin data.");
     } finally {
@@ -145,25 +163,55 @@ export default function AdminSpinPage() {
 
   async function handleDelete(id: string) {
     setDeleteId(id);
+    setDeleteError(null);
     try {
-      await fetch(`/api/admin/spin/items/${id}`, {
+      const res = await fetch(`/api/admin/spin/items/${id}`, {
         method: "DELETE",
         credentials: "include",
       });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { message?: string };
+        setDeleteError(data.message ?? "Failed to delete item.");
+        return;
+      }
       await load();
+    } catch {
+      setDeleteError("Network error. Try again.");
     } finally {
       setDeleteId(null);
     }
   }
 
-  async function handleToggleActive(item: SpinItem) {
-    await fetch(`/api/admin/spin/items/${item.id}`, {
-      method: "PATCH",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ active: false }),
-    });
-    await load();
+  async function handleSaveCost() {
+    const cost = parseInt(spinCostInput, 10);
+    if (!cost || cost < 1) {
+      setCostError("Cost must be at least 1 point.");
+      return;
+    }
+    setSavingCost(true);
+    setCostError(null);
+    setCostSaved(false);
+    try {
+      const res = await fetch("/api/admin/spin/settings", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ spinCost: cost }),
+      });
+      const data = (await res.json()) as { spinCost?: number; message?: string };
+      if (!res.ok) {
+        setCostError(data.message ?? "Failed to save cost.");
+        return;
+      }
+      setSettings({ spinCost: data.spinCost ?? cost });
+      setSpinCostInput(String(data.spinCost ?? cost));
+      setCostSaved(true);
+      setTimeout(() => setCostSaved(false), 2500);
+    } catch {
+      setCostError("Network error. Try again.");
+    } finally {
+      setSavingCost(false);
+    }
   }
 
   const totalProb = items.reduce((s, i) => s + i.probability, 0);
@@ -189,6 +237,64 @@ export default function AdminSpinPage() {
           <Plus className="h-4 w-4" />
           Add Prize
         </button>
+      </div>
+
+      {/* Cost Per Spin Settings */}
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Settings2 className="h-4 w-4 text-[var(--muted-foreground)]" />
+          <h2 className="text-sm font-bold">Spin Settings</h2>
+        </div>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex-1 min-w-[160px] max-w-[240px]">
+            <label className="mb-1.5 block text-xs font-semibold text-[var(--muted-foreground)]">
+              Cost per spin (points)
+            </label>
+            <input
+              type="number"
+              min="1"
+              value={spinCostInput}
+              onChange={(e) => {
+                setSpinCostInput(e.target.value);
+                setCostSaved(false);
+                setCostError(null);
+              }}
+              className={inputCls}
+              placeholder="50"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleSaveCost()}
+            disabled={savingCost}
+            className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90 disabled:opacity-50"
+          >
+            {savingCost ? (
+              "Saving…"
+            ) : costSaved ? (
+              <>
+                <Check className="h-4 w-4 text-emerald-300" />
+                Saved!
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4" />
+                Save Cost
+              </>
+            )}
+          </button>
+          {settings && (
+            <p className="text-xs text-[var(--muted-foreground)] self-end pb-2.5">
+              Current: <span className="font-bold text-[var(--foreground)]">{settings.spinCost} pts</span>
+            </p>
+          )}
+        </div>
+        {costError && (
+          <div className="mt-3 flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0 text-red-400" />
+            <p className="text-xs font-medium text-red-400">{costError}</p>
+          </div>
+        )}
       </div>
 
       {/* Stats */}
@@ -243,6 +349,21 @@ export default function AdminSpinPage() {
         <div className="flex items-start gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-4">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
           <p className="text-sm font-medium text-red-400">{error}</p>
+        </div>
+      )}
+
+      {/* Delete Error */}
+      {deleteError && (
+        <div className="flex items-start gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-4">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
+          <p className="text-sm font-medium text-red-400">Delete failed: {deleteError}</p>
+          <button
+            type="button"
+            onClick={() => setDeleteError(null)}
+            className="ml-auto shrink-0 text-red-400 hover:text-red-300"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 
@@ -324,7 +445,11 @@ export default function AdminSpinPage() {
                         disabled={deleteId === item.id}
                         className="rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-xs font-semibold text-red-400 transition-colors hover:bg-red-500/20 disabled:opacity-50"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        {deleteId === item.id ? (
+                          <span className="text-[10px]">…</span>
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5" />
+                        )}
                       </button>
                     </div>
                   </td>

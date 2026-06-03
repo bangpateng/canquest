@@ -108,7 +108,35 @@ export class SpinService {
   }
 
   async deleteItem(itemId: string): Promise<void> {
+    // Hapus SpinResults dulu (cascade manual) karena tidak ada onDelete: Cascade di schema
+    await this.prisma.spinResult.deleteMany({ where: { spinItemId: itemId } });
     await this.prisma.spinItem.delete({ where: { id: itemId } });
+  }
+
+  /** Ambil spin cost dari DB (AppSetting), fallback ke env / default. */
+  async getSpinCost(): Promise<number> {
+    const setting = await this.prisma.appSetting.findUnique({
+      where: { key: 'spin_cost_points' },
+    });
+    if (setting) return Math.max(1, parseInt(setting.value, 10) || DEFAULT_SPIN_COST);
+    return Number(process.env.SPIN_COST_POINTS ?? DEFAULT_SPIN_COST);
+  }
+
+  /** Update spin cost di DB. */
+  async updateSpinCost(cost: number): Promise<number> {
+    const value = Math.max(1, Math.round(cost));
+    await this.prisma.appSetting.upsert({
+      where: { key: 'spin_cost_points' },
+      create: { key: 'spin_cost_points', value: String(value) },
+      update: { value: String(value) },
+    });
+    return value;
+  }
+
+  /** Settings untuk admin panel. */
+  async getSettings() {
+    const spinCost = await this.getSpinCost();
+    return { spinCost };
   }
 
   // ── User: Execute Spin ──────────────────────────────────────────────────────
