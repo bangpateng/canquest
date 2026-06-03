@@ -26,8 +26,15 @@ export async function nestWithAdminAccessCookie(
   }
 
   const url = `${internalApiBase()}${pathSuffix.startsWith('/') ? pathSuffix : `/${pathSuffix}`}`;
-  const headers = new Headers(init.headers);
+  const headers = new Headers(init.headers as HeadersInit | undefined);
   headers.set('Authorization', `Bearer ${token}`);
+  // Preserve Content-Type from init if provided
+  if (init.headers && typeof init.headers === 'object' && !Array.isArray(init.headers)) {
+    const h = init.headers as Record<string, string>;
+    if (h['Content-Type'] && !headers.has('Content-Type')) {
+      headers.set('Content-Type', h['Content-Type']);
+    }
+  }
   try {
     const upstream = await fetch(url, { ...init, headers, cache: 'no-store' });
     return upstreamToNext(upstream);

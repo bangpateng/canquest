@@ -6,5 +6,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  return nestWithAdminAccessCookie(req, '/admin/spin/items', { method: 'POST' });
+  const body = await req.text();
+  return nestWithAdminAccessCookie(req, '/admin/spin/items', {
+    method: 'POST',
+    body,
+    headers: { 'Content-Type': 'application/json' },
+  });
 }

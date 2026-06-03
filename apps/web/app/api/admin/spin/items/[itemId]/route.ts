@@ -3,7 +3,12 @@ import { nestWithAdminAccessCookie } from '@/lib/auth/nest-proxy-admin-access';
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ itemId: string }> }) {
   const { itemId } = await params;
-  return nestWithAdminAccessCookie(req, `/admin/spin/items/${itemId}`, { method: 'PATCH' });
+  const body = await req.text();
+  return nestWithAdminAccessCookie(req, `/admin/spin/items/${itemId}`, {
+    method: 'PATCH',
+    body,
+    headers: { 'Content-Type': 'application/json' },
+  });
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ itemId: string }> }) {
