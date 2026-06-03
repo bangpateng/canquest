@@ -1,12 +1,13 @@
 sdk-version: 3.3.0-snapshot.20250930.0
-# Package name canquest-v3 — module Main (v1.0.0)
-# Nama baru karena canquest-v2 v0.1.0 sudah ada di ledger dengan module berbeda
-# (CanQuest.Quest.Completion) yang tidak kompatibel untuk upgrade.
-# Templates: UserAccount, Mission, DailyLuckySpin
+# Package name canquest-v3 — module Main (v1.1.0)
+# v1.0.0: UserAccount, Mission, DailyLuckySpin
+# v1.1.0: UserAccount (earnedPoints+spentPoints+DebitSpinCost),
+#          Mission, SpinExecution, SpinCcReward
+# Templates baru: SpinExecution (audit on-chain per spin), SpinCcReward (bukti CC delivery)
 # Test:      testFullWorkflow (Daml.Script)
 name: canquest-v3
 source: daml
-version: 1.0.0
+version: 1.1.0
 dependencies:
   - daml-prim
   - daml-stdlib
