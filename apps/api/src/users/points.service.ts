@@ -147,17 +147,45 @@ export class PointsService {
   /**
    * Earned points untuk semua user — dipakai leaderboard.
    *
-   * DESAIN: Leaderboard mengukur PRESTASI (total yang pernah diraih),
-   * bukan saldo. Spin cost TIDAK dikurangi di sini karena:
-   * 1. Sinkron dengan earnPoints yang ditampilkan di dashboard
-   * 2. Tidak bisa dimanipulasi (spin tidak bisa "menghapus" ranking)
-   * 3. Weekly/monthly filter tetap akurat (hanya earned dalam periode)
+   * SUMBER KEBENARAN TUNGGAL: Pakai User.earnPoints (sudah di-reconcile dari
+   * semua sumber: quest, spin, referral, manual credit) agar sinkron dengan
+   * dashboard, spin, dan quest.
    *
-   * Net available (earned - spin spent) hanya untuk halaman Spin & Dashboard.
+   * Untuk filter weekly/monthly: tetap pakai buildPointsByUser(since) karena
+   * User.earnPoints tidak punya timestamp. Lifetime ("all") pakai earnPoints.
+   *
+   * Spin cost TIDAK dikurangi — leaderboard mengukur PRESTASI (total diraih).
    */
   async buildNetPointsByUser(since?: Date): Promise<PointsAggregateRow[]> {
-    const earned = await this.buildPointsByUser(since);
-    return earned
+    // Untuk filter periode (weekly/monthly), tetap hitung dari activity records
+    if (since) {
+      const earned = await this.buildPointsByUser(since);
+      return earned
+        .filter((r) => r.points > 0)
+        .sort((a, b) => b.points - a.points);
+    }
+
+    // Untuk lifetime ("all"): pakai User.earnPoints sebagai sumber kebenaran tunggal
+    // agar sinkron dengan dashboard, spin, dan quest
+    const users = await this.prisma.user.findMany({
+      where: { earnPoints: { gt: 0 } },
+      select: {
+        id: true,
+        username: true,
+        displayName: true,
+        cantonPartyId: true,
+        earnPoints: true,
+      },
+    });
+
+    return users
+      .map((u) => ({
+        id: u.id,
+        username: u.username,
+        displayName: u.displayName,
+        cantonPartyId: u.cantonPartyId,
+        points: u.earnPoints,
+      }))
       .filter((r) => r.points > 0)
       .sort((a, b) => b.points - a.points);
   }
