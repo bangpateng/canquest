@@ -21,21 +21,22 @@ git reset --hard origin/master
 echo "    ✓ $(git log -1 --format='%h %s')"
 
 # ───────────────────────────────────────────────────────────────
-echo "==> [2/6] Install ALL dependencies dari root (npm workspaces)"
+echo "==> [2/6] Install dependencies"
 cd "${APP_DIR}"
 
-# Hapus hanya node_modules yang perlu, bukan seluruh tree
-# Ini mencegah native module (iconv-lite, bcrypt, dll) hilang
+# Hapus node_modules lama
 rm -rf node_modules apps/api/node_modules
 
+# Install dari root (workspace hoist)
 npm install --legacy-peer-deps
-echo "    ✓ node_modules installed ($(ls node_modules | wc -l) packages)"
+echo "    ✓ Root node_modules installed"
 
-# Rebuild native modules untuk versi Node yang aktif
+# Install ulang di apps/api agar @nestjs/platform-express dan deps lain
+# tersedia di apps/api/node_modules (fix: No driver HTTP error)
 cd "${API_DIR}"
-npm rebuild 2>/dev/null || true
+npm install --legacy-peer-deps
+echo "    ✓ API node_modules installed"
 cd "${APP_DIR}"
-echo "    ✓ Native modules rebuilt"
 
 # ───────────────────────────────────────────────────────────────
 echo "==> [3/6] Prisma generate + sync database schema"
