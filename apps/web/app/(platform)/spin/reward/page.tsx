@@ -10,8 +10,6 @@ import {
   AlertCircle,
   Trophy,
   Zap,
-  History,
-  ChevronRight,
   Sparkles,
 } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -45,15 +43,6 @@ interface SpinResult {
   message: string;
 }
 
-interface SpinHistory {
-  id: string;
-  item: SpinItem;
-  pointsSpent: number;
-  delivered: boolean;
-  ledgerTxId: string | null;
-  createdAt: string;
-}
-
 // ─── Palette ──────────────────────────────────────────────────────────────────
 
 /**
@@ -76,10 +65,8 @@ const PALETTE: [string, string][] = [
 ];
 
 function segmentColor(item: SpinItem, index: number): [string, string] {
-  // If admin set a non-default color, use it; otherwise cycle palette
   const isDefault = !item.color || item.color === "#6366f1" || item.color === "#d4ff3f";
   if (!isDefault) {
-    // Darken by ~15% for edge
     return [item.color, item.color + "cc"];
   }
   return PALETTE[index % PALETTE.length]!;
@@ -95,22 +82,14 @@ function segmentColor(item: SpinItem, index: number): [string, string] {
  *     measured from the canvas "natural" 0 (right / 3 o'clock).
  *   - We apply a global `rotation` offset so the wheel appears to spin.
  *   - The pointer is drawn OUTSIDE the canvas as a fixed SVG arrow at the top.
- *   - The pointer points straight DOWN from the top, i.e. at canvas angle = -π/2
- *     (or equivalently 3π/2). In our rotated frame, the pointer hits the segment
- *     whose mid-angle satisfies:  rotation + i*segAngle + segAngle/2 ≡ -π/2 (mod 2π)
+ *   - The pointer points straight DOWN from the top, i.e. at canvas angle = -π/2.
  *
  * Winner stop formula (precise):
  *   We want segment `winnerIndex` to be centered under the pointer.
- *   The pointer is at canvas angle = -π/2.
+ *   Pointer is at canvas angle = -π/2.
  *   Segment i center (unrotated) = i * segAngle + segAngle / 2
- *   After rotation R: segment center is at R + i*segAngle + segAngle/2
- *   We want: R + winnerIndex*segAngle + segAngle/2 ≡ -π/2  (mod 2π)
- *   => R_target = -π/2 - winnerIndex*segAngle - segAngle/2
- *
- *   To ensure the wheel spins forward (positive direction) and does several full
- *   rotations for drama, we add enough full turns:
- *   R_final = R_current + (R_target - R_current mod 2π) + N * 2π
- *   where N is chosen so R_final > R_current + minSpins * 2π.
+ *   We need: R + i*segAngle + segAngle/2 = -π/2  (mod 2π)
+ *   => R_target_base = -π/2 - winnerIndex*segAngle - segAngle/2
  */
 function SpinWheel({
   items,
@@ -124,12 +103,9 @@ function SpinWheel({
   onSpinComplete?: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  // rotationRef holds the current visual rotation in radians (accumulates)
   const rotationRef = useRef(0);
   const animFrameRef = useRef<number>(0);
-  // Trigger re-draw by updating this state
   const [displayRotation, setDisplayRotation] = useState(0);
-  // Track whether we're in the "idle spin" phase vs "stop" phase
   const idleSpinRef = useRef(false);
   const idleSpeedRef = useRef(0);
 
@@ -154,21 +130,20 @@ function SpinWheel({
       ctx.save();
       ctx.scale(dpr, dpr);
 
-      // ── Outer decorative ring ──────────────────────────────────────────────
+      // Outer decorative ring
       ctx.beginPath();
       ctx.arc(cx, cy, outerR + 7, 0, 2 * Math.PI);
       ctx.strokeStyle = "rgba(255,255,255,0.06)";
       ctx.lineWidth = 2;
       ctx.stroke();
 
-      // ── Segments ──────────────────────────────────────────────────────────
+      // Segments
       items.forEach((item, i) => {
         const [fill, edge] = segmentColor(item, i);
         const startAngle = rotation + i * segAngle;
         const endAngle = startAngle + segAngle;
         const midAngle = startAngle + segAngle / 2;
 
-        // Radial gradient: bright at outer edge, slightly darker toward center
         const gx1 = cx + outerR * 0.85 * Math.cos(midAngle);
         const gy1 = cy + outerR * 0.85 * Math.sin(midAngle);
         const gx2 = cx + innerR * Math.cos(midAngle);
@@ -184,7 +159,6 @@ function SpinWheel({
         ctx.fillStyle = grad;
         ctx.fill();
 
-        // Crisp white separator lines
         ctx.beginPath();
         ctx.moveTo(cx, cy);
         ctx.arc(cx, cy, outerR, startAngle, endAngle);
@@ -193,19 +167,17 @@ function SpinWheel({
         ctx.lineWidth = 1.5;
         ctx.stroke();
 
-        // ── Label ────────────────────────────────────────────────────────────
+        // Label
         ctx.save();
         ctx.translate(cx, cy);
         ctx.rotate(midAngle);
         ctx.textAlign = "right";
         ctx.textBaseline = "middle";
-
         const maxFontSize = Math.max(8, Math.min(13, 200 / items.length));
         ctx.font = `700 ${maxFontSize}px -apple-system, system-ui, sans-serif`;
         ctx.shadowColor = "rgba(0,0,0,0.8)";
         ctx.shadowBlur = 5;
         ctx.fillStyle = "#ffffff";
-
         const maxChars = items.length > 8 ? 9 : 12;
         const label =
           item.label.length > maxChars
@@ -215,7 +187,7 @@ function SpinWheel({
         ctx.restore();
       });
 
-      // ── Inner shadow vignette ──────────────────────────────────────────────
+      // Inner shadow vignette
       const vigGrd = ctx.createRadialGradient(cx, cy, innerR, cx, cy, innerR + 24);
       vigGrd.addColorStop(0, "rgba(0,0,0,0.55)");
       vigGrd.addColorStop(1, "rgba(0,0,0,0)");
@@ -224,14 +196,12 @@ function SpinWheel({
       ctx.fillStyle = vigGrd;
       ctx.fill();
 
-      // ── Center hub ────────────────────────────────────────────────────────
-      // Outer hub ring
+      // Center hub
       ctx.beginPath();
       ctx.arc(cx, cy, innerR + 2, 0, 2 * Math.PI);
       ctx.fillStyle = "rgba(255,255,255,0.08)";
       ctx.fill();
 
-      // Hub body
       const hubGrd = ctx.createRadialGradient(cx - 5, cy - 5, 2, cx, cy, innerR);
       hubGrd.addColorStop(0, "#1e293b");
       hubGrd.addColorStop(1, "#0f172a");
@@ -240,14 +210,12 @@ function SpinWheel({
       ctx.fillStyle = hubGrd;
       ctx.fill();
 
-      // Hub border glow
       ctx.beginPath();
       ctx.arc(cx, cy, innerR, 0, 2 * Math.PI);
       ctx.strokeStyle = "rgba(6,182,212,0.5)";
       ctx.lineWidth = 2.5;
       ctx.stroke();
 
-      // Hub center dot
       ctx.beginPath();
       ctx.arc(cx, cy, 7, 0, 2 * Math.PI);
       const dotGrd = ctx.createRadialGradient(cx - 2, cy - 2, 1, cx, cy, 7);
@@ -261,8 +229,7 @@ function SpinWheel({
     [items],
   );
 
-  // ── HiDPI setup ───────────────────────────────────────────────────────────
-
+  // HiDPI setup
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -274,13 +241,11 @@ function SpinWheel({
     canvas.style.height = `${size}px`;
   }, []);
 
-  // Re-draw whenever displayRotation or items change
   useEffect(() => {
     drawWheel(displayRotation);
   }, [drawWheel, displayRotation, items]);
 
-  // ── Idle spin (while waiting for API response) ────────────────────────────
-
+  // Idle spin (while waiting for API response)
   useEffect(() => {
     if (!spinning) {
       idleSpinRef.current = false;
@@ -305,49 +270,29 @@ function SpinWheel({
     };
   }, [spinning]);
 
-  // ── Stop animation (easing to winner) ────────────────────────────────────
-
+  // Stop animation (easing to winner)
   useEffect(() => {
     if (winnerIndex === null || spinning || items.length === 0) return;
 
     cancelAnimationFrame(animFrameRef.current);
 
     const segAngle = (2 * Math.PI) / items.length;
-
-    /**
-     * Target rotation so segment `winnerIndex` is centered under the top pointer.
-     *
-     * Pointer is at canvas angle = -π/2 (top of circle).
-     * Segment i center (unrotated) = i * segAngle + segAngle / 2
-     * We need: R + i*segAngle + segAngle/2 = -π/2  (mod 2π)
-     * => R_target_base = -π/2 - winnerIndex*segAngle - segAngle/2
-     */
     const targetBase = -Math.PI / 2 - winnerIndex * segAngle - segAngle / 2;
 
-    // Normalize current rotation to [0, 2π)
     const currentNorm = ((rotationRef.current % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
-    // Normalize target to [0, 2π)
     const targetNorm = ((targetBase % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
 
-    // How much extra we need to rotate from current normalized position
     let delta = targetNorm - currentNorm;
-    if (delta < 0) delta += 2 * Math.PI; // always go forward
+    if (delta < 0) delta += 2 * Math.PI;
 
-    // Add enough full rotations for drama (minimum 5 full spins)
     const minExtraSpins = 5;
     const totalDelta = delta + minExtraSpins * 2 * Math.PI;
 
     const startRotation = rotationRef.current;
     const endRotation = startRotation + totalDelta;
-
-    // Duration scales slightly with distance for natural feel
     const duration = 3200 + Math.min(totalDelta * 80, 1200);
     const startTime = performance.now();
 
-    /**
-     * Cubic ease-out: fast start, smooth deceleration.
-     * t=0 → 0, t=1 → 1, derivative at t=0 is 3 (fast), at t=1 is 0 (stopped).
-     */
     const easeOut = (t: number): number => 1 - Math.pow(1 - t, 4);
 
     const animate = (now: number) => {
@@ -362,7 +307,6 @@ function SpinWheel({
       if (t < 1) {
         animFrameRef.current = requestAnimationFrame(animate);
       } else {
-        // Snap to exact final position
         rotationRef.current = endRotation;
         setDisplayRotation(endRotation);
         onSpinComplete?.();
@@ -378,7 +322,7 @@ function SpinWheel({
 
   return (
     <div className="relative flex items-center justify-center select-none">
-      {/* Ambient glow behind wheel */}
+      {/* Ambient glow */}
       <div
         className="pointer-events-none absolute rounded-full"
         style={{
@@ -416,7 +360,6 @@ function SpinWheel({
               <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#f43f5e" floodOpacity="0.5" />
             </filter>
           </defs>
-          {/* Teardrop pointer */}
           <path
             d="M14 2 L3 28 Q14 22 25 28 Z"
             fill="url(#ptr-grad)"
@@ -428,7 +371,6 @@ function SpinWheel({
             stroke="rgba(255,255,255,0.35)"
             strokeWidth="1"
           />
-          {/* Tip highlight */}
           <circle cx="14" cy="4" r="2.5" fill="rgba(255,255,255,0.4)" />
         </svg>
       </div>
@@ -450,73 +392,12 @@ function SpinWheel({
 
 // ─── Reward Icon ──────────────────────────────────────────────────────────────
 
-function RewardIcon({ rewardType, size = "sm" }: { rewardType: string; size?: "sm" | "md" | "lg" }) {
-  const cls =
-    size === "lg" ? "h-8 w-8" : size === "md" ? "h-5 w-5" : "h-4 w-4";
+function RewardIcon({ rewardType, size = "sm" }: { rewardType: string; size?: "sm" | "md" }) {
+  const cls = size === "md" ? "h-5 w-5" : "h-4 w-4";
   if (rewardType === "cc") return <Coins className={cn(cls, "text-amber-400")} />;
   if (rewardType === "points") return <Star className={cn(cls, "text-violet-400")} />;
   if (rewardType === "invite_code") return <Zap className={cn(cls, "text-cyan-400")} />;
   return <Gift className={cn(cls, "text-slate-400")} />;
-}
-
-// ─── History Row ──────────────────────────────────────────────────────────────
-
-function HistoryRow({ entry }: { entry: SpinHistory }) {
-  const date = new Date(entry.createdAt);
-  const timeStr = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  const dateStr = date.toLocaleDateString([], { month: "short", day: "numeric" });
-
-  return (
-    <div className="flex items-center gap-3 py-2.5">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.04]">
-        <RewardIcon rewardType={entry.item.rewardType} size="sm" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-slate-200">{entry.item.label}</p>
-        <p className="text-xs text-slate-500">
-          {dateStr} · {timeStr} · {entry.pointsSpent} pts
-        </p>
-      </div>
-      <div className="shrink-0">
-        {entry.delivered ? (
-          <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
-            Delivered
-          </span>
-        ) : (
-          <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400">
-            Pending
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── Prize Legend ─────────────────────────────────────────────────────────────
-
-function PrizeLegend({ items }: { items: SpinItem[] }) {
-  return (
-    <div className="grid grid-cols-2 gap-1.5">
-      {items.map((item, i) => {
-        const [fill] = segmentColor(item, i);
-        return (
-          <div
-            key={item.id}
-            className="flex items-center gap-2 rounded-lg bg-white/[0.03] px-2.5 py-1.5"
-          >
-            <div
-              className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-white/10"
-              style={{ backgroundColor: fill }}
-            />
-            <span className="truncate text-xs font-medium text-slate-300">{item.label}</span>
-            <span className="ml-auto shrink-0 text-[10px] font-semibold text-slate-500">
-              {item.probability}%
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
@@ -524,7 +405,6 @@ function PrizeLegend({ items }: { items: SpinItem[] }) {
 export default function SpinRewardPage() {
   const [items, setItems] = useState<SpinItem[]>([]);
   const [state, setSpinState] = useState<SpinState | null>(null);
-  const [history, setHistory] = useState<SpinHistory[]>([]);
   const [spinning, setSpinning] = useState(false);
   const [winnerIndex, setWinnerIndex] = useState<number | null>(null);
   const [lastResult, setLastResult] = useState<SpinResult | null>(null);
@@ -534,17 +414,12 @@ export default function SpinRewardPage() {
 
   const loadData = useCallback(async () => {
     try {
-      const [itemsRes, stateRes, histRes] = await Promise.all([
+      const [itemsRes, stateRes] = await Promise.all([
         fetch("/api/spin/items", { credentials: "include" }),
         fetch("/api/spin/state", { credentials: "include" }),
-        fetch("/api/spin/history?pageSize=5", { credentials: "include" }),
       ]);
       if (itemsRes.ok) setItems((await itemsRes.json()) as SpinItem[]);
       if (stateRes.ok) setSpinState((await stateRes.json()) as SpinState);
-      if (histRes.ok) {
-        const h = (await histRes.json()) as { items: SpinHistory[] };
-        setHistory(h.items ?? []);
-      }
     } catch {
       setError("Failed to load spin data.");
     } finally {
@@ -577,10 +452,7 @@ export default function SpinRewardPage() {
         return;
       }
 
-      // Find winner index in the items array
       const idx = items.findIndex((i) => i.id === data.item.id);
-
-      // Stop idle spin, then trigger the stop animation
       setSpinning(false);
       setWinnerIndex(idx >= 0 ? idx : 0);
       setLastResult(data);
@@ -590,10 +462,8 @@ export default function SpinRewardPage() {
     }
   }
 
-  // Called when the stop animation finishes
   function handleSpinComplete() {
     setShowResult(true);
-    // Refresh data after a short delay
     setTimeout(() => {
       void loadData();
     }, 1500);
@@ -645,9 +515,6 @@ export default function SpinRewardPage() {
             <h1 className="text-xl font-bold tracking-tight text-slate-100">
               Lucky Spin
             </h1>
-            <p className="text-sm text-slate-400">
-              Spend points for a chance to win CC &amp; bonus rewards
-            </p>
           </div>
           {state && (
             <div className="ml-auto hidden sm:block">
@@ -766,27 +633,15 @@ export default function SpinRewardPage() {
                     onClick={() => void handleSpin()}
                     disabled={!canSpin}
                     className={cn(
-                      "group relative w-full overflow-hidden rounded-2xl px-8 py-4 text-base font-bold transition-all duration-300",
+                      "group relative w-full overflow-hidden rounded-lg px-8 py-4 text-base font-semibold transition-colors duration-200",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:ring-offset-2",
+                      "disabled:pointer-events-none disabled:opacity-50",
                       canSpin
-                        ? "text-white"
-                        : "cursor-not-allowed opacity-50",
+                        ? "bg-emerald-500 text-white hover:bg-emerald-400 active:bg-emerald-600"
+                        : "bg-emerald-500 text-white",
                     )}
-                    style={
-                      canSpin
-                        ? {
-                            background:
-                              "linear-gradient(135deg, #06b6d4 0%, #6366f1 50%, #8b5cf6 100%)",
-                            boxShadow:
-                              "0 8px 32px rgba(6,182,212,0.35), 0 0 0 1px rgba(255,255,255,0.1)",
-                          }
-                        : {
-                            background: "rgba(255,255,255,0.05)",
-                            border: "1px solid rgba(255,255,255,0.08)",
-                            color: "rgba(255,255,255,0.3)",
-                          }
-                    }
                   >
-                    {/* Shimmer effect on hover */}
+                    {/* Shimmer on hover */}
                     {canSpin && (
                       <span
                         className="pointer-events-none absolute inset-0 -translate-x-full skew-x-12 bg-white/10 transition-transform duration-700 group-hover:translate-x-full"
@@ -795,12 +650,12 @@ export default function SpinRewardPage() {
                     )}
                     {spinning ? (
                       <span className="flex items-center justify-center gap-2.5">
-                        <LoadingSpinner size="sm" />
+                        <LoadingSpinner size="sm" tone="inherit" />
                         <span>Spinning…</span>
                       </span>
                     ) : winnerIndex !== null && !showResult ? (
                       <span className="flex items-center justify-center gap-2.5">
-                        <LoadingSpinner size="sm" />
+                        <LoadingSpinner size="sm" tone="inherit" />
                         <span>Revealing…</span>
                       </span>
                     ) : (
@@ -808,10 +663,7 @@ export default function SpinRewardPage() {
                         <Ticket className="h-5 w-5" />
                         <span>Spin Now</span>
                         {state && (
-                          <span
-                            className="rounded-full px-2 py-0.5 text-xs font-semibold"
-                            style={{ background: "rgba(0,0,0,0.25)" }}
-                          >
+                          <span className="rounded-full bg-black/20 px-2 py-0.5 text-xs font-semibold">
                             {state.spinCost} pts
                           </span>
                         )}
@@ -836,17 +688,6 @@ export default function SpinRewardPage() {
                     </div>
                   )}
                 </div>
-              </div>
-
-              {/* Divider */}
-              <div style={{ height: 1, background: "rgba(255,255,255,0.05)" }} />
-
-              {/* Prize legend */}
-              <div className="px-6 py-5">
-                <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-500">
-                  Prize Pool
-                </p>
-                <PrizeLegend items={items} />
               </div>
             </>
           )}
@@ -885,33 +726,6 @@ export default function SpinRewardPage() {
                   {state.spinCost} pts
                 </p>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── Spin History ─────────────────────────────────────────────────── */}
-        {history.length > 0 && (
-          <div
-            className="rounded-2xl"
-            style={{
-              background: "rgba(15,23,42,0.8)",
-              border: "1px solid rgba(255,255,255,0.07)",
-            }}
-          >
-            <div
-              className="flex items-center justify-between px-5 py-4"
-              style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}
-            >
-              <div className="flex items-center gap-2">
-                <History className="h-4 w-4 text-slate-500" />
-                <p className="text-sm font-semibold text-slate-300">Recent Spins</p>
-              </div>
-              <ChevronRight className="h-4 w-4 text-slate-600" />
-            </div>
-            <div className="divide-y px-5" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
-              {history.map((entry) => (
-                <HistoryRow key={entry.id} entry={entry} />
-              ))}
             </div>
           </div>
         )}
