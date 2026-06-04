@@ -464,9 +464,8 @@ export default function SpinRewardPage() {
 
   function handleSpinComplete() {
     setShowResult(true);
-    setTimeout(() => {
-      void loadData();
-    }, 1500);
+    // Immediately refresh state so points balance updates right after winning
+    void loadData();
   }
 
   const canSpin =
