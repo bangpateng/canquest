@@ -1,31 +1,48 @@
+"use client";
+
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
-import { cookies } from "next/headers";
-import { Plus, Sparkles } from "lucide-react";
-import { CQ_ADMIN_ACCESS_COOKIE } from "@/lib/auth/auth-cookies";
-import { internalApiBase } from "@/lib/api/internal-api-url";
+import { useCallback, useEffect, useState } from "react";
+import { Plus, Sparkles, RefreshCw } from "lucide-react";
 import { AdminQuestTable, type AdminQuestRow } from "@/components/admin/admin-quest-table";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
-async function fetchCampaigns(): Promise<AdminQuestRow[] | null> {
-  const jar = await cookies();
-  const token = jar.get(CQ_ADMIN_ACCESS_COOKIE)?.value;
-  if (!token) return null;
-  try {
-    const res = await fetch(`${internalApiBase()}/admin/quests?kind=CAMPAIGN`, {
-      headers: { Authorization: `Bearer ${token}` },
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    return res.json() as Promise<AdminQuestRow[]>;
-  } catch {
-    return null;
+export default function AdminEarnPage() {
+  const [quests, setQuests] = useState<AdminQuestRow[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/quests?kind=CAMPAIGN", { cache: "no-store" });
+      if (!res.ok) {
+        setError("Failed to load campaigns.");
+        return;
+      }
+      setQuests((await res.json()) as AdminQuestRow[]);
+    } catch {
+      setError("Network error. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function handleDelete(id: string) {
+    const res = await fetch(`/api/admin/quests/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = (await res.json().catch(() => ({}))) as { message?: string };
+      throw new Error(data.message ?? "Delete failed");
+    }
+    // Refresh list after successful delete
+    await load();
   }
-}
-
-/** Admin — partner campaigns shown in user menu Earn */
-export default async function AdminEarnPage() {
-  const quests = await fetchCampaigns();
 
   return (
     <div className="space-y-8">
@@ -37,24 +54,45 @@ export default async function AdminEarnPage() {
           </div>
           <h1 className="type-page-title">Earn campaigns</h1>
           <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-            Partner quests (Alpend, etc.) — banner, tasks, rewards, invite codes, and winners.
+            Partner quests — banner, tasks, rewards, invite codes, and winners.
           </p>
         </div>
-        <Link
-          href="/admin/earn/new"
-          className={cn(buttonVariants(), "gap-2")}
-        >
-          <Plus className="h-4 w-4" />
-          New campaign
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={loading}
+            className={cn(buttonVariants({ variant: "secondary" }), "gap-2")}
+          >
+            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+            Refresh
+          </button>
+          <Link href="/admin/earn/new" className={cn(buttonVariants(), "gap-2")}>
+            <Plus className="h-4 w-4" />
+            New campaign
+          </Link>
+        </div>
       </div>
 
-      <AdminQuestTable
-        quests={quests}
-        emptyHref="/admin/earn/new"
-        emptyLabel="Create your first campaign"
-        showWinners
-      />
+      {error && (
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-400">
+          {error}
+        </div>
+      )}
+
+      {loading && !quests ? (
+        <div className="flex items-center justify-center py-16">
+          <LoadingSpinner size="xl" tone="muted" />
+        </div>
+      ) : (
+        <AdminQuestTable
+          quests={quests}
+          emptyHref="/admin/earn/new"
+          emptyLabel="Create your first campaign"
+          showWinners
+          onDelete={handleDelete}
+        />
+      )}
     </div>
   );
 }

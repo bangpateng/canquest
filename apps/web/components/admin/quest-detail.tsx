@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Download, Edit, Plus, Trash2, Users, Trophy } from "lucide-react";
+import { ChevronLeft, Download, Plus, Trash2, Users, Trophy } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { buttonVariants } from "@/components/ui/button";
 import { underlineTabClass } from "@/lib/ui/ui-button-styles";
@@ -20,6 +20,7 @@ import {
   questTaskTypeLabel,
   resolveQuestTaskDisplayTitle,
 } from "@/lib/quest/quest-types";
+import type { QuestSocialLink } from "@/lib/quest/quest-social-links";
 
 interface Task {
   id: string;
@@ -49,8 +50,8 @@ interface QuestData {
   rewardType: string;
   maxWinners: number | null;
   tags: string[];
-  socialLinks?: { platform: string; url: string }[];
-  questKind?: string;
+  socialLinks?: QuestSocialLink[];
+  questKind?: "CAMPAIGN" | "EARN_HUB";
   tasks: Task[];
   _count: { completions: number; winnerDraws: number };
 }
@@ -108,14 +109,30 @@ export function QuestDetail({ questId }: { questId: string }) {
   }
 
   async function handleDeleteQuest() {
-    if (!confirm("Delete this quest and all its data? This cannot be undone.")) return;
+    if (
+      !confirm(
+        `Delete "${quest?.title ?? "this quest"}" and all its data?\n\nThis will permanently remove all tasks, completions, and winner records. This cannot be undone.`,
+      )
+    )
+      return;
     setDeleting(true);
-    await fetch(`/api/admin/quests/${questId}`, { method: "DELETE" });
-    router.push("/admin");
+    try {
+      const res = await fetch(`/api/admin/quests/${questId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { message?: string };
+        alert(data.message ?? "Delete failed. Try again.");
+        return;
+      }
+      // Redirect back to the correct list page
+      router.push(isEarnHub ? "/admin/quests" : "/admin/earn");
+    } finally {
+      setDeleting(false);
+    }
   }
 
   async function handleAddTask(e: React.FormEvent) {
     e.preventDefault();
+    if (!quest) return;
     setTaskSaving(true);
     const res = await fetch(`/api/admin/quests/${questId}/tasks`, {
       method: "POST",
