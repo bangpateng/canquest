@@ -250,7 +250,7 @@ export class SpinService {
 
     // ── DAML Ledger: catat spin on-chain (best-effort, tidak block user) ──────
     if (cantonPartyId) {
-      this.recordSpinOnLedger(cantonPartyId, result.id, item, spinCost).catch((err) =>
+      this.recordSpinOnLedger(cantonPartyId, result.id, item, spinCost, username).catch((err) =>
         this.logger.warn(`DAML spin record failed (non-blocking): ${String(err)}`),
       );
     }
@@ -324,50 +324,55 @@ export class SpinService {
   // ── DAML Ledger Integration ─────────────────────────────────────────────────
 
   /**
-   * Catat spin ke DAML ledger menggunakan DailyLuckySpin + ExecuteSpin.
+   * Catat spin ke DAML ledger menggunakan SpinExecution contract (canquest-v3).
    * Best-effort: error tidak memblokir user.
    *
    * Flow:
-   *   1. Ensure DailyLuckySpin contract ada untuk user ini
-   *   2. Exercise ExecuteSpin choice dengan tanggal hari ini
+   *   1. Cari UserAccount contract untuk user ini (untuk DebitSpinCost)
+   *   2. Create SpinExecution contract sebagai audit trail on-chain
    */
   private async recordSpinOnLedger(
     cantonPartyId: string,
     spinResultId: string,
     item: SpinItemDto,
     spinCost: number,
+    username: string | null,
   ): Promise<void> {
     if (!this.questLedger.isClaimSessionConfigured()) return;
 
-    const today = new Date().toISOString().split('T')[0]; // "YYYY-MM-DD"
-
-    // 1. Ensure DailyLuckySpin contract ada
-    const spinContract = await this.questLedger.ensureDailySpinContract({
-      userPartyId: cantonPartyId,
-      initialDate: today,
-    });
-
-    if (!spinContract.contractId) {
-      this.logger.warn(
-        `DAML: DailyLuckySpin contract not found for ${cantonPartyId.slice(0, 16)}... errors: ${spinContract.errors.join(', ')}`,
-      );
-      return;
+    // Cari UserAccount contract untuk DebitSpinCost (opsional — best-effort)
+    let accountContractId: string | null = null;
+    try {
+      const acctResult = await this.questLedger.ensureUserAccount({
+        userPartyId: cantonPartyId,
+        username: username ?? cantonPartyId.split('::')[0],
+      });
+      accountContractId = acctResult.contractId;
+    } catch (err) {
+      this.logger.warn(`DAML: ensureUserAccount failed (non-blocking): ${String(err)}`);
     }
 
-    // 2. Exercise ExecuteSpin — reward = spinCost (poin yang dipakai)
-    const spinResult = await this.questLedger.executeDailySpin({
-      spinContractId:  spinContract.contractId,
-      accountContractId: spinContract.contractId, // DailyLuckySpin tidak butuh accountCid terpisah
-      currentDate:     today,
-      spinReward:      item.rewardPoints > 0 ? item.rewardPoints : spinCost,
+    // Create SpinExecution contract
+    const execResult = await this.questLedger.recordSpinExecution({
+      userPartyId:      cantonPartyId,
+      username:         username ?? cantonPartyId.split('::')[0],
+      spinResultId,
+      spinItemId:       item.id,
+      spinItemLabel:    item.label,
+      rewardType:       item.rewardType,
+      rewardCc:         item.rewardCc,
+      rewardPoints:     item.rewardPoints,
+      spinCost,
+      executedAt:       new Date().toISOString(),
+      accountContractId,
     });
 
-    if (spinResult.contractId) {
+    if (execResult.spinExecutionContractId) {
       this.logger.log(
-        `DAML ExecuteSpin OK: spinResultId=${spinResultId.slice(0, 8)} contractId=${spinResult.contractId.slice(0, 16)}...`,
+        `DAML SpinExecution OK: spinResultId=${spinResultId.slice(0, 8)} contractId=${execResult.spinExecutionContractId.slice(0, 16)}...`,
       );
-    } else if (spinResult.errors.length > 0) {
-      this.logger.warn(`DAML ExecuteSpin errors: ${spinResult.errors.join(', ')}`);
+    } else if (execResult.errors.length > 0) {
+      this.logger.warn(`DAML SpinExecution errors: ${execResult.errors.join(', ')}`);
     }
   }
 

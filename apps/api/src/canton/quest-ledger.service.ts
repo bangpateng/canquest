@@ -4,20 +4,22 @@ import { randomUUID } from 'crypto';
 import { CantonLedgerService } from './canton-ledger.service';
 
 /**
- * DAML template paths — module Main (canquest-v2 v0.2.0)
+ * DAML template paths — module Main (canquest-v3 v0.3.0)
  *
  * Contract layout (packages/daml/daml/Main.daml):
- *   Main:UserAccount     — akun user dengan poin
- *   Main:Mission         — misi FCFS dengan kuota terbatas
- *   Main:DailyLuckySpin  — spin harian (1x per hari)
+ *   Main:UserAccount    — akun user dengan earnedPoints & spentPoints
+ *   Main:Mission        — misi FCFS dengan kuota terbatas
+ *   Main:SpinExecution  — bukti on-chain satu putaran spin
+ *   Main:SpinCcReward   — bukti on-chain CC reward dari spin sudah dikirim
  *
  * Template ID format: #<packageName>:<Module>:<Template>
- * Example: #canquest-v2:Main:UserAccount
+ * Example: #canquest-v3:Main:UserAccount
  */
 const TPL = {
-  UserAccount:    'Main:UserAccount',
-  Mission:        'Main:Mission',
-  DailyLuckySpin: 'Main:DailyLuckySpin',
+  UserAccount:   'Main:UserAccount',
+  Mission:       'Main:Mission',
+  SpinExecution: 'Main:SpinExecution',
+  SpinCcReward:  'Main:SpinCcReward',
 } as const;
 
 // ── Result types ──────────────────────────────────────────────────────────────
@@ -38,6 +40,12 @@ export interface MissionClaimLedgerResult {
 export interface SpinLedgerResult {
   ledgerEnabled: boolean;
   contractId: string | null;
+  errors: string[];
+}
+
+export interface SpinExecutionLedgerResult {
+  ledgerEnabled: boolean;
+  spinExecutionContractId: string | null;
   errors: string[];
 }
 
@@ -211,10 +219,11 @@ export class QuestLedgerService {
     const res = await this.ledger.createContract(
       tpl,
       {
-        admin:       operator,
-        userAddress: params.userPartyId,
-        username:    params.username,
-        totalPoints: 0,
+        admin:        operator,
+        userAddress:  params.userPartyId,
+        username:     params.username,
+        earnedPoints: 0,
+        spentPoints:  0,
       },
       [operator],
       `user-account-${params.username}-${randomUUID()}`,
@@ -380,25 +389,36 @@ export class QuestLedgerService {
     return result;
   }
 
-  // ── DailyLuckySpin ──────────────────────────────────────────────────────────
+  // ── SpinExecution ───────────────────────────────────────────────────────────
 
   /**
-   * Create a DailyLuckySpin contract for a user.
-   * Called once when user first accesses the spin feature.
-   * Idempotent: returns existing contract if already created.
+   * Create a SpinExecution contract on the ledger.
+   * Records one spin on-chain: who spun, what they won, cost, timestamp.
+   * Also calls DebitSpinCost on UserAccount if accountContractId is provided.
+   *
+   * Called when: user executes a spin (best-effort, non-blocking).
    */
-  async ensureDailySpinContract(params: {
-    userPartyId: string;
-    initialDate: string; // ISO date string "YYYY-MM-DD"
-  }): Promise<SpinLedgerResult> {
-    const result: SpinLedgerResult = {
+  async recordSpinExecution(params: {
+    userPartyId:   string;
+    username:      string;
+    spinResultId:  string;   // DB SpinResult.id — idempotency key
+    spinItemId:    string;
+    spinItemLabel: string;
+    rewardType:    string;   // "cc" | "points" | "invite_code" | "none"
+    rewardCc:      number;
+    rewardPoints:  number;
+    spinCost:      number;
+    executedAt:    string;   // ISO timestamp
+    accountContractId?: string | null;
+  }): Promise<SpinExecutionLedgerResult> {
+    const result: SpinExecutionLedgerResult = {
       ledgerEnabled: false,
-      contractId: null,
+      spinExecutionContractId: null,
       errors: [],
     };
     if (!this.isClaimSessionConfigured()) return result;
 
-    const tpl = this.templateId(TPL.DailyLuckySpin);
+    const tpl = this.templateId(TPL.SpinExecution);
     const operator = this.operatorPartyId;
     if (!operator) {
       result.errors.push('Canton operator party not configured');
@@ -413,87 +433,85 @@ export class QuestLedgerService {
       this.logger.warn(`grantUserRights(operator) failed: ${String(err)}`),
     );
 
-    // Idempotency: check if spin contract already exists for this user
-    const existing = this.findContractId(
-      await this.ledger.queryActiveContracts(tpl, [operator]),
-      (args) => args.userAddress === params.userPartyId,
-    );
-    if (existing) {
-      result.contractId = existing;
-      return result;
+    // 1. Debit spin cost on UserAccount (if we have the contract ID)
+    if (params.accountContractId) {
+      const acctTpl = this.templateId(TPL.UserAccount);
+      const { ok: debitOk, text: debitText } = await this.ledger.exerciseChoice(
+        params.accountContractId,
+        acctTpl,
+        'DebitSpinCost',
+        { spinCost: params.spinCost },
+        [operator],
+        `debit-spin-${params.spinResultId}`,
+      );
+      if (!debitOk) {
+        result.errors.push(this.formatLedgerError(debitText, 'DebitSpinCost failed'));
+        // Non-fatal: still record the SpinExecution for audit trail
+      } else {
+        this.logger.log(`DebitSpinCost: -${params.spinCost} pts for ${params.userPartyId.split('::')[0]}`);
+      }
     }
 
-    // Parse ISO date → DAML Date format { year, month, day }
-    const [year, month, day] = params.initialDate.split('-').map(Number);
-
+    // 2. Create SpinExecution contract (audit trail on-chain)
     const res = await this.ledger.createContract(
       tpl,
       {
-        admin:        operator,
-        userAddress:  params.userPartyId,
-        // DAML Date is represented as days since epoch in JSON API
-        // Use ISO string and let the ledger parse it
-        lastSpinDate: { year, month, day },
+        admin:         operator,
+        userAddress:   params.userPartyId,
+        username:      params.username,
+        spinResultId:  params.spinResultId,
+        spinItemId:    params.spinItemId,
+        spinItemLabel: params.spinItemLabel,
+        rewardType:    params.rewardType,
+        rewardCc:      params.rewardCc,
+        rewardPoints:  params.rewardPoints,
+        spinCost:      params.spinCost,
+        executedAt:    params.executedAt,
       },
       [operator],
-      `daily-spin-${params.userPartyId}-${randomUUID()}`,
+      `spin-exec-${params.spinResultId}`,
     );
 
     if (res.ok && res.contractId) {
-      this.logger.log(`DailyLuckySpin created: ${params.userPartyId.split('::')[0]}`);
-      result.contractId = res.contractId;
+      this.logger.log(
+        `SpinExecution created: user=${params.userPartyId.split('::')[0]} item="${params.spinItemLabel}" reward=${params.rewardType}`,
+      );
+      result.spinExecutionContractId = res.contractId;
     } else {
-      result.errors.push(this.formatLedgerError(res.error, 'Failed to create DailyLuckySpin'));
+      result.errors.push(this.formatLedgerError(res.error, 'Failed to create SpinExecution'));
     }
     return result;
   }
 
   /**
-   * Execute a daily spin by exercising ExecuteSpin choice.
-   * The DAML contract enforces 1-spin-per-day — if already spun today, ledger rejects.
-   *
-   * Called when: user clicks spin button.
+   * Confirm CC delivery by exercising ConfirmCcDelivered on a SpinExecution contract.
+   * Called after BullMQ job successfully sends CC via Splice.
+   * Creates a SpinCcReward contract as permanent on-chain proof.
    */
-  async executeDailySpin(params: {
-    spinContractId: string;
-    accountContractId: string;
-    currentDate: string; // ISO date string "YYYY-MM-DD"
-    spinReward: number;
-  }): Promise<SpinLedgerResult> {
-    const result: SpinLedgerResult = {
-      ledgerEnabled: false,
-      contractId: null,
-      errors: [],
-    };
-    if (!this.isClaimSessionConfigured()) return result;
-
-    const tpl = this.templateId(TPL.DailyLuckySpin);
+  async confirmSpinCcDelivered(params: {
+    spinExecutionContractId: string;
+    spliceTxId: string;
+  }): Promise<{ ok: boolean; ccRewardContractId: string | null; errors: string[] }> {
+    if (!this.isClaimSessionConfigured()) {
+      return { ok: false, ccRewardContractId: null, errors: ['Claim session ledger disabled'] };
+    }
+    const tpl = this.templateId(TPL.SpinExecution);
     const operator = this.operatorPartyId;
     if (!operator) {
-      result.errors.push('Canton operator party not configured');
-      return result;
+      return { ok: false, ccRewardContractId: null, errors: ['Canton operator party not configured'] };
     }
-    const reachErr = await this.ensureReachable();
-    if (reachErr) { result.errors.push(reachErr); return result; }
-
-    result.ledgerEnabled = true;
-
-    const [year, month, day] = params.currentDate.split('-').map(Number);
 
     const { ok, text } = await this.ledger.exerciseChoice(
-      params.spinContractId,
+      params.spinExecutionContractId,
       tpl,
-      'ExecuteSpin',
-      {
-        currentDate: { year, month, day },
-        accountCid:  params.accountContractId,
-        spinReward:  params.spinReward,
-      },
+      'ConfirmCcDelivered',
+      { spliceTxId: params.spliceTxId },
       [operator],
-      `execute-spin-${params.spinContractId}-${randomUUID()}`,
+      `confirm-cc-${params.spinExecutionContractId}-${randomUUID()}`,
     );
 
     if (ok) {
+      let ccRewardContractId: string | null = null;
       try {
         const parsed = JSON.parse(text) as Record<string, unknown>;
         const stack: unknown[] = [parsed];
@@ -503,19 +521,48 @@ export class QuestLedgerService {
           if (Array.isArray(cur)) { stack.push(...cur); continue; }
           const obj = cur as Record<string, unknown>;
           if (typeof obj.contractId === 'string') {
-            result.contractId = obj.contractId;
+            ccRewardContractId = obj.contractId;
             break;
           }
           for (const v of Object.values(obj)) stack.push(v);
         }
       } catch { /* ignore */ }
       this.logger.log(
-        `ExecuteSpin: +${params.spinReward} pts user=${params.spinContractId.slice(0, 12)}... date=${params.currentDate}`,
+        `ConfirmCcDelivered: spinExec=${params.spinExecutionContractId.slice(0, 12)}... spliceTx=${params.spliceTxId.slice(0, 16)}`,
       );
-    } else {
-      result.errors.push(this.formatLedgerError(text, 'ExecuteSpin failed (already spun today or ledger error)'));
+      return { ok: true, ccRewardContractId, errors: [] };
     }
-    return result;
+    return {
+      ok: false,
+      ccRewardContractId: null,
+      errors: [this.formatLedgerError(text, 'ConfirmCcDelivered failed')],
+    };
+  }
+
+  // ── @deprecated stubs kept for backward compat ──────────────────────────────
+
+  /** @deprecated Use recordSpinExecution() instead */
+  async ensureDailySpinContract(params: {
+    userPartyId: string;
+    initialDate: string;
+  }): Promise<SpinLedgerResult> {
+    this.logger.warn(
+      `ensureDailySpinContract() called — DailyLuckySpin removed in canquest-v3. Use recordSpinExecution().`,
+    );
+    return { ledgerEnabled: false, contractId: null, errors: ['DailyLuckySpin template removed — use recordSpinExecution()'] };
+  }
+
+  /** @deprecated Use recordSpinExecution() instead */
+  async executeDailySpin(params: {
+    spinContractId: string;
+    accountContractId: string;
+    currentDate: string;
+    spinReward: number;
+  }): Promise<SpinLedgerResult> {
+    this.logger.warn(
+      `executeDailySpin() called — DailyLuckySpin removed in canquest-v3. Use recordSpinExecution().`,
+    );
+    return { ledgerEnabled: false, contractId: null, errors: ['DailyLuckySpin template removed — use recordSpinExecution()'] };
   }
 
   // ── Legacy stubs (kept for backward compatibility) ──────────────────────────
