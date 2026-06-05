@@ -605,8 +605,12 @@ export class CantonLedgerService {
       signal: AbortSignal.timeout(20_000),
     });
     if (!res.ok) {
-      const text = await res.text();
-      this.logger.debug(`fetchTransactionUpdates ${res.status}: ${text.slice(0, 120)}`);
+      // 404 = endpoint tidak tersedia di versi Canton JSON API ini (normal, tidak perlu log)
+      // Endpoint ini opsional — hanya dipakai untuk transaction history lookup
+      if (res.status !== 404) {
+        const text = await res.text();
+        this.logger.debug(`fetchTransactionUpdates ${res.status}: ${text.slice(0, 120)}`);
+      }
       return [];
     }
     const data = (await res.json()) as { transactions?: LedgerStreamTransaction[] };

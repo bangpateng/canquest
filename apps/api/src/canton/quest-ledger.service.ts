@@ -1111,7 +1111,11 @@ export class QuestLedgerService {
     };
   }
 
-  /** @deprecated — no-op stub */
+  /**
+   * @deprecated — no-op stub (canquest-v4 tidak punya QuestTaskSubmission template).
+   * Task submission tidak perlu on-chain — hanya quest claim yang perlu.
+   * Tidak ada WARN log agar tidak spam.
+   */
   async recordTaskSubmission(params: {
     questId: string;
     questKind: string;
@@ -1120,6 +1124,8 @@ export class QuestLedgerService {
     proof: string | null;
     userPartyId: string;
   }): Promise<QuestTaskLedgerResult> {
+    // canquest-v4: task submission tidak dicatat on-chain (hanya quest claim)
+    // Ini intentional — tidak perlu WARN
     return {
       ledgerEnabled: false,
       participationContractId: null,
