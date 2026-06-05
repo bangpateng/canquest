@@ -1,249 +1,310 @@
-# DAML Contracts Documentation — CanQuest v0.2.0
+# CanQuest DAML Contracts Documentation
+## Package: `canquest-v4` | SDK: 3.4.11 | Version: 1.0.0
+
+---
 
 ## Overview
 
-Dokumen ini menjelaskan DAML contracts yang diimplementasikan untuk platform CanQuest.
-Contract menggunakan **module Main** (satu file) dengan 3 template utama.
+Semua transaksi penting di CanQuest dicatat on-chain di Canton Network menggunakan DAML smart contracts. Ini memastikan:
 
-**File contract:** [`packages/daml/daml/Main.daml`](../packages/daml/daml/Main.daml)  
-**Package:** `canquest-v2` v0.2.0  
-**SDK:** `3.3.0-snapshot.20250930.0`  
-**Test:** `testFullWorkflow` — 10 skenario, semua harus PASS
-
----
-
-## Arsitektur Contract
-
-```
-packages/daml/
-├── daml.yaml          ← SDK version, package name, version
-└── daml/
-    └── Main.daml      ← Semua template dalam satu file
-        ├── UserAccount      (template 1)
-        ├── Mission          (template 2)
-        └── DailyLuckySpin   (template 3)
-```
+- **Tidak ada manipulasi** — semua choice hanya bisa dieksekusi oleh admin/operator
+- **Audit trail permanen** — setiap transaksi tercatat di ledger Canton
+- **Kuota FCFS divalidasi on-chain** — jika slot penuh, transaksi otomatis GAGAL dan di-revert
+- **Fee verification** — reward tidak bisa dikirim tanpa bukti fee diterima
+- **Anti double-spend** — setiap spin/check-in punya ID unik
 
 ### Authorization Pattern (Canton M3)
-
 ```
-signatory admin     ← operator platform — menandatangani semua kontrak
-observer  user      ← user hanya bisa melihat, tidak bisa submit sendiri
+signatory admin  ← operator yang menandatangani semua kontrak
+observer user    ← user hanya bisa melihat, tidak bisa submit sendiri
 ```
-
-Backend (NestJS API di VPS 2) submit semua command sebagai `admin` (operator party).
-User hanya menjadi observer — mereka bisa melihat kontrak mereka di ledger.
 
 ---
 
-## Template 1: UserAccount
+## Templates
 
-**Fungsi:** Menyimpan akun user dengan total poin yang dikumpulkan.
+### 1. `UserAccount`
+**File:** `packages/daml/daml/Main.daml`
 
-```daml
-template UserAccount
-  with
-    admin        : Party   -- operator platform
-    userAddress  : Party   -- wallet address / party user
-    username     : Text    -- nama tampilan user
-    totalPoints  : Int     -- total poin yang dikumpulkan
-```
+Akun user on-chain yang menyimpan total poin earned dan spent.
 
-**Contract Key:** `(admin, userAddress) : (Party, Party)`  
-→ Satu user hanya punya satu akun per admin (idempoten).
+| Field | Type | Keterangan |
+|-------|------|-----------|
+| `admin` | Party | Operator CanQuest |
+| `userAddress` | Party | Canton Party ID user |
+| `username` | Text | Username di platform |
+| `earnedPoints` | Int | Total poin yang pernah diraih |
+| `spentPoints` | Int | Total poin yang sudah dipakai untuk spin |
+| `createdAt` | Text | ISO timestamp pembuatan |
 
 **Choices:**
-| Choice | Controller | Fungsi |
-|--------|-----------|--------|
-| `RewardUser` | admin | Tambah poin ke akun user |
+- `RewardPoints` — tambah poin (quest, spin win, check-in, referral)
+- `DebitPoints` — kurangi poin untuk spin (validasi: available >= amount)
+- `UpdateUsername` — update username
 
-**Validasi di RewardUser:**
-- `pointsToAdd > 0` — tidak boleh tambah 0 atau negatif
-
-**Dipanggil dari API:**
-- `QuestLedgerService.ensureUserAccount()` — saat user register/buat wallet
-- `QuestLedgerService.rewardUser()` — setelah quest selesai / spin / klaim misi
+**Kapan dibuat:** Saat user register dan membuat wallet pertama kali.
 
 ---
 
-## Template 2: Mission
+### 2. `WalletRegistration`
+**File:** `packages/daml/daml/Main.daml`
 
-**Fungsi:** Misi FCFS (First Come First Served) dengan kuota terbatas.
+Bukti on-chain bahwa user telah membuat wallet dengan Party ID yang sah.
 
-```daml
-template Mission
-  with
-    admin         : Party  -- operator platform
-    missionId     : Text   -- ID unik misi
-    rewardPoints  : Int    -- poin per klaim
-    maxQuota      : Int    -- kuota maksimal pemenang
-    currentClaims : Int    -- jumlah klaim yang sudah terjadi
-```
-
-**Contract Key:** `(admin, missionId) : (Party, Text)`  
-⚠️ **PENTING:** Key type adalah `(Party, Text)` — bukan `(Party, Party)` karena `missionId` bertipe `Text`.
+| Field | Type | Keterangan |
+|-------|------|-----------|
+| `admin` | Party | Operator CanQuest |
+| `userAddress` | Party | Canton Party ID user |
+| `username` | Text | Username di platform |
+| `partyId` | Text | Party ID string |
+| `inviteCode` | Text | Kode invite yang dipakai |
+| `registeredAt` | Text | ISO timestamp registrasi |
 
 **Choices:**
-| Choice | Controller | Fungsi |
-|--------|-----------|--------|
-| `ClaimMission` | admin | Klaim slot FCFS, update counter |
+- `ConfirmWalletActive` — konfirmasi wallet aktif di Canton Network
 
-**Validasi di ClaimMission:**
-- `currentClaims < maxQuota` — tolak jika kuota sudah habis
-- Mengembalikan `(ContractId Mission, ContractId UserAccount)` — keduanya diperbarui
-
-**Dipanggil dari API:**
-- `QuestLedgerService.createMission()` — saat admin buat campaign baru
-- `QuestLedgerService.claimMission()` — saat user klaim reward FCFS
+**Kapan dibuat:** Saat user submit Party ID (dari admin invite code) di menu Wallet.
 
 ---
 
-## Template 3: DailyLuckySpin
+### 3. `QuestCampaign`
+**File:** `packages/daml/daml/Main.daml`
 
-**Fungsi:** Sistem spin harian — user hanya boleh spin 1x per hari.
+Template induk untuk semua jenis quest campaign. Mencakup 4 type.
 
-```daml
-template DailyLuckySpin
-  with
-    admin        : Party  -- operator platform
-    userAddress  : Party  -- user yang memiliki spin ini
-    lastSpinDate : Date   -- tanggal terakhir user melakukan spin
-```
-
-**Contract Key:** `(admin, userAddress) : (Party, Party)`  
-→ Satu spin record per user per admin.
+| Field | Type | Keterangan |
+|-------|------|-----------|
+| `admin` | Party | Operator CanQuest |
+| `campaignId` | Text | ID campaign dari DB |
+| `title` | Text | Judul campaign |
+| `questKind` | Text | `CC_FCFS` \| `CC_RAFFLE` \| `CODE_FCFS` \| `CODE_RAFFLE` |
+| `rewardCc` | Decimal | Jumlah CC reward per pemenang |
+| `claimFeeCc` | Decimal | Biaya claim fee CC |
+| `maxWinners` | Int | Kuota maksimal (0 = unlimited) |
+| `currentClaims` | Int | Jumlah klaim yang sudah terjadi |
+| `status` | Text | `ACTIVE` \| `ENDED` \| `CLOSED` |
+| `createdAt` | Text | ISO timestamp pembuatan |
 
 **Choices:**
-| Choice | Controller | Fungsi |
-|--------|-----------|--------|
-| `ExecuteSpin` | admin | Eksekusi spin, update tanggal |
+- `ClaimFcfsSlot` — reserve slot FCFS (validasi kuota on-chain, GAGAL jika penuh)
+- `DrawRaffleWinner` — catat pemenang raffle yang dipilih admin
+- `CloseCampaign` — tutup campaign
 
-**Validasi di ExecuteSpin:**
-- `currentDate /= lastSpinDate` — tolak jika sudah spin hari ini
-- `spinReward > 0` — reward harus positif
-
-**Dipanggil dari API:**
-- `QuestLedgerService.ensureDailySpinContract()` — saat user pertama kali akses spin
-- `QuestLedgerService.executeDailySpin()` — saat user klik tombol spin
+**Kapan dibuat:** Saat admin membuat quest campaign baru.
 
 ---
 
-## Test Suite (testFullWorkflow)
+### 4. `QuestClaim`
+**File:** `packages/daml/daml/Main.daml`
 
-File: `packages/daml/daml/Main.daml` — fungsi `testFullWorkflow`
+Bukti on-chain bahwa user telah mengklaim quest campaign.
 
-| # | Skenario | Expected |
-|---|----------|----------|
-| b | Buat akun Budi & Iwan | ✅ SUKSES |
-| c | Admin buat Misi FCFS kuota=1 | ✅ SUKSES |
-| d | Budi klaim misi pertama | ✅ SUKSES |
-| e | Iwan klaim misi yang sama (kuota habis) | ❌ GAGAL (assertMsg) |
-| f | Setup DailyLuckySpin untuk Budi (1 Mei) | ✅ SUKSES |
-| g | Budi spin di hari baru (2 Mei) | ✅ SUKSES |
-| h | Budi spin lagi di hari yang sama (2 Mei) | ❌ GAGAL (assertMsg) |
-| i | Budi spin di hari berikutnya (3 Mei) | ✅ SUKSES |
-| j | RewardUser dengan pointsToAdd=0 | ❌ GAGAL (assertMsg) |
+| Field | Type | Keterangan |
+|-------|------|-----------|
+| `admin` | Party | Operator CanQuest |
+| `userAddress` | Party | Canton Party ID user |
+| `campaignId` | Text | ID campaign dari DB |
+| `claimId` | Text | ID unik klaim (anti double-claim) |
+| `claimKind` | Text | `CC_FCFS` \| `CC_RAFFLE` \| `CODE_FCFS` \| `CODE_RAFFLE` |
+| `rewardCc` | Decimal | Jumlah CC reward |
+| `rewardCode` | Text | Kode reward (untuk CODE_*) |
+| `claimFeeCc` | Decimal | Biaya claim fee CC |
+| `feePaid` | Bool | Apakah fee sudah dibayar |
+| `feeTxId` | Text | Splice TX ID bukti fee |
+| `rewardSent` | Bool | Apakah reward sudah dikirim |
+| `rewardTxId` | Text | Splice TX ID bukti reward |
+| `claimedAt` | Text | ISO timestamp klaim |
+
+**Choices:**
+- `ConfirmFeePaid` — konfirmasi fee CC diterima (WAJIB sebelum reward)
+- `ConfirmRewardSent` — konfirmasi reward dikirim (fee harus dibayar dulu)
+
+**Flow:** `ClaimFcfsSlot/DrawRaffleWinner` → `QuestClaim` dibuat → `ConfirmFeePaid` → `ConfirmRewardSent`
+
+---
+
+### 5. `DailyCheckIn`
+**File:** `packages/daml/daml/Main.daml`
+
+Bukti on-chain bahwa user telah melakukan check-in harian.
+
+| Field | Type | Keterangan |
+|-------|------|-----------|
+| `admin` | Party | Operator CanQuest |
+| `userAddress` | Party | Canton Party ID user |
+| `username` | Text | Username di platform |
+| `checkInId` | Text | ID unik: `{userId}_{YYYY-MM-DD}` |
+| `checkInDate` | Text | Tanggal check-in `YYYY-MM-DD` |
+| `pointsAwarded` | Int | Poin yang diberikan |
+| `streakCount` | Int | Streak hari berturut-turut |
+| `checkedInAt` | Text | ISO timestamp check-in |
+
+**Choices:**
+- `VerifyCheckIn` — verifikasi check-in sudah diproses (opsional, untuk audit)
+
+**Kapan dibuat:** Setiap kali user melakukan daily check-in di menu Quest.
+
+---
+
+### 6. `SpinExecution`
+**File:** `packages/daml/daml/Main.daml`
+
+Bukti on-chain bahwa satu putaran spin telah dieksekusi.
+
+| Field | Type | Keterangan |
+|-------|------|-----------|
+| `admin` | Party | Operator CanQuest |
+| `userAddress` | Party | Canton Party ID user |
+| `username` | Text | Username di platform |
+| `spinResultId` | Text | ID unik dari DB (anti double-spend) |
+| `spinItemId` | Text | ID item yang menang |
+| `spinItemLabel` | Text | Label item (e.g. "50 CC", "100 Points") |
+| `rewardType` | Text | `cc` \| `points` \| `none` |
+| `rewardCc` | Decimal | Jumlah CC (0.0 jika bukan CC) |
+| `rewardPoints` | Int | Jumlah points (0 jika bukan points) |
+| `spinCost` | Int | Poin yang dipakai untuk spin |
+| `executedAt` | Text | ISO timestamp eksekusi |
+
+**Choices:**
+- `ConfirmCcDelivered` — konfirmasi CC reward sudah dikirim via Splice → membuat `SpinCcReward`
+
+**Kapan dibuat:** Setiap kali user melakukan spin di menu Spin.
+
+---
+
+### 7. `SpinCcReward`
+**File:** `packages/daml/daml/Main.daml`
+
+Bukti on-chain bahwa CC reward dari spin sudah dikirim ke user.
+
+| Field | Type | Keterangan |
+|-------|------|-----------|
+| `admin` | Party | Operator CanQuest |
+| `userAddress` | Party | Canton Party ID user |
+| `username` | Text | Username di platform |
+| `spinResultId` | Text | Referensi ke SpinExecution |
+| `rewardCc` | Decimal | Jumlah CC yang dikirim |
+| `spliceTxId` | Text | Canton/Splice TX ID sebagai bukti |
+| `deliveredAt` | Text | ISO timestamp pengiriman CC |
+
+**Kapan dibuat:** Dibuat oleh `ConfirmCcDelivered` setelah Splice TX berhasil.
+
+---
+
+## Mapping Fitur Web → DAML Contract
+
+| Fitur Web | DAML Contract | Method di Service |
+|-----------|--------------|-------------------|
+| Register + buat wallet | `UserAccount` + `WalletRegistration` | `ensureUserAccount()` + `registerWallet()` |
+| Wallet: submit Party ID | `WalletRegistration` | `registerWallet()` |
+| Quest CC FCFS: klaim | `QuestCampaign.ClaimFcfsSlot` → `QuestClaim` | `claimFcfsSlot()` |
+| Quest CC FCFS: bayar fee | `QuestClaim.ConfirmFeePaid` | `confirmFeePaid()` |
+| Quest CC FCFS: terima reward | `QuestClaim.ConfirmRewardSent` | `confirmRewardSent()` |
+| Quest CC Raffle: admin draw | `QuestCampaign.DrawRaffleWinner` → `QuestClaim` | `drawRaffleWinner()` |
+| Quest Code FCFS: klaim | `QuestCampaign.ClaimFcfsSlot` → `QuestClaim` | `claimFcfsSlot()` |
+| Quest Code Raffle: admin draw | `QuestCampaign.DrawRaffleWinner` → `QuestClaim` | `drawRaffleWinner()` |
+| Daily Check-in | `DailyCheckIn` | `recordDailyCheckIn()` |
+| Spin: eksekusi | `SpinExecution` | `recordSpinExecution()` |
+| Spin: CC reward dikirim | `SpinCcReward` | `confirmSpinCcDelivered()` |
+| Quest selesai: dapat poin | `UserAccount.RewardPoints` | `rewardUser()` |
+| Spin: debit poin | `UserAccount.DebitPoints` | `debitPoints()` |
 
 ---
 
 ## Build & Deploy
 
-### 1. Build .dar (di Local PC)
-
-```powershell
-cd packages\daml
-dpm install package          # Install SDK dari daml.yaml
-dpm build                    # Output: .daml/dist/canquest-v2-0.2.0.dar
-dpm test                     # Jalankan testFullWorkflow — semua harus PASS
-```
-
-### 2. Ambil Package ID
-
-```powershell
-dpm damlc inspect .daml\dist\canquest-v2-0.2.0.dar --json | findstr packageId
-```
-
-### 3. Upload ke Canton Participant (VPS 1)
-
-Tunnel harus hidup dulu:
-```powershell
-# Terminal 1 (biarkan hidup):
-ssh -N -L 7575:172.18.0.5:7575 -L 8080:172.18.0.7:80 root@162.250.190.204
-
-# Terminal 2 (upload):
-curl -X POST `
-  -H "Authorization: Bearer <JWT_TOKEN>" `
-  -H "Content-Type: application/octet-stream" `
-  --data-binary @packages\daml\.daml\dist\canquest-v2-0.2.0.dar `
-  http://127.0.0.1:7575/v1/packages
-```
-
-### 4. Update `.env` di VPS 2
-
-```env
-CANTON_DAML_PACKAGE_NAME=canquest-v2
-CANTON_DAML_PACKAGE_ID=<64-hex dari dpm build>
-CANTON_OPERATOR_PARTY_ID=<dari node scripts/ensure-quest-operator.cjs>
-QUEST_LEDGER_ENABLED=true
-CLAIM_SESSION_LEDGER_ENABLED=true
-```
-
-### 5. Restart API
+### Build di VPS (Linux)
 
 ```bash
+# 1. Pastikan DAML SDK 3.4.11 terinstall
+curl -sSL https://get.daml.com/ | sh -s 3.4.11
+
+# 2. Build dan test
+bash scripts/daml-build-vps.sh
+
+# 3. Upload DAR ke Canton ledger
+cd apps/api
+node scripts/upload-daml-dar.cjs
+
+# 4. Update .env
+CANTON_DAML_PACKAGE_NAME=canquest-v4
+CANTON_DAML_PACKAGE_ID=<package-id-dari-step-2>
+
+# 5. Restart API
 pm2 restart canquest-api
-pm2 logs canquest-api | grep -E "UserAccount|Mission|DailyLuckySpin"
+```
+
+### Build via Docker (Windows)
+
+```powershell
+# Pastikan Docker Desktop berjalan
+.\scripts\daml-build-test.ps1
+```
+
+### DAR Output
+```
+packages/daml/.daml/dist/canquest-v4-1.0.0.dar
 ```
 
 ---
 
-## Template IDs (JSON Ledger API)
+## Test Coverage
 
-Setelah deploy, template direferensikan sebagai:
+File: `packages/daml/daml/Test.daml`
 
-```
-#canquest-v2:Main:UserAccount
-#canquest-v2:Main:Mission
-#canquest-v2:Main:DailyLuckySpin
-```
+| Section | Test Cases |
+|---------|-----------|
+| [A] UserAccount | RewardPoints, DebitPoints, UpdateUsername, validasi error |
+| [B] WalletRegistration | ConfirmWalletActive, validasi error |
+| [C] QuestCampaign CC_FCFS | ClaimFcfsSlot, kuota habis, CloseCampaign |
+| [D] QuestCampaign CODE_FCFS | ClaimFcfsSlot dengan code, kuota habis |
+| [E] QuestCampaign CC_RAFFLE | DrawRaffleWinner multiple winners |
+| [F] QuestCampaign CODE_RAFFLE | DrawRaffleWinner dengan code |
+| [G] QuestClaim | ConfirmFeePaid, ConfirmRewardSent, urutan wajib, double-pay/send |
+| [H] DailyCheckIn | VerifyCheckIn, validasi error |
+| [I] SpinExecution | ConfirmCcDelivered, validasi rewardType |
+| [J] Edge Cases | Cross-type errors, security validations |
 
-Atau dengan package hash ID:
-```
-<packageId>:Main:UserAccount
-<packageId>:Main:Mission
-<packageId>:Main:DailyLuckySpin
+**Total test cases: 30+**
+
+Jalankan test:
+```bash
+# Di VPS
+cd packages/daml
+~/.daml/bin/daml test
+
+# Via Docker (Windows)
+.\scripts\daml-build-test.ps1
 ```
 
 ---
 
-## API Integration
+## Environment Variables
 
-| Event | DAML Action | Method |
-|-------|-------------|--------|
-| User register / buat wallet | Buat `UserAccount` | `ensureUserAccount()` |
-| Quest selesai / reward | Exercise `RewardUser` | `rewardUser()` |
-| Admin buat campaign FCFS | Buat `Mission` | `createMission()` |
-| User klaim FCFS | Exercise `ClaimMission` | `claimMission()` |
-| User pertama kali spin | Buat `DailyLuckySpin` | `ensureDailySpinContract()` |
-| User klik spin | Exercise `ExecuteSpin` | `executeDailySpin()` |
+```env
+# Aktifkan DAML ledger writes
+QUEST_LEDGER_ENABLED=true
+CLAIM_SESSION_LEDGER_ENABLED=true
 
----
+# Canton operator party
+CANTON_OPERATOR_PARTY_ID=<operator-party-id>
 
-## Bug Fixes dari Versi Sebelumnya
-
-| Bug | Versi Lama | Versi Baru (v0.2.0) |
-|-----|-----------|---------------------|
-| Mission key type salah | `key (admin, missionId) : (Party, Party)` | `key (admin, missionId) : (Party, Text)` |
-| Tidak ada validasi RewardUser | Bisa tambah 0 poin | `assertMsg (pointsToAdd > 0)` |
-| Import tidak perlu | `import DA.Time` (tidak dipakai) | Hanya `import DA.Date` |
-| Module terfragmentasi | 10+ file di CanQuest.* | Satu file `Main.daml` |
+# Package reference (setelah upload DAR)
+CANTON_DAML_PACKAGE_NAME=canquest-v4
+CANTON_DAML_PACKAGE_ID=<64-char-hex-package-id>
+```
 
 ---
 
-## References
+## Perubahan dari canquest-v3
 
-- [DAML Documentation](https://docs.daml.com/)
-- [Canton Network M3 Dev Environment](https://docs.canton.network/appdev/modules/m3-dev-environment)
-- [Canton Network M4 Building Apps](https://docs.canton.network/appdev/modules/m4-building-apps-intro)
-- [DAML SDK Setup Guide](./DAML_SDK_SETUP.md)
-- [Canton TestNet Guide](./CANTON_TESTNET.md)
+| Aspek | canquest-v3 | canquest-v4 |
+|-------|------------|------------|
+| Templates | 4 (UserAccount, Mission, SpinExecution, SpinCcReward) | 7 (+ WalletRegistration, QuestCampaign, QuestClaim, DailyCheckIn) |
+| Quest types | Hanya FCFS | CC_FCFS, CC_RAFFLE, CODE_FCFS, CODE_RAFFLE |
+| Wallet registration | Tidak ada | ✅ WalletRegistration contract |
+| Daily check-in | Tidak ada | ✅ DailyCheckIn contract |
+| Fee verification | Tidak ada | ✅ ConfirmFeePaid wajib sebelum reward |
+| Raffle support | Tidak ada | ✅ DrawRaffleWinner |
+| Konsistensi DAR | ❌ Inkonsisten (totalPoints vs earnedPoints) | ✅ Konsisten |
+| No-op stubs | Banyak | Minimal (hanya legacy compat) |

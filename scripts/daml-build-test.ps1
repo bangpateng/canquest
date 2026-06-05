@@ -2,11 +2,12 @@ $ErrorActionPreference = "Continue"
 
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 $DamlDir     = "$ProjectRoot\packages\daml"
-$SdkVersion  = "3.3.0-snapshot.20250930.0"
-$DarName     = "canquest-v3-1.0.0.dar"
+$SdkVersion  = "3.4.11"
+$DarName     = "canquest-v4-1.0.0.dar"
 
 Write-Host ""
 Write-Host "CanQuest DAML Build + Test (via Docker)" -ForegroundColor Cyan
+Write-Host "Package  : canquest-v4 v1.0.0" -ForegroundColor Cyan
 Write-Host "DAML dir : $DamlDir" -ForegroundColor Gray
 Write-Host "SDK      : $SdkVersion" -ForegroundColor Gray
 Write-Host ""
@@ -80,8 +81,8 @@ Write-Host "=== RESULT ===" -ForegroundColor Cyan
 if ($pkgId) {
     Write-Host "Package ID : $pkgId" -ForegroundColor Green
     Write-Host ""
-    Write-Host "Add to apps/api/.env on VPS 2:" -ForegroundColor White
-    Write-Host "  CANTON_DAML_PACKAGE_NAME=canquest-v3" -ForegroundColor Yellow
+    Write-Host "Add to apps/api/.env on VPS:" -ForegroundColor White
+    Write-Host "  CANTON_DAML_PACKAGE_NAME=canquest-v4" -ForegroundColor Yellow
     Write-Host "  CANTON_DAML_PACKAGE_ID=$pkgId" -ForegroundColor Yellow
 } else {
     Write-Host "Package ID not found - check inspect output above" -ForegroundColor Yellow
@@ -89,8 +90,8 @@ if ($pkgId) {
 
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor White
-Write-Host "  1. Open tunnel : ssh -N -L 7575:172.18.0.5:7575 -L 8080:172.18.0.7:80 root@162.250.190.204"
+Write-Host "  1. Open tunnel : ssh -N -L 7575:172.18.0.5:7575 -L 8080:172.18.0.7:80 root@<VPS_IP>"
 Write-Host "  2. Upload DAR  : cd apps/api ; node scripts/upload-daml-dar.cjs"
-Write-Host "  3. Update .env : set CANTON_DAML_PACKAGE_ID on VPS 2"
+Write-Host "  3. Update .env : set CANTON_DAML_PACKAGE_NAME=canquest-v4 on VPS"
 Write-Host "  4. Restart API : pm2 restart canquest-api"
 Write-Host ""

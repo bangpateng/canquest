@@ -4,21 +4,32 @@ import { randomUUID } from 'crypto';
 import { CantonLedgerService } from './canton-ledger.service';
 
 /**
- * DAML template paths — module Main (canquest-v3, DAR yang ter-deploy di ledger)
+ * DAML template paths — module Main (canquest-v4, DAR yang ter-deploy di ledger)
  *
- * Contract layout aktual di ledger (bukan Main.daml lokal):
- *   Main:UserAccount     — akun user dengan totalPoints
- *   Main:Mission         — misi FCFS dengan kuota terbatas
- *   Main:DailyLuckySpin  — spin harian (1x per hari), lastSpinDate = ISO string "YYYY-MM-DD"
+ * Templates:
+ *   Main:UserAccount        — akun user on-chain (earnedPoints & spentPoints)
+ *   Main:WalletRegistration — bukti pembuatan wallet / Party ID
+ *   Main:QuestCampaign      — template induk quest (CC_FCFS, CC_RAFFLE, CODE_FCFS, CODE_RAFFLE)
+ *   Main:QuestClaim         — bukti klaim quest + fee + reward
+ *   Main:DailyCheckIn       — check-in harian on-chain
+ *   Main:SpinExecution      — audit trail spin on-chain
+ *   Main:SpinCcReward       — bukti CC reward dari spin sudah dikirim
  *
- * PENTING: Main.daml lokal berbeda dari DAR yang ter-deploy.
- * API ini disesuaikan dengan DAR yang AKTUAL di ledger.
- * Jangan ubah field mapping di sini tanpa re-deploy DAR baru.
+ * Authorization pattern (Canton M3):
+ *   signatory admin  — operator signs all contracts
+ *   observer user    — user can only read, backend submits on their behalf
+ *
+ * All methods are best-effort: they log errors but never throw,
+ * so a Canton outage does not break the main application flow.
  */
 const TPL = {
-  UserAccount:    'Main:UserAccount',
-  Mission:        'Main:Mission',
-  DailyLuckySpin: 'Main:DailyLuckySpin',
+  UserAccount:        'Main:UserAccount',
+  WalletRegistration: 'Main:WalletRegistration',
+  QuestCampaign:      'Main:QuestCampaign',
+  QuestClaim:         'Main:QuestClaim',
+  DailyCheckIn:       'Main:DailyCheckIn',
+  SpinExecution:      'Main:SpinExecution',
+  SpinCcReward:       'Main:SpinCcReward',
 } as const;
 
 // ── Result types ──────────────────────────────────────────────────────────────
@@ -26,6 +37,37 @@ const TPL = {
 export interface UserAccountLedgerResult {
   ledgerEnabled: boolean;
   contractId: string | null;
+  errors: string[];
+}
+
+export interface WalletRegistrationLedgerResult {
+  ledgerEnabled: boolean;
+  contractId: string | null;
+  errors: string[];
+}
+
+export interface QuestCampaignLedgerResult {
+  ledgerEnabled: boolean;
+  contractId: string | null;
+  errors: string[];
+}
+
+export interface QuestClaimLedgerResult {
+  ledgerEnabled: boolean;
+  campaignContractId: string | null;
+  claimContractId: string | null;
+  errors: string[];
+}
+
+export interface DailyCheckInLedgerResult {
+  ledgerEnabled: boolean;
+  contractId: string | null;
+  errors: string[];
+}
+
+export interface SpinExecutionLedgerResult {
+  ledgerEnabled: boolean;
+  spinExecutionContractId: string | null;
   errors: string[];
 }
 
@@ -42,14 +84,7 @@ export interface SpinLedgerResult {
   errors: string[];
 }
 
-export interface SpinExecutionLedgerResult {
-  ledgerEnabled: boolean;
-  spinExecutionContractId: string | null;
-  errors: string[];
-}
-
-// ── Legacy result types (kept for backward compat with existing controllers) ──
-
+// Legacy result types (kept for backward compat with existing controllers)
 export interface QuestLedgerSubmitResult {
   ledgerEnabled: boolean;
   participationContractId: string | null;
@@ -72,16 +107,6 @@ export interface ClaimSessionLedgerResult {
   errors: string[];
 }
 
-/**
- * Records CanQuest activity on Canton via DAML templates.
- *
- * Authorization pattern (Canton M3):
- *   signatory admin  — operator signs all contracts
- *   observer user    — user can only read, backend submits on their behalf
- *
- * All methods are best-effort: they log errors but never throw,
- * so a Canton outage does not break the main application flow.
- */
 @Injectable()
 export class QuestLedgerService {
   private readonly logger = new Logger(QuestLedgerService.name);
@@ -97,7 +122,7 @@ export class QuestLedgerService {
   private get damlPackageRef(): string {
     const name = this.config.get<string>('CANTON_DAML_PACKAGE_NAME')?.trim();
     if (name) return name.startsWith('#') ? name : `#${name}`;
-    return '#canquest-v3';
+    return '#canquest-v4';
   }
 
   private get operatorPartyId(): string | null {
@@ -107,8 +132,7 @@ export class QuestLedgerService {
     if (validator && !this.operatorFallbackWarned) {
       this.operatorFallbackWarned = true;
       this.logger.warn(
-        'CANTON_OPERATOR_PARTY_ID unset — DAML uses CANTON_VALIDATOR_PARTY_ID as fallback. ' +
-        'Run: node scripts/ensure-quest-operator.cjs',
+        'CANTON_OPERATOR_PARTY_ID unset — DAML uses CANTON_VALIDATOR_PARTY_ID as fallback.',
       );
     }
     return validator ?? null;
@@ -166,13 +190,30 @@ export class QuestLedgerService {
     return null;
   }
 
-  // ── UserAccount ─────────────────────────────────────────────────────────────
+  /** Extract all contractIds from a ledger exercise response. */
+  private extractContractIds(text: string): string[] {
+    const cids: string[] = [];
+    try {
+      const parsed = JSON.parse(text) as Record<string, unknown>;
+      const stack: unknown[] = [parsed];
+      while (stack.length) {
+        const cur = stack.pop();
+        if (!cur || typeof cur !== 'object') continue;
+        if (Array.isArray(cur)) { stack.push(...cur); continue; }
+        const obj = cur as Record<string, unknown>;
+        if (typeof obj.contractId === 'string') cids.push(obj.contractId);
+        for (const v of Object.values(obj)) stack.push(v);
+      }
+    } catch { /* ignore parse errors */ }
+    return cids;
+  }
+
+  // ── 1. UserAccount ──────────────────────────────────────────────────────────
 
   /**
    * Create a UserAccount contract on the ledger.
    * Idempotent: returns existing contract if already created for this user.
-   *
-   * DAR aktual di ledger: field = { admin, userAddress, username, totalPoints }
+   * Called when user registers and creates their wallet.
    */
   async ensureUserAccount(params: {
     userPartyId: string;
@@ -210,14 +251,15 @@ export class QuestLedgerService {
       return result;
     }
 
-    // DAR di ledger pakai totalPoints (bukan earnedPoints/spentPoints)
     const res = await this.ledger.createContract(
       tpl,
       {
-        admin:       operator,
-        userAddress: params.userPartyId,
-        username:    params.username,
-        totalPoints: 0,
+        admin:        operator,
+        userAddress:  params.userPartyId,
+        username:     params.username,
+        earnedPoints: 0,
+        spentPoints:  0,
+        createdAt:    new Date().toISOString(),
       },
       [operator],
       `user-account-${params.username}-${randomUUID()}`,
@@ -233,12 +275,13 @@ export class QuestLedgerService {
   }
 
   /**
-   * Add points to a UserAccount by exercising RewardUser choice.
-   * Called after: quest completion, spin reward, mission claim.
+   * Add points to a UserAccount by exercising RewardPoints choice.
+   * Called after: quest completion, spin win, daily check-in, referral.
    */
   async rewardUser(params: {
     accountContractId: string;
     pointsToAdd: number;
+    reason: string;
   }): Promise<{ ok: boolean; newContractId: string | null; errors: string[] }> {
     if (!this.isConfigured()) {
       return { ok: false, newContractId: null, errors: ['Quest ledger disabled'] };
@@ -252,152 +295,82 @@ export class QuestLedgerService {
     const { ok, text } = await this.ledger.exerciseChoice(
       params.accountContractId,
       tpl,
-      'RewardUser',
-      { pointsToAdd: params.pointsToAdd },
+      'RewardPoints',
+      {
+        pointsToAdd: params.pointsToAdd,
+        reason:      params.reason || 'quest_completion',
+      },
       [operator],
-      `reward-user-${randomUUID()}`,
+      `reward-points-${randomUUID()}`,
     );
 
     if (ok) {
-      let newContractId: string | null = null;
-      try {
-        const parsed = JSON.parse(text) as Record<string, unknown>;
-        newContractId = (parsed.contractId as string | undefined) ?? null;
-      } catch { /* ignore */ }
-      this.logger.log(`RewardUser: +${params.pointsToAdd} pts on ${params.accountContractId.slice(0, 12)}...`);
-      return { ok: true, newContractId, errors: [] };
+      const cids = this.extractContractIds(text);
+      this.logger.log(`RewardPoints: +${params.pointsToAdd} pts on ${params.accountContractId.slice(0, 12)}...`);
+      return { ok: true, newContractId: cids[0] ?? null, errors: [] };
     }
     return { ok: false, newContractId: null, errors: [text.slice(0, 200)] };
   }
 
-  // ── Mission (FCFS) ──────────────────────────────────────────────────────────
-
   /**
-   * Create a Mission contract on the ledger.
-   * Called by admin when creating a new FCFS mission/campaign.
+   * Debit points from a UserAccount by exercising DebitPoints choice.
+   * Called before spin execution to deduct spin cost.
    */
-  async createMission(params: {
-    missionId: string;
-    rewardPoints: number;
-    maxQuota: number;
-  }): Promise<{ contractId: string | null; error?: string }> {
-    if (!this.isConfigured()) {
-      return { contractId: null, error: 'Quest ledger disabled' };
-    }
-    const tpl = this.templateId(TPL.Mission);
-    const operator = this.operatorPartyId;
-    if (!operator) {
-      return { contractId: null, error: 'Canton operator party not configured' };
-    }
-    const reachErr = await this.ensureReachable();
-    if (reachErr) return { contractId: null, error: reachErr };
-
-    const res = await this.ledger.createContract(
-      tpl,
-      {
-        admin:         operator,
-        missionId:     params.missionId,
-        rewardPoints:  params.rewardPoints,
-        maxQuota:      params.maxQuota,
-        currentClaims: 0,
-      },
-      [operator],
-      `mission-${params.missionId}`,
-    );
-
-    if (res.ok && res.contractId) {
-      this.logger.log(`Mission created: ${params.missionId} quota=${params.maxQuota}`);
-      return { contractId: res.contractId };
-    }
-    return { contractId: null, error: this.formatLedgerError(res.error, 'Failed to create Mission') };
-  }
-
-  /**
-   * Claim a Mission FCFS slot by exercising ClaimMission choice.
-   * The DAML contract enforces quota — if full, the ledger rejects the tx.
-   */
-  async claimMission(params: {
-    missionContractId: string;
-    userPartyId: string;
+  async debitPoints(params: {
     accountContractId: string;
-  }): Promise<MissionClaimLedgerResult> {
-    const result: MissionClaimLedgerResult = {
-      ledgerEnabled: false,
-      missionContractId: null,
-      accountContractId: null,
-      errors: [],
-    };
-    if (!this.isClaimSessionConfigured()) return result;
-
-    const tpl = this.templateId(TPL.Mission);
+    amount: number;
+    reason: string;
+  }): Promise<{ ok: boolean; newContractId: string | null; errors: string[] }> {
+    if (!this.isConfigured()) {
+      return { ok: false, newContractId: null, errors: ['Quest ledger disabled'] };
+    }
+    const tpl = this.templateId(TPL.UserAccount);
     const operator = this.operatorPartyId;
     if (!operator) {
-      result.errors.push('Canton operator party not configured');
-      return result;
+      return { ok: false, newContractId: null, errors: ['Canton operator party not configured'] };
     }
-    const reachErr = await this.ensureReachable();
-    if (reachErr) { result.errors.push(reachErr); return result; }
-
-    result.ledgerEnabled = true;
 
     const { ok, text } = await this.ledger.exerciseChoice(
-      params.missionContractId,
+      params.accountContractId,
       tpl,
-      'ClaimMission',
+      'DebitPoints',
       {
-        user:       params.userPartyId,
-        accountCid: params.accountContractId,
+        amount: params.amount,
+        reason: params.reason || 'spin_cost',
       },
       [operator],
-      `claim-mission-${params.missionContractId}-${randomUUID()}`,
+      `debit-points-${randomUUID()}`,
     );
 
     if (ok) {
-      try {
-        const parsed = JSON.parse(text) as Record<string, unknown>;
-        const stack: unknown[] = [parsed];
-        const cids: string[] = [];
-        while (stack.length) {
-          const cur = stack.pop();
-          if (!cur || typeof cur !== 'object') continue;
-          if (Array.isArray(cur)) { stack.push(...cur); continue; }
-          const obj = cur as Record<string, unknown>;
-          if (typeof obj.contractId === 'string') cids.push(obj.contractId);
-          for (const v of Object.values(obj)) stack.push(v);
-        }
-        result.missionContractId  = cids[0] ?? null;
-        result.accountContractId  = cids[1] ?? null;
-      } catch { /* ignore parse errors */ }
-      this.logger.log(
-        `ClaimMission: user=${params.userPartyId.split('::')[0]} mission=${params.missionContractId.slice(0, 12)}...`,
-      );
-    } else {
-      result.errors.push(this.formatLedgerError(text, 'ClaimMission failed (quota full or ledger error)'));
+      const cids = this.extractContractIds(text);
+      this.logger.log(`DebitPoints: -${params.amount} pts on ${params.accountContractId.slice(0, 12)}...`);
+      return { ok: true, newContractId: cids[0] ?? null, errors: [] };
     }
-    return result;
+    return { ok: false, newContractId: null, errors: [text.slice(0, 200)] };
   }
 
-  // ── DailyLuckySpin ──────────────────────────────────────────────────────────
+  // ── 2. WalletRegistration ───────────────────────────────────────────────────
 
   /**
-   * Create a DailyLuckySpin contract for a user.
-   * Idempotent: returns existing contract if already created.
-   *
-   * DAR di ledger: lastSpinDate = ISO date string "YYYY-MM-DD" (bukan object)
-   * FIX: kirim string langsung, bukan { year, month, day }
+   * Register a wallet on the ledger.
+   * Called when user submits their Party ID (from admin invite code) in Wallet menu.
+   * Idempotent: returns existing contract if already registered.
    */
-  async ensureDailySpinContract(params: {
+  async registerWallet(params: {
     userPartyId: string;
-    initialDate: string; // ISO date string "YYYY-MM-DD"
-  }): Promise<SpinLedgerResult> {
-    const result: SpinLedgerResult = {
+    username: string;
+    partyId: string;
+    inviteCode: string;
+  }): Promise<WalletRegistrationLedgerResult> {
+    const result: WalletRegistrationLedgerResult = {
       ledgerEnabled: false,
       contractId: null,
       errors: [],
     };
-    if (!this.isClaimSessionConfigured()) return result;
+    if (!this.isConfigured()) return result;
 
-    const tpl = this.templateId(TPL.DailyLuckySpin);
+    const tpl = this.templateId(TPL.WalletRegistration);
     const operator = this.operatorPartyId;
     if (!operator) {
       result.errors.push('Canton operator party not configured');
@@ -412,7 +385,7 @@ export class QuestLedgerService {
       this.logger.warn(`grantUserRights(operator) failed: ${String(err)}`),
     );
 
-    // Idempotency: check if spin contract already exists for this user
+    // Idempotency: check if wallet already registered
     const existing = this.findContractId(
       await this.ledger.queryActiveContracts(tpl, [operator]),
       (args) => args.userAddress === params.userPartyId,
@@ -422,49 +395,141 @@ export class QuestLedgerService {
       return result;
     }
 
-    // PENTING: kirim lastSpinDate sebagai ISO string "YYYY-MM-DD"
-    // bukan object { year, month, day } — DAR di ledger expect ujson.Str
     const res = await this.ledger.createContract(
       tpl,
       {
         admin:        operator,
         userAddress:  params.userPartyId,
-        lastSpinDate: params.initialDate, // "YYYY-MM-DD" string langsung
+        username:     params.username,
+        partyId:      params.partyId,
+        inviteCode:   params.inviteCode,
+        registeredAt: new Date().toISOString(),
       },
       [operator],
-      `daily-spin-${params.userPartyId}-${randomUUID()}`,
+      `wallet-reg-${params.username}-${randomUUID()}`,
     );
 
     if (res.ok && res.contractId) {
-      this.logger.log(`DailyLuckySpin created: ${params.userPartyId.split('::')[0]}`);
+      this.logger.log(`WalletRegistration created: @${params.username} partyId=${params.partyId.split('::')[0]}`);
       result.contractId = res.contractId;
     } else {
-      result.errors.push(this.formatLedgerError(res.error, 'Failed to create DailyLuckySpin'));
+      result.errors.push(this.formatLedgerError(res.error, 'Failed to create WalletRegistration'));
     }
     return result;
   }
 
   /**
-   * Execute a daily spin by exercising ExecuteSpin choice.
-   * The DAML contract enforces 1-spin-per-day — if already spun today, ledger rejects.
-   *
-   * DAR di ledger: currentDate = ISO date string "YYYY-MM-DD" (bukan object)
-   * FIX: kirim string langsung, bukan { year, month, day }
+   * Confirm wallet is active on Canton Network.
+   * Called after wallet is verified.
    */
-  async executeDailySpin(params: {
-    spinContractId: string;
-    accountContractId: string;
-    currentDate: string; // ISO date string "YYYY-MM-DD"
-    spinReward: number;
-  }): Promise<SpinLedgerResult> {
-    const result: SpinLedgerResult = {
+  async confirmWalletActive(params: {
+    walletContractId: string;
+  }): Promise<{ ok: boolean; newContractId: string | null; errors: string[] }> {
+    if (!this.isConfigured()) {
+      return { ok: false, newContractId: null, errors: ['Quest ledger disabled'] };
+    }
+    const tpl = this.templateId(TPL.WalletRegistration);
+    const operator = this.operatorPartyId;
+    if (!operator) {
+      return { ok: false, newContractId: null, errors: ['Canton operator party not configured'] };
+    }
+
+    const { ok, text } = await this.ledger.exerciseChoice(
+      params.walletContractId,
+      tpl,
+      'ConfirmWalletActive',
+      { confirmedAt: new Date().toISOString() },
+      [operator],
+      `confirm-wallet-${randomUUID()}`,
+    );
+
+    if (ok) {
+      const cids = this.extractContractIds(text);
+      this.logger.log(`WalletRegistration confirmed: ${params.walletContractId.slice(0, 12)}...`);
+      return { ok: true, newContractId: cids[0] ?? null, errors: [] };
+    }
+    return { ok: false, newContractId: null, errors: [text.slice(0, 200)] };
+  }
+
+  // ── 3. QuestCampaign ────────────────────────────────────────────────────────
+
+  /**
+   * Create a QuestCampaign contract on the ledger.
+   * Called by admin when creating a new quest campaign.
+   * Supports all 4 types: CC_FCFS, CC_RAFFLE, CODE_FCFS, CODE_RAFFLE.
+   */
+  async createQuestCampaign(params: {
+    campaignId: string;
+    title: string;
+    questKind: 'CC_FCFS' | 'CC_RAFFLE' | 'CODE_FCFS' | 'CODE_RAFFLE';
+    rewardCc: number;
+    claimFeeCc: number;
+    maxWinners: number;
+  }): Promise<QuestCampaignLedgerResult> {
+    const result: QuestCampaignLedgerResult = {
       ledgerEnabled: false,
       contractId: null,
       errors: [],
     };
+    if (!this.isConfigured()) return result;
+
+    const tpl = this.templateId(TPL.QuestCampaign);
+    const operator = this.operatorPartyId;
+    if (!operator) {
+      result.errors.push('Canton operator party not configured');
+      return result;
+    }
+    const reachErr = await this.ensureReachable();
+    if (reachErr) { result.errors.push(reachErr); return result; }
+
+    result.ledgerEnabled = true;
+
+    const res = await this.ledger.createContract(
+      tpl,
+      {
+        admin:         operator,
+        campaignId:    params.campaignId,
+        title:         params.title,
+        questKind:     params.questKind,
+        rewardCc:      params.rewardCc,
+        claimFeeCc:    params.claimFeeCc,
+        maxWinners:    params.maxWinners,
+        currentClaims: 0,
+        status:        'ACTIVE',
+        createdAt:     new Date().toISOString(),
+      },
+      [operator],
+      `quest-campaign-${params.campaignId}`,
+    );
+
+    if (res.ok && res.contractId) {
+      this.logger.log(`QuestCampaign created: ${params.campaignId} kind=${params.questKind} quota=${params.maxWinners}`);
+      result.contractId = res.contractId;
+    } else {
+      result.errors.push(this.formatLedgerError(res.error, 'Failed to create QuestCampaign'));
+    }
+    return result;
+  }
+
+  /**
+   * Claim a FCFS slot by exercising ClaimFcfsSlot choice.
+   * The DAML contract enforces quota — if full, the ledger rejects the tx.
+   * Used for CC_FCFS and CODE_FCFS quest types.
+   */
+  async claimFcfsSlot(params: {
+    campaignContractId: string;
+    userPartyId: string;
+    claimId: string;
+  }): Promise<QuestClaimLedgerResult> {
+    const result: QuestClaimLedgerResult = {
+      ledgerEnabled: false,
+      campaignContractId: null,
+      claimContractId: null,
+      errors: [],
+    };
     if (!this.isClaimSessionConfigured()) return result;
 
-    const tpl = this.templateId(TPL.DailyLuckySpin);
+    const tpl = this.templateId(TPL.QuestCampaign);
     const operator = this.operatorPartyId;
     if (!operator) {
       result.errors.push('Canton operator party not configured');
@@ -476,49 +541,242 @@ export class QuestLedgerService {
     result.ledgerEnabled = true;
 
     const { ok, text } = await this.ledger.exerciseChoice(
-      params.spinContractId,
+      params.campaignContractId,
       tpl,
-      'ExecuteSpin',
+      'ClaimFcfsSlot',
       {
-        // PENTING: kirim currentDate sebagai ISO string "YYYY-MM-DD"
-        // bukan object { year, month, day }
-        currentDate: params.currentDate,
-        accountCid:  params.accountContractId,
-        spinReward:  params.spinReward,
+        user:      params.userPartyId,
+        claimId:   params.claimId,
+        claimedAt: new Date().toISOString(),
       },
       [operator],
-      `execute-spin-${params.spinContractId}-${randomUUID()}`,
+      `claim-fcfs-${params.claimId}-${randomUUID()}`,
     );
 
     if (ok) {
-      try {
-        const parsed = JSON.parse(text) as Record<string, unknown>;
-        const stack: unknown[] = [parsed];
-        while (stack.length) {
-          const cur = stack.pop();
-          if (!cur || typeof cur !== 'object') continue;
-          if (Array.isArray(cur)) { stack.push(...cur); continue; }
-          const obj = cur as Record<string, unknown>;
-          if (typeof obj.contractId === 'string') {
-            result.contractId = obj.contractId;
-            break;
-          }
-          for (const v of Object.values(obj)) stack.push(v);
-        }
-      } catch { /* ignore */ }
+      const cids = this.extractContractIds(text);
+      result.campaignContractId = cids[0] ?? null;
+      result.claimContractId    = cids[1] ?? null;
       this.logger.log(
-        `ExecuteSpin: +${params.spinReward} pts user=${params.spinContractId.slice(0, 12)}... date=${params.currentDate}`,
+        `ClaimFcfsSlot: user=${params.userPartyId.split('::')[0]} campaign=${params.campaignContractId.slice(0, 12)}...`,
       );
     } else {
-      result.errors.push(this.formatLedgerError(text, 'ExecuteSpin failed (already spun today or ledger error)'));
+      result.errors.push(this.formatLedgerError(text, 'ClaimFcfsSlot failed (quota full or ledger error)'));
     }
     return result;
   }
 
   /**
-   * recordSpinExecution — alias best-effort untuk mencatat spin on-chain.
-   * Menggunakan DailyLuckySpin flow (ensureDailySpinContract + executeDailySpin).
-   * Dipanggil dari SpinService.recordSpinOnLedger().
+   * Draw a raffle winner by exercising DrawRaffleWinner choice.
+   * Called by admin after raffle event ends.
+   * Used for CC_RAFFLE and CODE_RAFFLE quest types.
+   */
+  async drawRaffleWinner(params: {
+    campaignContractId: string;
+    userPartyId: string;
+    claimId: string;
+    rewardCode?: string;
+  }): Promise<QuestClaimLedgerResult> {
+    const result: QuestClaimLedgerResult = {
+      ledgerEnabled: false,
+      campaignContractId: null,
+      claimContractId: null,
+      errors: [],
+    };
+    if (!this.isClaimSessionConfigured()) return result;
+
+    const tpl = this.templateId(TPL.QuestCampaign);
+    const operator = this.operatorPartyId;
+    if (!operator) {
+      result.errors.push('Canton operator party not configured');
+      return result;
+    }
+    const reachErr = await this.ensureReachable();
+    if (reachErr) { result.errors.push(reachErr); return result; }
+
+    result.ledgerEnabled = true;
+
+    const { ok, text } = await this.ledger.exerciseChoice(
+      params.campaignContractId,
+      tpl,
+      'DrawRaffleWinner',
+      {
+        user:       params.userPartyId,
+        claimId:    params.claimId,
+        rewardCode: params.rewardCode ?? '',
+        drawnAt:    new Date().toISOString(),
+      },
+      [operator],
+      `draw-raffle-${params.claimId}-${randomUUID()}`,
+    );
+
+    if (ok) {
+      const cids = this.extractContractIds(text);
+      result.campaignContractId = cids[0] ?? null;
+      result.claimContractId    = cids[1] ?? null;
+      this.logger.log(
+        `DrawRaffleWinner: user=${params.userPartyId.split('::')[0]} campaign=${params.campaignContractId.slice(0, 12)}...`,
+      );
+    } else {
+      result.errors.push(this.formatLedgerError(text, 'DrawRaffleWinner failed'));
+    }
+    return result;
+  }
+
+  // ── 4. QuestClaim ───────────────────────────────────────────────────────────
+
+  /**
+   * Confirm fee CC has been received from user.
+   * Called after Splice TX fee is confirmed.
+   * MUST be called before confirmRewardSent.
+   */
+  async confirmFeePaid(params: {
+    claimContractId: string;
+    feeTxId: string;
+  }): Promise<{ ok: boolean; newContractId: string | null; errors: string[] }> {
+    if (!this.isClaimSessionConfigured()) {
+      return { ok: false, newContractId: null, errors: ['Claim session ledger disabled'] };
+    }
+    const tpl = this.templateId(TPL.QuestClaim);
+    const operator = this.operatorPartyId;
+    if (!operator) {
+      return { ok: false, newContractId: null, errors: ['Canton operator party not configured'] };
+    }
+
+    const { ok, text } = await this.ledger.exerciseChoice(
+      params.claimContractId,
+      tpl,
+      'ConfirmFeePaid',
+      {
+        txId:        params.feeTxId,
+        confirmedAt: new Date().toISOString(),
+      },
+      [operator],
+      `confirm-fee-${randomUUID()}`,
+    );
+
+    if (ok) {
+      const cids = this.extractContractIds(text);
+      this.logger.log(`ConfirmFeePaid: claim=${params.claimContractId.slice(0, 12)}... feeTx=${params.feeTxId.slice(0, 16)}`);
+      return { ok: true, newContractId: cids[0] ?? null, errors: [] };
+    }
+    return { ok: false, newContractId: null, errors: [text.slice(0, 200)] };
+  }
+
+  /**
+   * Confirm reward has been sent to user.
+   * Called after Splice TX reward is confirmed.
+   * Fee must be paid first (enforced by DAML contract).
+   */
+  async confirmRewardSent(params: {
+    claimContractId: string;
+    rewardTxId: string;
+  }): Promise<{ ok: boolean; newContractId: string | null; errors: string[] }> {
+    if (!this.isClaimSessionConfigured()) {
+      return { ok: false, newContractId: null, errors: ['Claim session ledger disabled'] };
+    }
+    const tpl = this.templateId(TPL.QuestClaim);
+    const operator = this.operatorPartyId;
+    if (!operator) {
+      return { ok: false, newContractId: null, errors: ['Canton operator party not configured'] };
+    }
+
+    const { ok, text } = await this.ledger.exerciseChoice(
+      params.claimContractId,
+      tpl,
+      'ConfirmRewardSent',
+      {
+        txId:   params.rewardTxId,
+        sentAt: new Date().toISOString(),
+      },
+      [operator],
+      `confirm-reward-${randomUUID()}`,
+    );
+
+    if (ok) {
+      const cids = this.extractContractIds(text);
+      this.logger.log(`ConfirmRewardSent: claim=${params.claimContractId.slice(0, 12)}... rewardTx=${params.rewardTxId.slice(0, 16)}`);
+      return { ok: true, newContractId: cids[0] ?? null, errors: [] };
+    }
+    return { ok: false, newContractId: null, errors: [text.slice(0, 200)] };
+  }
+
+  // ── 5. DailyCheckIn ─────────────────────────────────────────────────────────
+
+  /**
+   * Record a daily check-in on the ledger.
+   * checkInId = "{userId}_{YYYY-MM-DD}" — unique per user per day.
+   * Idempotency is checked at API level before calling this.
+   */
+  async recordDailyCheckIn(params: {
+    userPartyId: string;
+    username: string;
+    userId: string;
+    checkInDate: string;   // "YYYY-MM-DD"
+    pointsAwarded: number;
+    streakCount: number;
+  }): Promise<DailyCheckInLedgerResult> {
+    const result: DailyCheckInLedgerResult = {
+      ledgerEnabled: false,
+      contractId: null,
+      errors: [],
+    };
+    if (!this.isClaimSessionConfigured()) return result;
+
+    const tpl = this.templateId(TPL.DailyCheckIn);
+    const operator = this.operatorPartyId;
+    if (!operator) {
+      result.errors.push('Canton operator party not configured');
+      return result;
+    }
+    const reachErr = await this.ensureReachable();
+    if (reachErr) { result.errors.push(reachErr); return result; }
+
+    result.ledgerEnabled = true;
+
+    const checkInId = `${params.userId}_${params.checkInDate}`;
+
+    // Idempotency: check if check-in already recorded for this user+date
+    const existing = this.findContractId(
+      await this.ledger.queryActiveContracts(tpl, [operator]),
+      (args) => args.checkInId === checkInId,
+    );
+    if (existing) {
+      result.contractId = existing;
+      return result;
+    }
+
+    const res = await this.ledger.createContract(
+      tpl,
+      {
+        admin:         operator,
+        userAddress:   params.userPartyId,
+        username:      params.username,
+        checkInId,
+        checkInDate:   params.checkInDate,
+        pointsAwarded: params.pointsAwarded,
+        streakCount:   params.streakCount,
+        checkedInAt:   new Date().toISOString(),
+      },
+      [operator],
+      `daily-checkin-${checkInId}-${randomUUID()}`,
+    );
+
+    if (res.ok && res.contractId) {
+      this.logger.log(`DailyCheckIn recorded: @${params.username} date=${params.checkInDate} streak=${params.streakCount}`);
+      result.contractId = res.contractId;
+    } else {
+      result.errors.push(this.formatLedgerError(res.error, 'Failed to record DailyCheckIn'));
+    }
+    return result;
+  }
+
+  // ── 6. SpinExecution ────────────────────────────────────────────────────────
+
+  /**
+   * Record a spin execution on the ledger.
+   * Creates a SpinExecution contract as on-chain audit trail.
+   * spinResultId is unique per spin (from DB) — prevents double-spend.
    */
   async recordSpinExecution(params: {
     userPartyId:   string;
@@ -540,43 +798,143 @@ export class QuestLedgerService {
     };
     if (!this.isClaimSessionConfigured()) return result;
 
-    const today = params.executedAt.split('T')[0]; // "YYYY-MM-DD"
-
-    // 1. Ensure DailyLuckySpin contract ada
-    const spinContract = await this.ensureDailySpinContract({
-      userPartyId: params.userPartyId,
-      initialDate: today,
-    });
-
-    result.ledgerEnabled = spinContract.ledgerEnabled;
-
-    if (!spinContract.contractId) {
-      result.errors.push(...spinContract.errors);
+    const tpl = this.templateId(TPL.SpinExecution);
+    const operator = this.operatorPartyId;
+    if (!operator) {
+      result.errors.push('Canton operator party not configured');
       return result;
     }
+    const reachErr = await this.ensureReachable();
+    if (reachErr) { result.errors.push(reachErr); return result; }
 
-    // 2. Exercise ExecuteSpin
-    const spinResult = await this.executeDailySpin({
-      spinContractId:    spinContract.contractId,
-      accountContractId: spinContract.contractId,
-      currentDate:       today,
-      spinReward:        params.rewardPoints > 0 ? params.rewardPoints : params.spinCost,
-    });
+    result.ledgerEnabled = true;
 
-    result.spinExecutionContractId = spinResult.contractId;
-    result.errors.push(...spinResult.errors);
+    await this.ledger.grantUserRights(operator).catch((err) =>
+      this.logger.warn(`grantUserRights(operator) failed: ${String(err)}`),
+    );
+
+    const res = await this.ledger.createContract(
+      tpl,
+      {
+        admin:         operator,
+        userAddress:   params.userPartyId,
+        username:      params.username,
+        spinResultId:  params.spinResultId,
+        spinItemId:    params.spinItemId,
+        spinItemLabel: params.spinItemLabel,
+        rewardType:    params.rewardType,
+        rewardCc:      params.rewardCc,
+        rewardPoints:  params.rewardPoints,
+        spinCost:      params.spinCost,
+        executedAt:    params.executedAt,
+      },
+      [operator],
+      `spin-exec-${params.spinResultId}`,
+    );
+
+    if (res.ok && res.contractId) {
+      this.logger.log(
+        `SpinExecution recorded: @${params.username} item="${params.spinItemLabel}" type=${params.rewardType} spinResultId=${params.spinResultId.slice(0, 8)}`,
+      );
+      result.spinExecutionContractId = res.contractId;
+    } else {
+      result.errors.push(this.formatLedgerError(res.error, 'Failed to record SpinExecution'));
+    }
     return result;
   }
 
   /**
-   * confirmSpinCcDelivered — no-op stub.
-   * DailyLuckySpin di ledger tidak punya ConfirmCcDelivered choice.
+   * Confirm CC reward from spin has been delivered.
+   * Called after BullMQ job successfully sends CC via Splice.
+   * Creates SpinCcReward contract as permanent audit trail.
    */
   async confirmSpinCcDelivered(params: {
     spinExecutionContractId: string;
     spliceTxId: string;
   }): Promise<{ ok: boolean; ccRewardContractId: string | null; errors: string[] }> {
-    return { ok: true, ccRewardContractId: null, errors: [] };
+    if (!this.isClaimSessionConfigured()) {
+      return { ok: true, ccRewardContractId: null, errors: [] };
+    }
+    const tpl = this.templateId(TPL.SpinExecution);
+    const operator = this.operatorPartyId;
+    if (!operator) {
+      return { ok: false, ccRewardContractId: null, errors: ['Canton operator party not configured'] };
+    }
+
+    const { ok, text } = await this.ledger.exerciseChoice(
+      params.spinExecutionContractId,
+      tpl,
+      'ConfirmCcDelivered',
+      {
+        spliceTxId:  params.spliceTxId,
+        deliveredAt: new Date().toISOString(),
+      },
+      [operator],
+      `confirm-spin-cc-${randomUUID()}`,
+    );
+
+    if (ok) {
+      const cids = this.extractContractIds(text);
+      this.logger.log(
+        `SpinCcReward confirmed: spinExec=${params.spinExecutionContractId.slice(0, 12)}... spliceTx=${params.spliceTxId.slice(0, 16)}`,
+      );
+      return { ok: true, ccRewardContractId: cids[0] ?? null, errors: [] };
+    }
+    return { ok: false, ccRewardContractId: null, errors: [text.slice(0, 200)] };
+  }
+
+  // ── Legacy: Mission (FCFS) — maps to QuestCampaign ─────────────────────────
+
+  /**
+   * Create a Mission contract on the ledger.
+   * @deprecated Use createQuestCampaign() instead.
+   * Kept for backward compatibility with existing admin flows.
+   */
+  async createMission(params: {
+    missionId: string;
+    rewardPoints: number;
+    maxQuota: number;
+  }): Promise<{ contractId: string | null; error?: string }> {
+    const result = await this.createQuestCampaign({
+      campaignId:  params.missionId,
+      title:       `Mission ${params.missionId}`,
+      questKind:   'CC_FCFS',
+      rewardCc:    0,
+      claimFeeCc:  0,
+      maxWinners:  params.maxQuota,
+    });
+    if (result.contractId) return { contractId: result.contractId };
+    return { contractId: null, error: result.errors.join(' | ') };
+  }
+
+  /**
+   * Claim a Mission FCFS slot.
+   * @deprecated Use claimFcfsSlot() instead.
+   * Kept for backward compatibility with existing quest flows.
+   */
+  async claimMission(params: {
+    missionContractId: string;
+    userPartyId: string;
+    accountContractId: string;
+  }): Promise<MissionClaimLedgerResult> {
+    const result: MissionClaimLedgerResult = {
+      ledgerEnabled: false,
+      missionContractId: null,
+      accountContractId: null,
+      errors: [],
+    };
+
+    const claimResult = await this.claimFcfsSlot({
+      campaignContractId: params.missionContractId,
+      userPartyId:        params.userPartyId,
+      claimId:            `mission-claim-${randomUUID()}`,
+    });
+
+    result.ledgerEnabled      = claimResult.ledgerEnabled;
+    result.missionContractId  = claimResult.campaignContractId;
+    result.accountContractId  = claimResult.claimContractId;
+    result.errors             = claimResult.errors;
+    return result;
   }
 
   // ── Legacy stubs (kept for backward compatibility) ──────────────────────────
@@ -587,11 +945,11 @@ export class QuestLedgerService {
     questKind: string;
     userPartyId: string;
   }): Promise<{ contractId: string | null; error?: string }> {
-    this.logger.warn(`ensureParticipation() called for quest=${params.questId} — legacy stub, no-op`);
-    return { contractId: null, error: 'Legacy method: use ensureUserAccount()' };
+    this.logger.warn(`ensureParticipation() called for quest=${params.questId} — use ensureUserAccount()`);
+    return { contractId: null };
   }
 
-  /** @deprecated Use claimMission() instead */
+  /** @deprecated Use claimFcfsSlot() or drawRaffleWinner() instead */
   async createClaimSession(params: {
     questId: string;
     userPartyId: string;
@@ -599,8 +957,8 @@ export class QuestLedgerService {
     feeCc: number;
     rewardCc: number;
   }): Promise<ClaimSessionLedgerResult> {
-    this.logger.warn(`createClaimSession() called for quest=${params.questId} — legacy stub, no-op`);
-    return { ledgerEnabled: false, sessionContractId: null, errors: ['Legacy method: use claimMission()'] };
+    this.logger.warn(`createClaimSession() called for quest=${params.questId} — use claimFcfsSlot()`);
+    return { ledgerEnabled: false, sessionContractId: null, errors: [] };
   }
 
   /** @deprecated — no-op stub */
@@ -608,9 +966,6 @@ export class QuestLedgerService {
     questId?: string;
     campaignId?: string;
     userPartyId: string;
-    claimKind?: string;
-    feeCc?: number;
-    rewardCc?: number;
     [key: string]: unknown;
   }): Promise<{ contractId: string | null; error?: string }> {
     return { contractId: null };
@@ -621,8 +976,6 @@ export class QuestLedgerService {
     questId?: string;
     campaignId?: string;
     userPartyId: string;
-    expiresAt?: string;
-    slotIndex?: number;
     [key: string]: unknown;
   }): Promise<{ contractId: string | null; error?: string }> {
     return { contractId: null };
@@ -633,8 +986,6 @@ export class QuestLedgerService {
     questId?: string;
     campaignId?: string;
     userPartyId: string;
-    rewardCc?: number;
-    rewardOfferId?: string;
     [key: string]: unknown;
   }): Promise<{ contractId: string | null; error?: string }> {
     return { contractId: null };
@@ -645,14 +996,12 @@ export class QuestLedgerService {
     questId?: string;
     campaignId?: string;
     userPartyId: string;
-    rewardCode?: string;
-    rewardOfferId?: string;
     [key: string]: unknown;
   }): Promise<{ contractId: string | null; error?: string }> {
     return { contractId: null };
   }
 
-  /** @deprecated — no-op stub */
+  /** @deprecated Use registerWallet() instead */
   async recordPartyRegistration(params: {
     userPartyId: string;
     username?: string;
@@ -660,7 +1009,14 @@ export class QuestLedgerService {
     inviteCode?: string;
     [key: string]: unknown;
   }): Promise<{ ok: boolean; contractId: string | null; errors: string[] }> {
-    return { ok: true, contractId: null, errors: [] };
+    if (!params.userPartyId) return { ok: true, contractId: null, errors: [] };
+    const result = await this.registerWallet({
+      userPartyId: params.userPartyId,
+      username:    params.username ?? params.partyHint ?? params.userPartyId.split('::')[0],
+      partyId:     params.userPartyId,
+      inviteCode:  params.inviteCode ?? '',
+    });
+    return { ok: !!result.contractId, contractId: result.contractId, errors: result.errors };
   }
 
   /** @deprecated — no-op stub */
@@ -674,7 +1030,7 @@ export class QuestLedgerService {
     return { ok: true, contractId: null, errors: [] };
   }
 
-  /** @deprecated — no-op stub */
+  /** @deprecated Use drawRaffleWinner() instead */
   async createRaffleWinner(params: {
     userPartyId: string;
     questId?: string;
@@ -686,50 +1042,55 @@ export class QuestLedgerService {
     return { contractId: null };
   }
 
-  /** @deprecated — no-op stub */
+  /** @deprecated Use confirmFeePaid() instead */
   async markEarnClaimFeePaid(params: {
     sessionContractId: string;
     feeTxId: string;
   }): Promise<{ ok: boolean; errors: string[] }> {
-    return { ok: true, errors: [] };
+    const result = await this.confirmFeePaid({
+      claimContractId: params.sessionContractId,
+      feeTxId:         params.feeTxId,
+    });
+    return { ok: result.ok, errors: result.errors };
   }
 
-  /** @deprecated — no-op stub */
+  /** @deprecated Use confirmRewardSent() instead */
   async markEarnClaimRewardSent(params: {
     sessionContractId: string;
     rewardTxId: string;
   }): Promise<{ ok: boolean; errors: string[] }> {
-    return { ok: true, errors: [] };
+    const result = await this.confirmRewardSent({
+      claimContractId: params.sessionContractId,
+      rewardTxId:      params.rewardTxId,
+    });
+    return { ok: result.ok, errors: result.errors };
   }
 
-  /** @deprecated */
+  /** @deprecated Use confirmFeePaid() instead */
   async markClaimFeePaid(params: {
     sessionContractId: string;
     feeTxId: string;
   }): Promise<{ ok: boolean; errors: string[] }> {
-    this.logger.warn(`markClaimFeePaid() called — legacy stub, no-op`);
-    return { ok: false, errors: ['Legacy method: no ClaimSession in new contract'] };
+    return this.markEarnClaimFeePaid(params);
   }
 
-  /** @deprecated */
+  /** @deprecated Use confirmRewardSent() instead */
   async markClaimRewardSent(params: {
     sessionContractId: string;
     rewardTxId: string;
   }): Promise<{ ok: boolean; errors: string[] }> {
-    this.logger.warn(`markClaimRewardSent() called — legacy stub, no-op`);
-    return { ok: false, errors: ['Legacy method: no ClaimSession in new contract'] };
+    return this.markEarnClaimRewardSent({ sessionContractId: params.sessionContractId, rewardTxId: params.rewardTxId });
   }
 
-  /** @deprecated */
+  /** @deprecated — no-op stub */
   async markRewardClaimed(params: {
     rewardContractId: string;
     payoutTxId: string;
   }): Promise<{ ok: boolean; errors: string[] }> {
-    this.logger.warn(`markRewardClaimed() called — legacy stub, no-op`);
-    return { ok: false, errors: ['Legacy method: no QuestReward in new contract'] };
+    return { ok: true, errors: [] };
   }
 
-  /** @deprecated */
+  /** @deprecated Use ensureUserAccount() + rewardUser() instead */
   async recordQuestCompletion(params: {
     questId: string;
     questKind: string;
@@ -739,18 +1100,18 @@ export class QuestLedgerService {
     taskIds: string[];
     proofs: Array<{ taskId: string; taskType: string; proof: string | null }>;
   }): Promise<QuestLedgerSubmitResult> {
-    this.logger.warn(`recordQuestCompletion() called for quest=${params.questId} — legacy stub, no-op`);
+    this.logger.warn(`recordQuestCompletion() called for quest=${params.questId} — use ensureUserAccount() + rewardUser()`);
     return {
       ledgerEnabled: false,
       participationContractId: null,
       completionContractId: null,
       rewardContractId: null,
       taskSubmissionIds: [],
-      errors: ['Legacy method: use ensureUserAccount() + rewardUser()'],
+      errors: [],
     };
   }
 
-  /** @deprecated */
+  /** @deprecated — no-op stub */
   async recordTaskSubmission(params: {
     questId: string;
     questKind: string;
@@ -759,12 +1120,11 @@ export class QuestLedgerService {
     proof: string | null;
     userPartyId: string;
   }): Promise<QuestTaskLedgerResult> {
-    this.logger.warn(`recordTaskSubmission() called — legacy stub, no-op`);
     return {
       ledgerEnabled: false,
       participationContractId: null,
       taskSubmissionContractId: null,
-      errors: ['Legacy method: no QuestTaskSubmission in new contract'],
+      errors: [],
     };
   }
 
@@ -775,9 +1135,9 @@ export class QuestLedgerService {
     if (!raw) return fallback;
     try {
       const j = JSON.parse(raw) as { code?: string; cause?: string; message?: string };
-      if (j.cause)    return `${fallback}: ${j.cause}`;
-      if (j.message)  return `${fallback}: ${j.message}`;
-      if (j.code)     return `${fallback}: ${j.code}`;
+      if (j.cause)   return `${fallback}: ${j.cause}`;
+      if (j.message) return `${fallback}: ${j.message}`;
+      if (j.code)    return `${fallback}: ${j.code}`;
     } catch { /* use raw slice */ }
     return `${fallback}: ${raw.slice(0, 120)}`;
   }
