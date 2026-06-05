@@ -1,6 +1,7 @@
 /**
- * List packages on the participant and probe canquest-v3 ACS filter.
- * Templates: Main:UserAccount, Main:Mission, Main:DailyLuckySpin
+ * List packages on the participant and probe canquest-v4 ACS filter.
+ * Templates: Main:UserAccount, Main:WalletRegistration, Main:QuestCampaign,
+ *            Main:QuestClaim, Main:DailyCheckIn, Main:SpinExecution, Main:SpinCcReward
  * Usage: node scripts/verify-daml-package.cjs
  */
 const fs = require('fs');
@@ -31,7 +32,7 @@ const secret = process.env.CANTON_SPLICE_SECRET || 'unsafe';
 const audience = process.env.CANTON_LEDGER_API_AUDIENCE || 'https://canton.network.global';
 const user = process.env.CANTON_LEDGER_API_USER || 'ledger-api-user';
 const expectedPkg = process.env.CANTON_DAML_PACKAGE_ID?.trim();
-const packageName = process.env.CANTON_DAML_PACKAGE_NAME?.trim() || 'canquest-v3';
+const packageName = process.env.CANTON_DAML_PACKAGE_NAME?.trim() || 'canquest-v4';
 const operator =
   process.env.CANTON_OPERATOR_PARTY_ID?.trim() ||
   process.env.CANTON_VALIDATOR_PARTY_ID?.trim();
@@ -134,11 +135,15 @@ async function main() {
 
   const ref = packageName.startsWith('#') ? packageName : `#${packageName}`;
 
-  // Probe all 3 templates from canquest-v3 Main.daml
+  // Probe all 7 templates from canquest-v4 Main.daml
   const templates = [
     `${ref}:Main:UserAccount`,
-    `${ref}:Main:Mission`,
-    `${ref}:Main:DailyLuckySpin`,
+    `${ref}:Main:WalletRegistration`,
+    `${ref}:Main:QuestCampaign`,
+    `${ref}:Main:QuestClaim`,
+    `${ref}:Main:DailyCheckIn`,
+    `${ref}:Main:SpinExecution`,
+    `${ref}:Main:SpinCcReward`,
   ];
 
   for (const tpl of templates) {

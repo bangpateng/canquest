@@ -40,10 +40,11 @@ const secret = process.env.CANTON_SPLICE_SECRET || 'unsafe';
 const spliceAud = process.env.CANTON_SPLICE_AUDIENCE || 'https://validator.example.com';
 const ledgerAud = process.env.CANTON_LEDGER_API_AUDIENCE || 'https://canton.network.global';
 const ledgerUser = process.env.CANTON_LEDGER_API_USER || 'ledger-api-user';
-const pkgName = process.env.CANTON_DAML_PACKAGE_NAME?.trim() || 'canquest-v2';
+const pkgName = process.env.CANTON_DAML_PACKAGE_NAME?.trim() || 'canquest-v4';
 const pkgRef = pkgName.startsWith('#') ? pkgName : `#${pkgName}`;
 const validatorAnchor = process.env.CANTON_VALIDATOR_PARTY_ID?.trim();
-const TASK_TPL = `${pkgRef}:CanQuest.Quest.Task:QuestTaskSubmission`;
+// canquest-v4: probe dengan UserAccount (template yang pasti ada di Main.daml)
+const PROBE_TPL = `${pkgRef}:Main:UserAccount`;
 
 function partySuffix(partyId) {
   const i = partyId?.indexOf('::');
@@ -138,7 +139,9 @@ async function grantUserRights(partyId) {
 }
 
 async function probeSubmit(partyId) {
-  const templateId = TASK_TPL;
+  // canquest-v4: probe dengan membuat UserAccount contract
+  // Ini membuktikan bahwa DAR canquest-v4 sudah ter-upload dan operator bisa submit
+  const templateId = PROBE_TPL;
   const res = await fetch(`${ledgerBase}/v2/commands/submit-and-wait`, {
     method: 'POST',
     headers: ledgerHeaders(),
@@ -148,14 +151,12 @@ async function probeSubmit(partyId) {
           CreateCommand: {
             templateId,
             createArguments: {
-              operator: partyId,
-              user: partyId,
-              questId: 'operator-probe',
-              taskId: 'probe-task',
-              taskType: 'probe',
-              proof: 'probe',
-              submittedAt: new Date().toISOString(),
-              verified: true,
+              admin:        partyId,
+              userAddress:  partyId,
+              username:     'operator-probe',
+              earnedPoints: 0,
+              spentPoints:  0,
+              createdAt:    new Date().toISOString(),
             },
           },
         },
@@ -172,7 +173,7 @@ async function probeSubmit(partyId) {
     console.log(`Ledger submit probe failed ${res.status}:`, text.slice(0, 300));
     return false;
   }
-  console.log('Ledger submit probe OK (canquest-v2 template)');
+  console.log('Ledger submit probe OK (canquest-v4 Main:UserAccount)');
   return true;
 }
 

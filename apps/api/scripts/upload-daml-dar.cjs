@@ -84,7 +84,7 @@ async function main() {
   const pkgFromDar = idMatch ? idMatch[1] : null;
 
   console.log('Add to apps/api/.env:');
-  console.log('CANTON_DAML_PACKAGE_NAME=canquest-v2');
+  console.log('CANTON_DAML_PACKAGE_NAME=canquest-v4');
   if (pkgFromDar) {
     console.log('CANTON_DAML_PACKAGE_ID=' + pkgFromDar);
   } else {
