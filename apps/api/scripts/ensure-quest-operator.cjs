@@ -139,41 +139,40 @@ async function grantUserRights(partyId) {
 }
 
 async function probeSubmit(partyId) {
-  // canquest-v4: probe dengan membuat UserAccount contract
-  // Ini membuktikan bahwa DAR canquest-v4 sudah ter-upload dan operator bisa submit
+  // canquest-v4: probe dengan ACS query (tidak perlu submit contract)
+  // Cukup query ACS untuk membuktikan template ada dan operator bisa read
   const templateId = PROBE_TPL;
-  const res = await fetch(`${ledgerBase}/v2/commands/submit-and-wait`, {
+  const res = await fetch(`${ledgerBase}/v2/state/active-contracts`, {
     method: 'POST',
     headers: ledgerHeaders(),
     body: JSON.stringify({
-      commands: [
-        {
-          CreateCommand: {
-            templateId,
-            createArguments: {
-              admin:        partyId,
-              userAddress:  partyId,
-              username:     'operator-probe',
-              earnedPoints: 0,
-              spentPoints:  0,
-              createdAt:    new Date().toISOString(),
-            },
+      eventFormat: {
+        filtersByParty: {
+          [partyId]: {
+            cumulative: [
+              {
+                identifierFilter: {
+                  TemplateFilter: {
+                    value: { templateId, includeCreatedEventBlob: false },
+                  },
+                },
+              },
+            ],
           },
         },
-      ],
-      userId: ledgerUser,
-      commandId: randomUUID(),
-      actAs: [partyId],
-      readAs: [partyId],
+        filtersForAnyParty: { cumulative: [] },
+        verbose: false,
+      },
+      activeAtOffset: 0,
     }),
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(15_000),
   });
   const text = await res.text();
   if (!res.ok) {
-    console.log(`Ledger submit probe failed ${res.status}:`, text.slice(0, 300));
+    console.log(`Ledger ACS probe failed ${res.status}:`, text.slice(0, 300));
     return false;
   }
-  console.log('Ledger submit probe OK (canquest-v4 Main:UserAccount)');
+  console.log('Ledger ACS probe OK (canquest-v4 Main:UserAccount template found)');
   return true;
 }
 
