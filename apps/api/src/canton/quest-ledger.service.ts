@@ -605,10 +605,14 @@ export class QuestLedgerService {
 
     if (ok) {
       const cids = this.extractContractIds(text);
-      result.campaignContractId = cids[0] ?? null;
-      result.claimContractId    = cids[1] ?? null;
+      // ClaimFcfsSlot returns (ContractId QuestCampaign, ContractId QuestClaim)
+      // Canton JSON API v2 wraps tuple results — extract all unique contract IDs
+      // cids[0] = new QuestCampaign, cids[1] = new QuestClaim
+      // If only 1 cid found, it might be the claim (campaign update creates new cid)
+      result.campaignContractId = cids.length >= 2 ? (cids[0] ?? null) : null;
+      result.claimContractId    = cids.length >= 2 ? (cids[1] ?? null) : (cids[0] ?? null);
       this.logger.log(
-        `ClaimFcfsSlot: user=${params.userPartyId.split('::')[0]} campaign=${params.campaignContractId.slice(0, 12)}...`,
+        `ClaimFcfsSlot: user=${params.userPartyId.split('::')[0]} campaign=${params.campaignContractId.slice(0, 12)}... claim=${result.claimContractId?.slice(0, 12) ?? 'none'}`,
       );
     } else {
       result.errors.push(this.formatLedgerError(text, 'ClaimFcfsSlot failed (quota full or ledger error)'));
