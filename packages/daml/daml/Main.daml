@@ -392,8 +392,8 @@ template SpinExecution
     spinItemLabel : Text    -- label item (e.g. "50 CC", "100 Points", "Not Lucky")
     rewardType    : Text    -- "cc" | "points" | "invite_code" | "none"
     rewardCc      : Decimal -- jumlah CC jika rewardType = "cc" (0.0 jika bukan)
-    rewardPoints  : Int     -- jumlah points jika rewardType = "points" (0 jika bukan)
-    spinCost      : Int     -- poin yang dipakai untuk spin ini
+    rewardPoints  : Text    -- jumlah points jika rewardType = "points" ("0" jika bukan)
+    spinCost      : Text    -- poin yang dipakai untuk spin ini (sebagai string)
     executedAt    : Text    -- ISO timestamp eksekusi spin
   where
     signatory admin

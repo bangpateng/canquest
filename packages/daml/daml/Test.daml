@@ -553,8 +553,8 @@ testAllTemplates = script do
       spinItemLabel = "50 CC"
       rewardType    = "cc"
       rewardCc      = 50.0
-      rewardPoints  = 0
-      spinCost      = 50
+      rewardPoints  = "0"
+      spinCost      = "50"
       executedAt    = "2026-06-05T10:00:00Z"
 
   -- (K2) Alice spin — menang points reward
@@ -568,8 +568,8 @@ testAllTemplates = script do
       spinItemLabel = "100 Points"
       rewardType    = "points"
       rewardCc      = 0.0
-      rewardPoints  = 100
-      spinCost      = 50
+      rewardPoints  = "100"
+      spinCost      = "50"
       executedAt    = "2026-06-05T10:30:00Z"
 
   -- (K3) Bob spin — tidak menang (none)
@@ -583,8 +583,8 @@ testAllTemplates = script do
       spinItemLabel = "Not Lucky"
       rewardType    = "none"
       rewardCc      = 0.0
-      rewardPoints  = 0
-      spinCost      = 50
+      rewardPoints  = "0"
+      spinCost      = "50"
       executedAt    = "2026-06-05T11:00:00Z"
 
   -- (K4) ConfirmCcDelivered untuk Alice spin CC → HARUS SUKSES

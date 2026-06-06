@@ -873,9 +873,9 @@ export class QuestLedgerService {
         spinItemId:    params.spinItemId,
         spinItemLabel: params.spinItemLabel,
         rewardType:    params.rewardType,
-        rewardCc:      this.dec(params.rewardCc),   // Decimal → string
-        rewardPoints:  params.rewardPoints,           // Int → number (ok)
-        spinCost:      params.spinCost,               // Int → number (ok)
+        rewardCc:      this.dec(params.rewardCc),
+        rewardPoints:  String(params.rewardPoints),
+        spinCost:      String(params.spinCost),
         executedAt:    params.executedAt,
       },
       [operator],
