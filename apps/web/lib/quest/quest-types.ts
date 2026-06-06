@@ -13,6 +13,7 @@ export type RewardType =
   | "CC_ONLY"
   | "CC_MANUAL"
   | "CC_AND_INVITE"
+  | "CC_AND_CODE_RAFFLE"
   | "INVITE_CODE";
 
 export type QuestRewardState =
@@ -587,6 +588,12 @@ export const REWARD_TYPE_OPTIONS: { value: RewardType; label: string; hint: stri
     value: "CC_AND_INVITE",
     label: "6 · CC + kode (FCFS campuran · legacy)",
     hint: "CC + invite (legacy). Untuk kampanye baru lebih baik pisah tipe 1, 4, dan 5.",
+  },
+  {
+    value: "CC_AND_CODE_RAFFLE",
+    label: "7 · CC + Kode (Raffle Gabungan)",
+    hint:
+      "Satu event gabungan: user selesaikan semua task sosial → submit → tunggu raffle. Admin draw pemenang dari dashboard. Pemenang claim CC reward + invite code dengan membayar 5 CC claim fee.",
   },
 ];
 

@@ -207,6 +207,8 @@ enum RewardType {
   /// Raffle CC — admin draw after event; winners claim on-chain
   CC_MANUAL
   CC_AND_INVITE
+  /// Combined raffle: winners get both CC reward AND an invite code in one event; each claim costs 5 CC
+  CC_AND_CODE_RAFFLE
   /// @deprecated Use INVITE_CODE_RANDOM — kept for existing rows
   INVITE_CODE
 }

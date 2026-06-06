@@ -775,7 +775,8 @@ export class AdminService {
     const rewardType = normalizeRewardType(quest.rewardType as RewardType);
     if (
       rewardType === RewardType.INVITE_CODE_RANDOM ||
-      rewardType === RewardType.INVITE_CODE
+      rewardType === RewardType.INVITE_CODE ||
+      rewardType === RewardType.CC_AND_CODE_RAFFLE
     ) {
       const codeCount = await this.prisma.inviteCodePool.count({
         where: { questId, userId: null },
@@ -912,7 +913,8 @@ export class AdminService {
         rt === RewardType.CC_MANUAL ||
         rt === RewardType.INVITE_CODE_RANDOM ||
         rt === RewardType.INVITE_CODE ||
-        rt === RewardType.WAITLIST_EMAIL
+        rt === RewardType.WAITLIST_EMAIL ||
+        rt === RewardType.CC_AND_CODE_RAFFLE
       ) {
         throw new BadRequestException(
           'Raffle campaigns: use Draw Winners only — winners claim or view results on the quest page.',

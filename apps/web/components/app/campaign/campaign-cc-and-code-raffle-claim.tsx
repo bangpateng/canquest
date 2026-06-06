@@ -1,0 +1,112 @@
+"use client";
+
+import { useState } from "react";
+import type { CampaignMeta } from "@/lib/canton/campaign-reward";
+import { CampaignFcfsRewardCard } from "@/components/app/campaign/campaign-fcfs-reward-card";
+
+const CLAIM_FAIL_MSG =
+  "Claim failed: Transaction reverted by ledger (insufficient balance or network error)";
+
+/**
+ * CC + Code Combined Raffle Claim Section
+ *
+ * Shown when rewardType === "CC_AND_CODE_RAFFLE" and user is a raffle winner.
+ * Winner pays 5 CC claim fee → receives CC reward + invite code in one transaction.
+ */
+export function CampaignCcAndCodeRaffleClaimSection({
+  questId,
+  partyId,
+  rewardCc,
+  campaignMeta,
+  onClaimed,
+}: {
+  questId: string;
+  partyId: string | null;
+  rewardCc: number;
+  campaignMeta: CampaignMeta;
+  onClaimed: () => void;
+}) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [claimedCode, setClaimedCode] = useState<string | null>(null);
+
+  const fee = campaignMeta.fcfsClaimFeeCc;
+
+  async function handleClaim() {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const res = await fetch(`/api/quests/${questId}/claim-cc-and-code-raffle`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        message?: string;
+        inviteCode?: string;
+        rewardCc?: number;
+      };
+      if (!res.ok || data.ok === false) {
+        setError(
+          typeof data.message === "string" && data.message.trim()
+            ? data.message
+            : CLAIM_FAIL_MSG,
+        );
+        return;
+      }
+      const code = data.inviteCode ?? null;
+      setClaimedCode(code);
+      setSuccess(
+        data.message ??
+          (code
+            ? `${rewardCc} CC sent to your wallet! Your code: ${code}`
+            : `${rewardCc} CC sent to your wallet.`),
+      );
+      onClaimed();
+    } catch {
+      setError(CLAIM_FAIL_MSG);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  const description = fee > 0
+    ? `Pay ${fee} CC claim fee on-chain to receive ${rewardCc} CC + your invite code`
+    : `Claim your ${rewardCc} CC reward and invite code`;
+
+  return (
+    <div className="space-y-3">
+      <CampaignFcfsRewardCard
+        mode="claim"
+        sectionLabel="CC + Code Raffle reward"
+        slotsLabel={`You won · ${rewardCc} CC + Code`}
+        description={description}
+        rewardCc={rewardCc}
+        partyId={partyId}
+        canClaim
+        isSubmitting={isSubmitting}
+        error={error}
+        success={success}
+        claimButtonLabel={`Claim ${rewardCc} CC + Code`}
+        onClaim={() => void handleClaim()}
+      />
+      {claimedCode && (
+        <div className="rounded-2xl border border-canton/30 bg-canton/[0.06] p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+            Your Invite Code
+          </p>
+          <p className="mt-2 font-mono text-lg font-bold tracking-widest text-canton">
+            {claimedCode}
+          </p>
+          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+            Save this code — it will not be shown again after you leave this page.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}

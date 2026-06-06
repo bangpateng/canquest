@@ -23,6 +23,7 @@ import {
 } from "@/lib/quest/quest-types";
 import { CampaignFcfsClaimSection } from "@/components/app/campaign/campaign-fcfs-claim";
 import { CampaignDrawCcClaimSection } from "@/components/app/campaign/campaign-draw-cc-claim";
+import { CampaignCcAndCodeRaffleClaimSection } from "@/components/app/campaign/campaign-cc-and-code-raffle-claim";
 import { TaskPointsLabel } from "@/components/app/quest/task-points-label";
 import { CampaignInviteClaimSection } from "@/components/app/campaign/campaign-invite-claim";
 import {
@@ -324,6 +325,12 @@ export function QuestTaskPanel({
     questCompleted &&
     !isEarnHub &&
     rewardStatus?.state === "fcfs_claimable";
+  // CC + Code combined raffle: winner selected by admin, pays 5 CC fee to claim both CC + code
+  const showCcAndCodeRaffleClaim =
+    quest.rewardType === "CC_AND_CODE_RAFFLE" &&
+    questCompleted &&
+    !isEarnHub &&
+    rewardStatus?.state === "fcfs_claimable";
   const showClassicSubmit =
     allDone &&
     !questCompleted &&
@@ -562,6 +569,16 @@ export function QuestTaskPanel({
         />
       ) : null}
 
+      {showCcAndCodeRaffleClaim && campaignMeta ? (
+        <CampaignCcAndCodeRaffleClaimSection
+          questId={quest.id}
+          partyId={partyId}
+          rewardCc={quest.rewardCc}
+          campaignMeta={campaignMeta}
+          onClaimed={() => loadProgress()}
+        />
+      ) : null}
+
       {showClassicSubmit ? (
         <QuestSubmitSection
           partyId={partyId}
@@ -579,7 +596,7 @@ export function QuestTaskPanel({
         </p>
       ) : null}
 
-      {questCompleted && !isEarnHub && !showCcDrawClaim && !showInviteClaim && (
+      {questCompleted && !isEarnHub && !showCcDrawClaim && !showInviteClaim && !showCcAndCodeRaffleClaim && (
         <QuestSubmittedProof
           rewardCc={rewardCc}
           rewardStatus={rewardStatus}

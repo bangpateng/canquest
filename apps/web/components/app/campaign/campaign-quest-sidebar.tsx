@@ -40,6 +40,7 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
   const requiresFcfs = summary?.requiresFcfsClaim ?? false;
   const requiresPaidInvite = summary?.requiresPaidInviteClaim ?? false;
   const requiresDrawCc = summary?.requiresDrawCcClaim ?? false;
+  const isCcAndCodeRaffle = quest.rewardType === "CC_AND_CODE_RAFFLE";
   const uiKind = campaignUiKind(quest.rewardType, requiresFcfs);
   const rewardHeadline = getCampaignRewardHeadline(
     quest,
@@ -78,12 +79,23 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
     });
   }
 
-  if ((showFcfsSlots || requiresDrawCc) && (summary?.fcfsClaimFeeCc ?? 0) > 0) {
+  // CC + Code Raffle: show winners count
+  if (isCcAndCodeRaffle && slotsMax > 0) {
+    stats.push({
+      key: "winners",
+      icon: Users,
+      label: "Winners",
+      value: `${slotsMax} max`,
+      valueClassName: "text-canton",
+    });
+  }
+
+  if ((showFcfsSlots || requiresDrawCc || isCcAndCodeRaffle) && (summary?.fcfsClaimFeeCc ?? 0) > 0) {
     stats.push({
       key: "fee",
       icon: Zap,
       label: "Claim fee",
-      value: `${summary.fcfsClaimFeeCc} CC`,
+      value: `${summary?.fcfsClaimFeeCc ?? 0} CC`,
     });
   }
 

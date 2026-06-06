@@ -12,6 +12,9 @@ export function defaultClaimFeeCc(rewardType: RewardType | string): number | nul
     case RewardType.CC_ONLY:
     case RewardType.CC_MANUAL:
       return 3;
+    case RewardType.CC_AND_CODE_RAFFLE:
+      // Combined CC + Code raffle: 5 CC claim fee (covers both CC reward + code reveal)
+      return 5;
     default:
       return null;
   }

@@ -50,6 +50,7 @@ export type RewardType =
   | 'CC_ONLY'
   | 'CC_MANUAL'
   | 'CC_AND_INVITE'
+  | 'CC_AND_CODE_RAFFLE'
   | 'INVITE_CODE';
 export const RewardType = {
   WAITLIST_EMAIL: 'WAITLIST_EMAIL' as RewardType,
@@ -58,6 +59,7 @@ export const RewardType = {
   CC_ONLY: 'CC_ONLY' as RewardType,
   CC_MANUAL: 'CC_MANUAL' as RewardType,
   CC_AND_INVITE: 'CC_AND_INVITE' as RewardType,
+  CC_AND_CODE_RAFFLE: 'CC_AND_CODE_RAFFLE' as RewardType,
   INVITE_CODE: 'INVITE_CODE' as RewardType,
 };
 

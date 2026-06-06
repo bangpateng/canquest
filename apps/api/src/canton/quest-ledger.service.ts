@@ -1001,7 +1001,16 @@ export class QuestLedgerService {
     return { contractId: null };
   }
 
-  /** @deprecated Use registerWallet() instead */
+  /**
+   * Record wallet registration on the DAML ledger.
+   * Creates both WalletRegistration AND UserAccount contracts (idempotent).
+   * Called from party.controller.ts after wallet is successfully created.
+   *
+   * Per DAML contract (canquest-v4):
+   *   - WalletRegistration: bukti on-chain bahwa user telah membuat wallet
+   *   - UserAccount: akun user on-chain (earnedPoints & spentPoints)
+   * Both are created together when a wallet is first registered.
+   */
   async recordPartyRegistration(params: {
     userPartyId: string;
     username?: string;
@@ -1010,13 +1019,37 @@ export class QuestLedgerService {
     [key: string]: unknown;
   }): Promise<{ ok: boolean; contractId: string | null; errors: string[] }> {
     if (!params.userPartyId) return { ok: true, contractId: null, errors: [] };
-    const result = await this.registerWallet({
+    const resolvedUsername =
+      params.username ?? params.partyHint ?? params.userPartyId.split('::')[0];
+
+    // 1. Create WalletRegistration contract
+    const walletResult = await this.registerWallet({
       userPartyId: params.userPartyId,
-      username:    params.username ?? params.partyHint ?? params.userPartyId.split('::')[0],
+      username:    resolvedUsername,
       partyId:     params.userPartyId,
       inviteCode:  params.inviteCode ?? '',
     });
-    return { ok: !!result.contractId, contractId: result.contractId, errors: result.errors };
+
+    // 2. Create UserAccount contract (idempotent — skips if already exists)
+    const accountResult = await this.ensureUserAccount({
+      userPartyId: params.userPartyId,
+      username:    resolvedUsername,
+    });
+
+    const errors = [...walletResult.errors, ...accountResult.errors];
+    const ok = !!walletResult.contractId || !!accountResult.contractId;
+
+    if (walletResult.contractId) {
+      this.logger.log(
+        `recordPartyRegistration: WalletRegistration=${walletResult.contractId.slice(0, 12)}... UserAccount=${accountResult.contractId?.slice(0, 12) ?? 'skipped'}...`,
+      );
+    }
+
+    return {
+      ok,
+      contractId: walletResult.contractId,
+      errors,
+    };
   }
 
   /** @deprecated — no-op stub */

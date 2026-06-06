@@ -131,6 +131,11 @@ export class QuestsService {
     return normalizeRewardType(quest.rewardType as RewardType) === RewardType.CC_MANUAL;
   }
 
+  /** CC + Code combined raffle: admin draw after event; winners claim both CC and invite code. */
+  requiresCcAndCodeRaffleClaim(quest: { rewardType: RewardType | string }): boolean {
+    return normalizeRewardType(quest.rewardType as RewardType) === RewardType.CC_AND_CODE_RAFFLE;
+  }
+
   isCampaignEnded(quest: {
     endsAt: Date | null;
     deadline?: Date | string | null;
@@ -833,15 +838,17 @@ export class QuestsService {
             },
           });
           await this.users.creditEarnPoints(userId, task.points);
-          if (userPartyId && this.questLedger.isConfigured()) {
+          // canquest-v4: daily check-in dicatat on-chain via DailyCheckIn template
+          if (userPartyId && this.questLedger.isClaimSessionConfigured()) {
+            const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
             void this.questLedger
-              .recordTaskSubmission({
-                questId,
-                questKind: this.damlQuestKind(quest.questKind),
-                taskId,
-                taskType,
-                proof: proof?.trim() || 'checked_in',
+              .recordDailyCheckIn({
                 userPartyId,
+                username: (await this.users.findById(userId))?.username ?? userPartyId.split('::')[0],
+                userId,
+                checkInDate: today,
+                pointsAwarded: task.points,
+                streakCount: 1,
               })
               .catch((err) =>
                 this.logger.warn(`Daily check-in ledger: ${String(err)}`),
@@ -1408,6 +1415,60 @@ export class QuestsService {
         state: 'fcfs_claimable' as const,
         inviteCode: null,
         message: `${formatFcfsSlotsRemainingLabel(remaining, maxW)}\n${formatFcfsClaimFeeHint(fee, quest.rewardCc)}`,
+      };
+    }
+
+    // ── CC + Code Combined Raffle ──────────────────────────────────────────
+    if (rewardType === RewardType.CC_AND_CODE_RAFFLE) {
+      if (draw?.distributed && draw.inviteCode) {
+        return {
+          state: 'cc_reward' as const,
+          inviteCode: draw.inviteCode,
+          message: `Congratulations! You received ${quest.rewardCc} CC and code: ${draw.inviteCode}`,
+        };
+      }
+      if (draw?.distributed && !draw.inviteCode) {
+        return {
+          state: 'cc_reward' as const,
+          inviteCode: null,
+          message: `${quest.rewardCc} CC sent to your wallet. Code will be assigned shortly.`,
+        };
+      }
+      if (draw) {
+        const fee = resolveClaimFeeCc(quest) ?? 5;
+        const codesLeft = await this.countAvailableInviteCodes(questId);
+        if (codesLeft <= 0) {
+          return {
+            state: 'fcfs_missed' as const,
+            inviteCode: null,
+            message: 'No codes left in the pool. Contact support.',
+          };
+        }
+        return {
+          state: 'fcfs_claimable' as const,
+          inviteCode: null,
+          message: `You won! Pay ${fee} CC claim fee to receive ${quest.rewardCc} CC + your invite code.`,
+        };
+      }
+      const drawsHeld = await this.prisma.winnerDraw.count({ where: { questId } });
+      if (drawsHeld > 0) {
+        return {
+          state: 'not_winner' as const,
+          inviteCode: null,
+          message: 'You were not selected in the raffle draw.',
+        };
+      }
+      if (this.isCampaignEnded(quest)) {
+        return {
+          state: 'pending_draw' as const,
+          inviteCode: null,
+          message: 'The event has ended. Winners will be announced after the admin draw.',
+        };
+      }
+      return {
+        state: 'waitlist' as const,
+        inviteCode: null,
+        message: 'Winners will be announced after the event ends.',
       };
     }
 
@@ -2335,6 +2396,158 @@ export class QuestsService {
    * User → CANTON_VALIDATOR_PARTY_ID claim fee (offer/accept, same as Send CC).
    * Validator admin wallet must accept — NOT the claiming user.
    */
+  /**
+   * CC + Code combined raffle claim — winner pays 5 CC fee, receives CC reward + invite code.
+   * Admin must have run Draw Winners first (sets WinnerDraw row).
+   */
+  async claimCcAndCodeRaffleReward(params: {
+    userId: string;
+    username: string | null;
+    cantonPartyId: string | null;
+    questId: string;
+  }): Promise<{
+    ok: boolean;
+    message: string;
+    rewardCc: number;
+    inviteCode: string | null;
+    feeCc: number;
+    rewardStatus: Awaited<ReturnType<QuestsService['getQuestRewardStatus']>>;
+  }> {
+    const { userId, questId, username, cantonPartyId } = params;
+    if (!username?.trim() || !cantonPartyId?.trim()) {
+      throw new BadRequestException('Create your Canton wallet before claiming.');
+    }
+    const quest = await this.prisma.quest.findUnique({ where: { id: questId } });
+    if (!quest) throw new NotFoundException('Quest not found');
+    if (!this.requiresCcAndCodeRaffleClaim(quest)) {
+      throw new BadRequestException('This campaign does not use CC + Code combined raffle claim.');
+    }
+    const completion = await this.prisma.questCompletion.findUnique({
+      where: { userId_questId: { userId, questId } },
+    });
+    if (!completion) {
+      throw new BadRequestException('Submit the quest before claiming your reward.');
+    }
+    const draw = await this.prisma.winnerDraw.findUnique({
+      where: { questId_userId: { questId, userId } },
+    });
+    if (!draw) {
+      throw new BadRequestException('You were not selected in the raffle draw.');
+    }
+    if (draw.distributed) {
+      const rewardStatus = await this.getQuestRewardStatus(userId, questId);
+      return {
+        ok: true,
+        message: draw.inviteCode
+          ? `Already claimed: ${quest.rewardCc} CC + code ${draw.inviteCode}`
+          : 'You already claimed this reward.',
+        rewardCc: quest.rewardCc,
+        inviteCode: draw.inviteCode,
+        feeCc: 0,
+        rewardStatus,
+      };
+    }
+    const codesLeft = await this.countAvailableInviteCodes(questId);
+    if (codesLeft <= 0) {
+      throw new BadRequestException('No invite codes left in the pool. Contact support.');
+    }
+    const feeCc = resolveClaimFeeCc(quest) ?? 5;
+    const rewardCc = quest.rewardCc;
+    const validatorPartyId = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
+    if (!validatorPartyId) {
+      throw new BadRequestException('Validator party is not configured on the server.');
+    }
+    const balance = await this.splice.getUserBalance(username);
+    if (balance !== null && balance < feeCc) {
+      throw new BadRequestException(FCFS_CLAIM_FAIL_MSG);
+    }
+    this.logger.log(
+      `CC+Code raffle claim start quest=${questId} user=@${username} fee=${feeCc} reward=${rewardCc} CC + code`,
+    );
+    try {
+      const feeTxId = await this.collectClaimFee({
+        userId,
+        username,
+        questTitle: quest.title,
+        feeCc,
+        feeLabel: 'CC+Code raffle claim fee',
+        validatorPartyId,
+      });
+      await this.assertValidatorRewardPool(rewardCc);
+      let rewardOfferId: string | null = null;
+      if (rewardCc > 0) {
+        rewardOfferId = await this.splice.createTransferOffer(
+          cantonPartyId,
+          rewardCc,
+          `CC+Code raffle reward — ${quest.title}`,
+        );
+        if (!rewardOfferId) throw new Error('CC reward offer failed');
+        const rewardAccepted = await this.splice.acceptOfferViaWallet(rewardOfferId, username);
+        if (!rewardAccepted) throw new Error('CC reward accept failed');
+        await this.users.recordTransaction({
+          userId,
+          amountCc: rewardCc,
+          type: 'QUEST_REWARD',
+          description: `Received ${rewardCc} CC raffle reward`,
+          referenceId: questId,
+          counterparty: validatorPartyId.split('::')[0],
+          ledgerTxId: rewardOfferId,
+        });
+        if (username) {
+          await this.inboundSync.alignBalanceFromChain(userId, username);
+        }
+      }
+      const codeRow = await this.prisma.inviteCodePool.findFirst({
+        where: { questId, userId: null },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (!codeRow) {
+        throw new Error('No invite codes available after fee was paid. Contact support.');
+      }
+      const rewardMicroCc = BigInt(Math.round(rewardCc * 1_000_000));
+      await this.prisma.$transaction([
+        this.prisma.inviteCodePool.update({
+          where: { id: codeRow.id },
+          data: { userId, assignedAt: new Date() },
+        }),
+        this.prisma.winnerDraw.update({
+          where: { id: draw.id },
+          data: {
+            distributed: true,
+            ccAmount: rewardCc,
+            inviteCode: codeRow.code,
+            claimFeeLedgerTxId: feeTxId,
+            ledgerTxId: rewardOfferId ?? undefined,
+            distributedAt: new Date(),
+          },
+        }),
+        this.prisma.questCompletion.upsert({
+          where: { userId_questId: { userId, questId } },
+          create: { userId, questId, rewardMicroCc, completedAt: completion.completedAt },
+          update: { rewardMicroCc },
+        }),
+      ]);
+      if (cantonPartyId && rewardOfferId) {
+        void this.syncCampaignLedgerAfterPayout({
+          userId, questId, userPartyId: cantonPartyId, rewardCc, payoutTxId: rewardOfferId,
+        }).catch((err) => this.logger.warn(`CC+Code raffle ledger sync failed: ${String(err)}`));
+      }
+      const rewardStatus = await this.getQuestRewardStatus(userId, questId);
+      return {
+        ok: true,
+        message: `Congratulations! ${rewardCc} CC sent to your wallet and your code is: ${codeRow.code}`,
+        rewardCc,
+        inviteCode: codeRow.code,
+        feeCc,
+        rewardStatus,
+      };
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`CC+Code raffle claim failed: ${detail}`);
+      throw new BadRequestException(this.fcfsClaimErrorMessage(detail));
+    }
+  }
+
   private async collectClaimFee(params: {
     userId: string;
     username: string;

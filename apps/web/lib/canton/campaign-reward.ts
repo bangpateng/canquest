@@ -195,6 +195,8 @@ export function campaignTypeDisplayValue(
       return rewardType === "INVITE_CODE_FCFS" ? "WAITLIST FCFS" : "WAITLIST RAFFLE";
     case "cc_manual":
       return "CC Manual";
+    case "cc_and_code_raffle":
+      return "CC + CODE RAFFLE";
     default:
       return "Campaign";
   }
@@ -203,7 +205,7 @@ export function campaignTypeDisplayValue(
 export function campaignUiKind(
   rewardType: RewardType | string | undefined,
   requiresFcfsClaim: boolean,
-): "waitlist_email" | "waitlist_code" | "cc_manual" | "cc_manual_draw" | "cc_fcfs" | "other" {
+): "waitlist_email" | "waitlist_code" | "cc_manual" | "cc_manual_draw" | "cc_fcfs" | "cc_and_code_raffle" | "other" {
   // Invite-code FCFS should look like FCFS, but not be labeled as "CC FCFS".
   if (rewardType === "INVITE_CODE_FCFS") return "waitlist_code";
   if (requiresFcfsClaim) return "cc_fcfs";
@@ -220,6 +222,8 @@ export function campaignUiKind(
     case "INVITE_CODE_FCFS":
     case "CC_AND_INVITE":
       return "waitlist_code";
+    case "CC_AND_CODE_RAFFLE":
+      return "cc_and_code_raffle";
     default:
       return "other";
   }

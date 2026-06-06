@@ -196,6 +196,21 @@ export class QuestsController {
     });
   }
 
+  /** CC + Code combined raffle — admin draw winner pays 5 CC fee, receives CC reward + invite code. */
+  @Post(':questId/claim-cc-and-code-raffle')
+  @UseGuards(WalletRequiredGuard)
+  @Throttle({ ledger: { limit: 3, ttl: 60_000 } })
+  async claimCcAndCodeRaffle(@Param('questId') questId: string, @Req() req: AuthedReq) {
+    const user = await this.users.findById(req.user.userId);
+    if (!user) return { ok: false, message: 'User not found' };
+    return this.quests.claimCcAndCodeRaffleReward({
+      userId: user.id,
+      username: user.username,
+      cantonPartyId: user.cantonPartyId,
+      questId,
+    });
+  }
+
   @Post(':questId/tasks/:taskId/submit')
   async submitTask(
     @Param('questId') questId: string,

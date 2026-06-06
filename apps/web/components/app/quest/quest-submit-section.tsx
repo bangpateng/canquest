@@ -242,6 +242,35 @@ export function QuestSubmittedProof({
     return null;
   }
 
+  // CC + Code Raffle: claimable state is handled by CampaignCcAndCodeRaffleClaimSection
+  if (uiKind === "cc_and_code_raffle" && state === "fcfs_claimable") {
+    return null;
+  }
+
+  if (uiKind === "cc_and_code_raffle" && state === "waitlist") {
+    return (
+      <CampaignQuestStatusCard
+        tone="sky"
+        label="CC + Code Raffle"
+        title="Entry recorded"
+        description="Winners will be announced after the event ends. You will receive both CC and an invite code."
+        icon={CheckCircle2}
+      />
+    );
+  }
+
+  if (uiKind === "cc_and_code_raffle" && state === "cc_reward") {
+    return (
+      <CampaignQuestStatusCard
+        tone="emerald"
+        label="CC + Code Raffle reward"
+        title="Reward claimed"
+        description={`${rewardCc ?? 0} CC and your invite code have been sent.`}
+        icon={CheckCircle2}
+      />
+    );
+  }
+
   if (uiKind === "cc_manual_draw" && state === "waitlist") {
     return (
       <CampaignQuestStatusCard
