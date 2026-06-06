@@ -429,7 +429,7 @@ export function EarnCampaignCard({
             {slotsMax > 0 && (
               <div className="border-t border-white/[0.04] px-3 py-2 sm:px-4">
                 <p className="text-[9px] font-semibold text-slate-500 sm:text-[10px]">
-                  Complete all social tasks → Submit → Wait for raffle draw → Claim 5 CC fee
+                  Complete all social tasks → Submit → Wait for raffle draw → Claim reward
                 </p>
               </div>
             )}
