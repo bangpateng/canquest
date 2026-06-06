@@ -261,13 +261,45 @@ export function QuestSubmittedProof({
 
   if (uiKind === "cc_and_code_raffle" && state === "cc_reward") {
     return (
-      <CampaignQuestStatusCard
-        tone="emerald"
-        label="Congratulationss"
-        title="Reward claimed"
-        description={`${rewardCc ?? 0} CC and your invite code have been sent.`}
-        icon={CheckCircle2}
-      />
+      <section className="relative overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-b from-emerald-500/12 via-[var(--card)] to-[var(--card)] p-6 ring-1 ring-emerald-500/20">
+        <div className="flex items-center gap-3">
+          <CheckCircle2 className="h-8 w-8 shrink-0 text-emerald-400" />
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-emerald-400/80">
+              CC + Code Raffle Reward
+            </p>
+            <p className="mt-0.5 text-base font-bold text-white">Reward claimed</p>
+          </div>
+        </div>
+        <div className="mt-4 space-y-3">
+          {/* CC reward row */}
+          <div className="flex items-center gap-3 rounded-xl border border-[var(--primary)]/20 bg-[var(--primary)]/10 px-4 py-3">
+            <CcRewardLogo size={20} />
+            <span className="text-sm font-bold text-canton">+{rewardCc ?? 0} CC sent to your wallet</span>
+          </div>
+          {/* Invite code row */}
+          {inviteCode ? (
+            <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 px-4 py-3">
+              <p className="text-xs font-bold uppercase tracking-wider text-violet-300/80">
+                Your Invite Code
+              </p>
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <code className="font-mono text-lg font-bold tracking-widest text-violet-200">
+                  {inviteCode}
+                </code>
+                <CopyButton value={inviteCode} label="Copy code" />
+              </div>
+              <p className="mt-1.5 text-xs text-slate-500">
+                Save this code — it will not be shown again after you leave this page.
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-400">
+              {rewardStatus?.message ?? `${rewardCc ?? 0} CC and your invite code have been sent.`}
+            </p>
+          )}
+        </div>
+      </section>
     );
   }
 

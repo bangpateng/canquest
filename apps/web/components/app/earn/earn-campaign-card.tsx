@@ -393,22 +393,16 @@ export function EarnCampaignCard({
           ) : null}
         </div>
 
-        {/* CC + Code Raffle: special metrics strip */}
-        {isCcAndCodeRaffle && (
+        {/* CC + Code Raffle: show Reward Pool */}
+        {isCcAndCodeRaffle && showPool && (
           <div className="mt-4 w-full min-w-0 overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02] sm:mt-5">
-            <div className="grid w-full min-w-0 grid-cols-3 divide-x divide-white/[0.04]">
+            <div className="grid w-full min-w-0 grid-cols-2 divide-x divide-white/[0.04]">
               <Metric
-                label="CC / Winner"
-                value={quest.rewardCc > 0 ? `${quest.rewardCc} CC` : "—"}
+                label={t("earnCampaigns.cardPoolTotal")}
+                value={poolDisplay}
                 icon={Coins}
                 useCcLogo
                 accent="text-canton"
-              />
-              <Metric
-                label="Code / Winner"
-                value="1 Code"
-                icon={Ticket}
-                accent="text-violet-300"
               />
               {slotsMax > 0 ? (
                 <Metric
@@ -426,13 +420,6 @@ export function EarnCampaignCard({
                 />
               )}
             </div>
-            {slotsMax > 0 && (
-              <div className="border-t border-white/[0.04] px-3 py-2 sm:px-4">
-                <p className="text-[9px] font-semibold text-slate-500 sm:text-[10px]">
-                  Complete all social tasks → Submit → Wait for raffle draw → Claim reward
-                </p>
-              </div>
-            )}
           </div>
         )}
 
