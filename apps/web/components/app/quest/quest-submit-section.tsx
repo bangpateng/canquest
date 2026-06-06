@@ -266,7 +266,7 @@ export function QuestSubmittedProof({
           <CheckCircle2 className="h-8 w-8 shrink-0 text-emerald-400" />
           <div>
             <p className="text-xs font-bold uppercase tracking-wider text-emerald-400/80">
-              CC + Code Raffle Reward
+              Raffle Reward
             </p>
             <p className="mt-0.5 text-base font-bold text-white">Reward claimed</p>
           </div>
