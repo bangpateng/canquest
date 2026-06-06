@@ -12,8 +12,10 @@ import { UsersModule } from '../users/users.module';
 import { CantonModule } from '../canton/canton.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { QueueModule } from '../queue/queue.module';
+import { QuestLedgerService } from '../canton/quest-ledger.service';
+
 @Module({
-    imports: [
+  imports: [
     ConfigModule,
     PassportModule.register({}),
     JwtModule.registerAsync({
@@ -30,6 +32,6 @@ import { QueueModule } from '../queue/queue.module';
     QueueModule,
   ],
   controllers: [AdminAuthController, AdminController, AdminUploadsController],
-  providers: [AdminService, AdminGuard, AdminPanelJwtStrategy],
+  providers: [AdminService, AdminGuard, AdminPanelJwtStrategy, QuestLedgerService],
 })
 export class AdminModule {}

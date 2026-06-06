@@ -190,6 +190,9 @@ model Quest {
   winnerMessage String?
   /// CAMPAIGN = partner campaigns (user menu Earn). EARN_HUB = CanQuest daily tasks (user menu Quest).
   questKind    QuestKind   @default(CAMPAIGN)
+  /// DAML QuestCampaign contract ID on Canton ledger (set after admin creates quest).
+  /// Used by claimFcfsSlot() / drawRaffleWinner() to reference the on-chain campaign.
+  ledgerCampaignId String?
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
   tasks        QuestTask[]

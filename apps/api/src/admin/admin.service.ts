@@ -26,6 +26,7 @@ import {
   parseQuestSocialLinks,
   serializeQuestSocialLinks,
 } from '../quests/quest-social-links.util';
+import { QuestLedgerService } from '../canton/quest-ledger.service';
 
 @Injectable()
 export class AdminService {
@@ -37,6 +38,7 @@ export class AdminService {
     private readonly users: UsersService,
     private readonly config: ConfigService,
     private readonly storage: R2StorageService,
+    private readonly questLedger: QuestLedgerService,
   ) {}
 
   /** Drop replaced/removed banner & logo from R2 when not referenced by another quest. */
@@ -141,7 +143,8 @@ export class AdminService {
         rewardCc: 0,
         rewardPool: 'Earn points',
         status: QuestStatus.ACTIVE,
-        rewardType: RewardType.CC_ONLY,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        rewardType: RewardType.CC_ONLY as any,
         questKind: QuestKind.EARN_HUB,
         tags: JSON.stringify(['earn', 'daily']),
         tasks: {
@@ -278,7 +281,8 @@ export class AdminService {
         startsAt: data.startsAt ? new Date(data.startsAt) : null,
         endsAt: data.endsAt ? new Date(data.endsAt) : null,
         status: data.status ?? QuestStatus.ACTIVE,
-        rewardType: data.rewardType ?? RewardType.CC_ONLY,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        rewardType: (data.rewardType ?? RewardType.CC_ONLY) as any,
         maxWinners: data.maxWinners ?? null,
         claimFeeCc: data.claimFeeCc ?? null,
         winnerMessage: data.winnerMessage?.trim() || null,
@@ -304,6 +308,43 @@ export class AdminService {
       include: { tasks: true },
     });
     this.logger.log(`Quest created: ${quest.title} (${quest.id})`);
+
+    // canquest-v4: Buat QuestCampaign on-chain setelah quest dibuat di DB.
+    // Best-effort — tidak memblokir jika ledger tidak tersedia.
+    // ledgerCampaignId disimpan ke DB agar claimFcfsSlot() bisa referensi contract.
+    if (questKind === QuestKind.CAMPAIGN && this.questLedger.isConfigured()) {
+      void (async () => {
+        try {
+          const questKindDaml = QuestLedgerService.mapRewardTypeToQuestKind(
+            data.rewardType ?? RewardType.CC_ONLY,
+            (data.maxWinners ?? 0) > 0,
+          );
+          const ledgerResult = await this.questLedger.createQuestCampaign({
+            campaignId: quest.id,
+            title: quest.title,
+            questKind: questKindDaml,
+            rewardCc: quest.rewardCc,
+            claimFeeCc: quest.claimFeeCc ?? 0,
+            maxWinners: quest.maxWinners ?? 0,
+          });
+          if (ledgerResult.contractId) {
+            await this.prisma.quest.update({
+              where: { id: quest.id },
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              data: { ledgerCampaignId: ledgerResult.contractId } as any,
+            });
+            this.logger.log(
+              `QuestCampaign on-chain: quest=${quest.id.slice(0, 8)} kind=${questKindDaml} contract=${ledgerResult.contractId.slice(0, 12)}...`,
+            );
+          } else if (ledgerResult.errors.length > 0) {
+            this.logger.warn(`QuestCampaign ledger: ${ledgerResult.errors.join(' | ')}`);
+          }
+        } catch (err) {
+          this.logger.warn(`QuestCampaign ledger failed: ${String(err)}`);
+        }
+      })();
+    }
+
     return withQuestMediaUrls(
       {
         ...quest,
@@ -386,7 +427,8 @@ export class AdminService {
           endsAt: data.endsAt ? new Date(data.endsAt) : null,
         }),
         ...(data.status !== undefined && { status: data.status }),
-        ...(data.rewardType !== undefined && { rewardType: data.rewardType }),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ...(data.rewardType !== undefined && { rewardType: data.rewardType as any }),
         ...(data.maxWinners !== undefined && { maxWinners: data.maxWinners }),
         ...(data.claimFeeCc !== undefined && { claimFeeCc: data.claimFeeCc }),
         ...(data.winnerMessage !== undefined && {

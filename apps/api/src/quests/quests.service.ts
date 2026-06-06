@@ -1651,64 +1651,27 @@ export class QuestsService {
         throw new Error('FCFS reward already distributed for this user');
       }
 
-      // Best-effort DAML audit: create ClaimSession (operator signs, user observes).
+      // canquest-v4: DAML audit trail via QuestClaim (ClaimFcfsSlot on QuestCampaign).
+      // campaignContractId diambil dari DB (disimpan saat admin buat quest).
+      // Best-effort — tidak memblokir CC transfer jika ledger tidak tersedia.
       let claimSessionId: string | null = null;
-      if (this.questLedger.isClaimSessionConfigured()) {
-        const cs = await this.questLedger.createClaimSession({
-          questId,
-          userPartyId: cantonPartyId,
-          claimKind: 'fcfs_cc',
-          feeCc,
-          rewardCc,
-        });
-        claimSessionId = cs.sessionContractId;
-        if (cs.errors.length > 0) {
-          this.logger.warn(`ClaimSession create warnings: ${cs.errors.join(' | ')}`);
-        }
-      }
-
-      // NEW: Create EarnClaimSession for earn-specific audit trail (Canton M3 pattern)
-      let earnClaimSessionId: string | null = null;
-      if (this.questLedger.isClaimSessionConfigured()) {
-        const ecs = await this.questLedger.createEarnClaimSession({
-          userPartyId: cantonPartyId,
-          campaignId: questId,
-          claimKind: 'CC_FCFS',
-          feeCc,
-          rewardCc,
-        });
-        earnClaimSessionId = ecs.contractId;
-        if (ecs.error) {
-          this.logger.warn(`EarnClaimSession create warning: ${ecs.error}`);
-        }
-      }
-
-      // NEW: Create FcfsSlotReservation on ledger for slot tracking
-      if (this.questLedger.isConfigured() && maxWinners > 0) {
-        const slotIndex = await this.countFcfsSlotsTaken(questId) - 1; // Current slot index
-        const expiresAt = new Date(Date.now() + this.fcfsReservationTtlMs()).toISOString();
-        const slotRes = await this.questLedger.createFcfsSlotReservation({
-          userPartyId: cantonPartyId,
-          campaignId: questId,
-          slotIndex,
-          expiresAt,
-        });
-        if (slotRes.error) {
-          this.logger.warn(`FcfsSlotReservation create warning: ${slotRes.error}`);
-        }
-      }
-
-      // NEW: Create CcRewardEntitlement for CC reward tracking
-      if (this.questLedger.isConfigured()) {
-        const entitlementRes = await this.questLedger.createCcRewardEntitlement({
-          userPartyId: cantonPartyId,
-          campaignId: questId,
-          rewardCc,
-          feeCc,
-          claimKind: 'CC_FCFS',
-        });
-        if (entitlementRes.error) {
-          this.logger.warn(`CcRewardEntitlement create warning: ${entitlementRes.error}`);
+      if (this.questLedger.isClaimSessionConfigured() && cantonPartyId) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const campaignContractId = (quest as any).ledgerCampaignId ?? null;
+        if (campaignContractId) {
+          const claimResult = await this.questLedger.claimFcfsSlot({
+            campaignContractId,
+            userPartyId: cantonPartyId,
+            claimId: reservedDrawId,
+          });
+          claimSessionId = claimResult.claimContractId;
+          if (claimResult.errors.length > 0) {
+            this.logger.warn(`ClaimFcfsSlot warnings: ${claimResult.errors.join(' | ')}`);
+          } else {
+            this.logger.log(`ClaimFcfsSlot OK: user=@${username} quest=${questId.slice(0, 8)} claim=${claimSessionId?.slice(0, 12)}`);
+          }
+        } else {
+          this.logger.warn(`ClaimFcfsSlot skipped: no ledgerCampaignId for quest=${questId}`);
         }
       }
 
@@ -1743,17 +1706,6 @@ export class QuestsService {
         }
       }
 
-      // NEW: Mark EarnClaimSession fee paid
-      if (earnClaimSessionId) {
-        const earnFeeMarked = await this.questLedger.markEarnClaimFeePaid({
-          sessionContractId: earnClaimSessionId,
-          feeTxId,
-        });
-        if (!earnFeeMarked.ok) {
-          this.logger.warn(`EarnClaimSession fee mark failed: ${earnFeeMarked.errors.join(' | ')}`);
-        }
-      }
-
       // Step 2: validator wallet sends reward → same user party (only after fee is on validator).
       await this.assertValidatorRewardPool(rewardCc);
       this.logger.log(
@@ -1782,17 +1734,6 @@ export class QuestsService {
         });
         if (!marked.ok) {
           this.logger.warn(`ClaimSession reward mark failed: ${marked.errors.join(' | ')}`);
-        }
-      }
-
-      // NEW: Mark EarnClaimSession reward sent
-      if (earnClaimSessionId) {
-        const earnMarked = await this.questLedger.markEarnClaimRewardSent({
-          sessionContractId: earnClaimSessionId,
-          rewardTxId: rewardOfferId,
-        });
-        if (!earnMarked.ok) {
-          this.logger.warn(`EarnClaimSession reward mark failed: ${earnMarked.errors.join(' | ')}`);
         }
       }
 
