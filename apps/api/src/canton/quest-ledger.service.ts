@@ -30,6 +30,8 @@ const TPL = {
   DailyCheckIn:       'Main:DailyCheckIn',
   SpinExecution:      'Main:SpinExecution',
   SpinCcReward:       'Main:SpinCcReward',
+  ReferralReward:     'Main:ReferralReward',
+  CcTransactionLog:   'Main:CcTransactionLog',
 } as const;
 
 // ── Result types ──────────────────────────────────────────────────────────────
@@ -454,14 +456,49 @@ export class QuestLedgerService {
   // ── 3. QuestCampaign ────────────────────────────────────────────────────────
 
   /**
+   * Map backend RewardType → DAML questKind string.
+   * CC_ONLY / CC_MANUAL     → "CC_FCFS" / "CC_RAFFLE"
+   * INVITE_CODE_FCFS        → "CODE_FCFS"
+   * INVITE_CODE_RANDOM      → "CODE_RAFFLE"
+   * CC_AND_CODE_RAFFLE      → "CC_AND_CODE_RAFFLE"
+   * WAITLIST_EMAIL          → "WAITLIST"
+   * CC_AND_INVITE           → "CC_FCFS" (auto-assign, no on-chain fee)
+   */
+  static mapRewardTypeToQuestKind(
+    rewardType: string,
+    hasFcfsSlots: boolean,
+  ): 'CC_FCFS' | 'CC_RAFFLE' | 'CODE_FCFS' | 'CODE_RAFFLE' | 'CC_AND_CODE_RAFFLE' | 'WAITLIST' {
+    switch (rewardType) {
+      case 'CC_ONLY':
+        return hasFcfsSlots ? 'CC_FCFS' : 'CC_RAFFLE';
+      case 'CC_MANUAL':
+        return 'CC_RAFFLE';
+      case 'CC_AND_INVITE':
+        return 'CC_FCFS';
+      case 'INVITE_CODE_FCFS':
+        return 'CODE_FCFS';
+      case 'INVITE_CODE_RANDOM':
+      case 'INVITE_CODE':
+        return 'CODE_RAFFLE';
+      case 'CC_AND_CODE_RAFFLE':
+        return 'CC_AND_CODE_RAFFLE';
+      case 'WAITLIST_EMAIL':
+        return 'WAITLIST';
+      default:
+        return hasFcfsSlots ? 'CC_FCFS' : 'CC_RAFFLE';
+    }
+  }
+
+  /**
    * Create a QuestCampaign contract on the ledger.
    * Called by admin when creating a new quest campaign.
-   * Supports all 4 types: CC_FCFS, CC_RAFFLE, CODE_FCFS, CODE_RAFFLE.
+   * Supports all 6 questKind values: CC_FCFS, CC_RAFFLE, CODE_FCFS,
+   * CODE_RAFFLE, CC_AND_CODE_RAFFLE, WAITLIST.
    */
   async createQuestCampaign(params: {
     campaignId: string;
     title: string;
-    questKind: 'CC_FCFS' | 'CC_RAFFLE' | 'CODE_FCFS' | 'CODE_RAFFLE';
+    questKind: 'CC_FCFS' | 'CC_RAFFLE' | 'CODE_FCFS' | 'CODE_RAFFLE' | 'CC_AND_CODE_RAFFLE' | 'WAITLIST';
     rewardCc: number;
     claimFeeCc: number;
     maxWinners: number;
@@ -1165,6 +1202,207 @@ export class QuestLedgerService {
       taskSubmissionContractId: null,
       errors: [],
     };
+  }
+
+  // ── 7. QuestClaim: RevealRewardCode ─────────────────────────────────────────
+
+  /**
+   * Reveal invite code on a QuestClaim contract.
+   * Called after fee is confirmed for CODE_FCFS / CODE_RAFFLE / CC_AND_CODE_RAFFLE.
+   * The code is stored on-chain so user can always retrieve it.
+   */
+  async revealRewardCode(params: {
+    claimContractId: string;
+    code: string;
+  }): Promise<{ ok: boolean; newContractId: string | null; errors: string[] }> {
+    if (!this.isClaimSessionConfigured()) {
+      return { ok: false, newContractId: null, errors: ['Claim session ledger disabled'] };
+    }
+    const tpl = this.templateId(TPL.QuestClaim);
+    const operator = this.operatorPartyId;
+    if (!operator) {
+      return { ok: false, newContractId: null, errors: ['Canton operator party not configured'] };
+    }
+
+    const { ok, text } = await this.ledger.exerciseChoice(
+      params.claimContractId,
+      tpl,
+      'RevealRewardCode',
+      {
+        code:       params.code,
+        revealedAt: new Date().toISOString(),
+      },
+      [operator],
+      `reveal-code-${randomUUID()}`,
+    );
+
+    if (ok) {
+      const cids = this.extractContractIds(text);
+      this.logger.log(`RevealRewardCode: claim=${params.claimContractId.slice(0, 12)}... code=${params.code.slice(0, 8)}...`);
+      return { ok: true, newContractId: cids[0] ?? null, errors: [] };
+    }
+    return { ok: false, newContractId: null, errors: [text.slice(0, 200)] };
+  }
+
+  // ── 8. ReferralReward ────────────────────────────────────────────────────────
+
+  /**
+   * Record a referral reward on the ledger.
+   * Called when a referred user successfully registers.
+   * referralId = "{referrerId}_{referredUserId}" — unique per pair (idempotency).
+   * referrerPartyId: Canton Party ID of the referrer (must have cantonPartyId set).
+   */
+  async recordReferralReward(params: {
+    referrerPartyId: string;
+    referrerId: string;
+    referredUserId: string;
+    points: number;
+  }): Promise<{ ok: boolean; contractId: string | null; errors: string[] }> {
+    if (!this.isClaimSessionConfigured()) {
+      return { ok: false, contractId: null, errors: ['Claim session ledger disabled'] };
+    }
+    const tpl = this.templateId(TPL.ReferralReward);
+    const operator = this.operatorPartyId;
+    if (!operator) {
+      return { ok: false, contractId: null, errors: ['Canton operator party not configured'] };
+    }
+    const reachErr = await this.ensureReachable();
+    if (reachErr) return { ok: false, contractId: null, errors: [reachErr] };
+
+    const referralId = `${params.referrerId}_${params.referredUserId}`;
+
+    // Idempotency: check if referral already recorded
+    const existing = this.findContractId(
+      await this.ledger.queryActiveContracts(tpl, [operator]),
+      (args) => args.referralId === referralId,
+    );
+    if (existing) {
+      this.logger.log(`ReferralReward already exists: ${referralId}`);
+      return { ok: true, contractId: existing, errors: [] };
+    }
+
+    const res = await this.ledger.createContract(
+      tpl,
+      {
+        admin:           operator,
+        referrerAddress: params.referrerPartyId,
+        referrerId:      params.referrerId,
+        referredUserId:  params.referredUserId,
+        points:          params.points,
+        referralId,
+        createdAt:       new Date().toISOString(),
+      },
+      [operator],
+      `referral-reward-${referralId}`,
+    );
+
+    if (res.ok && res.contractId) {
+      this.logger.log(`ReferralReward recorded: referrer=${params.referrerId.slice(0, 8)} referred=${params.referredUserId.slice(0, 8)} pts=${params.points}`);
+      return { ok: true, contractId: res.contractId, errors: [] };
+    }
+    return {
+      ok: false,
+      contractId: null,
+      errors: [this.formatLedgerError(res.error, 'Failed to record ReferralReward')],
+    };
+  }
+
+  // ── 9. CcTransactionLog ──────────────────────────────────────────────────────
+
+  /**
+   * Record a CC transaction event on the ledger.
+   * Called for every CC credit/debit event (quest reward, spin reward, airdrop, etc).
+   * txType: "QUEST_REWARD" | "SPIN_REWARD" | "TRANSFER_IN" | "TRANSFER_OUT" | "AIRDROP"
+   * amountMicroCc: positive = credit, negative = debit (1 CC = 1_000_000 micro-CC).
+   * Best-effort: does not block main flow if ledger is unavailable.
+   */
+  async recordCcTransactionLog(params: {
+    userPartyId: string;
+    username: string;
+    txLogId: string;
+    txType: 'QUEST_REWARD' | 'SPIN_REWARD' | 'TRANSFER_IN' | 'TRANSFER_OUT' | 'AIRDROP';
+    amountMicroCc: number;
+    description: string;
+    referenceId: string;
+    ledgerTxId?: string;
+  }): Promise<{ ok: boolean; contractId: string | null; errors: string[] }> {
+    if (!this.isClaimSessionConfigured()) {
+      return { ok: false, contractId: null, errors: ['Claim session ledger disabled'] };
+    }
+    const tpl = this.templateId(TPL.CcTransactionLog);
+    const operator = this.operatorPartyId;
+    if (!operator) {
+      return { ok: false, contractId: null, errors: ['Canton operator party not configured'] };
+    }
+    const reachErr = await this.ensureReachable();
+    if (reachErr) return { ok: false, contractId: null, errors: [reachErr] };
+
+    const res = await this.ledger.createContract(
+      tpl,
+      {
+        admin:         operator,
+        userAddress:   params.userPartyId,
+        username:      params.username,
+        txLogId:       params.txLogId,
+        txType:        params.txType,
+        amountMicroCc: params.amountMicroCc,
+        description:   params.description,
+        referenceId:   params.referenceId,
+        ledgerTxId:    params.ledgerTxId ?? '',
+        createdAt:     new Date().toISOString(),
+      },
+      [operator],
+      `cc-tx-log-${params.txLogId}`,
+    );
+
+    if (res.ok && res.contractId) {
+      this.logger.log(
+        `CcTransactionLog recorded: @${params.username} type=${params.txType} amount=${params.amountMicroCc} txLogId=${params.txLogId.slice(0, 8)}`,
+      );
+      return { ok: true, contractId: res.contractId, errors: [] };
+    }
+    return {
+      ok: false,
+      contractId: null,
+      errors: [this.formatLedgerError(res.error, 'Failed to record CcTransactionLog')],
+    };
+  }
+
+  /**
+   * Settle a CcTransactionLog by updating its ledger TX ID.
+   * Called after CC transfer is confirmed on-chain.
+   */
+  async settleCcTransactionLog(params: {
+    txLogContractId: string;
+    txId: string;
+  }): Promise<{ ok: boolean; newContractId: string | null; errors: string[] }> {
+    if (!this.isClaimSessionConfigured()) {
+      return { ok: false, newContractId: null, errors: ['Claim session ledger disabled'] };
+    }
+    const tpl = this.templateId(TPL.CcTransactionLog);
+    const operator = this.operatorPartyId;
+    if (!operator) {
+      return { ok: false, newContractId: null, errors: ['Canton operator party not configured'] };
+    }
+
+    const { ok, text } = await this.ledger.exerciseChoice(
+      params.txLogContractId,
+      tpl,
+      'SettleCcTransaction',
+      {
+        txId:      params.txId,
+        settledAt: new Date().toISOString(),
+      },
+      [operator],
+      `settle-cc-tx-${randomUUID()}`,
+    );
+
+    if (ok) {
+      const cids = this.extractContractIds(text);
+      this.logger.log(`CcTransactionLog settled: contract=${params.txLogContractId.slice(0, 12)}... txId=${params.txId.slice(0, 16)}`);
+      return { ok: true, newContractId: cids[0] ?? null, errors: [] };
+    }
+    return { ok: false, newContractId: null, errors: [text.slice(0, 200)] };
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────────

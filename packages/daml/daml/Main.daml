@@ -5,11 +5,23 @@
 -- Templates:
 --   1. UserAccount        — akun user on-chain (earnedPoints & spentPoints)
 --   2. WalletRegistration — bukti pembuatan wallet / Party ID
---   3. QuestCampaign      — template induk quest (CC_FCFS, CC_RAFFLE, CODE_FCFS, CODE_RAFFLE)
+--   3. QuestCampaign      — template induk quest (semua 8 RewardType)
 --   4. QuestClaim         — bukti klaim quest + konfirmasi fee + konfirmasi reward
 --   5. DailyCheckIn       — check-in harian on-chain (1x per hari per user)
 --   6. SpinExecution      — audit trail spin on-chain (anti double-spend)
 --   7. SpinCcReward       — bukti CC reward dari spin sudah dikirim
+--   8. ReferralReward     — bukti referral reward sudah dikreditkan
+--   9. CcTransactionLog   — audit trail setiap CC credit/debit event
+--
+-- RewardType yang didukung (sesuai backend):
+--   "WAITLIST_EMAIL"      — waitlist, pemenang dipilih admin
+--   "INVITE_CODE_RANDOM"  — raffle invite code, admin draw
+--   "INVITE_CODE_FCFS"    — invite code FCFS, bayar fee untuk reveal
+--   "CC_ONLY"             — CC reward FCFS, bayar fee untuk claim
+--   "CC_MANUAL"           — CC raffle, admin draw, bayar fee untuk claim
+--   "CC_AND_INVITE"       — CC + invite code, auto-assign saat submit
+--   "CC_AND_CODE_RAFFLE"  — CC + invite code raffle, admin draw, fee 5 CC
+--   "INVITE_CODE"         — alias INVITE_CODE_RANDOM (legacy)
 --
 -- Authorization pattern (Canton M3):
 --   signatory admin  — operator yang menandatangani semua kontrak
@@ -34,7 +46,7 @@ module Main where
 
 -- | Akun user on-chain yang menyimpan total poin earned dan spent.
 -- Dibuat saat user register dan membuat wallet pertama kali.
--- earnedPoints = total poin dari quest, spin win, check-in, dll.
+-- earnedPoints = total poin dari quest, spin win, check-in, referral, dll.
 -- spentPoints  = total poin yang sudah dipakai untuk spin.
 -- availablePoints = earnedPoints - spentPoints (dihitung off-chain di API).
 -- Leaderboard menggunakan earnedPoints (tidak dikurangi spentPoints).
@@ -52,11 +64,11 @@ template UserAccount
 
     -- | Tambah poin ke akun user.
     -- Dipanggil setelah: quest completion, spin win, daily check-in, referral.
-    -- Hanya admin yang bisa memanggil choice ini.
+    -- reason: "quest_completion" | "spin_win" | "daily_check_in" | "referral" | "bonus"
     choice RewardPoints : ContractId UserAccount
       with
         pointsToAdd : Int
-        reason      : Text  -- "quest_completion" | "spin_win" | "daily_check_in" | "referral"
+        reason      : Text
       controller admin
       do
         assertMsg "Points harus lebih dari 0!" (pointsToAdd > 0)
@@ -121,7 +133,17 @@ template WalletRegistration
 -- ============================================================
 
 -- | Template induk untuk semua jenis quest campaign.
--- Mencakup 4 type: CC_FCFS, CC_RAFFLE, CODE_FCFS, CODE_RAFFLE.
+-- Mendukung semua 8 RewardType dari backend:
+--   WAITLIST_EMAIL, INVITE_CODE_RANDOM, INVITE_CODE_FCFS,
+--   CC_ONLY, CC_MANUAL, CC_AND_INVITE, CC_AND_CODE_RAFFLE, INVITE_CODE
+--
+-- rewardType di-map ke questKind on-chain:
+--   CC_ONLY / CC_MANUAL / CC_AND_INVITE → "CC_FCFS" / "CC_RAFFLE"
+--   INVITE_CODE_FCFS                    → "CODE_FCFS"
+--   INVITE_CODE_RANDOM / INVITE_CODE    → "CODE_RAFFLE"
+--   CC_AND_CODE_RAFFLE                  → "CC_AND_CODE_RAFFLE"
+--   WAITLIST_EMAIL                      → "WAITLIST"
+--
 -- Admin membuat 1 contract per campaign.
 -- Kuota FCFS divalidasi on-chain — jika penuh, transaksi GAGAL otomatis.
 template QuestCampaign
@@ -129,7 +151,9 @@ template QuestCampaign
     admin         : Party   -- operator / admin CanQuest
     campaignId    : Text    -- ID campaign dari DB
     title         : Text    -- judul campaign
-    questKind     : Text    -- "CC_FCFS" | "CC_RAFFLE" | "CODE_FCFS" | "CODE_RAFFLE"
+    -- questKind: "CC_FCFS" | "CC_RAFFLE" | "CODE_FCFS" | "CODE_RAFFLE"
+    --          | "CC_AND_CODE_RAFFLE" | "WAITLIST"
+    questKind     : Text
     rewardCc      : Decimal -- jumlah CC reward per pemenang (0.0 jika bukan CC)
     claimFeeCc    : Decimal -- biaya claim fee CC (0.0 jika gratis)
     maxWinners    : Int     -- kuota maksimal pemenang (0 = unlimited/raffle)
@@ -141,7 +165,7 @@ template QuestCampaign
 
     -- | Reserve slot FCFS untuk user.
     -- Validasi ketat: jika kuota sudah penuh, transaksi GAGAL dan di-revert.
-    -- Hanya untuk questKind = "CC_FCFS" atau "CODE_FCFS".
+    -- Untuk questKind: "CC_FCFS" atau "CODE_FCFS"
     -- Mengembalikan (ContractId QuestCampaign baru, ContractId QuestClaim baru).
     choice ClaimFcfsSlot : (ContractId QuestCampaign, ContractId QuestClaim)
       with
@@ -175,17 +199,23 @@ template QuestCampaign
         pure (newCampaignCid, newClaimCid)
 
     -- | Catat pemenang raffle yang dipilih admin.
-    -- Hanya untuk questKind = "CC_RAFFLE" atau "CODE_RAFFLE".
+    -- Untuk questKind: "CC_RAFFLE" | "CODE_RAFFLE" | "CC_AND_CODE_RAFFLE" | "WAITLIST"
     -- Admin memilih pemenang secara manual setelah event berakhir.
+    -- rewardCode diisi untuk CODE_RAFFLE dan CC_AND_CODE_RAFFLE.
     choice DrawRaffleWinner : (ContractId QuestCampaign, ContractId QuestClaim)
       with
         user        : Party
         claimId     : Text   -- ID unik klaim dari DB
-        rewardCode  : Text   -- kode reward (untuk CODE_RAFFLE, kosong untuk CC_RAFFLE)
+        rewardCode  : Text   -- kode reward (untuk CODE_*, kosong untuk CC_RAFFLE)
         drawnAt     : Text   -- ISO timestamp pengundian
       controller admin
       do
-        assertMsg "questKind harus RAFFLE!" (questKind == "CC_RAFFLE" || questKind == "CODE_RAFFLE")
+        assertMsg "questKind harus RAFFLE atau WAITLIST!" (
+          questKind == "CC_RAFFLE" ||
+          questKind == "CODE_RAFFLE" ||
+          questKind == "CC_AND_CODE_RAFFLE" ||
+          questKind == "WAITLIST"
+          )
 
         newClaimCid <- create QuestClaim with
           admin
@@ -216,6 +246,17 @@ template QuestCampaign
         assertMsg "closedAt tidak boleh kosong!" (closedAt /= "")
         create this with status = "CLOSED"
 
+    -- | Update status campaign (ACTIVE → ENDED, dll).
+    choice UpdateCampaignStatus : ContractId QuestCampaign
+      with
+        newStatus  : Text  -- "ACTIVE" | "ENDED" | "CLOSED"
+        updatedAt  : Text
+      controller admin
+      do
+        assertMsg "newStatus tidak boleh kosong!" (newStatus /= "")
+        assertMsg "updatedAt tidak boleh kosong!" (updatedAt /= "")
+        create this with status = newStatus
+
 
 -- ============================================================
 -- 4. TEMPLATE QUEST CLAIM
@@ -225,13 +266,16 @@ template QuestCampaign
 -- Dibuat oleh ClaimFcfsSlot atau DrawRaffleWinner di QuestCampaign.
 -- Flow: dibuat → ConfirmFeePaid → ConfirmRewardSent.
 -- Reward tidak bisa dikirim tanpa bukti fee diterima terlebih dahulu.
+-- Untuk quest tanpa fee (claimFeeCc = 0.0), ConfirmRewardSent bisa langsung dipanggil.
 template QuestClaim
   with
     admin       : Party   -- operator / admin CanQuest
     userAddress : Party   -- Canton Party ID user
     campaignId  : Text    -- ID campaign dari DB
     claimId     : Text    -- ID unik klaim dari DB (anti double-claim)
-    claimKind   : Text    -- "CC_FCFS" | "CC_RAFFLE" | "CODE_FCFS" | "CODE_RAFFLE"
+    -- claimKind: "CC_FCFS" | "CC_RAFFLE" | "CODE_FCFS" | "CODE_RAFFLE"
+    --          | "CC_AND_CODE_RAFFLE" | "WAITLIST"
+    claimKind   : Text
     rewardCc    : Decimal -- jumlah CC reward (0.0 jika bukan CC)
     rewardCode  : Text    -- kode reward (untuk CODE_*, kosong untuk CC_*)
     claimFeeCc  : Decimal -- biaya claim fee CC yang harus dibayar
@@ -263,6 +307,7 @@ template QuestClaim
     -- | Konfirmasi reward sudah dikirim ke user.
     -- Dipanggil setelah Splice TX reward berhasil dikonfirmasi.
     -- WAJIB: fee harus sudah dibayar sebelum reward bisa dikirim.
+    -- Pengecualian: jika claimFeeCc = 0.0, reward bisa langsung dikirim.
     choice ConfirmRewardSent : ContractId QuestClaim
       with
         txId      : Text  -- Canton/Splice TX ID bukti reward
@@ -276,6 +321,20 @@ template QuestClaim
           rewardSent = True
           rewardTxId = txId
 
+    -- | Reveal kode reward (untuk CODE_FCFS / CODE_RAFFLE / CC_AND_CODE_RAFFLE).
+    -- Dipanggil setelah fee dibayar untuk mengungkap kode invite.
+    -- rewardCode diisi oleh admin setelah fee dikonfirmasi.
+    choice RevealRewardCode : ContractId QuestClaim
+      with
+        code      : Text  -- kode invite yang akan diungkap ke user
+        revealedAt : Text
+      controller admin
+      do
+        assertMsg "Fee harus dibayar dulu sebelum kode diungkap!" (feePaid || claimFeeCc == 0.0)
+        assertMsg "Kode tidak boleh kosong!" (code /= "")
+        assertMsg "revealedAt tidak boleh kosong!" (revealedAt /= "")
+        create this with rewardCode = code
+
 
 -- ============================================================
 -- 5. TEMPLATE DAILY CHECK-IN
@@ -283,7 +342,7 @@ template QuestClaim
 
 -- | Bukti on-chain bahwa user telah melakukan check-in harian.
 -- Setiap check-in menghasilkan 1 contract baru.
--- checkInId = userAddress + tanggal (unik per user per hari).
+-- checkInId = "{userId}_{YYYY-MM-DD}" (unik per user per hari).
 -- Idempotency dicek di API sebelum submit ke ledger.
 template DailyCheckIn
   with
@@ -320,7 +379,7 @@ template DailyCheckIn
 -- KEAMANAN ANTI-MANIPULASI:
 --   - spinResultId unik per spin (idempotency key dari API)
 --   - spinCost selalu > 0 (tidak bisa spin gratis)
---   - rewardType harus valid: "cc" | "points" | "none"
+--   - rewardType harus valid: "cc" | "points" | "invite_code" | "none"
 --   - Hanya admin yang bisa membuat kontrak ini
 --   - User tidak bisa membuat atau memodifikasi kontrak ini
 template SpinExecution
@@ -331,7 +390,7 @@ template SpinExecution
     spinResultId  : Text    -- ID unik dari DB (SpinResult.id) — anti double-spend
     spinItemId    : Text    -- ID item yang menang
     spinItemLabel : Text    -- label item (e.g. "50 CC", "100 Points", "Not Lucky")
-    rewardType    : Text    -- "cc" | "points" | "none"
+    rewardType    : Text    -- "cc" | "points" | "invite_code" | "none"
     rewardCc      : Decimal -- jumlah CC jika rewardType = "cc" (0.0 jika bukan)
     rewardPoints  : Int     -- jumlah points jika rewardType = "points" (0 jika bukan)
     spinCost      : Int     -- poin yang dipakai untuk spin ini
@@ -381,3 +440,72 @@ template SpinCcReward
   where
     signatory admin
     observer userAddress
+
+
+-- ============================================================
+-- 8. TEMPLATE REFERRAL REWARD
+-- ============================================================
+
+-- | Bukti on-chain bahwa referral reward sudah dikreditkan ke referrer.
+-- Dibuat saat user yang direferral berhasil mendaftar dan diverifikasi.
+-- Setiap referrer hanya mendapat 1 reward per referred user (idempotency di API).
+-- referralId = "{referrerId}_{referredUserId}" (unik per pasangan).
+template ReferralReward
+  with
+    admin          : Party   -- operator / admin CanQuest
+    referrerAddress : Party  -- Canton Party ID referrer (yang mengundang)
+    referrerId     : Text    -- DB user ID referrer
+    referredUserId : Text    -- DB user ID user yang direferral
+    points         : Int     -- poin yang dikreditkan ke referrer
+    referralId     : Text    -- ID unik: "{referrerId}_{referredUserId}"
+    createdAt      : Text    -- ISO timestamp reward dikreditkan
+  where
+    signatory admin
+    observer referrerAddress
+
+    -- | Konfirmasi referral reward sudah diproses.
+    choice ConfirmReferralProcessed : ContractId ReferralReward
+      with
+        confirmedAt : Text
+      controller admin
+      do
+        assertMsg "confirmedAt tidak boleh kosong!" (confirmedAt /= "")
+        create this with createdAt = confirmedAt
+
+
+-- ============================================================
+-- 9. TEMPLATE CC TRANSACTION LOG
+-- ============================================================
+
+-- | Audit trail on-chain untuk setiap CC credit/debit event.
+-- Mencerminkan CcTransaction di DB — setiap event punya bukti on-chain.
+-- txType: "QUEST_REWARD" | "SPIN_REWARD" | "TRANSFER_IN" | "TRANSFER_OUT" | "AIRDROP"
+-- amountMicroCc: positif = credit, negatif = debit (dalam micro-CC, 1 CC = 1_000_000)
+-- Hanya dibuat untuk event yang melibatkan CC (bukan points-only).
+template CcTransactionLog
+  with
+    admin         : Party   -- operator / admin CanQuest
+    userAddress   : Party   -- Canton Party ID user
+    username      : Text    -- username di platform
+    txLogId       : Text    -- ID unik dari DB (CcTransaction.id)
+    -- txType: "QUEST_REWARD" | "SPIN_REWARD" | "TRANSFER_IN" | "TRANSFER_OUT" | "AIRDROP"
+    txType        : Text
+    amountMicroCc : Int     -- jumlah dalam micro-CC (positif=credit, negatif=debit)
+    description   : Text    -- deskripsi human-readable
+    referenceId   : Text    -- referensi ke sumber (questId, spinId, dll)
+    ledgerTxId    : Text    -- Canton/Splice TX ID (kosong jika belum settled)
+    createdAt     : Text    -- ISO timestamp event
+  where
+    signatory admin
+    observer userAddress
+
+    -- | Update ledger TX ID setelah CC transfer dikonfirmasi on-chain.
+    choice SettleCcTransaction : ContractId CcTransactionLog
+      with
+        txId       : Text  -- Canton/Splice TX ID
+        settledAt  : Text  -- ISO timestamp settlement
+      controller admin
+      do
+        assertMsg "txId tidak boleh kosong!" (txId /= "")
+        assertMsg "settledAt tidak boleh kosong!" (settledAt /= "")
+        create this with ledgerTxId = txId

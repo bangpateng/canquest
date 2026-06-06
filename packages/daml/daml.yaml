@@ -7,11 +7,13 @@ sdk-version: 3.4.11
 # Templates (module Main):
 #   1. UserAccount        — akun user on-chain (poin earned & spent)
 #   2. WalletRegistration — bukti pembuatan wallet/party ID
-#   3. QuestCampaign      — template induk quest (semua 4 type)
-#   4. QuestClaim         — bukti klaim quest + fee + reward
+#   3. QuestCampaign      — template induk quest (semua 8 RewardType)
+#   4. QuestClaim         — bukti klaim quest + fee + reward + reveal code
 #   5. DailyCheckIn       — check-in harian on-chain
 #   6. SpinExecution      — audit trail spin on-chain
 #   7. SpinCcReward       — bukti CC reward dari spin
+#   8. ReferralReward     — bukti referral reward dikreditkan
+#   9. CcTransactionLog   — audit trail setiap CC credit/debit event
 #
 # Authorization pattern (Canton M3):
 #   signatory admin  — operator yang menandatangani semua kontrak

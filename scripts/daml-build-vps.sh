@@ -1,15 +1,24 @@
 #!/bin/bash
 # ============================================================
-# CanQuest DAML Build + Test Script (untuk VPS Linux)
+# CanQuest DAML Build + Test + Upload Script (untuk VPS Linux)
 # Package: canquest-v4 v1.0.0  |  SDK: 3.4.11
 #
-# Cara pakai:
-#   1. Copy folder packages/daml ke VPS
-#   2. Jalankan script ini di VPS
-#   3. Atau jalankan langsung via SSH pipe
+# Templates (9 total):
+#   1. UserAccount        2. WalletRegistration  3. QuestCampaign
+#   4. QuestClaim         5. DailyCheckIn        6. SpinExecution
+#   7. SpinCcReward       8. ReferralReward       9. CcTransactionLog
 #
-# Jalankan di VPS:
-#   bash scripts/daml-build-vps.sh
+# Cara pakai:
+#   1. Push kode ke VPS (git pull di VPS)
+#   2. Jalankan script ini di VPS:
+#        bash scripts/daml-build-vps.sh
+#   3. Setelah build sukses, upload DAR:
+#        cd apps/api && node scripts/upload-daml-dar.cjs
+#   4. Update .env dan restart API:
+#        pm2 restart canquest-api
+#
+# Atau jalankan semua sekaligus (build + upload):
+#   bash scripts/daml-build-vps.sh --upload
 # ============================================================
 
 set -e
@@ -120,3 +129,34 @@ echo "  1. Upload DAR  : cd apps/api && node scripts/upload-daml-dar.cjs"
 echo "  2. Update .env : set CANTON_DAML_PACKAGE_NAME=canquest-v4"
 echo "  3. Restart API : pm2 restart canquest-api"
 echo ""
+
+# ── STEP 4 (opsional): Auto-upload jika flag --upload diberikan ────────────
+if [[ "$*" == *"--upload"* ]]; then
+    echo "STEP 4: Auto-upload DAR ke Canton ledger ..."
+    echo ""
+
+    API_DIR="$PROJECT_ROOT/apps/api"
+    if [ ! -f "$API_DIR/scripts/upload-daml-dar.cjs" ]; then
+        echo "[WARN] upload-daml-dar.cjs not found, skip upload"
+    else
+        cd "$API_DIR"
+        node scripts/upload-daml-dar.cjs "$DAR_PATH"
+        UPLOAD_EXIT=$?
+        if [ $UPLOAD_EXIT -eq 0 ]; then
+            echo ""
+            echo "[OK] DAR uploaded successfully!"
+            echo ""
+            echo "Sekarang:"
+            echo "  1. Update apps/api/.env:"
+            echo "       CANTON_DAML_PACKAGE_NAME=canquest-v4"
+            if [ -n "$PKG_ID" ]; then
+                echo "       CANTON_DAML_PACKAGE_ID=$PKG_ID"
+            fi
+            echo "  2. pm2 restart canquest-api"
+        else
+            echo "[FAIL] Upload failed (exit $UPLOAD_EXIT)"
+            echo "Pastikan SSH tunnel ke Canton JSON API aktif (port 7575)"
+            exit 1
+        fi
+    fi
+fi
