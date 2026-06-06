@@ -177,11 +177,13 @@ export function QuestForm({
   const showCcField =
     form.rewardType === "CC_ONLY" ||
     form.rewardType === "CC_MANUAL" ||
-    form.rewardType === "CC_AND_INVITE";
+    form.rewardType === "CC_AND_INVITE" ||
+    form.rewardType === "CC_AND_CODE_RAFFLE";
   const needsMaxWinners =
     form.rewardType === "CC_ONLY" ||
     form.rewardType === "CC_MANUAL" ||
     form.rewardType === "CC_AND_INVITE" ||
+    form.rewardType === "CC_AND_CODE_RAFFLE" ||
     form.rewardType === "INVITE_CODE_RANDOM" ||
     form.rewardType === "INVITE_CODE_FCFS";
 
@@ -628,16 +630,34 @@ export function QuestForm({
               </p>
             </div>
           </div>
-          {form.rewardType === "WAITLIST_EMAIL" && (
+          {(form.rewardType === "WAITLIST_EMAIL" ||
+            form.rewardType === "CC_MANUAL" ||
+            form.rewardType === "CC_AND_CODE_RAFFLE" ||
+            form.rewardType === "INVITE_CODE_RANDOM") && (
             <div>
-              <label className="mb-1.5 block text-sm font-medium">Pesan pemenang (custom)</label>
+              <label className="mb-1.5 block text-sm font-medium">
+                {form.rewardType === "CC_AND_CODE_RAFFLE"
+                  ? "Pesan pemenang (notifikasi menang)"
+                  : "Pesan pemenang (custom)"}
+              </label>
               <textarea
                 value={form.winnerMessage}
                 onChange={(e) => updateField("winnerMessage", e.target.value)}
                 rows={3}
-                placeholder="Contoh: Silakan cek inbox email untuk langkah KYC."
+                placeholder={
+                  form.rewardType === "CC_AND_CODE_RAFFLE"
+                    ? "Contoh: Selamat! Kamu terpilih sebagai pemenang. Klaim CC + Code kamu sekarang."
+                    : form.rewardType === "CC_MANUAL"
+                      ? "Contoh: Selamat! CC reward akan dikirim ke wallet kamu."
+                      : "Contoh: Silakan cek inbox email untuk langkah KYC."
+                }
                 className={cn(inputCls, "resize-y")}
               />
+              {form.rewardType === "CC_AND_CODE_RAFFLE" && (
+                <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                  Pesan ini ditampilkan ke pemenang saat mereka membuka quest setelah admin draw. Yang tidak menang akan melihat "You Not Lucky".
+                </p>
+              )}
             </div>
           )}
         </div>

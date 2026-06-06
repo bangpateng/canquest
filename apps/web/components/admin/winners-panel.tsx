@@ -284,7 +284,8 @@ export function WinnersPanel({ questId }: { questId: string }) {
     questRewardType === "CC_MANUAL" ||
     questRewardType === "INVITE_CODE_RANDOM" ||
     questRewardType === "INVITE_CODE" ||
-    questRewardType === "WAITLIST_EMAIL";
+    questRewardType === "WAITLIST_EMAIL" ||
+    questRewardType === "CC_AND_CODE_RAFFLE";
 
   return (
     <div className="space-y-6">

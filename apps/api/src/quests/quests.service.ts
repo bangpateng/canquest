@@ -1421,10 +1421,11 @@ export class QuestsService {
     // ── CC + Code Combined Raffle ──────────────────────────────────────────
     if (rewardType === RewardType.CC_AND_CODE_RAFFLE) {
       if (draw?.distributed && draw.inviteCode) {
+        const custom = quest.winnerMessage?.trim();
         return {
           state: 'cc_reward' as const,
           inviteCode: draw.inviteCode,
-          message: `Congratulations! You received ${quest.rewardCc} CC and code: ${draw.inviteCode}`,
+          message: custom || `Congratulations! You received ${quest.rewardCc} CC and code: ${draw.inviteCode}`,
         };
       }
       if (draw?.distributed && !draw.inviteCode) {
@@ -1444,10 +1445,11 @@ export class QuestsService {
             message: 'No codes left in the pool. Contact support.',
           };
         }
+        const custom = quest.winnerMessage?.trim();
         return {
           state: 'fcfs_claimable' as const,
           inviteCode: null,
-          message: `You won! Pay ${fee} CC claim fee to receive ${quest.rewardCc} CC + your invite code.`,
+          message: custom || `You won! Pay ${fee} CC claim fee to receive ${quest.rewardCc} CC + your invite code.`,
         };
       }
       const drawsHeld = await this.prisma.winnerDraw.count({ where: { questId } });
