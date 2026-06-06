@@ -144,7 +144,7 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
                 </div>
               </div>
               <p className="mt-2 text-sm font-medium text-slate-400">
-                Per winner · Pay 5 CC claim fee to receive both rewards
+                Per Winner
               </p>
             </div>
           ) : (
