@@ -119,6 +119,19 @@ export class QuestLedgerService {
     private readonly config: ConfigService,
   ) {}
 
+  // ── Type helpers — Canton JSON API v2 serialization ─────────────────────────
+
+  /**
+   * Canton JSON API v2 requires DAML Decimal fields to be sent as strings.
+   * e.g. rewardCc: 10.0 → "10.0", claimFeeCc: 0.0 → "0.0"
+   * Int fields stay as JS numbers. Bool fields stay as JS booleans.
+   * See: https://docs.canton.network/appdev/modules/m4-json-api-tutorial
+   */
+  private dec(value: number): string {
+    // Always include at least one decimal place for DAML Decimal type
+    return Number.isInteger(value) ? `${value}.0` : String(value);
+  }
+
   // ── Config helpers ──────────────────────────────────────────────────────────
 
   private get damlPackageRef(): string {
@@ -528,8 +541,8 @@ export class QuestLedgerService {
         campaignId:    params.campaignId,
         title:         params.title,
         questKind:     params.questKind,
-        rewardCc:      params.rewardCc,
-        claimFeeCc:    params.claimFeeCc,
+        rewardCc:      this.dec(params.rewardCc),
+        claimFeeCc:    this.dec(params.claimFeeCc),
         maxWinners:    params.maxWinners,
         currentClaims: 0,
         status:        'ACTIVE',
@@ -860,9 +873,9 @@ export class QuestLedgerService {
         spinItemId:    params.spinItemId,
         spinItemLabel: params.spinItemLabel,
         rewardType:    params.rewardType,
-        rewardCc:      params.rewardCc,
-        rewardPoints:  params.rewardPoints,
-        spinCost:      params.spinCost,
+        rewardCc:      this.dec(params.rewardCc),   // Decimal → string
+        rewardPoints:  params.rewardPoints,           // Int → number (ok)
+        spinCost:      params.spinCost,               // Int → number (ok)
         executedAt:    params.executedAt,
       },
       [operator],
