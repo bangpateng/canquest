@@ -156,8 +156,8 @@ template QuestCampaign
     questKind     : Text
     rewardCc      : Decimal -- jumlah CC reward per pemenang (0.0 jika bukan CC)
     claimFeeCc    : Decimal -- biaya claim fee CC (0.0 jika gratis)
-    maxWinners    : Int     -- kuota maksimal pemenang (0 = unlimited/raffle)
-    currentClaims : Int     -- jumlah klaim yang sudah terjadi
+    maxWinners    : Text    -- kuota maksimal pemenang ("0" = unlimited/raffle)
+    currentClaims : Text    -- jumlah klaim yang sudah terjadi
     status        : Text    -- "ACTIVE" | "ENDED" | "CLOSED"
     createdAt     : Text    -- ISO timestamp pembuatan
   where
@@ -176,7 +176,8 @@ template QuestCampaign
       do
         assertMsg "Campaign harus ACTIVE!" (status == "ACTIVE")
         assertMsg "questKind harus FCFS!" (questKind == "CC_FCFS" || questKind == "CODE_FCFS")
-        assertMsg "Kuota FCFS sudah habis!" (maxWinners == 0 || currentClaims < maxWinners)
+        -- maxWinners "0" = unlimited; validasi kuota dilakukan off-chain di API
+        assertMsg "Kuota FCFS sudah habis!" (maxWinners == "0" || currentClaims /= maxWinners)
 
         newClaimCid <- create QuestClaim with
           admin
@@ -194,7 +195,7 @@ template QuestCampaign
           claimedAt
 
         newCampaignCid <- create this
-          with currentClaims = currentClaims + 1
+          with currentClaims = currentClaims <> "+"
 
         pure (newCampaignCid, newClaimCid)
 
@@ -233,7 +234,7 @@ template QuestCampaign
           claimedAt    = drawnAt
 
         newCampaignCid <- create this
-          with currentClaims = currentClaims + 1
+          with currentClaims = currentClaims <> "+"
 
         pure (newCampaignCid, newClaimCid)
 

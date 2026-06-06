@@ -1,7 +1,7 @@
 sdk-version: 3.4.11
 # ============================================================
 # CanQuest DAML Package — canquest-v4
-# Version: 1.0.2
+# Version: 1.0.3
 # SDK: 3.4.11 (Canton Network)
 #
 # Templates (module Main):
@@ -21,9 +21,9 @@ sdk-version: 3.4.11
 #
 # Docs: https://docs.canton.network/appdev/modules/m3-dev-environment
 # ============================================================
-name: canquest-v5
+name: canquest-v4
 source: daml
-version: 2.0.0
+version: 1.0.3
 dependencies:
   - daml-prim
   - daml-stdlib

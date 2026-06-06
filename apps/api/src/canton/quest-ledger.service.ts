@@ -543,8 +543,8 @@ export class QuestLedgerService {
         questKind:     params.questKind,
         rewardCc:      this.dec(params.rewardCc),
         claimFeeCc:    this.dec(params.claimFeeCc),
-        maxWinners:    params.maxWinners,
-        currentClaims: 0,
+        maxWinners:    String(params.maxWinners),   // Int → string (Canton JSON API v2)
+        currentClaims: String(0),                   // Int → string
         status:        'ACTIVE',
         createdAt:     new Date().toISOString(),
       },
