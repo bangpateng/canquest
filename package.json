@@ -25,6 +25,7 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@nestjs/platform-express": "^11.1.24",
     "bcryptjs": "^3.0.3",
     "jsonwebtoken": "^9.0.3"
   },
