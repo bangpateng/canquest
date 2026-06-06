@@ -263,7 +263,7 @@ export function QuestSubmittedProof({
     return (
       <CampaignQuestStatusCard
         tone="emerald"
-        label="Congratulations"
+        label="Congratulationss"
         title="Reward claimed"
         description={`${rewardCc ?? 0} CC and your invite code have been sent.`}
         icon={CheckCircle2}
