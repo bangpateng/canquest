@@ -1,26 +1,6 @@
 -- ============================================================
 -- CanQuest DAML Test Suite — module Test
 -- Package: canquest-v4  |  SDK: 3.4.11
---
--- Test suite terpisah dari template utama (Main.daml).
--- Dipisah agar daml-script tidak ikut ter-upload ke ledger production.
---
--- Coverage:
---   [A] UserAccount        — RewardPoints, DebitPoints, UpdateUsername
---   [B] WalletRegistration — ConfirmWalletActive
---   [C] QuestCampaign CC_FCFS   — ClaimFcfsSlot, kuota habis, CloseCampaign
---   [D] QuestCampaign CODE_FCFS — ClaimFcfsSlot dengan code
---   [E] QuestCampaign CC_RAFFLE — DrawRaffleWinner
---   [F] QuestCampaign CODE_RAFFLE — DrawRaffleWinner dengan code
---   [G] QuestCampaign CC_AND_CODE_RAFFLE — DrawRaffleWinner combined
---   [H] QuestCampaign WAITLIST — DrawRaffleWinner waitlist
---   [I] QuestClaim         — ConfirmFeePaid, ConfirmRewardSent, RevealRewardCode
---   [J] DailyCheckIn       — VerifyCheckIn
---   [K] SpinExecution      — ConfirmCcDelivered, validasi rewardType
---   [L] ReferralReward     — ConfirmReferralProcessed
---   [M] CcTransactionLog   — SettleCcTransaction
---   [N] Edge cases & security — semua skenario GAGAL yang diharapkan
---
 -- Jalankan: daml test
 -- ============================================================
 
@@ -29,26 +9,16 @@ module Test where
 import Daml.Script
 import Main
 
--- ============================================================
--- MAIN TEST RUNNER
--- ============================================================
-
--- | Test suite lengkap untuk semua 9 template canquest-v4.
--- Semua skenario harus PASS agar kontrak siap deploy ke Canton Network.
 testAllTemplates : Script ()
 testAllTemplates = script do
 
-  -- Setup parties
   admin <- allocateParty "CanQuestAdmin"
   alice <- allocateParty "Alice_User"
   bob   <- allocateParty "Bob_User"
   carol <- allocateParty "Carol_User"
 
-  -- ──────────────────────────────────────────────────────────
   -- [A] USER ACCOUNT
-  -- ──────────────────────────────────────────────────────────
 
-  -- (A1) Buat UserAccount untuk Alice
   aliceAccCid <- submit admin do
     createCmd UserAccount with
       admin
@@ -58,7 +28,6 @@ testAllTemplates = script do
       spentPoints  = 0
       createdAt    = "2026-06-05T00:00:00Z"
 
-  -- (A2) Buat UserAccount untuk Bob
   bobAccCid <- submit admin do
     createCmd UserAccount with
       admin
@@ -68,70 +37,56 @@ testAllTemplates = script do
       spentPoints  = 0
       createdAt    = "2026-06-05T00:00:00Z"
 
-  -- (A3) RewardPoints — Alice selesaikan quest, dapat 500 poin
   aliceAccCid2 <- submit admin do
     exerciseCmd aliceAccCid RewardPoints with
       pointsToAdd = 500
       reason      = "quest_completion"
 
-  -- (A4) RewardPoints — Alice check-in harian, dapat 50 poin
   aliceAccCid3 <- submit admin do
     exerciseCmd aliceAccCid2 RewardPoints with
       pointsToAdd = 50
       reason      = "daily_check_in"
 
-  -- (A5) RewardPoints — Alice dapat referral bonus
   aliceAccCid4 <- submit admin do
     exerciseCmd aliceAccCid3 RewardPoints with
       pointsToAdd = 100
       reason      = "referral"
 
-  -- (A6) DebitPoints — Alice spin, debit 50 poin
   aliceAccCid5 <- submit admin do
     exerciseCmd aliceAccCid4 DebitPoints with
       amount = 50
       reason = "spin_cost"
 
-  -- (A7) UpdateUsername — Alice ganti username
   aliceAccCid6 <- submit admin do
     exerciseCmd aliceAccCid5 UpdateUsername with
       newUsername = "Alice_CanQuest"
 
-  -- (A8) GAGAL: RewardPoints dengan 0 poin harus GAGAL
   submitMustFail admin do
     exerciseCmd aliceAccCid6 RewardPoints with
       pointsToAdd = 0
       reason      = "invalid"
 
-  -- (A9) GAGAL: RewardPoints dengan reason kosong harus GAGAL
   submitMustFail admin do
     exerciseCmd aliceAccCid6 RewardPoints with
       pointsToAdd = 100
       reason      = ""
 
-  -- (A10) GAGAL: DebitPoints melebihi available points harus GAGAL
-  -- Alice: earned=650, spent=50, available=600 → debit 700 harus GAGAL
   submitMustFail admin do
     exerciseCmd aliceAccCid6 DebitPoints with
       amount = 700
       reason = "spin_cost"
 
-  -- (A11) GAGAL: DebitPoints dengan amount 0 harus GAGAL
   submitMustFail admin do
     exerciseCmd aliceAccCid6 DebitPoints with
       amount = 0
       reason = "spin_cost"
 
-  -- (A12) GAGAL: UpdateUsername dengan string kosong harus GAGAL
   submitMustFail admin do
     exerciseCmd aliceAccCid6 UpdateUsername with
       newUsername = ""
 
-  -- ──────────────────────────────────────────────────────────
   -- [B] WALLET REGISTRATION
-  -- ──────────────────────────────────────────────────────────
 
-  -- (B1) Buat WalletRegistration untuk Alice
   aliceWalletCid <- submit admin do
     createCmd WalletRegistration with
       admin
@@ -141,7 +96,6 @@ testAllTemplates = script do
       inviteCode   = "ADMIN_CODE_001"
       registeredAt = "2026-06-05T00:00:00Z"
 
-  -- (B2) Buat WalletRegistration untuk Bob
   _bobWalletCid <- submit admin do
     createCmd WalletRegistration with
       admin
@@ -151,21 +105,16 @@ testAllTemplates = script do
       inviteCode   = "ADMIN_CODE_002"
       registeredAt = "2026-06-05T00:00:00Z"
 
-  -- (B3) ConfirmWalletActive — konfirmasi wallet Alice aktif
   _aliceWalletConfirmedCid <- submit admin do
     exerciseCmd aliceWalletCid ConfirmWalletActive with
       confirmedAt = "2026-06-05T00:01:00Z"
 
-  -- (B4) GAGAL: ConfirmWalletActive dengan confirmedAt kosong harus GAGAL
   submitMustFail admin do
     exerciseCmd aliceWalletCid ConfirmWalletActive with
       confirmedAt = ""
 
-  -- ──────────────────────────────────────────────────────────
   -- [C] QUEST CAMPAIGN — CC FCFS
-  -- ──────────────────────────────────────────────────────────
 
-  -- (C1) Admin buat campaign CC_FCFS dengan kuota 2 pemenang
   ccFcfsCampaignCid <- submit admin do
     createCmd QuestCampaign with
       admin
@@ -174,55 +123,46 @@ testAllTemplates = script do
       questKind     = "CC_FCFS"
       rewardCc      = 10.0
       claimFeeCc    = 3.0
-      maxWinners    = "2"
-      currentClaims = "0"
+      maxWinners    = 2
+      currentClaims = 0
       status        = "ACTIVE"
       createdAt     = "2026-06-05T00:00:00Z"
 
-  -- (C2) Alice klaim slot FCFS pertama → HARUS SUKSES
   (ccFcfsCampaignCid2, aliceClaimCid) <- submit admin do
     exerciseCmd ccFcfsCampaignCid ClaimFcfsSlot with
       user      = alice
       claimId   = "CLAIM_CC_FCFS_001"
       claimedAt = "2026-06-05T01:00:00Z"
 
-  -- (C3) Bob klaim slot FCFS kedua → HARUS SUKSES (kuota masih ada)
   (ccFcfsCampaignCid3, _bobClaimCid) <- submit admin do
     exerciseCmd ccFcfsCampaignCid2 ClaimFcfsSlot with
       user      = bob
       claimId   = "CLAIM_CC_FCFS_002"
       claimedAt = "2026-06-05T01:01:00Z"
 
-  -- (C4) GAGAL: Carol coba klaim slot ketiga → HARUS GAGAL (kuota habis)
   submitMustFail admin do
     exerciseCmd ccFcfsCampaignCid3 ClaimFcfsSlot with
       user      = carol
       claimId   = "CLAIM_CC_FCFS_003"
       claimedAt = "2026-06-05T01:02:00Z"
 
-  -- (C5) UpdateCampaignStatus — admin tandai campaign ENDED
   ccFcfsCampaignCid4 <- submit admin do
     exerciseCmd ccFcfsCampaignCid3 UpdateCampaignStatus with
       newStatus = "ENDED"
       updatedAt = "2026-06-05T23:00:00Z"
 
-  -- (C6) CloseCampaign — admin tutup campaign
   _closedCampaignCid <- submit admin do
     exerciseCmd ccFcfsCampaignCid4 CloseCampaign with
       closedAt = "2026-06-05T23:59:00Z"
 
-  -- (C7) GAGAL: ClaimFcfsSlot pada campaign CLOSED harus GAGAL
   submitMustFail admin do
     exerciseCmd ccFcfsCampaignCid4 ClaimFcfsSlot with
       user      = carol
       claimId   = "CLAIM_CC_FCFS_004"
       claimedAt = "2026-06-05T23:59:30Z"
 
-  -- ──────────────────────────────────────────────────────────
   -- [D] QUEST CAMPAIGN — CODE FCFS
-  -- ──────────────────────────────────────────────────────────
 
-  -- (D1) Admin buat campaign CODE_FCFS dengan kuota 1
   codeFcfsCampaignCid <- submit admin do
     createCmd QuestCampaign with
       admin
@@ -231,30 +171,25 @@ testAllTemplates = script do
       questKind     = "CODE_FCFS"
       rewardCc      = 0.0
       claimFeeCc    = 2.0
-      maxWinners    = "1"
-      currentClaims = "0"
+      maxWinners    = 1
+      currentClaims = 0
       status        = "ACTIVE"
       createdAt     = "2026-06-05T00:00:00Z"
 
-  -- (D2) Alice klaim slot CODE_FCFS → HARUS SUKSES
   (codeFcfsCampaignCid2, _aliceCodeClaimCid) <- submit admin do
     exerciseCmd codeFcfsCampaignCid ClaimFcfsSlot with
       user      = alice
       claimId   = "CLAIM_CODE_FCFS_001"
       claimedAt = "2026-06-05T02:00:00Z"
 
-  -- (D3) GAGAL: Bob coba klaim → HARUS GAGAL (kuota habis)
   submitMustFail admin do
     exerciseCmd codeFcfsCampaignCid2 ClaimFcfsSlot with
       user      = bob
       claimId   = "CLAIM_CODE_FCFS_002"
       claimedAt = "2026-06-05T02:01:00Z"
 
-  -- ──────────────────────────────────────────────────────────
   -- [E] QUEST CAMPAIGN — CC RAFFLE
-  -- ──────────────────────────────────────────────────────────
 
-  -- (E1) Admin buat campaign CC_RAFFLE (maxWinners=0 = unlimited entry)
   ccRaffleCampaignCid <- submit admin do
     createCmd QuestCampaign with
       admin
@@ -263,12 +198,11 @@ testAllTemplates = script do
       questKind     = "CC_RAFFLE"
       rewardCc      = 50.0
       claimFeeCc    = 3.0
-      maxWinners    = "0"
-      currentClaims = "0"
+      maxWinners    = 0
+      currentClaims = 0
       status        = "ACTIVE"
       createdAt     = "2026-06-05T00:00:00Z"
 
-  -- (E2) Admin draw Alice sebagai pemenang raffle CC → HARUS SUKSES
   (ccRaffleCampaignCid2, aliceRaffleClaimCid) <- submit admin do
     exerciseCmd ccRaffleCampaignCid DrawRaffleWinner with
       user       = alice
@@ -276,7 +210,6 @@ testAllTemplates = script do
       rewardCode = ""
       drawnAt    = "2026-06-05T20:00:00Z"
 
-  -- (E3) Admin draw Bob sebagai pemenang raffle CC → HARUS SUKSES
   (_ccRaffleCampaignCid3, _bobRaffleClaimCid) <- submit admin do
     exerciseCmd ccRaffleCampaignCid2 DrawRaffleWinner with
       user       = bob
@@ -284,11 +217,8 @@ testAllTemplates = script do
       rewardCode = ""
       drawnAt    = "2026-06-05T20:01:00Z"
 
-  -- ──────────────────────────────────────────────────────────
   -- [F] QUEST CAMPAIGN — CODE RAFFLE
-  -- ──────────────────────────────────────────────────────────
 
-  -- (F1) Admin buat campaign CODE_RAFFLE
   codeRaffleCampaignCid <- submit admin do
     createCmd QuestCampaign with
       admin
@@ -297,12 +227,11 @@ testAllTemplates = script do
       questKind     = "CODE_RAFFLE"
       rewardCc      = 0.0
       claimFeeCc    = 2.0
-      maxWinners    = "0"
-      currentClaims = "0"
+      maxWinners    = 0
+      currentClaims = 0
       status        = "ACTIVE"
       createdAt     = "2026-06-05T00:00:00Z"
 
-  -- (F2) Admin draw Carol sebagai pemenang raffle code → HARUS SUKSES
   (_codeRaffleCampaignCid2, carolCodeRaffleClaimCid) <- submit admin do
     exerciseCmd codeRaffleCampaignCid DrawRaffleWinner with
       user       = carol
@@ -310,7 +239,6 @@ testAllTemplates = script do
       rewardCode = "INVITE_CODE_XYZ789"
       drawnAt    = "2026-06-05T21:00:00Z"
 
-  -- (F3) GAGAL: DrawRaffleWinner pada campaign CC_FCFS harus GAGAL
   submitMustFail admin do
     exerciseCmd ccFcfsCampaignCid DrawRaffleWinner with
       user       = carol
@@ -318,11 +246,8 @@ testAllTemplates = script do
       rewardCode = ""
       drawnAt    = "2026-06-05T21:01:00Z"
 
-  -- ──────────────────────────────────────────────────────────
-  -- [G] QUEST CAMPAIGN — CC_AND_CODE_RAFFLE (combined)
-  -- ──────────────────────────────────────────────────────────
+  -- [G] QUEST CAMPAIGN — CC_AND_CODE_RAFFLE
 
-  -- (G1) Admin buat campaign CC_AND_CODE_RAFFLE (fee 5 CC)
   ccAndCodeRaffleCid <- submit admin do
     createCmd QuestCampaign with
       admin
@@ -331,12 +256,11 @@ testAllTemplates = script do
       questKind     = "CC_AND_CODE_RAFFLE"
       rewardCc      = 20.0
       claimFeeCc    = 5.0
-      maxWinners    = "0"
-      currentClaims = "0"
+      maxWinners    = 0
+      currentClaims = 0
       status        = "ACTIVE"
       createdAt     = "2026-06-05T00:00:00Z"
 
-  -- (G2) Admin draw Alice sebagai pemenang CC+Code raffle → HARUS SUKSES
   (ccAndCodeRaffleCid2, aliceCcCodeClaimCid) <- submit admin do
     exerciseCmd ccAndCodeRaffleCid DrawRaffleWinner with
       user       = alice
@@ -344,7 +268,6 @@ testAllTemplates = script do
       rewardCode = "INVITE_CODE_ALICE_001"
       drawnAt    = "2026-06-05T22:00:00Z"
 
-  -- (G3) Admin draw Bob sebagai pemenang CC+Code raffle → HARUS SUKSES
   (_ccAndCodeRaffleCid3, _bobCcCodeClaimCid) <- submit admin do
     exerciseCmd ccAndCodeRaffleCid2 DrawRaffleWinner with
       user       = bob
@@ -352,11 +275,8 @@ testAllTemplates = script do
       rewardCode = "INVITE_CODE_BOB_001"
       drawnAt    = "2026-06-05T22:01:00Z"
 
-  -- ──────────────────────────────────────────────────────────
   -- [H] QUEST CAMPAIGN — WAITLIST
-  -- ──────────────────────────────────────────────────────────
 
-  -- (H1) Admin buat campaign WAITLIST
   waitlistCampaignCid <- submit admin do
     createCmd QuestCampaign with
       admin
@@ -365,12 +285,11 @@ testAllTemplates = script do
       questKind     = "WAITLIST"
       rewardCc      = 0.0
       claimFeeCc    = 0.0
-      maxWinners    = "0"
-      currentClaims = "0"
+      maxWinners    = 0
+      currentClaims = 0
       status        = "ACTIVE"
       createdAt     = "2026-06-05T00:00:00Z"
 
-  -- (H2) Admin draw Carol sebagai pemenang waitlist → HARUS SUKSES
   (_waitlistCampaignCid2, _carolWaitlistClaimCid) <- submit admin do
     exerciseCmd waitlistCampaignCid DrawRaffleWinner with
       user       = carol
@@ -378,79 +297,64 @@ testAllTemplates = script do
       rewardCode = ""
       drawnAt    = "2026-06-05T23:00:00Z"
 
-  -- (H3) GAGAL: ClaimFcfsSlot pada campaign WAITLIST harus GAGAL
   submitMustFail admin do
     exerciseCmd waitlistCampaignCid ClaimFcfsSlot with
       user      = alice
       claimId   = "CLAIM_WAITLIST_INVALID"
       claimedAt = "2026-06-05T23:01:00Z"
 
-  -- ──────────────────────────────────────────────────────────
-  -- [I] QUEST CLAIM — Fee, Reward & RevealCode Flow
-  -- ──────────────────────────────────────────────────────────
+  -- [I] QUEST CLAIM
 
-  -- (I1) ConfirmFeePaid untuk Alice CC FCFS claim → HARUS SUKSES
   aliceClaimCid2 <- submit admin do
     exerciseCmd aliceClaimCid ConfirmFeePaid with
       txId        = "SPLICE_FEE_TX_ALICE_001"
       confirmedAt = "2026-06-05T01:05:00Z"
 
-  -- (I2) ConfirmRewardSent untuk Alice setelah fee dibayar → HARUS SUKSES
   _aliceClaimCid3 <- submit admin do
     exerciseCmd aliceClaimCid2 ConfirmRewardSent with
       txId   = "SPLICE_REWARD_TX_ALICE_001"
       sentAt = "2026-06-05T01:06:00Z"
 
-  -- (I3) ConfirmFeePaid untuk Alice CC Raffle claim → HARUS SUKSES
   aliceRaffleClaimCid2 <- submit admin do
     exerciseCmd aliceRaffleClaimCid ConfirmFeePaid with
       txId        = "SPLICE_FEE_TX_ALICE_RAFFLE_001"
       confirmedAt = "2026-06-05T20:05:00Z"
 
-  -- (I4) ConfirmRewardSent untuk Alice raffle → HARUS SUKSES
   _aliceRaffleClaimCid3 <- submit admin do
     exerciseCmd aliceRaffleClaimCid2 ConfirmRewardSent with
       txId   = "SPLICE_REWARD_TX_ALICE_RAFFLE_001"
       sentAt = "2026-06-05T20:06:00Z"
 
-  -- (I5) ConfirmRewardSent untuk Carol code raffle (claimFeeCc=2.0, fee belum dibayar)
-  -- HARUS GAGAL: fee belum dibayar
   submitMustFail admin do
     exerciseCmd carolCodeRaffleClaimCid ConfirmRewardSent with
       txId   = "SPLICE_REWARD_TX_CAROL_001"
       sentAt = "2026-06-05T21:05:00Z"
 
-  -- (I6) ConfirmFeePaid dengan txId kosong harus GAGAL
   submitMustFail admin do
     exerciseCmd carolCodeRaffleClaimCid ConfirmFeePaid with
       txId        = ""
       confirmedAt = "2026-06-05T21:02:00Z"
 
-  -- (I7) ConfirmFeePaid untuk Carol code raffle → HARUS SUKSES
   carolCodeRaffleClaimCid2 <- submit admin do
     exerciseCmd carolCodeRaffleClaimCid ConfirmFeePaid with
       txId        = "SPLICE_FEE_TX_CAROL_001"
       confirmedAt = "2026-06-05T21:03:00Z"
 
-  -- (I8) ConfirmFeePaid lagi (double pay) harus GAGAL
   submitMustFail admin do
     exerciseCmd carolCodeRaffleClaimCid2 ConfirmFeePaid with
       txId        = "SPLICE_FEE_TX_CAROL_002"
       confirmedAt = "2026-06-05T21:04:00Z"
 
-  -- (I9) ConfirmRewardSent untuk Carol setelah fee dibayar → HARUS SUKSES
   carolCodeRaffleClaimCid3 <- submit admin do
     exerciseCmd carolCodeRaffleClaimCid2 ConfirmRewardSent with
       txId   = "SPLICE_REWARD_TX_CAROL_001"
       sentAt = "2026-06-05T21:05:00Z"
 
-  -- (I10) ConfirmRewardSent lagi (double send) harus GAGAL
   submitMustFail admin do
     exerciseCmd carolCodeRaffleClaimCid3 ConfirmRewardSent with
       txId   = "SPLICE_REWARD_TX_CAROL_002"
       sentAt = "2026-06-05T21:06:00Z"
 
-  -- (I11) RevealRewardCode untuk Alice CC+Code claim setelah fee dibayar
   aliceCcCodeClaimCid2 <- submit admin do
     exerciseCmd aliceCcCodeClaimCid ConfirmFeePaid with
       txId        = "SPLICE_FEE_TX_ALICE_CC_CODE_001"
@@ -461,8 +365,6 @@ testAllTemplates = script do
       code       = "INVITE_CODE_ALICE_REVEALED"
       revealedAt = "2026-06-05T22:06:00Z"
 
-  -- (I12) GAGAL: RevealRewardCode sebelum fee dibayar harus GAGAL
-  -- Buat claim baru tanpa fee untuk test ini
   testClaimCid <- submit admin do
     createCmd QuestCampaign with
       admin
@@ -471,8 +373,8 @@ testAllTemplates = script do
       questKind     = "CODE_RAFFLE"
       rewardCc      = 0.0
       claimFeeCc    = 2.0
-      maxWinners    = "0"
-      currentClaims = "0"
+      maxWinners    = 0
+      currentClaims = 0
       status        = "ACTIVE"
       createdAt     = "2026-06-05T00:00:00Z"
 
@@ -488,11 +390,8 @@ testAllTemplates = script do
       code       = "SHOULD_FAIL"
       revealedAt = "2026-06-05T22:11:00Z"
 
-  -- ──────────────────────────────────────────────────────────
   -- [J] DAILY CHECK-IN
-  -- ──────────────────────────────────────────────────────────
 
-  -- (J1) Alice check-in hari pertama
   aliceCheckInCid <- submit admin do
     createCmd DailyCheckIn with
       admin
@@ -504,7 +403,6 @@ testAllTemplates = script do
       streakCount   = 1
       checkedInAt   = "2026-06-05T08:00:00Z"
 
-  -- (J2) Bob check-in hari pertama
   _bobCheckInCid <- submit admin do
     createCmd DailyCheckIn with
       admin
@@ -516,7 +414,6 @@ testAllTemplates = script do
       streakCount   = 1
       checkedInAt   = "2026-06-05T09:00:00Z"
 
-  -- (J3) Alice check-in hari kedua (streak 2)
   _aliceCheckInDay2Cid <- submit admin do
     createCmd DailyCheckIn with
       admin
@@ -528,21 +425,16 @@ testAllTemplates = script do
       streakCount   = 2
       checkedInAt   = "2026-06-06T08:00:00Z"
 
-  -- (J4) VerifyCheckIn — verifikasi check-in Alice hari pertama
   _aliceCheckInVerifiedCid <- submit admin do
     exerciseCmd aliceCheckInCid VerifyCheckIn with
       verifiedAt = "2026-06-05T08:01:00Z"
 
-  -- (J5) GAGAL: VerifyCheckIn dengan verifiedAt kosong harus GAGAL
   submitMustFail admin do
     exerciseCmd aliceCheckInCid VerifyCheckIn with
       verifiedAt = ""
 
-  -- ──────────────────────────────────────────────────────────
   -- [K] SPIN EXECUTION
-  -- ──────────────────────────────────────────────────────────
 
-  -- (K1) Alice spin — menang CC reward
   aliceSpinCcCid <- submit admin do
     createCmd SpinExecution with
       admin
@@ -557,7 +449,6 @@ testAllTemplates = script do
       spinCost      = "50"
       executedAt    = "2026-06-05T10:00:00Z"
 
-  -- (K2) Alice spin — menang points reward
   aliceSpinPtsCid <- submit admin do
     createCmd SpinExecution with
       admin
@@ -572,7 +463,6 @@ testAllTemplates = script do
       spinCost      = "50"
       executedAt    = "2026-06-05T10:30:00Z"
 
-  -- (K3) Bob spin — tidak menang (none)
   _bobSpinNoneCid <- submit admin do
     createCmd SpinExecution with
       admin
@@ -587,29 +477,23 @@ testAllTemplates = script do
       spinCost      = "50"
       executedAt    = "2026-06-05T11:00:00Z"
 
-  -- (K4) ConfirmCcDelivered untuk Alice spin CC → HARUS SUKSES
   _aliceSpinCcRewardCid <- submit admin do
     exerciseCmd aliceSpinCcCid ConfirmCcDelivered with
       spliceTxId  = "SPLICE_SPIN_TX_ALICE_001"
       deliveredAt = "2026-06-05T10:05:00Z"
 
-  -- (K5) GAGAL: ConfirmCcDelivered pada spin "points" harus GAGAL
   submitMustFail admin do
     exerciseCmd aliceSpinPtsCid ConfirmCcDelivered with
       spliceTxId  = "SPLICE_SPIN_TX_INVALID"
       deliveredAt = "2026-06-05T10:35:00Z"
 
-  -- (K6) GAGAL: ConfirmCcDelivered dengan spliceTxId kosong harus GAGAL
   submitMustFail admin do
     exerciseCmd aliceSpinCcCid ConfirmCcDelivered with
       spliceTxId  = ""
       deliveredAt = "2026-06-05T10:06:00Z"
 
-  -- ──────────────────────────────────────────────────────────
   -- [L] REFERRAL REWARD
-  -- ──────────────────────────────────────────────────────────
 
-  -- (L1) Buat ReferralReward — Alice mereferral Bob
   aliceReferralCid <- submit admin do
     createCmd ReferralReward with
       admin
@@ -620,12 +504,10 @@ testAllTemplates = script do
       referralId      = "alice_db_id_001_bob_db_id_001"
       createdAt       = "2026-06-05T12:00:00Z"
 
-  -- (L2) ConfirmReferralProcessed → HARUS SUKSES
   _aliceReferralConfirmedCid <- submit admin do
     exerciseCmd aliceReferralCid ConfirmReferralProcessed with
       confirmedAt = "2026-06-05T12:01:00Z"
 
-  -- (L3) Buat ReferralReward — Bob mereferral Carol
   _bobReferralCid <- submit admin do
     createCmd ReferralReward with
       admin
@@ -636,16 +518,12 @@ testAllTemplates = script do
       referralId      = "bob_db_id_001_carol_db_id_001"
       createdAt       = "2026-06-05T13:00:00Z"
 
-  -- (L4) GAGAL: ConfirmReferralProcessed dengan confirmedAt kosong harus GAGAL
   submitMustFail admin do
     exerciseCmd aliceReferralCid ConfirmReferralProcessed with
       confirmedAt = ""
 
-  -- ──────────────────────────────────────────────────────────
   -- [M] CC TRANSACTION LOG
-  -- ──────────────────────────────────────────────────────────
 
-  -- (M1) Buat CcTransactionLog untuk quest reward Alice
   aliceTxLogCid <- submit admin do
     createCmd CcTransactionLog with
       admin
@@ -653,13 +531,12 @@ testAllTemplates = script do
       username      = "Alice_CanQuest"
       txLogId       = "CC_TX_ALICE_QUEST_001"
       txType        = "QUEST_REWARD"
-      amountMicroCc = 10000000   -- 10 CC dalam micro-CC
+      amountMicroCc = 10000000
       description   = "Quest reward: Canton Network CC Quest"
       referenceId   = "CAMPAIGN_CC_FCFS_001"
       ledgerTxId    = ""
       createdAt     = "2026-06-05T01:06:00Z"
 
-  -- (M2) Buat CcTransactionLog untuk spin reward Alice
   aliceSpinTxLogCid <- submit admin do
     createCmd CcTransactionLog with
       admin
@@ -667,31 +544,27 @@ testAllTemplates = script do
       username      = "Alice_CanQuest"
       txLogId       = "CC_TX_ALICE_SPIN_001"
       txType        = "SPIN_REWARD"
-      amountMicroCc = 50000000   -- 50 CC dalam micro-CC
+      amountMicroCc = 50000000
       description   = "Spin reward: 50 CC"
       referenceId   = "SPIN_RESULT_ALICE_001"
       ledgerTxId    = ""
       createdAt     = "2026-06-05T10:05:00Z"
 
-  -- (M3) SettleCcTransaction — update ledger TX ID setelah CC dikirim
   _aliceTxLogSettledCid <- submit admin do
     exerciseCmd aliceTxLogCid SettleCcTransaction with
       txId      = "SPLICE_REWARD_TX_ALICE_001"
       settledAt = "2026-06-05T01:07:00Z"
 
-  -- (M4) SettleCcTransaction untuk spin reward
   _aliceSpinTxLogSettledCid <- submit admin do
     exerciseCmd aliceSpinTxLogCid SettleCcTransaction with
       txId      = "SPLICE_SPIN_TX_ALICE_001"
       settledAt = "2026-06-05T10:06:00Z"
 
-  -- (M5) GAGAL: SettleCcTransaction dengan txId kosong harus GAGAL
   submitMustFail admin do
     exerciseCmd aliceTxLogCid SettleCcTransaction with
       txId      = ""
       settledAt = "2026-06-05T01:08:00Z"
 
-  -- (M6) Buat CcTransactionLog untuk airdrop Bob
   _bobAirdropTxLogCid <- submit admin do
     createCmd CcTransactionLog with
       admin
@@ -699,48 +572,39 @@ testAllTemplates = script do
       username      = "Bob_Canton"
       txLogId       = "CC_TX_BOB_AIRDROP_001"
       txType        = "AIRDROP"
-      amountMicroCc = 5000000    -- 5 CC dalam micro-CC
+      amountMicroCc = 5000000
       description   = "Airdrop: Canton Network launch bonus"
       referenceId   = "AIRDROP_LAUNCH_001"
       ledgerTxId    = "SPLICE_AIRDROP_TX_BOB_001"
       createdAt     = "2026-06-05T14:00:00Z"
 
-  -- ──────────────────────────────────────────────────────────
   -- [N] EDGE CASES & SECURITY
-  -- ──────────────────────────────────────────────────────────
 
-  -- (N1) GAGAL: ClaimFcfsSlot pada campaign CC_RAFFLE harus GAGAL
   submitMustFail admin do
     exerciseCmd ccRaffleCampaignCid ClaimFcfsSlot with
       user      = carol
       claimId   = "CLAIM_INVALID_002"
       claimedAt = "2026-06-05T22:00:00Z"
 
-  -- (N2) GAGAL: CloseCampaign dengan closedAt kosong harus GAGAL
   submitMustFail admin do
     exerciseCmd ccFcfsCampaignCid CloseCampaign with
       closedAt = ""
 
-  -- (N3) GAGAL: DebitPoints pada Bob (0 earned, 0 spent) harus GAGAL
   submitMustFail admin do
     exerciseCmd bobAccCid DebitPoints with
       amount = 50
       reason = "spin_cost"
 
-  -- (N4) Verifikasi Alice punya cukup poin untuk spin lagi
-  -- Alice: earned=650, spent=50, available=600 → debit 50 lagi harus SUKSES
   _aliceAccCid7 <- submit admin do
     exerciseCmd aliceAccCid6 DebitPoints with
       amount = 50
       reason = "spin_cost"
 
-  -- (N5) GAGAL: UpdateCampaignStatus dengan newStatus kosong harus GAGAL
   submitMustFail admin do
     exerciseCmd ccFcfsCampaignCid UpdateCampaignStatus with
       newStatus = ""
       updatedAt = "2026-06-05T23:00:00Z"
 
-  -- (N6) GAGAL: DrawRaffleWinner pada campaign CODE_FCFS harus GAGAL
   submitMustFail admin do
     exerciseCmd codeFcfsCampaignCid DrawRaffleWinner with
       user       = carol
@@ -748,8 +612,6 @@ testAllTemplates = script do
       rewardCode = ""
       drawnAt    = "2026-06-05T22:30:00Z"
 
-  -- (N7) GAGAL: RevealRewardCode dengan kode kosong harus GAGAL
-  -- Buat claim dengan fee sudah dibayar untuk test ini
   testRevealCampaignCid <- submit admin do
     createCmd QuestCampaign with
       admin
@@ -758,8 +620,8 @@ testAllTemplates = script do
       questKind     = "CODE_RAFFLE"
       rewardCc      = 0.0
       claimFeeCc    = 0.0
-      maxWinners    = "0"
-      currentClaims = "0"
+      maxWinners    = 0
+      currentClaims = 0
       status        = "ACTIVE"
       createdAt     = "2026-06-05T00:00:00Z"
 
@@ -775,7 +637,6 @@ testAllTemplates = script do
       code       = ""
       revealedAt = "2026-06-05T23:31:00Z"
 
-  -- (N8) GAGAL: SettleCcTransaction dengan settledAt kosong harus GAGAL
   submitMustFail admin do
     exerciseCmd aliceSpinTxLogCid SettleCcTransaction with
       txId      = "SOME_TX_ID"
