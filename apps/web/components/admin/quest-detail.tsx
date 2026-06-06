@@ -222,13 +222,13 @@ export function QuestDetail({ questId }: { questId: string }) {
             {exporting ? <LoadingSpinner size="sm" /> : <Download className="h-3.5 w-3.5" />}
             {questExportLabel(quest.rewardType)}
           </button>
-          {isInviteRewardType(quest.rewardType) && (
+          {(isInviteRewardType(quest.rewardType) || quest.rewardType === "CC_AND_CODE_RAFFLE" || quest.rewardType === "CC_MANUAL") && (
             <Link
               href={`/admin/quests/${questId}/winners`}
               className={cn(buttonVariants({ size: "sm" }), "gap-1.5")}
             >
               <Trophy className="h-3.5 w-3.5" />
-              Invite codes & draw
+              {quest.rewardType === "CC_AND_CODE_RAFFLE" ? "Codes & Draw Winners" : quest.rewardType === "CC_MANUAL" ? "Draw Winners" : "Invite codes & draw"}
             </Link>
           )}
           <button

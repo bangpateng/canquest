@@ -10,7 +10,7 @@ import {
 import { isCcTokenRewardQuest } from "@/lib/canton/cc-reward-logo";
 import type { Quest } from "@/lib/quest/quest-types";
 import { cn } from "@/lib/utils/utils";
-import { Calendar, ListChecks, Trophy, Users, Zap } from "lucide-react";
+import { Calendar, ListChecks, Ticket, Trophy, Users, Zap } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 function formatEnd(quest: Quest): string {
@@ -125,21 +125,47 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
           <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
             Campaign reward
           </p>
-          <p className="mt-2 flex items-center gap-3 text-3xl font-bold tabular-nums text-white sm:text-4xl">
-            {isCcTokenRewardQuest(quest) ? (
-              <CcRewardLogo className="sm:h-8 sm:w-8" size={32} />
-            ) : null}
-            <span>
-              {quest.rewardType?.includes("INVITE")
-                ? formatCodePerWinners()
-                : rewardHeadline.primary}
-            </span>
-          </p>
-          {rewardHeadline.secondary ? (
-            <p className="mt-2 text-sm font-medium text-slate-400">
-              {rewardHeadline.secondary}
-            </p>
-          ) : null}
+          {isCcAndCodeRaffle ? (
+            /* CC + Code Raffle: show dual reward with both logos */
+            <div className="mt-2">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <CcRewardLogo className="sm:h-8 sm:w-8" size={28} />
+                  <span className="text-2xl font-bold text-white sm:text-3xl">
+                    {quest.rewardCc > 0 ? `${quest.rewardCc} CC` : "CC"}
+                  </span>
+                </div>
+                <span className="text-xl font-bold text-slate-400">+</span>
+                <div className="flex items-center gap-2">
+                  <Ticket className="h-6 w-6 text-violet-300 sm:h-8 sm:w-8" aria-hidden />
+                  <span className="text-2xl font-bold text-violet-300 sm:text-3xl">
+                    1 Code
+                  </span>
+                </div>
+              </div>
+              <p className="mt-2 text-sm font-medium text-slate-400">
+                Per winner · Pay 5 CC claim fee to receive both rewards
+              </p>
+            </div>
+          ) : (
+            <>
+              <p className="mt-2 flex items-center gap-3 text-3xl font-bold tabular-nums text-white sm:text-4xl">
+                {isCcTokenRewardQuest(quest) ? (
+                  <CcRewardLogo className="sm:h-8 sm:w-8" size={32} />
+                ) : null}
+                <span>
+                  {quest.rewardType?.includes("INVITE")
+                    ? formatCodePerWinners()
+                    : rewardHeadline.primary}
+                </span>
+              </p>
+              {rewardHeadline.secondary ? (
+                <p className="mt-2 text-sm font-medium text-slate-400">
+                  {rewardHeadline.secondary}
+                </p>
+              ) : null}
+            </>
+          )}
         </div>
       </div>
 

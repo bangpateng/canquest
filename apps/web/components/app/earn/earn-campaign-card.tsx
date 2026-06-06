@@ -28,6 +28,16 @@ import {
 
 function rewardTheme(rewardPool: string, rewardType?: string) {
   const pool = rewardPool.toLowerCase();
+  // CC + Code Raffle: special dual theme (CC + Ticket)
+  if (rewardType === "CC_AND_CODE_RAFFLE") {
+    return {
+      icon: Ticket,
+      isCcToken: true,
+      isDualReward: true,
+      accent: "text-canton",
+      chip: "bg-gradient-to-r from-canton-soft to-violet-500/15 text-canton border-canton-muted",
+    };
+  }
   if (
     rewardType === "CC_ONLY" ||
     rewardType === "CC_MANUAL" ||
@@ -37,6 +47,7 @@ function rewardTheme(rewardPool: string, rewardType?: string) {
     return {
       icon: Coins,
       isCcToken: true,
+      isDualReward: false,
       accent: "text-canton",
       chip: "bg-canton-soft text-canton border-canton-muted",
     };
@@ -45,6 +56,7 @@ function rewardTheme(rewardPool: string, rewardType?: string) {
     return {
       icon: Ticket,
       isCcToken: false,
+      isDualReward: false,
       accent: "text-violet-300",
       chip: "bg-violet-500/15 text-violet-200 border-violet-500/25",
     };
@@ -53,6 +65,7 @@ function rewardTheme(rewardPool: string, rewardType?: string) {
     return {
       icon: Sparkles,
       isCcToken: false,
+      isDualReward: false,
       accent: "text-cyan-300",
       chip: "bg-cyan-500/12 text-cyan-200 border-cyan-500/25",
     };
@@ -60,6 +73,7 @@ function rewardTheme(rewardPool: string, rewardType?: string) {
   return {
     icon: Trophy,
     isCcToken: false,
+    isDualReward: false,
     accent: "text-canton",
     chip: "bg-canton-soft text-canton border-canton-muted",
   };
@@ -93,6 +107,8 @@ function kindLabel(
       return t("earnCampaigns.kindCcRaffle");
     case "cc_manual":
       return t("earnCampaigns.kindCc");
+    case "cc_and_code_raffle":
+      return "CC + Code Raffle";
     case "waitlist_code":
       return rewardType === "INVITE_CODE_FCFS"
         ? t("earnCampaigns.kindInvite")
@@ -153,6 +169,7 @@ export function EarnCampaignCard({
   const t = usePlatformT();
   const summary = quest.campaignSummary;
   const poolLower = quest.rewardPool.toLowerCase();
+  const isCcAndCodeRaffle = quest.rewardType === "CC_AND_CODE_RAFFLE";
   const isDrawCcRaffle =
     quest.rewardType === "CC_MANUAL" || Boolean(summary?.requiresDrawCcClaim);
   const isCodeReward =
@@ -290,8 +307,28 @@ export function EarnCampaignCard({
           {statusLabel}
         </span>
 
-        {/* Reward highlight on banner */}
-        {quest.rewardCc > 0 || bannerRewardText ? (
+        {/* Reward highlight on banner — CC+Code Raffle: dual icons */}
+        {isCcAndCodeRaffle ? (
+          <div className="absolute bottom-3 right-3 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-lg border border-white/10 bg-black/70 px-3 py-2 backdrop-blur-xl sm:bottom-4 sm:right-4 sm:gap-3 sm:px-4 sm:py-2.5">
+            <div className="flex items-center gap-1">
+              <CcRewardLogo className="shrink-0 text-canton" size={14} />
+              <span className="text-white/40">+</span>
+              <Ticket className="h-3.5 w-3.5 shrink-0 text-violet-300" aria-hidden />
+            </div>
+            <div className="min-w-0 text-right">
+              <p className="hidden text-[9px] font-bold uppercase tracking-wider text-white/60 sm:block sm:text-[10px]">
+                Per Winner
+              </p>
+              <p className="text-sm font-bold leading-none tabular-nums text-canton sm:text-base">
+                {quest.rewardCc > 0 ? (
+                  <span>{quest.rewardCc} <span className="text-xs text-white/70">CC</span></span>
+                ) : null}
+                {quest.rewardCc > 0 ? <span className="mx-1 text-white/40">+</span> : null}
+                <span className="text-violet-300">1 Code</span>
+              </p>
+            </div>
+          </div>
+        ) : quest.rewardCc > 0 || bannerRewardText ? (
           <div className="absolute bottom-3 right-3 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-lg border border-white/10 bg-black/70 px-3 py-2 backdrop-blur-xl sm:bottom-4 sm:right-4 sm:gap-3 sm:px-4 sm:py-2.5">
             <CampaignRewardIcon theme={theme} className={cn("shrink-0", theme.accent)} size={14} />
             <div className="min-w-0 text-right">
@@ -356,8 +393,51 @@ export function EarnCampaignCard({
           ) : null}
         </div>
 
+        {/* CC + Code Raffle: special metrics strip */}
+        {isCcAndCodeRaffle && (
+          <div className="mt-4 w-full min-w-0 overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02] sm:mt-5">
+            <div className="grid w-full min-w-0 grid-cols-3 divide-x divide-white/[0.04]">
+              <Metric
+                label="CC / Winner"
+                value={quest.rewardCc > 0 ? `${quest.rewardCc} CC` : "—"}
+                icon={Coins}
+                useCcLogo
+                accent="text-canton"
+              />
+              <Metric
+                label="Code / Winner"
+                value="1 Code"
+                icon={Ticket}
+                accent="text-violet-300"
+              />
+              {slotsMax > 0 ? (
+                <Metric
+                  label="Max Winners"
+                  value={String(slotsMax)}
+                  icon={Users}
+                  accent="text-canton"
+                />
+              ) : (
+                <Metric
+                  label="Claim Fee"
+                  value="5 CC"
+                  icon={Zap}
+                  accent="text-amber-300"
+                />
+              )}
+            </div>
+            {slotsMax > 0 && (
+              <div className="border-t border-white/[0.04] px-3 py-2 sm:px-4">
+                <p className="text-[9px] font-semibold text-slate-500 sm:text-[10px]">
+                  Complete all social tasks → Submit → Wait for raffle draw → Claim 5 CC fee
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Metrics strip */}
-        {(showFcfs || showRaffleWinners || showPool || showCodes) && (
+        {!isCcAndCodeRaffle && (showFcfs || showRaffleWinners || showPool || showCodes) && (
           <div className="mt-4 w-full min-w-0 overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02] sm:mt-5">
             <div className="grid w-full min-w-0 grid-cols-2 divide-x divide-white/[0.04]">
               {showRaffleWinners ? (
