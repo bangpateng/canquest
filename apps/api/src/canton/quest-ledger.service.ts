@@ -207,18 +207,37 @@ export class QuestLedgerService {
     return null;
   }
 
-  /** Extract all contractIds from a ledger exercise response. */
+  /** Extract all contractIds from a ledger exercise response (handles tuple returns). */
   private extractContractIds(text: string): string[] {
     const cids: string[] = [];
     try {
       const parsed = JSON.parse(text) as Record<string, unknown>;
       const stack: unknown[] = [parsed];
+      const seen = new Set<string>();
       while (stack.length) {
         const cur = stack.pop();
         if (!cur || typeof cur !== 'object') continue;
-        if (Array.isArray(cur)) { stack.push(...cur); continue; }
+        if (Array.isArray(cur)) {
+          // Tuple return from exercise: [CampaignCid, ClaimCid]
+          // Push in reverse order so we process left-to-right
+          for (let i = cur.length - 1; i >= 0; i--) stack.push(cur[i]);
+          continue;
+        }
         const obj = cur as Record<string, unknown>;
-        if (typeof obj.contractId === 'string') cids.push(obj.contractId);
+        const cid = typeof obj.contractId === 'string' ? obj.contractId : null;
+        // For exercise responses, search deeper for CreatedTreeEvent/CreatedEvent wrappers
+        if (cid && !seen.has(cid)) {
+          // Check if this is a contractId we care about (not updateId etc)
+          const hasTemplateOrCreate =
+            obj.templateId !== undefined ||
+            obj.createArgument !== undefined ||
+            obj.CreatedEvent !== undefined ||
+            obj.CreatedTreeEvent !== undefined;
+          if (hasTemplateOrCreate || cids.length < 2) {
+            cids.push(cid);
+            seen.add(cid);
+          }
+        }
         for (const v of Object.values(obj)) stack.push(v);
       }
     } catch { /* ignore parse errors */ }
