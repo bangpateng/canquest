@@ -426,7 +426,8 @@ export class UsersService {
       rt === RewardType.CC_MANUAL ||
       rt === RewardType.INVITE_CODE_RANDOM ||
       rt === RewardType.INVITE_CODE ||
-      rt === RewardType.WAITLIST_EMAIL
+      rt === RewardType.WAITLIST_EMAIL ||
+      rt === RewardType.CC_AND_CODE_RAFFLE
     );
   }
 
@@ -468,6 +469,20 @@ export class UsersService {
       return {
         description: `You won ${questTitle} — open the campaign to claim your code.`,
         rewardCc: null,
+      };
+    }
+
+    if (rewardType === RewardType.CC_AND_CODE_RAFFLE) {
+      const codePart = userDraw?.inviteCode ? ` + code: ${userDraw.inviteCode}` : "";
+      if (userDraw?.distributed) {
+        return {
+          description: `You won ${questTitle}! ${rewardCc} CC${codePart} sent to your wallet.`,
+          rewardCc: rewardCc > 0 ? rewardCc : null,
+        };
+      }
+      return {
+        description: `You won ${questTitle}! ${rewardCc} CC${codePart} — claim your reward now.`,
+        rewardCc: rewardCc > 0 ? rewardCc : null,
       };
     }
 
