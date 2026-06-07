@@ -84,7 +84,7 @@ export class AdminService {
       where: kind ? { questKind: kind } : undefined,
       include: {
         tasks: { orderBy: { order: 'asc' } },
-        _count: { select: { completions: true, submissions: true, inviteCodes: true } },
+        _count: { select: { completions: true, submissions: true, inviteCodes: true, winnerDraws: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
