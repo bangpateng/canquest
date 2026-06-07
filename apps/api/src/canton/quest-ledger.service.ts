@@ -4,16 +4,18 @@ import { randomUUID } from 'crypto';
 import { CantonLedgerService } from './canton-ledger.service';
 
 /**
- * DAML template paths — module Main (canquest-v4, DAR yang ter-deploy di ledger)
+ * DAML template paths — module Main (canquest-v6, DAR yang ter-deploy di ledger)
  *
  * Templates:
  *   Main:UserAccount        — akun user on-chain (earnedPoints & spentPoints)
  *   Main:WalletRegistration — bukti pembuatan wallet / Party ID
- *   Main:QuestCampaign      — template induk quest (CC_FCFS, CC_RAFFLE, CODE_FCFS, CODE_RAFFLE)
- *   Main:QuestClaim         — bukti klaim quest + fee + reward
+ *   Main:QuestCampaign      — template induk quest (6 questKind: CC_FCFS, CC_RAFFLE, CODE_FCFS, CODE_RAFFLE, CC_AND_CODE_RAFFLE, WAITLIST)
+ *   Main:QuestClaim         — bukti klaim quest + confirmFee + confirmReward + revealCode
  *   Main:DailyCheckIn       — check-in harian on-chain
  *   Main:SpinExecution      — audit trail spin on-chain
  *   Main:SpinCcReward       — bukti CC reward dari spin sudah dikirim
+ *   Main:ReferralReward     — bukti referral reward dikreditkan
+ *   Main:CcTransactionLog   — audit trail setiap CC credit/debit event
  *
  * Authorization pattern (Canton M3):
  *   signatory admin  — operator signs all contracts
@@ -137,7 +139,7 @@ export class QuestLedgerService {
   private get damlPackageRef(): string {
     const name = this.config.get<string>('CANTON_DAML_PACKAGE_NAME')?.trim();
     if (name) return name.startsWith('#') ? name : `#${name}`;
-    return '#canquest-v4';
+    return '#canquest-v6';
   }
 
   private get operatorPartyId(): string | null {
@@ -543,8 +545,8 @@ export class QuestLedgerService {
         questKind:     params.questKind,
         rewardCc:      this.dec(params.rewardCc),
         claimFeeCc:    this.dec(params.claimFeeCc),
-        maxWinners:    String(params.maxWinners),
-        currentClaims: String(0),
+        maxWinners:    params.maxWinners,
+        currentClaims: 0,
         status:        'ACTIVE',
         createdAt:     new Date().toISOString(),
       },
@@ -1060,7 +1062,7 @@ export class QuestLedgerService {
    * Creates both WalletRegistration AND UserAccount contracts (idempotent).
    * Called from party.controller.ts after wallet is successfully created.
    *
-   * Per DAML contract (canquest-v4):
+   * Per DAML contract (canquest-v6):
    *   - WalletRegistration: bukti on-chain bahwa user telah membuat wallet
    *   - UserAccount: akun user on-chain (earnedPoints & spentPoints)
    * Both are created together when a wallet is first registered.
@@ -1199,7 +1201,7 @@ export class QuestLedgerService {
   }
 
   /**
-   * @deprecated — no-op stub (canquest-v4 tidak punya QuestTaskSubmission template).
+   * @deprecated — no-op stub (canquest-v6 tidak punya QuestTaskSubmission template).
    * Task submission tidak perlu on-chain — hanya quest claim yang perlu.
    * Tidak ada WARN log agar tidak spam.
    */
@@ -1211,7 +1213,7 @@ export class QuestLedgerService {
     proof: string | null;
     userPartyId: string;
   }): Promise<QuestTaskLedgerResult> {
-    // canquest-v4: task submission tidak dicatat on-chain (hanya quest claim)
+    // canquest-v6: task submission tidak dicatat on-chain (hanya quest claim)
     // Ini intentional — tidak perlu WARN
     return {
       ledgerEnabled: false,

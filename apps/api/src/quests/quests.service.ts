@@ -838,7 +838,7 @@ export class QuestsService {
             },
           });
           await this.users.creditEarnPoints(userId, task.points);
-          // canquest-v4: daily check-in dicatat on-chain via DailyCheckIn template
+          // canquest-v6: daily check-in dicatat on-chain via DailyCheckIn template
           if (userPartyId && this.questLedger.isClaimSessionConfigured()) {
             const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
             void this.questLedger
@@ -1651,7 +1651,7 @@ export class QuestsService {
         throw new Error('FCFS reward already distributed for this user');
       }
 
-      // canquest-v4: DAML audit trail via QuestClaim (ClaimFcfsSlot on QuestCampaign).
+      // canquest-v6: DAML audit trail via QuestClaim (ClaimFcfsSlot on QuestCampaign).
       // campaignContractId diambil dari DB (disimpan saat admin buat quest).
       // Best-effort — tidak memblokir CC transfer jika ledger tidak tersedia.
       let claimSessionId: string | null = null;

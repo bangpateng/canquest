@@ -324,7 +324,7 @@ export class SpinService {
   // ── DAML Ledger Integration ─────────────────────────────────────────────────
 
   /**
-   * Catat spin ke DAML ledger menggunakan SpinExecution contract (canquest-v3).
+   * Catat spin ke DAML ledger menggunakan SpinExecution contract (canquest-v6).
    * Best-effort: error tidak memblokir user.
    *
    * Flow:

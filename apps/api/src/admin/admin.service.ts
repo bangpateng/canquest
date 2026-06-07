@@ -309,7 +309,7 @@ export class AdminService {
     });
     this.logger.log(`Quest created: ${quest.title} (${quest.id})`);
 
-    // canquest-v4: Buat QuestCampaign on-chain setelah quest dibuat di DB.
+    // canquest-v6: Buat QuestCampaign on-chain setelah quest dibuat di DB.
     // Best-effort — tidak memblokir jika ledger tidak tersedia.
     // ledgerCampaignId disimpan ke DB agar claimFcfsSlot() bisa referensi contract.
     if (questKind === QuestKind.CAMPAIGN && this.questLedger.isConfigured()) {
