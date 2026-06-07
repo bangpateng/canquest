@@ -8,6 +8,7 @@ import {
 } from "@/lib/canton/campaign-reward";
 import { CampaignFcfsRewardCard } from "@/components/app/campaign/campaign-fcfs-reward-card";
 import { useState } from "react";
+import { launchClaimConfetti } from "@/components/ui/confetti-effect";
 
 const FCFS_FAIL_MSG =
   "Claim failed: Transaction reverted by ledger (Slot is full or insufficient balance)";
@@ -68,6 +69,7 @@ export function CampaignFcfsClaimSection({
       setSuccess(
         `${formatFcfsSlotsRemaining(afterRemaining, maxWinners)}\n${formatFcfsClaimFeeHint(fee, rewardCc)}`,
       );
+      launchClaimConfetti();
       onClaimed();
     } catch {
       setError(FCFS_FAIL_MSG);

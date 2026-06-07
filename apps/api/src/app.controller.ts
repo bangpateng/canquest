@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { SkipThrottle } from '@nestjs/throttler';
 import { CantonLedgerService } from './canton/canton-ledger.service';
 import { SpliceValidatorService } from './canton/splice-validator.service';
+import { PrismaService } from './prisma/prisma.service';
 
 /**
  * AppController — health check endpoints.
@@ -16,6 +17,7 @@ export class AppController {
     private readonly config: ConfigService,
     private readonly splice: SpliceValidatorService,
     private readonly ledger: CantonLedgerService,
+    private readonly prisma: PrismaService,
   ) {}
 
   /** GET /api/health — liveness probe */
@@ -45,6 +47,26 @@ export class AppController {
       ok: true,
       ts: new Date().toISOString(),
       uptime: Math.floor(process.uptime()),
+    };
+  }
+
+  /** GET /api/health/db — PostgreSQL connectivity check */
+  @Get('db')
+  async db() {
+    const start = Date.now();
+    let ok = false;
+    let error: string | null = null;
+    try {
+      await this.prisma.$queryRaw`SELECT 1`;
+      ok = true;
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    }
+    return {
+      ok,
+      ts: new Date().toISOString(),
+      ms: Date.now() - start,
+      error: error ?? null,
     };
   }
 
