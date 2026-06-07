@@ -10,13 +10,8 @@ const PUBLIC_EARN_DETAIL_PATTERN = /^\/earn\/[^/]+\/?$/;
 
 /** Legacy app paths → new platform paths */
 const LEGACY_REDIRECTS: Record<string, string> = {
-  '/dashboard': '/overview',
   '/quest': '/quests',
   '/spin': '/spin/reward',
-  '/spin-daily': '/spin/daily',
-  '/spin-reward': '/spin/reward',
-  '/setting': '/settings',
-  '/transactions': '/wallet',
 };
 
 export function middleware(request: NextRequest) {
@@ -64,8 +59,6 @@ export const config = {
     '/login/:path*',
     '/register',
     '/register/:path*',
-    '/dashboard',
-    '/dashboard/:path*',
     '/quests',
     '/quests/:path*',
     '/leaderboard',
@@ -74,8 +67,6 @@ export const config = {
     '/spin/:path*',
     '/wallet',
     '/wallet/:path*',
-    '/transactions',
-    '/transactions/:path*',
     '/settings',
     '/settings/:path*',
     '/overview',
@@ -84,11 +75,5 @@ export const config = {
     '/quest/:path*',
     '/earn',
     '/earn/:path*',
-    '/setting',
-    '/setting/:path*',
-    '/spin-daily',
-    '/spin-daily/:path*',
-    '/spin-reward',
-    '/spin-reward/:path*',
   ],
 };
