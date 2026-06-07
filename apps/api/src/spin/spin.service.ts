@@ -279,7 +279,101 @@ export class SpinService {
     });
     const spentPoints = spentResults.reduce((s, r) => s + r.pointsSpent, 0);
     const availablePoints = Math.max(0, earnPoints - spentPoints);
-    return { spinCost, earnPoints, spentPoints, availablePoints };
+
+    // Free daily spin: 1x per hari, reset at midnight
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const freeSpinUsedToday = await this.prisma.spinResult.count({
+      where: {
+        userId,
+        pointsSpent: 0,
+        createdAt: { gte: today },
+      },
+    });
+    const freeSpinAvailable = freeSpinUsedToday < 1;
+
+    return { spinCost, earnPoints, spentPoints, availablePoints, freeSpinAvailable };
+  }
+
+  /** Execute free daily spin (no points cost, same reward pool). */
+  async executeFreeSpin(
+    userId: string,
+    username: string | null,
+    cantonPartyId: string | null,
+  ): Promise<SpinResultDto & { free: boolean }> {
+    // Check if already used today
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const alreadyUsed = await this.prisma.spinResult.count({
+      where: {
+        userId,
+        pointsSpent: 0,
+        createdAt: { gte: today },
+      },
+    });
+    if (alreadyUsed > 0) {
+      throw new BadRequestException('You already claimed your free spin today. Come back tomorrow!');
+    }
+
+    // Load active items
+    const items = await this.prisma.spinItem.findMany({ where: { active: true } });
+    if (items.length === 0) {
+      throw new BadRequestException('No spin items configured. Contact admin.');
+    }
+
+    const winner = this.pickWinner(items);
+    if (!winner) {
+      throw new BadRequestException('Spin configuration error. Contact admin.');
+    }
+
+    const result = await this.prisma.spinResult.create({
+      data: {
+        userId,
+        spinItemId: winner.id,
+        pointsSpent: 0, // FREE
+        delivered: winner.rewardType === 'none' || winner.rewardType === 'points',
+        deliveredAt: (winner.rewardType === 'none' || winner.rewardType === 'points') ? new Date() : null,
+      },
+    });
+
+    await this.prisma.spinItem.update({
+      where: { id: winner.id },
+      data: { wonCount: { increment: 1 } },
+    });
+
+    if (winner.rewardType === 'points' && winner.rewardPoints > 0) {
+      await this.users.creditEarnPoints(userId, winner.rewardPoints);
+    }
+
+    let jobId: string | null = null;
+    if (winner.rewardType === 'cc' && winner.rewardCc > 0) {
+      try {
+        jobId = await this.ledgerQueue.enqueueSpinResult({
+          spinResultId: result.id,
+          userId,
+          username,
+          cantonPartyId,
+          rewardType: winner.rewardType,
+          rewardCc: winner.rewardCc,
+        });
+      } catch (err) {
+        this.logger.warn(`Failed to enqueue free spin CC: ${String(err)}`);
+      }
+    }
+
+    const item = this.toDto(winner);
+    this.logger.log(
+      `FreeSpin: user=${userId.slice(0, 8)} won="${item.label}" type=${item.rewardType}`,
+    );
+
+    return {
+      spinResultId: result.id,
+      item,
+      pointsSpent: 0,
+      jobId,
+      message: `🎁 Free spin! ${this.buildMessage(item)}`,
+      free: true,
+    };
   }
 
   // ── History ─────────────────────────────────────────────────────────────────

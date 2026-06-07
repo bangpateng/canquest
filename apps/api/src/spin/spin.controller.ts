@@ -56,6 +56,25 @@ export class SpinController {
     return { ok: true, ...result };
   }
 
+  /**
+   * Free daily spin — 1x per hari, tanpa biaya points.
+   * Rate-limited: 2x per menit (cegah spam klik).
+   */
+  @Post('free')
+  @Throttle({ ledger: { limit: 2, ttl: 60_000 } })
+  async executeFreeSpin(@Req() req: AuthedReq) {
+    const user = await this.users.findById(req.user.userId);
+    if (!user) return { ok: false, message: 'User not found' };
+
+    const result = await this.spin.executeFreeSpin(
+      user.id,
+      user.username ?? null,
+      user.cantonPartyId ?? null,
+    );
+
+    return { ok: true, ...result };
+  }
+
   /** Riwayat spin user yang login. */
   @Get('history')
   async getHistory(
