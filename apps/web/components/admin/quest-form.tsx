@@ -162,15 +162,38 @@ export function QuestForm({
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
+  /** Default claim fees per reward type. Matches `resolveClaimFeeCc()` in quest-reward-config.ts */
+  const DEFAULT_CLAIM_FEE: Partial<Record<RewardType, number>> = {
+    CC_ONLY: 3,
+    CC_MANUAL: 3,
+    INVITE_CODE_FCFS: 2,
+    INVITE_CODE_RANDOM: 2,
+    CC_AND_CODE_RAFFLE: 5,
+    CC_AND_INVITE: 2,
+  };
+
+  const REWARD_TYPE_INFO: Record<RewardType, string> = {
+    CC_ONLY: "User completes tasks → pays 3 CC fee → receives CC reward. FCFS / limited slots.",
+    CC_MANUAL: "User completes tasks → admin draws winners → winners pay fee → receive CC.",
+    INVITE_CODE_FCFS: "User completes tasks → pays 2 CC fee → receives 1 invite code. FCFS / limited slots.",
+    INVITE_CODE_RANDOM: "User completes tasks → admin draws winners → winners pay 2 CC fee → receive 1 code.",
+    CC_AND_INVITE: "User completes tasks → auto-assign invite code + CC reward (no on-chain fee).",
+    CC_AND_CODE_RAFFLE: "Admin draws winners → winners pay 5 CC fee → receive CC + invite code.",
+    WAITLIST_EMAIL: "User submits email → admin selects winners (no CC, no code).",
+    INVITE_CODE: "Legacy — same as INVITE_CODE_RANDOM.",
+  };
+
   function updateRewardType(value: RewardType) {
     const noCc =
       value === "WAITLIST_EMAIL" ||
       value === "INVITE_CODE_RANDOM" ||
       value === "INVITE_CODE_FCFS";
+    const claimFee = DEFAULT_CLAIM_FEE[value];
     setForm((prev) => ({
       ...prev,
       rewardType: value,
       rewardCc: noCc ? "0" : prev.rewardCc,
+      claimFeeCc: claimFee != null ? String(claimFee) : prev.claimFeeCc,
     }));
   }
 
