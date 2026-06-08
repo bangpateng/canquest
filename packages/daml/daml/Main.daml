@@ -98,6 +98,7 @@ template WalletRegistration
     partyId      : Text
     inviteCode   : Text
     registeredAt : Text
+    confirmedAt  : Text
   where
     signatory admin
     observer userAddress
@@ -108,7 +109,7 @@ template WalletRegistration
       controller admin
       do
         assertMsg "confirmedAt tidak boleh kosong!" (confirmedAt /= "")
-        create this with registeredAt = confirmedAt
+        create this with confirmedAt = confirmedAt
 
 
 -- ============================================================
@@ -309,8 +310,8 @@ template SpinExecution
     spinItemLabel : Text
     rewardType    : Text
     rewardCc      : Decimal
-    rewardPoints  : Text
-    spinCost      : Text
+    rewardPoints  : Int
+    spinCost      : Int
     executedAt    : Text
   where
     signatory admin
