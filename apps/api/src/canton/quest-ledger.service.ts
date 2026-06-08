@@ -156,6 +156,12 @@ export class QuestLedgerService {
   }
 
   private templateId(suffix: (typeof TPL)[keyof typeof TPL]): string {
+    const packageId = this.config.get<string>('CANTON_DAML_PACKAGE_ID')?.trim();
+    if (packageId) {
+      // Canton JSON API v2 requires full package hash, not package name
+      return `${packageId}:${suffix}`;
+    }
+    // Fallback: use package name ref (may resolve to wrong version)
     return `${this.damlPackageRef}:${suffix}`;
   }
 
