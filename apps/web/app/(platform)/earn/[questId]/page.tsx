@@ -1,5 +1,6 @@
 import { PlatformPage } from "@/components/platform/platform-page";
 import { CampaignSocialLinks } from "@/components/app/campaign/campaign-social-links";
+import { CampaignHowToClaim } from "@/components/app/campaign/campaign-how-to-claim";
 import { QuestTaskPanel } from "@/components/app/quest/quest-task-panel";
 import { CampaignQuestSidebar } from "@/components/app/campaign/campaign-quest-sidebar";
 import { Eyebrow, PageTitle } from "@/components/ui/typography";
@@ -125,6 +126,10 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
         </div>
       </header>
 
+      <CampaignQuestSidebar quest={quest} />
+
+      <CampaignHowToClaim quest={quest} />
+
       <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)]/60 p-4 sm:p-5">
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-[var(--primary-strong)]" aria-hidden />
@@ -139,8 +144,6 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
           <CampaignSocialLinks links={quest.socialLinks} className="mt-4 pt-1" />
         ) : null}
       </section>
-
-      <CampaignQuestSidebar quest={quest} />
 
       <section className="min-w-0">
         {isAuthed ? (
