@@ -1,6 +1,6 @@
 -- ============================================================
 -- CanQuest DAML Test Suite — module Test
--- Package: canquest-v4  |  SDK: 3.4.11
+-- Package: canquest-v6  |  SDK: 3.4.11
 -- Jalankan: daml test
 -- ============================================================
 
@@ -95,7 +95,6 @@ testAllTemplates = script do
       partyId      = "Alice_CanQuest::122abc"
       inviteCode   = "ADMIN_CODE_001"
       registeredAt = "2026-06-05T00:00:00Z"
-      confirmedAt  = None
 
   _bobWalletCid <- submit admin do
     createCmd WalletRegistration with
@@ -105,7 +104,6 @@ testAllTemplates = script do
       partyId      = "Bob_Canton::122def"
       inviteCode   = "ADMIN_CODE_002"
       registeredAt = "2026-06-05T00:00:00Z"
-      confirmedAt  = None
 
   _aliceWalletConfirmedCid <- submit admin do
     exerciseCmd aliceWalletCid ConfirmWalletActive with
@@ -447,8 +445,8 @@ testAllTemplates = script do
       spinItemLabel = "50 CC"
       rewardType    = "cc"
       rewardCc      = 50.0
-      rewardPoints  = 0
-      spinCost      = 50
+      rewardPoints  = "0"
+      spinCost      = "50"
       executedAt    = "2026-06-05T10:00:00Z"
 
   aliceSpinPtsCid <- submit admin do
@@ -461,8 +459,8 @@ testAllTemplates = script do
       spinItemLabel = "100 Points"
       rewardType    = "points"
       rewardCc      = 0.0
-      rewardPoints  = 100
-      spinCost      = 50
+      rewardPoints  = "100"
+      spinCost      = "50"
       executedAt    = "2026-06-05T10:30:00Z"
 
   _bobSpinNoneCid <- submit admin do
@@ -475,8 +473,8 @@ testAllTemplates = script do
       spinItemLabel = "Not Lucky"
       rewardType    = "none"
       rewardCc      = 0.0
-      rewardPoints  = 0
-      spinCost      = 50
+      rewardPoints  = "0"
+      spinCost      = "50"
       executedAt    = "2026-06-05T11:00:00Z"
 
   _aliceSpinCcRewardCid <- submit admin do

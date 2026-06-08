@@ -21,9 +21,9 @@ sdk-version: 3.4.11
 #
 # Docs: https://docs.canton.network/appdev/modules/m3-dev-environment
 # ============================================================
-name: canquest-v8
+name: canquest-v6
 source: daml
-version: 1.0.0
+version: 3.0.2
 dependencies:
   - daml-prim
   - daml-stdlib
