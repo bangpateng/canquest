@@ -87,25 +87,25 @@ testAllTemplates = script do
 
   -- [B] WALLET REGISTRATION
 
-   aliceWalletCid <- submit admin do
-     createCmd WalletRegistration with
-       admin
-       userAddress  = alice
-       username     = "Alice_CanQuest"
-       partyId      = "Alice_CanQuest::122abc"
-       inviteCode   = "ADMIN_CODE_001"
-       registeredAt = "2026-06-05T00:00:00Z"
-       confirmedAt  = ""
+  aliceWalletCid <- submit admin do
+    createCmd WalletRegistration with
+      admin
+      userAddress  = alice
+      username     = "Alice_CanQuest"
+      partyId      = "Alice_CanQuest::122abc"
+      inviteCode   = "ADMIN_CODE_001"
+      registeredAt = "2026-06-05T00:00:00Z"
+      confirmedAt  = ""
 
-   _bobWalletCid <- submit admin do
-     createCmd WalletRegistration with
-       admin
-       userAddress  = bob
-       username     = "Bob_Canton"
-       partyId      = "Bob_Canton::122def"
-       inviteCode   = "ADMIN_CODE_002"
-       registeredAt = "2026-06-05T00:00:00Z"
-       confirmedAt  = ""
+  _bobWalletCid <- submit admin do
+    createCmd WalletRegistration with
+      admin
+      userAddress  = bob
+      username     = "Bob_Canton"
+      partyId      = "Bob_Canton::122def"
+      inviteCode   = "ADMIN_CODE_002"
+      registeredAt = "2026-06-05T00:00:00Z"
+      confirmedAt  = ""
 
   _aliceWalletConfirmedCid <- submit admin do
     exerciseCmd aliceWalletCid ConfirmWalletActive with
