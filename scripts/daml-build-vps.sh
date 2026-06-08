@@ -26,13 +26,13 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 DAML_DIR="$PROJECT_ROOT/packages/daml"
-DAR_NAME="canquest-v7-3.0.3.dar"
+DAR_NAME="canquest-v10-1.0.0.dar"
 SDK_VERSION="3.4.11"
 
 echo ""
 echo "=================================================="
 echo " CanQuest DAML Build + Test"
-echo " Package : canquest-v7 v3.0.3"
+echo " Package : canquest-v10 v1.0.0"
 echo " SDK     : $SDK_VERSION"
 echo " Dir     : $DAML_DIR"
 echo "=================================================="
@@ -117,7 +117,7 @@ if [ -n "$PKG_ID" ]; then
     echo "[OK] Package ID: $PKG_ID"
     echo ""
     echo "Update apps/api/.env on VPS:"
-    echo "  CANTON_DAML_PACKAGE_NAME=canquest-v7"
+    echo "  CANTON_DAML_PACKAGE_NAME=canquest-v10"
     echo "  CANTON_DAML_PACKAGE_ID=$PKG_ID"
 else
     echo "[WARN] Package ID not found - check inspect output above"
@@ -126,7 +126,7 @@ fi
 echo ""
 echo "Next steps:"
 echo "  1. Upload DAR  : cd apps/api && node scripts/upload-daml-dar.cjs"
-echo "  2. Update .env : set CANTON_DAML_PACKAGE_NAME=canquest-v7"
+echo "  2. Update .env : set CANTON_DAML_PACKAGE_NAME=canquest-v10"
 echo "  3. Restart API : pm2 restart canquest-api"
 echo ""
 
@@ -147,8 +147,8 @@ if [[ "$*" == *"--upload"* ]]; then
             echo "[OK] DAR uploaded successfully!"
             echo ""
             echo "Sekarang:"
-    echo "  1. Update apps/api/.env:"
-    echo "       CANTON_DAML_PACKAGE_NAME=canquest-v7"
+echo "  1. Update apps/api/.env:"
+echo "       CANTON_DAML_PACKAGE_NAME=canquest-v10"
             if [ -n "$PKG_ID" ]; then
                 echo "       CANTON_DAML_PACKAGE_ID=$PKG_ID"
             fi
