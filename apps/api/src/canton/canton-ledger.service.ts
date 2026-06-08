@@ -469,7 +469,13 @@ export class CantonLedgerService {
 
       if (!res.ok) {
         const text = await res.text();
-        this.logger.warn(`queryActiveContracts ${res.status}: ${text.slice(0, 200)}`);
+        if (res.status === 413) {
+          // Participant has >200 contracts for this template — normal at scale.
+          // Fallback: idempotency handled by command deduplication.
+          this.logger.debug(`queryActiveContracts 413 (limit reached) — skipping ACS lookup, using command dedup`);
+        } else {
+          this.logger.warn(`queryActiveContracts ${res.status}: ${text.slice(0, 200)}`);
+        }
         return [];
       }
 
