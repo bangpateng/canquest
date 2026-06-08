@@ -1,6 +1,6 @@
 -- ============================================================
 -- CanQuest DAML Contract — module Main
--- Package: canquest-v4  |  SDK: 3.4.11
+-- Package: canquest-v8  |  SDK: 3.4.11
 --
 -- Templates:
 --   1. UserAccount        — akun user on-chain (earnedPoints & spentPoints)
