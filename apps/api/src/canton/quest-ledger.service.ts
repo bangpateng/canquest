@@ -255,8 +255,9 @@ export class QuestLedgerService {
     if (reachErr) { result.errors.push(reachErr); return result; }
     result.ledgerEnabled = true;
     await this.ledger.grantUserRights(operator).catch((err) => this.logger.warn(`grantUserRights(operator) failed: ${String(err)}`));
-    const existing = this.findContractId(await this.ledger.queryActiveContracts(tpl, [operator]), (args) => args.userAddress === params.userPartyId);
-    if (existing) { result.contractId = existing; return result; }
+    // O(1) lookup via contract key — replaces queryActiveContracts + findContractId
+    const existing = await this.ledger.fetchByKey(tpl, { _1: operator, _2: params.username }, [operator]);
+    if (existing) { result.contractId = existing.contractId; return result; }
     const res = await this.ledger.createContract(tpl, {
       admin: operator, userAddress: params.userPartyId, username: params.username,
       earnedPoints: 0, spentPoints: 0, createdAt: new Date().toISOString(),
@@ -302,8 +303,9 @@ export class QuestLedgerService {
     if (reachErr) { result.errors.push(reachErr); return result; }
     result.ledgerEnabled = true;
     await this.ledger.grantUserRights(operator).catch((err) => this.logger.warn(`grantUserRights(operator) failed: ${String(err)}`));
-    const existing = this.findContractId(await this.ledger.queryActiveContracts(tpl, [operator]), (args) => args.userAddress === params.userPartyId);
-    if (existing) { result.contractId = existing; return result; }
+    // O(1) lookup via contract key — replaces queryActiveContracts + findContractId
+    const existing = await this.ledger.fetchByKey(tpl, { _1: operator, _2: params.userPartyId }, [operator]);
+    if (existing) { result.contractId = existing.contractId; return result; }
     const res = await this.ledger.createContract(tpl, {
       admin: operator, userAddress: params.userPartyId, username: params.username,
       partyId: params.partyId, inviteCode: params.inviteCode, registeredAt: new Date().toISOString(),
@@ -434,8 +436,9 @@ export class QuestLedgerService {
     if (reachErr) { result.errors.push(reachErr); return result; }
     result.ledgerEnabled = true;
     const checkInId = `${params.userId}_${params.checkInDate}`;
-    const existing = this.findContractId(await this.ledger.queryActiveContracts(tpl, [operator]), (args) => args.checkInId === checkInId);
-    if (existing) { result.contractId = existing; return result; }
+    // O(1) lookup via contract key — replaces queryActiveContracts + findContractId
+    const existing = await this.ledger.fetchByKey(tpl, { _1: operator, _2: checkInId }, [operator]);
+    if (existing) { result.contractId = existing.contractId; return result; }
     const res = await this.ledger.createContract(tpl, {
       admin: operator, userAddress: params.userPartyId, username: params.username,
       checkInId, checkInDate: params.checkInDate, pointsAwarded: params.pointsAwarded, streakCount: params.streakCount, checkedInAt: new Date().toISOString(),
@@ -579,8 +582,9 @@ export class QuestLedgerService {
     const reachErr = await this.ensureReachable();
     if (reachErr) return { ok: false, contractId: null, errors: [reachErr] };
     const referralId = `${params.referrerId}_${params.referredUserId}`;
-    const existing = this.findContractId(await this.ledger.queryActiveContracts(tpl, [operator]), (args) => args.referralId === referralId);
-    if (existing) { return { ok: true, contractId: existing, errors: [] }; }
+    // O(1) lookup via contract key — replaces queryActiveContracts + findContractId
+    const existing = await this.ledger.fetchByKey(tpl, { _1: operator, _2: referralId }, [operator]);
+    if (existing) { return { ok: true, contractId: existing.contractId, errors: [] }; }
     const res = await this.ledger.createContract(tpl, {
       admin: operator, referrerAddress: params.referrerPartyId, referrerId: params.referrerId,
       referredUserId: params.referredUserId, points: params.points, referralId, createdAt: new Date().toISOString(),

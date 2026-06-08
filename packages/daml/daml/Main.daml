@@ -56,6 +56,9 @@ template UserAccount
     signatory admin
     observer userAddress
 
+    key (admin, username) : (Party, Text)
+    maintainer key._1
+
     choice RewardPoints : ContractId UserAccount
       with
         pointsToAdd : Int
@@ -102,6 +105,9 @@ template WalletRegistration
     signatory admin
     observer userAddress
 
+    key (admin, userAddress) : (Party, Party)
+    maintainer key._1
+
     choice ConfirmWalletActive : ContractId WalletRegistration
       with
         confirmedAt : Text
@@ -129,6 +135,9 @@ template QuestCampaign
     createdAt     : Text
   where
     signatory admin
+
+    key (admin, campaignId) : (Party, Text)
+    maintainer key._1
 
     choice ClaimFcfsSlot : (ContractId QuestCampaign, ContractId QuestClaim)
       with
@@ -230,6 +239,9 @@ template QuestClaim
     signatory admin
     observer userAddress
 
+    key (admin, claimId) : (Party, Text)
+    maintainer key._1
+
     choice ConfirmFeePaid : ContractId QuestClaim
       with
         txId        : Text
@@ -286,6 +298,9 @@ template DailyCheckIn
     signatory admin
     observer userAddress
 
+    key (admin, checkInId) : (Party, Text)
+    maintainer key._1
+
     choice VerifyCheckIn : ContractId DailyCheckIn
       with
         verifiedAt : Text
@@ -315,6 +330,9 @@ template SpinExecution
   where
     signatory admin
     observer userAddress
+
+    key (admin, spinResultId) : (Party, Text)
+    maintainer key._1
 
     choice ConfirmCcDelivered : ContractId SpinCcReward
       with
@@ -370,6 +388,9 @@ template ReferralReward
     signatory admin
     observer referrerAddress
 
+    key (admin, referralId) : (Party, Text)
+    maintainer key._1
+
     choice ConfirmReferralProcessed : ContractId ReferralReward
       with
         confirmedAt : Text
@@ -398,6 +419,9 @@ template CcTransactionLog
   where
     signatory admin
     observer userAddress
+
+    key (admin, txLogId) : (Party, Text)
+    maintainer key._1
 
     choice SettleCcTransaction : ContractId CcTransactionLog
       with

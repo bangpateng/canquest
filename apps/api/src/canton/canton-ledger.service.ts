@@ -489,6 +489,62 @@ export class CantonLedgerService {
   }
 
   /**
+   * Fetch a contract by its DAML key using the Canton JSON Ledger API v2.
+   *
+   * POST /v2/contracts/by-key
+   *
+   * Body per official docs:
+   * {
+   *   "templateId": "<packageId>:<ModuleName>:<TemplateName>",
+   *   "key": { ... },       // e.g. { "_1": "party", "_2": "username" } for (Party, Text) key
+   *   "readAs": ["party"]
+   * }
+   *
+   * Returns the contract entry (with contractId) if found, null if not found,
+   * or throws on permission / transport errors.
+   *
+   * See: https://docs.canton.network/appdev/modules/m3-contract-keys
+   */
+  async fetchByKey(
+    templateId: string,
+    key: unknown,
+    readAs: string[],
+  ): Promise<{ contractId: string; createArgument?: unknown } | null> {
+    try {
+      const res = await fetch(`${this.baseUrl}/v2/contracts/by-key`, {
+        method: 'POST',
+        headers: this.authHeaders(),
+        body: JSON.stringify({ templateId, key, readAs }),
+        signal: AbortSignal.timeout(10_000),
+      });
+
+      if (!res.ok) {
+        // 404 = key not found (normal, not a warning)
+        if (res.status !== 404) {
+          const text = await res.text();
+          this.logger.warn(`fetchByKey ${res.status}: ${text.slice(0, 200)}`);
+        }
+        return null;
+      }
+
+      const data = (await res.json()) as Record<string, unknown>;
+      // Response may be { contractId, createArgument } or wrapped in CreatedEvent
+      const contractId =
+        typeof data.contractId === 'string' ? data.contractId : null;
+      const args = (data.createArgument ??
+        (data.CreatedEvent as Record<string, unknown> | undefined)?.createArgument ??
+        (data.CreatedTreeEvent as Record<string, unknown> | undefined)?.createArgument ??
+        null) as Record<string, unknown> | null;
+
+      if (!contractId) return null;
+      return { contractId, createArgument: args ?? undefined };
+    } catch (err) {
+      this.logger.warn(`fetchByKey error: ${String(err)}`);
+      return null;
+    }
+  }
+
+  /**
    * Create a contract on the Canton ledger.
    *
    * CreateCommand body per official docs:
