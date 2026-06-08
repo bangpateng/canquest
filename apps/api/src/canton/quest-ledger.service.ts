@@ -440,7 +440,7 @@ export class QuestLedgerService {
         partyId:      params.partyId,
         inviteCode:   params.inviteCode,
         registeredAt: new Date().toISOString(),
-        confirmedAt:  '',
+        confirmedAt:  null,
       },
       [operator],
       `wallet-reg-${params.username}-${randomUUID()}`,

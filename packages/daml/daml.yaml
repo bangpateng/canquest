@@ -23,7 +23,7 @@ sdk-version: 3.4.11
 # ============================================================
 name: canquest-v6
 source: daml
-version: 3.0.1
+version: 3.0.2
 dependencies:
   - daml-prim
   - daml-stdlib
