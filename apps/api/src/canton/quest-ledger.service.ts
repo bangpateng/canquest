@@ -891,6 +891,9 @@ export class QuestLedgerService {
 
     result.ledgerEnabled = true;
 
+    // Skip ACS idempotency check — spinResultId from DB is unique,
+    // and commandId dedup on createContract handles double-spend prevention.
+    // ACS query would fail with 413 when participant has >200 contracts.
     await this.ledger.grantUserRights(operator).catch((err) =>
       this.logger.warn(`grantUserRights(operator) failed: ${String(err)}`),
     );
