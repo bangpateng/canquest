@@ -15,11 +15,14 @@ import { QUEST_STATUS_BADGE, type Quest, type UserProgress } from "@/lib/quest/q
 import { CcRewardLogo } from "@/components/app/campaign/cc-reward-logo";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
+import { useEffect, useState } from "react";
 import {
   Calendar,
+  Clock,
   Coins,
   ListChecks,
   Sparkles,
+  Tag,
   Ticket,
   Trophy,
   Users,
@@ -118,6 +121,36 @@ function kindLabel(
     default:
       return t("earnCampaigns.kindCampaign");
   }
+}
+
+function CountdownTimer({ endsAt }: { endsAt: string | null }) {
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+
+  if (!endsAt) return null;
+  const end = new Date(endsAt).getTime();
+  const diff = end - now;
+  if (diff <= 0) return <span className="text-red-400 font-bold text-[10px]">Ended</span>;
+
+  const days = Math.floor(diff / 86_400_000);
+  const hours = Math.floor((diff % 86_400_000) / 3_600_000);
+  const mins = Math.floor((diff % 3_600_000) / 60_000);
+
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0 || days > 0) parts.push(`${hours}h`);
+  parts.push(`${mins}m`);
+
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-300 sm:text-xs">
+      <Clock className="h-3 w-3" aria-hidden />
+      {parts.join(" ")}
+    </span>
+  );
 }
 
 function Metric({
@@ -380,18 +413,40 @@ export function EarnCampaignCard({
           {quest.description}
         </p>
 
-        <div className="mt-3 flex items-center gap-3 text-[10px] font-semibold text-slate-500 sm:mt-4 sm:gap-4 sm:text-xs">
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[10px] font-semibold text-slate-500 sm:mt-4 sm:gap-x-4 sm:text-xs">
           <span className="inline-flex items-center gap-1 sm:gap-1.5">
             <ListChecks className="h-3 w-3 text-canton sm:h-4 sm:w-4" />
             {quest.tasks.length} tasks
           </span>
-          {quest.deadline ? (
+          {quest.endsAt ? (
+            <CountdownTimer endsAt={quest.endsAt} />
+          ) : quest.deadline ? (
             <span className="inline-flex items-center gap-1 sm:gap-1.5">
               <Calendar className="h-3 w-3 sm:h-4 sm:w-4" />
               <span className="truncate">{quest.deadline}</span>
             </span>
           ) : null}
+          {summary?.slotsTaken != null && summary.slotsTaken > 0 && (
+            <span className="inline-flex items-center gap-1 sm:gap-1.5">
+              <Users className="h-3 w-3 sm:h-4 sm:w-4" />
+              {summary.slotsTaken}
+            </span>
+          )}
         </div>
+
+        {quest.tags.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1">
+            {quest.tags.slice(0, 3).map((tag) => (
+              <span
+                key={tag}
+                className="inline-flex items-center gap-0.5 rounded-md border border-white/[0.06] bg-white/[0.03] px-2 py-0.5 text-[10px] font-medium text-slate-500"
+              >
+                <Tag className="h-2.5 w-2.5 shrink-0 opacity-50" aria-hidden />
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* CC + Code Raffle: show Reward Pool */}
         {isCcAndCodeRaffle && showPool && (
