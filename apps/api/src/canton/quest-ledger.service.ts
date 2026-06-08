@@ -139,7 +139,7 @@ export class QuestLedgerService {
   private get damlPackageRef(): string {
     const name = this.config.get<string>('CANTON_DAML_PACKAGE_NAME')?.trim();
     if (name) return name.startsWith('#') ? name : `#${name}`;
-    return '#canquest-v6';
+    return '#canquest-v7';
   }
 
   private get operatorPartyId(): string | null {
