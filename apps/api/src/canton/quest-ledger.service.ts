@@ -4,12 +4,12 @@ import { randomUUID } from 'crypto';
 import { CantonLedgerService } from './canton-ledger.service';
 
 /**
- * DAML template paths — module Main (canquest-v6, DAR yang ter-deploy di ledger)
+ * DAML template paths — module Main (canquest-v10, DAR yang ter-deploy di ledger)
  *
  * Templates:
  *   Main:UserAccount        — akun user on-chain (earnedPoints & spentPoints)
  *   Main:WalletRegistration — bukti pembuatan wallet / Party ID
- *   Main:QuestCampaign      — template induk quest (6 questKind: CC_FCFS, CC_RAFFLE, CODE_FCFS, CODE_RAFFLE, CC_AND_CODE_RAFFLE, WAITLIST)
+ *   Main:QuestCampaign      — template induk quest (6 questKind)
  *   Main:QuestClaim         — bukti klaim quest + confirmFee + confirmReward + revealCode
  *   Main:DailyCheckIn       — check-in harian on-chain
  *   Main:SpinExecution      — audit trail spin on-chain
@@ -126,12 +126,18 @@ export class QuestLedgerService {
   /**
    * Canton JSON API v2 requires DAML Decimal fields to be sent as strings.
    * e.g. rewardCc: 10.0 → "10.0", claimFeeCc: 0.0 → "0.0"
-   * Int fields stay as JS numbers. Bool fields stay as JS booleans.
-   * See: https://docs.canton.network/appdev/modules/m4-json-api-tutorial
    */
   private dec(value: number): string {
-    // Always include at least one decimal place for DAML Decimal type
     return Number.isInteger(value) ? `${value}.0` : String(value);
+  }
+
+  /**
+   * Canton JSON API v2 requires DAML Int fields to be sent as strings too.
+   * e.g. earnedPoints: 0 → "0", maxWinners: 100 → "100"
+   * Failure to do this causes: LEDGER_API_INTERNAL_ERROR "Expected ujson.Str"
+   */
+  private intStr(value: number): string {
+    return String(value);
   }
 
   // ── Config helpers ──────────────────────────────────────────────────────────
@@ -139,7 +145,7 @@ export class QuestLedgerService {
   private get damlPackageRef(): string {
     const name = this.config.get<string>('CANTON_DAML_PACKAGE_NAME')?.trim();
     if (name) return name.startsWith('#') ? name : `#${name}`;
-    return '#canquest-v6';
+    return '#canquest-v10';
   }
 
   private get operatorPartyId(): string | null {
@@ -259,7 +265,7 @@ export class QuestLedgerService {
     if (existing) { result.contractId = existing; return result; }
     const res = await this.ledger.createContract(tpl, {
       admin: operator, userAddress: params.userPartyId, username: params.username,
-      earnedPoints: 0, spentPoints: 0, createdAt: new Date().toISOString(),
+      earnedPoints: this.intStr(0), spentPoints: this.intStr(0), createdAt: new Date().toISOString(),
     }, [operator], `user-account-${params.username}-${randomUUID()}`);
     if (res.ok && res.contractId) {
       this.logger.log(`UserAccount created: @${params.username} → ${params.userPartyId.split('::')[0]}`);
@@ -274,7 +280,7 @@ export class QuestLedgerService {
     const operator = this.operatorPartyId;
     if (!operator) return { ok: false, newContractId: null, errors: ['Canton operator party not configured'] };
     const { ok, text } = await this.ledger.exerciseChoice(params.accountContractId, tpl, 'RewardPoints',
-      { pointsToAdd: params.pointsToAdd, reason: params.reason || 'quest_completion' }, [operator], `reward-points-${randomUUID()}`);
+      { pointsToAdd: this.intStr(params.pointsToAdd), reason: params.reason || 'quest_completion' }, [operator], `reward-points-${randomUUID()}`);
     if (ok) { const cids = this.extractContractIds(text); return { ok: true, newContractId: cids[0] ?? null, errors: [] }; }
     return { ok: false, newContractId: null, errors: [text.slice(0, 200)] };
   }
@@ -285,7 +291,7 @@ export class QuestLedgerService {
     const operator = this.operatorPartyId;
     if (!operator) return { ok: false, newContractId: null, errors: ['Canton operator party not configured'] };
     const { ok, text } = await this.ledger.exerciseChoice(params.accountContractId, tpl, 'DebitPoints',
-      { amount: params.amount, reason: params.reason || 'spin_cost' }, [operator], `debit-points-${randomUUID()}`);
+      { amount: this.intStr(params.amount), reason: params.reason || 'spin_cost' }, [operator], `debit-points-${randomUUID()}`);
     if (ok) { const cids = this.extractContractIds(text); return { ok: true, newContractId: cids[0] ?? null, errors: [] }; }
     return { ok: false, newContractId: null, errors: [text.slice(0, 200)] };
   }
@@ -353,7 +359,7 @@ export class QuestLedgerService {
     const res = await this.ledger.createContract(tpl, {
       admin: operator, campaignId: params.campaignId, title: params.title, questKind: params.questKind,
       rewardCc: this.dec(params.rewardCc), claimFeeCc: this.dec(params.claimFeeCc),
-      maxWinners: params.maxWinners, currentClaims: 0, status: 'ACTIVE', createdAt: new Date().toISOString(),
+      maxWinners: this.intStr(params.maxWinners), currentClaims: this.intStr(0), status: 'ACTIVE', createdAt: new Date().toISOString(),
     }, [operator], `quest-campaign-${params.campaignId}`);
     if (res.ok && res.contractId) {
       this.logger.log(`QuestCampaign created: ${params.campaignId} kind=${params.questKind} quota=${params.maxWinners}`);
@@ -438,7 +444,9 @@ export class QuestLedgerService {
     if (existing) { result.contractId = existing; return result; }
     const res = await this.ledger.createContract(tpl, {
       admin: operator, userAddress: params.userPartyId, username: params.username,
-      checkInId, checkInDate: params.checkInDate, pointsAwarded: params.pointsAwarded, streakCount: params.streakCount, checkedInAt: new Date().toISOString(),
+      checkInId, checkInDate: params.checkInDate,
+      pointsAwarded: this.intStr(params.pointsAwarded), streakCount: this.intStr(params.streakCount),
+      checkedInAt: new Date().toISOString(),
     }, [operator], `daily-checkin-${checkInId}-${randomUUID()}`);
     if (res.ok && res.contractId) { this.logger.log(`DailyCheckIn recorded: @${params.username} date=${params.checkInDate} streak=${params.streakCount}`); result.contractId = res.contractId; }
     else { result.errors.push(this.formatLedgerError(res.error, 'Failed to record DailyCheckIn')); }
@@ -485,77 +493,6 @@ export class QuestLedgerService {
     return { ok: false, ccRewardContractId: null, errors: [text.slice(0, 200)] };
   }
 
-  // ── Legacy ──────────────────────────────────────────────────────────────────
-
-  async createMission(params: { missionId: string; rewardPoints: number; maxQuota: number }): Promise<{ contractId: string | null; error?: string }> {
-    const result = await this.createQuestCampaign({ campaignId: params.missionId, title: `Mission ${params.missionId}`, questKind: 'CC_FCFS', rewardCc: 0, claimFeeCc: 0, maxWinners: params.maxQuota });
-    if (result.contractId) return { contractId: result.contractId };
-    return { contractId: null, error: result.errors.join(' | ') };
-  }
-
-  async claimMission(params: { missionContractId: string; userPartyId: string; accountContractId: string }): Promise<MissionClaimLedgerResult> {
-    const result: MissionClaimLedgerResult = { ledgerEnabled: false, missionContractId: null, accountContractId: null, errors: [] };
-    const claimResult = await this.claimFcfsSlot({ campaignContractId: params.missionContractId, userPartyId: params.userPartyId, claimId: `mission-claim-${randomUUID()}` });
-    result.ledgerEnabled = claimResult.ledgerEnabled; result.missionContractId = claimResult.campaignContractId;
-    result.accountContractId = claimResult.claimContractId; result.errors = claimResult.errors;
-    return result;
-  }
-
-  /** @deprecated */
-  async ensureParticipation(params: { questId: string; questKind: string; userPartyId: string }): Promise<{ contractId: string | null; error?: string }> {
-    this.logger.warn(`ensureParticipation() called for quest=${params.questId} — use ensureUserAccount()`);
-    return { contractId: null };
-  }
-
-  /** @deprecated */
-  async createClaimSession(params: { questId: string; userPartyId: string; claimKind: string; feeCc: number; rewardCc: number }): Promise<ClaimSessionLedgerResult> {
-    this.logger.warn(`createClaimSession() called for quest=${params.questId} — use claimFcfsSlot()`);
-    return { ledgerEnabled: false, sessionContractId: null, errors: [] };
-  }
-
-  /** @deprecated */
-  async createEarnClaimSession(params: { questId?: string; campaignId?: string; userPartyId: string; [key: string]: unknown }): Promise<{ contractId: string | null; error?: string }> { return { contractId: null }; }
-  /** @deprecated */
-  async createFcfsSlotReservation(params: { questId?: string; campaignId?: string; userPartyId: string; [key: string]: unknown }): Promise<{ contractId: string | null; error?: string }> { return { contractId: null }; }
-  /** @deprecated */
-  async createCcRewardEntitlement(params: { questId?: string; campaignId?: string; userPartyId: string; [key: string]: unknown }): Promise<{ contractId: string | null; error?: string }> { return { contractId: null }; }
-  /** @deprecated */
-  async createCodeRewardEntitlement(params: { questId?: string; campaignId?: string; userPartyId: string; [key: string]: unknown }): Promise<{ contractId: string | null; error?: string }> { return { contractId: null }; }
-
-  async recordPartyRegistration(params: { userPartyId: string; username?: string; partyHint?: string; inviteCode?: string; [key: string]: unknown }): Promise<{ ok: boolean; contractId: string | null; errors: string[] }> {
-    if (!params.userPartyId) return { ok: true, contractId: null, errors: [] };
-    const resolvedUsername = params.username ?? params.partyHint ?? params.userPartyId.split('::')[0];
-    const walletResult = await this.registerWallet({ userPartyId: params.userPartyId, username: resolvedUsername, partyId: params.userPartyId, inviteCode: params.inviteCode ?? '' });
-    const accountResult = await this.ensureUserAccount({ userPartyId: params.userPartyId, username: resolvedUsername });
-    const errors = [...walletResult.errors, ...accountResult.errors];
-    const ok = !!walletResult.contractId || !!accountResult.contractId;
-    return { ok, contractId: walletResult.contractId, errors };
-  }
-
-  /** @deprecated */
-  async recordCcTransfer(params: { senderPartyId?: string; receiverPartyId?: string; amount?: number; txId?: string; [key: string]: unknown }): Promise<{ ok: boolean; contractId: string | null; errors: string[] }> { return { ok: true, contractId: null, errors: [] }; }
-  /** @deprecated */
-  async createRaffleWinner(params: { userPartyId: string; questId?: string; campaignId?: string; rewardCc?: number; txId?: string; [key: string]: unknown }): Promise<{ contractId: string | null; error?: string }> { return { contractId: null }; }
-  /** @deprecated */
-  async markEarnClaimFeePaid(params: { sessionContractId: string; feeTxId: string }): Promise<{ ok: boolean; errors: string[] }> { const r = await this.confirmFeePaid({ claimContractId: params.sessionContractId, feeTxId: params.feeTxId }); return { ok: r.ok, errors: r.errors }; }
-  /** @deprecated */
-  async markEarnClaimRewardSent(params: { sessionContractId: string; rewardTxId: string }): Promise<{ ok: boolean; errors: string[] }> { const r = await this.confirmRewardSent({ claimContractId: params.sessionContractId, rewardTxId: params.rewardTxId }); return { ok: r.ok, errors: r.errors }; }
-  /** @deprecated */
-  async markClaimFeePaid(params: { sessionContractId: string; feeTxId: string }): Promise<{ ok: boolean; errors: string[] }> { return this.markEarnClaimFeePaid(params); }
-  /** @deprecated */
-  async markClaimRewardSent(params: { sessionContractId: string; rewardTxId: string }): Promise<{ ok: boolean; errors: string[] }> { return this.markEarnClaimRewardSent({ sessionContractId: params.sessionContractId, rewardTxId: params.rewardTxId }); }
-  /** @deprecated */
-  async markRewardClaimed(params: { rewardContractId: string; payoutTxId: string }): Promise<{ ok: boolean; errors: string[] }> { return { ok: true, errors: [] }; }
-  /** @deprecated */
-  async recordQuestCompletion(params: { questId: string; questKind: string; questTitle: string; rewardCc: number; userPartyId: string; taskIds: string[]; proofs: Array<{ taskId: string; taskType: string; proof: string | null }> }): Promise<QuestLedgerSubmitResult> {
-    this.logger.warn(`recordQuestCompletion() called for quest=${params.questId} — use ensureUserAccount() + rewardUser()`);
-    return { ledgerEnabled: false, participationContractId: null, completionContractId: null, rewardContractId: null, taskSubmissionIds: [], errors: [] };
-  }
-  /** @deprecated */
-  async recordTaskSubmission(params: { questId: string; questKind: string; taskId: string; taskType: string; proof: string | null; userPartyId: string }): Promise<QuestTaskLedgerResult> {
-    return { ledgerEnabled: false, participationContractId: null, taskSubmissionContractId: null, errors: [] };
-  }
-
   // ── 7. QuestClaim: RevealRewardCode ─────────────────────────────────────────
 
   async revealRewardCode(params: { claimContractId: string; code: string }): Promise<{ ok: boolean; newContractId: string | null; errors: string[] }> {
@@ -583,7 +520,8 @@ export class QuestLedgerService {
     if (existing) { return { ok: true, contractId: existing, errors: [] }; }
     const res = await this.ledger.createContract(tpl, {
       admin: operator, referrerAddress: params.referrerPartyId, referrerId: params.referrerId,
-      referredUserId: params.referredUserId, points: params.points, referralId, createdAt: new Date().toISOString(),
+      referredUserId: params.referredUserId, points: this.intStr(params.points),
+      referralId, createdAt: new Date().toISOString(),
     }, [operator], `referral-reward-${referralId}`);
     if (res.ok && res.contractId) { return { ok: true, contractId: res.contractId, errors: [] }; }
     return { ok: false, contractId: null, errors: [this.formatLedgerError(res.error, 'Failed to record ReferralReward')] };
@@ -600,7 +538,7 @@ export class QuestLedgerService {
     if (reachErr) return { ok: false, contractId: null, errors: [reachErr] };
     const res = await this.ledger.createContract(tpl, {
       admin: operator, userAddress: params.userPartyId, username: params.username,
-      txLogId: params.txLogId, txType: params.txType, amountMicroCc: params.amountMicroCc,
+      txLogId: params.txLogId, txType: params.txType, amountMicroCc: this.intStr(params.amountMicroCc),
       description: params.description, referenceId: params.referenceId, ledgerTxId: params.ledgerTxId ?? '', createdAt: new Date().toISOString(),
     }, [operator], `cc-tx-log-${params.txLogId}`);
     if (res.ok && res.contractId) { return { ok: true, contractId: res.contractId, errors: [] }; }
@@ -616,6 +554,69 @@ export class QuestLedgerService {
       { txId: params.txId, settledAt: new Date().toISOString() }, [operator], `settle-cc-tx-${randomUUID()}`);
     if (ok) { const cids = this.extractContractIds(text); return { ok: true, newContractId: cids[0] ?? null, errors: [] }; }
     return { ok: false, newContractId: null, errors: [text.slice(0, 200)] };
+  }
+
+  // ── Legacy / deprecated stubs ───────────────────────────────────────────────
+
+  async createMission(params: { missionId: string; rewardPoints: number; maxQuota: number }): Promise<{ contractId: string | null; error?: string }> {
+    const result = await this.createQuestCampaign({ campaignId: params.missionId, title: `Mission ${params.missionId}`, questKind: 'CC_FCFS', rewardCc: 0, claimFeeCc: 0, maxWinners: params.maxQuota });
+    if (result.contractId) return { contractId: result.contractId };
+    return { contractId: null, error: result.errors.join(' | ') };
+  }
+
+  async claimMission(params: { missionContractId: string; userPartyId: string; accountContractId: string }): Promise<MissionClaimLedgerResult> {
+    const claimResult = await this.claimFcfsSlot({ campaignContractId: params.missionContractId, userPartyId: params.userPartyId, claimId: `mission-claim-${randomUUID()}` });
+    return { ledgerEnabled: claimResult.ledgerEnabled, missionContractId: claimResult.campaignContractId, accountContractId: claimResult.claimContractId, errors: claimResult.errors };
+  }
+
+  /** @deprecated */
+  async ensureParticipation(params: { questId: string; questKind: string; userPartyId: string }): Promise<{ contractId: string | null; error?: string }> {
+    return { contractId: null };
+  }
+  /** @deprecated */
+  async createClaimSession(params: { questId: string; userPartyId: string; claimKind: string; feeCc: number; rewardCc: number }): Promise<ClaimSessionLedgerResult> {
+    return { ledgerEnabled: false, sessionContractId: null, errors: [] };
+  }
+  /** @deprecated */
+  async createEarnClaimSession(params: { questId?: string; campaignId?: string; userPartyId: string; [key: string]: unknown }): Promise<{ contractId: string | null; error?: string }> { return { contractId: null }; }
+  /** @deprecated */
+  async createFcfsSlotReservation(params: { questId?: string; campaignId?: string; userPartyId: string; [key: string]: unknown }): Promise<{ contractId: string | null; error?: string }> { return { contractId: null }; }
+  /** @deprecated */
+  async createCcRewardEntitlement(params: { questId?: string; campaignId?: string; userPartyId: string; [key: string]: unknown }): Promise<{ contractId: string | null; error?: string }> { return { contractId: null }; }
+  /** @deprecated */
+  async createCodeRewardEntitlement(params: { questId?: string; campaignId?: string; userPartyId: string; [key: string]: unknown }): Promise<{ contractId: string | null; error?: string }> { return { contractId: null }; }
+
+  async recordPartyRegistration(params: { userPartyId: string; username?: string; partyHint?: string; inviteCode?: string; [key: string]: unknown }): Promise<{ ok: boolean; contractId: string | null; errors: string[] }> {
+    if (!params.userPartyId) return { ok: true, contractId: null, errors: [] };
+    const resolvedUsername = params.username ?? params.partyHint ?? params.userPartyId.split('::')[0];
+    const walletResult = await this.registerWallet({ userPartyId: params.userPartyId, username: resolvedUsername, partyId: params.userPartyId, inviteCode: params.inviteCode ?? '' });
+    const accountResult = await this.ensureUserAccount({ userPartyId: params.userPartyId, username: resolvedUsername });
+    const errors = [...walletResult.errors, ...accountResult.errors];
+    const ok = !!walletResult.contractId || !!accountResult.contractId;
+    return { ok, contractId: walletResult.contractId, errors };
+  }
+
+  /** @deprecated */
+  async recordCcTransfer(params: { senderPartyId?: string; receiverPartyId?: string; amount?: number; txId?: string; [key: string]: unknown }): Promise<{ ok: boolean; contractId: string | null; errors: string[] }> { return { ok: true, contractId: null, errors: [] }; }
+  /** @deprecated */
+  async createRaffleWinner(params: { userPartyId: string; questId?: string; campaignId?: string; rewardCc?: number; txId?: string; [key: string]: unknown }): Promise<{ contractId: string | null; error?: string }> { return { contractId: null }; }
+  /** @deprecated */
+  async markEarnClaimFeePaid(params: { sessionContractId: string; feeTxId: string }): Promise<{ ok: boolean; errors: string[] }> { return this.confirmFeePaid({ claimContractId: params.sessionContractId, feeTxId: params.feeTxId }).then(r => ({ ok: r.ok, errors: r.errors })); }
+  /** @deprecated */
+  async markEarnClaimRewardSent(params: { sessionContractId: string; rewardTxId: string }): Promise<{ ok: boolean; errors: string[] }> { return this.confirmRewardSent({ claimContractId: params.sessionContractId, rewardTxId: params.rewardTxId }).then(r => ({ ok: r.ok, errors: r.errors })); }
+  /** @deprecated */
+  async markClaimFeePaid(params: { sessionContractId: string; feeTxId: string }): Promise<{ ok: boolean; errors: string[] }> { return this.markEarnClaimFeePaid(params); }
+  /** @deprecated */
+  async markClaimRewardSent(params: { sessionContractId: string; rewardTxId: string }): Promise<{ ok: boolean; errors: string[] }> { return this.markEarnClaimRewardSent({ sessionContractId: params.sessionContractId, rewardTxId: params.rewardTxId }); }
+  /** @deprecated */
+  async markRewardClaimed(params: { rewardContractId: string; payoutTxId: string }): Promise<{ ok: boolean; errors: string[] }> { return { ok: true, errors: [] }; }
+  /** @deprecated */
+  async recordQuestCompletion(params: { questId: string; questKind: string; questTitle: string; rewardCc: number; userPartyId: string; taskIds: string[]; proofs: Array<{ taskId: string; taskType: string; proof: string | null }> }): Promise<QuestLedgerSubmitResult> {
+    return { ledgerEnabled: false, participationContractId: null, completionContractId: null, rewardContractId: null, taskSubmissionIds: [], errors: [] };
+  }
+  /** @deprecated */
+  async recordTaskSubmission(params: { questId: string; questKind: string; taskId: string; taskType: string; proof: string | null; userPartyId: string }): Promise<QuestTaskLedgerResult> {
+    return { ledgerEnabled: false, participationContractId: null, taskSubmissionContractId: null, errors: [] };
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
