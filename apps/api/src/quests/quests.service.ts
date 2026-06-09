@@ -1596,7 +1596,7 @@ export class QuestsService {
             questTitle: quest.title,
             feeCc,
             feeLabel: 'FCFS claim fee (recovery)',
-            validatorPartyId,
+            feeTargetPartyId: this.feeTargetPartyId ?? validatorPartyId,
           });
           await this.prisma.winnerDraw.update({
             where: { id: existingDraw.id },
@@ -1710,7 +1710,7 @@ export class QuestsService {
           questTitle: quest.title,
           feeCc,
           feeLabel: 'FCFS claim fee',
-          validatorPartyId,
+          feeTargetPartyId: this.feeTargetPartyId ?? validatorPartyId,
         }));
 
       // Persist fee TX early so retries don't double-charge and slot stays reserved.
@@ -1977,7 +1977,7 @@ export class QuestsService {
         questTitle: quest.title,
         feeCc,
         feeLabel: 'Raffle claim fee',
-        validatorPartyId,
+        feeTargetPartyId: this.feeTargetPartyId ?? validatorPartyId,
       });
 
       if (claimSessionId) {
@@ -2219,7 +2219,7 @@ export class QuestsService {
           questTitle: quest.title,
           feeCc,
           feeLabel: 'Claim fee',
-          validatorPartyId,
+          feeTargetPartyId: this.feeTargetPartyId ?? validatorPartyId,
         });
       } catch {
         throw new BadRequestException(FCFS_CLAIM_FAIL_MSG);
@@ -2443,7 +2443,7 @@ export class QuestsService {
         questTitle: quest.title,
         feeCc,
         feeLabel: 'CC+Code raffle claim fee',
-        validatorPartyId,
+        feeTargetPartyId: this.feeTargetPartyId ?? validatorPartyId,
       });
       await this.assertRewardPool(rewardCc);
       let rewardOfferId: string | null = null;
@@ -2522,19 +2522,23 @@ export class QuestsService {
     }
   }
 
+  private get feeTargetLabel(): string {
+    return this.feeTargetPartyId?.split('::')[0] ?? 'fee';
+  }
+
   private async collectClaimFee(params: {
     userId: string;
     username: string;
     questTitle: string;
     feeCc: number;
     feeLabel: string;
-    validatorPartyId: string;
+    feeTargetPartyId: string;
   }): Promise<string> {
     const feeResult = await this.splice.collectClaimFeeToValidatorParty({
       senderUsername: params.username,
       feeCc: params.feeCc,
-      description: `FCFS claim fee — ${params.questTitle}`,
-      validatorPartyId: params.validatorPartyId,
+      description: `${params.feeLabel} — ${params.questTitle}`,
+      validatorPartyId: params.feeTargetPartyId,
     });
 
     if (!feeResult.collected) {
@@ -2542,13 +2546,13 @@ export class QuestsService {
     }
 
     const ledgerTxId = feeResult.ledgerTxId ?? '';
-    const validatorLabel = params.validatorPartyId.split('::')[0];
+    const feeLabel = params.feeTargetPartyId.split('::')[0];
     await this.users.recordTransaction({
       userId: params.userId,
       amountCc: params.feeCc,
       type: 'TRANSFER_OUT',
       description: `Sent ${params.feeCc} CC claim fee`,
-      counterparty: validatorLabel,
+      counterparty: feeLabel,
       ledgerTxId: ledgerTxId || undefined,
     });
     return ledgerTxId;
