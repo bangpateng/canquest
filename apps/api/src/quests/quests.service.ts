@@ -273,16 +273,41 @@ export class QuestsService {
       .catch(() => {});
   }
 
-  /** Ensure validator wallet can cover the FCFS reward before sending. */
-  private async assertValidatorRewardPool(rewardCc: number): Promise<void> {
-    const treasuryAcceptUsername =
-      this.config.get<string>('CANTON_FEE_ACCEPT_USERNAME')?.trim() ||
+  /** Resolve the Splice username for reward sending (canquest-reward wallet). */
+  private get rewardSenderUsername(): string {
+    return (
+      this.config.get<string>('CANTON_REWARD_API_USER')?.trim() ||
       this.config.get<string>('CANTON_VALIDATOR_ADMIN_USER')?.trim() ||
-      'administrator';
-    const balance = await this.splice.getUserBalance(treasuryAcceptUsername);
+      'administrator'
+    );
+  }
+
+  /** Resolve the reward party ID for sending rewards. */
+  private get rewardPartyId(): string | null {
+    return (
+      this.config.get<string>('CANTON_REWARD_PARTY_ID')?.trim() ||
+      this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ||
+      null
+    );
+  }
+
+  /** Resolve the fee target party ID (fee recipient). */
+  private get feeTargetPartyId(): string | null {
+    return (
+      this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
+      this.config.get<string>('CANTON_FEE_PARTY_ID')?.trim() ||
+      this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ||
+      null
+    );
+  }
+
+  /** Ensure reward wallet (canquest-reward) can cover the payout before sending. */
+  private async assertRewardPool(rewardCc: number): Promise<void> {
+    const rewardUsername = this.rewardSenderUsername;
+    const balance = await this.splice.getUserBalance(rewardUsername);
     if (balance !== null && balance < rewardCc) {
       throw new Error(
-        `Validator reward pool too low (${balance.toFixed(2)} CC available, need ${rewardCc} CC)`,
+        `Reward wallet too low (@${rewardUsername} has ${balance.toFixed(2)} CC, need ${rewardCc} CC)`,
       );
     }
   }
@@ -1706,15 +1731,17 @@ export class QuestsService {
         }
       }
 
-      // Step 2: validator wallet sends reward → same user party (only after fee is on validator).
-      await this.assertValidatorRewardPool(rewardCc);
+      // Step 2: reward wallet (canquest-reward) sends reward → same user party (only after fee is collected).
+      await this.assertRewardPool(rewardCc);
       this.logger.log(
-        `Claim fee step 2: ${validatorPartyId.split('::')[0]} → ${cantonPartyId.split('::')[0]} (@${username}, ${rewardCc} CC)`,
+        `Claim fee step 2: ${this.rewardPartyId?.split('::')[0] ?? 'reward'} → ${cantonPartyId.split('::')[0]} (@${username}, ${rewardCc} CC)`,
       );
       const rewardOfferId = await this.splice.createTransferOffer(
         cantonPartyId,
         rewardCc,
         `FCFS reward — ${quest.title}`,
+        undefined,
+        this.rewardSenderUsername,
       );
       if (!rewardOfferId) {
         throw new Error('reward offer failed');
@@ -1974,11 +2001,13 @@ export class QuestsService {
         }
       }
 
-      await this.assertValidatorRewardPool(rewardCc);
+      await this.assertRewardPool(rewardCc);
       const rewardOfferId = await this.splice.createTransferOffer(
         cantonPartyId,
         rewardCc,
         `Raffle reward — ${quest.title}`,
+        undefined,
+        this.rewardSenderUsername,
       );
       if (!rewardOfferId) {
         throw new Error('reward offer failed');
@@ -2416,13 +2445,15 @@ export class QuestsService {
         feeLabel: 'CC+Code raffle claim fee',
         validatorPartyId,
       });
-      await this.assertValidatorRewardPool(rewardCc);
+      await this.assertRewardPool(rewardCc);
       let rewardOfferId: string | null = null;
       if (rewardCc > 0) {
         rewardOfferId = await this.splice.createTransferOffer(
           cantonPartyId,
           rewardCc,
           `CC+Code raffle reward — ${quest.title}`,
+          undefined,
+          this.rewardSenderUsername,
         );
         if (!rewardOfferId) throw new Error('CC reward offer failed');
         const rewardAccepted = await this.splice.acceptOfferViaWallet(rewardOfferId, username);

@@ -611,15 +611,13 @@ export class SpliceValidatorService {
 
   /**
    * Resolve treasury wallet for platform / claim fees (same rules as Send CC).
-   * Prefer Splice user-status party for CANTON_FEE_ACCEPT_USERNAME over stale .env IDs.
+   * Prefer CANTON_FEE_RECIPIENT_PARTY_ID → CANTON_FEE_PARTY_ID → Splice user-status party.
+   * Fee TIDAK PERNAH dikirim ke validator lagi — TERISOLASI ke canquest-fee.
    */
   async resolveTreasuryFeeTarget(): Promise<{
     treasuryPartyId: string;
     treasuryAcceptUsername: string;
   } | null> {
-    const validatorPartyId = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
-    if (!validatorPartyId) return null;
-
     const treasuryAcceptUsername =
       this.config.get<string>('CANTON_FEE_ACCEPT_USERNAME')?.trim() ||
       this.config.get<string>('CANTON_VALIDATOR_ADMIN_USER')?.trim() ||
@@ -627,7 +625,17 @@ export class SpliceValidatorService {
 
     let treasuryPartyId =
       this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
-      validatorPartyId;
+      this.config.get<string>('CANTON_FEE_PARTY_ID')?.trim() ||
+      null;
+
+    if (!treasuryPartyId) {
+      const validatorPartyId = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
+      if (!validatorPartyId) return null;
+      treasuryPartyId = validatorPartyId;
+      this.logger.warn(
+        'CANTON_FEE_RECIPIENT_PARTY_ID & CANTON_FEE_PARTY_ID both unset — fallback to CANTON_VALIDATOR_PARTY_ID (NOT recommended for mainnet)',
+      );
+    }
 
     const walletParty = await this.getWalletPartyId(treasuryAcceptUsername);
     if (walletParty && walletParty !== treasuryPartyId) {
@@ -635,7 +643,11 @@ export class SpliceValidatorService {
         `Fee party mismatch: .env treasury=${treasuryPartyId.split('::')[0]} but Splice user ${treasuryAcceptUsername} → ${walletParty.split('::')[0]}. Using wallet party.`,
       );
       treasuryPartyId = walletParty;
-    } else if (!this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() && walletParty) {
+    } else if (
+      !this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() &&
+      !this.config.get<string>('CANTON_FEE_PARTY_ID')?.trim() &&
+      walletParty
+    ) {
       treasuryPartyId = walletParty;
     }
 
