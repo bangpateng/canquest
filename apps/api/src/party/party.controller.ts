@@ -908,6 +908,114 @@ export class PartyController {
     };
   }
 
+  /**
+   * List incoming transfer offers for the authenticated user.
+   * GET /api/party/transfer-offers
+   *
+   * Returns all active TransferOffer contracts where this user is the receiver.
+   * From the Splice Wallet API, we get both incoming and outgoing — we filter
+   * client-side to show only incoming (receiver = user's party).
+   */
+  @SkipThrottle()
+  @Get('transfer-offers')
+  async listTransferOffers(@Req() req: AuthedReq) {
+    const user = await this.users.findById(req.user.userId);
+    if (!user?.cantonPartyId || !user.username) {
+      throw new BadRequestException('Create your wallet first.');
+    }
+
+    const walletUsername =
+      (await this.splice.resolveWalletUsernameForParty(user.cantonPartyId)) ??
+      user.username;
+
+    const offers = await this.splice.listTransferOffers(walletUsername);
+
+    const normalizedUserParty = normalizeCantonPartyId(user.cantonPartyId)
+      ?? user.cantonPartyId;
+
+    const incoming = offers
+      .filter((offer) => {
+        const payload = offer.payload as Record<string, unknown> | undefined;
+        const receiver = typeof payload?.receiver_party_id === 'string'
+          ? payload.receiver_party_id
+          : null;
+        if (!receiver) return false;
+        return cantonPartyIdsEqual(receiver, normalizedUserParty);
+      })
+      .map((offer) => {
+        const payload = (offer.payload ?? {}) as Record<string, unknown>;
+        const senderPartyId = (typeof payload.sender_party_id === 'string'
+          ? payload.sender_party_id
+          : '') as string;
+        return {
+          contractId: offer.contractId,
+          senderParty: senderPartyId,
+          senderUsername: senderPartyId.split('::')[0] ?? senderPartyId,
+          amount: String(payload.amount ?? '0'),
+          description: String(payload.description ?? ''),
+          expiresAtMicros: String(payload.expires_at ?? '0'),
+          createdAt: typeof payload.created_at === 'string'
+            ? payload.created_at
+            : undefined,
+          incoming: true,
+        };
+      });
+
+    return {
+      offers: incoming,
+    };
+  }
+
+  /**
+   * Accept an incoming transfer offer for the authenticated user.
+   * POST /api/party/accept-offer
+   */
+  @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
+  @Post('accept-offer')
+  async acceptOffer(
+    @Req() req: AuthedReq,
+    @Body() body: { contractId: string },
+  ) {
+    const contractId = body.contractId?.trim();
+    if (!contractId) {
+      throw new BadRequestException('contractId is required.');
+    }
+
+    const user = await this.users.findById(req.user.userId);
+    if (!user?.cantonPartyId || !user.username) {
+      throw new BadRequestException('Create your wallet first.');
+    }
+
+    const walletUsername =
+      (await this.splice.resolveWalletUsernameForParty(user.cantonPartyId)) ??
+      user.username;
+
+    const accepted = await this.splice.acceptOfferViaWalletWithRetry(
+      contractId,
+      walletUsername,
+      { attempts: 5, delayMs: 1500 },
+    );
+
+    if (!accepted) {
+      // Fallback: try Canton Ledger API direct accept
+      const ledgerResult = await this.ledger.acceptTransferOffer(
+        contractId,
+        user.cantonPartyId,
+      );
+      if (!ledgerResult.accepted) {
+        throw new BadRequestException(
+          'Failed to accept transfer offer. The offer may have expired or already been processed.',
+        );
+      }
+    }
+
+    return {
+      accepted: true,
+      contractId,
+      message: 'Transfer offer accepted. CC will arrive in your wallet shortly.',
+    };
+  }
+
   /** Check reachability of Canton JSON Ledger API and Splice Validator API. */
   @SkipThrottle()
   @Get('ledger-status')
