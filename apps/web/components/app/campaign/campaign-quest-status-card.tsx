@@ -53,7 +53,7 @@ export function CampaignQuestStatusCard({
   return (
     <section
       className={cn(
-        "rounded-3xl border bg-[var(--card)] px-6 py-5",
+        "rounded-xl border bg-[var(--card)] px-5 py-4 shadow-sm",
         styles.border,
       )}
     >
