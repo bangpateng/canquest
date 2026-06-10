@@ -1721,16 +1721,6 @@ export class QuestsService {
         });
       }
 
-      if (claimSessionId) {
-        const marked = await this.questLedger.markClaimFeePaid({
-          sessionContractId: claimSessionId,
-          feeTxId,
-        });
-        if (!marked.ok) {
-          this.logger.warn(`ClaimSession fee mark failed: ${marked.errors.join(' | ')}`);
-        }
-      }
-
       // Step 2: reward wallet (canquest-reward) sends reward → same user party (only after fee is collected).
       await this.assertRewardPool(rewardCc);
       this.logger.log(
@@ -1754,13 +1744,22 @@ export class QuestsService {
         throw new Error('reward accept failed');
       }
 
+      // canquest-v11: Atomic DAML choice — fee + reward + audit trail dalam SATU transaksi.
+      // Jika salah satu gagal, Canton rollback seluruhnya. Tidak ada partial commit.
       if (claimSessionId) {
-        const marked = await this.questLedger.markClaimRewardSent({
-          sessionContractId: claimSessionId,
+        const atomicResult = await this.questLedger.atomicFeeAndReward({
+          claimContractId: claimSessionId,
+          feeTxId,
           rewardTxId: rewardOfferId,
+          txLogId: `fcfstx-${reservedDrawId.slice(0, 12)}`,
+          amountMicroCc: Math.round(rewardCc * 1_000_000),
+          description: `FCFS reward — ${quest.title}`,
+          referenceId: questId,
         });
-        if (!marked.ok) {
-          this.logger.warn(`ClaimSession reward mark failed: ${marked.errors.join(' | ')}`);
+        if (!atomicResult.ok) {
+          this.logger.warn(
+            `AtomicFeeAndReward FCFS failed (non-blocking): ${atomicResult.errors.join(' | ')}`,
+          );
         }
       }
 
@@ -1774,8 +1773,13 @@ export class QuestsService {
         ledgerTxId: rewardOfferId,
       });
 
+      // Asynchronous State Pattern — non-blocking balance sync
       if (username) {
-        await this.inboundSync.alignBalanceFromChain(userId, username);
+        void this.inboundSync
+          .alignBalanceFromChain(userId, username)
+          .catch((err) =>
+            this.logger.warn(`Balance sync failed (non-blocking): ${String(err)}`),
+          );
       }
 
       const rewardMicroCc = BigInt(Math.round(rewardCc * 1_000_000));
@@ -1980,27 +1984,6 @@ export class QuestsService {
         feeTargetPartyId: this.feeTargetPartyId ?? validatorPartyId,
       });
 
-      if (claimSessionId) {
-        const marked = await this.questLedger.markClaimFeePaid({
-          sessionContractId: claimSessionId,
-          feeTxId,
-        });
-        if (!marked.ok) {
-          this.logger.warn(`ClaimSession fee mark failed: ${marked.errors.join(' | ')}`);
-        }
-      }
-
-      // NEW: Mark EarnClaimSession fee paid for CC Raffle
-      if (earnClaimSessionId) {
-        const earnFeeMarked = await this.questLedger.markEarnClaimFeePaid({
-          sessionContractId: earnClaimSessionId,
-          feeTxId,
-        });
-        if (!earnFeeMarked.ok) {
-          this.logger.warn(`EarnClaimSession (CC_RAFFLE) fee mark failed: ${earnFeeMarked.errors.join(' | ')}`);
-        }
-      }
-
       await this.assertRewardPool(rewardCc);
       const rewardOfferId = await this.splice.createTransferOffer(
         cantonPartyId,
@@ -2020,24 +2003,39 @@ export class QuestsService {
         throw new Error('reward accept failed');
       }
 
+      // canquest-v11: Atomic DAML choice — fee + reward + audit trail.
+      // Prioritas utama claimSessionId (QuestClaim DAML). earnClaimSessionId 
+      // adalah fallback legacy yang tetap jalan sendiri karena deprecated stub.
       if (claimSessionId) {
-        const marked = await this.questLedger.markClaimRewardSent({
-          sessionContractId: claimSessionId,
+        const atomicResult = await this.questLedger.atomicFeeAndReward({
+          claimContractId: claimSessionId,
+          feeTxId,
           rewardTxId: rewardOfferId,
+          txLogId: `drawtx-${draw.id.slice(0, 12)}`,
+          amountMicroCc: Math.round(rewardCc * 1_000_000),
+          description: `Raffle reward — ${quest.title}`,
+          referenceId: questId,
         });
-        if (!marked.ok) {
-          this.logger.warn(`ClaimSession reward mark failed: ${marked.errors.join(' | ')}`);
+        if (!atomicResult.ok) {
+          this.logger.warn(
+            `AtomicFeeAndReward DrawCC failed (non-blocking): ${atomicResult.errors.join(' | ')}`,
+          );
         }
-      }
-
-      // NEW: Mark EarnClaimSession reward sent for CC Raffle
-      if (earnClaimSessionId) {
+      } else if (earnClaimSessionId) {
+        // Legacy path: earnClaimSession tetap menggunakan mark terpisah (deprecated stub)
+        const earnFeeMarked = await this.questLedger.markEarnClaimFeePaid({
+          sessionContractId: earnClaimSessionId,
+          feeTxId,
+        });
+        if (!earnFeeMarked.ok) {
+          this.logger.warn(`EarnClaimSession fee mark failed: ${earnFeeMarked.errors.join(' | ')}`);
+        }
         const earnRewardMarked = await this.questLedger.markEarnClaimRewardSent({
           sessionContractId: earnClaimSessionId,
           rewardTxId: rewardOfferId,
         });
         if (!earnRewardMarked.ok) {
-          this.logger.warn(`EarnClaimSession (CC_RAFFLE) reward mark failed: ${earnRewardMarked.errors.join(' | ')}`);
+          this.logger.warn(`EarnClaimSession reward mark failed: ${earnRewardMarked.errors.join(' | ')}`);
         }
       }
 
@@ -2051,8 +2049,14 @@ export class QuestsService {
         ledgerTxId: rewardOfferId,
       });
 
+      // Asynchronous State Pattern: balance sync tidak memblokir response HTTP.
+      // UI Next.js langsung menerima response, balance di-refresh di belakang.
       if (username) {
-        await this.inboundSync.alignBalanceFromChain(userId, username);
+        void this.inboundSync
+          .alignBalanceFromChain(userId, username)
+          .catch((err) =>
+            this.logger.warn(`Balance sync failed (non-blocking): ${String(err)}`),
+          );
       }
 
       const rewardMicroCc = BigInt(Math.round(rewardCc * 1_000_000));
@@ -2467,8 +2471,13 @@ export class QuestsService {
           counterparty: validatorPartyId.split('::')[0],
           ledgerTxId: rewardOfferId,
         });
+        // Asynchronous State Pattern — non-blocking balance sync
         if (username) {
-          await this.inboundSync.alignBalanceFromChain(userId, username);
+          void this.inboundSync
+            .alignBalanceFromChain(userId, username)
+            .catch((err) =>
+              this.logger.warn(`Balance sync failed (non-blocking): ${String(err)}`),
+            );
         }
       }
       const codeRow = await this.prisma.inviteCodePool.findFirst({

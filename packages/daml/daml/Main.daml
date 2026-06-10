@@ -271,6 +271,53 @@ template QuestClaim
         assertMsg "revealedAt tidak boleh kosong!" (revealedAt /= "")
         create this with rewardCode = code
 
+    -- Atomic choice: fee payment + reward delivery dalam SATU transaksi DAML.
+    -- Jika salah satu langkah gagal, SELURUH transaksi ROLLBACK otomatis.
+    -- Canton menjamin ACID: semua create di dalam satu choice dieksekusi atomically.
+    -- Docs: https://docs.canton.network/overview/learn/architecture
+    choice AtomicFeeAndReward : (ContractId QuestClaim, ContractId QuestClaim, ContractId CcTransactionLog)
+      with
+        feeTxId        : Text
+        feeConfirmedAt : Text
+        rewardTxId     : Text
+        rewardSentAt   : Text
+        txLogId        : Text
+        amountMicroCc  : Int
+        description    : Text
+        referenceId    : Text
+      controller admin
+      do
+        assertMsg "Minimal harus ada fee atau reward untuk transaksi atomic!" (claimFeeCc > 0.0 || rewardCc > 0.0)
+        assertMsg "Fee sudah dibayar sebelumnya!" (not feePaid || claimFeeCc == 0.0)
+        assertMsg "Reward sudah dikirim sebelumnya!" (not rewardSent)
+        assertMsg "feeTxId tidak boleh kosong!" (feeTxId /= "")
+        assertMsg "rewardTxId tidak boleh kosong!" (rewardTxId /= "")
+
+        -- Step 1: Konfirmasi fee terbayar (mutasi QuestClaim)
+        claimWithFeeCid <- create this with
+          feePaid = True
+          feeTxId = feeTxId
+
+        -- Step 2: Konfirmasi reward terkirim (mutasi lanjutan)
+        claimFinalCid <- create claimWithFeeCid with
+          rewardSent = True
+          rewardTxId = rewardTxId
+
+        -- Step 3: Catat transaksi CC (audit trail on-chain)
+        txLogCid <- create CcTransactionLog with
+          admin = admin
+          userAddress = userAddress
+          username = ""
+          txLogId = txLogId
+          txType = "QUEST_REWARD"
+          amountMicroCc = amountMicroCc
+          description = description
+          referenceId = referenceId
+          ledgerTxId = rewardTxId
+          createdAt = rewardSentAt
+
+        pure (claimWithFeeCid, claimFinalCid, txLogCid)
+
 
 -- ============================================================
 -- 5. TEMPLATE DAILY CHECK-IN

@@ -500,6 +500,10 @@ export class CantonLedgerService {
    *   "readAs": ["party"]
    * }
    *
+   * NOTE: `/v2/contracts/by-key` may not be available in all Canton versions.
+   * If the endpoint returns 404, we fall back to queryActiveContracts and
+   * apply the key-based filter client-side.
+   *
    * Returns the contract entry (with contractId) if found, null if not found,
    * or throws on permission / transport errors.
    *
@@ -518,12 +522,18 @@ export class CantonLedgerService {
         signal: AbortSignal.timeout(10_000),
       });
 
+      // 404 = endpoint not available on this participant version
+      // → fall back to ACS query + client-side key match
+      if (res.status === 404) {
+        this.logger.debug(
+          `/v2/contracts/by-key returned 404 — falling back to ACS query`,
+        );
+        return this.fetchByKeyViaAcs(templateId, key, readAs);
+      }
+
       if (!res.ok) {
-        // 404 = key not found (normal, not a warning)
-        if (res.status !== 404) {
-          const text = await res.text();
-          this.logger.warn(`fetchByKey ${res.status}: ${text.slice(0, 200)}`);
-        }
+        const text = await res.text();
+        this.logger.warn(`fetchByKey ${res.status}: ${text.slice(0, 200)}`);
         return null;
       }
 
@@ -542,6 +552,56 @@ export class CantonLedgerService {
       this.logger.warn(`fetchByKey error: ${String(err)}`);
       return null;
     }
+  }
+
+  /**
+   * Fallback: query ACS for the template and filter by key client-side.
+   * Used when `/v2/contracts/by-key` is not available (older Canton versions).
+   *
+   * keyMatch is a simple shallow comparison of the DAML createArguments fields
+   * against the provided key record. For canonical Canton key serialisation,
+   * keys are compared via Daml-LF value equality, but for our internal app
+   * templates this shallow match is sufficient.
+   */
+  private async fetchByKeyViaAcs(
+    templateId: string,
+    key: unknown,
+    readAs: string[],
+  ): Promise<{ contractId: string; createArgument?: unknown } | null> {
+    try {
+      const contracts = await this.queryActiveContracts(templateId, readAs);
+      const keyObj = key as Record<string, unknown>;
+
+      for (const entry of contracts) {
+        if (!entry || typeof entry !== 'object') continue;
+        const obj = entry as Record<string, unknown>;
+        const args =
+          (obj.createArgument as Record<string, unknown> | undefined) ??
+          ((obj.CreatedTreeEvent as Record<string, unknown> | undefined)
+            ?.createArgument as Record<string, unknown> | undefined) ??
+          ((obj.CreatedEvent as Record<string, unknown> | undefined)
+            ?.createArgument as Record<string, unknown> | undefined);
+        const cid =
+          typeof obj.contractId === 'string'
+            ? obj.contractId
+            : null;
+
+        if (!args || !cid) continue;
+
+        // Shallow key match — compare every key in keyObj against args
+        let match = true;
+        for (const [k, v] of Object.entries(keyObj)) {
+          if (args[k] !== v) {
+            match = false;
+            break;
+          }
+        }
+        if (match) return { contractId: cid, createArgument: args };
+      }
+    } catch (err) {
+      this.logger.warn(`fetchByKeyViaAcs error: ${String(err)}`);
+    }
+    return null;
   }
 
   /**

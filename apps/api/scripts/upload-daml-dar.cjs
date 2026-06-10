@@ -54,6 +54,7 @@ async function main() {
     process.exit(1);
   }
 
+  // ── Step 1: Upload DAR ──
   const token = jwt.sign({ sub: user, aud: audience }, secret, {
     algorithm: 'HS256',
     expiresIn: '5m',
@@ -78,20 +79,102 @@ async function main() {
   console.log('Upload OK:', text || res.status);
   console.log('');
 
-  // Extract main package id from DAR filename suffix when possible
+  // ── Step 2: Query /v2/packages to get the full 64-char package ID ──
+  const packagesUrl = `${baseUrl}/v2/packages`;
+  const pkgRes = await fetch(packagesUrl, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  let pkgIdFromLedger = null;
+  let pkgNameFromLedger = null;
+
+  if (pkgRes.ok) {
+    try {
+      const pkgJson = await pkgRes.json();
+      const details = pkgJson.packageDetails ?? [];
+      // Cari package canquest di daftar package yang terdaftar
+      for (const p of details) {
+        if ((p.packageName ?? '').includes('canquest')) {
+          // Pilih package ID paling baru (terakhir di list)
+          pkgIdFromLedger = p.packageId;
+          pkgNameFromLedger = p.packageName;
+        }
+      }
+      // Kalau ada lebih dari 1 canquest package, pilih version tertinggi
+      if (!pkgIdFromLedger && details.length > 0) {
+        const canquestPkgs = details
+          .filter((p) => (p.packageName ?? '').includes('canquest'))
+          .sort((a, b) => (b.packageVersion ?? '') > (a.packageVersion ?? '') ? 1 : -1);
+        if (canquestPkgs.length > 0) {
+          pkgIdFromLedger = canquestPkgs[0].packageId;
+          pkgNameFromLedger = canquestPkgs[0].packageName;
+        }
+      }
+    } catch (err) {
+      console.warn('⚠ Could not parse /v2/packages response:', err.message);
+    }
+  } else {
+    console.warn('⚠ /v2/packages returned', pkgRes.status, '— trying filename fallback');
+  }
+
+  // Fallback: extract dari DAR filename suffix
   const darName = path.basename(darPath);
   const idMatch = darName.match(/-([a-f0-9]{64})\.dar$/i);
   const pkgFromDar = idMatch ? idMatch[1] : null;
 
-  console.log('Add to apps/api/.env:');
-  console.log('CANTON_DAML_PACKAGE_NAME=canquest-v10');
-  if (pkgFromDar) {
-    console.log('CANTON_DAML_PACKAGE_ID=' + pkgFromDar);
-  } else {
-    console.log('CANTON_DAML_PACKAGE_ID=<run: npm run daml:inspect>');
+  const finalPkgId = pkgIdFromLedger ?? pkgFromDar ?? null;
+  const finalPkgName = pkgNameFromLedger ?? 'canquest-v11';
+
+  // ── Step 3: Auto-update apps/api/.env ──
+  const envPath = path.join(__dirname, '..', '.env');
+
+  if (!fs.existsSync(envPath)) {
+    console.error('ERROR: apps/api/.env not found at', envPath);
+    console.log('');
+    console.log('Manual steps:');
+    console.log(`  CANTON_DAML_PACKAGE_NAME=${finalPkgName}`);
+    if (finalPkgId) {
+      console.log(`  CANTON_DAML_PACKAGE_ID=${finalPkgId}`);
+    } else {
+      console.log('  CANTON_DAML_PACKAGE_ID=<run: npm run daml:inspect>');
+    }
+    process.exit(finalPkgId ? 0 : 1);
   }
-  console.log('CANTON_OPERATOR_PARTY_ID=<run: npm run quest:operator>');
-  console.log('Then: node scripts/verify-daml-package.cjs && pm2 restart canquest-api');
+
+  let envContent = fs.readFileSync(envPath, 'utf8');
+  const original = envContent;
+
+  // Update CANTON_DAML_PACKAGE_NAME
+  const nameRegex = /^(\s*CANTON_DAML_PACKAGE_NAME\s*=\s*).*$/m;
+  if (nameRegex.test(envContent)) {
+    envContent = envContent.replace(nameRegex, `$1${finalPkgName}`);
+  } else {
+    // Append if not found
+    envContent += `\nCANTON_DAML_PACKAGE_NAME=${finalPkgName}\n`;
+  }
+
+  // Update CANTON_DAML_PACKAGE_ID
+  if (finalPkgId) {
+    const idRegex = /^(\s*CANTON_DAML_PACKAGE_ID\s*=\s*).*$/m;
+    if (idRegex.test(envContent)) {
+      envContent = envContent.replace(idRegex, `$1${finalPkgId}`);
+    } else {
+      envContent += `\nCANTON_DAML_PACKAGE_ID=${finalPkgId}\n`;
+    }
+  }
+
+  if (envContent !== original) {
+    fs.writeFileSync(envPath, envContent, 'utf8');
+    console.log('');
+    console.log('✅ apps/api/.env UPDATED automatically:');
+    console.log(`   CANTON_DAML_PACKAGE_NAME=${finalPkgName}`);
+    if (finalPkgId) console.log(`   CANTON_DAML_PACKAGE_ID=${finalPkgId}`);
+    else console.log('   CANTON_DAML_PACKAGE_ID=<NOT FOUND — run: npm run daml:inspect>');
+    console.log('');
+    console.log('Next: pm2 restart canquest-api --update-env');
+  } else {
+    console.log('ℹ apps/api/.env already up-to-date (no changes needed).');
+  }
 }
 
 main().catch((e) => {

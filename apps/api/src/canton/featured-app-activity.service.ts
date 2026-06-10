@@ -111,13 +111,29 @@ export class FeaturedAppActivityService {
       return false;
     }
 
-    // FeaturedAppActivityMarker templateId from Splice amulet package.
-    // The full package hash prefix may vary between environments; use '#' shorthand
-    // which the JSON Ledger API resolves via dynamic package resolution.
-    // See: https://docs.canton.network/appdev/deep-dives/values-in-the-ledger-api
+    // FeaturedAppActivityMarker templateId from the Splice amulet package.
+    //
+    // IMPORTANT for MainNet: `#` shorthand (dynamic package resolution) is
+    // unreliable in production. Always set CANTON_FEATURED_APP_MARKER_TEMPLATE_ID
+    // to the FULL package hash of the deployed splice-amulet DAR:
+    //   "<64-char-package-hash>:Splice.Amulet:FeaturedAppActivityMarker"
+    //
+    // You can find the hash via:
+    //   node apps/api/scripts/find-v7-package.cjs splice-amulet
+    //
+    // The `#` shorthand fallback is ONLY for DevNet/TestNet where package versions
+    // change frequently.
     const templateId =
-      this.config.get<string>('CANTON_FEATURED_APP_MARKER_TEMPLATE_ID') ??
-      '#splice-amulet:Splice.Amulet:FeaturedAppActivityMarker';
+      this.config.get<string>('CANTON_FEATURED_APP_MARKER_TEMPLATE_ID')?.trim() ||
+      (() => {
+        this.logger.warn(
+          'CANTON_FEATURED_APP_MARKER_TEMPLATE_ID not set — FeaturedAppActivityMarker will be skipped. ' +
+          'On MainNet this MUST be set to the full package hash of splice-amulet.',
+        );
+        return '';
+      })();
+
+    if (!templateId) return false;
 
     const commandId = `canquest-activity-${activityType}-${randomUUID()}`;
     const url = `${this.baseUrl}/v2/commands/submit-and-wait`;

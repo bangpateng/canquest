@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { CantonLedgerService } from './canton-ledger.service';
@@ -112,7 +112,7 @@ export interface ClaimSessionLedgerResult {
 }
 
 @Injectable()
-export class QuestLedgerService {
+export class QuestLedgerService implements OnModuleInit {
   private readonly logger = new Logger(QuestLedgerService.name);
   private operatorFallbackWarned = false;
 
@@ -120,6 +120,45 @@ export class QuestLedgerService {
     private readonly ledger: CantonLedgerService,
     private readonly config: ConfigService,
   ) {}
+
+  /**
+   * MainNet safety check — pastikan 3 party punya fingerprint berbeda.
+   * Kalau semua sama, Canton anggap 1 party → isolasi fee/reward GAGAL.
+   */
+  onModuleInit(): void {
+    if (!this.isConfigured()) return;
+    const validator = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
+    const operator = this.operatorPartyId;
+    const fee = this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim();
+
+    const fingerprints = new Set<string>();
+    for (const p of [validator, operator, fee]) {
+      if (!p) continue;
+      const fp = p.split('::')[1] ?? '';
+      if (fp) fingerprints.add(fp);
+    }
+
+    if (fingerprints.size < 2) {
+      this.logger.error(
+        '╔══════════════════════════════════════════════════════════════╗\n' +
+        '║  ⛔ MAINNET PARTY FINGERPRINT ERROR                          ║\n' +
+        '║  Semua party ID menggunakan fingerprint yang SAMA.           ║\n' +
+        '║  Canton menganggapnya 1 party → isolasi fee/reward GAGAL.   ║\n' +
+        '║                                                            ║\n' +
+        '║  PERBAIKI: Buat 2 Splice user BARU di VPS1:                 ║\n' +
+        '║    curl -X POST .../admin/users -d \'{"name":"canquest-operator"}\'  ║\n' +
+        '║    curl -X POST .../admin/users -d \'{"name":"canquest-fee"}\'       ║\n' +
+        '║  ⚠  Setiap user AKAN MENDAPAT FINGERPRINT BERBEDA.          ║\n' +
+        '║  ⚠  JANGAN pakai fingerprint validator untuk operator/fee.   ║\n' +
+        '╚══════════════════════════════════════════════════════════════╝',
+      );
+    } else if (fingerprints.size < 3) {
+      this.logger.warn(
+        '⚠ MAINNET: Hanya 2 fingerprint unik terdeteksi. ' +
+        'Pastikan canquest-validator, canquest-operator, dan canquest-fee SEMUA berbeda.',
+      );
+    }
+  }
 
   // ── Type helpers — Canton JSON API v2 serialization ─────────────────────────
 
@@ -504,6 +543,78 @@ export class QuestLedgerService {
       { code: params.code, revealedAt: new Date().toISOString() }, [operator], `reveal-code-${randomUUID()}`);
     if (ok) { const cids = this.extractContractIds(text); return { ok: true, newContractId: cids[0] ?? null, errors: [] }; }
     return { ok: false, newContractId: null, errors: [text.slice(0, 200)] };
+  }
+
+  /**
+   * AtomicFeeAndReward — single DAML choice yang menggabungkan:
+   *   1. ConfirmFeePaid   (fee terbayar)
+   *   2. ConfirmRewardSent (reward terkirim)
+   *   3. CcTransactionLog  (audit trail)
+   *
+   * Canton menjamin ketiga operasi di atas bersifat ATOMIC:
+   * jika salah satu gagal, seluruh transaksi rollback otomatis.
+   *
+   * Ini menggantikan pemanggilan terpisah confirmFeePaid + confirmRewardSent +
+   * recordCcTransactionLog yang sebelumnya bisa menyebabkan inkonsistensi
+   * (fee tercatat tapi reward gagal, atau sebaliknya).
+   */
+  async atomicFeeAndReward(params: {
+    claimContractId: string;
+    feeTxId: string;
+    rewardTxId: string;
+    txLogId: string;
+    amountMicroCc: number;
+    description: string;
+    referenceId: string;
+  }): Promise<{
+    ok: boolean;
+    claimWithFeeCid: string | null;
+    claimFinalCid: string | null;
+    txLogCid: string | null;
+    errors: string[];
+  }> {
+    if (!this.isClaimSessionConfigured()) {
+      return { ok: false, claimWithFeeCid: null, claimFinalCid: null, txLogCid: null, errors: ['Claim session ledger disabled'] };
+    }
+    const tpl = this.templateId(TPL.QuestClaim);
+    const operator = this.operatorPartyId;
+    if (!operator) {
+      return { ok: false, claimWithFeeCid: null, claimFinalCid: null, txLogCid: null, errors: ['Canton operator party not configured'] };
+    }
+
+    const now = new Date().toISOString();
+    const { ok, text } = await this.ledger.exerciseChoice(
+      params.claimContractId,
+      tpl,
+      'AtomicFeeAndReward',
+      {
+        feeTxId: params.feeTxId,
+        feeConfirmedAt: now,
+        rewardTxId: params.rewardTxId,
+        rewardSentAt: now,
+        txLogId: params.txLogId,
+        amountMicroCc: this.intStr(params.amountMicroCc),
+        description: params.description,
+        referenceId: params.referenceId,
+      },
+      [operator],
+      `atomic-fee-reward-${params.claimContractId.slice(0, 16)}-${randomUUID()}`,
+    );
+
+    if (ok) {
+      const cids = this.extractContractIds(text);
+      // Expected: [claimWithFeeCid, claimFinalCid, txLogCid] (3 contract IDs)
+      const claimWithFeeCid = cids[0] ?? null;
+      const claimFinalCid = cids[1] ?? null;
+      const txLogCid = cids[2] ?? null;
+      this.logger.log(
+        `AtomicFeeAndReward OK: claimFee=${claimWithFeeCid?.slice(0, 12)} claimFinal=${claimFinalCid?.slice(0, 12)} txLog=${txLogCid?.slice(0, 12)}`,
+      );
+      return { ok: true, claimWithFeeCid, claimFinalCid, txLogCid, errors: [] };
+    }
+
+    this.logger.warn(`AtomicFeeAndReward failed: ${text.slice(0, 300)}`);
+    return { ok: false, claimWithFeeCid: null, claimFinalCid: null, txLogCid: null, errors: [this.formatLedgerError(text, 'AtomicFeeAndReward failed')] };
   }
 
   // ── 8. ReferralReward ────────────────────────────────────────────────────────
