@@ -290,12 +290,8 @@ export function DashboardView() {
                 className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_100%_0%,rgb(var(--canton-rgb)/0.08),transparent_60%)]"
                 aria-hidden
               />
-              <div className="relative flex items-center gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--primary)]/15 border border-[var(--primary)]/20">
-                  <Sparkles className="h-6 w-6 text-[var(--primary)]" />
-                </div>
-                <div>
-                  <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
+              <div className="relative">
+                <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
                     {me?.displayName
                       ? `Welcome back, ${me.displayName.split(" ")[0]}`
                       : "Welcome to CanQuest"}
@@ -303,7 +299,6 @@ export function DashboardView() {
                   <p className="mt-1 text-sm text-slate-400">
                     Complete quests, earn CC tokens, and climb the leaderboard.
                   </p>
-                </div>
               </div>
             </div>
           )}
