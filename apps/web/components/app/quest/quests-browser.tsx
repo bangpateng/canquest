@@ -11,7 +11,7 @@ import { inputClass, surfaceToolbarClass } from "@/lib/ui/ui-tokens";
 import { cn } from "@/lib/utils/utils";
 import { ListPagination } from "@/components/app/list/list-pagination";
 import { buttonVariants } from "@/components/ui/button";
-import { CheckCircle2, Search } from "lucide-react";
+import { CheckCircle2, Search, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
@@ -174,7 +174,7 @@ export function QuestsBrowser({
     <div
       className={cn(
         "flex overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-        isEarn ? "gap-2" : "gap-2 pb-1 sm:pb-0",
+        isEarn ? "gap-1.5" : "gap-2 pb-1 sm:pb-0",
       )}
     >
       {TABS.map((tab) => {
@@ -212,9 +212,9 @@ export function QuestsBrowser({
         type="search"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search"
+        placeholder="Search quests..."
         className={cn(
-          "w-full rounded-xl border border-white/[0.06] bg-slate-900/40 py-2.5 pl-11 pr-4 text-sm font-medium text-slate-100 outline-none placeholder:text-slate-500 focus:border-[var(--primary)]/40 focus:ring-2 focus:ring-[var(--ring)] transition-all duration-200 backdrop-blur-xl",
+          "w-full rounded-xl border border-white/[0.08] bg-[#0a0c14]/80 py-2.5 pl-11 pr-4 text-sm font-medium text-slate-100 outline-none placeholder:text-slate-500 focus:border-[var(--primary)]/40 focus:ring-2 focus:ring-[var(--ring)] focus:shadow-[0_0_20px_rgb(var(--canton-rgb)/0.08)] transition-all duration-200 backdrop-blur-xl",
           isEarn && "bg-[var(--background)]/60",
         )}
         autoComplete="off"
@@ -226,7 +226,7 @@ export function QuestsBrowser({
     <div className={cn("w-full max-w-full overflow-hidden", isEarn ? "space-y-4 sm:space-y-5 md:space-y-6" : "space-y-5 sm:space-y-6 md:space-y-8")}>
       {isEarn ? (
         <section
-          className="w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-slate-900/40 p-3 backdrop-blur-xl sm:p-4 md:p-5"
+          className="w-full overflow-hidden rounded-xl border border-white/[0.06] bg-[#0a0c14]/70 backdrop-blur-2xl p-3 sm:p-4 md:p-5"
           aria-label={t("earnCampaigns.filterAria")}
         >
           <div className="flex w-full min-w-0 items-center gap-2 sm:gap-3">
@@ -252,21 +252,26 @@ export function QuestsBrowser({
         )
       ) : loadError ? (
         <div className="rounded-2xl border border-red-500/20 bg-red-500/5 px-4 py-10 text-center backdrop-blur-xl sm:px-6 sm:py-14">
-          <p className="text-lg font-bold tracking-tight text-red-200 sm:text-xl md:text-2xl">{t("earnCampaigns.loadFailed")}</p>
+          <p className="text-lg font-bold tracking-tight text-red-200 sm:text-xl md:text-2xl">
+            {t("earnCampaigns.loadFailed")}
+          </p>
           <p className="mt-2 text-sm font-medium leading-relaxed text-red-200/70 sm:mt-3 sm:text-base">
             {isWalletRequiredLoadError(loadError)
               ? t("earnCampaigns.loadFailedHint")
               : loadError}
           </p>
           {isEarn && isWalletRequiredLoadError(loadError) ? (
-            <Link href="/wallet" className={cn(buttonVariants({ size: "sm" }), "mt-6 rounded-md sm:mt-8")}>
+            <Link
+              href="/wallet"
+              className={cn(buttonVariants({ size: "sm" }), "mt-6 rounded-xl sm:mt-8")}
+            >
               {t("dashboard.createWallet")}
             </Link>
           ) : (
             <button
               type="button"
               onClick={() => loadQuests()}
-              className={cn(buttonVariants({ size: "sm" }), "mt-6 rounded-md sm:mt-8")}
+              className={cn(buttonVariants({ size: "sm" }), "mt-6 rounded-xl sm:mt-8")}
             >
               {t("spin.retry")}
             </button>
@@ -274,20 +279,27 @@ export function QuestsBrowser({
         </div>
       ) : filtered.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-white/[0.08] bg-white/[0.02] px-4 py-16 text-center backdrop-blur-xl sm:px-8 sm:py-20">
-          <p className="text-lg font-bold tracking-tight text-slate-100 sm:text-xl md:text-2xl">
-            {query ? t("quests.noMatch") : t("quests.noPrograms")}
-          </p>
-          <p className="mx-auto mt-2 max-w-md text-sm font-medium leading-relaxed text-slate-500 sm:mt-3 sm:text-base">
-            {query
-              ? t("quests.tryAnother")
-              : allQuests.length === 0
-                ? t("earnCampaigns.noCampaignsHint")
-                : t("earnCampaigns.tryOtherTab")}
-          </p>
+          <div className="flex flex-col items-center gap-4">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/5 ring-1 ring-white/10">
+              <Search className="h-8 w-8 text-slate-500" />
+            </div>
+            <div>
+              <p className="text-lg font-bold tracking-tight text-slate-100 sm:text-xl md:text-2xl">
+                {query ? t("quests.noMatch") : t("quests.noPrograms")}
+              </p>
+              <p className="mx-auto mt-2 max-w-md text-sm font-medium leading-relaxed text-slate-500 sm:mt-3 sm:text-base">
+                {query
+                  ? t("quests.tryAnother")
+                  : allQuests.length === 0
+                    ? t("earnCampaigns.noCampaignsHint")
+                    : t("earnCampaigns.tryOtherTab")}
+              </p>
+            </div>
+          </div>
           {isEarn && allQuests.length === 0 ? (
             <Link
               href={ROUTES.earnHub}
-              className={cn(buttonVariants({ size: "sm" }), "mt-6 inline-flex rounded-md sm:mt-8")}
+              className={cn(buttonVariants({ size: "sm" }), "mt-6 inline-flex rounded-xl sm:mt-8")}
             >
               {t("earnCampaigns.dailyTasks")}
             </Link>

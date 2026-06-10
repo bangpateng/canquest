@@ -45,23 +45,19 @@ interface SpinResult {
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 
-/**
- * High-contrast alternating palette so adjacent segments are always visually
- * distinct. Each entry is [fill, darkened-edge].
- */
 const PALETTE: [string, string][] = [
-  ["#06b6d4", "#0891b2"], // cyan
-  ["#6366f1", "#4f46e5"], // indigo
-  ["#f59e0b", "#d97706"], // amber
-  ["#10b981", "#059669"], // emerald
-  ["#f43f5e", "#e11d48"], // rose
-  ["#8b5cf6", "#7c3aed"], // violet
-  ["#0ea5e9", "#0284c7"], // sky
-  ["#ec4899", "#db2777"], // pink
-  ["#14b8a6", "#0d9488"], // teal
-  ["#a855f7", "#9333ea"], // purple
-  ["#22c55e", "#16a34a"], // green
-  ["#fb923c", "#ea580c"], // orange
+  ["#06b6d4", "#0891b2"],
+  ["#6366f1", "#4f46e5"],
+  ["#f59e0b", "#d97706"],
+  ["#10b981", "#059669"],
+  ["#f43f5e", "#e11d48"],
+  ["#8b5cf6", "#7c3aed"],
+  ["#0ea5e9", "#0284c7"],
+  ["#ec4899", "#db2777"],
+  ["#14b8a6", "#0d9488"],
+  ["#a855f7", "#9333ea"],
+  ["#22c55e", "#16a34a"],
+  ["#fb923c", "#ea580c"],
 ];
 
 function segmentColor(item: SpinItem, index: number): [string, string] {
@@ -74,23 +70,6 @@ function segmentColor(item: SpinItem, index: number): [string, string] {
 
 // ─── SpinWheel Component ──────────────────────────────────────────────────────
 
-/**
- * Canvas-based spin wheel.
- *
- * Coordinate system:
- *   - Segment i occupies the arc from angle (i * segAngle) to ((i+1) * segAngle)
- *     measured from the canvas "natural" 0 (right / 3 o'clock).
- *   - We apply a global `rotation` offset so the wheel appears to spin.
- *   - The pointer is drawn OUTSIDE the canvas as a fixed SVG arrow at the top.
- *   - The pointer points straight DOWN from the top, i.e. at canvas angle = -π/2.
- *
- * Winner stop formula (precise):
- *   We want segment `winnerIndex` to be centered under the pointer.
- *   Pointer is at canvas angle = -π/2.
- *   Segment i center (unrotated) = i * segAngle + segAngle / 2
- *   We need: R + i*segAngle + segAngle/2 = -π/2  (mod 2π)
- *   => R_target_base = -π/2 - winnerIndex*segAngle - segAngle/2
- */
 function SpinWheel({
   items,
   spinning,
@@ -108,8 +87,6 @@ function SpinWheel({
   const [displayRotation, setDisplayRotation] = useState(0);
   const idleSpinRef = useRef(false);
   const idleSpeedRef = useRef(0);
-
-  // ── Draw ──────────────────────────────────────────────────────────────────
 
   const drawWheel = useCallback(
     (rotation: number) => {
@@ -229,7 +206,6 @@ function SpinWheel({
     [items],
   );
 
-  // HiDPI setup
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -245,7 +221,6 @@ function SpinWheel({
     drawWheel(displayRotation);
   }, [drawWheel, displayRotation, items]);
 
-  // Idle spin (while waiting for API response)
   useEffect(() => {
     if (!spinning) {
       idleSpinRef.current = false;
@@ -270,7 +245,6 @@ function SpinWheel({
     };
   }, [spinning]);
 
-  // Stop animation (easing to winner)
   useEffect(() => {
     if (winnerIndex === null || spinning || items.length === 0) return;
 
@@ -328,8 +302,7 @@ function SpinWheel({
         style={{
           width: 380,
           height: 380,
-          background:
-            "radial-gradient(circle, rgba(6,182,212,0.12) 0%, rgba(99,102,241,0.08) 50%, transparent 70%)",
+          background: "radial-gradient(circle, rgba(6,182,212,0.12) 0%, rgba(99,102,241,0.08) 50%, transparent 70%)",
           filter: "blur(24px)",
         }}
       />
@@ -345,7 +318,7 @@ function SpinWheel({
         }}
       />
 
-      {/* Pointer — fixed SVG arrow at top center */}
+      {/* Pointer */}
       <div
         className="pointer-events-none absolute z-10"
         style={{ top: -2, left: "50%", transform: "translateX(-50%)" }}
@@ -464,7 +437,6 @@ export default function SpinRewardPage() {
 
   function handleSpinComplete() {
     setShowResult(true);
-    // Immediately refresh state so points balance updates right after winning
     void loadData();
   }
 
@@ -511,23 +483,18 @@ export default function SpinRewardPage() {
             <Ticket className="h-6 w-6 text-cyan-400" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-100">
+            <h1 className="text-xl font-bold tracking-tight text-white">
               Lucky Spin
             </h1>
+            <p className="text-xs text-slate-500">Spend points to win rewards</p>
           </div>
           {state && (
             <div className="ml-auto hidden sm:block">
-              <div
-                className="rounded-xl px-4 py-2 text-right"
-                style={{
-                  background: "rgba(6,182,212,0.06)",
-                  border: "1px solid rgba(6,182,212,0.18)",
-                }}
-              >
+              <div className="rounded-xl px-4 py-2 text-right border border-cyan-500/15 bg-cyan-500/[0.04] backdrop-blur-xl">
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
                   Balance
                 </p>
-                <p className="text-lg font-bold tabular-nums text-slate-100">
+                <p className="text-lg font-bold tabular-nums text-white">
                   {state.availablePoints.toLocaleString()}
                   <span className="ml-1 text-xs font-normal text-slate-400">pts</span>
                 </p>
@@ -537,25 +504,17 @@ export default function SpinRewardPage() {
         </div>
 
         {/* ── Main Spin Card ───────────────────────────────────────────────── */}
-        <div
-          className="overflow-hidden rounded-3xl"
-          style={{
-            background: "linear-gradient(160deg, rgba(15,23,42,0.95) 0%, rgba(15,23,42,0.98) 100%)",
-            border: "1px solid rgba(255,255,255,0.07)",
-            boxShadow: "0 32px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04)",
-          }}
-        >
+        <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50">
           {items.length === 0 ? (
             <div className="flex min-h-[280px] flex-col items-center justify-center gap-4 p-8 text-center">
-              <div
-                className="flex h-16 w-16 items-center justify-center rounded-2xl"
-                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
-              >
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/[0.04] border border-white/[0.08]">
                 <Gift className="h-8 w-8 text-slate-500" />
               </div>
               <div>
-                <p className="font-semibold text-slate-300">Create a wallet to spin</p>
-                <p className="mt-1 text-sm text-slate-500">You need a wallet before you can spin. Create one on the Wallet page.</p>
+                <p className="font-semibold text-white">Create a wallet to spin</p>
+                <p className="mt-1 text-sm text-slate-500">
+                  You need a wallet before you can spin. Create one on the Wallet page.
+                </p>
               </div>
             </div>
           ) : (
@@ -564,8 +523,7 @@ export default function SpinRewardPage() {
               <div
                 className="flex flex-col items-center gap-6 px-6 py-8"
                 style={{
-                  background:
-                    "radial-gradient(ellipse at 50% 0%, rgba(6,182,212,0.06) 0%, transparent 60%)",
+                  background: "radial-gradient(ellipse at 50% 0%, rgba(6,182,212,0.05) 0%, transparent 60%)",
                 }}
               >
                 <SpinWheel
@@ -575,37 +533,24 @@ export default function SpinRewardPage() {
                   onSpinComplete={handleSpinComplete}
                 />
 
-                {/* Result banner — shown after animation completes */}
+                {/* Result banner */}
                 {showResult && lastResult && (
-                  <div
-                    className="w-full max-w-sm overflow-hidden rounded-2xl"
-                    style={{
-                      background: "linear-gradient(135deg, rgba(16,185,129,0.12) 0%, rgba(6,182,212,0.08) 100%)",
-                      border: "1px solid rgba(16,185,129,0.25)",
-                      boxShadow: "0 8px 32px rgba(16,185,129,0.1)",
-                    }}
-                  >
+                  <div className="w-full max-w-sm overflow-hidden rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] backdrop-blur-xl">
                     <div className="flex items-center gap-3 px-5 py-4">
-                      <div
-                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
-                        style={{ background: "rgba(16,185,129,0.15)" }}
-                      >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 ring-1 ring-emerald-500/20">
                         <Trophy className="h-5 w-5 text-emerald-400" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs font-semibold uppercase tracking-wider text-emerald-500">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
                           You won!
                         </p>
-                        <p className="mt-0.5 truncate text-sm font-bold text-slate-100">
+                        <p className="mt-0.5 truncate text-sm font-bold text-white">
                           {lastResult.item.label}
                         </p>
                       </div>
                       <Sparkles className="h-4 w-4 shrink-0 text-emerald-400" />
                     </div>
-                    <div
-                      className="border-t px-5 py-2.5"
-                      style={{ borderColor: "rgba(16,185,129,0.15)" }}
-                    >
+                    <div className="border-t border-emerald-500/10 px-5 py-2.5">
                       <p className="text-xs text-slate-400">{lastResult.message}</p>
                     </div>
                   </div>
@@ -613,13 +558,7 @@ export default function SpinRewardPage() {
 
                 {/* Error */}
                 {error && (
-                  <div
-                    className="flex w-full max-w-sm items-start gap-3 rounded-2xl px-4 py-3"
-                    style={{
-                      background: "rgba(239,68,68,0.08)",
-                      border: "1px solid rgba(239,68,68,0.2)",
-                    }}
-                  >
+                  <div className="flex w-full max-w-sm items-start gap-3 rounded-xl border border-red-500/20 bg-red-500/[0.06] px-4 py-3 backdrop-blur-xl">
                     <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
                     <p className="text-sm font-medium text-red-400">{error}</p>
                   </div>
@@ -632,15 +571,14 @@ export default function SpinRewardPage() {
                     onClick={() => void handleSpin()}
                     disabled={!canSpin}
                     className={cn(
-                      "group relative w-full overflow-hidden rounded-lg px-8 py-4 text-base font-semibold transition-colors duration-200",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:ring-offset-2",
+                      "group relative w-full overflow-hidden rounded-xl px-8 py-4 text-base font-semibold transition-all duration-200",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050508]",
                       "disabled:pointer-events-none disabled:opacity-50",
                       canSpin
-                        ? "bg-emerald-500 text-white hover:bg-emerald-400 active:bg-emerald-600"
-                        : "bg-emerald-500 text-white",
+                        ? "bg-emerald-500 text-white hover:bg-emerald-400 hover:shadow-[0_0_30px_rgb(16_185_129/0.3)] active:bg-emerald-600"
+                        : "bg-emerald-500/80 text-white",
                     )}
                   >
-                    {/* Shimmer on hover */}
                     {canSpin && (
                       <span
                         className="pointer-events-none absolute inset-0 -translate-x-full skew-x-12 bg-white/10 transition-transform duration-700 group-hover:translate-x-full"
@@ -672,13 +610,7 @@ export default function SpinRewardPage() {
 
                   {/* Insufficient points warning */}
                   {state && state.availablePoints < state.spinCost && !spinning && (
-                    <div
-                      className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5"
-                      style={{
-                        background: "rgba(245,158,11,0.08)",
-                        border: "1px solid rgba(245,158,11,0.2)",
-                      }}
-                    >
+                    <div className="flex w-full items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2.5 backdrop-blur-xl">
                       <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
                       <p className="text-xs font-medium text-amber-400">
                         Need {state.spinCost} pts · You have {state.availablePoints} pts.
@@ -692,32 +624,20 @@ export default function SpinRewardPage() {
           )}
         </div>
 
-        {/* ── Points Balance (mobile) ──────────────────────────────────────── */}
+        {/* ── Points Balance (mobile) ────────────────────────────────────── */}
         {state && (
-          <div
-            className="sm:hidden rounded-2xl px-5 py-4"
-            style={{
-              background: "rgba(15,23,42,0.8)",
-              border: "1px solid rgba(255,255,255,0.07)",
-            }}
-          >
+          <div className="sm:hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl px-5 py-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
                   Available Points
                 </p>
-                <p className="mt-0.5 text-2xl font-bold tabular-nums text-slate-100">
+                <p className="mt-0.5 text-2xl font-bold tabular-nums text-white">
                   {state.availablePoints.toLocaleString()}
                   <span className="ml-1 text-sm font-normal text-slate-400">pts</span>
                 </p>
               </div>
-              <div
-                className="rounded-xl px-3 py-2 text-right"
-                style={{
-                  background: "rgba(6,182,212,0.06)",
-                  border: "1px solid rgba(6,182,212,0.15)",
-                }}
-              >
+              <div className="rounded-xl px-3 py-2 text-right border border-cyan-500/15 bg-cyan-500/[0.04]">
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
                   Cost / spin
                 </p>

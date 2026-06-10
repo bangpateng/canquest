@@ -2,7 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
-/* CanQuest — brand green from logo */
+/* ═══════════════════════════════════════════════════════════════════════════
+   CanQuest v2 — Dark Web3 Quest Platform
+   Green: #5ad98a (rgb 90 217 138) — preserved exactly
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 :root,
 .dark {
   --canton-rgb: 90 217 138;
@@ -55,12 +59,8 @@
 }
 
 @layer base {
-  html.dark {
-    color-scheme: dark;
-  }
-  html.light {
-    color-scheme: light;
-  }
+  html.dark { color-scheme: dark; }
+  html.light { color-scheme: light; }
   html, body {
     overflow-x: hidden;
     max-width: 100vw;
@@ -73,16 +73,28 @@
       radial-gradient(ellipse 120% 80% at 50% -30%, rgb(var(--canton-rgb) / 0.07), transparent 50%),
       radial-gradient(ellipse 60% 40% at 100% 0%, rgb(var(--canton-cyan-rgb) / 0.05), transparent 45%);
   }
-  /* Prevent any element from causing horizontal overflow on mobile */
   * {
     max-width: 100%;
     box-sizing: border-box;
   }
+
+  /* ── Scrollbar ────────────────────────────────────────────────────────── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(255 255 255 / 6%);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: rgb(255 255 255 / 12%); }
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   Glass Card System
+   ═══════════════════════════════════════════════════════════════════════════ */
 .glass-card {
   background: var(--elevated);
   backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--border);
   box-shadow:
     0 0 0 1px rgb(255 255 255 / 3%) inset,
@@ -92,6 +104,7 @@
 @media (max-width: 768px) {
   .glass-card {
     backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
   }
 }
 
@@ -106,6 +119,9 @@
     0 24px 48px rgb(0 0 0 / 40%);
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   Gradient Mesh & Particle Field
+   ═══════════════════════════════════════════════════════════════════════════ */
 .gradient-mesh {
   background:
     radial-gradient(ellipse 80% 50% at 50% -20%, rgb(var(--canton-rgb) / 0.14), transparent),
@@ -124,15 +140,59 @@
     0 0 24px rgb(var(--canton-rgb) / 0.08);
 }
 
-/*
- * UI radius tokens (apply via lib/ui-tokens.ts + buttonVariants):
- * - Buttons / primary CTAs → rounded-lg
- * - Pills / filter chips → rounded-full
- * - Inputs / inset blocks → rounded-xl
- * - Cards / panels → rounded-2xl
- */
+/* ═══════════════════════════════════════════════════════════════════════════
+   Glow Effects
+   ═══════════════════════════════════════════════════════════════════════════ */
+.glow-soft {
+  box-shadow: 0 0 30px rgb(var(--canton-rgb) / 0.06), 0 0 60px rgb(var(--canton-rgb) / 0.03);
+}
+.glow-strong {
+  box-shadow: 0 0 20px rgb(var(--canton-rgb) / 0.15), 0 0 50px rgb(var(--canton-rgb) / 0.08);
+}
+.glow-text {
+  text-shadow: 0 0 20px rgb(var(--canton-rgb) / 0.25);
+}
 
-/* App typography scale — use these classes for consistent h1–h4 / labels */
+/* ═══════════════════════════════════════════════════════════════════════════
+   Shimmer / Loading Animations
+   ═══════════════════════════════════════════════════════════════════════════ */
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.shimmer-overlay {
+  position: relative;
+  overflow: hidden;
+}
+.shimmer-overlay::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgb(255 255 255 / 3%) 40%,
+    rgb(255 255 255 / 6%) 50%,
+    rgb(255 255 255 / 3%) 60%,
+    transparent 100%
+  );
+  animation: shimmer 2s infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 15px rgb(var(--canton-rgb) / 0.1); }
+  50% { box-shadow: 0 0 30px rgb(var(--canton-rgb) / 0.25), 0 0 60px rgb(var(--canton-rgb) / 0.08); }
+}
+
+.pulse-glow {
+  animation: pulse-glow 3s ease-in-out infinite;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Typography Scale
+   ═══════════════════════════════════════════════════════════════════════════ */
 @layer components {
   .type-display {
     font-family: var(--font-space), system-ui, sans-serif;
@@ -182,25 +242,16 @@
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   Canton Brand Utilities
+   ═══════════════════════════════════════════════════════════════════════════ */
 @layer utilities {
-  .text-canton {
-    color: rgb(var(--canton-ink));
-  }
-  .text-canton-muted {
-    color: rgb(var(--canton-ink-muted));
-  }
-  .bg-canton-subtle {
-    background-color: rgb(var(--canton-rgb) / 0.1);
-  }
-  .bg-canton-soft {
-    background-color: rgb(var(--canton-rgb) / 0.16);
-  }
-  .border-canton-muted {
-    border-color: rgb(var(--canton-rgb) / 0.22);
-  }
-  .border-canton-strong {
-    border-color: rgb(var(--canton-rgb) / 0.38);
-  }
+  .text-canton { color: rgb(var(--canton-ink)); }
+  .text-canton-muted { color: rgb(var(--canton-ink-muted)); }
+  .bg-canton-subtle { background-color: rgb(var(--canton-rgb) / 0.1); }
+  .bg-canton-soft { background-color: rgb(var(--canton-rgb) / 0.16); }
+  .border-canton-muted { border-color: rgb(var(--canton-rgb) / 0.22); }
+  .border-canton-strong { border-color: rgb(var(--canton-rgb) / 0.38); }
   .text-gradient-brand {
     background: linear-gradient(
       135deg,
@@ -212,22 +263,15 @@
     background-clip: text;
   }
 
+  /* ── Landing Animations ────────────────────────────────────────────────── */
   .landing-fade-in {
     animation: landing-fade-in-up 0.55s ease-out forwards;
     opacity: 0;
   }
-  .landing-fade-in-delay-1 {
-    animation-delay: 0.06s;
-  }
-  .landing-fade-in-delay-2 {
-    animation-delay: 0.12s;
-  }
-  .landing-fade-in-delay-3 {
-    animation-delay: 0.18s;
-  }
-  .landing-fade-in-delay-4 {
-    animation-delay: 0.24s;
-  }
+  .landing-fade-in-delay-1 { animation-delay: 0.06s; }
+  .landing-fade-in-delay-2 { animation-delay: 0.12s; }
+  .landing-fade-in-delay-3 { animation-delay: 0.18s; }
+  .landing-fade-in-delay-4 { animation-delay: 0.24s; }
 
   .landing-menu-backdrop {
     animation: landing-fade-in 0.2s ease-out forwards;
@@ -235,7 +279,6 @@
   .landing-menu-panel {
     animation: landing-slide-in-right 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   }
-
   .landing-carousel-slide {
     animation: landing-carousel-fade 0.4s ease-out forwards;
   }
@@ -248,50 +291,24 @@
 }
 
 @keyframes landing-fade-in-up {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
 }
-
 @keyframes landing-fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
-
 @keyframes landing-slide-in-right {
-  from {
-    transform: translateX(100%);
-  }
-  to {
-    transform: translateX(0);
-  }
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
 }
-
 @keyframes landing-carousel-fade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
-
 @keyframes landing-carousel-progress {
-  from {
-    width: 0%;
-  }
-  to {
-    width: 100%;
-  }
+  from { width: 0%; }
+  to { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -305,8 +322,5 @@
     transform: none;
     width: 100%;
   }
-
-  .particle-field {
-    opacity: 0.35;
-  }
+  .particle-field { opacity: 0.35; }
 }

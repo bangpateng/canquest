@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { SectionTitle, StatValue } from "@/components/ui/typography";
 import { cn } from "@/lib/utils/utils";
-import { CheckCircle2, Coins, Gift, TrendingUp, Trophy, Zap } from "lucide-react";
+import { CheckCircle2, Coins, Gift, TrendingUp, Trophy, Zap, Sparkles } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { ListPagination } from "@/components/app/list/list-pagination";
 import { useCcBalance } from "@/lib/hooks/use-cc-balance";
@@ -226,6 +226,9 @@ export function DashboardView() {
       value: loading ? null : stats?.weeklyRank ? `#${stats.weeklyRank}` : "—",
       hint: t("dashboard.weeklyRankHint"),
       icon: Trophy,
+      gradient: "from-amber-500/20 to-orange-500/5",
+      iconBg: "bg-amber-500/10 ring-amber-500/20",
+      iconColor: "text-amber-400",
     },
     {
       key: "ccBalance",
@@ -239,6 +242,9 @@ export function DashboardView() {
             : "—",
       hint: hasWallet ? t("dashboard.ccBalanceHintLive") : t("dashboard.ccBalanceHintCreate"),
       icon: Coins,
+      gradient: "from-blue-500/20 to-cyan-500/5",
+      iconBg: "bg-blue-500/10 ring-blue-500/20",
+      iconColor: "text-blue-400",
     },
     {
       key: "ccTransactions",
@@ -246,6 +252,9 @@ export function DashboardView() {
       value: loading ? null : (stats?.txCount ?? 0).toString(),
       hint: t("dashboard.ccTransactionsHint"),
       icon: Zap,
+      gradient: "from-purple-500/20 to-violet-500/5",
+      iconBg: "bg-purple-500/10 ring-purple-500/20",
+      iconColor: "text-purple-400",
     },
     {
       key: "questsCompleted",
@@ -253,6 +262,9 @@ export function DashboardView() {
       value: loading ? null : (stats?.questsCompleted ?? 0).toString(),
       hint: t("dashboard.questsCompletedHint"),
       icon: Gift,
+      gradient: "from-emerald-500/20 to-teal-500/5",
+      iconBg: "bg-emerald-500/10 ring-emerald-500/20",
+      iconColor: "text-emerald-400",
     },
     {
       key: "questPoints",
@@ -260,6 +272,9 @@ export function DashboardView() {
       value: loading ? null : lifetimePoints.toLocaleString(),
       hint: t("dashboard.questPointsHint"),
       icon: TrendingUp,
+      gradient: "from-rose-500/20 to-pink-500/5",
+      iconBg: "bg-rose-500/10 ring-rose-500/20",
+      iconColor: "text-rose-400",
     },
   ];
 
@@ -267,7 +282,33 @@ export function DashboardView() {
     <div className="w-full max-w-full overflow-x-hidden font-sans">
       <div className="w-full min-h-screen max-w-7xl mx-auto">
         <div className="space-y-5 md:space-y-6">
-          {/* Error Banner */}
+
+          {/* ── Welcome Banner ───────────────────────────────────────────── */}
+          {!loadError && (
+            <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50 p-6 sm:p-8">
+              <div
+                className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_100%_0%,rgb(var(--canton-rgb)/0.08),transparent_60%)]"
+                aria-hidden
+              />
+              <div className="relative flex items-center gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--primary)]/15 border border-[var(--primary)]/20">
+                  <Sparkles className="h-6 w-6 text-[var(--primary)]" />
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
+                    {me?.displayName
+                      ? `Welcome back, ${me.displayName.split(" ")[0]}`
+                      : "Welcome to CanQuest"}
+                  </h1>
+                  <p className="mt-1 text-sm text-slate-400">
+                    Complete quests, earn CC tokens, and climb the leaderboard.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Error Banner ─────────────────────────────────────────────── */}
           {loadError ? (
             <div className="rounded-2xl border border-orange-500/20 bg-orange-500/10 backdrop-blur-xl shadow-xl shadow-black/30 px-5 py-4 sm:px-6 sm:py-5">
               <div className="flex flex-col sm:flex-row sm:items-center gap-3">
@@ -292,15 +333,19 @@ export function DashboardView() {
             </div>
           ) : null}
 
-          {/* Premium Bento Box Grid — Asymmetric Masonry Layout */}
+          {/* ── Premium Bento Grid ─────────────────────────────────────── */}
           <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 md:gap-5">
-            {/* Hero Card — Weekly Rank (Large Feature) */}
-            <div className="sm:col-span-2 lg:col-span-7 lg:row-span-2 bg-slate-900/40 backdrop-blur-xl border border-white/5 rounded-3xl shadow-2xl shadow-black/40 transition-all duration-300 hover:border-white/10 hover:shadow-black/50 p-6 sm:p-8 md:p-10 group">
-              <div className="flex flex-col h-full justify-between">
+            {/* Hero Card — Weekly Rank (Large Feature, spans 7 cols, 2 rows) */}
+            <div className="sm:col-span-2 lg:col-span-7 lg:row-span-2 relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50 transition-all duration-300 hover:border-white/[0.08] group p-6 sm:p-8 md:p-10">
+              <div
+                className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_100%_0%,rgb(251_191_36/0.06),transparent_70%)]"
+                aria-hidden
+              />
+              <div className="relative flex flex-col h-full justify-between">
                 <div>
                   <div className="flex items-center gap-3 mb-6">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--primary)]/20 to-[var(--primary)]/5 ring-1 ring-white/10 transition-all duration-300 group-hover:ring-white/20">
-                      <Trophy className="h-7 w-7 text-[var(--primary)]" aria-hidden />
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/10 ring-1 ring-amber-500/20 transition-all duration-300 group-hover:ring-amber-500/30 group-hover:scale-105">
+                      <Trophy className="h-7 w-7 text-amber-400" aria-hidden />
                     </div>
                     <div>
                       <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
@@ -308,20 +353,18 @@ export function DashboardView() {
                       </span>
                     </div>
                   </div>
-
                   <div className="mt-8">
                     {statCards[0].value === null ? (
                       <div className="flex items-center h-24">
                         <LoadingSpinner size="xl" tone="muted" />
                       </div>
                     ) : (
-                      <p className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-white">
+                      <p className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-white glow-text">
                         {statCards[0].value}
                       </p>
                     )}
                   </div>
                 </div>
-
                 {statCards[0].hint ? (
                   <p className="mt-8 text-xs sm:text-sm text-slate-400 font-normal leading-relaxed line-clamp-2">
                     {statCards[0].hint}
@@ -330,18 +373,21 @@ export function DashboardView() {
               </div>
             </div>
 
-            {/* CC Balance Card — Prominent Secondary Feature */}
-            <div className="sm:col-span-2 lg:col-span-5 lg:row-span-2 bg-slate-900/40 backdrop-blur-xl border border-white/5 rounded-3xl shadow-2xl shadow-black/40 transition-all duration-300 hover:border-white/10 hover:shadow-black/50 p-5 sm:p-6 md:p-8 group">
-              <div className="flex flex-col h-full">
+            {/* CC Balance Card — Prominent Secondary (5 cols) */}
+            <div className="sm:col-span-2 lg:col-span-5 lg:row-span-2 relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50 transition-all duration-300 hover:border-white/[0.08] group p-5 sm:p-6 md:p-8">
+              <div
+                className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_50%_0%,rgb(59_130_246/0.06),transparent_70%)]"
+                aria-hidden
+              />
+              <div className="relative flex flex-col h-full">
                 <div className="flex items-start justify-between mb-4">
                   <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
                     {statCards[1].title}
                   </span>
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10 ring-1 ring-blue-500/20 transition-all duration-300 group-hover:ring-blue-500/30">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10 ring-1 ring-blue-500/20 transition-all duration-300 group-hover:ring-blue-500/30 group-hover:scale-105">
                     <Coins className="h-5 w-5 text-blue-400" aria-hidden />
                   </div>
                 </div>
-
                 <div className="mt-6 flex-1 flex items-center">
                   {statCards[1].value === null ? (
                     <LoadingSpinner size="lg" tone="muted" />
@@ -351,7 +397,6 @@ export function DashboardView() {
                     </p>
                   )}
                 </div>
-
                 {statCards[1].hint ? (
                   <p className="mt-6 text-xs sm:text-sm text-slate-400 font-normal leading-relaxed line-clamp-2">
                     {statCards[1].hint}
@@ -360,31 +405,28 @@ export function DashboardView() {
               </div>
             </div>
 
-            {/* Compact Stat Cards — Bento Grid of 3 */}
+            {/* Compact Stat Cards — 3 across bottom (4 cols each) */}
             {statCards.slice(2).map((card) => {
               const Icon = card.icon;
-              const iconColors = {
-                ccTransactions: "bg-purple-500/10 text-purple-400 ring-purple-500/20",
-                questsCompleted: "bg-emerald-500/10 text-emerald-400 ring-emerald-500/20",
-                questPoints: "bg-amber-500/10 text-amber-400 ring-amber-500/20",
-              };
-              const colorClass = iconColors[card.key as keyof typeof iconColors] || "bg-slate-500/10 text-slate-400 ring-slate-500/20";
-
               return (
                 <div
                   key={card.key}
-                  className="lg:col-span-4 bg-slate-900/40 backdrop-blur-xl border border-white/5 rounded-3xl shadow-2xl shadow-black/40 transition-all duration-300 hover:border-white/10 hover:shadow-black/50 p-5 sm:p-6 group"
+                  className="lg:col-span-4 relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50 transition-all duration-300 hover:border-white/[0.08] group p-5 sm:p-6"
                 >
-                  <div className="flex items-start justify-between mb-4">
+                  {/* Subtle gradient accent */}
+                  <div
+                    className={`pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_100%_0%,var(--tw-gradient-from),transparent_70%)] bg-gradient-to-br ${card.gradient}`}
+                    aria-hidden
+                  />
+                  <div className="relative flex items-start justify-between mb-4">
                     <span className="text-xs sm:text-sm font-medium text-slate-500 tracking-tight">
                       {card.title}
                     </span>
-                    <div className={cn("flex h-9 w-9 items-center justify-center rounded-lg ring-1 transition-all duration-300", colorClass)}>
-                      <Icon className="h-4 w-4" aria-hidden />
+                    <div className={cn("flex h-9 w-9 items-center justify-center rounded-lg ring-1 transition-all duration-300 group-hover:scale-105", card.iconBg)}>
+                      <Icon className={cn("h-4 w-4", card.iconColor)} aria-hidden />
                     </div>
                   </div>
-
-                  <div className="mt-4">
+                  <div className="relative mt-4">
                     {card.value === null ? (
                       <LoadingSpinner size="lg" tone="muted" />
                     ) : (
@@ -393,9 +435,8 @@ export function DashboardView() {
                       </p>
                     )}
                   </div>
-
                   {card.hint ? (
-                    <p className="mt-4 text-xs text-slate-500 font-normal leading-relaxed line-clamp-2">
+                    <p className="relative mt-4 text-xs text-slate-500 font-normal leading-relaxed line-clamp-2">
                       {card.hint}
                     </p>
                   ) : null}
@@ -404,17 +445,20 @@ export function DashboardView() {
             })}
           </section>
 
-          {/* Recent Activity — Premium Glassmorphic Card */}
-          <section className="w-full overflow-hidden bg-slate-900/40 backdrop-blur-xl border border-white/5 rounded-3xl shadow-2xl shadow-black/40">
-            <div className="border-b border-white/5 bg-white/[0.02] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
-              <div className="flex items-center justify-between">
+          {/* ── Recent Activity ─────────────────────────────────────────── */}
+          <section className="w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50">
+            <div className="flex items-center justify-between border-b border-white/[0.06] bg-white/[0.01] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]/20">
+                  <Zap className="h-4 w-4 text-[var(--primary)]" />
+                </div>
                 <h2 className="text-base sm:text-lg font-semibold tracking-tight text-white">
                   {t("dashboard.recentActivity")}
                 </h2>
-                <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-500 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
-                  Latest
-                </span>
               </div>
+              <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-500 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
+                Live
+              </span>
             </div>
 
             {activityLoading ? (
@@ -436,18 +480,18 @@ export function DashboardView() {
               </div>
             ) : (
               <div className="p-5 sm:p-6 md:p-8">
-                <ul className="space-y-2">
+                <ul className="space-y-1.5">
                   {activityData.items.map((item, i) => {
                     const Icon = ACTIVITY_ICON[item.type];
                     const colorClass = ACTIVITY_COLOR[item.type];
                     return (
                       <li
                         key={`${item.type}-${item.time}-${i}`}
-                        className="group flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4 rounded-xl px-4 py-4 transition-all duration-200 hover:bg-white/[0.03] border border-transparent hover:border-white/5"
+                        className="group flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4 rounded-xl px-4 py-3.5 transition-all duration-200 hover:bg-white/[0.03] border border-transparent hover:border-white/[0.05]"
                       >
                         <div
                           className={cn(
-                            "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ring-1 ring-white/10 transition-all duration-200 group-hover:scale-105",
+                            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-white/10 transition-all duration-200 group-hover:scale-105",
                             colorClass,
                           )}
                         >

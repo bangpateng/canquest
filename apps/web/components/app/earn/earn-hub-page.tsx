@@ -7,7 +7,7 @@ import { ROUTES } from "@/lib/routing/app-routes";
 import { hasRealWallet } from "@/lib/auth/wallet-access";
 import type { Quest } from "@/lib/quest/quest-types";
 import { cn } from "@/lib/utils/utils";
-import { Trophy, Zap } from "lucide-react";
+import { Gift, Sparkles, Trophy, TrendingUp, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export function EarnHubPage() {
@@ -94,21 +94,32 @@ export function EarnHubPage() {
 
   return (
     <div className="w-full max-w-full min-w-0 overflow-x-hidden space-y-5 md:space-y-6 font-sans">
-      {/* Points Balance — Premium Hero Bento Card */}
+      {/* ── Points Balance Hero Card ────────────────────────────────────── */}
       <section
-        className="w-full max-w-full overflow-hidden rounded-3xl border border-white/5 bg-slate-900/40 backdrop-blur-xl shadow-2xl shadow-black/40"
+        className="relative w-full max-w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50"
         aria-label="Points balance"
       >
-        <div className="border-b border-white/[0.05] bg-white/[0.02] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
-          <h2 className="text-base sm:text-lg font-semibold tracking-tight text-white">Your points</h2>
-        </div>
+        {/* Background glow */}
+        <div
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_100%_0%,rgb(var(--canton-rgb)/0.10),transparent_60%)]"
+          aria-hidden
+        />
+        <div className="relative">
+          <div className="border-b border-white/[0.06] bg-white/[0.01] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]/20">
+                <TrendingUp className="h-5 w-5 text-[var(--primary)]" />
+              </div>
+              <div>
+                <h2 className="text-base sm:text-lg font-semibold tracking-tight text-white">
+                  Your Points
+                </h2>
+                <p className="text-xs text-slate-500">Earn from quests, invites & spins</p>
+              </div>
+            </div>
+          </div>
 
-        <div className="relative px-5 py-8 sm:px-6 sm:py-10 md:px-8 md:py-12">
-          <div
-            className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_100%_0%,rgb(var(--canton-rgb)/0.10),transparent_60%)]"
-            aria-hidden
-          />
-          <div className="relative">
+          <div className="px-5 py-8 sm:px-6 sm:py-10 md:px-8 md:py-12">
             {loading ? (
               <div className="flex h-16 items-center gap-3 text-sm sm:text-base font-medium text-slate-400">
                 <LoadingSpinner size="lg" />
@@ -116,43 +127,55 @@ export function EarnHubPage() {
               </div>
             ) : (
               <>
-                <p className="text-3xl font-extrabold tabular-nums leading-none tracking-tight text-white sm:text-4xl md:text-5xl">
+                <p className="text-4xl font-extrabold tabular-nums leading-none tracking-tight text-white sm:text-5xl md:text-6xl glow-text">
                   {earnPoints.toLocaleString()}
-                  <span className="ml-2 text-base font-semibold text-[var(--primary)] sm:ml-2.5 sm:text-lg md:text-xl">pts</span>
+                  <span className="ml-2 text-base font-semibold text-[var(--primary)] sm:ml-2.5 sm:text-lg md:text-xl">
+                    pts
+                  </span>
                 </p>
                 <p className="mt-3 max-w-2xl text-xs sm:text-sm font-normal leading-relaxed text-slate-400 sm:mt-4">
                   Quest tasks, friend invites, partner Earn campaigns, and spin wins.
                 </p>
               </>
             )}
-          </div>
 
-          <div className="relative mt-6 flex flex-wrap items-center gap-3 border-t border-white/[0.05] pt-6 sm:mt-8 sm:pt-8">
-            <Link
-              href={ROUTES.leaderboard}
-              className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10 sm:px-5 sm:py-3"
-            >
-              <Trophy className="h-4 w-4 text-[var(--primary)]" />
-              Leaderboard
-            </Link>
-            <Link
-              href={ROUTES.spinReward}
-              className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-semibold text-slate-400 transition-all duration-200 hover:border-white/[0.15] hover:text-white hover:bg-white/[0.06] sm:px-5 sm:py-3"
-            >
-              Spend points
-            </Link>
+            {/* Quick Actions */}
+            <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-white/[0.06] pt-6 sm:mt-8 sm:pt-8">
+              <Link
+                href={ROUTES.leaderboard}
+                className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10 hover:shadow-[0_0_20px_rgb(var(--canton-rgb)/0.08)] sm:px-5 sm:py-3"
+              >
+                <Trophy className="h-4 w-4 text-[var(--primary)]" />
+                Leaderboard
+              </Link>
+              <Link
+                href={ROUTES.spinReward}
+                className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm font-semibold text-slate-400 transition-all duration-200 hover:border-white/[0.15] hover:text-white hover:bg-white/[0.05] sm:px-5 sm:py-3"
+              >
+                <Gift className="h-4 w-4" />
+                Spend Points
+              </Link>
+            </div>
           </div>
         </div>
       </section>
 
+      {/* ── Tasks / Hub Content ─────────────────────────────────────────── */}
       {loading ? (
         <div className="flex items-center justify-center gap-3 py-20 text-base font-medium text-slate-400 sm:py-24">
           <LoadingSpinner size="lg" />
           Loading tasks…
         </div>
       ) : hubError || !hub ? (
-        <div className="rounded-3xl border border-dashed border-white/[0.08] bg-white/[0.02] py-16 text-center sm:py-20">
-          <p className="text-sm font-medium text-slate-500">{hubError ?? "No Quest hub yet."}</p>
+        <div className="rounded-2xl border border-dashed border-white/[0.08] bg-white/[0.02] py-16 text-center sm:py-20">
+          <div className="flex flex-col items-center gap-4">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/5 ring-1 ring-white/10">
+              <Zap className="h-8 w-8 text-slate-500" />
+            </div>
+            <p className="text-sm font-medium text-slate-500">
+              {hubError ?? "No Quest hub yet."}
+            </p>
+          </div>
         </div>
       ) : (
         <>
@@ -174,33 +197,43 @@ export function EarnHubPage() {
                 }}
               />
             ) : (
-              <p className="py-16 text-center text-sm font-medium text-slate-500">
-                No tasks yet. Check back soon.
-              </p>
+              <div className="rounded-2xl border border-dashed border-white/[0.08] bg-white/[0.02] py-16 text-center">
+                <div className="flex flex-col items-center gap-4">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/5 ring-1 ring-white/10">
+                    <Sparkles className="h-8 w-8 text-slate-500" />
+                  </div>
+                  <p className="text-sm font-medium text-slate-500">
+                    No tasks yet. Check back soon.
+                  </p>
+                </div>
+              </div>
             )
           ) : (
-            <p className="py-16 text-center text-sm font-medium text-slate-500">
-              Quest is not active right now.
-            </p>
+            <div className="rounded-2xl border border-dashed border-white/[0.08] bg-white/[0.02] py-16 text-center">
+              <p className="text-sm font-medium text-slate-500">
+                Quest is not active right now.
+              </p>
+            </div>
           )}
 
           <QuestReferralCard />
         </>
       )}
 
-      {/* Footer Nav Strip */}
-      <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-5 py-4 backdrop-blur-xl sm:px-6 sm:py-5 md:px-8">
+      {/* ── Footer Nav ──────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between gap-4 rounded-xl border border-white/[0.06] bg-white/[0.02] px-5 py-4 backdrop-blur-xl sm:px-6 sm:py-5 md:px-8">
         <Link
           href={ROUTES.earnHub}
           className="text-base font-semibold text-white transition-colors hover:text-canton"
         >
-          Earn
+          Quest Hub
         </Link>
         <Link
           href={ROUTES.campaignQuests}
           className="group flex items-center gap-1.5 text-sm font-semibold text-canton transition-colors hover:text-[var(--primary-strong)]"
         >
-          Partner campaigns
+          <Sparkles className="h-4 w-4" />
+          Partner Campaigns
         </Link>
       </div>
     </div>

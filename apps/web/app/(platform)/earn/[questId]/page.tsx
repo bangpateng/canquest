@@ -63,6 +63,7 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
 
   return (
     <PlatformPage className="space-y-5 sm:space-y-6">
+      {/* Back Link */}
       <Link
         href={ROUTES.campaignQuests}
         className="inline-flex items-center gap-2 text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
@@ -71,7 +72,8 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
         Back to Earn
       </Link>
 
-      <header className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]">
+      {/* ── Hero Header ─────────────────────────────────────────────────── */}
+      <header className="overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50">
         <div className="relative h-32 sm:h-40 md:h-44">
           <div
             className="absolute inset-0 bg-cover bg-center"
@@ -81,7 +83,8 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
                 : { background: quest.banner }
             }
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-[var(--card)] via-[var(--card)]/80 to-black/15" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0a0c14] via-[#0a0c14]/70 to-black/15" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_100%_0%,rgb(var(--canton-rgb)/0.08),transparent_60%)]" />
         </div>
 
         <div className="relative px-4 pb-4 pt-0 sm:px-5 sm:pb-5">
@@ -90,10 +93,10 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
               <img
                 src={quest.logoUrl}
                 alt=""
-                className="h-16 w-16 shrink-0 rounded-xl border-[3px] border-[var(--card)] object-cover shadow-md sm:h-20 sm:w-20 sm:rounded-2xl sm:border-4"
+                className="h-16 w-16 shrink-0 rounded-xl border-[3px] border-[#0a0c14] object-cover shadow-md ring-1 ring-white/10 sm:h-20 sm:w-20 sm:rounded-2xl sm:border-4"
               />
             ) : (
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border-[3px] border-[var(--card)] bg-[var(--muted)] text-lg font-bold text-canton shadow-md sm:h-20 sm:w-20 sm:rounded-2xl sm:border-4">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border-[3px] border-[#0a0c14] bg-[var(--muted)] text-lg font-bold text-canton shadow-md ring-1 ring-white/10 sm:h-20 sm:w-20 sm:rounded-2xl sm:border-4">
                 {quest.orgSlug.slice(0, 2).toUpperCase()}
               </div>
             )}
@@ -101,7 +104,7 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
               <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
                 <span
                   className={cn(
-                    "rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+                    "rounded-lg px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
                     statusMeta.className,
                   )}
                 >
@@ -110,14 +113,14 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
                 {quest.tags.map((tag) => (
                   <span
                     key={tag}
-                    className="rounded-md border border-[var(--border)] bg-[var(--muted)]/40 px-2 py-0.5 text-[10px] font-semibold text-[var(--muted-foreground)]"
+                    className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-2 py-0.5 text-[10px] font-semibold text-slate-400"
                   >
                     {tag}
                   </span>
                 ))}
               </div>
-              <Eyebrow className="text-[var(--muted-foreground)]">{quest.org}</Eyebrow>
-              <PageTitle className="mt-0.5 text-xl leading-tight sm:text-2xl md:text-3xl">
+              <Eyebrow className="text-slate-400">{quest.org}</Eyebrow>
+              <PageTitle className="mt-0.5 text-xl leading-tight sm:text-2xl md:text-3xl text-white">
                 {quest.title}
               </PageTitle>
             </div>
@@ -125,14 +128,17 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
         </div>
       </header>
 
-      <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)]/60 p-4 sm:p-5">
+      {/* ── About Section ───────────────────────────────────────────────── */}
+      <section className="rounded-2xl border border-white/[0.06] bg-[#0a0c14]/60 backdrop-blur-2xl p-4 sm:p-5">
         <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-[var(--primary-strong)]" aria-hidden />
-          <h2 className="text-sm font-bold uppercase tracking-wider text-[var(--foreground)]">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]/20">
+            <Sparkles className="h-3.5 w-3.5 text-[var(--primary)]" aria-hidden />
+          </div>
+          <h2 className="text-sm font-bold uppercase tracking-wider text-white">
             About
           </h2>
         </div>
-        <p className="mt-3 text-sm leading-relaxed text-[var(--muted-foreground)] whitespace-pre-line">
+        <p className="mt-3 text-sm leading-relaxed text-slate-400 whitespace-pre-line">
           {quest.description}
         </p>
         {quest.socialLinks && quest.socialLinks.length > 0 ? (
@@ -142,15 +148,23 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
 
       <CampaignQuestSidebar quest={quest} />
 
+      {/* ── Task Panel / Auth Prompt ────────────────────────────────────── */}
       <section className="min-w-0">
         {isAuthed ? (
           <QuestTaskPanel quest={quest} />
         ) : (
-          <div className={cn(surfaceCardClass, "bg-[var(--card)]/60 p-5 text-center")}>
-            <h2 className="type-section-title">Sign in to participate</h2>
-            <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-              You need an account to complete missions and claim rewards.
-            </p>
+          <div className={cn(surfaceCardClass, "bg-[#0a0c14]/80 p-5 text-center")}>
+            <div className="flex flex-col items-center gap-3">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]/20">
+                <Sparkles className="h-7 w-7 text-[var(--primary)]" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-white">Sign in to participate</h2>
+                <p className="mt-2 text-sm text-slate-400 max-w-sm mx-auto">
+                  You need an account to complete missions and claim rewards.
+                </p>
+              </div>
+            </div>
             <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-center">
               <Link
                 href={`/?auth=register&next=${encodeURIComponent(canonicalPath)}`}

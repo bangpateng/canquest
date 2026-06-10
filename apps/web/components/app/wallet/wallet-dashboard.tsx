@@ -5,7 +5,7 @@ import { CopyField } from "@/components/app/wallet/copy-field";
 import { WalletActions } from "@/components/app/wallet/wallet-actions";
 import { WalletPreapprovalBanner } from "@/components/app/wallet/wallet-preapproval-banner";
 import { TransactionsView } from "@/components/app/wallet/transactions-view";
-import { CheckCircle2, RefreshCw } from "lucide-react";
+import { CheckCircle2, Coins, RefreshCw, TrendingUp } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useCcBalance } from "@/lib/hooks/use-cc-balance";
 import { formatPartyIdForDisplay } from "@/lib/canton/canton-party-id";
@@ -47,15 +47,17 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
 
   return (
     <div className="w-full max-w-full min-w-0 overflow-x-hidden space-y-5 md:space-y-6 font-sans">
-      {/* Wallet Status Card */}
-      <div className="w-full max-w-full overflow-hidden rounded-3xl border border-white/5 bg-slate-900/40 backdrop-blur-xl shadow-2xl shadow-black/40 p-5 sm:p-6 md:p-8">
+      {/* ── Wallet Status Card ──────────────────────────────────────────── */}
+      <div className="w-full max-w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50 p-5 sm:p-6 md:p-8">
         <div className="flex items-center gap-3 mb-5 sm:mb-6">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10 ring-1 ring-emerald-500/20">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 ring-1 ring-emerald-500/20">
             <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-400" />
           </div>
-          <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
-            {t("wallet.walletActive")}
-          </span>
+          <div>
+            <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
+              {t("wallet.walletActive")}
+            </span>
+          </div>
         </div>
         <div>
           <CopyField
@@ -65,17 +67,27 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
         </div>
       </div>
 
-      {/* Balance Card — Hero Bento Feature */}
-      <div className="w-full max-w-full overflow-hidden rounded-3xl border border-white/5 bg-slate-900/40 backdrop-blur-xl shadow-2xl shadow-black/40 p-6 sm:p-8 md:p-10 lg:p-12">
-        <div className="flex items-center justify-between gap-3 mb-6 sm:mb-8">
-          <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
-            {t("wallet.balance")}
-          </span>
+      {/* ── Balance Hero Card ───────────────────────────────────────────── */}
+      <div className="relative w-full max-w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50 p-6 sm:p-8 md:p-10 lg:p-12">
+        {/* Ambient glow */}
+        <div
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_0%,rgb(var(--canton-rgb)/0.10),transparent_70%)]"
+          aria-hidden
+        />
+        <div className="relative flex items-center justify-between gap-3 mb-6 sm:mb-8">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 ring-1 ring-blue-500/20">
+              <Coins className="h-5 w-5 text-blue-400" />
+            </div>
+            <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
+              {t("wallet.balance")}
+            </span>
+          </div>
           <button
             type="button"
             onClick={() => void fetchBalance()}
             disabled={balanceLoading}
-            className="rounded-lg p-2.5 text-slate-400 transition-all duration-200 hover:bg-white/[0.06] hover:text-slate-100 disabled:opacity-40 ring-1 ring-white/10 hover:ring-white/20"
+            className="rounded-xl p-2.5 text-slate-400 transition-all duration-200 hover:bg-white/[0.06] hover:text-slate-100 disabled:opacity-40 ring-1 ring-white/10 hover:ring-white/20"
             aria-label={t("wallet.refreshBalance")}
           >
             {balanceLoading ? (
@@ -85,12 +97,9 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
             )}
           </button>
         </div>
+
         <div className="relative">
-          <div
-            className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_0%,rgb(var(--canton-rgb)/0.12),transparent_70%)]"
-            aria-hidden
-          />
-          <p className="relative text-3xl font-extrabold tabular-nums leading-none tracking-tight text-white sm:text-4xl md:text-5xl">
+          <p className="relative text-3xl font-extrabold tabular-nums leading-none tracking-tight text-white sm:text-4xl md:text-5xl glow-text">
             {balanceLoading ? (
               <span className="text-slate-500">—</span>
             ) : (
@@ -103,7 +112,8 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
             )}
           </p>
           {!balanceLoading && ccUsdPrice > 0 && balance !== null ? (
-            <p className="relative mt-4 text-sm font-medium text-slate-500 sm:mt-5 sm:text-base md:text-lg">
+            <p className="relative mt-4 text-sm font-medium text-slate-500 sm:mt-5 sm:text-base md:text-lg flex items-center gap-1.5">
+              <TrendingUp className="h-4 w-4 text-[var(--primary)]" />
               ≈ $
               {(balance * ccUsdPrice).toLocaleString("en-US", {
                 minimumFractionDigits: 2,

@@ -4,7 +4,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { ListPagination } from "@/components/app/list/list-pagination";
 import { filterTabClass } from "@/lib/ui/ui-button-styles";
 import { cn } from "@/lib/utils/utils";
-import { Trophy } from "lucide-react";
+import { Crown, Medal, Trophy } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 const LEADERBOARD_PAGE_SIZE = 5;
@@ -60,12 +60,18 @@ function avatarGradient(username: string): string {
   return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length]!;
 }
 
-/** Twitter CDN URLs must not get extra query params (breaks CDN / optimizers). */
 function leaderboardAvatarSrc(url: string | null): string | null {
   if (!url?.trim()) return null;
   const trimmed = url.trim();
   if (trimmed.includes("twimg.com")) return trimmed;
   return trimmed;
+}
+
+function RankBadge({ rank }: { rank: number }) {
+  if (rank === 1) return <Crown className="h-5 w-5 text-amber-400 drop-shadow-[0_0_6px_rgb(251_191_36/0.5)]" />;
+  if (rank === 2) return <Medal className="h-5 w-5 text-slate-300 drop-shadow-[0_0_4px_rgb(203_213_225/0.3)]" />;
+  if (rank === 3) return <Medal className="h-5 w-5 text-amber-700 drop-shadow-[0_0_4px_rgb(180_83_9/0.3)]" />;
+  return <span className="text-sm font-bold tabular-nums text-slate-500">{rank}</span>;
 }
 
 function ParticipantCell({
@@ -81,7 +87,7 @@ function ParticipantCell({
     <td className="px-4 py-3.5 sm:px-6 sm:py-4">
       <div className="flex items-center gap-3 sm:gap-4">
         <div
-          className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full ring-2 ring-white/10 ring-offset-1 ring-offset-[var(--card)] sm:h-12 sm:w-12"
+          className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full ring-2 ring-white/10 ring-offset-1 ring-offset-[#0a0c14] sm:h-12 sm:w-12"
           aria-hidden
           style={
             avatarSrc
@@ -113,18 +119,15 @@ function ParticipantCell({
               {row.displayName}
             </span>
             {isCurrentUser && (
-              <span className="rounded-md bg-[var(--primary)]/20 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-slate-100">
+              <span className="rounded-md bg-[var(--primary)]/20 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-[var(--primary)]">
                 You
-              </span>
-            )}
-            {row.rank <= 3 && (
-              <span className="text-sm sm:text-base">
-                {row.rank === 1 ? "🥇" : row.rank === 2 ? "🥈" : "🥉"}
               </span>
             )}
           </div>
           {row.twitterUsername ? (
-            <p className="mt-0.5 text-xs font-medium text-slate-500 sm:text-sm">@{row.twitterUsername}</p>
+            <p className="mt-0.5 text-xs font-medium text-slate-500 sm:text-sm">
+              @{row.twitterUsername}
+            </p>
           ) : null}
         </div>
       </div>
@@ -139,7 +142,6 @@ export function LeaderboardTable() {
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-  // Get current user ID for highlighting
   useEffect(() => {
     fetch("/api/me", { credentials: "include", signal: AbortSignal.timeout(12_000) })
       .then((r) => r.ok ? r.json() : null)
@@ -200,25 +202,25 @@ export function LeaderboardTable() {
       </div>
 
       {/* Leaderboard Card */}
-      <div className="w-full max-w-full overflow-hidden rounded-3xl border border-white/5 bg-slate-900/40 backdrop-blur-xl shadow-2xl shadow-black/40">
+      <div className="w-full max-w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50">
         {/* Card Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 border-b border-white/[0.05] bg-white/[0.02] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 border-b border-white/[0.06] bg-white/[0.01] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]/20">
-              <Trophy className="h-5 w-5 text-[var(--primary)]" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 ring-1 ring-amber-500/20">
+              <Trophy className="h-5 w-5 text-amber-400" />
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-semibold tracking-tight text-white">
-                Top participants
+                Top Participants
               </h2>
               <p className="text-xs sm:text-sm font-medium text-slate-500">
-                {period === "all" ? "All time" : period === "weekly" ? "Weekly" : "Monthly"}
+                {period === "all" ? "All time" : period === "weekly" ? "Weekly ranking" : "Monthly ranking"}
               </p>
             </div>
           </div>
           {data && (
             <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10 sm:ml-auto">
-              {data.total} participants
+              {data.total.toLocaleString()} participants
             </span>
           )}
         </div>
@@ -249,7 +251,7 @@ export function LeaderboardTable() {
             <table className="w-full min-w-[300px] text-left">
               <thead className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="whitespace-nowrap px-4 py-3.5 font-semibold sm:px-6 sm:py-4 md:px-8">#</th>
+                  <th className="whitespace-nowrap px-4 py-3.5 font-semibold sm:px-6 sm:py-4 md:px-8">Rank</th>
                   <th className="min-w-[10rem] px-3 py-3.5 font-semibold sm:px-4 sm:py-4">Participant</th>
                   <th className="whitespace-nowrap px-4 py-3.5 text-right font-semibold sm:px-6 sm:py-4 md:px-8">Points</th>
                 </tr>
@@ -265,12 +267,15 @@ export function LeaderboardTable() {
                         isCurrentUser && "bg-[var(--primary)]/5 hover:bg-[var(--primary)]/8",
                       )}
                     >
-                      <td className="px-4 py-3.5 text-sm sm:text-base tabular-nums font-semibold text-slate-100 sm:px-6 sm:py-4 md:px-8">
-                        {row.rank}
+                      <td className="px-4 py-3.5 sm:px-6 sm:py-4 md:px-8">
+                        <RankBadge rank={row.rank} />
                       </td>
                       <ParticipantCell row={row} isCurrentUser={isCurrentUser} />
-                      <td className="px-4 py-3.5 text-right text-sm sm:text-base tabular-nums font-bold text-slate-100 sm:px-6 sm:py-4 md:px-8">
-                        {row.points.toLocaleString()}
+                      <td className="px-4 py-3.5 text-right sm:px-6 sm:py-4 md:px-8">
+                        <span className="text-sm sm:text-base tabular-nums font-bold text-white">
+                          {row.points.toLocaleString()}
+                        </span>
+                        <span className="ml-1 text-xs font-medium text-slate-500">pts</span>
                       </td>
                     </tr>
                   );
@@ -282,7 +287,7 @@ export function LeaderboardTable() {
 
         {/* Pagination */}
         {!loading && data && data.rows.length > 0 && (
-          <div className="border-t border-white/[0.05] bg-white/[0.02]">
+          <div className="border-t border-white/[0.06] bg-white/[0.01]">
             <ListPagination
               className="px-5 py-4 sm:px-6 sm:py-5 md:px-8"
               page={page}
