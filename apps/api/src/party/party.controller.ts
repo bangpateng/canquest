@@ -920,10 +920,10 @@ export class PartyController {
       canton: { reachable: canton },
       splice: { reachable: splice, configured: this.splice.isConfigured },
       message: canton && splice
-        ? 'Both Canton JSON API and Splice Validator API are reachable.'
+        ? 'Node connected.'
         : !canton
-          ? 'Canton JSON API NOT reachable. Check CANTON_JSON_API_URL and SSH tunnel to port 7575.'
-          : 'Canton OK. Splice Validator API not reachable — check CANTON_VALIDATOR_URL (port 5003 tunnel).',
+          ? 'Node connection issue'
+          : 'Node connection issue',
     };
   }
 

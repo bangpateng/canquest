@@ -554,8 +554,8 @@ export default function SpinRewardPage() {
                 <Gift className="h-8 w-8 text-slate-500" />
               </div>
               <div>
-                <p className="font-semibold text-slate-300">No prizes configured</p>
-                <p className="mt-1 text-sm text-slate-500">Check back soon — prizes are being set up!</p>
+                <p className="font-semibold text-slate-300">Create a wallet to spin</p>
+                <p className="mt-1 text-sm text-slate-500">You need a wallet before you can spin. Create one on the Wallet page.</p>
               </div>
             </div>
           ) : (
