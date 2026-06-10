@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { CopyField } from "@/components/app/wallet/copy-field";
 import { WalletActions } from "@/components/app/wallet/wallet-actions";
-import { WalletPendingOffers } from "@/components/app/wallet/wallet-pending-offers";
 import { WalletPreapprovalBanner } from "@/components/app/wallet/wallet-preapproval-banner";
 import { TransactionsView } from "@/components/app/wallet/transactions-view";
 import { CheckCircle2, RefreshCw } from "lucide-react";
@@ -61,7 +60,7 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
         <div>
           <CopyField
             label={t("wallet.partyId")}
-            value={hasWallet ? displayPartyId || "\u2014" : "\u2014"}
+            value={hasWallet ? displayPartyId || "—" : "—"}
           />
         </div>
       </div>
@@ -93,7 +92,7 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
           />
           <p className="relative text-3xl font-extrabold tabular-nums leading-none tracking-tight text-white sm:text-4xl md:text-5xl">
             {balanceLoading ? (
-              <span className="text-slate-500">{"\u2014"}</span>
+              <span className="text-slate-500">—</span>
             ) : (
               <>
                 {balance?.toFixed(4) ?? "0.0000"}{" "}
@@ -105,7 +104,7 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
           </p>
           {!balanceLoading && ccUsdPrice > 0 && balance !== null ? (
             <p className="relative mt-4 text-sm font-medium text-slate-500 sm:mt-5 sm:text-base md:text-lg">
-              {"\u2248"} $
+              ≈ $
               {(balance * ccUsdPrice).toLocaleString("en-US", {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
@@ -115,8 +114,6 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
           ) : null}
         </div>
       </div>
-
-      <WalletPendingOffers onBalanceRefresh={handleBalanceRefresh} />
 
       <WalletPreapprovalBanner onActivated={handleBalanceRefresh} />
 
