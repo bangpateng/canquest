@@ -85,8 +85,8 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
     <div className="flex min-h-[60vh] w-full min-w-0 items-center justify-center">
       <div className="w-full min-w-0 max-w-md">
         <div className="mb-8 flex justify-center">
-          <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-white/5 bg-canton/10">
-            <Wallet className="h-10 w-10 text-canton" />
+          <div className="flex h-20 w-20 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--primary)]/10">
+            <Wallet className="h-10 w-10 text-[var(--primary)]" />
           </div>
         </div>
 

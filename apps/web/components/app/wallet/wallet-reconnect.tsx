@@ -40,7 +40,7 @@ export function WalletReconnect({ username, onConnected }: WalletReconnectProps)
     <div className="flex min-h-[60vh] w-full min-w-0 items-center justify-center">
       <div className="w-full min-w-0 max-w-md text-center">
         <div className="mb-8 flex justify-center">
-          <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-orange-500/30 bg-orange-500/10">
+          <div className="flex h-20 w-20 items-center justify-center rounded-xl border border-orange-500/20 bg-orange-500/5">
             <Wallet className="h-10 w-10 text-orange-400" />
           </div>
         </div>
