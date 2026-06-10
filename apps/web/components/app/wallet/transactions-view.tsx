@@ -1,11 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/utils/utils";
 import { ListPagination } from "@/components/app/list/list-pagination";
 import { ArrowDownLeft, ArrowUpRight, Gift, RefreshCw, Zap } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { TransactionDetailModal } from "@/components/app/wallet/transaction-detail-modal";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 
 export const TRANSACTIONS_PAGE_SIZE = 5;
@@ -75,7 +75,7 @@ function amountColor(type: TxItem["type"]): string {
 }
 
 function amountSign(type: TxItem["type"]): string {
-  return type === "TRANSFER_OUT" ? "−" : "+";
+  return type === "TRANSFER_OUT" ? "\u2212" : "+";
 }
 
 function txDisplayTitle(tx: TxItem, fallback: string): string {
@@ -87,10 +87,8 @@ function txDisplayTitle(tx: TxItem, fallback: string): string {
 }
 
 type TransactionsViewProps = {
-  /** Full page with section header, or compact block inside wallet */
   variant?: "page" | "embedded";
   pageSize?: number;
-  /** Increment to refetch after send/receive */
   refreshKey?: number;
   className?: string;
 };
@@ -107,6 +105,7 @@ export function TransactionsView({
   const [txPage, setTxPage] = useState<TxPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [modalTxId, setModalTxId] = useState<string | null>(null);
 
   const fetchTxns = useCallback(
     async (page: number) => {
@@ -149,13 +148,12 @@ export function TransactionsView({
 
       <div
         className={cn(
-          "w-full min-w-0 overflow-hidden rounded-3xl border border-white/5",
-          embedded ? "glass-card" : "bg-[var(--card)]",
+          "w-full min-w-0 overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl",
         )}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-slate-800/80 px-6 py-5">
+        <div className="flex items-start justify-between gap-4 border-b border-white/[0.06] bg-white/[0.01] px-5 py-4 sm:px-6 sm:py-5">
           <div className="min-w-0">
-            <p className="text-base font-semibold text-slate-100">
+            <p className="text-base font-semibold text-white">
               {t("transactions.title")}
             </p>
           </div>
@@ -185,7 +183,7 @@ export function TransactionsView({
           </div>
         ) : !txPage || txPage.items.length === 0 ? (
           <div className={cn("text-center", embedded ? "py-12" : "py-20")}>
-            <p className="text-base font-semibold text-slate-100">
+            <p className="text-base font-semibold text-white">
               {t("transactions.empty")}
             </p>
             <p className="mt-2 text-sm font-medium text-slate-400">
@@ -196,14 +194,14 @@ export function TransactionsView({
           <>
             <div className="hidden min-w-0 md:block">
               <table className="w-full table-fixed text-left text-base">
-                <thead className="border-b border-slate-800/80 bg-[var(--muted)]/50 text-sm font-semibold uppercase tracking-wide text-slate-400">
+                <thead className="border-b border-white/[0.06] bg-white/[0.01] text-sm font-semibold uppercase tracking-wide text-slate-500">
                   <tr>
-                    <th className="whitespace-nowrap px-6 py-4 font-semibold">{t("transactions.type")}</th>
-                    <th className="whitespace-nowrap px-6 py-4 font-semibold">{t("transactions.amount")}</th>
-                    <th className="whitespace-nowrap px-6 py-4 font-semibold">{t("transactions.description")}</th>
-                    <th className="whitespace-nowrap px-6 py-4 font-semibold">{t("transactions.counterparty")}</th>
-                    <th className="whitespace-nowrap px-6 py-4 font-semibold">{t("transactions.ledgerTx")}</th>
-                    <th className="whitespace-nowrap px-6 py-4 font-semibold">{t("transactions.when")}</th>
+                    <th className="whitespace-nowrap px-5 py-3.5 sm:px-6 sm:py-4 font-semibold">{t("transactions.type")}</th>
+                    <th className="whitespace-nowrap px-5 py-3.5 sm:px-6 sm:py-4 font-semibold">{t("transactions.amount")}</th>
+                    <th className="whitespace-nowrap px-5 py-3.5 sm:px-6 sm:py-4 font-semibold">{t("transactions.description")}</th>
+                    <th className="whitespace-nowrap px-5 py-3.5 sm:px-6 sm:py-4 font-semibold">{t("transactions.counterparty")}</th>
+                    <th className="whitespace-nowrap px-5 py-3.5 sm:px-6 sm:py-4 font-semibold">{t("transactions.ledgerTx")}</th>
+                    <th className="whitespace-nowrap px-5 py-3.5 sm:px-6 sm:py-4 font-semibold">{t("transactions.when")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -218,51 +216,49 @@ export function TransactionsView({
                     return (
                       <tr
                         key={tx.id}
-                        className="border-t border-slate-800/80 transition-colors hover:bg-[var(--muted)]/40"
+                        className="border-t border-white/[0.04] transition-colors hover:bg-white/[0.03] cursor-pointer"
+                        onClick={() => setModalTxId(tx.id)}
                       >
-                        <td className="px-6 py-4">
+                        <td className="px-5 py-3.5 sm:px-6 sm:py-4">
                           <div className="flex items-center gap-3">
                             <span
                               className={cn(
-                                "flex h-9 w-9 items-center justify-center rounded-2xl",
+                                "flex h-9 w-9 items-center justify-center rounded-xl",
                                 txIconBg(tx.type),
                               )}
                             >
                               <TxTypeIcon type={tx.type} />
                             </span>
-                            <span className="text-base font-semibold text-slate-100">
+                            <span className="text-base font-semibold text-white">
                               {txDisplayTitle(tx, txLabel(tx.type))}
                             </span>
                           </div>
                         </td>
                         <td
                           className={cn(
-                            "px-6 py-4 text-base font-bold tabular-nums",
+                            "px-5 py-3.5 sm:px-6 sm:py-4 text-base font-bold tabular-nums",
                             amountColor(tx.type),
                           )}
                         >
                           {amountSign(tx.type)}
                           {ccAmt.toFixed(4)} CC
                         </td>
-                        <td className="max-w-[12rem] truncate px-6 py-4 text-sm font-medium text-slate-400">
+                        <td className="max-w-[12rem] truncate px-5 py-3.5 sm:px-6 sm:py-4 text-sm font-medium text-slate-400">
                           {tx.description}
                         </td>
-                        <td className="max-w-[10rem] truncate px-6 py-4 font-mono text-sm font-medium text-slate-400">
-                          {tx.counterparty ?? tx.referenceId ?? "—"}
+                        <td className="max-w-[10rem] truncate px-5 py-3.5 sm:px-6 sm:py-4 font-mono text-sm font-medium text-slate-400">
+                          {tx.counterparty ?? tx.referenceId ?? "\u2014"}
                         </td>
-                        <td className="px-6 py-4">
-                          <Link
-                            href={`/transactions/${tx.id}`}
-                            className="inline-flex items-center gap-1.5 rounded-xl border border-white/5 bg-[var(--muted)]/60 px-3 py-1 font-mono text-xs font-medium text-canton underline-offset-2 hover:underline"
-                          >
+                        <td className="px-5 py-3.5 sm:px-6 sm:py-4">
+                          <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-1 font-mono text-xs font-medium text-[var(--primary)]">
                             {tx.cantonUpdateId
-                              ? `${tx.cantonUpdateId.slice(0, 10)}…`
+                              ? `${tx.cantonUpdateId.slice(0, 10)}\u2026`
                               : tx.ledgerTxId
-                                ? `${tx.ledgerTxId.slice(0, 10)}…`
+                                ? `${tx.ledgerTxId.slice(0, 10)}\u2026`
                                 : "View"}
-                          </Link>
+                          </span>
                         </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-400">
+                        <td className="whitespace-nowrap px-5 py-3.5 sm:px-6 sm:py-4 text-sm font-medium text-slate-400">
                           {date}
                         </td>
                       </tr>
@@ -272,7 +268,7 @@ export function TransactionsView({
               </table>
             </div>
 
-            <ul className="divide-y divide-slate-800/80 md:hidden">
+            <ul className="divide-y divide-white/[0.04] md:hidden">
               {txPage.items.map((tx) => {
                 const ccAmt = Math.abs(Number(tx.amountMicroCc)) / 1_000_000;
                 const date = new Date(tx.createdAt).toLocaleString("en-GB", {
@@ -283,46 +279,47 @@ export function TransactionsView({
                 });
                 return (
                   <li key={tx.id}>
-                    <Link
-                      href={`/transactions/${tx.id}`}
-                      className="flex items-center gap-5 px-6 py-5 transition-colors hover:bg-[var(--muted)]/40"
+                    <button
+                      type="button"
+                      onClick={() => setModalTxId(tx.id)}
+                      className="flex w-full items-center gap-4 px-5 py-4 transition-colors hover:bg-white/[0.03] text-left"
                     >
-                    <div
-                      className={cn(
-                        "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl",
-                        txIconBg(tx.type),
-                      )}
-                    >
-                      <TxTypeIcon type={tx.type} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-base font-semibold text-slate-100">
-                        {txDisplayTitle(tx, tx.description)}
-                      </p>
-                      <p className="mt-1 text-sm font-medium text-slate-400">{date}</p>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <p
+                      <div
                         className={cn(
-                          "text-base font-bold tabular-nums",
-                          amountColor(tx.type),
+                          "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+                          txIconBg(tx.type),
                         )}
                       >
-                        {amountSign(tx.type)}
-                        {ccAmt.toFixed(4)} CC
-                      </p>
-                      <p className="mt-1 text-sm font-medium text-slate-400">
-                        {txLabel(tx.type)}
-                      </p>
-                    </div>
-                    </Link>
+                        <TxTypeIcon type={tx.type} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-white">
+                          {txDisplayTitle(tx, tx.description)}
+                        </p>
+                        <p className="mt-1 text-xs font-medium text-slate-400">{date}</p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p
+                          className={cn(
+                            "text-sm font-bold tabular-nums",
+                            amountColor(tx.type),
+                          )}
+                        >
+                          {amountSign(tx.type)}
+                          {ccAmt.toFixed(4)} CC
+                        </p>
+                        <p className="mt-1 text-xs font-medium text-slate-400">
+                          {txLabel(tx.type)}
+                        </p>
+                      </div>
+                    </button>
                   </li>
                 );
               })}
             </ul>
 
             <ListPagination
-              className="px-6 pb-4"
+              className="px-5 pb-4 sm:px-6"
               page={currentPage}
               totalPages={txPage.totalPages}
               total={txPage.total}
@@ -332,6 +329,13 @@ export function TransactionsView({
           </>
         )}
       </div>
+
+      {/* Transaction Detail Modal */}
+      <TransactionDetailModal
+        open={modalTxId !== null}
+        transactionId={modalTxId}
+        onClose={() => setModalTxId(null)}
+      />
     </div>
   );
 }

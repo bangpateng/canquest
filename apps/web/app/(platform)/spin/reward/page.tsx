@@ -173,7 +173,7 @@ function SpinWheel({
           item.label.length > maxChars
             ? item.label.slice(0, maxChars - 1) + "\u2026"
             : item.label;
-        ctx.fillText(label, outerR - 10, 0);
+        ctx.fillText(label, outerR - 8, 0);
         ctx.restore();
       });
 
@@ -230,7 +230,7 @@ function SpinWheel({
 
   useEffect(() => {
     drawWheel(displayRotation);
-  }, [drawWheel, displayRotation, items]);
+  }, [drawWheel, displayRotation, items, wheelSize]);
 
   useEffect(() => {
     if (!spinning) {
@@ -474,7 +474,7 @@ export default function SpinRewardPage() {
               <div className="h-16 w-16 rounded-full border-2 border-cyan-500/20 bg-cyan-500/5" />
               <LoadingSpinner size="lg" className="absolute inset-0 m-auto" />
             </div>
-            <p className="text-sm font-medium text-slate-400">Loading spin wheel\u2026</p>
+            <p className="text-sm font-medium text-slate-400">Loading spin wheel…</p>
           </div>
         </div>
       </PlatformPage>
@@ -604,12 +604,12 @@ export default function SpinRewardPage() {
                     {spinning ? (
                       <span className="flex items-center justify-center gap-2.5">
                         <LoadingSpinner size="sm" tone="inherit" />
-                        <span>Spinning\u2026</span>
+                        <span>Spinning…</span>
                       </span>
                     ) : winnerIndex !== null && !showResult ? (
                       <span className="flex items-center justify-center gap-2.5">
                         <LoadingSpinner size="sm" tone="inherit" />
-                        <span>Revealing\u2026</span>
+                        <span>Revealing…</span>
                       </span>
                     ) : (
                       <span className="flex items-center justify-center gap-2.5">
@@ -624,16 +624,6 @@ export default function SpinRewardPage() {
                     )}
                   </button>
 
-                  {/* Insufficient points warning */}
-                  {state && state.availablePoints < state.spinCost && !spinning && (
-                    <div className="flex w-full items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2.5 backdrop-blur-xl">
-                      <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
-                      <p className="text-xs font-medium text-amber-400">
-                        Need {state.spinCost} pts \u00b7 You have {state.availablePoints} pts.
-                        Complete quests to earn more!
-                      </p>
-                    </div>
-                  )}
                 </div>
               </div>
             </>
