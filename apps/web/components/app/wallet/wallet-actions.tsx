@@ -281,7 +281,7 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
                 {/* Fee notice — value from env TRANSACTION_FEE_CC */}
                 <div className="rounded-2xl border border-white/5 bg-[var(--muted)]/30 px-4 py-3">
                   <p className="text-sm font-medium text-slate-400">
-                    <span className="font-semibold text-slate-100">Platform fee: {feeCc} CC</span>
+                    <span className="font-semibold text-slate-100">Fee Withdraw : {feeCc} CC</span>
                     {ccAmount && parseFloat(ccAmount) > 0 && (
                       <span className="ml-2 font-semibold text-canton">
                         · Total: {(parseFloat(ccAmount) + feeCc).toFixed(2)} CC

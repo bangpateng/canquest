@@ -7,12 +7,14 @@ import { ROUTES } from "@/lib/routing/app-routes";
 import { hasRealWallet } from "@/lib/auth/wallet-access";
 import type { Quest } from "@/lib/quest/quest-types";
 import { cn } from "@/lib/utils/utils";
-import { Gift, Sparkles, Trophy, TrendingUp, Zap } from "lucide-react";
+import { Gift, Sparkles, Trophy, TrendingUp, Zap, User, Star } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export function EarnHubPage() {
   const [partyId, setPartyId] = useState<string | null>(null);
   const [twitterUsername, setTwitterUsername] = useState<string | null>(null);
+  const [displayName, setDisplayName] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [earnPoints, setEarnPoints] = useState(0);
   const [hub, setHub] = useState<Quest | null>(null);
   const [hubLoading, setHubLoading] = useState(true);
@@ -43,12 +45,16 @@ export function EarnHubPage() {
             const me = (await meRes.json()) as {
               cantonPartyId?: string | null;
               twitterUsername?: string | null;
+              displayName?: string | null;
+              avatarUrl?: string | null;
               earnPoints?: number;
             };
             setPartyId(
               hasRealWallet(me.cantonPartyId) ? me.cantonPartyId!.trim() : null,
             );
             setTwitterUsername(me.twitterUsername?.trim() || null);
+            setDisplayName(me.displayName?.trim() || null);
+            setAvatarUrl(me.avatarUrl?.trim() || null);
             setEarnPoints(typeof me.earnPoints === "number" ? me.earnPoints : 0);
           } else {
             setPartyId(null);
@@ -94,17 +100,20 @@ export function EarnHubPage() {
 
   return (
     <div className="w-full max-w-full min-w-0 overflow-x-hidden space-y-5 md:space-y-6 font-sans">
-      {/* ── Points Balance Hero Card ────────────────────────────────────── */}
+
+      {/* ── Hero Card — Split Layout: Left (Points) + Right (Profile) ────── */}
       <section
         className="relative w-full max-w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50"
         aria-label="Points balance"
       >
-        {/* Background glow */}
+        {/* Background glow — right side accent */}
         <div
           className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_100%_0%,rgb(var(--canton-rgb)/0.10),transparent_60%)]"
           aria-hidden
         />
+
         <div className="relative">
+          {/* Header */}
           <div className="border-b border-white/[0.06] bg-white/[0.01] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
             <div className="flex items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]/20">
@@ -112,49 +121,117 @@ export function EarnHubPage() {
               </div>
               <div>
                 <h2 className="text-base sm:text-lg font-semibold tracking-tight text-white">
-                  Your Points
+                  Quest Hub
                 </h2>
-                <p className="text-xs text-slate-500">Earn from quests, invites & spins</p>
+                <p className="text-xs text-slate-500">Daily tasks & rewards</p>
               </div>
             </div>
           </div>
 
-          <div className="px-5 py-8 sm:px-6 sm:py-10 md:px-8 md:py-12">
-            {loading ? (
-              <div className="flex h-16 items-center gap-3 text-sm sm:text-base font-medium text-slate-400">
-                <LoadingSpinner size="lg" />
-                Loading…
-              </div>
-            ) : (
-              <>
-                <p className="text-4xl font-extrabold tabular-nums leading-none tracking-tight text-white sm:text-5xl md:text-6xl glow-text">
-                  {earnPoints.toLocaleString()}
-                  <span className="ml-2 text-base font-semibold text-[var(--primary)] sm:ml-2.5 sm:text-lg md:text-xl">
-                    pts
-                  </span>
-                </p>
-                <p className="mt-3 max-w-2xl text-xs sm:text-sm font-normal leading-relaxed text-slate-400 sm:mt-4">
-                  Quest tasks, friend invites, partner Earn campaigns, and spin wins.
-                </p>
-              </>
-            )}
+          {/* Body — Two Column Split */}
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-0">
+            {/* LEFT: Points Display */}
+            <div className="lg:col-span-3 px-5 py-6 sm:px-6 sm:py-8 md:px-8 md:py-10 lg:border-r lg:border-white/[0.06]">
+              {loading ? (
+                <div className="flex h-16 items-center gap-3 text-sm sm:text-base font-medium text-slate-400">
+                  <LoadingSpinner size="lg" />
+                  Loading…
+                </div>
+              ) : (
+                <>
+                  <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-2">
+                    Total Points Earned
+                  </p>
+                  <p className="text-4xl font-extrabold tabular-nums leading-none tracking-tight text-white sm:text-5xl md:text-6xl glow-text">
+                    {earnPoints.toLocaleString()}
+                    <span className="ml-2 text-base font-semibold text-[var(--primary)] sm:ml-2.5 sm:text-lg md:text-xl">
+                      pts
+                    </span>
+                  </p>
+                  <p className="mt-3 text-xs sm:text-sm font-normal leading-relaxed text-slate-400 sm:mt-4 max-w-md">
+                    Complete daily tasks, invite friends, join partner campaigns, and spin the wheel to earn more.
+                  </p>
 
-            {/* Quick Actions */}
-            <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-white/[0.06] pt-6 sm:mt-8 sm:pt-8">
-              <Link
-                href={ROUTES.leaderboard}
-                className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10 hover:shadow-[0_0_20px_rgb(var(--canton-rgb)/0.08)] sm:px-5 sm:py-3"
-              >
-                <Trophy className="h-4 w-4 text-[var(--primary)]" />
-                Leaderboard
-              </Link>
-              <Link
-                href={ROUTES.spinReward}
-                className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm font-semibold text-slate-400 transition-all duration-200 hover:border-white/[0.15] hover:text-white hover:bg-white/[0.05] sm:px-5 sm:py-3"
-              >
-                <Gift className="h-4 w-4" />
-                Spend Points
-              </Link>
+                  {/* Quick Actions — below points on left */}
+                  <div className="mt-5 flex flex-wrap items-center gap-3 sm:mt-6">
+                    <Link
+                      href={ROUTES.leaderboard}
+                      className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10 hover:shadow-[0_0_20px_rgb(var(--canton-rgb)/0.08)] sm:px-5 sm:py-3"
+                    >
+                      <Trophy className="h-4 w-4 text-[var(--primary)]" />
+                      View Leaderboard
+                    </Link>
+                    <Link
+                      href={ROUTES.spinReward}
+                      className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm font-semibold text-slate-400 transition-all duration-200 hover:border-white/[0.15] hover:text-white hover:bg-white/[0.05] sm:px-5 sm:py-3"
+                    >
+                      <Gift className="h-4 w-4" />
+                      Spend Points
+                    </Link>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* RIGHT: Profile Info + Stats */}
+            <div className="lg:col-span-2 px-5 py-6 sm:px-6 sm:py-8 md:px-8 md:py-10 bg-white/[0.01]">
+              {loading ? (
+                <div className="flex items-center gap-3 text-sm font-medium text-slate-400">
+                  <LoadingSpinner size="sm" />
+                  Loading profile…
+                </div>
+              ) : (
+                <div className="flex flex-col gap-5">
+                  {/* Avatar + Name */}
+                  <div className="flex items-center gap-4">
+                    {avatarUrl ? (
+                      <img
+                        src={avatarUrl}
+                        alt=""
+                        className="h-14 w-14 shrink-0 rounded-full object-cover ring-2 ring-[var(--primary)]/20 sm:h-16 sm:w-16"
+                      />
+                    ) : (
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[var(--primary)]/10 ring-2 ring-[var(--primary)]/20 sm:h-16 sm:w-16">
+                        <User className="h-7 w-7 text-[var(--primary)]" />
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-lg font-bold text-white truncate sm:text-xl">
+                        {displayName || twitterUsername || "Adventurer"}
+                      </p>
+                      {twitterUsername ? (
+                        <p className="mt-0.5 text-sm font-medium text-slate-500">@{twitterUsername}</p>
+                      ) : (
+                        <p className="mt-0.5 text-xs font-medium text-slate-600 italic">
+                          Connect X to verify quests
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Mini Stats */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 backdrop-blur-xl">
+                      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                        <Star className="h-3 w-3 text-amber-400" />
+                        Points
+                      </div>
+                      <p className="mt-1 text-xl font-bold tabular-nums text-white">
+                        {earnPoints.toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 backdrop-blur-xl">
+                      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                        <Sparkles className="h-3 w-3 text-[var(--primary)]" />
+                        Status
+                      </div>
+                      <p className="mt-1 text-xl font-bold text-[var(--primary)]">
+                        {hub?.status === "ACTIVE" ? "Active" : "—"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
