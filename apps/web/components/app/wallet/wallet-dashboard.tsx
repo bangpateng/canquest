@@ -93,7 +93,7 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
           />
           <p className="relative text-3xl font-extrabold tabular-nums leading-none tracking-tight text-white sm:text-4xl md:text-5xl">
             {balanceLoading ? (
-              <span className="text-slate-500">\u2014</span>
+              <span className="text-slate-500">{"\u2014"}</span>
             ) : (
               <>
                 {balance?.toFixed(4) ?? "0.0000"}{" "}
@@ -105,7 +105,7 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
           </p>
           {!balanceLoading && ccUsdPrice > 0 && balance !== null ? (
             <p className="relative mt-4 text-sm font-medium text-slate-500 sm:mt-5 sm:text-base md:text-lg">
-              \u2248 $
+              {"\u2248"} $
               {(balance * ccUsdPrice).toLocaleString("en-US", {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
