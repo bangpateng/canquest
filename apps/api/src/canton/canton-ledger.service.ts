@@ -193,6 +193,14 @@ export class CantonLedgerService {
    *
    * See: https://docs.canton.network/appdev/modules/m4-json-api-tutorial
    */
+  /**
+   * Exercise a choice and return { ok, status, text }.
+   *
+   * @param waitMode — use 'submit-and-wait-for-transaction-tree' when the choice
+   *   returns a tuple (ContractId A, ContractId B) and you need to extract both
+   *   contract IDs from the CreatedEvent tree. Default is 'submit-and-wait' which
+   *   only returns the updateId (no contract IDs for multi-create choices).
+   */
   async exerciseChoice(
     contractId: string,
     templateId: string,
@@ -200,6 +208,7 @@ export class CantonLedgerService {
     choiceArgument: unknown,
     actAs: string[],
     commandId?: string,
+    waitMode?: 'submit-and-wait' | 'submit-and-wait-for-transaction-tree',
   ): Promise<{ ok: boolean; status: number; text: string }> {
     return this.submitCommand(
       [
@@ -215,6 +224,7 @@ export class CantonLedgerService {
       actAs,
       undefined,
       commandId,
+      waitMode,
     );
   }
 

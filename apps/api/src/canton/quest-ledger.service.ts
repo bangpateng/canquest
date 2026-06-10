@@ -473,7 +473,7 @@ export class QuestLedgerService implements OnModuleInit {
     if (reachErr) { result.errors.push(reachErr); return result; }
     result.ledgerEnabled = true;
     const { ok, text } = await this.ledger.exerciseChoice(params.campaignContractId, tpl, 'ClaimFcfsSlot',
-      { user: params.userPartyId, claimId: params.claimId, claimedAt: new Date().toISOString() }, [operator], `claim-fcfs-${params.claimId}-${randomUUID()}`);
+      { user: params.userPartyId, claimId: params.claimId, claimedAt: new Date().toISOString() }, [operator], `claim-fcfs-${params.claimId}-${randomUUID()}`, 'submit-and-wait-for-transaction-tree');
     if (ok) {
       const cids = this.extractContractIds(text);
       result.campaignContractId = cids.length >= 2 ? (cids[0] ?? null) : null;
@@ -655,6 +655,7 @@ export class QuestLedgerService implements OnModuleInit {
       },
       [operator],
       `atomic-fee-reward-${params.claimContractId.slice(0, 16)}-${randomUUID()}`,
+      'submit-and-wait-for-transaction-tree',
     );
 
     if (ok) {
