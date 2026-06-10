@@ -87,6 +87,19 @@ function SpinWheel({
   const [displayRotation, setDisplayRotation] = useState(0);
   const idleSpinRef = useRef(false);
   const idleSpeedRef = useRef(0);
+  // Responsive size: max 340px desktop, scaled down on mobile
+  const [wheelSize, setWheelSize] = useState(340);
+
+  // Update wheel size responsively
+  useEffect(() => {
+    function update() {
+      const maxW = Math.min(340, window.innerWidth - 48);
+      setWheelSize(maxW);
+    }
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
 
   const drawWheel = useCallback(
     (rotation: number) => {
@@ -100,7 +113,7 @@ function SpinWheel({
       const cx = size / 2;
       const cy = size / 2;
       const outerR = size / 2 - 8;
-      const innerR = 32;
+      const innerR = Math.max(22, size * 0.094);
       const segAngle = (2 * Math.PI) / items.length;
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -150,7 +163,7 @@ function SpinWheel({
         ctx.rotate(midAngle);
         ctx.textAlign = "right";
         ctx.textBaseline = "middle";
-        const maxFontSize = Math.max(8, Math.min(13, 200 / items.length));
+        const maxFontSize = Math.max(7, Math.min(13, 180 / items.length));
         ctx.font = `700 ${maxFontSize}px -apple-system, system-ui, sans-serif`;
         ctx.shadowColor = "rgba(0,0,0,0.8)";
         ctx.shadowBlur = 5;
@@ -158,7 +171,7 @@ function SpinWheel({
         const maxChars = items.length > 8 ? 9 : 12;
         const label =
           item.label.length > maxChars
-            ? item.label.slice(0, maxChars - 1) + "…"
+            ? item.label.slice(0, maxChars - 1) + "\u2026"
             : item.label;
         ctx.fillText(label, outerR - 10, 0);
         ctx.restore();
@@ -206,16 +219,14 @@ function SpinWheel({
     [items],
   );
 
+  // HiDPI setup using responsive wheelSize
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const dpr = window.devicePixelRatio || 1;
-    const size = 340;
-    canvas.width = size * dpr;
-    canvas.height = size * dpr;
-    canvas.style.width = `${size}px`;
-    canvas.style.height = `${size}px`;
-  }, []);
+    canvas.width = wheelSize * dpr;
+    canvas.height = wheelSize * dpr;
+  }, [wheelSize]);
 
   useEffect(() => {
     drawWheel(displayRotation);
@@ -294,16 +305,21 @@ function SpinWheel({
 
   if (items.length === 0) return null;
 
+  // Calculate proportional glow & ring sizes
+  const glowSize = wheelSize + 40;
+  const ringSize = wheelSize + 16;
+  const glowBlur = Math.max(12, wheelSize * 0.07);
+
   return (
     <div className="relative flex items-center justify-center select-none">
       {/* Ambient glow */}
       <div
         className="pointer-events-none absolute rounded-full"
         style={{
-          width: 380,
-          height: 380,
+          width: glowSize,
+          height: glowSize,
           background: "radial-gradient(circle, rgba(6,182,212,0.12) 0%, rgba(99,102,241,0.08) 50%, transparent 70%)",
-          filter: "blur(24px)",
+          filter: `blur(${glowBlur}px)`,
         }}
       />
 
@@ -311,8 +327,8 @@ function SpinWheel({
       <div
         className="pointer-events-none absolute rounded-full"
         style={{
-          width: 356,
-          height: 356,
+          width: ringSize,
+          height: ringSize,
           border: "2px solid rgba(255,255,255,0.06)",
           boxShadow: "0 0 40px rgba(6,182,212,0.15), inset 0 0 40px rgba(0,0,0,0.3)",
         }}
@@ -353,8 +369,8 @@ function SpinWheel({
         ref={canvasRef}
         className="relative rounded-full"
         style={{
-          width: 340,
-          height: 340,
+          width: wheelSize,
+          height: wheelSize,
           boxShadow:
             "0 25px 60px rgba(0,0,0,0.5), 0 0 0 3px rgba(255,255,255,0.06), 0 0 80px rgba(6,182,212,0.1)",
         }}
@@ -458,7 +474,7 @@ export default function SpinRewardPage() {
               <div className="h-16 w-16 rounded-full border-2 border-cyan-500/20 bg-cyan-500/5" />
               <LoadingSpinner size="lg" className="absolute inset-0 m-auto" />
             </div>
-            <p className="text-sm font-medium text-slate-400">Loading spin wheel…</p>
+            <p className="text-sm font-medium text-slate-400">Loading spin wheel\u2026</p>
           </div>
         </div>
       </PlatformPage>
@@ -521,7 +537,7 @@ export default function SpinRewardPage() {
             <>
               {/* Wheel area */}
               <div
-                className="flex flex-col items-center gap-6 px-6 py-8"
+                className="flex flex-col items-center gap-5 px-4 py-6 sm:gap-6 sm:px-6 sm:py-8"
                 style={{
                   background: "radial-gradient(ellipse at 50% 0%, rgba(6,182,212,0.05) 0%, transparent 60%)",
                 }}
@@ -588,12 +604,12 @@ export default function SpinRewardPage() {
                     {spinning ? (
                       <span className="flex items-center justify-center gap-2.5">
                         <LoadingSpinner size="sm" tone="inherit" />
-                        <span>Spinning…</span>
+                        <span>Spinning\u2026</span>
                       </span>
                     ) : winnerIndex !== null && !showResult ? (
                       <span className="flex items-center justify-center gap-2.5">
                         <LoadingSpinner size="sm" tone="inherit" />
-                        <span>Revealing…</span>
+                        <span>Revealing\u2026</span>
                       </span>
                     ) : (
                       <span className="flex items-center justify-center gap-2.5">
@@ -613,7 +629,7 @@ export default function SpinRewardPage() {
                     <div className="flex w-full items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2.5 backdrop-blur-xl">
                       <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
                       <p className="text-xs font-medium text-amber-400">
-                        Need {state.spinCost} pts · You have {state.availablePoints} pts.
+                        Need {state.spinCost} pts \u00b7 You have {state.availablePoints} pts.
                         Complete quests to earn more!
                       </p>
                     </div>
