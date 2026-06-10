@@ -305,8 +305,8 @@ export class PartyController {
     // Record external offer to DB so it shows in "Pending Sent Offers"
     if (externalOffer) {
       await this.prisma.$executeRawUnsafe(
-        `INSERT INTO "CcExternalOffer" ("id","userId","contractId","recipientParty","recipientLabel","amountCc","description","status","createdAt","updatedAt") VALUES ($1,$2,$3,$4,$5,$6,$7,'pending',NOW(),NOW()) ON CONFLICT ("contractId") DO NOTHING`,
-        ...[offerContractId.slice(0, 30), sender.id, offerContractId, recipientPartyId, recipientLabel, amount, description].map((v) => String(v)),
+        `INSERT INTO "CcExternalOffer" ("id","userId","contractId","recipientParty","recipientLabel","amountCc","description","status","createdAt","updatedAt") VALUES ($1,$2,$3,$4,$5,$6::double precision,$7,'pending',NOW(),NOW()) ON CONFLICT ("contractId") DO NOTHING`,
+        offerContractId.slice(0, 30), sender.id, offerContractId, recipientPartyId, recipientLabel, amount, description,
       );
       await this.users.recordTransaction({ userId: sender.id, amountCc: amount, type: 'TRANSFER_OUT', description, counterparty: recipientPartyId, ledgerTxId: offerContractId });
       if (sender.username) void this.inboundSync.alignBalanceFromChain(sender.id, sender.username);
