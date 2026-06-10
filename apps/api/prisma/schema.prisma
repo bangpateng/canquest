@@ -58,6 +58,7 @@ model User {
   referralRewardReceived ReferralReward?  @relation("ReferralRewardReceived")
   walletAllocations      WalletAllocationLog[]
   redeemedWalletInvites  WalletInviteCode[]  @relation("WalletInviteRedemptions")
+  externalOffers         CcExternalOffer[]
 }
 
 /// One-time codes required to create a Canton wallet (admin-generated).
@@ -396,4 +397,20 @@ model QuestCompletion {
   completedAt   DateTime @default(now())
 
   @@unique([userId, questId])
+}
+
+/// Tracks external party transfer offers sent by users.
+model CcExternalOffer {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contractId     String    @unique
+  recipientParty String
+  recipientLabel String
+  amountCc       Float
+  description    String
+  status         String    @default("pending")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  cancelledAt    DateTime?
 }
