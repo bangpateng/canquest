@@ -41,6 +41,9 @@ import { SetUsernameDto } from './dto/set-username.dto';
 
 type AuthedReq = Request & { user: { userId: string; email: string } };
 
+const TRANSFER_OFFER_TEMPLATE_ID =
+  '94d88246f69d8a4b69333d1f993e3280deaca19b70511ea7687f01e4328a34a4:Splice.Wallet.TransferOffer:TransferOffer';
+
 @Controller('party')
 @UseGuards(AuthGuard('jwt'))
 export class PartyController {
@@ -821,40 +824,103 @@ export class PartyController {
         (await this.splice.resolveWalletUsernameForParty(user.cantonPartyId)) ??
         user.username;
 
-      const offers = await this.splice.listTransferOffers(walletUsername);
-
       const normalizedUserParty = normalizeCantonPartyId(user.cantonPartyId)
         ?? user.cantonPartyId;
 
-      const incoming = offers
-        .filter((offer) => {
-          const payload = offer.payload as Record<string, unknown> | undefined;
-          const receiver = typeof payload?.receiver_party_id === 'string'
-            ? payload.receiver_party_id
+      let allOffers: {
+        contractId: string;
+        senderParty: string;
+        senderUsername: string;
+        amount: string;
+        description: string;
+        expiresAtMicros: string;
+        createdAt?: string;
+        incoming: true;
+      }[] = [];
+
+      // 1) Query Splice Wallet API (fast, covers Splice-registered users)
+      try {
+        const spliceOffers = await this.splice.listTransferOffers(walletUsername);
+        allOffers = spliceOffers
+          .filter((offer) => {
+            const payload = offer.payload as Record<string, unknown> | undefined;
+            const receiver = typeof payload?.receiver_party_id === 'string'
+              ? payload.receiver_party_id
+              : null;
+            if (!receiver) return false;
+            return cantonPartyIdsEqual(receiver, normalizedUserParty);
+          })
+          .map((offer) => {
+            const payload = (offer.payload ?? {}) as Record<string, unknown>;
+            const senderPartyId = (typeof payload.sender_party_id === 'string'
+              ? payload.sender_party_id
+              : '') as string;
+            return {
+              contractId: offer.contractId,
+              senderParty: senderPartyId,
+              senderUsername: senderPartyId.split('::')[0] ?? senderPartyId,
+              amount: String(payload.amount ?? '0'),
+              description: String(payload.description ?? ''),
+              expiresAtMicros: String(payload.expires_at ?? '0'),
+              createdAt: typeof payload.created_at === 'string'
+                ? payload.created_at
+                : undefined,
+              incoming: true as const,
+            };
+          });
+      } catch {
+        // Splice Wallet API unreachable; fall through to Canton ACS
+      }
+
+      // 2) Fallback: query Canton Ledger ACS for Canton-only parties
+      //    This catches offers visible on-chain but not in Splice Wallet API
+      try {
+        const acsContracts = await this.ledger.queryActiveContracts(
+          TRANSFER_OFFER_TEMPLATE_ID,
+          [user.cantonPartyId],
+        );
+
+        const acsContractIds = new Set(allOffers.map((o) => o.contractId));
+
+        for (const entry of acsContracts) {
+          if (!entry || typeof entry !== 'object') continue;
+          const obj = entry as Record<string, unknown>;
+          const cid = typeof obj.contractId === 'string' ? obj.contractId : null;
+          if (!cid || acsContractIds.has(cid)) continue;
+
+          const args =
+            (obj.createArgument as Record<string, unknown> | undefined) ??
+            ((obj.CreatedEvent as Record<string, unknown> | undefined)
+              ?.createArgument as Record<string, unknown> | undefined) ??
+            ((obj.CreatedTreeEvent as Record<string, unknown> | undefined)
+              ?.createArgument as Record<string, unknown> | undefined);
+
+          if (!args) continue;
+
+          const receiver = typeof args.receiver_party_id === 'string'
+            ? args.receiver_party_id
             : null;
-          if (!receiver) return false;
-          return cantonPartyIdsEqual(receiver, normalizedUserParty);
-        })
-        .map((offer) => {
-          const payload = (offer.payload ?? {}) as Record<string, unknown>;
-          const senderPartyId = (typeof payload.sender_party_id === 'string'
-            ? payload.sender_party_id
+          if (!receiver || !cantonPartyIdsEqual(receiver, normalizedUserParty)) continue;
+
+          const senderPartyId = (typeof args.sender_party_id === 'string'
+            ? args.sender_party_id
             : '') as string;
-          return {
-            contractId: offer.contractId,
+
+          allOffers.push({
+            contractId: cid,
             senderParty: senderPartyId,
             senderUsername: senderPartyId.split('::')[0] ?? senderPartyId,
-            amount: String(payload.amount ?? '0'),
-            description: String(payload.description ?? ''),
-            expiresAtMicros: String(payload.expires_at ?? '0'),
-            createdAt: typeof payload.created_at === 'string'
-              ? payload.created_at
-              : undefined,
+            amount: String(args.amount ?? '0'),
+            description: String(args.description ?? ''),
+            expiresAtMicros: String(args.expires_at ?? '0'),
             incoming: true,
-          };
-        });
+          });
+        }
+      } catch {
+        // ACS query failed — non-critical
+      }
 
-      return { offers: incoming };
+      return { offers: allOffers };
     } catch {
       return { offers: [] };
     }
