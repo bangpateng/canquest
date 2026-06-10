@@ -298,8 +298,14 @@ template QuestClaim
           feePaid = True
           feeTxId = feeTxId
 
-        -- Step 2: Konfirmasi reward terkirim (mutasi lanjutan)
-        claimFinalCid <- create claimWithFeeCid with
+        -- Step 2: Konfirmasi reward terkirim — `this` tetap mengacu ke field
+        --         original QuestClaim sebelum choice dieksekusi, jadi aman
+        --         dipakai dua kali. Canton meng-archive kontrak original
+        --         setelah `create` pertama, lalu create kedua dari `this`
+        --         menghasilkan kontrak baru dengan feePaid + rewardSent.
+        claimFinalCid <- create this with
+          feePaid = True
+          feeTxId = feeTxId
           rewardSent = True
           rewardTxId = rewardTxId
 
