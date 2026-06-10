@@ -118,7 +118,7 @@ export function EarnCampaignRow({
     <li>
       <article
         className={cn(
-          "group relative overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-sm transition-all duration-300",
+          "group relative overflow-hidden rounded-3xl border transition-all duration-300",
           completed
             ? "border-emerald-500/25 bg-gradient-to-b from-emerald-500/[0.06] to-[var(--card)]/90"
             : "border-white/5 bg-[var(--card)]/60 hover:border-[var(--primary)]/20 hover:bg-[var(--card)]/90",

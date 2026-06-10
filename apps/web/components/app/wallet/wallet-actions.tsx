@@ -1,73 +1,404 @@
 "use client";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
+
 import { CopyField } from "@/components/app/wallet/copy-field";
 import { buttonVariants } from "@/components/ui/button";
 import { iconButtonClass } from "@/lib/ui/ui-button-styles";
-import { formatPartyIdForDisplay, normalizeSendRecipientInput } from "@/lib/canton/canton-party-id";
+import {
+  formatPartyIdForDisplay,
+  normalizeSendRecipientInput,
+} from "@/lib/canton/canton-party-id";
 import { cn } from "@/lib/utils/utils";
 import { TransactionDetailModal } from "@/components/app/wallet/transaction-detail-modal";
 import { ArrowDownLeft, ArrowUpRight, X, AlertCircle } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { useCallback, useEffect, useId, useState } from "react";
-import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 type Sheet = null | "send" | "receive";
 type SendState = "idle" | "loading" | "success" | "error";
 
-interface WalletActionsProps { partyId: string; onBalanceRefresh?: () => void; }
+interface WalletActionsProps {
+  partyId: string;
+  onBalanceRefresh?: () => void;
+}
 
 export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps) {
-  const dp = formatPartyIdForDisplay(partyId);
-  const stid = useId(); const rtid = useId();
+  const displayPartyId = formatPartyIdForDisplay(partyId);
+  const sendTitleId = useId();
+  const receiveTitleId = useId();
   const [sheet, setSheet] = useState<Sheet>(null);
   const [feeCc, setFeeCc] = useState(5);
-  const [rec, setRec] = useState(""); const [amt, setAmt] = useState(""); const [memo, setMemo] = useState("");
-  const [ss, setSs] = useState<SendState>("idle"); const [sm, setSm] = useState("");
-  const [stx, setStx] = useState<string | null>(null);
 
-  useEffect(() => { fetch("/api/party/fee-config", { credentials: "include" }).then(r => r.ok ? r.json() : null).then((d: any) => { if (d?.feeCc !== undefined) setFeeCc(d.feeCc); }).catch(() => {}); }, []);
+  // Fetch fee config from backend env so UI stays in sync with .env
+  useEffect(() => {
+    fetch("/api/party/fee-config", { credentials: "include" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((d: { feeCc?: number } | null) => { if (d?.feeCc !== undefined) setFeeCc(d.feeCc); })
+      .catch(() => {});
+  }, []);
 
-  const close = useCallback(() => { setSheet(null); setSs("idle"); setSm(""); }, []);
-  const cstx = useCallback(() => { setStx(null); setSs("idle"); setSm(""); }, []);
-  useEffect(() => { if (!sheet) return; const cb = (e: KeyboardEvent) => { if (e.key === "Escape") close(); }; window.addEventListener("keydown", cb); return () => window.removeEventListener("keydown", cb); }, [sheet, close]);
+  // Send form state
+  const [recipientUsername, setRecipientUsername] = useState("");
+  const [ccAmount, setCcAmount] = useState("");
+  const [memo, setMemo] = useState("");
+  const [sendState, setSendState] = useState<SendState>("idle");
+  const [sendMessage, setSendMessage] = useState("");
+  const [successTransactionId, setSuccessTransactionId] = useState<string | null>(null);
 
-  function os() { setRec(""); setAmt(""); setMemo(""); setSs("idle"); setSm(""); setSheet("send"); }
+  const close = useCallback(() => {
+    setSheet(null);
+    setSendState("idle");
+    setSendMessage("");
+  }, []);
 
-  async function sub(e: React.FormEvent) { e.preventDefault(); const r = normalizeSendRecipientInput(rec); const a = parseFloat(amt.trim()); if (!r || !a || a <= 0) return; setSs("loading"); setSm("");
-    try { const res = await fetch("/api/party/send-cc", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ recipientUsername: r, amount: a, memo: memo.trim() || undefined }) }); const d = await res.json() as any;
-      if (!res.ok || d.success === false || d.accepted === false) { setSs("error"); setSm(d.message ?? d.error ?? "Transfer failed"); return; }
-      setSheet(null); setSs("idle");
-      if (typeof d.transactionId === "string" && d.transactionId) setStx(d.transactionId);
-      else { setSs("success"); setSm(d.message ?? `Sent ${a} CC`); setSheet("send"); }
-      onBalanceRefresh?.();
-    } catch { setSs("error"); setSm("Network error"); }
+  const closeSuccessReceipt = useCallback(() => {
+    setSuccessTransactionId(null);
+    setSendState("idle");
+    setSendMessage("");
+  }, []);
+
+  useEffect(() => {
+    if (!sheet) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") close();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sheet, close]);
+
+  function openSend() {
+    setRecipientUsername("");
+    setCcAmount("");
+    setMemo("");
+    setSendState("idle");
+    setSendMessage("");
+    setSheet("send");
   }
 
-  return (<>
-    <div className="grid grid-cols-2 gap-3"><button type="button" onClick={os} className={cn(buttonVariants({ size: "sm" }), "w-full justify-center gap-2 rounded-lg")}><ArrowUpRight className="h-4 w-4" />Send</button>
-    <button type="button" onClick={() => setSheet("receive")} className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "w-full justify-center gap-2 rounded-lg")}><ArrowDownLeft className="h-4 w-4" />Receive</button></div>
+  async function submitSend(e: React.FormEvent) {
+    e.preventDefault();
+    const recipient = normalizeSendRecipientInput(recipientUsername);
+    const amount = parseFloat(ccAmount.trim());
+    if (!recipient || !amount || amount <= 0) return;
 
-    {sheet === "send" && (<div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="presentation"><button type="button" className="fixed inset-0 bg-black/40" onClick={close} />
-      <div role="dialog" aria-modal="true" aria-labelledby={stid} className="relative z-10 w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-lg p-5 sm:p-6">
-        <div className="flex items-start justify-between gap-4"><h2 id={stid} className="text-base font-semibold text-[var(--foreground)]">Send CC</h2><button onClick={close} className="p-1 rounded-md hover:bg-[var(--muted)]"><X className="h-4 w-4 text-[var(--muted-foreground)]" /></button></div>
-        {ss === "success" ? <div className="mt-4 text-center"><p className="text-sm text-[var(--foreground)]">{sm}</p><button onClick={close} className={cn(buttonVariants({ size: "sm" }), "mt-3")}>Done</button></div>
-        : <form onSubmit={sub} className="mt-4 space-y-4">
-          <div><label htmlFor="wsr" className="text-xs font-medium text-[var(--muted-foreground)]">Recipient</label><textarea id="wsr" required rows={2} value={rec} onChange={e => setRec(e.target.value)} placeholder="@alice or alice::1220..." disabled={ss==="loading"} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--muted)] px-3 py-2 font-mono text-sm text-[var(--foreground)] outline-none resize-none focus:border-[var(--primary)]/50 disabled:opacity-50" /></div>
-          <div><label htmlFor="wsa" className="text-xs font-medium text-[var(--muted-foreground)]">Amount</label><input id="wsa" required inputMode="decimal" value={amt} onChange={e => setAmt(e.target.value)} placeholder="10" disabled={ss==="loading"} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--muted)] px-3 py-2 text-sm font-bold tabular-nums text-[var(--foreground)] outline-none focus:border-[var(--primary)]/50 disabled:opacity-50" /></div>
-          <div><label htmlFor="wsm" className="text-xs font-medium text-[var(--muted-foreground)]">Memo <span className="text-[var(--muted-foreground)]">(optional)</span></label><input id="wsm" value={memo} onChange={e => setMemo(e.target.value)} disabled={ss==="loading"} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--muted)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--primary)]/50 disabled:opacity-50" /></div>
-          <div className="rounded-lg border border-[var(--border)] bg-[var(--muted)] px-3 py-2 text-xs text-[var(--muted-foreground)]">Fee: {feeCc} CC{amt && parseFloat(amt) > 0 ? ` · Total: ${(parseFloat(amt) + feeCc).toFixed(2)} CC` : ""}</div>
-          {ss === "error" && <div className="flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" /><p className="text-xs text-red-300">{sm}</p></div>}
-          <div className="flex gap-2"><button type="submit" disabled={ss==="loading"} className={cn(buttonVariants({ size: "sm" }), "gap-2 rounded-lg")}>{ss==="loading" ? <><LoadingSpinner size="sm" />Sending...</> : "Send"}</button><button type="button" onClick={close} disabled={ss==="loading"} className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "rounded-lg")}>Cancel</button></div>
-        </form>}
-      </div></div>)}
+    setSendState("loading");
+    setSendMessage("");
 
-    <TransactionDetailModal open={stx !== null} transactionId={stx} onClose={cstx} />
+    try {
+      const res = await fetch("/api/party/send-cc", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipientUsername: recipient,
+          amount,
+          memo: memo.trim() || undefined,
+        }),
+      });
 
-    {sheet === "receive" && (<div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="presentation"><button type="button" className="fixed inset-0 bg-black/40" onClick={close} />
-      <div role="dialog" aria-modal="true" aria-labelledby={rtid} className="relative z-10 w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-lg p-5 sm:p-6">
-        <div className="flex items-start justify-between gap-4"><h2 id={rtid} className="text-base font-semibold text-[var(--foreground)]">Receive CC</h2><button onClick={close} className="p-1 rounded-md hover:bg-[var(--muted)]"><X className="h-4 w-4 text-[var(--muted-foreground)]" /></button></div>
-        <div className="mt-4 flex justify-center rounded-lg border border-[var(--border)] bg-white p-4"><QRCodeSVG value={dp} size={180} level="M" /></div>
-        <div className="mt-4"><CopyField label="Your Canton Party ID" value={dp} /></div>
-        <button type="button" onClick={close} className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "mt-4 w-full rounded-lg")}>Done</button>
-      </div></div>)}
-  </>);
+      const data = (await res.json()) as {
+        message?: string;
+        error?: string;
+        totalDeducted?: number;
+        fee?: number;
+        feeCollected?: boolean;
+        warning?: string;
+        success?: boolean;
+        accepted?: boolean;
+        transactionId?: string;
+        to?: string;
+      };
+
+      if (
+        !res.ok ||
+        data.success === false ||
+        data.accepted === false
+      ) {
+        setSendState("error");
+        setSendMessage(data.message ?? data.error ?? "Transfer failed. Please try again.");
+        return;
+      }
+
+      setSheet(null);
+      setSendState("idle");
+      if (typeof data.transactionId === "string" && data.transactionId) {
+        setSuccessTransactionId(data.transactionId);
+      } else {
+        setSendState("success");
+        setSendMessage(
+          data.message ??
+            `Sent ${amount} CC` +
+              (data.feeCollected && data.fee
+                ? ` (fee ${data.fee} CC, total ${data.totalDeducted ?? amount + data.fee} CC)`
+                : ""),
+        );
+        setSheet("send");
+      }
+      onBalanceRefresh?.();
+    } catch {
+      setSendState("error");
+      setSendMessage("Network error. Check your connection and try again.");
+    }
+  }
+
+  return (
+    <>
+      <div className="grid w-full min-w-0 grid-cols-2 gap-4">
+        <button
+          type="button"
+          onClick={openSend}
+          className={cn(buttonVariants({ size: "sm" }), "w-full justify-center gap-2")}
+        >
+          <ArrowUpRight className="h-5 w-5 shrink-0" aria-hidden />
+          Send CC
+        </button>
+        <button
+          type="button"
+          onClick={() => setSheet("receive")}
+          className={cn(
+            buttonVariants({ variant: "secondary", size: "sm" }),
+            "w-full justify-center gap-2",
+          )}
+        >
+          <ArrowDownLeft className="h-5 w-5 shrink-0" aria-hidden />
+          Receive
+        </button>
+      </div>
+
+      {/* ── SEND DIALOG ── */}
+      {sheet === "send" ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overscroll-contain p-4"
+          role="presentation"
+        >
+          <button
+            type="button"
+            className="fixed inset-0 bg-black/45 backdrop-blur-[2px]"
+            aria-label="Close dialog"
+            onClick={close}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={sendTitleId}
+            className="relative z-10 my-auto w-full max-h-[min(90vh,90dvh)] max-w-md overflow-y-auto rounded-3xl border border-white/5 bg-[var(--card)] p-8 shadow-xl"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2
+                  id={sendTitleId}
+                  className="text-xl font-bold text-slate-100"
+                >
+                  Send
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={close}
+                className={iconButtonClass("h-9 w-9 shrink-0 text-[var(--foreground)]")}
+                aria-label="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {sendState === "success" ? (
+              <div className="mt-6 flex flex-col items-center gap-4 py-4 text-center">
+                <p className="text-sm font-medium text-[var(--foreground)]">{sendMessage}</p>
+                <button
+                  type="button"
+                  onClick={close}
+                  className={cn(buttonVariants({ size: "sm" }), "mt-2")}
+                >
+                  Done
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={submitSend} className="mt-8 space-y-6">
+                                <div className="space-y-3">
+                  <label
+                    htmlFor="wallet-send-recipient"
+                    className="text-sm font-medium text-slate-400"
+                  >
+                    Recipient
+                  </label>
+                  <textarea
+                    id="wallet-send-recipient"
+                    required
+                    rows={2}
+                    autoComplete="off"
+                    value={recipientUsername}
+                    onChange={(e) => setRecipientUsername(e.target.value)}
+                    onBlur={() => {
+                      const n = normalizeSendRecipientInput(recipientUsername);
+                      if (n && n !== recipientUsername.trim()) setRecipientUsername(n);
+                    }}
+                    placeholder="@alice or alice::1220…"
+                    disabled={sendState === "loading"}
+                    className="w-full resize-none rounded-2xl border border-white/5 bg-[var(--muted)]/40 px-4 py-3 font-mono text-sm font-medium text-slate-100 outline-none ring-offset-[var(--card)] placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <label
+                    htmlFor="wallet-send-amount"
+                    className="text-sm font-medium text-slate-400"
+                  >
+                    Amount
+                  </label>
+                  <input
+                    id="wallet-send-amount"
+                    required
+                    inputMode="decimal"
+                    autoComplete="off"
+                    value={ccAmount}
+                    onChange={(e) => setCcAmount(e.target.value)}
+                    placeholder="e.g. 10"
+                    disabled={sendState === "loading"}
+                    className="w-full rounded-2xl border border-white/5 bg-[var(--muted)]/40 px-4 py-3 text-base font-bold tabular-nums text-slate-100 outline-none ring-offset-[var(--card)] placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <label
+                    htmlFor="wallet-send-memo"
+                    className="text-sm font-medium text-slate-400"
+                  >
+                    Memo{" "}
+                    <span className="font-normal text-slate-500">(optional)</span>
+                  </label>
+                  <input
+                    id="wallet-send-memo"
+                    autoComplete="off"
+                    value={memo}
+                    onChange={(e) => setMemo(e.target.value)}
+                    placeholder=""
+                    disabled={sendState === "loading"}
+                    className="w-full rounded-2xl border border-white/5 bg-[var(--muted)]/40 px-4 py-3 text-base font-medium text-slate-100 outline-none ring-offset-[var(--card)] placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
+                  />
+                </div>
+
+                {/* Fee notice — value from env TRANSACTION_FEE_CC */}
+                <div className="rounded-2xl border border-white/5 bg-[var(--muted)]/30 px-4 py-3">
+                  <p className="text-sm font-medium text-slate-400">
+                    <span className="font-semibold text-slate-100">Fee Withdraw : {feeCc} CC</span>
+                    {ccAmount && parseFloat(ccAmount) > 0 && (
+                      <span className="ml-2 font-semibold text-canton">
+                        · Total: {(parseFloat(ccAmount) + feeCc).toFixed(2)} CC
+                      </span>
+                    )}
+                  </p>
+                </div>
+
+                {sendState === "error" && (
+                  <div className="flex items-start gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-4">
+                    <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
+                    <p className="text-sm font-medium text-red-400">{sendMessage}</p>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-3 pt-3">
+                  <button
+                    type="submit"
+                    disabled={sendState === "loading"}
+                    className={cn(buttonVariants({ size: "sm" }), "min-w-[7rem] gap-2")}
+                  >
+                    {sendState === "loading" ? (
+                      <>
+                        <LoadingSpinner size="sm" />
+                        Sending…
+                      </>
+                    ) : (
+                      "Send"
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={close}
+                    disabled={sendState === "loading"}
+                    className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      <TransactionDetailModal
+        open={successTransactionId !== null}
+        transactionId={successTransactionId}
+        title="Transfer sent"
+        subtitle="Funds are on the way. Review your receipt below."
+        onClose={closeSuccessReceipt}
+      />
+
+      {/* ── RECEIVE DIALOG ── */}
+      {sheet === "receive" ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overscroll-contain p-4"
+          role="presentation"
+        >
+          <button
+            type="button"
+            className="fixed inset-0 bg-black/45 backdrop-blur-[2px]"
+            aria-label="Close dialog"
+            onClick={close}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={receiveTitleId}
+            className="relative z-10 my-auto w-full max-h-[min(90vh,90dvh)] max-w-md overflow-y-auto rounded-3xl border border-white/5 bg-[var(--card)] p-8 shadow-xl"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2
+                  id={receiveTitleId}
+                  className="text-xl font-bold text-slate-100"
+                >
+                  Receive CC
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={close}
+                className={iconButtonClass("h-9 w-9 shrink-0 text-[var(--foreground)]")}
+                aria-label="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mt-8 flex justify-center rounded-3xl border border-white/5 bg-white p-6 dark:bg-zinc-950">
+              <QRCodeSVG
+                value={displayPartyId}
+                size={200}
+                level="M"
+                marginSize={2}
+                className="h-[200px] w-[200px]"
+              />
+            </div>
+
+            <div className="mt-8">
+              <CopyField label="Your Canton Party ID" value={displayPartyId} />
+            </div>
+
+            <button
+              type="button"
+              onClick={close}
+              className={cn(
+                buttonVariants({ variant: "secondary", size: "sm" }),
+                "mt-8 w-full sm:w-auto",
+              )}
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
 }

@@ -42,7 +42,7 @@ export function CampaignFcfsRewardCard({
   const showClaimButton = mode === "claim" && canClaim && onClaim;
 
   return (
-    <section className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-sm px-5 py-4">
+    <section className="overflow-hidden rounded-3xl border border-white/5 bg-[var(--card)]/40 px-6 py-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-5">
         <div className="flex min-w-0 items-start gap-4">
           <div

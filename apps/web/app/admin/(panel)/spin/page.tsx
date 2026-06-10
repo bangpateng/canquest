@@ -472,7 +472,7 @@ export default function AdminSpinPage() {
           <div
             role="dialog"
             aria-modal="true"
-            className="relative z-10 w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-lg"
+            className="relative z-10 w-full max-w-md rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl"
           >
             <div className="flex items-center justify-between gap-4">
               <h2 className="text-lg font-bold">

@@ -19,7 +19,7 @@ export function WalletCreatePromptBanner({ className }: WalletCreatePromptProps)
   return (
     <div
       className={cn(
-        "rounded-xl border border-orange-500/20 bg-orange-500/5 p-5 sm:p-6",
+        "rounded-3xl border border-orange-500/30 bg-orange-500/10 p-6 sm:p-8",
         className,
       )}
       role="status"
@@ -65,7 +65,7 @@ export function WalletCreatePromptModal({
         aria-label="Close"
         onClick={onClose}
       />
-      <div className="relative w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-lg">
+      <div className="relative w-full max-w-md rounded-3xl border border-orange-500/25 bg-[var(--card)] p-8 shadow-2xl shadow-black/40">
         <button
           type="button"
           onClick={onClose}
