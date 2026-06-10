@@ -1,5 +1,6 @@
 import { Process, Processor } from '@nestjs/bull';
 import { Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import Bull from 'bull';
 type Job<T> = Bull.Job<T>;
 import { QUEUE_SPIN, JOB_PROCESS_SPIN } from './queue.constants';
@@ -25,7 +26,7 @@ export interface ProcessSpinPayload {
  *
  * Flow:
  *   1. Spin controller → DB (hasil spin disimpan) → enqueue job
- *   2. Worker: jika reward = CC → createTransferOffer + accept
+ *   2. Worker: jika reward = CC → createTransferOffer (sender = canquest-reward-user) + accept
  *   3. Worker: update SpinResult status = DELIVERED
  */
 @Processor(QUEUE_SPIN)
@@ -36,6 +37,7 @@ export class SpinJobProcessor {
     private readonly prisma: PrismaService,
     private readonly splice: SpliceValidatorService,
     private readonly users: UsersService,
+    private readonly config: ConfigService,
   ) {}
 
   @Process(JOB_PROCESS_SPIN)
@@ -53,10 +55,17 @@ export class SpinJobProcessor {
         return;
       }
 
+      // Reward sender = canquest-reward-user (same as quest earn rewards)
+      // So CC comes from canquest-reward, not canquest-validator-1
+      const rewardSender =
+        this.config.get<string>('CANTON_REWARD_API_USER')?.trim() || 'canquest-reward-user';
+
       const offerContractId = await this.splice.createTransferOffer(
         cantonPartyId,
         rewardCc,
         `Spin reward`,
+        undefined,          // trackingId
+        rewardSender,        // senderUsername → canquest-reward-user
       );
 
       if (!offerContractId) {
@@ -77,7 +86,7 @@ export class SpinJobProcessor {
       });
 
       await this.markDelivered(spinResultId, true, offerContractId);
-      this.logger.log(`[Job ${job.id}] ✅ Spin CC reward delivered: ${rewardCc} CC → @${username}`);
+      this.logger.log(`[Job ${job.id}] ✅ Spin CC reward delivered: ${rewardCc} CC from @${rewardSender} → @${username}`);
     } else {
       // Non-CC reward (points already credited by SpinService synchronously)
       await this.markDelivered(spinResultId, true);
