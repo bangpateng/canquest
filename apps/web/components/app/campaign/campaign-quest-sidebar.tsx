@@ -117,7 +117,7 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
 
   return (
     <section
-      className="w-full overflow-hidden rounded-3xl border border-white/5 bg-[var(--card)]"
+      className="w-full overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-sm"
       aria-label="Campaign reward"
     >
       <div className="border-b border-slate-800/80 bg-gradient-to-br from-[var(--primary)]/12 via-transparent to-transparent px-6 py-6">
