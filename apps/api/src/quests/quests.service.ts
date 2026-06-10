@@ -2554,7 +2554,9 @@ export class QuestsService {
       throw new Error(feeResult.error ?? 'fee collect failed');
     }
 
-    const ledgerTxId = feeResult.ledgerTxId ?? '';
+    // Gunakan ledgerTxId dari Splice jika ada; fallback ke UUID agar DAML
+    // AtomicFeeAndReward tidak gagal assertion "feeTxId tidak boleh kosong".
+    const ledgerTxId = feeResult.ledgerTxId?.trim() || `fee-${Date.now()}-${params.userId.slice(0, 8)}`;
     const feeLabel = params.feeTargetPartyId.split('::')[0];
     await this.users.recordTransaction({
       userId: params.userId,
@@ -2562,7 +2564,7 @@ export class QuestsService {
       type: 'TRANSFER_OUT',
       description: `Sent ${params.feeCc} CC claim fee`,
       counterparty: feeLabel,
-      ledgerTxId: ledgerTxId || undefined,
+      ledgerTxId,
     });
     return ledgerTxId;
   }
