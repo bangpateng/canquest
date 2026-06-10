@@ -122,8 +122,24 @@ export class QuestLedgerService implements OnModuleInit {
   ) {}
 
   /**
-   * MainNet safety check — pastikan 3 party punya fingerprint berbeda.
-   * Kalau semua sama, Canton anggap 1 party → isolasi fee/reward GAGAL.
+   * Canton Network safety check — pastikan 3 party ID LENGKAP berbeda.
+   *
+   * ⚠️ PENTING: Fingerprint SAMA adalah NORMAL di arsitektur Canton!
+   *
+   * Canton party ID format: username::fingerprint
+   * - fingerprint = hash public key PARTICIPANT NODE (bukan user)
+   * - 1 participant node = 1 fingerprint untuk SEMUA party di node itu
+   * - Canton membedakan party dari NAMA LENGKAP (termasuk username sebelum ::)
+   * - Isolasi privacy terjadi di level party ID lengkap, bukan fingerprint
+   *
+   * Contoh VALID (fingerprint sama, tapi party berbeda):
+   *   canquest-validator-1::abc123def456
+   *   canquest-operator::abc123def456
+   *   canquest-fee::abc123def456
+   *
+   * Yang wajib divalidasi: partyHint (username) BERBEDA, dan bukan placeholder.
+   *
+   * Docs: https://docs.canton.network/overview/learn/architecture
    */
   onModuleInit(): void {
     if (!this.isConfigured()) return;
@@ -131,31 +147,71 @@ export class QuestLedgerService implements OnModuleInit {
     const operator = this.operatorPartyId;
     const fee = this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim();
 
-    const fingerprints = new Set<string>();
-    for (const p of [validator, operator, fee]) {
-      if (!p) continue;
-      const fp = p.split('::')[1] ?? '';
-      if (fp) fingerprints.add(fp);
+    const partyIds = [
+      { label: 'validator', value: validator },
+      { label: 'operator', value: operator },
+      { label: 'fee', value: fee },
+    ];
+
+    // Validasi 1: semua party ID harus ada
+    const missing = partyIds.filter((p) => !p.value).map((p) => p.label);
+    if (missing.length > 0) {
+      this.logger.error(
+        `⛔ CANQUEST PARTY CONFIG MISSING: ${missing.join(', ')} party ID(s) not set in .env.\n` +
+        '   Isi CANTON_VALIDATOR_PARTY_ID, CANTON_OPERATOR_PARTY_ID, dan CANTON_FEE_RECIPIENT_PARTY_ID.',
+      );
+      return;
     }
 
-    if (fingerprints.size < 2) {
+    // Validasi 2: partyHint (username) harus berbeda
+    const hints = new Set(partyIds.map((p) => p.value!.split('::')[0] ?? ''));
+    if (hints.size < 3) {
       this.logger.error(
         '╔══════════════════════════════════════════════════════════════╗\n' +
-        '║  ⛔ MAINNET PARTY FINGERPRINT ERROR                          ║\n' +
-        '║  Semua party ID menggunakan fingerprint yang SAMA.           ║\n' +
-        '║  Canton menganggapnya 1 party → isolasi fee/reward GAGAL.   ║\n' +
-        '║                                                            ║\n' +
-        '║  PERBAIKI: Buat 2 Splice user BARU di VPS1:                 ║\n' +
+        '║  ⛔ CANQUEST PARTY HINT DUPLICATE                             ║\n' +
+        '║  Dua atau lebih party ID memiliki nama yang SAMA.            ║\n' +
+        '║  Canton akan menganggapnya sebagai 1 party.                  ║\n' +
+        '║                                                              ║\n' +
+        '║  Saat ini terdaftar:                                         ║\n' +
+        `║    validator : ${(validator ?? 'MISSING').split('::')[0]?.padEnd(35) ?? 'MISSING'.padEnd(35)}║\n` +
+        `║    operator  : ${(operator ?? 'MISSING').split('::')[0]?.padEnd(35) ?? 'MISSING'.padEnd(35)}║\n` +
+        `║    fee       : ${(fee ?? 'MISSING').split('::')[0]?.padEnd(35) ?? 'MISSING'.padEnd(35)}║\n` +
+        '║                                                              ║\n' +
+        '║  PERBAIKI: Buat Splice user dengan nama BERBEDA di VPS1:     ║\n' +
         '║    curl -X POST .../admin/users -d \'{"name":"canquest-operator"}\'  ║\n' +
         '║    curl -X POST .../admin/users -d \'{"name":"canquest-fee"}\'       ║\n' +
-        '║  ⚠  Setiap user AKAN MENDAPAT FINGERPRINT BERBEDA.          ║\n' +
-        '║  ⚠  JANGAN pakai fingerprint validator untuk operator/fee.   ║\n' +
         '╚══════════════════════════════════════════════════════════════╝',
       );
-    } else if (fingerprints.size < 3) {
+      return;
+    }
+
+    // Validasi 3: tidak boleh ada placeholder
+    const placeholders = partyIds.filter((p) => {
+      const v = p.value ?? '';
+      return v.includes('__GANTI') || v.includes('__UPLOAD') || v.includes('<FINGERPRINT');
+    });
+    if (placeholders.length > 0) {
+      this.logger.error(
+        `⛔ CANQUEST PARTY PLACEHOLDER DETECTED: ${placeholders.map((p) => p.label).join(', ')} masih pakai placeholder.\n` +
+        '   Jalankan: curl -X POST .../admin/users untuk mendapatkan party ID asli, lalu isi di .env.',
+      );
+      return;
+    }
+
+    // Validasi 4: fingerprint sebaiknya sama (karena 1 participant node)
+    const fingerprints = new Set<string>();
+    for (const p of partyIds) {
+      const fp = p.value!.split('::')[1] ?? '';
+      if (fp) fingerprints.add(fp);
+    }
+    if (fingerprints.size > 1) {
       this.logger.warn(
-        '⚠ MAINNET: Hanya 2 fingerprint unik terdeteksi. ' +
-        'Pastikan canquest-validator, canquest-operator, dan canquest-fee SEMUA berbeda.',
+        `⚠ UNEXPECTED: ${fingerprints.size} different fingerprints detected across 3 party IDs.\n` +
+        '   Ini berarti party dibuat di participant node BERBEDA. Pastikan SEMUA party dari VPS1 yang sama.',
+      );
+    } else {
+      this.logger.log(
+        `✅ Canton party check PASSED: ${hints.size} unique party hints, 1 participant (fingerprint ${[...fingerprints][0].slice(0, 12)}…)`,
       );
     }
   }
