@@ -2,51 +2,38 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── CanQuest — Simple Web3 dApp design ────────────────────────────────── */
-
 :root, .dark {
   --canton-rgb: 90 217 138;
   --canton-ink: 184 240 212;
   --canton-ink-muted: 122 184 154;
-  --canton-cyan-rgb: 32 211 195;
-  --background: #07080d;
-  --foreground: #f1f1f4;
+  --background: #06080d;
+  --foreground: #eeeff2;
   --muted: #111319;
   --muted-foreground: #6b6e7b;
-  --card: #0d0e16;
-  --border: rgb(255 255 255 / 0.06);
+  --card: #0d0f17;
+  --border: rgb(255 255 255 / 0.05);
   --primary: rgb(var(--canton-rgb));
   --primary-strong: #72e8a4;
-  --primary-soft: rgb(var(--canton-rgb) / 0.12);
+  --primary-soft: rgb(var(--canton-rgb) / 0.1);
   --primary-foreground: #0a0a0c;
-  --accent: #5eead4;
-  --accent-muted: rgb(var(--canton-cyan-rgb) / 0.1);
-  --ring: rgb(var(--canton-rgb) / 0.4);
-  --danger: #f87171;
-  --success: #4ade80;
-  --warn-rgb: 251 146 60;
+  --ring: rgb(var(--canton-rgb) / 0.35);
 }
 
 .light {
   --canton-rgb: 56 180 120;
   --canton-ink: 22 101 52;
   --canton-ink-muted: 74 124 98;
-  --canton-cyan-rgb: 13 148 136;
-  --background: #f4f6fa;
+  --background: #f8f9fc;
   --foreground: #0f1117;
-  --muted: #e8ecf4;
+  --muted: #f0f1f5;
   --muted-foreground: #5c6070;
   --card: #ffffff;
-  --border: rgb(15 23 42 / 0.1);
+  --border: rgb(15 23 42 / 0.06);
   --primary: rgb(var(--canton-rgb));
   --primary-strong: #2d9a68;
-  --primary-soft: rgb(var(--canton-rgb) / 0.12);
+  --primary-soft: rgb(var(--canton-rgb) / 0.1);
   --primary-foreground: #ffffff;
-  --accent: #0d9488;
-  --ring: rgb(var(--canton-rgb) / 0.35);
-  --danger: #dc2626;
-  --success: #16a34a;
-  --warn-rgb: 234 88 12;
+  --ring: rgb(var(--canton-rgb) / 0.3);
 }
 
 @layer base {
@@ -57,56 +44,26 @@
     @apply bg-[var(--background)] text-[var(--foreground)] antialiased;
     font-family: var(--font-inter), system-ui, sans-serif;
   }
-  * { max-width: 100%; box-sizing: border-box; }
-  ::-webkit-scrollbar { width: 4px; height: 4px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: rgb(255 255 255 / 0.08); border-radius: 999px; }
+  * { box-sizing: border-box; }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-thumb { background: rgb(255 255 255 / 0.1); border-radius: 4px; }
 }
 
-/* ── Typography ────────────────────────────────────────────────────────── */
 @layer components {
   .type-display { font-family: var(--font-space), system-ui, sans-serif; @apply tracking-tight; }
-  .type-toolbar-title { @apply type-display text-base font-semibold sm:text-lg md:text-xl; }
   .type-hero { @apply type-display text-3xl font-semibold leading-[1.08] sm:text-4xl; }
   .type-page-title { @apply type-display text-2xl font-semibold leading-tight; }
   .type-section-title { @apply type-display text-lg font-semibold leading-snug; }
   .type-card-title { @apply type-display text-sm font-semibold leading-snug; }
-  .type-eyebrow { @apply text-xs font-semibold uppercase tracking-widest text-[var(--muted-foreground)]; }
-  .type-eyebrow-brand { @apply text-xs font-semibold uppercase tracking-widest text-canton; }
-  .type-lead { @apply text-sm leading-relaxed text-[var(--muted-foreground)]; }
-  .type-body { @apply text-sm leading-relaxed text-[var(--foreground)]; }
+  .type-eyebrow { @apply text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]; }
   .type-stat { @apply type-display text-2xl font-semibold tabular-nums leading-none; }
-  .type-stat-lg { @apply type-display text-3xl font-semibold tabular-nums leading-none; }
 }
 
-/* ── Canton utilities ──────────────────────────────────────────────────── */
 @layer utilities {
   .text-canton { color: rgb(var(--canton-ink)); }
-  .text-canton-muted { color: rgb(var(--canton-ink-muted)); }
-  .bg-canton-subtle { background-color: rgb(var(--canton-rgb) / 0.1); }
-  .bg-canton-soft { background-color: rgb(var(--canton-rgb) / 0.15); }
-  .border-canton-muted { border-color: rgb(var(--canton-rgb) / 0.2); }
+  .bg-canton-soft { background-color: var(--primary-soft); }
   .text-gradient-brand {
-    background: linear-gradient(135deg, rgb(var(--canton-rgb)) 0%, rgb(var(--canton-cyan-rgb)) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    background: linear-gradient(135deg, rgb(var(--canton-rgb)), rgb(var(--canton-ink)));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
   }
-}
-
-/* ── Landing animations ────────────────────────────────────────────────── */
-.landing-fade-in { animation: landing-fade-in-up 0.55s ease-out forwards; opacity: 0; }
-.landing-fade-in-delay-1 { animation-delay: 0.06s; }
-.landing-fade-in-delay-2 { animation-delay: 0.12s; }
-.landing-fade-in-delay-3 { animation-delay: 0.18s; }
-.landing-fade-in-delay-4 { animation-delay: 0.24s; }
-.landing-menu-backdrop { animation: landing-fade-in 0.2s ease-out forwards; }
-.landing-menu-panel { animation: landing-slide-in-right 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
-
-@keyframes landing-fade-in-up { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes landing-fade-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes landing-slide-in-right { from { transform: translateX(100%); } to { transform: translateX(0); } }
-
-@media (prefers-reduced-motion: reduce) {
-  .landing-fade-in, .landing-menu-backdrop, .landing-menu-panel { animation: none !important; opacity: 1; transform: none; }
 }
