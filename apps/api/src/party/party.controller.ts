@@ -59,6 +59,10 @@ export class PartyController {
     private readonly questLedger: QuestLedgerService,
   ) {}
 
+  /**
+   * Reject wallets allocated on the wrong Canton participant (7575 tunnel ≠ TestNet validator).
+   * TestNet validator suffix example: …1220cc5cc83730c8d5fb167626147133848cf69be6962f143be0c39d3e11a8546e8d
+   */
   private assertPartyOnValidatorParticipant(partyId: string): void {
     if (partyId.startsWith('canquest:')) return;
     const anchor =
@@ -70,12 +74,12 @@ export class PartyController {
     const expected = participantSuffixFromParty(anchor);
     const got = participantSuffixFromParty(partyId);
     this.logger.error(
-      `Party participant mismatch: got ...${got?.slice(-16) ?? '?'} expected ...${expected?.slice(-16) ?? '?'}`,
+      `Party participant mismatch: got …${got?.slice(-16) ?? '?'} expected …${expected?.slice(-16) ?? '?'}`,
     );
     throw new BadRequestException(
       'Wallet was created on the wrong Canton participant (suffix after :: does not match your TestNet validator). ' +
         'Both SSH tunnels must target the same validator stack on 162.250.190.204: ' +
-        '7575 -> participant container, 8080 -> nginx (wallet.localhost). ' +
+        '7575 → participant container, 8080 → nginx (wallet.localhost). ' +
         'Do not use DevNet (162.250.191.46). Re-run tunnel-testnet.ps1 with correct Docker IPs, then create a new wallet.',
     );
   }
@@ -90,6 +94,11 @@ export class PartyController {
     };
   }
 
+  /**
+   * Reserve a username → create Splice wallet user (allocates Party ID + registers in Splice).
+   * Single API call to the Splice validator does everything.
+   * Falls back to Canton JSON API only, or placeholder, if Splice is unreachable.
+   */
   @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
   @Post('username')
   async setUsername(@Req() req: AuthedReq, @Body() body: SetUsernameDto) {
@@ -124,6 +133,7 @@ export class PartyController {
     }
 
     try {
+    // Preferred path: Splice validator handles party allocation + onboarding in one call.
     const splicePartyId = await this.splice.createWalletUser(username);
     if (!splicePartyId && (await this.splice.getUserPartyId(username))) {
       throw new ConflictException('Party ID Already Taken');
@@ -133,6 +143,7 @@ export class PartyController {
       cantonPartyId = splicePartyId;
       spliceOnboarded = true;
     } else {
+      // Fallback: allocate party on Canton JSON API only (not visible in Splice explorer yet).
       const ledgerReachable = await this.ledger.isReachable();
       if (ledgerReachable) {
         try {
@@ -184,12 +195,20 @@ export class PartyController {
       }
     }
 
+    // Emit FeaturedAppActivityMarker for wallet creation
+    // Per Canton Module 4: wallet_created is a meaningful user action
+    // https://docs.canton.network/appdev/modules/m4-featured-app-activity-marker
     void this.featuredActivity
       .recordActivity('wallet_created', cantonPartyId, `Wallet created for @${username}`)
-      .catch(() => {});
+      .catch(() => { /* non-critical */ });
 
+    // CIP-56 compliance: auto-create TransferPreapproval so the user can receive
+    // CC transfers directly without a manual step. This is a best-effort call —
+    // the offer/accept flow still works even if preapproval creation fails.
+    // See: https://docs.canton.network/appdev/modules/m7-canton-coin-preapprovals
     let preapprovalActive = false;
     if (spliceOnboarded) {
+      // First check if one already exists (e.g. re-generating wallet)
       const existing = await this.splice.hasTransferPreapproval(cantonPartyId);
       if (existing) {
         preapprovalActive = true;
@@ -198,6 +217,8 @@ export class PartyController {
       }
     }
 
+    // Record PartyRegistration on Canton ledger (Canton M3 pattern)
+    // This creates an audit trail of the wallet creation with invite code
     if (!isPlaceholder && needsInviteFlow) {
       void this.questLedger
         .recordPartyRegistration({
@@ -215,14 +236,14 @@ export class PartyController {
     let message: string;
     if (spliceOnboarded) {
       message = preapprovalActive
-        ? 'Wallet created -- Party ID registered. Direct CC transfers enabled (CIP-56 compliant).'
-        : 'Wallet created -- Party ID registered. CC transfers work via offer/accept flow.';
+        ? 'Wallet created — Party ID registered. Direct CC transfers enabled (CIP-56 compliant).'
+        : 'Wallet created — Party ID registered. CC transfers work via offer/accept flow.';
     } else if (!isPlaceholder) {
       message =
-        'Party ID allocated on Canton participant. Splice validator not reachable (set CANTON_VALIDATOR_URL) -- wallet not yet visible in explorer.';
+        'Party ID allocated on Canton participant. Splice validator not reachable (set CANTON_VALIDATOR_URL) — wallet not yet visible in explorer.';
     } else {
       message =
-        'Saved with placeholder -- both Canton JSON API and Splice validator unreachable. Start your SSH tunnels (7575 + 8080) and re-generate from the Wallet page.';
+        'Saved with placeholder — both Canton JSON API and Splice validator unreachable. Start your SSH tunnels (7575 + 8080) and re-generate from the Wallet page.';
     }
 
     return {
@@ -241,6 +262,21 @@ export class PartyController {
     }
   }
 
+  /**
+   * Check TransferPreapproval status for the current user.
+   * A TransferPreapproval (Splice.AmuletRules:TransferPreapproval) enables
+   * any party to send CC directly to this user without offer/accept.
+   *
+   * Users create their preapproval once via the Splice Wallet UI:
+   *   1. Visit your Splice Wallet UI (same domain as your validator)
+   *   2. Click the "Create Preapproval" button (top-right, next to logout)
+   *   3. Approve the transaction — this burns a small CC fee ($1/year)
+   *   4. After that, all incoming CC transfers go through automatically
+   */
+  /**
+   * Enable or refresh TransferPreapproval (CIP-56) for the logged-in user.
+   * Required for direct CC transfers from the validator wallet without manual accept.
+   */
   @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
   @Post('ensure-preapproval')
   async ensurePreapproval(@Req() req: AuthedReq) {
@@ -294,7 +330,7 @@ export class PartyController {
       const chainBalance = await this.splice.getUserBalance(walletUsername);
       const hint =
         chainBalance === null || chainBalance <= 0
-          ? ` On-chain balance for @${walletUsername} is ${chainBalance ?? 0} CC -- need funds for the preapproval fee (~$1/year). UI balance may be a DB snapshot.`
+          ? ` On-chain balance for @${walletUsername} is ${chainBalance ?? 0} CC — need funds for the preapproval fee (~$1/year). UI balance may be a DB snapshot.`
           : ` On-chain balance: ${chainBalance} CC (@${walletUsername}).`;
       this.logger.warn(
         `ensurePreapproval failed user=${user.id.slice(0, 8)} wallet=@${walletUsername} status=${created.status ?? '?'} ${created.detail ?? ''}`,
@@ -313,7 +349,7 @@ export class PartyController {
       partyId: user.cantonPartyId,
       username: walletUsername,
       message:
-        'TransferPreapproval active -- CC from the validator wallet can arrive directly (CIP-56).',
+        'TransferPreapproval active — CC from the validator wallet can arrive directly (CIP-56).',
     };
   }
 
@@ -346,12 +382,16 @@ export class PartyController {
         walletUiUrl,
         contracts: preapprovals,
         message: active
-          ? `Preapproval active -- direct CC transfers enabled. Expires: ${preapprovals[0]?.expiresAt ?? 'unknown'}`
+          ? `Preapproval active — direct CC transfers enabled. Expires: ${preapprovals[0]?.expiresAt ?? 'unknown'}`
           : 'No preapproval found. Visit your Splice Wallet UI and click "Create Preapproval" to enable direct CC transfers.',
       },
     };
   }
 
+  /**
+   * Retry wallet creation — calls Splice validator to allocate + register.
+   * Use this if Generate Wallet previously resulted in a placeholder.
+   */
   @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
   @Post('allocate')
   async allocateCantonParty(@Req() req: AuthedReq, @Body() body: AllocateWalletDto) {
@@ -375,6 +415,7 @@ export class PartyController {
     }
 
     try {
+    // Try Splice first (preferred — full registration).
     const splicePartyId = await this.splice.createWalletUser(username);
     if (!splicePartyId && (await this.splice.getUserPartyId(username))) {
       throw new ConflictException('Party ID Already Taken');
@@ -395,6 +436,7 @@ export class PartyController {
           partyId: storedPartyId,
         });
       }
+      // CIP-56: ensure TransferPreapproval exists for this user
       const preapprovalActive = (await this.splice.createTransferPreapproval(username)).ok;
       return {
         cantonPartyId: storedPartyId,
@@ -402,11 +444,12 @@ export class PartyController {
         spliceOnboarded: true,
         preapproval: { active: preapprovalActive },
         message: preapprovalActive
-          ? 'Wallet created -- Party ID registered. Direct CC transfers enabled (CIP-56 compliant).'
-          : 'Wallet created -- Party ID allocated and registered in Splice validator.',
+          ? 'Wallet created — Party ID registered. Direct CC transfers enabled (CIP-56 compliant).'
+          : 'Wallet created — Party ID allocated and registered in Splice validator.',
       };
     }
 
+    // Fallback: Canton JSON API only (often wrong participant if 7575 tunnel ≠ Splice stack).
     const cantonPartyId = await this.ledger.allocateParty(username);
     this.assertPartyOnValidatorParticipant(cantonPartyId);
     await this.users.setPartyId(req.user.userId, cantonPartyId, user.username ?? undefined);
@@ -433,6 +476,9 @@ export class PartyController {
     }
   }
 
+  /**
+   * Manually save a Party ID — use when allocating via Canton Console / CLI.
+   */
   @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
   @Post('canton-binding')
   async bindCantonParty(@Req() req: AuthedReq, @Body() body: CantonPartyBindingDto) {
@@ -446,6 +492,10 @@ export class PartyController {
     };
   }
 
+  /**
+   * CC balance: PostgreSQL snapshot first (fast), Splice sync in background.
+   * See BALANCE_READ_FROM_DB in apps/api/.env.example.
+   */
   @SkipThrottle()
   @Get('balance')
   async getBalance(@Req() req: AuthedReq) {
@@ -468,6 +518,17 @@ export class PartyController {
     };
   }
 
+  /**
+   * Send CC reward to the authenticated user (auto-accept via backend).
+   *
+   * Flow:
+   *   1. Validator creates TransferOffer → user's party
+   *   2. Backend immediately accepts it as the user (canActAs)
+   *   3. Validator's wallet automation delivers CC
+   *
+   * Note: In production, this endpoint should require admin privileges.
+   * For testing purposes it's self-callable.
+   */
   @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
   @Post('claim-reward')
   async claimReward(
@@ -482,6 +543,7 @@ export class PartyController {
       throw new BadRequestException('amount must be > 0');
     }
 
+    // Step 1: Create transfer offer from validator → user
     const offerContractId = await this.splice.createTransferOffer(
       user.cantonPartyId,
       body.amount,
@@ -492,6 +554,8 @@ export class PartyController {
       throw new BadRequestException('Failed to create transfer offer. Check Splice Validator connection.');
     }
 
+    // Step 2: Auto-accept menggunakan Splice Wallet API (port 8080) sebagai receiver
+    // Menggunakan actAs = user.username sesuai pola CIP-56 Propose-Accept
     const accepted = await this.splice.acceptOfferViaWallet(offerContractId, user.username);
 
     if (accepted) {
@@ -510,7 +574,7 @@ export class PartyController {
 
     if (!accepted) {
       throw new BadRequestException(
-        'Reward transfer failed -- offer was not accepted. No transaction was recorded.',
+        'Reward transfer failed — offer was not accepted. No transaction was recorded.',
       );
     }
 
@@ -522,6 +586,15 @@ export class PartyController {
     };
   }
 
+  /**
+   * User-to-user CC transfer with platform fee.
+   *
+   * Flow:
+   *   1. Create TransferOffer from sender → recipient (main transfer)
+   *   2. Auto-accept on behalf of recipient
+   *   3. Create TransferOffer from sender → validator (fee)
+   *   4. Auto-accept fee on behalf of validator
+   */
   @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
   @Post('send-cc')
   async sendCc(
@@ -542,7 +615,7 @@ export class PartyController {
     const recipientInput = body.recipientUsername?.trim();
     if (!recipientInput) throw new BadRequestException('Recipient is required.');
 
-    // Resolve recipient
+    // Resolve recipient: jika ada '::' berarti Party ID langsung, kalau tidak cari by username
     let recipientPartyId: string;
     let recipientLabel: string;
     let recipientUsername: string | null = null;
@@ -585,7 +658,8 @@ export class PartyController {
       );
     }
 
-    // Step 1 (Propose): Create TransferOffer from sender -> recipient
+    // ── Step 1 (Propose): Buat TransferOffer dari pengirim → penerima ──────────
+    // actAs = sender.username (sesuai CIP-56 Propose-Accept)
     const offerContractId = await this.splice.createTransferOffer(
       recipientPartyId,
       amount,
@@ -595,47 +669,27 @@ export class PartyController {
     );
     if (!offerContractId) {
       throw new BadRequestException(
-        'Transfer failed -- could not create offer. Check your CC balance.',
+        'Transfer failed — could not create offer. Check your CC balance.',
       );
     }
 
-    // Step 2 (Accept): Auto-accept ONLY for CanQuest users (same participant node)
-    // External parties (different fingerprint / participant node) must accept
-    // the offer themselves via their own wallet (Canton Offer->Accept model).
-    const isSameParticipant = participantSuffixesMatch(
-      recipientPartyId,
-      sender.cantonPartyId ?? undefined,
-    );
-
+    // ── Step 2 (Accept): Auto-accept menggunakan Splice Wallet API (port 8080) ─
+    // Jika penerima adalah user CanQuest → pakai acceptOfferViaWallet (actAs = recipientUsername)
+    // Jika penerima eksternal (tidak punya username) → fallback ke Canton Ledger API (port 7575)
     let accepted = false;
     let acceptUpdateId: string | null = null;
     let transferTransactionId: string | undefined;
-    let externalOffer = false;
-
-    if (isSameParticipant && recipientUsername) {
+    if (recipientUsername) {
       accepted = await this.splice.acceptOfferViaWallet(offerContractId, recipientUsername);
       this.logger.log(
-        `CC transfer (Wallet API): ${sender.username} -> ${recipientLabel} ${amount} CC (accepted: ${String(accepted)})`,
-      );
-      if (!accepted) {
-        // Wallet accept failed -> try Canton Ledger API accept
-        const ledgerResult = await this.ledger.acceptTransferOffer(offerContractId, recipientPartyId);
-        accepted = ledgerResult.accepted;
-        acceptUpdateId = ledgerResult.updateId;
-      }
-    } else if (!isSameParticipant) {
-      // External party -> offer created, receiver accepts themselves
-      externalOffer = true;
-      this.logger.log(
-        `CC transfer (External): ${sender.username} -> ${recipientLabel} ${amount} CC.` +
-        ` Offer ${offerContractId.slice(0, 16)}... pending recipient acceptance.`,
+        `CC transfer (Wallet API): ${sender.username} → ${recipientLabel} ${amount} CC (accepted: ${String(accepted)})`,
       );
     } else {
       const result = await this.ledger.acceptTransferOffer(offerContractId, recipientPartyId);
       accepted = result.accepted;
       acceptUpdateId = result.updateId;
       this.logger.log(
-        `CC transfer (Ledger API): ${sender.username} -> ${recipientLabel} ${amount} CC (accepted: ${String(accepted)})`,
+        `CC transfer (Ledger API): ${sender.username} → ${recipientLabel} ${amount} CC (accepted: ${String(accepted)})`,
       );
     }
 
@@ -654,10 +708,11 @@ export class PartyController {
         void this.txDetail.backfillUpdateId(outRow.id, offerContractId, sender.cantonPartyId);
       }
 
+      // Emit FeaturedAppActivityMarker for CC transfer
       if (sender.cantonPartyId) {
         void this.featuredActivity
           .recordActivity('cc_transfer', sender.cantonPartyId, `CC transfer ${amount} CC to ${recipientLabel}`)
-          .catch(() => {});
+          .catch(() => { /* non-critical */ });
       }
 
       let recipientUser = recipientUsername
@@ -696,25 +751,10 @@ export class PartyController {
       }
     }
 
-    if (!accepted && !externalOffer) {
+    if (!accepted) {
       throw new BadRequestException(
-        'Transfer failed -- offer was not accepted. No transaction was recorded in your history.',
+        'Transfer failed — offer was not accepted. No transaction was recorded in your history.',
       );
-    }
-
-    // Record sender's outgoing transaction even for external offers
-    if (externalOffer) {
-      await this.users.recordTransaction({
-        userId: sender.id,
-        amountCc: amount,
-        type: 'TRANSFER_OUT',
-        description: description,
-        counterparty: recipientPartyId,
-        ledgerTxId: offerContractId,
-      });
-      if (sender.username) {
-        void this.inboundSync.alignBalanceFromChain(sender.id, sender.username);
-      }
     }
 
     let feeCollected = false;
@@ -749,7 +789,7 @@ export class PartyController {
         }
         await this.inboundSync.alignBalanceFromChain(sender.id, sender.username);
         this.logger.log(
-          `Fee collected (${feeResult.method ?? 'unknown'}): ${sender.username} -> ${feeTreasuryPartyId.split('::')[0]} ${feeCc} CC`,
+          `Fee collected (${feeResult.method ?? 'unknown'}): ${sender.username} → ${feeTreasuryPartyId.split('::')[0]} ${feeCc} CC`,
         );
       } else {
         feeWarning = `Transfer succeeded but platform fee (${feeCc} CC) could not be collected.`;
@@ -760,16 +800,15 @@ export class PartyController {
     }
 
     const totalDeducted = amount + (feeCollected ? feeCc : 0);
-    const message = externalOffer
-      ? `Sent ${amount} CC to ${recipientLabel}. The recipient must accept the offer from their wallet.` +
-        (feeCollected ? ` (platform fee ${feeCc} CC)` : '')
-      : feeCollected
-        ? `Sent ${amount} CC to ${recipientLabel} (platform fee ${feeCc} CC).`
-        : feeWarning
-          ? `Sent ${amount} CC to ${recipientLabel}. ${feeWarning}`
-          : `Sent ${amount} CC to ${recipientLabel}.`;
+    const message = feeCollected
+      ? `Sent ${amount} CC to ${recipientLabel} (platform fee ${feeCc} CC).`
+      : feeWarning
+        ? `Sent ${amount} CC to ${recipientLabel}. ${feeWarning}`
+        : `Sent ${amount} CC to ${recipientLabel}.`;
 
-    if (sender.cantonPartyId && (accepted || externalOffer)) {
+    // Record CC transfer on Canton ledger (Canton M3 pattern)
+    // Creates CcTransferRecord contract for audit trail
+    if (sender.cantonPartyId && accepted) {
       void this.questLedger
         .recordCcTransfer({
           senderPartyId: sender.cantonPartyId,
@@ -795,25 +834,30 @@ export class PartyController {
       fee: feeCc,
       feeCollected,
       totalDeducted,
-      accepted: externalOffer ? null : true,
-      external: externalOffer || undefined,
+      accepted: true,
       message,
       transactionId: transferTransactionId,
       ...(feeWarning ? { warning: feeWarning } : {}),
     };
   }
 
-  // ── Notifications & History (unchanged) ──
-
+  /**
+   * CC notification feed (earn rewards, spin wins, inbound transfers).
+   * GET /api/party/notifications?limit=12
+   */
   @SkipThrottle()
   @Get('notifications')
-  async getNotifications(@Req() req: AuthedReq, @Query('limit') limit?: string) {
+  async getNotifications(
+    @Req() req: AuthedReq,
+    @Query('limit') limit?: string,
+  ) {
     const user = await this.users.findById(req.user.userId);
     if (!user) throw new BadRequestException('User not found.');
     const n = Math.min(30, Math.max(1, parseInt(limit ?? '12', 10) || 12));
     return this.users.getNotifications(user.id, n);
   }
 
+  /** Mark all notification bell items as seen. POST /api/party/notifications/seen */
   @SkipThrottle()
   @Post('notifications/seen')
   async markNotificationsSeen(@Req() req: AuthedReq) {
@@ -822,9 +866,17 @@ export class PartyController {
     return this.users.markNotificationsSeen(user.id);
   }
 
+  /**
+   * Paginated CC transaction history for the authenticated user.
+   * GET /api/party/transactions?page=1&pageSize=5
+   */
   @SkipThrottle()
   @Get('transactions')
-  async getTransactions(@Req() req: AuthedReq, @Query('page') page?: string, @Query('pageSize') pageSize?: string) {
+  async getTransactions(
+    @Req() req: AuthedReq,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
     const user = await this.users.findById(req.user.userId);
     if (!user) throw new BadRequestException('User not found.');
     const p = Math.max(1, parseInt(page ?? '1', 10) || 1);
@@ -832,12 +884,21 @@ export class PartyController {
     return this.users.getTransactions(user.id, p, ps);
   }
 
+  /**
+   * Internal transaction explorer — DB summary + optional on-chain events.
+   * GET /api/party/transactions/:id
+   */
   @SkipThrottle()
   @Get('transactions/:id')
   async getTransactionById(@Req() req: AuthedReq, @Param('id') id: string) {
     return this.txDetail.getDetailForUser(req.user.userId, id.trim());
   }
 
+  /**
+   * Kembalikan konfigurasi fee transaksi dari env.
+   * Frontend menggunakan ini agar tampilan fee selalu sinkron dengan nilai di .env.
+   * GET /api/party/fee-config
+   */
   @SkipThrottle()
   @Get('fee-config')
   getFeeConfig() {
@@ -847,6 +908,7 @@ export class PartyController {
     };
   }
 
+  /** Check reachability of Canton JSON Ledger API and Splice Validator API. */
   @SkipThrottle()
   @Get('ledger-status')
   async ledgerStatus() {
@@ -859,7 +921,10 @@ export class PartyController {
       splice: { reachable: splice, configured: this.splice.isConfigured },
       message: canton && splice
         ? 'Node connected.'
-        : 'Node connection issue',
+        : !canton
+          ? 'Node connection issue'
+          : 'Node connection issue',
     };
   }
+
 }
