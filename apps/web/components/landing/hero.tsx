@@ -1,57 +1,24 @@
 "use client";
-
-import { LaunchAppButton } from "@/components/landing/launch-app-button";
-import { LandingShell } from "@/components/landing/landing-shell";
+import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
 
-const STEPS = ["Pick a campaign", "Complete tasks", "Receive CC & Waitlist Access"] as const;
-
-export function LandingHero() {
+export function Hero() {
   return (
-    <section className="relative border-b border-[var(--border)]">
-      <div className="gradient-mesh absolute inset-0 opacity-40" aria-hidden />
-
-      <LandingShell className="relative py-16 text-center md:py-20 lg:py-24">
-        <p className="type-eyebrow-brand">CanQuest on Canton</p>
-
-        <h1 className="type-display mx-auto mt-4 max-w-2xl text-[2rem] font-bold leading-tight tracking-tight sm:text-4xl lg:text-5xl">
-          Complete quests.{" "}
-          <span className="text-gradient-brand">Get paid in CC.</span>
+    <section className="relative min-h-[80vh] flex flex-col items-center justify-center text-center px-4 py-20 md:py-32">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgb(var(--canton-rgb)/0.08),transparent)]" />
+      <div className="relative z-10 max-w-3xl mx-auto">
+        <h1 className="text-3xl font-bold tracking-tight text-[var(--foreground)] sm:text-5xl md:text-6xl">
+          Complete Quests.<br />Earn <span className="text-[var(--primary)]">CC Tokens</span>.
         </h1>
-
-        <p className="mx-auto mt-4 max-w-lg text-base leading-relaxed text-[var(--muted-foreground)]">
-          Partner missions, daily hub tasks, and a Canton wallet — one account for all of it.
+        <p className="mt-4 text-base text-[var(--muted-foreground)] sm:text-lg max-w-xl mx-auto">
+          Join CanQuest — the Web3 quest platform. Complete tasks, earn rewards, and climb the leaderboard.
         </p>
-
-        <ol className="mx-auto mt-10 flex max-w-md flex-col gap-3 sm:max-w-none sm:flex-row sm:justify-center sm:gap-8">
-          {STEPS.map((step, i) => (
-            <li
-              key={step}
-              className="flex items-center justify-center gap-2 text-sm text-[var(--foreground)]"
-            >
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-canton-subtle text-xs font-bold text-canton">
-                {i + 1}
-              </span>
-              {step}
-            </li>
-          ))}
-        </ol>
-
-        <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <LaunchAppButton size="lg" className="w-full rounded-full px-8 sm:w-auto" />
-          <a href="#campaigns" className="inline-flex w-full justify-center sm:w-auto">
-            <span
-              className={cn(
-                buttonVariants({ variant: "secondary", size: "lg" }),
-                "inline-flex w-full rounded-full sm:w-auto",
-              )}
-            >
-              View campaigns
-            </span>
-          </a>
+        <div className="mt-8 flex flex-wrap gap-3 justify-center">
+          <Link href="/?auth=register" className={cn(buttonVariants(), "rounded-lg px-6 py-2.5")}>Get Started</Link>
+          <Link href="/?auth=login" className={cn(buttonVariants({ variant: "secondary" }), "rounded-lg px-6 py-2.5")}>Sign In</Link>
         </div>
-      </LandingShell>
+      </div>
     </section>
   );
 }
