@@ -2,32 +2,26 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   CanQuest v2 — Dark Web3 Quest Platform
-   Green: #5ad98a (rgb 90 217 138) — preserved exactly
-   ═══════════════════════════════════════════════════════════════════════════ */
+/* ── CanQuest — Simple Web3 dApp design ────────────────────────────────── */
 
-:root,
-.dark {
+:root, .dark {
   --canton-rgb: 90 217 138;
   --canton-ink: 184 240 212;
   --canton-ink-muted: 122 184 154;
   --canton-cyan-rgb: 32 211 195;
-  --background: #050508;
-  --foreground: #f4f4f8;
-  --muted: #0f1018;
-  --muted-foreground: #8b8ca3;
-  --card: #0c0d14;
-  --border: rgb(148 163 184 / 10%);
+  --background: #07080d;
+  --foreground: #f1f1f4;
+  --muted: #111319;
+  --muted-foreground: #6b6e7b;
+  --card: #0d0e16;
+  --border: rgb(255 255 255 / 0.06);
   --primary: rgb(var(--canton-rgb));
   --primary-strong: #72e8a4;
-  --primary-soft: rgb(var(--canton-rgb) / 0.15);
+  --primary-soft: rgb(var(--canton-rgb) / 0.12);
   --primary-foreground: #0a0a0c;
   --accent: #5eead4;
-  --accent-muted: rgb(var(--canton-cyan-rgb) / 0.12);
-  --ring: rgb(var(--canton-rgb) / 0.5);
-  --elevated: rgb(12 13 20 / 88%);
-  --glow: rgb(var(--canton-rgb) / 0.28);
+  --accent-muted: rgb(var(--canton-cyan-rgb) / 0.1);
+  --ring: rgb(var(--canton-rgb) / 0.4);
   --danger: #f87171;
   --success: #4ade80;
   --warn-rgb: 251 146 60;
@@ -43,16 +37,13 @@
   --muted: #e8ecf4;
   --muted-foreground: #5c6070;
   --card: #ffffff;
-  --border: rgb(15 23 42 / 10%);
+  --border: rgb(15 23 42 / 0.1);
   --primary: rgb(var(--canton-rgb));
   --primary-strong: #2d9a68;
   --primary-soft: rgb(var(--canton-rgb) / 0.12);
   --primary-foreground: #ffffff;
   --accent: #0d9488;
-  --accent-muted: rgb(var(--canton-cyan-rgb) / 0.1);
   --ring: rgb(var(--canton-rgb) / 0.35);
-  --elevated: rgb(255 255 255 / 92%);
-  --glow: rgb(var(--canton-rgb) / 0.15);
   --danger: #dc2626;
   --success: #16a34a;
   --warn-rgb: 234 88 12;
@@ -61,266 +52,61 @@
 @layer base {
   html.dark { color-scheme: dark; }
   html.light { color-scheme: light; }
-  html, body {
-    overflow-x: hidden;
-    max-width: 100vw;
-    width: 100%;
-  }
+  html, body { overflow-x: hidden; max-width: 100vw; width: 100%; }
   body {
     @apply bg-[var(--background)] text-[var(--foreground)] antialiased;
     font-family: var(--font-inter), system-ui, sans-serif;
-    background-image:
-      radial-gradient(ellipse 120% 80% at 50% -30%, rgb(var(--canton-rgb) / 0.07), transparent 50%),
-      radial-gradient(ellipse 60% 40% at 100% 0%, rgb(var(--canton-cyan-rgb) / 0.05), transparent 45%);
   }
-  * {
-    max-width: 100%;
-    box-sizing: border-box;
-  }
-
-  /* ── Scrollbar ────────────────────────────────────────────────────────── */
-  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  * { max-width: 100%; box-sizing: border-box; }
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb {
-    background: rgb(255 255 255 / 6%);
-    border-radius: 999px;
-  }
-  ::-webkit-scrollbar-thumb:hover { background: rgb(255 255 255 / 12%); }
+  ::-webkit-scrollbar-thumb { background: rgb(255 255 255 / 0.08); border-radius: 999px; }
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   Glass Card System
-   ═══════════════════════════════════════════════════════════════════════════ */
-.glass-card {
-  background: var(--elevated);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--border);
-  box-shadow:
-    0 0 0 1px rgb(255 255 255 / 3%) inset,
-    0 24px 48px rgb(0 0 0 / 35%);
-}
-
-@media (max-width: 768px) {
-  .glass-card {
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-  }
-}
-
-.glass-card-hover {
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-.glass-card-hover:hover {
-  border-color: rgb(var(--canton-rgb) / 0.22);
-  box-shadow:
-    0 0 0 1px rgb(var(--canton-rgb) / 8%) inset,
-    0 0 40px rgb(var(--canton-rgb) / 6%),
-    0 24px 48px rgb(0 0 0 / 40%);
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   Gradient Mesh & Particle Field
-   ═══════════════════════════════════════════════════════════════════════════ */
-.gradient-mesh {
-  background:
-    radial-gradient(ellipse 80% 50% at 50% -20%, rgb(var(--canton-rgb) / 0.14), transparent),
-    radial-gradient(ellipse 60% 40% at 100% 0%, rgb(var(--canton-cyan-rgb) / 0.1), transparent),
-    radial-gradient(ellipse 50% 30% at 0% 100%, rgb(var(--canton-rgb) / 0.06), transparent);
-}
-
-.particle-field {
-  background-image: radial-gradient(circle, rgb(244 244 245 / 6%) 1px, transparent 1px);
-  background-size: 28px 28px;
-}
-
-.neon-border {
-  box-shadow:
-    0 0 0 1px rgb(var(--canton-rgb) / 0.2),
-    0 0 24px rgb(var(--canton-rgb) / 0.08);
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   Glow Effects
-   ═══════════════════════════════════════════════════════════════════════════ */
-.glow-soft {
-  box-shadow: 0 0 30px rgb(var(--canton-rgb) / 0.06), 0 0 60px rgb(var(--canton-rgb) / 0.03);
-}
-.glow-strong {
-  box-shadow: 0 0 20px rgb(var(--canton-rgb) / 0.15), 0 0 50px rgb(var(--canton-rgb) / 0.08);
-}
-.glow-text {
-  text-shadow: 0 0 20px rgb(var(--canton-rgb) / 0.25);
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   Shimmer / Loading Animations
-   ═══════════════════════════════════════════════════════════════════════════ */
-@keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
-}
-
-.shimmer-overlay {
-  position: relative;
-  overflow: hidden;
-}
-.shimmer-overlay::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  transform: translateX(-100%);
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgb(255 255 255 / 3%) 40%,
-    rgb(255 255 255 / 6%) 50%,
-    rgb(255 255 255 / 3%) 60%,
-    transparent 100%
-  );
-  animation: shimmer 2s infinite;
-}
-
-@keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 15px rgb(var(--canton-rgb) / 0.1); }
-  50% { box-shadow: 0 0 30px rgb(var(--canton-rgb) / 0.25), 0 0 60px rgb(var(--canton-rgb) / 0.08); }
-}
-
-.pulse-glow {
-  animation: pulse-glow 3s ease-in-out infinite;
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   Typography Scale
-   ═══════════════════════════════════════════════════════════════════════════ */
+/* ── Typography ────────────────────────────────────────────────────────── */
 @layer components {
-  .type-display {
-    font-family: var(--font-space), system-ui, sans-serif;
-    @apply tracking-tight;
-  }
-  .type-toolbar-title {
-    @apply type-display text-base font-semibold sm:text-lg md:text-xl;
-  }
-  .type-hero {
-    @apply type-display text-3xl font-semibold leading-[1.08] sm:text-4xl;
-  }
-  .type-page-title {
-    @apply type-display text-2xl font-semibold leading-tight;
-  }
-  .type-section-title {
-    @apply type-display text-lg font-semibold leading-snug;
-  }
-  .type-subsection-title {
-    @apply type-display text-base font-semibold leading-snug;
-  }
-  .type-card-title {
-    @apply type-display text-sm font-semibold leading-snug;
-  }
-  .type-eyebrow {
-    @apply text-xs font-semibold uppercase tracking-widest text-[var(--muted-foreground)];
-  }
-  .type-eyebrow-brand {
-    @apply text-xs font-semibold uppercase tracking-widest text-canton;
-  }
-  .type-lead {
-    @apply text-sm leading-relaxed text-[var(--muted-foreground)];
-  }
-  .type-body {
-    @apply text-sm leading-relaxed text-[var(--foreground)];
-  }
-  .type-stat {
-    @apply type-display text-2xl font-semibold tabular-nums leading-none;
-  }
-  .type-stat-lg {
-    @apply type-display text-3xl font-semibold tabular-nums leading-none;
-  }
-  .type-label {
-    @apply text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)];
-  }
-  .type-micro-label {
-    @apply text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)];
-  }
+  .type-display { font-family: var(--font-space), system-ui, sans-serif; @apply tracking-tight; }
+  .type-toolbar-title { @apply type-display text-base font-semibold sm:text-lg md:text-xl; }
+  .type-hero { @apply type-display text-3xl font-semibold leading-[1.08] sm:text-4xl; }
+  .type-page-title { @apply type-display text-2xl font-semibold leading-tight; }
+  .type-section-title { @apply type-display text-lg font-semibold leading-snug; }
+  .type-card-title { @apply type-display text-sm font-semibold leading-snug; }
+  .type-eyebrow { @apply text-xs font-semibold uppercase tracking-widest text-[var(--muted-foreground)]; }
+  .type-eyebrow-brand { @apply text-xs font-semibold uppercase tracking-widest text-canton; }
+  .type-lead { @apply text-sm leading-relaxed text-[var(--muted-foreground)]; }
+  .type-body { @apply text-sm leading-relaxed text-[var(--foreground)]; }
+  .type-stat { @apply type-display text-2xl font-semibold tabular-nums leading-none; }
+  .type-stat-lg { @apply type-display text-3xl font-semibold tabular-nums leading-none; }
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   Canton Brand Utilities
-   ═══════════════════════════════════════════════════════════════════════════ */
+/* ── Canton utilities ──────────────────────────────────────────────────── */
 @layer utilities {
   .text-canton { color: rgb(var(--canton-ink)); }
   .text-canton-muted { color: rgb(var(--canton-ink-muted)); }
   .bg-canton-subtle { background-color: rgb(var(--canton-rgb) / 0.1); }
-  .bg-canton-soft { background-color: rgb(var(--canton-rgb) / 0.16); }
-  .border-canton-muted { border-color: rgb(var(--canton-rgb) / 0.22); }
-  .border-canton-strong { border-color: rgb(var(--canton-rgb) / 0.38); }
+  .bg-canton-soft { background-color: rgb(var(--canton-rgb) / 0.15); }
+  .border-canton-muted { border-color: rgb(var(--canton-rgb) / 0.2); }
   .text-gradient-brand {
-    background: linear-gradient(
-      135deg,
-      rgb(var(--canton-rgb)) 0%,
-      rgb(var(--canton-cyan-rgb)) 100%
-    );
+    background: linear-gradient(135deg, rgb(var(--canton-rgb)) 0%, rgb(var(--canton-cyan-rgb)) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
-
-  /* ── Landing Animations ────────────────────────────────────────────────── */
-  .landing-fade-in {
-    animation: landing-fade-in-up 0.55s ease-out forwards;
-    opacity: 0;
-  }
-  .landing-fade-in-delay-1 { animation-delay: 0.06s; }
-  .landing-fade-in-delay-2 { animation-delay: 0.12s; }
-  .landing-fade-in-delay-3 { animation-delay: 0.18s; }
-  .landing-fade-in-delay-4 { animation-delay: 0.24s; }
-
-  .landing-menu-backdrop {
-    animation: landing-fade-in 0.2s ease-out forwards;
-  }
-  .landing-menu-panel {
-    animation: landing-slide-in-right 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-  }
-  .landing-carousel-slide {
-    animation: landing-carousel-fade 0.4s ease-out forwards;
-  }
-  .landing-carousel-progress {
-    width: 0;
-    animation-name: landing-carousel-progress;
-    animation-timing-function: linear;
-    animation-fill-mode: forwards;
-  }
 }
 
-@keyframes landing-fade-in-up {
-  from { opacity: 0; transform: translateY(14px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-@keyframes landing-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-@keyframes landing-slide-in-right {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
-}
-@keyframes landing-carousel-fade {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-@keyframes landing-carousel-progress {
-  from { width: 0%; }
-  to { width: 100%; }
-}
+/* ── Landing animations ────────────────────────────────────────────────── */
+.landing-fade-in { animation: landing-fade-in-up 0.55s ease-out forwards; opacity: 0; }
+.landing-fade-in-delay-1 { animation-delay: 0.06s; }
+.landing-fade-in-delay-2 { animation-delay: 0.12s; }
+.landing-fade-in-delay-3 { animation-delay: 0.18s; }
+.landing-fade-in-delay-4 { animation-delay: 0.24s; }
+.landing-menu-backdrop { animation: landing-fade-in 0.2s ease-out forwards; }
+.landing-menu-panel { animation: landing-slide-in-right 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+
+@keyframes landing-fade-in-up { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes landing-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes landing-slide-in-right { from { transform: translateX(100%); } to { transform: translateX(0); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .landing-fade-in,
-  .landing-menu-backdrop,
-  .landing-menu-panel,
-  .landing-carousel-slide,
-  .landing-carousel-progress {
-    animation: none !important;
-    opacity: 1;
-    transform: none;
-    width: 100%;
-  }
-  .particle-field { opacity: 0.35; }
+  .landing-fade-in, .landing-menu-backdrop, .landing-menu-panel { animation: none !important; opacity: 1; transform: none; }
 }
