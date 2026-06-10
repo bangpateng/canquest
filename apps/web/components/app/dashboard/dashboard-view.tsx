@@ -445,82 +445,83 @@ export function DashboardView() {
             })}
           </section>
 
-          {/* ── Recent Activity ─────────────────────────────────────────── */}
-          <section className="w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50">
-            <div className="flex items-center justify-between border-b border-white/[0.06] bg-white/[0.01] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
-              <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]/20">
-                  <Zap className="h-4 w-4 text-[var(--primary)]" />
-                </div>
-                <h2 className="text-base sm:text-lg font-semibold tracking-tight text-white">
-                  {t("dashboard.recentActivity")}
-                </h2>
-              </div>
-              <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-500 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
-                Live
-              </span>
+          {/* ── Recent Activity — same layout as Wallet transactions ───── */}
+          <section className="w-full overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]">
+            <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3 md:px-5">
+              <h2 className="text-sm font-semibold text-[var(--foreground)]">
+                {t("dashboard.recentActivity")}
+              </h2>
             </div>
 
             {activityLoading ? (
-              <div className="flex items-center justify-center py-16 sm:py-20 md:py-24">
+              <div className="flex items-center justify-center py-16">
                 <LoadingSpinner size="lg" />
               </div>
             ) : !activityData || activityData.items.length === 0 ? (
-              <div className="px-5 py-16 sm:py-20 md:py-24 text-center">
-                <div className="flex flex-col items-center gap-4">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/5 ring-1 ring-white/10">
-                    <svg className="h-8 w-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                    </svg>
-                  </div>
-                  <p className="text-sm font-medium text-slate-500">
-                    {t("dashboard.noActivity")}
-                  </p>
-                </div>
+              <div className="py-16 text-center text-sm text-[var(--muted-foreground)]">
+                {t("dashboard.noActivity")}
               </div>
             ) : (
-              <div className="p-5 sm:p-6 md:p-8">
-                <ul className="space-y-1.5">
+              <>
+                {/* Desktop table */}
+                <table className="w-full text-left hidden md:table">
+                  <thead className="text-xs font-semibold uppercase text-[var(--muted-foreground)]">
+                    <tr>
+                      <th className="px-4 py-3 md:px-5">Type</th>
+                      <th className="px-4 py-3 md:px-5">Title</th>
+                      <th className="px-4 py-3 md:px-5">Detail</th>
+                      <th className="px-4 py-3 text-right md:px-5">When</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activityData.items.map((item, i) => {
+                      const Icon = ACTIVITY_ICON[item.type];
+                      const colorClass = ACTIVITY_COLOR[item.type];
+                      return (
+                        <tr key={`${item.type}-${item.time}-${i}`} className="border-t border-[var(--border)] transition-colors hover:bg-[var(--muted)]/50">
+                          <td className="px-4 py-3 md:px-5">
+                            <span className={cn("inline-flex h-8 w-8 items-center justify-center rounded-lg", colorClass)}>
+                              <Icon className="h-4 w-4" aria-hidden />
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 md:px-5 text-sm font-semibold text-[var(--foreground)] truncate">{item.title}</td>
+                          <td className="px-4 py-3 md:px-5 text-sm text-[var(--muted-foreground)] max-w-[16rem] truncate">{item.detail}</td>
+                          <td className="px-4 py-3 md:px-5 text-xs text-[var(--muted-foreground)] text-right whitespace-nowrap">{timeAgo(item.time, t)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+
+                {/* Mobile list */}
+                <ul className="divide-y divide-[var(--border)] md:hidden">
                   {activityData.items.map((item, i) => {
                     const Icon = ACTIVITY_ICON[item.type];
                     const colorClass = ACTIVITY_COLOR[item.type];
                     return (
-                      <li
-                        key={`${item.type}-${item.time}-${i}`}
-                        className="group flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4 rounded-xl px-4 py-3.5 transition-all duration-200 hover:bg-white/[0.03] border border-transparent hover:border-white/[0.05]"
-                      >
-                        <div
-                          className={cn(
-                            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-white/10 transition-all duration-200 group-hover:scale-105",
-                            colorClass,
-                          )}
-                        >
-                          <Icon className="h-5 w-5" aria-hidden />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm sm:text-base font-semibold text-white leading-snug tracking-tight">
-                            {item.title}
-                          </p>
-                          <p className="mt-1.5 text-xs sm:text-sm text-slate-400 font-normal leading-relaxed line-clamp-2">
-                            {item.detail}
-                          </p>
-                        </div>
-                        <span className="shrink-0 text-xs sm:text-sm font-medium text-slate-500 sm:pt-1 whitespace-nowrap">
-                          {timeAgo(item.time, t)}
+                      <li key={`${item.type}-${item.time}-${i}`} className="flex items-center gap-3 px-4 py-3">
+                        <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", colorClass)}>
+                          <Icon className="h-4 w-4" />
                         </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-[var(--foreground)] truncate">{item.title}</p>
+                          <p className="text-xs text-[var(--muted-foreground)] truncate">{item.detail}</p>
+                        </div>
+                        <span className="shrink-0 text-xs text-[var(--muted-foreground)]">{timeAgo(item.time, t)}</span>
                       </li>
                     );
                   })}
                 </ul>
+
                 <ListPagination
-                  className="mt-6 sm:mt-8"
+                  className="px-4 py-3"
                   page={activityPage}
                   totalPages={activityData.totalPages}
                   total={activityData.total}
                   disabled={activityLoading}
                   onPageChange={setActivityPage}
                 />
-              </div>
+              </>
             )}
           </section>
         </div>
