@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { CopyField } from "@/components/app/wallet/copy-field";
 import { WalletActions } from "@/components/app/wallet/wallet-actions";
 import { TransactionsView } from "@/components/app/wallet/transactions-view";
-import { CheckCircle2, Coins, RefreshCw, TrendingUp } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useCcBalance } from "@/lib/hooks/use-cc-balance";
 import { formatPartyIdForDisplay } from "@/lib/canton/canton-party-id";
@@ -54,9 +54,6 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
       {/* ── Wallet Status Card ──────────────────────────────────────────── */}
       <div className="w-full max-w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50 p-5 sm:p-6 md:p-8">
         <div className="flex items-center gap-3 mb-5 sm:mb-6">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 ring-1 ring-emerald-500/20">
-            <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-400" />
-          </div>
           <div>
             <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
               {t("wallet.walletActive")}
@@ -80,14 +77,11 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
         />
         <div className="relative flex items-center justify-between gap-3 mb-6 sm:mb-8">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 ring-1 ring-blue-500/20">
-              <Coins className="h-5 w-5 text-blue-400" />
-            </div>
             <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
               {t("wallet.balance")}
             </span>
             {ccUsdPrice > 0 && (
-              <span className="inline-block text-[10px] sm:text-xs font-semibold tracking-wider text-[var(--primary)] bg-[var(--primary)]/5 px-2.5 py-1 rounded-full border border-[var(--primary)]/20">
+              <span className="inline-block text-[10px] sm:text-xs font-semibold tracking-wider text-[var(--primary)]">
                 1 CC ≈ ${ccUsdPrice.toFixed(6)}
               </span>
             )}
@@ -121,8 +115,7 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
             )}
           </p>
           {!balanceLoading && ccUsdPrice > 0 && balance !== null ? (
-            <p className="relative mt-4 text-sm font-medium text-slate-500 sm:mt-5 sm:text-base md:text-lg flex items-center gap-1.5">
-              <TrendingUp className="h-4 w-4 text-[var(--primary)]" />
+            <p className="relative mt-4 text-sm font-medium text-slate-500 sm:mt-5 sm:text-base md:text-lg">
               ≈ $
               {(balance * ccUsdPrice).toLocaleString("en-US", {
                 minimumFractionDigits: 2,
