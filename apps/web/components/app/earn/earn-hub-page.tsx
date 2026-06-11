@@ -109,16 +109,10 @@ export function EarnHubPage() {
         <div className="relative">
           {/* Header */}
           <div className="border-b border-white/[0.06] bg-white/[0.01] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]/20">
-                <TrendingUp className="h-5 w-5 text-[var(--primary)]" />
-              </div>
-              <div>
-                <h2 className="text-base sm:text-lg font-semibold tracking-tight text-white">
-                  Quest Hub
-                </h2>
-                <p className="text-xs text-slate-500">Daily tasks & rewards</p>
-              </div>
+            <div>
+              <h2 className="text-base sm:text-lg font-semibold tracking-tight text-white">
+                Quest Hub
+              </h2>
             </div>
           </div>
 
@@ -227,22 +221,6 @@ export function EarnHubPage() {
         </>
       )}
 
-      {/* ── Footer Nav ──────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-4 rounded-xl border border-white/[0.06] bg-white/[0.02] px-5 py-4 backdrop-blur-xl sm:px-6 sm:py-5 md:px-8">
-        <Link
-          href={ROUTES.earnHub}
-          className="text-base font-semibold text-white transition-colors hover:text-canton"
-        >
-          Quest Hub
-        </Link>
-        <Link
-          href={ROUTES.campaignQuests}
-          className="group flex items-center gap-1.5 text-sm font-semibold text-canton transition-colors hover:text-[var(--primary-strong)]"
-        >
-          <Sparkles className="h-4 w-4" />
-          Partner Campaigns
-        </Link>
-      </div>
     </div>
   );
 }
