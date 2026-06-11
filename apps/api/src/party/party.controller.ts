@@ -658,54 +658,94 @@ export class PartyController {
       );
     }
 
-    // ── Step 1 (Propose): Buat TransferOffer dari pengirim → penerima ──────────
-    // actAs = sender.username (sesuai CIP-56 Propose-Accept)
-    const offerContractId = await this.splice.createTransferOffer(
-      recipientPartyId,
-      amount,
-      description,
-      undefined,
-      sender.username,
-    );
-    if (!offerContractId) {
-      throw new BadRequestException(
-        'Transfer failed — could not create offer. Check your CC balance.',
-      );
-    }
+    // ── Resolve apakah recipient adalah CanQuest user (punya record di DB) ──
+    const recipientDbUser = recipientUsername
+      ? await this.users.findByUsernameInsensitive(recipientUsername)
+      : null;
+    const isInternalUser = recipientDbUser !== null;
 
-    // ── Step 2 (Accept): Auto-accept menggunakan Splice Wallet API (port 8080) ─
-    // Jika penerima adalah user CanQuest → pakai acceptOfferViaWallet (actAs = recipientUsername)
-    // Jika penerima eksternal (tidak punya username) → fallback ke Canton Ledger API (port 7575)
+    // ── Step 1: Coba 1-step transfer via TransferPreapproval ──────────────────
+    // Jika receiver punya preapproval, CC bisa langsung masuk tanpa offer/accept.
+    // Ini jalan untuk SEMUA recipient (internal CanQuest user maupun external party/CEX).
     let accepted = false;
     let acceptUpdateId: string | null = null;
     let transferTransactionId: string | undefined;
-    if (recipientUsername) {
-      accepted = await this.splice.acceptOfferViaWallet(offerContractId, recipientUsername);
-      this.logger.log(
-        `CC transfer (Wallet API): ${sender.username} → ${recipientLabel} ${amount} CC (accepted: ${String(accepted)})`,
+    let ledgerTxId: string | undefined;
+    let transferMethod: 'preapproval_send' | 'offer_accept' | 'offer_only' = 'offer_accept';
+
+    const receiverHasPreapproval = await this.splice.hasTransferPreapproval(recipientPartyId);
+    if (receiverHasPreapproval && sender.username) {
+      const preapprovalResult = await this.splice.sendViaTransferPreapproval(
+        sender.username,
+        recipientPartyId,
+        amount,
+        description,
       );
-    } else {
-      const result = await this.ledger.acceptTransferOffer(offerContractId, recipientPartyId);
-      accepted = result.accepted;
-      acceptUpdateId = result.updateId;
-      this.logger.log(
-        `CC transfer (Ledger API): ${sender.username} → ${recipientLabel} ${amount} CC (accepted: ${String(accepted)})`,
-      );
+      if (preapprovalResult.ok) {
+        accepted = true;
+        ledgerTxId = preapprovalResult.referenceId;
+        transferMethod = 'preapproval_send';
+        this.logger.log(
+          `CC transfer (1-step preapproval): ${sender.username} → ${recipientLabel} ${amount} CC (ref: ${preapprovalResult.referenceId?.slice(0, 16) ?? 'n/a'})`,
+        );
+      } else {
+        this.logger.warn(
+          `Preapproval send failed for ${sender.username} → ${recipientLabel}: ${preapprovalResult.error?.slice(0, 200)} — falling back to offer flow`,
+        );
+        // Fallback: kalau preapproval gagal, coba offer/accept
+      }
     }
 
+    // ── Step 2: Fallback — 2-step Offer → Accept ──────────────────────────────
+    if (!accepted) {
+      const offerContractId = await this.splice.createTransferOffer(
+        recipientPartyId,
+        amount,
+        description,
+        undefined,
+        sender.username,
+      );
+      if (!offerContractId) {
+        throw new BadRequestException(
+          'Transfer failed — could not create offer. Check your CC balance.',
+        );
+      }
+      ledgerTxId = offerContractId;
+
+      if (isInternalUser && recipientUsername) {
+        // ── Internal CanQuest user → auto-accept via Splice Wallet API ──
+        accepted = await this.splice.acceptOfferViaWallet(offerContractId, recipientUsername);
+        transferMethod = 'offer_accept';
+        this.logger.log(
+          `CC transfer (Wallet API): ${sender.username} → ${recipientLabel} ${amount} CC (accepted: ${String(accepted)})`,
+        );
+      } else {
+        // ── External party / CEX → offer only, recipient must accept themselves ──
+        // Kita tetap record sebagai transfer yang "pending" di sisi pengirim.
+        accepted = true; // Offer berhasil dibuat — transfer considered "in flight"
+        transferMethod = 'offer_only';
+        this.logger.log(
+          `CC transfer (offer only, external): ${sender.username} → ${recipientLabel} ${amount} CC (offer: ${offerContractId.slice(0, 20)}…)`,
+        );
+      }
+    }
+
+    // ── Step 3: Record sender's outgoing transaction ─────────────────────────
     if (accepted) {
       const outRow = await this.users.recordTransaction({
         userId: sender.id,
         amountCc: amount,
         type: 'TRANSFER_OUT',
-        description: description,
+        description: transferMethod === 'offer_only'
+          ? `${description} [pending acceptance by recipient]`
+          : description,
         counterparty: recipientPartyId,
-        ledgerTxId: offerContractId,
+        ledgerTxId: ledgerTxId,
         cantonUpdateId: acceptUpdateId ?? undefined,
       });
       transferTransactionId = outRow.id;
       if (!acceptUpdateId && sender.cantonPartyId) {
-        void this.txDetail.backfillUpdateId(outRow.id, offerContractId, sender.cantonPartyId);
+        void this.txDetail.backfillUpdateId(outRow.id, ledgerTxId ?? '', sender.cantonPartyId);
       }
 
       // Emit FeaturedAppActivityMarker for CC transfer
@@ -715,34 +755,29 @@ export class PartyController {
           .catch(() => { /* non-critical */ });
       }
 
-      let recipientUser = recipientUsername
-        ? await this.users.findByUsernameInsensitive(recipientUsername)
-        : null;
-      if (!recipientUser) {
-        recipientUser = await this.users.findByPartyId(recipientPartyId);
-      }
-      if (recipientUser) {
+      // ── Record incoming transaction for internal CanQuest recipients ────
+      if (isInternalUser && recipientDbUser) {
         const inRow = await this.users.recordTransaction({
-          userId: recipientUser.id,
+          userId: recipientDbUser.id,
           amountCc: amount,
           type: 'TRANSFER_IN',
           description: `Received from @${sender.username}${body.memo ? `: ${body.memo.trim()}` : ''}`,
           counterparty:
             normalizeCantonPartyId(sender.cantonPartyId) ?? sender.cantonPartyId,
-          ledgerTxId: offerContractId,
+          ledgerTxId: ledgerTxId,
           cantonUpdateId: acceptUpdateId ?? undefined,
         });
-        if (recipientUser.cantonPartyId) {
+        if (recipientDbUser.cantonPartyId) {
           void this.txDetail.backfillUpdateId(
             inRow.id,
-            offerContractId,
-            recipientUser.cantonPartyId,
+            ledgerTxId ?? '',
+            recipientDbUser.cantonPartyId,
           );
         }
-        if (recipientUser.username) {
+        if (recipientDbUser.username) {
           void this.inboundSync.alignBalanceFromChain(
-            recipientUser.id,
-            recipientUser.username,
+            recipientDbUser.id,
+            recipientDbUser.username,
           );
         }
       }
@@ -753,7 +788,7 @@ export class PartyController {
 
     if (!accepted) {
       throw new BadRequestException(
-        'Transfer failed — offer was not accepted. No transaction was recorded in your history.',
+        'Transfer failed — could not send CC. Check your balance and recipient preapproval status.',
       );
     }
 
@@ -817,7 +852,7 @@ export class PartyController {
           feeCc: feeCollected ? feeCc : 0,
           totalDeductedCc: totalDeducted,
           memo: body.memo?.trim(),
-          transferTxId: offerContractId,
+          transferTxId: ledgerTxId,
           feeTxId: feeLedgerTxId,
           transferKind: 'USER_TO_USER',
         })
