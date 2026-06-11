@@ -298,11 +298,6 @@ export function WalletActions({ partyId, balance, onBalanceRefresh }: WalletActi
                 <div className="flex justify-center px-6 py-4">
                   <p className="text-sm font-medium text-slate-400">
                     <span className="font-semibold text-slate-100">Fee Withdraw : {feeCc} CC</span>
-                    {ccAmount && parseFloat(ccAmount) > 0 && (
-                      <span className="ml-2 font-semibold text-[var(--primary)]">
-                        · Total: {(parseFloat(ccAmount) + feeCc).toFixed(2)} CC
-                      </span>
-                    )}
                   </p>
                 </div>
 
