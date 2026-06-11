@@ -489,20 +489,10 @@ export default function SpinRewardPage() {
 
         {/* ── Page Header ─────────────────────────────────────────────────── */}
         <div className="flex items-center gap-4">
-          <div
-            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl"
-            style={{
-              background: "linear-gradient(135deg, rgba(6,182,212,0.2) 0%, rgba(99,102,241,0.2) 100%)",
-              boxShadow: "0 0 0 1px rgba(6,182,212,0.25), 0 4px 16px rgba(6,182,212,0.1)",
-            }}
-          >
-            <Ticket className="h-6 w-6 text-cyan-400" />
-          </div>
           <div>
             <h1 className="text-xl font-bold tracking-tight text-white">
               Lucky Spin
             </h1>
-            <p className="text-xs text-slate-500">Spend points to win rewards</p>
           </div>
           {state && (
             <div className="ml-auto hidden sm:block">
@@ -587,7 +577,7 @@ export default function SpinRewardPage() {
                     onClick={() => void handleSpin()}
                     disabled={!canSpin}
                     className={cn(
-                      "group relative w-full overflow-hidden rounded-xl px-8 py-4 text-base font-semibold transition-all duration-200",
+                      "group relative w-full overflow-hidden rounded-2xl px-8 py-4 text-base font-semibold transition-all duration-200",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050508]",
                       "disabled:pointer-events-none disabled:opacity-50",
                       canSpin
