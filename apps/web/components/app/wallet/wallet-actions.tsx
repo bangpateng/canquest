@@ -236,7 +236,7 @@ export function WalletActions({ partyId, balance, onBalanceRefresh }: WalletActi
                     }}
                     placeholder="@alice or alice::1220…"
                     disabled={sendState === "loading"}
-                    className="w-full resize-none rounded-2xl border border-white/5 bg-[var(--muted)]/50 px-4 py-3 font-mono text-sm font-medium text-slate-100 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
+                    className="w-full resize-none rounded-2xl border border-white/5 bg-white/5 px-4 py-3 font-mono text-sm font-medium text-slate-100 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
                   />
                 </div>
 
@@ -271,7 +271,7 @@ export function WalletActions({ partyId, balance, onBalanceRefresh }: WalletActi
                     onChange={(e) => setCcAmount(e.target.value)}
                     placeholder="e.g. 10"
                     disabled={sendState === "loading"}
-                    className="w-full rounded-2xl border border-white/5 bg-[var(--muted)]/50 px-4 py-3 text-base font-bold tabular-nums text-slate-100 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
+                    className="w-full rounded-2xl border border-white/5 bg-white/5 px-4 py-3 text-base font-bold tabular-nums text-slate-100 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
                   />
                 </div>
 
@@ -290,7 +290,7 @@ export function WalletActions({ partyId, balance, onBalanceRefresh }: WalletActi
                     onChange={(e) => setMemo(e.target.value)}
                     placeholder=""
                     disabled={sendState === "loading"}
-                    className="w-full rounded-2xl border border-white/5 bg-[var(--muted)]/50 px-4 py-3 text-base font-medium text-slate-100 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
+                    className="w-full rounded-2xl border border-white/5 bg-white/5 px-4 py-3 text-base font-medium text-slate-100 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
                   />
                 </div>
 
@@ -376,7 +376,7 @@ export function WalletActions({ partyId, balance, onBalanceRefresh }: WalletActi
                   id={receiveTitleId}
                   className="text-xl font-bold text-slate-100"
                 >
-                  Receive CC
+                  Receive
                 </h2>
               </div>
               <button
