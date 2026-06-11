@@ -673,8 +673,12 @@ export class PartyController {
     let ledgerTxId: string | undefined;
     let transferMethod: 'preapproval_send' | 'offer_accept' | 'offer_only' = 'offer_accept';
 
-    const receiverHasPreapproval = await this.splice.hasTransferPreapproval(recipientPartyId);
-    if (receiverHasPreapproval && sender.username) {
+    // ── Coba 1-step transfer via TransferPreapproval ──
+    // Langsung kirim tanpa cek hasTransferPreapproval() dulu, karena untuk
+    // external party/CEX di participant berbeda, endpoint admin tidak bisa
+    // melihat preapproval mereka. Splice Wallet API akan otomatis resolve
+    // preapproval receiver saat send. Kalau gagal → fallback ke offer.
+    if (sender.username) {
       const preapprovalResult = await this.splice.sendViaTransferPreapproval(
         sender.username,
         recipientPartyId,
@@ -689,10 +693,10 @@ export class PartyController {
           `CC transfer (1-step preapproval): ${sender.username} → ${recipientLabel} ${amount} CC (ref: ${preapprovalResult.referenceId?.slice(0, 16) ?? 'n/a'})`,
         );
       } else {
+        // Preapproval gagal — fallback ke offer/accept
         this.logger.warn(
           `Preapproval send failed for ${sender.username} → ${recipientLabel}: ${preapprovalResult.error?.slice(0, 200)} — falling back to offer flow`,
         );
-        // Fallback: kalau preapproval gagal, coba offer/accept
       }
     }
 
