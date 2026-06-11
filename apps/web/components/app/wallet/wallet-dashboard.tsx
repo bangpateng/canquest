@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { CopyField } from "@/components/app/wallet/copy-field";
 import { WalletActions } from "@/components/app/wallet/wallet-actions";
+import { OffersSection } from "@/components/app/wallet/offers-section";
 import { TransactionsView } from "@/components/app/wallet/transactions-view";
 import { RefreshCw } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -47,7 +48,7 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
     refreshWithRetries();
     setTxRefreshKey((k) => k + 1);
     onRefresh?.();
- i }, [refreshWithRetries, onRefresh]);
+  }, [refreshWithRetries, onRefresh]);
 
   return (
     <div className="w-full max-w-full min-w-0 overflow-x-hidden space-y-5 md:space-y-6 font-sans">
@@ -115,6 +116,8 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
         balance={balance}
         onBalanceRefresh={handleBalanceRefresh}
       />
+
+      <OffersSection onRefresh={handleBalanceRefresh} />
 
       <TransactionsView variant="embedded" refreshKey={txRefreshKey} />
     </div>

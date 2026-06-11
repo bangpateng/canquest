@@ -265,6 +265,42 @@ export class CantonLedgerService {
   }
 
   /**
+   * Reject a Splice TransferOffer on behalf of the receiver party.
+   *
+   * Template: Splice.Wallet.TransferOffer:TransferOffer
+   * Choice:   TransferOffer_Reject (controller = receiver, no arguments)
+   *
+   * Returns { rejected: boolean, updateId: string | null }
+   */
+  async rejectTransferOffer(
+    offerContractId: string,
+    receiverPartyId: string,
+  ): Promise<{ rejected: boolean; updateId: string | null }> {
+    const templateId =
+      '94d88246f69d8a4b69333d1f993e3280deaca19b70511ea7687f01e4328a34a4:Splice.Wallet.TransferOffer:TransferOffer';
+
+    const { ok, status, text } = await this.exerciseChoice(
+      offerContractId,
+      templateId,
+      'TransferOffer_Reject',
+      {},
+      [receiverPartyId],
+    );
+
+    if (ok) {
+      let updateId: string | null = null;
+      try {
+        const parsed = JSON.parse(text) as { updateId?: string };
+        updateId = parsed.updateId ?? null;
+      } catch { /* ignore */ }
+      this.logger.log(`TransferOffer rejected: ${receiverPartyId.split('::')[0]} updateId: ${updateId ?? 'unknown'}`);
+      return { rejected: true, updateId };
+    }
+    this.logger.warn(`TransferOffer_Reject ${status}: ${text.slice(0, 300)}`);
+    return { rejected: false, updateId: null };
+  }
+
+  /**
    * Allocate a new internal party on the connected participant node.
    *
    * POST /v2/parties
