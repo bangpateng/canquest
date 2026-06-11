@@ -935,15 +935,32 @@ export class PartyController {
       );
     }
 
+    // Look up the original transfer to get the refund amount
+    const userTxns = await this.users.getTransactions(user.id, 1, 20);
+    const originalTx = userTxns.items.find(
+      (tx: { ledgerTxId: string | null; amountMicroCc: string }) =>
+        tx.ledgerTxId === offerContractId,
+    );
+    const refundAmountCc = originalTx
+      ? Math.abs(Number(originalTx.amountMicroCc)) / 1_000_000
+      : 0;
+
     // Record the cancellation as a refund transaction
-    await this.users.recordTransaction({
+    const refundRow = await this.users.recordTransaction({
       userId: user.id,
-      amountCc: 0, // Amount not known here — we just mark it as cancelled
+      amountCc: refundAmountCc,
       type: 'TRANSFER_IN',
-      description: 'Transfer offer withdrawn — CC refunded to wallet',
+      description: `Transfer offer withdrawn — ${refundAmountCc} CC refunded to wallet`,
       counterparty: 'Offer Withdrawal',
       ledgerTxId: result.updateId ?? offerContractId,
     });
+    if (result.updateId && user.cantonPartyId) {
+      void this.txDetail.backfillUpdateId(
+        refundRow.id,
+        result.updateId,
+        user.cantonPartyId,
+      );
+    }
 
     if (user.username) {
       void this.inboundSync.alignBalanceFromChain(user.id, user.username);
