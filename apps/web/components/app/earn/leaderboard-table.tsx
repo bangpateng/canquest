@@ -205,18 +205,13 @@ export function LeaderboardTable() {
       <div className="w-full max-w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50">
         {/* Card Header */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 border-b border-white/[0.06] bg-white/[0.01] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 ring-1 ring-amber-500/20">
-              <Trophy className="h-5 w-5 text-amber-400" />
-            </div>
-            <div>
-              <h2 className="text-base sm:text-lg font-semibold tracking-tight text-white">
-                Top Participants
-              </h2>
-              <p className="text-xs sm:text-sm font-medium text-slate-500">
-                {period === "all" ? "All time" : period === "weekly" ? "Weekly ranking" : "Monthly ranking"}
-              </p>
-            </div>
+          <div>
+            <h2 className="text-base sm:text-lg font-semibold tracking-tight text-white">
+              Top Participants
+            </h2>
+            <p className="text-xs sm:text-sm font-medium text-slate-500">
+              {period === "all" ? "All time" : period === "weekly" ? "Weekly ranking" : "Monthly ranking"}
+            </p>
           </div>
           {data && (
             <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10 sm:ml-auto">
