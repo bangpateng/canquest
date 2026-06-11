@@ -6,7 +6,7 @@ export function filterTabClass(selected: boolean, className?: string) {
     "shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition-all",
     selected
       ? "border-0 bg-emerald-500 text-white hover:bg-emerald-400"
-      : "border border-[var(--border)] bg-[var(--card)]/80 text-[var(--muted-foreground)] hover:border-[var(--primary)]/30 hover:text-[var(--foreground)]",
+      : "bg-[var(--card)]/80 text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
     className,
   );
 }
