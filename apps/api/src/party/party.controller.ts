@@ -898,6 +898,71 @@ export class PartyController {
   }
 
   /**
+   * Withdraw (cancel) a pending TransferOffer and refund CC to sender.
+   *
+   * POST /api/party/cancel-transfer
+   *
+   * Only the sender can withdraw their own offer. The offer must not have been
+   * accepted yet. CC amount is returned to the sender's wallet on-chain.
+   *
+   * Fee is NOT refunded — it was already collected on-chain.
+   */
+  @Throttle({ ledger: { limit: 5, ttl: 60_000 } })
+  @Post('cancel-transfer')
+  async cancelTransfer(
+    @Req() req: AuthedReq,
+    @Body() body: { offerContractId: string },
+  ) {
+    const user = await this.users.findById(req.user.userId);
+    if (!user?.cantonPartyId) {
+      throw new BadRequestException('No wallet found.');
+    }
+
+    const offerContractId = body.offerContractId?.trim();
+    if (!offerContractId) {
+      throw new BadRequestException('offerContractId is required.');
+    }
+
+    const result = await this.ledger.withdrawTransferOffer(
+      offerContractId,
+      user.cantonPartyId,
+      'Cancelled by sender via CanQuest',
+    );
+
+    if (!result.withdrawn) {
+      throw new BadRequestException(
+        'Failed to withdraw offer. The offer may have already been accepted, expired, or you are not the sender.',
+      );
+    }
+
+    // Record the cancellation as a refund transaction
+    await this.users.recordTransaction({
+      userId: user.id,
+      amountCc: 0, // Amount not known here — we just mark it as cancelled
+      type: 'TRANSFER_IN',
+      description: 'Transfer offer withdrawn — CC refunded to wallet',
+      counterparty: 'Offer Withdrawal',
+      ledgerTxId: result.updateId ?? offerContractId,
+    });
+
+    if (user.username) {
+      void this.inboundSync.alignBalanceFromChain(user.id, user.username);
+    }
+
+    this.logger.log(
+      `Transfer offer withdrawn by @${user.username}: ${offerContractId.slice(0, 20)}…`,
+    );
+
+    return {
+      success: true,
+      withdrawn: true,
+      updateId: result.updateId,
+      message:
+        'Transfer offer withdrawn successfully. CC has been refunded to your wallet.',
+    };
+  }
+
+  /**
    * CC notification feed (earn rewards, spin wins, inbound transfers).
    * GET /api/party/notifications?limit=12
    */
