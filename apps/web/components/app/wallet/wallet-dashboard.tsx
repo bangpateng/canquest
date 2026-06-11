@@ -86,6 +86,11 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
             <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
               {t("wallet.balance")}
             </span>
+            {ccUsdPrice > 0 && (
+              <span className="inline-block text-[10px] sm:text-xs font-semibold tracking-wider text-[var(--primary)] bg-[var(--primary)]/5 px-2.5 py-1 rounded-full border border-[var(--primary)]/20">
+                1 CC ≈ ${ccUsdPrice.toFixed(6)}
+              </span>
+            )}
           </div>
           <button
             type="button"
