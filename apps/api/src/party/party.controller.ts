@@ -964,40 +964,6 @@ export class PartyController {
     };
   }
 
-  /**
-   * Harga CC realtime dari Bybit public API (gratis, tanpa auth).
-   * GET /api/party/cc-price
-   */
-  @SkipThrottle()
-  @Get('cc-price')
-  async getCcPrice() {
-    const apiUrl =
-      this.config.get<string>('CC_PRICE_API_URL') ??
-      'https://api.bytick.com/v5/market/tickers?category=spot&symbol=CCUSDT';
-    try {
-      const res = await fetch(apiUrl, {
-        signal: AbortSignal.timeout(5_000),
-      });
-      if (!res.ok) {
-        this.logger.warn(`Bybit CC price fetch failed: HTTP ${res.status}`);
-        return { lastPrice: null, source: 'env_fallback' };
-      }
-      const data = (await res.json()) as {
-        retCode: number;
-        result?: { list?: Array<{ lastPrice?: string }> };
-      };
-      const rawPrice = data?.result?.list?.[0]?.lastPrice;
-      const lastPrice = rawPrice ? Number(rawPrice) : null;
-      return {
-        lastPrice,
-        source: lastPrice !== null ? 'bybit_realtime' : 'bybit_parse_failed',
-      };
-    } catch (err: unknown) {
-      this.logger.warn(`Bybit CC price fetch error: ${String(err)}`);
-      return { lastPrice: null, source: 'bybit_unreachable' };
-    }
-  }
-
   /** Check reachability of Canton JSON Ledger API and Splice Validator API. */
   @SkipThrottle()
   @Get('ledger-status')
