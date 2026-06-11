@@ -3,10 +3,10 @@ import { cn } from "@/lib/utils/utils";
 /** Period / status filter pills (Weekly, Active, etc.) */
 export function filterTabClass(selected: boolean, className?: string) {
   return cn(
-    "shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition-all",
+    "shrink-0 rounded-full text-[10px] sm:text-xs font-semibold uppercase tracking-wider transition-all",
     selected
-      ? "border-0 bg-emerald-500 text-white hover:bg-emerald-400"
-      : "bg-[var(--card)]/80 text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
+      ? "border-0 bg-emerald-500 text-white hover:bg-emerald-400 px-2.5 py-1"
+      : "border border-white/10 bg-white/5 text-slate-400 hover:text-slate-200 px-2.5 py-1",
     className,
   );
 }
