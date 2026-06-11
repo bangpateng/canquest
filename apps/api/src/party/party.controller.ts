@@ -720,13 +720,30 @@ export class PartyController {
           `CC transfer (Wallet API): ${sender.username} → ${recipientLabel} ${amount} CC (accepted: ${String(accepted)})`,
         );
       } else {
-        // ── External party / CEX → offer only, recipient must accept themselves ──
-        // Kita tetap record sebagai transfer yang "pending" di sisi pengirim.
-        accepted = true; // Offer berhasil dibuat — transfer considered "in flight"
-        transferMethod = 'offer_only';
-        this.logger.log(
-          `CC transfer (offer only, external): ${sender.username} → ${recipientLabel} ${amount} CC (offer: ${offerContractId.slice(0, 20)}…)`,
+        // ── External party / CEX → coba accept via Canton Ledger API ──
+        // Jika receiver ada di participant yang sama, backend bisa accept.
+        // Jika beda participant, offer tetap dibuat tapi receiver harus accept manual.
+        const ledgerAcceptResult = await this.ledger.acceptTransferOffer(
+          offerContractId,
+          recipientPartyId,
         );
+        if (ledgerAcceptResult.accepted) {
+          accepted = true;
+          acceptUpdateId = ledgerAcceptResult.updateId;
+          transferMethod = 'offer_accept';
+          this.logger.log(
+            `CC transfer (Ledger API, external): ${sender.username} → ${recipientLabel} ${amount} CC (accepted, updateId: ${acceptUpdateId?.slice(0, 16) ?? 'n/a'})`,
+          );
+        } else {
+          // ── Gagal accept — kemungkinan beda participant ──
+          // Offer tetap exist di ledger, tapi receiver harus accept manual.
+          // Kita record sebagai pending transfer di sisi pengirim.
+          accepted = true; // Offer berhasil dibuat
+          transferMethod = 'offer_only';
+          this.logger.warn(
+            `CC transfer (offer only, external): ${sender.username} → ${recipientLabel} ${amount} CC — recipient must accept offer manually (different participant or no backend access). Offer: ${offerContractId.slice(0, 20)}…`,
+          );
+        }
       }
     }
 
