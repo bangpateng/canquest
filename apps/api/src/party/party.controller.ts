@@ -724,29 +724,14 @@ export class PartyController {
           `CC transfer (Wallet API): ${sender.username} → ${recipientLabel} ${amount} CC (accepted: ${String(accepted)})`,
         );
       } else {
-        // ── External party / CEX → coba accept via Canton Ledger API ──
-        // Jika receiver ada di participant yang sama, backend bisa accept.
-        // Jika beda participant, offer tetap dibuat tapi receiver harus accept manual.
-        const ledgerAcceptResult = await this.ledger.acceptTransferOffer(
-          offerContractId,
-          recipientPartyId,
+        // ── External party / CEX → offer saja, jangan auto-accept ──
+        // Backend tidak bisa accept untuk party di participant berbeda
+        // (NO_SYNCHRONIZER_ON_WHICH_ALL_SUBMITTERS_CAN_SUBMIT).
+        // Receiver harus accept manual via Splice Wallet UI / Canton Loop.
+        transferMethod = 'offer_only';
+        this.logger.log(
+          `CC transfer (offer created): ${sender.username} → ${recipientLabel} ${amount} CC — offer ${offerContractId.slice(0, 20)}… (receiver must accept manually)`,
         );
-        if (ledgerAcceptResult.accepted) {
-          accepted = true;
-          acceptUpdateId = ledgerAcceptResult.updateId;
-          transferMethod = 'offer_accept';
-          this.logger.log(
-            `CC transfer (Ledger API, external): ${sender.username} → ${recipientLabel} ${amount} CC (accepted, updateId: ${acceptUpdateId?.slice(0, 16) ?? 'n/a'})`,
-          );
-        } else {
-          // ── Gagal accept — kemungkinan beda participant ──
-          // Offer tetap exist di ledger, tapi receiver harus accept manual.
-          // Jangan set accepted=true — CC belum pindah! Hanya catat sebagai pending offer.
-          transferMethod = 'offer_only';
-          this.logger.warn(
-            `CC transfer (offer only, external): ${sender.username} → ${recipientLabel} ${amount} CC — recipient must accept offer manually. Offer: ${offerContractId.slice(0, 20)}…`,
-          );
-        }
       }
     }
 
