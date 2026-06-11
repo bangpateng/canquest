@@ -490,9 +490,9 @@ export default function SpinRewardPage() {
         {/* ── Page Header ─────────────────────────────────────────────────── */}
         <div className="flex items-center gap-4">
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-white">
+            <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
               Lucky Spin
-            </h1>
+            </span>
           </div>
           {state && (
             <div className="ml-auto hidden sm:block">

@@ -110,9 +110,9 @@ export function EarnHubPage() {
           {/* Header */}
           <div className="border-b border-white/[0.06] bg-white/[0.01] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
             <div>
-              <h2 className="text-base sm:text-lg font-semibold tracking-tight text-white">
+              <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
                 Quest Hub
-              </h2>
+              </span>
             </div>
           </div>
 
