@@ -184,12 +184,7 @@ export function QuestsBrowser({
             key={tab.id}
             type="button"
             onClick={() => setStatus(tab.id)}
-            className={filterTabClass(
-              selected,
-              isEarn
-                ? "justify-center px-3 py-1.5 text-xs sm:px-3.5 sm:py-2 sm:text-sm"
-                : undefined,
-            )}
+            className={filterTabClass(selected)}
           >
             {QUEST_STATUS_BADGE[tab.id].label}{" "}
             <span className="tabular-nums opacity-80">({counts[tab.id]})</span>
