@@ -90,7 +90,7 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
             type="button"
             onClick={() => void fetchBalance()}
             disabled={balanceLoading}
-            className="rounded-xl p-2.5 text-slate-400 transition-all duration-200 hover:bg-white/[0.06] hover:text-slate-100 disabled:opacity-40 ring-1 ring-white/10 hover:ring-white/20"
+            className="rounded-xl p-2.5 text-slate-400 transition-all duration-200 hover:bg-white/[0.06] hover:text-slate-100 disabled:opacity-40"
             aria-label={t("wallet.refreshBalance")}
           >
             {balanceLoading ? (
