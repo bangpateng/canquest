@@ -1103,6 +1103,7 @@ export class PartyController {
   @SkipThrottle()
   @Get('offers')
   async listOffers(@Req() req: AuthedReq) {
+    try {
     const user = await this.users.findById(req.user.userId);
     if (!user?.username || !user.cantonPartyId) {
       return { offers: [], message: 'No wallet found.' };
@@ -1155,6 +1156,11 @@ export class PartyController {
     });
 
     return { offers, count: offers.length };
+    } catch (err) {
+      this.logger.warn(`listOffers error for user ${req.user.userId.slice(0, 8)}: ${String(err)}`);
+      // Return empty list instead of throwing 500 — the wallet page should never crash
+      return { offers: [], message: 'Could not fetch offers. Splice tunnel may be down.' };
+    }
   }
 
   /** Check reachability of Canton JSON Ledger API and Splice Validator API. */

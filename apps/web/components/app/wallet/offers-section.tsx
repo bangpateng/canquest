@@ -32,13 +32,16 @@ export function OffersSection({ onRefresh }: OffersSectionProps) {
     setError(null);
     try {
       const res = await fetch("/api/party/offers", { credentials: "include" });
+      const data = (await res.json()) as { offers?: OfferItem[]; count?: number; message?: string };
       if (!res.ok) {
         setOffers([]);
-        setError("Could not load offers.");
+        setError(data.message ?? `Server error (HTTP ${res.status}).`);
         return;
       }
-      const data = (await res.json()) as { offers?: OfferItem[]; count?: number };
       setOffers(data.offers ?? []);
+      if (data.message && data.message !== "No wallet found.") {
+        // Show server message only if it's not a normal "no wallet" state
+      }
     } catch {
       setOffers([]);
       setError("Network error. Check your connection.");
