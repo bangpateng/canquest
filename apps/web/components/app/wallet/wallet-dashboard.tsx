@@ -129,6 +129,7 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
 
       <WalletActions
         partyId={displayPartyId}
+        balance={balance}
         onBalanceRefresh={handleBalanceRefresh}
       />
 

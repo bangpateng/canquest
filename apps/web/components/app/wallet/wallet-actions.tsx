@@ -12,17 +12,18 @@ import { cn } from "@/lib/utils/utils";
 import { TransactionDetailModal } from "@/components/app/wallet/transaction-detail-modal";
 import { ArrowDownLeft, ArrowUpRight, X, AlertCircle } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
 type Sheet = null | "send" | "receive";
 type SendState = "idle" | "loading" | "success" | "error";
 
 interface WalletActionsProps {
   partyId: string;
+  balance?: number | null;
   onBalanceRefresh?: () => void;
 }
 
-export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps) {
+export function WalletActions({ partyId, balance, onBalanceRefresh }: WalletActionsProps) {
   const displayPartyId = formatPartyIdForDisplay(partyId);
   const sendTitleId = useId();
   const receiveTitleId = useId();
@@ -235,17 +236,32 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
                     }}
                     placeholder="@alice or alice::1220…"
                     disabled={sendState === "loading"}
-                    className="w-full resize-none rounded-3xl border border-white/5 bg-white/5 px-4 py-3 font-mono text-sm font-medium text-slate-100 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
+                    className="w-full resize-none rounded-2xl border border-white/5 bg-[var(--muted)]/50 px-4 py-3 font-mono text-sm font-medium text-slate-100 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
                   />
                 </div>
 
                 <div className="space-y-3">
-                  <label
-                    htmlFor="wallet-send-amount"
-                    className="text-sm font-medium text-slate-400"
-                  >
-                    Amount
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label
+                      htmlFor="wallet-send-amount"
+                      className="text-sm font-medium text-slate-400"
+                    >
+                      Amount
+                    </label>
+                    {balance != null && balance > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const max = Math.max(0, balance - feeCc);
+                          setCcAmount(max.toFixed(4));
+                        }}
+                        disabled={sendState === "loading"}
+                        className="text-xs font-semibold text-[var(--primary)] hover:underline disabled:opacity-40"
+                      >
+                        MAX
+                      </button>
+                    )}
+                  </div>
                   <input
                     id="wallet-send-amount"
                     required
@@ -255,7 +271,7 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
                     onChange={(e) => setCcAmount(e.target.value)}
                     placeholder="e.g. 10"
                     disabled={sendState === "loading"}
-                    className="w-full rounded-3xl border border-white/5 bg-white/5 px-4 py-3 text-base font-bold tabular-nums text-slate-100 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
+                    className="w-full rounded-2xl border border-white/5 bg-[var(--muted)]/50 px-4 py-3 text-base font-bold tabular-nums text-slate-100 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
                   />
                 </div>
 
@@ -274,7 +290,7 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
                     onChange={(e) => setMemo(e.target.value)}
                     placeholder=""
                     disabled={sendState === "loading"}
-                    className="w-full rounded-3xl border border-white/5 bg-white/5 px-4 py-3 text-base font-medium text-slate-100 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
+                    className="w-full rounded-2xl border border-white/5 bg-[var(--muted)]/50 px-4 py-3 text-base font-medium text-slate-100 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
                   />
                 </div>
 
