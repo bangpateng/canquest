@@ -30,12 +30,17 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
   const [txRefreshKey, setTxRefreshKey] = useState(0);
 
   useEffect(() => {
-    fetch("/api/party/fee-config", { credentials: "include" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d: { ccUsdPrice?: number } | null) => {
-        if (d?.ccUsdPrice) setCcUsdPrice(d.ccUsdPrice);
-      })
-      .catch(() => {});
+    const pollPrice = () => {
+      fetch("/api/party/cc-price", { credentials: "include" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d: { lastPrice?: number | null } | null) => {
+          if (d?.lastPrice) setCcUsdPrice(d.lastPrice);
+        })
+        .catch(() => {});
+    };
+    pollPrice();
+    const interval = setInterval(pollPrice, 30_000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleBalanceRefresh = useCallback(() => {
