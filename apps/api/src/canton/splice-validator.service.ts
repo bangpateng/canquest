@@ -486,7 +486,7 @@ export class SpliceValidatorService {
   ): Promise<string | null> {
     if (!this.isConfigured) return null;
 
-    const validatorAdminUsername =
+    const effectiveSender =
       senderUsername ?? this.config.get<string>('CANTON_VALIDATOR_ADMIN_USER') ?? 'administrator';
 
         // expires_at must be in MICROSECONDS (Unix timestamp × 1_000_000).
@@ -502,7 +502,7 @@ export class SpliceValidatorService {
     try {
       const res = await fetch(url, {
         method: 'POST',
-        headers: this.jsonAuthHeaders(validatorAdminUsername),
+        headers: this.jsonAuthHeaders(effectiveSender),
         body: JSON.stringify({
           receiver_party_id: receiverPartyId,
           amount: amountCc.toString(),

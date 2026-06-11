@@ -741,11 +741,10 @@ export class PartyController {
         } else {
           // ── Gagal accept — kemungkinan beda participant ──
           // Offer tetap exist di ledger, tapi receiver harus accept manual.
-          // Kita record sebagai pending transfer di sisi pengirim.
-          accepted = true; // Offer berhasil dibuat
+          // Jangan set accepted=true — CC belum pindah! Hanya catat sebagai pending offer.
           transferMethod = 'offer_only';
           this.logger.warn(
-            `CC transfer (offer only, external): ${sender.username} → ${recipientLabel} ${amount} CC — recipient must accept offer manually (different participant or no backend access). Offer: ${offerContractId.slice(0, 20)}…`,
+            `CC transfer (offer only, external): ${sender.username} → ${recipientLabel} ${amount} CC — recipient must accept offer manually. Offer: ${offerContractId.slice(0, 20)}…`,
           );
         }
       }
@@ -807,10 +806,34 @@ export class PartyController {
       }
     }
 
-    if (!accepted) {
-      throw new BadRequestException(
-        'Transfer failed — could not send CC. Check your balance and recipient preapproval status.',
-      );
+    // ── Offer-only path: return early with pending status ──
+    if (transferMethod === 'offer_only') {
+      // Record pending offer transaction for sender
+      const pendingRow = await this.users.recordTransaction({
+        userId: sender.id,
+        amountCc: amount,
+        type: 'TRANSFER_OUT',
+        description: `${description} [pending — recipient must accept offer]`,
+        counterparty: recipientPartyId,
+        ledgerTxId,
+      });
+
+      void this.inboundSync.alignBalanceFromChain(sender.id, sender.username);
+
+      return {
+        success: true,
+        from: sender.username,
+        to: recipientLabel,
+        amount,
+        fee: feeCc,
+        feeCollected: false,
+        totalDeducted: 0,
+        accepted: false,
+        offerPending: true,
+        offerContractId: ledgerTxId,
+        message: `Transfer offer created for ${amount} CC to ${recipientLabel}. The recipient must accept this offer manually (different participant wallet). Offer ID: ${ledgerTxId?.slice(0, 20)}…`,
+        transactionId: pendingRow.id,
+      };
     }
 
     let feeCollected = false;
