@@ -47,27 +47,10 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
     refreshWithRetries();
     setTxRefreshKey((k) => k + 1);
     onRefresh?.();
-  }, [refreshWithRetries, onRefresh]);
+ i }, [refreshWithRetries, onRefresh]);
 
   return (
     <div className="w-full max-w-full min-w-0 overflow-x-hidden space-y-5 md:space-y-6 font-sans">
-      {/* ── Wallet Status Card ──────────────────────────────────────────── */}
-      <div className="w-full max-w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50 p-5 sm:p-6 md:p-8">
-        <div className="flex items-center gap-3 mb-5 sm:mb-6">
-          <div>
-            <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
-              {t("wallet.walletActive")}
-            </span>
-          </div>
-        </div>
-        <div>
-          <CopyField
-            label={t("wallet.partyId")}
-            value={hasWallet ? displayPartyId || "—" : "—"}
-          />
-        </div>
-      </div>
-
       {/* ── Balance Hero Card ───────────────────────────────────────────── */}
       <div className="relative w-full max-w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50 p-6 sm:p-8 md:p-10 lg:p-12">
         {/* Ambient glow */}
