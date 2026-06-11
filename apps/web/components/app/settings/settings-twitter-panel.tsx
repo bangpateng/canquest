@@ -128,14 +128,11 @@ export function SettingsTwitterPanel({
     >
       {/* Section Header */}
       <div className="border-b border-white/[0.06] bg-white/[0.01] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/10 ring-1 ring-sky-500/20">
-            <AtSign className="h-5 w-5 text-sky-400" />
-          </div>
-          <div>
-            <h3 className="text-base sm:text-lg font-semibold tracking-tight text-white">X (Twitter)</h3>
-            <p className="text-xs text-slate-500">Connect for quest verification</p>
-          </div>
+        <div>
+          <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
+            X (Twitter)
+          </span>
+          <p className="mt-1 text-xs text-slate-500">Connect for quest verification</p>
         </div>
       </div>
 

@@ -79,16 +79,10 @@ export function SettingsAccountPanel() {
     <section className="w-full max-w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50">
       {/* Section Header */}
       <div className="border-b border-white/[0.06] bg-white/[0.01] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]/20">
-            <User className="h-5 w-5 text-[var(--primary)]" />
-          </div>
-          <div>
-            <h3 className="text-base sm:text-lg font-semibold tracking-tight text-white">
-              Profile
-            </h3>
-            <p className="text-xs text-slate-500">Your account information</p>
-          </div>
+        <div>
+          <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
+            Profile
+          </span>
         </div>
       </div>
 
