@@ -448,17 +448,6 @@ export function QuestTaskPanel({
       {/* Task list */}
       {isEarnHub ? (
         <div className="overflow-hidden rounded-3xl border border-white/5 bg-[var(--card)]/40">
-          <div className="flex items-center justify-between border-b border-slate-800/80 bg-[var(--muted)]/20 px-6 py-4">
-            <div>
-              <p className="text-sm font-medium text-slate-400">Tasks to complete</p>
-              <p className="mt-1 text-xs font-medium text-slate-500">
-                One at a time — finish each task before the next unlocks
-              </p>
-            </div>
-            <p className="text-base font-semibold tabular-nums text-slate-100">
-              {verifiedCount}/{quest.tasks.length}
-            </p>
-          </div>
           <ul className="divide-y divide-slate-800/80">
             {quest.tasks.map((task, idx) => (
               <TaskRow
@@ -484,37 +473,6 @@ export function QuestTaskPanel({
         </div>
       ) : (
         <div className="overflow-hidden rounded-3xl border border-white/5 bg-[var(--card)]/40">
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800/80 bg-[var(--muted)]/20 px-6 py-4">
-            <div>
-              <p className="text-sm font-medium text-slate-400">
-                Tasks to complete
-              </p>
-              <p className="mt-1 text-xs font-medium text-slate-500">
-                One at a time — finish each task before the next unlocks
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              {allDone && !questCompleted ? (
-                <span className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--primary)]/12 px-3 py-1 text-xs font-bold uppercase tracking-wide text-canton">
-                  <Zap className="h-4 w-4" aria-hidden />
-                  Ready
-                </span>
-              ) : null}
-              <p className="text-base font-semibold tabular-nums text-slate-100">
-                {verifiedCount}/{quest.tasks.length}
-              </p>
-            </div>
-          </div>
-          {quest.tasks.length > 0 ? (
-            <div className="border-b border-slate-800/80 px-6 py-3">
-              <div className="h-1.5 overflow-hidden rounded-full bg-[var(--muted)]">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-[var(--primary)] to-[var(--primary-strong)] transition-all duration-500"
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-            </div>
-          ) : null}
           <ul className="divide-y divide-slate-800/80">
             {quest.tasks.map((task, idx) => (
               <TaskRow
