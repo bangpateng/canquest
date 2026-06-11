@@ -215,7 +215,7 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
               </div>
             ) : (
               <form onSubmit={submitSend} className="mt-8 space-y-6">
-                                <div className="space-y-3">
+                <div className="space-y-3">
                   <label
                     htmlFor="wallet-send-recipient"
                     className="text-sm font-medium text-slate-400"
@@ -235,7 +235,7 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
                     }}
                     placeholder="@alice or alice::1220…"
                     disabled={sendState === "loading"}
-                    className="w-full resize-none rounded-2xl border border-white/5 bg-[var(--muted)]/40 px-4 py-3 font-mono text-sm font-medium text-slate-100 outline-none ring-offset-[var(--card)] placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
+                    className="w-full resize-none rounded-3xl border border-white/5 bg-white/5 px-4 py-3 font-mono text-sm font-medium text-slate-100 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
                   />
                 </div>
 
@@ -255,7 +255,7 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
                     onChange={(e) => setCcAmount(e.target.value)}
                     placeholder="e.g. 10"
                     disabled={sendState === "loading"}
-                    className="w-full rounded-2xl border border-white/5 bg-[var(--muted)]/40 px-4 py-3 text-base font-bold tabular-nums text-slate-100 outline-none ring-offset-[var(--card)] placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
+                    className="w-full rounded-3xl border border-white/5 bg-white/5 px-4 py-3 text-base font-bold tabular-nums text-slate-100 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
                   />
                 </div>
 
@@ -274,16 +274,16 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
                     onChange={(e) => setMemo(e.target.value)}
                     placeholder=""
                     disabled={sendState === "loading"}
-                    className="w-full rounded-2xl border border-white/5 bg-[var(--muted)]/40 px-4 py-3 text-base font-medium text-slate-100 outline-none ring-offset-[var(--card)] placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
+                    className="w-full rounded-3xl border border-white/5 bg-white/5 px-4 py-3 text-base font-medium text-slate-100 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
                   />
                 </div>
 
-                {/* Fee notice — value from env TRANSACTION_FEE_CC */}
-                <div className="rounded-2xl border border-white/5 bg-[var(--muted)]/30 px-4 py-3">
+                {/* Fee notice — matches Receive QR box style */}
+                <div className="flex justify-center rounded-3xl border border-white/5 bg-white/5 px-6 py-4">
                   <p className="text-sm font-medium text-slate-400">
                     <span className="font-semibold text-slate-100">Fee Withdraw : {feeCc} CC</span>
                     {ccAmount && parseFloat(ccAmount) > 0 && (
-                      <span className="ml-2 font-semibold text-canton">
+                      <span className="ml-2 font-semibold text-[var(--primary)]">
                         · Total: {(parseFloat(ccAmount) + feeCc).toFixed(2)} CC
                       </span>
                     )}
@@ -291,36 +291,37 @@ export function WalletActions({ partyId, onBalanceRefresh }: WalletActionsProps)
                 </div>
 
                 {sendState === "error" && (
-                  <div className="flex items-start gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-4">
+                  <div className="flex items-start gap-3 rounded-3xl border border-red-500/30 bg-red-500/10 p-4">
                     <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
                     <p className="text-sm font-medium text-red-400">{sendMessage}</p>
                   </div>
                 )}
 
-                <div className="flex flex-wrap gap-3 pt-3">
-                  <button
-                    type="submit"
-                    disabled={sendState === "loading"}
-                    className={cn(buttonVariants({ size: "sm" }), "min-w-[7rem] gap-2")}
-                  >
-                    {sendState === "loading" ? (
-                      <>
-                        <LoadingSpinner size="sm" />
-                        Sending…
-                      </>
-                    ) : (
-                      "Send"
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={close}
-                    disabled={sendState === "loading"}
-                    className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}
-                  >
-                    Cancel
-                  </button>
-                </div>
+                <button
+                  type="submit"
+                  disabled={sendState === "loading"}
+                  className={cn(buttonVariants({ size: "sm" }), "mt-8 w-full sm:w-auto gap-2")}
+                >
+                  {sendState === "loading" ? (
+                    <>
+                      <LoadingSpinner size="sm" />
+                      Sending…
+                    </>
+                  ) : (
+                    "Send"
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={close}
+                  disabled={sendState === "loading"}
+                  className={cn(
+                    buttonVariants({ variant: "secondary", size: "sm" }),
+                    "w-full sm:w-auto",
+                  )}
+                >
+                  Cancel
+                </button>
               </form>
             )}
           </div>
