@@ -489,15 +489,13 @@ export class SpliceValidatorService {
     const validatorAdminUsername =
       senderUsername ?? this.config.get<string>('CANTON_VALIDATOR_ADMIN_USER') ?? 'administrator';
 
-    // expires_at must be in MICROSECONDS (Unix timestamp × 1_000_000).
+        // expires_at must be in MICROSECONDS (Unix timestamp × 1_000_000).
     // Per Canton docs the timestamp is epoch-microseconds as a number.
-    // Default 168 hours (7 days), configurable via TRANSFER_OFFER_EXPIRY_HOURS.
-    const expiryHours = Number(
-      this.config.get<string>('TRANSFER_OFFER_EXPIRY_HOURS') ?? '168',
-    );
+    // We compute: (now_ms * 1000) + (7_days_in_microseconds)
+    // Using BigInt throughout to avoid float precision loss at large values.
     const nowMicros = BigInt(Date.now()) * 1_000n;
-    const expiryMicros = BigInt(expiryHours) * 3_600n * 1_000_000n;
-    const expiresAtMicros = nowMicros + expiryMicros;
+    const sevenDaysMicros = 7n * 24n * 3_600n * 1_000_000n;
+    const expiresAtMicros = nowMicros + sevenDaysMicros;
 
     const url = `${this.baseUrl}/api/validator/v0/wallet/transfer-offers`;
 
