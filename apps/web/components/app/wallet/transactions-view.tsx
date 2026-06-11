@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/utils/utils";
 import { ListPagination } from "@/components/app/list/list-pagination";
-import { ArrowDownLeft, ArrowUpRight, Gift, RefreshCw, Zap } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Gift, RefreshCw, XCircle, Zap } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { TransactionDetailModal } from "@/components/app/wallet/transaction-detail-modal";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
@@ -106,6 +106,7 @@ export function TransactionsView({
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [modalTxId, setModalTxId] = useState<string | null>(null);
+  const [cancellingIds, setCancellingIds] = useState<Set<string>>(new Set());
 
   const fetchTxns = useCallback(
     async (page: number) => {
@@ -138,6 +139,44 @@ export function TransactionsView({
 
   function refresh() {
     void fetchTxns(currentPage);
+  }
+
+  async function cancelOffer(tx: TxItem) {
+    const offerContractId = tx.ledgerTxId;
+    if (!offerContractId) return;
+
+    const confirmed = window.confirm(
+      `Withdraw this transfer offer?\n\n` +
+        `${Math.abs(Number(tx.amountMicroCc)) / 1_000_000} CC will be refunded to your wallet.\n` +
+        `Platform fee (if any) is NOT refundable.\n\n` +
+        `Offer ID: ${offerContractId.slice(0, 20)}…`,
+    );
+    if (!confirmed) return;
+
+    setCancellingIds((prev) => new Set(prev).add(tx.id));
+    try {
+      const res = await fetch("/api/party/cancel-transfer", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ offerContractId }),
+      });
+      const data = (await res.json()) as { success?: boolean; message?: string };
+      if (res.ok && data.success) {
+        alert(data.message ?? "Transfer cancelled. CC refunded.");
+        refresh();
+      } else {
+        alert(data.message ?? "Failed to cancel. The offer may have already been accepted or expired.");
+      }
+    } catch {
+      alert("Network error. Please try again.");
+    } finally {
+      setCancellingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(tx.id);
+        return next;
+      });
+    }
   }
 
   return (
@@ -260,6 +299,28 @@ export function TransactionsView({
                         </td>
                         <td className="whitespace-nowrap px-5 py-3.5 sm:px-6 sm:py-4 text-sm font-medium text-slate-400">
                           {date}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-3.5 sm:px-4 sm:py-4">
+                          {tx.type === "TRANSFER_OUT" &&
+                            tx.description.includes("[pending acceptance") &&
+                            tx.ledgerTxId ? (
+                            <button
+                              type="button"
+                              disabled={cancellingIds.has(tx.id)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void cancelOffer(tx);
+                              }}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-400 transition-colors hover:bg-amber-500/20 disabled:opacity-40"
+                            >
+                              {cancellingIds.has(tx.id) ? (
+                                <LoadingSpinner size="sm" />
+                              ) : (
+                                <XCircle className="h-3.5 w-3.5" />
+                              )}
+                              Cancel
+                            </button>
+                          ) : null}
                         </td>
                       </tr>
                     );
