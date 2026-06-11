@@ -577,7 +577,7 @@ export default function SpinRewardPage() {
                     onClick={() => void handleSpin()}
                     disabled={!canSpin}
                     className={cn(
-                      "group relative w-full overflow-hidden rounded-2xl px-8 py-4 text-base font-semibold transition-all duration-200",
+                      "group relative w-full overflow-hidden rounded-2xl px-4 py-3 text-base font-semibold transition-all duration-200",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050508]",
                       "disabled:pointer-events-none disabled:opacity-50",
                       canSpin
