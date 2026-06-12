@@ -301,42 +301,6 @@ export class CantonLedgerService {
   }
 
   /**
-   * Withdraw a TransferOffer that the sender created (cancel the offer).
-   *
-   * Template: Splice.Wallet.TransferOffer:TransferOffer
-   * Choice:   TransferOffer_Withdraw (controller = sender, reason: Text)
-   *
-   * Returns { withdrawn: boolean, updateId: string | null }
-   */
-  async withdrawTransferOffer(
-    offerContractId: string,
-    senderPartyId: string,
-  ): Promise<{ withdrawn: boolean; updateId: string | null }> {
-    const templateId =
-      '94d88246f69d8a4b69333d1f993e3280deaca19b70511ea7687f01e4328a34a4:Splice.Wallet.TransferOffer:TransferOffer';
-
-    const { ok, status, text } = await this.exerciseChoice(
-      offerContractId,
-      templateId,
-      'TransferOffer_Withdraw',
-      { reason: 'Cancelled by sender' },
-      [senderPartyId],
-    );
-
-    if (ok) {
-      let updateId: string | null = null;
-      try {
-        const parsed = JSON.parse(text) as { updateId?: string };
-        updateId = parsed.updateId ?? null;
-      } catch { /* ignore */ }
-      this.logger.log(`TransferOffer withdrawn by sender: ${senderPartyId.split('::')[0]} updateId: ${updateId ?? 'unknown'}`);
-      return { withdrawn: true, updateId };
-    }
-    this.logger.warn(`TransferOffer_Withdraw ${status}: ${text.slice(0, 300)}`);
-    return { withdrawn: false, updateId: null };
-  }
-
-  /**
    * Allocate a new internal party on the connected participant node.
    *
    * POST /v2/parties

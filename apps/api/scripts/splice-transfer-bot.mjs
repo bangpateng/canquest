@@ -415,9 +415,12 @@ async function checkHealth() {
       headers,
       signal: AbortSignal.timeout(5_000),
     });
-    // Any response (200, 401, 403, 404) = tunnel works — validator responded
-    logger.info(`✅ Validator reachable at ${CONFIG.baseUrl} (readyz HTTP ${res.status})`);
-    return true;
+    // Any response (200, 401, 404) = tunnel works
+    if (res.ok) {
+      logger.info(`✅ Validator reachable at ${CONFIG.baseUrl} (readyz OK)`);
+      return true;
+    }
+    logger.info(`Readyz returned ${res.status} — tunnel is up but endpoint not found. Trying authenticated endpoint...`);
   } catch (err) {
     // Connection refused — try authenticated fallback
     logger.warn(`Readyz fetch failed: ${String(err).slice(0, 80)}. Trying admin/users...`);
