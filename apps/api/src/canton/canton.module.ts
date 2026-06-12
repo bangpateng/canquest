@@ -9,6 +9,7 @@ import { CcInboundSyncService } from './cc-inbound-sync.service';
 import { CcBalanceService } from './cc-balance.service';
 import { TransactionDetailService } from './transaction-detail.service';
 import { QuestLedgerService } from './quest-ledger.service';
+import { SpliceWalletManagerService } from './splice-wallet-manager.service';
 
 /**
  * CantonModule wires together:
@@ -29,6 +30,7 @@ import { QuestLedgerService } from './quest-ledger.service';
     CcBalanceService,
     TransactionDetailService,
     QuestLedgerService,
+    SpliceWalletManagerService,
   ],
   exports: [
     CantonLedgerService,
@@ -38,6 +40,7 @@ import { QuestLedgerService } from './quest-ledger.service';
     CcBalanceService,
     TransactionDetailService,
     QuestLedgerService,
+    SpliceWalletManagerService,
   ],
 })
 export class CantonModule {}
