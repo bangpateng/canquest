@@ -401,20 +401,49 @@ async function checkHealth() {
     return false;
   }
 
+  // Pattern from SpliceValidatorService.isReachable():
+  // Any HTTP response (including 404) means tunnel is up.
+  // Try readyz first, then admin/users with auth as fallback.
+
+  const headers = { ...walletAuthHeaders(CONFIG.botUsername) };
+  delete headers['Content-Type'];
+  if (CONFIG.hostHeader) headers['Host'] = CONFIG.hostHeader;
+
+  // Try readyz first (no auth needed, lightweight)
   try {
     const res = await fetch(`${CONFIG.baseUrl}/api/validator/v0/readyz`, {
+      headers,
       signal: AbortSignal.timeout(5_000),
     });
+    // Any response (200, 401, 404) = tunnel works
     if (res.ok) {
-      logger.info(`✅ Validator reachable at ${CONFIG.baseUrl}`);
+      logger.info(`✅ Validator reachable at ${CONFIG.baseUrl} (readyz OK)`);
       return true;
     }
-    logger.warn(`Validator returned HTTP ${res.status}`);
-    return false;
+    logger.info(`Readyz returned ${res.status} — tunnel is up but endpoint not found. Trying authenticated endpoint...`);
   } catch (err) {
-    logger.error(`Validator unreachable at ${CONFIG.baseUrl}: ${String(err)}`);
-    return false;
+    // Connection refused — try authenticated fallback
+    logger.warn(`Readyz fetch failed: ${String(err).slice(0, 80)}. Trying admin/users...`);
   }
+
+  // Fallback: try authenticated admin endpoint
+  try {
+    const res = await fetch(`${CONFIG.baseUrl}/api/validator/v0/admin/users`, {
+      headers,
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (res.ok || res.status === 401 || res.status === 403) {
+      // Any response means tunnel is up (401/403 = auth working, just not admin credentials)
+      logger.info(`✅ Validator reachable at ${CONFIG.baseUrl} (admin/users HTTP ${res.status})`);
+      return true;
+    }
+    logger.warn(`Admin/users returned HTTP ${res.status}`);
+  } catch (err) {
+    logger.warn(`Admin/users fetch failed: ${String(err).slice(0, 80)}`);
+  }
+
+  logger.error(`Validator unreachable at ${CONFIG.baseUrl}. Check SSH tunnel.`);
+  return false;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
