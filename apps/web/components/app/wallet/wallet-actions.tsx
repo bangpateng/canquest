@@ -106,9 +106,24 @@ export function WalletActions({ partyId, balance, onBalanceRefresh }: WalletActi
         warning?: string;
         success?: boolean;
         accepted?: boolean;
+        offerPending?: boolean;
+        offerContractId?: string;
         transactionId?: string;
         to?: string;
       };
+
+      // Offer pending (receiver must accept) — treat as success with info
+      if (data.offerPending) {
+        setSheet(null);
+        setSendState("idle");
+        setSendMessage(
+          data.message ??
+            `Offer sent — waiting for recipient to accept. You can withdraw if not accepted.`,
+        );
+        setSheet("send");
+        onBalanceRefresh?.();
+        return;
+      }
 
       if (
         !res.ok ||
