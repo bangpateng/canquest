@@ -671,7 +671,7 @@ export class PartyController {
     let acceptUpdateId: string | null = null;
     let transferTransactionId: string | undefined;
     let ledgerTxId: string | undefined;
-    let transferMethod: 'preapproval_send' | 'offer_accept' | 'offer_only' = 'offer_accept';
+    let transferMethod: 'preapproval_send' | 'offer_accept' = 'offer_accept';
 
     // ── Coba 1-step transfer via TransferPreapproval ──
     // Langsung kirim tanpa cek hasTransferPreapproval() dulu, karena untuk
@@ -700,37 +700,40 @@ export class PartyController {
       }
     }
 
-    // ── Step 2: Fallback — 2-step Offer → Accept ──────────────────────────────
+    // ── Step 2: Fallback — only for internal CanQuest users ───────────────────
+    // External wallets: preapproval gagal → jangan buat offer (saldo nyangkut).
+    // Internal CanQuest users: auto-accept offer via Splice Wallet API.
     if (!accepted) {
-      const offerContractId = await this.splice.createTransferOffer(
-        recipientPartyId,
-        amount,
-        description,
-        undefined,
-        sender.username,
-      );
-      if (!offerContractId) {
-        throw new BadRequestException(
-          'Transfer failed — could not create offer. Check your CC balance.',
-        );
-      }
-      ledgerTxId = offerContractId;
-
       if (isInternalUser && recipientUsername) {
-        // ── Internal CanQuest user → auto-accept via Splice Wallet API ──
+        // ── Internal CanQuest user → create offer then auto-accept ──
+        const offerContractId = await this.splice.createTransferOffer(
+          recipientPartyId,
+          amount,
+          description,
+          undefined,
+          sender.username,
+        );
+        if (!offerContractId) {
+          throw new BadRequestException(
+            'Transfer failed — could not create offer. Check your CC balance.',
+          );
+        }
+        ledgerTxId = offerContractId;
+
         accepted = await this.splice.acceptOfferViaWallet(offerContractId, recipientUsername);
         transferMethod = 'offer_accept';
         this.logger.log(
           `CC transfer (Wallet API): ${sender.username} → ${recipientLabel} ${amount} CC (accepted: ${String(accepted)})`,
         );
       } else {
-        // ── External party / CEX → offer saja, jangan auto-accept ──
-        // Backend tidak bisa accept untuk party di participant berbeda
-        // (NO_SYNCHRONIZER_ON_WHICH_ALL_SUBMITTERS_CAN_SUBMIT).
-        // Receiver harus accept manual via Splice Wallet UI / Canton Loop.
-        transferMethod = 'offer_only';
-        this.logger.log(
-          `CC transfer (offer created): ${sender.username} → ${recipientLabel} ${amount} CC — offer ${offerContractId.slice(0, 20)}… (receiver must accept manually)`,
+        // ── External wallet without preapproval: jangan lanjut ──
+        // Tidak membuat offer, tidak ada fee, saldo tidak tertahan.
+        // Kasih notifikasi jelas ke user.
+        throw new BadRequestException(
+          `Transfer to ${recipientLabel} cannot be completed. ` +
+          'The recipient has not enabled One-Step Transfer (TransferPreapproval). ' +
+          'Please ask the recipient to enable it in their Splice Wallet UI first, then try again. ' +
+          'No fee has been charged.'
         );
       }
     }
@@ -789,36 +792,6 @@ export class PartyController {
       if (sender.username) {
         void this.inboundSync.alignBalanceFromChain(sender.id, sender.username);
       }
-    }
-
-    // ── Offer-only path: return early with pending status ──
-    if (transferMethod === 'offer_only') {
-      // Record pending offer transaction for sender
-      const pendingRow = await this.users.recordTransaction({
-        userId: sender.id,
-        amountCc: amount,
-        type: 'TRANSFER_OUT',
-        description: `${description} [pending — recipient must accept offer]`,
-        counterparty: recipientPartyId,
-        ledgerTxId,
-      });
-
-      void this.inboundSync.alignBalanceFromChain(sender.id, sender.username);
-
-      return {
-        success: true,
-        from: sender.username,
-        to: recipientLabel,
-        amount,
-        fee: feeCc,
-        feeCollected: false,
-        totalDeducted: 0,
-        accepted: false,
-        offerPending: true,
-        offerContractId: ledgerTxId,
-        message: `Transfer offer created for ${amount} CC to ${recipientLabel}. The recipient must accept this offer manually (different participant wallet). Offer ID: ${ledgerTxId?.slice(0, 20)}…`,
-        transactionId: pendingRow.id,
-      };
     }
 
     let feeCollected = false;
