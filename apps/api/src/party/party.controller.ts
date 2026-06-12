@@ -741,9 +741,7 @@ export class PartyController {
         userId: sender.id,
         amountCc: amount,
         type: 'TRANSFER_OUT',
-        description: transferMethod === 'offer_only'
-          ? `${description} [pending acceptance by recipient]`
-          : description,
+        description,
         counterparty: recipientPartyId,
         ledgerTxId: ledgerTxId,
         cantonUpdateId: acceptUpdateId ?? undefined,
