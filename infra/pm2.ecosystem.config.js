@@ -80,32 +80,5 @@ module.exports = {
       restart_delay: 3000,
       autorestart: true,
     },
-    {
-      name: 'splice-transfer-bot',
-      cwd: root,
-      script: path.join(apiDir, 'scripts/splice-transfer-bot.mjs'),
-      instances: 1,
-      exec_mode: 'fork',
-      env_production: {
-        NODE_ENV: 'production',
-        SPLICE_VALIDATOR_URL: env.SPLICE_VALIDATOR_URL ?? apiEnv.SPLICE_VALIDATOR_URL ?? 'http://localhost:5012',
-        SPLICE_VALIDATOR_HOST_HEADER: env.SPLICE_VALIDATOR_HOST_HEADER ?? apiEnv.SPLICE_VALIDATOR_HOST_HEADER ?? 'wallet.localhost',
-        CANTON_SPLICE_SECRET: env.CANTON_SPLICE_SECRET ?? apiEnv.CANTON_SPLICE_SECRET ?? '',
-        SPLICE_BOT_USERNAME: env.SPLICE_BOT_USERNAME ?? apiEnv.SPLICE_BOT_USERNAME ?? 'administrator',
-        SPLICE_BOT_AUTO_ACCEPT: env.SPLICE_BOT_AUTO_ACCEPT ?? apiEnv.SPLICE_BOT_AUTO_ACCEPT ?? 'true',
-        SPLICE_BOT_POLL_INTERVAL_MS: env.SPLICE_BOT_POLL_INTERVAL_MS ?? apiEnv.SPLICE_BOT_POLL_INTERVAL_MS ?? '10000',
-        ...apiEnv,
-      },
-      watch: false,
-      max_memory_restart: '256M',
-      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-      error_file: path.join(root, 'logs/splice-bot-error.log'),
-      out_file: path.join(root, 'logs/splice-bot-out.log'),
-      merge_logs: true,
-      restart_delay: 5000,
-      autorestart: true,
-    },
   ],
 };
-
-
