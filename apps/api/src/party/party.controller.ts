@@ -1172,6 +1172,61 @@ export class PartyController {
   }
 
   /** Check reachability of Canton JSON Ledger API and Splice Validator API. */
+  /**
+   * Withdraw a pending TransferOffer that the sender created.
+   *
+   * This cancels the offer and returns CC to the sender.
+   * Only the sender can withdraw — controller is sender.
+   *
+   * POST /api/party/withdraw-offer
+   */
+  @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
+  @Post('withdraw-offer')
+  async withdrawOffer(
+    @Req() req: AuthedReq,
+    @Body() body: { contractId: string },
+  ) {
+    const contractId = body.contractId?.trim();
+    if (!contractId) {
+      throw new BadRequestException('contractId is required.');
+    }
+
+    const user = await this.users.findById(req.user.userId);
+    if (!user?.username || !user.cantonPartyId) {
+      throw new BadRequestException('No wallet found. Create your wallet first.');
+    }
+
+    if (user.cantonPartyId.startsWith('canquest:')) {
+      throw new BadRequestException('Party ID is still a placeholder. Regenerate your wallet.');
+    }
+
+    this.logger.log(`Withdraw offer requested: user=@${user.username} contractId=${contractId.slice(0, 20)}…`);
+
+    // Withdraw via Canton Ledger API (TransferOffer_Withdraw choice, controller = sender)
+    const result = await this.ledger.withdrawTransferOffer(contractId, user.cantonPartyId);
+
+    if (!result.withdrawn) {
+      throw new BadRequestException(
+        'Could not withdraw the transfer offer. The offer may have been accepted or expired already. ' +
+        'If the receiver has not accepted, try again or wait a few seconds.'
+      );
+    }
+
+    this.logger.log(`Offer withdrawn by sender: @${user.username} contractId=${contractId.slice(0, 20)}…`);
+
+    // Trigger balance sync so sender sees their CC returned
+    if (user.username) {
+      void this.inboundSync.alignBalanceFromChain(user.id, user.username);
+    }
+
+    return {
+      withdrawn: true,
+      contractId,
+      updateId: result.updateId ?? null,
+      message: 'Transfer offer withdrawn. Your CC has been returned to your wallet.',
+    };
+  }
+
   @SkipThrottle()
   @Get('ledger-status')
   async ledgerStatus() {
