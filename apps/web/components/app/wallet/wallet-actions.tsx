@@ -106,15 +106,15 @@ export function WalletActions({ partyId, balance, onBalanceRefresh }: WalletActi
         warning?: string;
         success?: boolean;
         accepted?: boolean;
+        offerPending?: boolean;
+        offerContractId?: string;
         transactionId?: string;
         to?: string;
       };
 
-      if (
-        !res.ok ||
-        data.success === false ||
-        data.accepted === false
-      ) {
+      // Error hanya jika HTTP error ATAU success=false
+      // accepted=false + offerPending=true = offer berhasil dibuat, receiver perlu accept manual (BUKAN error)
+      if (!res.ok || data.success === false) {
         setSendState("error");
         setSendMessage(data.message ?? data.error ?? "Transfer failed. Please try again.");
         return;
@@ -124,6 +124,14 @@ export function WalletActions({ partyId, balance, onBalanceRefresh }: WalletActi
       setSendState("idle");
       if (typeof data.transactionId === "string" && data.transactionId) {
         setSuccessTransactionId(data.transactionId);
+      } else if (data.offerPending) {
+        // Offer berhasil dibuat tapi receiver harus accept manual (external party / different participant)
+        setSendState("success");
+        setSendMessage(
+          data.message ??
+            `Transfer offer sent for ${amount} CC. The recipient must accept it from their wallet.`,
+        );
+        setSheet("send");
       } else {
         setSendState("success");
         setSendMessage(
