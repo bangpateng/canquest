@@ -110,6 +110,7 @@ export function WalletActions({ partyId, balance, onBalanceRefresh }: WalletActi
         offerContractId?: string;
         transactionId?: string;
         to?: string;
+        transferMethod?: string;
       };
 
       // Error hanya jika HTTP error ATAU success=false

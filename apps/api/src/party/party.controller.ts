@@ -585,27 +585,37 @@ export class PartyController {
 
     const description = body.memo?.trim() || `Sent to ${recipientLabel}`;
 
-    const senderBalance = await this.splice.getUserBalance(sender.username);
-    if (senderBalance !== null && senderBalance < amount + feeCc) {
-      throw new BadRequestException(
-        `Insufficient balance. Need ${amount + feeCc} CC (${amount} transfer + ${feeCc} platform fee).`,
-      );
-    }
-
+    // Resolve recipient DB user first (needed for fee policy)
     const recipientDbUser = recipientUsername
       ? await this.users.findByUsernameInsensitive(recipientUsername)
       : null;
     const isInternalUser = recipientDbUser !== null;
 
-    // ── Step 1: COLLECT FEE FIRST ─────────────────────────────────────────
+    // ── Fee Policy ────────────────────────────────────────────────────────
+    // Fee ONLY applies to internal users (registered CanQuest users).
+    // External parties (CEX, different participant, not in DB) → fee = 0.
+    // This allows clean CEX withdrawals with memo without extra fee transaction.
+    const effectiveFeeCc = isInternalUser ? feeCc : 0;
+
+    // Balance check uses effectiveFeeCc (0 for external party)
+    const senderBalance = await this.splice.getUserBalance(sender.username);
+    if (senderBalance !== null && senderBalance < amount + effectiveFeeCc) {
+      throw new BadRequestException(
+        effectiveFeeCc > 0
+          ? `Insufficient balance. Need ${amount + effectiveFeeCc} CC (${amount} transfer + ${effectiveFeeCc} platform fee).`
+          : `Insufficient balance. Need ${amount} CC.`,
+      );
+    }
+
+    // ── Step 1: COLLECT FEE FIRST (internal users only) ───────────────────
     let feeCollected = false;
     let feeLedgerTxId: string | undefined;
     let feeTreasuryPartyId: string | undefined;
 
-    if (feeCc > 0 && sender.username) {
+    if (effectiveFeeCc > 0 && sender.username) {
       const feeResult = await this.splice.collectPlatformFee({
         senderUsername: sender.username,
-        feeCc,
+        feeCc: effectiveFeeCc,
         description: `Platform fee for transfer to ${recipientLabel}`,
       });
       feeCollected = feeResult.collected;
@@ -615,18 +625,18 @@ export class PartyController {
       if (feeCollected) {
         await this.users.recordTransaction({
           userId: sender.id,
-          amountCc: feeCc,
+          amountCc: effectiveFeeCc,
           type: 'TRANSFER_OUT',
           description: `Platform fee (transfer to ${recipientLabel})`,
           counterparty: normalizeCantonPartyId(feeTreasuryPartyId) ?? feeTreasuryPartyId,
           ledgerTxId: feeLedgerTxId,
         });
         this.logger.log(
-          `Fee collected: ${sender.username} → ${(feeTreasuryPartyId ?? '').split('::')[0]} ${feeCc} CC (${feeResult.method ?? 'unknown'})`,
+          `Fee collected: ${sender.username} → ${(feeTreasuryPartyId ?? '').split('::')[0]} ${effectiveFeeCc} CC (${feeResult.method ?? 'unknown'})`,
         );
       } else {
         throw new BadRequestException(
-          `Platform fee (${feeCc} CC) could not be collected. Transfer aborted. ` +
+          `Platform fee (${effectiveFeeCc} CC) could not be collected. Transfer aborted. ` +
             (feeResult.error ?? 'Check your CC balance.'),
         );
       }
