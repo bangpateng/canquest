@@ -279,7 +279,8 @@ export class CantonLedgerService {
     }
 
     // The registry endpoint path per Token Standard OpenAPI spec
-    const url = `${this.scanUrl}/api/scan/v2/registry/transfer-instruction/v1/transfer-factory`;
+    // Public Scan serves it at /registry/... (NOT /api/scan/v2/registry/...)
+    const url = `${this.scanUrl}/registry/transfer-instruction/v1/transfer-factory`;
 
     try {
       const res = await fetch(url, {
