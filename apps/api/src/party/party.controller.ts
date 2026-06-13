@@ -664,126 +664,137 @@ export class PartyController {
       : null;
     const isInternalUser = recipientDbUser !== null;
 
-    // ── Step 1: Coba 1-step transfer via TransferPreapproval ──────────────────
-    // Jika receiver punya preapproval, CC bisa langsung masuk tanpa offer/accept.
-    // Ini jalan untuk SEMUA recipient (internal CanQuest user maupun external party/CEX).
+    // ── Step 1: CHECK PREAPPROVAL FIRST (Canton docs) ─────────────────────
+    let preapprovalActive = false;
+    if (this.splice.isConfigured) {
+      preapprovalActive = await this.splice.hasTransferPreapproval(recipientPartyId);
+      this.logger.log(
+        `Preapproval check: ${recipientLabel} → ${preapprovalActive ? 'ACTIVE (1-step)' : 'NONE (2-step)'}`,
+      );
+    }
+
+    // ── Step 2: COLLECT FEE FIRST (atomic — refund if transfer fails) ────
+    let feeCollected = false;
+    let feeLedgerTxId: string | undefined;
+    let feeTreasuryPartyId: string | undefined;
+
+    if (feeCc > 0 && sender.username) {
+      const feeResult = await this.splice.collectPlatformFee({
+        senderUsername: sender.username,
+        feeCc,
+        description: `Platform fee for transfer to ${recipientLabel}`,
+      });
+      feeCollected = feeResult.collected;
+      feeLedgerTxId = feeResult.ledgerTxId;
+      feeTreasuryPartyId = feeResult.treasuryPartyId ?? validatorPartyId;
+
+      if (feeCollected) {
+        await this.users.recordTransaction({
+          userId: sender.id,
+          amountCc: feeCc,
+          type: 'TRANSFER_OUT',
+          description: `Platform fee (transfer to ${recipientLabel})`,
+          counterparty: normalizeCantonPartyId(feeTreasuryPartyId) ?? feeTreasuryPartyId,
+          ledgerTxId: feeLedgerTxId,
+        });
+        this.logger.log(
+          `Fee collected: ${sender.username} → ${(feeTreasuryPartyId ?? '').split('::')[0]} ${feeCc} CC (${feeResult.method ?? 'unknown'})`,
+        );
+      } else {
+        throw new BadRequestException(
+          `Platform fee (${feeCc} CC) could not be collected. Transfer aborted. ` +
+            (feeResult.error ?? 'Check your CC balance.'),
+        );
+      }
+    }
+
+    // ── Step 3: EXECUTE MAIN TRANSFER ────────────────────────────────────
     let accepted = false;
-    let acceptUpdateId: string | null = null;
-    let transferTransactionId: string | undefined;
     let ledgerTxId: string | undefined;
+    let transferTransactionId: string | undefined;
     let transferMethod: 'preapproval_send' | 'offer_accept' | 'offer_only' = 'offer_accept';
 
-    // ── Coba 1-step transfer via TransferPreapproval ──
-    // Langsung kirim tanpa cek hasTransferPreapproval() dulu, karena untuk
-    // external party/CEX di participant berbeda, endpoint admin tidak bisa
-    // melihat preapproval mereka. Splice Wallet API akan otomatis resolve
-    // preapproval receiver saat send. Kalau gagal → fallback ke offer.
-    if (sender.username) {
-      const preapprovalResult = await this.splice.sendViaTransferPreapproval(
-        sender.username,
-        recipientPartyId,
-        amount,
-        description,
-      );
-      if (preapprovalResult.ok) {
-        accepted = true;
-        ledgerTxId = preapprovalResult.referenceId;
-        transferMethod = 'preapproval_send';
-        this.logger.log(
-          `CC transfer (1-step preapproval): ${sender.username} → ${recipientLabel} ${amount} CC (ref: ${preapprovalResult.referenceId?.slice(0, 16) ?? 'n/a'})`,
+    try {
+      if (preapprovalActive && sender.username) {
+        const result = await this.splice.sendViaTransferPreapproval(
+          sender.username, recipientPartyId, amount, description,
         );
+        if (result.ok) {
+          accepted = true;
+          ledgerTxId = result.referenceId;
+          transferMethod = 'preapproval_send';
+          this.logger.log(`CC transfer (1-step): ${sender.username} → ${recipientLabel} ${amount} CC`);
+        } else {
+          throw new Error(`Preapproval send failed: ${result.error ?? 'unknown'}`);
+        }
       } else {
-        // Preapproval gagal — fallback ke offer/accept
-        this.logger.warn(
-          `Preapproval send failed for ${sender.username} → ${recipientLabel}: ${preapprovalResult.error?.slice(0, 200)} — falling back to offer flow`,
+        this.logger.log(`CC transfer (2-step): ${sender.username} → ${recipientLabel} ${amount} CC`);
+        const offerContractId = await this.splice.createTransferOffer(
+          recipientPartyId, amount, description, undefined, sender.username,
         );
+        if (!offerContractId) throw new Error('Failed to create transfer offer.');
+        ledgerTxId = offerContractId;
+
+        if (isInternalUser && recipientUsername) {
+          accepted = await this.splice.acceptOfferViaWallet(offerContractId, recipientUsername);
+          transferMethod = accepted ? 'offer_accept' : 'offer_only';
+          this.logger.log(`CC transfer (Wallet API): auto-accept=${String(accepted)}`);
+        } else {
+          transferMethod = 'offer_only';
+          this.logger.log(`CC transfer (offer created): ${offerContractId.slice(0, 20)}… — receiver accepts manually`);
+        }
       }
+    } catch (mainTransferErr) {
+      const errMsg = mainTransferErr instanceof Error ? mainTransferErr.message : String(mainTransferErr);
+      this.logger.error(`Main transfer failed: ${errMsg} — refunding fee`);
+      if (feeCollected && feeTreasuryPartyId && sender.username) {
+        try {
+          const r = await this.splice.collectPlatformFee({
+            senderUsername: this.config.get<string>('CANTON_FEE_ACCEPT_USERNAME')?.trim() ||
+              this.config.get<string>('CANTON_VALIDATOR_ADMIN_USER')?.trim() || 'administrator',
+            feeCc, description: `REFUND: Platform fee for transfer to ${recipientLabel}`,
+          });
+          if (r.collected) this.logger.log(`Fee refunded: ${feeCc} CC → @${sender.username}`);
+          else this.logger.error(`Fee refund FAILED: ${r.error ?? 'unknown'}`);
+        } catch (refundErr) { this.logger.error(`Fee refund exception: ${String(refundErr)}`); }
+      }
+      throw new BadRequestException(
+        `Transfer failed: ${errMsg}. ${feeCollected ? `Fee (${feeCc} CC) refunded.` : 'No fee charged.'}`,
+      );
     }
 
-    // ── Step 2: Fallback — 2-step Offer → Accept ──────────────────────────────
-    if (!accepted) {
-      const offerContractId = await this.splice.createTransferOffer(
-        recipientPartyId,
-        amount,
-        description,
-        undefined,
-        sender.username,
-      );
-      if (!offerContractId) {
-        throw new BadRequestException(
-          'Transfer failed — could not create offer. Check your CC balance.',
-        );
-      }
-      ledgerTxId = offerContractId;
-
-      if (isInternalUser && recipientUsername) {
-        // ── Internal CanQuest user → auto-accept via Splice Wallet API ──
-        accepted = await this.splice.acceptOfferViaWallet(offerContractId, recipientUsername);
-        transferMethod = 'offer_accept';
-        this.logger.log(
-          `CC transfer (Wallet API): ${sender.username} → ${recipientLabel} ${amount} CC (accepted: ${String(accepted)})`,
-        );
-      } else {
-        // ── External party / CEX → offer saja, jangan auto-accept ──
-        // Backend tidak bisa accept untuk party di participant berbeda
-        // (NO_SYNCHRONIZER_ON_WHICH_ALL_SUBMITTERS_CAN_SUBMIT).
-        // Receiver harus accept manual via Splice Wallet UI / Canton Loop.
-        transferMethod = 'offer_only';
-        this.logger.log(
-          `CC transfer (offer created): ${sender.username} → ${recipientLabel} ${amount} CC — offer ${offerContractId.slice(0, 20)}… (receiver must accept manually)`,
-        );
-      }
-    }
-
-    // ── Step 3: Record sender's outgoing transaction ─────────────────────────
+    // ── Step 4: Record outgoing transaction ──────────────────────────────
     if (accepted) {
       const outRow = await this.users.recordTransaction({
         userId: sender.id,
         amountCc: amount,
         type: 'TRANSFER_OUT',
-        description: transferMethod === 'offer_only'
-          ? `${description} [pending acceptance by recipient]`
-          : description,
+        description,
         counterparty: recipientPartyId,
         ledgerTxId: ledgerTxId,
-        cantonUpdateId: acceptUpdateId ?? undefined,
       });
       transferTransactionId = outRow.id;
-      if (!acceptUpdateId && sender.cantonPartyId) {
-        void this.txDetail.backfillUpdateId(outRow.id, ledgerTxId ?? '', sender.cantonPartyId);
+      if (ledgerTxId && sender.cantonPartyId) {
+        void this.txDetail.backfillUpdateId(outRow.id, ledgerTxId, sender.cantonPartyId);
       }
 
-      // Emit FeaturedAppActivityMarker for CC transfer
       if (sender.cantonPartyId) {
         void this.featuredActivity
           .recordActivity('cc_transfer', sender.cantonPartyId, `CC transfer ${amount} CC to ${recipientLabel}`)
-          .catch(() => { /* non-critical */ });
+          .catch(() => {});
       }
 
-      // ── Record incoming transaction for internal CanQuest recipients ────
       if (isInternalUser && recipientDbUser) {
-        const inRow = await this.users.recordTransaction({
+        await this.users.recordTransaction({
           userId: recipientDbUser.id,
           amountCc: amount,
           type: 'TRANSFER_IN',
           description: `Received from @${sender.username}${body.memo ? `: ${body.memo.trim()}` : ''}`,
-          counterparty:
-            normalizeCantonPartyId(sender.cantonPartyId) ?? sender.cantonPartyId,
+          counterparty: normalizeCantonPartyId(sender.cantonPartyId) ?? sender.cantonPartyId,
           ledgerTxId: ledgerTxId,
-          cantonUpdateId: acceptUpdateId ?? undefined,
         });
-        if (recipientDbUser.cantonPartyId) {
-          void this.txDetail.backfillUpdateId(
-            inRow.id,
-            ledgerTxId ?? '',
-            recipientDbUser.cantonPartyId,
-          );
-        }
         if (recipientDbUser.username) {
-          void this.inboundSync.alignBalanceFromChain(
-            recipientDbUser.id,
-            recipientDbUser.username,
-          );
+          void this.inboundSync.alignBalanceFromChain(recipientDbUser.id, recipientDbUser.username);
         }
       }
       if (sender.username) {
@@ -791,9 +802,8 @@ export class PartyController {
       }
     }
 
-    // ── Offer-only path: return early with pending status ──
+    // ── Offer-only: return early with pending status ─────────────────────
     if (transferMethod === 'offer_only') {
-      // Record pending offer transaction for sender
       const pendingRow = await this.users.recordTransaction({
         userId: sender.id,
         amountCc: amount,
@@ -802,17 +812,15 @@ export class PartyController {
         counterparty: recipientPartyId,
         ledgerTxId,
       });
-
       void this.inboundSync.alignBalanceFromChain(sender.id, sender.username);
-
       return {
         success: true,
         from: sender.username,
         to: recipientLabel,
         amount,
         fee: feeCc,
-        feeCollected: false,
-        totalDeducted: 0,
+        feeCollected,
+        totalDeducted: feeCollected ? feeCc : 0,
         accepted: false,
         offerPending: true,
         offerContractId: ledgerTxId,
@@ -821,57 +829,10 @@ export class PartyController {
       };
     }
 
-    let feeCollected = false;
-    let feeWarning: string | undefined;
-    let feeLedgerTxId: string | undefined;
-    if (feeCc > 0 && validatorPartyId && sender.username) {
-      const feeResult = await this.splice.collectPlatformFee({
-        senderUsername: sender.username,
-        feeCc,
-        description: `Platform fee for transfer to ${recipientLabel}`,
-      });
-
-      feeCollected = feeResult.collected;
-      feeLedgerTxId = feeResult.ledgerTxId;
-      const feeTreasuryPartyId = feeResult.treasuryPartyId ?? validatorPartyId;
-      if (feeCollected) {
-        const feeRow = await this.users.recordTransaction({
-          userId: sender.id,
-          amountCc: feeCc,
-          type: 'TRANSFER_OUT',
-          description: `Platform fee (transfer to ${recipientLabel})`,
-          counterparty:
-            normalizeCantonPartyId(feeTreasuryPartyId) ?? feeTreasuryPartyId,
-          ledgerTxId: feeResult.ledgerTxId,
-        });
-        if (feeResult.ledgerTxId && sender.cantonPartyId) {
-          void this.txDetail.backfillUpdateId(
-            feeRow.id,
-            feeResult.ledgerTxId,
-            sender.cantonPartyId,
-          );
-        }
-        await this.inboundSync.alignBalanceFromChain(sender.id, sender.username);
-        this.logger.log(
-          `Fee collected (${feeResult.method ?? 'unknown'}): ${sender.username} → ${feeTreasuryPartyId.split('::')[0]} ${feeCc} CC`,
-        );
-      } else {
-        feeWarning = `Transfer succeeded but platform fee (${feeCc} CC) could not be collected.`;
-        this.logger.warn(
-          `Fee failed for ${sender.username}: ${feeResult.error ?? 'unknown'} (treasury ${feeTreasuryPartyId.split('::')[0]})`,
-        );
-      }
-    }
-
     const totalDeducted = amount + (feeCollected ? feeCc : 0);
-    const message = feeCollected
-      ? `Sent ${amount} CC to ${recipientLabel} (platform fee ${feeCc} CC).`
-      : feeWarning
-        ? `Sent ${amount} CC to ${recipientLabel}. ${feeWarning}`
-        : `Sent ${amount} CC to ${recipientLabel}.`;
+    const message = `Sent ${amount} CC to ${recipientLabel} (platform fee ${feeCc} CC).`;
 
-    // Record CC transfer on Canton ledger (Canton M3 pattern)
-    // Creates CcTransferRecord contract for audit trail
+    // ── On-chain audit trail (Canton M3 pattern) ────────────────────────
     if (sender.cantonPartyId && accepted) {
       void this.questLedger
         .recordCcTransfer({
@@ -899,9 +860,9 @@ export class PartyController {
       feeCollected,
       totalDeducted,
       accepted: true,
+      transferMethod,
       message,
       transactionId: transferTransactionId,
-      ...(feeWarning ? { warning: feeWarning } : {}),
     };
   }
 
