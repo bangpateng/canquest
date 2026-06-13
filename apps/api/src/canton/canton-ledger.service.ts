@@ -229,6 +229,114 @@ export class CantonLedgerService {
   }
 
   /**
+   * Exercise TransferFactory_Transfer via the Canton JSON Ledger API v2.
+   *
+   * This is the CIP-0056 Token Standard API preferred path for CC transfers.
+   * Replaces the legacy Splice REST createTransferOffer call.
+   *
+   * Uses the ExternalPartyAmuletRules factory contract to execute the transfer.
+   * The factory handles 1-step (preapproval) and 2-step (TransferInstruction)
+   * routing automatically on-chain.
+   *
+   * @param factoryContractId - The TransferFactory contract ID on the ledger
+   * @param senderPartyId - Sender's Canton party ID
+   * @param receiverPartyId - Receiver's Canton party ID
+   * @param amountCc - Amount in CC to transfer
+   * @param inputHoldingCids - Array of Amulet contract IDs to consume as inputs
+   * @param operatorPartyId - Party that executes the exercise (operator)
+   * @param description - Human-readable description
+   * @returns { ok, updateId, error }
+   */
+  async executeTransferFactoryTransfer(params: {
+    factoryContractId: string;
+    senderPartyId: string;
+    receiverPartyId: string;
+    amountCc: number;
+    inputHoldingCids: string[];
+    operatorPartyId: string;
+    description?: string;
+  }): Promise<{
+    ok: boolean;
+    updateId: string | null;
+    error?: string;
+  }> {
+    const { factoryContractId, senderPartyId, receiverPartyId, amountCc, inputHoldingCids, operatorPartyId, description } = params;
+
+    // Template ID for the TransferFactory interface on ExternalPartyAmuletRules
+    // From Supanova Scan: Splice.ExternalPartyAmuletRules:ExternalPartyAmuletRules
+    // Interface ID: 55ba4deb0ad4662c4168b39859738a0e91388d252286480c7331b3f71a517281:Splice.Api.Token.TransferInstructionV1:TransferFactory
+    const factoryInterfaceId =
+      this.config.get<string>('CANTON_TRANSFER_FACTORY_INTERFACE_ID')?.trim() ||
+      '55ba4deb0ad4662c4168b39859738a0e91388d252286480c7331b3f71a517281:Splice.Api.Token.TransferInstructionV1:TransferFactory';
+
+    // Instrument ID for CC (Canton Coin)
+    const dsoParty = this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() ||
+      this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() || '';
+
+    const validFrom = new Date().toISOString();
+    const executeBefore = new Date(Date.now() + 30_000).toISOString();
+
+    // The choice argument for TransferFactory_Transfer
+    // Matches the TransferFactory_Transfer choice signature:
+    //   expectedAdmin : Party
+    //   transfer : Transfer
+    // where Transfer = { sender, receiver, amount, instrumentId, inputHoldingCids, executeBefore, context }
+    const choiceArgument = {
+      expectedAdmin: dsoParty,
+      transfer: {
+        sender: senderPartyId,
+        receiver: receiverPartyId,
+        amount: String(amountCc),
+        instrumentId: {
+          admin: dsoParty,
+          id: 'canton-coin',
+        },
+        inputHoldingCids: inputHoldingCids.map(cid => ({ '': cid })),
+        executeBefore,
+        context: [
+          ['splice.lfdecentralizedtrust.org/tx-kind', 'transfer'],
+          ['splice.lfdecentralizedtrust.org/sender', senderPartyId],
+          ['splice.lfdecentralizedtrust.org/reason', description ?? 'CanQuest transfer'],
+        ],
+      },
+    };
+
+    const actAs = [operatorPartyId];
+    const commandId = `transfer-factory-${senderPartyId.slice(0, 12)}-${randomUUID().slice(0, 16)}`;
+
+    this.logger.log(
+      `TransferFactory_Transfer: sender=${senderPartyId.split('::')[0]} → receiver=${receiverPartyId.split('::')[0]} amount=${amountCc} CC inputs=${inputHoldingCids.length} factory=${factoryContractId.slice(0, 16)}...`,
+    );
+
+    const { ok, status, text } = await this.exerciseChoice(
+      factoryContractId,
+      factoryInterfaceId,
+      'TransferFactory_Transfer',
+      choiceArgument,
+      actAs,
+      commandId,
+      'submit-and-wait-for-transaction-tree',
+    );
+
+    if (ok) {
+      let updateId: string | null = null;
+      try {
+        const parsed = JSON.parse(text) as { updateId?: string };
+        updateId = parsed.updateId ?? null;
+      } catch { /* ignore */ }
+
+      this.logger.log(
+        `TransferFactory_Transfer succeeded: updateId=${updateId?.slice(0, 16) ?? 'unknown'}`,
+      );
+      return { ok: true, updateId };
+    }
+
+    const errMsg = text.slice(0, 300);
+    this.logger.warn(`TransferFactory_Transfer failed ${status}: ${errMsg}`);
+    return { ok: false, updateId: null, error: errMsg };
+  }
+
+  /**
    * Accept a Splice TransferOffer on behalf of the receiver party.
    *
    * Template: Splice.Wallet.TransferOffer:TransferOffer
@@ -424,7 +532,7 @@ export class CantonLedgerService {
     return (JSON.parse(text) as { partyDetails: unknown[] }).partyDetails ?? [];
   }
 
-    /** Returns current ledger-end offset. */
+  /** Returns current ledger-end offset. */
   async ledgerEnd(): Promise<unknown> {
     const res = await fetch(`${this.baseUrl}/v2/state/ledger-end`, {
       headers: this.authHeaders(),
@@ -433,6 +541,64 @@ export class CantonLedgerService {
     const text = await res.text();
     if (!res.ok) throw new ServiceUnavailableException(`Canton ledger-end ${res.status}`);
     return JSON.parse(text);
+  }
+
+  /**
+   * Query the Active Contract Set (ACS) for Amulet holdings owned by a party.
+   *
+   * Uses POST /v2/state/active-contracts with a TemplateFilter for Splice.Amulet:Amulet.
+   * Returns contracts where the owner field matches the given partyId.
+   *
+   * Per Token Standard documentation:
+   * https://docs.canton.network/appdev/deep-dives/token-standard.md
+   *
+   * @param ownerPartyId - Canton party ID of the holding owner
+   * @param readAs - parties with read rights
+   * @returns Array of { contractId, amount (Decimal as string) }
+   */
+  async queryAmuletHoldings(
+    ownerPartyId: string,
+    readAs?: string[],
+  ): Promise<Array<{ contractId: string; amount: string }>> {
+    // Splice.Amulet:Amulet template ID is in splice-amulet package
+    const amuletTemplateId = this.config.get<string>('CANTON_AMULET_TEMPLATE_ID')?.trim() ||
+      '#splice-amulet:Splice.Amulet:Amulet';
+    const effectiveReadAs = readAs ?? [ownerPartyId];
+    const contracts = await this.queryActiveContracts(amuletTemplateId, effectiveReadAs);
+
+    const holdings: Array<{ contractId: string; amount: string }> = [];
+    for (const entry of contracts) {
+      if (!entry || typeof entry !== 'object') continue;
+      const obj = entry as Record<string, unknown>;
+      const cid = typeof obj.contractId === 'string' ? obj.contractId : null;
+      const args =
+        (obj.createArgument as Record<string, unknown> | undefined) ??
+        ((obj.CreatedTreeEvent as Record<string, unknown> | undefined)
+          ?.createArgument as Record<string, unknown> | undefined) ??
+        ((obj.CreatedEvent as Record<string, unknown> | undefined)
+          ?.createArgument as Record<string, unknown> | undefined);
+
+      if (!cid || !args) continue;
+
+      // Check owner field
+      const cOwner = typeof args.owner === 'string' ? args.owner : '';
+      if (cOwner !== ownerPartyId) continue;
+
+      // Extract amount from ExpiringAmount { amount: Decimal }
+      const amtRaw = args.amount as Record<string, unknown> | undefined;
+      const amountStr =
+        typeof amtRaw?.amount === 'string' ? amtRaw.amount
+        : typeof amtRaw?.initialAmount === 'string' ? amtRaw.initialAmount
+        : typeof args.amount === 'string' ? args.amount
+        : '0';
+
+      holdings.push({ contractId: cid, amount: amountStr });
+    }
+
+    this.logger.log(
+      `Amulet ACS query: party=${ownerPartyId.split('::')[0]} found ${holdings.length} holdings`,
+    );
+    return holdings;
   }
 
   /**
