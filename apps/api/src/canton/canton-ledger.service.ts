@@ -262,27 +262,33 @@ export class CantonLedgerService {
   }> {
     const { factoryContractId, senderPartyId, receiverPartyId, amountCc, inputHoldingCids, operatorPartyId, description } = params;
 
-    // Template ID for the TransferFactory interface on ExternalPartyAmuletRules
-    // From Supanova Scan: Splice.ExternalPartyAmuletRules:ExternalPartyAmuletRules
-    // Interface ID: 55ba4deb0ad4662c4168b39859738a0e91388d252286480c7331b3f71a517281:Splice.Api.Token.TransferInstructionV1:TransferFactory
+    // Interface ID from DAML types: '#splice-api-token-transfer-instruction-v1:Splice.Api.Token.TransferInstructionV1:TransferFactory'
     const factoryInterfaceId =
       this.config.get<string>('CANTON_TRANSFER_FACTORY_INTERFACE_ID')?.trim() ||
-      '55ba4deb0ad4662c4168b39859738a0e91388d252286480c7331b3f71a517281:Splice.Api.Token.TransferInstructionV1:TransferFactory';
+      '#splice-api-token-transfer-instruction-v1:Splice.Api.Token.TransferInstructionV1:TransferFactory';
 
-    // Instrument ID for CC (Canton Coin)
+    // Instrument ID for CC (Canton Coin) — matches HoldingV1.InstrumentId
     const dsoParty = this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() ||
       this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() || '';
 
-    const validFrom = new Date().toISOString();
+    const now = new Date().toISOString();
     const executeBefore = new Date(Date.now() + 30_000).toISOString();
 
-    // The choice argument for TransferFactory_Transfer
-    // Matches the TransferFactory_Transfer choice signature:
-    //   expectedAdmin : Party
-    //   transfer : Transfer
-    // where Transfer = { sender, receiver, amount, instrumentId, inputHoldingCids, executeBefore, context }
+    // Choice argument matches TransferFactory_Transfer from DAML types:
+    //   TransferFactory_Transfer = {
+    //     expectedAdmin : Party
+    //     transfer      : Transfer   // { sender, receiver, amount, instrumentId, requestedAt, executeBefore, inputHoldingCids, meta }
+    //     extraArgs     : ExtraArgs  // { choiceContext, metadata }
+    //   }
     const choiceArgument = {
       expectedAdmin: dsoParty,
+      extraArgs: {
+        choiceContext: null,
+        metadata: {
+          annotations: {},
+          resourceVersion: '',
+        },
+      },
       transfer: {
         sender: senderPartyId,
         receiver: receiverPartyId,
@@ -291,17 +297,17 @@ export class CantonLedgerService {
           admin: dsoParty,
           id: 'canton-coin',
         },
-        inputHoldingCids: inputHoldingCids.map(cid => ({ '': cid })),
+        requestedAt: now,
         executeBefore,
-        context: [
-          ['splice.lfdecentralizedtrust.org/tx-kind', 'transfer'],
-          ['splice.lfdecentralizedtrust.org/sender', senderPartyId],
-          ['splice.lfdecentralizedtrust.org/reason', description ?? 'CanQuest transfer'],
-        ],
+        inputHoldingCids,
+        meta: {
+          annotations: {},
+          resourceVersion: '',
+        },
       },
     };
 
-    const actAs = [operatorPartyId];
+    const actAs = [senderPartyId];
     const commandId = `transfer-factory-${senderPartyId.slice(0, 12)}-${randomUUID().slice(0, 16)}`;
 
     this.logger.log(
