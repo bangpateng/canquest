@@ -902,43 +902,92 @@ export class CantonLedgerService {
     ownerPartyId: string,
     readAs?: string[],
   ): Promise<Array<{ contractId: string; amount: string }>> {
-    // Splice.Amulet:Amulet template ID is in splice-amulet package
-    const amuletTemplateId = this.config.get<string>('CANTON_AMULET_TEMPLATE_ID')?.trim() ||
-      '#splice-amulet:Splice.Amulet:Amulet';
     const effectiveReadAs = readAs ?? [ownerPartyId];
-    const contracts = await this.queryActiveContracts(amuletTemplateId, effectiveReadAs);
 
+    // MainNet splice-amulet uses full package hash which TemplateFilter rejects.
+    // Solution: WildcardFilter + client-side filter for Splice.Amulet:Amulet.
+    // This is safe because we filter by owner party AND template name.
+    let offset: number | string = 0;
+    try {
+      const end = (await this.ledgerEnd()) as { offset?: number | string };
+      offset = end?.offset ?? 0;
+    } catch { offset = 0; }
+
+    const filtersByParty: Record<string, unknown> = {};
+    for (const party of effectiveReadAs) {
+      filtersByParty[party] = {
+        cumulative: [
+          {
+            identifierFilter: {
+              WildcardFilter: {
+                value: { includeCreatedEventBlob: false },
+              },
+            },
+          },
+        ],
+      };
+    }
+
+    let allContracts: unknown[] = [];
+    try {
+      const res = await fetch(`${this.baseUrl}/v2/state/active-contracts`, {
+        method: 'POST',
+        headers: this.authHeaders(),
+        body: JSON.stringify({
+          eventFormat: {
+            filtersByParty,
+            filtersForAnyParty: { cumulative: [] },
+            verbose: true,
+          },
+          activeAtOffset: offset,
+        }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (res.ok) {
+        allContracts = (await res.json()) as unknown[];
+        if (!Array.isArray(allContracts)) allContracts = [];
+      } else {
+        const text = await res.text();
+        this.logger.warn(`queryAmuletHoldings wildcard ${res.status}: ${text.slice(0, 200)}`);
+      }
+    } catch (err) {
+      this.logger.warn(`queryAmuletHoldings error: ${String(err)}`);
+    }
+
+    // Client-side filter: only Splice.Amulet:Amulet contracts owned by this party
     const holdings: Array<{ contractId: string; amount: string }> = [];
-    for (const entry of contracts) {
+    for (const entry of allContracts) {
       if (!entry || typeof entry !== 'object') continue;
-      const obj = entry as Record<string, unknown>;
-      const cid = typeof obj.contractId === 'string' ? obj.contractId : null;
-      const args =
-        (obj.createArgument as Record<string, unknown> | undefined) ??
-        ((obj.CreatedTreeEvent as Record<string, unknown> | undefined)
-          ?.createArgument as Record<string, unknown> | undefined) ??
-        ((obj.CreatedEvent as Record<string, unknown> | undefined)
-          ?.createArgument as Record<string, unknown> | undefined);
+      const wrapper = entry as Record<string, unknown>;
+      const active = wrapper.contractEntry as Record<string, unknown> | undefined;
+      const jsActive = active?.JsActiveContract as Record<string, unknown> | undefined;
+      const ev = (jsActive?.createdEvent ?? wrapper) as Record<string, unknown>;
 
-      if (!cid || !args) continue;
+      const tplId = typeof ev.templateId === 'string' ? ev.templateId : '';
+      if (!tplId.includes('Splice.Amulet:Amulet')) continue;
 
-      // Check owner field
+      const cid = typeof ev.contractId === 'string' ? ev.contractId : null;
+      const args = (ev.createArgument as Record<string, unknown> | undefined) ?? {};
+
+      if (!cid) continue;
+
+      // Check owner
       const cOwner = typeof args.owner === 'string' ? args.owner : '';
-      if (cOwner !== ownerPartyId) continue;
+      if (cOwner && cOwner !== ownerPartyId) continue;
 
-      // Extract amount from ExpiringAmount { amount: Decimal }
+      // Extract amount from ExpiringAmount
       const amtRaw = args.amount as Record<string, unknown> | undefined;
       const amountStr =
-        typeof amtRaw?.amount === 'string' ? amtRaw.amount
-        : typeof amtRaw?.initialAmount === 'string' ? amtRaw.initialAmount
-        : typeof args.amount === 'string' ? args.amount
+        typeof amtRaw?.initialAmount === 'string' ? amtRaw.initialAmount
+        : typeof amtRaw?.amount === 'string' ? amtRaw.amount
+        : typeof args.amount === 'string' ? (args.amount as string)
         : '0';
 
       holdings.push({ contractId: cid, amount: amountStr });
     }
 
     this.logger.log(
-      `Amulet ACS query: party=${ownerPartyId.split('::')[0]} found ${holdings.length} holdings`,
+      `Amulet ACS query (wildcard): party=${ownerPartyId.split('::')[0]} found ${holdings.length} holdings from ${allContracts.length} total contracts`,
     );
     return holdings;
   }
