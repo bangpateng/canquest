@@ -729,19 +729,23 @@ export class PartyController {
           throw new Error(`Preapproval send failed: ${result.error ?? 'unknown'}`);
         }
       } else {
-        // Path B: 2-step via Token Standard API (TransferFactory_Transfer)
-        // Uses CIP-0056 preferred path: exercise TransferFactory_Transfer via Ledger API.
-        // Creates on-chain TransferInstruction visible to BOTH sender and receiver across participants.
-        this.logger.log(`CC transfer (2-step Token Standard): ${sender.username} → ${recipientLabel} ${amount} CC`);
+        // Path B: 2-step transfer via Splice REST API (proven working path).
+        //
+        // CIP-0056 TransferFactory_Transfer path is OPTIONAL and only used when
+        // CANTON_TRANSFER_FACTORY_CONTRACT_ID is explicitly set in .env.
+        // This prevents breaking existing transfers when the factory contract
+        // is not yet configured on the validator.
+        //
+        // Priority order:
+        //   1. Splice REST createTransferOffer + acceptOfferViaWallet (default, always works)
+        //   2. TransferFactory_Transfer (CIP-0056, only if CANTON_TRANSFER_FACTORY_CONTRACT_ID set)
 
-        // Use DSO party for auto-discovery (known from Scan)
-        const dsoPartyId = this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() ||
-          this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
-        const factoryContractId =
-          this.config.get<string>('CANTON_TRANSFER_FACTORY_CONTRACT_ID')?.trim() ||
-          (dsoPartyId ? await this.ledger.discoverTransferFactoryContractId(dsoPartyId) : null);
+        const explicitFactoryContractId = this.config.get<string>('CANTON_TRANSFER_FACTORY_CONTRACT_ID')?.trim();
 
-        if (factoryContractId && sender.cantonPartyId) {
+        // Only attempt TransferFactory path if explicitly configured in env
+        if (explicitFactoryContractId && sender.cantonPartyId) {
+          this.logger.log(`CC transfer (CIP-0056 Token Standard): ${sender.username} → ${recipientLabel} ${amount} CC`);
+
           // Query sender's Amulet holdings for TransferFactory input
           let inputCids: string[] = [];
           try {
@@ -756,7 +760,7 @@ export class PartyController {
 
           if (inputCids.length > 0) {
             const factoryResult = await this.ledger.executeTransferFactoryTransfer({
-              factoryContractId,
+              factoryContractId: explicitFactoryContractId,
               senderPartyId: sender.cantonPartyId,
               receiverPartyId: recipientPartyId,
               amountCc: amount,
@@ -769,19 +773,22 @@ export class PartyController {
               accepted = true;
               ledgerTxId = factoryResult.updateId ?? undefined;
               transferMethod = 'offer_accept';
-              this.logger.log(`CC transfer (Token Standard): ${sender.username} → ${recipientLabel} ${amount} CC — TransferFactory_Transfer OK`);
+              this.logger.log(`CC transfer (Token Standard OK): ${sender.username} → ${recipientLabel} ${amount} CC`);
             } else {
               this.logger.warn(`TransferFactory_Transfer failed: ${factoryResult.error?.slice(0, 200)} — falling back to Splice REST`);
             }
+          } else {
+            this.logger.warn(`No Amulet holdings found for ${sender.username} — falling back to Splice REST`);
           }
         }
 
-        // Fallback: Splice REST createTransferOffer (backward compatible)
+        // Primary / Fallback: Splice REST createTransferOffer (proven working, always available)
         if (!accepted) {
+          this.logger.log(`CC transfer (Splice REST): ${sender.username} → ${recipientLabel} ${amount} CC`);
           const offerContractId = await this.splice.createTransferOffer(
             recipientPartyId, amount, description, undefined, sender.username,
           );
-          if (!offerContractId) throw new Error('Failed to create transfer offer.');
+          if (!offerContractId) throw new Error('Failed to create transfer offer. Check Splice Validator connection.');
           ledgerTxId = offerContractId;
 
           if (isInternalUser && recipientUsername) {
