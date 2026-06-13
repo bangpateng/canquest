@@ -592,12 +592,12 @@ export class PartyController {
     const isInternalUser = recipientDbUser !== null;
 
     // ── Fee Policy ────────────────────────────────────────────────────────
-    // Fee ONLY applies to internal users (registered CanQuest users).
-    // External parties (CEX, different participant, not in DB) → fee = 0.
-    // This allows clean CEX withdrawals with memo without extra fee transaction.
-    const effectiveFeeCc = isInternalUser ? feeCc : 0;
+    // Fee applies to ALL transfers (internal AND external/CEX).
+    // Fee is sent to CANTON_FEE_RECIPIENT_PARTY_ID (canquest-fee wallet).
+    // This is a separate transaction: fee first, then main transfer.
+    const effectiveFeeCc = feeCc; // Always apply fee regardless of recipient type
 
-    // Balance check uses effectiveFeeCc (0 for external party)
+    // Balance check: sender needs amount + fee
     const senderBalance = await this.splice.getUserBalance(sender.username);
     if (senderBalance !== null && senderBalance < amount + effectiveFeeCc) {
       throw new BadRequestException(
@@ -607,7 +607,9 @@ export class PartyController {
       );
     }
 
-    // ── Step 1: COLLECT FEE FIRST (internal users only) ───────────────────
+    // ── Step 1: COLLECT FEE FIRST (all transfers) ─────────────────────────
+    // Fee is sent to canquest-fee wallet (CANTON_FEE_RECIPIENT_PARTY_ID).
+    // This is transaction #1. Main transfer is transaction #2.
     let feeCollected = false;
     let feeLedgerTxId: string | undefined;
     let feeTreasuryPartyId: string | undefined;
