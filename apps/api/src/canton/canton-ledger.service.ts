@@ -46,6 +46,12 @@ export class CantonLedgerService {
   private readonly secret: string | null;
   private readonly ledgerApiUser: string;
   private readonly ledgerAudience: string;
+  /**
+   * Scan API URL — hosts the Transfer Factory Registry (CIP-0056).
+   * Required for executeTransferFactoryTransfer() to get factoryId + choiceContext.
+   * Set via CANTON_SCAN_URL env var.
+   */
+  private readonly scanUrl: string | null;
 
   constructor(private readonly config: ConfigService) {
     this.baseUrl = (
@@ -56,6 +62,9 @@ export class CantonLedgerService {
       config.get<string>('CANTON_LEDGER_API_USER') ?? 'ledger-api-user';
     this.ledgerAudience =
       config.get<string>('CANTON_LEDGER_API_AUDIENCE') ?? 'https://canton.network.global';
+    this.scanUrl = (
+      config.get<string>('CANTON_SCAN_URL') ?? null
+    )?.replace(/\/$/, '') ?? null;
   }
 
   /** JWT token for Canton JSON Ledger API calls. */
@@ -125,6 +134,13 @@ export class CantonLedgerService {
     commandId?: string,
     /** Use transaction-tree endpoint when CreatedEvent contract ids are needed. */
     waitMode: 'submit-and-wait' | 'submit-and-wait-for-transaction-tree' = 'submit-and-wait',
+    /**
+     * CIP-0056: Disclosed contracts from the Transfer Factory Registry.
+     * Required for TransferFactory_Transfer — the ledger needs these to verify
+     * contract visibility across participants.
+     * See: https://docs.canton.network/appdev/deep-dives/explicit-contract-disclosure
+     */
+    disclosedContracts?: unknown[],
   ): Promise<{ ok: boolean; status: number; text: string }> {
     const url = `${this.baseUrl}/v2/commands/${waitMode}`;
     const effectiveUserId = userId ?? this.ledgerApiUser;
@@ -135,16 +151,21 @@ export class CantonLedgerService {
 
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: this.authHeaders(effectiveUserId),
-          body: JSON.stringify({
+        const body: Record<string, unknown> = {
             commands,
             userId: effectiveUserId,
             commandId: effectiveCommandId,
             actAs,
             readAs: actAs,
-          }),
+        };
+        // CIP-0056: attach disclosed contracts when provided by the registry
+        if (disclosedContracts && disclosedContracts.length > 0) {
+          body.disclosedContracts = disclosedContracts;
+        }
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: this.authHeaders(effectiveUserId),
+          body: JSON.stringify(body),
           signal: AbortSignal.timeout(30_000),
         });
         const text = await res.text();
@@ -209,6 +230,8 @@ export class CantonLedgerService {
     actAs: string[],
     commandId?: string,
     waitMode?: 'submit-and-wait' | 'submit-and-wait-for-transaction-tree',
+    /** CIP-0056: disclosed contracts from Transfer Factory Registry */
+    disclosedContracts?: unknown[],
   ): Promise<{ ok: boolean; status: number; text: string }> {
     return this.submitCommand(
       [
@@ -225,71 +248,156 @@ export class CantonLedgerService {
       undefined,
       commandId,
       waitMode,
+      disclosedContracts,
     );
   }
 
   /**
-   * Exercise TransferFactory_Transfer via the Canton JSON Ledger API v2.
+   * Call the Transfer Factory Registry (CIP-0056) to get factoryId + choiceContext.
    *
-   * This is the CIP-0056 Token Standard API preferred path for CC transfers.
+   * The registry is served by the Scan API. It returns:
+   *   - factoryId: contract ID of the TransferFactory to exercise
+   *   - choiceContext.choiceContextData: goes into extraArgs.context
+   *   - choiceContext.disclosedContracts: must be passed to submitCommand
+   *   - transferKind: "direct" (preapproval) or "offer" (2-step)
+   *
+   * Reference: https://github.com/canton-network/splice/blob/main/token-standard/cli/src/commands/transfer.ts
+   * CIP-0056: https://github.com/global-synchronizer-foundation/cips/blob/main/cip-0056/cip-0056.md
+   */
+  async callTransferFactoryRegistry(choiceArguments: unknown): Promise<{
+    factoryId: string;
+    choiceContextData: Record<string, unknown>;
+    disclosedContracts: unknown[];
+    transferKind: string;
+  } | null> {
+    if (!this.scanUrl) {
+      this.logger.error(
+        'CANTON_SCAN_URL is not set — cannot call Transfer Factory Registry. ' +
+        'Set it to your Scan API URL (e.g. https://scan.sv-1.test.global.canton.network.sync.global)',
+      );
+      return null;
+    }
+
+    // The registry endpoint path per Token Standard OpenAPI spec
+    const url = `${this.scanUrl}/api/scan/v2/registry/transfer-instruction/v1/transfer-factory`;
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(this.secret ? { Authorization: `Bearer ${this.ledgerToken()}` } : {}),
+        },
+        body: JSON.stringify({ choiceArguments }),
+        signal: AbortSignal.timeout(20_000),
+      });
+
+      const text = await res.text();
+      if (!res.ok) {
+        this.logger.warn(`Transfer Factory Registry ${res.status}: ${text.slice(0, 300)}`);
+        return null;
+      }
+
+      const data = JSON.parse(text) as {
+        factoryId?: string;
+        choiceContext?: {
+          choiceContextData?: Record<string, unknown>;
+          disclosedContracts?: unknown[];
+        };
+        transferKind?: string;
+      };
+
+      if (!data.factoryId || !data.choiceContext) {
+        this.logger.warn('Registry response missing factoryId or choiceContext');
+        return null;
+      }
+
+      this.logger.log(
+        `Registry OK: factory=${data.factoryId.slice(0, 16)}... kind=${data.transferKind ?? 'unknown'} ` +
+        `disclosed=${data.choiceContext.disclosedContracts?.length ?? 0}`,
+      );
+
+      return {
+        factoryId: data.factoryId,
+        choiceContextData: data.choiceContext.choiceContextData ?? { values: {} },
+        disclosedContracts: data.choiceContext.disclosedContracts ?? [],
+        transferKind: data.transferKind ?? 'unknown',
+      };
+    } catch (err) {
+      this.logger.error(`Transfer Factory Registry error: ${String(err)}`);
+      return null;
+    }
+  }
+
+  /**
+   * CIP-0056 Token Standard Transfer — the CORRECT flow.
+   *
    * Replaces the legacy Splice REST createTransferOffer call.
+   * Uses the Transfer Factory Registry (Scan API) to get the factory contract
+   * and disclosed contracts, then exercises TransferFactory_Transfer.
    *
-   * Uses the ExternalPartyAmuletRules factory contract to execute the transfer.
-   * The factory handles 1-step (preapproval) and 2-step (TransferInstruction)
-   * routing automatically on-chain.
+   * Flow per official reference CLI (canton-network/splice/token-standard/cli):
+   *   1. Query ACS for sender's Amulet holdings → inputHoldingCids
+   *   2. POST /registry/transfer-instruction/v1/transfer-factory
+   *      → factoryId, choiceContext.choiceContextData, choiceContext.disclosedContracts
+   *   3. Exercise TransferFactory_Transfer with:
+   *      - contractId = factoryId (from registry, NOT from ACS)
+   *      - extraArgs.context = choiceContext.choiceContextData
+   *      - disclosedContracts passed to submitCommand
    *
-   * @param factoryContractId - The TransferFactory contract ID on the ledger
+   * Result:
+   *   - transferKind = "direct" → CC transferred immediately (receiver has preapproval)
+   *   - transferKind = "offer"  → AmuletTransferInstruction created (receiver must accept)
+   *
    * @param senderPartyId - Sender's Canton party ID
    * @param receiverPartyId - Receiver's Canton party ID
    * @param amountCc - Amount in CC to transfer
-   * @param inputHoldingCids - Array of Amulet contract IDs to consume as inputs
-   * @param operatorPartyId - Party that executes the exercise (operator)
-   * @param description - Human-readable description
-   * @returns { ok, updateId, error }
+   * @param description - Human-readable description (stored in meta)
+   * @returns { ok, updateId, transferKind, error }
    */
   async executeTransferFactoryTransfer(params: {
-    factoryContractId: string;
     senderPartyId: string;
     receiverPartyId: string;
     amountCc: number;
-    inputHoldingCids: string[];
-    operatorPartyId: string;
     description?: string;
   }): Promise<{
     ok: boolean;
     updateId: string | null;
+    transferKind: string;
+    transferInstructionCid?: string | null;
     error?: string;
   }> {
-    const { factoryContractId, senderPartyId, receiverPartyId, amountCc, inputHoldingCids, operatorPartyId, description } = params;
+    const { senderPartyId, receiverPartyId, amountCc, description } = params;
 
-    // Interface ID from DAML types: '#splice-api-token-transfer-instruction-v1:Splice.Api.Token.TransferInstructionV1:TransferFactory'
-    const factoryInterfaceId =
-      this.config.get<string>('CANTON_TRANSFER_FACTORY_INTERFACE_ID')?.trim() ||
-      '#splice-api-token-transfer-instruction-v1:Splice.Api.Token.TransferInstructionV1:TransferFactory';
+    // ── Step 1: Query sender's Amulet holdings for inputHoldingCids ──────
+    const holdings = await this.queryAmuletHoldings(senderPartyId);
+    if (holdings.length === 0) {
+      return {
+        ok: false,
+        updateId: null,
+        transferKind: 'unknown',
+        error: 'Sender has no Amulet holdings — cannot fund transfer',
+      };
+    }
+    const inputHoldingCids = holdings.map((h) => h.contractId);
 
-    // Instrument ID for CC (Canton Coin) — matches HoldingV1.InstrumentId
-    const dsoParty = this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() ||
-      this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() || '';
+    // DSO party (instrumentId.admin) — from CANTON_DSO_PARTY_ID
+    const dsoParty = this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() || '';
+    if (!dsoParty) {
+      return {
+        ok: false,
+        updateId: null,
+        transferKind: 'unknown',
+        error: 'CANTON_DSO_PARTY_ID is not set — required for CIP-0056 transfer',
+      };
+    }
 
     const now = new Date();
-    // CIP-0056: deadline 24 jam (bukan 30 detik) agar receiver punya waktu cukup untuk accept
-    const executeBefore = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
-
-    // Format amount ke Numeric(10) — 10 desimal, sesuai DAML Numeric(10)
     const amountNumeric = amountCc.toFixed(10);
 
-    // Choice argument sesuai CIP-0056 TransferFactory_Transfer spec:
-    //   TransferFactory_Transfer = {
-    //     expectedAdmin : Party
-    //     transfer      : Transfer   // { sender, receiver, amount, instrumentId, requestedAt, executeBefore, inputHoldingCids, meta }
-    //     extraArgs     : ExtraArgs  // { values: {} }
-    //   }
-    //
-    // PENTING:
-    //   - instrumentId.id = "Amulet" (bukan "canton-coin") — sesuai HoldingV1.InstrumentId
-    //   - meta = { values: {} } (bukan { annotations, resourceVersion })
-    //   - extraArgs = { values: {} } (bukan { choiceContext, metadata })
-    const choiceArgument = {
+    // ── Build choiceArguments per CIP-0056 spec ──────────────────────────
+    // Reference: canton-network/splice/token-standard/cli/src/commands/transfer.ts
+    const choiceArguments: Record<string, unknown> = {
       expectedAdmin: dsoParty,
       transfer: {
         sender: senderPartyId,
@@ -299,47 +407,90 @@ export class CantonLedgerService {
           admin: dsoParty,
           id: 'Amulet',
         },
+        lock: null,
         requestedAt: now.toISOString(),
-        executeBefore,
+        executeBefore: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(),
         inputHoldingCids,
+        meta: {
+          values: description
+            ? { 'splice.lfdecentralizedtrust.org/reason': description }
+            : {},
+        },
+      },
+      extraArgs: {
+        context: { values: {} },  // Will be replaced with registry's choiceContextData
         meta: { values: {} },
       },
-      extraArgs: { values: {} },
     };
 
-    const actAs = [senderPartyId];
+    // ── Step 2: Call Transfer Factory Registry ───────────────────────────
+    const registry = await this.callTransferFactoryRegistry(choiceArguments);
+    if (!registry) {
+      return {
+        ok: false,
+        updateId: null,
+        transferKind: 'unknown',
+        error: 'Transfer Factory Registry call failed — check CANTON_SCAN_URL',
+      };
+    }
+
+    // Inject choiceContextData into extraArgs.context (per reference CLI)
+    (choiceArguments.extraArgs as Record<string, unknown>).context =
+      registry.choiceContextData;
+
+    // ── Step 3: Exercise TransferFactory_Transfer ────────────────────────
+    const factoryInterfaceId =
+      '#splice-api-token-transfer-instruction-v1:Splice.Api.Token.TransferInstructionV1:TransferFactory';
+
     const commandId = `transfer-factory-${senderPartyId.slice(0, 12)}-${randomUUID().slice(0, 16)}`;
 
     this.logger.log(
-      `TransferFactory_Transfer: sender=${senderPartyId.split('::')[0]} → receiver=${receiverPartyId.split('::')[0]} amount=${amountCc} CC inputs=${inputHoldingCids.length} factory=${factoryContractId.slice(0, 16)}...`,
+      `TransferFactory_Transfer (CIP-0056): sender=${senderPartyId.split('::')[0]} → ` +
+      `receiver=${receiverPartyId.split('::')[0]} amount=${amountCc} CC ` +
+      `kind=${registry.transferKind} factory=${registry.factoryId.slice(0, 16)}... ` +
+      `disclosed=${registry.disclosedContracts.length}`,
     );
 
     const { ok, status, text } = await this.exerciseChoice(
-      factoryContractId,
+      registry.factoryId,
       factoryInterfaceId,
       'TransferFactory_Transfer',
-      choiceArgument,
-      actAs,
+      choiceArguments,
+      [senderPartyId],
       commandId,
       'submit-and-wait-for-transaction-tree',
+      registry.disclosedContracts,  // CIP-0056: pass disclosed contracts
     );
 
     if (ok) {
       let updateId: string | null = null;
+      let transferInstructionCid: string | null = null;
       try {
-        const parsed = JSON.parse(text) as { updateId?: string };
+        const parsed = JSON.parse(text);
         updateId = parsed.updateId ?? null;
+        // If transferKind = "offer", extract the TransferInstruction contract ID
+        // from the CreatedEvent tree for the receiver to accept later
+        if (registry.transferKind === 'offer') {
+          transferInstructionCid = extractCreatedContractId(text);
+        }
       } catch { /* ignore */ }
 
       this.logger.log(
-        `TransferFactory_Transfer succeeded: updateId=${updateId?.slice(0, 16) ?? 'unknown'}`,
+        `TransferFactory_Transfer OK: kind=${registry.transferKind} ` +
+        `updateId=${updateId?.slice(0, 16) ?? 'unknown'} ` +
+        (transferInstructionCid ? `instructionCid=${transferInstructionCid.slice(0, 16)}...` : ''),
       );
-      return { ok: true, updateId };
+      return {
+        ok: true,
+        updateId,
+        transferKind: registry.transferKind,
+        transferInstructionCid,
+      };
     }
 
     const errMsg = text.slice(0, 300);
     this.logger.warn(`TransferFactory_Transfer failed ${status}: ${errMsg}`);
-    return { ok: false, updateId: null, error: errMsg };
+    return { ok: false, updateId: null, transferKind: registry.transferKind, error: errMsg };
   }
 
   /**

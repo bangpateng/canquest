@@ -9,9 +9,11 @@ import {
   JOB_ACCEPT_OFFER,
 } from './queue.constants';
 import { SpliceValidatorService } from '../canton/splice-validator.service';
+import { CantonLedgerService } from '../canton/canton-ledger.service';
 import { QuestLedgerService } from '../canton/quest-ledger.service';
 import { UsersService } from '../users/users.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ConfigService } from '@nestjs/config';
 
 // ── Job payload types ──────────────────────────────────────────────────────────
 
@@ -60,9 +62,11 @@ export class LedgerJobProcessor {
 
   constructor(
     private readonly splice: SpliceValidatorService,
+    private readonly ledger: CantonLedgerService,
     private readonly users: UsersService,
     private readonly prisma: PrismaService,
     private readonly questLedger: QuestLedgerService,
+    private readonly config: ConfigService,
   ) {}
 
   // ── Send CC Reward ───────────────────────────────────────────────────────────
@@ -71,25 +75,42 @@ export class LedgerJobProcessor {
   async processSendCcReward(job: Job<SendCcRewardPayload>): Promise<void> {
     const { userId, username, cantonPartyId, amountCc, description, referenceId } = job.data;
     this.logger.log(
-      `[Job ${job.id}] SendCcReward: ${amountCc} CC → @${username} (attempt ${job.attemptsMade + 1})`,
+      `[Job ${job.id}] SendCcReward (CIP-0056): ${amountCc} CC → @${username} (attempt ${job.attemptsMade + 1})`,
     );
 
-    // Step 1: buat TransferOffer dari validator → user
-    const offerContractId = await this.splice.createTransferOffer(
-      cantonPartyId,
+    // Validator party sends the reward
+    const validatorPartyId = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ?? '';
+
+    // Step 1: CIP-0056 TransferFactory_Transfer
+    const cip56Result = await this.ledger.executeTransferFactoryTransfer({
+      senderPartyId: validatorPartyId,
+      receiverPartyId: cantonPartyId,
       amountCc,
       description,
-    );
+    });
 
-    if (!offerContractId) {
-      throw new Error(`createTransferOffer failed for @${username} — will retry`);
+    if (!cip56Result.ok) {
+      throw new Error(
+        `CIP-0056 transfer failed for @${username}: ${cip56Result.error ?? 'unknown'} — will retry`,
+      );
     }
 
-    // Step 2: auto-accept via Splice Wallet API
-    const accepted = await this.splice.acceptOfferViaWallet(offerContractId, username);
-    if (!accepted) {
-      this.logger.warn(`[Job ${job.id}] offer created but accept failed: ${offerContractId}`);
+    // Step 2: If TransferInstruction was created (no preapproval), auto-accept
+    let accepted = cip56Result.transferKind === 'direct';
+    if (!accepted && cip56Result.transferInstructionCid) {
+      const acceptResult = await this.ledger.acceptTransferInstruction(
+        cip56Result.transferInstructionCid,
+        cantonPartyId,
+      );
+      accepted = acceptResult.ok;
+      if (!accepted) {
+        this.logger.warn(
+          `[Job ${job.id}] TransferInstruction created but auto-accept failed: ${acceptResult.error ?? 'unknown'}`,
+        );
+      }
     }
+
+    const ledgerTxId = cip56Result.updateId ?? cip56Result.transferInstructionCid ?? '';
 
     // Step 3: catat transaksi ke DB
     await this.users.recordTransaction({
@@ -97,7 +118,7 @@ export class LedgerJobProcessor {
       amountCc,
       type: 'QUEST_REWARD',
       description,
-      ledgerTxId: offerContractId,
+      ledgerTxId,
     });
 
     if (referenceId && this.questLedger.isConfigured()) {
@@ -108,7 +129,7 @@ export class LedgerJobProcessor {
       if (completion?.ledgerRewardId) {
         const marked = await this.questLedger.markRewardClaimed({
           rewardContractId: completion.ledgerRewardId,
-          payoutTxId: offerContractId,
+          payoutTxId: ledgerTxId,
         });
         if (!marked.ok) {
           this.logger.warn(
@@ -119,7 +140,8 @@ export class LedgerJobProcessor {
     }
 
     this.logger.log(
-      `[Job ${job.id}] ✅ ${amountCc} CC → @${username} accepted=${String(accepted)} txId=${offerContractId.slice(0, 16)}…`,
+      `[Job ${job.id}] ✅ ${amountCc} CC → @${username} kind=${cip56Result.transferKind} ` +
+      `accepted=${String(accepted)} txId=${ledgerTxId.slice(0, 16)}…`,
     );
   }
 
@@ -128,35 +150,53 @@ export class LedgerJobProcessor {
   @Process(JOB_DISTRIBUTE_REWARD)
   async processDistributeReward(job: Job<DistributeRewardPayload>): Promise<void> {
     const { drawId, questId, userId, username, cantonPartyId, amountCc } = job.data;
-    this.logger.log(`[Job ${job.id}] DistributeReward: draw=${drawId} ${amountCc} CC → @${username ?? 'unknown'}`);
+    this.logger.log(`[Job ${job.id}] DistributeReward (CIP-0056): draw=${drawId} ${amountCc} CC → @${username ?? 'unknown'}`);
 
     let ledgerTxId: string | null = null;
     let ccSent = false;
 
     if (amountCc > 0 && cantonPartyId && username) {
-      const offerContractId = await this.splice.createTransferOffer(
-        cantonPartyId,
-        amountCc,
-        `Quest winner reward: ${questId}`,
-      );
+      const validatorPartyId = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ?? '';
 
-      if (offerContractId) {
-        ccSent = await this.splice.acceptOfferViaWallet(offerContractId, username);
-        if (ccSent) {
-          ledgerTxId = offerContractId;
-          await this.users.recordTransaction({
-            userId,
-            amountCc,
-            type: 'QUEST_REWARD',
-            description: `Quest winner reward: ${questId}`,
-            ledgerTxId: offerContractId,
-          });
-        } else {
-          throw new Error(`acceptOffer failed for draw=${drawId} — will retry`);
-        }
-      } else {
-        throw new Error(`createTransferOffer failed for draw=${drawId} — will retry`);
+      // CIP-0056: TransferFactory_Transfer instead of deprecated createTransferOffer
+      const cip56Result = await this.ledger.executeTransferFactoryTransfer({
+        senderPartyId: validatorPartyId,
+        receiverPartyId: cantonPartyId,
+        amountCc,
+        description: `Quest winner reward: ${questId}`,
+      });
+
+      if (!cip56Result.ok) {
+        throw new Error(
+          `CIP-0056 transfer failed for draw=${drawId}: ${cip56Result.error ?? 'unknown'} — will retry`,
+        );
       }
+
+      // Auto-accept if TransferInstruction (no preapproval)
+      let accepted = cip56Result.transferKind === 'direct';
+      if (!accepted && cip56Result.transferInstructionCid) {
+        const acceptResult = await this.ledger.acceptTransferInstruction(
+          cip56Result.transferInstructionCid,
+          cantonPartyId,
+        );
+        accepted = acceptResult.ok;
+        if (!accepted) {
+          throw new Error(
+            `TransferInstruction accept failed for draw=${drawId}: ${acceptResult.error ?? 'unknown'} — will retry`,
+          );
+        }
+      }
+
+      ccSent = true;
+      ledgerTxId = cip56Result.updateId ?? cip56Result.transferInstructionCid ?? null;
+
+      await this.users.recordTransaction({
+        userId,
+        amountCc,
+        type: 'QUEST_REWARD',
+        description: `Quest winner reward: ${questId}`,
+        ledgerTxId: ledgerTxId ?? undefined,
+      });
     }
 
     // Update WinnerDraw record
