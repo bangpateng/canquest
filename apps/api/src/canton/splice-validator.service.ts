@@ -489,10 +489,22 @@ export class SpliceValidatorService {
     const effectiveSender =
       senderUsername ?? this.config.get<string>('CANTON_VALIDATOR_ADMIN_USER') ?? 'administrator';
 
-        // expires_at must be in MICROSECONDS (Unix timestamp × 1_000_000).
-    // Per Canton docs the timestamp is epoch-microseconds as a number.
-    // We compute: (now_ms * 1000) + (7_days_in_microseconds)
-    // Using BigInt throughout to avoid float precision loss at large values.
+    // Resolve sender party ID
+    const senderPartyId =
+      (effectiveSender !== 'administrator'
+        ? await this.getWalletPartyId(effectiveSender)
+        : null) ??
+      this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ?? '';
+
+    // Resolve operator/DSO party
+    const dsoParty =
+      this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() ||
+      this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() || '';
+
+    // Deadline: 7 days from now in ISO-8601 (for transferBefore)
+    const transferBefore = new Date(Date.now() + 7 * 24 * 3_600_000).toISOString();
+
+    // expires_at must be in MICROSECONDS (Unix timestamp × 1_000_000).
     const nowMicros = BigInt(Date.now()) * 1_000n;
     const sevenDaysMicros = 7n * 24n * 3_600n * 1_000_000n;
     const expiresAtMicros = nowMicros + sevenDaysMicros;
@@ -500,18 +512,33 @@ export class SpliceValidatorService {
     const url = `${this.baseUrl}/api/validator/v0/wallet/transfer-offers`;
 
     try {
+      const body = {
+        // Legacy Splice REST fields (backward compatible)
+        receiver_party_id: receiverPartyId,
+        amount: amountCc.toString(),
+        description,
+        expires_at: Number(expiresAtMicros),
+        tracking_id: trackingId,
+
+        // TwoStepTransfer fields per Splice.Amulet.TwoStepTransfer DAML type
+        dso: dsoParty,
+        sender: senderPartyId,
+        receiver: receiverPartyId,
+        lockContext: description,
+        transferBefore,
+        transferBeforeDeadline: 'Transfer expiry',
+        provider: dsoParty,
+        allowFeaturing: false,
+      };
+
+      this.logger.log(
+        `TransferOffer TwoStepTransfer: ${senderPartyId.split('::')[0]} → ${receiverPartyId.split('::')[0]} ${amountCc} CC`,
+      );
+
       const res = await fetch(url, {
         method: 'POST',
         headers: this.jsonAuthHeaders(effectiveSender),
-        body: JSON.stringify({
-          receiver_party_id: receiverPartyId,
-          amount: amountCc.toString(),
-          description,
-          // Convert BigInt to Number for JSON serialisation.
-          // Safe up to ~9_007_199_254_740_991 microseconds (≈2285 AD).
-          expires_at: Number(expiresAtMicros),
-          tracking_id: trackingId,
-        }),
+        body: JSON.stringify(body),
         signal: AbortSignal.timeout(30_000),
       });
 
