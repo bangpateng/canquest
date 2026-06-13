@@ -532,6 +532,37 @@ export class CantonLedgerService {
     return (JSON.parse(text) as { partyDetails: unknown[] }).partyDetails ?? [];
   }
 
+  /**
+   * Auto-discover the ExternalPartyAmuletRules factory contract ID from the ledger.
+   * Queries ACS for Splice.ExternalPartyAmuletRules:ExternalPartyAmuletRules visible to the operator.
+   * No need to configure CANTON_TRANSFER_FACTORY_CONTRACT_ID in .env.
+   */
+  async discoverTransferFactoryContractId(
+    operatorPartyId: string,
+  ): Promise<string | null> {
+    const tplId = '#splice-amulet:Splice.ExternalPartyAmuletRules:ExternalPartyAmuletRules';
+    try {
+      const contracts = await this.queryActiveContracts(tplId, [operatorPartyId]);
+      for (const entry of contracts) {
+        if (!entry || typeof entry !== 'object') continue;
+        const obj = entry as Record<string, unknown>;
+        const cid = typeof obj.contractId === 'string' ? obj.contractId
+          : typeof (obj as { CreatedTreeEvent?: { contractId?: string } })?.CreatedTreeEvent?.contractId === 'string'
+            ? (obj as { CreatedTreeEvent: { contractId: string } }).CreatedTreeEvent.contractId
+            : null;
+        if (cid) {
+          this.logger.log(`Discovered TransferFactory: ${cid.slice(0, 16)}...`);
+          return cid;
+        }
+      }
+      this.logger.warn(`No ExternalPartyAmuletRules contract found for operator ${operatorPartyId.split('::')[0]}`);
+      return null;
+    } catch (err) {
+      this.logger.warn(`discoverTransferFactoryContractId error: ${String(err)}`);
+      return null;
+    }
+  }
+
   /** Returns current ledger-end offset. */
   async ledgerEnd(): Promise<unknown> {
     const res = await fetch(`${this.baseUrl}/v2/state/ledger-end`, {

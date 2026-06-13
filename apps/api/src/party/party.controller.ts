@@ -734,9 +734,11 @@ export class PartyController {
         // TransferFactory_Transfer creates an on-chain TransferInstruction
         // visible to BOTH sender and receiver regardless of participant.
         this.logger.log(`CC transfer (2-step Token Standard): ${sender.username} → ${recipientLabel} ${amount} CC`);
-        const factoryContractId = this.config.get<string>('CANTON_TRANSFER_FACTORY_CONTRACT_ID')?.trim();
         const operatorPartyId = this.config.get<string>('CANTON_OPERATOR_PARTY_ID')?.trim() ||
           this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
+        const factoryContractId =
+          this.config.get<string>('CANTON_TRANSFER_FACTORY_CONTRACT_ID')?.trim() ||
+          (operatorPartyId ? await this.ledger.discoverTransferFactoryContractId(operatorPartyId) : null);
 
         if (factoryContractId && operatorPartyId && sender.cantonPartyId) {
           // Query sender's Amulet holdings for TransferFactory input
