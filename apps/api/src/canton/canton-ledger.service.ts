@@ -271,40 +271,40 @@ export class CantonLedgerService {
     const dsoParty = this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() ||
       this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() || '';
 
-    const now = new Date().toISOString();
-    const executeBefore = new Date(Date.now() + 30_000).toISOString();
+    const now = new Date();
+    // CIP-0056: deadline 24 jam (bukan 30 detik) agar receiver punya waktu cukup untuk accept
+    const executeBefore = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
 
-    // Choice argument matches TransferFactory_Transfer from DAML types:
+    // Format amount ke Numeric(10) — 10 desimal, sesuai DAML Numeric(10)
+    const amountNumeric = amountCc.toFixed(10);
+
+    // Choice argument sesuai CIP-0056 TransferFactory_Transfer spec:
     //   TransferFactory_Transfer = {
     //     expectedAdmin : Party
     //     transfer      : Transfer   // { sender, receiver, amount, instrumentId, requestedAt, executeBefore, inputHoldingCids, meta }
-    //     extraArgs     : ExtraArgs  // { choiceContext, metadata }
+    //     extraArgs     : ExtraArgs  // { values: {} }
     //   }
+    //
+    // PENTING:
+    //   - instrumentId.id = "Amulet" (bukan "canton-coin") — sesuai HoldingV1.InstrumentId
+    //   - meta = { values: {} } (bukan { annotations, resourceVersion })
+    //   - extraArgs = { values: {} } (bukan { choiceContext, metadata })
     const choiceArgument = {
       expectedAdmin: dsoParty,
-      extraArgs: {
-        choiceContext: null,
-        metadata: {
-          annotations: {},
-          resourceVersion: '',
-        },
-      },
       transfer: {
         sender: senderPartyId,
         receiver: receiverPartyId,
-        amount: String(amountCc),
+        amount: amountNumeric,
         instrumentId: {
           admin: dsoParty,
-          id: 'canton-coin',
+          id: 'Amulet',
         },
-        requestedAt: now,
+        requestedAt: now.toISOString(),
         executeBefore,
         inputHoldingCids,
-        meta: {
-          annotations: {},
-          resourceVersion: '',
-        },
+        meta: { values: {} },
       },
+      extraArgs: { values: {} },
     };
 
     const actAs = [senderPartyId];
@@ -339,6 +339,160 @@ export class CantonLedgerService {
 
     const errMsg = text.slice(0, 300);
     this.logger.warn(`TransferFactory_Transfer failed ${status}: ${errMsg}`);
+    return { ok: false, updateId: null, error: errMsg };
+  }
+
+  /**
+   * CIP-0056 Two-Step Transfer — STEP 2A: RECEIVER menerima TransferInstruction.
+   *
+   * Interface: Splice.Api.Token.TransferInstructionV1:TransferInstruction
+   * Choice:    TransferInstruction_Accept
+   * Argument:  { extraArgs: { values: {} } }
+   *
+   * Dipanggil oleh receiver setelah sender membuat TransferInstruction via TransferFactory_Transfer.
+   * Jika berhasil, holding CC berpindah ke receiver dan status menjadi TransferInstructionResult_Completed.
+   *
+   * @param transferInstructionCid - ContractId dari TransferInstruction (dari Step 1)
+   * @param receiverPartyId - Canton party ID penerima (controller choice ini)
+   * @returns { ok, updateId, error }
+   */
+  async acceptTransferInstruction(
+    transferInstructionCid: string,
+    receiverPartyId: string,
+  ): Promise<{ ok: boolean; updateId: string | null; error?: string }> {
+    // Interface ID dari DAML types (module.js line 49-51)
+    const interfaceId =
+      '#splice-api-token-transfer-instruction-v1:Splice.Api.Token.TransferInstructionV1:TransferInstruction';
+
+    const commandId = `accept-instruction-${transferInstructionCid.slice(0, 16)}-${randomUUID().slice(0, 8)}`;
+
+    this.logger.log(
+      `TransferInstruction_Accept: receiver=${receiverPartyId.split('::')[0]} cid=${transferInstructionCid.slice(0, 16)}...`,
+    );
+
+    const { ok, status, text } = await this.exerciseChoice(
+      transferInstructionCid,
+      interfaceId,
+      'TransferInstruction_Accept',
+      { extraArgs: { values: {} } },
+      [receiverPartyId],
+      commandId,
+      'submit-and-wait-for-transaction-tree',
+    );
+
+    if (ok) {
+      let updateId: string | null = null;
+      try {
+        const parsed = JSON.parse(text) as { updateId?: string };
+        updateId = parsed.updateId ?? null;
+      } catch { /* ignore */ }
+      this.logger.log(`TransferInstruction_Accept succeeded: updateId=${updateId?.slice(0, 16) ?? 'unknown'}`);
+      return { ok: true, updateId };
+    }
+
+    const errMsg = text.slice(0, 300);
+    this.logger.warn(`TransferInstruction_Accept failed ${status}: ${errMsg}`);
+    return { ok: false, updateId: null, error: errMsg };
+  }
+
+  /**
+   * CIP-0056 Two-Step Transfer — STEP 2B: RECEIVER menolak TransferInstruction.
+   *
+   * Interface: Splice.Api.Token.TransferInstructionV1:TransferInstruction
+   * Choice:    TransferInstruction_Reject
+   * Argument:  { extraArgs: { values: {} } }
+   *
+   * Holding CC dikembalikan ke sender. Status menjadi TransferInstructionResult_Failed.
+   *
+   * @param transferInstructionCid - ContractId dari TransferInstruction (dari Step 1)
+   * @param receiverPartyId - Canton party ID penerima (controller choice ini)
+   * @returns { ok, updateId, error }
+   */
+  async rejectTransferInstruction(
+    transferInstructionCid: string,
+    receiverPartyId: string,
+  ): Promise<{ ok: boolean; updateId: string | null; error?: string }> {
+    const interfaceId =
+      '#splice-api-token-transfer-instruction-v1:Splice.Api.Token.TransferInstructionV1:TransferInstruction';
+
+    const commandId = `reject-instruction-${transferInstructionCid.slice(0, 16)}-${randomUUID().slice(0, 8)}`;
+
+    this.logger.log(
+      `TransferInstruction_Reject: receiver=${receiverPartyId.split('::')[0]} cid=${transferInstructionCid.slice(0, 16)}...`,
+    );
+
+    const { ok, status, text } = await this.exerciseChoice(
+      transferInstructionCid,
+      interfaceId,
+      'TransferInstruction_Reject',
+      { extraArgs: { values: {} } },
+      [receiverPartyId],
+      commandId,
+    );
+
+    if (ok) {
+      let updateId: string | null = null;
+      try {
+        const parsed = JSON.parse(text) as { updateId?: string };
+        updateId = parsed.updateId ?? null;
+      } catch { /* ignore */ }
+      this.logger.log(`TransferInstruction_Reject succeeded: updateId=${updateId?.slice(0, 16) ?? 'unknown'}`);
+      return { ok: true, updateId };
+    }
+
+    const errMsg = text.slice(0, 300);
+    this.logger.warn(`TransferInstruction_Reject failed ${status}: ${errMsg}`);
+    return { ok: false, updateId: null, error: errMsg };
+  }
+
+  /**
+   * CIP-0056 Two-Step Transfer — STEP 2C: SENDER membatalkan TransferInstruction.
+   *
+   * Interface: Splice.Api.Token.TransferInstructionV1:TransferInstruction
+   * Choice:    TransferInstruction_Withdraw
+   * Argument:  { extraArgs: { values: {} } }
+   *
+   * Sender membatalkan transfer sebelum receiver accept/reject.
+   * Holding CC dikembalikan ke sender.
+   *
+   * @param transferInstructionCid - ContractId dari TransferInstruction (dari Step 1)
+   * @param senderPartyId - Canton party ID pengirim (controller choice ini)
+   * @returns { ok, updateId, error }
+   */
+  async withdrawTransferInstruction(
+    transferInstructionCid: string,
+    senderPartyId: string,
+  ): Promise<{ ok: boolean; updateId: string | null; error?: string }> {
+    const interfaceId =
+      '#splice-api-token-transfer-instruction-v1:Splice.Api.Token.TransferInstructionV1:TransferInstruction';
+
+    const commandId = `withdraw-instruction-${transferInstructionCid.slice(0, 16)}-${randomUUID().slice(0, 8)}`;
+
+    this.logger.log(
+      `TransferInstruction_Withdraw: sender=${senderPartyId.split('::')[0]} cid=${transferInstructionCid.slice(0, 16)}...`,
+    );
+
+    const { ok, status, text } = await this.exerciseChoice(
+      transferInstructionCid,
+      interfaceId,
+      'TransferInstruction_Withdraw',
+      { extraArgs: { values: {} } },
+      [senderPartyId],
+      commandId,
+    );
+
+    if (ok) {
+      let updateId: string | null = null;
+      try {
+        const parsed = JSON.parse(text) as { updateId?: string };
+        updateId = parsed.updateId ?? null;
+      } catch { /* ignore */ }
+      this.logger.log(`TransferInstruction_Withdraw succeeded: updateId=${updateId?.slice(0, 16) ?? 'unknown'}`);
+      return { ok: true, updateId };
+    }
+
+    const errMsg = text.slice(0, 300);
+    this.logger.warn(`TransferInstruction_Withdraw failed ${status}: ${errMsg}`);
     return { ok: false, updateId: null, error: errMsg };
   }
 

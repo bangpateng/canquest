@@ -729,24 +729,69 @@ export class PartyController {
           throw new Error(`Preapproval send failed: ${result.error ?? 'unknown'}`);
         }
       } else {
-        // Path B: 2-step via TwoStepTransfer (Splice REST API)
-        // Uses Splice.Amulet.TwoStepTransfer DAML type with all required fields.
-        // Works for ALL recipients — internal and external (e.g. Canton Loop).
-        this.logger.log(`CC transfer (2-step TwoStepTransfer): ${sender.username} → ${recipientLabel} ${amount} CC`);
+        // Path B: 2-step via Token Standard API (TransferFactory_Transfer)
+        // Uses CIP-0056 preferred path: exercise TransferFactory_Transfer via Ledger API.
+        // Creates on-chain TransferInstruction visible to BOTH sender and receiver across participants.
+        this.logger.log(`CC transfer (2-step Token Standard): ${sender.username} → ${recipientLabel} ${amount} CC`);
 
-        const offerContractId = await this.splice.createTransferOffer(
-          recipientPartyId, amount, description, undefined, sender.username,
-        );
-        if (!offerContractId) throw new Error('Failed to create transfer offer.');
-        ledgerTxId = offerContractId;
+        // Use DSO party for auto-discovery (known from Scan)
+        const dsoPartyId = this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() ||
+          this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
+        const factoryContractId =
+          this.config.get<string>('CANTON_TRANSFER_FACTORY_CONTRACT_ID')?.trim() ||
+          (dsoPartyId ? await this.ledger.discoverTransferFactoryContractId(dsoPartyId) : null);
 
-        if (isInternalUser && recipientUsername) {
-          accepted = await this.splice.acceptOfferViaWallet(offerContractId, recipientUsername);
-          transferMethod = accepted ? 'offer_accept' : 'offer_only';
-          this.logger.log(`CC transfer (Wallet API): auto-accept=${String(accepted)}`);
-        } else {
-          transferMethod = 'offer_only';
-          this.logger.log(`CC transfer (offer created): ${offerContractId.slice(0, 20)}… — receiver accepts manually`);
+        if (factoryContractId && sender.cantonPartyId) {
+          // Query sender's Amulet holdings for TransferFactory input
+          let inputCids: string[] = [];
+          try {
+            const holdings = await this.ledger.queryAmuletHoldings(sender.cantonPartyId);
+            inputCids = holdings
+              .sort((a, b) => parseFloat(a.amount) - parseFloat(b.amount))
+              .slice(0, 10)
+              .map(h => h.contractId);
+          } catch (acsErr) {
+            this.logger.warn(`ACS query failed, falling back to Splice REST: ${String(acsErr)}`);
+          }
+
+          if (inputCids.length > 0) {
+            const factoryResult = await this.ledger.executeTransferFactoryTransfer({
+              factoryContractId,
+              senderPartyId: sender.cantonPartyId,
+              receiverPartyId: recipientPartyId,
+              amountCc: amount,
+              inputHoldingCids: inputCids,
+              operatorPartyId: sender.cantonPartyId,
+              description,
+            });
+
+            if (factoryResult.ok) {
+              accepted = true;
+              ledgerTxId = factoryResult.updateId ?? undefined;
+              transferMethod = 'offer_accept';
+              this.logger.log(`CC transfer (Token Standard): ${sender.username} → ${recipientLabel} ${amount} CC — TransferFactory_Transfer OK`);
+            } else {
+              this.logger.warn(`TransferFactory_Transfer failed: ${factoryResult.error?.slice(0, 200)} — falling back to Splice REST`);
+            }
+          }
+        }
+
+        // Fallback: Splice REST createTransferOffer (backward compatible)
+        if (!accepted) {
+          const offerContractId = await this.splice.createTransferOffer(
+            recipientPartyId, amount, description, undefined, sender.username,
+          );
+          if (!offerContractId) throw new Error('Failed to create transfer offer.');
+          ledgerTxId = offerContractId;
+
+          if (isInternalUser && recipientUsername) {
+            accepted = await this.splice.acceptOfferViaWallet(offerContractId, recipientUsername);
+            transferMethod = accepted ? 'offer_accept' : 'offer_only';
+            this.logger.log(`CC transfer (Wallet API): auto-accept=${String(accepted)}`);
+          } else {
+            transferMethod = 'offer_only';
+            this.logger.log(`CC transfer (offer created): ${offerContractId.slice(0, 20)}… — receiver accepts manually`);
+          }
         }
       }
     } catch (mainTransferErr) {
@@ -868,6 +913,159 @@ export class PartyController {
       transferMethod,
       message,
       transactionId: transferTransactionId,
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CIP-0056 Two-Step Transfer — TransferInstruction endpoints
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * CIP-0056 Step 2A: RECEIVER menerima TransferInstruction.
+   *
+   * Dipanggil oleh receiver setelah sender membuat TransferInstruction
+   * via TransferFactory_Transfer (sendCc → Path B).
+   *
+   * POST /api/party/transfer-instruction/accept
+   * Body: { transferInstructionCid: string }
+   *
+   * Flow:
+   *   1. Verify user adalah receiver (punya wallet)
+   *   2. Exercise TransferInstruction_Accept { extraArgs: { values: {} } }
+   *   3. Record TRANSFER_IN transaction
+   *   4. Sync balance
+   */
+  @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
+  @Post('transfer-instruction/accept')
+  async acceptTransferInstruction(
+    @Req() req: AuthedReq,
+    @Body() body: { transferInstructionCid: string },
+  ) {
+    const user = await this.users.findById(req.user.userId);
+    if (!user?.cantonPartyId || !hasRealWallet(user.cantonPartyId)) {
+      throw new BadRequestException('No wallet found. Create your wallet first.');
+    }
+    const cid = body.transferInstructionCid?.trim();
+    if (!cid) throw new BadRequestException('transferInstructionCid is required.');
+
+    this.logger.log(
+      `TransferInstruction_Accept: user=@${user.username} cid=${cid.slice(0, 20)}...`,
+    );
+
+    const result = await this.ledger.acceptTransferInstruction(cid, user.cantonPartyId);
+
+    if (!result.ok) {
+      throw new BadRequestException(
+        `Failed to accept transfer instruction: ${result.error ?? 'unknown error'}`,
+      );
+    }
+
+    // Record inbound transaction
+    const row = await this.users.recordTransaction({
+      userId: user.id,
+      amountCc: 0, // amount tidak diketahui dari sini — akan di-sync dari chain
+      type: 'TRANSFER_IN',
+      description: 'Accepted incoming CC transfer (CIP-0056 Two-Step)',
+      counterparty: 'sender',
+      ledgerTxId: result.updateId ?? cid,
+    });
+
+    // Sync balance dari chain
+    if (user.username) {
+      void this.inboundSync.alignBalanceFromChain(user.id, user.username);
+    }
+
+    return {
+      ok: true,
+      updateId: result.updateId,
+      transactionId: row.id,
+      message: 'Transfer accepted. CC will appear in your wallet shortly.',
+    };
+  }
+
+  /**
+   * CIP-0056 Step 2B: RECEIVER menolak TransferInstruction.
+   *
+   * POST /api/party/transfer-instruction/reject
+   * Body: { transferInstructionCid: string }
+   *
+   * Holding CC dikembalikan ke sender.
+   */
+  @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
+  @Post('transfer-instruction/reject')
+  async rejectTransferInstruction(
+    @Req() req: AuthedReq,
+    @Body() body: { transferInstructionCid: string },
+  ) {
+    const user = await this.users.findById(req.user.userId);
+    if (!user?.cantonPartyId || !hasRealWallet(user.cantonPartyId)) {
+      throw new BadRequestException('No wallet found. Create your wallet first.');
+    }
+    const cid = body.transferInstructionCid?.trim();
+    if (!cid) throw new BadRequestException('transferInstructionCid is required.');
+
+    this.logger.log(
+      `TransferInstruction_Reject: user=@${user.username} cid=${cid.slice(0, 20)}...`,
+    );
+
+    const result = await this.ledger.rejectTransferInstruction(cid, user.cantonPartyId);
+
+    if (!result.ok) {
+      throw new BadRequestException(
+        `Failed to reject transfer instruction: ${result.error ?? 'unknown error'}`,
+      );
+    }
+
+    return {
+      ok: true,
+      updateId: result.updateId,
+      message: 'Transfer rejected. CC returned to sender.',
+    };
+  }
+
+  /**
+   * CIP-0056 Step 2C: SENDER membatalkan TransferInstruction.
+   *
+   * POST /api/party/transfer-instruction/withdraw
+   * Body: { transferInstructionCid: string }
+   *
+   * Sender membatalkan transfer sebelum receiver accept/reject.
+   * Holding CC dikembalikan ke sender.
+   */
+  @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
+  @Post('transfer-instruction/withdraw')
+  async withdrawTransferInstruction(
+    @Req() req: AuthedReq,
+    @Body() body: { transferInstructionCid: string },
+  ) {
+    const user = await this.users.findById(req.user.userId);
+    if (!user?.cantonPartyId || !hasRealWallet(user.cantonPartyId)) {
+      throw new BadRequestException('No wallet found. Create your wallet first.');
+    }
+    const cid = body.transferInstructionCid?.trim();
+    if (!cid) throw new BadRequestException('transferInstructionCid is required.');
+
+    this.logger.log(
+      `TransferInstruction_Withdraw: user=@${user.username} cid=${cid.slice(0, 20)}...`,
+    );
+
+    const result = await this.ledger.withdrawTransferInstruction(cid, user.cantonPartyId);
+
+    if (!result.ok) {
+      throw new BadRequestException(
+        `Failed to withdraw transfer instruction: ${result.error ?? 'unknown error'}`,
+      );
+    }
+
+    // Sync sender balance (CC returned)
+    if (user.username) {
+      void this.inboundSync.alignBalanceFromChain(user.id, user.username);
+    }
+
+    return {
+      ok: true,
+      updateId: result.updateId,
+      message: 'Transfer cancelled. CC returned to your wallet.',
     };
   }
 
