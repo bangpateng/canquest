@@ -716,6 +716,7 @@ export class PartyController {
 
     try {
       if (preapprovalActive && sender.username) {
+        // Path A: 1-step via TransferPreapproval
         const result = await this.splice.sendViaTransferPreapproval(
           sender.username, recipientPartyId, amount, description,
         );
@@ -728,20 +729,66 @@ export class PartyController {
           throw new Error(`Preapproval send failed: ${result.error ?? 'unknown'}`);
         }
       } else {
-        this.logger.log(`CC transfer (2-step): ${sender.username} → ${recipientLabel} ${amount} CC`);
-        const offerContractId = await this.splice.createTransferOffer(
-          recipientPartyId, amount, description, undefined, sender.username,
-        );
-        if (!offerContractId) throw new Error('Failed to create transfer offer.');
-        ledgerTxId = offerContractId;
+        // Path B: 2-step via Token Standard API (TransferFactory_Transfer)
+        // Replaces legacy Splice REST createTransferOffer.
+        // TransferFactory_Transfer creates an on-chain TransferInstruction
+        // visible to BOTH sender and receiver regardless of participant.
+        this.logger.log(`CC transfer (2-step Token Standard): ${sender.username} → ${recipientLabel} ${amount} CC`);
+        const factoryContractId = this.config.get<string>('CANTON_TRANSFER_FACTORY_CONTRACT_ID')?.trim();
+        const operatorPartyId = this.config.get<string>('CANTON_OPERATOR_PARTY_ID')?.trim() ||
+          this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
 
-        if (isInternalUser && recipientUsername) {
-          accepted = await this.splice.acceptOfferViaWallet(offerContractId, recipientUsername);
-          transferMethod = accepted ? 'offer_accept' : 'offer_only';
-          this.logger.log(`CC transfer (Wallet API): auto-accept=${String(accepted)}`);
-        } else {
-          transferMethod = 'offer_only';
-          this.logger.log(`CC transfer (offer created): ${offerContractId.slice(0, 20)}… — receiver accepts manually`);
+        if (factoryContractId && operatorPartyId && sender.cantonPartyId) {
+          // Query sender's Amulet holdings for TransferFactory input
+          let inputCids: string[] = [];
+          try {
+            const holdings = await this.ledger.queryAmuletHoldings(sender.cantonPartyId);
+            inputCids = holdings
+              .sort((a, b) => parseFloat(a.amount) - parseFloat(b.amount))
+              .slice(0, 10)
+              .map(h => h.contractId);
+          } catch (acsErr) {
+            this.logger.warn(`ACS query failed, falling back to Splice REST: ${String(acsErr)}`);
+          }
+
+          if (inputCids.length > 0) {
+            const factoryResult = await this.ledger.executeTransferFactoryTransfer({
+              factoryContractId,
+              senderPartyId: sender.cantonPartyId,
+              receiverPartyId: recipientPartyId,
+              amountCc: amount,
+              inputHoldingCids: inputCids,
+              operatorPartyId,
+              description,
+            });
+
+            if (factoryResult.ok) {
+              accepted = true;
+              ledgerTxId = factoryResult.updateId ?? undefined;
+              transferMethod = 'offer_accept';
+              this.logger.log(`CC transfer (Token Standard): ${sender.username} → ${recipientLabel} ${amount} CC — TransferFactory_Transfer OK`);
+            } else {
+              this.logger.warn(`TransferFactory_Transfer failed: ${factoryResult.error?.slice(0, 200)} — falling back to Splice REST`);
+            }
+          }
+        }
+
+        // Fallback: Splice REST createTransferOffer (backward compatible)
+        if (!accepted) {
+          const offerContractId = await this.splice.createTransferOffer(
+            recipientPartyId, amount, description, undefined, sender.username,
+          );
+          if (!offerContractId) throw new Error('Failed to create transfer offer.');
+          ledgerTxId = offerContractId;
+
+          if (isInternalUser && recipientUsername) {
+            accepted = await this.splice.acceptOfferViaWallet(offerContractId, recipientUsername);
+            transferMethod = accepted ? 'offer_accept' : 'offer_only';
+            this.logger.log(`CC transfer (Wallet API): auto-accept=${String(accepted)}`);
+          } else {
+            transferMethod = 'offer_only';
+            this.logger.log(`CC transfer (offer created): ${offerContractId.slice(0, 20)}… — receiver accepts manually`);
+          }
         }
       }
     } catch (mainTransferErr) {
