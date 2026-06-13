@@ -287,9 +287,9 @@ export class CantonLedgerService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(this.secret ? { Authorization: `Bearer ${this.ledgerToken()}` } : {}),
+          // CIP-0056 spec: security: [] — registry does NOT require authentication
         },
-        body: JSON.stringify({ choiceArguments }),
+        body: JSON.stringify({ choiceArguments, excludeDebugFields: true }),
         signal: AbortSignal.timeout(20_000),
       });
 
