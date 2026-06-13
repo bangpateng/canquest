@@ -1009,6 +1009,266 @@ export class PartyController {
     };
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Offer Inbox — list and manage incoming transfer offers
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * List all pending incoming transfer offers for the current user.
+   * Returns both legacy Splice TransferOffers and CIP-0056 TransferInstructions.
+   */
+  @SkipThrottle()
+  @Get('offers')
+  async listOffers(@Req() req: AuthedReq) {
+    const user = await this.users.findById(req.user.userId);
+    if (!user?.cantonPartyId || !hasRealWallet(user.cantonPartyId)) {
+      throw new BadRequestException('No wallet found. Create your wallet first.');
+    }
+
+    const offers = await this.ledger.queryPendingOffers(user.cantonPartyId);
+
+    // Resolve sender labels from DB where possible
+    const enriched = await Promise.all(
+      offers.map(async (offer) => {
+        let senderLabel = offer.sender.split('::')[0] ?? offer.sender;
+        try {
+          const senderUser = await this.users.findByPartyId(offer.sender);
+          if (senderUser?.username) senderLabel = `@${senderUser.username}`;
+        } catch { /* keep party hint */ }
+        return { ...offer, senderLabel };
+      }),
+    );
+
+    return {
+      offers: enriched,
+      total: enriched.length,
+      legacyCount: enriched.filter((o) => o.type === 'transfer_offer').length,
+      cip56Count: enriched.filter((o) => o.type === 'transfer_instruction').length,
+    };
+  }
+
+  /**
+   * Accept a pending transfer offer (auto-detects type: legacy or CIP-0056).
+   */
+  @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
+  @Post('offers/accept')
+  async acceptOffer(
+    @Req() req: AuthedReq,
+    @Body() body: { contractId: string; type?: 'transfer_offer' | 'transfer_instruction' },
+  ) {
+    const user = await this.users.findById(req.user.userId);
+    if (!user?.cantonPartyId || !user.username || !hasRealWallet(user.cantonPartyId)) {
+      throw new BadRequestException('No wallet found. Create your wallet first.');
+    }
+    const cid = body.contractId?.trim();
+    if (!cid) throw new BadRequestException('contractId is required.');
+
+    const offerType = body.type ?? 'transfer_offer';
+    this.logger.log(`Accept offer: user=@${user.username} type=${offerType} cid=${cid.slice(0, 20)}...`);
+
+    let ok = false;
+    let updateId: string | null = null;
+
+    if (offerType === 'transfer_instruction') {
+      // CIP-0056 TransferInstruction
+      const result = await this.ledger.acceptTransferInstruction(cid, user.cantonPartyId);
+      ok = result.ok;
+      updateId = result.updateId;
+      if (!ok) {
+        throw new BadRequestException(`Failed to accept: ${result.error ?? 'unknown'}`);
+      }
+    } else {
+      // Legacy Splice TransferOffer — try Ledger API first, then Splice Wallet API
+      const result = await this.ledger.acceptTransferOffer(cid, user.cantonPartyId);
+      ok = result.accepted;
+      updateId = result.updateId;
+      if (!ok) {
+        // Fallback to Splice Wallet API
+        ok = await this.splice.acceptOfferViaWallet(cid, user.username);
+      }
+      if (!ok) {
+        throw new BadRequestException('Failed to accept transfer offer.');
+      }
+    }
+
+    // Record incoming transaction
+    await this.users.recordTransaction({
+      userId: user.id,
+      amountCc: 0, // akan di-sync dari chain
+      type: 'TRANSFER_IN',
+      description: `Accepted incoming ${offerType === 'transfer_instruction' ? 'CIP-0056' : 'legacy'} transfer`,
+      counterparty: 'sender',
+      ledgerTxId: updateId ?? cid,
+    });
+
+    if (user.username) {
+      void this.inboundSync.alignBalanceFromChain(user.id, user.username);
+    }
+
+    return {
+      ok: true,
+      updateId,
+      message: 'Transfer accepted. CC will appear in your wallet shortly.',
+    };
+  }
+
+  /**
+   * Reject a pending transfer offer (auto-detects type: legacy or CIP-0056).
+   */
+  @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
+  @Post('offers/reject')
+  async rejectOffer(
+    @Req() req: AuthedReq,
+    @Body() body: { contractId: string; type?: 'transfer_offer' | 'transfer_instruction' },
+  ) {
+    const user = await this.users.findById(req.user.userId);
+    if (!user?.cantonPartyId || !hasRealWallet(user.cantonPartyId)) {
+      throw new BadRequestException('No wallet found. Create your wallet first.');
+    }
+    const cid = body.contractId?.trim();
+    if (!cid) throw new BadRequestException('contractId is required.');
+
+    const offerType = body.type ?? 'transfer_offer';
+    this.logger.log(`Reject offer: user=@${user.username} type=${offerType} cid=${cid.slice(0, 20)}...`);
+
+    if (offerType === 'transfer_instruction') {
+      const result = await this.ledger.rejectTransferInstruction(cid, user.cantonPartyId);
+      if (!result.ok) {
+        throw new BadRequestException(`Failed to reject: ${result.error ?? 'unknown'}`);
+      }
+      return { ok: true, updateId: result.updateId, message: 'Transfer rejected. CC returned to sender.' };
+    } else {
+      const result = await this.ledger.rejectTransferOffer(cid, user.cantonPartyId);
+      if (!result.rejected) {
+        throw new BadRequestException('Failed to reject transfer offer.');
+      }
+      return { ok: true, updateId: result.updateId, message: 'Transfer offer rejected.' };
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Preapproval Toggle — enable/disable TransferPreapproval
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Get current preapproval status for the user's wallet.
+   */
+  @SkipThrottle()
+  @Get('preapproval')
+  async getPreapprovalStatus(@Req() req: AuthedReq) {
+    const user = await this.users.findById(req.user.userId);
+    if (!user?.cantonPartyId || !hasRealWallet(user.cantonPartyId)) {
+      throw new BadRequestException('No wallet found. Create your wallet first.');
+    }
+
+    const preapproval = await this.splice.getTransferPreapproval(user.cantonPartyId);
+
+    return {
+      active: preapproval !== null,
+      expiresAt: preapproval?.expiresAt ?? null,
+      provider: preapproval?.provider ?? null,
+      message: preapproval
+        ? 'Preapproval active — incoming CC transfers arrive directly without manual accept.'
+        : 'Preapproval inactive — incoming CC transfers will appear as offers that you must accept manually.',
+    };
+  }
+
+  /**
+   * Enable TransferPreapproval — allows direct incoming CC transfers.
+   */
+  @Throttle({ ledger: { limit: 5, ttl: 60_000 } })
+  @Post('preapproval/enable')
+  async enablePreapproval(@Req() req: AuthedReq) {
+    const user = await this.users.findById(req.user.userId);
+    if (!user?.cantonPartyId || !user.username || !hasRealWallet(user.cantonPartyId)) {
+      throw new BadRequestException('No wallet found. Create your wallet first.');
+    }
+
+    // Check if already active
+    const existing = await this.splice.getTransferPreapproval(user.cantonPartyId);
+    if (existing) {
+      return {
+        ok: true,
+        alreadyActive: true,
+        expiresAt: existing.expiresAt,
+        message: 'Preapproval is already active.',
+      };
+    }
+
+    // Resolve Splice wallet username
+    const walletUsername =
+      (await this.splice.resolveWalletUsernameForParty(user.cantonPartyId)) ?? user.username;
+
+    const result = await this.splice.createTransferPreapproval(walletUsername);
+
+    if (!result.ok) {
+      throw new BadRequestException(
+        result.detail ?? 'Failed to create preapproval. Try again or create via Splice Wallet UI.',
+      );
+    }
+
+    return {
+      ok: true,
+      alreadyActive: false,
+      message: 'Preapproval enabled — incoming CC transfers will now arrive directly.',
+    };
+  }
+
+  /**
+   * Disable TransferPreapproval — incoming CC will require manual accept.
+   * Uses DELETE /v0/admin/transfer-preapprovals/by-party/{party}
+   */
+  @Throttle({ ledger: { limit: 5, ttl: 60_000 } })
+  @Post('preapproval/disable')
+  async disablePreapproval(@Req() req: AuthedReq) {
+    const user = await this.users.findById(req.user.userId);
+    if (!user?.cantonPartyId || !hasRealWallet(user.cantonPartyId)) {
+      throw new BadRequestException('No wallet found. Create your wallet first.');
+    }
+
+    // Check if active
+    const existing = await this.splice.getTransferPreapproval(user.cantonPartyId);
+    if (!existing) {
+      return {
+        ok: true,
+        wasActive: false,
+        message: 'Preapproval is already inactive.',
+      };
+    }
+
+    // Cancel via admin API
+    const encoded = encodeURIComponent(user.cantonPartyId);
+    try {
+      const token = (this.splice as any).adminToken?.() ?? '';
+      const baseUrl = (this.splice as any).baseUrl ?? '';
+      const hostHeader = (this.splice as any).hostHeader ?? '';
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${token}`,
+      };
+      if (hostHeader) headers['Host'] = hostHeader;
+
+      const res = await fetch(
+        `${baseUrl}/api/validator/v0/admin/transfer-preapprovals/by-party/${encoded}`,
+        { method: 'DELETE', headers, signal: AbortSignal.timeout(15_000) },
+      );
+      if (!res.ok && res.status !== 404) {
+        const text = await res.text();
+        this.logger.warn(`Disable preapproval ${res.status}: ${text.slice(0, 200)}`);
+        throw new BadRequestException('Failed to disable preapproval.');
+      }
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      this.logger.warn(`Disable preapproval error: ${String(err)}`);
+      throw new BadRequestException('Failed to disable preapproval. Check Splice connection.');
+    }
+
+    return {
+      ok: true,
+      wasActive: true,
+      message: 'Preapproval disabled — incoming CC transfers will now appear as offers.',
+    };
+  }
+
   @SkipThrottle()
   @Get('notifications')
   async getNotifications(
@@ -1170,65 +1430,6 @@ export class PartyController {
     };
   }
 
-  @SkipThrottle()
-  @Get('offers')
-  async listOffers(@Req() req: AuthedReq) {
-    try {
-      const user = await this.users.findById(req.user.userId);
-      if (!user?.username || !user.cantonPartyId) {
-        return { offers: [], message: 'No wallet found.' };
-      }
-
-      if (user.cantonPartyId.startsWith('canquest:')) {
-        return { offers: [], message: 'Party ID is still a placeholder.' };
-      }
-
-      if (!this.splice.isConfigured) {
-        return { offers: [], message: 'Splice validator not configured.' };
-      }
-
-      const walletUsername =
-        (await this.splice.resolveWalletUsernameForParty(user.cantonPartyId)) ??
-        user.username;
-
-      const rawOffers = await this.splice.listTransferOffers(walletUsername);
-
-      const filtered = rawOffers.filter((o) => {
-        const p = o.payload as Record<string, unknown> | undefined;
-        if (!p) return false;
-        const receiver = typeof p.receiver === 'string'
-          ? p.receiver
-          : (p.receiver as Record<string, string> | undefined)?.id ?? '';
-        return receiver && (
-          receiver === user.cantonPartyId ||
-          receiver.startsWith(`${walletUsername}::`)
-        );
-      });
-
-      const offers = filtered.map((o) => {
-        const p = o.payload as Record<string, unknown>;
-        const amount = p?.amount as Record<string, unknown> | undefined;
-        const amountStr = typeof amount?.unassigned === 'string'
-          ? amount.unassigned
-          : typeof amount?.qty === 'string'
-            ? amount.qty
-            : '0';
-        return {
-          contractId: o.contractId,
-          sender: typeof p?.sender === 'string' ? p.sender : 'unknown',
-          receiver: typeof p?.receiver === 'string' ? p.receiver : 'unknown',
-          amountCc: (parseFloat(amountStr) || 0) / 1_000_000,
-          description: typeof p?.description === 'string' ? p.description : '',
-          trackingId: typeof p?.trackingId === 'string' ? p.trackingId : '',
-        };
-      });
-
-      return { offers, count: offers.length };
-    } catch (err) {
-      this.logger.warn(`listOffers error for user ${req.user.userId.slice(0, 8)}: ${String(err)}`);
-      return { offers: [], message: 'Could not fetch offers. Splice tunnel may be down.' };
-    }
-  }
 
   @SkipThrottle()
   @Get('ledger-status')

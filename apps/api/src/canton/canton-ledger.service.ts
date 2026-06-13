@@ -994,6 +994,159 @@ export class CantonLedgerService {
   }
 
   /**
+   * Query the ACS for pending transfer offers visible to a party.
+   *
+   * Returns both:
+   *   - Legacy Splice.Wallet.TransferOffer:TransferOffer contracts
+   *   - CIP-0056 AmuletTransferInstruction contracts (Splice.AmuletTransferInstruction)
+   *
+   * Uses WildcardFilter + client-side filter (same pattern as queryAmuletHoldings)
+   * because MainNet TemplateFilter rejects full package hashes.
+   *
+   * @param partyId - Canton party ID to query offers for
+   * @returns Array of pending offers with type, contractId, sender, receiver, amount, description
+   */
+  async queryPendingOffers(
+    partyId: string,
+  ): Promise<Array<{
+    type: 'transfer_offer' | 'transfer_instruction';
+    contractId: string;
+    sender: string;
+    receiver: string;
+    amount: string;
+    description: string;
+    expiresAt: string;
+    createdAt: string;
+  }>> {
+    let offset: number | string = 0;
+    try {
+      const end = (await this.ledgerEnd()) as { offset?: number | string };
+      offset = end?.offset ?? 0;
+    } catch { offset = 0; }
+
+    let allContracts: unknown[] = [];
+    try {
+      const res = await fetch(`${this.baseUrl}/v2/state/active-contracts`, {
+        method: 'POST',
+        headers: this.authHeaders(),
+        body: JSON.stringify({
+          eventFormat: {
+            filtersByParty: {
+              [partyId]: {
+                cumulative: [{
+                  identifierFilter: {
+                    WildcardFilter: { value: { includeCreatedEventBlob: false } },
+                  },
+                }],
+              },
+            },
+            filtersForAnyParty: { cumulative: [] },
+            verbose: true,
+          },
+          activeAtOffset: offset,
+        }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (res.ok) {
+        allContracts = (await res.json()) as unknown[];
+        if (!Array.isArray(allContracts)) allContracts = [];
+      }
+    } catch (err) {
+      this.logger.warn(`queryPendingOffers error: ${String(err)}`);
+    }
+
+    const offers: Array<{
+      type: 'transfer_offer' | 'transfer_instruction';
+      contractId: string;
+      sender: string;
+      receiver: string;
+      amount: string;
+      description: string;
+      expiresAt: string;
+      createdAt: string;
+    }> = [];
+
+    for (const entry of allContracts) {
+      if (!entry || typeof entry !== 'object') continue;
+      const wrapper = entry as Record<string, unknown>;
+      const active = wrapper.contractEntry as Record<string, unknown> | undefined;
+      const jsActive = active?.JsActiveContract as Record<string, unknown> | undefined;
+      const ev = (jsActive?.createdEvent ?? wrapper) as Record<string, unknown>;
+
+      const tplId = typeof ev.templateId === 'string' ? ev.templateId : '';
+      const cid = typeof ev.contractId === 'string' ? ev.contractId : null;
+      const args = (ev.createArgument as Record<string, unknown> | undefined) ?? {};
+      if (!cid) continue;
+
+      // Legacy: Splice.Wallet.TransferOffer:TransferOffer
+      if (tplId.includes('Splice.Wallet.TransferOffer:TransferOffer')) {
+        const receiver = typeof args.receiver === 'string' ? args.receiver : '';
+        // Only show offers where this party is the RECEIVER
+        if (receiver !== partyId) continue;
+
+        const sender = typeof args.sender === 'string' ? args.sender : '';
+        const ccAmount = typeof args.amount === 'string' ? args.amount : '0';
+        const desc = typeof args.description === 'string' ? args.description : '';
+        const expiresAt = typeof args.expiresAt === 'string' ? args.expiresAt : '';
+        const trackingId = typeof args.trackingId === 'string' ? args.trackingId : '';
+
+        offers.push({
+          type: 'transfer_offer',
+          contractId: cid,
+          sender,
+          receiver,
+          amount: ccAmount,
+          description: desc || trackingId,
+          expiresAt,
+          createdAt: '',
+        });
+        continue;
+      }
+
+      // CIP-0056: AmuletTransferInstruction
+      if (
+        tplId.includes('AmuletTransferInstruction') ||
+        tplId.includes('TransferInstruction')
+      ) {
+        // Skip if it's the interface/factory, not an actual instruction
+        if (tplId.includes('Factory') || tplId.includes('Result')) continue;
+
+        const transfer = args.transfer as Record<string, unknown> | undefined;
+        if (!transfer) continue;
+
+        const receiver = typeof transfer.receiver === 'string' ? transfer.receiver : '';
+        // Only show instructions where this party is the RECEIVER
+        if (receiver !== partyId) continue;
+
+        const sender = typeof transfer.sender === 'string' ? transfer.sender : '';
+        const amount = typeof transfer.amount === 'string' ? transfer.amount : '0';
+        const meta = transfer.meta as Record<string, Record<string, string>> | undefined;
+        const desc = meta?.values?.['splice.lfdecentralizedtrust.org/reason'] ?? '';
+        const executeBefore = typeof transfer.executeBefore === 'string' ? transfer.executeBefore : '';
+        const requestedAt = typeof transfer.requestedAt === 'string' ? transfer.requestedAt : '';
+
+        offers.push({
+          type: 'transfer_instruction',
+          contractId: cid,
+          sender,
+          receiver,
+          amount,
+          description: desc,
+          expiresAt: executeBefore,
+          createdAt: requestedAt,
+        });
+      }
+    }
+
+    this.logger.log(
+      `Pending offers query: party=${partyId.split('::')[0]} found ${offers.length} offers ` +
+      `(${offers.filter(o => o.type === 'transfer_offer').length} legacy, ` +
+      `${offers.filter(o => o.type === 'transfer_instruction').length} CIP-0056)`,
+    );
+    return offers;
+  }
+
+  /**
    * Query the Active Contract Set (ACS) for a specific template.
    *
    * Uses POST /v2/state/active-contracts with a WildcardFilter or
