@@ -81,7 +81,7 @@ export class LedgerJobProcessor {
     // Validator party sends the reward
     const validatorPartyId = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ?? '';
 
-    // Step 1: CIP-0056 TransferFactory_Transfer
+    // Step 1: Try CIP-0056 TransferFactory_Transfer
     const cip56Result = await this.ledger.executeTransferFactoryTransfer({
       senderPartyId: validatorPartyId,
       receiverPartyId: cantonPartyId,
@@ -89,28 +89,38 @@ export class LedgerJobProcessor {
       description,
     });
 
-    if (!cip56Result.ok) {
-      throw new Error(
-        `CIP-0056 transfer failed for @${username}: ${cip56Result.error ?? 'unknown'} — will retry`,
-      );
-    }
+    let accepted = false;
+    let ledgerTxId = '';
 
-    // Step 2: If TransferInstruction was created (no preapproval), auto-accept
-    let accepted = cip56Result.transferKind === 'direct';
-    if (!accepted && cip56Result.transferInstructionCid) {
-      const acceptResult = await this.ledger.acceptTransferInstruction(
-        cip56Result.transferInstructionCid,
-        cantonPartyId,
-      );
-      accepted = acceptResult.ok;
-      if (!accepted) {
-        this.logger.warn(
-          `[Job ${job.id}] TransferInstruction created but auto-accept failed: ${acceptResult.error ?? 'unknown'}`,
+    if (cip56Result.ok) {
+      accepted = cip56Result.transferKind === 'direct';
+      ledgerTxId = cip56Result.updateId ?? cip56Result.transferInstructionCid ?? '';
+      if (!accepted && cip56Result.transferInstructionCid) {
+        const acceptResult = await this.ledger.acceptTransferInstruction(
+          cip56Result.transferInstructionCid,
+          cantonPartyId,
         );
+        accepted = acceptResult.ok;
       }
     }
 
-    const ledgerTxId = cip56Result.updateId ?? cip56Result.transferInstructionCid ?? '';
+    // Fallback to Splice TransferOffer if CIP-0056 failed (no Scan access)
+    if (!cip56Result.ok) {
+      this.logger.log(
+        `[Job ${job.id}] CIP-0056 unavailable, fallback to Splice TransferOffer: ${cip56Result.error?.slice(0, 80) ?? 'unknown'}`,
+      );
+      const offerContractId = await this.splice.createTransferOffer(
+        cantonPartyId, amountCc, description,
+      );
+      if (!offerContractId) {
+        throw new Error(`Both CIP-0056 and createTransferOffer failed for @${username} — will retry`);
+      }
+      accepted = await this.splice.acceptOfferViaWallet(offerContractId, username);
+      ledgerTxId = offerContractId;
+      if (!accepted) {
+        this.logger.warn(`[Job ${job.id}] Splice offer created but accept failed: ${offerContractId}`);
+      }
+    }
 
     // Step 3: catat transaksi ke DB
     await this.users.recordTransaction({
@@ -158,7 +168,7 @@ export class LedgerJobProcessor {
     if (amountCc > 0 && cantonPartyId && username) {
       const validatorPartyId = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ?? '';
 
-      // CIP-0056: TransferFactory_Transfer instead of deprecated createTransferOffer
+      // CIP-0056: try TransferFactory_Transfer first, fallback to Splice TransferOffer
       const cip56Result = await this.ledger.executeTransferFactoryTransfer({
         senderPartyId: validatorPartyId,
         receiverPartyId: cantonPartyId,
@@ -166,37 +176,46 @@ export class LedgerJobProcessor {
         description: `Quest winner reward: ${questId}`,
       });
 
-      if (!cip56Result.ok) {
-        throw new Error(
-          `CIP-0056 transfer failed for draw=${drawId}: ${cip56Result.error ?? 'unknown'} — will retry`,
-        );
-      }
-
-      // Auto-accept if TransferInstruction (no preapproval)
-      let accepted = cip56Result.transferKind === 'direct';
-      if (!accepted && cip56Result.transferInstructionCid) {
-        const acceptResult = await this.ledger.acceptTransferInstruction(
-          cip56Result.transferInstructionCid,
-          cantonPartyId,
-        );
-        accepted = acceptResult.ok;
-        if (!accepted) {
-          throw new Error(
-            `TransferInstruction accept failed for draw=${drawId}: ${acceptResult.error ?? 'unknown'} — will retry`,
+      if (cip56Result.ok) {
+        let accepted = cip56Result.transferKind === 'direct';
+        ledgerTxId = cip56Result.updateId ?? cip56Result.transferInstructionCid ?? null;
+        if (!accepted && cip56Result.transferInstructionCid) {
+          const acceptResult = await this.ledger.acceptTransferInstruction(
+            cip56Result.transferInstructionCid,
+            cantonPartyId,
           );
+          accepted = acceptResult.ok;
+          if (!accepted) {
+            throw new Error(`TransferInstruction accept failed for draw=${drawId} — will retry`);
+          }
         }
+        ccSent = true;
+      } else {
+        // Fallback to Splice TransferOffer
+        this.logger.log(`[Job ${job.id}] CIP-0056 unavailable, fallback: ${cip56Result.error?.slice(0, 80) ?? 'unknown'}`);
+        const offerContractId = await this.splice.createTransferOffer(
+          cantonPartyId, amountCc, `Quest winner reward: ${questId}`,
+        );
+        if (!offerContractId) {
+          throw new Error(`Both CIP-0056 and createTransferOffer failed for draw=${drawId} — will retry`);
+        }
+        const offerAccepted = await this.splice.acceptOfferViaWallet(offerContractId, username);
+        if (!offerAccepted) {
+          throw new Error(`acceptOffer failed for draw=${drawId} — will retry`);
+        }
+        ledgerTxId = offerContractId;
+        ccSent = true;
       }
 
-      ccSent = true;
-      ledgerTxId = cip56Result.updateId ?? cip56Result.transferInstructionCid ?? null;
-
-      await this.users.recordTransaction({
-        userId,
-        amountCc,
-        type: 'QUEST_REWARD',
-        description: `Quest winner reward: ${questId}`,
-        ledgerTxId: ledgerTxId ?? undefined,
-      });
+      if (ccSent && ledgerTxId) {
+        await this.users.recordTransaction({
+          userId,
+          amountCc,
+          type: 'QUEST_REWARD',
+          description: `Quest winner reward: ${questId}`,
+          ledgerTxId,
+        });
+      }
     }
 
     // Update WinnerDraw record

@@ -482,8 +482,13 @@ export class PartyController {
       throw new BadRequestException('amount must be > 0');
     }
 
-    // CIP-0056: Use Token Standard transfer instead of deprecated TransferOffer
+    // Hybrid: try CIP-0056 first, fallback to Splice TransferOffer
     const validatorPartyId = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ?? '';
+
+    let accepted = false;
+    let ledgerTxId: string | null = null;
+
+    // Try CIP-0056
     const cip56Result = await this.ledger.executeTransferFactoryTransfer({
       senderPartyId: validatorPartyId,
       receiverPartyId: user.cantonPartyId,
@@ -491,51 +496,58 @@ export class PartyController {
       description: body.description ?? 'CanQuest reward',
     });
 
+    if (cip56Result.ok) {
+      accepted = cip56Result.transferKind === 'direct';
+      ledgerTxId = cip56Result.updateId ?? cip56Result.transferInstructionCid ?? null;
+      if (!accepted && cip56Result.transferInstructionCid) {
+        const acceptResult = await this.ledger.acceptTransferInstruction(
+          cip56Result.transferInstructionCid,
+          user.cantonPartyId,
+        );
+        accepted = acceptResult.ok;
+      }
+    }
+
+    // Fallback to Splice TransferOffer if CIP-0056 failed
     if (!cip56Result.ok) {
-      throw new BadRequestException(
-        `Failed to create CIP-0056 transfer: ${cip56Result.error ?? 'unknown'}. Check CANTON_SCAN_URL and CANTON_DSO_PARTY_ID.`,
-      );
-    }
-
-    // If transferKind = "direct" → CC already landed (receiver has preapproval)
-    // If transferKind = "offer"  → TransferInstruction created, auto-accept for internal user
-    let accepted = cip56Result.transferKind === 'direct';
-    if (!accepted && cip56Result.transferInstructionCid) {
-      const acceptResult = await this.ledger.acceptTransferInstruction(
-        cip56Result.transferInstructionCid,
+      this.logger.log(`claimReward fallback to Splice TransferOffer: ${cip56Result.error?.slice(0, 80) ?? 'unknown'}`);
+      const offerContractId = await this.splice.createTransferOffer(
         user.cantonPartyId,
+        body.amount,
+        body.description ?? 'CanQuest reward',
       );
-      accepted = acceptResult.ok;
+      if (!offerContractId) {
+        throw new BadRequestException('Failed to create transfer. Both CIP-0056 and Splice fallback failed.');
+      }
+      accepted = await this.splice.acceptOfferViaWallet(offerContractId, user.username);
+      ledgerTxId = offerContractId;
     }
 
-    const ledgerTxId = cip56Result.updateId ?? cip56Result.transferInstructionCid ?? null;
-
-    if (accepted) {
+    if (accepted && ledgerTxId) {
       const row = await this.users.recordTransaction({
         userId: user.id,
         amountCc: body.amount,
         type: 'TRANSFER_IN',
         description: body.description ?? 'CanQuest reward',
         counterparty: 'Validator (reward)',
-        ledgerTxId: ledgerTxId ?? undefined,
+        ledgerTxId,
       });
-      if (user.cantonPartyId && ledgerTxId) {
+      if (user.cantonPartyId) {
         void this.txDetail.backfillUpdateId(row.id, ledgerTxId, user.cantonPartyId);
       }
     }
 
     if (!accepted) {
       throw new BadRequestException(
-        'Reward transfer failed — TransferInstruction was not accepted. No transaction was recorded.',
+        'Reward transfer failed — offer was not accepted. No transaction was recorded.',
       );
     }
 
     return {
       ledgerTxId,
-      transferKind: cip56Result.transferKind,
       accepted: true,
       amount: body.amount,
-      message: `${body.amount} CC sent to ${user.username} via CIP-0056. It should appear in your wallet shortly.`,
+      message: `${body.amount} CC sent to ${user.username}. It should appear in your wallet shortly.`,
     };
   }
 
@@ -693,14 +705,11 @@ export class PartyController {
         }
       }
 
-      // Path B: CIP-0056 Token Standard TransferFactory_Transfer
-      // Creates AmuletTransferInstruction (recognized by ALL Canton wallets)
-      // Replaces deprecated Splice REST createTransferOffer
+      // Path B: Hybrid — try CIP-0056 first, fallback to Splice TransferOffer
+      // CIP-0056 requires Scan registry access. If unavailable (403), fall back
+      // to the legacy createTransferOffer which still works on the ledger.
       if (!accepted) {
-        this.logger.log(
-          `Path B (CIP-0056 TransferFactory): ${sender.username} → ${recipientLabel} ${amount} CC`,
-        );
-
+        // ── B1: Try CIP-0056 TransferFactory (preferred) ────────────────
         const cip56Result = await this.ledger.executeTransferFactoryTransfer({
           senderPartyId: sender.cantonPartyId,
           receiverPartyId: recipientPartyId,
@@ -708,48 +717,53 @@ export class PartyController {
           description,
         });
 
-        if (!cip56Result.ok) {
-          throw new Error(
-            `CIP-0056 transfer failed: ${cip56Result.error ?? 'unknown'}`,
-          );
-        }
+        if (cip56Result.ok) {
+          ledgerTxId = cip56Result.updateId ?? undefined;
 
-        ledgerTxId = cip56Result.updateId ?? undefined;
-
-        if (cip56Result.transferKind === 'direct') {
-          // Receiver had preapproval on-chain — CC already transferred
-          accepted = true;
-          transferMethod = 'preapproval_send';
-          this.logger.log(
-            `CC transfer (CIP-0056 direct — preapproval on-chain): ${sender.username} → ${recipientLabel} ${amount} CC`,
-          );
-        } else if (cip56Result.transferKind === 'offer') {
-          // AmuletTransferInstruction created — receiver must accept
-          if (isInternalUser && recipientUsername && cip56Result.transferInstructionCid) {
-            // Internal user: auto-accept TransferInstruction on their behalf
-            const acceptResult = await this.ledger.acceptTransferInstruction(
-              cip56Result.transferInstructionCid,
-              recipientPartyId,
+          if (cip56Result.transferKind === 'direct') {
+            accepted = true;
+            transferMethod = 'preapproval_send';
+            this.logger.log(
+              `CC transfer (CIP-0056 direct): ${sender.username} → ${recipientLabel} ${amount} CC`,
             );
-            accepted = acceptResult.ok;
-            transferMethod = accepted ? 'offer_accept' : 'offer_only';
-            if (accepted) {
-              this.logger.log(
-                `CC transfer (CIP-0056 instruction auto-accepted): ${recipientLabel}`,
+          } else if (cip56Result.transferKind === 'offer') {
+            if (isInternalUser && recipientUsername && cip56Result.transferInstructionCid) {
+              const acceptResult = await this.ledger.acceptTransferInstruction(
+                cip56Result.transferInstructionCid,
+                recipientPartyId,
               );
+              accepted = acceptResult.ok;
+              transferMethod = accepted ? 'offer_accept' : 'offer_only';
             } else {
-              this.logger.warn(
-                `CIP-0056 instruction auto-accept failed: ${acceptResult.error ?? 'unknown'}`,
+              transferMethod = 'offer_only';
+              ledgerTxId = cip56Result.transferInstructionCid ?? cip56Result.updateId ?? undefined;
+              this.logger.log(
+                `CC transfer (CIP-0056 instruction pending): receiver accepts in their wallet`,
               );
             }
+          }
+        }
+
+        // ── B2: Fallback to Splice TransferOffer (if CIP-0056 failed) ───
+        if (!cip56Result.ok && !accepted) {
+          this.logger.log(
+            `Path B fallback (Splice TransferOffer): ${sender.username} → ${recipientLabel} ${amount} CC — CIP-0056 unavailable: ${cip56Result.error?.slice(0, 80) ?? 'unknown'}`,
+          );
+          const offerContractId = await this.splice.createTransferOffer(
+            recipientPartyId, amount, description, undefined, sender.username,
+          );
+          if (!offerContractId) {
+            throw new Error('Failed to create transfer offer. Both CIP-0056 and Splice fallback failed.');
+          }
+          ledgerTxId = offerContractId;
+
+          if (isInternalUser && recipientUsername) {
+            accepted = await this.splice.acceptOfferViaWallet(offerContractId, recipientUsername);
+            transferMethod = accepted ? 'offer_accept' : 'offer_only';
+            this.logger.log(`CC transfer (Splice fallback auto-accept): ${String(accepted)}`);
           } else {
-            // External party: TransferInstruction created, receiver accepts in their wallet
             transferMethod = 'offer_only';
-            ledgerTxId = cip56Result.transferInstructionCid ?? cip56Result.updateId ?? undefined;
-            this.logger.log(
-              `CC transfer (CIP-0056 instruction pending): ${cip56Result.transferInstructionCid?.slice(0, 20) ?? '?'}… — ` +
-              `receiver accepts in Canton Loop / Supanova / etc`,
-            );
+            this.logger.log(`CC transfer (Splice fallback offer pending): ${offerContractId.slice(0, 20)}…`);
           }
         }
       }
