@@ -117,25 +117,32 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
 
   return (
     <section
-      className="w-full overflow-hidden rounded-3xl border border-white/5 bg-[var(--card)]"
+      className="relative w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/40"
       aria-label="Campaign reward"
     >
-      <div className="border-b border-slate-800/80 bg-gradient-to-br from-[var(--primary)]/12 via-transparent to-transparent px-6 py-6">
-        <div className="min-w-0">
-          <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            Campaign reward
-          </p>
+      {/* ── Reward headline ─────────────────────────────────────────────── */}
+      <div className="relative border-b border-white/[0.06] px-5 py-6 sm:px-6 sm:py-7">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_90%_at_0%_0%,rgb(var(--canton-rgb)/0.12),transparent_60%)]" />
+        <div className="relative min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]/20">
+              <Trophy className="h-3.5 w-3.5 text-[var(--primary)]" aria-hidden />
+            </span>
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              Campaign reward
+            </p>
+          </div>
           {isCcAndCodeRaffle ? (
             /* CC + Code Raffle: show dual reward with both logos */
-            <div className="mt-2">
-              <div className="flex items-center gap-3">
+            <div className="mt-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-2">
                   <CcRewardLogo className="sm:h-8 sm:w-8" size={28} />
                   <span className="text-2xl font-bold text-white sm:text-3xl">
                     {quest.rewardCc > 0 ? `${quest.rewardCc} CC` : "CC"}
                   </span>
                 </div>
-                <span className="text-xl font-bold text-slate-400">+</span>
+                <span className="text-xl font-bold text-slate-500">+</span>
                 <div className="flex items-center gap-2">
                   <Ticket className="h-6 w-6 text-violet-300 sm:h-8 sm:w-8" aria-hidden />
                   <span className="text-2xl font-bold text-violet-300 sm:text-3xl">
@@ -149,7 +156,7 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
             </div>
           ) : (
             <>
-              <p className="mt-2 flex items-center gap-3 text-3xl font-bold tabular-nums text-white sm:text-4xl">
+              <p className="mt-3 flex items-center gap-3 text-3xl font-bold tabular-nums text-white sm:text-4xl">
                 {isCcTokenRewardQuest(quest) ? (
                   <CcRewardLogo className="sm:h-8 sm:w-8" size={32} />
                 ) : null}
@@ -169,14 +176,15 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 divide-x divide-y divide-slate-800/80 border-slate-800/80 sm:grid-cols-3 lg:grid-cols-5">
+      {/* ── Stats grid ──────────────────────────────────────────────────── */}
+      <dl className="grid grid-cols-2 gap-px bg-white/[0.04] sm:grid-cols-3 lg:grid-cols-5">
         {stats.map(({ key, icon: Icon, label, value, valueClassName }) => (
           <div
             key={key}
-            className="flex min-w-0 flex-col justify-center gap-2 bg-[var(--card)]/80 px-4 py-4"
+            className="flex min-w-0 flex-col justify-center gap-1.5 bg-[#0a0c14]/90 px-4 py-4 transition-colors hover:bg-white/[0.02]"
           >
-            <dt className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-              <Icon className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+            <dt className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500 sm:text-xs">
+              <Icon className="h-3.5 w-3.5 shrink-0 text-canton opacity-90" aria-hidden />
               <span className="truncate">{label}</span>
             </dt>
             <dd
@@ -189,7 +197,9 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
             </dd>
           </div>
         ))}
-      </div>
+      </dl>
     </section>
   );
 }
+
+

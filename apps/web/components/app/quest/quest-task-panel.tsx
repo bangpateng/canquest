@@ -447,9 +447,10 @@ export function QuestTaskPanel({
 
       {/* Task list */}
       {isEarnHub ? (
-        <div className="overflow-hidden rounded-3xl border border-white/5 bg-[var(--card)]/40">
-          <ul className="divide-y divide-slate-800/80">
+        <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/40">
+          <ul className="divide-y divide-white/[0.05]">
             {quest.tasks.map((task, idx) => (
+
               <TaskRow
                 key={task.id}
                 index={idx + 1}
@@ -472,10 +473,11 @@ export function QuestTaskPanel({
           </ul>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-3xl border border-white/5 bg-[var(--card)]/40">
-          <ul className="divide-y divide-slate-800/80">
+        <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/40">
+          <ul className="divide-y divide-white/[0.05]">
             {quest.tasks.map((task, idx) => (
               <TaskRow
+
                 key={task.id}
                 index={idx + 1}
                 questId={quest.id}
