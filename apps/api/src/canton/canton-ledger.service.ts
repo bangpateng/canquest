@@ -1314,11 +1314,13 @@ export class CantonLedgerService {
       }
     }
 
-    this.logger.log(
-      `Pending offers query: party=${partyId.split('::')[0]} found ${offers.length} offers ` +
-      `(${offers.filter(o => o.type === 'transfer_offer').length} legacy, ` +
-      `${offers.filter(o => o.type === 'transfer_instruction').length} CIP-0056)`,
-    );
+    if (offers.length > 0) {
+      this.logger.log(
+        `Pending offers: party=${partyId.split('::')[0]} found ${offers.length} ` +
+        `(${offers.filter(o => o.type === 'transfer_offer').length} legacy, ` +
+        `${offers.filter(o => o.type === 'transfer_instruction').length} CIP-0056)`,
+      );
+    }
     return offers;
   }
 

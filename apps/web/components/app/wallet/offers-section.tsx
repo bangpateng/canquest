@@ -85,9 +85,6 @@ export function OffersSection({ onRefresh }: OffersSectionProps) {
 
   useEffect(() => {
     void fetchOffers();
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(() => void fetchOffers(), 30_000);
-    return () => clearInterval(interval);
   }, [fetchOffers]);
 
   const handleAccept = useCallback(
