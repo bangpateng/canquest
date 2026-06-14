@@ -565,7 +565,7 @@ export class CantonLedgerService {
     this.logger.log(`Cancelling TransferPreapproval via Ledger: cid=${preapprovalCid.slice(0, 20)}...`);
 
     const { ok, status, text } = await this.exerciseChoice(
-      preapprovalCid, preapprovalTemplateId, 'Archive', {}, [partyId],
+      preapprovalCid, preapprovalTemplateId, 'TransferPreapproval_Cancel', {}, [partyId],
     );
 
     if (ok) {

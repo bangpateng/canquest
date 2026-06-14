@@ -1052,7 +1052,7 @@ export class PartyController {
    */
   @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
   @Post('offers/accept')
-  async acceptOffer(
+  async acceptOfferInbox(
     @Req() req: AuthedReq,
     @Body() body: { contractId: string; type?: 'transfer_offer' | 'transfer_instruction' },
   ) {
@@ -1117,7 +1117,7 @@ export class PartyController {
    */
   @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
   @Post('offers/reject')
-  async rejectOffer(
+  async rejectOfferInbox(
     @Req() req: AuthedReq,
     @Body() body: { contractId: string; type?: 'transfer_offer' | 'transfer_instruction' },
   ) {
