@@ -60,7 +60,7 @@ export function OffersSection({ onRefresh }: OffersSectionProps) {
   const [offers, setOffers] = useState<OfferItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
+  const [processingAction, setProcessingAction] = useState<{ id: string; action: 'accept' | 'reject' } | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const fetchOffers = useCallback(async () => {
@@ -92,7 +92,7 @@ export function OffersSection({ onRefresh }: OffersSectionProps) {
 
   const handleAccept = useCallback(
     async (offer: OfferItem) => {
-      setProcessingIds((prev) => new Set(prev).add(offer.contractId));
+      setProcessingAction({ id: offer.contractId, action: 'accept' });
       setSuccessMsg(null);
       try {
         const res = await fetch("/api/party/offers/accept", {
@@ -115,11 +115,7 @@ export function OffersSection({ onRefresh }: OffersSectionProps) {
       } catch {
         alert("Network error. Check your connection and try again.");
       } finally {
-        setProcessingIds((prev) => {
-          const next = new Set(prev);
-          next.delete(offer.contractId);
-          return next;
-        });
+        setProcessingAction(null);
       }
     },
     [onRefresh],
@@ -127,7 +123,7 @@ export function OffersSection({ onRefresh }: OffersSectionProps) {
 
   const handleReject = useCallback(
     async (offer: OfferItem) => {
-      setProcessingIds((prev) => new Set(prev).add(offer.contractId));
+      setProcessingAction({ id: offer.contractId, action: 'reject' });
       setSuccessMsg(null);
       try {
         const res = await fetch("/api/party/offers/reject", {
@@ -150,11 +146,7 @@ export function OffersSection({ onRefresh }: OffersSectionProps) {
       } catch {
         alert("Network error. Check your connection and try again.");
       } finally {
-        setProcessingIds((prev) => {
-          const next = new Set(prev);
-          next.delete(offer.contractId);
-          return next;
-        });
+        setProcessingAction(null);
       }
     },
     [onRefresh],
@@ -196,7 +188,9 @@ export function OffersSection({ onRefresh }: OffersSectionProps) {
 
       <ul className="space-y-3">
         {offers.map((offer) => {
-          const isProcessing = processingIds.has(offer.contractId);
+          const isAccepting = processingAction?.id === offer.contractId && processingAction?.action === 'accept';
+          const isRejecting = processingAction?.id === offer.contractId && processingAction?.action === 'reject';
+          const isBusy = isAccepting || isRejecting;
 
           return (
             <li
@@ -246,14 +240,14 @@ export function OffersSection({ onRefresh }: OffersSectionProps) {
               <div className="flex shrink-0 items-center gap-2">
                 <button
                   type="button"
-                  disabled={isProcessing}
+                  disabled={isBusy}
                   onClick={() => handleAccept(offer)}
                   className={cn(
                     buttonVariants({ variant: "secondary", size: "sm" }),
                     "gap-1.5 text-green-400 hover:text-green-300 border-green-500/20 hover:border-green-500/40",
                   )}
                 >
-                  {isProcessing ? (
+                  {isAccepting ? (
                     <LoadingSpinner size="sm" />
                   ) : (
                     <Check className="h-4 w-4" />
@@ -262,14 +256,14 @@ export function OffersSection({ onRefresh }: OffersSectionProps) {
                 </button>
                 <button
                   type="button"
-                  disabled={isProcessing}
+                  disabled={isBusy}
                   onClick={() => handleReject(offer)}
                   className={cn(
                     buttonVariants({ variant: "secondary", size: "sm" }),
                     "gap-1.5 text-red-400 hover:text-red-300 border-red-500/20 hover:border-red-500/40",
                   )}
                 >
-                  {isProcessing ? (
+                  {isRejecting ? (
                     <LoadingSpinner size="sm" />
                   ) : (
                     <X className="h-4 w-4" />
