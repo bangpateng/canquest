@@ -287,7 +287,12 @@ export class CantonLedgerService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          // CIP-0056 spec: security: [] — registry does NOT require authentication
+          // Scan-proxy on validator requires auth (even though CIP-0056 spec says security:[])
+          // because the proxy itself authenticates requests before forwarding to Scan.
+          Authorization: `Bearer ${this.ledgerToken()}`,
+          ...(this.config.get<string>('CANTON_VALIDATOR_HOST_HEADER')
+            ? { Host: this.config.get<string>('CANTON_VALIDATOR_HOST_HEADER')! }
+            : {}),
         },
         body: JSON.stringify({ choiceArguments, excludeDebugFields: true }),
         signal: AbortSignal.timeout(20_000),
