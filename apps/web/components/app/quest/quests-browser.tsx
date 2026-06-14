@@ -11,7 +11,7 @@ import { inputClass, surfaceToolbarClass } from "@/lib/ui/ui-tokens";
 import { cn } from "@/lib/utils/utils";
 import { ListPagination } from "@/components/app/list/list-pagination";
 import { buttonVariants } from "@/components/ui/button";
-import { CheckCircle2, Search, Sparkles } from "lucide-react";
+import { CheckCircle2, Coins, Layers, Search, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
@@ -158,6 +158,29 @@ export function QuestsBrowser({
     return c;
   }, [allQuests]);
 
+  const earnSummary = useMemo(() => {
+    let totalRewardCc = 0;
+    for (const q of allQuests) {
+      const perUser = typeof q.rewardCc === "number" ? q.rewardCc : 0;
+      const pool = q.campaignSummary?.poolTotalCc;
+      totalRewardCc += typeof pool === "number" && pool > 0 ? pool : perUser;
+    }
+    return {
+      active: counts.ACTIVE,
+      total: allQuests.length,
+      totalRewardCc,
+      completed: progress?.completedQuestIds?.length ?? 0,
+    };
+  }, [allQuests, counts.ACTIVE, progress]);
+
+  const formatCc = (value: number): string => {
+    if (value <= 0) return "0";
+    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value % 1_000_000 === 0 ? 0 : 1)}M`;
+    if (value >= 1_000) return `${(value / 1_000).toFixed(value % 1_000 === 0 ? 0 : 1)}K`;
+    return value.toLocaleString();
+  };
+
+
   const filtered = useMemo(
     () => allQuests.filter((q) => q.status === status && matchesSearch(q, query)),
     [allQuests, status, query],
@@ -220,17 +243,73 @@ export function QuestsBrowser({
   return (
     <div className={cn("w-full max-w-full overflow-hidden", isEarn ? "space-y-4 sm:space-y-5 md:space-y-6" : "space-y-5 sm:space-y-6 md:space-y-8")}>
       {isEarn ? (
-        <section
-          className="w-full overflow-hidden rounded-xl border border-white/[0.06] bg-[#0a0c14]/70 backdrop-blur-2xl p-3 sm:p-4 md:p-5"
-          aria-label={t("earnCampaigns.filterAria")}
-        >
-          <div className="flex w-full min-w-0 items-center gap-2 sm:gap-3">
-            <div className="min-w-0 flex-1 overflow-hidden">{tabRow}</div>
-          </div>
-        </section>
+        <>
+          {/* ── Hero header ─────────────────────────────────────────────── */}
+          <section className="relative w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/40">
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_80%_at_100%_0%,rgb(var(--canton-rgb)/0.12),transparent_60%)]" />
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_70%_at_0%_100%,rgb(167_139_250/0.06),transparent_55%)]" />
+            <div className="relative flex flex-col gap-5 p-4 sm:p-6 md:flex-row md:items-center md:justify-between md:p-7">
+              <div className="min-w-0">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-[rgb(var(--canton-rgb)/0.25)] bg-[rgb(var(--canton-rgb)/0.08)] px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-canton sm:text-xs">
+                  <Sparkles className="h-3 w-3" aria-hidden />
+                  {t("earnCampaigns.kindCampaign")}
+                </span>
+                <h1 className="mt-3 text-2xl font-bold leading-tight tracking-tight text-white sm:text-3xl md:text-4xl">
+                  Earn Rewards
+                </h1>
+                <p className="mt-2 max-w-md text-sm font-medium leading-relaxed text-slate-400 sm:text-base">
+                  {t("earnCampaigns.noCampaignsHint")}
+                </p>
+              </div>
+
+              {/* Summary stat chips */}
+              <div className="grid w-full shrink-0 grid-cols-3 gap-2.5 md:w-auto md:gap-3">
+                <div className="flex flex-col items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-3 text-center sm:px-5">
+                  <Layers className="mb-1.5 h-4 w-4 text-canton" aria-hidden />
+                  <p className="text-lg font-bold tabular-nums text-white sm:text-2xl">
+                    {earnSummary.active}
+                  </p>
+                  <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-500 sm:text-[10px]">
+                    Active
+                  </p>
+                </div>
+                <div className="flex flex-col items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-3 text-center sm:px-5">
+                  <Coins className="mb-1.5 h-4 w-4 text-canton" aria-hidden />
+                  <p className="text-lg font-bold tabular-nums text-white sm:text-2xl">
+                    {formatCc(earnSummary.totalRewardCc)}
+                  </p>
+                  <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-500 sm:text-[10px]">
+                    CC Pool
+                  </p>
+                </div>
+                <div className="flex flex-col items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-3 text-center sm:px-5">
+                  <CheckCircle2 className="mb-1.5 h-4 w-4 text-emerald-400" aria-hidden />
+                  <p className="text-lg font-bold tabular-nums text-white sm:text-2xl">
+                    {earnSummary.completed}
+                  </p>
+                  <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-500 sm:text-[10px]">
+                    Completed
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* ── Toolbar: tabs + search ──────────────────────────────────── */}
+          <section
+            className="w-full overflow-hidden rounded-xl border border-white/[0.06] bg-[#0a0c14]/70 backdrop-blur-2xl p-3 sm:p-4"
+            aria-label={t("earnCampaigns.filterAria")}
+          >
+            <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+              <div className="min-w-0 flex-1 overflow-hidden">{tabRow}</div>
+              <div className="w-full shrink-0 sm:max-w-[16rem]">{searchField}</div>
+            </div>
+          </section>
+        </>
       ) : (
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
           {tabRow}
+
           {searchField}
         </div>
       )}
