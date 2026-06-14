@@ -284,9 +284,9 @@ export class CantonLedgerService {
     ).replace(/\/$/, '');
     const hostHeader = this.config.get<string>('CANTON_VALIDATOR_HOST_HEADER') ?? '';
 
-    // If CANTON_SCAN_URL is set and doesn't point to localhost validator, use it.
-    // Otherwise use the validator's scan-proxy which we know works.
-    const scanBase = this.scanUrl ?? `${validatorUrl}/api/validator/v0/scan-proxy`;
+    // Always use validator's scan-proxy — proven to work on MainNet
+    // Scan-proxy is at: ${validatorUrl}/api/validator/v0/scan-proxy
+    const scanBase = `${validatorUrl}/api/validator/v0/scan-proxy`;
     const url = `${scanBase}/registry/transfer-instruction/v1/transfer-factory`;
 
     this.logger.log(`Registry call: ${url} Host=${hostHeader || '(none)'}`);
