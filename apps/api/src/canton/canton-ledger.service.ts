@@ -590,14 +590,72 @@ export class CantonLedgerService {
   }
 
   /**
+   * Get choiceContext from registry for accept/reject/withdraw on a TransferInstruction.
+   * Calls: POST /registry/transfer-instruction/v1/{id}/choice-contexts/{action}
+   */
+  private async getInstructionChoiceContext(
+    transferInstructionCid: string,
+    action: 'accept' | 'reject' | 'withdraw',
+  ): Promise<{
+    choiceContextData: Record<string, unknown>;
+    disclosedContracts: unknown[];
+  } | null> {
+    const validatorUrl = (
+      this.config.get<string>('CANTON_VALIDATOR_URL') ?? 'http://127.0.0.1:8080'
+    ).replace(/\/$/, '');
+    const hostHeader = this.config.get<string>('CANTON_VALIDATOR_HOST_HEADER') ?? '';
+    const scanBase = `${validatorUrl}/api/validator/v0/scan-proxy`;
+    const encodedCid = encodeURIComponent(transferInstructionCid);
+    const url = `${scanBase}/registry/transfer-instruction/v1/${encodedCid}/choice-contexts/${action}`;
+
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.ledgerToken()}`,
+      };
+      if (hostHeader) headers['Host'] = hostHeader;
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ excludeDebugFields: true }),
+        signal: AbortSignal.timeout(15_000),
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        this.logger.warn(`Choice context (${action}) ${res.status}: ${text.slice(0, 200)}`);
+        return null;
+      }
+
+      const data = (await res.json()) as {
+        choiceContextData?: Record<string, unknown>;
+        disclosedContracts?: unknown[];
+      };
+
+      this.logger.log(
+        `Choice context (${action}) OK: disclosed=${data.disclosedContracts?.length ?? 0}`,
+      );
+
+      return {
+        choiceContextData: data.choiceContextData ?? { values: {} },
+        disclosedContracts: data.disclosedContracts ?? [],
+      };
+    } catch (err) {
+      this.logger.warn(`Choice context (${action}) error: ${String(err)}`);
+      return null;
+    }
+  }
+
+  /**
    * CIP-0056 Two-Step Transfer — STEP 2A: RECEIVER menerima TransferInstruction.
    *
    * Interface: Splice.Api.Token.TransferInstructionV1:TransferInstruction
    * Choice:    TransferInstruction_Accept
-   * Argument:  { extraArgs: { values: {} } }
+   * Argument:  { extraArgs: { context: choiceContextData, meta: {} } }
    *
-   * Dipanggil oleh receiver setelah sender membuat TransferInstruction via TransferFactory_Transfer.
-   * Jika berhasil, holding CC berpindah ke receiver dan status menjadi TransferInstructionResult_Completed.
+   * Requires registry call to get disclosedContracts + choiceContextData.
+   * Registry: POST /registry/transfer-instruction/v1/{id}/choice-contexts/accept
    *
    * @param transferInstructionCid - ContractId dari TransferInstruction (dari Step 1)
    * @param receiverPartyId - Canton party ID penerima (controller choice ini)
@@ -607,7 +665,6 @@ export class CantonLedgerService {
     transferInstructionCid: string,
     receiverPartyId: string,
   ): Promise<{ ok: boolean; updateId: string | null; error?: string }> {
-    // Interface ID dari DAML types (module.js line 49-51)
     const interfaceId =
       '#splice-api-token-transfer-instruction-v1:Splice.Api.Token.TransferInstructionV1:TransferInstruction';
 
@@ -617,14 +674,27 @@ export class CantonLedgerService {
       `TransferInstruction_Accept: receiver=${receiverPartyId.split('::')[0]} cid=${transferInstructionCid.slice(0, 16)}...`,
     );
 
+    // Get choiceContext from registry (required for disclosedContracts)
+    const choiceCtx = await this.getInstructionChoiceContext(
+      transferInstructionCid, 'accept',
+    );
+
+    const choiceArgument = {
+      extraArgs: {
+        context: choiceCtx?.choiceContextData ?? { values: {} },
+        meta: { values: {} },
+      },
+    };
+
     const { ok, status, text } = await this.exerciseChoice(
       transferInstructionCid,
       interfaceId,
       'TransferInstruction_Accept',
-      { extraArgs: { values: {} } },
+      choiceArgument,
       [receiverPartyId],
       commandId,
       'submit-and-wait-for-transaction-tree',
+      choiceCtx?.disclosedContracts,
     );
 
     if (ok) {
@@ -668,13 +738,24 @@ export class CantonLedgerService {
       `TransferInstruction_Reject: receiver=${receiverPartyId.split('::')[0]} cid=${transferInstructionCid.slice(0, 16)}...`,
     );
 
+    const choiceCtx = await this.getInstructionChoiceContext(
+      transferInstructionCid, 'reject',
+    );
+
     const { ok, status, text } = await this.exerciseChoice(
       transferInstructionCid,
       interfaceId,
       'TransferInstruction_Reject',
-      { extraArgs: { values: {} } },
+      {
+        extraArgs: {
+          context: choiceCtx?.choiceContextData ?? { values: {} },
+          meta: { values: {} },
+        },
+      },
       [receiverPartyId],
       commandId,
+      undefined,
+      choiceCtx?.disclosedContracts,
     );
 
     if (ok) {
