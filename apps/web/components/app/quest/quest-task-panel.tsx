@@ -445,11 +445,45 @@ export function QuestTaskPanel({
         </div>
       ) : null}
 
+      {/* Missions header with live progress — consistent for all quest types */}
+      {quest.tasks.length > 0 ? (
+        <div className="flex flex-col gap-3 rounded-2xl border border-white/[0.06] bg-[#0a0c14]/60 px-4 py-4 backdrop-blur-2xl sm:px-5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]/20">
+                <CheckCircle2 className="h-3.5 w-3.5 text-[var(--primary)]" aria-hidden />
+              </span>
+              <h2 className="text-sm font-bold uppercase tracking-wider text-white">Missions</h2>
+            </div>
+            <span className="text-xs font-bold tabular-nums text-slate-400">
+              {verifiedCount}/{quest.tasks.length} done
+              {totalPoints > 0 ? (
+                <span className="ml-2 text-canton">
+                  +{earnedPoints}/{totalPoints} pts
+                </span>
+              ) : null}
+            </span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+            <div
+              className={cn(
+                "h-full rounded-full transition-all duration-500",
+                allDone
+                  ? "bg-gradient-to-r from-emerald-500 to-emerald-400"
+                  : "bg-gradient-to-r from-[var(--primary)] to-[var(--primary-strong)]",
+              )}
+              style={{ width: `${Math.max(4, pct)}%` }}
+            />
+          </div>
+        </div>
+      ) : null}
+
       {/* Task list */}
       {isEarnHub ? (
         <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/40">
           <ul className="divide-y divide-white/[0.05]">
             {quest.tasks.map((task, idx) => (
+
 
               <TaskRow
                 key={task.id}
