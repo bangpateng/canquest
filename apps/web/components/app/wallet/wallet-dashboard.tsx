@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { CopyField } from "@/components/app/wallet/copy-field";
 import { WalletActions } from "@/components/app/wallet/wallet-actions";
 import { OffersSection } from "@/components/app/wallet/offers-section";
+import { WalletPreapprovalBanner } from "@/components/app/wallet/wallet-preapproval-banner";
 import { TransactionsView } from "@/components/app/wallet/transactions-view";
 import { RefreshCw } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -116,6 +117,8 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
         balance={balance}
         onBalanceRefresh={handleBalanceRefresh}
       />
+
+      <WalletPreapprovalBanner variant="toggle" onActivated={handleBalanceRefresh} />
 
       <OffersSection onRefresh={handleBalanceRefresh} />
 
