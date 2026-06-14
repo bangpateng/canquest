@@ -278,22 +278,30 @@ export class CantonLedgerService {
       return null;
     }
 
-    // The registry endpoint path per Token Standard OpenAPI spec
-    // Public Scan serves it at /registry/... (NOT /api/scan/v2/registry/...)
-    const url = `${this.scanUrl}/registry/transfer-instruction/v1/transfer-factory`;
+    // Build URL: prefer scan-proxy on validator (uses same auth + Host as wallet API)
+    const validatorUrl = (
+      this.config.get<string>('CANTON_VALIDATOR_URL') ?? 'http://127.0.0.1:8080'
+    ).replace(/\/$/, '');
+    const hostHeader = this.config.get<string>('CANTON_VALIDATOR_HOST_HEADER') ?? '';
+
+    // If CANTON_SCAN_URL is set and doesn't point to localhost validator, use it.
+    // Otherwise use the validator's scan-proxy which we know works.
+    const scanBase = this.scanUrl ?? `${validatorUrl}/api/validator/v0/scan-proxy`;
+    const url = `${scanBase}/registry/transfer-instruction/v1/transfer-factory`;
+
+    this.logger.log(`Registry call: ${url} Host=${hostHeader || '(none)'}`);
 
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.ledgerToken()}`,
+      };
+      // MUST send Host header when going through nginx on validator
+      if (hostHeader) headers['Host'] = hostHeader;
+
       const res = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Scan-proxy on validator requires auth (even though CIP-0056 spec says security:[])
-          // because the proxy itself authenticates requests before forwarding to Scan.
-          Authorization: `Bearer ${this.ledgerToken()}`,
-          ...(this.config.get<string>('CANTON_VALIDATOR_HOST_HEADER')
-            ? { Host: this.config.get<string>('CANTON_VALIDATOR_HOST_HEADER')! }
-            : {}),
-        },
+        headers,
         body: JSON.stringify({ choiceArguments, excludeDebugFields: true }),
         signal: AbortSignal.timeout(20_000),
       });
