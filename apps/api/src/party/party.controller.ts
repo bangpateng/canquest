@@ -1236,30 +1236,13 @@ export class PartyController {
       };
     }
 
-    // Cancel via admin API
-    const encoded = encodeURIComponent(user.cantonPartyId);
-    try {
-      const token = (this.splice as any).adminToken?.() ?? '';
-      const baseUrl = (this.splice as any).baseUrl ?? '';
-      const hostHeader = (this.splice as any).hostHeader ?? '';
-      const headers: Record<string, string> = {
-        Authorization: `Bearer ${token}`,
-      };
-      if (hostHeader) headers['Host'] = hostHeader;
-
-      const res = await fetch(
-        `${baseUrl}/api/validator/v0/admin/transfer-preapprovals/by-party/${encoded}`,
-        { method: 'DELETE', headers, signal: AbortSignal.timeout(15_000) },
+    // Cancel via Splice admin API
+    const result = await this.splice.cancelTransferPreapproval(user.cantonPartyId);
+    if (!result.ok) {
+      this.logger.warn(`Disable preapproval failed: ${result.error ?? 'unknown'}`);
+      throw new BadRequestException(
+        `Failed to disable preapproval: ${result.error ?? 'unknown'}`,
       );
-      if (!res.ok && res.status !== 404) {
-        const text = await res.text();
-        this.logger.warn(`Disable preapproval ${res.status}: ${text.slice(0, 200)}`);
-        throw new BadRequestException('Failed to disable preapproval.');
-      }
-    } catch (err) {
-      if (err instanceof BadRequestException) throw err;
-      this.logger.warn(`Disable preapproval error: ${String(err)}`);
-      throw new BadRequestException('Failed to disable preapproval. Check Splice connection.');
     }
 
     return {

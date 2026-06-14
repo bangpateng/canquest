@@ -414,6 +414,35 @@ export class SpliceValidatorService {
   }
 
   /**
+   * Cancel (disable) TransferPreapproval for a party.
+   * Uses DELETE /v0/admin/transfer-preapprovals/by-party/{party}.
+   */
+  async cancelTransferPreapproval(
+    partyId: string,
+  ): Promise<{ ok: boolean; error?: string }> {
+    if (!this.isConfigured) return { ok: false, error: 'Splice not configured' };
+    const normalized = normalizeCantonPartyId(partyId) ?? partyId.trim();
+    const encoded = encodeURIComponent(normalized);
+    try {
+      const res = await fetch(
+        `${this.baseUrl}/api/validator/v0/admin/transfer-preapprovals/by-party/${encoded}`,
+        {
+          method: 'DELETE',
+          headers: this.authHeaders(),
+          signal: AbortSignal.timeout(10_000),
+        },
+      );
+      if (res.ok || res.status === 404) {
+        return { ok: true };
+      }
+      const text = await res.text();
+      return { ok: false, error: `${res.status}: ${text.slice(0, 200)}` };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  }
+
+  /**
    * Returns TransferPreapproval info as an array (for backward compat with controller).
    * Returns empty array if no preapproval exists.
    */
