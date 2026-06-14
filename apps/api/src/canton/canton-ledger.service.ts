@@ -495,6 +495,88 @@ export class CantonLedgerService {
   }
 
   /**
+   * Cancel TransferPreapproval via Ledger API.
+   * Fallback when Splice admin API returns 401 on MainNet.
+   */
+  async cancelTransferPreapprovalViaLedger(
+    partyId: string,
+  ): Promise<{ ok: boolean; error?: string }> {
+    let offset: number | string = 0;
+    try {
+      const end = (await this.ledgerEnd()) as { offset?: number | string };
+      offset = end?.offset ?? 0;
+    } catch { offset = 0; }
+
+    let allContracts: unknown[] = [];
+    try {
+      const res = await fetch(`${this.baseUrl}/v2/state/active-contracts`, {
+        method: 'POST',
+        headers: this.authHeaders(),
+        body: JSON.stringify({
+          eventFormat: {
+            filtersByParty: {
+              [partyId]: {
+                cumulative: [{
+                  identifierFilter: {
+                    WildcardFilter: { value: { includeCreatedEventBlob: false } },
+                  },
+                }],
+              },
+            },
+            filtersForAnyParty: { cumulative: [] },
+            verbose: true,
+          },
+          activeAtOffset: offset,
+        }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (res.ok) {
+        allContracts = (await res.json()) as unknown[];
+      }
+    } catch (err) {
+      return { ok: false, error: `ACS query failed: ${String(err)}` };
+    }
+
+    let preapprovalCid: string | null = null;
+    let preapprovalTemplateId: string | null = null;
+
+    for (const entry of allContracts) {
+      if (!entry || typeof entry !== 'object') continue;
+      const wrapper = entry as Record<string, unknown>;
+      const active = wrapper.contractEntry as Record<string, unknown> | undefined;
+      const jsActive = active?.JsActiveContract as Record<string, unknown> | undefined;
+      const ev = (jsActive?.createdEvent ?? wrapper) as Record<string, unknown>;
+      const tplId = typeof ev.templateId === 'string' ? ev.templateId : '';
+      if (!tplId.includes('TransferPreapproval')) continue;
+      const cid = typeof ev.contractId === 'string' ? ev.contractId : null;
+      const args = (ev.createArgument as Record<string, unknown> | undefined) ?? {};
+      const receiver = typeof args.receiver === 'string' ? args.receiver : '';
+      if (receiver === partyId && cid) {
+        preapprovalCid = cid;
+        preapprovalTemplateId = tplId;
+        break;
+      }
+    }
+
+    if (!preapprovalCid || !preapprovalTemplateId) {
+      return { ok: true };
+    }
+
+    this.logger.log(`Cancelling TransferPreapproval via Ledger: cid=${preapprovalCid.slice(0, 20)}...`);
+
+    const { ok, status, text } = await this.exerciseChoice(
+      preapprovalCid, preapprovalTemplateId, 'Archive', {}, [partyId],
+    );
+
+    if (ok) {
+      this.logger.log('TransferPreapproval archived successfully');
+      return { ok: true };
+    }
+    this.logger.warn(`Archive TransferPreapproval failed ${status}: ${text.slice(0, 200)}`);
+    return { ok: false, error: `Ledger ${status}: ${text.slice(0, 200)}` };
+  }
+
+  /**
    * CIP-0056 Two-Step Transfer — STEP 2A: RECEIVER menerima TransferInstruction.
    *
    * Interface: Splice.Api.Token.TransferInstructionV1:TransferInstruction

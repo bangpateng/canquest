@@ -415,7 +415,7 @@ export class SpliceValidatorService {
 
   /**
    * Cancel (disable) TransferPreapproval for a party.
-   * Uses DELETE /v0/admin/transfer-preapprovals/by-party/{party}.
+   * Tries admin API first, falls back to Ledger API if admin returns 401.
    */
   async cancelTransferPreapproval(
     partyId: string,
@@ -423,6 +423,8 @@ export class SpliceValidatorService {
     if (!this.isConfigured) return { ok: false, error: 'Splice not configured' };
     const normalized = normalizeCantonPartyId(partyId) ?? partyId.trim();
     const encoded = encodeURIComponent(normalized);
+
+    // Try admin API first
     try {
       const res = await fetch(
         `${this.baseUrl}/api/validator/v0/admin/transfer-preapprovals/by-party/${encoded}`,
@@ -435,11 +437,15 @@ export class SpliceValidatorService {
       if (res.ok || res.status === 404) {
         return { ok: true };
       }
-      const text = await res.text();
-      return { ok: false, error: `${res.status}: ${text.slice(0, 200)}` };
-    } catch (err) {
-      return { ok: false, error: String(err) };
-    }
+      // If 401/403, fall through to Ledger API approach
+      if (res.status !== 401 && res.status !== 403) {
+        const text = await res.text();
+        return { ok: false, error: `Admin API ${res.status}: ${text.slice(0, 200)}` };
+      }
+    } catch { /* fall through */ }
+
+    // Admin API failed with 401/403 — signal controller to use Ledger API
+    return { ok: false, error: 'ADMIN_AUTH_FAILED' };
   }
 
   /**

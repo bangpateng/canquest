@@ -1236,13 +1236,27 @@ export class PartyController {
       };
     }
 
-    // Cancel via Splice admin API
+    // Cancel via Splice admin API (falls back to Ledger API if 401)
     const result = await this.splice.cancelTransferPreapproval(user.cantonPartyId);
     if (!result.ok) {
-      this.logger.warn(`Disable preapproval failed: ${result.error ?? 'unknown'}`);
-      throw new BadRequestException(
-        `Failed to disable preapproval: ${result.error ?? 'unknown'}`,
-      );
+      if (result.error === 'ADMIN_AUTH_FAILED') {
+        // Admin API returns 401 on MainNet — use Ledger API to archive contract
+        this.logger.log('Admin API 401, falling back to Ledger API to cancel preapproval');
+        const ledgerResult = await this.ledger.cancelTransferPreapprovalViaLedger(
+          user.cantonPartyId,
+        );
+        if (!ledgerResult.ok) {
+          this.logger.warn(`Ledger API cancel also failed: ${ledgerResult.error ?? 'unknown'}`);
+          throw new BadRequestException(
+            `Failed to disable preapproval: ${ledgerResult.error ?? 'unknown'}`,
+          );
+        }
+      } else {
+        this.logger.warn(`Disable preapproval failed: ${result.error ?? 'unknown'}`);
+        throw new BadRequestException(
+          `Failed to disable preapproval: ${result.error ?? 'unknown'}`,
+        );
+      }
     }
 
     return {
