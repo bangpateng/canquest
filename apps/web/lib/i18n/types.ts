@@ -176,6 +176,7 @@ export type PlatformMessages = {
     viewMyQuest: string;
     slotsFullBanner: string;
     slotsFullClosedBanner: string;
+    codeLabel: string;
   };
   wallet: {
     createTitle: string;

@@ -1,19 +1,15 @@
 import { CcRewardLogo } from "@/components/app/campaign/cc-reward-logo";
-import {
-  campaignTypeDisplayValue,
-  campaignUiKind,
-  fcfsSlotsTaken,
-  formatCodePerWinners,
-  getCampaignRewardHeadline,
-  isFcfsSlotsFull,
-} from "@/lib/canton/campaign-reward";
+import { getQuestMeta } from "@/lib/quest/quest-engine";
 import { isCcTokenRewardQuest } from "@/lib/canton/cc-reward-logo";
+import { formatCodePerWinners } from "@/lib/canton/campaign-reward";
 import type { Quest } from "@/lib/quest/quest-types";
 import { cn } from "@/lib/utils/utils";
 import {
   Calendar,
   Clock,
+  Coins,
   ListChecks,
+  Sparkles,
   Ticket,
   Trophy,
   Users,
@@ -52,51 +48,41 @@ const TONE_TEXT: Record<NonNullable<Tile["tone"]>, string> = {
   muted: "text-slate-400",
 };
 
+/** Map metric iconKind from quest-engine to LucideIcon. */
+function resolveIcon(kind: string): LucideIcon {
+  switch (kind) {
+    case "cc": return Coins;
+    case "zap": return Zap;
+    case "users": return Users;
+    case "ticket": return Ticket;
+    case "sparkles": return Sparkles;
+    default: return Trophy;
+  }
+}
+
+/** Map metric accent class to sidebar tile tone. */
+function resolveTone(accent?: string, muted?: boolean): Tile["tone"] {
+  if (muted) return "muted";
+  if (!accent) return "default";
+  if (accent.includes("violet")) return "violet";
+  if (accent.includes("amber")) return "amber";
+  if (accent.includes("canton")) return "canton";
+  return "default";
+}
+
 /**
  * Campaign reward + meta — type-aware highlight panel shown above quest tasks.
- * Keeps the same data/logic as the API summary, but normalizes how each reward
- * type surfaces its "participation" metric (FCFS slots vs raffle winners vs
- * waitlist spots) so every quest type stays visually consistent.
+ * Uses getQuestMeta from quest-engine for all derived state.
  */
 export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
+  const meta = getQuestMeta(quest);
+  const { config, rewardDisplay, slots, metrics } = meta;
   const summary = quest.campaignSummary;
-  const requiresFcfs = summary?.requiresFcfsClaim ?? false;
-  const requiresPaidInvite = summary?.requiresPaidInviteClaim ?? false;
-  const requiresDrawCc = summary?.requiresDrawCcClaim ?? false;
-  const isCcAndCodeRaffle = quest.rewardType === "CC_AND_CODE_RAFFLE";
-  const isCodeFcfs = quest.rewardType === "INVITE_CODE_FCFS";
-  const isCodeReward =
-    quest.rewardType === "INVITE_CODE_FCFS" ||
-    quest.rewardType === "INVITE_CODE_RANDOM" ||
-    quest.rewardType === "INVITE_CODE" ||
-    quest.rewardType === "CC_AND_INVITE";
-  const isWaitlistEmail = quest.rewardType === "WAITLIST_EMAIL";
 
-  const uiKind = campaignUiKind(quest.rewardType, requiresFcfs);
-  const typeLabel = campaignTypeDisplayValue(uiKind, quest.rewardType);
-  const rewardHeadline = getCampaignRewardHeadline(quest, summary?.poolTotalCc ?? null);
-
-  const slotsMax = summary?.maxWinners ?? 0;
-  const slotsLeft = summary?.remainingSlots ?? 0;
-  const slotsUsed = fcfsSlotsTaken(slotsLeft, slotsMax);
-  const winnersDrawn = summary?.slotsTaken ?? 0;
-  const slotsFull = isFcfsSlotsFull(slotsLeft, slotsMax);
-
-  // FCFS-style availability (CC FCFS, invite-code FCFS, paid-invite FCFS).
-  const isFcfsStyle = (requiresFcfs || requiresPaidInvite || isCodeFcfs) && slotsMax > 0;
-  // Raffle/manual-draw style winners (CC raffle, code raffle, CC+code raffle, waitlist).
-  const isRaffleStyle =
-    !isFcfsStyle &&
-    slotsMax > 0 &&
-    (requiresDrawCc ||
-      isCcAndCodeRaffle ||
-      isWaitlistEmail ||
-      (isCodeReward && !isCodeFcfs));
-
-  // ── Build tiles (type-aware, consistent across reward types) ──────────────
+  // ── Build tiles from quest-engine metrics ──────────────────────
   const tiles: Tile[] = [];
 
-  // 1. Reward-per-winner (always meaningful when CC reward exists)
+  // Per-winner reward tile (always first when applicable)
   if (quest.rewardCc > 0) {
     tiles.push({
       key: "perWinner",
@@ -105,7 +91,7 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
       value: `${quest.rewardCc} CC`,
       tone: "canton",
     });
-  } else if (isCodeReward) {
+  } else if (config.code === "INVITE_CODE_FCFS" || config.code === "INVITE_CODE_RANDOM") {
     tiles.push({
       key: "perWinner",
       icon: Ticket,
@@ -115,33 +101,34 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
     });
   }
 
-  // 2. Participation metric — FCFS slots OR raffle winners (normalized)
-  if (isFcfsStyle) {
-    tiles.push({
-      key: "fcfs",
-      icon: Zap,
-      label: "FCFS slots",
-      value: slotsFull ? "Full" : `${slotsUsed}/${slotsMax}`,
-      hint: slotsFull ? "All slots claimed" : `${Math.max(0, slotsMax - slotsUsed)} left`,
-      tone: slotsFull ? "muted" : slotsLeft <= 1 ? "amber" : "canton",
-      progress: slotsFull ? null : { used: slotsUsed, max: slotsMax, warn: slotsLeft <= 1 },
-    });
-  } else if (isRaffleStyle) {
-    tiles.push({
-      key: "winners",
-      icon: Users,
-      label: "Winners",
-      value:
-        winnersDrawn > 0 ? `${winnersDrawn}/${slotsMax}` : `${slotsMax} max`,
-      hint: winnersDrawn > 0 ? "selected" : "drawn at the end",
-      tone: "canton",
-      progress: winnersDrawn > 0 ? { used: winnersDrawn, max: slotsMax } : null,
-    });
+  // Participation metric from quest-engine (FCFS slots or raffle winners)
+  for (const m of metrics) {
+    if (m.key === "fcfs") {
+      tiles.push({
+        key: "fcfs",
+        icon: Zap,
+        label: m.label,
+        value: m.value,
+        hint: slots.full ? "All slots claimed" : `${slots.left} left`,
+        tone: resolveTone(m.accent, m.muted),
+        progress: slots.full ? null : { used: slots.used, max: slots.max, warn: slots.warn },
+      });
+    } else if (m.key === "winners") {
+      tiles.push({
+        key: "winners",
+        icon: Users,
+        label: m.label,
+        value: m.value,
+        hint: slots.used > 0 ? "selected" : "drawn at the end",
+        tone: "canton",
+        progress: slots.used > 0 ? { used: slots.used, max: slots.max } : null,
+      });
+    }
   }
 
-  // 3. Claim fee (only when there's an on-chain claim fee)
+  // Claim fee tile
   if (
-    (isFcfsStyle || isRaffleStyle || isCcAndCodeRaffle) &&
+    (slots.isFcfs || slots.isRaffle || config.isDual) &&
     (summary?.fcfsClaimFeeCc ?? 0) > 0
   ) {
     tiles.push({
@@ -154,19 +141,20 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
     });
   }
 
-  // 4. Codes remaining (paid invite codes)
-  if (summary?.codesRemaining != null && !isCodeFcfs && requiresPaidInvite) {
+  // Codes remaining tile
+  const codesMetric = metrics.find((m) => m.key === "codes");
+  if (codesMetric) {
     tiles.push({
       key: "codes",
       icon: Ticket,
       label: "Codes left",
-      value: String(summary.codesRemaining ?? 0),
+      value: codesMetric.value.replace(/ invite codes left$/, ""),
       tone: "violet",
     });
   }
 
-  // ── Compact meta row (always shown) ───────────────────────────────────────
-  const meta: { key: string; icon: LucideIcon; label: string; value: string }[] = [
+  // ── Compact meta row (always shown) ───────────────────────────
+  const metaRow: { key: string; icon: LucideIcon; label: string; value: string }[] = [
     { key: "tasks", icon: ListChecks, label: "Tasks", value: String(quest.tasks.length) },
     {
       key: "ends",
@@ -174,7 +162,7 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
       label: "Ends",
       value: formatEnd(quest),
     },
-    { key: "type", icon: Trophy, label: "Type", value: typeLabel },
+    { key: "type", icon: Trophy, label: "Type", value: config.shortLabel },
   ];
 
   return (
@@ -189,16 +177,16 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-[rgb(var(--canton-rgb)/0.25)] bg-[rgb(var(--canton-rgb)/0.08)] px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-canton sm:text-xs">
               <Trophy className="h-3 w-3" aria-hidden />
-              {typeLabel}
+              {config.shortLabel}
             </span>
-            {slotsFull && isFcfsStyle ? (
+            {slots.full && slots.isFcfs ? (
               <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 sm:text-xs">
                 Slots full
               </span>
             ) : null}
           </div>
 
-          {isCcAndCodeRaffle ? (
+          {config.isDual ? (
             <div className="mt-3">
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-2">
@@ -222,14 +210,14 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
                   <CcRewardLogo className="sm:h-8 sm:w-8" size={32} />
                 ) : null}
                 <span>
-                  {quest.rewardType?.includes("INVITE")
+                  {config.code === "INVITE_CODE_FCFS" || config.code === "INVITE_CODE_RANDOM"
                     ? formatCodePerWinners()
-                    : rewardHeadline.primary}
+                    : rewardDisplay.primaryText}
                 </span>
               </p>
-              {rewardHeadline.secondary ? (
+              {rewardDisplay.secondaryText ? (
                 <p className="mt-2 text-sm font-medium text-slate-400">
-                  {rewardHeadline.secondary}
+                  {rewardDisplay.secondaryText}
                 </p>
               ) : null}
             </>
@@ -283,7 +271,7 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
 
       {/* ── Compact meta row ─────────────────────────────────────────────── */}
       <dl className="grid grid-cols-3 gap-px border-t border-white/[0.04] bg-white/[0.04]">
-        {meta.map(({ key, icon: Icon, label, value }) => (
+        {metaRow.map(({ key, icon: Icon, label, value }) => (
           <div key={key} className="flex min-w-0 flex-col gap-1 bg-[#0a0c14]/90 px-4 py-3">
             <dt className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
               <Icon className="h-3 w-3 shrink-0 opacity-70" aria-hidden />

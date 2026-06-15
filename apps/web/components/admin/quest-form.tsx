@@ -8,13 +8,18 @@ import { Plus, Trash2, ChevronDown, ChevronUp, Upload } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import {
   QUEST_TASK_TYPE_OPTIONS,
-  REWARD_TYPE_OPTIONS,
   buildQuestTaskTitle,
   DEFAULT_QUEST_BANNER,
   formatQuestDeadlineDisplay,
   resolveQuestProjectName,
   type RewardType,
 } from "@/lib/quest/quest-types";
+import {
+  getRewardConfig,
+  validateQuestForm,
+  type ActiveRewardCode,
+} from "@/lib/quest/quest-engine";
+import { RewardTypePicker } from "@/components/admin/reward-type-picker";
 import type { QuestSocialLink } from "@/lib/quest/quest-social-links";
 import { QuestSocialLinksEditor } from "@/components/admin/quest-social-links-editor";
 
@@ -69,6 +74,14 @@ export function QuestForm({
   const router = useRouter();
   const isEdit = !!initialData?.id;
 
+  // Normalize legacy reward types on load
+  const initialRewardType = (): ActiveRewardCode => {
+    const rt = initialData?.rewardType;
+    if (!rt) return "CC_ONLY";
+    const config = getRewardConfig(rt);
+    return config.code;
+  };
+
   const [form, setForm] = useState({
     title: initialData?.title ?? "",
     projectName: initialData?.projectName ?? "",
@@ -86,9 +99,7 @@ export function QuestForm({
       ? new Date(initialData.endsAt).toISOString().slice(0, 16)
       : "",
     status: initialData?.status ?? "ACTIVE",
-    rewardType: (initialData?.rewardType === "INVITE_CODE"
-      ? "INVITE_CODE_RANDOM"
-      : initialData?.rewardType ?? "CC_ONLY") as RewardType,
+    rewardType: initialRewardType(),
     maxWinners: String(initialData?.maxWinners ?? ""),
     claimFeeCc: initialData?.claimFeeCc != null ? String(initialData.claimFeeCc) : "",
     winnerMessage: initialData?.winnerMessage ?? "",
@@ -162,53 +173,23 @@ export function QuestForm({
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  /** Default claim fees per reward type. Matches `resolveClaimFeeCc()` in quest-reward-config.ts */
-  const DEFAULT_CLAIM_FEE: Partial<Record<RewardType, number>> = {
-    CC_ONLY: 3,
-    CC_MANUAL: 3,
-    INVITE_CODE_FCFS: 2,
-    INVITE_CODE_RANDOM: 2,
-    CC_AND_CODE_RAFFLE: 5,
-    CC_AND_INVITE: 2,
-  };
-
-  const REWARD_TYPE_INFO: Record<RewardType, string> = {
-    CC_ONLY: "User completes tasks → pays 3 CC fee → receives CC reward. FCFS / limited slots.",
-    CC_MANUAL: "User completes tasks → admin draws winners → winners pay fee → receive CC.",
-    INVITE_CODE_FCFS: "User completes tasks → pays 2 CC fee → receives 1 invite code. FCFS / limited slots.",
-    INVITE_CODE_RANDOM: "User completes tasks → admin draws winners → winners pay 2 CC fee → receive 1 code.",
-    CC_AND_INVITE: "User completes tasks → auto-assign invite code + CC reward (no on-chain fee).",
-    CC_AND_CODE_RAFFLE: "Admin draws winners → winners pay 5 CC fee → receive CC + invite code.",
-    WAITLIST_EMAIL: "User submits email → admin selects winners (no CC, no code).",
-    INVITE_CODE: "Legacy — same as INVITE_CODE_RANDOM.",
-  };
-
-  function updateRewardType(value: RewardType) {
-    const noCc =
-      value === "WAITLIST_EMAIL" ||
-      value === "INVITE_CODE_RANDOM" ||
-      value === "INVITE_CODE_FCFS";
-    const claimFee = DEFAULT_CLAIM_FEE[value];
+  /** Update reward type and auto-fill claim fee from quest-engine config. */
+  function updateRewardType(value: string) {
+    const config = getRewardConfig(value);
+    const noCc = !config.needsCcAmount;
+    const claimFee = config.defaultClaimFee;
     setForm((prev) => ({
       ...prev,
-      rewardType: value,
+      rewardType: config.code,
       rewardCc: noCc ? "0" : prev.rewardCc,
       claimFeeCc: claimFee != null ? String(claimFee) : prev.claimFeeCc,
     }));
   }
 
-  const showCcField =
-    form.rewardType === "CC_ONLY" ||
-    form.rewardType === "CC_MANUAL" ||
-    form.rewardType === "CC_AND_INVITE" ||
-    form.rewardType === "CC_AND_CODE_RAFFLE";
-  const needsMaxWinners =
-    form.rewardType === "CC_ONLY" ||
-    form.rewardType === "CC_MANUAL" ||
-    form.rewardType === "CC_AND_INVITE" ||
-    form.rewardType === "CC_AND_CODE_RAFFLE" ||
-    form.rewardType === "INVITE_CODE_RANDOM" ||
-    form.rewardType === "INVITE_CODE_FCFS";
+  // Field visibility driven by quest-engine config
+  const rewardConfig = getRewardConfig(form.rewardType);
+  const showCcField = rewardConfig.needsCcAmount;
+  const needsMaxWinners = rewardConfig.needsMaxWinners;
 
   const recommendedTaskType =
     questKind === "CAMPAIGN" && form.rewardType === "WAITLIST_EMAIL"
@@ -216,7 +197,7 @@ export function QuestForm({
       : questKind === "CAMPAIGN" &&
           (form.rewardType === "CC_ONLY" ||
             form.rewardType === "CC_MANUAL" ||
-            form.rewardType === "CC_AND_INVITE")
+            form.rewardType === "CC_AND_CODE_RAFFLE")
         ? "submit_party_id"
         : null;
   const hasRecommendedTask =
@@ -254,33 +235,25 @@ export function QuestForm({
     setError(null);
     setSubmitting(true);
     try {
-      const rt = form.rewardType;
       const cc = Number(form.rewardCc) || 0;
       const maxW = form.maxWinners.trim() === "" ? null : Number(form.maxWinners);
 
-      if (
-        rt === "INVITE_CODE_RANDOM" ||
-        rt === "INVITE_CODE_FCFS" ||
-        rt === "CC_MANUAL" ||
-        rt === "CC_AND_INVITE"
-      ) {
-        if (maxW === null || !Number.isFinite(maxW) || maxW < 1) {
-          setError("Set max winners / FCFS slots (at least 1).");
-          setSubmitting(false);
-          return;
-        }
-      }
+      // Validate using quest-engine
+      const formErrors = validateQuestForm({
+        title: form.title,
+        org: form.org,
+        description: form.description,
+        rewardType: form.rewardType,
+        rewardCc: cc,
+        maxWinners: maxW,
+        startsAt: form.startsAt || null,
+        endsAt: form.endsAt || null,
+      });
 
-      if (rt === "CC_ONLY" || rt === "CC_MANUAL" || rt === "CC_AND_INVITE") {
-        if (cc <= 0) {
-          setError(
-            rt === "CC_AND_INVITE"
-              ? "CC + Code: CC amount must be greater than 0."
-              : "Reward CC: CC amount must be greater than 0.",
-          );
-          setSubmitting(false);
-          return;
-        }
+      if (formErrors.length > 0) {
+        setError(formErrors[0]?.message ?? "Validation error");
+        setSubmitting(false);
+        return;
       }
 
       if (form.startsAt && form.endsAt) {
@@ -293,12 +266,7 @@ export function QuestForm({
         }
       }
 
-      const rewardCcPayload =
-        rt === "WAITLIST_EMAIL" ||
-        rt === "INVITE_CODE_RANDOM" ||
-        rt === "INVITE_CODE_FCFS"
-          ? 0
-          : cc;
+      const rewardCcPayload = rewardConfig.needsCcAmount ? cc : 0;
 
       const payload = {
         title: form.title,
@@ -314,7 +282,7 @@ export function QuestForm({
         rewardCc: rewardCcPayload,
         rewardPool:
           form.rewardPool ||
-          (rewardCcPayload > 0 ? `${rewardCcPayload} CC` : rt === "INVITE_CODE" ? "Invite codes only" : "TBD"),
+          (rewardCcPayload > 0 ? `${rewardCcPayload} CC` : "TBD"),
         deadline: form.endsAt
           ? formatQuestDeadlineDisplay(new Date(form.endsAt).toISOString())
           : null,
@@ -574,17 +542,11 @@ export function QuestForm({
         <h2 className="type-section-title">Reward</h2>
         <div className="space-y-4">
           <div>
-            <label className="mb-1.5 block text-sm font-medium">Reward type</label>
-            <select
+            <label className="mb-2 block text-sm font-medium">Reward type</label>
+            <RewardTypePicker
               value={form.rewardType}
-              onChange={(e) => updateRewardType(e.target.value as RewardType)}
-              className={inputCls}
-            >
-              {REWARD_TYPE_OPTIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
-            </select>
-            <p className="mt-1.5 text-xs text-[var(--muted-foreground)]">
-              {REWARD_TYPE_OPTIONS.find((r) => r.value === form.rewardType)?.hint}
-            </p>
+              onChange={updateRewardType}
+            />
             {recommendedTaskType && !hasRecommendedTask && !isEdit && questKind === "CAMPAIGN" && (
               <p className="mt-2 rounded-lg bg-orange-500/10 px-3 py-2 text-xs text-orange-200 dark:text-orange-200">
                 Add a{" "}
@@ -594,8 +556,7 @@ export function QuestForm({
                 task below so user data is collected for export.
               </p>
             )}
-            {(form.rewardType === "INVITE_CODE_RANDOM" ||
-              form.rewardType === "INVITE_CODE") && (
+            {(form.rewardType === "INVITE_CODE_RANDOM") && (
               <p className="mt-2 text-xs text-[var(--muted-foreground)]">
                 After creating the quest, open <strong>Invite codes & draw</strong> to paste
                 codes and run the random draw.
@@ -642,14 +603,14 @@ export function QuestForm({
                 value={form.claimFeeCc}
                 onChange={(e) => updateField("claimFeeCc", e.target.value)}
                 placeholder={
-                  form.rewardType === "CC_ONLY" || form.rewardType === "CC_MANUAL"
-                    ? "Default 3"
-                    : "Default 2 (code types)"
+                  rewardConfig.defaultClaimFee != null
+                    ? `Default ${rewardConfig.defaultClaimFee}`
+                    : "No fee"
                 }
                 className={inputCls}
               />
               <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                Kosongkan = default per tipe (kode 2 CC, token FCFS 3 CC).
+                Leave empty to use the default for this reward type.
               </p>
             </div>
           </div>
@@ -660,8 +621,8 @@ export function QuestForm({
             <div>
               <label className="mb-1.5 block text-sm font-medium">
                 {form.rewardType === "CC_AND_CODE_RAFFLE"
-                  ? "Pesan pemenang (notifikasi menang)"
-                  : "Pesan pemenang (custom)"}
+                  ? "Winner message (shown after draw)"
+                  : "Winner message (custom)"}
               </label>
               <textarea
                 value={form.winnerMessage}
@@ -669,16 +630,16 @@ export function QuestForm({
                 rows={3}
                 placeholder={
                   form.rewardType === "CC_AND_CODE_RAFFLE"
-                    ? "Contoh: Selamat! Kamu terpilih sebagai pemenang. Klaim CC + Code kamu sekarang."
+                    ? "e.g. Congratulations! You have been selected as a winner. Claim your CC + Code now."
                     : form.rewardType === "CC_MANUAL"
-                      ? "Contoh: Selamat! CC reward akan dikirim ke wallet kamu."
-                      : "Contoh: Silakan cek inbox email untuk langkah KYC."
+                      ? "e.g. Congratulations! CC reward will be sent to your wallet."
+                      : "e.g. Please check your inbox for KYC steps."
                 }
                 className={cn(inputCls, "resize-y")}
               />
               {form.rewardType === "CC_AND_CODE_RAFFLE" && (
                 <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                  Pesan ini ditampilkan ke pemenang saat mereka membuka quest setelah admin draw. Yang tidak menang akan melihat "You Not Lucky".
+                  Shown to winners after admin draw. Non-winners see "You Not Lucky".
                 </p>
               )}
             </div>
@@ -686,11 +647,7 @@ export function QuestForm({
         </div>
         <div>
           <label className="mb-1.5 block text-sm font-medium">
-            {form.rewardType === "INVITE_CODE_FCFS" ||
-            form.rewardType === "INVITE_CODE_RANDOM" ||
-            form.rewardType === "INVITE_CODE" ||
-            form.rewardType === "CC_AND_INVITE" ||
-            form.rewardType === "WAITLIST_EMAIL"
+            {!rewardConfig.isCcToken
               ? "Reward Pool (spots / access count shown to users)"
               : "Reward Pool label (shown to users)"}
           </label>
@@ -702,29 +659,13 @@ export function QuestForm({
                 ? `e.g. ${Number(form.maxWinners) > 0 && form.rewardCc ? `${Number(form.rewardCc) * Number(form.maxWinners)} CC pool` : `${form.rewardCc || "…"} CC`}`
                 : form.rewardType === "WAITLIST_EMAIL"
                   ? "e.g. 5"
-                  : form.rewardType === "INVITE_CODE_FCFS" ||
-                      form.rewardType === "INVITE_CODE_RANDOM" ||
-                      form.rewardType === "INVITE_CODE" ||
-                      form.rewardType === "CC_AND_INVITE"
-                    ? "e.g. 5"
-                    : "e.g. WL spots"
+                  : "e.g. 5"
             }
             className={inputCls}
           />
           {questKind === "CAMPAIGN" ? (
             <p className="mt-1 text-xs text-[var(--muted-foreground)]">
               Use CC wording here (not quest points). Task points (+10 pts) show on each task and count toward the leaderboard automatically.
-            </p>
-          ) : null}
-          {questKind === "CAMPAIGN" &&
-          (form.rewardType === "WAITLIST_EMAIL" ||
-            form.rewardType === "INVITE_CODE_FCFS" ||
-            form.rewardType === "INVITE_CODE_RANDOM" ||
-            form.rewardType === "INVITE_CODE" ||
-            form.rewardType === "CC_AND_INVITE") ? (
-            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-              Tip: set <strong>Max winners</strong> to the number of winners (or FCFS slots). Set
-              <strong> Reward Pool</strong> to the total spots/codes count shown on cards.
             </p>
           ) : null}
         </div>

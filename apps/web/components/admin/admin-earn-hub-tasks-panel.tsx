@@ -128,7 +128,7 @@ export function AdminEarnHubTasksPanel({
     setSaving(true);
     try {
       const payload = buildEarnHubTaskPayload(draft);
-      const res = await fetch(`/api/admin/quests/${hub.id}/tasks`, {
+      const res = await fetch(`/api/admin/quests/${hub!.id}/tasks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...payload, order: tasks.length }),
@@ -230,7 +230,7 @@ export function AdminEarnHubTasksPanel({
                     <AdminEarnHubTaskForm
                       idPrefix={`edit-${t.id}`}
                       draft={editDraft}
-                      setDraft={setEditDraft}
+                      setDraft={setEditDraft as React.Dispatch<React.SetStateAction<EarnHubTaskDraft>>}
                       onSubmit={handleUpdateTask}
                       saving={saving}
                       formError={formError}

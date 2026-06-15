@@ -2,69 +2,21 @@
 
 import { buttonVariants } from "@/components/ui/button";
 import { ROUTES } from "@/lib/routing/app-routes";
-import { campaignUiKind } from "@/lib/canton/campaign-reward";
-import { QUEST_STATUS_BADGE, type Quest, type RewardType } from "@/lib/quest/quest-types";
+import { getQuestMeta } from "@/lib/quest/quest-engine";
+import { QUEST_STATUS_BADGE, type Quest } from "@/lib/quest/quest-types";
 import { cn } from "@/lib/utils/utils";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { Coins, Sparkles, Ticket, Trophy } from "lucide-react";
 import Link from "next/link";
 
-function rewardAccent(rewardPool: string, rewardType?: RewardType) {
-  const pool = rewardPool.toLowerCase();
-  if (
-    rewardType === "CC_ONLY" ||
-    rewardType === "CC_MANUAL" ||
-    rewardType === "CC_AND_INVITE" ||
-    pool.includes("cc")
-  ) {
-    return {
-      icon: Coins,
-      footer: "from-[var(--primary)]/10 via-transparent to-transparent border-[var(--primary)]/20",
-      value: "text-canton",
-    };
-  }
-  if (rewardType?.includes("INVITE") || pool.includes("invite") || pool.includes("fcfs")) {
-    return {
-      icon: Ticket,
-      footer: "from-violet-500/10 via-transparent to-transparent border-violet-500/20",
-      value: "text-violet-200",
-    };
-  }
-  if (rewardType === "WAITLIST_EMAIL" || pool.includes("waitlist")) {
-    return {
-      icon: Sparkles,
-      footer: "from-cyan-500/10 via-transparent to-transparent border-cyan-500/15",
-      value: "text-cyan-200",
-    };
-  }
-  return {
-    icon: Trophy,
-    footer: "from-[rgb(var(--canton-rgb)/0.08)] via-transparent to-transparent border-[var(--border)]",
-    value: "text-canton",
-  };
-}
-
-function kindLabel(
-  kind: ReturnType<typeof campaignUiKind>,
-  rewardType: string | undefined,
-  t: (key: string) => string,
-): string {
-  switch (kind) {
-    case "cc_fcfs":
-      return t("earnCampaigns.kindFcfs");
-    case "cc_manual_draw":
-      return t("earnCampaigns.kindCcRaffle");
-    case "cc_manual":
-      return t("earnCampaigns.kindCc");
-    case "waitlist_code":
-      return rewardType === "INVITE_CODE_FCFS"
-        ? t("earnCampaigns.kindInvite")
-        : t("earnCampaigns.kindRaffle");
-    case "waitlist_email":
-      return t("earnCampaigns.kindWaitlist");
-    default:
-      return t("earnCampaigns.kindCampaign");
-  }
+/** Map accent class from quest-engine config to footer gradient style. */
+function accentFooter(accentClass: string): string {
+  if (accentClass.includes("violet"))
+    return "from-violet-500/10 via-transparent to-transparent border-violet-500/20";
+  if (accentClass.includes("cyan"))
+    return "from-cyan-500/10 via-transparent to-transparent border-cyan-500/15";
+  // Default canton accent
+  return "from-[rgb(var(--canton-rgb)/0.08)] via-transparent to-transparent border-[var(--border)]";
 }
 
 function CampaignLogo({ quest }: { quest: Quest }) {
@@ -91,15 +43,14 @@ export function EarnCampaignRow({
   completed?: boolean;
 }) {
   const t = usePlatformT();
+
+  // ── Derive all UI state from quest-engine ─────────────────────
+  const meta = getQuestMeta(quest);
+  const { config } = meta;
+
   const canOpen = quest.status === "ACTIVE" || quest.status === "ENDED";
   const statusMeta = QUEST_STATUS_BADGE[quest.status];
-  const poolLower = quest.rewardPool.toLowerCase();
-  const requiresFcfs =
-    poolLower.includes("fcfs") ||
-    poolLower.includes("first come") ||
-    quest.rewardType === "INVITE_CODE_FCFS";
-  const uiKind = campaignUiKind(quest.rewardType, requiresFcfs);
-  const accent = rewardAccent(quest.rewardPool, quest.rewardType);
+  const footer = accentFooter(config.accentClass);
 
   const ctaLabel =
     quest.status === "ENDED"
@@ -109,7 +60,7 @@ export function EarnCampaignRow({
         : t("quests.joinQuest");
 
   const metaParts = [
-    kindLabel(uiKind, quest.rewardType, t),
+    config.shortLabel,
     `${quest.tasks.length} tasks`,
     quest.deadline ?? null,
   ].filter(Boolean) as string[];
@@ -200,14 +151,14 @@ export function EarnCampaignRow({
             href={ROUTES.campaignQuest(quest.id, quest.title)}
             className={cn(
               "flex items-center gap-4 border-t bg-gradient-to-r px-6 py-4 transition-colors",
-              accent.footer,
+              footer,
               "hover:bg-[var(--muted)]/10",
             )}
           >
             <span className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
               {t("earnCampaigns.rewardLabel")}
             </span>
-            <span className={cn("min-w-0 flex-1 truncate text-base font-bold", accent.value)}>
+            <span className={cn("min-w-0 flex-1 truncate text-base font-bold", config.accentClass)}>
               {quest.rewardPool}
             </span>
             <span className="inline-flex shrink-0 items-center text-sm font-semibold text-slate-100 transition-colors group-hover:text-canton">
@@ -218,13 +169,13 @@ export function EarnCampaignRow({
           <div
             className={cn(
               "flex items-center gap-4 border-t bg-gradient-to-r px-6 py-4",
-              accent.footer,
+              footer,
             )}
           >
             <span className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
               {t("earnCampaigns.rewardLabel")}
             </span>
-            <span className={cn("min-w-0 flex-1 truncate text-base font-bold", accent.value)}>
+            <span className={cn("min-w-0 flex-1 truncate text-base font-bold", config.accentClass)}>
               {quest.rewardPool}
             </span>
           </div>

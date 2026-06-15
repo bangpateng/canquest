@@ -74,7 +74,7 @@ export function TurnstileField({ onToken, resetKey = 0 }: TurnstileFieldProps) {
       <Turnstile
         ref={ref}
         siteKey={siteKey}
-        onSuccess={(token) => onToken(token)}
+        onSuccess={(token: string) => onToken(token)}
         onExpire={() => onToken(null)}
         onError={() => onToken(null)}
         options={{ theme: "dark", size: "normal" }}
