@@ -9,8 +9,8 @@ import { TransactionDetailModal } from "@/components/app/wallet/transaction-deta
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 
 export const TRANSACTIONS_PAGE_SIZE = 5;
-/** Server-side proxy to avoid CORS — see apps/web/app/api/lighthouse/[...path]/route.ts */
-const LIGHTHOUSE_PROXY = "/api/lighthouse";
+/** Server-side proxy to onchain tx — partyId comes from JWT on the backend. */
+const LIGHTHOUSE_PROXY = "/api/party/transactions/onchain";
 
 export interface TxItem {
   id: string;
@@ -230,7 +230,7 @@ export function TransactionsView({
     async (page: number) => {
       setLoading(true);
       try {
-        // Fetch from DB + 3 Lighthouse endpoints in parallel
+        // Fetch from DB + onchain (Lighthouse via backend proxy) in parallel.
         const dbPromise = fetch(
           `/api/party/transactions?page=${page}&pageSize=${pageSize}`,
           { credentials: "include" },
@@ -238,22 +238,15 @@ export function TransactionsView({
 
         const onChainPromises: Promise<TxItem[]>[] = [];
         if (partyId) {
-          const encoded = encodeURIComponent(partyId);
+          // partyId is resolved from the JWT on the backend — not passed in URL.
           onChainPromises.push(
             fetchLighthouseEndpoint(
-              `${LIGHTHOUSE_PROXY}/parties/${encoded}/tx?limit=${pageSize * 3}`,
-              partyId,
-            ),
-            fetchLighthouseEndpoint(
-              `${LIGHTHOUSE_PROXY}/parties/${encoded}/transfers?limit=${pageSize * 3}`,
-              partyId,
-            ),
-            fetchLighthouseEndpoint(
-              `${LIGHTHOUSE_PROXY}/parties/${encoded}/rewards?limit=${pageSize * 3}`,
+              `${LIGHTHOUSE_PROXY}?limit=${pageSize * 3}`,
               partyId,
             ),
           );
         }
+
 
         const [dbRes, ...onChainResults] = await Promise.allSettled([
           dbPromise,
