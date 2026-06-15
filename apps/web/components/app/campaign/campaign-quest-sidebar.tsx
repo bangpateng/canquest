@@ -1,4 +1,5 @@
 import { CcRewardLogo } from "@/components/app/campaign/cc-reward-logo";
+import { CampaignSocialLinks } from "@/components/app/campaign/campaign-social-links";
 import { getQuestMeta } from "@/lib/quest/quest-engine";
 import { isCcTokenRewardQuest } from "@/lib/canton/cc-reward-logo";
 import { formatCodePerWinners } from "@/lib/canton/campaign-reward";
@@ -17,15 +18,15 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
+/** Compact date format: "Jun 15, 21:39" */
 function formatEnd(quest: Quest): string {
   if (quest.endsAt) {
     return new Date(quest.endsAt).toLocaleString("en-GB", {
       day: "numeric",
       month: "short",
-      year: "numeric",
       hour: "2-digit",
       minute: "2-digit",
-    });
+    }).replace(",", ",");
   }
   return quest.deadline ?? "—";
 }
@@ -79,215 +80,225 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
   const { config, rewardDisplay, slots, metrics } = meta;
   const summary = quest.campaignSummary;
 
-  // ── Build tiles from quest-engine metrics ──────────────────────
-  const tiles: Tile[] = [];
-
-  // Per-winner reward tile (always first when applicable)
-  if (quest.rewardCc > 0) {
-    tiles.push({
-      key: "perWinner",
-      icon: Trophy,
-      label: "Reward / winner",
-      value: `${quest.rewardCc} CC`,
-      tone: "canton",
-    });
+  // ── Reward / winner value ──────────────────────────────────────
+  let rewardPerWinner: React.ReactNode;
+  if (config.isDual) {
+    rewardPerWinner = (
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          <CcRewardLogo size={20} />
+          <span className="text-xl font-bold text-white">
+            {quest.rewardCc > 0 ? `${quest.rewardCc} CC` : "CC"}
+          </span>
+        </div>
+        <span className="text-lg font-bold text-slate-500">+</span>
+        <div className="flex items-center gap-1.5">
+          <Ticket className="h-5 w-5 text-violet-300" aria-hidden />
+          <span className="text-xl font-bold text-violet-300">1 Code</span>
+        </div>
+      </div>
+    );
+  } else if (isCcTokenRewardQuest(quest)) {
+    rewardPerWinner = (
+      <div className="flex items-center gap-2">
+        <CcRewardLogo size={20} />
+        <span className="text-xl font-bold text-canton">
+          {quest.rewardCc > 0 ? `${quest.rewardCc} CC` : rewardDisplay.primaryText}
+        </span>
+      </div>
+    );
   } else if (config.code === "INVITE_CODE_FCFS" || config.code === "INVITE_CODE_RANDOM") {
-    tiles.push({
-      key: "perWinner",
-      icon: Ticket,
-      label: "Reward / winner",
-      value: "1 Code",
-      tone: "violet",
-    });
+    rewardPerWinner = (
+      <div className="flex items-center gap-2">
+        <Ticket className="h-5 w-5 text-violet-300" aria-hidden />
+        <span className="text-xl font-bold text-violet-300">{formatCodePerWinners()}</span>
+      </div>
+    );
+  } else if (config.code === "WAITLIST_EMAIL") {
+    rewardPerWinner = (
+      <div className="flex items-center gap-2">
+        <Sparkles className="h-5 w-5 text-cyan-300" aria-hidden />
+        <span className="text-xl font-bold text-cyan-300">Waitlist spot</span>
+      </div>
+    );
+  } else {
+    rewardPerWinner = (
+      <span className="text-xl font-bold text-white">{rewardDisplay.primaryText}</span>
+    );
   }
 
-  // Participation metric from quest-engine (FCFS slots or raffle winners)
-  for (const m of metrics) {
-    if (m.key === "fcfs") {
-      tiles.push({
-        key: "fcfs",
-        icon: Zap,
-        label: m.label,
-        value: m.value,
-        hint: slots.full ? "All slots claimed" : `${slots.left} left`,
-        tone: resolveTone(m.accent, m.muted),
-        progress: slots.full ? null : { used: slots.used, max: slots.max, warn: slots.warn },
-      });
-    } else if (m.key === "winners") {
-      tiles.push({
-        key: "winners",
-        icon: Users,
-        label: m.label,
-        value: m.value,
-        hint: slots.used > 0 ? "selected" : "drawn at the end",
-        tone: "canton",
-        progress: slots.used > 0 ? { used: slots.used, max: slots.max } : null,
-      });
-    }
-  }
+  // ── Claim fee ──────────────────────────────────────────────────
+  const claimFeeCc = summary?.fcfsClaimFeeCc ?? config.defaultClaimFee ?? 0;
+  const claimFeeDisplay =
+    config.code === "WAITLIST_EMAIL"
+      ? null // no claim fee row for email raffle
+      : claimFeeCc > 0
+        ? `${claimFeeCc} CC`
+        : "Free";
 
-  // Claim fee tile
-  if (
-    (slots.isFcfs || slots.isRaffle || config.isDual) &&
-    (summary?.fcfsClaimFeeCc ?? 0) > 0
-  ) {
-    tiles.push({
-      key: "fee",
-      icon: Zap,
-      label: "Claim fee",
-      value: `${summary?.fcfsClaimFeeCc ?? 0} CC`,
-      hint: "paid on-chain to claim",
-      tone: "amber",
-    });
-  }
+  // ── Pool label ─────────────────────────────────────────────────
+  const poolMetric = metrics.find((m) => m.key === "pool");
+  const poolDisplay = poolMetric ? poolMetric.value : rewardDisplay.poolLabel;
 
-  // Codes remaining tile
-  const codesMetric = metrics.find((m) => m.key === "codes");
-  if (codesMetric) {
-    tiles.push({
-      key: "codes",
-      icon: Ticket,
-      label: "Codes left",
-      value: codesMetric.value.replace(/ invite codes left$/, ""),
-      tone: "violet",
-    });
-  }
+  // ── Metric columns ─────────────────────────────────────────────
+  // Left: FCFS slots (with progress) or Max winners
+  // Center: Tasks
+  // Right: Ends
+  const isFcfsType =
+    config.code === "CC_ONLY" || config.code === "INVITE_CODE_FCFS";
 
-  // ── Compact meta row (always shown) ───────────────────────────
-  const metaRow: { key: string; icon: LucideIcon; label: string; value: string }[] = [
-    { key: "tasks", icon: ListChecks, label: "Tasks", value: String(quest.tasks.length) },
-    {
-      key: "ends",
-      icon: quest.endsAt ? Clock : Calendar,
-      label: "Ends",
-      value: formatEnd(quest),
-    },
-    { key: "type", icon: Trophy, label: "Type", value: config.shortLabel },
-  ];
+  let leftLabel: string;
+  let leftValue: string;
+  let leftHint: string | null = null;
+  let leftProgress: { used: number; max: number; warn?: boolean } | null = null;
+
+  if (isFcfsType && slots.max > 0) {
+    leftLabel = "FCFS slots";
+    leftValue = slots.filledLabel;
+    leftHint = slots.full ? "All slots claimed" : `${slots.left} left`;
+    leftProgress =
+      !slots.full && summary != null
+        ? { used: slots.used, max: slots.max, warn: slots.warn }
+        : null;
+  } else if (config.code === "INVITE_CODE_RANDOM" && slots.used > 0) {
+    leftLabel = "Winners drawn";
+    leftValue = `${slots.used}/${slots.max}`;
+    leftProgress = { used: slots.used, max: slots.max };
+  } else {
+    leftLabel = "Max winners";
+    leftValue = slots.max > 0 ? String(slots.max) : "—";
+  }
 
   return (
     <section
       className="relative w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/40"
       aria-label="Campaign reward"
     >
-      {/* ── Reward headline ─────────────────────────────────────────────── */}
-      <div className="relative border-b border-white/[0.06] px-5 py-6 sm:px-6 sm:py-7">
+      {/* ── SECTION 2 — Reward highlight ──────────────────────────────── */}
+      <div className="relative border-b border-white/[0.06]">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_90%_at_0%_0%,rgb(var(--canton-rgb)/0.12),transparent_60%)]" />
-        <div className="relative min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-[rgb(var(--canton-rgb)/0.25)] bg-[rgb(var(--canton-rgb)/0.08)] px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-canton sm:text-xs">
-              <Trophy className="h-3 w-3" aria-hidden />
-              {config.shortLabel}
+
+        {/* Reward / winner + Claim fee row */}
+        <div className="relative grid grid-cols-2 gap-px bg-white/[0.04]">
+          {/* Left: Reward / winner */}
+          <div className="flex min-w-0 flex-col gap-1.5 bg-[#0a0c14]/90 px-5 py-4 sm:px-6 sm:py-5">
+            <span className="text-[10px] font-semibold text-slate-500 sm:text-xs">
+              Reward / winner
             </span>
-            {slots.full && slots.isFcfs ? (
-              <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 sm:text-xs">
-                Slots full
-              </span>
-            ) : null}
+            {rewardPerWinner}
           </div>
 
-          {config.isDual ? (
-            <div className="mt-3">
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <CcRewardLogo className="sm:h-8 sm:w-8" size={28} />
-                  <span className="text-2xl font-bold text-white sm:text-3xl">
-                    {quest.rewardCc > 0 ? `${quest.rewardCc} CC` : "CC"}
-                  </span>
-                </div>
-                <span className="text-xl font-bold text-slate-500">+</span>
-                <div className="flex items-center gap-2">
-                  <Ticket className="h-6 w-6 text-violet-300 sm:h-8 sm:w-8" aria-hidden />
-                  <span className="text-2xl font-bold text-violet-300 sm:text-3xl">1 Code</span>
-                </div>
+          {/* Right: Claim fee */}
+          {claimFeeDisplay !== null ? (
+            <div className="flex min-w-0 flex-col gap-1.5 bg-[#0a0c14]/90 px-5 py-4 sm:px-6 sm:py-5">
+              <span className="text-[10px] font-semibold text-slate-500 sm:text-xs">
+                Claim fee
+              </span>
+              <div className="flex items-center gap-1.5">
+                <Zap className="h-4 w-4 shrink-0 text-amber-300" aria-hidden />
+                <span className={cn(
+                  "text-xl font-bold",
+                  claimFeeDisplay === "Free" ? "text-emerald-400" : "text-amber-300",
+                )}>
+                  {claimFeeDisplay}
+                </span>
               </div>
-              <p className="mt-2 text-sm font-medium text-slate-400">Per winner</p>
+              {claimFeeDisplay !== "Free" && (
+                <span className="text-[10px] text-slate-500">paid on-chain to claim</span>
+              )}
             </div>
           ) : (
-            <>
-              <p className="mt-3 flex items-center gap-3 text-3xl font-bold tabular-nums text-white sm:text-4xl">
-                {isCcTokenRewardQuest(quest) ? (
-                  <CcRewardLogo className="sm:h-8 sm:w-8" size={32} />
-                ) : null}
-                <span>
-                  {config.code === "INVITE_CODE_FCFS" || config.code === "INVITE_CODE_RANDOM"
-                    ? formatCodePerWinners()
-                    : rewardDisplay.primaryText}
-                </span>
-              </p>
-              {rewardDisplay.secondaryText ? (
-                <p className="mt-2 text-sm font-medium text-slate-400">
-                  {rewardDisplay.secondaryText}
-                </p>
-              ) : null}
-            </>
+            <div className="flex min-w-0 flex-col gap-1.5 bg-[#0a0c14]/90 px-5 py-4 sm:px-6 sm:py-5">
+              <span className="text-[10px] font-semibold text-slate-500 sm:text-xs">
+                Claim fee
+              </span>
+              <span className="text-xl font-bold text-emerald-400">Free</span>
+            </div>
           )}
+        </div>
+
+        {/* Type badge + Pool row */}
+        <div className="relative flex items-center gap-3 bg-[#0a0c14]/90 px-5 py-2.5 sm:px-6">
+          <span className={cn(
+            "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider sm:text-xs",
+            config.chipClass,
+          )}>
+            <Trophy className="h-3 w-3" aria-hidden />
+            {config.shortLabel}
+          </span>
+          {slots.full && slots.isFcfs ? (
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 sm:text-xs">
+              Slots full
+            </span>
+          ) : null}
+          {poolDisplay && poolDisplay !== "—" ? (
+            <span className="ml-auto text-[10px] font-semibold text-slate-400 sm:text-xs">
+              Pool: <span className="text-slate-200">{poolDisplay}</span>
+            </span>
+          ) : null}
         </div>
       </div>
 
-      {/* ── Highlight tiles (type-aware) ─────────────────────────────────── */}
-      {tiles.length > 0 ? (
-        <div
-          className={cn(
-            "grid gap-px bg-white/[0.04]",
-            tiles.length === 1 && "grid-cols-1",
-            tiles.length === 2 && "grid-cols-2",
-            tiles.length >= 3 && "grid-cols-2 sm:grid-cols-3",
-          )}
-        >
-          {tiles.map(({ key, icon: Icon, label, value, hint, tone = "default", progress }) => (
-            <div key={key} className="flex min-w-0 flex-col gap-2 bg-[#0a0c14]/90 px-4 py-4">
-              <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500 sm:text-xs">
-                <Icon className="h-3.5 w-3.5 shrink-0 text-canton opacity-90" aria-hidden />
-                <span className="truncate">{label}</span>
-              </div>
-              <div className="flex items-baseline gap-1.5">
-                <span className={cn("text-lg font-bold tabular-nums sm:text-xl", TONE_TEXT[tone])}>
-                  {value}
-                </span>
-                {hint ? (
-                  <span className="truncate text-[10px] font-medium text-slate-500">{hint}</span>
-                ) : null}
-              </div>
-              {progress ? (
-                <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
-                  <div
-                    className={cn(
-                      "h-full rounded-full transition-all duration-500",
-                      progress.warn
-                        ? "bg-gradient-to-r from-amber-500 to-orange-500"
-                        : "bg-gradient-to-r from-[var(--primary)] to-[var(--primary-strong)]",
-                    )}
-                    style={{
-                      width: `${Math.max(6, Math.min(100, Math.round((progress.used / Math.max(1, progress.max)) * 100)))}%`,
-                    }}
-                  />
-                </div>
-              ) : null}
+      {/* ── SECTION 3 — Metrics (3 columns) ───────────────────────────── */}
+      <dl className="grid grid-cols-3 gap-px border-b border-white/[0.04] bg-white/[0.04]">
+        {/* Left: FCFS slots or Max winners */}
+        <div className="flex min-w-0 flex-col gap-1.5 bg-[#0a0c14]/90 px-4 py-3">
+          <dt className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500">
+            {isFcfsType ? (
+              <Zap className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+            ) : (
+              <Users className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+            )}
+            <span className="truncate">{leftLabel}</span>
+          </dt>
+          <dd className="truncate text-sm font-bold text-slate-100">
+            {leftValue}
+            {leftHint ? (
+              <span className="ml-1 text-[10px] font-medium text-slate-500">{leftHint}</span>
+            ) : null}
+          </dd>
+          {leftProgress ? (
+            <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+              <div
+                className={cn(
+                  "h-full rounded-full transition-all duration-500",
+                  leftProgress.warn
+                    ? "bg-gradient-to-r from-amber-500 to-orange-500"
+                    : "bg-gradient-to-r from-[var(--primary)] to-[var(--primary-strong)]",
+                )}
+                style={{
+                  width: `${Math.max(6, Math.min(100, Math.round((leftProgress.used / Math.max(1, leftProgress.max)) * 100)))}%`,
+                }}
+              />
             </div>
-          ))}
+          ) : null}
         </div>
-      ) : null}
 
-      {/* ── Compact meta row ─────────────────────────────────────────────── */}
-      <dl className="grid grid-cols-3 gap-px border-t border-white/[0.04] bg-white/[0.04]">
-        {metaRow.map(({ key, icon: Icon, label, value }) => (
-          <div key={key} className="flex min-w-0 flex-col gap-1 bg-[#0a0c14]/90 px-4 py-3">
-            <dt className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-              <Icon className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
-              <span className="truncate">{label}</span>
-            </dt>
-            <dd
-              className={cn(
-                "truncate font-bold text-slate-100",
-                key === "ends" ? "text-xs leading-snug" : "text-sm",
-                key === "type" && "uppercase tracking-wide text-[11px] text-canton",
-              )}
-            >
-              {value}
-            </dd>
-          </div>
-        ))}
+        {/* Center: Tasks */}
+        <div className="flex min-w-0 flex-col gap-1.5 bg-[#0a0c14]/90 px-4 py-3">
+          <dt className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500">
+            <ListChecks className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+            <span className="truncate">Tasks</span>
+          </dt>
+          <dd className="truncate text-sm font-bold text-slate-100">
+            {quest.tasks.length}
+          </dd>
+        </div>
+
+        {/* Right: Ends */}
+        <div className="flex min-w-0 flex-col gap-1.5 bg-[#0a0c14]/90 px-4 py-3">
+          <dt className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500">
+            {quest.endsAt ? (
+              <Clock className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+            ) : (
+              <Calendar className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+            )}
+            <span className="truncate">Ends</span>
+          </dt>
+          <dd className="truncate text-xs font-bold leading-snug text-slate-100">
+            {formatEnd(quest)}
+          </dd>
+        </div>
       </dl>
     </section>
   );

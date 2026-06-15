@@ -133,7 +133,20 @@ export function EarnCampaignCard({
 
   const statusMeta = QUEST_STATUS_BADGE[quest.status];
   const statusLabel = slots.full && quest.status === "ACTIVE" ? t("earnCampaigns.slotsEnded") : statusMeta.label;
-  const bannerRewardText = quest.rewardCc > 0 ? null : isCodeReward ? t("earnCampaigns.cardRewardPerUserCode") : quest.rewardPool;
+
+  // Reward pill text
+  let rewardPillText: string;
+  if (config.isDual) {
+    rewardPillText = quest.rewardCc > 0 ? `${quest.rewardCc} CC + 1 Code` : "CC + 1 Code";
+  } else if (config.isCcToken && quest.rewardCc > 0) {
+    rewardPillText = `${quest.rewardCc} CC / winner`;
+  } else if (isCodeReward) {
+    rewardPillText = t("earnCampaigns.cardRewardPerUserCode");
+  } else if (config.code === "WAITLIST_EMAIL") {
+    rewardPillText = "Waitlist spot";
+  } else {
+    rewardPillText = quest.rewardPool ?? "—";
+  }
 
   // Use completed prop to override CTA if passed
   const ctaLabel = meta.joinBlocked
@@ -150,73 +163,27 @@ export function EarnCampaignCard({
       meta.canOpen && !meta.joinBlocked && "hover:-translate-y-1 hover:border-[rgb(var(--canton-rgb)/0.25)] hover:shadow-[0_24px_60px_rgb(0_0_0/0.5),0_0_0_1px_rgb(var(--canton-rgb)/0.15)]",
       (quest.status === "ENDED" || meta.joinBlocked) && "opacity-90",
     )}>
-      {/* Banner */}
-      <div className="relative h-32 shrink-0 overflow-hidden sm:h-36 md:h-40 lg:h-44">
-        <div className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105"
-          style={quest.bannerImageUrl ? { backgroundImage: `url("${quest.bannerImageUrl}")` } : { background: quest.banner }} />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0a0c14] via-[#0a0c14]/60 to-black/30" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_100%_0%,rgb(var(--canton-rgb)/0.10),transparent_60%)]" />
 
-        {/* Type badge */}
-        <div className="absolute left-3 top-3 flex flex-wrap gap-1.5 sm:left-4 sm:top-4 sm:gap-2">
-          <span className={cn("rounded-lg border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide backdrop-blur-xl sm:px-3 sm:py-1.5 sm:text-xs", config.chipClass)}>
-            {config.shortLabel}
-          </span>
+      {/* ── Banner accent strip (only if bannerImageUrl exists) ─── */}
+      {quest.bannerImageUrl ? (
+        <div
+          className="relative h-20 w-full shrink-0 overflow-hidden"
+          style={{ maxHeight: "80px" }}
+        >
+          <div
+            className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105"
+            style={{ backgroundImage: `url("${quest.bannerImageUrl}")` }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0a0c14] via-[#0a0c14]/40 to-transparent" />
         </div>
+      ) : null}
 
-        {/* Status badge */}
-        <span className={cn(
-          "absolute right-3 top-3 rounded-lg px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide backdrop-blur-xl sm:right-4 sm:top-4 sm:px-3 sm:py-1.5 sm:text-xs",
-          slots.full && quest.status === "ACTIVE"
-            ? "border border-white/5 bg-black/60 text-slate-400"
-            : "border border-white/10 bg-black/50 text-white",
-          !(slots.full && quest.status === "ACTIVE") && statusMeta.className,
-        )}>
-          {statusLabel}
-        </span>
-
-        {/* Reward highlight */}
-        {config.isDual ? (
-          <div className="absolute bottom-3 right-3 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-xl border border-white/[0.08] bg-black/70 px-3 py-2 backdrop-blur-xl sm:bottom-4 sm:right-4 sm:gap-3 sm:px-4 sm:py-2.5">
-            <div className="flex items-center gap-1">
-              <CcRewardLogo className="shrink-0 text-canton" size={14} />
-              <span className="text-white/40">+</span>
-              <Ticket className="h-3.5 w-3.5 shrink-0 text-violet-300" aria-hidden />
-            </div>
-            <div className="min-w-0 text-right">
-              <p className="hidden text-[9px] font-bold uppercase tracking-wider text-white/60 sm:block sm:text-[10px]">Per Winner</p>
-              <p className="text-sm font-bold leading-none tabular-nums text-canton sm:text-base">
-                {quest.rewardCc > 0 ? <span>{quest.rewardCc} <span className="text-xs text-white/70">CC</span></span> : null}
-                {quest.rewardCc > 0 ? <span className="mx-1 text-white/40">+</span> : null}
-                <span className="text-violet-300">1 Code</span>
-              </p>
-            </div>
-          </div>
-        ) : quest.rewardCc > 0 || bannerRewardText ? (
-          <div className="absolute bottom-3 right-3 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-xl border border-white/[0.08] bg-black/70 px-3 py-2 backdrop-blur-xl sm:bottom-4 sm:right-4 sm:gap-3 sm:px-4 sm:py-2.5">
-            <CampaignRewardIcon iconKind={rewardDisplay.iconKind} isCcToken={config.isCcToken} className={cn("shrink-0", config.accentClass)} size={14} />
-            <div className="min-w-0 text-right">
-              <p className="hidden text-[9px] font-bold uppercase tracking-wider text-white/60 sm:block sm:text-[10px]">
-                {t("earnCampaigns.rewardLabel")}
-              </p>
-              {quest.rewardCc > 0 ? (
-                <p className={cn("text-base font-bold leading-none tabular-nums sm:text-xl md:text-2xl", config.accentClass)}>
-                  {quest.rewardCc}
-                  <span className="ml-1 text-xs font-semibold text-white/70 sm:text-sm">CC</span>
-                </p>
-              ) : (
-                <p className={cn("truncate text-sm font-bold leading-tight sm:text-base", config.accentClass)}>
-                  {bannerRewardText}
-                </p>
-              )}
-            </div>
-          </div>
-        ) : null}
-      </div>
-
-      {/* Body */}
+      {/* ── Body ─────────────────────────────────────────────────── */}
       <div className="flex w-full min-w-0 flex-1 flex-col justify-between px-4 pb-5 pt-4 sm:px-5 sm:pb-6 sm:pt-5 md:px-6 md:pb-7">
-        <div className="flex w-full min-w-0 items-center gap-3 sm:gap-4">
+
+        {/* Header: logo + org/title left, badges right */}
+        <div className="flex w-full min-w-0 items-start gap-3 sm:gap-4">
+          {/* Logo */}
           <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-slate-800/80 ring-1 ring-white/10 sm:h-14 sm:w-14">
             {quest.logoUrl ? (
               <img src={quest.logoUrl} alt="" className="h-full w-full object-cover" />
@@ -226,37 +193,71 @@ export function EarnCampaignCard({
               </span>
             )}
           </div>
+
+          {/* Org + Title */}
           <div className="min-w-0 flex-1">
             <p className="truncate text-[10px] font-semibold text-slate-500 sm:text-xs">{quest.org}</p>
             <h3 className="line-clamp-2 text-sm font-bold leading-tight text-white sm:mt-0.5 sm:text-base md:text-lg">
               {quest.title}
             </h3>
           </div>
+
+          {/* Status + Type badges stacked */}
+          <div className="flex shrink-0 flex-col items-end gap-1.5">
+            <span className={cn(
+              "rounded-lg px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide backdrop-blur-xl sm:px-3 sm:py-1.5 sm:text-xs",
+              slots.full && quest.status === "ACTIVE"
+                ? "border border-white/5 bg-black/60 text-slate-400"
+                : "border border-white/10 bg-black/50 text-white",
+              !(slots.full && quest.status === "ACTIVE") && statusMeta.className,
+            )}>
+              {statusLabel}
+            </span>
+            <span className={cn(
+              "rounded-lg border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide backdrop-blur-xl sm:px-3 sm:py-1.5 sm:text-xs",
+              config.chipClass,
+            )}>
+              {config.shortLabel}
+            </span>
+          </div>
         </div>
 
-        <p className="mt-3 hidden line-clamp-2 text-sm font-medium leading-relaxed text-slate-400 sm:block">
+        {/* Description */}
+        <p className="mt-3 line-clamp-2 text-sm font-medium leading-relaxed text-slate-400">
           {quest.description}
         </p>
 
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[10px] font-semibold text-slate-500 sm:mt-4 sm:gap-x-4 sm:text-xs">
-          <span className="inline-flex items-center gap-1 sm:gap-1.5">
-            <ListChecks className="h-3 w-3 text-canton sm:h-4 sm:w-4" />
-            {quest.tasks.length} tasks
-          </span>
-          {quest.endsAt ? <CountdownTimer endsAt={quest.endsAt} /> : quest.deadline ? (
+        {/* Meta row: tasks + timer left, reward pill right */}
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 sm:mt-4">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[10px] font-semibold text-slate-500 sm:text-xs">
             <span className="inline-flex items-center gap-1 sm:gap-1.5">
-              <Calendar className="h-3 w-3 sm:h-4 sm:w-4" />
-              <span className="truncate">{quest.deadline}</span>
+              <ListChecks className="h-3 w-3 text-canton sm:h-4 sm:w-4" />
+              {quest.tasks.length} tasks
             </span>
-          ) : null}
-          {summary?.slotsTaken != null && summary.slotsTaken > 0 && (
-            <span className="inline-flex items-center gap-1 sm:gap-1.5">
-              <Users className="h-3 w-3 sm:h-4 sm:w-4" />
-              {summary.slotsTaken}
-            </span>
-          )}
+            {quest.endsAt ? <CountdownTimer endsAt={quest.endsAt} /> : quest.deadline ? (
+              <span className="inline-flex items-center gap-1 sm:gap-1.5">
+                <Calendar className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="truncate">{quest.deadline}</span>
+              </span>
+            ) : null}
+          </div>
+
+          {/* Reward pill */}
+          <div className={cn(
+            "inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-black/40 px-2.5 py-1 text-[10px] font-bold backdrop-blur-xl sm:text-xs",
+            config.accentClass,
+          )}>
+            <CampaignRewardIcon
+              iconKind={rewardDisplay.iconKind}
+              isCcToken={config.isCcToken}
+              className={cn("shrink-0 h-3 w-3", config.accentClass)}
+              size={12}
+            />
+            <span className="truncate">{rewardPillText}</span>
+          </div>
         </div>
 
+        {/* Tags */}
         {quest.tags.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1">
             {quest.tags.slice(0, 3).map((tag) => (
@@ -268,7 +269,7 @@ export function EarnCampaignCard({
           </div>
         )}
 
-        {/* Metrics strips — driven by quest-engine */}
+        {/* Metrics strip — driven by quest-engine */}
         {metrics.length > 0 && (
           <div className="mt-4 w-full min-w-0 overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02] sm:mt-5">
             <div className="grid w-full min-w-0 grid-cols-2 divide-x divide-white/[0.04]">
