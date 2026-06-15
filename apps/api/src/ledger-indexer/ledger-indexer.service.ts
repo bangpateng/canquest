@@ -1,33 +1,39 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as jwt from 'jsonwebtoken';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
- * LedgerIndexerService — poll Canton ledger transaction updates & sync ke DB.
+ * LedgerIndexerService — poll Canton ledger transaction updates & sync to DB.
  *
- * Canton JSON Ledger API endpoint:
- *   GET /v2/updates/transactions — stream transaksi (offset-based paging)
+ * Uses the Lighthouse Explorer API (public, no auth) instead of the Canton
+ * JSON API directly, because the Canton JSON API at :7575 does not support
+ * the /v2/updates/transactions endpoint.
  *
- * Apa yang di-index:
- *   - TransferOffer accepted → update CcTransaction.settledAt
- *   - Deteksi balance changes → log untuk audit
+ * Lighthouse Explorer API:
+ *   GET {LIGHTHOUSE_API_URL}/api/parties/{partyId}/tx?limit=50&cursor={cursor}
+ *   Returns paginated transaction data keyed by cursor.
  *
- * Arsitektur:
- *   - Polling setiap INDEXER_POLL_INTERVAL ms (default 15 detik)
- *   - Menyimpan last processed offset di DB (key-value store via PrismaService)
- *   - Tidak blokir HTTP server (setInterval, cleanup di OnModuleDestroy)
+ * What gets indexed:
+ *   - AmuletRules_Transfer (or is_cip56) → CC transfer onchain
+ *     → update CcTransaction.settledAt + cantonUpdateId
  *
- * Aktifkan dengan env:
+ * Architecture:
+ *   - Polling every INDEXER_POLL_INTERVAL ms (default 15 seconds)
+ *   - Stores last processed cursor per party in an in-memory Map
+ *   - Does not block the HTTP server (setInterval, cleanup in OnModuleDestroy)
+ *
+ * Enable with env:
  *   LEDGER_INDEXER_ENABLED=true
  *   LEDGER_INDEXER_PARTY_IDS=party1::hash,party2::hash   (comma-separated)
- *
- * Canton Updates API reference:
- *   https://docs.canton.network/appdev/modules/m4-backend-dev
+ *   LIGHTHOUSE_API_URL=https://api-canton.interscan.pro/mainnet
  */
 @Injectable()
 export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(LedgerIndexerService.name);
+  // Lighthouse Explorer API base URL.
+  private readonly lighthouseUrl: string;
+  // Legacy Canton JSON API properties — kept to avoid breaking getStatus()
+  // and existing env wiring. No longer used for polling.
   private readonly baseUrl: string;
   private readonly secret: string | null;
   private readonly ledgerApiUser: string;
@@ -37,15 +43,25 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
   private readonly watchParties: string[];
 
   private timer: NodeJS.Timeout | null = null;
-  private lastOffset: string | number = 0;
+  /** Last processed cursor per party id (Lighthouse pagination cursor). */
+  private lastCursors: Map<string, number> = new Map();
   private running = false;
-  /** Avoid log spam when tunnel/API is down — warn once until reachable again */
+  /** Avoid log spam when API is down — warn once until reachable again */
   private loggedUnreachable = false;
+
+  /** Max pages fetched per party per poll cycle to avoid timeouts. */
+  private static readonly MAX_PAGES_PER_POLL = 5;
+  /** Page size for Lighthouse transaction queries. */
+  private static readonly PAGE_LIMIT = 50;
 
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
   ) {
+    this.lighthouseUrl = (
+      config.get<string>('LIGHTHOUSE_API_URL') ??
+      'https://api-canton.interscan.pro/mainnet'
+    ).replace(/\/$/, '');
     this.baseUrl = (
       config.get<string>('CANTON_JSON_API_URL') ?? 'http://127.0.0.1:7575'
     ).replace(/\/$/, '');
@@ -68,9 +84,10 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
       return;
     }
     this.logger.log(
-      `Ledger Indexer started — polling every ${this.pollIntervalMs}ms for ${this.watchParties.length} parties`,
+      `Ledger Indexer started (Lighthouse) — polling every ${this.pollIntervalMs}ms ` +
+        `for ${this.watchParties.length} parties`,
     );
-    // Jalankan pertama kali segera, lalu interval
+    // Run once immediately, then on interval
     void this.poll();
     this.timer = setInterval(() => { void this.poll(); }, this.pollIntervalMs);
   }
@@ -83,34 +100,12 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private ledgerToken(): string | null {
-    if (!this.secret) return null;
-    return jwt.sign(
-      { sub: this.ledgerApiUser, aud: this.ledgerAudience },
-      this.secret,
-      { algorithm: 'HS256', expiresIn: '5m' },
-    );
-  }
-
-  private authHeaders(): Record<string, string> {
-    const token = this.ledgerToken();
-    const base: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) base['Authorization'] = `Bearer ${token}`;
-    return base;
-  }
-
   /**
-   * Poll satu batch transaksi dari ledger.
-   *
-   * Menggunakan POST /v2/updates/transactions dengan filter per party
-   * dan offset-based paging (beginExclusive = lastOffset).
-   *
-   * Per Canton Module 4 backend dev docs:
-   *   - Setiap transaction berisi array of events (CreatedEvent / ArchivedEvent)
-   *   - Setiap event punya templateId untuk identifikasi jenis kontrak
+   * Poll one batch of transactions from the Lighthouse Explorer API.
+   * Skips if a previous poll is still running.
    */
   private async poll(): Promise<void> {
-    if (this.running) return; // skip jika poll sebelumnya belum selesai
+    if (this.running) return; // skip if previous poll has not finished
     this.running = true;
     try {
       await this.fetchAndProcessUpdates();
@@ -121,133 +116,132 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * Poll each watched party separately via the Lighthouse Explorer API.
+   *
+   * For each party:
+   *   GET {lighthouseUrl}/api/parties/{partyId}/tx?limit=50[&cursor={cursor}]
+   *   - Resume from the stored cursor if present.
+   *   - Follow pagination (has_next → next_cursor) up to MAX_PAGES_PER_POLL.
+   */
   private async fetchAndProcessUpdates(): Promise<void> {
     const parties = await this.resolveWatchParties();
     if (parties.length === 0) return;
 
-    // Build filtersByParty untuk semua watched parties
-    const filtersByParty: Record<string, unknown> = {};
     for (const party of parties) {
-      filtersByParty[party] = {
-        cumulative: [
-          {
-            identifierFilter: {
-              WildcardFilter: {
-                value: { includeCreatedEventBlob: false },
-              },
-            },
-          },
-        ],
-      };
+      await this.pollParty(party);
     }
+  }
 
-    const body = {
-      filter: {
-        filtersByParty,
-        filtersForAnyParty: { cumulative: [] },
-      },
-      beginExclusive: this.lastOffset,
-      // Ambil max 100 transaksi per poll untuk menghindari response besar
-    };
+  /** Fetch and process transactions for a single party, following pagination. */
+  private async pollParty(partyId: string): Promise<void> {
+    let cursor = this.lastCursors.get(partyId);
+    let pages = 0;
 
-    let res: Response;
-    try {
-      res = await fetch(`${this.baseUrl}/v2/updates/transactions`, {
-        method: 'POST',
-        headers: this.authHeaders(),
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(10_000),
-      });
-    } catch (err) {
-      if (!this.loggedUnreachable) {
-        this.loggedUnreachable = true;
-        this.logger.warn(
-          `Ledger not reachable at ${this.baseUrl} (indexer keeps retrying). ` +
-            `If local dev: open SSH tunnel to participant :7575. Detail: ${String(err)}`,
+    while (pages < LedgerIndexerService.MAX_PAGES_PER_POLL) {
+      pages += 1;
+
+      const url = new URL(
+        `${this.lighthouseUrl}/api/parties/${encodeURIComponent(partyId)}/tx`,
+      );
+      url.searchParams.set('limit', String(LedgerIndexerService.PAGE_LIMIT));
+      if (cursor !== undefined) {
+        url.searchParams.set('cursor', String(cursor));
+      }
+
+      let res: Response;
+      try {
+        res = await fetch(url.toString(), {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(10_000),
+        });
+      } catch (err) {
+        if (!this.loggedUnreachable) {
+          this.loggedUnreachable = true;
+          this.logger.warn(
+            `Lighthouse API not reachable at ${this.lighthouseUrl} (indexer keeps retrying). ` +
+              `Detail: ${String(err)}`,
+          );
+        }
+        return;
+      }
+
+      if (this.loggedUnreachable) {
+        this.loggedUnreachable = false;
+        this.logger.log(`Lighthouse API reachable again at ${this.lighthouseUrl}`);
+      }
+
+      if (!res.ok) {
+        this.logger.debug(
+          `Ledger Indexer poll HTTP ${res.status} for party ${partyId.slice(0, 16)}…`,
         );
+        return;
       }
-      return;
-    }
 
-    if (this.loggedUnreachable) {
-      this.loggedUnreachable = false;
-      this.logger.log(`Ledger reachable again at ${this.baseUrl}`);
-    }
+      const data = (await res.json()) as LighthouseResponse;
+      const txs = data.transactions ?? [];
 
-    if (!res.ok) {
-      if (res.status === 401 || res.status === 403) {
-        this.logger.warn(`Ledger Indexer auth error ${res.status} — check CANTON_SPLICE_SECRET`);
-      } else {
-        this.logger.debug(`Ledger Indexer poll HTTP ${res.status}`);
+      if (txs.length === 0) return;
+
+      this.logger.debug(
+        `Ledger Indexer: ${txs.length} transactions for party ${partyId.slice(0, 16)}…`,
+      );
+
+      for (const tx of txs) {
+        await this.processTransaction(tx);
       }
-      return;
-    }
 
-    const data = (await res.json()) as {
-      transactions?: LedgerTransaction[];
-      nextOffset?: string | number;
-    };
+      // Advance cursor to the latest transaction id on this page so we do not
+      // re-process it next cycle, even if the API does not paginate further.
+      const lastTx = txs[txs.length - 1];
+      if (lastTx?.id !== undefined) {
+        this.lastCursors.set(partyId, lastTx.id);
+      }
 
-    const txs = data.transactions ?? [];
-    if (txs.length === 0) return;
+      const pagination = data.pagination;
+      if (!pagination?.has_next || pagination.next_cursor === undefined) {
+        return;
+      }
 
-    this.logger.debug(`Ledger Indexer: ${txs.length} new transactions from offset ${String(this.lastOffset)}`);
-
-    // Process setiap transaksi
-    for (const tx of txs) {
-      await this.processTransaction(tx);
-    }
-
-    // Simpan offset terakhir
-    if (data.nextOffset !== undefined) {
-      this.lastOffset = data.nextOffset;
-    } else if (txs.length > 0) {
-      const last = txs[txs.length - 1];
-      if (last?.offset !== undefined) this.lastOffset = last.offset;
+      cursor = pagination.next_cursor;
+      this.lastCursors.set(partyId, pagination.next_cursor);
     }
   }
 
   /**
-   * Process satu ledger transaction.
-   * Cari events yang relevan untuk CanQuest:
-   *   - TransferOffer archived → offer accepted/rejected
+   * Process one Lighthouse transaction.
+   *
+   * A CC transfer onchain is identified by either:
+   *   - choice === "AmuletRules_Transfer", or
+   *   - is_cip56 === true
+   *
+   * For these we settle the matching CcTransaction (ledgerTxId = contract_id).
    */
-  private async processTransaction(tx: LedgerTransaction): Promise<void> {
-    if (!tx.events) return;
+  private async processTransaction(tx: LighthouseTransaction): Promise<void> {
+    const isCcTransfer = tx.choice === 'AmuletRules_Transfer' || tx.is_cip56 === true;
+    if (!isCcTransfer) return;
+    if (!tx.contract_id) return;
 
-    for (const event of tx.events) {
-      try {
-        await this.processEvent(event, tx.updateId);
-      } catch (err) {
-        this.logger.warn(`processEvent error: ${String(err)}`);
-      }
-    }
-  }
-
-  private async processEvent(
-    event: LedgerEvent,
-    updateId: string,
-  ): Promise<void> {
-    // Cari CcTransaction yang punya ledgerTxId = contract ID ini
-    // dan belum punya settledAt
-    if (event.archived?.templateId?.includes('TransferOffer')) {
-      const contractId = event.archived.contractId;
-      if (!contractId) return;
-
-      // Tandai settled jika ada CcTransaction dengan ledgerTxId = contractId
+    try {
       await this.prisma.ccTransaction.updateMany({
         where: {
-          ledgerTxId: contractId,
+          ledgerTxId: tx.contract_id,
           settledAt: null,
         },
-        data: { settledAt: new Date(), cantonUpdateId: updateId },
+        data: {
+          settledAt: new Date(tx.record_time),
+          cantonUpdateId: tx.update_id,
+        },
       });
 
-      this.logger.debug(`Indexed TransferOffer archived: ${contractId.slice(0, 16)}…`);
+      this.logger.debug(`Indexed CC transfer: ${tx.update_id.slice(0, 16)}…`);
+    } catch (err) {
+      this.logger.warn(`processTransaction error: ${String(err)}`);
     }
   }
 
-  /** Env parties + semua cantonPartyId user CanQuest (non-placeholder). */
+  /** Env parties + all cantonPartyId users of CanQuest (non-placeholder). */
   private async resolveWatchParties(): Promise<string[]> {
     const fromEnv = this.watchParties;
     const users = await this.prisma.user.findMany({
@@ -260,12 +254,13 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
     return [...new Set([...fromEnv, ...fromDb])];
   }
 
-  /** Status indexer untuk health check endpoint. */
+  /** Status indexer for health check endpoint. */
   getStatus() {
     return {
       enabled: this.enabled,
       running: this.running,
-      lastOffset: this.lastOffset,
+      lighthouseUrl: this.lighthouseUrl,
+      lastCursors: Object.fromEntries(this.lastCursors),
       watchParties: this.watchParties.length,
       pollIntervalMs: this.pollIntervalMs,
     };
@@ -274,20 +269,25 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
 
 // ── Type helpers ──────────────────────────────────────────────────────────────
 
-interface LedgerTransaction {
-  updateId: string;
-  offset: string | number;
-  events?: LedgerEvent[];
+interface LighthousePagination {
+  has_next: boolean;
+  has_previous: boolean;
+  next_cursor: number;
+  previous_cursor: number;
 }
 
-interface LedgerEvent {
-  created?: {
-    contractId: string;
-    templateId: string;
-    createArgument?: unknown;
-  };
-  archived?: {
-    contractId: string;
-    templateId: string;
-  };
+interface LighthouseTransaction {
+  id: number;
+  update_id: string;
+  record_time: string;
+  choice: string;
+  consuming: boolean;
+  acting_parties: string[];
+  contract_id: string;
+  is_cip56: boolean;
+}
+
+interface LighthouseResponse {
+  pagination: LighthousePagination;
+  transactions: LighthouseTransaction[];
 }
