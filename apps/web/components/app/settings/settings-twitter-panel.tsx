@@ -146,9 +146,6 @@ export function SettingsTwitterPanel({
         {status.connected && status.username ? (
           <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-emerald-500/15 bg-emerald-500/5 px-5 py-4 sm:px-6 sm:py-5 backdrop-blur-xl">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10 ring-1 ring-emerald-500/20">
-                <AtSign className="h-4.5 w-4.5 text-emerald-400" />
-              </div>
               <div>
                 <p className="text-xs font-semibold text-emerald-300/80 uppercase tracking-wider">Connected</p>
                 <p className="mt-0.5 font-mono text-base font-semibold text-slate-100">
