@@ -131,8 +131,8 @@ const REWARD_CONFIGS: Record<ActiveRewardCode, RewardConfig> = {
     adminHint:
       "User selesaikan task → bayar 2 CC fee → dapat kode dari pool. Upload kode di Winners.",
     chipClass:
-      "bg-violet-500/15 text-violet-200 border-violet-500/25",
-    accentClass: "text-violet-300",
+      "bg-canton-soft text-canton border-canton-muted",
+    accentClass: "text-canton",
   },
   INVITE_CODE_RANDOM: {
     code: "INVITE_CODE_RANDOM",
