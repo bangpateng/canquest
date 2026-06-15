@@ -21,10 +21,16 @@ function partyIdsEqual(a: string | null | undefined, b: string | null | undefine
   return a.trim() === b.trim();
 }
 
-/** Format a microCC string to a CC number with 4 decimals. */
+/** Format a microCC string to a CC number. */
 function microCcToCc(micro: string | null | undefined): number {
   if (!micro) return 0;
   return Math.abs(Number(micro)) / 1_000_000;
+}
+
+/** Truncate a long id/address for compact display. */
+function truncateMiddle(value: string, head = 10, tail = 6): string {
+  if (value.length <= head + tail + 1) return value;
+  return `${value.slice(0, head)}…${value.slice(-tail)}`;
 }
 
 /** Render an address; if it is the caller's own party, append a muted "(You)" label. */
@@ -63,7 +69,7 @@ function InlineCopyButton({ value, label = "Copy" }: { value: string; label?: st
     <button
       type="button"
       onClick={copy}
-      className={iconButtonClass("h-8 w-8 shrink-0 text-slate-100")}
+      className={iconButtonClass("h-7 w-7 shrink-0 text-slate-100")}
       aria-label={label}
     >
       {copied ? (
@@ -85,12 +91,12 @@ function ReceiptField({
   mono?: boolean;
 }) {
   return (
-    <div className="min-w-0">
-      <dt className="text-sm font-medium text-slate-400">{label}</dt>
+    <div className="flex items-start justify-between gap-3 py-2.5">
+      <dt className="shrink-0 text-sm font-medium text-slate-400">{label}</dt>
       <dd
         className={cn(
-          "mt-2 min-w-0 text-base font-semibold text-slate-100 [overflow-wrap:anywhere]",
-          mono && "font-mono text-sm font-medium",
+          "min-w-0 text-right text-sm font-semibold text-slate-100 [overflow-wrap:anywhere]",
+          mono && "font-mono",
         )}
       >
         {children}
@@ -109,6 +115,8 @@ type TransactionDetailContentProps = {
   compact?: boolean;
 };
 
+const LIGHTHOUSE_TX_BASE = "https://lighthouse.xyz/transfers";
+
 export function TransactionDetailContent({
   detail,
   loading,
@@ -120,7 +128,7 @@ export function TransactionDetailContent({
 
   if (loading) {
     return (
-      <div className={cn("flex justify-center", compact ? "py-12" : "py-24")}>
+      <div className={cn("flex justify-center", compact ? "py-10" : "py-24")}>
         <LoadingSpinner size="xl" tone="muted" />
       </div>
     );
@@ -144,55 +152,61 @@ export function TransactionDetailContent({
   // User's own wallet address — prefer the detail's stored party, fall back to prop.
   const ownAddress = detail.cantonPartyId ?? partyId ?? null;
 
-  // From / To resolution:
-  //  - TRANSFER_OUT: From = you, To = counterparty (receiver)
-  //  - TRANSFER_IN:  From = counterparty (sender), To = you
-  const fromAddress = isIn ? detail.counterparty : ownAddress;
-  const toAddress = isIn ? ownAddress : detail.counterparty;
+  // From / To use the REAL sender/receiver addresses. We only tag the one that
+  // matches the user's party as "(You)" — never default both to the user.
+  const fromAddress =
+    detail.senderAddress ?? (isOut ? ownAddress : detail.counterparty) ?? null;
+  const toAddress =
+    detail.receiverAddress ?? (isIn ? ownAddress : detail.counterparty) ?? null;
 
-  // Tx ID for copy/explorer — prefer ledger update id, fall back to contract id / row id.
-  const txId = detail.cantonUpdateId ?? detail.ledgerContractId ?? detail.id;
+  // Tx ID for copy/explorer — prefer Lighthouse event id, fall back to update/contract id.
+  const txId =
+    detail.eventId ?? detail.cantonUpdateId ?? detail.ledgerContractId ?? detail.id;
+  const lighthouseUrl = detail.eventId
+    ? `${LIGHTHOUSE_TX_BASE}/${encodeURIComponent(detail.eventId)}`
+    : null;
 
   const feeCc = microCcToCc(detail.networkFeeMicroCc);
-  const hasFee = detail.networkFeeMicroCc != null && feeCc > 0;
-
   const roundDisplay =
     detail.round != null && detail.round !== "" ? String(detail.round) : null;
-
   const usdDisplay =
     typeof detail.usdEstimate === "number" && Number.isFinite(detail.usdEstimate)
       ? detail.usdEstimate
       : null;
+
+  // For on-chain transfers the fields already show everything — hide the
+  // separate "On-chain events" block so the modal fits without scrolling.
+  const showLedgerEvents = !isTransfer && detail.ledgerEvents.length > 0;
 
   return (
     <>
       <div
         className={cn(
           "w-full min-w-0 overflow-hidden rounded-3xl border border-white/5 bg-[var(--card)]",
-          compact ? "p-6" : "p-8",
+          compact ? "p-5" : "p-8",
         )}
       >
         {/* Centered amount hero */}
         <div className="flex flex-col items-center text-center">
           <span
             className={cn(
-              "flex h-14 w-14 items-center justify-center rounded-full",
+              "flex h-11 w-11 items-center justify-center rounded-full",
               isOut ? "bg-red-500/15 text-red-500" : "bg-green-500/15 text-green-500",
             )}
             aria-hidden
           >
             {isIn ? (
-              <ArrowDownLeft className="h-6 w-6" />
+              <ArrowDownLeft className="h-5 w-5" />
             ) : (
-              <ArrowUpRight className="h-6 w-6" />
+              <ArrowUpRight className="h-5 w-5" />
             )}
           </span>
-          <p className="mt-4 text-xs font-bold uppercase tracking-wider text-slate-400">
+          <p className="mt-2 text-xs font-bold uppercase tracking-wider text-slate-400">
             {detail.description}
           </p>
           <p
             className={cn(
-              "mt-2 font-bold tabular-nums",
+              "mt-1 font-bold tabular-nums",
               compact ? "text-3xl" : "text-4xl",
               isOut ? "text-red-500" : "text-green-500",
             )}
@@ -201,14 +215,15 @@ export function TransactionDetailContent({
             {ccAmt.toFixed(4)} CC
           </p>
           {usdDisplay != null ? (
-            <p className="mt-1 text-sm font-medium text-slate-400 tabular-nums">
+            <p className="mt-0.5 text-sm font-medium text-slate-400 tabular-nums">
               ≈ ${usdDisplay.toFixed(2)} USD
             </p>
           ) : null}
         </div>
 
-        <dl className="mt-8 space-y-5">
+        <dl className="mt-4 divide-y divide-slate-800/60">
           <ReceiptField label="Type">{detail.type.replace(/_/g, " ")}</ReceiptField>
+
           {isTransfer ? (
             <>
               <ReceiptField label="From" mono>
@@ -225,11 +240,7 @@ export function TransactionDetailContent({
           ) : null}
 
           <ReceiptField label="Network fee">
-            {hasFee ? (
-              <span className="tabular-nums">{feeCc.toFixed(4)} CC</span>
-            ) : (
-              <span className="text-slate-400">{"\u2014"}</span>
-            )}
+            <span className="tabular-nums">{feeCc.toFixed(4)} CC</span>
           </ReceiptField>
 
           {roundDisplay ? (
@@ -242,11 +253,11 @@ export function TransactionDetailContent({
             {new Date(detail.createdAt).toLocaleString()}
           </ReceiptField>
 
-          <ReceiptField label="On-chain">
-            <span className="inline-flex items-center gap-2">
+          <ReceiptField label="Status">
+            <span className="inline-flex items-center gap-1.5">
               {detail.onChainSettled ? (
                 <>
-                  <ShieldCheck className="h-5 w-5 shrink-0 text-green-500" />
+                  <ShieldCheck className="h-4 w-4 shrink-0 text-green-500" />
                   <span className="font-semibold">Settled</span>
                 </>
               ) : (
@@ -257,8 +268,19 @@ export function TransactionDetailContent({
 
           {txId ? (
             <ReceiptField label="Tx ID" mono>
-              <span className="flex min-w-0 items-center gap-2">
-                <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{txId}</span>
+              <span className="inline-flex items-center justify-end gap-1.5">
+                {lighthouseUrl ? (
+                  <a
+                    href={lighthouseUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[var(--primary)] underline-offset-2 hover:underline"
+                  >
+                    {truncateMiddle(txId)}
+                  </a>
+                ) : (
+                  <span>{truncateMiddle(txId)}</span>
+                )}
                 <InlineCopyButton value={txId} label="Copy transaction ID" />
               </span>
             </ReceiptField>
@@ -270,19 +292,19 @@ export function TransactionDetailContent({
             href={detail.cantonScanUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-white/5 bg-[var(--muted)]/40 px-5 py-3 text-sm font-semibold text-slate-100 transition-colors hover:bg-[var(--muted)]"
+            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-white/5 bg-[var(--muted)]/40 px-5 py-2.5 text-sm font-semibold text-slate-100 transition-colors hover:bg-[var(--muted)]"
           >
             View on CantonScan
-            <ExternalLink className="h-5 w-5" />
+            <ExternalLink className="h-4 w-4" />
           </a>
         ) : null}
       </div>
 
-      {detail.ledgerEvents.length > 0 ? (
+      {showLedgerEvents ? (
         <div
           className={cn(
             "w-full min-w-0 overflow-hidden rounded-3xl border border-white/5 bg-[var(--card)]",
-            compact ? "mt-5 p-6" : "mt-5 p-8",
+            compact ? "mt-4 p-5" : "mt-5 p-8",
           )}
         >
           <h3 className="text-base font-bold text-slate-100">On-chain events</h3>
@@ -300,7 +322,7 @@ export function TransactionDetailContent({
             ))}
           </ul>
         </div>
-      ) : detail.ledgerFetchError ? (
+      ) : !isTransfer && detail.ledgerFetchError ? (
         <p className="mt-4 text-sm font-medium text-slate-400">{detail.ledgerFetchError}</p>
       ) : null}
     </>

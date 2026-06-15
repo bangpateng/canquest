@@ -32,7 +32,14 @@ export type TransactionDetail = {
   round?: number | string | null;
   /** Estimated USD value of the amount, if known. */
   usdEstimate?: number | null;
+  /** Real sender address (on-chain transfers). */
+  senderAddress?: string | null;
+  /** Real receiver address (on-chain transfers). */
+  receiverAddress?: string | null;
+  /** Lighthouse event id — used for the explorer link. */
+  eventId?: string | null;
 };
+
 
 
 type TransactionDetailViewProps = {

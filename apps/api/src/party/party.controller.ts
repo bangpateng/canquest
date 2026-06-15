@@ -1343,12 +1343,33 @@ export class PartyController {
         this.logger.warn(`Lighthouse onchain fetch HTTP ${res.status}`);
         return { transactions: [], pagination: null };
       }
-      return await res.json();
+
+      const data = (await res.json()) as Record<string, unknown>;
+
+      // Network fee (CC) applied to every transfer — sourced from env so the
+      // receipt shows a consistent fee even when Lighthouse omits it.
+      const feeCc = Number(this.config.get<string>('TRANSACTION_FEE_CC') ?? '0.2');
+      const networkFeeMicroCc = String(Math.round(Math.abs(feeCc) * 1_000_000));
+
+      // Inject network_fee into every transfer-like array in the response.
+      for (const key of ['transfers', 'transactions', 'items', 'data']) {
+        const arr = data[key];
+        if (Array.isArray(arr)) {
+          data[key] = arr.map((item) =>
+            item && typeof item === 'object'
+              ? { ...(item as Record<string, unknown>), network_fee: networkFeeMicroCc }
+              : item,
+          );
+        }
+      }
+
+      return data;
     } catch (err) {
       this.logger.warn(`Lighthouse onchain fetch error: ${String(err)}`);
       return { transactions: [], pagination: null };
     }
   }
+
 
   @SkipThrottle()
   @Get('transactions/:id')

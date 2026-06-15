@@ -27,6 +27,12 @@ export interface TxItem {
   source?: "db" | "onchain";
   /** Owner party (used to highlight "You" in the detail modal). */
   partyId?: string | null;
+  /** Real sender address (on-chain). */
+  senderAddress?: string | null;
+  /** Real receiver address (on-chain). */
+  receiverAddress?: string | null;
+  /** Lighthouse event id (format "122072…:0") — used for the explorer link. */
+  eventId?: string | null;
   /** Direct CantonScan link for this on-chain item, if known. */
   cantonScanUrl?: string | null;
   /** Network fee paid, in microCC. */
@@ -36,6 +42,7 @@ export interface TxItem {
   /** Estimated USD value of the amount, if known. */
   usdEstimate?: number | null;
 }
+
 
 
 /** Generic on-chain item from Lighthouse — fields vary per endpoint */
@@ -60,8 +67,11 @@ interface LighthouseOnChainItem {
   round?: number | string;
   fee?: string;
   fee_cc?: string;
+  /** Network fee in microCC, injected by the backend from TRANSACTION_FEE_CC. */
+  network_fee?: string;
   scan_url?: string;
 }
+
 
 
 interface TxPage {
@@ -193,15 +203,24 @@ function lighthouseToTxItem(
   const amount = Math.abs(Number(amountStr));
   const timestamp = item.created_at ?? item.timestamp ?? new Date().toISOString();
   const description = inferOnChainDescription(item, type);
-  const counterparty = item.counterparty
-    ?? item.receiver_address ?? item.sender_address
-    ?? item.receiver ?? item.sender ?? null;
 
-  const feeStr = item.fee ?? item.fee_cc ?? null;
-  const networkFeeMicroCc =
-    feeStr != null && feeStr !== "" && Number.isFinite(Number(feeStr))
-      ? String(Math.round(Math.abs(Number(feeStr)) * 1_000_000))
-      : null;
+  // Keep the real sender/receiver addresses separate so the detail modal can
+  // render From/To correctly (and tag only the matching one as "You").
+  const senderAddress = item.sender_address ?? item.sender ?? null;
+  const receiverAddress = item.receiver_address ?? item.receiver ?? null;
+
+  // Network fee — backend injects network_fee (microCC). Fall back to fee/fee_cc
+  // (CC), and finally to 0.2 CC (200000 microCC) so the receipt always shows it.
+  let networkFeeMicroCc: string;
+  if (item.network_fee != null && item.network_fee !== "") {
+    networkFeeMicroCc = String(item.network_fee);
+  } else {
+    const feeStr = item.fee ?? item.fee_cc ?? null;
+    networkFeeMicroCc =
+      feeStr != null && feeStr !== "" && Number.isFinite(Number(feeStr))
+        ? String(Math.round(Math.abs(Number(feeStr)) * 1_000_000))
+        : "200000";
+  }
 
   return {
     id: `lh-${item.id}`,
@@ -209,19 +228,25 @@ function lighthouseToTxItem(
     type,
     description,
     referenceId: null,
-    counterparty,
+    // List view keeps the counterparty column clean for on-chain items — the
+    // description already says "Sent to …" / "Received from …".
+    counterparty: null,
     ledgerTxId: item.contract_id ?? null,
     cantonUpdateId: item.update_id ?? item.event_id ?? null,
     settledAt: timestamp,
     createdAt: timestamp,
     source: "onchain" as const,
     partyId,
+    senderAddress,
+    receiverAddress,
+    eventId: item.event_id ?? null,
     cantonScanUrl: item.scan_url ?? null,
     networkFeeMicroCc,
     round: item.round ?? null,
     usdEstimate: null,
   };
 }
+
 
 
 /** Fetch on-chain items from a Lighthouse endpoint, convert to TxItem[] */

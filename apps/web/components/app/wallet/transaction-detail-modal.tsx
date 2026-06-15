@@ -46,8 +46,12 @@ function buildDetailFromTxItem(tx: TxItem): TransactionDetail {
     networkFeeMicroCc: tx.networkFeeMicroCc ?? null,
     round: tx.round ?? null,
     usdEstimate: tx.usdEstimate ?? null,
+    senderAddress: tx.senderAddress ?? null,
+    receiverAddress: tx.receiverAddress ?? null,
+    eventId: tx.eventId ?? null,
   };
 }
+
 
 /** Same explorer UI as /transactions/[id], in a dialog (e.g. after Send CC). */
 export function TransactionDetailModal({
