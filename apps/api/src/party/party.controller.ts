@@ -1300,6 +1300,56 @@ export class PartyController {
     return this.users.getTransactions(user.id, p, ps);
   }
 
+  /**
+   * Onchain transactions from the Lighthouse Explorer API for the user's party.
+   *
+   * NOTE: Must be declared BEFORE `@Get('transactions/:id')` so NestJS matches
+   * the static `onchain` segment instead of treating it as the `:id` param.
+   */
+  @SkipThrottle()
+  @Get('transactions/onchain')
+  async getOnchainTransactions(
+    @Req() req: AuthedReq,
+    @Query('limit') limit?: string,
+    @Query('cursor') cursor?: string,
+  ) {
+    const user = await this.users.findById(req.user.userId);
+    const partyId = user?.cantonPartyId;
+
+    // No real wallet → nothing to show onchain.
+    if (!partyId || partyId.startsWith('canquest:')) {
+      return { transactions: [], pagination: null };
+    }
+
+    const lighthouseUrl = (
+      this.config.get<string>('LIGHTHOUSE_API_URL') ??
+      'https://api-canton.interscan.pro/mainnet'
+    ).replace(/\/$/, '');
+
+    const url = new URL(
+      `${lighthouseUrl}/api/parties/${encodeURIComponent(partyId)}/tx`,
+    );
+    const n = Math.min(50, Math.max(1, parseInt(limit ?? '15', 10) || 15));
+    url.searchParams.set('limit', String(n));
+    if (cursor) url.searchParams.set('cursor', cursor);
+
+    try {
+      const res = await fetch(url.toString(), {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!res.ok) {
+        this.logger.warn(`Lighthouse onchain fetch HTTP ${res.status}`);
+        return { transactions: [], pagination: null };
+      }
+      return await res.json();
+    } catch (err) {
+      this.logger.warn(`Lighthouse onchain fetch error: ${String(err)}`);
+      return { transactions: [], pagination: null };
+    }
+  }
+
   @SkipThrottle()
   @Get('transactions/:id')
   async getTransactionById(@Req() req: AuthedReq, @Param('id') id: string) {
