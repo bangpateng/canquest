@@ -148,8 +148,8 @@ const REWARD_CONFIGS: Record<ActiveRewardCode, RewardConfig> = {
     adminHint:
       "Setelah event: admin Draw Winners → pemenang bayar 2 CC fee → dapat kode. Yang kalah: You Not Lucky.",
     chipClass:
-      "bg-violet-500/15 text-violet-200 border-violet-500/25",
-    accentClass: "text-violet-300",
+      "bg-canton-soft text-canton border-canton-muted",
+    accentClass: "text-canton",
   },
   WAITLIST_EMAIL: {
     code: "WAITLIST_EMAIL",
