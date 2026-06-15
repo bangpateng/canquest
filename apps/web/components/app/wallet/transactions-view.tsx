@@ -9,6 +9,7 @@ import { TransactionDetailModal } from "@/components/app/wallet/transaction-deta
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 
 export const TRANSACTIONS_PAGE_SIZE = 5;
+const LIGHTHOUSE_BASE = "https://lighthouse.xyz/api";
 
 export interface TxItem {
   id: string;
@@ -21,6 +22,18 @@ export interface TxItem {
   cantonUpdateId?: string | null;
   settledAt: string | null;
   createdAt: string;
+  /** On-chain source marker */
+  source?: "db" | "onchain";
+}
+
+interface LighthouseTransfer {
+  id: number;
+  sender: string;
+  receiver: string;
+  amount: string;
+  created_at: string;
+  update_id?: string;
+  contract_id?: string;
 }
 
 interface TxPage {
@@ -91,13 +104,42 @@ type TransactionsViewProps = {
   pageSize?: number;
   refreshKey?: number;
   className?: string;
+  /** Canton party ID for on-chain lookup (5N Lighthouse). If empty, skip on-chain. */
+  partyId?: string | null;
 };
+
+/** Convert a Lighthouse transfer to a TxItem for display */
+function lighthouseToTxItem(
+  t: LighthouseTransfer,
+  partyId: string,
+): TxItem {
+  const isOut = t.sender === partyId;
+  const counterparty = isOut ? t.receiver : t.sender;
+  const description = isOut
+    ? `Sent to ${counterparty.split("::")[0] ?? counterparty.slice(0, 12)}…`
+    : `Received from ${counterparty.split("::")[0] ?? counterparty.slice(0, 12)}…`;
+
+  return {
+    id: `lh-${t.id}`,
+    amountMicroCc: String(Math.round(Number(t.amount) * 1_000_000)),
+    type: isOut ? "TRANSFER_OUT" : "TRANSFER_IN",
+    description,
+    referenceId: null,
+    counterparty,
+    ledgerTxId: t.contract_id ?? null,
+    cantonUpdateId: t.update_id ?? null,
+    settledAt: t.created_at,
+    createdAt: t.created_at,
+    source: "onchain" as const,
+  };
+}
 
 export function TransactionsView({
   variant = "page",
   pageSize = TRANSACTIONS_PAGE_SIZE,
   refreshKey = 0,
   className,
+  partyId,
 }: TransactionsViewProps) {
   const t = usePlatformT();
   const embedded = variant === "embedded";
@@ -111,20 +153,68 @@ export function TransactionsView({
     async (page: number) => {
       setLoading(true);
       try {
-        const res = await fetch(
-          `/api/party/transactions?page=${page}&pageSize=${pageSize}`,
-          { credentials: "include" },
+        // Fetch from both sources in parallel
+        const [dbRes, lhRes] = await Promise.allSettled([
+          fetch(`/api/party/transactions?page=${page}&pageSize=${pageSize}`, {
+            credentials: "include",
+          }),
+          partyId
+            ? fetch(
+                `${LIGHTHOUSE_BASE}/parties/${encodeURIComponent(partyId)}/transfers?limit=${pageSize * 3}`,
+                { cache: "no-store" },
+              )
+            : Promise.reject(new Error("Skipped — no partyId")),
+        ]);
+
+        // Parse DB results
+        let dbPage: TxPage = { items: [], total: 0, page, pageSize, totalPages: 0 };
+        if (dbRes.status === "fulfilled" && dbRes.value.ok) {
+          dbPage = (await dbRes.value.json()) as TxPage;
+        }
+
+        // Parse Lighthouse (on-chain) results
+        const onChainItems: TxItem[] = [];
+        if (lhRes.status === "fulfilled" && lhRes.value.ok && partyId) {
+          const lhTransfers: LighthouseTransfer[] = await lhRes.value.json().catch(() => []);
+          for (const lt of lhTransfers) {
+            onChainItems.push(lighthouseToTxItem(lt, partyId));
+          }
+        }
+
+        // Merge: DB first, then on-chain deduplicated (by cantonUpdateId)
+        const merged = [...dbPage.items];
+        const seenContractIds = new Set(
+          dbPage.items
+            .map((x) => x.cantonUpdateId ?? x.ledgerTxId)
+            .filter(Boolean),
         );
-        if (res.ok) setTxPage((await res.json()) as TxPage);
-        else
-          setTxPage({ items: [], total: 0, page, pageSize, totalPages: 0 });
+        for (const oc of onChainItems) {
+          const ocKey = oc.cantonUpdateId ?? oc.ledgerTxId;
+          if (ocKey && seenContractIds.has(ocKey)) continue;
+          if (ocKey) seenContractIds.add(ocKey);
+          merged.push(oc);
+        }
+
+        // Sort by createdAt descending, slice to pageSize
+        merged.sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        );
+        const paged = merged.slice(0, pageSize);
+
+        setTxPage({
+          items: paged,
+          total: merged.length,
+          page,
+          pageSize,
+          totalPages: Math.ceil(merged.length / pageSize),
+        });
       } catch {
         setTxPage({ items: [], total: 0, page, pageSize, totalPages: 0 });
       } finally {
         setLoading(false);
       }
     },
-    [pageSize],
+    [pageSize, partyId],
   );
 
   useEffect(() => {

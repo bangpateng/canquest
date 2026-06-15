@@ -119,7 +119,7 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
 
       <OffersSection onRefresh={handleBalanceRefresh} />
 
-      <TransactionsView variant="embedded" refreshKey={txRefreshKey} />
+      <TransactionsView variant="embedded" refreshKey={txRefreshKey} partyId={me.cantonPartyId ?? null} />
     </div>
   );
 }
