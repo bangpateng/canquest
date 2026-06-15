@@ -107,19 +107,6 @@ export function SettingsPreapprovalPanel() {
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3 min-w-0">
-              <div
-                className={`flex h-9 w-9 items-center justify-center rounded-lg ring-1 ${
-                  active
-                    ? "bg-emerald-500/10 ring-emerald-500/20"
-                    : "bg-slate-500/10 ring-white/10"
-                }`}
-              >
-                {active ? (
-                  <Zap className="h-4.5 w-4.5 text-emerald-400" />
-                ) : (
-                  <ZapOff className="h-4.5 w-4.5 text-slate-500" />
-                )}
-              </div>
               <div className="min-w-0">
                 <p
                   className={`text-xs font-semibold uppercase tracking-wider ${
