@@ -2,13 +2,13 @@ import { PlatformPage } from "@/components/platform/platform-page";
 import { CampaignSocialLinks } from "@/components/app/campaign/campaign-social-links";
 import { QuestTaskPanel } from "@/components/app/quest/quest-task-panel";
 import { CampaignQuestSidebar } from "@/components/app/campaign/campaign-quest-sidebar";
-import { Eyebrow, PageTitle } from "@/components/ui/typography";
 import { ROUTES } from "@/lib/routing/app-routes";
 import { CQ_ACCESS_COOKIE } from "@/lib/auth/auth-cookies";
 import { internalApiBase } from "@/lib/api/internal-api-url";
 import { resolveQuestMediaUrl } from "@/lib/quest/quest-media-url";
 import { slugify } from "@/lib/routing/slug";
 import { QUEST_STATUS_BADGE, type Quest } from "@/lib/quest/quest-types";
+import { getRewardConfig } from "@/lib/quest/quest-engine";
 import { buttonVariants } from "@/components/ui/button";
 import { surfaceCardClass } from "@/lib/ui/ui-tokens";
 import { cn } from "@/lib/utils/utils";
@@ -60,6 +60,7 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
 
   const canonicalPath = ROUTES.campaignQuest(quest.id, quest.title);
   const statusMeta = QUEST_STATUS_BADGE[quest.status];
+  const config = getRewardConfig(quest.rewardType);
 
   return (
     <PlatformPage className="space-y-5 sm:space-y-6">
@@ -74,41 +75,63 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
 
       {/* ── Hero Header ─────────────────────────────────────────────────── */}
       <header className="overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50">
-        <div className="relative h-32 sm:h-40 md:h-44">
-          <div
-            className="absolute inset-0 bg-cover bg-center"
-            style={
-              quest.bannerImageUrl
-                ? { backgroundImage: `url("${quest.bannerImageUrl}")` }
-                : { background: quest.banner }
-            }
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#0a0c14] via-[#0a0c14]/70 to-black/15" />
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_100%_0%,rgb(var(--canton-rgb)/0.08),transparent_60%)]" />
-        </div>
+        {/* Banner — only if image exists */}
+        {quest.bannerImageUrl ? (
+          <div className="relative h-28 sm:h-36 md:h-40 w-full overflow-hidden">
+            <div
+              className="absolute inset-0 bg-cover bg-center"
+              style={{ backgroundImage: `url("${quest.bannerImageUrl}")` }}
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#0a0c14] via-[#0a0c14]/60 to-transparent" />
+          </div>
+        ) : (
+          /* Decorative gradient strip when no banner */
+          <div className="relative h-2 w-full overflow-hidden">
+            <div className={cn(
+              "absolute inset-0 bg-gradient-to-r opacity-60",
+              config.isDual
+                ? "from-[rgb(var(--canton-rgb)/0.8)] via-violet-500/60 to-transparent"
+                : config.accentClass.includes("violet")
+                  ? "from-violet-500/80 via-violet-400/40 to-transparent"
+                  : config.accentClass.includes("cyan")
+                    ? "from-cyan-500/80 via-cyan-400/40 to-transparent"
+                    : "from-[rgb(var(--canton-rgb)/0.8)] via-[rgb(var(--canton-rgb)/0.4)] to-transparent"
+            )} />
+          </div>
+        )}
 
-        <div className="relative px-4 pb-4 pt-0 sm:px-5 sm:pb-5">
-          <div className="-mt-9 flex flex-col gap-3 sm:-mt-11 sm:flex-row sm:items-end sm:gap-4">
-            {quest.logoUrl ? (
-              <img
-                src={quest.logoUrl}
-                alt=""
-                className="h-16 w-16 shrink-0 rounded-xl border-[3px] border-[#0a0c14] object-cover shadow-md ring-1 ring-white/10 sm:h-20 sm:w-20 sm:rounded-2xl sm:border-4"
-              />
-            ) : (
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border-[3px] border-[#0a0c14] bg-[var(--muted)] text-lg font-bold text-canton shadow-md ring-1 ring-white/10 sm:h-20 sm:w-20 sm:rounded-2xl sm:border-4">
-                {quest.orgSlug.slice(0, 2).toUpperCase()}
-              </div>
-            )}
+        {/* Header content */}
+        <div className="relative px-5 py-5 sm:px-6 sm:py-6">
+          <div className="flex items-start gap-4">
+            {/* Logo */}
+            <div className={cn(
+              "relative shrink-0 overflow-hidden rounded-2xl shadow-lg ring-2 ring-white/10",
+              quest.bannerImageUrl ? "-mt-10 sm:-mt-14 border-2 border-[#0a0c14]" : "",
+              "h-14 w-14 sm:h-16 sm:w-16",
+            )}>
+              {quest.logoUrl ? (
+                <img src={quest.logoUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center bg-[var(--muted)] text-base font-bold text-canton">
+                  {quest.orgSlug.slice(0, 2).toUpperCase()}
+                </div>
+              )}
+            </div>
+
+            {/* Title + badges */}
             <div className="min-w-0 flex-1">
-              <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-                <span
-                  className={cn(
-                    "rounded-lg px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
-                    statusMeta.className,
-                  )}
-                >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={cn(
+                  "rounded-lg px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+                  statusMeta.className,
+                )}>
                   {statusMeta.label}
+                </span>
+                <span className={cn(
+                  "rounded-lg border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+                  config.chipClass,
+                )}>
+                  {config.shortLabel}
                 </span>
                 {quest.tags.map((tag) => (
                   <span
@@ -119,32 +142,28 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
                   </span>
                 ))}
               </div>
-              <Eyebrow className="text-slate-400">{quest.org}</Eyebrow>
-              <PageTitle className="mt-0.5 text-xl leading-tight sm:text-2xl md:text-3xl text-white">
+              <p className="mt-1.5 text-xs font-semibold text-slate-400">{quest.org}</p>
+              <h1 className="mt-0.5 text-xl font-bold leading-tight text-white sm:text-2xl md:text-3xl">
                 {quest.title}
-              </PageTitle>
+              </h1>
             </div>
           </div>
+
+          {/* Description + social links — inside header */}
+          {(quest.description || (quest.socialLinks && quest.socialLinks.length > 0)) && (
+            <div className="mt-4 border-t border-white/[0.05] pt-4">
+              {quest.description && (
+                <p className="line-clamp-3 text-sm leading-relaxed text-slate-400">
+                  {quest.description}
+                </p>
+              )}
+              {quest.socialLinks && quest.socialLinks.length > 0 && (
+                <CampaignSocialLinks links={quest.socialLinks} className="mt-3" />
+              )}
+            </div>
+          )}
         </div>
       </header>
-
-      {/* ── About Section ───────────────────────────────────────────────── */}
-      <section className="rounded-2xl border border-white/[0.06] bg-[#0a0c14]/60 backdrop-blur-2xl p-4 sm:p-5">
-        <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]/20">
-            <Sparkles className="h-3.5 w-3.5 text-[var(--primary)]" aria-hidden />
-          </div>
-          <h2 className="text-sm font-bold uppercase tracking-wider text-white">
-            About
-          </h2>
-        </div>
-        <p className="mt-3 text-sm leading-relaxed text-slate-400 whitespace-pre-line">
-          {quest.description}
-        </p>
-        {quest.socialLinks && quest.socialLinks.length > 0 ? (
-          <CampaignSocialLinks links={quest.socialLinks} className="mt-4 pt-1" />
-        ) : null}
-      </section>
 
       <CampaignQuestSidebar quest={quest} />
 
