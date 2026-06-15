@@ -317,7 +317,7 @@ export function getQuestMeta(
 
   // ── Slot calculation ──────────────────────────────────────────
   const slotsMax = summary?.maxWinners ?? quest.maxWinners ?? 0;
-  const slotsLeft = summary?.remainingSlots ?? 0;
+  const slotsLeft = summary?.remainingSlots ?? slotsMax;
   const winnersDrawn = summary?.slotsTaken ?? 0;
 
   // Determine if this quest uses FCFS or raffle style
