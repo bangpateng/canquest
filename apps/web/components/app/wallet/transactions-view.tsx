@@ -25,7 +25,18 @@ export interface TxItem {
   createdAt: string;
   /** On-chain source marker */
   source?: "db" | "onchain";
+  /** Owner party (used to highlight "You" in the detail modal). */
+  partyId?: string | null;
+  /** Direct CantonScan link for this on-chain item, if known. */
+  cantonScanUrl?: string | null;
+  /** Network fee paid, in microCC. */
+  networkFeeMicroCc?: string | null;
+  /** Canton round number the transaction settled in. */
+  round?: number | string | null;
+  /** Estimated USD value of the amount, if known. */
+  usdEstimate?: number | null;
 }
+
 
 /** Generic on-chain item from Lighthouse — fields vary per endpoint */
 interface LighthouseOnChainItem {
@@ -46,7 +57,12 @@ interface LighthouseOnChainItem {
   kind?: string;
   counterparty?: string;
   party_id?: string;
+  round?: number | string;
+  fee?: string;
+  fee_cc?: string;
+  scan_url?: string;
 }
+
 
 interface TxPage {
   items: TxItem[];
@@ -181,6 +197,12 @@ function lighthouseToTxItem(
     ?? item.receiver_address ?? item.sender_address
     ?? item.receiver ?? item.sender ?? null;
 
+  const feeStr = item.fee ?? item.fee_cc ?? null;
+  const networkFeeMicroCc =
+    feeStr != null && feeStr !== "" && Number.isFinite(Number(feeStr))
+      ? String(Math.round(Math.abs(Number(feeStr)) * 1_000_000))
+      : null;
+
   return {
     id: `lh-${item.id}`,
     amountMicroCc: String(Math.round(amount * 1_000_000)),
@@ -193,8 +215,14 @@ function lighthouseToTxItem(
     settledAt: timestamp,
     createdAt: timestamp,
     source: "onchain" as const,
+    partyId,
+    cantonScanUrl: item.scan_url ?? null,
+    networkFeeMicroCc,
+    round: item.round ?? null,
+    usdEstimate: null,
   };
 }
+
 
 /** Fetch on-chain items from a Lighthouse endpoint, convert to TxItem[] */
 async function fetchLighthouseEndpoint(
@@ -230,7 +258,8 @@ export function TransactionsView({
   const [txPage, setTxPage] = useState<TxPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
-  const [modalTxId, setModalTxId] = useState<string | null>(null);
+  const [modalTx, setModalTx] = useState<TxItem | null>(null);
+
 
   const fetchTxns = useCallback(
     async (page: number) => {
@@ -398,7 +427,8 @@ export function TransactionsView({
                       <tr
                         key={tx.id}
                         className="border-t border-white/[0.04] transition-colors hover:bg-white/[0.03] cursor-pointer"
-                        onClick={() => setModalTxId(tx.id)}
+                        onClick={() => setModalTx(tx)}
+
                       >
                         <td className="px-5 py-3.5 sm:px-6 sm:py-4">
                           <div className="flex items-center gap-3">
@@ -462,9 +492,10 @@ export function TransactionsView({
                   <li key={tx.id}>
                     <button
                       type="button"
-                      onClick={() => setModalTxId(tx.id)}
+                      onClick={() => setModalTx(tx)}
                       className="flex w-full items-center gap-4 px-5 py-4 transition-colors hover:bg-white/[0.03] text-left"
                     >
+
                       <div
                         className={cn(
                           "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
@@ -511,12 +542,18 @@ export function TransactionsView({
         )}
       </div>
 
-      {/* Transaction Detail Modal */}
+      {/* Transaction Detail Modal.
+          On-chain items (id "lh-…") are rendered directly from the TxItem —
+          they don't exist in the DB and a fetch would 404. DB items fetch as before. */}
       <TransactionDetailModal
-        open={modalTxId !== null}
-        transactionId={modalTxId}
-        onClose={() => setModalTxId(null)}
+        open={modalTx !== null}
+        transactionId={modalTx?.id ?? null}
+        partyId={partyId ?? null}
+        onchainTx={modalTx?.source === "onchain" ? modalTx : null}
+        onClose={() => setModalTx(null)}
       />
+
+
     </div>
   );
 }

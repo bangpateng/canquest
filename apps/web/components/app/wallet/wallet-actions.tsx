@@ -353,8 +353,10 @@ export function WalletActions({ partyId, balance, onBalanceRefresh }: WalletActi
         transactionId={successTransactionId}
         title="Transfer sent"
         subtitle="Funds are on the way. Review your receipt below."
+        partyId={partyId}
         onClose={closeSuccessReceipt}
       />
+
 
       {/* ── RECEIVE DIALOG ── */}
       {sheet === "receive" ? (

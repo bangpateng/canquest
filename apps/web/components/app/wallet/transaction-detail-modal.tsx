@@ -1,9 +1,12 @@
 "use client";
 
-import { CheckCircle2, X } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, CheckCircle2, X } from "lucide-react";
 
 import { TransactionDetailContent } from "@/components/app/wallet/transaction-detail-content";
+import type { TransactionDetail } from "@/components/app/wallet/transaction-detail-view";
+import type { TxItem } from "@/components/app/wallet/transactions-view";
 import { iconButtonClass } from "@/lib/ui/ui-button-styles";
+import { cn } from "@/lib/utils/utils";
 import { useTransactionDetail } from "@/lib/hooks/use-transaction-detail";
 
 type TransactionDetailModalProps = {
@@ -11,20 +14,74 @@ type TransactionDetailModalProps = {
   transactionId: string | null;
   title?: string;
   subtitle?: string;
+  /** Caller's Canton party ID — used to decide which address is "You" and IN vs OUT. */
+  partyId?: string | null;
+  /**
+   * On-chain (Lighthouse) item. When provided, the receipt is built directly from
+   * this item and the DB is NOT queried — on-chain ids (e.g. "lh-123") do not exist
+   * in the database and would otherwise 404 ("Transaction not found").
+   */
+  onchainTx?: TxItem | null;
   onClose: () => void;
 };
+
+/** Build a TransactionDetail straight from an on-chain TxItem (no DB round-trip). */
+function buildDetailFromTxItem(tx: TxItem): TransactionDetail {
+  return {
+    id: tx.id,
+    type: tx.type,
+    amountMicroCc: tx.amountMicroCc,
+    description: tx.description,
+    referenceId: tx.referenceId,
+    counterparty: tx.counterparty ?? null,
+    ledgerContractId: tx.ledgerTxId,
+    cantonUpdateId: tx.cantonUpdateId ?? null,
+    settledAt: tx.settledAt,
+    createdAt: tx.createdAt,
+    cantonPartyId: tx.partyId ?? null,
+    cantonScanUrl: tx.cantonScanUrl ?? null,
+    onChainSettled: tx.source === "onchain" || Boolean(tx.settledAt),
+    ledgerEvents: [],
+    ledgerFetchError: null,
+    networkFeeMicroCc: tx.networkFeeMicroCc ?? null,
+    round: tx.round ?? null,
+    usdEstimate: tx.usdEstimate ?? null,
+  };
+}
 
 /** Same explorer UI as /transactions/[id], in a dialog (e.g. after Send CC). */
 export function TransactionDetailModal({
   open,
   transactionId,
-  title = "Transfer sent",
-  subtitle = "Your transaction is recorded. Details below.",
+  title,
+  subtitle,
+  partyId = null,
+  onchainTx = null,
   onClose,
 }: TransactionDetailModalProps) {
-  const { detail, loading, error } = useTransactionDetail(open ? transactionId : null);
+  // Only fetch from the DB when we don't already have an on-chain item to render.
+  const shouldFetch = open && !onchainTx;
+  const { detail: fetchedDetail, loading: fetchLoading, error: fetchError } =
+    useTransactionDetail(shouldFetch ? transactionId : null);
 
   if (!open) return null;
+
+  const detail: TransactionDetail | null = onchainTx
+    ? buildDetailFromTxItem(onchainTx)
+    : fetchedDetail;
+  const loading = onchainTx ? false : fetchLoading;
+  const error = onchainTx ? null : fetchError;
+
+  // Decide direction from the detail. Defaults to "sent" until detail loads
+  // (most modal openers are post-send), but flips to "received" for TRANSFER_IN.
+  const isIn = detail?.type === "TRANSFER_IN";
+
+  const headerTitle = title ?? (isIn ? "Transfer received" : "Transfer sent");
+  const headerSubtitle =
+    subtitle ??
+    (isIn
+      ? "Funds landed in your wallet. Details below."
+      : "Your transaction is recorded. Details below.");
 
   return (
     <div
@@ -44,10 +101,26 @@ export function TransactionDetailModal({
       >
         <div className="flex items-start justify-between gap-4 border-b border-slate-800/80 px-6 py-5">
           <div className="flex min-w-0 items-start gap-4">
-            <CheckCircle2 className="mt-1 h-10 w-10 shrink-0 text-green-500" aria-hidden />
+            {loading ? (
+              <CheckCircle2 className="mt-1 h-10 w-10 shrink-0 text-slate-500" aria-hidden />
+            ) : (
+              <span
+                className={cn(
+                  "mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
+                  isIn ? "bg-green-500/15 text-green-500" : "bg-red-500/15 text-red-500",
+                )}
+                aria-hidden
+              >
+                {isIn ? (
+                  <ArrowDownLeft className="h-5 w-5" />
+                ) : (
+                  <ArrowUpRight className="h-5 w-5" />
+                )}
+              </span>
+            )}
             <div className="min-w-0">
-              <h2 className="text-xl font-bold text-slate-100">{title}</h2>
-              <p className="mt-2 text-sm font-medium text-slate-400">{subtitle}</p>
+              <h2 className="text-xl font-bold text-slate-100">{headerTitle}</h2>
+              <p className="mt-2 text-sm font-medium text-slate-400">{headerSubtitle}</p>
             </div>
           </div>
           <button
@@ -65,6 +138,7 @@ export function TransactionDetailModal({
             detail={detail}
             loading={loading}
             error={error}
+            partyId={partyId}
             compact
           />
         </div>

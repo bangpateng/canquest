@@ -1,192 +1,29 @@
-Read .clinerules first.
+TRANSFER IN vs TRANSFER OUT — both must work:
 
-Then read these files only:
-- apps/web/components/app/campaign/campaign-quest-sidebar.tsx
-- apps/web/components/app/earn/earn-campaign-card.tsx
-- apps/web/components/app/earn/earn-campaign-row.tsx
-- apps/web/components/app/campaign/campaign-social-links.tsx
-- apps/web/components/app/campaign/campaign-quest-status-card.tsx
-- apps/web/lib/quest/quest-engine.ts
-- apps/web/app/(platform)/earn/[questId]/page.tsx
+TRANSFER OUT (user is sender):
+- Header icon: arrow-up-right, red background
+- Header title: "Transfer sent"
+- Amount: "−0.2000 CC" in red
+- From: user's own address (highlight as "You")
+- To: receiver address
 
-Do NOT read any other files.
-After reading, confirm structure understood.
-STOP and wait for my confirmation.
+TRANSFER IN (user is receiver):
+- Header icon: arrow-down-left, green background  
+- Header title: "Transfer received"
+- Amount: "+0.2000 CC" in green
+- From: sender address
+- To: user's own address (highlight as "You")
 
----
+Detection logic (already in inferOnChainType):
+- If sender_address === user partyId → TRANSFER_OUT
+- If receiver_address === user partyId → TRANSFER_IN
 
-GOAL:
-Improve layout, hierarchy and content arrangement
-of the quest detail page and earn cards.
-Keep all existing colors, Tailwind classes, 
-and all logic. Only reorganize the layout.
+For the "You" highlight:
+- When showing user's own address in From or To field,
+  append " (You)" label in muted text
+- Compare against partyId passed to the component
 
----
-
-PAGE: earn/[questId]/page.tsx + campaign-quest-sidebar.tsx
-
-Current problems:
-- Banner is too large and empty
-- Header info buried below banner
-- Reward headline too oversized
-- About section disconnected from header
-- No clear visual hierarchy
-- Mobile layout breaks on small screens
-
-New layout for campaign-quest-sidebar.tsx:
-
-SECTION 1 — Hero header (replace banner area)
-┌─────────────────────────────────────────┐
-│ [Logo 48px]  Org name (small, muted)    │
-│              Quest Title (bold, large)  │
-│                          [Active badge] │
-│                          [Type badge]   │
-├─────────────────────────────────────────┤
-│ About text (max 2 lines, truncated)     │
-│ [Social link icons row]                 │
-└─────────────────────────────────────────┘
-
-SECTION 2 — Reward highlight
-┌──────────────────┬──────────────────────┐
-│ Reward/winner    │ Claim fee            │
-│ [BIG VALUE]      │ [value] on-chain     │
-│ e.g. 1 CC        │ e.g. 1 CC            │
-│ or 1 Code        │ or Free              │
-│ or 25CC + Code   │                      │
-├──────────────────┴──────────────────────┤
-│ [Type badge]     Pool: [value]          │
-└─────────────────────────────────────────┘
-
-SECTION 3 — Metrics (adapt per reward type)
-Token FCFS / WL Code FCFS:
-┌──────────────┬──────────────┬───────────┐
-│ FCFS Slots   │ Tasks        │ Ends      │
-│ 0/1 · 1 left │ 1            │ Jun 15    │
-│ [progress]   │              │ 21:39     │
-└──────────────┴──────────────┴───────────┘
-
-Token Raffle / WL Code Raffle / WL Email / CC+Code:
-┌──────────────┬──────────────┬───────────┐
-│ Max Winners  │ Tasks        │ Ends      │
-│ 20           │ 3            │ Jun 20    │
-└──────────────┴──────────────┴───────────┘
-
-SECTION 4 — Missions + Tasks (unchanged)
-Keep exact same JSX for:
-- Missions progress bar
-- Task list items
-- Submit/verify buttons
-
-SECTION 5 — Claim section (unchanged)
-Keep exact same JSX for all claim types:
-- campaign-fcfs-claim.tsx
-- campaign-draw-cc-claim.tsx
-- campaign-invite-claim.tsx
-- campaign-cc-and-code-raffle-claim.tsx
-
----
-
-CARD: earn-campaign-card.tsx
-
-Current problems:
-- Banner area too tall and mostly empty
-- Reward pill feels disconnected
-- Info hierarchy unclear
-
-New card layout:
-
-┌─────────────────────────────────────────┐
-│ [Logo]  Org · Title          [Active]   │
-│                              [CC FCFS]  │
-├─────────────────────────────────────────┤
-│ Description (2 lines max)               │
-├─────────────────────────────────────────┤
-│ [tasks] [timer]        [reward pill →]  │
-├──────────────────┬──────────────────────┤
-│ Metric left      │ Metric right         │
-│ e.g. 0/1 slots   │ Pool: 1 CC · Fee 1CC │
-│ [progress bar]   │                      │
-├─────────────────────────────────────────┤
-│ [      Join campaign button           ] │
-└─────────────────────────────────────────┘
-
-Banner image: if bannerImageUrl exists, show it
-as a small accent strip (height: 80px max) 
-at the very top, not as main hero.
-If no banner, skip entirely — no empty space.
-
----
-
-REWARD TYPE ADAPTATIONS (apply to both card + sidebar):
-
-Token FCFS (CC_ONLY):
-- Accent: existing canton/teal color
-- Metric: FCFS Slots + progress | Pool + Fee
-- Pill: "X CC / winner"
-- Button: "Join campaign" (primary)
-
-Token Raffle (CC_MANUAL):
-- Accent: existing canton/teal color  
-- Metric: Max Winners | Pool + Fee
-- Pill: "X CC / winner"
-- Button: "Join campaign" (primary)
-- Note: "Winners drawn after campaign ends"
-
-Waitlist Code FCFS (INVITE_CODE_FCFS):
-- Accent: existing violet color
-- Metric: FCFS Slots + progress | Claim Fee
-- Pill: "1 Code / winner"
-- Button: "Join campaign" (primary)
-
-Waitlist Code Raffle (INVITE_CODE_RANDOM):
-- Accent: existing violet color
-- Metric: Winners Drawn + progress | Participants
-- Pill: "1 Code / winner"
-- Button: "Join campaign" or "View results"
-
-Waitlist Email Raffle (WAITLIST_EMAIL):
-- Accent: existing cyan color
-- Metric: Max Winners | Participants
-- Pill: "Waitlist spot"
-- Button: "Join campaign" (primary)
-- Note: no claim fee row
-
-Token + Code Raffle (CC_AND_CODE_RAFFLE):
-- Accent: existing canton/teal + violet dual
-- Metric: Max Winners | Pool + Fee
-- Pill: "X CC + 1 Code"
-- Button: "Join campaign" (primary)
-- Note: "5 CC claim fee" prominent
-
----
-
-CONTENT RULES:
-- All text must be in English
-- Labels: sentence case (not ALL CAPS)
-  e.g. "FCFS slots" not "FCFS SLOTS"
-  e.g. "Reward / winner" not "REWARD / WINNER"
-  e.g. "Claim fee" not "CLAIM FEE"
-- Dates: compact format "Jun 15, 21:39"
-- Numbers: always show unit "1 CC" "3 tasks"
-- Empty states: show "—" not blank
-
----
-
-RULES:
-- Do NOT change any colors or Tailwind classes
-- Do NOT change any logic or getQuestMeta() calls
-- Do NOT touch claim components
-- Do NOT touch Canton services
-- Do NOT touch API routes
-- One file at a time
-- Show diff after each file
-- Run npx tsc --noEmit after each file
-- STOP and wait for confirmation before next file
-
-Order:
-1. campaign-quest-sidebar.tsx
-2. earn-campaign-card.tsx
-3. earn-campaign-row.tsx (minor adjustments only)
-
-Start with FILE 1 only.
-Show diff and tsc output, then STOP.
+Make sure the modal receives partyId so it can 
+determine which address is "You":
+Pass partyId prop to TransactionDetailModal 
+and through to TransactionDetailContent.

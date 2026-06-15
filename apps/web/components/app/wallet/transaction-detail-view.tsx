@@ -26,7 +26,14 @@ export type TransactionDetail = {
     templateId: string;
   }>;
   ledgerFetchError: string | null;
+  /** Optional on-chain extras (present for Lighthouse on-chain items). */
+  networkFeeMicroCc?: string | null;
+  /** Canton round number the transaction settled in. */
+  round?: number | string | null;
+  /** Estimated USD value of the amount, if known. */
+  usdEstimate?: number | null;
 };
+
 
 type TransactionDetailViewProps = {
   transactionId: string;
