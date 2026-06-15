@@ -9,7 +9,8 @@ import { TransactionDetailModal } from "@/components/app/wallet/transaction-deta
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 
 export const TRANSACTIONS_PAGE_SIZE = 5;
-const LIGHTHOUSE_BASE = "https://lighthouse.xyz/api";
+/** Server-side proxy to avoid CORS — see apps/web/app/api/lighthouse/[...path]/route.ts */
+const LIGHTHOUSE_PROXY = "/api/lighthouse";
 
 export interface TxItem {
   id: string;
@@ -26,14 +27,22 @@ export interface TxItem {
   source?: "db" | "onchain";
 }
 
-interface LighthouseTransfer {
+/** Generic on-chain item from Lighthouse — fields vary per endpoint */
+interface LighthouseOnChainItem {
   id: number;
-  sender: string;
-  receiver: string;
-  amount: string;
-  created_at: string;
+  sender?: string;
+  receiver?: string;
+  amount?: string;
+  amount_cc?: string;
+  created_at?: string;
+  timestamp?: string;
   update_id?: string;
   contract_id?: string;
+  type?: string;
+  description?: string;
+  kind?: string;
+  counterparty?: string;
+  party_id?: string;
 }
 
 interface TxPage {
@@ -108,30 +117,98 @@ type TransactionsViewProps = {
   partyId?: string | null;
 };
 
-/** Convert a Lighthouse transfer to a TxItem for display */
+/** Resolve tx type from on-chain item fields */
+function inferOnChainType(item: LighthouseOnChainItem, partyId: string): "TRANSFER_IN" | "TRANSFER_OUT" | "QUEST_REWARD" | "SPIN_REWARD" | "AIRDROP" {
+  const kind = (item.kind ?? item.type ?? "").toLowerCase();
+
+  if (kind.includes("reward") || kind.includes("quest")) return "QUEST_REWARD";
+  if (kind.includes("spin") || kind.includes("wheel")) return "SPIN_REWARD";
+  if (kind.includes("airdrop") || kind.includes("claim")) return "AIRDROP";
+
+  // Transfer detection by sender/receiver
+  if (item.sender && item.receiver) {
+    return item.sender === partyId ? "TRANSFER_OUT" : "TRANSFER_IN";
+  }
+
+  // Fallback: check negative amounts
+  const amountStr = item.amount ?? item.amount_cc ?? "0";
+  const amount = Number(amountStr);
+  if (amount < 0) return "TRANSFER_OUT";
+  return "TRANSFER_IN";
+}
+
+/** Build description from on-chain item */
+function inferOnChainDescription(item: LighthouseOnChainItem, type: TxItem["type"]): string {
+  if (item.description?.trim()) return item.description;
+
+  const counterparty = item.counterparty ?? item.receiver ?? item.sender ?? "";
+  const short = counterparty.split("::")[0] ?? counterparty.slice(0, 12);
+
+  switch (type) {
+    case "TRANSFER_OUT":
+      return `Sent to ${short}…`;
+    case "TRANSFER_IN":
+      return `Received from ${short}…`;
+    case "QUEST_REWARD":
+      return "Quest reward";
+    case "SPIN_REWARD":
+      return "Spin reward";
+    case "AIRDROP":
+      return "Airdrop";
+    default:
+      return "On-chain transaction";
+  }
+}
+
+/** Convert a Lighthouse on-chain item to TxItem */
 function lighthouseToTxItem(
-  t: LighthouseTransfer,
+  item: LighthouseOnChainItem,
   partyId: string,
 ): TxItem {
-  const isOut = t.sender === partyId;
-  const counterparty = isOut ? t.receiver : t.sender;
-  const description = isOut
-    ? `Sent to ${counterparty.split("::")[0] ?? counterparty.slice(0, 12)}…`
-    : `Received from ${counterparty.split("::")[0] ?? counterparty.slice(0, 12)}…`;
+  const type = inferOnChainType(item, partyId);
+  const amountStr = item.amount ?? item.amount_cc ?? "0";
+  const amount = Math.abs(Number(amountStr));
+  const timestamp = item.created_at ?? item.timestamp ?? new Date().toISOString();
+  const description = inferOnChainDescription(item, type);
+  const counterparty = item.counterparty
+    ?? item.receiver
+    ?? item.sender
+    ?? null;
 
   return {
-    id: `lh-${t.id}`,
-    amountMicroCc: String(Math.round(Number(t.amount) * 1_000_000)),
-    type: isOut ? "TRANSFER_OUT" : "TRANSFER_IN",
+    id: `lh-${item.id}`,
+    amountMicroCc: String(Math.round(amount * 1_000_000)),
+    type,
     description,
     referenceId: null,
     counterparty,
-    ledgerTxId: t.contract_id ?? null,
-    cantonUpdateId: t.update_id ?? null,
-    settledAt: t.created_at,
-    createdAt: t.created_at,
+    ledgerTxId: item.contract_id ?? null,
+    cantonUpdateId: item.update_id ?? null,
+    settledAt: timestamp,
+    createdAt: timestamp,
     source: "onchain" as const,
   };
+}
+
+/** Fetch on-chain items from a Lighthouse endpoint, convert to TxItem[] */
+async function fetchLighthouseEndpoint(
+  url: string,
+  partyId: string,
+): Promise<TxItem[]> {
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) return [];
+    const data = await res.json();
+
+    // Response bisa berupa array langsung atau { items: [...], data: [...] }
+    const items: LighthouseOnChainItem[] = Array.isArray(data)
+      ? data
+      : (data.items ?? data.data ?? data.transactions ?? data.rewards ?? data.transfers ?? []);
+
+    return items.map((item) => lighthouseToTxItem(item, partyId));
+  } catch {
+    return [];
+  }
 }
 
 export function TransactionsView({
@@ -153,17 +230,34 @@ export function TransactionsView({
     async (page: number) => {
       setLoading(true);
       try {
-        // Fetch from both sources in parallel
-        const [dbRes, lhRes] = await Promise.allSettled([
-          fetch(`/api/party/transactions?page=${page}&pageSize=${pageSize}`, {
-            credentials: "include",
-          }),
-          partyId
-            ? fetch(
-                `${LIGHTHOUSE_BASE}/parties/${encodeURIComponent(partyId)}/transfers?limit=${pageSize * 3}`,
-                { cache: "no-store" },
-              )
-            : Promise.reject(new Error("Skipped — no partyId")),
+        // Fetch from DB + 3 Lighthouse endpoints in parallel
+        const dbPromise = fetch(
+          `/api/party/transactions?page=${page}&pageSize=${pageSize}`,
+          { credentials: "include" },
+        );
+
+        const onChainPromises: Promise<TxItem[]>[] = [];
+        if (partyId) {
+          const encoded = encodeURIComponent(partyId);
+          onChainPromises.push(
+            fetchLighthouseEndpoint(
+              `${LIGHTHOUSE_PROXY}/parties/${encoded}/tx?limit=${pageSize * 3}`,
+              partyId,
+            ),
+            fetchLighthouseEndpoint(
+              `${LIGHTHOUSE_PROXY}/parties/${encoded}/transfers?limit=${pageSize * 3}`,
+              partyId,
+            ),
+            fetchLighthouseEndpoint(
+              `${LIGHTHOUSE_PROXY}/parties/${encoded}/rewards?limit=${pageSize * 3}`,
+              partyId,
+            ),
+          );
+        }
+
+        const [dbRes, ...onChainResults] = await Promise.allSettled([
+          dbPromise,
+          ...onChainPromises,
         ]);
 
         // Parse DB results
@@ -172,28 +266,26 @@ export function TransactionsView({
           dbPage = (await dbRes.value.json()) as TxPage;
         }
 
-        // Parse Lighthouse (on-chain) results
-        const onChainItems: TxItem[] = [];
-        if (lhRes.status === "fulfilled" && lhRes.value.ok && partyId) {
-          const lhTransfers: LighthouseTransfer[] = await lhRes.value.json().catch(() => []);
-          for (const lt of lhTransfers) {
-            onChainItems.push(lighthouseToTxItem(lt, partyId));
-          }
-        }
-
-        // Merge: DB first, then on-chain deduplicated (by cantonUpdateId)
-        const merged = [...dbPage.items];
+        // Collect all on-chain items (deduped)
         const seenContractIds = new Set(
           dbPage.items
             .map((x) => x.cantonUpdateId ?? x.ledgerTxId)
             .filter(Boolean),
         );
-        for (const oc of onChainItems) {
-          const ocKey = oc.cantonUpdateId ?? oc.ledgerTxId;
-          if (ocKey && seenContractIds.has(ocKey)) continue;
-          if (ocKey) seenContractIds.add(ocKey);
-          merged.push(oc);
+        const onChainItems: TxItem[] = [];
+
+        for (const result of onChainResults) {
+          if (result.status !== "fulfilled") continue;
+          for (const item of result.value) {
+            const key = item.cantonUpdateId ?? item.ledgerTxId;
+            if (key && seenContractIds.has(key)) continue;
+            if (key) seenContractIds.add(key);
+            onChainItems.push(item);
+          }
         }
+
+        // Merge: DB first, then on-chain
+        const merged = [...dbPage.items, ...onChainItems];
 
         // Sort by createdAt descending, slice to pageSize
         merged.sort(
