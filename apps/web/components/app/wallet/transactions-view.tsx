@@ -32,6 +32,9 @@ interface LighthouseOnChainItem {
   id: number;
   sender?: string;
   receiver?: string;
+  sender_address?: string;
+  receiver_address?: string;
+  event_id?: string;
   amount?: string;
   amount_cc?: string;
   created_at?: string;
@@ -126,8 +129,10 @@ function inferOnChainType(item: LighthouseOnChainItem, partyId: string): "TRANSF
   if (kind.includes("airdrop") || kind.includes("claim")) return "AIRDROP";
 
   // Transfer detection by sender/receiver
-  if (item.sender && item.receiver) {
-    return item.sender === partyId ? "TRANSFER_OUT" : "TRANSFER_IN";
+  const sender = item.sender_address ?? item.sender;
+  const receiver = item.receiver_address ?? item.receiver;
+  if (sender && receiver) {
+    return sender === partyId ? "TRANSFER_OUT" : "TRANSFER_IN";
   }
 
   // Fallback: check negative amounts
@@ -141,7 +146,9 @@ function inferOnChainType(item: LighthouseOnChainItem, partyId: string): "TRANSF
 function inferOnChainDescription(item: LighthouseOnChainItem, type: TxItem["type"]): string {
   if (item.description?.trim()) return item.description;
 
-  const counterparty = item.counterparty ?? item.receiver ?? item.sender ?? "";
+  const counterparty = item.counterparty
+    ?? item.receiver_address ?? item.sender_address
+    ?? item.receiver ?? item.sender ?? "";
   const short = counterparty.split("::")[0] ?? counterparty.slice(0, 12);
 
   switch (type) {
@@ -171,9 +178,8 @@ function lighthouseToTxItem(
   const timestamp = item.created_at ?? item.timestamp ?? new Date().toISOString();
   const description = inferOnChainDescription(item, type);
   const counterparty = item.counterparty
-    ?? item.receiver
-    ?? item.sender
-    ?? null;
+    ?? item.receiver_address ?? item.sender_address
+    ?? item.receiver ?? item.sender ?? null;
 
   return {
     id: `lh-${item.id}`,
@@ -183,7 +189,7 @@ function lighthouseToTxItem(
     referenceId: null,
     counterparty,
     ledgerTxId: item.contract_id ?? null,
-    cantonUpdateId: item.update_id ?? null,
+    cantonUpdateId: item.update_id ?? item.event_id ?? null,
     settledAt: timestamp,
     createdAt: timestamp,
     source: "onchain" as const,
@@ -203,7 +209,7 @@ async function fetchLighthouseEndpoint(
     // Response bisa berupa array langsung atau { items: [...], data: [...] }
     const items: LighthouseOnChainItem[] = Array.isArray(data)
       ? data
-      : (data.items ?? data.data ?? data.transactions ?? data.rewards ?? data.transfers ?? []);
+      : (data.transfers ?? data.items ?? data.transactions ?? data.rewards ?? data.data ?? []);
 
     return items.map((item) => lighthouseToTxItem(item, partyId));
   } catch {

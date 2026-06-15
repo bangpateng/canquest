@@ -1327,7 +1327,7 @@ export class PartyController {
     ).replace(/\/$/, '');
 
     const url = new URL(
-      `${lighthouseUrl}/api/parties/${encodeURIComponent(partyId)}/tx`,
+      `${lighthouseUrl}/api/parties/${encodeURIComponent(partyId)}/transfers`,
     );
     const n = Math.min(50, Math.max(1, parseInt(limit ?? '15', 10) || 15));
     url.searchParams.set('limit', String(n));
