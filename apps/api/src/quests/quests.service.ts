@@ -408,7 +408,9 @@ export class QuestsService {
       isCodeFcfs &&
       q.status === QuestStatus.ACTIVE &&
       (q.campaignSummary?.slotsFull ||
-        (q.campaignSummary?.codesRemaining != null && q.campaignSummary.codesRemaining <= 0));
+        (q.campaignSummary?.codesRemaining != null &&
+          q.campaignSummary.codesRemaining <= 0 &&
+          (q.campaignSummary?.slotsTaken ?? 0) > 0));
     if (
       q.campaignSummary?.requiresFcfsClaim &&
       q.campaignSummary.slotsFull &&
@@ -471,9 +473,18 @@ export class QuestsService {
       }
     }
 
+    const isInviteCodeFcfs = (q: { rewardType: RewardType | string }) =>
+      normalizeRewardType(q.rewardType as RewardType) === RewardType.INVITE_CODE_FCFS;
+
     return quests.map((q) => {
       const maxWinners = q.maxWinners;
-      const taken = takenByQuest[q.id] ?? 0;
+      const isCodeFcfs = isInviteCodeFcfs(q);
+      // For INVITE_CODE_FCFS: slots are tracked by available invite codes, not winnerDraw rows.
+      const taken = isCodeFcfs
+        ? maxWinners != null && maxWinners > 0
+          ? Math.max(0, maxWinners - (codesByQuest[q.id] ?? 0))
+          : 0
+        : (takenByQuest[q.id] ?? 0);
       const remainingSlots =
         maxWinners != null && maxWinners > 0
           ? this.fcfsSlotsRemaining(maxWinners, taken)
