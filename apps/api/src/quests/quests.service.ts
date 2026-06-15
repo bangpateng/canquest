@@ -168,11 +168,23 @@ export class QuestsService {
     let slotsTaken: number | null = null;
     let slotsFull = false;
     if (maxWinners != null && maxWinners > 0) {
-      await this.releaseStaleFcfsReservations(questId);
-      const used = await this.countFcfsSlotsTaken(questId);
-      remainingSlots = this.fcfsSlotsRemaining(maxWinners, used);
-      slotsTaken = used;
-      slotsFull = remainingSlots <= 0;
+      const isCodeFcfs =
+        normalizeRewardType(quest.rewardType as RewardType) ===
+        RewardType.INVITE_CODE_FCFS;
+      if (isCodeFcfs) {
+        const codesAssigned = await this.prisma.inviteCodePool.count({
+          where: { questId, userId: { not: null } },
+        });
+        remainingSlots = this.fcfsSlotsRemaining(maxWinners, codesAssigned);
+        slotsTaken = codesAssigned;
+        slotsFull = remainingSlots <= 0;
+      } else {
+        await this.releaseStaleFcfsReservations(questId);
+        const used = await this.countFcfsSlotsTaken(questId);
+        remainingSlots = this.fcfsSlotsRemaining(maxWinners, used);
+        slotsTaken = used;
+        slotsFull = remainingSlots <= 0;
+      }
     }
     const endRaw = quest.endsAt ?? quest.deadline ?? null;
     const end =
@@ -461,15 +473,29 @@ export class QuestsService {
           RewardType.INVITE_CODE_FCFS,
       )
       .map((q) => q.id);
-    const codesByQuest: Record<string, number> = {};
+    // For INVITE_CODE_FCFS: count CODES THAT HAVE BEEN ASSIGNED (userId not null)
+    const assignedCodesByQuest: Record<string, number> = {};
     if (inviteFcfsIds.length > 0) {
-      const codeCounts = await this.prisma.inviteCodePool.groupBy({
+      const assignedCounts = await this.prisma.inviteCodePool.groupBy({
+        by: ['questId'],
+        where: { questId: { in: inviteFcfsIds }, userId: { not: null } },
+        _count: { _all: true },
+      });
+      for (const row of assignedCounts) {
+        assignedCodesByQuest[row.questId] = row._count._all;
+      }
+    }
+
+    // Available (unassigned) codes — for codesRemaining display
+    const availableCodesByQuest: Record<string, number> = {};
+    if (inviteFcfsIds.length > 0) {
+      const availableCounts = await this.prisma.inviteCodePool.groupBy({
         by: ['questId'],
         where: { questId: { in: inviteFcfsIds }, userId: null },
         _count: { _all: true },
       });
-      for (const row of codeCounts) {
-        codesByQuest[row.questId] = row._count._all;
+      for (const row of availableCounts) {
+        availableCodesByQuest[row.questId] = row._count._all;
       }
     }
 
@@ -479,11 +505,9 @@ export class QuestsService {
     return quests.map((q) => {
       const maxWinners = q.maxWinners;
       const isCodeFcfs = isInviteCodeFcfs(q);
-      // For INVITE_CODE_FCFS: slots are tracked by available invite codes, not winnerDraw rows.
+      // For INVITE_CODE_FCFS: slots taken = number of codes already assigned to users.
       const taken = isCodeFcfs
-        ? maxWinners != null && maxWinners > 0
-          ? Math.max(0, maxWinners - (codesByQuest[q.id] ?? 0))
-          : 0
+        ? (assignedCodesByQuest[q.id] ?? 0)
         : (takenByQuest[q.id] ?? 0);
       const remainingSlots =
         maxWinners != null && maxWinners > 0
@@ -509,7 +533,7 @@ export class QuestsService {
         codesRemaining:
           normalizeRewardType(q.rewardType as RewardType) ===
           RewardType.INVITE_CODE_FCFS
-            ? (codesByQuest[q.id] ?? 0)
+            ? (availableCodesByQuest[q.id] ?? 0)
             : null,
       };
       return { ...q, campaignSummary: summary };
