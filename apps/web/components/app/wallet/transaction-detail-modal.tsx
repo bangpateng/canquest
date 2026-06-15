@@ -84,7 +84,7 @@ export function TransactionDetailModal({
   const headerSubtitle =
     subtitle ??
     (isIn
-      ? "Funds landed in your wallet. Details below."
+      ? ""
       : "Your transaction is recorded. Details below.");
 
   return (
