@@ -450,9 +450,6 @@ export function QuestTaskPanel({
         <div className="flex flex-col gap-3 rounded-2xl border border-white/[0.06] bg-[#0a0c14]/60 px-4 py-4 backdrop-blur-2xl sm:px-5">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]/20">
-                <CheckCircle2 className="h-3.5 w-3.5 text-[var(--primary)]" aria-hidden />
-              </span>
               <h2 className="text-sm font-bold uppercase tracking-wider text-white">Missions</h2>
             </div>
             <span className="text-xs font-bold tabular-nums text-slate-400">
