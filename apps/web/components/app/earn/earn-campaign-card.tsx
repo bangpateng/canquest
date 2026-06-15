@@ -1,14 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import {
-  campaignUiKind,
-  fcfsSlotsTaken,
-  formatFcfsSlotsFilled,
-  formatPoolTotalLabel,
-  hasParticipatedInQuest,
-  isFcfsSlotsFull,
-} from "@/lib/canton/campaign-reward";
+import { getQuestMeta, type RewardIconKind } from "@/lib/quest/quest-engine";
+import { formatPoolTotalLabel } from "@/lib/canton/campaign-reward";
 import { ROUTES } from "@/lib/routing/app-routes";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { QUEST_STATUS_BADGE, type Quest, type UserProgress } from "@/lib/quest/quest-types";
@@ -29,91 +23,42 @@ import {
   Zap,
 } from "lucide-react";
 
-function rewardTheme(rewardPool: string, rewardType?: string) {
-  const pool = rewardPool.toLowerCase();
-  if (rewardType === "CC_AND_CODE_RAFFLE") {
-    return {
-      icon: Ticket,
-      isCcToken: true,
-      isDualReward: true,
-      accent: "text-canton",
-      chip: "bg-gradient-to-r from-canton-soft to-violet-500/15 text-canton border-canton-muted",
-    };
+/** Map iconKind from quest-engine to a Lucide icon. */
+const ICON_MAP: Record<RewardIconKind, typeof Coins> = {
+  cc: Coins,
+  ticket: Ticket,
+  sparkles: Sparkles,
+  trophy: Trophy,
+};
+
+/** Map metric iconKind (including zap/users/ticket) to Lucide icon. */
+function metricIcon(kind: string): typeof Coins {
+  switch (kind) {
+    case "cc": return Coins;
+    case "zap": return Zap;
+    case "users": return Users;
+    case "ticket": return Ticket;
+    case "sparkles": return Sparkles;
+    default: return Trophy;
   }
-  if (
-    rewardType === "CC_ONLY" ||
-    rewardType === "CC_MANUAL" ||
-    rewardType === "CC_AND_INVITE" ||
-    pool.includes("cc")
-  ) {
-    return {
-      icon: Coins,
-      isCcToken: true,
-      isDualReward: false,
-      accent: "text-canton",
-      chip: "bg-canton-soft text-canton border-canton-muted",
-    };
-  }
-  if (rewardType?.includes("INVITE") || pool.includes("invite") || pool.includes("fcfs")) {
-    return {
-      icon: Ticket,
-      isCcToken: false,
-      isDualReward: false,
-      accent: "text-violet-300",
-      chip: "bg-violet-500/15 text-violet-200 border-violet-500/25",
-    };
-  }
-  if (rewardType === "WAITLIST_EMAIL" || pool.includes("waitlist")) {
-    return {
-      icon: Sparkles,
-      isCcToken: false,
-      isDualReward: false,
-      accent: "text-cyan-300",
-      chip: "bg-cyan-500/12 text-cyan-200 border-cyan-500/25",
-    };
-  }
-  return {
-    icon: Trophy,
-    isCcToken: false,
-    isDualReward: false,
-    accent: "text-canton",
-    chip: "bg-canton-soft text-canton border-canton-muted",
-  };
 }
 
 function CampaignRewardIcon({
-  theme,
+  iconKind,
+  isCcToken,
   className,
   size = 16,
 }: {
-  theme: ReturnType<typeof rewardTheme>;
+  iconKind: RewardIconKind;
+  isCcToken: boolean;
   className?: string;
   size?: number;
 }) {
-  if (theme.isCcToken) {
+  if (isCcToken) {
     return <CcRewardLogo className={className} size={size} />;
   }
-  const Icon = theme.icon;
+  const Icon = ICON_MAP[iconKind];
   return <Icon className={className} aria-hidden />;
-}
-
-function kindLabel(
-  kind: ReturnType<typeof campaignUiKind>,
-  rewardType: string | undefined,
-  t: (key: string) => string,
-): string {
-  switch (kind) {
-    case "cc_fcfs": return t("earnCampaigns.kindFcfs");
-    case "cc_manual_draw": return t("earnCampaigns.kindCcRaffle");
-    case "cc_manual": return t("earnCampaigns.kindCc");
-    case "cc_and_code_raffle": return "CC + Code Raffle";
-    case "waitlist_code":
-      return rewardType === "INVITE_CODE_FCFS"
-        ? t("earnCampaigns.kindInvite")
-        : t("earnCampaigns.kindRaffle");
-    case "waitlist_email": return t("earnCampaigns.kindWaitlist");
-    default: return t("earnCampaigns.kindCampaign");
-  }
 }
 
 function CountdownTimer({ endsAt }: { endsAt: string | null }) {
@@ -171,135 +116,74 @@ export function EarnCampaignCard({
 }) {
   const t = usePlatformT();
   const summary = quest.campaignSummary;
-  const poolLower = quest.rewardPool.toLowerCase();
-  const isCcAndCodeRaffle = quest.rewardType === "CC_AND_CODE_RAFFLE";
-  const isDrawCcRaffle = quest.rewardType === "CC_MANUAL" || Boolean(summary?.requiresDrawCcClaim);
+
+  // ── Derive all UI state from quest-engine ─────────────────────
+  const meta = getQuestMeta(quest, userProgress);
+  const { config, rewardDisplay, slots, metrics } = meta;
+
   const isCodeReward =
-    quest.rewardType === "INVITE_CODE_FCFS" ||
-    quest.rewardType === "INVITE_CODE_RANDOM" ||
-    quest.rewardType === "INVITE_CODE" ||
-    quest.rewardType === "CC_AND_INVITE";
-  const isCodeFcfs = quest.rewardType === "INVITE_CODE_FCFS";
-  const requiresFcfs = isDrawCcRaffle
-    ? false
-    : isCodeFcfs ? true
-    : summary?.requiresFcfsClaim ?? (poolLower.includes("fcfs") || poolLower.includes("first come") || quest.rewardType === "INVITE_CODE_FCFS");
-  const uiKind = campaignUiKind(quest.rewardType, requiresFcfs);
-  const theme = rewardTheme(quest.rewardPool, quest.rewardType);
+    config.code === "INVITE_CODE_FCFS" ||
+    config.code === "INVITE_CODE_RANDOM";
 
-  const hasParticipated = hasParticipatedInQuest(quest, userProgress);
-  const slotsMax = summary?.maxWinners ?? 0;
-  const slotsLeft = summary?.remainingSlots ?? 0;
-  const winnersDrawn = summary?.slotsTaken ?? 0;
-  const slotsUsed = fcfsSlotsTaken(slotsLeft, slotsMax);
-  const slotsFull = requiresFcfs && isFcfsSlotsFull(slotsLeft, slotsMax);
-  const joinBlocked = slotsFull && !hasParticipated && quest.status === "ACTIVE";
-
-  const canOpen = quest.status === "ACTIVE" || quest.status === "ENDED" || (slotsFull && hasParticipated);
-  const statusMeta = QUEST_STATUS_BADGE[quest.status];
-  const showFcfs = requiresFcfs && summary != null && slotsMax > 0 && summary.remainingSlots != null;
-  const showWaitlistEmailWinners = quest.rewardType === "WAITLIST_EMAIL" && slotsMax > 0;
-  const showWaitlistRaffleWinners = !isDrawCcRaffle && isCodeReward && !requiresFcfs && slotsMax > 0;
-  const showRaffleWinners = !isCodeFcfs && (isDrawCcRaffle || showWaitlistRaffleWinners || showWaitlistEmailWinners) && slotsMax > 0;
-  const raffleWinnersLabel =
-    showWaitlistRaffleWinners || showWaitlistEmailWinners
-      ? String(slotsMax)
-      : winnersDrawn > 0
-        ? t("earnCampaigns.slotsSelected", { used: String(winnersDrawn), max: String(slotsMax) })
-        : String(slotsMax);
-  const rafflePct = slotsMax > 0 ? Math.round((winnersDrawn / slotsMax) * 100) : 0;
+  // Pool display — enrich code-only pools with label
   const poolLabel = formatPoolTotalLabel(summary?.poolTotalCc ?? null, quest.rewardPool);
   const poolDisplay = isCodeReward && /^\d+(\.\d+)?$/.test(poolLabel.trim())
     ? `${poolLabel.trim()} ${t("earnCampaigns.codeLabel")}`
     : poolLabel;
-  const showPool = poolLabel !== "—" || (summary?.poolTotalCc ?? 0) > 0;
-  const showCodes = summary?.codesRemaining != null && !isCodeFcfs && summary.requiresPaidInviteClaim;
-  const slotsPct = slotsMax > 0 ? Math.round((slotsUsed / slotsMax) * 100) : 0;
 
-  const ctaLabel = joinBlocked
+  const statusMeta = QUEST_STATUS_BADGE[quest.status];
+  const statusLabel = slots.full && quest.status === "ACTIVE" ? t("earnCampaigns.slotsEnded") : statusMeta.label;
+
+  // Reward pill text
+  let rewardPillText: string;
+  if (config.isDual) {
+    rewardPillText = quest.rewardCc > 0 ? `${quest.rewardCc} CC + 1 Code` : "CC + 1 Code";
+  } else if (config.isCcToken && quest.rewardCc > 0) {
+    rewardPillText = `${quest.rewardCc} CC / winner`;
+  } else if (isCodeReward) {
+    rewardPillText = t("earnCampaigns.cardRewardPerUserCode");
+  } else if (config.code === "WAITLIST_EMAIL") {
+    rewardPillText = "Waitlist spot";
+  } else {
+    rewardPillText = quest.rewardPool ?? "—";
+  }
+
+  // Use completed prop to override CTA if passed
+  const ctaLabel = meta.joinBlocked
     ? t("earnCampaigns.slotsEnded")
     : quest.status === "ENDED" ? "View"
     : completed ? t("quests.questComplete")
-    : hasParticipated && slotsFull ? t("earnCampaigns.viewMyQuest")
+    : meta.hasParticipated && slots.full ? t("earnCampaigns.viewMyQuest")
     : t("quests.joinQuest");
-
-  const statusLabel = slotsFull && quest.status === "ACTIVE" ? t("earnCampaigns.slotsEnded") : statusMeta.label;
-  const bannerRewardText = quest.rewardCc > 0 ? null : isCodeReward ? t("earnCampaigns.cardRewardPerUserCode") : quest.rewardPool;
 
   const inner = (
     <article className={cn(
       "group relative flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50",
       "transition-all duration-300 ease-out",
-      canOpen && !joinBlocked && "hover:-translate-y-1 hover:border-[rgb(var(--canton-rgb)/0.25)] hover:shadow-[0_24px_60px_rgb(0_0_0/0.5),0_0_0_1px_rgb(var(--canton-rgb)/0.15)]",
-      (quest.status === "ENDED" || joinBlocked) && "opacity-90",
+      meta.canOpen && !meta.joinBlocked && "hover:-translate-y-1 hover:border-[rgb(var(--canton-rgb)/0.25)] hover:shadow-[0_24px_60px_rgb(0_0_0/0.5),0_0_0_1px_rgb(var(--canton-rgb)/0.15)]",
+      (quest.status === "ENDED" || meta.joinBlocked) && "opacity-90",
     )}>
-      {/* Banner */}
-      <div className="relative h-32 shrink-0 overflow-hidden sm:h-36 md:h-40 lg:h-44">
-        <div className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105"
-          style={quest.bannerImageUrl ? { backgroundImage: `url("${quest.bannerImageUrl}")` } : { background: quest.banner }} />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0a0c14] via-[#0a0c14]/60 to-black/30" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_100%_0%,rgb(var(--canton-rgb)/0.10),transparent_60%)]" />
 
-        {/* Type badge */}
-        <div className="absolute left-3 top-3 flex flex-wrap gap-1.5 sm:left-4 sm:top-4 sm:gap-2">
-          <span className={cn("rounded-lg border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide backdrop-blur-xl sm:px-3 sm:py-1.5 sm:text-xs", theme.chip)}>
-            {kindLabel(uiKind, quest.rewardType, t)}
-          </span>
+      {/* ── Banner accent strip (only if bannerImageUrl exists) ─── */}
+      {quest.bannerImageUrl ? (
+        <div
+          className="relative h-20 w-full shrink-0 overflow-hidden"
+          style={{ maxHeight: "80px" }}
+        >
+          <div
+            className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105"
+            style={{ backgroundImage: `url("${quest.bannerImageUrl}")` }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0a0c14] via-[#0a0c14]/40 to-transparent" />
         </div>
+      ) : null}
 
-        {/* Status badge */}
-        <span className={cn(
-          "absolute right-3 top-3 rounded-lg px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide backdrop-blur-xl sm:right-4 sm:top-4 sm:px-3 sm:py-1.5 sm:text-xs",
-          slotsFull && quest.status === "ACTIVE"
-            ? "border border-white/5 bg-black/60 text-slate-400"
-            : "border border-white/10 bg-black/50 text-white",
-          !(slotsFull && quest.status === "ACTIVE") && statusMeta.className,
-        )}>
-          {statusLabel}
-        </span>
-
-        {/* Reward highlight */}
-        {isCcAndCodeRaffle ? (
-          <div className="absolute bottom-3 right-3 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-xl border border-white/[0.08] bg-black/70 px-3 py-2 backdrop-blur-xl sm:bottom-4 sm:right-4 sm:gap-3 sm:px-4 sm:py-2.5">
-            <div className="flex items-center gap-1">
-              <CcRewardLogo className="shrink-0 text-canton" size={14} />
-              <span className="text-white/40">+</span>
-              <Ticket className="h-3.5 w-3.5 shrink-0 text-violet-300" aria-hidden />
-            </div>
-            <div className="min-w-0 text-right">
-              <p className="hidden text-[9px] font-bold uppercase tracking-wider text-white/60 sm:block sm:text-[10px]">Per Winner</p>
-              <p className="text-sm font-bold leading-none tabular-nums text-canton sm:text-base">
-                {quest.rewardCc > 0 ? <span>{quest.rewardCc} <span className="text-xs text-white/70">CC</span></span> : null}
-                {quest.rewardCc > 0 ? <span className="mx-1 text-white/40">+</span> : null}
-                <span className="text-violet-300">1 Code</span>
-              </p>
-            </div>
-          </div>
-        ) : quest.rewardCc > 0 || bannerRewardText ? (
-          <div className="absolute bottom-3 right-3 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-xl border border-white/[0.08] bg-black/70 px-3 py-2 backdrop-blur-xl sm:bottom-4 sm:right-4 sm:gap-3 sm:px-4 sm:py-2.5">
-            <CampaignRewardIcon theme={theme} className={cn("shrink-0", theme.accent)} size={14} />
-            <div className="min-w-0 text-right">
-              <p className="hidden text-[9px] font-bold uppercase tracking-wider text-white/60 sm:block sm:text-[10px]">
-                {t("earnCampaigns.rewardLabel")}
-              </p>
-              {quest.rewardCc > 0 ? (
-                <p className={cn("text-base font-bold leading-none tabular-nums sm:text-xl md:text-2xl", theme.accent)}>
-                  {quest.rewardCc}
-                  <span className="ml-1 text-xs font-semibold text-white/70 sm:text-sm">CC</span>
-                </p>
-              ) : (
-                <p className={cn("truncate text-sm font-bold leading-tight sm:text-base", theme.accent)}>
-                  {bannerRewardText}
-                </p>
-              )}
-            </div>
-          </div>
-        ) : null}
-      </div>
-
-      {/* Body */}
+      {/* ── Body ─────────────────────────────────────────────────── */}
       <div className="flex w-full min-w-0 flex-1 flex-col justify-between px-4 pb-5 pt-4 sm:px-5 sm:pb-6 sm:pt-5 md:px-6 md:pb-7">
-        <div className="flex w-full min-w-0 items-center gap-3 sm:gap-4">
+
+        {/* Header: logo + org/title left, badges right */}
+        <div className="flex w-full min-w-0 items-start gap-3 sm:gap-4">
+          {/* Logo */}
           <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-slate-800/80 ring-1 ring-white/10 sm:h-14 sm:w-14">
             {quest.logoUrl ? (
               <img src={quest.logoUrl} alt="" className="h-full w-full object-cover" />
@@ -309,37 +193,71 @@ export function EarnCampaignCard({
               </span>
             )}
           </div>
+
+          {/* Org + Title */}
           <div className="min-w-0 flex-1">
             <p className="truncate text-[10px] font-semibold text-slate-500 sm:text-xs">{quest.org}</p>
             <h3 className="line-clamp-2 text-sm font-bold leading-tight text-white sm:mt-0.5 sm:text-base md:text-lg">
               {quest.title}
             </h3>
           </div>
+
+          {/* Status + Type badges stacked */}
+          <div className="flex shrink-0 flex-col items-end gap-1.5">
+            <span className={cn(
+              "rounded-lg px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide backdrop-blur-xl sm:px-3 sm:py-1.5 sm:text-xs",
+              slots.full && quest.status === "ACTIVE"
+                ? "border border-white/5 bg-black/60 text-slate-400"
+                : "border border-white/10 bg-black/50 text-white",
+              !(slots.full && quest.status === "ACTIVE") && statusMeta.className,
+            )}>
+              {statusLabel}
+            </span>
+            <span className={cn(
+              "rounded-lg border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide backdrop-blur-xl sm:px-3 sm:py-1.5 sm:text-xs",
+              config.chipClass,
+            )}>
+              {config.shortLabel}
+            </span>
+          </div>
         </div>
 
-        <p className="mt-3 hidden line-clamp-2 text-sm font-medium leading-relaxed text-slate-400 sm:block">
+        {/* Description */}
+        <p className="mt-3 line-clamp-2 text-sm font-medium leading-relaxed text-slate-400">
           {quest.description}
         </p>
 
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[10px] font-semibold text-slate-500 sm:mt-4 sm:gap-x-4 sm:text-xs">
-          <span className="inline-flex items-center gap-1 sm:gap-1.5">
-            <ListChecks className="h-3 w-3 text-canton sm:h-4 sm:w-4" />
-            {quest.tasks.length} tasks
-          </span>
-          {quest.endsAt ? <CountdownTimer endsAt={quest.endsAt} /> : quest.deadline ? (
+        {/* Meta row: tasks + timer left, reward pill right */}
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 sm:mt-4">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[10px] font-semibold text-slate-500 sm:text-xs">
             <span className="inline-flex items-center gap-1 sm:gap-1.5">
-              <Calendar className="h-3 w-3 sm:h-4 sm:w-4" />
-              <span className="truncate">{quest.deadline}</span>
+              <ListChecks className="h-3 w-3 text-canton sm:h-4 sm:w-4" />
+              {quest.tasks.length} tasks
             </span>
-          ) : null}
-          {summary?.slotsTaken != null && summary.slotsTaken > 0 && (
-            <span className="inline-flex items-center gap-1 sm:gap-1.5">
-              <Users className="h-3 w-3 sm:h-4 sm:w-4" />
-              {summary.slotsTaken}
-            </span>
-          )}
+            {quest.endsAt ? <CountdownTimer endsAt={quest.endsAt} /> : quest.deadline ? (
+              <span className="inline-flex items-center gap-1 sm:gap-1.5">
+                <Calendar className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="truncate">{quest.deadline}</span>
+              </span>
+            ) : null}
+          </div>
+
+          {/* Reward pill */}
+          <div className={cn(
+            "inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-black/40 px-2.5 py-1 text-[10px] font-bold backdrop-blur-xl sm:text-xs",
+            config.accentClass,
+          )}>
+            <CampaignRewardIcon
+              iconKind={rewardDisplay.iconKind}
+              isCcToken={config.isCcToken}
+              className={cn("shrink-0 h-3 w-3", config.accentClass)}
+              size={12}
+            />
+            <span className="truncate">{rewardPillText}</span>
+          </div>
         </div>
 
+        {/* Tags */}
         {quest.tags.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1">
             {quest.tags.slice(0, 3).map((tag) => (
@@ -351,48 +269,32 @@ export function EarnCampaignCard({
           </div>
         )}
 
-        {/* Metrics strips — kept fully functional */}
-        {isCcAndCodeRaffle && showPool && (
+        {/* Metrics strip — driven by quest-engine */}
+        {metrics.length > 0 && (
           <div className="mt-4 w-full min-w-0 overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02] sm:mt-5">
             <div className="grid w-full min-w-0 grid-cols-2 divide-x divide-white/[0.04]">
-              <Metric label={t("earnCampaigns.cardPoolTotal")} value={poolDisplay} icon={Coins} useCcLogo accent="text-canton" />
-              {slotsMax > 0
-                ? <Metric label="Max Winners" value={String(slotsMax)} icon={Users} accent="text-canton" />
-                : <Metric label="Claim Fee" value="5 CC" icon={Zap} accent="text-amber-300" />}
+              {metrics.map((m) => (
+                <Metric
+                  key={m.key}
+                  label={m.label}
+                  value={m.key === "pool" ? poolDisplay : m.value}
+                  icon={metricIcon(m.iconKind)}
+                  useCcLogo={m.useCcLogo}
+                  accent={m.accent}
+                  muted={m.muted}
+                />
+              ))}
             </div>
-          </div>
-        )}
-
-        {!isCcAndCodeRaffle && (showFcfs || showRaffleWinners || showPool || showCodes) && (
-          <div className="mt-4 w-full min-w-0 overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02] sm:mt-5">
-            <div className="grid w-full min-w-0 grid-cols-2 divide-x divide-white/[0.04]">
-              {showRaffleWinners && <Metric label={t("earnCampaigns.cardRaffleWinners")} value={raffleWinnersLabel} icon={Users} accent={theme.accent} />}
-              {showFcfs && <Metric label={t("earnCampaigns.cardFcfsSlots")} value={formatFcfsSlotsFilled(slotsLeft, summary!.maxWinners, t("earnCampaigns.slotsEnded"))} icon={Zap} accent={slotsFull ? undefined : "text-canton"} muted={slotsFull} />}
-              {showPool && <Metric label={t("earnCampaigns.cardPoolTotal")} value={poolDisplay} icon={Users} accent={theme.accent} />}
-              {showCodes && <Metric label={t("earnCampaigns.cardCodes")} value={t("earnCampaigns.cardCodesRemaining", { n: String(summary!.codesRemaining ?? 0) })} icon={Ticket} />}
-            </div>
-            {isDrawCcRaffle && showRaffleWinners && winnersDrawn > 0 ? (
+            {meta.showProgress && meta.progressBar ? (
               <div className="border-t border-white/[0.04] px-3 py-2.5 sm:px-4 sm:py-3">
                 <div className="mb-1.5 flex justify-between text-[9px] font-semibold tabular-nums text-slate-500 sm:text-xs">
-                  <span>{t("earnCampaigns.slotsSelected", { used: String(winnersDrawn), max: String(slotsMax) })}</span>
-                  <span>{rafflePct}%</span>
-                </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
-                  <div className="h-full rounded-full bg-gradient-to-r from-[var(--primary)] to-[var(--primary-strong)] transition-all duration-500"
-                    style={{ width: `${Math.max(6, rafflePct)}%` }} />
-                </div>
-              </div>
-            ) : null}
-            {showFcfs && !slotsFull ? (
-              <div className="border-t border-white/[0.04] px-3 py-2.5 sm:px-4 sm:py-3">
-                <div className="mb-1.5 flex justify-between text-[9px] font-semibold tabular-nums text-slate-500 sm:text-xs">
-                  <span>{t("earnCampaigns.slotsClaimed", { used: String(slotsUsed), max: String(slotsMax) })}</span>
-                  <span>{slotsPct}%</span>
+                  <span>{t("earnCampaigns.slotsClaimed", { used: String(meta.progressBar.used), max: String(meta.progressBar.max) })}</span>
+                  <span>{meta.progressBar.pct}%</span>
                 </div>
                 <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
                   <div className={cn("h-full rounded-full transition-all duration-500",
-                    slotsLeft <= 1 ? "bg-gradient-to-r from-amber-500 to-orange-500" : "bg-gradient-to-r from-[var(--primary)] to-[var(--primary-strong)]")}
-                    style={{ width: `${Math.max(6, slotsPct)}%` }} />
+                    meta.progressBar.warn ? "bg-gradient-to-r from-amber-500 to-orange-500" : "bg-gradient-to-r from-[var(--primary)] to-[var(--primary-strong)]")}
+                    style={{ width: `${Math.max(6, meta.progressBar.pct)}%` }} />
                 </div>
               </div>
             ) : null}
@@ -401,10 +303,10 @@ export function EarnCampaignCard({
 
         {/* CTA Button */}
         <div className="mt-4">
-          {joinBlocked ? (
+          {meta.joinBlocked ? (
             <span className={cn(buttonVariants({ variant: "muted", size: "block" }),
               "flex h-12 w-full items-center justify-center rounded-xl text-sm font-semibold")}>{ctaLabel}</span>
-          ) : canOpen ? (
+          ) : meta.canOpen ? (
             <span className={cn(buttonVariants({
               variant: quest.status === "ENDED" ? "secondary" : completed ? "success" : "primary", size: "block",
             }), "flex h-12 w-full items-center justify-center rounded-xl text-sm font-semibold")}>{ctaLabel}</span>
@@ -417,7 +319,7 @@ export function EarnCampaignCard({
     </article>
   );
 
-  if (joinBlocked || !canOpen) return inner;
+  if (meta.joinBlocked || !meta.canOpen) return inner;
 
   return (
     <Link href={ROUTES.campaignQuest(quest.id, quest.title)}

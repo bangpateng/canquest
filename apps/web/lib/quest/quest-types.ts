@@ -12,9 +12,7 @@ export type RewardType =
   | "INVITE_CODE_FCFS"
   | "CC_ONLY"
   | "CC_MANUAL"
-  | "CC_AND_INVITE"
-  | "CC_AND_CODE_RAFFLE"
-  | "INVITE_CODE";
+  | "CC_AND_CODE_RAFFLE";
 
 export type QuestRewardState =
   | "in_progress"
@@ -585,13 +583,8 @@ export const REWARD_TYPE_OPTIONS: { value: RewardType; label: string; hint: stri
       "Setelah event: admin Draw Winners → pemenang dapat notifikasi & claim CC (bukan FCFS). Yang kalah: You Not Lucky.",
   },
   {
-    value: "CC_AND_INVITE",
-    label: "6 · CC + kode (FCFS campuran · legacy)",
-    hint: "CC + invite (legacy). Untuk kampanye baru lebih baik pisah tipe 1, 4, dan 5.",
-  },
-  {
     value: "CC_AND_CODE_RAFFLE",
-    label: "7 · CC + Kode (Raffle Gabungan)",
+    label: "6 · CC + Kode (Raffle Gabungan)",
     hint:
       "Satu event gabungan: user selesaikan semua task sosial → submit → tunggu raffle. Admin draw pemenang dari dashboard. Pemenang claim CC reward + invite code dengan membayar 5 CC claim fee.",
   },
@@ -604,10 +597,10 @@ export function questExportLabel(rewardType: RewardType | string): string {
       return "Download waitlist CSV";
     case "CC_ONLY":
     case "CC_MANUAL":
-    case "CC_AND_INVITE":
       return "Download CC + Party ID CSV";
     case "INVITE_CODE_RANDOM":
-    case "INVITE_CODE":
+    case "INVITE_CODE_FCFS":
+    case "INVITE_CODE": // legacy fallback — data lama di DB
       return "Download draw results CSV";
     default:
       return "Download activity CSV";
@@ -617,9 +610,8 @@ export function questExportLabel(rewardType: RewardType | string): string {
 export function isInviteRewardType(rewardType: RewardType | string): boolean {
   return (
     rewardType === "INVITE_CODE_RANDOM" ||
-    rewardType === "INVITE_CODE" ||
-    rewardType === "INVITE_CODE_FCFS" ||
-    rewardType === "CC_AND_INVITE"
+    rewardType === "INVITE_CODE" || // legacy fallback — data lama di DB
+    rewardType === "INVITE_CODE_FCFS"
   );
 }
 

@@ -162,8 +162,10 @@ export function QuestSubmittedProof({
   const taskCount = ledger?.taskSubmissionCount ?? 0;
   const [proofOpen, setProofOpen] = useState(false);
 
+  // CC_AND_INVITE is a legacy type — migrated to CC_AND_CODE_RAFFLE in DB.
+  // Keep the string comparison as `string` to handle any remaining legacy rows.
   const isCcAndInvite =
-    rt === "CC_AND_INVITE" &&
+    (rt as string) === "CC_AND_INVITE" &&
     Boolean(inviteCode) &&
     (rewardCc ?? 0) > 0;
   const showCcReward =

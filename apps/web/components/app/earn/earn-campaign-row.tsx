@@ -1,71 +1,14 @@
 "use client";
 
 import { buttonVariants } from "@/components/ui/button";
+import { CcRewardLogo } from "@/components/app/campaign/cc-reward-logo";
 import { ROUTES } from "@/lib/routing/app-routes";
-import { campaignUiKind } from "@/lib/canton/campaign-reward";
-import { QUEST_STATUS_BADGE, type Quest, type RewardType } from "@/lib/quest/quest-types";
+import { getQuestMeta } from "@/lib/quest/quest-engine";
+import { QUEST_STATUS_BADGE, type Quest } from "@/lib/quest/quest-types";
 import { cn } from "@/lib/utils/utils";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
-import { Coins, Sparkles, Ticket, Trophy } from "lucide-react";
+import { Coins, ListChecks, Sparkles, Ticket, Trophy } from "lucide-react";
 import Link from "next/link";
-
-function rewardAccent(rewardPool: string, rewardType?: RewardType) {
-  const pool = rewardPool.toLowerCase();
-  if (
-    rewardType === "CC_ONLY" ||
-    rewardType === "CC_MANUAL" ||
-    rewardType === "CC_AND_INVITE" ||
-    pool.includes("cc")
-  ) {
-    return {
-      icon: Coins,
-      footer: "from-[var(--primary)]/10 via-transparent to-transparent border-[var(--primary)]/20",
-      value: "text-canton",
-    };
-  }
-  if (rewardType?.includes("INVITE") || pool.includes("invite") || pool.includes("fcfs")) {
-    return {
-      icon: Ticket,
-      footer: "from-violet-500/10 via-transparent to-transparent border-violet-500/20",
-      value: "text-violet-200",
-    };
-  }
-  if (rewardType === "WAITLIST_EMAIL" || pool.includes("waitlist")) {
-    return {
-      icon: Sparkles,
-      footer: "from-cyan-500/10 via-transparent to-transparent border-cyan-500/15",
-      value: "text-cyan-200",
-    };
-  }
-  return {
-    icon: Trophy,
-    footer: "from-[rgb(var(--canton-rgb)/0.08)] via-transparent to-transparent border-[var(--border)]",
-    value: "text-canton",
-  };
-}
-
-function kindLabel(
-  kind: ReturnType<typeof campaignUiKind>,
-  rewardType: string | undefined,
-  t: (key: string) => string,
-): string {
-  switch (kind) {
-    case "cc_fcfs":
-      return t("earnCampaigns.kindFcfs");
-    case "cc_manual_draw":
-      return t("earnCampaigns.kindCcRaffle");
-    case "cc_manual":
-      return t("earnCampaigns.kindCc");
-    case "waitlist_code":
-      return rewardType === "INVITE_CODE_FCFS"
-        ? t("earnCampaigns.kindInvite")
-        : t("earnCampaigns.kindRaffle");
-    case "waitlist_email":
-      return t("earnCampaigns.kindWaitlist");
-    default:
-      return t("earnCampaigns.kindCampaign");
-  }
-}
 
 function CampaignLogo({ quest }: { quest: Quest }) {
   return (
@@ -83,6 +26,22 @@ function CampaignLogo({ quest }: { quest: Quest }) {
   );
 }
 
+/** Reward pill icon for row view */
+function RewardPillIcon({
+  config,
+  size = 12,
+}: {
+  config: ReturnType<typeof getQuestMeta>["config"];
+  size?: number;
+}) {
+  if (config.isCcToken) return <CcRewardLogo size={size} />;
+  if (config.code === "INVITE_CODE_FCFS" || config.code === "INVITE_CODE_RANDOM")
+    return <Ticket className="h-3 w-3 shrink-0" aria-hidden />;
+  if (config.code === "WAITLIST_EMAIL")
+    return <Sparkles className="h-3 w-3 shrink-0" aria-hidden />;
+  return <Trophy className="h-3 w-3 shrink-0" aria-hidden />;
+}
+
 export function EarnCampaignRow({
   quest,
   completed = false,
@@ -91,15 +50,13 @@ export function EarnCampaignRow({
   completed?: boolean;
 }) {
   const t = usePlatformT();
+
+  // ── Derive all UI state from quest-engine ─────────────────────
+  const meta = getQuestMeta(quest);
+  const { config } = meta;
+
   const canOpen = quest.status === "ACTIVE" || quest.status === "ENDED";
   const statusMeta = QUEST_STATUS_BADGE[quest.status];
-  const poolLower = quest.rewardPool.toLowerCase();
-  const requiresFcfs =
-    poolLower.includes("fcfs") ||
-    poolLower.includes("first come") ||
-    quest.rewardType === "INVITE_CODE_FCFS";
-  const uiKind = campaignUiKind(quest.rewardType, requiresFcfs);
-  const accent = rewardAccent(quest.rewardPool, quest.rewardType);
 
   const ctaLabel =
     quest.status === "ENDED"
@@ -108,11 +65,19 @@ export function EarnCampaignRow({
         ? t("quests.questComplete")
         : t("quests.joinQuest");
 
-  const metaParts = [
-    kindLabel(uiKind, quest.rewardType, t),
-    `${quest.tasks.length} tasks`,
-    quest.deadline ?? null,
-  ].filter(Boolean) as string[];
+  // Reward pill text (sentence case)
+  let rewardPillText: string;
+  if (config.isDual) {
+    rewardPillText = quest.rewardCc > 0 ? `${quest.rewardCc} CC + 1 Code` : "CC + 1 Code";
+  } else if (config.isCcToken && quest.rewardCc > 0) {
+    rewardPillText = `${quest.rewardCc} CC / winner`;
+  } else if (config.code === "INVITE_CODE_FCFS" || config.code === "INVITE_CODE_RANDOM") {
+    rewardPillText = "1 Code / winner";
+  } else if (config.code === "WAITLIST_EMAIL") {
+    rewardPillText = "Waitlist spot";
+  } else {
+    rewardPillText = quest.rewardPool ?? "—";
+  }
 
   return (
     <li>
@@ -133,37 +98,68 @@ export function EarnCampaignRow({
         <div className="p-6">
           {/* Header */}
           <div className="flex gap-5">
-          <CampaignLogo quest={quest} />
+            <CampaignLogo quest={quest} />
 
             <div className="min-w-0 flex-1">
               <div className="flex items-start justify-between gap-4">
+                {/* Org + Title */}
                 <div className="min-w-0 pr-3">
-                  <p className="truncate text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                  <p className="truncate text-xs font-semibold text-slate-400">
                     {quest.org}
                   </p>
-                  <h3 className="mt-2 line-clamp-1 text-lg font-bold text-slate-100 sm:text-xl">
+                  <h3 className="mt-1 line-clamp-1 text-lg font-bold text-slate-100 sm:text-xl">
                     {quest.title}
                   </h3>
                 </div>
-                <span
-                  className={cn(
-                    "shrink-0 rounded-xl px-3 py-1 text-xs font-bold uppercase tracking-wide",
-                    statusMeta.className,
-                  )}
-                >
-                  {statusMeta.label}
-                </span>
+
+                {/* Status + Type badges stacked */}
+                <div className="flex shrink-0 flex-col items-end gap-1.5">
+                  <span
+                    className={cn(
+                      "rounded-xl px-3 py-1 text-xs font-bold uppercase tracking-wide",
+                      statusMeta.className,
+                    )}
+                  >
+                    {statusMeta.label}
+                  </span>
+                  <span
+                    className={cn(
+                      "rounded-xl border px-3 py-1 text-xs font-bold uppercase tracking-wide",
+                      config.chipClass,
+                    )}
+                  >
+                    {config.shortLabel}
+                  </span>
+                </div>
               </div>
 
+              {/* Description */}
               <p className="mt-3 line-clamp-2 text-sm font-medium leading-relaxed text-slate-400">
                 {quest.description}
               </p>
 
+              {/* Meta row: tasks + type info left, reward pill + CTA right */}
               <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
-                <p className="text-sm font-medium leading-relaxed text-slate-400">
-                  {metaParts.join(" · ")}
-                </p>
+                {/* Left: tasks count */}
+                <div className="flex flex-wrap items-center gap-3 text-sm font-medium text-slate-400">
+                  <span className="inline-flex items-center gap-1.5">
+                    <ListChecks className="h-4 w-4 text-canton" aria-hidden />
+                    {quest.tasks.length} tasks
+                  </span>
+                  {quest.deadline ? (
+                    <span className="text-slate-500">{quest.deadline}</span>
+                  ) : null}
+                  {/* Reward pill */}
+                  <div className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-black/30 px-2.5 py-1 text-xs font-bold",
+                    config.accentClass,
+                  )}>
+                    <RewardPillIcon config={config} size={12} />
+                    <span className="truncate">{rewardPillText}</span>
+                  </div>
+                </div>
 
+                {/* CTA */}
                 {canOpen ? (
                   <Link
                     href={ROUTES.campaignQuest(quest.id, quest.title)}
@@ -193,42 +189,6 @@ export function EarnCampaignRow({
             </div>
           </div>
         </div>
-
-        {/* Reward footer */}
-        {canOpen ? (
-          <Link
-            href={ROUTES.campaignQuest(quest.id, quest.title)}
-            className={cn(
-              "flex items-center gap-4 border-t bg-gradient-to-r px-6 py-4 transition-colors",
-              accent.footer,
-              "hover:bg-[var(--muted)]/10",
-            )}
-          >
-            <span className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
-              {t("earnCampaigns.rewardLabel")}
-            </span>
-            <span className={cn("min-w-0 flex-1 truncate text-base font-bold", accent.value)}>
-              {quest.rewardPool}
-            </span>
-            <span className="inline-flex shrink-0 items-center text-sm font-semibold text-slate-100 transition-colors group-hover:text-canton">
-              {t("quests.viewQuest")}
-            </span>
-          </Link>
-        ) : (
-          <div
-            className={cn(
-              "flex items-center gap-4 border-t bg-gradient-to-r px-6 py-4",
-              accent.footer,
-            )}
-          >
-            <span className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
-              {t("earnCampaigns.rewardLabel")}
-            </span>
-            <span className={cn("min-w-0 flex-1 truncate text-base font-bold", accent.value)}>
-              {quest.rewardPool}
-            </span>
-          </div>
-        )}
       </article>
     </li>
   );

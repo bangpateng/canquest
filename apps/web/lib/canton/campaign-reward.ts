@@ -213,15 +213,12 @@ export function campaignUiKind(
     case "WAITLIST_EMAIL":
       return "waitlist_email";
     case "INVITE_CODE_RANDOM":
-    case "INVITE_CODE":
+    case "INVITE_CODE": // legacy fallback — data lama di DB
       return "waitlist_code";
     case "CC_MANUAL":
       return "cc_manual_draw";
     case "CC_ONLY":
       return "cc_manual";
-    case "INVITE_CODE_FCFS":
-    case "CC_AND_INVITE":
-      return "waitlist_code";
     case "CC_AND_CODE_RAFFLE":
       return "cc_and_code_raffle";
     default:

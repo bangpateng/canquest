@@ -1,0 +1,262 @@
+# CanQuest — Cline Context & Rules
+
+## PROJECT OVERVIEW
+CanQuest adalah platform Web3 quest di Canton Network (blockchain).
+Ada smart contract DAML yang berjalan onchain di Canton Network.
+Setiap perubahan kode HARUS mempertimbangkan koneksi ke Canton blockchain.
+Jangan pernah ubah koneksi Canton tanpa konfirmasi eksplisit dari saya.
+
+## DEPLOYMENT
+- Frontend : Next.js 15 App Router → Vercel (auto deploy dari GitHub main)
+- Backend  : NestJS → VPS 2 (manual deploy)
+- Database : PostgreSQL + Redis → VPS 2
+- Blockchain: Canton Network + DAML → VPS 1 (Canton Node)
+- Repo     : GitHub (bangpateng/canquest)
+- Branch   : SELALU buat branch baru, JANGAN langsung ke main
+
+## ARSITEKTUR SISTEM
+User (browser)
+  → Vercel / Next.js (Frontend)
+    → VPS 2 / NestJS API (Backend)
+      → VPS 1 / Canton Node (Validator)
+        → Canton Network (Blockchain)
+
+## REWARD TYPE SISTEM (6 tipe aktif)
+| Kode DB             | Label User            | Claim    |
+|---------------------|-----------------------|----------|
+| CC_ONLY             | Token FCFS            | Onchain  |
+| CC_MANUAL           | Token Raffle          | Onchain  |
+| INVITE_CODE_FCFS    | Waitlist Code FCFS    | Onchain  |
+| INVITE_CODE_RANDOM  | Waitlist Code Raffle  | Onchain  |
+| WAITLIST_EMAIL      | Waitlist Email Raffle | Offchain |
+| CC_AND_CODE_RAFFLE  | Token + Code Raffle   | Onchain  |
+
+## LEGACY TYPE (jangan tampilkan di admin form)
+| Kode Lama     | Fallback ke          |
+|---------------|----------------------|
+| CC_AND_INVITE | CC_AND_CODE_RAFFLE   |
+| INVITE_CODE   | INVITE_CODE_RANDOM   |
+Tetap handle di backend sebagai fallback untuk data lama di DB.
+
+## POLA TAMPILAN REWARD
+FCFS types  → tampilkan slots + progress bar
+RAFFLE types → tampilkan max winners
+DUAL types  → tampilkan CC + Code sekaligus
+Semua warna dan label dari quest-engine.ts (akan dibuat)
+
+## FILE PENTING — BACA DULUAN
+
+### Fondasi (single source of truth — akan dibuat)
+apps/web/lib/quest/quest-engine.ts
+
+### Core Logic Sekarang
+apps/web/lib/quest/quest-types.ts
+apps/web/lib/quest/quest-social-links.ts
+apps/web/lib/canton/campaign-reward.ts
+apps/web/lib/canton/cc-reward-logo.ts
+apps/web/lib/routing/app-routes.ts
+apps/web/lib/utils/utils.ts
+apps/web/lib/i18n/platform-provider.tsx
+apps/web/lib/i18n/messages/en.ts
+apps/web/lib/auth/wallet-access.ts
+apps/web/lib/hooks/use-wallet-access.ts
+apps/web/lib/services/api/quests.ts
+apps/web/lib/services/api/client.ts
+
+### DAML Smart Contract (onchain — baca dulu sebelum ubah claim)
+packages/daml/daml/Main.daml
+
+### Canton Services (koneksi blockchain — hati-hati)
+apps/api/src/canton/quest-ledger.service.ts
+apps/api/src/canton/cc-inbound-sync.service.ts
+apps/api/src/canton/cc-balance.service.ts
+apps/api/src/canton/featured-app-activity.service.ts
+apps/api/src/canton/splice-validator.service.ts
+apps/api/src/canton/transaction-detail.service.ts
+
+### Backend Quest Logic
+apps/api/src/quests/quests.controller.ts
+apps/api/src/quests/quest-reward-config.ts
+apps/api/src/quests/campaign-task.util.ts
+apps/api/src/quests/quest-social-links.util.ts
+apps/api/prisma/schema.prisma
+
+### Queue & Jobs
+apps/api/src/queue/ledger-job.processor.ts
+apps/api/src/queue/spin-job.processor.ts
+
+### Earn Frontend — Halaman
+apps/web/app/(platform)/earn/page.tsx
+apps/web/app/(platform)/earn/layout.tsx
+apps/web/app/(platform)/earn/[questId]/page.tsx
+apps/web/app/(platform)/earn/[questId]/not-found.tsx
+
+### Earn Frontend — Komponen List
+apps/web/components/app/earn/earn-campaigns-page.tsx
+apps/web/components/app/earn/earn-campaign-card.tsx
+apps/web/components/app/earn/earn-campaign-row.tsx
+apps/web/components/app/earn/earn-campaign-skeleton.tsx
+apps/web/components/app/earn/earn-hub-page.tsx
+apps/web/components/app/earn/leaderboard-table.tsx
+
+### Campaign Detail & Claim
+apps/web/components/app/campaign/campaign-quest-sidebar.tsx
+apps/web/components/app/campaign/campaign-quest-status-card.tsx
+apps/web/components/app/campaign/campaign-fcfs-reward-card.tsx
+apps/web/components/app/campaign/campaign-fcfs-claim.tsx
+apps/web/components/app/campaign/campaign-draw-cc-claim.tsx
+apps/web/components/app/campaign/campaign-invite-claim.tsx
+apps/web/components/app/campaign/campaign-cc-and-code-raffle-claim.tsx
+apps/web/components/app/campaign/campaign-social-links.tsx
+apps/web/components/app/campaign/cc-reward-logo.tsx
+
+### Quest Components
+apps/web/components/app/quest/quest-card.tsx
+apps/web/components/app/quest/quest-submit-section.tsx
+apps/web/components/app/quest/quests-browser.tsx
+apps/web/components/app/quest/quest-referral-card.tsx
+apps/web/components/app/quest/task-points-label.tsx
+
+### API Routes — Claim (trigger onchain)
+apps/web/app/api/quests/[questId]/claim-fcfs/route.ts
+apps/web/app/api/quests/[questId]/claim-draw-cc/route.ts
+apps/web/app/api/quests/[questId]/claim-invite/route.ts
+apps/web/app/api/quests/[questId]/claim-cc-and-code-raffle/route.ts
+apps/web/app/api/quests/[questId]/route.ts
+apps/web/app/api/quests/[questId]/progress/route.ts
+apps/web/app/api/quests/[questId]/reward-status/route.ts
+apps/web/app/api/quests/[questId]/submit/route.ts
+apps/web/app/api/quests/route.ts
+apps/web/app/api/quests/earn-hub/route.ts
+apps/web/app/api/quests/dashboard-stats/route.ts
+
+### Admin
+apps/web/components/admin/quest-form.tsx
+apps/web/components/admin/quest-detail.tsx
+apps/web/components/admin/admin-earn-hub-panel.tsx
+apps/web/components/admin/admin-earn-hub-task-form.tsx
+apps/web/components/admin/admin-quest-table.tsx
+apps/web/components/admin/winners-panel.tsx
+apps/web/app/admin/(panel)/earn/page.tsx
+apps/web/app/admin/(panel)/earn/new/page.tsx
+apps/web/app/admin/(panel)/quests/page.tsx
+apps/web/app/admin/(panel)/quests/new/page.tsx
+apps/web/app/admin/(panel)/quests/[questId]/page.tsx
+apps/web/app/admin/(panel)/quests/[questId]/winners/page.tsx
+apps/web/app/api/admin/quests/route.ts
+apps/web/app/api/admin/quests/[questId]/route.ts
+apps/web/app/api/admin/quests/[questId]/draw-winners/route.ts
+apps/web/app/api/admin/quests/[questId]/distribute-rewards/route.ts
+apps/web/app/api/admin/quests/[questId]/invite-codes/route.ts
+
+### UI Components
+apps/web/components/ui/button.tsx
+apps/web/components/ui/loading-spinner.tsx
+apps/web/components/ui/confetti-effect.tsx
+
+### Shell & Platform
+apps/web/components/platform/platform-shell.tsx
+apps/web/components/platform/auth-context.tsx
+apps/web/components/platform/platform-toolbar.tsx
+apps/web/components/app/shell/app-shell.tsx
+
+## FOLDER TIDAK BOLEH DISENTUH
+apps/api/src/canton/     → Canton blockchain connection
+infra/                   → Server config VPS
+nginx/                   → Web server config
+wireguard/               → VPN config VPS
+packages/frontend/src/daml-types/ → Auto-generated DAML types
+
+## FOLDER ABAIKAN SAAT SCAN
+node_modules/
+.next/
+dist/
+apps/api/scripts/
+packages/frontend/src/daml-types/
+apps/api/prisma/migrations/
+
+## TUJUAN UTAMA PROYEK INI
+Perbaiki dan rapikan sistem menu Earn:
+
+1. Buat apps/web/lib/quest/quest-engine.ts
+   → Single source of truth untuk semua reward logic
+   → Semua komponen import dari sini
+
+2. Konsistenkan tampilan card & row
+   → Semua 6 reward type tampil konsisten
+   → Warna, label, metric, CTA seragam
+
+3. Hapus duplikasi logic reward
+   → Logic tidak tersebar di banyak file
+   → Ubah di satu tempat, efek ke semua
+
+4. Perbaiki admin form
+   → Visual reward type picker (bukan dropdown)
+   → Live preview card saat admin isi form
+   → Validasi form dari quest-engine
+
+5. Hapus legacy type
+   → CC_AND_INVITE dan INVITE_CODE
+   → Migrasi data lama di database
+   → Jangan break data yang sudah ada
+
+6. Pastikan onchain tetap jalan
+   → Canton claim tidak boleh rusak
+   → DAML contract tidak boleh berubah
+   → Hanya UI dan label yang berubah
+
+## ATURAN WAJIB — BACA DAN IKUTI
+
+### Sebelum coding
+- Baca dan pahami file yang relevan dulu
+- Buat laporan singkat apa yang akan diubah
+- Tunggu konfirmasi sebelum mulai
+
+### Saat coding
+- Satu file selesai → tunjukkan hasil → tunggu konfirmasi
+- Jangan ubah file di luar scope tanpa lapor dulu
+- Selesaikan TypeScript error sebelum lanjut file berikutnya
+- Refactor = struktur berubah, cara kerja TETAP SAMA
+- Jangan hapus fungsionalitas yang sudah jalan
+
+### Yang tidak boleh dilakukan
+- JANGAN merge ke branch main
+- JANGAN sentuh canton/, infra/, nginx/, wireguard/
+- JANGAN ubah DAML contract tanpa konfirmasi eksplisit
+- JANGAN jalankan migration SQL otomatis
+- JANGAN ubah shape API response yang sudah ada
+
+### Kalau menemukan masalah lain
+- Catat dan laporkan di akhir sesi
+- Jangan langsung fix di luar scope
+- Tanya dulu, konfirmasi dulu, baru kerjakan
+
+### Migration SQL
+- Buat file SQL saja, JANGAN jalankan
+- Saya yang jalankan manual di VPS 2
+- Selalu backup database dulu sebelum migration
+
+## FORMAT LAPORAN YANG SAYA MAU
+Setiap kali scan atau selesai satu file:
+
+=== LAPORAN ===
+FILE    : [nama file]
+STATUS  : [Dibaca / Diubah / Dibuat]
+MASALAH : [apa yang bermasalah]
+SOLUSI  : [apa yang dilakukan]
+RISIKO  : [ada risiko onchain atau tidak]
+NEXT    : [file berikutnya yang perlu diubah]
+===============
+
+## CARA KOMUNIKASI
+- Penjelasan dan laporan: Bahasa Indonesia
+- Kode dan komentar kode: Bahasa Inggris
+- Kalau ragu: tanya dulu, jangan langsung eksekusi
+- Kalau ada 2 pilihan approach: tunjukkan keduanya, 
+  biarkan saya yang pilih
+
+## LANGUAGE RULE
+ALL code, comments, labels, hints, error messages,
+and content inside files must be in ENGLISH only.
+No Indonesian language in any code file.
+Exception: this .clinerules file only.

@@ -162,6 +162,7 @@ export const tr: PlatformMessages = {
       "Tüm ödül slotları dolu. Zaten katıldıysanız görevlerinizi görüntüleyebilirsiniz.",
     slotsFullClosedBanner:
       "Tüm ödül slotları dolu. Yeni katılımcılar bu kampanyaya katılamaz.",
+    codeLabel: "Invite Codes",
   },
   quests: {
     searchPlaceholder: "Başlık, kuruluş, havuz ara…",

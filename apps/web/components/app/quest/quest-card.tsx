@@ -4,6 +4,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { CardTitle } from "@/components/ui/typography";
 import { ROUTES } from "@/lib/routing/app-routes";
 import { EarnCampaignCard } from "@/components/app/earn/earn-campaign-card";
+import { getRewardConfig, type RewardIconKind } from "@/lib/quest/quest-engine";
 import type { UserProgress } from "@/lib/quest/quest-types";
 import { QUEST_STATUS_BADGE, type Quest } from "@/lib/quest/quest-types";
 import {
@@ -59,21 +60,24 @@ function QuestLogo({
   );
 }
 
-function rewardAccent(rewardPool: string, rewardType?: string) {
-  const pool = rewardPool.toLowerCase();
-  if (rewardType === "CC_ONLY" || rewardType === "CC_AND_INVITE" || pool.includes("cc")) {
+/** Map reward config accentClass to reward bar gradient + icon. */
+function rewardBarStyle(config: ReturnType<typeof getRewardConfig>): {
+  icon: typeof Coins;
+  className: string;
+} {
+  if (config.isCcToken) {
     return {
       icon: Coins,
       className: "from-[var(--primary)]/20 to-[rgb(var(--canton-cyan-rgb)/0.08)] border-[var(--primary)]/30 text-canton",
     };
   }
-  if (rewardType?.includes("INVITE") || pool.includes("invite") || pool.includes("fcfs")) {
+  if (config.code === "INVITE_CODE_FCFS" || config.code === "INVITE_CODE_RANDOM") {
     return {
       icon: Ticket,
       className: "from-violet-500/20 to-fuchsia-500/10 border-violet-500/30 text-violet-200",
     };
   }
-  if (rewardType === "WAITLIST_EMAIL" || pool.includes("waitlist")) {
+  if (config.code === "WAITLIST_EMAIL") {
     return {
       icon: Sparkles,
       className: "from-cyan-500/15 to-blue-500/10 border-cyan-500/25 text-cyan-200",
@@ -111,7 +115,8 @@ export function QuestCard({
 
   const canOpen = quest.status === "ACTIVE" || quest.status === "ENDED";
   const statusMeta = QUEST_STATUS_BADGE[quest.status];
-  const accent = rewardAccent(quest.rewardPool, quest.rewardType);
+  const config = getRewardConfig(quest.rewardType);
+  const accent = rewardBarStyle(config);
   const RewardIcon = accent.icon;
 
   const ctaLabel =

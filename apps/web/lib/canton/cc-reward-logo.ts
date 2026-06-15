@@ -47,12 +47,12 @@ export function isCcTokenRewardQuest(
   quest: Pick<Quest, "rewardCc" | "rewardType" | "rewardPool">,
 ): boolean {
   if ((quest.rewardCc ?? 0) > 0) return true;
-  const rt = quest.rewardType ?? "";
+  const rt = (quest.rewardType ?? "") as string;
   if (
     rt === "CC_ONLY" ||
     rt === "CC_MANUAL" ||
-    rt === "CC_AND_INVITE" ||
-    rt === "CC_AND_CODE_RAFFLE"
+    rt === "CC_AND_CODE_RAFFLE" ||
+    rt === "CC_AND_INVITE" // legacy fallback — data lama di DB
   ) return true;
   const pool = (quest.rewardPool ?? "").toLowerCase();
   return /\bcc\b/.test(pool) || pool.includes("canton coin");
