@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as jwt from 'jsonwebtoken';
-import * as jwksRsa from 'jwks-rsa';
+import { JwksClient } from 'jwks-rsa';
 import type { Request } from 'express';
 
 /**
@@ -25,30 +25,45 @@ import type { Request } from 'express';
  *   @UseGuards(Auth0JwtGuard)
  *   @Get('protected')
  *   async protectedEndpoint() { ... }
+ *
+ * NOTE: JwksClient is instantiated LAZILY on first use (not in constructor)
+ * so that the guard can be registered as a global provider without crashing
+ * the app at startup when AUTH_JWKS_URL is not yet configured.
  */
 @Injectable()
 export class Auth0JwtGuard implements CanActivate {
   private readonly logger = new Logger(Auth0JwtGuard.name);
-  private readonly jwksClient: jwksRsa.JwksClient;
-  private readonly issuer: string;
-  private readonly audience: string;
+
+  // Lazy — created on first call to this.jwks()
+  private _jwksClient?: JwksClient;
 
   constructor(private readonly config: ConfigService) {
-    const jwksUri =
-      config.get<string>('AUTH_JWKS_URL') ??
-      `${(config.get<string>('AUTH_URL') ?? '').replace(/\/$/, '')}/.well-known/jwks.json`;
+    // Intentionally empty — do NOT create JwksClient or read env here.
+    // NestJS instantiates all providers at boot; creating the client here
+    // would crash the app if AUTH_JWKS_URL is not configured.
+  }
 
-    this.jwksClient = jwksRsa({
-      jwksUri,
-      cache: true,
-      cacheMaxEntries: 5,
-      cacheMaxAge: 10 * 60 * 60 * 1000, // 10 hours
-      rateLimit: true,
-      jwksRequestsPerMinute: 10,
-    });
+  /**
+   * Lazy accessor for JwksClient.
+   * Created on first call so that startup is never blocked by missing env vars.
+   */
+  private jwks(): JwksClient {
+    if (!this._jwksClient) {
+      const authUrl = (this.config.get<string>('AUTH_URL') ?? '').replace(/\/$/, '');
+      const jwksUri =
+        this.config.get<string>('AUTH_JWKS_URL') ??
+        (authUrl ? `${authUrl}/.well-known/jwks.json` : '');
 
-    this.issuer = `${(config.get<string>('AUTH_URL') ?? '').replace(/\/$/, '')}/`;
-    this.audience = config.get<string>('LEDGER_API_AUTH_AUDIENCE') ?? '';
+      this._jwksClient = new JwksClient({
+        jwksUri,
+        cache: true,
+        cacheMaxEntries: 5,
+        cacheMaxAge: 10 * 60 * 60 * 1000, // 10 hours
+        rateLimit: true,
+        jwksRequestsPerMinute: 10,
+      });
+    }
+    return this._jwksClient;
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -75,6 +90,11 @@ export class Auth0JwtGuard implements CanActivate {
   }
 
   private verifyToken(token: string): Promise<jwt.JwtPayload> {
+    // Read issuer and audience at call time (not at construction time)
+    const authUrl = (this.config.get<string>('AUTH_URL') ?? '').replace(/\/$/, '');
+    const issuer = authUrl ? `${authUrl}/` : '';
+    const audience = this.config.get<string>('LEDGER_API_AUTH_AUDIENCE') ?? '';
+
     return new Promise((resolve, reject) => {
       // Decode header to get kid (key ID) for JWKS lookup
       const decoded = jwt.decode(token, { complete: true });
@@ -87,7 +107,7 @@ export class Auth0JwtGuard implements CanActivate {
         return reject(new Error('Token header missing kid'));
       }
 
-      this.jwksClient.getSigningKey(kid, (err, key) => {
+      this.jwks().getSigningKey(kid, (err, key) => {
         if (err || !key) {
           return reject(err ?? new Error('Signing key not found'));
         }
@@ -99,8 +119,8 @@ export class Auth0JwtGuard implements CanActivate {
           signingKey,
           {
             algorithms: ['RS256'],
-            audience: this.audience || undefined,
-            issuer: this.issuer || undefined,
+            audience: audience || undefined,
+            issuer: issuer || undefined,
           },
           (verifyErr, payload) => {
             if (verifyErr) return reject(verifyErr);
