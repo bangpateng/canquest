@@ -81,12 +81,13 @@ export class LedgerJobProcessor {
     // Validator party sends the reward
     const validatorPartyId = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ?? '';
 
-    // Step 1: Try CIP-0056 TransferFactory_Transfer
+    // Step 1: Try CIP-0056 TransferFactory_Transfer (identity='reward' for dapp-reward auth)
     const cip56Result = await this.ledger.executeTransferFactoryTransfer({
       senderPartyId: validatorPartyId,
       receiverPartyId: cantonPartyId,
       amountCc,
       description,
+      identity: 'reward',
     });
 
     let accepted = false;
@@ -169,11 +170,13 @@ export class LedgerJobProcessor {
       const validatorPartyId = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ?? '';
 
       // CIP-0056: try TransferFactory_Transfer first, fallback to Splice TransferOffer
+      // identity='reward' → dapp-reward identity for CC reward transfers
       const cip56Result = await this.ledger.executeTransferFactoryTransfer({
         senderPartyId: validatorPartyId,
         receiverPartyId: cantonPartyId,
         amountCc,
         description: `Quest winner reward: ${questId}`,
+        identity: 'reward',
       });
 
       if (cip56Result.ok) {
@@ -219,7 +222,8 @@ export class LedgerJobProcessor {
     }
 
     // Update WinnerDraw record
-    await this.prisma.winnerDraw.update({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (this.prisma as any).winnerDraw.update({
       where: { id: drawId },
       data: {
         distributed: true,

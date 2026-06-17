@@ -1,7 +1,8 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { Injectable, Logger, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as jwt from 'jsonwebtoken';
 import { randomUUID } from 'crypto';
+import { Auth0TokenService } from '../auth/auth0-token.service';
 
 /**
  * HTTP client for the Canton JSON Ledger API v2.
@@ -53,7 +54,10 @@ export class CantonLedgerService {
    */
   private readonly scanUrl: string | null;
 
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    @Optional() private readonly auth0: Auth0TokenService,
+  ) {
     this.baseUrl = (
       config.get<string>('CANTON_JSON_API_URL') ?? 'http://127.0.0.1:7575'
     ).replace(/\/$/, '');
@@ -67,7 +71,10 @@ export class CantonLedgerService {
     )?.replace(/\/$/, '') ?? null;
   }
 
-  /** JWT token for Canton JSON Ledger API calls. */
+  /**
+   * HS256 JWT token for Canton JSON Ledger API calls (legacy / hs256 mode).
+   * Kept intact for REVERSIBILITY — do not delete.
+   */
   private ledgerToken(actingUser?: string): string | null {
     if (!this.secret) return null;
     const sub = actingUser ?? this.ledgerApiUser;
@@ -78,8 +85,54 @@ export class CantonLedgerService {
     );
   }
 
-  private authHeaders(actingUser?: string): Record<string, string> {
-    const token = this.ledgerToken(actingUser);
+  /**
+   * Resolve the bearer token for a given ledger identity.
+   *
+   * LEDGER_AUTH_MODE=auth0  → Auth0 M2M token via client_credentials
+   *   identity='admin'  → getAdminLedgerToken()  (dapp-admin)
+   *   identity='reward' → getRewardLedgerToken() (dapp-reward)
+   * LEDGER_AUTH_MODE=hs256 (default) → HS256 JWT signed with CANTON_SPLICE_SECRET
+   *
+   * This is the single choke-point for auth mode switching — all other methods
+   * call authHeaders() which calls this helper.
+   */
+  private async getLedgerToken(
+    identity: 'admin' | 'reward' = 'admin',
+  ): Promise<string | null> {
+    const mode = this.config.get<string>('LEDGER_AUTH_MODE') ?? 'hs256';
+
+    if (mode === 'auth0') {
+      if (!this.auth0) {
+        this.logger.error(
+          'LEDGER_AUTH_MODE=auth0 but Auth0TokenService is not injected. ' +
+          'Ensure Auth0Module is imported in CantonModule.',
+        );
+        return null;
+      }
+      try {
+        return identity === 'reward'
+          ? await this.auth0.getRewardLedgerToken()
+          : await this.auth0.getAdminLedgerToken();
+      } catch (err) {
+        this.logger.error(`getLedgerToken(${identity}) Auth0 error: ${String(err)}`);
+        return null;
+      }
+    }
+
+    // Default: hs256 — use legacy CANTON_SPLICE_SECRET token
+    return this.ledgerToken();
+  }
+
+  /**
+   * Build HTTP headers for a Canton Ledger API request.
+   *
+   * @param identity - 'admin' (default) or 'reward' — selects the Auth0 M2M identity
+   *                   when LEDGER_AUTH_MODE=auth0. Ignored in hs256 mode.
+   */
+  private async authHeaders(
+    identity: 'admin' | 'reward' = 'admin',
+  ): Promise<Record<string, string>> {
+    const token = await this.getLedgerToken(identity);
     if (!token) return { 'Content-Type': 'application/json' };
     return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
   }
@@ -164,7 +217,7 @@ export class CantonLedgerService {
         }
         const res = await fetch(url, {
           method: 'POST',
-          headers: this.authHeaders(effectiveUserId),
+          headers: await this.authHeaders(),
           body: JSON.stringify(body),
           signal: AbortSignal.timeout(30_000),
         });
@@ -374,6 +427,13 @@ export class CantonLedgerService {
     receiverPartyId: string;
     amountCc: number;
     description?: string;
+    /**
+     * Ledger identity to use for authentication.
+     * 'admin'  → dapp-admin (general operations, default)
+     * 'reward' → dapp-reward (CC reward transfers — JOB_SEND_CC_REWARD, JOB_DISTRIBUTE_REWARD)
+     * Only relevant when LEDGER_AUTH_MODE=auth0.
+     */
+    identity?: 'admin' | 'reward';
   }): Promise<{
     ok: boolean;
     updateId: string | null;
@@ -381,7 +441,7 @@ export class CantonLedgerService {
     transferInstructionCid?: string | null;
     error?: string;
   }> {
-    const { senderPartyId, receiverPartyId, amountCc, description } = params;
+    const { senderPartyId, receiverPartyId, amountCc, description, identity = 'admin' } = params;
 
     // ── Step 1: Query sender's Amulet holdings for inputHoldingCids ──────
     const holdings = await this.queryAmuletHoldings(senderPartyId);
@@ -462,7 +522,7 @@ export class CantonLedgerService {
       `TransferFactory_Transfer (CIP-0056): sender=${senderPartyId.split('::')[0]} → ` +
       `receiver=${receiverPartyId.split('::')[0]} amount=${amountCc} CC ` +
       `kind=${registry.transferKind} factory=${registry.factoryId.slice(0, 16)}... ` +
-      `disclosed=${registry.disclosedContracts.length}`,
+      `disclosed=${registry.disclosedContracts.length} identity=${identity}`,
     );
 
     const { ok, status, text } = await this.exerciseChoice(
@@ -524,7 +584,7 @@ export class CantonLedgerService {
     try {
       const res = await fetch(`${this.baseUrl}/v2/state/active-contracts`, {
         method: 'POST',
-        headers: this.authHeaders(),
+        headers: await this.authHeaders(),
         body: JSON.stringify({
           eventFormat: {
             filtersByParty: {
@@ -916,7 +976,7 @@ export class CantonLedgerService {
     try {
       res = await fetch(url, {
         method: 'POST',
-        headers: this.authHeaders(),
+        headers: await this.authHeaders(),
         body: JSON.stringify({ partyIdHint, identityProviderId: '' }),
         signal: AbortSignal.timeout(10_000),
       });
@@ -971,7 +1031,7 @@ export class CantonLedgerService {
     const url = `${this.baseUrl}/v2/users/${encodeURIComponent(this.ledgerApiUser)}/rights`;
     const res = await fetch(url, {
       method: 'POST',
-      headers: this.authHeaders(),
+      headers: await this.authHeaders(),
       body: JSON.stringify({
         identityProviderId: '',
         userId: this.ledgerApiUser,
@@ -998,7 +1058,7 @@ export class CantonLedgerService {
     try {
       const encoded = encodeURIComponent(partyId);
       const res = await fetch(`${this.baseUrl}/v2/parties?parties=${encoded}`, {
-        headers: this.authHeaders(),
+        headers: await this.authHeaders(),
         signal: AbortSignal.timeout(6_000),
       });
       if (!res.ok) return false;
@@ -1012,7 +1072,7 @@ export class CantonLedgerService {
   /** List parties visible to this participant. */
   async listParties(): Promise<unknown[]> {
     const res = await fetch(`${this.baseUrl}/v2/parties`, {
-      headers: this.authHeaders(),
+      headers: await this.authHeaders(),
       signal: AbortSignal.timeout(6_000),
     });
     const text = await res.text();
@@ -1054,7 +1114,7 @@ export class CantonLedgerService {
   /** Returns current ledger-end offset. */
   async ledgerEnd(): Promise<unknown> {
     const res = await fetch(`${this.baseUrl}/v2/state/ledger-end`, {
-      headers: this.authHeaders(),
+      headers: await this.authHeaders(),
       signal: AbortSignal.timeout(6_000),
     });
     const text = await res.text();
@@ -1109,7 +1169,7 @@ export class CantonLedgerService {
     try {
       const res = await fetch(`${this.baseUrl}/v2/state/active-contracts`, {
         method: 'POST',
-        headers: this.authHeaders(),
+        headers: await this.authHeaders(),
         body: JSON.stringify({
           eventFormat: {
             filtersByParty,
@@ -1204,7 +1264,7 @@ export class CantonLedgerService {
     try {
       const res = await fetch(`${this.baseUrl}/v2/state/active-contracts`, {
         method: 'POST',
-        headers: this.authHeaders(),
+        headers: await this.authHeaders(),
         body: JSON.stringify({
           eventFormat: {
             filtersByParty: {
@@ -1397,7 +1457,7 @@ export class CantonLedgerService {
     try {
       const res = await fetch(`${this.baseUrl}/v2/state/active-contracts`, {
         method: 'POST',
-        headers: this.authHeaders(),
+        headers: await this.authHeaders(),
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(15_000),
       });
@@ -1452,7 +1512,7 @@ export class CantonLedgerService {
     try {
       const res = await fetch(`${this.baseUrl}/v2/contracts/by-key`, {
         method: 'POST',
-        headers: this.authHeaders(),
+        headers: await this.authHeaders(),
         body: JSON.stringify({ templateId, key, readAs }),
         signal: AbortSignal.timeout(10_000),
       });
@@ -1657,7 +1717,7 @@ export class CantonLedgerService {
 
     const res = await fetch(`${this.baseUrl}/v2/updates/transactions`, {
       method: 'POST',
-      headers: this.authHeaders(),
+      headers: await this.authHeaders(),
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(20_000),
     });

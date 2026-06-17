@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from '../prisma/prisma.module';
 import { UsersModule } from '../users/users.module';
+import { Auth0Module } from '../auth/auth0.module';
 import { CantonLedgerService } from './canton-ledger.service';
 import { SpliceValidatorService } from './splice-validator.service';
 import { FeaturedAppActivityService } from './featured-app-activity.service';
@@ -20,7 +21,7 @@ import { QuestLedgerService } from './quest-ledger.service';
  *   https://docs.canton.network/appdev/modules/m4-app-architecture
  */
 @Module({
-  imports: [PrismaModule, ConfigModule, UsersModule],
+  imports: [PrismaModule, ConfigModule, UsersModule, Auth0Module],
   providers: [
     CantonLedgerService,
     SpliceValidatorService,
