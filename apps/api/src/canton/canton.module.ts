@@ -6,6 +6,7 @@ import { Auth0Module } from '../auth/auth0.module';
 import { KeycloakTokenService } from '../auth/keycloak-token.service';
 import { KeycloakAdminService } from '../auth/keycloak-admin.service';
 import { CantonLedgerService } from './canton-ledger.service';
+import { WalletOnboardingService } from './wallet-onboarding.service';
 import { SpliceValidatorService } from './splice-validator.service';
 import { FeaturedAppActivityService } from './featured-app-activity.service';
 import { CcInboundSyncService } from './cc-inbound-sync.service';
@@ -34,6 +35,7 @@ import { QuestLedgerService } from './quest-ledger.service';
     CcBalanceService,
     TransactionDetailService,
     QuestLedgerService,
+    WalletOnboardingService,
   ],
   exports: [
     CantonLedgerService,
@@ -43,6 +45,7 @@ import { QuestLedgerService } from './quest-ledger.service';
     CcBalanceService,
     TransactionDetailService,
     QuestLedgerService,
+    WalletOnboardingService,
   ],
 })
 export class CantonModule {}

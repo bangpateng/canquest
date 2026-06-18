@@ -156,9 +156,10 @@ export class KeycloakAdminService {
     }
 
     if (res.status === 409) {
-      throw new Error(
-        `Keycloak user '${params.username}' already exists (409 Conflict)`,
+      this.logger.warn(
+        `Keycloak user '${params.username}' already exists (409) — reusing existing user`,
       );
+      return;
     }
 
     const text = await res.text();
