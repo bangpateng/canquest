@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 
 /**
  * Ambil token ledger dari KEYCLOAK (bukan Auth0).
@@ -27,24 +28,31 @@ export class KeycloakTokenService {
   private readonly inflight = new Map<string, Promise<string>>();
   private readonly SKEW_MS = 60_000;
 
+  constructor(private readonly config: ConfigService) {}
+
   private req(name: string): string {
-    const v = process.env[name];
+    const v = this.config.get<string>(name);
     if (!v) throw new Error(`Env var ${name} belum diset`);
     return v;
   }
 
   private get tokenUrl(): string {
     const base = this.req('KEYCLOAK_URL').replace(/\/$/, '');
-    const realm = process.env.KEYCLOAK_REALM || 'canton';
+    const realm = this.config.get<string>('KEYCLOAK_REALM') || 'canton';
     return `${base}/realms/${realm}/protocol/openid-connect/token`;
   }
 
   private get scope(): string {
-    return process.env.LEDGER_API_AUTH_SCOPE || 'daml_ledger_api';
+    return this.config.get<string>('LEDGER_API_AUTH_SCOPE') || 'daml_ledger_api';
   }
 
   /** Token untuk operasi ledger sebagai admin/operator (validator-app-backend). */
   async getAdminLedgerToken(): Promise<string> {
+    this.logger.debug(
+      `getAdminLedgerToken: client_id=${this.req('LEDGER_CLIENT_ID')} ` +
+      `secret_len=${this.req('LEDGER_CLIENT_SECRET').length} ` +
+      `url=${this.tokenUrl} scope=${this.scope}`,
+    );
     return this.getToken(this.req('LEDGER_CLIENT_ID'), this.req('LEDGER_CLIENT_SECRET'));
   }
 
@@ -54,8 +62,8 @@ export class KeycloakTokenService {
    * set REWARD_CLIENT_ID / REWARD_CLIENT_SECRET dan ini otomatis pakai itu.
    */
   async getRewardLedgerToken(): Promise<string> {
-    const id = process.env.REWARD_CLIENT_ID || this.req('LEDGER_CLIENT_ID');
-    const secret = process.env.REWARD_CLIENT_SECRET || this.req('LEDGER_CLIENT_SECRET');
+    const id = this.config.get<string>('REWARD_CLIENT_ID') || this.req('LEDGER_CLIENT_ID');
+    const secret = this.config.get<string>('REWARD_CLIENT_SECRET') || this.req('LEDGER_CLIENT_SECRET');
     return this.getToken(id, secret);
   }
 
