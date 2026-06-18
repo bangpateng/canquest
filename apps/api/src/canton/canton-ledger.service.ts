@@ -1756,6 +1756,49 @@ export class CantonLedgerService {
     return data.transactions ?? [];
   }
 
+  /**
+   * Grant CanReadAs right to the admin service account for a party.
+   * This allows the operator (validator-app-backend) to read ACS contracts
+   * for this party — needed for queryPendingOffers() to work.
+   */
+  async grantAdminReadRights(partyId: string): Promise<void> {
+    const adminUserId = this.config.get<string>('LEDGER_ADMIN_USER_ID');
+    if (!adminUserId) {
+      this.logger.debug('LEDGER_ADMIN_USER_ID not set — skipping admin grant');
+      return;
+    }
+    const token = await this.keycloak!.getAdminLedgerToken();
+    const url = `${this.baseUrl}/v2/users/${encodeURIComponent(adminUserId)}/rights`;
+    try {
+      // Ensure admin user exists in ledger
+      await fetch(`${this.baseUrl}/v2/users`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user: { id: adminUserId, primaryParty: partyId } }),
+        signal: AbortSignal.timeout(10_000),
+      }).catch(() => {}); // ignore if already exists
+
+      // Grant CanReadAs
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: adminUserId,
+          rights: [{ kind: { CanReadAs: { value: { party: partyId } } } }],
+        }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (res.ok || res.status === 409) {
+        this.logger.debug(`Admin CanReadAs granted for party=${partyId.split('::')[0]}`);
+      } else {
+        const text = await res.text();
+        this.logger.warn(`grantAdminReadRights ${res.status}: ${text.slice(0, 200)}`);
+      }
+    } catch (err) {
+      this.logger.warn(`grantAdminReadRights error: ${String(err)}`);
+    }
+  }
+
   // ── Keycloak user onboarding ──────────────────────────────────────
 
   /**

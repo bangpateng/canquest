@@ -72,6 +72,16 @@ export class WalletOnboardingService {
     // d. Bridge UUID ke Ledger API user (idempoten)
     await this.cantonLedger.ensureLedgerUser(keycloakId, partyId);
 
+    // e. Grant operator read rights supaya ACS query offers bisa baca party user
+    await this.cantonLedger.grantUserRights(partyId).catch((err) => {
+      this.logger.warn(`grantUserRights untuk operator gagal (non-fatal): ${String(err)}`);
+    });
+
+    // f. Grant admin service account CanReadAs rights untuk query ACS offers
+    await this.cantonLedger.grantAdminReadRights(partyId).catch((err) => {
+      this.logger.warn(`grantAdminReadRights gagal (non-fatal): ${String(err)}`);
+    });
+
     this.logger.log(
       `onboardWallet done: @${input.username} keycloak=${keycloakId.slice(0, 8)}... party=${partyId.split('::')[0]}`,
     );
