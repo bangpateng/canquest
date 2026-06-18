@@ -1045,68 +1045,38 @@ export class SpliceValidatorService {
     if (!this.isConfigured) {
       return { ok: false, detail: 'CANTON_VALIDATOR_URL atau CANTON_SPLICE_SECRET belum di-set.' };
     }
-    const paths = [
-      '/api/validator/v0/wallet/transfer-preapproval',
-      '/api/validator/v0/wallet/transfer-preapprovals',
-    ];
     try {
-      let lastStatus = 0;
-      let lastText = '';
-      for (const aud of this.walletAudiences()) {
-        for (const path of paths) {
-          const res = await fetch(`${this.baseUrl}${path}`, {
-            method: 'POST',
-            headers: this.authHeadersForToken(this.signToken(username, aud), true),
-            body: '{}',
-            signal: AbortSignal.timeout(15_000),
-          });
-          const text = await res.text();
-          lastStatus = res.status;
-          lastText = text;
+      const res = await fetch(`${this.baseUrl}/api/validator/v0/wallet/transfer-preapproval`, {
+        method: 'POST',
+        headers: await this.jsonAuthHeaders(),
+        body: '{}',
+        signal: AbortSignal.timeout(15_000),
+      });
+      const text = await res.text();
 
-          if (res.ok) {
-            this.logger.log(
-              `TransferPreapproval created for @${username} (CIP-56) via ${path} aud=${aud}`,
-            );
-            return { ok: true, status: res.status };
-          }
-
-          if (res.status === 409) {
-            this.logger.log(`TransferPreapproval already active for @${username}`);
-            return { ok: true, status: 409 };
-          }
-
-          if (res.status === 401 || res.status === 403) continue;
-          if (res.status !== 404) break;
-        }
-        if (lastStatus !== 404 && lastStatus !== 401 && lastStatus !== 403) break;
+      if (res.ok || res.status === 409) {
+        this.logger.log(
+          `TransferPreapproval ${res.status === 409 ? 'already active' : 'created'} for @${username} (CIP-56)`,
+        );
+        return { ok: true, status: res.status };
       }
 
-      let detail = lastText.slice(0, 300);
-      if (lastStatus === 404) {
-        detail =
-          'Endpoint preapproval tidak ditemukan di validator (versi Splice?). Buat lewat Splice Wallet UI.';
-      } else if (lastStatus === 401 || lastStatus === 403) {
+      let detail = text.slice(0, 300);
+      if (res.status === 404) {
+        detail = 'Endpoint preapproval tidak ditemukan di validator (versi Splice?). Buat lewat Splice Wallet UI.';
+      } else if (res.status === 401 || res.status === 403) {
         const spliceUsers = await this.listSpliceUsernames();
         const listed = spliceUsers.some((u) => u.toLowerCase() === username.toLowerCase());
         detail = listed
           ? `@${username} ada di Splice tapi wallet API menolak (403). Buat preapproval lewat Splice Wallet UI.`
-          : `@${username} belum terdaftar di Splice Wallet (Party ID hanya di Canton ledger). Buat ulang wallet saat tunnel Splice aktif.`;
+          : `@${username} belum terdaftar di Splice Wallet. Buat ulang wallet saat tunnel Splice aktif.`;
       }
-      this.logger.warn(
-        `createTransferPreapproval ${lastStatus} for @${username}: ${lastText.slice(0, 200)}`,
-      );
-      return { ok: false, status: lastStatus, detail };
+      this.logger.warn(`createTransferPreapproval ${res.status} for @${username}: ${text.slice(0, 200)}`);
+      return { ok: false, status: res.status, detail };
     } catch (err) {
       const msg = String(err);
       this.logger.warn(`createTransferPreapproval error for @${username}: ${msg}`);
-      return {
-        ok: false,
-        detail:
-          msg.includes('ECONNREFUSED') || msg.includes('fetch failed')
-            ? 'Tidak bisa hubungi Splice (port 8080). Jalankan SSH tunnel ke node validator.'
-            : msg,
-      };
+      return { ok: false, detail: msg.includes('ECONNREFUSED') || msg.includes('fetch failed') ? 'Tidak bisa hubungi Splice. Jalankan SSH tunnel.' : msg };
     }
   }
 
