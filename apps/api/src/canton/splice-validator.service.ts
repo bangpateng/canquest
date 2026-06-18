@@ -976,20 +976,23 @@ export class SpliceValidatorService {
    */
     async getUserBalance(username: string): Promise<number | null> {
     if (!this.isConfigured) return null;
-    try {
-      const res = await fetch(`${this.baseUrl}/api/validator/v0/wallet/balance`, {
-        headers: await this.authHeaders(),
-        signal: AbortSignal.timeout(8_000),
-      });
-      if (!res.ok) {
-        if (res.status === 401 || res.status === 403) return null;
-        return null;
+    for (const aud of this.walletAudiences()) {
+      try {
+        const res = await fetch(`${this.baseUrl}/api/validator/v0/wallet/balance`, {
+          headers: this.authHeadersForToken(this.signToken(username, aud)),
+          signal: AbortSignal.timeout(8_000),
+        });
+        if (!res.ok) {
+          if (res.status === 401 || res.status === 403) continue;
+          return null;
+        }
+        const data = (await res.json()) as { effective_unlocked_qty?: string };
+        return data.effective_unlocked_qty ? parseFloat(data.effective_unlocked_qty) : 0;
+      } catch {
+        /* try next audience */
       }
-      const data = (await res.json()) as { effective_unlocked_qty?: string };
-      return data.effective_unlocked_qty ? parseFloat(data.effective_unlocked_qty) : 0;
-    } catch {
-      return null;
     }
+    return null;
   }
 
   /**
@@ -998,25 +1001,28 @@ export class SpliceValidatorService {
    */
     async listTransferOffers(username: string): Promise<{ contractId: string; payload: unknown }[]> {
     if (!this.isConfigured) return [];
-    try {
-      const res = await fetch(`${this.baseUrl}/api/validator/v0/wallet/transfer-offers`, {
-        headers: await this.authHeaders(),
-        signal: AbortSignal.timeout(8_000),
-      });
-      if (!res.ok) {
-        if (res.status === 401 || res.status === 403) return [];
-        return [];
+    for (const aud of this.walletAudiences()) {
+      try {
+        const res = await fetch(`${this.baseUrl}/api/validator/v0/wallet/transfer-offers`, {
+          headers: this.authHeadersForToken(this.signToken(username, aud)),
+          signal: AbortSignal.timeout(8_000),
+        });
+        if (!res.ok) {
+          if (res.status === 401 || res.status === 403) continue;
+          return [];
+        }
+        const data = (await res.json()) as {
+          offers?: { contract_id?: string; payload?: unknown }[];
+        };
+        return (data.offers ?? []).map((o) => ({
+          contractId: o.contract_id ?? '',
+          payload: o.payload,
+        }));
+      } catch {
+        /* try next audience */
       }
-      const data = (await res.json()) as {
-        offers?: { contract_id?: string; payload?: unknown }[];
-      };
-      return (data.offers ?? []).map((o) => ({
-        contractId: o.contract_id ?? '',
-        payload: o.payload,
-      }));
-    } catch {
-      return [];
     }
+    return [];
   }
 
   /**
