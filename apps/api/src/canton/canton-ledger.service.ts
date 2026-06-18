@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import * as jwt from 'jsonwebtoken';
 import { randomUUID } from 'crypto';
 import { Auth0TokenService } from '../auth/auth0-token.service';
+import { KeycloakTokenService } from '../auth/keycloak-token.service';
 
 /**
  * HTTP client for the Canton JSON Ledger API v2.
@@ -57,6 +58,7 @@ export class CantonLedgerService {
   constructor(
     private readonly config: ConfigService,
     @Optional() private readonly auth0: Auth0TokenService,
+    @Optional() private readonly keycloak: KeycloakTokenService,
   ) {
     this.baseUrl = (
       config.get<string>('CANTON_JSON_API_URL') ?? 'http://127.0.0.1:7575'
@@ -100,6 +102,24 @@ export class CantonLedgerService {
     identity: 'admin' | 'reward' = 'admin',
   ): Promise<string | null> {
     const mode = this.config.get<string>('LEDGER_AUTH_MODE') ?? 'hs256';
+
+    if (mode === 'keycloak') {
+      if (!this.keycloak) {
+        this.logger.error(
+          'LEDGER_AUTH_MODE=keycloak but KeycloakTokenService is not injected. ' +
+          'Ensure KeycloakTokenService is registered in CantonModule.',
+        );
+        return null;
+      }
+      try {
+        return identity === 'reward'
+          ? await this.keycloak.getRewardLedgerToken()
+          : await this.keycloak.getAdminLedgerToken();
+      } catch (err) {
+        this.logger.error(`getLedgerToken(${identity}) Keycloak error: ${String(err)}`);
+        return null;
+      }
+    }
 
     if (mode === 'auth0') {
       if (!this.auth0) {
