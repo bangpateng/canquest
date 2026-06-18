@@ -53,16 +53,23 @@ async function main() {
 
   // Dynamic import supaya register-module-path jalan dulu
   require(path.join(__dirname, '..', 'register-module-path.cjs'));
-  const { AppModule } = require('../src/app.module');
+
+  // Gunakan compiled JS jika tersedia (production), fallback ke src (dev)
+  const distApp = path.join(__dirname, '..', 'dist', 'app.module.js');
+  const { AppModule } = fs.existsSync(distApp)
+    ? require(distApp)
+    : require('../src/app.module');
 
   const app = await NestFactory.createApplicationContext(AppModule, {
     logger: ['log', 'warn', 'error'],
   });
 
   try {
-    const onboarding = app.get(
-      require('../src/canton/wallet-onboarding.service').WalletOnboardingService,
-    );
+    const distSvc = path.join(__dirname, '..', 'dist', 'canton', 'wallet-onboarding.service.js');
+    const { WalletOnboardingService } = fs.existsSync(distSvc)
+      ? require(distSvc)
+      : require('../src/canton/wallet-onboarding.service');
+    const onboarding = app.get(WalletOnboardingService);
 
     const result = await onboarding.onboardWalletForUser({
       username,
