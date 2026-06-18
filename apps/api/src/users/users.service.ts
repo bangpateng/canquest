@@ -172,6 +172,22 @@ export class UsersService {
     });
   }
 
+  async setCantonIdentity(
+    userId: string,
+    params: { partyId: string; keycloakId: string; username?: string },
+  ) {
+    const normalized =
+      normalizeCantonPartyId(params.partyId) ?? params.partyId.trim();
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        cantonPartyId: normalized,
+        keycloakId: params.keycloakId,
+        username: params.username?.trim() || undefined,
+      },
+    });
+  }
+
   async setPartyId(userId: string, cantonPartyId: string, username?: string) {
     const normalized = normalizeCantonPartyId(cantonPartyId) ?? cantonPartyId.trim();
     return this.prisma.user.update({

@@ -18,6 +18,7 @@ import { ConfigService } from '@nestjs/config';
 
 import { CantonLedgerService } from '../canton/canton-ledger.service';
 import { SpliceValidatorService } from '../canton/splice-validator.service';
+import { WalletOnboardingService } from '../canton/wallet-onboarding.service';
 import { FeaturedAppActivityService } from '../canton/featured-app-activity.service';
 import { CcInboundSyncService } from '../canton/cc-inbound-sync.service';
 import { CcBalanceService } from '../canton/cc-balance.service';
@@ -57,6 +58,7 @@ export class PartyController {
     private readonly config: ConfigService,
     private readonly walletInvites: WalletInviteCodeService,
     private readonly questLedger: QuestLedgerService,
+    private readonly walletOnboarding: WalletOnboardingService,
   ) {}
 
   private assertPartyOnValidatorParticipant(partyId: string): void {
@@ -113,9 +115,6 @@ export class PartyController {
       throw new ConflictException('Party ID Already Taken');
     }
 
-    let cantonPartyId: string;
-    let isPlaceholder = false;
-    let spliceOnboarded = false;
     const needsInviteFlow = !hasRealWallet(existing.cantonPartyId);
     const inviteCode = body.walletInviteCode;
 
@@ -123,42 +122,30 @@ export class PartyController {
       await this.walletInvites.assertCanCreateWallet(req.user.userId, inviteCode);
     }
 
+    let cantonPartyId: string;
     try {
-      const splicePartyId = await this.splice.createWalletUser(username);
-      if (!splicePartyId && (await this.splice.getUserPartyId(username))) {
-        throw new ConflictException('Party ID Already Taken');
-      }
-
-      if (splicePartyId) {
-        cantonPartyId = splicePartyId;
-        spliceOnboarded = true;
-      } else {
-        const ledgerReachable = await this.ledger.isReachable();
-        if (ledgerReachable) {
-          try {
-            cantonPartyId = await this.ledger.allocateParty(username);
-          } catch {
-            cantonPartyId = `canquest:user:${username}:${req.user.userId.slice(0, 8)}`;
-            isPlaceholder = true;
-          }
-        } else {
-          cantonPartyId = `canquest:user:${username}:${req.user.userId.slice(0, 8)}`;
-          isPlaceholder = true;
-        }
-      }
+      // ── Keycloak model: onboard via WalletOnboardingService ──────
+      const { keycloakId, partyId } =
+        await this.walletOnboarding.onboardWalletForUser({
+          username,
+          email: existing.email,
+        });
+      cantonPartyId = normalizeCantonPartyId(partyId) ?? partyId;
 
       const partyOwner = await this.users.findByPartyId(cantonPartyId);
       if (partyOwner && partyOwner.id !== req.user.userId) {
         throw new ConflictException('Party ID Already Taken');
       }
 
-      if (!isPlaceholder) {
-        this.assertPartyOnValidatorParticipant(cantonPartyId);
-      }
+      this.assertPartyOnValidatorParticipant(cantonPartyId);
 
+      // Simpan atomik: partyId + keycloakId
       try {
-        await this.users.setPartyId(req.user.userId, cantonPartyId, username);
-        cantonPartyId = normalizeCantonPartyId(cantonPartyId) ?? cantonPartyId;
+        await this.users.setCantonIdentity(req.user.userId, {
+          partyId: cantonPartyId,
+          keycloakId,
+          username,
+        });
       } catch (err: unknown) {
         if (
           err &&
@@ -171,40 +158,36 @@ export class PartyController {
         throw err;
       }
 
+      // Redeem invite HANYA setelah onboarding + simpan sukses
       if (needsInviteFlow) {
-        if (!isPlaceholder) {
-          await this.walletInvites.redeemAfterWalletCreated(req.user.userId, inviteCode);
-          await this.walletInvites.recordAllocation({
-            userId: req.user.userId,
-            username,
-            partyId: cantonPartyId,
-          });
-        } else {
-          await this.walletInvites.releaseReservation(req.user.userId, inviteCode);
-        }
+        await this.walletInvites.redeemAfterWalletCreated(req.user.userId, inviteCode);
+        await this.walletInvites.recordAllocation({
+          userId: req.user.userId,
+          username,
+          partyId: cantonPartyId,
+        });
       }
 
       void this.featuredActivity
         .recordActivity('wallet_created', cantonPartyId, `Wallet created for @${username}`)
         .catch(() => { /* non-critical */ });
 
+      // TransferPreapproval (dipertahankan dari flow lama)
       let preapprovalActive = false;
-      if (spliceOnboarded) {
-        const existingPreapproval = await this.splice.hasTransferPreapproval(cantonPartyId);
-        if (existingPreapproval) {
-          preapprovalActive = true;
-        } else {
-          preapprovalActive = (await this.splice.createTransferPreapproval(username)).ok;
-        }
+      const existingPreapproval = await this.splice.hasTransferPreapproval(cantonPartyId);
+      if (existingPreapproval) {
+        preapprovalActive = true;
+      } else {
+        preapprovalActive = (await this.splice.createTransferPreapproval(username)).ok;
       }
 
-      if (!isPlaceholder && needsInviteFlow) {
+      if (needsInviteFlow) {
         void this.questLedger
           .recordPartyRegistration({
             userPartyId: cantonPartyId,
             username,
             inviteCode: inviteCode ?? '',
-            spliceOnboarded,
+            spliceOnboarded: true,
             preapprovalActive,
           })
           .catch((err: unknown) => {
@@ -212,24 +195,15 @@ export class PartyController {
           });
       }
 
-      let message: string;
-      if (spliceOnboarded) {
-        message = preapprovalActive
-          ? 'Wallet created — Party ID registered. Direct CC transfers enabled (CIP-56 compliant).'
-          : 'Wallet created — Party ID registered. CC transfers work via offer/accept flow.';
-      } else if (!isPlaceholder) {
-        message =
-          'Party ID allocated on Canton participant. Splice validator not reachable (set CANTON_VALIDATOR_URL) — wallet not yet visible in explorer.';
-      } else {
-        message =
-          'Saved with placeholder — both Canton JSON API and Splice validator unreachable. Start your SSH tunnels (7575 + 8080) and re-generate from the Wallet page.';
-      }
+      const message = preapprovalActive
+        ? 'Wallet created — Party ID registered. Direct CC transfers enabled (CIP-56 compliant).'
+        : 'Wallet created — Party ID registered. CC transfers work via offer/accept flow.';
 
       return {
         username,
         cantonPartyId,
-        isPlaceholder,
-        spliceOnboarded,
+        isPlaceholder: false,
+        spliceOnboarded: true,
         preapproval: { active: preapprovalActive },
         message,
       };
