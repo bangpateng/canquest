@@ -61,7 +61,9 @@ export class CantonLedgerService {
     @Optional() private readonly keycloak: KeycloakTokenService,
   ) {
     this.baseUrl = (
-      config.get<string>('CANTON_JSON_API_URL') ?? 'http://127.0.0.1:7575'
+      (config.get<string>('LEDGER_API_URL') ||
+      config.get<string>('CANTON_JSON_API_URL')) ??
+      'http://127.0.0.1:7575'
     ).replace(/\/$/, '');
     this.secret = config.get<string>('CANTON_SPLICE_SECRET') ?? null;
     this.ledgerApiUser =
