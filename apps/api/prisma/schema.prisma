@@ -32,6 +32,8 @@ model User {
   username       String?         @unique
   /// Canton ledger party identifier after binding — follow Participant / Ledger API contracts.
   cantonPartyId  String?
+  /// Keycloak user UUID (sub) — identity bridge between web2 User and on-chain Ledger API user.
+  keycloakId     String?         @unique
   /// Admin flag — set via ADMIN_EMAILS env or manually.
   isAdmin        Boolean         @default(false)
   /// Lifetime earn points (quest/earn tasks, completion bonus, spin prizes, referral) — synced via PointsService.

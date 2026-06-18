@@ -1,8 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as jwt from 'jsonwebtoken';
 import { randomUUID } from 'crypto';
 import { cantonPartyIdsEqual, normalizeCantonPartyId, spliceWalletUsernameFromParty } from '../common/canton-party-id';
+import { KeycloakTokenService } from '../auth/keycloak-token.service';
 
 /**
  * Client for the Splice Validator App REST API.
@@ -63,7 +64,10 @@ export class SpliceValidatorService {
    */
   private readonly hostHeader: string | null;
 
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    @Optional() private readonly keycloak: KeycloakTokenService,
+  ) {
     const raw = config.get<string>('CANTON_VALIDATOR_URL');
     this.baseUrl = raw ? raw.replace(/\/$/, '') : null;
     this.secret = config.get<string>('CANTON_SPLICE_SECRET') ?? null;
@@ -72,6 +76,8 @@ export class SpliceValidatorService {
   }
 
   get isConfigured(): boolean {
+    const mode = this.config.get<string>('LEDGER_AUTH_MODE') ?? 'hs256';
+    if (mode === 'keycloak') return Boolean(this.baseUrl && this.keycloak);
     return Boolean(this.baseUrl && this.secret);
   }
 
@@ -85,8 +91,20 @@ export class SpliceValidatorService {
     return headers;
   }
 
-  /** JWT token for admin operations — signed with the Splice hs-256-unsafe shared secret. */
-  private adminToken(subject = 'ledger-api-user'): string {
+  /** JWT token for admin operations.
+   * LEDGER_AUTH_MODE=keycloak → Keycloak client_credentials (validator-app-backend).
+   * Otherwise → HS256 signed with CANTON_SPLICE_SECRET. */
+  private async adminToken(subject = 'ledger-api-user'): Promise<string> {
+    const mode = this.config.get<string>('LEDGER_AUTH_MODE') ?? 'hs256';
+    if (mode === 'keycloak') {
+      if (!this.keycloak) {
+        throw new Error(
+          'LEDGER_AUTH_MODE=keycloak but KeycloakTokenService is not injected in SpliceValidatorService. ' +
+          'Ensure it is registered in CantonModule.',
+        );
+      }
+      return this.keycloak.getAdminLedgerToken();
+    }
     const audience =
       this.config.get<string>('CANTON_SPLICE_AUDIENCE') ?? 'https://validator.example.com';
     return this.signToken(subject, audience);
@@ -122,14 +140,14 @@ export class SpliceValidatorService {
   }
 
   /** Auth headers (Authorization + optional Host override). */
-  private authHeaders(subject?: string): Record<string, string> {
-    return this.authHeadersForToken(this.adminToken(subject ?? 'ledger-api-user'));
+  private async authHeaders(subject?: string): Promise<Record<string, string>> {
+    return this.authHeadersForToken(await this.adminToken(subject ?? 'ledger-api-user'));
   }
 
   /** Auth + Content-Type headers (admin unless a wallet username is passed). */
-  private jsonAuthHeaders(subject?: string): Record<string, string> {
+  private async jsonAuthHeaders(subject?: string): Promise<Record<string, string>> {
     if (!subject) {
-      return this.authHeadersForToken(this.adminToken(), true);
+      return this.authHeadersForToken(await this.adminToken(), true);
     }
     const aud = this.walletAudiences()[0] ?? 'https://validator.example.com';
     return this.authHeadersForToken(this.signToken(subject, aud), true);
@@ -157,7 +175,7 @@ export class SpliceValidatorService {
     if (!this.isConfigured) return [];
     try {
       const res = await fetch(`${this.baseUrl}/api/validator/v0/admin/users`, {
-        headers: this.authHeaders(),
+        headers: await this.authHeaders(),
         signal: AbortSignal.timeout(8_000),
       });
       if (!res.ok) return [];
@@ -291,13 +309,13 @@ export class SpliceValidatorService {
     }
 
     const url = `${this.baseUrl}/api/validator/v0/admin/users`;
-    const token = this.adminToken();
+    const token = await this.adminToken();
 
         let res: Response;
     try {
       res = await fetch(url, {
         method: 'POST',
-        headers: this.jsonAuthHeaders(),
+        headers: await this.jsonAuthHeaders(),
         body: JSON.stringify({ name: username }),
         signal: AbortSignal.timeout(30_000),
       });
@@ -353,7 +371,7 @@ export class SpliceValidatorService {
       const res = await fetch(
         `${this.baseUrl}/api/validator/v0/admin/users/${encodeURIComponent(username)}`,
         {
-          headers: this.authHeaders(),
+          headers: await this.authHeaders(),
           signal: AbortSignal.timeout(8_000),
         },
       );
@@ -387,7 +405,7 @@ export class SpliceValidatorService {
             const res = await fetch(
         `${this.baseUrl}/api/validator/v0/admin/transfer-preapprovals/by-party/${encoded}`,
         {
-          headers: this.authHeaders(),
+          headers: await this.authHeaders(),
           signal: AbortSignal.timeout(8_000),
         },
       );
@@ -430,7 +448,7 @@ export class SpliceValidatorService {
         `${this.baseUrl}/api/validator/v0/admin/transfer-preapprovals/by-party/${encoded}`,
         {
           method: 'DELETE',
-          headers: this.authHeaders(),
+          headers: await this.authHeaders(),
           signal: AbortSignal.timeout(10_000),
         },
       );
@@ -488,7 +506,7 @@ export class SpliceValidatorService {
       try {
         await fetch(`${this.baseUrl}/api/validator/v0/admin/users`, {
           method: 'GET',
-          headers: this.authHeaders(),
+          headers: await this.authHeaders(),
           signal: AbortSignal.timeout(4_000),
         });
         return true;
@@ -572,7 +590,7 @@ export class SpliceValidatorService {
 
       const res = await fetch(url, {
         method: 'POST',
-        headers: this.jsonAuthHeaders(effectiveSender),
+        headers: await this.jsonAuthHeaders(effectiveSender),
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(30_000),
       });
@@ -637,7 +655,7 @@ export class SpliceValidatorService {
     try {
       const res = await fetch(url, {
         method: 'POST',
-        headers: this.jsonAuthHeaders(senderUsername),
+        headers: await this.jsonAuthHeaders(senderUsername),
         body: JSON.stringify({
           receiver_party_id: receiverPartyId,
           amount: amountCc.toString(),
@@ -1112,7 +1130,7 @@ export class SpliceValidatorService {
         `${this.baseUrl}/api/validator/v0/wallet/transfer-offers/${encodedId}/accept`,
         {
           method: 'POST',
-          headers: this.jsonAuthHeaders(asUsername),
+          headers: await this.jsonAuthHeaders(asUsername),
           body: '{}',
           signal: AbortSignal.timeout(45_000),
         },

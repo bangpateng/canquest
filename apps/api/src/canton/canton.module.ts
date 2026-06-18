@@ -4,6 +4,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { UsersModule } from '../users/users.module';
 import { Auth0Module } from '../auth/auth0.module';
 import { KeycloakTokenService } from '../auth/keycloak-token.service';
+import { KeycloakAdminService } from '../auth/keycloak-admin.service';
 import { CantonLedgerService } from './canton-ledger.service';
 import { SpliceValidatorService } from './splice-validator.service';
 import { FeaturedAppActivityService } from './featured-app-activity.service';
@@ -25,6 +26,7 @@ import { QuestLedgerService } from './quest-ledger.service';
   imports: [PrismaModule, ConfigModule, UsersModule, Auth0Module],
   providers: [
     KeycloakTokenService,
+    KeycloakAdminService,
     CantonLedgerService,
     SpliceValidatorService,
     FeaturedAppActivityService,

@@ -1755,6 +1755,100 @@ export class CantonLedgerService {
     const data = (await res.json()) as { transactions?: LedgerStreamTransaction[] };
     return data.transactions ?? [];
   }
+
+  // ── Keycloak user onboarding ──────────────────────────────────────
+
+  /**
+   * Buat Ledger API user untuk UUID Keycloak dengan primaryParty.
+   * POST /v2/users — IDEMPOTEN: 409 atau ALREADY_EXISTS tidak thrown.
+   */
+  async createLedgerUser(keycloakUuid: string, partyId: string): Promise<void> {
+    const token = await this.keycloak!.getAdminLedgerToken();
+    const url = `${this.baseUrl}/v2/users`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user: { id: keycloakUuid, primaryParty: partyId } }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (res.ok) {
+      this.logger.log(`Ledger user created: ${keycloakUuid.slice(0, 8)}... → ${partyId.split('::')[0]}`);
+      return;
+    }
+    const text = await res.text();
+    if (res.status === 409 || text.includes('ALREADY_EXISTS')) {
+      this.logger.debug(`Ledger user already exists: ${keycloakUuid.slice(0, 8)}...`);
+      return;
+    }
+    throw new Error(`createLedgerUser gagal (${res.status}): ${text.slice(0, 300)}`);
+  }
+
+  /**
+   * Update primaryParty untuk Ledger API user.
+   * PATCH /v2/users/{keycloakUuid}
+   */
+  async setLedgerUserPrimaryParty(keycloakUuid: string, partyId: string): Promise<void> {
+    const token = await this.keycloak!.getAdminLedgerToken();
+    const url = `${this.baseUrl}/v2/users/${encodeURIComponent(keycloakUuid)}`;
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user: { id: keycloakUuid, primaryParty: partyId },
+        updateMask: { paths: ['primary_party'] },
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (res.ok) {
+      this.logger.log(`Ledger user primaryParty set: ${keycloakUuid.slice(0, 8)}... → ${partyId.split('::')[0]}`);
+      return;
+    }
+    const text = await res.text();
+    throw new Error(`setLedgerUserPrimaryParty gagal (${res.status}): ${text.slice(0, 300)}`);
+  }
+
+  /**
+   * Grant CanActAs + CanReadAs rights untuk party user sendiri.
+   * POST /v2/users/{keycloakUuid}/rights — idempoten (409 diabaikan).
+   */
+  async grantLedgerUserRights(keycloakUuid: string, partyId: string): Promise<void> {
+    const token = await this.keycloak!.getAdminLedgerToken();
+    const url = `${this.baseUrl}/v2/users/${encodeURIComponent(keycloakUuid)}/rights`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: keycloakUuid,
+        rights: [
+          { kind: { CanActAs: { value: { party: partyId } } } },
+          { kind: { CanReadAs: { value: { party: partyId } } } },
+        ],
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (res.ok) {
+      this.logger.log(`Ledger user rights granted: ${keycloakUuid.slice(0, 8)}... → ${partyId.split('::')[0]}`);
+      return;
+    }
+    const text = await res.text();
+    if (res.status === 409) {
+      this.logger.debug(`Ledger user rights already granted (409): ${keycloakUuid.slice(0, 8)}...`);
+      return;
+    }
+    throw new Error(`grantLedgerUserRights gagal (${res.status}): ${text.slice(0, 300)}`);
+  }
+
+  /**
+   * Orkestrasi idempoten: create → set primaryParty → grant rights.
+   * Semua langkah pakai token admin Keycloak dan baseUrl dari LEDGER_API_URL.
+   */
+  async ensureLedgerUser(keycloakUuid: string, partyId: string): Promise<void> {
+    this.logger.log(`ensureLedgerUser start: uuid=${keycloakUuid.slice(0, 8)}... party=${partyId.split('::')[0]}`);
+    await this.createLedgerUser(keycloakUuid, partyId);
+    await this.setLedgerUserPrimaryParty(keycloakUuid, partyId);
+    await this.grantLedgerUserRights(keycloakUuid, partyId);
+    this.logger.log(`ensureLedgerUser done: uuid=${keycloakUuid.slice(0, 8)}... party=${partyId.split('::')[0]}`);
+  }
 }
 
 type LedgerStreamTransaction = {
