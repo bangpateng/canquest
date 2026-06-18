@@ -999,7 +999,25 @@ export class PartyController {
       throw new BadRequestException('No wallet found. Create your wallet first.');
     }
 
-    const offers = await this.ledger.queryPendingOffers(user.cantonPartyId);
+    let offers = await this.ledger.queryPendingOffers(user.cantonPartyId);
+
+    // Fallback: kalau ACS kosong, coba Splice Wallet API langsung
+    if (offers.length === 0 && user.username) {
+      const spliceOffers = await this.splice.listTransferOffers(user.username);
+      if (spliceOffers.length > 0) {
+        offers = spliceOffers.map((o) => ({
+          type: 'transfer_offer' as const,
+          contractId: o.contractId,
+          sender: '',
+          receiver: user.cantonPartyId!,
+          amount: '0',
+          description: 'Incoming transfer (Splice Wallet)',
+          expiresAt: '',
+          createdAt: '',
+        }));
+        this.logger.log(`Fallback Splice: ${offers.length} offers for @${user.username}`);
+      }
+    }
 
     // Resolve sender labels from DB where possible
     const enriched = await Promise.all(
