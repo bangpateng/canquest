@@ -1627,6 +1627,7 @@ export class QuestsService {
         try {
           const feeTxId = await this.collectClaimFee({
             userId,
+            cantonPartyId,
             username,
             questTitle: quest.title,
             feeCc,
@@ -1741,6 +1742,7 @@ export class QuestsService {
         drawNow?.claimFeeLedgerTxId ??
         (await this.collectClaimFee({
           userId,
+          cantonPartyId,
           username,
           questTitle: quest.title,
           feeCc,
@@ -2012,6 +2014,7 @@ export class QuestsService {
 
       const feeTxId = await this.collectClaimFee({
         userId,
+        cantonPartyId,
         username,
         questTitle: quest.title,
         feeCc,
@@ -2254,6 +2257,7 @@ export class QuestsService {
       try {
         feeTxId = await this.collectClaimFee({
           userId,
+          cantonPartyId,
           username,
           questTitle: quest.title,
           feeCc,
@@ -2478,6 +2482,7 @@ export class QuestsService {
     try {
       const feeTxId = await this.collectClaimFee({
         userId,
+        cantonPartyId,
         username,
         questTitle: quest.title,
         feeCc,
@@ -2572,6 +2577,7 @@ export class QuestsService {
 
   private async collectClaimFee(params: {
     userId: string;
+    cantonPartyId: string;
     username: string;
     questTitle: string;
     feeCc: number;
@@ -2579,6 +2585,7 @@ export class QuestsService {
     feeTargetPartyId: string;
   }): Promise<string> {
     const feeResult = await this.splice.collectClaimFeeToValidatorParty({
+      senderPartyId: params.cantonPartyId,
       senderUsername: params.username,
       feeCc: params.feeCc,
       description: `${params.feeLabel} — ${params.questTitle}`,

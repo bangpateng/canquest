@@ -4,6 +4,7 @@ import * as jwt from 'jsonwebtoken';
 import { randomUUID } from 'crypto';
 import { cantonPartyIdsEqual, normalizeCantonPartyId, spliceWalletUsernameFromParty } from '../common/canton-party-id';
 import { KeycloakTokenService } from '../auth/keycloak-token.service';
+import { CantonLedgerService } from './canton-ledger.service';
 
 /**
  * Client for the Splice Validator App REST API.
@@ -67,6 +68,7 @@ export class SpliceValidatorService {
   constructor(
     private readonly config: ConfigService,
     @Optional() private readonly keycloak: KeycloakTokenService,
+    @Optional() private readonly ledger: CantonLedgerService,
   ) {
     const raw = config.get<string>('CANTON_VALIDATOR_URL');
     this.baseUrl = raw ? raw.replace(/\/$/, '') : null;
@@ -733,10 +735,11 @@ export class SpliceValidatorService {
 
   /**
    * FCFS / invite claim fee: user → CANTON_VALIDATOR_PARTY_ID (your node validator wallet).
-   * Uses the same collectPlatformFee path as Send CC (preapproval, then offer + validator accept).
+   * Uses CIP-0056 collectPlatformFee (executeTransferFactoryTransfer).
    * Reward must only be sent after this returns collected=true.
    */
   async collectClaimFeeToValidatorParty(params: {
+    senderPartyId: string;          // ← BARU: party user yang bayar fee
     senderUsername: string;
     feeCc: number;
     description: string;
@@ -753,33 +756,17 @@ export class SpliceValidatorService {
       return { collected: false, error: 'CANTON_VALIDATOR_PARTY_ID is not set' };
     }
 
-    const treasuryAcceptUsername =
-      this.config.get<string>('CANTON_FEE_ACCEPT_USERNAME')?.trim() ||
-      this.config.get<string>('CANTON_VALIDATOR_ADMIN_USER')?.trim() ||
-      'administrator';
-
-    const walletParty = await this.getWalletPartyId(treasuryAcceptUsername);
-    if (walletParty && !cantonPartyIdsEqual(walletParty, validatorPartyId)) {
-      const msg =
-        `Claim fee wallet mismatch: CANTON_VALIDATOR_PARTY_ID=${validatorPartyId.split('::')[0]} ` +
-        `but @${treasuryAcceptUsername} wallet is ${walletParty.split('::')[0]}. ` +
-        'Set CANTON_VALIDATOR_PARTY_ID to the party owned by the validator admin wallet.';
-      this.logger.error(msg);
-      return { collected: false, error: msg, validatorPartyId };
-    }
-
     const validatorLabel = validatorPartyId.split('::')[0];
     this.logger.log(
       `Claim fee step 1: @${params.senderUsername} → ${validatorLabel} (${params.feeCc} CC)`,
     );
 
     const result = await this.collectPlatformFee({
+      senderPartyId: params.senderPartyId,  // ← user yang bayar fee
       senderUsername: params.senderUsername,
       feeCc: params.feeCc,
       description: params.description,
       treasuryPartyId: validatorPartyId,
-      treasuryAcceptUsername,
-      strictBalanceVerify: true,
     });
 
     if (result.collected) {
@@ -798,18 +785,18 @@ export class SpliceValidatorService {
   }
 
   /**
-   * Collect platform fee into validator treasury (naxweb-validator-1 on TestNet).
-   * Tries direct preapproval send first, then transfer-offer + treasury wallet accept.
+   * Collect platform fee via CIP-0056 TransferFactory (replaces Splice REST preapproval/offer flow).
+   * Uses executeTransferFactoryTransfer (direct or offer) + acceptTransferInstruction if needed.
+   * Non-blocking: returns collected=false on error, caller decides whether to proceed.
    */
   async collectPlatformFee(params: {
-    senderUsername: string;
+    senderPartyId: string;          // ← BARU: party user yang bayar fee
+    senderUsername?: string;        // untuk logging
     feeCc: number;
     description: string;
-    /** Optional override; normally resolved via resolveTreasuryFeeTarget(). */
     treasuryPartyId?: string;
-    treasuryAcceptUsername?: string;
-    /** Fail if treasury balance cannot be verified (used for FCFS claim fees). */
-    strictBalanceVerify?: boolean;
+    treasuryAcceptUsername?: string; // backward compat, diabaikan
+    strictBalanceVerify?: boolean;   // backward compat, diabaikan
   }): Promise<{
     collected: boolean;
     ledgerTxId?: string;
@@ -817,108 +804,69 @@ export class SpliceValidatorService {
     error?: string;
     treasuryPartyId?: string;
   }> {
-    const { senderUsername, feeCc, description } = params;
+    const { senderPartyId, feeCc, description } = params;
+    const senderLabel = params.senderUsername || senderPartyId.split('::')[0];
 
     const resolved =
-      params.treasuryPartyId && params.treasuryAcceptUsername
-        ? {
-            treasuryPartyId: params.treasuryPartyId,
-            treasuryAcceptUsername: params.treasuryAcceptUsername,
-          }
-        : await this.resolveTreasuryFeeTarget();
+      params.treasuryPartyId
+        ? { treasuryPartyId: params.treasuryPartyId, treasuryAcceptUsername: params.treasuryAcceptUsername ?? 'administrator' }
+        : { treasuryPartyId: this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim()
+              || this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim()
+              || '', treasuryAcceptUsername: 'administrator' };
 
-    if (!resolved) {
+    if (!resolved?.treasuryPartyId) {
       return { collected: false, error: 'Treasury / validator party not configured' };
     }
 
-    const { treasuryPartyId, treasuryAcceptUsername } = resolved;
+    const { treasuryPartyId } = resolved;
     const treasuryLabel = treasuryPartyId.split('::')[0];
-    const strict = params.strictBalanceVerify === true;
 
-    const balanceBefore = await this.readTreasuryBalanceWithRetry(treasuryAcceptUsername);
+    if (!this.ledger) {
+      this.logger.error('CantonLedgerService not injected — cannot execute CIP-0056 fee transfer');
+      return { collected: false, error: 'CantonLedgerService not available', treasuryPartyId };
+    }
 
-    const direct = await this.sendViaTransferPreapproval(
-      senderUsername,
-      treasuryPartyId,
-      feeCc,
-      description,
-    );
-    if (direct.ok) {
-      const verified = await this.verifyTreasuryFeeCredit({
-        treasuryAcceptUsername,
-        feeCc,
-        balanceBefore,
-        strict,
+    // ── CIP-0056 fee transfer (non-blocking, actAs=senderPartyId) ───
+    try {
+      const feeResult = await this.ledger.executeTransferFactoryTransfer({
+        senderPartyId,              // ← user yang BAYAR fee (claimer)
+        receiverPartyId: treasuryPartyId,
+        amountCc: feeCc,
+        description,
       });
-      if (verified) {
-        this.logger.log(
-          `Platform fee ${feeCc} CC via preapproval_send → ${treasuryLabel} (@${treasuryAcceptUsername})`,
-        );
+
+      if (feeResult.ok && feeResult.transferKind === 'direct') {
+        this.logger.log(`Platform fee ${feeCc} CC via CIP-0056 direct → ${treasuryLabel} (from ${senderLabel})`);
         return {
           collected: true,
-          ledgerTxId: direct.referenceId,
-          method: 'preapproval_send',
+          ledgerTxId: feeResult.updateId ?? undefined,
+          method: 'cip56_direct',
           treasuryPartyId,
         };
       }
+
+      if (feeResult.ok && feeResult.transferKind === 'offer' && feeResult.transferInstructionCid) {
+        const acceptR = await this.ledger.acceptTransferInstruction(
+          feeResult.transferInstructionCid, treasuryPartyId);
+        if (acceptR.ok) {
+          this.logger.log(`Platform fee ${feeCc} CC via CIP-0056 offer-accept → ${treasuryLabel} (from ${senderLabel})`);
+          return {
+            collected: true,
+            ledgerTxId: acceptR.updateId ?? feeResult.updateId ?? undefined,
+            method: 'cip56_offer_accept',
+            treasuryPartyId,
+          };
+        }
+        this.logger.warn(`Fee offer accept failed for ${treasuryLabel} — transfer proceeds without fee`);
+      }
+
       this.logger.warn(
-        `Preapproval fee send returned OK but treasury balance did not increase; trying transfer offer`,
-      );
+        `Fee NOT collected (transferKind=${feeResult.transferKind}, ok=${feeResult.ok}). Proceeding without fee.`);
+      return { collected: false, error: feeResult.error ?? 'CIP-0056 fee gagal', treasuryPartyId };
+    } catch (feeErr) {
+      this.logger.warn(`Fee collect error (non-blocking): ${String(feeErr)}`);
+      return { collected: false, error: String(feeErr), treasuryPartyId };
     }
-
-    const offerId = await this.createTransferOffer(
-      treasuryPartyId,
-      feeCc,
-      description,
-      undefined,
-      senderUsername,
-    );
-    if (!offerId) {
-      return {
-        collected: false,
-        error: direct.error ?? 'Failed to create fee transfer offer',
-        treasuryPartyId,
-      };
-    }
-
-    const accepted = await this.acceptOfferViaWalletWithRetry(
-      offerId,
-      treasuryAcceptUsername,
-      { attempts: 8, delayMs: 1500 },
-    );
-    if (!accepted) {
-      return {
-        collected: false,
-        ledgerTxId: offerId,
-        error: `Fee offer created but treasury could not accept (${treasuryAcceptUsername})`,
-        treasuryPartyId,
-      };
-    }
-
-    const verified = await this.verifyTreasuryFeeCredit({
-      treasuryAcceptUsername,
-      feeCc,
-      balanceBefore,
-      strict,
-    });
-    if (!verified) {
-      return {
-        collected: false,
-        ledgerTxId: offerId,
-        error: `Fee offer accepted but treasury balance did not increase (@${treasuryAcceptUsername})`,
-        treasuryPartyId,
-      };
-    }
-
-    this.logger.log(
-      `Platform fee ${feeCc} CC via transfer_offer → ${treasuryLabel} (@${treasuryAcceptUsername})`,
-    );
-    return {
-      collected: true,
-      ledgerTxId: offerId,
-      method: 'transfer_offer',
-      treasuryPartyId,
-    };
   }
 
   /** Read validator/treasury wallet balance with short retries (Splice API can lag). */
