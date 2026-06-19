@@ -15,6 +15,7 @@ import type { Request } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '../prisma/prisma.service';
 
 import { CantonLedgerService } from '../canton/canton-ledger.service';
 import { SpliceValidatorService } from '../canton/splice-validator.service';
@@ -59,6 +60,7 @@ export class PartyController {
     private readonly walletInvites: WalletInviteCodeService,
     private readonly questLedger: QuestLedgerService,
     private readonly walletOnboarding: WalletOnboardingService,
+    private readonly prisma: PrismaService,
   ) {}
 
   private assertPartyOnValidatorParticipant(partyId: string): void {
@@ -587,183 +589,127 @@ export class PartyController {
     }
 
     const description = body.memo?.trim() || `Sent to ${recipientLabel}`;
-
-    // Resolve recipient DB user first (needed for fee policy)
     const recipientDbUser = recipientUsername
-      ? await this.users.findByUsernameInsensitive(recipientUsername)
-      : null;
+      ? await this.users.findByUsernameInsensitive(recipientUsername) : null;
     const isInternalUser = recipientDbUser !== null;
+    const effectiveFeeCc = feeCc;
 
-    // ── Fee Policy ────────────────────────────────────────────────────────
-    // Fee applies to ALL transfers (internal AND external/CEX).
-    // Fee is sent to CANTON_FEE_RECIPIENT_PARTY_ID (canquest-fee wallet).
-    // This is a separate transaction: fee first, then main transfer.
-    const effectiveFeeCc = feeCc; // Always apply fee regardless of recipient type
-
-    // Balance check: sender needs amount + fee
-    const senderBalance = await this.splice.getUserBalance(sender.username);
-    if (senderBalance !== null && senderBalance < amount + effectiveFeeCc) {
-      throw new BadRequestException(
-        effectiveFeeCc > 0
-          ? `Insufficient balance. Need ${amount + effectiveFeeCc} CC (${amount} transfer + ${effectiveFeeCc} platform fee).`
-          : `Insufficient balance. Need ${amount} CC.`,
-      );
+    // ── Balance check (DB cache only — tidak blokir dengan HS256) ─────
+    const dbBalance = await this.prisma.ccBalance.findUnique({
+      where: { userId: sender.id },
+      select: { balanceMicroCc: true },
+    });
+    if (dbBalance) {
+      const cachedCc = Number(dbBalance.balanceMicroCc) / 1_000_000;
+      if (cachedCc < amount + effectiveFeeCc) {
+        throw new BadRequestException(
+          effectiveFeeCc > 0
+            ? `Insufficient balance. Need ${amount + effectiveFeeCc} CC (${amount} transfer + ${effectiveFeeCc} platform fee).`
+            : `Insufficient balance. Need ${amount} CC.`,
+        );
+      }
     }
+    // Kalau null → ledger akan menolak jika dana kurang
 
-    // ── Step 1: COLLECT FEE FIRST (all transfers) ─────────────────────────
-    // Fee is sent to canquest-fee wallet (CANTON_FEE_RECIPIENT_PARTY_ID).
-    // This is transaction #1. Main transfer is transaction #2.
+    // ── Step 1: FEE COLLECT via CIP-0056 (non-blocking) ───────────────
     let feeCollected = false;
     let feeLedgerTxId: string | undefined;
     let feeTreasuryPartyId: string | undefined;
 
-    if (effectiveFeeCc > 0 && sender.username) {
-      const feeResult = await this.splice.collectPlatformFee({
-        senderUsername: sender.username,
-        feeCc: effectiveFeeCc,
-        description: `Platform fee for transfer to ${recipientLabel}`,
-      });
-      feeCollected = feeResult.collected;
-      feeLedgerTxId = feeResult.ledgerTxId;
-      feeTreasuryPartyId = feeResult.treasuryPartyId ?? validatorPartyId;
-
-      if (feeCollected) {
-        await this.users.recordTransaction({
-          userId: sender.id,
-          amountCc: effectiveFeeCc,
-          type: 'TRANSFER_OUT',
-          description: `Platform fee (transfer to ${recipientLabel})`,
-          counterparty: normalizeCantonPartyId(feeTreasuryPartyId) ?? feeTreasuryPartyId,
-          ledgerTxId: feeLedgerTxId,
-        });
-        this.logger.log(
-          `Fee collected: ${sender.username} → ${(feeTreasuryPartyId ?? '').split('::')[0]} ${effectiveFeeCc} CC (${feeResult.method ?? 'unknown'})`,
-        );
-      } else {
-        throw new BadRequestException(
-          `Platform fee (${effectiveFeeCc} CC) could not be collected. Transfer aborted. ` +
-            (feeResult.error ?? 'Check your CC balance.'),
-        );
+    if (effectiveFeeCc > 0 && sender.cantonPartyId) {
+      const feeParty = this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim()
+        || validatorPartyId;
+      if (feeParty) {
+        try {
+          const feeResult = await this.ledger.executeTransferFactoryTransfer({
+            senderPartyId: sender.cantonPartyId,
+            receiverPartyId: feeParty,
+            amountCc: effectiveFeeCc,
+            description: `Platform fee: ${recipientLabel}`,
+          });
+          if (feeResult.ok && feeResult.transferKind === 'direct') {
+            feeCollected = true;
+            feeLedgerTxId = feeResult.updateId ?? undefined;
+            feeTreasuryPartyId = feeParty;
+            await this.users.recordTransaction({
+              userId: sender.id,
+              amountCc: effectiveFeeCc,
+              type: 'TRANSFER_OUT',
+              description: `Platform fee (transfer to ${recipientLabel})`,
+              counterparty: normalizeCantonPartyId(feeParty) ?? feeParty,
+              ledgerTxId: feeLedgerTxId,
+            });
+            this.logger.log(
+              `Fee collected: ${sender.username} → ${feeParty.split('::')[0]} ${effectiveFeeCc} CC (direct)`,
+            );
+          } else if (feeResult.ok && feeResult.transferKind === 'offer' && feeResult.transferInstructionCid) {
+            const acceptR = await this.ledger.acceptTransferInstruction(
+              feeResult.transferInstructionCid, feeParty);
+            if (acceptR.ok) {
+              feeCollected = true;
+              feeLedgerTxId = acceptR.updateId ?? feeResult.updateId ?? undefined;
+              feeTreasuryPartyId = feeParty;
+              await this.users.recordTransaction({
+                userId: sender.id,
+                amountCc: effectiveFeeCc,
+                type: 'TRANSFER_OUT',
+                description: `Platform fee (transfer to ${recipientLabel})`,
+                counterparty: normalizeCantonPartyId(feeParty) ?? feeParty,
+                ledgerTxId: feeLedgerTxId,
+              });
+              this.logger.log(
+                `Fee collected: ${sender.username} → ${feeParty.split('::')[0]} ${effectiveFeeCc} CC (offer-accept)`);
+            } else {
+              this.logger.warn(`Fee offer accept failed: transfer proceeds without fee`);
+            }
+          } else {
+            this.logger.warn(
+              `Fee NOT collected (transferKind=${feeResult.transferKind}, ok=${feeResult.ok}). Transfer proceeds.`);
+          }
+        } catch (feeErr) {
+          this.logger.warn(`Fee collect error (non-blocking): ${String(feeErr)}`);
+        }
       }
     }
 
-    // ── Step 2: EXECUTE MAIN TRANSFER ────────────────────────────────────
+    // ── Step 2: MAIN TRANSFER via CIP-0056 (satu-satunya jalur) ─────
     let accepted = false;
     let ledgerTxId: string | undefined;
-    let transferTransactionId: string | undefined;
-    let transferMethod: 'preapproval_send' | 'offer_accept' | 'offer_only' = 'offer_accept';
+    let transferMethod: 'direct' | 'offer_accept' | 'offer_only' = 'offer_accept';
 
-    try {
-      // Path A: Try sendViaTransferPreapproval first (1-step).
-      // The Splice validator itself decides if receiver has an active preapproval.
-      // This works even if our local hasTransferPreapproval check fails (e.g. short party ID,
-      // different participant, admin API 404). If receiver has no preapproval, Splice returns
-      // an error and we fall through to Path B automatically.
-      if (this.splice.isConfigured && sender.username) {
-        this.logger.log(
-          `Trying Path A (preapproval send): ${sender.username} → ${recipientLabel} ${amount} CC`,
-        );
-        const result = await this.splice.sendViaTransferPreapproval(
-          sender.username, recipientPartyId, amount, description,
-        );
-        if (result.ok) {
-          accepted = true;
-          ledgerTxId = result.referenceId;
-          transferMethod = 'preapproval_send';
-          this.logger.log(`CC transfer (1-step preapproval OK): ${sender.username} → ${recipientLabel} ${amount} CC`);
+    const cip56Result = await this.ledger.executeTransferFactoryTransfer({
+      senderPartyId: sender.cantonPartyId,
+      receiverPartyId: recipientPartyId,
+      amountCc: amount,
+      description,
+    });
+
+    if (cip56Result.ok) {
+      if (cip56Result.transferKind === 'direct') {
+        accepted = true;
+        transferMethod = 'direct';
+        ledgerTxId = cip56Result.updateId ?? undefined;
+        this.logger.log(`CC transfer direct: ${sender.username} → ${recipientLabel} ${amount} CC`);
+      } else if (cip56Result.transferKind === 'offer') {
+        ledgerTxId = cip56Result.transferInstructionCid ?? cip56Result.updateId ?? undefined;
+        if (isInternalUser && recipientUsername && cip56Result.transferInstructionCid) {
+          const acceptResult = await this.ledger.acceptTransferInstruction(
+            cip56Result.transferInstructionCid, recipientPartyId);
+          accepted = acceptResult.ok;
+          transferMethod = accepted ? 'offer_accept' : 'offer_only';
         } else {
-          // Receiver has no preapproval — fall through to Path B
-          this.logger.log(
-            `Path A failed (receiver has no preapproval): ${result.error?.slice(0, 100) ?? 'unknown'} — trying Path B (offer/accept)`,
-          );
+          transferMethod = 'offer_only';
         }
       }
-
-      // Path B: Hybrid — try CIP-0056 first, fallback to Splice TransferOffer
-      // CIP-0056 requires Scan registry access. If unavailable (403), fall back
-      // to the legacy createTransferOffer which still works on the ledger.
-      if (!accepted) {
-        // ── B1: Try CIP-0056 TransferFactory (preferred) ────────────────
-        const cip56Result = await this.ledger.executeTransferFactoryTransfer({
-          senderPartyId: sender.cantonPartyId,
-          receiverPartyId: recipientPartyId,
-          amountCc: amount,
-          description,
-        });
-
-        if (cip56Result.ok) {
-          ledgerTxId = cip56Result.updateId ?? undefined;
-
-          if (cip56Result.transferKind === 'direct') {
-            accepted = true;
-            transferMethod = 'preapproval_send';
-            this.logger.log(
-              `CC transfer (CIP-0056 direct): ${sender.username} → ${recipientLabel} ${amount} CC`,
-            );
-          } else if (cip56Result.transferKind === 'offer') {
-            if (isInternalUser && recipientUsername && cip56Result.transferInstructionCid) {
-              const acceptResult = await this.ledger.acceptTransferInstruction(
-                cip56Result.transferInstructionCid,
-                recipientPartyId,
-              );
-              accepted = acceptResult.ok;
-              transferMethod = accepted ? 'offer_accept' : 'offer_only';
-            } else {
-              transferMethod = 'offer_only';
-              ledgerTxId = cip56Result.transferInstructionCid ?? cip56Result.updateId ?? undefined;
-              this.logger.log(
-                `CC transfer (CIP-0056 instruction pending): receiver accepts in their wallet`,
-              );
-            }
-          }
-        }
-
-        // ── B2: Fallback to Splice TransferOffer (if CIP-0056 failed) ───
-        if (!cip56Result.ok && !accepted) {
-          this.logger.log(
-            `Path B fallback (Splice TransferOffer): ${sender.username} → ${recipientLabel} ${amount} CC — CIP-0056 unavailable: ${cip56Result.error?.slice(0, 80) ?? 'unknown'}`,
-          );
-          const offerContractId = await this.splice.createTransferOffer(
-            recipientPartyId, amount, description, undefined, sender.username,
-          );
-          if (!offerContractId) {
-            throw new Error('Failed to create transfer offer. Both CIP-0056 and Splice fallback failed.');
-          }
-          ledgerTxId = offerContractId;
-
-          if (isInternalUser && recipientUsername) {
-            accepted = await this.splice.acceptOfferViaWallet(offerContractId, recipientUsername);
-            transferMethod = accepted ? 'offer_accept' : 'offer_only';
-            this.logger.log(`CC transfer (Splice fallback auto-accept): ${String(accepted)}`);
-          } else {
-            transferMethod = 'offer_only';
-            this.logger.log(`CC transfer (Splice fallback offer pending): ${offerContractId.slice(0, 20)}…`);
-          }
-        }
-      }
-    } catch (mainTransferErr) {
-      const errMsg = mainTransferErr instanceof Error ? mainTransferErr.message : String(mainTransferErr);
-      this.logger.error(`Main transfer failed: ${errMsg} — refunding fee`);
-      if (feeCollected && feeTreasuryPartyId && sender.username) {
-        try {
-          const r = await this.splice.collectPlatformFee({
-            senderUsername: this.config.get<string>('CANTON_FEE_ACCEPT_USERNAME')?.trim() ||
-              this.config.get<string>('CANTON_VALIDATOR_ADMIN_USER')?.trim() || 'administrator',
-            feeCc,
-            description: `REFUND: Platform fee for transfer to ${recipientLabel}`,
-          });
-          if (r.collected) this.logger.log(`Fee refunded: ${feeCc} CC → @${sender.username}`);
-          else this.logger.error(`Fee refund FAILED: ${r.error ?? 'unknown'}`);
-        } catch (refundErr) {
-          this.logger.error(`Fee refund exception: ${String(refundErr)}`);
-        }
-      }
-      throw new BadRequestException(
-        `Transfer failed: ${errMsg}. ${feeCollected ? `Fee (${feeCc} CC) refunded.` : 'No fee charged.'}`,
-      );
     }
 
-    // ── Step 3: Record outgoing transaction ──────────────────────────────
+    if (!cip56Result.ok) {
+      throw new BadRequestException(
+        `Transfer gagal: ${cip56Result.error?.slice(0, 120) ?? 'unknown'}`);
+    }
+
+    // ── Step 3: Record + response ──────────────────────────────────────
+    let transferTransactionId: string | undefined;
     if (accepted) {
       const outRow = await this.users.recordTransaction({
         userId: sender.id,
