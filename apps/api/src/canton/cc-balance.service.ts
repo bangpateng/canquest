@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { CcInboundSyncService } from './cc-inbound-sync.service';
+import { CantonLedgerService } from './canton-ledger.service';
 import { SpliceValidatorService } from './splice-validator.service';
 
 export type BalanceDisplayResult = {
@@ -30,6 +31,7 @@ export class CcBalanceService {
     private readonly prisma: PrismaService,
     private readonly inboundSync: CcInboundSyncService,
     private readonly splice: SpliceValidatorService,
+    private readonly ledger: CantonLedgerService,
   ) {
     const flag = config.get<string>('BALANCE_READ_FROM_DB');
     this.readFromDb = flag === undefined || flag === '' || flag === 'true';
@@ -95,16 +97,22 @@ export class CcBalanceService {
       };
     }
 
-    if (!this.splice.isConfigured) {
-      return { balance: null, source: 'unavailable', stale: true };
+    // Via Ledger API (admin Keycloak token, bukan HS256 per-user)
+    if (cantonPartyId && !cantonPartyId.startsWith('canquest:')) {
+      try {
+        const chain = await this.ledger.getLedgerBalance(cantonPartyId);
+        const onChainMicro = BigInt(Math.round(chain * 1_000_000));
+        await this.prisma.ccBalance.upsert({
+          where: { userId },
+          create: { userId, balanceMicroCc: onChainMicro },
+          update: { balanceMicroCc: onChainMicro },
+        });
+        return { balance: chain, source: 'chain', stale: false, updatedAt: new Date() };
+      } catch (err) {
+        this.logger.warn(`Balance Ledger fallback error: ${String(err)}`);
+      }
     }
-
-    const chain = await this.splice.getUserBalance(username);
-    return {
-      balance: chain,
-      source: chain !== null ? 'chain' : 'unavailable',
-      stale: false,
-    };
+    return { balance: null, source: 'unavailable', stale: true };
   }
 
   private scheduleBackgroundSync(

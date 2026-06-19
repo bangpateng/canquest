@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { SpliceValidatorService } from './splice-validator.service';
+import { CantonLedgerService } from './canton-ledger.service';
 
 /**
  * Sync inbound CC from Splice wallet balance → CcTransaction (TRANSFER_IN).
@@ -26,6 +27,7 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
     private readonly splice: SpliceValidatorService,
+    private readonly ledger: CantonLedgerService,
   ) {
     const flag = this.config.get<string>('CC_INBOUND_SYNC_ENABLED');
     this.enabled = flag === undefined || flag === '' || flag === 'true';
@@ -61,9 +63,11 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
    * Update CcBalance snapshot from on-chain wallet without creating a transaction.
    * Call after Send CC / rewards already recorded TRANSFER_IN or OUT in DB.
    */
-  async alignBalanceFromChain(userId: string, username: string): Promise<void> {
+  async alignBalanceFromChain(userId: string, username: string, cantonPartyId?: string | null): Promise<void> {
     if (!this.splice.isConfigured) return;
-    const onChain = await this.splice.getUserBalance(username);
+    const onChain = cantonPartyId && !cantonPartyId.startsWith('canquest:')
+      ? await this.ledger.getLedgerBalance(cantonPartyId)
+      : await this.splice.getUserBalance(username);
     if (onChain === null) return;
     const onChainMicro = BigInt(Math.round(onChain * 1_000_000));
     await this.prisma.ccBalance.upsert({
@@ -78,7 +82,7 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
     if (!this.enabled || !this.splice.isConfigured) return;
     if (!username || cantonPartyId?.startsWith('canquest:')) return;
     try {
-      await this.syncUserBalance(userId, username);
+      await this.syncUserBalance(userId, username, cantonPartyId);
     } catch (err) {
       this.logger.warn(`syncUser failed for @${username}: ${String(err)}`);
     }
@@ -99,7 +103,7 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
         if (!u.username || !u.cantonPartyId || u.cantonPartyId.startsWith('canquest:')) {
           continue;
         }
-        await this.syncUserBalance(u.id, u.username);
+        await this.syncUserBalance(u.id, u.username, u.cantonPartyId);
       }
     } finally {
       this.running = false;
@@ -151,8 +155,15 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
     return netMicro === deltaMicro;
   }
 
-  private async syncUserBalance(userId: string, username: string): Promise<void> {
-    const onChain = await this.splice.getUserBalance(username);
+  private async syncUserBalance(
+    userId: string,
+    username: string,
+    cantonPartyId?: string | null,
+  ): Promise<void> {
+    // Pakai Ledger API (admin Keycloak token) jika ada partyId real
+    const onChain = cantonPartyId && !cantonPartyId.startsWith('canquest:')
+      ? await this.ledger.getLedgerBalance(cantonPartyId)
+      : await this.splice.getUserBalance(username);
     if (onChain === null) return;
 
     const onChainMicro = BigInt(Math.round(onChain * 1_000_000));

@@ -1091,6 +1091,121 @@ export class CantonLedgerService {
     }
   }
 
+  /** Ambil current mining round dari Validator API (admin Keycloak token). */
+  async getCurrentRound(): Promise<number> {
+    if (!this.keycloak) throw new Error('KeycloakTokenService not injected');
+    const token = await this.keycloak.getAdminLedgerToken();
+    const validatorUrl = (
+      this.config.get<string>('CANTON_VALIDATOR_URL') ?? ''
+    ).replace(/\/$/, '');
+    const res = await fetch(`${validatorUrl}/api/validator/v0/wallet/balance`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) throw new Error(`getCurrentRound gagal HTTP ${res.status}`);
+    const data = (await res.json()) as { round?: number };
+    if (!data.round) throw new Error('getCurrentRound: field round tidak ditemukan');
+    return data.round;
+  }
+
+  /**
+   * Query ACS Amulet holdings dengan data lengkap (initialAmount, createdAtRound, ratePerRound).
+   * Hanya menyaring kontrak yang templateId-nya berakhiran :Splice.Amulet:Amulet milik party.
+   */
+  private async queryAmuletHoldingsRaw(partyId: string): Promise<Array<{
+    contractId: string; initialAmount: string; createdAtRound: number; ratePerRound: string
+  }>> {
+    let offset: number | string = 0;
+    try {
+      const end = (await this.ledgerEnd()) as { offset?: number | string };
+      offset = end?.offset ?? 0;
+    } catch { offset = 0; }
+
+    const filtersByParty: Record<string, unknown> = {
+      [partyId]: {
+        cumulative: [{
+          identifierFilter: {
+            WildcardFilter: { value: { includeCreatedEventBlob: false } },
+          },
+        }],
+      },
+    };
+
+    let allContracts: unknown[] = [];
+    try {
+      const res = await fetch(`${this.baseUrl}/v2/state/active-contracts`, {
+        method: 'POST',
+        headers: await this.authHeaders(),
+        body: JSON.stringify({
+          eventFormat: { filtersByParty, verbose: true },
+          activeAtOffset: offset,
+        }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (res.ok) {
+        allContracts = (await res.json()) as unknown[];
+        if (!Array.isArray(allContracts)) allContracts = [];
+      } else {
+        const text = await res.text();
+        this.logger.warn(`queryAmuletHoldingsRaw ${res.status}: ${text.slice(0, 200)}`);
+      }
+    } catch (err) {
+      this.logger.warn(`queryAmuletHoldingsRaw error: ${String(err)}`);
+      return [];
+    }
+
+    const results: Array<{
+      contractId: string; initialAmount: string; createdAtRound: number; ratePerRound: string
+    }> = [];
+    for (const entry of allContracts) {
+      if (!entry || typeof entry !== 'object') continue;
+      const wrapper = entry as Record<string, unknown>;
+      const active = wrapper.contractEntry as Record<string, unknown> | undefined;
+      const jsActive = active?.JsActiveContract as Record<string, unknown> | undefined;
+      const ev = (jsActive?.createdEvent ?? wrapper) as Record<string, unknown>;
+      const tplId = typeof ev.templateId === 'string' ? ev.templateId : '';
+      if (!tplId.endsWith(':Splice.Amulet:Amulet')) continue;
+      const cid = typeof ev.contractId === 'string' ? ev.contractId : null;
+      const args = (ev.createArgument as Record<string, unknown> | undefined) ?? {};
+      const owner = typeof args.owner === 'string' ? args.owner : '';
+      if (owner !== partyId) continue;
+      if (!cid) continue;
+      const amt = args.amount as Record<string, unknown> | undefined;
+      if (!amt) continue;
+      results.push({
+        contractId: cid,
+        initialAmount: (typeof amt.initialAmount === 'string' ? amt.initialAmount : '0'),
+        createdAtRound: (amt.createdAt as Record<string, unknown> | undefined)?.number
+          ? Number((amt.createdAt as Record<string, unknown>).number) : 0,
+        ratePerRound: (amt.ratePerRound as Record<string, unknown> | undefined)?.rate
+          ? String((amt.ratePerRound as Record<string, unknown>).rate) : '0',
+      });
+    }
+    return results;
+  }
+
+  /**
+   * Hitung balance CC dari Ledger API.
+   * Formula per Amulet: max(0, initialAmount - max(0, currentRound - createdAtRound) × ratePerRound).
+   */
+  async getLedgerBalance(partyId: string): Promise<number> {
+    const holdings = await this.queryAmuletHoldingsRaw(partyId);
+    if (holdings.length === 0) return 0;
+    const currentRound = await this.getCurrentRound();
+    let total = 0;
+    for (const h of holdings) {
+      const effective = Math.max(0,
+        parseFloat(h.initialAmount) -
+        Math.max(0, currentRound - h.createdAtRound) * parseFloat(h.ratePerRound)
+      );
+      total += effective;
+    }
+    this.logger.debug(
+      `Balance Ledger: party=${partyId.split('::')[0]} = ${total} CC (${holdings.length} Amulets, round ${currentRound})`,
+    );
+    return total;
+  }
+
   /** List parties visible to this participant. */
   async listParties(): Promise<unknown[]> {
     const res = await fetch(`${this.baseUrl}/v2/parties`, {
