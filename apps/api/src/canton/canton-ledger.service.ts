@@ -218,7 +218,11 @@ export class CantonLedgerService {
     disclosedContracts?: unknown[],
   ): Promise<{ ok: boolean; status: number; text: string }> {
     const url = `${this.baseUrl}/v2/commands/${waitMode}`;
-    const effectiveUserId = userId ?? this.ledgerApiUser;
+    const effectiveUserId = userId ?? (
+      ((this.config.get<string>('LEDGER_AUTH_MODE') ?? 'hs256') === 'keycloak')
+        ? (process.env.LEDGER_API_ADMIN_USER || this.ledgerApiUser)
+        : this.ledgerApiUser
+    );
     const effectiveCommandId = commandId ?? randomUUID();
 
     const MAX_RETRIES = 3;
