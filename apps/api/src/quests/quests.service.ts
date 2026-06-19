@@ -28,6 +28,7 @@ import {
   QuestLedgerService,
   type QuestLedgerSubmitResult,
 } from '../canton/quest-ledger.service';
+import { CantonLedgerService } from '../canton/canton-ledger.service';
 import { CcInboundSyncService } from '../canton/cc-inbound-sync.service';
 import { SpliceValidatorService } from '../canton/splice-validator.service';
 import { ProfileAvatarService } from '../users/profile-avatar.service';
@@ -80,6 +81,7 @@ export class QuestsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly questLedger: QuestLedgerService,
+    private readonly cantonLedger: CantonLedgerService,
     private readonly avatars: ProfileAvatarService,
     private readonly users: UsersService,
     private readonly points: PointsService,
@@ -1760,25 +1762,41 @@ export class QuestsService {
 
       // Step 2: reward wallet (canquest-reward) sends reward → same user party (only after fee is collected).
       await this.assertRewardPool(rewardCc);
-      this.logger.log(
-        `Claim fee step 2: ${this.rewardPartyId?.split('::')[0] ?? 'reward'} → ${cantonPartyId.split('::')[0]} (@${username}, ${rewardCc} CC)`,
-      );
-      const rewardOfferId = await this.splice.createTransferOffer(
-        cantonPartyId,
-        rewardCc,
-        `FCFS reward — ${quest.title}`,
-        undefined,
-        this.rewardSenderUsername,
-      );
-      if (!rewardOfferId) {
-        throw new Error('reward offer failed');
+      const rewardPartyId = this.rewardPartyId;
+      if (!rewardPartyId) {
+        throw new Error('CANTON_REWARD_PARTY_ID not configured');
       }
-      const rewardAccepted = await this.splice.acceptOfferViaWallet(
-        rewardOfferId,
-        username,
+      this.logger.log(
+        `Claim fee step 2: ${rewardPartyId.split('::')[0]} → ${cantonPartyId.split('::')[0]} (@${username}, ${rewardCc} CC)`,
       );
-      if (!rewardAccepted) {
-        throw new Error('reward accept failed');
+
+      const rewardResult = await this.cantonLedger.executeTransferFactoryTransfer({
+        senderPartyId: rewardPartyId,
+        receiverPartyId: cantonPartyId,
+        amountCc: rewardCc,
+        description: `FCFS reward — ${quest.title}`,
+      });
+
+      if (!rewardResult.ok) {
+        throw new Error(rewardResult.error ?? 'reward transfer failed');
+      }
+
+      let rewardTxId: string;
+      if (rewardResult.transferKind === 'direct') {
+        rewardTxId = rewardResult.updateId ?? `reward-${Date.now()}-${userId.slice(0, 8)}`;
+        this.logger.log(`Reward ${rewardCc} CC via CIP-0056 direct → ${cantonPartyId.split('::')[0]}`);
+      } else if (rewardResult.transferKind === 'offer' && rewardResult.transferInstructionCid) {
+        const acceptR = await this.cantonLedger.acceptTransferInstruction(
+          rewardResult.transferInstructionCid,
+          cantonPartyId,
+        );
+        if (!acceptR.ok) {
+          throw new Error('reward accept failed');
+        }
+        rewardTxId = acceptR.updateId ?? rewardResult.updateId ?? `reward-${Date.now()}-${userId.slice(0, 8)}`;
+        this.logger.log(`Reward ${rewardCc} CC via CIP-0056 offer-accept → ${cantonPartyId.split('::')[0]}`);
+      } else {
+        throw new Error('reward transfer failed (unknown kind)');
       }
 
       // canquest-v11: Atomic DAML choice — fee + reward + audit trail dalam SATU transaksi.
@@ -1787,7 +1805,7 @@ export class QuestsService {
         const atomicResult = await this.questLedger.atomicFeeAndReward({
           claimContractId: claimSessionId,
           feeTxId,
-          rewardTxId: rewardOfferId,
+          rewardTxId: rewardTxId,
           txLogId: `fcfstx-${reservedDrawId.slice(0, 12)}`,
           amountMicroCc: Math.round(rewardCc * 1_000_000),
           description: `FCFS reward — ${quest.title}`,
@@ -1806,8 +1824,8 @@ export class QuestsService {
         type: 'QUEST_REWARD',
         description: `Received ${rewardCc} CC reward`,
         referenceId: questId,
-        counterparty: validatorPartyId.split('::')[0],
-        ledgerTxId: rewardOfferId,
+        counterparty: rewardPartyId.split('::')[0],
+        ledgerTxId: rewardTxId,
       });
 
       // Asynchronous State Pattern — non-blocking balance sync
@@ -1827,7 +1845,7 @@ export class QuestsService {
             distributed: true,
             ccAmount: rewardCc,
             claimFeeLedgerTxId: feeTxId,
-            ledgerTxId: rewardOfferId,
+            ledgerTxId: rewardTxId,
             ...(claimSessionId ? { claimSessionContractId: claimSessionId } : {}),
           },
         }),
@@ -1848,7 +1866,7 @@ export class QuestsService {
           questId,
           userPartyId: cantonPartyId,
           rewardCc,
-          payoutTxId: rewardOfferId,
+          payoutTxId: rewardTxId,
         }).catch((err) =>
           this.logger.warn(`FCFS ledger sync failed: ${String(err)}`),
         );
