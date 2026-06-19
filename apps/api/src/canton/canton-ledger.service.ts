@@ -367,10 +367,7 @@ export class CantonLedgerService {
     this.logger.log(`Registry call: ${url} Host=${hostHeader || '(none)'}`);
 
     try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.ledgerToken()}`,
-      };
+      const headers = await this.authHeaders();
       // MUST send Host header when going through nginx on validator
       if (hostHeader) headers['Host'] = hostHeader;
 
@@ -693,10 +690,7 @@ export class CantonLedgerService {
     const url = `${scanBase}/registry/transfer-instruction/v1/${encodedCid}/choice-contexts/${action}`;
 
     try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.ledgerToken()}`,
-      };
+      const headers = await this.authHeaders();
       if (hostHeader) headers['Host'] = hostHeader;
 
       const res = await fetch(url, {
