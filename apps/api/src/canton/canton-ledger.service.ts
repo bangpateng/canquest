@@ -1756,6 +1756,48 @@ export class CantonLedgerService {
     return data.transactions ?? [];
   }
 
+  /**
+   * Grant CanActAs + CanReadAs rights to the operator (admin) for a party.
+   * Allows the backend to submit commands + query ACS on behalf of this party.
+   * Operator ID from LEDGER_API_ADMIN_USER env.
+   * IDEMPOTEN: 409 / ALREADY_EXISTS diabaikan.
+   */
+  async grantOperatorRightsOnParty(partyId: string): Promise<void> {
+    const operatorId = process.env.LEDGER_API_ADMIN_USER;
+    if (!operatorId) {
+      this.logger.error('LEDGER_API_ADMIN_USER belum diset — operator rights TIDAK di-grant');
+      return;
+    }
+    const token = await this.keycloak!.getAdminLedgerToken();
+    const url = `${this.baseUrl}/v2/users/${encodeURIComponent(operatorId)}/rights`;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: operatorId,
+          rights: [
+            { kind: { CanActAs: { value: { party: partyId } } } },
+            { kind: { CanReadAs: { value: { party: partyId } } } },
+          ],
+        }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (res.ok) {
+        this.logger.log(`Operator rights granted: ${operatorId.slice(0, 8)}... → ${partyId.split('::')[0]}`);
+        return;
+      }
+      const text = await res.text();
+      if (res.status === 409 || text.includes('ALREADY_EXISTS')) {
+        this.logger.debug(`Operator rights already exist for party=${partyId.split('::')[0]}`);
+        return;
+      }
+      this.logger.warn(`grantOperatorRightsOnParty ${res.status}: ${text.slice(0, 200)}`);
+    } catch (err) {
+      this.logger.warn(`grantOperatorRightsOnParty error: ${String(err)}`);
+    }
+  }
+
   // ── Keycloak user onboarding ──────────────────────────────────────
 
   /**
@@ -1847,6 +1889,7 @@ export class CantonLedgerService {
     await this.createLedgerUser(keycloakUuid, partyId);
     await this.setLedgerUserPrimaryParty(keycloakUuid, partyId);
     await this.grantLedgerUserRights(keycloakUuid, partyId);
+    await this.grantOperatorRightsOnParty(partyId);
     this.logger.log(`ensureLedgerUser done: uuid=${keycloakUuid.slice(0, 8)}... party=${partyId.split('::')[0]}`);
   }
 }
