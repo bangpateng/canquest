@@ -618,7 +618,6 @@ export class CantonLedgerService {
                 }],
               },
             },
-            filtersForAnyParty: { cumulative: [] },
             verbose: true,
           },
           activeAtOffset: offset,
@@ -627,6 +626,9 @@ export class CantonLedgerService {
       });
       if (res.ok) {
         allContracts = (await res.json()) as unknown[];
+      } else {
+        const text = await res.text();
+        this.logger.warn(`cancelTransferPreapproval ACS query gagal HTTP ${res.status}: ${text.slice(0, 200)}`);
       }
     } catch (err) {
       return { ok: false, error: `ACS query failed: ${String(err)}` };
@@ -1195,7 +1197,6 @@ export class CantonLedgerService {
         body: JSON.stringify({
           eventFormat: {
             filtersByParty,
-            filtersForAnyParty: { cumulative: [] },
             verbose: true,
           },
           activeAtOffset: offset,
@@ -1298,7 +1299,6 @@ export class CantonLedgerService {
                 }],
               },
             },
-            filtersForAnyParty: { cumulative: [] },
             verbose: true,
           },
           activeAtOffset: offset,
@@ -1470,7 +1470,6 @@ export class CantonLedgerService {
     const body = {
       eventFormat: {
         filtersByParty,
-        filtersForAnyParty: { cumulative: [] },
         verbose: false,
       },
       activeAtOffset: offset,
@@ -1732,7 +1731,6 @@ export class CantonLedgerService {
             ],
           },
         },
-        filtersForAnyParty: { cumulative: [] },
       },
       beginExclusive,
     };
