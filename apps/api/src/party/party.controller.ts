@@ -611,12 +611,48 @@ export class PartyController {
     }
     // Kalau null → ledger akan menolak jika dana kurang
 
-    // ── Step 1: FEE COLLECT via CIP-0056 (non-blocking) ───────────────
+    // ── MAIN TRANSFER via CIP-0056 (satu-satunya jalur) ─────────────
+    let accepted = false;
+    let ledgerTxId: string | undefined;
+    let transferMethod: 'direct' | 'offer_accept' | 'offer_only' = 'offer_accept';
+
+    const cip56Result = await this.ledger.executeTransferFactoryTransfer({
+      senderPartyId: sender.cantonPartyId,
+      receiverPartyId: recipientPartyId,
+      amountCc: amount,
+      description,
+    });
+
+    if (cip56Result.ok) {
+      if (cip56Result.transferKind === 'direct') {
+        accepted = true;
+        transferMethod = 'direct';
+        ledgerTxId = cip56Result.updateId ?? undefined;
+        this.logger.log(`CC transfer direct: ${sender.username} → ${recipientLabel} ${amount} CC`);
+      } else if (cip56Result.transferKind === 'offer') {
+        ledgerTxId = cip56Result.transferInstructionCid ?? cip56Result.updateId ?? undefined;
+        if (isInternalUser && recipientUsername && cip56Result.transferInstructionCid) {
+          const acceptResult = await this.ledger.acceptTransferInstruction(
+            cip56Result.transferInstructionCid, recipientPartyId);
+          accepted = acceptResult.ok;
+          transferMethod = accepted ? 'offer_accept' : 'offer_only';
+        } else {
+          transferMethod = 'offer_only';
+        }
+      }
+    }
+
+    if (!cip56Result.ok) {
+      throw new BadRequestException(
+        `Transfer gagal: ${cip56Result.error?.slice(0, 120) ?? 'unknown'}`);
+    }
+
+    // ── FEE COLLECT (HANYA jika transfer berhasil) ───────────────────
     let feeCollected = false;
     let feeLedgerTxId: string | undefined;
     let feeTreasuryPartyId: string | undefined;
 
-    if (effectiveFeeCc > 0 && sender.cantonPartyId) {
+    if (effectiveFeeCc > 0 && sender.cantonPartyId && accepted) {
       const feeParty = this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim()
         || validatorPartyId;
       if (feeParty) {
@@ -670,42 +706,6 @@ export class PartyController {
           this.logger.warn(`Fee collect error (non-blocking): ${String(feeErr)}`);
         }
       }
-    }
-
-    // ── Step 2: MAIN TRANSFER via CIP-0056 (satu-satunya jalur) ─────
-    let accepted = false;
-    let ledgerTxId: string | undefined;
-    let transferMethod: 'direct' | 'offer_accept' | 'offer_only' = 'offer_accept';
-
-    const cip56Result = await this.ledger.executeTransferFactoryTransfer({
-      senderPartyId: sender.cantonPartyId,
-      receiverPartyId: recipientPartyId,
-      amountCc: amount,
-      description,
-    });
-
-    if (cip56Result.ok) {
-      if (cip56Result.transferKind === 'direct') {
-        accepted = true;
-        transferMethod = 'direct';
-        ledgerTxId = cip56Result.updateId ?? undefined;
-        this.logger.log(`CC transfer direct: ${sender.username} → ${recipientLabel} ${amount} CC`);
-      } else if (cip56Result.transferKind === 'offer') {
-        ledgerTxId = cip56Result.transferInstructionCid ?? cip56Result.updateId ?? undefined;
-        if (isInternalUser && recipientUsername && cip56Result.transferInstructionCid) {
-          const acceptResult = await this.ledger.acceptTransferInstruction(
-            cip56Result.transferInstructionCid, recipientPartyId);
-          accepted = acceptResult.ok;
-          transferMethod = accepted ? 'offer_accept' : 'offer_only';
-        } else {
-          transferMethod = 'offer_only';
-        }
-      }
-    }
-
-    if (!cip56Result.ok) {
-      throw new BadRequestException(
-        `Transfer gagal: ${cip56Result.error?.slice(0, 120) ?? 'unknown'}`);
     }
 
     // ── Step 3: Record + response ──────────────────────────────────────
