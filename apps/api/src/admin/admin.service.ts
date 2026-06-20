@@ -992,34 +992,31 @@ export class AdminService {
       let ccSent = false;
       let ledgerTxId: string | null = null;
 
-      if (draw.ccAmount > 0 && user.cantonPartyId) {
+          if (draw.ccAmount > 0 && user.cantonPartyId) {
         try {
           const quest = await this.prisma.quest.findUnique({
             where: { id: questId },
             select: { title: true },
           });
           const rewardLabel = quest?.title ?? 'Quest';
-          const offerContractId = await this.splice.createTransferOffer(
-            user.cantonPartyId,
-            draw.ccAmount,
-            rewardLabel,
-          );
-          if (offerContractId && user.username) {
-            ccSent = await this.splice.acceptOfferViaWallet(
-              offerContractId,
-              user.username,
-            );
-            if (ccSent) {
-              ledgerTxId = offerContractId;
-              await this.users.recordTransaction({
-                userId: user.id,
-                amountCc: draw.ccAmount,
-                type: 'QUEST_REWARD',
-                description: rewardLabel,
-                referenceId: questId,
-                ledgerTxId: offerContractId,
-              });
-            }
+          const rewardResult = await this.splice.sendReward({
+            receiverPartyId: user.cantonPartyId,
+            amountCc: draw.ccAmount,
+            description: rewardLabel,
+          });
+          if (rewardResult.ok) {
+            ccSent = true; // dispatched (direct atau pending offer)
+            ledgerTxId = rewardResult.rewardTxId ?? null;
+            await this.users.recordTransaction({
+              userId: user.id,
+              amountCc: draw.ccAmount,
+              type: 'QUEST_REWARD',
+              description: rewardLabel,
+              referenceId: questId,
+              ledgerTxId: rewardResult.rewardTxId ?? undefined,
+              status: rewardResult.pending ? 'PENDING' : 'COMPLETED',
+              transferInstructionCid: rewardResult.transferInstructionCid ?? null,
+            });
           }
         } catch (err) {
           this.logger.warn(

@@ -590,6 +590,56 @@ export class CantonLedgerService {
     return { ok: false, updateId: null, transferKind: registry.transferKind, error: errMsg };
   }
 
+  /**
+   * Kirim reward CC via CIP-0056 TransferFactory.
+   * - Receiver punya TransferPreapproval → 'direct' (langsung mendarat).
+   * - Tidak punya → 'offer': AmuletTransferInstruction dibiarkan PENDING di inbox wallet.
+   *   TIDAK auto-accept — user terima manual via POST /party/offers/accept.
+   * senderPartyId default = CANTON_REWARD_PARTY_ID (canquest-reward-user).
+   */
+  async sendReward(params: {
+    senderPartyId?: string;
+    receiverPartyId: string;
+    amountCc: number;
+    description: string;
+  }): Promise<{
+    ok: boolean;
+    kind?: 'direct' | 'offer';
+    pending: boolean;
+    rewardTxId?: string;
+    transferInstructionCid?: string;
+    error?: string;
+  }> {
+    const senderPartyId =
+      params.senderPartyId ?? this.config.get<string>('CANTON_REWARD_PARTY_ID');
+    if (!senderPartyId) {
+      return { ok: false, pending: false, error: 'CANTON_REWARD_PARTY_ID not configured' };
+    }
+    const res = await this.executeTransferFactoryTransfer({
+      senderPartyId,
+      receiverPartyId: params.receiverPartyId,
+      amountCc: params.amountCc,
+      description: params.description,
+    });
+    if (!res.ok) {
+      return { ok: false, pending: false, error: res.error ?? 'reward transfer failed' };
+    }
+    if (res.transferKind === 'direct') {
+      return { ok: true, kind: 'direct', pending: false, rewardTxId: res.updateId ?? undefined };
+    }
+    if (res.transferKind === 'offer' && res.transferInstructionCid) {
+      // One-Step OFF: biarkan pending, JANGAN accept atas nama user.
+      return {
+        ok: true,
+        kind: 'offer',
+        pending: true,
+        rewardTxId: res.updateId ?? res.transferInstructionCid,
+        transferInstructionCid: res.transferInstructionCid,
+      };
+    }
+    return { ok: false, pending: false, error: 'reward transfer failed (unknown kind)' };
+  }
+
   // ───────────────────────────────────────────────────────────────────────────
   // READ / CANCEL TransferPreapproval via Ledger ACS (Keycloak) — no HS256.
   // ───────────────────────────────────────────────────────────────────────────

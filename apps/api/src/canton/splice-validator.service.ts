@@ -1085,6 +1085,16 @@ export class SpliceValidatorService {
     return false;
   }
 
+  /** CIP-0056 reward send — delegasi ke CantonLedgerService.sendReward. */
+  async sendReward(params: {
+    senderPartyId?: string;
+    receiverPartyId: string;
+    amountCc: number;
+    description: string;
+  }) {
+    return this.ledger.sendReward(params);
+  }
+
   /**
    * Returns the Splice Wallet UI URL so users can create their own
    * TransferPreapproval (enables direct CC transfers without offer/accept).

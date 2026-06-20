@@ -55,27 +55,15 @@ export class SpinJobProcessor {
         return;
       }
 
-      // Reward sender = canquest-reward-user (same as quest earn rewards)
-      // So CC comes from canquest-reward, not canquest-validator-1
-      const rewardSender =
-        this.config.get<string>('CANTON_REWARD_API_USER')?.trim() || 'canquest-reward-user';
-
-      const offerContractId = await this.splice.createTransferOffer(
-        cantonPartyId,
-        rewardCc,
-        `Spin reward`,
-        undefined,          // trackingId
-        rewardSender,        // senderUsername → canquest-reward-user
-      );
-
-      if (!offerContractId) {
-        throw new Error(`createTransferOffer failed for spin ${spinResultId} — will retry`);
+      const rewardResult = await this.splice.sendReward({
+        receiverPartyId: cantonPartyId,
+        amountCc: rewardCc,
+        description: `Spin reward`,
+      });
+      if (!rewardResult.ok) {
+        throw new Error(`spin reward failed for ${spinResultId}: ${rewardResult.error ?? 'unknown'} — will retry`);
       }
-
-      const accepted = await this.splice.acceptOfferViaWallet(offerContractId, username);
-      if (!accepted) {
-        throw new Error(`acceptOffer failed for spin ${spinResultId} — will retry`);
-      }
+      const offerContractId = rewardResult.rewardTxId ?? `reward-${Date.now()}`;
 
       await this.users.recordTransaction({
         userId,
@@ -83,10 +71,14 @@ export class SpinJobProcessor {
         type: 'SPIN_REWARD',
         description: `Spin reward: ${rewardCc} CC`,
         ledgerTxId: offerContractId,
+        status: rewardResult.pending ? 'PENDING' : 'COMPLETED',
+        transferInstructionCid: rewardResult.transferInstructionCid ?? null,
       });
 
       await this.markDelivered(spinResultId, true, offerContractId);
-      this.logger.log(`[Job ${job.id}] ✅ Spin CC reward delivered: ${rewardCc} CC from @${rewardSender} → @${username}`);
+      this.logger.log(
+        `[Job ${job.id}] ✅ Spin CC reward ${rewardResult.pending ? 'PENDING (user accepts in wallet)' : 'delivered direct'}: ${rewardCc} CC → @${username}`,
+      );
     } else {
       // Non-CC reward (points already credited by SpinService synchronously)
       await this.markDelivered(spinResultId, true);

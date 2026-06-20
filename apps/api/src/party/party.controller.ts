@@ -1057,6 +1057,13 @@ export class PartyController {
       ledgerTxId: updateId ?? cid,
     });
 
+    // Reward yang tadinya PENDING (offer) kini diterima → tandai COMPLETED
+    try {
+      await this.users.markTransferInstructionSettled(cid, 'COMPLETED');
+    } catch (err) {
+      this.logger.warn(`markTransferInstructionSettled failed: ${String(err)}`);
+    }
+
     if (user.username) {
       void this.inboundSync.alignBalanceFromChain(user.id, user.username);
     }
@@ -1091,6 +1098,12 @@ export class PartyController {
       const result = await this.ledger.rejectTransferInstruction(cid, user.cantonPartyId);
       if (!result.ok) {
         throw new BadRequestException(`Failed to reject: ${result.error ?? 'unknown'}`);
+      }
+      // Reward PENDING yang ditolak → tandai REJECTED
+      try {
+        await this.users.markTransferInstructionSettled(cid, 'REJECTED');
+      } catch (err) {
+        this.logger.warn(`markTransferInstructionSettled REJECTED failed: ${String(err)}`);
       }
       return { ok: true, updateId: result.updateId, message: 'Transfer rejected. CC returned to sender.' };
     } else {

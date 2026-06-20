@@ -1770,34 +1770,21 @@ export class QuestsService {
         `Claim fee step 2: ${rewardPartyId.split('::')[0]} → ${cantonPartyId.split('::')[0]} (@${username}, ${rewardCc} CC)`,
       );
 
-      const rewardResult = await this.cantonLedger.executeTransferFactoryTransfer({
+      const rewardResult = await this.cantonLedger.sendReward({
         senderPartyId: rewardPartyId,
         receiverPartyId: cantonPartyId,
         amountCc: rewardCc,
         description: `FCFS reward — ${quest.title}`,
       });
-
       if (!rewardResult.ok) {
         throw new Error(rewardResult.error ?? 'reward transfer failed');
       }
-
-      let rewardTxId: string;
-      if (rewardResult.transferKind === 'direct') {
-        rewardTxId = rewardResult.updateId ?? `reward-${Date.now()}-${userId.slice(0, 8)}`;
-        this.logger.log(`Reward ${rewardCc} CC via CIP-0056 direct → ${cantonPartyId.split('::')[0]}`);
-      } else if (rewardResult.transferKind === 'offer' && rewardResult.transferInstructionCid) {
-        const acceptR = await this.cantonLedger.acceptTransferInstruction(
-          rewardResult.transferInstructionCid,
-          cantonPartyId,
-        );
-        if (!acceptR.ok) {
-          throw new Error('reward accept failed');
-        }
-        rewardTxId = acceptR.updateId ?? rewardResult.updateId ?? `reward-${Date.now()}-${userId.slice(0, 8)}`;
-        this.logger.log(`Reward ${rewardCc} CC via CIP-0056 offer-accept → ${cantonPartyId.split('::')[0]}`);
-      } else {
-        throw new Error('reward transfer failed (unknown kind)');
-      }
+      const rewardTxId = rewardResult.rewardTxId ?? `reward-${Date.now()}-${userId.slice(0, 8)}`;
+      const rewardPending = rewardResult.pending;
+      this.logger.log(
+        `FCFS reward ${rewardCc} CC → ${cantonPartyId.split('::')[0]} ` +
+          `(${rewardPending ? 'PENDING — user accepts in wallet' : 'direct'})`,
+      );
 
       // canquest-v11: Atomic DAML choice — fee + reward + audit trail dalam SATU transaksi.
       // Jika salah satu gagal, Canton rollback seluruhnya. Tidak ada partial commit.
@@ -1826,6 +1813,8 @@ export class QuestsService {
         referenceId: questId,
         counterparty: rewardPartyId.split('::')[0],
         ledgerTxId: rewardTxId,
+        status: rewardPending ? 'PENDING' : 'COMPLETED',
+        transferInstructionCid: rewardResult.transferInstructionCid ?? null,
       });
 
       // Asynchronous State Pattern — non-blocking balance sync
@@ -2041,23 +2030,21 @@ export class QuestsService {
       });
 
       await this.assertRewardPool(rewardCc);
-      const rewardOfferId = await this.splice.createTransferOffer(
-        cantonPartyId,
-        rewardCc,
-        `Raffle reward — ${quest.title}`,
-        undefined,
-        this.rewardSenderUsername,
-      );
-      if (!rewardOfferId) {
-        throw new Error('reward offer failed');
+      const rewardResult = await this.cantonLedger.sendReward({
+        receiverPartyId: cantonPartyId,
+        amountCc: rewardCc,
+        description: `Raffle reward — ${quest.title}`,
+      });
+      if (!rewardResult.ok) {
+        throw new Error(rewardResult.error ?? 'reward transfer failed');
       }
-      const rewardAccepted = await this.splice.acceptOfferViaWallet(
-        rewardOfferId,
-        username,
+      // pertahankan nama var lama supaya downstream (atomic/record) tetap jalan
+      const rewardOfferId = rewardResult.rewardTxId ?? `reward-${Date.now()}`;
+      const rewardPending = rewardResult.pending;
+      this.logger.log(
+        `Draw reward ${rewardCc} CC → ${cantonPartyId.split('::')[0]} ` +
+          `(${rewardPending ? 'PENDING — user accepts in wallet' : 'direct'})`,
       );
-      if (!rewardAccepted) {
-        throw new Error('reward accept failed');
-      }
 
       // canquest-v11: Atomic DAML choice — fee + reward + audit trail.
       // Prioritas utama claimSessionId (QuestClaim DAML). earnClaimSessionId 
@@ -2103,6 +2090,8 @@ export class QuestsService {
         referenceId: questId,
         counterparty: validatorPartyId.split('::')[0],
         ledgerTxId: rewardOfferId,
+        status: rewardPending ? 'PENDING' : 'COMPLETED',
+        transferInstructionCid: rewardResult.transferInstructionCid ?? null,
       });
 
       // Asynchronous State Pattern: balance sync tidak memblokir response HTTP.
@@ -2510,16 +2499,17 @@ export class QuestsService {
       await this.assertRewardPool(rewardCc);
       let rewardOfferId: string | null = null;
       if (rewardCc > 0) {
-        rewardOfferId = await this.splice.createTransferOffer(
-          cantonPartyId,
-          rewardCc,
-          `CC+Code raffle reward — ${quest.title}`,
-          undefined,
-          this.rewardSenderUsername,
+        const rewardResult = await this.cantonLedger.sendReward({
+          receiverPartyId: cantonPartyId,
+          amountCc: rewardCc,
+          description: `CC+Code raffle reward — ${quest.title}`,
+        });
+        if (!rewardResult.ok) throw new Error(rewardResult.error ?? 'CC reward transfer failed');
+        rewardOfferId = rewardResult.rewardTxId ?? `reward-${Date.now()}`;
+        this.logger.log(
+          `Raffle reward ${rewardCc} CC → ${cantonPartyId.split('::')[0]} ` +
+            `(${rewardResult.pending ? 'PENDING — user accepts in wallet' : 'direct'})`,
         );
-        if (!rewardOfferId) throw new Error('CC reward offer failed');
-        const rewardAccepted = await this.splice.acceptOfferViaWallet(rewardOfferId, username);
-        if (!rewardAccepted) throw new Error('CC reward accept failed');
         await this.users.recordTransaction({
           userId,
           amountCc: rewardCc,
@@ -2528,6 +2518,8 @@ export class QuestsService {
           referenceId: questId,
           counterparty: validatorPartyId.split('::')[0],
           ledgerTxId: rewardOfferId,
+          status: rewardResult.pending ? 'PENDING' : 'COMPLETED',
+          transferInstructionCid: rewardResult.transferInstructionCid ?? null,
         });
         // Asynchronous State Pattern — non-blocking balance sync
         if (username) {

@@ -146,10 +146,13 @@ model CcTransaction {
   ledgerTxId     String?
   /// Ledger update ID from submit-and-wait / transaction stream (CantonScan).
   cantonUpdateId String?
+  status                 String   @default("COMPLETED") // COMPLETED | PENDING | REJECTED
+  transferInstructionCid String?
   settledAt      DateTime?
   createdAt      DateTime          @default(now())
 
   @@index([cantonUpdateId])
+  @@index([transferInstructionCid])
 }
 
 enum CcTransactionType {

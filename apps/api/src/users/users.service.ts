@@ -213,6 +213,10 @@ export class UsersService {
     counterparty?: string;
     ledgerTxId?: string;
     cantonUpdateId?: string;
+    /** COMPLETED (default) | PENDING (offer belum di-accept) | REJECTED */
+    status?: 'COMPLETED' | 'PENDING' | 'REJECTED';
+    /** cid AmuletTransferInstruction untuk reward yang masih pending. */
+    transferInstructionCid?: string | null;
   }) {
     const amountMicroCc = BigInt(Math.round(Math.abs(params.amountCc) * 1_000_000));
     const signed =
@@ -230,7 +234,9 @@ export class UsersService {
         referenceId,
         ledgerTxId: params.ledgerTxId ?? null,
         cantonUpdateId: params.cantonUpdateId ?? null,
-        settledAt: new Date(),
+        status: params.status ?? 'COMPLETED',
+        transferInstructionCid: params.transferInstructionCid ?? null,
+        settledAt: params.status === 'PENDING' ? null : new Date(),
       },
     });
   }
@@ -648,6 +654,18 @@ export class UsersService {
       where: { id: userId },
       data: { earnPoints: { increment: Math.round(amount) } },
     });
+  }
+
+  /** Saat offer pending di-accept/reject manual, update status tx reward terkait. */
+  async markTransferInstructionSettled(
+    transferInstructionCid: string,
+    status: 'COMPLETED' | 'REJECTED',
+  ): Promise<number> {
+    const r = await this.prisma.ccTransaction.updateMany({
+      where: { transferInstructionCid, status: 'PENDING' },
+      data: { status, settledAt: status === 'COMPLETED' ? new Date() : null },
+    });
+    return r.count;
   }
 
   /** Catat waktu toggle preapproval (enable/disable) untuk cooldown anti-spam 7 hari. */
