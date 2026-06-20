@@ -60,8 +60,8 @@ export class PartyController {
       const days = Math.ceil(remaining / (24 * 60 * 60 * 1000));
       const nextAt = new Date(Date.now() + remaining).toISOString();
       throw new BadRequestException(
-        `Pengaturan preapproval dibatasi 1× per 7 hari untuk mencegah biaya berulang. ` +
-        `Coba lagi dalam ~${days} hari (setelah ${nextAt}).`,
+        `Preapproval settings are limited to once per week. ` +
+        `Please try again in ~${days} days (after ${nextAt}).`,
       );
     }
   }
@@ -1047,21 +1047,26 @@ export class PartyController {
       }
     }
 
-    // Record incoming transaction
-    await this.users.recordTransaction({
-      userId: user.id,
-      amountCc: 0, // akan di-sync dari chain
-      type: 'TRANSFER_IN',
-      description: `Accepted incoming ${offerType === 'transfer_instruction' ? 'CIP-0056' : 'legacy'} transfer`,
-      counterparty: 'sender',
-      ledgerTxId: updateId ?? cid,
-    });
-
-    // Reward yang tadinya PENDING (offer) kini diterima → tandai COMPLETED
+    // Reward yang tadinya PENDING (offer) kini diterima → tandai COMPLETED.
+    // Jika baris reward kita yang cocok, JANGAN catat TRANSFER_IN baru: baris
+    // reward sudah punya angka yang benar. Hanya transfer dari pihak lain yang dicatat.
+    let settledOwnReward = 0;
     try {
-      await this.users.markTransferInstructionSettled(cid, 'COMPLETED');
+      settledOwnReward = await this.users.markTransferInstructionSettled(cid, 'COMPLETED');
     } catch (err) {
       this.logger.warn(`markTransferInstructionSettled failed: ${String(err)}`);
+    }
+
+    if (settledOwnReward === 0) {
+      // Transfer masuk dari pihak lain (bukan reward pending kita) → catat TRANSFER_IN.
+      await this.users.recordTransaction({
+        userId: user.id,
+        amountCc: 0, // saldo di-sync dari chain; baris ini penanda transfer masuk
+        type: 'TRANSFER_IN',
+        description: `Accepted incoming ${offerType === 'transfer_instruction' ? 'CIP-0056' : 'legacy'} transfer`,
+        counterparty: 'sender',
+        ledgerTxId: updateId ?? cid,
+      });
     }
 
     if (user.username) {
