@@ -1122,8 +1122,8 @@ export class PartyController {
       throw new BadRequestException('No wallet found. Create your wallet first.');
     }
 
-    // Check if already active
-    const existing = await this.splice.getTransferPreapproval(user.cantonPartyId);
+    // Already active? (Ledger ACS — no HS256)
+    const existing = await this.ledger.getTransferPreapprovalViaLedger(user.cantonPartyId);
     if (existing) {
       return {
         ok: true,
@@ -1133,21 +1133,17 @@ export class PartyController {
       };
     }
 
-    // Resolve Splice wallet username
-    const walletUsername =
-      (await this.splice.resolveWalletUsernameForParty(user.cantonPartyId)) ?? user.username;
-
-    const result = await this.splice.createTransferPreapproval(walletUsername);
-
+    // Create via Ledger: exercise AmuletRules_CreateTransferPreapproval (validator-1 pays burn)
+    const result = await this.ledger.createTransferPreapprovalViaLedger(user.cantonPartyId);
     if (!result.ok) {
-      throw new BadRequestException(
-        result.detail ?? 'Failed to create preapproval. Try again or create via Splice Wallet UI.',
-      );
+      throw new BadRequestException(result.error ?? 'Failed to create preapproval.');
     }
 
     return {
       ok: true,
       alreadyActive: false,
+      transferPreapprovalCid: result.transferPreapprovalCid,
+      amuletPaid: result.amuletPaid,
       message: 'Preapproval enabled — incoming CC transfers will now arrive directly.',
     };
   }

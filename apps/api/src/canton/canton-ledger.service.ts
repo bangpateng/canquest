@@ -590,89 +590,179 @@ export class CantonLedgerService {
     return { ok: false, updateId: null, transferKind: registry.transferKind, error: errMsg };
   }
 
-  /**
-   * Cancel TransferPreapproval via Ledger API.
-   * Fallback when Splice admin API returns 401 on MainNet.
-   */
-  async cancelTransferPreapprovalViaLedger(
-    partyId: string,
-  ): Promise<{ ok: boolean; error?: string }> {
-    let offset: number | string = 0;
-    try {
-      const end = (await this.ledgerEnd()) as { offset?: number | string };
-      offset = end?.offset ?? 0;
-    } catch { offset = 0; }
+  // ───────────────────────────────────────────────────────────────────────────
+  // CREATE TransferPreapproval via Ledger (Keycloak) — no HS256.
+  // Grounded on real on-chain choiceArgument (canquest-fee, tx offset 838791).
+  // Provider (validator-1) pre-pays the ~1.5 CC burn fee.
+  // Atomic: wrong args / insufficient funds => rejected, NO fee burned (safe to retry).
+  // ───────────────────────────────────────────────────────────────────────────
+  async createTransferPreapprovalViaLedger(
+    receiverPartyId: string,
+  ): Promise<{ ok: boolean; transferPreapprovalCid?: string; amuletPaid?: string; error?: string }> {
+    const provider = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID');
+    const expectedDso = this.config.get<string>('CANTON_DSO_PARTY_ID');
+    if (!provider) return { ok: false, error: 'CANTON_VALIDATOR_PARTY_ID not set' };
+    if (!expectedDso) return { ok: false, error: 'CANTON_DSO_PARTY_ID not set' };
 
-    let allContracts: unknown[] = [];
-    try {
-      const res = await fetch(`${this.baseUrl}/v2/state/active-contracts`, {
-        method: 'POST',
-        headers: await this.authHeaders(),
-        body: JSON.stringify({
-          eventFormat: {
-            filtersByParty: {
-              [partyId]: {
-                cumulative: [{
-                  identifierFilter: {
-                    WildcardFilter: { value: { includeCreatedEventBlob: false } },
-                  },
-                }],
-              },
-            },
-            verbose: true,
-          },
-          activeAtOffset: offset,
-        }),
-        signal: AbortSignal.timeout(20_000),
-      });
-      if (res.ok) {
-        allContracts = (await res.json()) as unknown[];
-      } else {
-        const text = await res.text();
-        this.logger.warn(`cancelTransferPreapproval ACS query gagal HTTP ${res.status}: ${text.slice(0, 200)}`);
-      }
-    } catch (err) {
-      return { ok: false, error: `ACS query failed: ${String(err)}` };
+    // 1) Disclosed contracts from scan-proxy (DSO-signed, with created_event_blob)
+    const amuletRules = await this.fetchScanProxyContract('amulet-rules');
+    if (!amuletRules) return { ok: false, error: 'scan-proxy /amulet-rules failed' };
+    const openRound = await this.fetchScanProxyContract('open-and-issuing-mining-rounds');
+    if (!openRound) return { ok: false, error: 'scan-proxy /open-and-issuing-mining-rounds failed' };
+
+    // 2) Provider's Amulet input — pick largest effective holding (>= ~2 CC buffer)
+    const holdings = await this.queryAmuletHoldingsRaw(provider);
+    if (holdings.length === 0) {
+      return { ok: false, error: `Provider ${provider} has no Amulet holding to pay preapproval fee` };
+    }
+    const round = openRound.round ?? 0;
+    const scored = holdings
+      .map((h) => {
+        const init = parseFloat(h.initialAmount) || 0;
+        const rate = parseFloat(h.ratePerRound) || 0;
+        const decay = Math.max(0, round - (h.createdAtRound || 0)) * rate;
+        return { h, eff: Math.max(0, init - decay) };
+      })
+      .sort((a, b) => b.eff - a.eff);
+    const best = scored[0];
+    if (best.eff < 2) {
+      return { ok: false, error: `Provider Amulet too small (eff ~${best.eff.toFixed(4)} CC) to pay preapproval fee` };
     }
 
-    let preapprovalCid: string | null = null;
-    let preapprovalTemplateId: string | null = null;
+    // 3) expiresAt = now + 90 days (matches on-chain lifetime)
+    const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
 
-    for (const entry of allContracts) {
-      if (!entry || typeof entry !== 'object') continue;
-      const wrapper = entry as Record<string, unknown>;
-      const active = wrapper.contractEntry as Record<string, unknown> | undefined;
-      const jsActive = active?.JsActiveContract as Record<string, unknown> | undefined;
-      const ev = (jsActive?.createdEvent ?? wrapper) as Record<string, unknown>;
-      const tplId = typeof ev.templateId === 'string' ? ev.templateId : '';
-      if (!tplId.includes('TransferPreapproval')) continue;
-      const cid = typeof ev.contractId === 'string' ? ev.contractId : null;
-      const args = (ev.createArgument as Record<string, unknown> | undefined) ?? {};
-      const receiver = typeof args.receiver === 'string' ? args.receiver : '';
-      if (receiver === partyId && cid) {
-        preapprovalCid = cid;
-        preapprovalTemplateId = tplId;
-        break;
-      }
-    }
+    // 4) choiceArgument — EXACT on-chain shape (offset 838791)
+    const choiceArgument = {
+      context: {
+        amuletRules: amuletRules.contractId,
+        context: {
+          openMiningRound: openRound.contractId,
+          issuingMiningRounds: [],
+          validatorRights: [],
+        },
+      },
+      inputs: [{ tag: 'InputAmulet', value: best.h.contractId }],
+      receiver: receiverPartyId,
+      provider,
+      expiresAt,
+      expectedDso,
+    };
 
-    if (!preapprovalCid || !preapprovalTemplateId) {
-      return { ok: true };
-    }
+    const disclosedContracts = [
+      { templateId: amuletRules.templateId, contractId: amuletRules.contractId, createdEventBlob: amuletRules.blob },
+      { templateId: openRound.templateId, contractId: openRound.contractId, createdEventBlob: openRound.blob },
+    ];
 
-    this.logger.log(`Cancelling TransferPreapproval via Ledger: cid=${preapprovalCid.slice(0, 20)}...`);
-
-    const { ok, status, text } = await this.exerciseChoice(
-      preapprovalCid, preapprovalTemplateId, 'TransferPreapproval_Cancel', {}, [partyId],
+    this.logger.log(
+      `CreateTransferPreapproval via Ledger: receiver=${receiverPartyId.slice(0, 24)}… ` +
+      `round=${round} input=${best.h.contractId.slice(0, 16)}… eff~${best.eff.toFixed(2)}CC`,
     );
 
-    if (ok) {
-      this.logger.log('TransferPreapproval archived successfully');
-      return { ok: true };
+    const { ok, status, text } = await this.exerciseChoice(
+      amuletRules.contractId,
+      amuletRules.templateId,
+      'AmuletRules_CreateTransferPreapproval',
+      choiceArgument,
+      [receiverPartyId, provider],
+      `create-preapproval-${randomUUID()}`,
+      'submit-and-wait-for-transaction-tree',
+      disclosedContracts,
+    );
+
+    if (!ok) {
+      this.logger.warn(`CreateTransferPreapproval failed ${status}: ${text.slice(0, 400)}`);
+      return { ok: false, error: `Ledger ${status}: ${text.slice(0, 300)}` };
     }
-    this.logger.warn(`Archive TransferPreapproval failed ${status}: ${text.slice(0, 200)}`);
-    return { ok: false, error: `Ledger ${status}: ${text.slice(0, 200)}` };
+
+    const cid = this.deepFindString(text, 'transferPreapprovalCid');
+    const amuletPaid = this.deepFindString(text, 'amuletPaid');
+    this.logger.log(
+      `TransferPreapproval created cid=${(cid ?? '?').slice(0, 20)}… amuletPaid=${amuletPaid ?? '?'}`,
+    );
+    return { ok: true, transferPreapprovalCid: cid ?? undefined, amuletPaid: amuletPaid ?? undefined };
   }
+
+  /** Scan-proxy base (CANTON_SCAN_URL preferred, else build from CANTON_VALIDATOR_URL). */
+  private scanProxyBase(): string | null {
+    if (this.scanUrl) return this.scanUrl;
+    const v = this.config.get<string>('CANTON_VALIDATOR_URL');
+    return v ? `${v.replace(/\/$/, '')}/api/validator/v0/scan-proxy` : null;
+  }
+
+  /**
+   * Fetch a DSO-signed contract (AmuletRules / current OpenMiningRound) from scan-proxy,
+   * returning camelCase { contractId, templateId, blob, round? } for disclosure.
+   * Scan API uses snake_case (contract_id, template_id, created_event_blob).
+   */
+  private async fetchScanProxyContract(
+    seg: 'amulet-rules' | 'open-and-issuing-mining-rounds',
+  ): Promise<{ contractId: string; templateId: string; blob: string; round?: number } | null> {
+    const base = this.scanProxyBase();
+    if (!base) { this.logger.error('scan-proxy base not configured (CANTON_SCAN_URL / CANTON_VALIDATOR_URL)'); return null; }
+    const hostHeader = this.config.get<string>('CANTON_VALIDATOR_HOST_HEADER') ?? '';
+    try {
+      const headers = await this.authHeaders();
+      if (hostHeader) headers['Host'] = hostHeader;
+      const res = await fetch(`${base}/${seg}`, { headers, signal: AbortSignal.timeout(15_000) });
+      if (!res.ok) {
+        this.logger.warn(`scan-proxy /${seg} ${res.status}: ${(await res.text()).slice(0, 200)}`);
+        return null;
+      }
+      const data = await res.json();
+
+      // collect every embedded contract { template_id, contract_id, created_event_blob, payload? }
+      const found: Array<{ contractId: string; templateId: string; blob: string; round?: number; opensAt?: string }> = [];
+      const walk = (n: unknown, seen = new Set<unknown>()): void => {
+        if (!n || typeof n !== 'object' || seen.has(n)) return;
+        seen.add(n);
+        const o = n as Record<string, any>;
+        if (typeof o.contract_id === 'string' && typeof o.template_id === 'string' && typeof o.created_event_blob === 'string') {
+          const payload = o.payload ?? {};
+          found.push({
+            contractId: o.contract_id,
+            templateId: o.template_id,
+            blob: o.created_event_blob,
+            round: payload?.round?.number != null ? Number(payload.round.number) : undefined,
+            opensAt: typeof payload?.opensAt === 'string' ? payload.opensAt : undefined,
+          });
+        }
+        for (const k of Object.keys(o)) walk(o[k], seen);
+      };
+      walk(data);
+
+      if (seg === 'amulet-rules') {
+        return found.find((c) => c.templateId.endsWith(':Splice.AmuletRules:AmuletRules')) ?? found[0] ?? null;
+      }
+      // open-and-issuing-mining-rounds: pick a currently-OPEN round, highest round number
+      const open = found.filter((c) => c.templateId.endsWith(':Splice.Round:OpenMiningRound'));
+      if (open.length === 0) { this.logger.warn('scan-proxy: no OpenMiningRound found'); return null; }
+      const now = Date.now();
+      const usable = open.filter((c) => !c.opensAt || Date.parse(c.opensAt) <= now);
+      const pick = (usable.length ? usable : open).sort((a, b) => (b.round ?? 0) - (a.round ?? 0))[0];
+      return pick ?? null;
+    } catch (err) {
+      this.logger.warn(`scan-proxy /${seg} error: ${String(err)}`);
+      return null;
+    }
+  }
+
+  /** Best-effort: parse a JSON response and return the first string value for `key`. */
+  private deepFindString(jsonText: string, key: string): string | null {
+    let root: unknown;
+    try { root = JSON.parse(jsonText); } catch { return null; }
+    let out: string | null = null;
+    const walk = (n: unknown, seen = new Set<unknown>()): void => {
+      if (out !== null || !n || typeof n !== 'object' || seen.has(n)) return;
+      seen.add(n);
+      const o = n as Record<string, unknown>;
+      if (typeof o[key] === 'string') { out = o[key] as string; return; }
+      for (const k of Object.keys(o)) walk(o[k], seen);
+    };
+    walk(root);
+    return out;
+  }
+  
 
   /**
    * Get choiceContext from registry for accept/reject/withdraw on a TransferInstruction.
