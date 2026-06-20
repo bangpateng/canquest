@@ -650,6 +650,14 @@ export class UsersService {
     });
   }
 
+  /** Catat waktu toggle preapproval (enable/disable) untuk cooldown anti-spam 7 hari. */
+  async markPreapprovalToggle(userId: string): Promise<void> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { preapprovalToggleAt: new Date() },
+    });
+  }
+
   /** Align User.earnPoints with quest + earn + spin + referral activity. */
   reconcileEarnPoints(userId: string): Promise<number> {
     return this.points.reconcileUserEarnPoints(userId);

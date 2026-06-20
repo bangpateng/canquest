@@ -48,6 +48,24 @@ type AuthedReq = Request & { user: { userId: string; email: string } };
 export class PartyController {
   private readonly logger = new Logger(PartyController.name);
 
+  /** Cooldown toggle preapproval: 1× per 7 hari (tiap re-enable burn ~1.5 CC). */
+  private static readonly PREAPPROVAL_TOGGLE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+
+  /** Lempar 400 jika masih dalam cooldown 7 hari sejak toggle terakhir. */
+  private assertPreapprovalToggleCooldown(toggledAt: Date | null | undefined): void {
+    if (!toggledAt) return;
+    const elapsed = Date.now() - new Date(toggledAt).getTime();
+    const remaining = PartyController.PREAPPROVAL_TOGGLE_COOLDOWN_MS - elapsed;
+    if (remaining > 0) {
+      const days = Math.ceil(remaining / (24 * 60 * 60 * 1000));
+      const nextAt = new Date(Date.now() + remaining).toISOString();
+      throw new BadRequestException(
+        `Pengaturan preapproval dibatasi 1× per 7 hari untuk mencegah biaya berulang. ` +
+        `Coba lagi dalam ~${days} hari (setelah ${nextAt}).`,
+      );
+    }
+  }
+
   constructor(
     private readonly users: UsersService,
     private readonly ledger: CantonLedgerService,
@@ -1133,11 +1151,17 @@ export class PartyController {
       };
     }
 
+    // Cooldown 7 hari (hanya gate aksi yang benar-benar burn)
+    this.assertPreapprovalToggleCooldown(user.preapprovalToggleAt);
+
     // Create via Ledger: exercise AmuletRules_CreateTransferPreapproval (validator-1 pays burn)
     const result = await this.ledger.createTransferPreapprovalViaLedger(user.cantonPartyId);
     if (!result.ok) {
       throw new BadRequestException(result.error ?? 'Failed to create preapproval.');
     }
+
+    // Sukses & burn terjadi → set cooldown
+    await this.users.markPreapprovalToggle(req.user.userId);
 
     return {
       ok: true,
@@ -1160,8 +1184,8 @@ export class PartyController {
       throw new BadRequestException('No wallet found. Create your wallet first.');
     }
 
-    // Check if active
-    const existing = await this.splice.getTransferPreapproval(user.cantonPartyId);
+    // Check if active (Ledger ACS — no HS256)
+    const existing = await this.ledger.getTransferPreapprovalViaLedger(user.cantonPartyId);
     if (!existing) {
       return {
         ok: true,
@@ -1170,28 +1194,19 @@ export class PartyController {
       };
     }
 
-    // Cancel via Splice admin API (falls back to Ledger API if 401)
-    const result = await this.splice.cancelTransferPreapproval(user.cantonPartyId);
+    // Cooldown 7 hari (gate state-change)
+    this.assertPreapprovalToggleCooldown(user.preapprovalToggleAt);
+
+    // Cancel via Ledger (primary, no HS256)
+    const result = await this.ledger.cancelTransferPreapprovalViaLedger(user.cantonPartyId);
     if (!result.ok) {
-      if (result.error === 'ADMIN_AUTH_FAILED') {
-        // Admin API returns 401 on MainNet — use Ledger API to archive contract
-        this.logger.log('Admin API 401, falling back to Ledger API to cancel preapproval');
-        const ledgerResult = await this.ledger.cancelTransferPreapprovalViaLedger(
-          user.cantonPartyId,
-        );
-        if (!ledgerResult.ok) {
-          this.logger.warn(`Ledger API cancel also failed: ${ledgerResult.error ?? 'unknown'}`);
-          throw new BadRequestException(
-            `Failed to disable preapproval: ${ledgerResult.error ?? 'unknown'}`,
-          );
-        }
-      } else {
-        this.logger.warn(`Disable preapproval failed: ${result.error ?? 'unknown'}`);
-        throw new BadRequestException(
-          `Failed to disable preapproval: ${result.error ?? 'unknown'}`,
-        );
-      }
+      throw new BadRequestException(
+        `Failed to disable preapproval: ${result.error ?? 'unknown'}`,
+      );
     }
+
+    // Sukses → set cooldown
+    await this.users.markPreapprovalToggle(req.user.userId);
 
     return {
       ok: true,

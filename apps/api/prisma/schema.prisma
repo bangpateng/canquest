@@ -34,6 +34,8 @@ model User {
   cantonPartyId  String?
   /// Keycloak user UUID (sub) — identity bridge between web2 User and on-chain Ledger API user.
   keycloakId     String?         @unique
+  /// Last time user toggled preapproval (enable/disable). Cooldown 7 hari anti-spam burn.
+  preapprovalToggleAt DateTime?
   /// Admin flag — set via ADMIN_EMAILS env or manually.
   isAdmin        Boolean         @default(false)
   /// Lifetime earn points (quest/earn tasks, completion bonus, spin prizes, referral) — synced via PointsService.
