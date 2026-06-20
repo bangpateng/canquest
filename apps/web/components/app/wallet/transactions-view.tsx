@@ -23,6 +23,9 @@ export interface TxItem {
   cantonUpdateId?: string | null;
   settledAt: string | null;
   createdAt: string;
+  /** COMPLETED (default) | PENDING (offer belum di-accept) | REJECTED */
+  status?: "COMPLETED" | "PENDING" | "REJECTED";
+  transferInstructionCid?: string | null;
   /** On-chain source marker */
   source?: "db" | "onchain";
   /** Owner party (used to highlight "You" in the detail modal). */
@@ -89,6 +92,21 @@ const TX_TYPE_KEYS: Record<TxItem["type"], string> = {
   TRANSFER_OUT: "transactions.sentCc",
   AIRDROP: "transactions.airdrop",
 };
+
+function TxStatusBadge({ status }: { status?: TxItem["status"] }) {
+  if (!status || status === "COMPLETED") return null;
+  const isPending = status === "PENDING";
+  return (
+    <span
+      className={cn(
+        "ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+        isPending ? "bg-amber-500/15 text-amber-600" : "bg-red-500/10 text-red-500",
+      )}
+    >
+      {isPending ? "Pending" : "Rejected"}
+    </span>
+  );
+}
 
 function TxTypeIcon({ type }: { type: TxItem["type"] }) {
   switch (type) {
@@ -467,6 +485,7 @@ export function TransactionsView({
                             </span>
                             <span className="text-base font-semibold text-white">
                               {txDisplayTitle(tx, txLabel(tx.type))}
+                              <TxStatusBadge status={tx.status} />
                             </span>
                           </div>
                         </td>
@@ -532,6 +551,7 @@ export function TransactionsView({
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold text-white">
                           {txDisplayTitle(tx, tx.description)}
+                          <TxStatusBadge status={tx.status} />
                         </p>
                         <p className="mt-1 text-xs font-medium text-slate-400">{date}</p>
                       </div>

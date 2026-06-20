@@ -2,6 +2,7 @@
 
 import { buttonVariants } from "@/components/ui/button";
 import { CcRewardLogo } from "@/components/app/campaign/cc-reward-logo";
+import { CcUsdValue } from "@/components/app/earn/cc-usd-value";
 import { ROUTES } from "@/lib/routing/app-routes";
 import { getQuestMeta } from "@/lib/quest/quest-engine";
 import { QUEST_STATUS_BADGE, type Quest } from "@/lib/quest/quest-types";
@@ -156,6 +157,7 @@ export function EarnCampaignRow({
                   )}>
                     <RewardPillIcon config={config} size={12} />
                     <span className="truncate">{rewardPillText}</span>
+                    {quest.rewardCc > 0 ? <CcUsdValue cc={quest.rewardCc} /> : null}
                   </div>
                 </div>
 

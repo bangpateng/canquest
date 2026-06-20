@@ -7,6 +7,7 @@ import { ROUTES } from "@/lib/routing/app-routes";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { QUEST_STATUS_BADGE, type Quest, type UserProgress } from "@/lib/quest/quest-types";
 import { CcRewardLogo } from "@/components/app/campaign/cc-reward-logo";
+import { CcUsdValue } from "@/components/app/earn/cc-usd-value";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
 import { useEffect, useState } from "react";
@@ -254,6 +255,7 @@ export function EarnCampaignCard({
               size={12}
             />
             <span className="truncate">{rewardPillText}</span>
+            {quest.rewardCc > 0 ? <CcUsdValue cc={quest.rewardCc} /> : null}
           </div>
         </div>
 
