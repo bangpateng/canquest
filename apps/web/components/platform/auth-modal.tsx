@@ -282,7 +282,7 @@ export function AuthModal() {
                 className={cn(buttonVariants({ size: "block" }), "gap-2")}
               >
                 {busy ? <LoadingSpinner size="md" /> : null}
-                Verify & continue
+                Verify
               </button>
             </form>
           ) : mode === "login" ? (

@@ -53,18 +53,28 @@ export class PartyController {
 
   /** Lempar 400 jika masih dalam cooldown 7 hari sejak toggle terakhir. */
   private assertPreapprovalToggleCooldown(toggledAt: Date | null | undefined): void {
-    if (!toggledAt) return;
-    const elapsed = Date.now() - new Date(toggledAt).getTime();
-    const remaining = PartyController.PREAPPROVAL_TOGGLE_COOLDOWN_MS - elapsed;
-    if (remaining > 0) {
-      const days = Math.ceil(remaining / (24 * 60 * 60 * 1000));
-      const nextAt = new Date(Date.now() + remaining).toISOString();
-      throw new BadRequestException(
-        `Preapproval settings are limited to once per week. ` +
-        `Please try again in ~${days} days (after ${nextAt}).`,
-      );
-    }
+  if (!toggledAt) return;
+
+  const elapsed = Date.now() - new Date(toggledAt).getTime();
+  const remaining = PartyController.PREAPPROVAL_TOGGLE_COOLDOWN_MS - elapsed;
+
+  if (remaining > 0) {
+    const days = Math.ceil(remaining / (24 * 60 * 60 * 1000));
+    
+    // Format tanggal menjadi format yang mudah dibaca, misal: "June 27, 2026"
+    const nextDate = new Date(Date.now() + remaining);
+    const nextAtFormatted = nextDate.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+
+    throw new BadRequestException(
+      `Preapproval settings are limited to once per week. ` +
+      `Please try again in ~${days} day(s) (after ${nextAtFormatted}).`,
+    );
   }
+}
 
   constructor(
     private readonly users: UsersService,
