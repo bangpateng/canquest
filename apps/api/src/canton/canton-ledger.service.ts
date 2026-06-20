@@ -591,6 +591,97 @@ export class CantonLedgerService {
   }
 
   // ───────────────────────────────────────────────────────────────────────────
+  // READ / CANCEL TransferPreapproval via Ledger ACS (Keycloak) — no HS256.
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /** ACS lookup: TransferPreapproval contract whose receiver === partyId. */
+  private async findTransferPreapprovalContract(partyId: string): Promise<{
+    contractId: string; templateId: string; expiresAt?: string; provider?: string;
+  } | null> {
+    let offset: number | string = 0;
+    try {
+      const end = (await this.ledgerEnd()) as { offset?: number | string };
+      offset = end?.offset ?? 0;
+    } catch { offset = 0; }
+
+    let rows: unknown[] = [];
+    try {
+      const res = await fetch(`${this.baseUrl}/v2/state/active-contracts`, {
+        method: 'POST',
+        headers: await this.authHeaders(),
+        body: JSON.stringify({
+          eventFormat: {
+            filtersByParty: {
+              [partyId]: {
+                cumulative: [{ identifierFilter: { WildcardFilter: { value: { includeCreatedEventBlob: false } } } }],
+              },
+            },
+            verbose: true,
+          },
+          activeAtOffset: offset,
+        }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!res.ok) {
+        this.logger.warn(`findTransferPreapproval ${res.status}: ${(await res.text()).slice(0, 200)}`);
+        return null;
+      }
+      rows = (await res.json()) as unknown[];
+      if (!Array.isArray(rows)) rows = [];
+    } catch (err) {
+      this.logger.warn(`findTransferPreapproval error: ${String(err)}`);
+      return null;
+    }
+
+    for (const entry of rows) {
+      if (!entry || typeof entry !== 'object') continue;
+      const wrapper = entry as Record<string, unknown>;
+      const active = wrapper.contractEntry as Record<string, unknown> | undefined;
+      const jsActive = active?.JsActiveContract as Record<string, unknown> | undefined;
+      const ev = (jsActive?.createdEvent ?? wrapper) as Record<string, unknown>;
+      const tplId = typeof ev.templateId === 'string' ? ev.templateId : '';
+      if (!tplId.includes('TransferPreapproval')) continue;
+      const cid = typeof ev.contractId === 'string' ? ev.contractId : null;
+      const args = (ev.createArgument as Record<string, unknown> | undefined) ?? {};
+      const receiver = typeof args.receiver === 'string' ? args.receiver : '';
+      if (receiver === partyId && cid) {
+        return {
+          contractId: cid,
+          templateId: tplId,
+          expiresAt: typeof args.expiresAt === 'string' ? args.expiresAt : undefined,
+          provider: typeof args.provider === 'string' ? args.provider : undefined,
+        };
+      }
+    }
+    return null;
+  }
+
+  async hasTransferPreapprovalViaLedger(partyId: string): Promise<boolean> {
+    return (await this.findTransferPreapprovalContract(partyId)) !== null;
+  }
+
+  async getTransferPreapprovalViaLedger(
+    partyId: string,
+  ): Promise<{ expiresAt?: string; provider?: string } | null> {
+    const c = await this.findTransferPreapprovalContract(partyId);
+    return c ? { expiresAt: c.expiresAt, provider: c.provider } : null;
+  }
+
+  async cancelTransferPreapprovalViaLedger(
+    partyId: string,
+  ): Promise<{ ok: boolean; error?: string }> {
+    const c = await this.findTransferPreapprovalContract(partyId);
+    if (!c) return { ok: true }; // nothing to cancel
+    this.logger.log(`Cancelling TransferPreapproval via Ledger: cid=${c.contractId.slice(0, 20)}…`);
+    const { ok, status, text } = await this.exerciseChoice(
+      c.contractId, c.templateId, 'TransferPreapproval_Cancel', {}, [partyId],
+    );
+    if (ok) return { ok: true };
+    this.logger.warn(`Cancel preapproval failed ${status}: ${text.slice(0, 200)}`);
+    return { ok: false, error: `Ledger ${status}: ${text.slice(0, 200)}` };
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
   // CREATE TransferPreapproval via Ledger (Keycloak) — no HS256.
   // Grounded on real on-chain choiceArgument (canquest-fee, tx offset 838791).
   // Provider (validator-1) pre-pays the ~1.5 CC burn fee.
