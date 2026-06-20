@@ -71,7 +71,7 @@ export function EarnCampaignRow({
   if (config.isDual) {
     rewardPillText = quest.rewardCc > 0 ? `${quest.rewardCc} CC + 1 Code` : "CC + 1 Code";
   } else if (config.isCcToken && quest.rewardCc > 0) {
-    rewardPillText = `${quest.rewardCc} CC / winner`;
+    rewardPillText = `${quest.rewardCc} CC · winner`;
   } else if (config.code === "INVITE_CODE_FCFS" || config.code === "INVITE_CODE_RANDOM") {
     rewardPillText = "1 Code / winner";
   } else if (config.code === "WAITLIST_EMAIL") {

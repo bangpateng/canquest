@@ -140,7 +140,7 @@ export function EarnCampaignCard({
   if (config.isDual) {
     rewardPillText = quest.rewardCc > 0 ? `${quest.rewardCc} CC + 1 Code` : "CC + 1 Code";
   } else if (config.isCcToken && quest.rewardCc > 0) {
-    rewardPillText = `${quest.rewardCc} CC / winner`;
+    rewardPillText = `${quest.rewardCc} CC · winner`;
   } else if (isCodeReward) {
     rewardPillText = t("earnCampaigns.cardRewardPerUserCode");
   } else if (config.code === "WAITLIST_EMAIL") {

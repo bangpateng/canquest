@@ -298,6 +298,9 @@ export function TransactionsView({
   const t = usePlatformT();
   const embedded = variant === "embedded";
   const txLabel = (type: TxItem["type"]) => t(TX_TYPE_KEYS[type]);
+  // Type column = arah transaksi yang ramah. Out = Sent; sisanya (in, reward, spin) = Received.
+  const txDirection = (type: TxItem["type"]): string =>
+    type === "TRANSFER_OUT" ? "Sent" : "Received";
   const [txPage, setTxPage] = useState<TxPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -308,68 +311,31 @@ export function TransactionsView({
     async (page: number) => {
       setLoading(true);
       try {
-        // Fetch from DB + onchain (Lighthouse via backend proxy) in parallel.
-        const dbPromise = fetch(
-          `/api/party/transactions?page=${page}&pageSize=${pageSize}`,
-          { credentials: "include" },
+        if (!partyId) {
+          setTxPage({ items: [], total: 0, page, pageSize, totalPages: 0 });
+          return;
+        }
+
+        // Single source of truth: on-chain (Lighthouse via backend proxy).
+        // No DB merge → no duplicate rows. partyId resolved from JWT on backend.
+        const all = await fetchLighthouseEndpoint(
+          `${LIGHTHOUSE_PROXY}?limit=200`,
+          partyId,
         );
 
-        const onChainPromises: Promise<TxItem[]>[] = [];
-        if (partyId) {
-          // partyId is resolved from the JWT on the backend — not passed in URL.
-          onChainPromises.push(
-            fetchLighthouseEndpoint(
-              `${LIGHTHOUSE_PROXY}?limit=${pageSize * 3}`,
-              partyId,
-            ),
-          );
-        }
-
-
-        const [dbRes, ...onChainResults] = await Promise.allSettled([
-          dbPromise,
-          ...onChainPromises,
-        ]);
-
-        // Parse DB results
-        let dbPage: TxPage = { items: [], total: 0, page, pageSize, totalPages: 0 };
-        if (dbRes.status === "fulfilled" && dbRes.value.ok) {
-          dbPage = (await dbRes.value.json()) as TxPage;
-        }
-
-        // Collect all on-chain items (deduped)
-        const seenContractIds = new Set(
-          dbPage.items
-            .map((x) => x.cantonUpdateId ?? x.ledgerTxId)
-            .filter(Boolean),
-        );
-        const onChainItems: TxItem[] = [];
-
-        for (const result of onChainResults) {
-          if (result.status !== "fulfilled") continue;
-          for (const item of result.value) {
-            const key = item.cantonUpdateId ?? item.ledgerTxId;
-            if (key && seenContractIds.has(key)) continue;
-            if (key) seenContractIds.add(key);
-            onChainItems.push(item);
-          }
-        }
-
-        // Merge: DB first, then on-chain
-        const merged = [...dbPage.items, ...onChainItems];
-
-        // Sort by createdAt descending, slice to pageSize
-        merged.sort(
+        all.sort(
           (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
         );
-        const paged = merged.slice(0, pageSize);
+
+        const start = (page - 1) * pageSize;
+        const paged = all.slice(start, start + pageSize);
 
         setTxPage({
           items: paged,
-          total: merged.length,
+          total: all.length,
           page,
           pageSize,
-          totalPages: Math.ceil(merged.length / pageSize),
+          totalPages: Math.max(1, Math.ceil(all.length / pageSize)),
         });
       } catch {
         setTxPage({ items: [], total: 0, page, pageSize, totalPages: 0 });
