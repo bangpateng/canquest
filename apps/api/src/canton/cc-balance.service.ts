@@ -26,6 +26,20 @@ export class CcBalanceService {
   private readonly backgroundDebounceMs: number;
   private readonly lastBackgroundKick = new Map<string, number>();
 
+  /** Evict stale entries from background kick map every ~1000 inserts. */
+  private bgKickInsertCount = 0;
+
+  private backgroundKickSet(userId: string, now: number): void {
+    this.lastBackgroundKick.set(userId, now);
+    this.bgKickInsertCount++;
+    if (this.bgKickInsertCount % 1000 === 0) {
+      const cutoff = now - this.backgroundDebounceMs * 2;
+      for (const [uid, ts] of this.lastBackgroundKick) {
+        if (ts < cutoff) this.lastBackgroundKick.delete(uid);
+      }
+    }
+  }
+
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,

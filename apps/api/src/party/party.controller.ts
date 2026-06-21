@@ -3,6 +3,7 @@ import {
   Body,
   ConflictException,
   Controller,
+  ForbiddenException,
   Get,
   Logger,
   Param,
@@ -472,87 +473,9 @@ export class PartyController {
     };
   }
 
-  @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
   @Post('claim-reward')
-  async claimReward(
-    @Req() req: AuthedReq,
-    @Body() body: { amount: number; description?: string },
-  ) {
-    const user = await this.users.findById(req.user.userId);
-    if (!user?.username || !user.cantonPartyId) {
-      throw new BadRequestException('No wallet found. Create your wallet first.');
-    }
-    if (!body.amount || body.amount <= 0) {
-      throw new BadRequestException('amount must be > 0');
-    }
-
-    // Hybrid: try CIP-0056 first, fallback to Splice TransferOffer
-    const validatorPartyId = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ?? '';
-
-    let accepted = false;
-    let ledgerTxId: string | null = null;
-
-    // Try CIP-0056
-    const cip56Result = await this.ledger.executeTransferFactoryTransfer({
-      senderPartyId: validatorPartyId,
-      receiverPartyId: user.cantonPartyId,
-      amountCc: body.amount,
-      description: body.description ?? 'CanQuest reward',
-    });
-
-    if (cip56Result.ok) {
-      accepted = cip56Result.transferKind === 'direct';
-      ledgerTxId = cip56Result.updateId ?? cip56Result.transferInstructionCid ?? null;
-      if (!accepted && cip56Result.transferInstructionCid) {
-        const acceptResult = await this.ledger.acceptTransferInstruction(
-          cip56Result.transferInstructionCid,
-          user.cantonPartyId,
-        );
-        accepted = acceptResult.ok;
-      }
-    }
-
-    // Fallback to Splice TransferOffer if CIP-0056 failed
-    if (!cip56Result.ok) {
-      this.logger.log(`claimReward fallback to Splice TransferOffer: ${cip56Result.error?.slice(0, 80) ?? 'unknown'}`);
-      const offerContractId = await this.splice.createTransferOffer(
-        user.cantonPartyId,
-        body.amount,
-        body.description ?? 'CanQuest reward',
-      );
-      if (!offerContractId) {
-        throw new BadRequestException('Failed to create transfer. Both CIP-0056 and Splice fallback failed.');
-      }
-      accepted = await this.splice.acceptOfferViaWallet(offerContractId, user.username);
-      ledgerTxId = offerContractId;
-    }
-
-    if (accepted && ledgerTxId) {
-      const row = await this.users.recordTransaction({
-        userId: user.id,
-        amountCc: body.amount,
-        type: 'TRANSFER_IN',
-        description: body.description ?? 'CanQuest reward',
-        counterparty: 'Validator (reward)',
-        ledgerTxId,
-      });
-      if (user.cantonPartyId) {
-        void this.txDetail.backfillUpdateId(row.id, ledgerTxId, user.cantonPartyId);
-      }
-    }
-
-    if (!accepted) {
-      throw new BadRequestException(
-        'Reward transfer failed — offer was not accepted. No transaction was recorded.',
-      );
-    }
-
-    return {
-      ledgerTxId,
-      accepted: true,
-      amount: body.amount,
-      message: `${body.amount} CC sent to ${user.username}. It should appear in your wallet shortly.`,
-    };
+  async claimReward() {
+    throw new ForbiddenException('This endpoint has been disabled. Rewards are only available via quest/spin flows.');
   }
 
   /**

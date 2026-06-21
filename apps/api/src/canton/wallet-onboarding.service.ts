@@ -51,7 +51,7 @@ export class WalletOnboardingService {
       lastName: input.lastName ?? 'canquest',
       password,
     });
-    this.logger.log(
+    this.logger.debug(
       `onboardWallet keycloak: ${input.username} → ${keycloakId.slice(0, 8)}...`,
     );
 

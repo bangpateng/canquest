@@ -81,50 +81,50 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
   const { config, rewardDisplay, slots, metrics } = meta;
   const summary = quest.campaignSummary;
 
-  // ── Reward / winner value ──────────────────────────────────────
+  const SIZE_CLS = "text-base font-semibold text-white";
+
+  // ── Reward / winner value (sized same as "Ends") ───────────────
   let rewardPerWinner: React.ReactNode;
   if (config.isDual) {
     rewardPerWinner = (
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1.5">
-          <CcRewardLogo size={20} />
-          <span className="text-xl font-bold text-white">
-            {quest.rewardCc > 0 ? `${quest.rewardCc} CC` : "CC"}
-          </span>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex items-center gap-1">
+          <CcRewardLogo size={18} />
+          <span className={SIZE_CLS}>{quest.rewardCc > 0 ? `${quest.rewardCc} CC` : "CC"}</span>
         </div>
-        <span className="text-lg font-bold text-slate-500">+</span>
-        <div className="flex items-center gap-1.5">
-          <Ticket className="h-5 w-5 text-violet-300" aria-hidden />
-          <span className="text-xl font-bold text-violet-300">1 Code</span>
+        <span className="text-xs font-semibold text-slate-400">+</span>
+        <div className="flex items-center gap-1">
+          <Ticket className="h-4 w-4 text-violet-300" aria-hidden />
+          <span className={SIZE_CLS}>1 Code</span>
         </div>
       </div>
     );
-  } else if (isCcTokenRewardQuest(quest)) {
+  } else if (config.isCcToken) {
     rewardPerWinner = (
-      <div className="flex items-center gap-2">
-        <CcRewardLogo size={20} />
-        <span className="text-xl font-bold text-canton">
+      <div className="flex items-center gap-1.5">
+        <CcRewardLogo size={18} />
+        <span className={SIZE_CLS}>
           {quest.rewardCc > 0 ? `${quest.rewardCc} CC` : rewardDisplay.primaryText}
         </span>
       </div>
     );
   } else if (config.code === "INVITE_CODE_FCFS" || config.code === "INVITE_CODE_RANDOM") {
     rewardPerWinner = (
-      <div className="flex items-center gap-2">
-        <Ticket className="h-5 w-5 text-violet-300" aria-hidden />
-        <span className="text-xl font-bold text-violet-300">{formatCodePerWinners()}</span>
+      <div className="flex items-center gap-1.5">
+        <Ticket className="h-4 w-4 text-violet-300" aria-hidden />
+        <span className={SIZE_CLS}>{formatCodePerWinners()}</span>
       </div>
     );
   } else if (config.code === "WAITLIST_EMAIL") {
     rewardPerWinner = (
-      <div className="flex items-center gap-2">
-        <Sparkles className="h-5 w-5 text-cyan-300" aria-hidden />
-        <span className="text-xl font-bold text-cyan-300">Waitlist spot</span>
+      <div className="flex items-center gap-1.5">
+        <Sparkles className="h-4 w-4 text-cyan-300" aria-hidden />
+        <span className={SIZE_CLS}>Waitlist spot</span>
       </div>
     );
   } else {
     rewardPerWinner = (
-      <span className="text-xl font-bold text-white">{rewardDisplay.primaryText}</span>
+      <span className={SIZE_CLS}>{rewardDisplay.primaryText}</span>
     );
   }
 
@@ -140,6 +140,7 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
   // ── Pool label ─────────────────────────────────────────────────
   const poolMetric = metrics.find((m) => m.key === "pool");
   const poolDisplay = poolMetric ? poolMetric.value : rewardDisplay.poolLabel;
+  const poolCcValue = summary?.poolTotalCc ?? 0;
 
   // ── Metric columns ─────────────────────────────────────────────
   // Left: FCFS slots (with progress) or Max winners
@@ -192,19 +193,32 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
             </div>
           </div>
 
-          {/* Right: Reward Pool */}
+          {/* Right: Reward Pool — adaptive per reward type */}
           <div className="flex min-w-0 flex-col gap-1.5 bg-[#0a0c14]/90 px-5 py-4 sm:px-6 sm:py-5">
             <span className="text-[10px] font-semibold text-slate-500 sm:text-xs">
               Reward Pool
             </span>
             <div className="flex items-center gap-1.5 flex-wrap">
-              <CcRewardLogo size={20} />
-              <span className="text-xl font-bold text-canton">
-                {poolDisplay}
-              </span>
-              {summary?.poolTotalCc != null && summary.poolTotalCc > 0 ? (
-                <CcUsdValue cc={summary.poolTotalCc} />
-              ) : null}
+              {config.isCcToken ? (
+                <>
+                  <Coins className="h-4 w-4 shrink-0 text-amber-400" />
+                  <span className="text-sm font-semibold text-white">{poolDisplay}</span>
+                  {poolCcValue > 0 ? <CcUsdValue cc={poolCcValue} /> : null}
+                </>
+              ) : config.code === "INVITE_CODE_FCFS" || config.code === "INVITE_CODE_RANDOM" ? (
+                <>
+                  <Ticket className="h-4 w-4 shrink-0 text-violet-400" />
+                  <span className="text-sm font-semibold text-white">{poolDisplay}</span>
+                </>
+              ) : (
+                <>
+                  <CcRewardLogo size={18} />
+                  <span className="text-sm font-semibold text-white">{poolDisplay}</span>
+                  {summary?.poolTotalCc != null && summary.poolTotalCc > 0 ? (
+                    <CcUsdValue cc={summary.poolTotalCc} />
+                  ) : null}
+                </>
+              )}
             </div>
           </div>
         </div>
