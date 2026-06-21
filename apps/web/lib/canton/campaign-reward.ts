@@ -47,7 +47,17 @@ export function formatCcPerWinners(rewardCc: number): string {
 
 /** e.g. `1 Code / Winners` — campaign reward line for invite/code reward types. */
 export function formatCodePerWinners(): string {
-  return "1 Code · winners";
+  return "1 Code"; // tiap pemenang = 1 invite code (by design, bukan angka admin)
+}
+
+/** Reward pool campaign code = total kode (maxWinners / codesRemaining), bukan CC. */
+export function formatCodePoolLabel(
+  maxWinners: number | null | undefined,
+  codesRemaining: number | null | undefined,
+): string {
+  const total = codesRemaining ?? maxWinners ?? null;
+  if (total != null && total > 0) return `${total} Code${total === 1 ? "" : "s"}`;
+  return "—";
 }
 
 export function sumQuestTaskPoints(tasks: { points: number }[]): number {

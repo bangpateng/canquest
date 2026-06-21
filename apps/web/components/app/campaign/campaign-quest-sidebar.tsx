@@ -3,7 +3,7 @@ import { CcUsdValue } from "@/components/app/earn/cc-usd-value";
 import { CampaignSocialLinks } from "@/components/app/campaign/campaign-social-links";
 import { getQuestMeta } from "@/lib/quest/quest-engine";
 import { isCcTokenRewardQuest } from "@/lib/canton/cc-reward-logo";
-import { formatCodePerWinners } from "@/lib/canton/campaign-reward";
+import { formatCodePerWinners, formatCodePoolLabel } from "@/lib/canton/campaign-reward";
 import type { Quest } from "@/lib/quest/quest-types";
 import { cn } from "@/lib/utils/utils";
 import {
@@ -137,9 +137,15 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
         ? `${claimFeeCc} CC`
         : "Free";
 
-  // ── Pool label ─────────────────────────────────────────────────
+  // ── Pool label (adaptif: code → "N Codes", CC → "N CC") ────────
+  const isCodeReward =
+    config.code === "INVITE_CODE_FCFS" || config.code === "INVITE_CODE_RANDOM";
   const poolMetric = metrics.find((m) => m.key === "pool");
-  const poolDisplay = poolMetric ? poolMetric.value : rewardDisplay.poolLabel;
+  const poolDisplay = isCodeReward
+    ? formatCodePoolLabel(quest.maxWinners, summary?.codesRemaining)
+    : poolMetric
+      ? poolMetric.value
+      : rewardDisplay.poolLabel;
   const poolCcValue = summary?.poolTotalCc ?? 0;
 
   // ── Metric columns ─────────────────────────────────────────────
