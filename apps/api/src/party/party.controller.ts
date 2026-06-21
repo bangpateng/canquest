@@ -40,6 +40,7 @@ import { UsersService } from '../users/users.service';
 import { WalletInviteCodeService } from './wallet-invite-code.service';
 import { AllocateWalletDto } from './dto/allocate-wallet.dto';
 import { CantonPartyBindingDto } from './dto/canton-party-binding.dto';
+import { SendCcDto } from './dto/send-cc.dto';
 import { SetUsernameDto } from './dto/set-username.dto';
 
 type AuthedReq = Request & { user: { userId: string; email: string } };
@@ -110,6 +111,25 @@ export class PartyController {
         'Both SSH tunnels must target the same validator stack on 162.250.190.204: ' +
         '7575 → participant container, 8080 → nginx (wallet.localhost). ' +
         'Do not use DevNet (162.250.191.46). Re-run tunnel-testnet.ps1 with correct Docker IPs, then create a new wallet.',
+    );
+  }
+
+  /**
+   * Party IDs owned by the platform itself. User-to-user transfers must never
+   * target these — they are the validator / reward / fee / operator wallets.
+   * Returning true here blocks the send-cc flow before it touches the ledger.
+   */
+  private isSystemPartyId(partyId: string): boolean {
+    const candidates = [
+      this.config.get<string>('CANTON_VALIDATOR_PARTY_ID'),
+      this.config.get<string>('CANTON_APP_PROVIDER_PARTY_ID'),
+      this.config.get<string>('CANTON_REWARD_PARTY_ID'),
+      this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID'),
+      this.config.get<string>('CANTON_FEE_PARTY_ID'),
+      this.config.get<string>('CANTON_OPERATOR_PARTY_ID'),
+    ];
+    return candidates.some(
+      (c) => !!c?.trim() && cantonPartyIdsEqual(c, partyId),
     );
   }
 
@@ -474,7 +494,13 @@ export class PartyController {
   }
 
   @Post('claim-reward')
-  async claimReward() {
+  @Throttle({ auth: { limit: 5, ttl: 60_000 } })
+  async claimReward(@Req() req: AuthedReq, @Body() body: unknown) {
+    // Abuse signal: any authenticated user still hitting this disabled kran is
+    // suspicious — log it so we can audit mainnet for probing attempts.
+    this.logger.warn(
+      `Blocked claim-reward attempt user=${req.user.userId.slice(0, 8)} body=${JSON.stringify(body).slice(0, 80)}`,
+    );
     throw new ForbiddenException('This endpoint has been disabled. Rewards are only available via quest/spin flows.');
   }
 
@@ -491,15 +517,18 @@ export class PartyController {
   @Post('send-cc')
   async sendCc(
     @Req() req: AuthedReq,
-    @Body() body: { recipientUsername: string; amount: number; memo?: string },
+    @Body() body: SendCcDto,
   ) {
     const sender = await this.users.findById(req.user.userId);
     if (!sender?.username || !sender.cantonPartyId) {
       throw new BadRequestException('You need a wallet to send CC. Create yours first.');
     }
 
+    // DTO (SendCcDto) already enforces: number, > 0, ≤ MAX_TRANSFER_CC, finite.
     const amount = Number(body.amount);
-    if (!amount || amount <= 0) throw new BadRequestException('Amount must be greater than 0.');
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new BadRequestException('Amount must be greater than 0.');
+    }
 
     const feeCc = Number(this.config.get<string>('TRANSACTION_FEE_CC') ?? '5');
     const validatorPartyId = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID') ?? '';
@@ -519,6 +548,13 @@ export class PartyController {
       if (cantonPartyIdsEqual(normalizedRecipient, sender.cantonPartyId)) {
         throw new BadRequestException('You cannot send CC to yourself.');
       }
+      // Block transfers to platform-owned wallets (validator/reward/fee/operator).
+      if (this.isSystemPartyId(normalizedRecipient)) {
+        this.logger.warn(
+          `Blocked send-cc to system party: user=${sender.id.slice(0, 8)} target=${normalizedRecipient.split('::')[0]} amount=${amount}`,
+        );
+        throw new BadRequestException('Transfers to platform wallets are not allowed.');
+      }
       recipientPartyId = normalizedRecipient;
       recipientLabel = normalizedRecipient.split('::')[0] ?? normalizedRecipient;
       const found = await this.users.findByPartyId(normalizedRecipient);
@@ -535,6 +571,12 @@ export class PartyController {
         throw new BadRequestException(`User "@${username}" not found or has no wallet.`);
       }
       recipientPartyId = normalizeCantonPartyId(resolved) ?? resolved;
+      if (this.isSystemPartyId(recipientPartyId)) {
+        this.logger.warn(
+          `Blocked send-cc to system wallet via @${username}: user=${sender.id.slice(0, 8)} amount=${amount}`,
+        );
+        throw new BadRequestException('Transfers to platform wallets are not allowed.');
+      }
       recipientLabel = `@${username}`;
       recipientUsername = dbUser?.username?.toLowerCase() ?? username;
     }

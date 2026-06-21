@@ -75,6 +75,69 @@ export class SpliceValidatorService {
     this.secret = config.get<string>('CANTON_SPLICE_SECRET') ?? null;
     this.hostHeader =
       config.get<string>('CANTON_VALIDATOR_HOST_HEADER') ?? 'wallet.localhost';
+    // Fail fast if a weak/default shared secret is configured for HS256 in a
+    // non-development environment — anyone holding the public default could
+    // forge wallet JWTs and impersonate users on Splice.
+    this.assertSecretStrength();
+  }
+
+  /**
+   * Refuse to run in non-development environments when the HS256 shared secret
+   * is missing, a known placeholder, or shorter than 32 bytes. Keycloak/RS256
+   * mode bypasses this check because no symmetric secret is involved.
+   */
+  private assertSecretStrength(): void {
+    const mode = this.config.get<string>('LEDGER_AUTH_MODE') ?? 'hs256';
+    if (mode === 'keycloak') return;
+    const nodeEnv = (this.config.get<string>('NODE_ENV') ?? '').toLowerCase();
+    const isProdLike =
+      nodeEnv === 'production' ||
+      nodeEnv === 'mainnet' ||
+      nodeEnv === 'staging';
+
+    const weakPlaceholders = new Set([
+      'unsafe',
+      'changeme',
+      'secret',
+      'hs256-unsafe',
+      'your-secret',
+      'your-secret-here',
+    ]);
+
+    if (!this.secret) {
+      if (isProdLike) {
+        // In production this is a hard failure: a missing secret means no
+        // auth at all OR a guessable default.
+        throw new Error(
+          'CANTON_SPLICE_SECRET is not set. Configure a random ≥32-byte secret ' +
+            'or switch LEDGER_AUTH_MODE=keycloak before running in production.',
+        );
+      }
+      return;
+    }
+
+    if (weakPlaceholders.has(this.secret.toLowerCase())) {
+      if (isProdLike) {
+        throw new Error(
+          `CANTON_SPLICE_SECRET="${this.secret}" is a known placeholder — ` +
+            'anyone can forge Splice wallet JWTs. Set a strong random secret.',
+        );
+      }
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[SpliceValidatorService] WARNING: CANTON_SPLICE_SECRET is a known ` +
+          `placeholder ("${this.secret}"). Do NOT use this in production — ` +
+          `set LEDGER_AUTH_MODE=keycloak or a strong random ≥32-byte secret.`,
+      );
+      return;
+    }
+
+    if (this.secret.length < 32 && isProdLike) {
+      throw new Error(
+        `CANTON_SPLICE_SECRET is too short (${this.secret.length} chars). ` +
+          'Use a random secret of at least 32 bytes (e.g. `openssl rand -hex 32`).',
+      );
+    }
   }
 
   get isConfigured(): boolean {

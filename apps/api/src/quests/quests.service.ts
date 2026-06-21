@@ -248,7 +248,8 @@ export class QuestsService {
     return `${questId}:${userId}`;
   }
 
-  /** DB + memory lock so one user cannot run two on-chain FCFS claims at once. */
+  /** DB + memory lock so one user cannot run two on-chain claims at once.
+   *  Applies to ALL claim kinds (FCFS, Draw CC, CC+Code raffle). */
   private async acquireFcfsOnChainLock(params: {
     drawId: string;
     questId: string;
@@ -1961,7 +1962,36 @@ export class QuestsService {
       `Draw CC claim start quest=${questId} user=@${username} fee=${feeCc} reward=${rewardCc}`,
     );
 
+    // Atomic lock: prevents two parallel requests for the same draw from both
+    // passing the `distributed` check and double-paying the reward on-chain.
+    const drawLocked = await this.acquireFcfsOnChainLock({
+      drawId: draw.id,
+      questId,
+      userId,
+    });
+    if (!drawLocked) {
+      throw new BadRequestException(
+        'Claim already in progress. Wait a moment before trying again.',
+      );
+    }
+
     try {
+      // Re-check distributed under the lock to close the TOCTOU window between
+      // the earlier `draw.distributed` check and acquiring the on-chain lock.
+      const drawNow = await this.prisma.winnerDraw.findUnique({
+        where: { id: draw.id },
+      });
+      if (drawNow?.distributed) {
+        const rewardStatus = await this.getQuestRewardStatus(userId, questId);
+        return {
+          ok: true,
+          message: 'You already claimed this reward.',
+          rewardCc: quest.rewardCc,
+          feeCc: 0,
+          rewardStatus,
+        };
+      }
+
       let claimSessionId: string | null = null;
       if (this.questLedger.isClaimSessionConfigured()) {
         const cs = await this.questLedger.createClaimSession({
@@ -2152,6 +2182,8 @@ export class QuestsService {
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       throw new BadRequestException(this.fcfsClaimErrorMessage(detail));
+    } finally {
+      this.releaseFcfsOnChainLock(questId, userId, draw.id);
     }
   }
 
@@ -2486,7 +2518,39 @@ export class QuestsService {
     this.logger.log(
       `CC+Code raffle claim start quest=${questId} user=@${username} fee=${feeCc} reward=${rewardCc} CC + code`,
     );
+
+    // Atomic lock: prevents two parallel requests for the same draw from both
+    // passing the `distributed` check and double-paying the reward on-chain.
+    const raffleLocked = await this.acquireFcfsOnChainLock({
+      drawId: draw.id,
+      questId,
+      userId,
+    });
+    if (!raffleLocked) {
+      throw new BadRequestException(
+        'Claim already in progress. Wait a moment before trying again.',
+      );
+    }
+
     try {
+      // Re-check distributed under the lock (TOCTOU hardening).
+      const drawNow = await this.prisma.winnerDraw.findUnique({
+        where: { id: draw.id },
+      });
+      if (drawNow?.distributed) {
+        const rewardStatus = await this.getQuestRewardStatus(userId, questId);
+        return {
+          ok: true,
+          message: drawNow.inviteCode
+            ? `Already claimed: ${quest.rewardCc} CC + code ${drawNow.inviteCode}`
+            : 'You already claimed this reward.',
+          rewardCc: quest.rewardCc,
+          inviteCode: drawNow.inviteCode,
+          feeCc: 0,
+          rewardStatus,
+        };
+      }
+
       const feeTxId = await this.collectClaimFee({
         userId,
         cantonPartyId,
@@ -2578,6 +2642,8 @@ export class QuestsService {
       const detail = err instanceof Error ? err.message : String(err);
       this.logger.warn(`CC+Code raffle claim failed: ${detail}`);
       throw new BadRequestException(this.fcfsClaimErrorMessage(detail));
+    } finally {
+      this.releaseFcfsOnChainLock(questId, userId, draw.id);
     }
   }
 
