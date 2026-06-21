@@ -153,6 +153,8 @@ model CcTransaction {
 
   @@index([cantonUpdateId])
   @@index([transferInstructionCid])
+
+  @@unique([userId, ledgerTxId])
 }
 
 enum CcTransactionType {

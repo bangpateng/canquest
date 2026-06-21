@@ -189,12 +189,12 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
         return;
       }
 
-      const dup = await this.prisma.ccTransaction.findFirst({
-        where: { ledgerTxId },
-      });
-      if (!dup) {
-        await this.prisma.ccTransaction.create({
-          data: {
+      // upsert dengan unique constraint @@unique([userId, ledgerTxId])
+      // agar dua sync konkuren tidak create baris duplikat.
+      try {
+        await this.prisma.ccTransaction.upsert({
+          where: { userId_ledgerTxId: { userId, ledgerTxId } },
+          create: {
             userId,
             amountMicroCc: deltaMicro,
             type: 'TRANSFER_IN',
@@ -203,10 +203,17 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
             ledgerTxId,
             settledAt: new Date(),
           },
+          update: {}, // no-op jika sudah ada
         });
         this.logger.log(
           `Recorded TRANSFER_IN ${deltaCc} CC for @${username} (balance sync)`,
         );
+      } catch (err) {
+        // Jika race condition terjadi, error duplicate key dibungkam dan
+        // balance tetap di-update di bawah — tidak ada data hilang.
+        if (!String(err).includes('Unique constraint')) {
+          this.logger.warn(`upsert TRANSFER_IN failed for @${username}: ${String(err)}`);
+        }
       }
 
       await this.prisma.ccBalance.update({
