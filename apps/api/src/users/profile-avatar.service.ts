@@ -24,7 +24,8 @@ export class ProfileAvatarService {
 
   /** Public path segment used by the API + web proxy (no auth). */
   avatarPublicPath(userId: string): string {
-    return `/api/avatars/${userId}`;
+    // Route di UploadsController: @Controller('uploads') + @Get('avatars/:userId')
+    return `/api/uploads/avatars/${userId}`;
   }
 
   hasAvatar(avatarPath: string | null | undefined): boolean {

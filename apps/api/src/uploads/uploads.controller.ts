@@ -6,7 +6,7 @@ import {
   Res,
   StreamableFile,
 } from '@nestjs/common';
-import { SkipThrottle } from '@nestjs/throttler';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { createReadStream, existsSync } from 'fs';
 import path from 'path';
@@ -42,7 +42,7 @@ export class UploadsController {
 
   /** CC token icon for Earn / campaign reward UI (R2 key from CC_REWARD_LOGO_R2_KEY). */
   @Get('cc-reward-logo')
-  @SkipThrottle()
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
   async serveCcRewardLogo(@Res({ passthrough: true }) res: Response) {
     const key =
       this.config.get<string>('CC_REWARD_LOGO_R2_KEY')?.trim() || 'quests/C (1).png';

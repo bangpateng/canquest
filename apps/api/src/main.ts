@@ -37,6 +37,13 @@ async function bootstrap() {
   );
 
   // ── CORS ──────────────────────────────────────────────────────────────────
+  // Allow larger JSON payloads for avatar uploads (base64 data URL up to ~2MB).
+  // Default NestJS body parser limit is 100KB which rejects avatar uploads
+  // before they reach DTO validation.
+  app.use(require('express').json({ limit: '2mb' }));
+  app.use(require('express').urlencoded({ limit: '2mb', extended: true }));
+
+  // ── CORS ──────────────────────────────────────────────────────────────────
   app.enableCors({
     origin: process.env.WEB_ORIGIN?.split(',').filter(Boolean) ?? [
       'http://localhost:3000',
