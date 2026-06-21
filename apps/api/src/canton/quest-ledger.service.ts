@@ -361,7 +361,7 @@ export class QuestLedgerService implements OnModuleInit {
     const res = await this.ledger.createContract(tpl, {
       admin: operator, userAddress: params.userPartyId, username: params.username,
       earnedPoints: this.intStr(0), spentPoints: this.intStr(0), createdAt: new Date().toISOString(),
-    }, [operator], `user-account-${params.username}-${randomUUID()}`);
+    }, [operator], `useracct-${params.username}`);
     if (res.ok && res.contractId) {
       this.logger.log(`UserAccount created: @${params.username} → ${params.userPartyId.split('::')[0]}`);
       result.contractId = res.contractId;
