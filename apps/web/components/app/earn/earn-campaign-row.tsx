@@ -157,7 +157,6 @@ export function EarnCampaignRow({
                   )}>
                     <RewardPillIcon config={config} size={12} />
                     <span className="truncate">{rewardPillText}</span>
-                    {quest.rewardCc > 0 ? <CcUsdValue cc={quest.rewardCc} /> : null}
                   </div>
                 </div>
 

@@ -2,6 +2,7 @@ import { PlatformPage } from "@/components/platform/platform-page";
 import { CampaignSocialLinks } from "@/components/app/campaign/campaign-social-links";
 import { QuestTaskPanel } from "@/components/app/quest/quest-task-panel";
 import { CampaignQuestSidebar } from "@/components/app/campaign/campaign-quest-sidebar";
+import { ShareCampaign } from "@/components/app/earn/share-campaign";
 import { ROUTES } from "@/lib/routing/app-routes";
 import { CQ_ACCESS_COOKIE } from "@/lib/auth/auth-cookies";
 import { internalApiBase } from "@/lib/api/internal-api-url";
@@ -147,6 +148,13 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
                 {quest.title}
               </h1>
             </div>
+
+            {/* Share button — top-right of header */}
+            <ShareCampaign
+              title={quest.title}
+              text={`Earn ${quest.rewardCc > 0 ? `${quest.rewardCc} CC` : "rewards"}`}
+              className="shrink-0"
+            />
           </div>
 
           {/* Description + social links — inside header */}

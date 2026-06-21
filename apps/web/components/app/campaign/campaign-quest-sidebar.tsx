@@ -1,4 +1,5 @@
 import { CcRewardLogo } from "@/components/app/campaign/cc-reward-logo";
+import { CcUsdValue } from "@/components/app/earn/cc-usd-value";
 import { CampaignSocialLinks } from "@/components/app/campaign/campaign-social-links";
 import { getQuestMeta } from "@/lib/quest/quest-engine";
 import { isCcTokenRewardQuest } from "@/lib/canton/cc-reward-logo";
@@ -183,38 +184,29 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
           {/* Left: Reward / winner */}
           <div className="flex min-w-0 flex-col gap-1.5 bg-[#0a0c14]/90 px-5 py-4 sm:px-6 sm:py-5">
             <span className="text-[10px] font-semibold text-slate-500 sm:text-xs">
-              Reward / winner
+              Reward · winner
             </span>
-            {rewardPerWinner}
+            <div className="flex items-center gap-2 flex-wrap">
+              {rewardPerWinner}
+              {quest.rewardCc > 0 ? <CcUsdValue cc={quest.rewardCc} /> : null}
+            </div>
           </div>
 
-          {/* Right: Claim fee */}
-          {claimFeeDisplay !== null ? (
-            <div className="flex min-w-0 flex-col gap-1.5 bg-[#0a0c14]/90 px-5 py-4 sm:px-6 sm:py-5">
-              <span className="text-[10px] font-semibold text-slate-500 sm:text-xs">
-                Claim fee
+          {/* Right: Reward Pool */}
+          <div className="flex min-w-0 flex-col gap-1.5 bg-[#0a0c14]/90 px-5 py-4 sm:px-6 sm:py-5">
+            <span className="text-[10px] font-semibold text-slate-500 sm:text-xs">
+              Reward Pool
+            </span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <CcRewardLogo size={20} />
+              <span className="text-xl font-bold text-canton">
+                {poolDisplay}
               </span>
-              <div className="flex items-center gap-1.5">
-                <Zap className="h-4 w-4 shrink-0 text-amber-300" aria-hidden />
-                <span className={cn(
-                  "text-xl font-bold",
-                  claimFeeDisplay === "Free" ? "text-emerald-400" : "text-amber-300",
-                )}>
-                  {claimFeeDisplay}
-                </span>
-              </div>
-              {claimFeeDisplay !== "Free" && (
-                <span className="text-[10px] text-slate-500">paid on-chain to claim</span>
-              )}
+              {summary?.poolTotalCc != null && summary.poolTotalCc > 0 ? (
+                <CcUsdValue cc={summary.poolTotalCc} />
+              ) : null}
             </div>
-          ) : (
-            <div className="flex min-w-0 flex-col gap-1.5 bg-[#0a0c14]/90 px-5 py-4 sm:px-6 sm:py-5">
-              <span className="text-[10px] font-semibold text-slate-500 sm:text-xs">
-                Claim fee
-              </span>
-              <span className="text-xl font-bold text-emerald-400">Free</span>
-            </div>
-          )}
+          </div>
         </div>
 
         {/* Type badge + Pool row */}
@@ -231,9 +223,12 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
               Slots full
             </span>
           ) : null}
-          {poolDisplay && poolDisplay !== "—" ? (
+          {claimFeeDisplay !== null ? (
             <span className="ml-auto text-[10px] font-semibold text-slate-400 sm:text-xs">
-              Pool: <span className="text-slate-200">{poolDisplay}</span>
+              Fee:{" "}
+              <span className={claimFeeDisplay === "Free" ? "text-emerald-400" : "text-amber-300"}>
+                {claimFeeDisplay}
+              </span>
             </span>
           ) : null}
         </div>

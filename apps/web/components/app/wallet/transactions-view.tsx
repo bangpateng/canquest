@@ -418,7 +418,6 @@ export function TransactionsView({
                     <th className="whitespace-nowrap px-5 py-3.5 sm:px-6 sm:py-4 font-semibold">{t("transactions.type")}</th>
                     <th className="whitespace-nowrap px-5 py-3.5 sm:px-6 sm:py-4 font-semibold">{t("transactions.amount")}</th>
                     <th className="whitespace-nowrap px-5 py-3.5 sm:px-6 sm:py-4 font-semibold">{t("transactions.description")}</th>
-                    <th className="whitespace-nowrap px-5 py-3.5 sm:px-6 sm:py-4 font-semibold">{t("transactions.counterparty")}</th>
                     <th className="whitespace-nowrap px-5 py-3.5 sm:px-6 sm:py-4 font-semibold">{t("transactions.ledgerTx")}</th>
                     <th className="whitespace-nowrap px-5 py-3.5 sm:px-6 sm:py-4 font-semibold">{t("transactions.when")}</th>
                   </tr>
@@ -450,7 +449,7 @@ export function TransactionsView({
                               <TxTypeIcon type={tx.type} />
                             </span>
                             <span className="text-base font-semibold text-white">
-                              {txDisplayTitle(tx, txLabel(tx.type))}
+                              {txDirection(tx.type)}
                               <TxStatusBadge status={tx.status} />
                             </span>
                           </div>
@@ -465,12 +464,9 @@ export function TransactionsView({
                           {ccAmt.toFixed(4)} CC
                         </td>
                         <td className="max-w-[12rem] truncate px-5 py-3.5 sm:px-6 sm:py-4 text-sm font-medium text-slate-400">
-                          {tx.description}
-                        </td>
-                        <td className="max-w-[10rem] truncate px-5 py-3.5 sm:px-6 sm:py-4 font-mono text-sm font-medium text-slate-400">
-                          {tx.counterparty ?? tx.referenceId ?? "\u2014"}
-                        </td>
-                        <td className="px-5 py-3.5 sm:px-6 sm:py-4">
+                           {tx.description}
+                         </td>
+                         <td className="px-5 py-3.5 sm:px-6 sm:py-4">
                           <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-1 font-mono text-xs font-medium text-[var(--primary)]">
                             {tx.cantonUpdateId
                               ? `${tx.cantonUpdateId.slice(0, 10)}\u2026`
@@ -514,27 +510,27 @@ export function TransactionsView({
                       >
                         <TxTypeIcon type={tx.type} />
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-white">
-                          {txDisplayTitle(tx, tx.description)}
-                          <TxStatusBadge status={tx.status} />
-                        </p>
-                        <p className="mt-1 text-xs font-medium text-slate-400">{date}</p>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <p
-                          className={cn(
-                            "text-sm font-bold tabular-nums",
-                            amountColor(tx.type),
-                          )}
-                        >
-                          {amountSign(tx.type)}
-                          {ccAmt.toFixed(4)} CC
-                        </p>
-                        <p className="mt-1 text-xs font-medium text-slate-400">
-                          {txLabel(tx.type)}
-                        </p>
-                      </div>
+                       <div className="min-w-0 flex-1">
+                         <p className="truncate text-sm font-semibold text-white">
+                           {txDirection(tx.type)}
+                           <TxStatusBadge status={tx.status} />
+                         </p>
+                         <p className="mt-0.5 truncate text-xs font-medium text-slate-400">
+                           {tx.description}
+                         </p>
+                         <p className="mt-0.5 text-xs font-medium text-slate-500">{date}</p>
+                       </div>
+                       <div className="shrink-0 text-right">
+                         <p
+                           className={cn(
+                             "text-sm font-bold tabular-nums",
+                             amountColor(tx.type),
+                           )}
+                         >
+                           {amountSign(tx.type)}
+                           {ccAmt.toFixed(4)} CC
+                         </p>
+                       </div>
                     </button>
                   </li>
                 );

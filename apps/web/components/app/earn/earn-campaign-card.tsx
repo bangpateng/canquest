@@ -255,7 +255,6 @@ export function EarnCampaignCard({
               size={12}
             />
             <span className="truncate">{rewardPillText}</span>
-            {quest.rewardCc > 0 ? <CcUsdValue cc={quest.rewardCc} /> : null}
           </div>
         </div>
 
@@ -275,17 +274,40 @@ export function EarnCampaignCard({
         {metrics.length > 0 && (
           <div className="mt-4 w-full min-w-0 overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02] sm:mt-5">
             <div className="grid w-full min-w-0 grid-cols-2 divide-x divide-white/[0.04]">
-              {metrics.map((m) => (
-                <Metric
-                  key={m.key}
-                  label={m.label}
-                  value={m.key === "pool" ? poolDisplay : m.value}
-                  icon={metricIcon(m.iconKind)}
-                  useCcLogo={m.useCcLogo}
-                  accent={m.accent}
-                  muted={m.muted}
-                />
-              ))}
+              {metrics.map((m) => {
+                if (m.key === "pool") {
+                  const Icon = metricIcon(m.iconKind);
+                  return (
+                    <div key="pool" className="min-w-0 flex-1 overflow-hidden px-2 py-2 first:pl-0 last:pr-0 sm:px-3 sm:py-3 md:px-4">
+                      <div className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wider text-slate-400 sm:gap-1.5 sm:text-[10px]">
+                        {m.useCcLogo ? (
+                          <CcRewardLogo className="shrink-0 opacity-90" size={10} />
+                        ) : (
+                          <Icon className={cn("h-3 w-3 shrink-0 opacity-70", m.accent)} aria-hidden />
+                        )}
+                        <span className="truncate">{m.label}</span>
+                      </div>
+                      <p className="mt-1 truncate text-xs font-bold tabular-nums sm:text-sm md:text-base text-white">
+                        {poolDisplay}
+                      </p>
+                      {summary?.poolTotalCc != null && summary.poolTotalCc > 0 ? (
+                        <CcUsdValue cc={summary.poolTotalCc} />
+                      ) : null}
+                    </div>
+                  );
+                }
+                return (
+                  <Metric
+                    key={m.key}
+                    label={m.label}
+                    value={m.value}
+                    icon={metricIcon(m.iconKind)}
+                    useCcLogo={m.useCcLogo}
+                    accent={m.accent}
+                    muted={m.muted}
+                  />
+                );
+              })}
             </div>
             {meta.showProgress && meta.progressBar ? (
               <div className="border-t border-white/[0.04] px-3 py-2.5 sm:px-4 sm:py-3">
