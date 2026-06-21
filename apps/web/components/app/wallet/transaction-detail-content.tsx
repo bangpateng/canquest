@@ -201,12 +201,9 @@ export function TransactionDetailContent({
               <ArrowUpRight className="h-5 w-5" />
             )}
           </span>
-          <p className="mt-2 text-xs font-bold uppercase tracking-wider text-slate-400">
-            {detail.description}
-          </p>
           <p
             className={cn(
-              "mt-1 font-bold tabular-nums",
+              "mt-3 font-bold tabular-nums",
               compact ? "text-3xl" : "text-4xl",
               isOut ? "text-red-500" : "text-green-500",
             )}
