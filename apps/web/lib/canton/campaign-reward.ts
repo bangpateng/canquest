@@ -42,12 +42,12 @@ export function formatPoolTotalLabel(poolTotalCc: number | null, rewardPool: str
 /** e.g. `10 CC / Winners` — campaign reward line under pool total. */
 export function formatCcPerWinners(rewardCc: number): string {
   if (rewardCc <= 0) return "";
-  return `${rewardCc} CC / Winners`;
+  return `${rewardCc} CC · Winners`;
 }
 
 /** e.g. `1 Code / Winners` — campaign reward line for invite/code reward types. */
 export function formatCodePerWinners(): string {
-  return "1 Code / Winners";
+  return "1 Code · winners";
 }
 
 export function sumQuestTaskPoints(tasks: { points: number }[]): number {
