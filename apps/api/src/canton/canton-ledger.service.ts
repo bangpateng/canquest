@@ -207,6 +207,8 @@ export class CantonLedgerService {
     userId?: string,
     /** Stable command ID for deduplication. Generates a UUID if not provided. */
     commandId?: string,
+    /** AuthN identity: 'admin' (default) or 'reward' for dapp-reward token. */
+    identity?: 'admin' | 'reward',
     /** Use transaction-tree endpoint when CreatedEvent contract ids are needed. */
     waitMode: 'submit-and-wait' | 'submit-and-wait-for-transaction-tree' = 'submit-and-wait',
     /**
@@ -243,7 +245,7 @@ export class CantonLedgerService {
         }
         const res = await fetch(url, {
           method: 'POST',
-          headers: await this.authHeaders(),
+          headers: await this.authHeaders(identity ?? 'admin'),
           body: JSON.stringify(body),
           signal: AbortSignal.timeout(30_000),
         });
@@ -326,6 +328,7 @@ export class CantonLedgerService {
       actAs,
       undefined,
       commandId,
+      undefined,   // identity (defaults to 'admin')
       waitMode,
       disclosedContracts,
     );
@@ -1988,6 +1991,7 @@ export class CantonLedgerService {
       actAs,
       undefined,
       commandId,
+      undefined,   // identity
       'submit-and-wait-for-transaction-tree',
     );
 

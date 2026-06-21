@@ -151,7 +151,11 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
     });
     if (!fee) return false;
 
-    const netMicro = reward.amountMicroCc + fee.amountMicroCc;
+    // S12: TRANSFER_OUT schema mungkin menyimpan magnitude positif atau negatif.
+    // Gunakan Math.abs agar robust terhadap kedua konvensi — delta on-chain selalu
+    // positif, jadi: reward (selalu positif) - |fee| = net delta.
+    const feeAbs = fee.amountMicroCc < 0n ? -fee.amountMicroCc : fee.amountMicroCc;
+    const netMicro = reward.amountMicroCc - feeAbs;
     return netMicro === deltaMicro;
   }
 
