@@ -87,8 +87,7 @@ export class SpliceValidatorService {
    * mode bypasses this check because no symmetric secret is involved.
    */
   private assertSecretStrength(): void {
-    const mode = this.config.get<string>('LEDGER_AUTH_MODE') ?? 'hs256';
-    if (mode === 'keycloak') return;
+    if (this.authMode === 'keycloak') return;
     const nodeEnv = (this.config.get<string>('NODE_ENV') ?? '').toLowerCase();
     const isProdLike =
       nodeEnv === 'production' ||
@@ -140,9 +139,28 @@ export class SpliceValidatorService {
     }
   }
 
+  /**
+   * Active ledger auth mode, normalized.
+   *
+   * In production we refuse to fall back to `hs256` silently — LEDGER_AUTH_MODE
+   * MUST be set explicitly. A missing/empty value is a config bug and failing
+   * loud here is far safer than accidentally minting HS256 wallet JWTs.
+   */
+  private get authMode(): 'keycloak' | 'auth0' | 'hs256' {
+    const m = (this.config.get<string>('LEDGER_AUTH_MODE') ?? '').trim().toLowerCase();
+    if (m === 'keycloak' || m === 'auth0' || m === 'hs256') return m;
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        'LEDGER_AUTH_MODE must be set explicitly in production (keycloak | auth0 | hs256). ' +
+          'Refusing to default to hs256.',
+      );
+    }
+    return 'hs256';
+  }
+
   get isConfigured(): boolean {
-    const mode = this.config.get<string>('LEDGER_AUTH_MODE') ?? 'hs256';
-    if (mode === 'keycloak') return Boolean(this.baseUrl && this.keycloak);
+    if (this.authMode === 'keycloak') return Boolean(this.baseUrl && this.keycloak);
+    if (this.authMode === 'auth0') return Boolean(this.baseUrl);
     return Boolean(this.baseUrl && this.secret);
   }
 
@@ -160,8 +178,7 @@ export class SpliceValidatorService {
    * LEDGER_AUTH_MODE=keycloak → Keycloak client_credentials (validator-app-backend).
    * Otherwise → HS256 signed with CANTON_SPLICE_SECRET. */
   private async adminToken(subject = 'ledger-api-user'): Promise<string> {
-    const mode = this.config.get<string>('LEDGER_AUTH_MODE') ?? 'hs256';
-    if (mode === 'keycloak') {
+    if (this.authMode === 'keycloak') {
       if (!this.keycloak) {
         throw new Error(
           'LEDGER_AUTH_MODE=keycloak but KeycloakTokenService is not injected in SpliceValidatorService. ' +
@@ -175,7 +192,22 @@ export class SpliceValidatorService {
     return this.signToken(subject, audience);
   }
 
+  /**
+   * Mint an HS256 per-user wallet JWT (legacy dev/testnet auth).
+   *
+   * This is the single choke-point that MUST NOT fire in Keycloak mode. If we
+   * ever reach here with authMode=keycloak it means a per-user call-site was
+   * not migrated to the Ledger API — throw loudly so it can be fixed instead of
+   * silently forging a wallet token with a secret that may not even be set.
+   */
   private signToken(subject: string, audience: string): string {
+    if (this.authMode === 'keycloak') {
+      throw new Error(
+        `HS256 wallet token refused in keycloak mode (subject=${subject}). ` +
+          'This per-user call-site must be migrated to the Ledger API. ' +
+          'See migration doc §3 (CanQuest-Fix-03-Keycloak-Migration.md).',
+      );
+    }
     if (!this.secret) throw new Error('CANTON_SPLICE_SECRET is not set');
     return jwt.sign(
       { sub: subject, aud: audience },
@@ -209,18 +241,42 @@ export class SpliceValidatorService {
     return this.authHeadersForToken(await this.adminToken(subject ?? 'ledger-api-user'));
   }
 
-  /** Auth + Content-Type headers (admin unless a wallet username is passed). */
+  /**
+   * Auth + Content-Type headers.
+   *
+   * Without a subject → admin token (Keycloak-safe). WITH a subject the legacy
+   * path minted a per-user HS256 wallet JWT — that is forbidden in Keycloak
+   * (operator) mode. We fail loud here with a pointer to the migration doc so
+   * any unmigrated per-user call-site (createTransferOffer-as-user,
+   * sendViaTransferPreapproval, acceptOfferViaWallet, etc.) surfaces
+   * immediately instead of producing a 401 from the validator.
+   */
   private async jsonAuthHeaders(subject?: string): Promise<Record<string, string>> {
     if (!subject) {
       return this.authHeadersForToken(await this.adminToken(), true);
+    }
+    if (this.authMode === 'keycloak') {
+      throw new Error(
+        `Per-user wallet auth (username=${subject}) is not available in keycloak mode. ` +
+          'Migrate this call-site to the Ledger API (CIP-0056). ' +
+          'See migration doc §3 (CanQuest-Fix-03-Keycloak-Migration.md).',
+      );
     }
     const aud = this.walletAudiences()[0] ?? 'https://validator.example.com';
     return this.authHeadersForToken(this.signToken(subject, aud), true);
   }
 
-  /** True when wallet/user-status accepts JWT for this Splice username. */
+  /**
+   * True when wallet/user-status accepts JWT for this Splice username.
+   *
+   * In Keycloak (operator) mode the per-user wallet JWT does not exist — the
+   * backend acts as operator for every party. We answer `true` so existing
+   * onboarding flows proceed; the operator's Keycloak token authorizes the
+   * admin wallet endpoints they actually need.
+   */
   async canAccessWalletAs(username: string): Promise<boolean> {
     if (!this.isConfigured) return false;
+    if (this.authMode === 'keycloak') return true;
     for (const aud of this.walletAudiences()) {
       try {
         const res = await fetch(`${this.baseUrl}/api/validator/v0/wallet/user-status`, {
@@ -984,9 +1040,16 @@ export class SpliceValidatorService {
   /**
    * Get a user's CC balance from the Splice Wallet API.
    * GET /api/validator/v0/wallet/balance  (as the user)
+   *
+   * In Keycloak (operator) mode there is no per-user wallet JWT, so this REST
+   * endpoint is unreachable. Callers should read balance from the DB
+   * (BALANCE_READ_FROM_DB=true) — CcInboundSyncService keeps it in sync via the
+   * Ledger API (getLedgerBalance, Keycloak admin token). Returning null here
+   * makes the DB path authoritative without ever touching signToken.
    */
     async getUserBalance(username: string): Promise<number | null> {
     if (!this.isConfigured) return null;
+    if (this.authMode === 'keycloak') return null;
     for (const aud of this.walletAudiences()) {
       try {
         const res = await fetch(`${this.baseUrl}/api/validator/v0/wallet/balance`, {
@@ -1009,9 +1072,15 @@ export class SpliceValidatorService {
   /**
    * List open transfer offers for a user (incoming + outgoing).
    * GET /api/validator/v0/wallet/transfer-offers  (as the user)
+   *
+   * In Keycloak (operator) mode the per-user wallet JWT is not available. The
+   * caller (party.controller) already falls back to CantonLedgerService.
+   * queryPendingOffers() (ACS query, operator readAs) — return [] here so that
+   * path is taken without ever reaching signToken.
    */
     async listTransferOffers(username: string): Promise<{ contractId: string; payload: unknown }[]> {
     if (!this.isConfigured) return [];
+    if (this.authMode === 'keycloak') return [];
     for (const aud of this.walletAudiences()) {
       try {
         const res = await fetch(`${this.baseUrl}/api/validator/v0/wallet/transfer-offers`, {
