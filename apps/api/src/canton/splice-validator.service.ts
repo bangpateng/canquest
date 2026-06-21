@@ -164,6 +164,14 @@ export class SpliceValidatorService {
     return Boolean(this.baseUrl && this.secret);
   }
 
+  /** True hanya saat LEDGER_AUTH_MODE=hs256 (legacy). Dipakai caller untuk
+   *  memagari fallback Splice agar tidak dijalankan di mode keycloak — di
+   *  keycloak validator menolak HS256, jadi jalur ini pasti gagal dan hanya
+   *  memicu retry sia-sia + log membingungkan. */
+  get isLegacyHs256(): boolean {
+    return this.authMode === 'hs256';
+  }
+
   /**
    * Base headers for every Splice Validator API request.
    * Includes Host override required by nginx server_name routing on VPS 1.

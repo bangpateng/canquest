@@ -382,6 +382,35 @@ export class QuestsService {
     });
   }
 
+  /**
+   * Atomically reserve one invite code for a user.
+   *
+   * Uses SELECT ... FOR UPDATE SKIP LOCKED inside an interactive transaction so
+   * concurrent claimants are serialised: only one of them takes each code row,
+   * the next skips the locked row and takes the following free code. Returns
+   * the assigned code, or null if the pool is exhausted.
+   *
+   * The previous findFirst+update pattern had a TOCTOU race: two parallel
+   * claims read the same free row, then the second upsert silently overwrote
+   * the first assignment — one code leaked and was mis-attributed.
+   */
+  private async reserveInviteCode(questId: string, userId: string): Promise<string | null> {
+    return this.prisma.$transaction(async (tx) => {
+      const free = await tx.$queryRaw<{ id: string; code: string }[]>`
+        SELECT id, code FROM "InviteCodePool"
+        WHERE "questId" = ${questId} AND "userId" IS NULL
+        ORDER BY "createdAt" ASC
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED`;
+      if (free.length === 0) return null;
+      await tx.inviteCodePool.update({
+        where: { id: free[0].id },
+        data: { userId, assignedAt: new Date() },
+      });
+      return free[0].code;
+    });
+  }
+
   /* ─── Quest list / detail ─── */
 
   async listQuests(status?: QuestStatus) {
@@ -1177,29 +1206,28 @@ export class QuestsService {
     if (needsInvite && quest.maxWinners && !requiresPaidInviteClaim(quest)) {
       const slotsUsed = await this.prisma.winnerDraw.count({ where: { questId } });
       if (slotsUsed < quest.maxWinners) {
-        const code = await this.prisma.inviteCodePool.findFirst({
-          where: { questId, userId: null },
-          orderBy: { createdAt: 'asc' },
-        });
-        if (code) {
-          inviteCode = code.code;
-          await this.prisma.$transaction([
-            this.prisma.inviteCodePool.update({
-              where: { id: code.id },
-              data: { userId, assignedAt: new Date() },
-            }),
-            this.prisma.winnerDraw.upsert({
+        // Atomically reserve a code. The previous findFirst+update pattern had
+        // a TOCTOU race: two parallel submissions read the same free row, then
+        // the second upsert silently overwrote the first assignment (code leak
+        // + mis-attribution). See reserveInviteCode for the lock strategy.
+        try {
+          const claimedCode = await this.reserveInviteCode(questId, userId);
+          if (claimedCode) {
+            inviteCode = claimedCode;
+            await this.prisma.winnerDraw.upsert({
               where: { questId_userId: { questId, userId } },
               create: {
                 questId,
                 userId,
                 ccAmount: rewardCc,
-                inviteCode: code.code,
+                inviteCode: claimedCode,
                 distributed: true,
               },
-              update: { inviteCode: code.code },
-            }),
-          ]);
+              update: { inviteCode: claimedCode },
+            });
+          }
+        } catch (err) {
+          this.logger.warn(`submitQuest code-assign failed: ${String(err)}`);
         }
       }
     }
@@ -2387,43 +2415,45 @@ export class QuestsService {
     }
 
     try {
-      const codeRow = await this.prisma.inviteCodePool.findFirst({
-        where: { questId, userId: null },
-        orderBy: { createdAt: 'asc' },
-      });
-      if (!codeRow) {
+      // Atomically reserve one code (FOR UPDATE SKIP LOCKED). The previous
+      // findFirst+update pattern had a TOCTOU race: two parallel claims read
+      // the same free row, then the second upsert silently overwrote the first
+      // assignment — a code leaked and was mis-attributed.
+      const claimedCode = await this.reserveInviteCode(questId, userId);
+      if (!claimedCode) {
         throw new BadRequestException('No invite codes available.');
       }
 
       await this.prisma.$transaction([
-        this.prisma.inviteCodePool.update({
-          where: { id: codeRow.id },
-          data: { userId, assignedAt: new Date() },
-        }),
         this.prisma.winnerDraw.upsert({
           where: { questId_userId: { questId, userId } },
           create: {
             questId,
             userId,
             ccAmount: quest.rewardCc,
-            inviteCode: codeRow.code,
+            inviteCode: claimedCode,
             distributed: true,
             claimFeeLedgerTxId: feeTxId,
           },
           update: {
-            inviteCode: codeRow.code,
+            inviteCode: claimedCode,
             distributed: true,
             claimFeeLedgerTxId: feeTxId,
           },
         }),
       ]);
 
+      // Re-read the row so downstream ledger sync has the assigned id/code.
+      const codeRow = await this.prisma.inviteCodePool.findFirst({
+        where: { questId, userId, code: claimedCode },
+      });
+
       // NEW: Create CodeRewardEntitlement on ledger after code is assigned
       if (this.questLedger.isConfigured() && codeRow) {
         const entitlementRes = await this.questLedger.createCodeRewardEntitlement({
           userPartyId: cantonPartyId,
           campaignId: questId,
-          code: codeRow.code,
+          code: claimedCode,
           feeTxId,
           claimKind: codeClaimKind,
         });
@@ -2594,25 +2624,23 @@ export class QuestsService {
             );
         }
       }
-      const codeRow = await this.prisma.inviteCodePool.findFirst({
-        where: { questId, userId: null },
-        orderBy: { createdAt: 'asc' },
-      });
-      if (!codeRow) {
+      // Atomically reserve one code (FOR UPDATE SKIP LOCKED). The per-user
+      // raffle lock above does NOT stop two DIFFERENT users from grabbing the
+      // same code row — findFirst+update had that TOCTOU race. The transaction
+      // below merges the code assignment with the winnerDraw/questCompletion
+      // update so a code is never marked distributed without being claimed.
+      const claimedCode = await this.reserveInviteCode(questId, userId);
+      if (!claimedCode) {
         throw new Error('No invite codes available after fee was paid. Contact support.');
       }
       const rewardMicroCc = BigInt(Math.round(rewardCc * 1_000_000));
       await this.prisma.$transaction([
-        this.prisma.inviteCodePool.update({
-          where: { id: codeRow.id },
-          data: { userId, assignedAt: new Date() },
-        }),
         this.prisma.winnerDraw.update({
           where: { id: draw.id },
           data: {
             distributed: true,
             ccAmount: rewardCc,
-            inviteCode: codeRow.code,
+            inviteCode: claimedCode,
             claimFeeLedgerTxId: feeTxId,
             ledgerTxId: rewardOfferId ?? undefined,
             distributedAt: new Date(),
@@ -2624,6 +2652,7 @@ export class QuestsService {
           update: { rewardMicroCc },
         }),
       ]);
+      const finalCode = claimedCode;
       if (cantonPartyId && rewardOfferId) {
         void this.syncCampaignLedgerAfterPayout({
           userId, questId, userPartyId: cantonPartyId, rewardCc, payoutTxId: rewardOfferId,
@@ -2632,9 +2661,9 @@ export class QuestsService {
       const rewardStatus = await this.getQuestRewardStatus(userId, questId);
       return {
         ok: true,
-        message: `Congratulations! ${rewardCc} CC sent to your wallet and your code is: ${codeRow.code}`,
+        message: `Congratulations! ${rewardCc} CC sent to your wallet and your code is: ${finalCode}`,
         rewardCc,
-        inviteCode: codeRow.code,
+        inviteCode: finalCode,
         feeCc,
         rewardStatus,
       };

@@ -105,8 +105,16 @@ export class LedgerJobProcessor {
       }
     }
 
-    // Fallback to Splice TransferOffer if CIP-0056 failed (no Scan access)
+    // Fallback to Splice TransferOffer if CIP-0056 failed (no Scan access).
+    // Fallback Splice HANYA untuk mode legacy hs256. Di keycloak, validator
+    // menolak HS256 — jadi jangan coba jalur yang pasti gagal; retry CIP-0056.
     if (!cip56Result.ok) {
+      if (!this.splice.isLegacyHs256) {
+        throw new Error(
+          `CIP-0056 transfer unavailable for @${username} ` +
+          `(${cip56Result.error?.slice(0, 80) ?? 'unknown'}) — will retry`,
+        );
+      }
       this.logger.log(
         `[Job ${job.id}] CIP-0056 unavailable, fallback to Splice TransferOffer: ${cip56Result.error?.slice(0, 80) ?? 'unknown'}`,
       );
@@ -194,7 +202,13 @@ export class LedgerJobProcessor {
         }
         ccSent = true;
       } else {
-        // Fallback to Splice TransferOffer
+        // Fallback to Splice TransferOffer HANYA untuk mode legacy hs256.
+        if (!this.splice.isLegacyHs256) {
+          throw new Error(
+            `CIP-0056 distribute unavailable for draw=${drawId} ` +
+            `(${cip56Result.error?.slice(0, 80) ?? 'unknown'}) — will retry`,
+          );
+        }
         this.logger.log(`[Job ${job.id}] CIP-0056 unavailable, fallback: ${cip56Result.error?.slice(0, 80) ?? 'unknown'}`);
         const offerContractId = await this.splice.createTransferOffer(
           cantonPartyId, amountCc, `Quest winner reward: ${questId}`,
@@ -240,6 +254,18 @@ export class LedgerJobProcessor {
   @Process(JOB_ACCEPT_OFFER)
   async processAcceptOffer(job: Job<AcceptOfferPayload>): Promise<void> {
     const { offerContractId, username, label } = job.data;
+
+    // JOB_ACCEPT_OFFER hanya relevan di mode legacy hs256 (Splice per-user
+    // offer). Di keycloak semua transfer sudah CIP-0056 — jalur Splice offer
+    // tidak dibuat lagi. Jangan throw → jangan retry tanpa akhir bila ada job
+    // lama yang sempat ter-enqueue.
+    if (!this.splice.isLegacyHs256) {
+      this.logger.warn(
+        `[Job ${job.id}] JOB_ACCEPT_OFFER diabaikan di mode keycloak (legacy Splice). cid=${offerContractId.slice(0, 16)}… as @${username} ${label ?? ''}`,
+      );
+      return;
+    }
+
     this.logger.log(`[Job ${job.id}] AcceptOffer: ${offerContractId.slice(0, 16)}… as @${username} ${label ?? ''}`);
 
     const ok = await this.splice.acceptOfferViaWallet(offerContractId, username);

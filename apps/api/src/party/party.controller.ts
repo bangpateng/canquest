@@ -42,6 +42,11 @@ import { AllocateWalletDto } from './dto/allocate-wallet.dto';
 import { CantonPartyBindingDto } from './dto/canton-party-binding.dto';
 import { SendCcDto } from './dto/send-cc.dto';
 import { SetUsernameDto } from './dto/set-username.dto';
+import {
+  ContractActionDto,
+  OfferType,
+  TransferInstructionActionDto,
+} from './dto/contract-action.dto';
 
 type AuthedReq = Request & { user: { userId: string; email: string } };
 
@@ -812,7 +817,7 @@ export class PartyController {
   @Post('transfer-instruction/accept')
   async acceptTransferInstruction(
     @Req() req: AuthedReq,
-    @Body() body: { transferInstructionCid: string },
+    @Body() body: TransferInstructionActionDto,
   ) {
     const user = await this.users.findById(req.user.userId);
     if (!user?.cantonPartyId || !hasRealWallet(user.cantonPartyId)) {
@@ -858,7 +863,7 @@ export class PartyController {
   @Post('transfer-instruction/reject')
   async rejectTransferInstruction(
     @Req() req: AuthedReq,
-    @Body() body: { transferInstructionCid: string },
+    @Body() body: TransferInstructionActionDto,
   ) {
     const user = await this.users.findById(req.user.userId);
     if (!user?.cantonPartyId || !hasRealWallet(user.cantonPartyId)) {
@@ -890,7 +895,7 @@ export class PartyController {
   @Post('transfer-instruction/withdraw')
   async withdrawTransferInstruction(
     @Req() req: AuthedReq,
-    @Body() body: { transferInstructionCid: string },
+    @Body() body: TransferInstructionActionDto,
   ) {
     const user = await this.users.findById(req.user.userId);
     if (!user?.cantonPartyId || !hasRealWallet(user.cantonPartyId)) {
@@ -985,7 +990,7 @@ export class PartyController {
   @Post('offers/accept')
   async acceptOfferInbox(
     @Req() req: AuthedReq,
-    @Body() body: { contractId: string; type?: 'transfer_offer' | 'transfer_instruction' },
+    @Body() body: ContractActionDto,
   ) {
     const user = await this.users.findById(req.user.userId);
     if (!user?.cantonPartyId || !user.username || !hasRealWallet(user.cantonPartyId)) {
@@ -994,13 +999,13 @@ export class PartyController {
     const cid = body.contractId?.trim();
     if (!cid) throw new BadRequestException('contractId is required.');
 
-    const offerType = body.type ?? 'transfer_offer';
+    const offerType = body.type ?? OfferType.TRANSFER_OFFER;
     this.logger.log(`Accept offer: user=@${user.username} type=${offerType} cid=${cid.slice(0, 20)}...`);
 
     let ok = false;
     let updateId: string | null = null;
 
-    if (offerType === 'transfer_instruction') {
+    if (offerType === OfferType.TRANSFER_INSTRUCTION) {
       // CIP-0056 TransferInstruction
       const result = await this.ledger.acceptTransferInstruction(cid, user.cantonPartyId);
       ok = result.ok;
@@ -1062,7 +1067,7 @@ export class PartyController {
   @Post('offers/reject')
   async rejectOfferInbox(
     @Req() req: AuthedReq,
-    @Body() body: { contractId: string; type?: 'transfer_offer' | 'transfer_instruction' },
+    @Body() body: ContractActionDto,
   ) {
     const user = await this.users.findById(req.user.userId);
     if (!user?.cantonPartyId || !hasRealWallet(user.cantonPartyId)) {
@@ -1071,10 +1076,10 @@ export class PartyController {
     const cid = body.contractId?.trim();
     if (!cid) throw new BadRequestException('contractId is required.');
 
-    const offerType = body.type ?? 'transfer_offer';
+    const offerType = body.type ?? OfferType.TRANSFER_OFFER;
     this.logger.log(`Reject offer: user=@${user.username} type=${offerType} cid=${cid.slice(0, 20)}...`);
 
-    if (offerType === 'transfer_instruction') {
+    if (offerType === OfferType.TRANSFER_INSTRUCTION) {
       const result = await this.ledger.rejectTransferInstruction(cid, user.cantonPartyId);
       if (!result.ok) {
         throw new BadRequestException(`Failed to reject: ${result.error ?? 'unknown'}`);
@@ -1332,7 +1337,7 @@ export class PartyController {
   @Post('accept-offer')
   async acceptOffer(
     @Req() req: AuthedReq,
-    @Body() body: { contractId: string },
+    @Body() body: ContractActionDto,
   ) {
     const contractId = body.contractId?.trim();
     if (!contractId) {
@@ -1357,7 +1362,9 @@ export class PartyController {
     let accepted = false;
     let acceptMethod = '';
 
-    if (this.splice.isConfigured) {
+    // Splice Wallet API (per-user HS256 JWT) hanya untuk mode legacy hs256.
+    // Di keycloak validator menolak HS256 — lewati langsung ke Canton Ledger API.
+    if (this.splice.isLegacyHs256 && this.splice.isConfigured) {
       accepted = await this.splice.acceptOfferViaWallet(contractId, walletUsername);
       if (accepted) {
         acceptMethod = 'splice_wallet_api';
@@ -1400,7 +1407,7 @@ export class PartyController {
   @Post('reject-offer')
   async rejectOffer(
     @Req() req: AuthedReq,
-    @Body() body: { contractId: string },
+    @Body() body: ContractActionDto,
   ) {
     const contractId = body.contractId?.trim();
     if (!contractId) {

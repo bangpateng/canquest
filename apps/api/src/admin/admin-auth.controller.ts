@@ -48,6 +48,7 @@ export class AdminAuthController {
   private static readonly THROTTLE_WINDOW_MS = 15 * 60 * 1000;
   private readonly failedAttempts = new Map<string, { count: number; firstAt: number }>();
   private readonly lockedUntil = new Map<string, number>();
+  private lastSweep = 0;
 
   constructor(
     private readonly jwt: JwtService,
@@ -65,6 +66,7 @@ export class AdminAuthController {
     @Req() req: Request,
     @Body() login: AdminLoginDto,
   ): Promise<{ accessToken: string }> {
+    this.sweepIfNeeded();
     const clientKey = this.clientFingerprint(req);
 
     // ── In-process account lockout after repeated failures ─────────────────
@@ -141,11 +143,28 @@ export class AdminAuthController {
     return { accessToken };
   }
 
-  /** Stable client fingerprint combining IP + forwarded-for (best-effort). */
+  /** Stable client fingerprint. req.ip sudah di-resolve via Express
+   *  `trust proxy` dan TIDAK bisa dipalsukan. JANGAN campur X-Forwarded-For
+   *  mentah — elemen paling kirinya dikontrol penyerang dan akan membuat
+   *  kunci lockout berganti tiap request (lockout jadi bisa dilewati). */
   private clientFingerprint(req: Request): string {
-    const xff = req.headers['x-forwarded-for'];
-    const xffStr = Array.isArray(xff) ? xff[0] : xff;
-    return `${xffStr?.split(',')[0]?.trim() ?? ''}|${req.ip ?? ''}`;
+    return req.ip ?? 'unknown';
+  }
+
+  /** Buang entri kedaluwarsa secara berkala (maksimal sekali per menit) agar
+   *  failedAttempts/lockedUntil tidak tumbuh tanpa batas dari IP sekali jalan. */
+  private sweepIfNeeded(): void {
+    const now = Date.now();
+    if (now - this.lastSweep < 60_000) return;
+    this.lastSweep = now;
+    for (const [k, v] of this.failedAttempts) {
+      if (v.firstAt < now - AdminAuthController.THROTTLE_WINDOW_MS) {
+        this.failedAttempts.delete(k);
+      }
+    }
+    for (const [k, until] of this.lockedUntil) {
+      if (until <= now) this.lockedUntil.delete(k);
+    }
   }
 
   /** Track consecutive failures and trigger lockout when the threshold is hit. */
