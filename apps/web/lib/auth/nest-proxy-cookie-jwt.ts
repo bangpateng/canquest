@@ -67,6 +67,11 @@ export async function nestWithAccessCookie(
         { status: 504 },
       );
     }
-    throw err;
+    // Non-timeout errors (network, DNS, etc.) → return JSON 502 instead of
+    // letting the error propagate and produce an HTML 500 page.
+    return NextResponse.json(
+      { ok: false, message: 'Upstream API unavailable' },
+      { status: 502 },
+    );
   }
 }

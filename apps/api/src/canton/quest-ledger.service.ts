@@ -568,7 +568,7 @@ export class QuestLedgerService implements OnModuleInit {
       admin: operator, userAddress: params.userPartyId, username: params.username,
       spinResultId: params.spinResultId, spinItemId: params.spinItemId, spinItemLabel: params.spinItemLabel,
       rewardType: params.rewardType, rewardCc: this.dec(params.rewardCc),
-      rewardPoints: String(params.rewardPoints), spinCost: String(params.spinCost), executedAt: params.executedAt,
+      rewardPoints: String(params.rewardPoints), spinCost: this.dec(params.spinCost), executedAt: params.executedAt,
     }, [operator], `spin-exec-${params.spinResultId}`);
     if (res.ok && res.contractId) {
       this.logger.log(`SpinExecution recorded: @${params.username} item="${params.spinItemLabel}" type=${params.rewardType} spinResultId=${params.spinResultId.slice(0, 8)}`);

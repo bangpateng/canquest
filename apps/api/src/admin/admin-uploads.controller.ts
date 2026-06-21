@@ -16,6 +16,15 @@ import { R2StorageService } from '../storage/r2-storage.service';
 
 const MAX_BYTES = 5 * 1024 * 1024;
 
+/** MIME allowlist yang diizinkan — tolak lebih awal di multer sebelum buffer
+ *  di-load penuh. Validasi magic-byte final tetap dilakukan di storage service. */
+const UPLOAD_MIME_ALLOWLIST = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+]);
+
 @Controller('admin/uploads')
 @UseGuards(AuthGuard('admin-jwt'), AdminGuard)
 export class AdminUploadsController {
@@ -27,6 +36,15 @@ export class AdminUploadsController {
     FileInterceptor('file', {
       storage: memoryStorage(),
       limits: { fileSize: MAX_BYTES },
+      fileFilter: (_req, file, cb) => {
+        if (!UPLOAD_MIME_ALLOWLIST.has(file.mimetype)) {
+          return cb(
+            new BadRequestException('Only JPEG, PNG, WebP, or GIF allowed'),
+            false,
+          );
+        }
+        cb(null, true);
+      },
     }),
   )
   async uploadQuestAsset(

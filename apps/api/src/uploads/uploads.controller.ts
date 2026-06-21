@@ -46,7 +46,7 @@ export class UploadsController {
   async serveCcRewardLogo(@Res({ passthrough: true }) res: Response) {
     const key =
       this.config.get<string>('CC_REWARD_LOGO_R2_KEY')?.trim() || 'quests/C (1).png';
-    if (!/^quests\/[a-zA-Z0-9 ()_.-]+\.(png|jpg|jpeg|webp|gif|svg)$/i.test(key)) {
+    if (!/^quests\/[a-zA-Z0-9 ()_.-]+\.(png|jpg|jpeg|webp|gif)$/i.test(key)) {
       throw new NotFoundException();
     }
     const asset = await this.storage.getQuestAssetStream(key);

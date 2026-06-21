@@ -164,19 +164,9 @@ export class SpinService {
   ): Promise<SpinResultDto> {
     const spinCost = await this.getSpinCost();
 
+    // Reconcile earned points (credits only increase over time, safe to read
+    // outside the transaction — the race condition is on the debit side).
     const totalEarned = await this.users.reconcileEarnPoints(userId);
-    const spentResults = await this.prisma.spinResult.findMany({
-      where: { userId },
-      select: { pointsSpent: true },
-    });
-    const spentPoints = spentResults.reduce((s, r) => s + r.pointsSpent, 0);
-    const availablePoints = totalEarned - spentPoints;
-
-    if (availablePoints < spinCost) {
-      throw new BadRequestException(
-        `Not enough points. You need ${spinCost} pts but have ${availablePoints} pts available.`,
-      );
-    }
 
     // Load active items
     const items = await this.prisma.spinItem.findMany({
@@ -193,39 +183,53 @@ export class SpinService {
     }
 
     // Cek inventory
+    let selectedItem = winner;
     if (winner.inventory !== null && winner.wonCount >= winner.inventory) {
       const fallback = items.find((i) => i.rewardType === 'none') ?? items[0];
       if (!fallback) throw new BadRequestException('No fallback item available.');
-      return this.saveAndEnqueue(userId, username, cantonPartyId, this.toDto(fallback), spinCost);
+      selectedItem = fallback;
     }
 
-    return this.saveAndEnqueue(userId, username, cantonPartyId, this.toDto(winner), spinCost);
-  }
+    const item = this.toDto(selectedItem);
 
-  private async saveAndEnqueue(
-    userId: string,
-    username: string | null,
-    cantonPartyId: string | null,
-    item: SpinItemDto,
-    spinCost: number,
-  ): Promise<SpinResultDto> {
-    // Simpan hasil spin
-    const result = await this.prisma.spinResult.create({
-      data: {
-        userId,
-        spinItemId: item.id,
-        pointsSpent: spinCost,
-        delivered: item.rewardType === 'none' || item.rewardType === 'points',
-        deliveredAt: (item.rewardType === 'none' || item.rewardType === 'points') ? new Date() : null,
-      },
+    // ── Atomic balance check + SpinResult creation ──────────────────────────
+    // Wrapping in $transaction prevents double-spend: two concurrent spins
+    // cannot both pass the balance check and create SpinResults, because the
+    // transaction isolates the read (spentPoints) from the write (SpinResult).
+    const result = await this.prisma.$transaction(async (tx) => {
+      const spentResults = await tx.spinResult.findMany({
+        where: { userId },
+        select: { pointsSpent: true },
+      });
+      const spentPoints = spentResults.reduce((s, r) => s + r.pointsSpent, 0);
+      const availablePoints = totalEarned - spentPoints;
+
+      if (availablePoints < spinCost) {
+        throw new BadRequestException(
+          `Not enough points. You need ${spinCost} pts but have ${availablePoints} pts available.`,
+        );
+      }
+
+      const spinResult = await tx.spinResult.create({
+        data: {
+          userId,
+          spinItemId: item.id,
+          pointsSpent: spinCost,
+          delivered: item.rewardType === 'none' || item.rewardType === 'points',
+          deliveredAt: (item.rewardType === 'none' || item.rewardType === 'points') ? new Date() : null,
+        },
+      });
+
+      // Increment wonCount inside the same transaction
+      await tx.spinItem.update({
+        where: { id: item.id },
+        data: { wonCount: { increment: 1 } },
+      });
+
+      return spinResult;
     });
 
-    // Increment wonCount item
-    await this.prisma.spinItem.update({
-      where: { id: item.id },
-      data: { wonCount: { increment: 1 } },
-    });
-
+    // Credit points reward (outside transaction — non-critical, idempotent)
     if (item.rewardType === 'points' && item.rewardPoints > 0) {
       await this.users.creditEarnPoints(userId, item.rewardPoints);
     }
@@ -262,7 +266,7 @@ export class SpinService {
     const message = this.buildMessage(item);
     return {
       spinResultId: result.id,
-      item: this.toDto(item),
+      item,
       pointsSpent: spinCost,
       jobId,
       message,
@@ -301,20 +305,6 @@ export class SpinService {
     username: string | null,
     cantonPartyId: string | null,
   ): Promise<SpinResultDto & { free: boolean }> {
-    // Check if already used today
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const alreadyUsed = await this.prisma.spinResult.count({
-      where: {
-        userId,
-        pointsSpent: 0,
-        createdAt: { gte: today },
-      },
-    });
-    if (alreadyUsed > 0) {
-      throw new BadRequestException('You already claimed your free spin today. Come back tomorrow!');
-    }
-
     // Load active items
     const items = await this.prisma.spinItem.findMany({ where: { active: true } });
     if (items.length === 0) {
@@ -326,42 +316,63 @@ export class SpinService {
       throw new BadRequestException('Spin configuration error. Contact admin.');
     }
 
-    const result = await this.prisma.spinResult.create({
-      data: {
-        userId,
-        spinItemId: winner.id,
-        pointsSpent: 0, // FREE
-        delivered: winner.rewardType === 'none' || winner.rewardType === 'points',
-        deliveredAt: (winner.rewardType === 'none' || winner.rewardType === 'points') ? new Date() : null,
-      },
+    const item = this.toDto(winner);
+
+    // ── Atomic daily free-spin check + SpinResult creation ──────────────────
+    // Wrapping in $transaction prevents double-claim: two concurrent free
+    // spin requests cannot both pass the daily check and create SpinResults.
+    const result = await this.prisma.$transaction(async (tx) => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const alreadyUsed = await tx.spinResult.count({
+        where: {
+          userId,
+          pointsSpent: 0,
+          createdAt: { gte: today },
+        },
+      });
+      if (alreadyUsed > 0) {
+        throw new BadRequestException('You already claimed your free spin today. Come back tomorrow!');
+      }
+
+      const spinResult = await tx.spinResult.create({
+        data: {
+          userId,
+          spinItemId: item.id,
+          pointsSpent: 0, // FREE
+          delivered: item.rewardType === 'none' || item.rewardType === 'points',
+          deliveredAt: (item.rewardType === 'none' || item.rewardType === 'points') ? new Date() : null,
+        },
+      });
+
+      await tx.spinItem.update({
+        where: { id: item.id },
+        data: { wonCount: { increment: 1 } },
+      });
+
+      return spinResult;
     });
 
-    await this.prisma.spinItem.update({
-      where: { id: winner.id },
-      data: { wonCount: { increment: 1 } },
-    });
-
-    if (winner.rewardType === 'points' && winner.rewardPoints > 0) {
-      await this.users.creditEarnPoints(userId, winner.rewardPoints);
+    if (item.rewardType === 'points' && item.rewardPoints > 0) {
+      await this.users.creditEarnPoints(userId, item.rewardPoints);
     }
 
     let jobId: string | null = null;
-    if (winner.rewardType === 'cc' && winner.rewardCc > 0) {
+    if (item.rewardType === 'cc' && item.rewardCc > 0) {
       try {
         jobId = await this.ledgerQueue.enqueueSpinResult({
           spinResultId: result.id,
           userId,
           username,
           cantonPartyId,
-          rewardType: winner.rewardType,
-          rewardCc: winner.rewardCc,
+          rewardType: item.rewardType,
+          rewardCc: item.rewardCc,
         });
       } catch (err) {
         this.logger.warn(`Failed to enqueue free spin CC: ${String(err)}`);
       }
     }
 
-    const item = this.toDto(winner);
     this.logger.log(
       `FreeSpin: user=${userId.slice(0, 8)} won="${item.label}" type=${item.rewardType}`,
     );

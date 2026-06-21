@@ -25,13 +25,7 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@nestjs/platform-express": "^11.1.24",
-    "bcryptjs": "^3.0.3",
-    "jsonwebtoken": "^9.0.3",
-    "jwks-rsa": "^4.0.1"
+    "@nestjs/platform-express": "^11.1.24"
   },
-  "devDependencies": {
-    "@types/bcryptjs": "^2.4.6",
-    "@types/jsonwebtoken": "^9.0.10"
-  }
+  "devDependencies": {}
 }

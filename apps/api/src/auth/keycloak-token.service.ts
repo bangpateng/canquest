@@ -50,7 +50,6 @@ export class KeycloakTokenService {
   async getAdminLedgerToken(): Promise<string> {
     this.logger.debug(
       `getAdminLedgerToken: client_id=${this.req('LEDGER_CLIENT_ID')} ` +
-      `secret_len=${this.req('LEDGER_CLIENT_SECRET').length} ` +
       `url=${this.tokenUrl} scope=${this.scope}`,
     );
     return this.getToken(this.req('LEDGER_CLIENT_ID'), this.req('LEDGER_CLIENT_SECRET'));
@@ -96,10 +95,14 @@ export class KeycloakTokenService {
       scope: this.scope,
     });
 
+    // Timeout wajib: bila Keycloak hang (network black-hole), tanpa abort signal
+    // promise tak pernah resolve dan `inflight` map menahannya selamanya →
+    // mengunci permanen semua request token untuk identity ini.
     const res = await fetch(this.tokenUrl, {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body,
+      signal: AbortSignal.timeout(10_000),
     });
 
     if (!res.ok) {

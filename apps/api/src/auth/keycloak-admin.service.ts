@@ -84,6 +84,9 @@ export class KeycloakAdminService {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body,
+      // Timeout wajib: getAdminToken() single-flight via adminTokenPromise —
+      // satu promise stuck akan mengunci SEMUA operasi admin.
+      signal: AbortSignal.timeout(10_000),
     });
 
     if (!res.ok) {
@@ -146,6 +149,9 @@ export class KeycloakAdminService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
+      // Timeout: createUser melibatkan network call ke Keycloak; tanpa abort,
+      // request hang akan memblokir flow onboarding user tanpa batas.
+      signal: AbortSignal.timeout(15_000),
     });
 
     if (res.status === 201) {
@@ -178,6 +184,9 @@ export class KeycloakAdminService {
 
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
+      // Timeout:.getUserId dipanggil tepat setelah createUser — tanpa abort,
+      // onboarding bisa hang tanpa feedback ke user.
+      signal: AbortSignal.timeout(15_000),
     });
 
     if (!res.ok) {
