@@ -63,6 +63,24 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
   const statusMeta = QUEST_STATUS_BADGE[quest.status];
   const config = getRewardConfig(quest.rewardType);
 
+  // ── Build share text based on reward type ──────────────────────
+  let shareText: string;
+  if (config.isDual) {
+    shareText = `Earn ${quest.rewardCc > 0 ? `${quest.rewardCc} CC` : "CC"} + 1 invite code`;
+  } else if (config.code === "CC_ONLY" || config.code === "CC_MANUAL") {
+    shareText = quest.rewardCc > 0 ? `Earn ${quest.rewardCc} CC` : "Earn CC rewards";
+  } else if (config.code === "INVITE_CODE_FCFS") {
+    shareText = "Claim an invite code — first come, first served";
+  } else if (config.code === "INVITE_CODE_RANDOM") {
+    shareText = "Win an invite code";
+  } else if (config.code === "WAITLIST_EMAIL") {
+    shareText = quest.org ? `Join the ${quest.org} waitlist` : "Join the waitlist";
+  } else if (quest.rewardCc > 0) {
+    shareText = `Earn ${quest.rewardCc} CC`;
+  } else {
+    shareText = "Check out this quest";
+  }
+
   return (
     <PlatformPage className="space-y-5 sm:space-y-6">
       {/* Back Link */}
@@ -152,7 +170,7 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
             {/* Share button — top-right of header */}
             <ShareCampaign
               title={quest.title}
-              text={`Earn ${quest.rewardCc > 0 ? `${quest.rewardCc} CC` : "rewards"}`}
+              text={shareText}
               className="shrink-0"
             />
           </div>
