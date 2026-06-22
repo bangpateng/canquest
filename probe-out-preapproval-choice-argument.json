@@ -1,0 +1,83 @@
+{
+  "capturedAt": "2026-06-20T00:22:29.006Z",
+  "choice": "AmuletRules_CreateTransferPreapproval",
+  "templateId": "a31be0483f3175647053f28965a4e6d97e3dbc433ea2338be303fae69bbcff6a:Splice.AmuletRules:AmuletRules",
+  "contractId": "0024dafd9baae52bd9b8eb7fde587c500696f7350cb4f25e53fdfa18859c4a1c77ca12122072bfcaa7923d684c043279ff3eb6a8e520a1cc9e6a7269a03662a2817cf93c9e",
+  "actingParties": [
+    "canquest-fee::12209fe74271728c49a1922362aa0c8d2bff7f7546b81963b7d5b65361fd8e5442fb",
+    "canquest-validator-1::12209fe74271728c49a1922362aa0c8d2bff7f7546b81963b7d5b65361fd8e5442fb"
+  ],
+  "consuming": false,
+  "sourceOffset": 838791,
+  "sourceUpdateId": null,
+  "feeParty": "canquest-fee::12209fe74271728c49a1922362aa0c8d2bff7f7546b81963b7d5b65361fd8e5442fb",
+  "providerParty": "canquest-validator-1::12209fe74271728c49a1922362aa0c8d2bff7f7546b81963b7d5b65361fd8e5442fb",
+  "choiceArgument": {
+    "context": {
+      "amuletRules": "0024dafd9baae52bd9b8eb7fde587c500696f7350cb4f25e53fdfa18859c4a1c77ca12122072bfcaa7923d684c043279ff3eb6a8e520a1cc9e6a7269a03662a2817cf93c9e",
+      "context": {
+        "openMiningRound": "00b62b27d4f3b3068bdf612273e8d0469d16371248893e8cb61a5d8991aaa61e5dca121220857b644773cbb5c3e0a5bb9d29f859b4f043ab7d49d3b16fef415fb1b17a7826",
+        "issuingMiningRounds": [],
+        "validatorRights": []
+      }
+    },
+    "inputs": [
+      {
+        "tag": "InputAmulet",
+        "value": "004a8533e56b3b9dd154194db6a13fbe58cf25b2af0d519623314743f40a8de6ffca121220a4659b3871132c2ef70db08b5349794753276a63ee2df253ee0c421a83656fa7"
+      }
+    ],
+    "receiver": "canquest-fee::12209fe74271728c49a1922362aa0c8d2bff7f7546b81963b7d5b65361fd8e5442fb",
+    "provider": "canquest-validator-1::12209fe74271728c49a1922362aa0c8d2bff7f7546b81963b7d5b65361fd8e5442fb",
+    "expiresAt": "2026-09-08T09:26:29.081459Z",
+    "expectedDso": "DSO::1220b1431ef217342db44d516bb9befde802be7d8899637d290895fa58880f19accc"
+  },
+  "exerciseResult": {
+    "transferPreapprovalCid": "00e3e19a3902e5befbb84613b4fda162856ad9c0e74571fbd624fe83733e0d498cca12122076828c93c5241b6f6d50e3534cd0946595f11aff9a624c6a58c35c4ff537e9c4",
+    "transferResult": {
+      "round": {
+        "number": "99674"
+      },
+      "summary": {
+        "inputAppRewardAmount": "0.0000000000",
+        "inputValidatorRewardAmount": "0.0000000000",
+        "inputSvRewardAmount": "0.0000000000",
+        "inputAmuletAmount": "162.5554280949",
+        "balanceChanges": [
+          [
+            "canquest-validator-1::12209fe74271728c49a1922362aa0c8d2bff7f7546b81963b7d5b65361fd8e5442fb",
+            {
+              "changeToInitialAmountAsOfRoundZero": "-1.5425794149",
+              "changeToHoldingFeesRate": "-0.0000004389"
+            }
+          ]
+        ],
+        "holdingFees": "0.0000000000",
+        "outputFees": [
+          "0.0000000000"
+        ],
+        "senderChangeFee": "0.0000000000",
+        "senderChangeAmount": "161.0503011534",
+        "amuletPrice": "0.1638400000",
+        "inputValidatorFaucetAmount": "0.0000000000",
+        "inputUnclaimedActivityRecordAmount": "0.0000000000",
+        "inputDevelopmentFundAmount": "0.0000000000"
+      },
+      "createdAmulets": [
+        {
+          "tag": "TransferResultAmulet",
+          "value": "00049f8948869b64e3dc75d329ad6296c458f593e3ca1eb4e91a125a2efdc126ffca12122039d6df69d43af8b54a326a484a5671c635c82b08cb5e3903b39080c7ce2bdb13"
+        }
+      ],
+      "senderChangeAmulet": "004ba658585facadc21efa16d11b5b3cae933aa714956f25e1a561752830541603ca121220fc0897e8c02d86bd798fedb13ef5d839d156d2218568026c7abeb29f5e4c261f"
+    },
+    "amuletPaid": "1.5051269415",
+    "meta": {
+      "values": {
+        "splice.lfdecentralizedtrust.org/burned": "1.5051269415",
+        "splice.lfdecentralizedtrust.org/reason": "create TransferPreapproval",
+        "splice.lfdecentralizedtrust.org/tx-kind": "burn"
+      }
+    }
+  }
+}

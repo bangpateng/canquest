@@ -240,7 +240,7 @@ export class QuestLedgerService implements OnModuleInit {
   private get damlPackageRef(): string {
     const name = this.config.get<string>('CANTON_DAML_PACKAGE_NAME')?.trim();
     if (name) return name.startsWith('#') ? name : `#${name}`;
-    return '#canquest-v11';
+    return '#canquest-v20';
   }
 
   private get operatorPartyId(): string | null {
