@@ -1,6 +1,6 @@
 -- ============================================================
 -- CanQuest DAML Contract — module Main
--- Package: canquest-v11  |  SDK: 3.4.11
+-- Package: canquest-v11.1  |  SDK: 3.4.11
 --
 -- Templates:
 --   1. UserAccount        — akun user on-chain (earnedPoints & spentPoints)
@@ -13,9 +13,22 @@
 --   8. ReferralReward     — bukti referral reward sudah dikreditkan
 --   9. CcTransactionLog   — audit trail setiap CC credit/debit event
 --
+-- ── MODEL KEAMANAN (PENTING DI BACA) ──────────────────────────
+-- DAML contract ini HANYA mencatat metadata & audit trail (rights/obligations).
+-- Pemindahan CC (Amulet) ASLI terjadi di Canton Token Standard (CIP-56
+-- TransferFactory) di luar DAML, di-orkestrasi oleh backend NestJS:
+--   - Fee collection: splice.collectClaimFeeToValidatorParty(...)
+--   - Reward send  : cantonLedger.executeTransferFactoryTransfer(...)
+-- DAML choice AtomicFeeAndReward hanya menulis status on-chain bahwa fee &
+-- reward sudah dikirim. "Atomicity" di sini = atomicity PENULISAN STATUS
+-- on-chain, BUKAN atomicity CC movement antar party.
+--
 -- NOTE: Contract keys belum bisa dipakai karena SDK 3.4.11 (Daml Assistant)
 -- tidak mendukung contract keys. Perlu upgrade ke DPM untuk fitur ini.
 -- fetchByKey() di CantonLedgerService sudah siap — tinggal enable saat upgrade.
+-- Konsekuensi: uniqueness (claimId, spinResultId, checkInId, txLogId) TIDAK
+-- di-enforce on-chain. Dedup adalah tanggung jawab backend (Postgres +
+-- Redis lock). Lihat quests.service.ts:acquireFcfsOnChainLock().
 --
 -- RewardType yang didukung (sesuai backend):
 --   "WAITLIST_EMAIL"      — waitlist, pemenang dipilih admin
@@ -34,10 +47,22 @@
 -- KEAMANAN:
 --   - Semua choice dikontrol oleh admin (tidak ada self-service user)
 --   - Validasi ketat di setiap choice (assertMsg)
---   - Kuota FCFS divalidasi on-chain — jika penuh, transaksi GAGAL otomatis
+--   - Kuota FCFS & RAFFLE divalidasi on-chain — jika penuh, transaksi GAGAL
+--   - Status campaign di-guard: CLOSED/ENDED tidak bisa draw/claim/reopen
 --   - Fee harus dikonfirmasi sebelum reward bisa dikirim
---   - spinResultId & checkInId unik per transaksi (anti double-spend)
+--   - spinResultId & checkInId unik per transaksi (anti double-spend)*
+--     *) enforced di backend, BUKAN on-chain (lihat note contract keys)
 --   - User tidak bisa membuat atau memodifikasi kontrak apapun
+--   - Invariant: earnedPoints >= 0, spentPoints <= earnedPoints,
+--                 amountMicroCc >= 0
+--
+-- CHANGELOG v11.1 (audit 2026-06-22):
+--   [CRITICAL] AtomicFeeAndReward: hapus double-create QuestClaim
+--              (sebelumnya menghasilkan 2 kontrak aktif → double-counting)
+--   [HIGH]     DrawRaffleWinner: tambah guard status=="ACTIVE" + maxWinners
+--   [HIGH]     UpdateCampaignStatus: jadi state machine (anti reopen)
+--   [MEDIUM]   Invariant ditambahkan di UserAccount & CcTransactionLog
+--   [MEDIUM]   AtomicFeeAndReward: assert amountMicroCc >= 0 & txLogId /= ""
 --
 -- Docs: https://docs.canton.network/appdev/modules/m3-dev-environment
 -- ============================================================
@@ -59,6 +84,14 @@ template UserAccount
   where
     signatory admin
     observer userAddress
+
+    -- Invariants: poin tidak boleh negatif, dan spent tidak boleh melebihi earned.
+    -- Defence-in-depth: walaupun choice sudah validate, invariant menjamin
+    -- kontrak tidak pernah berada di state tidak sah (termasuk jika choice
+    -- baru lupa validate di masa depan).
+    invariant earnedPoints >= 0
+    invariant spentPoints >= 0
+    invariant spentPoints <= earnedPoints
 
     choice RewardPoints : ContractId UserAccount
       with
@@ -169,6 +202,8 @@ template QuestCampaign
         drawnAt    : Text
       controller admin
       do
+        assertMsg "Campaign harus ACTIVE!" (status == "ACTIVE")
+        assertMsg "Kuota raffle sudah habis!" (maxWinners == 0 || currentClaims < maxWinners)
         assertMsg "questKind harus RAFFLE atau WAITLIST!" (
           questKind == "CC_RAFFLE" ||
           questKind == "CODE_RAFFLE" ||
@@ -208,6 +243,15 @@ template QuestCampaign
       do
         assertMsg "newStatus tidak boleh kosong!" (newStatus /= "")
         assertMsg "updatedAt tidak boleh kosong!" (updatedAt /= "")
+        -- State machine: hanya transisi yang sah diperbolehkan.
+        -- Mencegah reopen CLOSED/ENDED (kehilangan finality) dan transisi liar.
+        assertMsg
+          "Transisi status tidak sah! Aktif: DRAFT/PAUSED->ACTIVE, ACTIVE->PAUSED/ENDED/CLOSED. Tidak bisa dari CLOSED/ENDED."
+          ( (newStatus == "ACTIVE"  && (status == "DRAFT" || status == "PAUSED"))
+          || (newStatus == "PAUSED" && status == "ACTIVE")
+          || (newStatus == "ENDED"  && status == "ACTIVE")
+          || (newStatus == "CLOSED" && (status == "ACTIVE" || status == "ENDED"))
+          )
         create this with status = newStatus
 
 
@@ -274,17 +318,23 @@ template QuestClaim
     -- Atomic choice: fee payment + reward delivery dalam SATU transaksi DAML.
     -- Jika salah satu langkah gagal, SELURUH transaksi ROLLBACK otomatis.
     -- Canton menjamin ACID: semua create di dalam satu choice dieksekusi atomically.
+    --
+    -- ⚠️ SECURITY NOTE (v11.1):
+    --   Choice ini HANYA mencatat audit trail (feeTxId + rewardTxId + txLog).
+    --   Pemindahan CC ASLI terjadi di Canton Token Standard (CIP-56 TransferFactory)
+    --   di luar Daml, di-orkestrasi oleh backend (quests.service.ts).
+    --   "Atomic" di sini = atomicity PENULISAN STATUS ON-CHAIN, BUKAN atomicity CC.
+    --
     -- Docs: https://docs.canton.network/overview/learn/architecture
-    choice AtomicFeeAndReward : (ContractId QuestClaim, ContractId QuestClaim, ContractId CcTransactionLog)
+    choice AtomicFeeAndReward : (ContractId QuestClaim, ContractId CcTransactionLog)
       with
         feeTxId        : Text
-        feeConfirmedAt : Text
         rewardTxId     : Text
-        rewardSentAt   : Text
         txLogId        : Text
         amountMicroCc  : Int
         description    : Text
         referenceId    : Text
+        rewardSentAt   : Text
       controller admin
       do
         assertMsg "Minimal harus ada fee atau reward untuk transaksi atomic!" (claimFeeCc > 0.0 || rewardCc > 0.0)
@@ -292,24 +342,21 @@ template QuestClaim
         assertMsg "Reward sudah dikirim sebelumnya!" (not rewardSent)
         assertMsg "feeTxId tidak boleh kosong!" (feeTxId /= "")
         assertMsg "rewardTxId tidak boleh kosong!" (rewardTxId /= "")
+        assertMsg "txLogId tidak boleh kosong!" (txLogId /= "")
+        assertMsg "amountMicroCc tidak boleh negatif!" (amountMicroCc >= 0)
 
-        -- Step 1: Konfirmasi fee terbayar (mutasi QuestClaim)
-        claimWithFeeCid <- create this with
-          feePaid = True
-          feeTxId = feeTxId
-
-        -- Step 2: Konfirmasi reward terkirim — `this` tetap mengacu ke field
-        --         original QuestClaim sebelum choice dieksekusi, jadi aman
-        --         dipakai dua kali. Canton meng-archive kontrak original
-        --         setelah `create` pertama, lalu create kedua dari `this`
-        --         menghasilkan kontrak baru dengan feePaid + rewardSent.
+        -- SATU create untuk QuestClaim final (feePaid + rewardSent set).
+        -- Bug lama (v11.0): create ganda menghasilkan 2 kontrak QuestClaim aktif
+        -- dengan claimId identik → double-counting audit trail & potensi dobel
+        -- exercise ConfirmRewardSent pada kontrak pertama.
         claimFinalCid <- create this with
           feePaid = True
           feeTxId = feeTxId
           rewardSent = True
           rewardTxId = rewardTxId
 
-        -- Step 3: Catat transaksi CC (audit trail on-chain)
+        -- Catat transaksi CC (audit trail on-chain).
+        -- ledgerTxId di-set ke rewardTxId agar backend reconcile dapat join.
         txLogCid <- create CcTransactionLog with
           admin = admin
           userAddress = userAddress
@@ -322,7 +369,7 @@ template QuestClaim
           ledgerTxId = rewardTxId
           createdAt = rewardSentAt
 
-        pure (claimWithFeeCid, claimFinalCid, txLogCid)
+        pure (claimFinalCid, txLogCid)
 
 
 -- ============================================================
@@ -455,6 +502,9 @@ template CcTransactionLog
   where
     signatory admin
     observer userAddress
+
+    -- amountMicroCc tidak boleh negatif (mencegah "credit disamarkan sebagai debit").
+    invariant amountMicroCc >= 0
 
     choice SettleCcTransaction : ContractId CcTransactionLog
       with
