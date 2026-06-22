@@ -603,16 +603,25 @@ export class QuestLedgerService implements OnModuleInit {
 
   /**
    * AtomicFeeAndReward — single DAML choice yang menggabungkan:
-   *   1. ConfirmFeePaid   (fee terbayar)
+   *   1. ConfirmFeePaid    (fee terbayar)
    *   2. ConfirmRewardSent (reward terkirim)
    *   3. CcTransactionLog  (audit trail)
    *
-   * Canton menjamin ketiga operasi di atas bersifat ATOMIC:
-   * jika salah satu gagal, seluruh transaksi rollback otomatis.
+   * Canton menjamin ketiga status di atas ditulis ATOMIC dalam 1 transaksi:
+   * jika salah satu assert gagal, seluruh transaksi rollback otomatis.
    *
-   * Ini menggantikan pemanggilan terpisah confirmFeePaid + confirmRewardSent +
-   * recordCcTransactionLog yang sebelumnya bisa menyebabkan inkonsistensi
-   * (fee tercatat tapi reward gagal, atau sebaliknya).
+   * ⚠️ MODEL PEMINDAHAN CC (penting):
+   *   Choice ini HANYA menulis audit trail on-chain. Pemindahan CC (Amulet)
+   *   ASLI terjadi di Canton Token Standard (CIP-56 TransferFactory) di luar
+   *   DAML — lihat canton-ledger.service.ts:executeTransferFactoryTransfer.
+   *   "Atomic" di sini = atomicity PENULISAN STATUS, bukan atomicity CC.
+   *
+   * v11.1 fix: sebelumnya choice mengembalikan 3 contractId
+   * (claimWithFeeCid + claimFinalCid + txLogCid) karena bug double-create
+   * di Main.daml yang menghasilkan 2 QuestClaim aktif. Sekarang hanya
+   * 1 QuestClaim final + 1 CcTransactionLog = tuple 2.
+   *
+   * @returns { claimFinalCid, txLogCid } — 2 contract IDs (bukan 3 seperti v11.0)
    */
   async atomicFeeAndReward(params: {
     claimContractId: string;
@@ -624,18 +633,17 @@ export class QuestLedgerService implements OnModuleInit {
     referenceId: string;
   }): Promise<{
     ok: boolean;
-    claimWithFeeCid: string | null;
     claimFinalCid: string | null;
     txLogCid: string | null;
     errors: string[];
   }> {
     if (!this.isClaimSessionConfigured()) {
-      return { ok: false, claimWithFeeCid: null, claimFinalCid: null, txLogCid: null, errors: ['Claim session ledger disabled'] };
+      return { ok: false, claimFinalCid: null, txLogCid: null, errors: ['Claim session ledger disabled'] };
     }
     const tpl = this.templateId(TPL.QuestClaim);
     const operator = this.operatorPartyId;
     if (!operator) {
-      return { ok: false, claimWithFeeCid: null, claimFinalCid: null, txLogCid: null, errors: ['Canton operator party not configured'] };
+      return { ok: false, claimFinalCid: null, txLogCid: null, errors: ['Canton operator party not configured'] };
     }
 
     const now = new Date().toISOString();
@@ -645,13 +653,12 @@ export class QuestLedgerService implements OnModuleInit {
       'AtomicFeeAndReward',
       {
         feeTxId: params.feeTxId,
-        feeConfirmedAt: now,
         rewardTxId: params.rewardTxId,
-        rewardSentAt: now,
         txLogId: params.txLogId,
         amountMicroCc: this.intStr(params.amountMicroCc),
         description: params.description,
         referenceId: params.referenceId,
+        rewardSentAt: now,
       },
       [operator],
       `atomic-fee-reward-${params.claimContractId.slice(0, 16)}-${randomUUID()}`,
@@ -660,18 +667,17 @@ export class QuestLedgerService implements OnModuleInit {
 
     if (ok) {
       const cids = this.extractContractIds(text);
-      // Expected: [claimWithFeeCid, claimFinalCid, txLogCid] (3 contract IDs)
-      const claimWithFeeCid = cids[0] ?? null;
-      const claimFinalCid = cids[1] ?? null;
-      const txLogCid = cids[2] ?? null;
+      // Expected: [claimFinalCid, txLogCid] (2 contract IDs only — v11.1 fix)
+      const claimFinalCid = cids[0] ?? null;
+      const txLogCid = cids[1] ?? null;
       this.logger.log(
-        `AtomicFeeAndReward OK: claimFee=${claimWithFeeCid?.slice(0, 12)} claimFinal=${claimFinalCid?.slice(0, 12)} txLog=${txLogCid?.slice(0, 12)}`,
+        `AtomicFeeAndReward OK: claimFinal=${claimFinalCid?.slice(0, 12)} txLog=${txLogCid?.slice(0, 12)}`,
       );
-      return { ok: true, claimWithFeeCid, claimFinalCid, txLogCid, errors: [] };
+      return { ok: true, claimFinalCid, txLogCid, errors: [] };
     }
 
     this.logger.warn(`AtomicFeeAndReward failed: ${text.slice(0, 300)}`);
-    return { ok: false, claimWithFeeCid: null, claimFinalCid: null, txLogCid: null, errors: [this.formatLedgerError(text, 'AtomicFeeAndReward failed')] };
+    return { ok: false, claimFinalCid: null, txLogCid: null, errors: [this.formatLedgerError(text, 'AtomicFeeAndReward failed')] };
   }
 
   // ── 8. ReferralReward ────────────────────────────────────────────────────────
