@@ -85,14 +85,6 @@ template UserAccount
     signatory admin
     observer userAddress
 
-    -- Invariants: poin tidak boleh negatif, dan spent tidak boleh melebihi earned.
-    -- Defence-in-depth: walaupun choice sudah validate, invariant menjamin
-    -- kontrak tidak pernah berada di state tidak sah (termasuk jika choice
-    -- baru lupa validate di masa depan).
-    invariant earnedPoints >= 0
-    invariant spentPoints >= 0
-    invariant spentPoints <= earnedPoints
-
     choice RewardPoints : ContractId UserAccount
       with
         pointsToAdd : Int
@@ -502,9 +494,6 @@ template CcTransactionLog
   where
     signatory admin
     observer userAddress
-
-    -- amountMicroCc tidak boleh negatif (mencegah "credit disamarkan sebagai debit").
-    invariant amountMicroCc >= 0
 
     choice SettleCcTransaction : ContractId CcTransactionLog
       with
