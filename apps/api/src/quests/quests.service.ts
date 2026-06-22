@@ -1769,6 +1769,13 @@ export class QuestsService {
 
       // Step 1: user pays claim fee → validator node party (CANTON_VALIDATOR_PARTY_ID).
       // If the fee was already paid (previous attempt), skip collecting again.
+      //
+      // ⚠️ v11.1 fix: assertRewardPool DULU sebelum collectClaimFee.
+      // Sebelumnya urutan terbalik — user bisa ke-charge fee tapi reward gagal
+      // karena pool kosong. Sekarang: cek pool → collect fee → re-check pool
+      // (race defense) → send reward.
+      await this.assertRewardPool(rewardCc);
+
       const feeTxId =
         drawNow?.claimFeeLedgerTxId ??
         (await this.collectClaimFee({
@@ -1790,6 +1797,8 @@ export class QuestsService {
       }
 
       // Step 2: reward wallet (canquest-reward) sends reward → same user party (only after fee is collected).
+      // Re-check pool setelah fee terkumpul (defense against race condition:
+      // pool bisa berkurang antara pre-check dan eksekusi sebenarnya).
       await this.assertRewardPool(rewardCc);
       const rewardPartyId = this.rewardPartyId;
       if (!rewardPartyId) {
@@ -1815,8 +1824,10 @@ export class QuestsService {
           `(${rewardPending ? 'PENDING — user accepts in wallet' : 'direct'})`,
       );
 
-      // canquest-v11: Atomic DAML choice — fee + reward + audit trail dalam SATU transaksi.
+      // canquest-v11.1: Atomic DAML choice — fee + reward + audit trail dalam SATU transaksi.
       // Jika salah satu gagal, Canton rollback seluruhnya. Tidak ada partial commit.
+      // v11.1 fix: signature sekarang mengembalikan tuple 2 (claimFinalCid, txLogCid),
+      // bukan tuple 3 seperti v11.0 (yang akibatkan bug double-create QuestClaim).
       if (claimSessionId) {
         const atomicResult = await this.questLedger.atomicFeeAndReward({
           claimContractId: claimSessionId,
@@ -2020,62 +2031,42 @@ export class QuestsService {
         };
       }
 
+      // canquest-v11.1 fix: Sebelumnya flow raffle memanggil 4 stub deprecated
+      // (createClaimSession / createEarnClaimSession / createRaffleWinner /
+      // createCcRewardEntitlement) yang SEMUA selalu return null — akibatnya
+      // claimSessionId selalu null dan branch AtomicFeeAndReward di bawah
+      // TIDAK PERNAH jalan untuk raffle (audit trail raffle kosong).
+      //
+      // Fix: gunakan pattern yang sama dengan FCFS — exercise DrawRaffleWinner
+      // pada QuestCampaign yang sudah dibuat admin (ledgerCampaignId di DB).
+      // Ini menghasilkan (campaignCid, claimCid) yang langsung jadi
+      // claimSessionId untuk atomicFeeAndReward.
       let claimSessionId: string | null = null;
-      if (this.questLedger.isClaimSessionConfigured()) {
-        const cs = await this.questLedger.createClaimSession({
-          questId,
-          userPartyId: cantonPartyId,
-          claimKind: 'fcfs_cc',
-          feeCc,
-          rewardCc,
-        });
-        claimSessionId = cs.sessionContractId;
-        if (cs.errors.length > 0) {
-          this.logger.warn(`ClaimSession create warnings: ${cs.errors.join(' | ')}`);
+      if (this.questLedger.isClaimSessionConfigured() && cantonPartyId) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const campaignContractId = (quest as any).ledgerCampaignId ?? null;
+        if (campaignContractId) {
+          const claimResult = await this.questLedger.drawRaffleWinner({
+            campaignContractId,
+            userPartyId: cantonPartyId,
+            claimId: draw.id,
+          });
+          claimSessionId = claimResult.claimContractId;
+          if (claimResult.errors.length > 0) {
+            this.logger.warn(`DrawRaffleWinner warnings: ${claimResult.errors.join(' | ')}`);
+          } else {
+            this.logger.log(
+              `DrawRaffleWinner OK: user=@${username} quest=${questId.slice(0, 8)} claim=${claimSessionId?.slice(0, 12)}`,
+            );
+          }
+        } else {
+          this.logger.warn(`DrawRaffleWinner skipped: no ledgerCampaignId for quest=${questId}`);
         }
       }
 
-      // NEW: Create EarnClaimSession for CC Raffle audit trail (Canton M3 pattern)
-      let earnClaimSessionId: string | null = null;
-      if (this.questLedger.isClaimSessionConfigured()) {
-        const ecs = await this.questLedger.createEarnClaimSession({
-          userPartyId: cantonPartyId,
-          campaignId: questId,
-          claimKind: 'CC_RAFFLE',
-          feeCc,
-          rewardCc,
-        });
-        earnClaimSessionId = ecs.contractId;
-        if (ecs.error) {
-          this.logger.warn(`EarnClaimSession (CC_RAFFLE) create warning: ${ecs.error}`);
-        }
-      }
-
-      // NEW: Create RaffleWinner on ledger for winner tracking
-      if (this.questLedger.isConfigured()) {
-        const winnerRes = await this.questLedger.createRaffleWinner({
-          userPartyId: cantonPartyId,
-          campaignId: questId,
-          rewardCc,
-        });
-        if (winnerRes.error) {
-          this.logger.warn(`RaffleWinner create warning: ${winnerRes.error}`);
-        }
-      }
-
-      // NEW: Create CcRewardEntitlement for CC raffle reward tracking
-      if (this.questLedger.isConfigured()) {
-        const entitlementRes = await this.questLedger.createCcRewardEntitlement({
-          userPartyId: cantonPartyId,
-          campaignId: questId,
-          rewardCc,
-          feeCc,
-          claimKind: 'CC_RAFFLE',
-        });
-        if (entitlementRes.error) {
-          this.logger.warn(`CcRewardEntitlement (CC_RAFFLE) create warning: ${entitlementRes.error}`);
-        }
-      }
+      // v11.1: assertRewardPool DULU sebelum collectClaimFee (sama seperti FCFS).
+      // Mencegah user kena fee charge tapi reward gagal karena pool kosong.
+      await this.assertRewardPool(rewardCc);
 
       const feeTxId = await this.collectClaimFee({
         userId,
@@ -2087,6 +2078,7 @@ export class QuestsService {
         feeTargetPartyId: this.feeTargetPartyId ?? validatorPartyId,
       });
 
+      // Re-check pool setelah fee terkumpul (race defense).
       await this.assertRewardPool(rewardCc);
       const rewardResult = await this.cantonLedger.sendReward({
         receiverPartyId: cantonPartyId,
@@ -2104,9 +2096,10 @@ export class QuestsService {
           `(${rewardPending ? 'PENDING — user accepts in wallet' : 'direct'})`,
       );
 
-      // canquest-v11: Atomic DAML choice — fee + reward + audit trail.
-      // Prioritas utama claimSessionId (QuestClaim DAML). earnClaimSessionId 
-      // adalah fallback legacy yang tetap jalan sendiri karena deprecated stub.
+      // canquest-v11.1: Atomic DAML choice — fee + reward + audit trail dalam SATU transaksi.
+      // v11.1 fix: hapus branch earnClaimSessionId legacy (deprecated stub selalu null).
+      // Sekarang claimSessionId dari drawRaffleWinner di atas — selalu ada jika
+      // ledger aktif & ledgerCampaignId tersedia.
       if (claimSessionId) {
         const atomicResult = await this.questLedger.atomicFeeAndReward({
           claimContractId: claimSessionId,
@@ -2121,22 +2114,6 @@ export class QuestsService {
           this.logger.warn(
             `AtomicFeeAndReward DrawCC failed (non-blocking): ${atomicResult.errors.join(' | ')}`,
           );
-        }
-      } else if (earnClaimSessionId) {
-        // Legacy path: earnClaimSession tetap menggunakan mark terpisah (deprecated stub)
-        const earnFeeMarked = await this.questLedger.markEarnClaimFeePaid({
-          sessionContractId: earnClaimSessionId,
-          feeTxId,
-        });
-        if (!earnFeeMarked.ok) {
-          this.logger.warn(`EarnClaimSession fee mark failed: ${earnFeeMarked.errors.join(' | ')}`);
-        }
-        const earnRewardMarked = await this.questLedger.markEarnClaimRewardSent({
-          sessionContractId: earnClaimSessionId,
-          rewardTxId: rewardOfferId,
-        });
-        if (!earnRewardMarked.ok) {
-          this.logger.warn(`EarnClaimSession reward mark failed: ${earnRewardMarked.errors.join(' | ')}`);
         }
       }
 
@@ -2351,66 +2328,51 @@ export class QuestsService {
       });
     }
 
-    // NEW: Determine claim kind for Code rewards (CODE_FCFS or CODE_RAFFLE)
+    // Determine claim kind for Code rewards (CODE_FCFS or CODE_RAFFLE).
+    //
+    // v11.1 fix: Sebelumnya blok ini memanggil 4 stub deprecated
+    // (createEarnClaimSession / markEarnClaimFeePaid / createRaffleWinner /
+    // createFcfsSlotReservation) yang SEMUA selalu return null → tidak ada
+    // audit trail DAML sama sekali untuk Code rewards.
+    //
+    // Fix: exercise QuestCampaign on-chain (ClaimFcfsSlot atau DrawRaffleWinner),
+    // yang menghasilkan (campaignCid, claimCid). claimCid disimpan untuk
+    // revealRewardCode SETELAH kode benar-benar di-assign dari pool.
+    // Kuota FCFS & status campaign divalidasi on-chain di DAML choice.
     const codeClaimKind: 'CODE_FCFS' | 'CODE_RAFFLE' =
       rewardType === RewardType.INVITE_CODE_FCFS ? 'CODE_FCFS' : 'CODE_RAFFLE';
 
-    // NEW: Create EarnClaimSession for Code reward audit trail (Canton M3 pattern)
-    let earnClaimSessionId: string | null = null;
-    if (this.questLedger.isClaimSessionConfigured()) {
-      const ecs = await this.questLedger.createEarnClaimSession({
-        userPartyId: cantonPartyId,
-        campaignId: questId,
-        claimKind: codeClaimKind,
-        feeCc,
-        rewardCc: 0, // Code rewards don't have CC amount
-      });
-      earnClaimSessionId = ecs.contractId;
-      if (ecs.error) {
-        this.logger.warn(`EarnClaimSession (${codeClaimKind}) create warning: ${ecs.error}`);
-      }
-    }
-
-    // NEW: Mark EarnClaimSession fee paid for Code rewards
-    if (earnClaimSessionId) {
-      const earnFeeMarked = await this.questLedger.markEarnClaimFeePaid({
-        sessionContractId: earnClaimSessionId,
-        feeTxId,
-      });
-      if (!earnFeeMarked.ok) {
-        this.logger.warn(`EarnClaimSession (${codeClaimKind}) fee mark failed: ${earnFeeMarked.errors.join(' | ')}`);
-      }
-    }
-
-    // NEW: Create RaffleWinner on ledger for Code Raffle winner tracking
-    if (this.questLedger.isConfigured() && codeClaimKind === 'CODE_RAFFLE') {
-      const winnerRes = await this.questLedger.createRaffleWinner({
-        userPartyId: cantonPartyId,
-        campaignId: questId,
-        rewardCc: 0,
-      });
-      if (winnerRes.error) {
-        this.logger.warn(`RaffleWinner (CODE_RAFFLE) create warning: ${winnerRes.error}`);
-      }
-    }
-
-    // NEW: Create FcfsSlotReservation on ledger for Code FCFS slot tracking
-    if (this.questLedger.isConfigured() && codeClaimKind === 'CODE_FCFS') {
-      const maxW = quest.maxWinners ?? 0;
-      if (maxW > 0) {
-        const slotIndex = await this.prisma.winnerDraw.count({
-          where: { questId, inviteCode: { not: null } },
-        });
-        const expiresAt = new Date(Date.now() + this.fcfsReservationTtlMs()).toISOString();
-        const slotRes = await this.questLedger.createFcfsSlotReservation({
-          userPartyId: cantonPartyId,
-          campaignId: questId,
-          slotIndex,
-          expiresAt,
-        });
-        if (slotRes.error) {
-          this.logger.warn(`FcfsSlotReservation (CODE_FCFS) create warning: ${slotRes.error}`);
+    let codeClaimSessionId: string | null = null;
+    if (this.questLedger.isClaimSessionConfigured() && cantonPartyId) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const campaignContractId = (quest as any).ledgerCampaignId ?? null;
+      if (campaignContractId) {
+        const claimId = `code-${existingDraw?.id ?? userId.slice(0, 12)}-${Date.now().toString(36)}`;
+        try {
+          const claimResult = codeClaimKind === 'CODE_FCFS'
+            ? await this.questLedger.claimFcfsSlot({
+                campaignContractId,
+                userPartyId: cantonPartyId,
+                claimId,
+              })
+            : await this.questLedger.drawRaffleWinner({
+                campaignContractId,
+                userPartyId: cantonPartyId,
+                claimId,
+              });
+          codeClaimSessionId = claimResult.claimContractId;
+          if (claimResult.errors.length > 0) {
+            this.logger.warn(`QuestCampaign ${codeClaimKind} warnings: ${claimResult.errors.join(' | ')}`);
+          } else {
+            this.logger.log(
+              `QuestCampaign ${codeClaimKind} OK: user=@${username} quest=${questId.slice(0, 8)} claim=${codeClaimSessionId?.slice(0, 12)}`,
+            );
+          }
+        } catch (err) {
+          this.logger.warn(`QuestCampaign ${codeClaimKind} failed (non-blocking): ${String(err)}`);
         }
+      } else {
+        this.logger.warn(`QuestCampaign ${codeClaimKind} skipped: no ledgerCampaignId for quest=${questId}`);
       }
     }
 
@@ -2448,17 +2410,20 @@ export class QuestsService {
         where: { questId, userId, code: claimedCode },
       });
 
-      // NEW: Create CodeRewardEntitlement on ledger after code is assigned
-      if (this.questLedger.isConfigured() && codeRow) {
-        const entitlementRes = await this.questLedger.createCodeRewardEntitlement({
-          userPartyId: cantonPartyId,
-          campaignId: questId,
+      // v11.1: Reveal reward code on-chain via RevealRewardCode choice.
+      // Sebelumnya: createCodeRewardEntitlement (stub deprecated, selalu null).
+      // Sekarang: pakai codeClaimSessionId dari ClaimFcfsSlot/DrawRaffleWinner di atas,
+      // lalu reveal kode yang baru di-assign. DAML akan archive claim lama &
+      // buat baru dengan rewardCode ter-set — audit trail on-chain akurat.
+      if (codeClaimSessionId) {
+        const revealRes = await this.questLedger.revealRewardCode({
+          claimContractId: codeClaimSessionId,
           code: claimedCode,
-          feeTxId,
-          claimKind: codeClaimKind,
         });
-        if (entitlementRes.error) {
-          this.logger.warn(`CodeRewardEntitlement (${codeClaimKind}) create warning: ${entitlementRes.error}`);
+        if (!revealRes.ok) {
+          this.logger.warn(
+            `RevealRewardCode (${codeClaimKind}) failed (non-blocking): ${revealRes.errors.join(' | ')}`,
+          );
         }
       }
     } catch (err) {
@@ -2581,6 +2546,35 @@ export class QuestsService {
         };
       }
 
+      // v11.1: assertRewardPool DULU sebelum collectClaimFee (konsisten dengan FCFS/raffle).
+      // Mencegah user kena fee charge tapi reward gagal karena pool kosong.
+      await this.assertRewardPool(rewardCc);
+
+      // v11.1: exercise DrawRaffleWinner di QuestCampaign on-chain untuk dapat
+      // claimSessionId (sebelumnya flow CC+Code raffle tidak punya DAML audit).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ccCodeCampaignCid = (quest as any).ledgerCampaignId ?? null;
+      let ccCodeClaimSessionId: string | null = null;
+      if (this.questLedger.isClaimSessionConfigured() && cantonPartyId && ccCodeCampaignCid) {
+        try {
+          const claimResult = await this.questLedger.drawRaffleWinner({
+            campaignContractId: ccCodeCampaignCid,
+            userPartyId: cantonPartyId,
+            claimId: draw.id,
+          });
+          ccCodeClaimSessionId = claimResult.claimContractId;
+          if (claimResult.errors.length > 0) {
+            this.logger.warn(`DrawRaffleWinner (CC+Code) warnings: ${claimResult.errors.join(' | ')}`);
+          } else {
+            this.logger.log(
+              `DrawRaffleWinner (CC+Code) OK: user=@${username} quest=${questId.slice(0, 8)} claim=${ccCodeClaimSessionId?.slice(0, 12)}`,
+            );
+          }
+        } catch (err) {
+          this.logger.warn(`DrawRaffleWinner (CC+Code) failed (non-blocking): ${String(err)}`);
+        }
+      }
+
       const feeTxId = await this.collectClaimFee({
         userId,
         cantonPartyId,
@@ -2590,6 +2584,7 @@ export class QuestsService {
         feeLabel: 'CC+Code raffle claim fee',
         feeTargetPartyId: this.feeTargetPartyId ?? validatorPartyId,
       });
+      // Re-check pool setelah fee (race defense).
       await this.assertRewardPool(rewardCc);
       let rewardOfferId: string | null = null;
       if (rewardCc > 0) {
@@ -2658,6 +2653,36 @@ export class QuestsService {
           userId, questId, userPartyId: cantonPartyId, rewardCc, payoutTxId: rewardOfferId,
         }).catch((err) => this.logger.warn(`CC+Code raffle ledger sync failed: ${String(err)}`));
       }
+
+      // v11.1: Atomic DAML audit trail (fee + reward) + reveal code on-chain.
+      // Sebelumnya flow CC+Code raffle tidak punya DAML audit sama sekali.
+      if (ccCodeClaimSessionId && rewardOfferId) {
+        const atomicResult = await this.questLedger.atomicFeeAndReward({
+          claimContractId: ccCodeClaimSessionId,
+          feeTxId,
+          rewardTxId: rewardOfferId,
+          txLogId: `cccodetx-${draw.id.slice(0, 12)}`,
+          amountMicroCc: Math.round(rewardCc * 1_000_000),
+          description: `CC+Code raffle reward — ${quest.title}`,
+          referenceId: questId,
+        });
+        if (!atomicResult.ok) {
+          this.logger.warn(
+            `AtomicFeeAndReward (CC+Code) failed (non-blocking): ${atomicResult.errors.join(' | ')}`,
+          );
+        }
+        // Reveal kode yang baru di-assign dari pool.
+        const revealRes = await this.questLedger.revealRewardCode({
+          claimContractId: atomicResult.claimFinalCid ?? ccCodeClaimSessionId,
+          code: finalCode,
+        });
+        if (!revealRes.ok) {
+          this.logger.warn(
+            `RevealRewardCode (CC+Code) failed (non-blocking): ${revealRes.errors.join(' | ')}`,
+          );
+        }
+      }
+
       const rewardStatus = await this.getQuestRewardStatus(userId, questId);
       return {
         ok: true,
