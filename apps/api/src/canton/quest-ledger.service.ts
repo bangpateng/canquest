@@ -616,12 +616,17 @@ export class QuestLedgerService implements OnModuleInit {
    *   DAML — lihat canton-ledger.service.ts:executeTransferFactoryTransfer.
    *   "Atomic" di sini = atomicity PENULISAN STATUS, bukan atomicity CC.
    *
-   * v11.1 fix: sebelumnya choice mengembalikan 3 contractId
-   * (claimWithFeeCid + claimFinalCid + txLogCid) karena bug double-create
-   * di Main.daml yang menghasilkan 2 QuestClaim aktif. Sekarang hanya
-   * 1 QuestClaim final + 1 CcTransactionLog = tuple 2.
+   * v1.0.2 UPGRADE COMPATIBILITY:
+   *   DAML choice tetap return 3-tuple (ContractId QuestClaim, ContractId
+   *   QuestClaim, ContractId CcTransactionLog) supaya bisa upgrade dari
+   *   v1.0.1 (Canton melarang ubah return type choice saat package upgrade).
+   *   Tuple [0] dan [1] MERUJUK KE CONTRACT ID YANG SAMA (claimFinalCid).
+   *   Tidak ada lagi double-create QuestClaim (bug v1.0.1 sudah di-fix).
    *
-   * @returns { claimFinalCid, txLogCid } — 2 contract IDs (bukan 3 seperti v11.0)
+   *   Backend parse: cids[0] = claimFinal, cids[2] = txLog.
+   *   extractContractIds akan otomatis dedupe karena tuple [0]==[1].
+   *
+   * @returns { claimFinalCid, txLogCid } — claimFinal dari cids[0], txLog dari cids[1] setelah dedupe
    */
   async atomicFeeAndReward(params: {
     claimContractId: string;
@@ -667,11 +672,15 @@ export class QuestLedgerService implements OnModuleInit {
 
     if (ok) {
       const cids = this.extractContractIds(text);
-      // Expected: [claimFinalCid, txLogCid] (2 contract IDs only — v11.1 fix)
+      // DAML return 3-tuple: (claimFinal, claimFinal, txLog).
+      // extractContractIds otomatis dedupe → hasil: [claimFinal, txLog].
+      // Tapi kalau ternyata tidak dedupe (edge case), ambil posisi paling aman:
+      //   - claimFinalCid = cids[0]
+      //   - txLogCid = cids[cids.length - 1]  (selalu contract terakhir)
       const claimFinalCid = cids[0] ?? null;
-      const txLogCid = cids[1] ?? null;
+      const txLogCid = cids.length >= 2 ? cids[cids.length - 1] : null;
       this.logger.log(
-        `AtomicFeeAndReward OK: claimFinal=${claimFinalCid?.slice(0, 12)} txLog=${txLogCid?.slice(0, 12)}`,
+        `AtomicFeeAndReward OK: claimFinal=${claimFinalCid?.slice(0, 12)} txLog=${txLogCid?.slice(0, 12)} (cids count=${cids.length})`,
       );
       return { ok: true, claimFinalCid, txLogCid, errors: [] };
     }

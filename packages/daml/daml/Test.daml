@@ -602,7 +602,9 @@ testAllTemplates = script do
       claimedAt = "2026-06-05T03:00:00Z"
 
   -- Positive: atomic settlement pertama harus berhasil.
-  (atomicClaimFinalCid, _atomicTxLogCid) <- submit admin do
+  -- Return type 3-tuple: (claimFinal, claimFinalDuplicate, txLog).
+  -- Tuple [0] dan [1] sengaja sama (upgrade compatibility fix v1.0.2).
+  (atomicClaimFinalCid, _atomicClaimDupCid, _atomicTxLogCid) <- submit admin do
     exerciseCmd atomicClaimCid AtomicFeeAndReward with
       feeTxId       = "SPLICE_FEE_ATOMIC_001"
       rewardTxId    = "SPLICE_REWARD_ATOMIC_001"

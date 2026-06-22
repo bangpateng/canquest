@@ -317,8 +317,19 @@ template QuestClaim
     --   di luar Daml, di-orkestrasi oleh backend (quests.service.ts).
     --   "Atomic" di sini = atomicity PENULISAN STATUS ON-CHAIN, BUKAN atomicity CC.
     --
+    -- ⚠️ UPGRADE COMPATIBILITY (v1.0.2):
+    --   Return type HARUS tetap 3-tuple (ContractId QuestClaim, ContractId
+    --   QuestClaim, ContractId CcTransactionLog) supaya bisa upgrade dari
+    --   v1.0.1 (Canton melarang ubah return type choice saat package upgrade).
+    --   Bug lama (v1.0.0/v1.0.1) melakukan double-create QuestClaim → tuple [0]
+    --   dan [1] adalah 2 kontrak aktif berbeda.
+    --   Fix v1.0.2: HANYA 1 create QuestClaim. Tuple [0] dan [1] merujuk ke
+    --   contract ID yang SAMA (claimFinalCid). Tidak ada lagi double-create,
+    --   tidak ada lagi double-counting audit trail.
+    --   Backend WAJIB parse: cids[0] = claimFinal, cids[2] = txLog.
+    --
     -- Docs: https://docs.canton.network/overview/learn/architecture
-    choice AtomicFeeAndReward : (ContractId QuestClaim, ContractId CcTransactionLog)
+    choice AtomicFeeAndReward : (ContractId QuestClaim, ContractId QuestClaim, ContractId CcTransactionLog)
       with
         feeTxId        : Text
         rewardTxId     : Text
@@ -361,7 +372,9 @@ template QuestClaim
           ledgerTxId = rewardTxId
           createdAt = rewardSentAt
 
-        pure (claimFinalCid, txLogCid)
+        -- Tuple [0] dan [1] SAMA (claimFinalCid) — return type 3-tuple
+        -- dipertahankan untuk upgrade compatibility dengan v1.0.1.
+        pure (claimFinalCid, claimFinalCid, txLogCid)
 
 
 -- ============================================================
