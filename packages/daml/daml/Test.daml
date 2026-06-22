@@ -629,7 +629,6 @@ testAllTemplates = script do
   -- (lihat commit fix parse error). Validasi amountMicroCc >= 0 dijaga oleh
   -- assertMsg di choice AtomicFeeAndReward (backend tidak pernah mengirim
   -- nilai negatif karena Math.round(rewardCc * 1_000_000) selalu >= 0).
-      createdAt     = "2026-06-05T03:10:00Z"
 
   -- [P] RAFFLE GUARD: draw pada campaign CLOSED harus GAGAL (H-1)
   --     dan reopen CLOSED → ACTIVE harus GAGAL (H-3)
