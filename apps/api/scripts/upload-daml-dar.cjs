@@ -25,10 +25,65 @@ function loadEnv() {
 
 loadEnv();
 
-const baseUrl = (process.env.CANTON_JSON_API_URL || 'http://127.0.0.1:7575').replace(/\/$/, '');
+// Ledger API URL: pakai LEDGER_API_URL (publik, e.g. https://api-ledger-canquest.nodelab.my.id)
+// Fallback ke CANTON_JSON_API_URL (local 7575) kalau LEDGER_API_URL tidak diset.
+const baseUrl = (process.env.LEDGER_API_URL || process.env.CANTON_JSON_API_URL || 'http://127.0.0.1:7575').replace(/\/$/, '');
+
+// Auth: pakai Keycloak client_credentials (sama seperti KeycloakTokenService backend).
+// Fallback HS256 hanya kalau LEDGER_AUTH_MODE bukan 'keycloak'.
+const authMode = process.env.LEDGER_AUTH_MODE || 'hs256';
+const keycloakUrl = (process.env.KEYCLOAK_URL || '').replace(/\/$/, '');
+const keycloakRealm = process.env.KEYCLOAK_REALM || 'canton';
+const clientId = process.env.LEDGER_CLIENT_ID;
+const clientSecret = process.env.LEDGER_CLIENT_SECRET;
+const scope = process.env.LEDGER_API_AUTH_SCOPE || 'daml_ledger_api';
+// HS256 fallback (legacy/dev only)
 const secret = process.env.CANTON_SPLICE_SECRET || 'unsafe';
 const audience = process.env.CANTON_LEDGER_API_AUDIENCE || 'https://canton.network.global';
 const user = process.env.CANTON_LEDGER_API_USER || 'ledger-api-user';
+
+/**
+ * Dapatkan access token dari Keycloak (client_credentials flow).
+ * Mereplikasi persis KeycloakTokenService.getToken() di backend.
+ */
+async function getKeycloakToken() {
+  const tokenUrl = `${keycloakUrl}/realms/${keycloakRealm}/protocol/openid-connect/token`;
+  const body = new URLSearchParams({
+    grant_type: 'client_credentials',
+    client_id: clientId,
+    client_secret: clientSecret,
+    scope,
+  });
+  const res = await fetch(tokenUrl, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body,
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Keycloak token request gagal (${res.status}): ${txt}`);
+  }
+  const data = await res.json();
+  return data.access_token;
+}
+
+function signHs256Token() {
+  return jwt.sign({ sub: user, aud: audience }, secret, {
+    algorithm: 'HS256',
+    expiresIn: '5m',
+  });
+}
+
+async function getAccessToken() {
+  if (authMode === 'keycloak') {
+    if (!keycloakUrl || !clientId || !clientSecret) {
+      throw new Error('LEDGER_AUTH_MODE=keycloak tapi KEYCLOAK_URL/LEDGER_CLIENT_ID/LEDGER_CLIENT_SECRET belum diset di .env');
+    }
+    return getKeycloakToken();
+  }
+  return signHs256Token();
+}
 
 function resolveLatestDar() {
   const distDir = path.join(__dirname, '..', '..', '..', 'packages', 'daml', '.daml', 'dist');
@@ -54,11 +109,23 @@ async function main() {
     process.exit(1);
   }
 
-  // ── Step 1: Upload DAR ──
-  const token = jwt.sign({ sub: user, aud: audience }, secret, {
-    algorithm: 'HS256',
-    expiresIn: '5m',
-  });
+  console.log(`Ledger API: ${baseUrl}`);
+  console.log(`Auth mode:  ${authMode}`);
+  if (authMode === 'keycloak') {
+    console.log(`Keycloak:   ${keycloakUrl} (realm=${keycloakRealm}, client=${clientId})`);
+  }
+  console.log(`DAR:        ${darPath}`);
+  console.log('---');
+
+  // ── Step 1: Dapatkan token (Keycloak atau HS256) ──
+  let token;
+  try {
+    token = await getAccessToken();
+    console.log(`✓ Token acquired (length: ${token.length})`);
+  } catch (err) {
+    console.error('❌ Failed to get token:', err.message);
+    process.exit(1);
+  }
 
   const body = fs.readFileSync(darPath);
   const res = await fetch(`${baseUrl}/v2/packages`, {
