@@ -578,6 +578,134 @@ testAllTemplates = script do
       ledgerTxId    = "SPLICE_AIRDROP_TX_BOB_001"
       createdAt     = "2026-06-05T14:00:00Z"
 
+  -- [O] ATOMIC FEE + REWARD (canquest-v11.1)
+  -- Validasi choice AtomicFeeAndReward: 1 create QuestClaim + 1 CcTransactionLog.
+  -- Bug lama (v11.0) menghasilkan 2 QuestClaim aktif — sekarang harus 1 saja.
+
+  atomicTestCampaignCid <- submit admin do
+    createCmd QuestCampaign with
+      admin
+      campaignId    = "CAMPAIGN_ATOMIC_TEST"
+      title         = "Atomic Fee+Reward Test"
+      questKind     = "CC_FCFS"
+      rewardCc      = 10.0
+      claimFeeCc    = 3.0
+      maxWinners    = 1
+      currentClaims = 0
+      status        = "ACTIVE"
+      createdAt     = "2026-06-05T00:00:00Z"
+
+  (_, atomicClaimCid) <- submit admin do
+    exerciseCmd atomicTestCampaignCid ClaimFcfsSlot with
+      user      = alice
+      claimId   = "CLAIM_ATOMIC_TEST_001"
+      claimedAt = "2026-06-05T03:00:00Z"
+
+  -- Positive: atomic settlement pertama harus berhasil.
+  (atomicClaimFinalCid, _atomicTxLogCid) <- submit admin do
+    exerciseCmd atomicClaimCid AtomicFeeAndReward with
+      feeTxId       = "SPLICE_FEE_ATOMIC_001"
+      rewardTxId    = "SPLICE_REWARD_ATOMIC_001"
+      txLogId       = "CC_TX_ATOMIC_001"
+      amountMicroCc = 10000000
+      description   = "Atomic FCFS reward"
+      referenceId   = "CAMPAIGN_ATOMIC_TEST"
+      rewardSentAt  = "2026-06-05T03:05:00Z"
+
+  -- Negative: atomic settlement kedua pada kontrak yang sama HARUS gagal
+  -- (idempotency: rewardSent sudah True → assertMsg "Reward sudah dikirim").
+  submitMustFail admin do
+    exerciseCmd atomicClaimFinalCid AtomicFeeAndReward with
+      feeTxId       = "SPLICE_FEE_ATOMIC_002"
+      rewardTxId    = "SPLICE_REWARD_ATOMIC_002"
+      txLogId       = "CC_TX_ATOMIC_002"
+      amountMicroCc = 10000000
+      description   = "Atomic FCFS reward (retry)"
+      referenceId   = "CAMPAIGN_ATOMIC_TEST"
+      rewardSentAt  = "2026-06-05T03:06:00Z"
+
+  -- Negative: amountMicroCc negatif harus ditolak (invariant CcTransactionLog).
+  submitMustFail admin do
+    createCmd CcTransactionLog with
+      admin
+      userAddress   = alice
+      username      = "Alice_CanQuest"
+      txLogId       = "CC_TX_NEGATIVE_TEST"
+      txType        = "QUEST_REWARD"
+      amountMicroCc = -1
+      description   = "Should fail invariant"
+      referenceId   = "INVARIANT_TEST"
+      ledgerTxId    = ""
+      createdAt     = "2026-06-05T03:10:00Z"
+
+  -- [P] RAFFLE GUARD: draw pada campaign CLOSED harus GAGAL (H-1)
+  --     dan reopen CLOSED → ACTIVE harus GAGAL (H-3)
+
+  closedRaffleCid <- submit admin do
+    createCmd QuestCampaign with
+      admin
+      campaignId    = "CAMPAIGN_CLOSED_RAFFLE"
+      title         = "Closed Raffle Test"
+      questKind     = "CC_RAFFLE"
+      rewardCc      = 10.0
+      claimFeeCc    = 2.0
+      maxWinners    = 0
+      currentClaims = 0
+      status        = "ACTIVE"
+      createdAt     = "2026-06-05T00:00:00Z"
+
+  closedRaffleEndedCid <- submit admin do
+    exerciseCmd closedRaffleCid UpdateCampaignStatus with
+      newStatus = "ENDED"
+      updatedAt = "2026-06-05T23:00:00Z"
+
+  closedRaffleClosedCid <- submit admin do
+    exerciseCmd closedRaffleEndedCid CloseCampaign with
+      closedAt = "2026-06-05T23:30:00Z"
+
+  -- DrawRaffleWinner pada CLOSED → harus GAGAL (H-1 fix)
+  submitMustFail admin do
+    exerciseCmd closedRaffleClosedCid DrawRaffleWinner with
+      user       = alice
+      claimId    = "CLAIM_CLOSED_RAFFLE_FAIL"
+      rewardCode = ""
+      drawnAt    = "2026-06-05T23:35:00Z"
+
+  -- Reopen CLOSED → ACTIVE → harus GAGAL (H-3 fix: state machine)
+  submitMustFail admin do
+    exerciseCmd closedRaffleClosedCid UpdateCampaignStatus with
+      newStatus = "ACTIVE"
+      updatedAt = "2026-06-05T23:40:00Z"
+
+  -- [Q] RAFFLE QUOTA: draw melebihi maxWinners harus GAGAL (H-2 fix)
+  quotaRaffleCid <- submit admin do
+    createCmd QuestCampaign with
+      admin
+      campaignId    = "CAMPAIGN_RAFFLE_QUOTA"
+      title         = "Raffle Quota Test"
+      questKind     = "CC_RAFFLE"
+      rewardCc      = 5.0
+      claimFeeCc    = 1.0
+      maxWinners    = 1
+      currentClaims = 0
+      status        = "ACTIVE"
+      createdAt     = "2026-06-05T00:00:00Z"
+
+  (quotaRaffleCid2, _) <- submit admin do
+    exerciseCmd quotaRaffleCid DrawRaffleWinner with
+      user       = alice
+      claimId    = "CLAIM_RAFFLE_QUOTA_001"
+      rewardCode = ""
+      drawnAt    = "2026-06-05T20:00:00Z"
+
+  -- Draw kedua setelah maxWinners=1 tercapai → harus GAGAL (H-2 fix)
+  submitMustFail admin do
+    exerciseCmd quotaRaffleCid2 DrawRaffleWinner with
+      user       = bob
+      claimId    = "CLAIM_RAFFLE_QUOTA_002"
+      rewardCode = ""
+      drawnAt    = "2026-06-05T20:01:00Z"
+
   -- [N] EDGE CASES & SECURITY
 
   submitMustFail admin do
