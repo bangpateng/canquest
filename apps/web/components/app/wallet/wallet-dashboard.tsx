@@ -135,7 +135,6 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
         partyId={displayPartyId}
         balance={balance}
         onBalanceRefresh={handleBalanceRefresh}
-        onOpenLock={() => setLockOpen(true)}
       />
 
       <OffersSection onRefresh={handleBalanceRefresh} />
@@ -156,8 +155,8 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
 /**
  * Satu baris status lock (Spec BAGIAN 5a).
  * - Ada lock aktif: "Terkunci {n} CC · {tierLabel}" + tombol "Kelola".
- * - Tidak ada lock: ajakan "Kunci CC untuk ikut Earn" + tombol "Lock".
- * Aksen hijau-outline (bukan hijau penuh).
+ * - Tidak ada lock: ajakan "Belum ada CC terkunci · kunci untuk ikut Earn" + tombol "Lock".
+ * Aksen hijau-outline (bukan hijau penuh). Satu-satunya pintu masuk modal Lock di halaman wallet.
  */
 function LockStatusBar({
   status,
@@ -181,7 +180,9 @@ function LockStatusBar({
             )}
           </span>
         ) : (
-          <span className="truncate text-slate-400">Kunci CC untuk ikut Earn</span>
+          <span className="truncate text-slate-400">
+            Belum ada CC terkunci · kunci untuk ikut Earn
+          </span>
         )}
       </div>
       <button
