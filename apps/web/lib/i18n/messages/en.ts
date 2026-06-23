@@ -37,6 +37,9 @@ export const en: PlatformMessages = {
     toastEarn: "Earn reward: +{amount} CC",
     toastSpin: "Spin reward: +{amount} CC",
     toastReceived: "Received +{amount} CC",
+    toastSent: "You sent {amount} CC",
+    toastLocked: "You locked {amount} CC",
+    toastUnlocked: "{amount} CC has been unlocked",
   },
   common: {
     loading: "Loading…",

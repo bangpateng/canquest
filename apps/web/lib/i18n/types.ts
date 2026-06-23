@@ -42,6 +42,9 @@ export type PlatformMessages = {
     toastEarn: string;
     toastSpin: string;
     toastReceived: string;
+    toastSent: string;
+    toastLocked: string;
+    toastUnlocked: string;
   };
   common: {
     loading: string;

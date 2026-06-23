@@ -5,7 +5,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 export type NotificationTx = {
   kind: "transaction";
   id: string;
-  type: "QUEST_REWARD" | "SPIN_REWARD" | "TRANSFER_IN";
+  type:
+    | "QUEST_REWARD"
+    | "SPIN_REWARD"
+    | "TRANSFER_IN"
+    | "TRANSFER_OUT"
+    | "CC_LOCK"
+    | "CC_UNLOCK";
   description: string;
   amountMicroCc: string;
   referenceId: string | null;

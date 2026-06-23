@@ -37,6 +37,9 @@ export const tr: PlatformMessages = {
     toastEarn: "Kazanç ödülü: +{amount} CC",
     toastSpin: "Çevir ödülü: +{amount} CC",
     toastReceived: "+{amount} CC alındı",
+    toastSent: "{amount} CC gönderdin",
+    toastLocked: "{amount} CC kilitledin",
+    toastUnlocked: "{amount} CC kilidi açıldı",
   },
   common: {
     loading: "Yükleniyor…",

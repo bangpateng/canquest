@@ -4,8 +4,11 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowDownLeft,
+  ArrowUpRight,
   Bell,
   Gift,
+  Lock,
+  LockOpen,
   Sparkles,
   Ticket,
   X,
@@ -47,6 +50,12 @@ function txLabel(
       return t("transactions.spinReward");
     case "TRANSFER_IN":
       return t("transactions.receivedCc");
+    case "TRANSFER_OUT":
+      return t("transactions.sentCc");
+    case "CC_LOCK":
+      return t("transactions.ccLocked");
+    case "CC_UNLOCK":
+      return t("transactions.ccUnlocked");
     default:
       return tx.description;
   }
@@ -120,6 +129,28 @@ function NotificationRow({ item }: { item: NotificationItem }) {
   const tx = item;
   const ccAmt = Math.abs(Number(tx.amountMicroCc)) / 1_000_000;
   const title = tx.description?.trim() || txLabel(tx, t);
+  // Arah: TRANSFER_OUT & CC_LOCK = keluar (−), sisanya = masuk (+).
+  const isDebit = tx.type === "TRANSFER_OUT" || tx.type === "CC_LOCK";
+
+  const iconClass = cn(
+    "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
+    tx.type === "TRANSFER_IN"
+      ? "bg-green-500/10 text-green-600 dark:text-green-400"
+      : tx.type === "TRANSFER_OUT"
+        ? "bg-red-500/10 text-red-600 dark:text-red-400"
+        : tx.type === "CC_LOCK"
+          ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+          : tx.type === "CC_UNLOCK"
+            ? "bg-green-500/10 text-green-600 dark:text-green-400"
+            : "bg-[var(--primary)]/15 text-[var(--foreground)]",
+  );
+
+  const amountClass = cn(
+    "shrink-0 text-sm font-semibold tabular-nums",
+    isDebit
+      ? "text-red-600 dark:text-red-400"
+      : "text-green-600 dark:text-green-400",
+  );
 
   return (
     <li className="border-b border-[var(--border)] last:border-b-0">
@@ -127,16 +158,15 @@ function NotificationRow({ item }: { item: NotificationItem }) {
         href={`/transactions/${tx.id}`}
         className="flex items-start gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--primary)]/8"
       >
-        <span
-          className={cn(
-            "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
-            tx.type === "TRANSFER_IN"
-              ? "bg-green-500/10 text-green-600 dark:text-green-400"
-              : "bg-[var(--primary)]/15 text-[var(--foreground)]",
-          )}
-        >
+        <span className={iconClass}>
           {tx.type === "TRANSFER_IN" ? (
             <ArrowDownLeft className="h-4 w-4" aria-hidden />
+          ) : tx.type === "TRANSFER_OUT" ? (
+            <ArrowUpRight className="h-4 w-4" aria-hidden />
+          ) : tx.type === "CC_LOCK" ? (
+            <Lock className="h-4 w-4" aria-hidden />
+          ) : tx.type === "CC_UNLOCK" ? (
+            <LockOpen className="h-4 w-4" aria-hidden />
           ) : (
             <Gift className="h-4 w-4" aria-hidden />
           )}
@@ -149,8 +179,9 @@ function NotificationRow({ item }: { item: NotificationItem }) {
             {txLabel(tx, t)} · {timeAgo(tx.createdAt, t)}
           </span>
         </span>
-        <span className="shrink-0 text-sm font-semibold tabular-nums text-green-600 dark:text-green-400">
-          +{ccAmt.toLocaleString(undefined, { maximumFractionDigits: 6 })} CC
+        <span className={amountClass}>
+          {isDebit ? "\u2212" : "+"}
+          {ccAmt.toLocaleString(undefined, { maximumFractionDigits: 6 })} CC
         </span>
       </Link>
     </li>
@@ -226,6 +257,26 @@ export function TransactionNotifications() {
     return () => timers.forEach(clearTimeout);
   }, [toasts, dismissToast]);
 
+  /** Ikon + warna toast mengikuti jenis event (debit = merah, lock = amber, dsb). */
+  function toastIcon(toast: (typeof toasts)[number]) {
+    if (toast.kind === "draw") {
+      return <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />;
+    }
+    if (toast.kind === "code") {
+      return <Ticket className="mt-0.5 h-4 w-4 shrink-0 text-violet-700 dark:text-violet-300" />;
+    }
+    switch (toast.txType) {
+      case "TRANSFER_OUT":
+        return <ArrowUpRight className="mt-0.5 h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />;
+      case "CC_LOCK":
+        return <Lock className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />;
+      case "CC_UNLOCK":
+        return <LockOpen className="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />;
+      default:
+        return <Gift className="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />;
+    }
+  }
+
   function toastMessage(toast: (typeof toasts)[number]) {
     if (toast.kind === "draw" || toast.kind === "code") {
       return toast.description;
@@ -233,13 +284,21 @@ export function TransactionNotifications() {
     const amount = toast.amountCc.toLocaleString(undefined, {
       maximumFractionDigits: 6,
     });
-    if (toast.txType === "QUEST_REWARD") {
-      return t("notifications.toastEarn", { amount });
+    switch (toast.txType) {
+      case "QUEST_REWARD":
+        return t("notifications.toastEarn", { amount });
+      case "SPIN_REWARD":
+        return t("notifications.toastSpin", { amount });
+      case "TRANSFER_OUT":
+        return t("notifications.toastSent", { amount });
+      case "CC_LOCK":
+        return t("notifications.toastLocked", { amount });
+      case "CC_UNLOCK":
+        return t("notifications.toastUnlocked", { amount });
+      case "TRANSFER_IN":
+      default:
+        return t("notifications.toastReceived", { amount });
     }
-    if (toast.txType === "SPIN_REWARD") {
-      return t("notifications.toastSpin", { amount });
-    }
-    return t("notifications.toastReceived", { amount });
   }
 
   return (
@@ -325,7 +384,7 @@ export function TransactionNotifications() {
             key={toast.id}
             className="pointer-events-auto flex max-w-sm items-start gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 shadow-lg"
           >
-            <Gift className="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
+            {toastIcon(toast)}
             <p className="min-w-0 flex-1 text-sm text-[var(--foreground)]">
               {toastMessage(toast)}
             </p>

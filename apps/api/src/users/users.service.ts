@@ -9,12 +9,42 @@ import { PointsService } from './points.service';
 import { CC_TRANSACTION_HISTORY_WHERE } from './cc-transaction-visibility';
 import type { Prisma } from '@prisma/client';
 
-/** CC events surfaced in the platform notification bell. */
-export const NOTIFICATION_TX_TYPES: CcTransactionType[] = [
+/**
+ * CC event types surfaced in the platform notification bell (SPEC-TX-HISTORY-NOTIF B1).
+ *
+ * Two distinct concepts — kept separate so feed visibility ≠ badge triggers:
+ *   - FEED_TX_TYPES:        semua tipe yang TAMPIL di daftar notifikasi (bell).
+ *   - BADGE_UNREAD_TX_TYPES: hanya tipe yang MEMICU titik merah (badge unread).
+ *
+ * Fee TIDAK termasuk keduanya — baris fee tetap disembunyikan via
+ * CC_TRANSACTION_HISTORY_WHERE (Part A3), jadi tidak akan pernah muncul.
+ */
+export const FEED_TX_TYPES: CcTransactionType[] = [
   'QUEST_REWARD',
   'SPIN_REWARD',
   'TRANSFER_IN',
+  'TRANSFER_OUT',
+  'CC_LOCK',
+  'CC_UNLOCK',
 ];
+
+/**
+ * Tipe yang memicu badge unread (titik merah). B2 OPSI 2 (sesuai permintaan pemilik
+ * proyek) = SEMUA tipe feed. Konstanta terpusat agar mudah diganti ke OPSI 1
+ * (hanya hal yang TERJADI pada user: reward/in/unlock) bila terasa mengganggu:
+ *   OPSI 1: ['QUEST_REWARD', 'SPIN_REWARD', 'TRANSFER_IN', 'CC_UNLOCK']
+ */
+export const BADGE_UNREAD_TX_TYPES: CcTransactionType[] = [
+  'QUEST_REWARD',
+  'SPIN_REWARD',
+  'TRANSFER_IN',
+  'TRANSFER_OUT',
+  'CC_LOCK',
+  'CC_UNLOCK',
+];
+
+/** @deprecated Use FEED_TX_TYPES (feed) / BADGE_UNREAD_TX_TYPES (badge). */
+export const NOTIFICATION_TX_TYPES: CcTransactionType[] = FEED_TX_TYPES;
 import {
   looksLikeCantonPartyId,
   normalizeCantonPartyId,
@@ -316,12 +346,26 @@ export class UsersService {
     return enriched;
   }
 
-  private notificationWhere(userId: string): Prisma.CcTransactionWhereInput {
+  /** Where-clause for the FEED list — semua tipe yang tampil di bell (FEED_TX_TYPES). */
+  private notificationFeedWhere(userId: string): Prisma.CcTransactionWhereInput {
     return {
       userId,
-      type: { in: NOTIFICATION_TX_TYPES },
+      type: { in: FEED_TX_TYPES },
       ...CC_TRANSACTION_HISTORY_WHERE,
     };
+  }
+
+  /** Where-clause untuk hitung BADGE unread — hanya BADGE_UNREAD_TX_TYPES. */
+  private notificationBadgeWhere(
+    userId: string,
+    lastSeenAt: Date | null,
+  ): Prisma.CcTransactionWhereInput {
+    const base: Prisma.CcTransactionWhereInput = {
+      userId,
+      type: { in: BADGE_UNREAD_TX_TYPES },
+      ...CC_TRANSACTION_HISTORY_WHERE,
+    };
+    return lastSeenAt ? { ...base, createdAt: { gt: lastSeenAt } } : base;
   }
 
   /** Recent CC rewards/transfers + raffle draw results for the notification bell. */
@@ -331,19 +375,18 @@ export class UsersService {
       select: { notificationsLastSeenAt: true },
     });
     const lastSeenAt = user?.notificationsLastSeenAt ?? null;
-    const where = this.notificationWhere(userId);
+    const feedWhere = this.notificationFeedWhere(userId);
 
     const [items, unreadTxCount, drawAlerts, codeClaimAlerts] = await Promise.all([
       this.prisma.ccTransaction.findMany({
-        where,
+        where: feedWhere,
         orderBy: { createdAt: 'desc' },
         take: Math.min(30, Math.max(1, limit)),
       }),
-      lastSeenAt
-        ? this.prisma.ccTransaction.count({
-            where: { ...where, createdAt: { gt: lastSeenAt } },
-          })
-        : this.prisma.ccTransaction.count({ where }),
+      // Badge unread pakai BADGE_UNREAD_TX_TYPES (B2), BUKAN FEED_TX_TYPES.
+      this.prisma.ccTransaction.count({
+        where: this.notificationBadgeWhere(userId, lastSeenAt),
+      }),
       this.getDrawAlerts(userId, lastSeenAt),
       this.getCodeClaimAlerts(userId, lastSeenAt),
     ]);
@@ -352,7 +395,7 @@ export class UsersService {
     const serializedTx = await Promise.all(
       enriched.map(async (tx) => {
         const counterparty =
-          tx.type === 'TRANSFER_IN'
+          tx.type === 'TRANSFER_IN' || tx.type === 'TRANSFER_OUT'
             ? await this.resolveTransferCounterparty(tx.referenceId)
             : null;
         return {
