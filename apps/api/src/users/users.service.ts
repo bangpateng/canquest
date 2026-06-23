@@ -6,7 +6,10 @@ import {
 } from '../common/quest-reward-labels';
 import { CcTransactionType, RewardType, normalizeRewardType } from '../common/prisma-types';
 import { PointsService } from './points.service';
-import { CC_TRANSACTION_HISTORY_WHERE } from './cc-transaction-visibility';
+import {
+  CC_TRANSACTION_HISTORY_WHERE,
+  isFeePartyRecipient,
+} from './cc-transaction-visibility';
 import type { Prisma } from '@prisma/client';
 
 /**
@@ -368,7 +371,15 @@ export class UsersService {
     return lastSeenAt ? { ...base, createdAt: { gt: lastSeenAt } } : base;
   }
 
-  /** Recent CC rewards/transfers + raffle draw results for the notification bell. */
+  /**
+   * Recent CC rewards/transfers + raffle draw results for the notification bell.
+   *
+   * Fee rows diexclude dua lapis sama seperti getTransactions: filter Prisma
+   * (CC_TRANSACTION_HISTORY_WHERE) + post-filter isFeePartyRecipient() berdasarkan
+   * party penerima. Post-filter diterapkan ke FEED item DAN badge unread count supaya
+   * fee benar-benar hilang dari bell DAN titik merah (sesuai MD note A: badge = semua
+   * tipe KECUALI fee).
+   */
   async getNotifications(userId: string, limit = 12) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -376,22 +387,47 @@ export class UsersService {
     });
     const lastSeenAt = user?.notificationsLastSeenAt ?? null;
     const feedWhere = this.notificationFeedWhere(userId);
+    const take = Math.min(30, Math.max(1, limit));
 
-    const [items, unreadTxCount, drawAlerts, codeClaimAlerts] = await Promise.all([
+    const [feedRows, badgeRows, drawAlerts, codeClaimAlerts] = await Promise.all([
       this.prisma.ccTransaction.findMany({
         where: feedWhere,
         orderBy: { createdAt: 'desc' },
-        take: Math.min(30, Math.max(1, limit)),
+        take,
       }),
-      // Badge unread pakai BADGE_UNREAD_TX_TYPES (B2), BUKAN FEED_TX_TYPES.
-      this.prisma.ccTransaction.count({
+      // Ambil baris badge (id + referenceId + type) untuk post-filter fee, lalu hitung.
+      this.prisma.ccTransaction.findMany({
         where: this.notificationBadgeWhere(userId, lastSeenAt),
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, referenceId: true, type: true, createdAt: true },
       }),
       this.getDrawAlerts(userId, lastSeenAt),
       this.getCodeClaimAlerts(userId, lastSeenAt),
     ]);
 
-    const enriched = await this.enrichQuestRewardDescriptions(items);
+    // Post-filter fee dari FEED (buang penerima = party fee).
+    const feeFilteredFeed: typeof feedRows = [];
+    for (const tx of feedRows) {
+      if (tx.type !== 'TRANSFER_IN' && tx.type !== 'TRANSFER_OUT') {
+        feeFilteredFeed.push(tx);
+        continue;
+      }
+      const resolved = await this.resolveTransferCounterparty(tx.referenceId);
+      if (!isFeePartyRecipient(tx.referenceId, resolved)) feeFilteredFeed.push(tx);
+    }
+
+    // Post-filter fee dari BADGE unread count.
+    let unreadTxCount = 0;
+    for (const row of badgeRows) {
+      if (row.type !== 'TRANSFER_IN' && row.type !== 'TRANSFER_OUT') {
+        unreadTxCount++;
+        continue;
+      }
+      const resolved = await this.resolveTransferCounterparty(row.referenceId);
+      if (!isFeePartyRecipient(row.referenceId, resolved)) unreadTxCount++;
+    }
+
+    const enriched = await this.enrichQuestRewardDescriptions(feeFilteredFeed);
     const serializedTx = await Promise.all(
       enriched.map(async (tx) => {
         const counterparty =
@@ -413,7 +449,7 @@ export class UsersService {
 
     const merged = [...serializedTx, ...drawAlerts, ...codeClaimAlerts]
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, Math.min(30, Math.max(1, limit)));
+      .slice(0, take);
 
     const unreadDrawCount = drawAlerts.filter((a) => a.unread).length;
     const unreadCodeCount = codeClaimAlerts.filter((a) => a.unread).length;
@@ -662,19 +698,50 @@ export class UsersService {
     return { ok: true as const };
   }
 
-  /** Paginated transaction list for a user (newest first). BigInt serialized as string. */
+  /**
+   * Paginated transaction list for a user (newest first). BigInt serialized as string.
+   *
+   * Fee rows diexclude dua lapis: (1) filter Prisma `CC_TRANSACTION_HISTORY_WHERE` berdasarkan
+   * marker/deskripsi, lalu (2) post-filter `isFeePartyRecipient()` membuang baris yang
+   * penerimanya = party fee (mis. "Sent to canquest-fee…") walau tidak bermarker. Karena
+   * post-filter butuh counterparty yang di-resolve (DB), kita hitung id transaksi yang lolos
+   * dulu, lalu paginate berdasarkan id agar total/halaman tetap akurat.
+   */
   async getTransactions(userId: string, page: number, pageSize: number) {
+    const baseWhere = { userId, ...CC_TRANSACTION_HISTORY_WHERE };
+
+    // 1. Ambil id + referenceId + type untuk seluruh history (proyeksi ringan).
+    const allRows = await this.prisma.ccTransaction.findMany({
+      where: baseWhere,
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, referenceId: true, type: true, createdAt: true },
+    });
+
+    // 2. Post-filter: buang baris yang penerimanya = party fee.
+    const visibleIds: string[] = [];
+    for (const row of allRows) {
+      if (row.type !== 'TRANSFER_IN' && row.type !== 'TRANSFER_OUT') {
+        visibleIds.push(row.id);
+        continue;
+      }
+      const resolved = await this.resolveTransferCounterparty(row.referenceId);
+      if (!isFeePartyRecipient(row.referenceId, resolved)) {
+        visibleIds.push(row.id);
+      }
+    }
+
+    const total = visibleIds.length;
     const skip = (page - 1) * pageSize;
-    const where = { userId, ...CC_TRANSACTION_HISTORY_WHERE };
-    const [items, total] = await Promise.all([
-      this.prisma.ccTransaction.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: pageSize,
-      }),
-      this.prisma.ccTransaction.count({ where }),
-    ]);
+    const pageIds = visibleIds.slice(skip, skip + pageSize);
+
+    // 3. Ambil baris penuh untuk id halaman ini (urutan createdAt desc dipertahankan).
+    const items = pageIds.length
+      ? await this.prisma.ccTransaction.findMany({
+          where: { id: { in: pageIds } },
+          orderBy: { createdAt: 'desc' },
+        })
+      : [];
+
     const enriched = await this.enrichQuestRewardDescriptions(items);
     const serialized = await Promise.all(
       enriched.map(async (tx) => {
@@ -689,7 +756,7 @@ export class UsersService {
         };
       }),
     );
-    return { items: serialized, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
+    return { items: serialized, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
   }
 
   /** Lifetime points from Quest menu, Earn hub, campaign tasks, completion bonuses, spin wins. */

@@ -2735,7 +2735,9 @@ export class QuestsService {
       amountCc: params.feeCc,
       type: 'TRANSFER_OUT',
       description: `Sent ${params.feeCc} CC claim fee`,
-      counterparty: feeLabel,
+      // Penanda "fee:" → filter visibility (CC_TRANSACTION_HISTORY_WHERE) sembunyikan
+      // baris ini dari history & notifikasi. Party fee tetap tercatat untuk audit.
+      referenceId: `fee:${feeLabel}`,
       ledgerTxId,
     });
     return ledgerTxId;
