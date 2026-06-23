@@ -1754,6 +1754,35 @@ export class CantonLedgerService {
   }
 
   /**
+   * Lookup SATU pending offer by contract ID — dipakai saat accept/reject
+   * supaya amount + sender yang dicatat ke DB adalah nilai truthful dari ledger,
+   * bukan 0 / placeholder.
+   *
+   * Menggunakan queryPendingOffers + filter cid (murah, hasil sudah di-cache
+   * di validator). Return null kalau offer tidak ditemukan (sudah di-accept/
+   * expired/typo cid).
+   */
+  async lookupOfferDetail(
+    cid: string,
+    partyId: string,
+  ): Promise<{
+    type: 'transfer_offer' | 'transfer_instruction';
+    contractId: string;
+    sender: string;
+    receiver: string;
+    amount: string;
+    description: string;
+  } | null> {
+    try {
+      const offers = await this.queryPendingOffers(partyId);
+      return offers.find((o) => o.contractId === cid) ?? null;
+    } catch (err) {
+      this.logger.warn(`lookupOfferDetail error: ${String(err)}`);
+      return null;
+    }
+  }
+
+  /**
    * Query the Active Contract Set (ACS) for a specific template.
    *
    * Uses POST /v2/state/active-contracts with a WildcardFilter or
