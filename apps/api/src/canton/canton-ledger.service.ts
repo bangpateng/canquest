@@ -2298,9 +2298,13 @@ export class CantonLedgerService {
         }],
         beneficiaries: null,
       },
+      // AmuletRules_Transfer.context is a FLAT TransferContext (not the nested
+      // PaymentTransferContext used by other choices). Verified against binding
+      // splice-amulet-0.1.18: Splice/AmuletRules/module.d.ts line 922 + 438-443.
       context: {
-        amuletRules: amuletRules.contractId,
-        context: { openMiningRound: openRound.contractId, issuingMiningRounds: [], validatorRights: [] },
+        openMiningRound: openRound.contractId,
+        issuingMiningRounds: [],
+        validatorRights: [],
       },
       expectedDso,
     };
