@@ -11,6 +11,8 @@ import { usePlatformT } from "@/lib/i18n/platform-provider";
 export const TRANSACTIONS_PAGE_SIZE = 5;
 /** Server-side proxy to onchain tx — partyId comes from JWT on the backend. */
 const LIGHTHOUSE_PROXY = "/api/party/transactions/onchain";
+/** Server-side proxy to DB transactions — source of truth (fee filtered, lock/unlock recorded). */
+const DB_TRANSACTIONS_PROXY = "/api/party/transactions";
 
 export interface TxItem {
   id: string;
@@ -337,13 +339,41 @@ export function TransactionsView({
           return;
         }
 
-        // Single source of truth: on-chain (Lighthouse via backend proxy).
-        // No DB merge → no duplicate rows. partyId resolved from JWT on backend.
-        const all = await fetchLighthouseEndpoint(
+        // ── DB adalah sumber utama (source of truth). ──────────────────────────
+        // DB sudah benar: fee terfilter (server-side), CC_LOCK/CC_UNLOCK tercatat,
+        // send/received ada. On-chain dipakai HANYA sebagai fallback untuk item yang
+        // DB belum punya (transfer dari luar yang belum ter-sync), dengan dedup agar
+        // tidak dobel.
+        const dbRes = await fetch(
+          `${DB_TRANSACTIONS_PROXY}?page=1&pageSize=200`,
+          { credentials: "include", cache: "no-store" },
+        ).catch(() => null);
+        const dbData = dbRes?.ok ? ((await dbRes.json()) as { items?: TxItem[] }) : null;
+        const dbItems: TxItem[] = (dbData?.items ?? []).map((tx) => ({
+          ...tx,
+          source: "db" as const,
+        }));
+
+        // ── On-chain fallback (fee sudah difilter di backend onchain proxy). ───
+        const onchainItems = await fetchLighthouseEndpoint(
           `${LIGHTHOUSE_PROXY}?limit=200`,
           partyId,
         );
 
+        // Dedup: key = ledgerTxId / cantonUpdateId. Buang on-chain item yang sudah ada di DB.
+        const dbKeys = new Set<string>();
+        for (const tx of dbItems) {
+          const k = (tx.ledgerTxId ?? tx.cantonUpdateId ?? "").trim();
+          if (k) dbKeys.add(k);
+        }
+        const fallbackOnchain = onchainItems.filter((tx) => {
+          const k = (tx.ledgerTxId ?? tx.cantonUpdateId ?? "").trim();
+          // Tidak punya key → tidak bisa dedup → tetap masuk (jarang).
+          if (!k) return true;
+          return !dbKeys.has(k);
+        });
+
+        const all = [...dbItems, ...fallbackOnchain];
         all.sort(
           (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
         );

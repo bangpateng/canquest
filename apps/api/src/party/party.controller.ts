@@ -39,6 +39,7 @@ import {
 } from '../common/canton-party-id';
 import { hasRealWallet } from '../common/wallet-policy';
 import { UsersService } from '../users/users.service';
+import { feePartyLabels } from '../users/cc-transaction-visibility';
 import { WalletInviteCodeService } from './wallet-invite-code.service';
 import { AllocateWalletDto } from './dto/allocate-wallet.dto';
 import { CantonPartyBindingDto } from './dto/canton-party-binding.dto';
@@ -1305,16 +1306,38 @@ export class PartyController {
       const feeCc = Number(this.config.get<string>('TRANSACTION_FEE_CC') ?? '0.2');
       const networkFeeMicroCc = String(Math.round(Math.abs(feeCc) * 1_000_000));
 
-      // Inject network_fee into every transfer-like array in the response.
+      // Fee party short labels — transfer ke party ini (canquest-fee/validator) disembunyikan
+      // dari history on-chain agar konsisten dengan filter DB (CC_TRANSACTION_HISTORY_WHERE).
+      const feeLabels = feePartyLabels();
+
+      // Inject network_fee + filter baris fee (counterparty = party fee) dari setiap
+      // array transfer di response.
       for (const key of ['transfers', 'transactions', 'items', 'data']) {
         const arr = data[key];
-        if (Array.isArray(arr)) {
-          data[key] = arr.map((item) =>
-            item && typeof item === 'object'
-              ? { ...(item as Record<string, unknown>), network_fee: networkFeeMicroCc }
-              : item,
-          );
-        }
+        if (!Array.isArray(arr)) continue;
+        const filtered = arr.filter((item) => {
+          if (!item || typeof item !== 'object' || feeLabels.length === 0) return true;
+          const it = item as Record<string, unknown>;
+          // Cek semua field counterparty kemungkinan (sender/receiver/address/counterparty).
+          const parties = [
+            it.sender_address ?? it.sender,
+            it.receiver_address ?? it.receiver,
+            it.counterparty,
+            it.party_id,
+          ];
+          return !parties.some((p) => {
+            if (typeof p !== 'string' || !p.trim()) return false;
+            const v = p.trim();
+            return feeLabels.some(
+              (label) => v === label || v.startsWith(`${label}::`),
+            );
+          });
+        });
+        data[key] = filtered.map((item) =>
+          item && typeof item === 'object'
+            ? { ...(item as Record<string, unknown>), network_fee: networkFeeMicroCc }
+            : item,
+        );
       }
 
       return data;
