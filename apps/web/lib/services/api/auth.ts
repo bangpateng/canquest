@@ -44,6 +44,20 @@ export function verifyOtp(userId: string, code: string) {
   });
 }
 
+export function forgotPassword(email: string, turnstileToken: string) {
+  return apiFetch<Record<string, unknown>>('/api/auth/forgot-password', {
+    method: 'POST',
+    json: { email: email.trim().toLowerCase(), turnstileToken },
+  });
+}
+
+export function resetPassword(email: string, code: string, newPassword: string) {
+  return apiFetch<Record<string, unknown>>('/api/auth/reset-password', {
+    method: 'POST',
+    json: { email: email.trim().toLowerCase(), code: code.trim(), newPassword },
+  });
+}
+
 export function logout() {
   return apiFetch('/api/auth/logout', { method: 'POST' });
 }

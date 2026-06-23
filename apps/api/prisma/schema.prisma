@@ -51,6 +51,7 @@ model User {
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   refreshTokens    RefreshToken[]
+  passwordResets   PasswordReset[]  @relation("UserPasswordResets")
   ccBalance        CcBalance?
   ccTransactions   CcTransaction[]
   questCompletions QuestCompletion[]
@@ -118,6 +119,21 @@ model RefreshToken {
   expiresAt   DateTime
   revokedAt   DateTime?
   createdAt   DateTime  @default(now())
+}
+
+/// One-time 6-digit password reset codes (HMAC-SHA256 hashed) — separate from email OTP.
+/// Anti-enumeration: forgot-password always replies generically; only stored when user exists.
+model PasswordReset {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation("UserPasswordResets", fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String                       // HMAC-SHA256(secret, `reset:${userId}:${code}`)
+  expiresAt DateTime
+  attempts  Int       @default(0)
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }
 
 /// Tracks CC token balance for each user (off-chain mirror of Canton ledger).

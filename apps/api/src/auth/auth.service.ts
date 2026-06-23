@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { createHash, randomBytes } from 'crypto';
+import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReferralService } from '../users/referral.service';
 import { UsersService } from '../users/users.service';
@@ -22,6 +22,11 @@ import { ResendEmailService } from './resend-email.service';
 const BCRYPT_ROUNDS = 12;
 const OTP_TTL_MS = 15 * 60 * 1000;
 const OTP_RESEND_COOLDOWN_MS = 2 * 60 * 1000;
+
+// Password reset (6-digit code) — separate from email OTP.
+const RESET_TTL_MS = 15 * 60 * 1000;
+const RESET_RESEND_COOLDOWN_MS = 2 * 60 * 1000;
+const MAX_RESET_ATTEMPTS = 5;
 
 @Injectable()
 export class AuthService {
@@ -217,6 +222,135 @@ export class AuthService {
       throw new BadRequestException('You cannot use your own referral code');
     }
     return referrer.id;
+  }
+
+  /* ────────────────────────────────────────────────────────
+     PASSWORD RESET (6-digit code)
+     - Anti-enumeration: forgot-password ALWAYS replies { ok: true }.
+     - reset-password replies generic on any wrong input.
+     ──────────────────────────────────────────────────────── */
+
+  private resetSecret(): string {
+    return process.env.OTP_HMAC_SECRET?.trim() || process.env.JWT_ACCESS_SECRET || '';
+  }
+
+  private hashResetCode(userId: string, code: string): string {
+    return createHmac('sha256', this.resetSecret())
+      .update(`reset:${userId}:${code}`)
+      .digest('hex');
+  }
+
+  /** Constant-time hex comparison (length-independent). */
+  private safeHexEqual(a: string, b: string): boolean {
+    if (a.length !== b.length) return false;
+    try {
+      return timingSafeEqual(Buffer.from(a, 'hex'), Buffer.from(b, 'hex'));
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Request a reset code. Always returns { ok: true } regardless of whether the
+   * email exists — never leaks account existence. Resend cooldown 2 minutes.
+   */
+  async forgotPassword(emailRaw: string): Promise<{ ok: true }> {
+    const email = emailRaw.trim().toLowerCase();
+    const user = await this.users.findByEmail(email);
+
+    // Only act when the user exists; the response is identical either way.
+    if (user) {
+      const recent = await this.prisma.passwordReset.findFirst({
+        where: { userId: user.id, usedAt: null },
+        orderBy: { createdAt: 'desc' },
+      });
+      const onCooldown =
+        !!recent && Date.now() - recent.createdAt.getTime() < RESET_RESEND_COOLDOWN_MS;
+
+      if (!onCooldown) {
+        const code = randomInt(100000, 1000000).toString();
+        const codeHash = this.hashResetCode(user.id, code);
+        const expiresAt = new Date(Date.now() + RESET_TTL_MS);
+
+        // Void all unused prior codes, then issue a fresh one.
+        await this.prisma.passwordReset.updateMany({
+          where: { userId: user.id, usedAt: null },
+          data: { usedAt: new Date() },
+        });
+        await this.prisma.passwordReset.create({
+          data: { userId: user.id, codeHash, expiresAt },
+        });
+
+        try {
+          await this.resend.sendPasswordResetEmail(user.email, code);
+        } catch (err) {
+          this.logger.error(`Reset email failed for ${email}: ${String(err)}`);
+          // Still reply ok — never leak email-service failure.
+        }
+      }
+    }
+    return { ok: true };
+  }
+
+  /**
+   * Verify code + set new password + revoke ALL refresh tokens (kick every session).
+   * Generic error on any mismatch. Does NOT auto-login — user signs in fresh.
+   */
+  async resetPassword(
+    emailRaw: string,
+    code: string,
+    newPassword: string,
+  ): Promise<{ ok: true }> {
+    const email = emailRaw.trim().toLowerCase();
+    const fail = () => {
+      throw new UnauthorizedException('Invalid or expired reset code.');
+    };
+
+    const user = await this.users.findByEmail(email);
+    if (!user) fail();
+
+    const reset = await this.prisma.passwordReset.findFirst({
+      where: { userId: user!.id, usedAt: null },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!reset) fail();
+    if (reset!.expiresAt < new Date()) fail();
+    if (reset!.attempts >= MAX_RESET_ATTEMPTS) {
+      await this.prisma.passwordReset.update({
+        where: { id: reset!.id },
+        data: { usedAt: new Date() },
+      });
+      fail();
+    }
+
+    const candidate = this.hashResetCode(user!.id, code.trim());
+    if (!this.safeHexEqual(candidate, reset!.codeHash)) {
+      await this.prisma.passwordReset.update({
+        where: { id: reset!.id },
+        data: { attempts: { increment: 1 } },
+      });
+      fail();
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: user!.id },
+        data: { passwordHash, emailVerified: true }, // code ownership proves email
+      }),
+      this.prisma.passwordReset.update({
+        where: { id: reset!.id },
+        data: { usedAt: new Date() },
+      }),
+      // Revoke ALL refresh tokens → every existing session is kicked.
+      this.prisma.refreshToken.updateMany({
+        where: { userId: user!.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+    ]);
+
+    void this.resend.sendPasswordChangedEmail(user!.email).catch(() => {});
+    return { ok: true };
   }
 
   private async issueOtpForUser(

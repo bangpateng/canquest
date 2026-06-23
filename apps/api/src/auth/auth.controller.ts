@@ -7,6 +7,8 @@ import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { UploadAvatarDto } from './dto/upload-avatar.dto';
 import { ProfileAvatarService } from '../users/profile-avatar.service';
 
@@ -44,6 +46,20 @@ export class AuthController {
   @Post('refresh')
   refresh(@Body() body: RefreshTokenDto) {
     return this.auth.refresh(body.refreshToken);
+  }
+
+  /** Forgot password — generik (anti-enumerasi), 10 req/menit. */
+  @Post('forgot-password')
+  @Throttle({ auth: { limit: 10, ttl: 60_000 } })
+  forgotPassword(@Body() body: ForgotPasswordDto) {
+    return this.auth.forgotPassword(body.email);
+  }
+
+  /** Reset password — verifikasi kode + ganti password, 10 req/menit. */
+  @Post('reset-password')
+  @Throttle({ auth: { limit: 10, ttl: 60_000 } })
+  resetPassword(@Body() body: ResetPasswordDto) {
+    return this.auth.resetPassword(body.email, body.code, body.newPassword);
   }
 
   /** /me — skip throttle, ringan & sering dipanggil oleh frontend */

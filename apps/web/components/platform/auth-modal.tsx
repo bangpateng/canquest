@@ -8,7 +8,7 @@ import { TurnstileField, useTurnstileRequired } from "@/components/platform/turn
 import { buttonVariants } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
 import { formatApiError } from "@/lib/api/format-api-error";
-import { login, register, verifyOtp } from "@/lib/services/api/auth";
+import { login, register, verifyOtp, forgotPassword, resetPassword } from "@/lib/services/api/auth";
 import { clearReferralRef, getReferralRef } from "@/lib/routing/referral-ref";
 import { clearCachedWalletMe } from "@/lib/auth/wallet-session-cache";
 import { inputClass } from "@/lib/ui/ui-tokens";
@@ -40,6 +40,7 @@ export function AuthModal() {
   const [error, setError] = useState<string | null>(null);
   const [pendingOtp, setPendingOtp] = useState<PendingOtp | null>(null);
   const [referralDefault, setReferralDefault] = useState("");
+  const [resetEmail, setResetEmail] = useState("");
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileKey, setTurnstileKey] = useState(0);
   const turnstileRequired = useTurnstileRequired();
@@ -177,6 +178,64 @@ export function AuthModal() {
     }
   }
 
+  async function onForgot(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+    if (!requireTurnstile()) return;
+    const fd = new FormData(e.currentTarget);
+    const email = String(fd.get("email") ?? "").trim();
+    setBusy(true);
+    try {
+      // Always resolves ok (anti-enumeration); move to reset view either way.
+      await forgotPassword(email, turnstileToken ?? "");
+      setResetEmail(email);
+      openAuth("reset", nextPath);
+      setError(null);
+    } catch (err) {
+      // Network/turnstile errors still reach here; surface generically.
+      setError(formatApiError(err, "Could not send reset code. Try again."));
+      setTurnstileKey((k) => k + 1);
+      setTurnstileToken(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onReset(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+    const fd = new FormData(e.currentTarget);
+    const code = String(fd.get("code") ?? "").trim();
+    const newPassword = String(fd.get("newPassword") ?? "");
+    const confirm = String(fd.get("confirmPassword") ?? "");
+    const email = resetEmail || String(fd.get("email") ?? "").trim();
+
+    if (newPassword.length < 8) {
+      setError("New password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword !== confirm) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      await resetPassword(email, code, newPassword);
+      setResetEmail("");
+      closeAuth();
+      // Inline notice instead of a toast lib dependency.
+      window.setTimeout(() => {
+        openAuth("login", nextPath);
+        window.alert("Password updated — please sign in.");
+      }, 0);
+    } catch (err) {
+      setError(formatApiError(err, "Invalid or expired reset code."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const tabs: { id: AuthModalMode; label: string }[] = [
     { id: "login", label: "Sign In" },
     { id: "register", label: "Register" },
@@ -186,7 +245,11 @@ export function AuthModal() {
     ? "Verify email"
     : mode === "login"
       ? "Welcome back"
-      : "Create account";
+      : mode === "register"
+        ? "Create account"
+        : mode === "forgot"
+          ? "Forgot password"
+          : "Reset password";
 
   return (
     <div
@@ -225,7 +288,7 @@ export function AuthModal() {
             ) : null}
           </div>
 
-          {!pendingOtp && (
+          {!pendingOtp && mode !== "forgot" && mode !== "reset" && (
             <div className="mt-5 flex gap-1 rounded-full bg-[var(--muted)] p-1">
               {tabs.map((t) => (
                 <button
@@ -285,6 +348,99 @@ export function AuthModal() {
                 Verify
               </button>
             </form>
+          ) : mode === "forgot" ? (
+            <form onSubmit={onForgot} className="space-y-4">
+              <p className="text-sm text-[var(--muted-foreground)]">
+                Enter your account email and we&apos;ll send a 6-digit reset code.
+              </p>
+              <Field label="Email">
+                <input
+                  name="email"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  defaultValue={resetEmail}
+                  placeholder="you@example.com"
+                  className={inputClass}
+                />
+              </Field>
+              <TurnstileField resetKey={turnstileKey} onToken={setTurnstileToken} />
+              <button
+                type="submit"
+                disabled={busy}
+                className={cn(buttonVariants({ size: "block" }), "mt-2 gap-2")}
+              >
+                {busy ? <LoadingSpinner size="md" /> : null}
+                {busy ? "Sending…" : "Send code"}
+              </button>
+              <p className="text-center text-sm text-[var(--muted-foreground)]">
+                <button
+                  type="button"
+                  className="font-semibold text-canton hover:underline"
+                  onClick={() => {
+                    openAuth("login", nextPath);
+                    setError(null);
+                  }}
+                >
+                  Back to sign in
+                </button>
+              </p>
+            </form>
+          ) : mode === "reset" ? (
+            <form onSubmit={onReset} className="space-y-4">
+              <p className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 text-xs text-[var(--muted-foreground)]">
+                If an account exists for{" "}
+                <span className="font-semibold text-[var(--foreground)]">{resetEmail || "that email"}</span>,
+                a reset code was sent. Enter the code and a new password below.
+              </p>
+              <Field label="Reset code">
+                <input
+                  name="code"
+                  inputMode="numeric"
+                  maxLength={6}
+                  required
+                  placeholder="000000"
+                  className={cn(inputClass, "text-center font-mono text-lg tracking-[0.35em]")}
+                />
+              </Field>
+              <PasswordInput
+                id="auth-reset-password"
+                label="New password"
+                autoComplete="new-password"
+                placeholder="At least 8 characters"
+                minLength={8}
+                inputClassName="bg-[var(--muted)]/80"
+              />
+              <PasswordInput
+                id="auth-reset-confirm"
+                name="confirmPassword"
+                label="Confirm new password"
+                autoComplete="new-password"
+                placeholder="Re-enter new password"
+                minLength={8}
+                inputClassName="bg-[var(--muted)]/80"
+              />
+              <button
+                type="submit"
+                disabled={busy}
+                className={cn(buttonVariants({ size: "block" }), "mt-2 gap-2")}
+              >
+                {busy ? <LoadingSpinner size="md" /> : null}
+                Reset password
+              </button>
+              <p className="text-center text-sm text-[var(--muted-foreground)]">
+                <button
+                  type="button"
+                  className="font-semibold text-canton hover:underline"
+                  onClick={() => {
+                    openAuth("login", nextPath);
+                    setError(null);
+                  }}
+                >
+                  Back to sign in
+                </button>
+              </p>
+            </form>
           ) : mode === "login" ? (
             <form onSubmit={onLogin} className="space-y-4">
               <Field label="Email">
@@ -304,6 +460,19 @@ export function AuthModal() {
                 placeholder="Your password"
                 inputClassName="bg-[var(--muted)]/80"
               />
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  className="text-xs font-medium text-canton hover:underline"
+                  onClick={() => {
+                    setResetEmail("");
+                    openAuth("forgot", nextPath);
+                    setError(null);
+                  }}
+                >
+                  Forgot password?
+                </button>
+              </div>
               <TurnstileField resetKey={turnstileKey} onToken={setTurnstileToken} />
               <button
                 type="submit"

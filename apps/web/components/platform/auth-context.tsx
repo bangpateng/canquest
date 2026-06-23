@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 
-export type AuthModalMode = "login" | "register";
+export type AuthModalMode = "login" | "register" | "forgot" | "reset";
 
 type AuthContextValue = {
   open: boolean;
