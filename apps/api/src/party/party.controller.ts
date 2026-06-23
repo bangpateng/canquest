@@ -634,15 +634,15 @@ export class PartyController {
         ledgerTxId = cip56Result.updateId ?? undefined;
         this.logger.log(`CC transfer direct: ${sender.username} → ${recipientLabel} ${amount} CC`);
       } else if (cip56Result.transferKind === 'offer') {
+        // Receiver tidak punya TransferPreapproval aktif.
+        // JANGAN auto-accept — biarkan pending di inbox wallet receiver.
+        // User terima/reject manual via menu Offers (POST /party/offers/accept|reject).
         ledgerTxId = cip56Result.transferInstructionCid ?? cip56Result.updateId ?? undefined;
-        if (isInternalUser && recipientUsername && cip56Result.transferInstructionCid) {
-          const acceptResult = await this.ledger.acceptTransferInstruction(
-            cip56Result.transferInstructionCid, recipientPartyId);
-          accepted = acceptResult.ok;
-          transferMethod = accepted ? 'offer_accept' : 'offer_only';
-        } else {
-          transferMethod = 'offer_only';
-        }
+        transferMethod = 'offer_only';
+        this.logger.log(
+          `CC transfer offer (pending): ${sender.username} → ${recipientLabel} ${amount} CC ` +
+          `— recipient must accept via Offers menu`,
+        );
       }
     }
 
