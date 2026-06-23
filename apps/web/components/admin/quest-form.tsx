@@ -12,7 +12,6 @@ import {
   DEFAULT_QUEST_BANNER,
   formatQuestDeadlineDisplay,
   resolveQuestProjectName,
-  type RewardType,
 } from "@/lib/quest/quest-types";
 import {
   getRewardConfig,
@@ -86,7 +85,6 @@ export function QuestForm({
     title: initialData?.title ?? "",
     projectName: initialData?.projectName ?? "",
     org: initialData?.org ?? "",
-    orgSlug: initialData?.orgSlug ?? "",
     description: initialData?.description ?? "",
     bannerImageUrl: initialData?.bannerImageUrl ?? "",
     logoUrl: initialData?.logoUrl ?? "",
@@ -103,7 +101,6 @@ export function QuestForm({
     maxWinners: String(initialData?.maxWinners ?? ""),
     claimFeeCc: initialData?.claimFeeCc != null ? String(initialData.claimFeeCc) : "",
     winnerMessage: initialData?.winnerMessage ?? "",
-    tags: (initialData?.tags ?? []).join(", "),
   });
 
   const [socialLinks, setSocialLinks] = useState<QuestSocialLink[]>(
@@ -268,21 +265,34 @@ export function QuestForm({
 
       const rewardCcPayload = rewardConfig.needsCcAmount ? cc : 0;
 
+      // Auto-generate orgSlug from org (first letters of each word, uppercased, max 4 chars)
+      const orgSlug =
+        (initialData?.orgSlug && form.org === initialData.org
+          ? initialData.orgSlug
+          : form.org.trim().split(/\s+/).map((w) => w[0] ?? "").join("").toUpperCase().slice(0, 4)) || form.org.slice(0, 3).toUpperCase();
+
+      // Auto-generate reward pool label from reward type
+      const autoPoolLabel = (() => {
+        if (rewardConfig.isCcToken && cc > 0 && maxW && maxW > 0) return `${cc * maxW} CC pool`;
+        if (rewardConfig.isCcToken && cc > 0) return `${cc} CC`;
+        if (rewardConfig.isDual && cc > 0) return `${cc} CC + Code`;
+        if (maxW && maxW > 0) return `${maxW} ${rewardConfig.code === "WAITLIST_EMAIL" ? "spots" : "codes"}`;
+        return "TBD";
+      })();
+
       const payload = {
         title: form.title,
         ...(questKind === "CAMPAIGN" && {
           projectName: form.projectName.trim() || null,
         }),
         org: form.org,
-        orgSlug: form.orgSlug || form.org.slice(0, 3).toUpperCase(),
+        orgSlug,
         description: form.description,
         banner: (isEdit && initialData?.banner) || DEFAULT_QUEST_BANNER,
         bannerImageUrl: form.bannerImageUrl.trim() || null,
         logoUrl: form.logoUrl.trim() || null,
         rewardCc: rewardCcPayload,
-        rewardPool:
-          form.rewardPool ||
-          (rewardCcPayload > 0 ? `${rewardCcPayload} CC` : "TBD"),
+        rewardPool: form.rewardPool.trim() || autoPoolLabel,
         deadline: form.endsAt
           ? formatQuestDeadlineDisplay(new Date(form.endsAt).toISOString())
           : null,
@@ -293,10 +303,6 @@ export function QuestForm({
         maxWinners: maxW,
         claimFeeCc: form.claimFeeCc.trim() ? Number(form.claimFeeCc) : null,
         winnerMessage: form.winnerMessage.trim() || null,
-        tags: form.tags
-          .split(",")
-          .map((t) => t.trim())
-          .filter(Boolean),
         ...(questKind === "CAMPAIGN" && {
           socialLinks: socialLinks.filter((l) => l.url.trim()),
         }),
@@ -353,7 +359,10 @@ export function QuestForm({
     <form onSubmit={(e) => void handleSubmit(e)} className="space-y-6">
       {/* Basic Info */}
       <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-4">
-        <h2 className="type-section-title">Basic Info</h2>
+        <div className="flex items-center gap-2">
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[11px] font-bold text-[var(--primary)]">1</span>
+          <h2 className="type-section-title">Identity</h2>
+        </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
@@ -377,33 +386,51 @@ export function QuestForm({
           <div>
             <label className="mb-1.5 block text-sm font-medium">Organization *</label>
             <input required value={form.org} onChange={(e) => updateField("org", e.target.value)} placeholder="e.g. Digital Asset Collective" className={inputCls} />
+            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+              Slug auto-generated from this name (shown on cards when no logo).
+            </p>
           </div>
           <div>
-            <label className="mb-1.5 block text-sm font-medium">Org slug (2–4 chars)</label>
-            <input value={form.orgSlug} onChange={(e) => updateField("orgSlug", e.target.value.toUpperCase())} placeholder="DA" maxLength={4} className={inputCls} />
+            <label className="mb-1.5 block text-sm font-medium">Status</label>
+            <select value={form.status} onChange={(e) => updateField("status", e.target.value)} className={inputCls}>
+              {QUEST_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
           </div>
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-sm font-medium">Description *</label>
+          <textarea required rows={3} value={form.description} onChange={(e) => updateField("description", e.target.value)} placeholder="Describe the quest goals and tasks..." className={cn(inputCls, "resize-none")} />
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1.5 block text-sm font-medium">Starts at (timeline)</label>
+            <label className="mb-1.5 block text-sm font-medium">Starts at</label>
             <input type="datetime-local" value={form.startsAt} onChange={(e) => updateField("startsAt", e.target.value)} className={inputCls} />
           </div>
           <div>
-            <label className="mb-1.5 block text-sm font-medium">Ends at (timeline)</label>
+            <label className="mb-1.5 block text-sm font-medium">Ends at</label>
             <input type="datetime-local" value={form.endsAt} onChange={(e) => updateField("endsAt", e.target.value)} className={inputCls} />
             <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-              Shown on quest cards as the deadline (no separate display field).
+              Shown on cards as the deadline.
             </p>
           </div>
-          <div className="sm:col-span-2">
+        </div>
+
+        {/* Logo + Banner uploads in one row */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          {/* Logo */}
+          <div>
             <label className="mb-1.5 block text-sm font-medium">Project logo</label>
             <p className="mb-2 text-xs text-[var(--muted-foreground)]">
-              Square image (JPEG, PNG, WebP, GIF, max 5 MB). Uploaded to Cloudflare R2. Leave empty to use org initials.
+              Square (JPEG/PNG/WebP/GIF, max 5 MB). Empty → org initials.
             </p>
             <div className="flex flex-wrap items-center gap-3">
               {form.logoUrl ? (
                 <img src={form.logoUrl} alt="" className="h-14 w-14 rounded-xl border border-[var(--border)] object-cover" />
               ) : (
                 <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-dashed border-[var(--border)] bg-[var(--muted)]/40 text-xs font-semibold text-[var(--muted-foreground)]">
-                  {form.orgSlug.slice(0, 2) || "—"}
+                  {(form.org || "—").slice(0, 2).toUpperCase()}
                 </div>
               )}
               <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--card)]/80 px-4 py-2 text-sm font-semibold transition-colors hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10">
@@ -439,99 +466,64 @@ export function QuestForm({
                   onClick={() => removeQuestAsset("logoUrl", form.logoUrl, initialData?.logoUrl)}
                   className="text-sm font-medium text-red-600 hover:underline dark:text-red-400"
                 >
-                  Remove logo
+                  Remove
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Banner */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium">Event banner image</label>
+            <p className="mb-2 text-xs text-[var(--muted-foreground)]">
+              Wide image on cards (JPEG/PNG/WebP/GIF, max 5 MB). Optional.
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--card)]/80 px-4 py-2 text-sm font-semibold transition-colors hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10">
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="sr-only"
+                  disabled={uploadingBanner}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = "";
+                    if (!f) return;
+                    setUploadMsg(null);
+                    setUploadingBanner(true);
+                    const previous = form.bannerImageUrl;
+                    void uploadQuestAsset(f)
+                      .then((url) => {
+                        discardUnsavedQuestAsset(previous, initialData?.bannerImageUrl);
+                        updateField("bannerImageUrl", url);
+                      })
+                      .catch((err: unknown) =>
+                        setUploadMsg(err instanceof Error ? err.message : "Banner upload failed"),
+                      )
+                      .finally(() => setUploadingBanner(false));
+                  }}
+                />
+                {uploadingBanner ? <LoadingSpinner size="md" /> : <Upload className="h-4 w-4" />}
+                Upload banner
+              </label>
+              {form.bannerImageUrl ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    removeQuestAsset("bannerImageUrl", form.bannerImageUrl, initialData?.bannerImageUrl)
+                  }
+                  className="text-sm font-medium text-red-600 hover:underline dark:text-red-400"
+                >
+                  Remove
                 </button>
               ) : null}
             </div>
           </div>
         </div>
 
-        <div>
-          <label className="mb-1.5 block text-sm font-medium">Description *</label>
-          <textarea required rows={3} value={form.description} onChange={(e) => updateField("description", e.target.value)} placeholder="Describe the quest goals and tasks..." className={cn(inputCls, "resize-none")} />
-        </div>
-
-        {questKind === "CAMPAIGN" ? (
-          <div>
-            <label className="mb-1.5 block text-sm font-medium">Social links</label>
-            <p className="mb-2 text-xs text-[var(--muted-foreground)]">
-              Small icons shown under About on the campaign page (X, Discord, Telegram, website, etc.).
-            </p>
-            <QuestSocialLinksEditor
-              links={socialLinks}
-              onChange={setSocialLinks}
-              inputCls={inputCls}
-            />
-          </div>
-        ) : null}
-
-        <div>
-          <label className="mb-1.5 block text-sm font-medium">Tags (comma-separated)</label>
-          <input value={form.tags} onChange={(e) => updateField("tags", e.target.value)} placeholder="Live, Featured, Learning" className={inputCls} />
-        </div>
-
-        <div>
-          <label className="mb-1.5 block text-sm font-medium">Status</label>
-          <select value={form.status} onChange={(e) => updateField("status", e.target.value)} className={inputCls}>
-            {QUEST_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-          </select>
-        </div>
-      </section>
-
-      {/* Banner */}
-      <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-4">
-        <h2 className="type-section-title">Banner</h2>
-
-        <div>
-          <label className="mb-1.5 block text-sm font-medium">Event banner image</label>
-          <p className="mb-2 text-xs text-[var(--muted-foreground)]">
-            Wide image on Earn cards (JPEG, PNG, WebP, GIF, max 5 MB). Uploaded to Cloudflare R2. Optional — gradient fallback if empty.
-          </p>
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--card)]/80 px-4 py-2 text-sm font-semibold transition-colors hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10">
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
-                className="sr-only"
-                disabled={uploadingBanner}
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  e.target.value = "";
-                  if (!f) return;
-                  setUploadMsg(null);
-                  setUploadingBanner(true);
-                  const previous = form.bannerImageUrl;
-                  void uploadQuestAsset(f)
-                    .then((url) => {
-                      discardUnsavedQuestAsset(previous, initialData?.bannerImageUrl);
-                      updateField("bannerImageUrl", url);
-                    })
-                    .catch((err: unknown) =>
-                      setUploadMsg(err instanceof Error ? err.message : "Banner upload failed"),
-                    )
-                    .finally(() => setUploadingBanner(false));
-                }}
-              />
-              {uploadingBanner ? <LoadingSpinner size="md" /> : <Upload className="h-4 w-4" />}
-              Upload banner
-            </label>
-            {form.bannerImageUrl ? (
-              <button
-                type="button"
-                onClick={() =>
-                  removeQuestAsset("bannerImageUrl", form.bannerImageUrl, initialData?.bannerImageUrl)
-                }
-                className="text-sm font-medium text-red-600 hover:underline dark:text-red-400"
-              >
-                Remove banner image
-              </button>
-            ) : null}
-          </div>
-        </div>
-
         {form.bannerImageUrl ? (
           <div
-            className="h-28 rounded-xl border border-[var(--border)] bg-cover bg-center"
+            className="h-24 rounded-xl border border-[var(--border)] bg-cover bg-center"
             style={{ backgroundImage: `url("${form.bannerImageUrl}")` }}
           />
         ) : null}
@@ -539,7 +531,10 @@ export function QuestForm({
 
       {/* Reward */}
       <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-4">
-        <h2 className="type-section-title">Reward</h2>
+        <div className="flex items-center gap-2">
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[11px] font-bold text-[var(--primary)]">2</span>
+          <h2 className="type-section-title">Reward</h2>
+        </div>
         <div className="space-y-4">
           <div>
             <label className="mb-2 block text-sm font-medium">Reward type</label>
@@ -594,25 +589,6 @@ export function QuestForm({
                 />
               </div>
             )}
-            <div>
-              <label className="mb-1.5 block text-sm font-medium">Claim fee (CC on-chain)</label>
-              <input
-                type="number"
-                min="0"
-                step="0.5"
-                value={form.claimFeeCc}
-                onChange={(e) => updateField("claimFeeCc", e.target.value)}
-                placeholder={
-                  rewardConfig.defaultClaimFee != null
-                    ? `Default ${rewardConfig.defaultClaimFee}`
-                    : "No fee"
-                }
-                className={inputCls}
-              />
-              <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                Leave empty to use the default for this reward type.
-              </p>
-            </div>
           </div>
           {(form.rewardType === "WAITLIST_EMAIL" ||
             form.rewardType === "CC_MANUAL" ||
@@ -639,37 +615,79 @@ export function QuestForm({
               />
               {form.rewardType === "CC_AND_CODE_RAFFLE" && (
                 <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                  Shown to winners after admin draw. Non-winners see "You Not Lucky".
+                  Shown to winners after admin draw. Non-winners see &ldquo;You Not Lucky&rdquo;.
                 </p>
               )}
             </div>
           )}
-        </div>
-        <div>
-          <label className="mb-1.5 block text-sm font-medium">
-            {!rewardConfig.isCcToken
-              ? "Reward Pool (spots / access count shown to users)"
-              : "Reward Pool label (shown to users)"}
-          </label>
-          <input
-            value={form.rewardPool}
-            onChange={(e) => updateField("rewardPool", e.target.value)}
-            placeholder={
-              showCcField
-                ? `e.g. ${Number(form.maxWinners) > 0 && form.rewardCc ? `${Number(form.rewardCc) * Number(form.maxWinners)} CC pool` : `${form.rewardCc || "…"} CC`}`
-                : form.rewardType === "WAITLIST_EMAIL"
-                  ? "e.g. 5"
-                  : "e.g. 5"
-            }
-            className={inputCls}
-          />
-          {questKind === "CAMPAIGN" ? (
-            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-              Use CC wording here (not quest points). Task points (+10 pts) show on each task and count toward the leaderboard automatically.
+
+          {/* Reward pool preview — auto-generated, no manual input */}
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/30 px-3 py-2.5">
+            <p className="text-xs font-medium text-[var(--muted-foreground)]">Reward pool label (auto)</p>
+            <p className="mt-0.5 text-sm font-semibold text-[var(--foreground)]">
+              {(() => {
+                const cc = Number(form.rewardCc) || 0;
+                const maxW = form.maxWinners.trim() === "" ? null : Number(form.maxWinners);
+                if (rewardConfig.isCcToken && cc > 0 && maxW && maxW > 0) return `${cc * maxW} CC pool`;
+                if (rewardConfig.isCcToken && cc > 0) return `${cc} CC`;
+                if (rewardConfig.isDual && cc > 0) return `${cc} CC + Code`;
+                if (maxW && maxW > 0) return `${maxW} ${rewardConfig.code === "WAITLIST_EMAIL" ? "spots" : "codes"}`;
+                return "TBD";
+              })()}
             </p>
-          ) : null}
+            <p className="mt-0.5 text-[11px] text-[var(--muted-foreground)]">
+              {questKind === "CAMPAIGN"
+                ? "Auto-derived from CC amount & max winners. Task points count toward the leaderboard."
+                : "Auto-derived from CC amount & max winners."}
+            </p>
+          </div>
+
+          {/* Advanced — claim fee (collapsible) */}
+          <details className="group rounded-lg border border-[var(--border)] bg-[var(--muted)]/20">
+            <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2.5 text-sm font-medium">
+              <span>Advanced — claim fee</span>
+              <ChevronDown className="h-4 w-4 text-[var(--muted-foreground)] transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="border-t border-[var(--border)] px-3 py-3">
+              <label className="mb-1.5 block text-sm font-medium">Claim fee (CC on-chain)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.5"
+                value={form.claimFeeCc}
+                onChange={(e) => updateField("claimFeeCc", e.target.value)}
+                placeholder={
+                  rewardConfig.defaultClaimFee != null
+                    ? `Default ${rewardConfig.defaultClaimFee}`
+                    : "No fee"
+                }
+                className={inputCls}
+              />
+              <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                Leave empty to use the default for this reward type ({rewardConfig.defaultClaimFee != null ? `${rewardConfig.defaultClaimFee} CC` : "no fee"}).
+              </p>
+            </div>
+          </details>
         </div>
       </section>
+
+      {/* Social Links */}
+      {questKind === "CAMPAIGN" ? (
+        <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[11px] font-bold text-[var(--primary)]">3</span>
+            <h2 className="type-section-title">Social links</h2>
+          </div>
+          <p className="text-xs text-[var(--muted-foreground)]">
+            Small icons shown on the campaign page (X, Discord, Telegram, website, etc.).
+          </p>
+          <QuestSocialLinksEditor
+            links={socialLinks}
+            onChange={setSocialLinks}
+            inputCls={inputCls}
+          />
+        </section>
+      ) : null}
 
       {/* Tasks (optional at creation) */}
       {!isEdit && (
@@ -679,7 +697,10 @@ export function QuestForm({
             onClick={() => setShowTasks((v) => !v)}
             className="type-section-title flex w-full items-center justify-between"
           >
-            <span>Tasks ({tasks.length})</span>
+            <span className="flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[11px] font-bold text-[var(--primary)]">{questKind === "CAMPAIGN" ? "4" : "3"}</span>
+              Tasks ({tasks.length})
+            </span>
             {showTasks ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </button>
           <p className="text-xs text-[var(--muted-foreground)]">

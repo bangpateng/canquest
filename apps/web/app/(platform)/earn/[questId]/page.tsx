@@ -142,9 +142,22 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span className={cn(
-                  "rounded-lg px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+                  "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",
                   statusMeta.className,
                 )}>
+                  <span className={cn(
+                    "relative flex h-1.5 w-1.5",
+                    quest.status === "ACTIVE" && (
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/60" />
+                    ),
+                  )}>
+                    <span className={cn(
+                      "relative inline-flex h-1.5 w-1.5 rounded-full",
+                      quest.status === "ACTIVE" ? "bg-emerald-400"
+                        : quest.status === "COMING_SOON" ? "bg-cyan-400"
+                          : "bg-slate-500",
+                    )} />
+                  </span>
                   {statusMeta.label}
                 </span>
                 <span className={cn(
@@ -153,14 +166,6 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
                 )}>
                   {config.shortLabel}
                 </span>
-                {quest.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-2 py-0.5 text-[10px] font-semibold text-slate-400"
-                  >
-                    {tag}
-                  </span>
-                ))}
               </div>
               <p className="mt-1.5 text-xs font-semibold text-slate-400">{quest.org}</p>
               <h1 className="mt-0.5 text-xl font-bold leading-tight text-white sm:text-2xl md:text-3xl">
@@ -178,15 +183,17 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
 
           {/* Description + social links — inside header */}
           {(quest.description || (quest.socialLinks && quest.socialLinks.length > 0)) && (
-            <div className="mt-4 border-t border-white/[0.05] pt-4">
+            <div className="mt-4 grid gap-4 border-t border-white/[0.05] pt-4 sm:grid-cols-[1fr_auto] sm:items-start">
               {quest.description && (
-                <p className="line-clamp-3 text-sm leading-relaxed text-slate-400">
+                <p className="line-clamp-4 text-sm leading-relaxed text-slate-400 sm:line-clamp-3">
                   {quest.description}
                 </p>
               )}
-              {quest.socialLinks && quest.socialLinks.length > 0 && (
-                <CampaignSocialLinks links={quest.socialLinks} className="mt-3" />
-              )}
+              {quest.socialLinks && quest.socialLinks.length > 0 ? (
+                <div className="sm:pt-0.5">
+                  <CampaignSocialLinks links={quest.socialLinks} className="sm:justify-end" />
+                </div>
+              ) : null}
             </div>
           )}
         </div>
