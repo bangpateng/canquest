@@ -23,6 +23,8 @@ import { ResendEmailService } from './resend-email.service';
 const BCRYPT_ROUNDS = 12;
 const OTP_TTL_MS = 15 * 60 * 1000;
 const OTP_RESEND_COOLDOWN_MS = 2 * 60 * 1000;
+/// After this many wrong attempts the pending OTP is voided and the user must request a new code.
+const MAX_OTP_ATTEMPTS = 5;
 
 // Password reset (6-digit code) — separate from email OTP.
 const RESET_TTL_MS = 15 * 60 * 1000;
@@ -158,12 +160,30 @@ export class AuthService {
     if (user.otpExpiresAt < new Date()) {
       throw new UnauthorizedException('OTP expired');
     }
-    const hash = createHash('sha256').update(code.trim()).digest('hex');
-    if (hash !== user.otpCodeHash) {
+    if ((user.otpAttempts ?? 0) >= MAX_OTP_ATTEMPTS) {
+      await this.users.clearOtp(userId);
+      throw new UnauthorizedException(
+        'Too many incorrect attempts. Please request a new code.',
+      );
+    }
+
+    const trimmed = code.trim();
+    const candidate = this.hashOtp(userId, trimmed);
+    // Fallback: legacy hash format (sha256, no salt) for OTPs issued before this
+    // change and still in flight at deploy time. OTPs only live ~15 min, so this
+    // can be removed after one full deploy cycle.
+    // TODO: remove legacy fallback after one deploy cycle.
+    const legacy = createHash('sha256').update(trimmed).digest('hex');
+    const matched =
+      this.safeHexEqual(candidate, user.otpCodeHash) ||
+      this.safeHexEqual(legacy, user.otpCodeHash);
+
+    if (!matched) {
+      await this.users.incrementOtpAttempts(userId);
       throw new UnauthorizedException('Invalid OTP');
     }
 
-    await this.users.setVerified(userId);
+    await this.users.setVerified(userId); // nulls the OTP fields + resets attempts
     await this.referral.completeReferralForUser(userId);
 
     const fresh = await this.users.findById(userId);
@@ -369,6 +389,22 @@ export class AuthService {
     return { ok: true };
   }
 
+  /** Secret for OTP HMAC. Falls back to the JWT secret so legacy deployments keep working. */
+  private otpSecret(): string {
+    return (
+      process.env.OTP_HMAC_SECRET?.trim() ||
+      process.env.JWT_ACCESS_SECRET ||
+      ''
+    );
+  }
+
+  /** Hash a pending OTP: HMAC-SHA256(secret, `${userId}:${code}`). */
+  private hashOtp(userId: string, code: string): string {
+    return createHmac('sha256', this.otpSecret())
+      .update(`${userId}:${code}`)
+      .digest('hex');
+  }
+
   private async issueOtpForUser(
     userId: string,
     email: string,
@@ -383,8 +419,8 @@ export class AuthService {
       }
     }
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const otpCodeHash = createHash('sha256').update(otp).digest('hex');
+    const otp = randomInt(100000, 1000000).toString(); // CSPRNG, 6 digits
+    const otpCodeHash = this.hashOtp(userId, otp); // HMAC-SHA256 bound to the user
     const otpExpiresAt = new Date(Date.now() + OTP_TTL_MS);
     await this.users.setOtpPending(userId, otpCodeHash, otpExpiresAt);
 

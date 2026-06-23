@@ -169,14 +169,36 @@ export class UsersService {
   setOtpPending(userId: string, otpCodeHash: string, otpExpiresAt: Date) {
     return this.prisma.user.update({
       where: { id: userId },
-      data: { otpCodeHash, otpExpiresAt },
+      // Reset attempts whenever a fresh code is issued.
+      data: { otpCodeHash, otpExpiresAt, otpAttempts: 0 },
+    });
+  }
+
+  /** Increment the failed-attempt counter for the current pending OTP. */
+  incrementOtpAttempts(userId: string) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { otpAttempts: { increment: 1 } },
+    });
+  }
+
+  /** Void the pending OTP entirely (used after lockout / verification). */
+  clearOtp(userId: string) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { otpCodeHash: null, otpExpiresAt: null, otpAttempts: 0 },
     });
   }
 
   async setVerified(userId: string) {
     return this.prisma.user.update({
       where: { id: userId },
-      data: { emailVerified: true, otpCodeHash: null, otpExpiresAt: null },
+      data: {
+        emailVerified: true,
+        otpCodeHash: null,
+        otpExpiresAt: null,
+        otpAttempts: 0,
+      },
     });
   }
 
@@ -200,6 +222,7 @@ export class UsersService {
         emailVerified: false,
         otpCodeHash: null,
         otpExpiresAt: null,
+        otpAttempts: 0,
         ...(referredById !== undefined ? { referredById } : {}),
       },
     });
