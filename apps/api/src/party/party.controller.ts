@@ -1583,7 +1583,7 @@ export class PartyController {
 
     const result = await this.ledger.unlockCc(ownerParty, lock.lockedAmuletCid ?? undefined);
     if (!result.ok) {
-      return { ok: false, error: result.error ?? 'unlock gagal' };
+      return { ok: false, error: result.error ?? 'unlock failed' };
     }
 
     await this.prisma.ccLock.update({

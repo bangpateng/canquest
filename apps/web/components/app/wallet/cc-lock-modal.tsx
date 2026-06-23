@@ -132,13 +132,13 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
         const data = (await res.json()) as { ok?: boolean; error?: string };
         if (!res.ok || data.ok === false) {
           setLockState("error");
-          setLockMessage(data.error ?? "Unlock gagal.");
+          setLockMessage(data.error ?? "Unlock failed.");
         } else {
           onRefresh();
         }
       } catch {
         setLockState("error");
-        setLockMessage("Network error. Periksa koneksi.");
+        setLockMessage("Network error.");
       } finally {
         setUnlockingId(null);
       }
