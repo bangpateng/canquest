@@ -10,11 +10,12 @@ import {
 } from "@/lib/canton/canton-party-id";
 import { cn } from "@/lib/utils/utils";
 import { TransactionDetailModal } from "@/components/app/wallet/transaction-detail-modal";
-import { ArrowDownLeft, ArrowUpRight, X, AlertCircle } from "lucide-react";
+import { OffersModal, useOffers } from "@/components/app/wallet/offers-section";
+import { ArrowDownLeft, ArrowUpRight, X, AlertCircle, Inbox } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 
-type Sheet = null | "send" | "receive";
+type Sheet = null | "send" | "receive" | "offers";
 type SendState = "idle" | "loading" | "success" | "error";
 
 interface WalletActionsProps {
@@ -33,6 +34,10 @@ export function WalletActions({
   const receiveTitleId = useId();
   const [sheet, setSheet] = useState<Sheet>(null);
   const [feeCc, setFeeCc] = useState(5);
+
+  // Pending incoming offers — badge count + modal content.
+  const { offers, loading: offersLoading, error: offersError, setOffers, refresh: refreshOffers } = useOffers();
+  const offersCount = offers.length;
 
   // Fetch fee config from backend env so UI stays in sync with .env
   useEffect(() => {
@@ -157,7 +162,7 @@ export function WalletActions({
 
   return (
     <>
-      <div className="grid w-full min-w-0 grid-cols-2 gap-4">
+      <div className="grid w-full min-w-0 grid-cols-3 gap-3 sm:gap-4">
         <button
           type="button"
           onClick={openSend}
@@ -176,6 +181,28 @@ export function WalletActions({
         >
           <ArrowDownLeft className="h-5 w-5 shrink-0" aria-hidden />
           Receive
+        </button>
+        <button
+          type="button"
+          onClick={() => setSheet("offers")}
+          aria-label={`Incoming offers${offersCount > 0 ? `, ${offersCount} pending` : ""}`}
+          className={cn(
+            buttonVariants({ variant: "secondary", size: "sm" }),
+            "relative w-full justify-center gap-2",
+            offersCount > 0 &&
+              "border-emerald-500/40 text-emerald-400 hover:border-emerald-500/60 hover:bg-emerald-500/10",
+          )}
+        >
+          <Inbox className="h-5 w-5 shrink-0" aria-hidden />
+          Offers
+          {offersCount > 0 && (
+            <span
+              className="absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-500 px-1.5 text-[10px] font-bold text-white shadow ring-2 ring-[var(--card)]"
+              aria-hidden
+            >
+              {offersCount}
+            </span>
+          )}
         </button>
       </div>
 
@@ -428,6 +455,20 @@ export function WalletActions({
           </div>
         </div>
       ) : null}
+
+      {/* ── OFFERS MODAL ── */}
+      <OffersModal
+        open={sheet === "offers"}
+        onClose={() => setSheet(null)}
+        offers={offers}
+        loading={offersLoading}
+        error={offersError}
+        setOffers={setOffers}
+        onRefresh={() => {
+          void refreshOffers();
+          onBalanceRefresh?.();
+        }}
+      />
     </>
   );
 }

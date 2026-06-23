@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { CopyField } from "@/components/app/wallet/copy-field";
 import { WalletActions } from "@/components/app/wallet/wallet-actions";
 import { CcLockModal } from "@/components/app/wallet/cc-lock-modal";
-import { OffersSection } from "@/components/app/wallet/offers-section";
 import { TransactionsView } from "@/components/app/wallet/transactions-view";
 import { RefreshCw, Lock } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -136,8 +134,6 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
         balance={balance}
         onBalanceRefresh={handleBalanceRefresh}
       />
-
-      <OffersSection onRefresh={handleBalanceRefresh} />
 
       <TransactionsView variant="embedded" refreshKey={txRefreshKey} partyId={me.cantonPartyId ?? null} />
 
