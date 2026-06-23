@@ -101,6 +101,7 @@ export function QuestForm({
     maxWinners: String(initialData?.maxWinners ?? ""),
     claimFeeCc: initialData?.claimFeeCc != null ? String(initialData.claimFeeCc) : "",
     winnerMessage: initialData?.winnerMessage ?? "",
+    tags: (initialData?.tags ?? []).join(", "),
   });
 
   const [socialLinks, setSocialLinks] = useState<QuestSocialLink[]>(
@@ -303,6 +304,10 @@ export function QuestForm({
         maxWinners: maxW,
         claimFeeCc: form.claimFeeCc.trim() ? Number(form.claimFeeCc) : null,
         winnerMessage: form.winnerMessage.trim() || null,
+        tags: form.tags
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean),
         ...(questKind === "CAMPAIGN" && {
           socialLinks: socialLinks.filter((l) => l.url.trim()),
         }),
@@ -401,6 +406,14 @@ export function QuestForm({
         <div>
           <label className="mb-1.5 block text-sm font-medium">Description *</label>
           <textarea required rows={3} value={form.description} onChange={(e) => updateField("description", e.target.value)} placeholder="Describe the quest goals and tasks..." className={cn(inputCls, "resize-none")} />
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-sm font-medium">Tags (comma-separated)</label>
+          <input value={form.tags} onChange={(e) => updateField("tags", e.target.value)} placeholder="Live, Featured, Learning" className={inputCls} />
+          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+            Shown as small chips on Earn cards (up to 4).
+          </p>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">

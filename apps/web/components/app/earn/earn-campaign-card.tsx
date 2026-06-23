@@ -16,6 +16,7 @@ import {
   Coins,
   ListChecks,
   Sparkles,
+  Tag,
   Ticket,
   Trophy,
   Users,
@@ -72,21 +73,40 @@ function CountdownTimer({ endsAt }: { endsAt: string | null }) {
   );
 }
 
-/** Compact dot indicator for status — merges status + type into one visual. */
-function StatusDot({ quest, statusMeta }: { quest: Quest; statusMeta: { className: string; label: string } }) {
-  const color =
-    quest.status === "ACTIVE" ? "bg-emerald-400"
-      : quest.status === "COMING_SOON" ? "bg-cyan-400"
-        : "bg-slate-500";
+/** Status badge — shown top-left of card body. */
+function StatusBadge({
+  quest,
+  statusLabel,
+  className,
+}: {
+  quest: Quest;
+  statusLabel: string;
+  className?: string;
+}) {
+  const isActive = quest.status === "ACTIVE";
+  const isComing = quest.status === "COMING_SOON";
   return (
-    <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 sm:text-xs">
-      <span className={cn("relative flex h-2 w-2", "shrink-0")}>
-        {quest.status === "ACTIVE" && (
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/60" />
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider backdrop-blur-md sm:text-[10px]",
+        isActive && "border border-emerald-500/25 bg-emerald-500/15 text-emerald-300",
+        isComing && "border border-cyan-500/25 bg-cyan-500/15 text-cyan-300",
+        !isActive && !isComing && "border border-white/10 bg-black/50 text-slate-300",
+        className,
+      )}
+    >
+      <span className="relative flex h-1.5 w-1.5">
+        {isActive && (
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/70" />
         )}
-        <span className={cn("relative inline-flex h-2 w-2 rounded-full", color)} />
+        <span
+          className={cn(
+            "relative inline-flex h-1.5 w-1.5 rounded-full",
+            isActive ? "bg-emerald-400" : isComing ? "bg-cyan-400" : "bg-slate-500",
+          )}
+        />
       </span>
-      {statusMeta.label}
+      {statusLabel}
     </span>
   );
 }
@@ -174,17 +194,9 @@ export function EarnCampaignCard({
             style={{ backgroundImage: `url("${quest.bannerImageUrl}")` }}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-[#0a0c14] via-[#0a0c14]/40 to-transparent" />
-          {/* Status badge floats over banner */}
-          <div className="absolute right-2.5 top-2.5">
-            <span className={cn(
-              "rounded-lg px-2 py-1 text-[9px] font-bold uppercase tracking-wide backdrop-blur-xl sm:px-2.5 sm:text-[10px]",
-              slots.full && quest.status === "ACTIVE"
-                ? "border border-white/5 bg-black/60 text-slate-400"
-                : "border border-white/10 bg-black/50 text-white",
-              !(slots.full && quest.status === "ACTIVE") && statusMeta.className,
-            )}>
-              {statusLabel}
-            </span>
+          {/* Status badge floats over banner — top-left */}
+          <div className="absolute left-2.5 top-2.5">
+            <StatusBadge quest={quest} statusLabel={statusLabel} />
           </div>
         </div>
       ) : null}
@@ -192,8 +204,15 @@ export function EarnCampaignCard({
       {/* ── Body ─────────────────────────────────────────────────── */}
       <div className="flex w-full min-w-0 flex-1 flex-col justify-between px-4 pb-4 pt-4 sm:px-5 sm:pb-5 sm:pt-5">
 
-        {/* Header: logo + org/title */}
-        <div className="flex w-full min-w-0 items-start gap-3 sm:gap-3.5">
+        {/* Status — top-left (when no banner; when banner, status already on banner) */}
+        {!quest.bannerImageUrl ? (
+          <div className="mb-2.5">
+            <StatusBadge quest={quest} statusLabel={statusLabel} />
+          </div>
+        ) : null}
+
+        {/* Header: logo + org/title — aligned center so they line up */}
+        <div className="flex w-full min-w-0 items-center gap-3 sm:gap-3.5">
           {/* Logo */}
           <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-slate-800/80 ring-1 ring-white/10 sm:h-12 sm:w-12">
             {quest.logoUrl ? (
@@ -205,28 +224,13 @@ export function EarnCampaignCard({
             )}
           </div>
 
-          {/* Org + Title + status (if no banner) */}
+          {/* Org + Title */}
           <div className="min-w-0 flex-1">
-            {!quest.bannerImageUrl && (
-              <div className="mb-1 flex items-center justify-between gap-2">
-                <StatusDot quest={quest} statusMeta={statusMeta} />
-              </div>
-            )}
             <p className="truncate text-[10px] font-semibold text-slate-500 sm:text-xs">{quest.org}</p>
             <h3 className="line-clamp-2 text-sm font-bold leading-tight text-white sm:mt-0.5 sm:text-base">
               {quest.title}
             </h3>
           </div>
-
-          {/* Type chip (right) — only when banner present (status already on banner) */}
-          {quest.bannerImageUrl ? (
-            <span className={cn(
-              "mt-1 shrink-0 rounded-lg border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide backdrop-blur-xl sm:text-[10px]",
-              config.chipClass,
-            )}>
-              {config.shortLabel}
-            </span>
-          ) : null}
         </div>
 
         {/* Description */}
@@ -296,6 +300,18 @@ export function EarnCampaignCard({
             </div>
           ) : null}
         </div>
+
+        {/* Tags */}
+        {quest.tags.length > 0 && (
+          <div className="mt-2.5 flex flex-wrap gap-1 sm:mt-3">
+            {quest.tags.slice(0, 4).map((tag) => (
+              <span key={tag} className="inline-flex items-center gap-0.5 rounded-md border border-white/[0.06] bg-white/[0.03] px-1.5 py-0.5 text-[9px] font-medium text-slate-500 sm:text-[10px]">
+                <Tag className="h-2.5 w-2.5 shrink-0 opacity-50" aria-hidden />
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* Meta row — single line: tasks + deadline */}
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-semibold text-slate-500 sm:mt-3.5 sm:text-xs">

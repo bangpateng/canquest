@@ -7,7 +7,7 @@ import { getQuestMeta } from "@/lib/quest/quest-engine";
 import { QUEST_STATUS_BADGE, type Quest } from "@/lib/quest/quest-types";
 import { cn } from "@/lib/utils/utils";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
-import { Calendar, ListChecks, Sparkles, Ticket, Trophy, Users } from "lucide-react";
+import { Calendar, ListChecks, Sparkles, Tag, Ticket, Trophy, Users } from "lucide-react";
 import Link from "next/link";
 
 function CampaignLogo({ quest }: { quest: Quest }) {
@@ -40,18 +40,32 @@ function RewardPillIcon({
   return <Trophy className="h-3.5 w-3.5 shrink-0" aria-hidden />;
 }
 
-/** Compact status dot — merges status into a minimal visual. */
-function StatusDot({ quest }: { quest: Quest }) {
-  const color =
-    quest.status === "ACTIVE" ? "bg-emerald-400"
-      : quest.status === "COMING_SOON" ? "bg-cyan-400"
-        : "bg-slate-500";
+/** Status badge — consistent with card view. */
+function StatusBadge({ quest }: { quest: Quest }) {
+  const isActive = quest.status === "ACTIVE";
+  const isComing = quest.status === "COMING_SOON";
+  const label = QUEST_STATUS_BADGE[quest.status].label;
   return (
-    <span className="relative flex h-2 w-2 shrink-0">
-      {quest.status === "ACTIVE" && (
-        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/60" />
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider backdrop-blur-md",
+        isActive && "border border-emerald-500/25 bg-emerald-500/15 text-emerald-300",
+        isComing && "border border-cyan-500/25 bg-cyan-500/15 text-cyan-300",
+        !isActive && !isComing && "border border-white/10 bg-white/5 text-slate-300",
       )}
-      <span className={cn("relative inline-flex h-2 w-2 rounded-full", color)} />
+    >
+      <span className="relative flex h-1.5 w-1.5">
+        {isActive && (
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/70" />
+        )}
+        <span
+          className={cn(
+            "relative inline-flex h-1.5 w-1.5 rounded-full",
+            isActive ? "bg-emerald-400" : isComing ? "bg-cyan-400" : "bg-slate-500",
+          )}
+        />
+      </span>
+      {label}
     </span>
   );
 }
@@ -70,7 +84,6 @@ export function EarnCampaignRow({
   const { config, slots } = meta;
 
   const canOpen = quest.status === "ACTIVE" || quest.status === "ENDED";
-  const statusMeta = QUEST_STATUS_BADGE[quest.status];
 
   const ctaLabel =
     quest.status === "ENDED"
@@ -115,35 +128,32 @@ export function EarnCampaignRow({
             <CampaignLogo quest={quest} />
 
             <div className="min-w-0 flex-1">
-              <div className="flex items-start justify-between gap-3">
-                {/* Org + Title + status dot */}
-                <div className="min-w-0 pr-2">
-                  <div className="mb-0.5 flex items-center gap-1.5">
-                    <StatusDot quest={quest} />
-                    <span className="truncate text-xs font-semibold text-slate-400">
-                      {statusMeta.label} · {quest.org}
-                    </span>
-                  </div>
-                  <h3 className="line-clamp-1 text-base font-bold text-slate-100 sm:text-lg">
-                    {quest.title}
-                  </h3>
-                </div>
-
-                {/* Type chip */}
-                <span
-                  className={cn(
-                    "shrink-0 rounded-lg border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide",
-                    config.chipClass,
-                  )}
-                >
-                  {config.shortLabel}
+              <div className="mb-0.5 flex items-center gap-2">
+                <StatusBadge quest={quest} />
+                <span className="truncate text-xs font-semibold text-slate-400">
+                  {quest.org}
                 </span>
               </div>
+              <h3 className="line-clamp-1 text-base font-bold text-slate-100 sm:text-lg">
+                {quest.title}
+              </h3>
 
               {/* Description */}
               <p className="mt-2 line-clamp-2 text-sm font-medium leading-relaxed text-slate-400">
                 {quest.description}
               </p>
+
+              {/* Tags */}
+              {quest.tags.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {quest.tags.slice(0, 5).map((tag) => (
+                    <span key={tag} className="inline-flex items-center gap-0.5 rounded-md border border-white/[0.06] bg-white/[0.03] px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+                      <Tag className="h-2.5 w-2.5 shrink-0 opacity-50" aria-hidden />
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
 
               {/* Meta row: tasks + reward pill + deadline left, CTA right */}
               <div className="mt-3 flex flex-wrap items-center justify-between gap-3 sm:mt-4">
