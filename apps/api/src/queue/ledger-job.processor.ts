@@ -73,13 +73,21 @@ export class LedgerJobProcessor {
 
   @Process(JOB_SEND_CC_REWARD)
   async processSendCcReward(job: Job<SendCcRewardPayload>): Promise<void> {
-    const { userId, username, cantonPartyId, amountCc, description, referenceId } = job.data;
+    const {
+      userId,
+      username,
+      cantonPartyId,
+      amountCc,
+      description,
+      referenceId,
+    } = job.data;
     this.logger.log(
       `[Job ${job.id}] SendCcReward (CIP-0056): ${amountCc} CC → @${username} (attempt ${job.attemptsMade + 1})`,
     );
 
     // Validator party sends the reward
-    const validatorPartyId = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ?? '';
+    const validatorPartyId =
+      this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ?? '';
 
     // Step 1: Try CIP-0056 TransferFactory_Transfer (identity='reward' for dapp-reward auth)
     const cip56Result = await this.ledger.executeTransferFactoryTransfer({
@@ -94,15 +102,13 @@ export class LedgerJobProcessor {
     let ledgerTxId = '';
 
     if (cip56Result.ok) {
+      // Preapproval ON (direct) → CC langsung masuk.
+      // Preapproval OFF (offer) → JANGAN auto-accept atas nama user.
+      //   Biarkan AmuletTransferInstruction pending di inbox wallet receiver;
+      //   user accept/reject manual via menu Offers.
       accepted = cip56Result.transferKind === 'direct';
-      ledgerTxId = cip56Result.updateId ?? cip56Result.transferInstructionCid ?? '';
-      if (!accepted && cip56Result.transferInstructionCid) {
-        const acceptResult = await this.ledger.acceptTransferInstruction(
-          cip56Result.transferInstructionCid,
-          cantonPartyId,
-        );
-        accepted = acceptResult.ok;
-      }
+      ledgerTxId =
+        cip56Result.updateId ?? cip56Result.transferInstructionCid ?? '';
     }
 
     // Fallback to Splice TransferOffer if CIP-0056 failed (no Scan access).
@@ -112,23 +118,27 @@ export class LedgerJobProcessor {
       if (!this.splice.isLegacyHs256) {
         throw new Error(
           `CIP-0056 transfer unavailable for @${username} ` +
-          `(${cip56Result.error?.slice(0, 80) ?? 'unknown'}) — will retry`,
+            `(${cip56Result.error?.slice(0, 80) ?? 'unknown'}) — will retry`,
         );
       }
       this.logger.log(
         `[Job ${job.id}] CIP-0056 unavailable, fallback to Splice TransferOffer: ${cip56Result.error?.slice(0, 80) ?? 'unknown'}`,
       );
       const offerContractId = await this.splice.createTransferOffer(
-        cantonPartyId, amountCc, description,
+        cantonPartyId,
+        amountCc,
+        description,
       );
       if (!offerContractId) {
-        throw new Error(`Both CIP-0056 and createTransferOffer failed for @${username} — will retry`);
+        throw new Error(
+          `Both CIP-0056 and createTransferOffer failed for @${username} — will retry`,
+        );
       }
-      accepted = await this.splice.acceptOfferViaWallet(offerContractId, username);
+      // JANGAN auto-accept — offer pending, user accept manual via menu Offers.
       ledgerTxId = offerContractId;
-      if (!accepted) {
-        this.logger.warn(`[Job ${job.id}] Splice offer created but accept failed: ${offerContractId}`);
-      }
+      this.logger.log(
+        `[Job ${job.id}] Splice offer created (pending) for @${username}: ${offerContractId.slice(0, 16)}…`,
+      );
     }
 
     // Step 3: catat transaksi ke DB
@@ -160,22 +170,28 @@ export class LedgerJobProcessor {
 
     this.logger.log(
       `[Job ${job.id}] ✅ ${amountCc} CC → @${username} kind=${cip56Result.transferKind} ` +
-      `accepted=${String(accepted)} txId=${ledgerTxId.slice(0, 16)}…`,
+        `${accepted ? 'accepted' : 'pending (preapproval OFF)'} txId=${ledgerTxId.slice(0, 16)}…`,
     );
   }
 
   // ── Distribute Quest Reward (Admin) ──────────────────────────────────────────
 
   @Process(JOB_DISTRIBUTE_REWARD)
-  async processDistributeReward(job: Job<DistributeRewardPayload>): Promise<void> {
-    const { drawId, questId, userId, username, cantonPartyId, amountCc } = job.data;
-    this.logger.log(`[Job ${job.id}] DistributeReward (CIP-0056): draw=${drawId} ${amountCc} CC → @${username ?? 'unknown'}`);
+  async processDistributeReward(
+    job: Job<DistributeRewardPayload>,
+  ): Promise<void> {
+    const { drawId, questId, userId, username, cantonPartyId, amountCc } =
+      job.data;
+    this.logger.log(
+      `[Job ${job.id}] DistributeReward (CIP-0056): draw=${drawId} ${amountCc} CC → @${username ?? 'unknown'}`,
+    );
 
     let ledgerTxId: string | null = null;
     let ccSent = false;
 
     if (amountCc > 0 && cantonPartyId && username) {
-      const validatorPartyId = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ?? '';
+      const validatorPartyId =
+        this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ?? '';
 
       // CIP-0056: try TransferFactory_Transfer first, fallback to Splice TransferOffer
       // identity='reward' → dapp-reward identity for CC reward transfers
@@ -188,40 +204,39 @@ export class LedgerJobProcessor {
       });
 
       if (cip56Result.ok) {
-        let accepted = cip56Result.transferKind === 'direct';
-        ledgerTxId = cip56Result.updateId ?? cip56Result.transferInstructionCid ?? null;
-        if (!accepted && cip56Result.transferInstructionCid) {
-          const acceptResult = await this.ledger.acceptTransferInstruction(
-            cip56Result.transferInstructionCid,
-            cantonPartyId,
-          );
-          accepted = acceptResult.ok;
-          if (!accepted) {
-            throw new Error(`TransferInstruction accept failed for draw=${drawId} — will retry`);
-          }
-        }
+        // Preapproval ON (direct) → CC langsung masuk.
+        // Preapproval OFF (offer) → JANGAN auto-accept. Biarkan pending,
+        //   penerima accept/reject manual via menu Offers.
+        ledgerTxId =
+          cip56Result.updateId ?? cip56Result.transferInstructionCid ?? null;
         ccSent = true;
       } else {
         // Fallback to Splice TransferOffer HANYA untuk mode legacy hs256.
         if (!this.splice.isLegacyHs256) {
           throw new Error(
             `CIP-0056 distribute unavailable for draw=${drawId} ` +
-            `(${cip56Result.error?.slice(0, 80) ?? 'unknown'}) — will retry`,
+              `(${cip56Result.error?.slice(0, 80) ?? 'unknown'}) — will retry`,
           );
         }
-        this.logger.log(`[Job ${job.id}] CIP-0056 unavailable, fallback: ${cip56Result.error?.slice(0, 80) ?? 'unknown'}`);
+        this.logger.log(
+          `[Job ${job.id}] CIP-0056 unavailable, fallback: ${cip56Result.error?.slice(0, 80) ?? 'unknown'}`,
+        );
         const offerContractId = await this.splice.createTransferOffer(
-          cantonPartyId, amountCc, `Quest winner reward: ${questId}`,
+          cantonPartyId,
+          amountCc,
+          `Quest winner reward: ${questId}`,
         );
         if (!offerContractId) {
-          throw new Error(`Both CIP-0056 and createTransferOffer failed for draw=${drawId} — will retry`);
+          throw new Error(
+            `Both CIP-0056 and createTransferOffer failed for draw=${drawId} — will retry`,
+          );
         }
-        const offerAccepted = await this.splice.acceptOfferViaWallet(offerContractId, username);
-        if (!offerAccepted) {
-          throw new Error(`acceptOffer failed for draw=${drawId} — will retry`);
-        }
+        // JANGAN auto-accept — offer pending, penerima accept manual via menu Offers.
         ledgerTxId = offerContractId;
         ccSent = true;
+        this.logger.log(
+          `[Job ${job.id}] Splice offer created (pending) for draw=${drawId}: ${offerContractId.slice(0, 16)}…`,
+        );
       }
 
       if (ccSent && ledgerTxId) {
@@ -236,7 +251,7 @@ export class LedgerJobProcessor {
     }
 
     // Update WinnerDraw record
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     await (this.prisma as any).winnerDraw.update({
       where: { id: drawId },
       data: {
@@ -246,7 +261,10 @@ export class LedgerJobProcessor {
       },
     });
 
-    this.logger.log(`[Job ${job.id}] ✅ draw=${drawId} distributed ccSent=${String(ccSent)}`);
+    this.logger.log(
+      `[Job ${job.id}] ✅ draw=${drawId} distributed ccSent=${String(ccSent)} ` +
+        `${ccSent ? '(direct or pending offer)' : ''}`,
+    );
   }
 
   // ── Accept Transfer Offer ────────────────────────────────────────────────────
@@ -266,11 +284,18 @@ export class LedgerJobProcessor {
       return;
     }
 
-    this.logger.log(`[Job ${job.id}] AcceptOffer: ${offerContractId.slice(0, 16)}… as @${username} ${label ?? ''}`);
+    this.logger.log(
+      `[Job ${job.id}] AcceptOffer: ${offerContractId.slice(0, 16)}… as @${username} ${label ?? ''}`,
+    );
 
-    const ok = await this.splice.acceptOfferViaWallet(offerContractId, username);
+    const ok = await this.splice.acceptOfferViaWallet(
+      offerContractId,
+      username,
+    );
     if (!ok) {
-      throw new Error(`acceptOfferViaWallet failed for @${username} — will retry`);
+      throw new Error(
+        `acceptOfferViaWallet failed for @${username} — will retry`,
+      );
     }
 
     this.logger.log(`[Job ${job.id}] ✅ Offer accepted for @${username}`);
