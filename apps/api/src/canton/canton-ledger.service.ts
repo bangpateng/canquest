@@ -2409,11 +2409,8 @@ export class CantonLedgerService {
 
     const { ok, status, text } = await this.exerciseChoice(
       cid, tmpl,
-      // MD (SPEC-CC-LOCK baris 31): LockedAmulet_OwnerExpireLock SUDAH PENSIUN sejak
-      // splice-amulet 0.1.17 — pakai V2 dengan argumen {}. Rollback ke baris di atas
-      // bila choice V2 tidak tersedia di node jaringanmu.
       'LockedAmulet_OwnerExpireLockV2',
-      {},
+    {},
       [ownerParty],
       `unlock-cc-${randomUUID()}`,
       'submit-and-wait-for-transaction-tree',
