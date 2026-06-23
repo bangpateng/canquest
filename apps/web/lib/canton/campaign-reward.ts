@@ -56,7 +56,7 @@ export function formatCodePoolLabel(
   codesRemaining: number | null | undefined,
 ): string {
   const total = codesRemaining ?? maxWinners ?? null;
-  if (total != null && total > 0) return `${total} Code${total === 1 ? "" : "s"}`;
+  if (total != null && total > 0) return `${total} Code`;
   return "—";
 }
 

@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils/utils";
 import {
   Calendar,
   Clock,
-  Coins,
   ListChecks,
   Sparkles,
   Ticket,
@@ -162,19 +161,19 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
             <div className="flex flex-wrap items-center gap-1.5">
               {config.isCcToken ? (
                 <>
-                  <Coins className="h-4 w-4 shrink-0 text-amber-400" />
-                  <span className="text-sm font-bold text-white sm:text-base">{poolDisplay}</span>
+                  <CcRewardLogo size={18} />
+                  <span className={VALUE_CLS}>{poolDisplay}</span>
                   {poolCcValue > 0 ? <CcUsdValue cc={poolCcValue} /> : null}
                 </>
               ) : config.code === "INVITE_CODE_FCFS" || config.code === "INVITE_CODE_RANDOM" ? (
                 <>
                   <Ticket className="h-4 w-4 shrink-0 text-violet-400" />
-                  <span className="text-sm font-bold text-white sm:text-base">{poolDisplay}</span>
+                  <span className={VALUE_CLS}>{poolDisplay}</span>
                 </>
               ) : (
                 <>
                   <CcRewardLogo size={18} />
-                  <span className="text-sm font-bold text-white sm:text-base">{poolDisplay}</span>
+                  <span className={VALUE_CLS}>{poolDisplay}</span>
                   {summary?.poolTotalCc != null && summary.poolTotalCc > 0 ? (
                     <CcUsdValue cc={summary.poolTotalCc} />
                   ) : null}
