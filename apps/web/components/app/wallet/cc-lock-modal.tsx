@@ -14,10 +14,10 @@ function termLabel(termKey: string): string {
   if (!m) return termKey;
   const n = Number(m[1]);
   const unit = m[2].toLowerCase();
-  if (unit === "s") return `${n} detik`;
-  if (unit === "m") return `${n} menit`;
-  if (unit === "h") return `${n} jam`;
-  return `${n} hari`;
+  if (unit === "s") return `${n} second`;
+  if (unit === "m") return `${n} minutes`;
+  if (unit === "h") return `${n} hours`;
+  return `${n} day`;
 }
 
 interface CcLockModalProps {
@@ -211,7 +211,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
               disabled={lockState === "loading"}
               className="w-full rounded-2xl border border-white/5 bg-white/5 px-4 py-3 text-base font-bold tabular-nums text-slate-100 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
             />
-            <p className="text-xs text-slate-500">≥30 buka Earn + Spin · ≥5 buka Spin saja</p>
+            <p className="text-xs text-slate-500">Lock 5 CC: Access Spin or Lock 30 CC: Access Spin & Earn</p>
           </div>
 
           {/* Pilihan durasi — di-render dari GET /lock-terms, BUKAN hard-code */}
@@ -262,8 +262,8 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
               </>
             ) : (
               amountValid && selectedTerm
-                ? `Kunci ${numericAmount} CC selama ${termLabel(selectedTerm)}`
-                : "Kunci CC"
+                ? `Lock ${numericAmount} CC for ${termLabel(selectedTerm)}`
+                : "Lock CC"
             )}
           </button>
           <p className="text-center text-xs text-slate-500">
