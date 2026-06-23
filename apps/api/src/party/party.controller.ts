@@ -234,13 +234,15 @@ export class PartyController {
         .recordActivity('wallet_created', cantonPartyId, `Wallet created for @${username}`)
         .catch(() => { /* non-critical */ });
 
-      // TransferPreapproval (dipertahankan dari flow lama)
+      // TransferPreapproval: DEFAULT OFF.
+      // JANGAN auto-create saat register — biarkan OFF supaya SEMUA CC masuk
+      // (reward/transfer/spin) jadi offer yang harus di-accept manual. User
+      // baru bisa meng-enable sendiri via menu Wallet bila ingin transfer instan.
+      // Jika user sebelumnya sudah enable (existing), pertahankan apa adanya.
       let preapprovalActive = false;
       const existingPreapproval = await this.splice.hasTransferPreapproval(cantonPartyId);
       if (existingPreapproval) {
         preapprovalActive = true;
-      } else {
-        preapprovalActive = (await this.splice.createTransferPreapproval(username)).ok;
       }
 
       if (needsInviteFlow) {
@@ -431,15 +433,14 @@ export class PartyController {
             partyId: storedPartyId,
           });
         }
-        const preapprovalActive = (await this.splice.createTransferPreapproval(username)).ok;
+        // DEFAULT OFF: jangan auto-create preapproval. User enable manual via Wallet.
+        const preapprovalActive = false;
         return {
           cantonPartyId: storedPartyId,
           isPlaceholder: false,
           spliceOnboarded: true,
           preapproval: { active: preapprovalActive },
-          message: preapprovalActive
-            ? 'Wallet created — Party ID registered. Direct CC transfers enabled (CIP-56 compliant).'
-            : 'Wallet created — Party ID allocated and registered in Splice validator.',
+          message: 'Wallet created — Party ID allocated and registered in Splice validator.',
         };
       }
 
