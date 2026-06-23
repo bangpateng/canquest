@@ -1,4 +1,5 @@
 import { PlatformPage } from "@/components/platform/platform-page";
+import { CampaignLockGate } from "@/components/app/campaign/campaign-lock-gate";
 import { CampaignSocialLinks } from "@/components/app/campaign/campaign-social-links";
 import { QuestTaskPanel } from "@/components/app/quest/quest-task-panel";
 import { CampaignQuestSidebar } from "@/components/app/campaign/campaign-quest-sidebar";
@@ -194,7 +195,8 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
       <CampaignQuestSidebar quest={quest} />
 
       {/* ── Task Panel / Auth Prompt ────────────────────────────────────── */}
-      <section className="min-w-0">
+      <section className="min-w-0 space-y-4">
+        {isAuthed && <CampaignLockGate />}
         {isAuthed ? (
           <QuestTaskPanel quest={quest} />
         ) : (

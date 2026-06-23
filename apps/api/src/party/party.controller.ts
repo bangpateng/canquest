@@ -26,6 +26,8 @@ import { CcInboundSyncService } from '../canton/cc-inbound-sync.service';
 import { CcBalanceService } from '../canton/cc-balance.service';
 import { TransactionDetailService } from '../canton/transaction-detail.service';
 import { QuestLedgerService } from '../canton/quest-ledger.service';
+import { LockEligibilityService } from '../canton/lock-eligibility.service';
+import { parseLockTerms } from '../canton/lock-terms';
 import {
   cantonPartyIdsEqual,
   looksLikeCantonPartyId,
@@ -41,6 +43,8 @@ import { WalletInviteCodeService } from './wallet-invite-code.service';
 import { AllocateWalletDto } from './dto/allocate-wallet.dto';
 import { CantonPartyBindingDto } from './dto/canton-party-binding.dto';
 import { SendCcDto } from './dto/send-cc.dto';
+import { LockCcDto } from './dto/lock-cc.dto';
+import { UnlockCcDto } from './dto/unlock-cc.dto';
 import { SetUsernameDto } from './dto/set-username.dto';
 import {
   ContractActionDto,
@@ -95,6 +99,7 @@ export class PartyController {
     private readonly walletInvites: WalletInviteCodeService,
     private readonly questLedger: QuestLedgerService,
     private readonly walletOnboarding: WalletOnboardingService,
+    private readonly lockEligibility: LockEligibilityService,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -1447,6 +1452,192 @@ export class PartyController {
     };
   }
 
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CC LOCK (non-custodial) — Spec CC Lock CanQuest
+  // ownerParty di-resolve dari user login (JANGAN terima ownerParty mentah dari body).
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /** Helper: parse LOCK_TERM_OPTIONS sekali per request (murah, string kecil). */
+  private getLockTerms() {
+    return parseLockTerms(this.config.get<string>('LOCK_TERM_OPTIONS'));
+  }
+
+  /**
+   * POST /party/lock — kunci amountCc CC selama termKey (validated against env).
+   * Memakai cantonLedgerService.lockCc() (AmuletRules_Transfer → LockedAmulet).
+   */
+  @Throttle({ ledger: { limit: 5, ttl: 60_000 } })
+  @Post('lock')
+  async lockCc(@Req() req: AuthedReq, @Body() body: LockCcDto) {
+    const user = await this.users.findById(req.user.userId);
+    if (!user?.cantonPartyId || !hasRealWallet(user.cantonPartyId)) {
+      throw new BadRequestException('No wallet found. Create your wallet first.');
+    }
+    const ownerParty = user.cantonPartyId;
+
+    const { map } = this.getLockTerms();
+    const seconds = map.get(body.termKey);
+    if (seconds === undefined) {
+      throw new BadRequestException(`term "${body.termKey}" tidak valid`);
+    }
+    const amountCc = Number(body.amountCc);
+    if (!Number.isFinite(amountCc) || amountCc <= 0) {
+      throw new BadRequestException('amountCc must be greater than 0.');
+    }
+
+    this.logger.log(
+      `lockCc: user=@${user.username} amount=${amountCc} term=${body.termKey} (${seconds}s)`,
+    );
+
+    const result = await this.ledger.lockCc(ownerParty, amountCc, seconds);
+    if (!result.ok) {
+      return { ok: false, error: result.error ?? 'lock gagal' };
+    }
+
+    // Metadata di cc_locks (sumber kebenaran jumlah tetap on-chain; tabel = metadata + UI)
+    const lockedAt = new Date();
+    const expiresAt = new Date(lockedAt.getTime() + seconds * 1000);
+    const lockRow = await this.prisma.ccLock.create({
+      data: {
+        ownerParty,
+        userId: user.id,
+        amountCc,
+        termKey: body.termKey,
+        lockSeconds: seconds,
+        lockedAt,
+        expiresAt,
+        status: 'LOCKED',
+        lockedAmuletCid: result.lockedAmuletCid ?? null,
+      },
+    });
+
+    return { ok: true, expiresAt, lockId: lockRow.id, lockedAmuletCid: result.lockedAmuletCid ?? null };
+  }
+
+  /**
+   * POST /party/unlock — unlock satu lock (lockId) atau yang expiresAt<=now paling awal.
+   * Memakai cantonLedgerService.unlockCc() (LockedAmulet_OwnerExpireLockV2 per catatan MD).
+   */
+  @Throttle({ ledger: { limit: 5, ttl: 60_000 } })
+  @Post('unlock')
+  async unlockCc(@Req() req: AuthedReq, @Body() body: UnlockCcDto) {
+    const user = await this.users.findById(req.user.userId);
+    if (!user?.cantonPartyId || !hasRealWallet(user.cantonPartyId)) {
+      throw new BadRequestException('No wallet found. Create your wallet first.');
+    }
+    const ownerParty = user.cantonPartyId;
+
+    // Pilih lock: by lockId, else expired paling awal milik user.
+    let lock = null as null | {
+      id: string; lockedAmuletCid: string | null; expiresAt: Date; amountCc: any;
+    };
+    if (body.lockId?.trim()) {
+      lock = await this.prisma.ccLock.findFirst({
+        where: { id: body.lockId.trim(), ownerParty, status: 'LOCKED' },
+      });
+      if (!lock) throw new BadRequestException('Lock tidak ditemukan atau sudah tidak aktif.');
+    } else {
+      const now = new Date();
+      lock = await this.prisma.ccLock.findFirst({
+        where: { ownerParty, status: 'LOCKED', expiresAt: { lte: now } },
+        orderBy: { expiresAt: 'asc' },
+      });
+      if (!lock) {
+        throw new BadRequestException('Tidak ada lock yang siap di-unlock saat ini.');
+      }
+    }
+
+    // Guard backend (ledger juga menolak; ini untuk pesan rapi).
+    if (lock.expiresAt.getTime() > Date.now()) {
+      const tanggal = lock.expiresAt.toLocaleString('en-US', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      });
+      throw new BadRequestException(`Belum bisa unlock sampai ${tanggal}.`);
+    }
+
+    this.logger.log(
+      `unlockCc: user=@${user.username} lockId=${lock.id} cid=${(lock.lockedAmuletCid ?? '?').slice(0, 16)}…`,
+    );
+
+    const result = await this.ledger.unlockCc(ownerParty, lock.lockedAmuletCid ?? undefined);
+    if (!result.ok) {
+      return { ok: false, error: result.error ?? 'unlock gagal' };
+    }
+
+    await this.prisma.ccLock.update({
+      where: { id: lock.id },
+      data: { status: 'UNLOCKED', unlockedAt: new Date() },
+    });
+
+    return { ok: true, lockId: lock.id };
+  }
+
+  /**
+   * GET /party/lock-terms — daftar pilihan term dari LOCK_TERM_OPTIONS.
+   * UI render tombol durasi dari sini (BUKAN hard-code 7/15/30).
+   */
+  @SkipThrottle()
+  @Get('lock-terms')
+  async lockTerms() {
+    const { options } = this.getLockTerms();
+    return { terms: options };
+  }
+
+  /**
+   * GET /party/lock-status — status lock user.
+   * lockedCc dari on-chain (lockEligibility.lockedCcOf); activeLocks dari cc_locks.
+   * Countdown DIHITUNG DI FRONTEND dari expiresAt.
+   */
+  @SkipThrottle()
+  @Get('lock-status')
+  async lockStatus(@Req() req: AuthedReq) {
+    const user = await this.users.findById(req.user.userId);
+    if (!user?.cantonPartyId || !hasRealWallet(user.cantonPartyId)) {
+      return {
+        lockedCc: 0,
+        availableCc: null,
+        tier: 'NONE' as const,
+        activeLocks: [],
+        hasWallet: false,
+      };
+    }
+    const ownerParty = user.cantonPartyId;
+
+    const [lockedCc, tier, activeLocks, balanceRow] = await Promise.all([
+      this.lockEligibility.lockedCcOf(ownerParty),
+      this.lockEligibility.tierOf(ownerParty),
+      this.prisma.ccLock.findMany({
+        where: { ownerParty, status: 'LOCKED' },
+        orderBy: { expiresAt: 'asc' },
+      }),
+      this.prisma.ccBalance.findUnique({
+        where: { userId: user.id },
+        select: { balanceMicroCc: true },
+      }),
+    ]);
+
+    // availableCc opsional (untuk tombol MAX di modal). Dari snapshot DB balance.
+    const availableCc = balanceRow
+      ? Number(balanceRow.balanceMicroCc) / 1_000_000
+      : null;
+
+    return {
+      lockedCc,
+      availableCc,
+      tier,
+      activeLocks: activeLocks.map((l) => ({
+        id: l.id,
+        amountCc: Number(l.amountCc),
+        termKey: l.termKey,
+        lockSeconds: l.lockSeconds,
+        expiresAt: l.expiresAt.toISOString(),
+        lockedAmuletCid: l.lockedAmuletCid,
+      })),
+      hasWallet: true,
+    };
+  }
 
   @SkipThrottle()
   @Get('ledger-status')

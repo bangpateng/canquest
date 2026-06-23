@@ -3,18 +3,28 @@
 import { useEffect, useState, useCallback } from "react";
 import { CopyField } from "@/components/app/wallet/copy-field";
 import { WalletActions } from "@/components/app/wallet/wallet-actions";
+import { CcLockModal } from "@/components/app/wallet/cc-lock-modal";
 import { OffersSection } from "@/components/app/wallet/offers-section";
 import { TransactionsView } from "@/components/app/wallet/transactions-view";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Lock } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useCcBalance } from "@/lib/hooks/use-cc-balance";
+import { useLockStatus } from "@/lib/hooks/use-lock-status";
 import { formatPartyIdForDisplay } from "@/lib/canton/canton-party-id";
 import { isRealCantonPartyId } from "@/lib/auth/wallet-session-cache";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
+import { cn } from "@/lib/utils/utils";
 
 interface WalletDashboardProps {
   me: { username?: string | null; cantonPartyId?: string | null };
   onRefresh?: () => void;
+}
+
+/** tierLabel: FULL → "Full access" (hijau), SPIN → "Spin only" (kuning). */
+function tierBadge(tier: "NONE" | "SPIN" | "FULL") {
+  if (tier === "FULL") return { label: "Full access", color: "text-emerald-400" };
+  if (tier === "SPIN") return { label: "Spin only", color: "text-amber-400" };
+  return { label: "", color: "text-slate-400" };
 }
 
 export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
@@ -27,8 +37,13 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
     refresh: fetchBalance,
     refreshWithRetries,
   } = useCcBalance({ enabled: hasWallet, pollIntervalMs: 45_000 });
+  const {
+    status: lockStatus,
+    refreshWithRetries: refreshLock,
+  } = useLockStatus({ enabled: hasWallet, pollIntervalMs: 60_000 });
   const [ccUsdPrice, setCcUsdPrice] = useState(0);
   const [txRefreshKey, setTxRefreshKey] = useState(0);
+  const [lockOpen, setLockOpen] = useState(false);
 
   useEffect(() => {
     const pollPrice = () => {
@@ -111,15 +126,71 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
         </div>
       </div>
 
+      {/* ── Lock status bar (satu baris tipis) ── */}
+      {hasWallet && lockStatus.hasWallet && (
+        <LockStatusBar status={lockStatus} onManage={() => setLockOpen(true)} />
+      )}
+
       <WalletActions
         partyId={displayPartyId}
         balance={balance}
         onBalanceRefresh={handleBalanceRefresh}
+        onOpenLock={() => setLockOpen(true)}
       />
 
       <OffersSection onRefresh={handleBalanceRefresh} />
 
       <TransactionsView variant="embedded" refreshKey={txRefreshKey} partyId={me.cantonPartyId ?? null} />
+
+      {/* ── Lock modal (bottom-sheet) — dimiliki dashboard ── */}
+      <CcLockModal
+        open={lockOpen}
+        onClose={() => setLockOpen(false)}
+        status={lockStatus}
+        onRefresh={refreshLock}
+      />
+    </div>
+  );
+}
+
+/**
+ * Satu baris status lock (Spec BAGIAN 5a).
+ * - Ada lock aktif: "Terkunci {n} CC · {tierLabel}" + tombol "Kelola".
+ * - Tidak ada lock: ajakan "Kunci CC untuk ikut Earn" + tombol "Lock".
+ * Aksen hijau-outline (bukan hijau penuh).
+ */
+function LockStatusBar({
+  status,
+  onManage,
+}: {
+  status: { lockedCc: number; tier: "NONE" | "SPIN" | "FULL" };
+  onManage: () => void;
+}) {
+  const hasLock = status.lockedCc > 0;
+  const badge = tierBadge(status.tier);
+
+  return (
+    <div className="flex w-full items-center justify-between gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.04] px-4 py-2.5">
+      <div className="flex min-w-0 items-center gap-2 text-sm">
+        <Lock className="h-4 w-4 shrink-0 text-emerald-400" aria-hidden />
+        {hasLock ? (
+          <span className="truncate text-slate-200">
+            Terkunci <span className="font-semibold">{status.lockedCc} CC</span>
+            {badge.label && (
+              <span className={cn("ml-1.5 font-medium", badge.color)}>· {badge.label}</span>
+            )}
+          </span>
+        ) : (
+          <span className="truncate text-slate-400">Kunci CC untuk ikut Earn</span>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={onManage}
+        className="shrink-0 rounded-xl border border-emerald-500/60 bg-transparent px-3 py-1.5 text-xs font-semibold text-emerald-400 transition-all hover:bg-emerald-500/10"
+      >
+        {hasLock ? "Kelola" : "Lock"}
+      </button>
     </div>
   );
 }

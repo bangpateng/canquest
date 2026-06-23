@@ -10,7 +10,7 @@ import {
 } from "@/lib/canton/canton-party-id";
 import { cn } from "@/lib/utils/utils";
 import { TransactionDetailModal } from "@/components/app/wallet/transaction-detail-modal";
-import { ArrowDownLeft, ArrowUpRight, X, AlertCircle } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Lock, X, AlertCircle } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
@@ -21,9 +21,16 @@ interface WalletActionsProps {
   partyId: string;
   balance?: number | null;
   onBalanceRefresh?: () => void;
+  /** Buka modal Lock (modal dimiliki dashboard). */
+  onOpenLock?: () => void;
 }
 
-export function WalletActions({ partyId, balance, onBalanceRefresh }: WalletActionsProps) {
+export function WalletActions({
+  partyId,
+  balance,
+  onBalanceRefresh,
+  onOpenLock,
+}: WalletActionsProps) {
   const displayPartyId = formatPartyIdForDisplay(partyId);
   const sendTitleId = useId();
   const receiveTitleId = useId();
@@ -153,14 +160,14 @@ export function WalletActions({ partyId, balance, onBalanceRefresh }: WalletActi
 
   return (
     <>
-      <div className="grid w-full min-w-0 grid-cols-2 gap-4">
+      <div className="grid w-full min-w-0 grid-cols-3 gap-2 sm:gap-4">
         <button
           type="button"
           onClick={openSend}
           className={cn(buttonVariants({ size: "sm" }), "w-full justify-center gap-2")}
         >
           <ArrowUpRight className="h-5 w-5 shrink-0" aria-hidden />
-          Send CC
+          Send
         </button>
         <button
           type="button"
@@ -173,7 +180,20 @@ export function WalletActions({ partyId, balance, onBalanceRefresh }: WalletActi
           <ArrowDownLeft className="h-5 w-5 shrink-0" aria-hidden />
           Receive
         </button>
+        <button
+          type="button"
+          onClick={() => onOpenLock?.()}
+          className={cn(
+            buttonVariants({ size: "sm" }),
+            "w-full justify-center gap-2 border border-emerald-500/60 bg-transparent text-emerald-400 hover:bg-emerald-500/10",
+          )}
+        >
+          <Lock className="h-5 w-5 shrink-0" aria-hidden />
+          Lock
+        </button>
       </div>
+
+      {/* ── LOCK MODAL (bottom-sheet) dimiliki oleh WalletDashboard ── */}
 
       {/* ── SEND DIALOG ── */}
       {sheet === "send" ? (

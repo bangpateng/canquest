@@ -62,6 +62,7 @@ model User {
   referralRewardReceived ReferralReward?  @relation("ReferralRewardReceived")
   walletAllocations      WalletAllocationLog[]
   redeemedWalletInvites  WalletInviteCode[]  @relation("WalletInviteRedemptions")
+  ccLocks                CcLock[]
 }
 
 /// One-time codes required to create a Canton wallet (admin-generated).
@@ -163,6 +164,28 @@ enum CcTransactionType {
   TRANSFER_IN
   TRANSFER_OUT
   AIRDROP
+}
+
+/// CC Lock (non-custodial) — metadata untuk LockedAmulet on-chain.
+/// Jumlah terkunci (sumber kebenaran) tetap dari on-chain (findLockedAmulets /
+/// effective_locked_qty); tabel ini hanya untuk term, kapan boleh unlock, cid, audit + UI.
+/// Spec CC Lock — CanQuest.
+model CcLock {
+  id              String    @id @default(cuid())
+  ownerParty      String                         // party id user (mis. verify::1220...)
+  userId          String?                        // id user dapp (untuk join), jika ada
+  user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  amountCc        Decimal   @db.Decimal(20,10)
+  termKey         String                         // mis. "15d" atau "5m" (uji)
+  lockSeconds     Int                            // durasi efektif dalam detik
+  lockedAt        DateTime  @default(now())
+  expiresAt       DateTime                        // lockedAt + lockSeconds
+  status          String    @default("LOCKED")    // LOCKED | UNLOCKED
+  lockedAmuletCid String?
+  unlockedAt      DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([ownerParty, status])
 }
 
 /// Quest campaign dibuat oleh admin/operator.

@@ -1,5 +1,6 @@
 import {
   Controller,
+  ForbiddenException,
   Get,
   Post,
   Query,
@@ -10,6 +11,7 @@ import type { Request } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import { Throttle } from '@nestjs/throttler';
 import { WalletRequiredGuard } from '../common/wallet-required.guard';
+import { LockEligibilityService } from '../canton/lock-eligibility.service';
 import { SpinService } from './spin.service';
 import { UsersService } from '../users/users.service';
 
@@ -21,6 +23,7 @@ export class SpinController {
   constructor(
     private readonly spin: SpinService,
     private readonly users: UsersService,
+    private readonly lockEligibility: LockEligibilityService,
   ) {}
 
   // ── Public endpoints ───────────────────────────────────────────────────────
@@ -47,6 +50,12 @@ export class SpinController {
     const user = await this.users.findById(req.user.userId);
     if (!user) return { ok: false, message: 'User not found' };
 
+    // CC Lock guard (Spec CC Lock BAGIAN 4): Spin butuh ≥5 CC terkunci.
+    // Setelah guard lolos, logika potong points di service JANGAN diubah.
+    if (user.cantonPartyId && !(await this.lockEligibility.canSpin(user.cantonPartyId))) {
+      throw new ForbiddenException('Kunci minimal 5 CC untuk Spin');
+    }
+
     const result = await this.spin.executeSpin(
       user.id,
       user.username ?? null,
@@ -65,6 +74,11 @@ export class SpinController {
   async executeFreeSpin(@Req() req: AuthedReq) {
     const user = await this.users.findById(req.user.userId);
     if (!user) return { ok: false, message: 'User not found' };
+
+    // CC Lock guard (Spec CC Lock BAGIAN 4): Spin (termasuk free) butuh ≥5 CC terkunci.
+    if (user.cantonPartyId && !(await this.lockEligibility.canSpin(user.cantonPartyId))) {
+      throw new ForbiddenException('Kunci minimal 5 CC untuk Spin');
+    }
 
     const result = await this.spin.executeFreeSpin(
       user.id,

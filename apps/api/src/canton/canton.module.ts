@@ -13,7 +13,7 @@ import { CcInboundSyncService } from './cc-inbound-sync.service';
 import { CcBalanceService } from './cc-balance.service';
 import { TransactionDetailService } from './transaction-detail.service';
 import { QuestLedgerService } from './quest-ledger.service';
-import { LockTestController } from './_lock-test.controller'; // TEMPORARY — hapus setelah uji
+import { LockEligibilityService } from './lock-eligibility.service';
 
 /**
  * CantonModule wires together:
@@ -26,7 +26,7 @@ import { LockTestController } from './_lock-test.controller'; // TEMPORARY — h
  */
 @Module({
   imports: [PrismaModule, ConfigModule, UsersModule, Auth0Module],
-  controllers: [LockTestController], // TEMPORARY — hapus setelah uji
+  controllers: [],
   providers: [
     KeycloakTokenService,
     KeycloakAdminService,
@@ -38,6 +38,7 @@ import { LockTestController } from './_lock-test.controller'; // TEMPORARY — h
     TransactionDetailService,
     QuestLedgerService,
     WalletOnboardingService,
+    LockEligibilityService,
   ],
   exports: [
     CantonLedgerService,
@@ -48,6 +49,7 @@ import { LockTestController } from './_lock-test.controller'; // TEMPORARY — h
     TransactionDetailService,
     QuestLedgerService,
     WalletOnboardingService,
+    LockEligibilityService,
   ],
 })
 export class CantonModule {}

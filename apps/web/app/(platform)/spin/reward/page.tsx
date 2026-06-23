@@ -11,9 +11,12 @@ import {
   Trophy,
   Zap,
   Sparkles,
+  Lock,
 } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { cn } from "@/lib/utils/utils";
+import { useLockStatus } from "@/lib/hooks/use-lock-status";
+import Link from "next/link";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -400,6 +403,8 @@ export default function SpinRewardPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showResult, setShowResult] = useState(false);
+  // CC Lock gate (Spec BAGIAN 5d): tier NONE → tombol Spin nonaktif + banner.
+  const { status: lockStatus } = useLockStatus({ enabled: true, pollIntervalMs: 60_000 });
 
   const loadData = useCallback(async () => {
     try {
@@ -461,7 +466,8 @@ export default function SpinRewardPage() {
     (winnerIndex === null || showResult) &&
     state !== null &&
     state.availablePoints >= state.spinCost &&
-    items.length > 0;
+    items.length > 0 &&
+    lockStatus.tier !== "NONE";
 
   // ── Loading ────────────────────────────────────────────────────────────────
 
@@ -508,6 +514,22 @@ export default function SpinRewardPage() {
             </div>
           )}
         </div>
+
+        {/* ── CC Lock gate banner (Spec BAGIAN 5d) ── */}
+        {lockStatus.tier === "NONE" && (
+          <div className="flex items-center gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.06] px-4 py-3">
+            <Lock className="h-5 w-5 shrink-0 text-emerald-400" aria-hidden />
+            <p className="flex-1 text-sm font-medium text-slate-200">
+              Kunci 5 CC untuk Spin
+            </p>
+            <Link
+              href="/wallet"
+              className="shrink-0 rounded-xl border border-emerald-500/60 px-3 py-1.5 text-xs font-semibold text-emerald-400 transition-all hover:bg-emerald-500/10"
+            >
+              Lock CC
+            </Link>
+          </div>
+        )}
 
         {/* ── Main Spin Card ───────────────────────────────────────────────── */}
         <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50">
