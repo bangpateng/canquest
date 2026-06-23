@@ -174,32 +174,22 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
               </div>
               {/* Type + task count inline next to logo on desktop */}
               <div className="hidden pb-1 text-xs font-semibold uppercase tracking-wider text-slate-400 sm:block">
-                {config.shortLabel} · {quest.tasks.length} tasks
+                {quest.tasks.length} tasks
               </div>
             </div>
           ) : null}
 
           {/* Title block — full width, no logo competing for horizontal space on mobile */}
           <div className="min-w-0">
-            {/* Mobile-only badge row (status already on banner for banner case) */}
-            {!quest.bannerImageUrl ? (
-              <div className="mb-1.5 flex items-center gap-2 sm:hidden">
-                <StatusPill status={quest.status} label={statusMeta.label} />
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                  {config.shortLabel} · {quest.tasks.length} tasks
-                </span>
-              </div>
-            ) : null}
-            {/* Mobile-only type/task count for banner case */}
-            {quest.bannerImageUrl ? (
-              <div className="mb-1.5 flex items-center gap-2 sm:hidden">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                  {config.shortLabel} · {quest.tasks.length} tasks
-                </span>
-              </div>
-            ) : null}
+            {/* Mobile-only: task count (status on banner / no-banner handled separately) */}
+            <div className="mb-1.5 flex items-center gap-2 sm:hidden">
+              {!quest.bannerImageUrl ? <StatusPill status={quest.status} label={statusMeta.label} /> : null}
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                {quest.tasks.length} tasks
+              </span>
+            </div>
             <p className="text-xs font-semibold text-slate-400">{quest.org}</p>
-            <h1 className="mt-0.5 text-xl font-bold leading-tight text-white sm:text-2xl">
+            <h1 className="mt-0.5 text-lg font-bold leading-tight text-white sm:text-xl">
               {quest.title}
             </h1>
           </div>
