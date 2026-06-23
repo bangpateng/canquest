@@ -121,18 +121,17 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
         )}
 
         {/* Header content */}
-        <div className="relative px-5 py-5 sm:px-6 sm:py-6">
-          <div className="flex items-start gap-4">
-            {/* Logo */}
+        <div className="relative px-5 pb-5 pt-4 sm:px-6 sm:pb-6 sm:pt-5">
+          <div className="flex items-center gap-4">
+            {/* Logo — overlap banner when present, otherwise inline */}
             <div className={cn(
               "relative shrink-0 overflow-hidden rounded-2xl shadow-lg ring-2 ring-white/10",
-              quest.bannerImageUrl ? "-mt-10 sm:-mt-14 border-2 border-[#0a0c14]" : "",
-              "h-14 w-14 sm:h-16 sm:w-16",
+              quest.bannerImageUrl ? "-mt-12 sm:-mt-16 border-4 border-[#0a0c14] h-16 w-16 sm:h-20 sm:w-20" : "h-14 w-14 sm:h-16 sm:w-16",
             )}>
               {quest.logoUrl ? (
                 <img src={quest.logoUrl} alt="" className="h-full w-full object-cover" />
               ) : (
-                <div className="flex h-full w-full items-center justify-center bg-[var(--muted)] text-base font-bold text-canton">
+                <div className="flex h-full w-full items-center justify-center bg-[var(--muted)] text-lg font-bold text-canton sm:text-xl">
                   {quest.orgSlug.slice(0, 2).toUpperCase()}
                 </div>
               )}
@@ -140,10 +139,13 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
 
             {/* Title + badges */}
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
+              {/* Badge row: status + type + task count — single line */}
+              <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
                 <span className={cn(
-                  "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",
-                  statusMeta.className,
+                  "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                  quest.status === "ACTIVE" && "border border-emerald-500/25 bg-emerald-500/15 text-emerald-300",
+                  quest.status === "COMING_SOON" && "border border-cyan-500/25 bg-cyan-500/15 text-cyan-300",
+                  quest.status === "ENDED" && "border border-white/10 bg-white/5 text-slate-300",
                 )}>
                   <span className={cn(
                     "relative flex h-1.5 w-1.5",
@@ -160,15 +162,12 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
                   </span>
                   {statusMeta.label}
                 </span>
-                <span className={cn(
-                  "rounded-lg border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",
-                  config.chipClass,
-                )}>
-                  {config.shortLabel}
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  · {config.shortLabel} · {quest.tasks.length} tasks
                 </span>
               </div>
-              <p className="mt-1.5 text-xs font-semibold text-slate-400">{quest.org}</p>
-              <h1 className="mt-0.5 text-xl font-bold leading-tight text-white sm:text-2xl md:text-3xl">
+              <p className="text-xs font-semibold text-slate-400">{quest.org}</p>
+              <h1 className="mt-0.5 text-xl font-bold leading-tight text-white sm:text-2xl">
                 {quest.title}
               </h1>
             </div>
@@ -183,16 +182,14 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
 
           {/* Description + social links — inside header */}
           {(quest.description || (quest.socialLinks && quest.socialLinks.length > 0)) && (
-            <div className="mt-4 grid gap-4 border-t border-white/[0.05] pt-4 sm:grid-cols-[1fr_auto] sm:items-start">
+            <div className="mt-4 grid gap-3 border-t border-white/[0.05] pt-4 sm:grid-cols-[1fr_auto] sm:items-center">
               {quest.description && (
-                <p className="line-clamp-4 text-sm leading-relaxed text-slate-400 sm:line-clamp-3">
+                <p className="text-sm leading-relaxed text-slate-400">
                   {quest.description}
                 </p>
               )}
               {quest.socialLinks && quest.socialLinks.length > 0 ? (
-                <div className="sm:pt-0.5">
-                  <CampaignSocialLinks links={quest.socialLinks} className="sm:justify-end" />
-                </div>
+                <CampaignSocialLinks links={quest.socialLinks} className="sm:justify-end" />
               ) : null}
             </div>
           )}
