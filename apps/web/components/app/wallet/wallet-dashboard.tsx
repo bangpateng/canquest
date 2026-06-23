@@ -175,7 +175,7 @@ function LockStatusBar({
         <Lock className="h-4 w-4 shrink-0 text-emerald-400" aria-hidden />
         {hasLock ? (
           <span className="truncate text-slate-200">
-            Terkunci <span className="font-semibold">{status.lockedCc} CC</span>
+            Locked <span className="font-semibold">{status.lockedCc} CC</span>
             {badge.label && (
               <span className={cn("ml-1.5 font-medium", badge.color)}>· {badge.label}</span>
             )}
@@ -189,7 +189,7 @@ function LockStatusBar({
         onClick={onManage}
         className="shrink-0 rounded-xl border border-emerald-500/60 bg-transparent px-3 py-1.5 text-xs font-semibold text-emerald-400 transition-all hover:bg-emerald-500/10"
       >
-        {hasLock ? "Kelola" : "Lock"}
+        {hasLock ? "Manage" : "Lock"}
       </button>
     </div>
   );

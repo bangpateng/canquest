@@ -85,7 +85,7 @@ export function TransactionDetailModal({
     subtitle ??
     (isIn
       ? ""
-      : "Your transaction is recorded. Details below.");
+      : "");
 
   return (
     <div

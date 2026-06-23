@@ -150,7 +150,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto sm:items-center sm:p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4"
       role="presentation"
     >
       <button
@@ -163,10 +163,9 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative z-10 w-full max-w-md max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl border border-white/5 bg-[var(--card)] p-6 sm:p-8 shadow-xl"
+        className="relative z-10 w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-white/5 bg-[var(--card)] p-6 sm:p-8 shadow-xl"
       >
         {/* Drag handle (mobile bottom-sheet feel) */}
-        <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-white/10" aria-hidden />
 
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-2">
@@ -188,7 +187,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label htmlFor="cc-lock-amount" className="text-sm font-medium text-slate-400">
-                Jumlah CC
+                Amount
               </label>
               {status.availableCc != null && status.availableCc > 0 && (
                 <button
@@ -259,7 +258,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
           >
             {lockState === "loading" ? (
               <>
-                <LoadingSpinner size="sm" /> Mengunci…
+                <LoadingSpinner size="sm" /> Lock…
               </>
             ) : (
               amountValid && selectedTerm
@@ -268,14 +267,14 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
             )}
           </button>
           <p className="text-center text-xs text-slate-500">
-            CC tetap milikmu · kembali penuh saat unlock · biaya jaringan kecil (holding fee) berlaku selama terkunci
+            CC remains yours, with full return upon unlocking; a small network fee (holding fee) applies while locked
           </p>
         </form>
 
         {/* ── Bagian BAWAH: kelola lock aktif ── */}
         {status.activeLocks.length > 0 && (
           <div className="mt-7 border-t border-white/5 pt-5">
-            <h3 className="mb-3 text-sm font-semibold text-slate-300">Lock aktif</h3>
+            <h3 className="mb-3 text-sm font-semibold text-slate-300">Lock active</h3>
             <ul className="space-y-3">
               {status.activeLocks.map((lock) => (
                 <ActiveLockRow
@@ -320,7 +319,7 @@ function ActiveLockRow({
             {lock.amountCc} CC · {termLabel(lock.termKey)}
           </p>
           <p className={cn("text-xs font-medium", ready ? "text-emerald-400" : "text-slate-500")}>
-            {ready ? "Siap di-unlock" : `Unlock dalam ${countdown}`}
+            {ready ? "Siap di-unlock" : `Unlock ${countdown}`}
           </p>
         </div>
         <button
