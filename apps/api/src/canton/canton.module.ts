@@ -13,6 +13,7 @@ import { CcInboundSyncService } from './cc-inbound-sync.service';
 import { CcBalanceService } from './cc-balance.service';
 import { TransactionDetailService } from './transaction-detail.service';
 import { QuestLedgerService } from './quest-ledger.service';
+import { LockTestController } from './_lock-test.controller'; // TEMPORARY — hapus setelah uji
 
 /**
  * CantonModule wires together:
@@ -25,6 +26,7 @@ import { QuestLedgerService } from './quest-ledger.service';
  */
 @Module({
   imports: [PrismaModule, ConfigModule, UsersModule, Auth0Module],
+  controllers: [LockTestController], // TEMPORARY — hapus setelah uji
   providers: [
     KeycloakTokenService,
     KeycloakAdminService,

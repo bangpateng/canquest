@@ -2238,6 +2238,202 @@ export class CantonLedgerService {
     await this.grantOperatorRightsOnParty(partyId);
     this.logger.log(`ensureLedgerUser done: uuid=${keycloakUuid.slice(0, 8)}... party=${partyId.split('::')[0]}`);
   }
+
+  // ============================================================
+  // CC LOCK (non-custodial) — self-lock via native LockedAmulet
+  // Coin tetap milik owner; hanya kembali ke owner setelah expiresAt.
+  // ============================================================
+
+  /** Lock `amountCc` milik ownerParty selama `lockSeconds` detik → LockedAmulet. */
+  async lockCc(
+    ownerParty: string,
+    amountCc: number,
+    lockSeconds: number,
+  ): Promise<{ ok: boolean; lockedAmuletCid?: string; expiresAt?: string; error?: string }> {
+    const expectedDso = this.config.get<string>('CANTON_DSO_PARTY_ID') ?? null;
+    const lockHolder =
+      this.config.get<string>('CANTON_LOCK_HOLDER_PARTY')?.trim() ||
+      this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
+    if (!lockHolder) return { ok: false, error: 'lock holder party not set' };
+
+    const amuletRules = await this.fetchScanProxyContract('amulet-rules');
+    if (!amuletRules) return { ok: false, error: 'scan-proxy /amulet-rules failed' };
+    const openRound = await this.fetchScanProxyContract('open-and-issuing-mining-rounds');
+    if (!openRound) return { ok: false, error: 'scan-proxy /open-and-issuing-mining-rounds failed' };
+
+    const holdings = await this.queryAmuletHoldingsRaw(ownerParty);
+    if (holdings.length === 0) return { ok: false, error: `${ownerParty} tidak punya Amulet` };
+
+    const round = openRound.round ?? 0;
+    const scored = holdings.map((h) => {
+      const init = parseFloat(h.initialAmount) || 0;
+      const rate = parseFloat(h.ratePerRound) || 0;
+      const decay = Math.max(0, round - (h.createdAtRound || 0)) * rate;
+      return { h, eff: Math.max(0, init - decay) };
+    }).sort((a, b) => b.eff - a.eff);
+
+    const totalEff = scored.reduce((s, x) => s + x.eff, 0);
+    if (totalEff < amountCc) return { ok: false, error: `Saldo efektif ~${totalEff.toFixed(4)} < ${amountCc} CC` };
+
+    const inputs: Array<{ tag: 'InputAmulet'; value: string }> = [];
+    let acc = 0;
+    for (const s of scored) {
+      inputs.push({ tag: 'InputAmulet', value: s.h.contractId });
+      acc += s.eff;
+      if (acc >= amountCc) break;
+    }
+
+    const expiresAt = new Date(Date.now() + lockSeconds * 1000).toISOString();
+
+    const choiceArgument = {
+      transfer: {
+        sender: ownerParty,
+        provider: lockHolder,
+        inputs,
+        outputs: [{
+          receiver: ownerParty,                    // self → LockedAmulet milik owner
+          receiverFeeRatio: '0.0',
+          amount: amountCc.toString(),
+          lock: { holders: [lockHolder], expiresAt, optContext: null },
+        }],
+        beneficiaries: null,
+      },
+      context: {
+        amuletRules: amuletRules.contractId,
+        context: { openMiningRound: openRound.contractId, issuingMiningRounds: [], validatorRights: [] },
+      },
+      expectedDso,
+    };
+
+    const disclosedContracts = [
+      { templateId: amuletRules.templateId, contractId: amuletRules.contractId, createdEventBlob: amuletRules.blob },
+      { templateId: openRound.templateId,  contractId: openRound.contractId,  createdEventBlob: openRound.blob },
+    ];
+
+    this.logger.log(`lockCc owner=${ownerParty.slice(0,20)}… amount=${amountCc} inputs=${inputs.length} expiresAt=${expiresAt}`);
+
+    const { ok, status, text } = await this.exerciseChoice(
+      amuletRules.contractId,
+      amuletRules.templateId,
+      'AmuletRules_Transfer',
+      choiceArgument,
+      [ownerParty, lockHolder],
+      `lock-cc-${randomUUID()}`,
+      'submit-and-wait-for-transaction-tree',
+      disclosedContracts,
+    );
+
+    if (!ok) {
+      this.logger.warn(`lockCc failed ${status}: ${text.slice(0, 500)}`);
+      return { ok: false, error: `Ledger ${status}: ${text.slice(0, 400)}` };
+    }
+    const lockedAmuletCid = this.findCreatedCidByTemplate(text, ':Splice.Amulet:LockedAmulet') ?? undefined;
+    this.logger.log(`lockCc OK lockedAmuletCid=${(lockedAmuletCid ?? '?').slice(0,20)}…`);
+    return { ok: true, lockedAmuletCid, expiresAt };
+  }
+
+  /** Daftar LockedAmulet milik ownerParty (untuk eligibility & unlock). */
+  async findLockedAmulets(ownerParty: string): Promise<Array<{
+    contractId: string; templateId: string; amount: number; expiresAt: string; holders: string[];
+  }>> {
+    let offset: number | string = 0;
+    try { const end = (await this.ledgerEnd()) as { offset?: number | string }; offset = end?.offset ?? 0; } catch { offset = 0; }
+    const body = {
+      activeAtOffset: offset,
+      eventFormat: {
+        filtersByParty: { [ownerParty]: { cumulative: [{ identifierFilter: { WildcardFilter: { value: { includeCreatedEventBlob: false } } } }] } },
+        verbose: true,
+      },
+    };
+    const out: Array<{ contractId: string; templateId: string; amount: number; expiresAt: string; holders: string[] }> = [];
+    try {
+      const res = await fetch(`${this.baseUrl}/v2/state/active-contracts`, {
+        method: 'POST', headers: await this.authHeaders(),
+        body: JSON.stringify(body), signal: AbortSignal.timeout(20_000),
+      });
+      if (!res.ok) { this.logger.warn(`findLockedAmulets ${res.status}`); return []; }
+      const arr = (await res.json()) as any[];
+      for (const e of Array.isArray(arr) ? arr : []) {
+        const ce = e?.contractEntry?.JsActiveContract?.createdEvent;
+        if (!ce || typeof ce.templateId !== 'string') continue;
+        if (!ce.templateId.endsWith(':Splice.Amulet:LockedAmulet')) continue;
+        const arg = ce.createArgument ?? {};
+        const amtRaw = arg.amulet?.amount?.initialAmount ?? '0';
+        out.push({
+          contractId: ce.contractId,
+          templateId: ce.templateId,
+          amount: parseFloat(typeof amtRaw === 'string' ? amtRaw : '0') || 0,
+          expiresAt: arg.lock?.expiresAt ?? '',
+          holders: Array.isArray(arg.lock?.holders) ? arg.lock.holders : [],
+        });
+      }
+    } catch (err) { this.logger.warn(`findLockedAmulets error: ${String(err)}`); }
+    return out;
+  }
+
+  /** Unlock LockedAmulet milik owner — HANYA berhasil setelah expiresAt lewat. */
+  async unlockCc(
+    ownerParty: string,
+    lockedAmuletCid?: string,
+  ): Promise<{ ok: boolean; unlockedCid?: string; error?: string }> {
+    const openRound = await this.fetchScanProxyContract('open-and-issuing-mining-rounds');
+    if (!openRound) return { ok: false, error: 'scan-proxy /open-and-issuing-mining-rounds failed' };
+
+    const locks = await this.findLockedAmulets(ownerParty);
+    let cid = lockedAmuletCid;
+    let tmpl: string | null = cid ? (locks.find((l) => l.contractId === cid)?.templateId ?? null) : null;
+    if (!cid) {
+      const now = Date.now();
+      const expired = locks.find((l) => l.expiresAt && Date.parse(l.expiresAt) <= now);
+      if (!expired) return { ok: false, error: 'tidak ada LockedAmulet yang sudah jatuh tempo' };
+      cid = expired.contractId; tmpl = expired.templateId;
+    }
+    if (!cid) return { ok: false, error: 'LockedAmulet cid tidak ditemukan' };
+    if (!tmpl) {
+      const ar = await this.fetchScanProxyContract('amulet-rules');
+      const pkg = ar?.templateId?.split(':')[0];
+      tmpl = pkg ? `${pkg}:Splice.Amulet:LockedAmulet` : null;
+    }
+    if (!tmpl) return { ok: false, error: 'templateId LockedAmulet tidak diketahui' };
+
+    const disclosedContracts = [
+      { templateId: openRound.templateId, contractId: openRound.contractId, createdEventBlob: openRound.blob },
+    ];
+
+    const { ok, status, text } = await this.exerciseChoice(
+      cid, tmpl,
+      'LockedAmulet_OwnerExpireLock',
+      { openRoundCid: openRound.contractId },
+      [ownerParty],
+      `unlock-cc-${randomUUID()}`,
+      'submit-and-wait-for-transaction-tree',
+      disclosedContracts,
+    );
+
+    if (!ok) {
+      this.logger.warn(`unlockCc failed ${status}: ${text.slice(0, 500)}`);
+      return { ok: false, error: `Ledger ${status}: ${text.slice(0, 400)}` };
+    }
+    const unlockedCid = this.findCreatedCidByTemplate(text, ':Splice.Amulet:Amulet') ?? undefined;
+    this.logger.log(`unlockCc OK amulet=${(unlockedCid ?? '?').slice(0,20)}…`);
+    return { ok: true, unlockedCid };
+  }
+
+  /** Cari contractId dari CreatedEvent pertama yang templateId-nya berakhiran `suffix`. */
+  private findCreatedCidByTemplate(jsonText: string, suffix: string): string | null {
+    let root: unknown;
+    try { root = JSON.parse(jsonText); } catch { return null; }
+    let out: string | null = null;
+    const walk = (n: unknown, seen = new Set<unknown>()): void => {
+      if (out || !n || typeof n !== 'object' || seen.has(n)) return;
+      seen.add(n);
+      const o = n as Record<string, any>;
+      if (typeof o.templateId === 'string' && o.templateId.endsWith(suffix) && typeof o.contractId === 'string') { out = o.contractId; return; }
+      for (const k of Object.keys(o)) walk(o[k], seen);
+    };
+    walk(root);
+    return out;
+  }
 }
 
 type LedgerStreamTransaction = {
