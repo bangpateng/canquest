@@ -520,7 +520,7 @@ export default function SpinRewardPage() {
           <div className="flex items-center gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.06] px-4 py-3">
             <Lock className="h-5 w-5 shrink-0 text-emerald-400" aria-hidden />
             <p className="flex-1 text-sm font-medium text-slate-200">
-              Kunci 5 CC untuk Spin
+              Lock 5 CC to access Spin
             </p>
             <Link
               href="/wallet"

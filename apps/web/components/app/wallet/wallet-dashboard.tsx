@@ -181,7 +181,7 @@ function LockStatusBar({
           </span>
         ) : (
           <span className="truncate text-slate-400">
-            Belum ada CC terkunci · kunci untuk ikut Earn
+            No CC locked · Lock to access Spin & Earn
           </span>
         )}
       </div>
