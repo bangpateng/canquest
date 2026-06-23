@@ -159,40 +159,40 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
 
         {/* Header content */}
         <div className="relative px-5 pb-5 sm:px-6 sm:pb-6">
-          {/* Mobile: logo overlaps up into banner; Desktop: logo inline-left */}
-          {quest.bannerImageUrl ? (
-            /* Logo overlapping the banner bottom — centered on mobile, left on desktop */
-            <div className="-mt-10 mb-3 flex items-end gap-4 sm:-mt-14 sm:mb-4">
-              <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-2xl border-4 border-[#0a0c14] bg-[var(--muted)] shadow-lg ring-2 ring-white/10 sm:h-20 sm:w-20">
-                {quest.logoUrl ? (
-                  <img src={quest.logoUrl} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-xl font-bold text-canton sm:text-2xl">
-                    {quest.orgSlug.slice(0, 2).toUpperCase()}
-                  </div>
-                )}
-              </div>
-              {/* Type + task count inline next to logo on desktop */}
-              <div className="hidden pb-1 text-xs font-semibold uppercase tracking-wider text-slate-400 sm:block">
-                {quest.tasks.length} tasks
-              </div>
+          {/* Logo + Title aligned in a single row (logo left, title right, vertically centered) */}
+          <div className={cn(
+            "flex items-center gap-3 sm:gap-4",
+            quest.bannerImageUrl && "-mt-10 sm:-mt-14",
+          )}>
+            {/* Logo */}
+            <div className={cn(
+              "relative shrink-0 overflow-hidden rounded-2xl bg-[var(--muted)] shadow-lg ring-2 ring-white/10",
+              quest.bannerImageUrl ? "h-16 w-16 border-4 border-[#0a0c14] sm:h-20 sm:w-20" : "h-12 w-12 sm:h-16 sm:w-16",
+            )}>
+              {quest.logoUrl ? (
+                <img src={quest.logoUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-lg font-bold text-canton sm:text-xl">
+                  {quest.orgSlug.slice(0, 2).toUpperCase()}
+                </div>
+              )}
+            </div>
+
+            {/* Org + Title — vertically centered with logo */}
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-semibold text-slate-400">{quest.org}</p>
+              <h1 className="mt-0.5 truncate text-lg font-bold leading-tight text-white sm:text-xl">
+                {quest.title}
+              </h1>
+            </div>
+          </div>
+
+          {/* Mobile-only status pill (when no banner) */}
+          {!quest.bannerImageUrl ? (
+            <div className="mt-3 sm:hidden">
+              <StatusPill status={quest.status} label={statusMeta.label} />
             </div>
           ) : null}
-
-          {/* Title block — full width, no logo competing for horizontal space on mobile */}
-          <div className="min-w-0">
-            {/* Mobile-only: task count (status on banner / no-banner handled separately) */}
-            <div className="mb-1.5 flex items-center gap-2 sm:hidden">
-              {!quest.bannerImageUrl ? <StatusPill status={quest.status} label={statusMeta.label} /> : null}
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                {quest.tasks.length} tasks
-              </span>
-            </div>
-            <p className="text-xs font-semibold text-slate-400">{quest.org}</p>
-            <h1 className="mt-0.5 text-lg font-bold leading-tight text-white sm:text-xl">
-              {quest.title}
-            </h1>
-          </div>
 
           {/* Description + social links — inside header */}
           {(quest.description || (quest.socialLinks && quest.socialLinks.length > 0)) && (
