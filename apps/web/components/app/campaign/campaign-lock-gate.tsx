@@ -27,7 +27,7 @@ export function CampaignLockGate() {
         href="/wallet"
         className="shrink-0 rounded-xl border border-emerald-500/60 px-3 py-1.5 text-xs font-semibold text-emerald-400 transition-all hover:bg-emerald-500/10"
       >
-        Lock CC
+        Lock
       </Link>
     </div>
   );

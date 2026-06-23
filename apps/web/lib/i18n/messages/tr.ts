@@ -227,6 +227,8 @@ export const tr: PlatformMessages = {
     receivedCc: "CC alındı",
     sentCc: "CC gönderildi",
     airdrop: "Airdrop",
+    ccLocked: "CC kilitlendi",
+    ccUnlocked: "CC kilidi açıldı",
   },
   settings: {
     signingOut: "Çıkış yapılıyor…",

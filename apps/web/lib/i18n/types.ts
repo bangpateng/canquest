@@ -223,6 +223,8 @@ export type PlatformMessages = {
     receivedCc: string;
     sentCc: string;
     airdrop: string;
+    ccLocked: string;
+    ccUnlocked: string;
   };
   settings: {
     signingOut: string;

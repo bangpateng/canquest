@@ -226,6 +226,8 @@ export const en: PlatformMessages = {
     receivedCc: "Received CC",
     sentCc: "Sent CC",
     airdrop: "Airdrop",
+    ccLocked: "CC Locked",
+    ccUnlocked: "CC Unlocked",
   },
   settings: {
     signingOut: "Signing out…",

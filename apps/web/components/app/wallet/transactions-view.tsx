@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/utils/utils";
 import { ListPagination } from "@/components/app/list/list-pagination";
-import { ArrowDownLeft, ArrowUpRight, Gift, RefreshCw, Zap } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Gift, Lock, LockOpen, RefreshCw, Zap } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { TransactionDetailModal } from "@/components/app/wallet/transaction-detail-modal";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
@@ -15,7 +15,7 @@ const LIGHTHOUSE_PROXY = "/api/party/transactions/onchain";
 export interface TxItem {
   id: string;
   amountMicroCc: string;
-  type: "QUEST_REWARD" | "SPIN_REWARD" | "TRANSFER_IN" | "TRANSFER_OUT" | "AIRDROP";
+  type: "QUEST_REWARD" | "SPIN_REWARD" | "TRANSFER_IN" | "TRANSFER_OUT" | "AIRDROP" | "CC_LOCK" | "CC_UNLOCK";
   description: string;
   referenceId: string | null;
   counterparty?: string | null;
@@ -91,6 +91,8 @@ const TX_TYPE_KEYS: Record<TxItem["type"], string> = {
   TRANSFER_IN: "transactions.receivedCc",
   TRANSFER_OUT: "transactions.sentCc",
   AIRDROP: "transactions.airdrop",
+  CC_LOCK: "transactions.ccLocked",
+  CC_UNLOCK: "transactions.ccUnlocked",
 };
 
 function TxStatusBadge({ status }: { status?: TxItem["status"] }) {
@@ -114,6 +116,10 @@ function TxTypeIcon({ type }: { type: TxItem["type"] }) {
       return <ArrowUpRight className="h-4 w-4" />;
     case "TRANSFER_IN":
       return <ArrowDownLeft className="h-4 w-4" />;
+    case "CC_LOCK":
+      return <Lock className="h-4 w-4" />;
+    case "CC_UNLOCK":
+      return <LockOpen className="h-4 w-4" />;
     case "QUEST_REWARD":
     case "SPIN_REWARD":
     case "AIRDROP":
@@ -129,6 +135,11 @@ function txIconBg(type: TxItem["type"]): string {
       return "bg-red-500/10 text-red-500";
     case "TRANSFER_IN":
       return "bg-green-500/10 text-green-500";
+    case "CC_LOCK":
+      // Netral/amber — BUKAN merah transfer (dana dikunci, bukan keluar).
+      return "bg-amber-500/10 text-amber-500";
+    case "CC_UNLOCK":
+      return "bg-green-500/10 text-green-500";
     case "QUEST_REWARD":
       return "bg-[var(--primary)]/15 text-[var(--foreground)]";
     case "SPIN_REWARD":
@@ -140,17 +151,24 @@ function txIconBg(type: TxItem["type"]): string {
 }
 
 function amountColor(type: TxItem["type"]): string {
+  // CC_LOCK = debit (amber, netral — bukan merah transfer).
+  if (type === "CC_LOCK") return "text-amber-500";
   return type === "TRANSFER_OUT" ? "text-red-500" : "text-green-500";
 }
 
 function amountSign(type: TxItem["type"]): string {
-  return type === "TRANSFER_OUT" ? "\u2212" : "+";
+  // CC_LOCK = tanda − (dana dikunci / arah keluar untuk display).
+  return type === "TRANSFER_OUT" || type === "CC_LOCK" ? "\u2212" : "+";
 }
 
 function txDisplayTitle(tx: TxItem, fallback: string): string {
   const d = tx.description?.trim() ?? "";
   if (d.startsWith("Sent ") || d.startsWith("Received ")) {
     return d;
+  }
+  // Lock/unlock sudah punya judul deskriptif ("CC Locked" / "CC Unlocked").
+  if (tx.type === "CC_LOCK" || tx.type === "CC_UNLOCK") {
+    return d || fallback;
   }
   return fallback;
 }
@@ -165,7 +183,7 @@ type TransactionsViewProps = {
 };
 
 /** Resolve tx type from on-chain item fields */
-function inferOnChainType(item: LighthouseOnChainItem, partyId: string): "TRANSFER_IN" | "TRANSFER_OUT" | "QUEST_REWARD" | "SPIN_REWARD" | "AIRDROP" {
+function inferOnChainType(item: LighthouseOnChainItem, partyId: string): TxItem["type"] {
   const kind = (item.kind ?? item.type ?? "").toLowerCase();
 
   if (kind.includes("reward") || kind.includes("quest")) return "QUEST_REWARD";
@@ -298,9 +316,12 @@ export function TransactionsView({
   const t = usePlatformT();
   const embedded = variant === "embedded";
   const txLabel = (type: TxItem["type"]) => t(TX_TYPE_KEYS[type]);
-  // Type column = arah transaksi yang ramah. Out = Sent; sisanya (in, reward, spin) = Received.
-  const txDirection = (type: TxItem["type"]): string =>
-    type === "TRANSFER_OUT" ? "Sent" : "Received";
+  // Type column = arah transaksi yang ramah. Lock/unlock pakai label sendiri (bukan Sent/Received).
+  const txDirection = (type: TxItem["type"]): string => {
+    if (type === "CC_LOCK") return t(TX_TYPE_KEYS.CC_LOCK);
+    if (type === "CC_UNLOCK") return t(TX_TYPE_KEYS.CC_UNLOCK);
+    return type === "TRANSFER_OUT" ? "Sent" : "Received";
+  };
   const [txPage, setTxPage] = useState<TxPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);

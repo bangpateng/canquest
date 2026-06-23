@@ -219,8 +219,10 @@ export class UsersService {
     transferInstructionCid?: string | null;
   }) {
     const amountMicroCc = BigInt(Math.round(Math.abs(params.amountCc) * 1_000_000));
-    const signed =
-      params.type === 'TRANSFER_OUT' ? -amountMicroCc : amountMicroCc;
+    // Debit (keluar dari saldo yang bisa dipakai): TRANSFER_OUT & CC_LOCK (dana dikunci).
+    // Kredit (masuk): TRANSFER_IN, QUEST_REWARD, SPIN_REWARD, AIRDROP, CC_UNLOCK.
+    const isDebit = params.type === 'TRANSFER_OUT' || params.type === 'CC_LOCK';
+    const signed = isDebit ? -amountMicroCc : amountMicroCc;
     const referenceId =
       params.referenceId !== undefined
         ? params.referenceId

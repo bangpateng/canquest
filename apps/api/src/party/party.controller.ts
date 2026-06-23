@@ -675,7 +675,8 @@ export class PartyController {
               amountCc: effectiveFeeCc,
               type: 'TRANSFER_OUT',
               description: `Platform fee (transfer to ${recipientLabel})`,
-              counterparty: normalizeCantonPartyId(feeParty) ?? feeParty,
+              // Penanda "fee:" → filter visibility A3 sembunyikan baris ini dari history user.
+              referenceId: `fee:${normalizeCantonPartyId(feeParty) ?? feeParty}`,
               ledgerTxId: feeLedgerTxId,
             });
             this.logger.log(
@@ -693,7 +694,8 @@ export class PartyController {
                 amountCc: effectiveFeeCc,
                 type: 'TRANSFER_OUT',
                 description: `Platform fee (transfer to ${recipientLabel})`,
-                counterparty: normalizeCantonPartyId(feeParty) ?? feeParty,
+                // Penanda "fee:" → filter visibility A3 sembunyikan baris ini dari history user.
+                referenceId: `fee:${normalizeCantonPartyId(feeParty) ?? feeParty}`,
                 ledgerTxId: feeLedgerTxId,
               });
               this.logger.log(
@@ -1512,6 +1514,24 @@ export class PartyController {
       },
     });
 
+    // Catat ke history transaksi (tampilan). Idempotensi via @@unique(userId, ledgerTxId):
+    // ledgerTxId = lockedAmuletCid → handler ulang tidak akan mendobel-catat.
+    if (result.lockedAmuletCid) {
+      try {
+        await this.users.recordTransaction({
+          userId: user.id,
+          amountCc,
+          type: 'CC_LOCK',
+          description: 'CC Locked',
+          referenceId: lockRow.id,
+          ledgerTxId: result.lockedAmuletCid,
+        });
+      } catch (err) {
+        // P2002 = sudah ada (idempoten). Selain itu: non-fatal — lock inti tetap sukses.
+        this.logger.warn(`CC_LOCK history record failed: ${String(err)}`);
+      }
+    }
+
     return { ok: true, expiresAt, lockId: lockRow.id, lockedAmuletCid: result.lockedAmuletCid ?? null };
   }
 
@@ -1570,6 +1590,22 @@ export class PartyController {
       where: { id: lock.id },
       data: { status: 'UNLOCKED', unlockedAt: new Date() },
     });
+
+    // Catat ke history transaksi (tampilan). Idempotensi via @@unique(userId, ledgerTxId):
+    // prefix "unlock:" membedakan dari row CC_LOCK agar dua-duanya bisa ada untuk lock yang sama.
+    try {
+      await this.users.recordTransaction({
+        userId: user.id,
+        amountCc: Number(lock.amountCc),
+        type: 'CC_UNLOCK',
+        description: 'CC Unlocked',
+        referenceId: lock.id,
+        ledgerTxId: lock.lockedAmuletCid ? `unlock:${lock.lockedAmuletCid}` : `unlock:${lock.id}`,
+      });
+    } catch (err) {
+      // P2002 = sudah ada (idempoten). Selain itu: non-fatal — unlock inti tetap sukses.
+      this.logger.warn(`CC_UNLOCK history record failed: ${String(err)}`);
+    }
 
     return { ok: true, lockId: lock.id };
   }

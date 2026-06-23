@@ -80,4 +80,12 @@ export type CcTransactionType =
   | 'SPIN_REWARD'
   | 'TRANSFER_IN'
   | 'TRANSFER_OUT'
-  | 'AIRDROP';
+  | 'AIRDROP'
+  | 'CC_LOCK'
+  | 'CC_UNLOCK';
+
+/** CcTransactionTypes that represent a non-custodial lock/unlock (no counterparty). */
+export const CC_LOCK_TYPES: ReadonlySet<CcTransactionType> = new Set<CcTransactionType>([
+  'CC_LOCK',
+  'CC_UNLOCK',
+]);

@@ -164,6 +164,8 @@ enum CcTransactionType {
   TRANSFER_IN
   TRANSFER_OUT
   AIRDROP
+  CC_LOCK
+  CC_UNLOCK
 }
 
 /// CC Lock (non-custodial) — metadata untuk LockedAmulet on-chain.

@@ -170,7 +170,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-2">
             <Lock className="h-5 w-5 text-emerald-400" aria-hidden />
-            <h2 id={titleId} className="text-xl font-bold text-slate-100">Lock CC</h2>
+            <h2 id={titleId} className="text-xl font-bold text-slate-100">Lock</h2>
           </div>
           <button
             type="button"
@@ -211,7 +211,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
               disabled={lockState === "loading"}
               className="w-full rounded-2xl border border-white/5 bg-white/5 px-4 py-3 text-base font-bold tabular-nums text-slate-100 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
             />
-            <p className="text-xs text-slate-500">Lock 5 CC: Access Spin or Lock 30 CC: Access Spin & Earn</p>
+            <p className="text-xs text-slate-500">Lock 10 CC: Access Spin or Lock 30 CC: Access Spin & Earn</p>
           </div>
 
           {/* Pilihan durasi — di-render dari GET /lock-terms, BUKAN hard-code */}
@@ -263,7 +263,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
             ) : (
               amountValid && selectedTerm
                 ? `Lock ${numericAmount} CC for ${termLabel(selectedTerm)}`
-                : "Lock CC"
+                : "Lock"
             )}
           </button>
           <p className="text-center text-xs text-slate-500">

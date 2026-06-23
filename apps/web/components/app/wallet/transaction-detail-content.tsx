@@ -3,7 +3,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, Check, Copy, ExternalLink, ShieldCheck } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Check, Copy, ExternalLink, Lock, LockOpen, ShieldCheck } from "lucide-react";
 
 import type { TransactionDetail } from "@/components/app/wallet/transaction-detail-view";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
@@ -147,7 +147,13 @@ export function TransactionDetailContent({
   const ccAmt = microCcToCc(detail.amountMicroCc);
   const isOut = detail.type === "TRANSFER_OUT";
   const isIn = detail.type === "TRANSFER_IN";
+  const isLock = detail.type === "CC_LOCK";
+  const isUnlock = detail.type === "CC_UNLOCK";
   const isTransfer = isOut || isIn;
+  // Lock/unlock = non-custodial: TIDAK punya counterparty, jangan tampilkan From/To.
+  const isLockLike = isLock || isUnlock;
+  // Debit (negatif): TRANSFER_OUT & CC_LOCK. Kredit (positif): sisanya termasuk CC_UNLOCK.
+  const isDebit = isOut || isLock;
 
   // User's own wallet address — prefer the detail's stored party, fall back to prop.
   const ownAddress = detail.cantonPartyId ?? partyId ?? null;
@@ -191,11 +197,19 @@ export function TransactionDetailContent({
           <span
             className={cn(
               "flex h-11 w-11 items-center justify-center rounded-full",
-              isOut ? "bg-red-500/15 text-red-500" : "bg-green-500/15 text-green-500",
+              isLock
+                ? "bg-amber-500/15 text-amber-500"
+                : isUnlock || isIn
+                  ? "bg-green-500/15 text-green-500"
+                  : "bg-red-500/15 text-red-500",
             )}
             aria-hidden
           >
-            {isIn ? (
+            {isLock ? (
+              <Lock className="h-5 w-5" />
+            ) : isUnlock ? (
+              <LockOpen className="h-5 w-5" />
+            ) : isIn ? (
               <ArrowDownLeft className="h-5 w-5" />
             ) : (
               <ArrowUpRight className="h-5 w-5" />
@@ -205,10 +219,14 @@ export function TransactionDetailContent({
             className={cn(
               "mt-3 font-bold tabular-nums",
               compact ? "text-3xl" : "text-4xl",
-              isOut ? "text-red-500" : "text-green-500",
+              isLock
+                ? "text-amber-500"
+                : isOut
+                  ? "text-red-500"
+                  : "text-green-500",
             )}
           >
-            {isOut ? "−" : "+"}
+            {isDebit ? "−" : "+"}
             {ccAmt.toFixed(4)} CC
           </p>
           {usdDisplay != null ? (
