@@ -217,7 +217,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
           {/* Pilihan durasi — di-render dari GET /lock-terms, BUKAN hard-code */}
           {terms.length > 0 ? (
             <div className="space-y-2">
-              <span className="text-sm font-medium text-slate-400">Durasi</span>
+              <span className="text-sm font-medium text-slate-400">Duration</span>
               <div className="grid grid-cols-3 gap-2">
                 {terms.map((t) => {
                   const active = selectedTerm === t.key;
@@ -319,7 +319,7 @@ function ActiveLockRow({
             {lock.amountCc} CC · {termLabel(lock.termKey)}
           </p>
           <p className={cn("text-xs font-medium", ready ? "text-emerald-400" : "text-slate-500")}>
-            {ready ? "Siap di-unlock" : `Unlock ${countdown}`}
+            {ready ? "Unlocked" : `Unlock ${countdown}`}
           </p>
         </div>
         <button
