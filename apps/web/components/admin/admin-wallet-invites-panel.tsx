@@ -200,7 +200,7 @@ export function AdminWalletInvitesPanel() {
             value={customCodes}
             onChange={(e) => setCustomCodes(e.target.value)}
             rows={4}
-            placeholder="WQ-ABC12345&#10;WQ-XYZ98765"
+            placeholder="aB3xKp9Q&#10;K7mNp2Rs"
             className={cn(inputClass, "font-mono text-xs")}
             disabled={busy}
           />

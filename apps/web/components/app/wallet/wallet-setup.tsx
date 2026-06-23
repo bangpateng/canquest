@@ -107,16 +107,16 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
               <input
                 id="wallet-invite-code"
                 value={inviteCode}
-                onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-                placeholder="WQ-XXXXXXXX"
+                onChange={(e) => setInviteCode(e.target.value.replace(/\s+/g, ''))}
+                placeholder="8-character code (e.g. aB3xKp9Q)"
                 minLength={4}
                 maxLength={64}
-                autoCapitalize="characters"
+                autoCapitalize="none"
                 autoCorrect="off"
                 spellCheck={false}
                 required
                 disabled={busy || step === "done"}
-                className={cn(inputClass, "font-mono uppercase")}
+                className={cn(inputClass, "font-mono")}
               />
             </div>
           ) : null}

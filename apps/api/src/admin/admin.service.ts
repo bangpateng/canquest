@@ -13,7 +13,7 @@ import {
   SubmissionStatus,
   normalizeRewardType,
 } from '../common/prisma-types';
-import { randomUUID } from 'crypto';
+import { randomInt, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { requiresPaidInviteClaim } from '../quests/quest-reward-config';
 import { SpliceValidatorService } from '../canton/splice-validator.service';
@@ -1388,8 +1388,8 @@ export class AdminService {
   }) {
     const note = params.note?.trim() || null;
     const rawList =
-      params.codes?.map((c) => c.trim().toUpperCase()).filter(Boolean) ??
-      this.generateCodes(Math.min(Math.max(params.count ?? 1, 1), 500), 'WQ');
+      params.codes?.map((c) => c.trim()).filter(Boolean) ?? // custom code: store as-is (case-sensitive)
+      this.generateWalletCodes(Math.min(Math.max(params.count ?? 1, 1), 500));
 
     const created: string[] = [];
     const skipped: string[] = [];
@@ -1431,5 +1431,20 @@ export class AdminService {
     return Array.from({ length: count }, () =>
       `${prefix}-${randomUUID().split('-')[0].toUpperCase()}`,
     );
+  }
+
+  private static readonly WALLET_CODE_ALPHABET =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+
+  /** Wallet invite code: 8 random chars (digits + upper + lower), no prefix. */
+  generateWalletCodes(count: number): string[] {
+    const alphabet = AdminService.WALLET_CODE_ALPHABET;
+    return Array.from({ length: count }, () => {
+      let code = '';
+      for (let i = 0; i < 8; i++) {
+        code += alphabet[randomInt(0, alphabet.length)]; // CSPRNG, unbiased
+      }
+      return code;
+    });
   }
 }

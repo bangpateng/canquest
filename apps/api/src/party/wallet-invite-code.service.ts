@@ -9,7 +9,7 @@ export class WalletInviteCodeService {
   constructor(private readonly prisma: PrismaService) {}
 
   normalizeCode(raw: string): string {
-    return raw.trim().toUpperCase().replace(/\s+/g, '');
+    return raw.trim().replace(/\s+/g, '');
   }
 
   private reservationExpired(reservedAt: Date | null): boolean {
