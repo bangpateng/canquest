@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   UnauthorizedException,
@@ -120,6 +121,16 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
+    // Account status gate — checked AFTER password compare so a banned/suspended
+    // status is never leaked to password guessers.
+    if (user.status !== 'ACTIVE') {
+      throw new ForbiddenException(
+        user.status === 'BANNED'
+          ? 'This account has been banned.'
+          : 'This account is suspended.',
+      );
+    }
+
     if (!user.emailVerified) {
       if (process.env.AUTH_REGISTER_SKIP_OTP === 'true') {
         await this.users.setVerified(user.id);
@@ -174,6 +185,11 @@ export class AuthService {
     const u = row.user;
     if (!u.emailVerified) {
       throw new UnauthorizedException('Email not verified');
+    }
+    // Banned/suspended users cannot refresh — sessions die once their access
+    // token (≤15 mnt) expires. (Instant wallet check = phase 2, not here.)
+    if (u.status !== 'ACTIVE') {
+      throw new UnauthorizedException('Account is not active');
     }
 
     await this.prisma.refreshToken.update({

@@ -1159,6 +1159,8 @@ export class AdminService {
           cantonPartyId: true,
           isAdmin: true,
           emailVerified: true,
+          status: true,
+          bannedAt: true,
           createdAt: true,
           ccBalance: { select: { balanceMicroCc: true } },
           _count: { select: { questCompletions: true } },
@@ -1185,6 +1187,58 @@ export class AdminService {
       data: { isAdmin },
       select: { id: true, email: true, isAdmin: true },
     });
+  }
+
+  /**
+   * Set a user's account status (ACTIVE | SUSPENDED | BANNED).
+   * - Admin & protected-email accounts cannot be banned/suspended.
+   * - Ban/suspend revokes ALL refresh tokens (kicks every session); access tokens
+   *   expire on their own (≤15 mnt). Phase 1 only — does not touch on-chain funds.
+   */
+  async setUserStatus(
+    userId: string,
+    status: 'ACTIVE' | 'SUSPENDED' | 'BANNED',
+    reason?: string,
+  ) {
+    const target = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, isAdmin: true },
+    });
+    if (!target) throw new NotFoundException('User not found');
+
+    const protectedEmails = this.getProtectedAdminEmails();
+    if (
+      status !== 'ACTIVE' &&
+      (target.isAdmin || protectedEmails.has(target.email.toLowerCase()))
+    ) {
+      throw new BadRequestException('Cannot ban or suspend an admin account');
+    }
+
+    const isActive = status === 'ACTIVE';
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          status,
+          bannedAt: isActive ? null : new Date(),
+          banReason: isActive ? null : (reason?.trim() || null),
+        },
+      }),
+      // Kick every session on ban/suspend; nothing to do on unban.
+      ...(isActive
+        ? []
+        : [
+            this.prisma.refreshToken.updateMany({
+              where: { userId, revokedAt: null },
+              data: { revokedAt: new Date() },
+            }),
+          ]),
+    ]);
+
+    this.logger.warn(
+      `User ${target.email} status → ${status}${reason ? ` (${reason})` : ''}`,
+    );
+    return { ok: true, id: userId, status };
   }
 
   /** Delete one or more app users (DB only — does not remove Canton party on-chain). */

@@ -14,6 +14,7 @@ import { QuestKind, QuestStatus, RewardType } from '../common/prisma-types';
 
 import { AdminService } from './admin.service';
 import { AdminGuard } from './admin.guard';
+import { SetUserStatusDto } from './dto/set-user-status.dto';
 import type { QuestSocialLinkInput } from '../quests/quest-social-links.util';
 
 @Controller('admin')
@@ -293,5 +294,14 @@ export class AdminController {
     @Body() body: { isAdmin: boolean },
   ) {
     return this.admin.setAdmin(userId, body.isAdmin);
+  }
+
+  /** Ban / suspend / unban a user (Phase 1: login+refresh gate, session revoke). */
+  @Patch('users/:userId/status')
+  setUserStatus(
+    @Param('userId') userId: string,
+    @Body() body: SetUserStatusDto,
+  ) {
+    return this.admin.setUserStatus(userId, body.status, body.reason);
   }
 }

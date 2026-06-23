@@ -1,10 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Search, Trash2, Shield } from 'lucide-react';
+import { Search, Trash2, Shield, Ban, ShieldCheck } from 'lucide-react';
 import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils/utils';
 import { inputClass } from '@/lib/ui/ui-tokens';
+
+type UserStatus = 'ACTIVE' | 'SUSPENDED' | 'BANNED';
 
 interface AdminUserRow {
   id: string;
@@ -14,6 +16,8 @@ interface AdminUserRow {
   cantonPartyId: string | null;
   isAdmin: boolean;
   emailVerified: boolean;
+  status: UserStatus;
+  bannedAt: string | null;
   createdAt: string;
   balanceMicroCc: string;
   _count: { questCompletions: number };
@@ -30,6 +34,24 @@ interface UsersResponse {
 function formatCc(micro: string) {
   const n = Number(micro) / 1_000_000;
   return Number.isFinite(n) ? n.toFixed(2) : '0';
+}
+
+function StatusBadge({ status }: { status: UserStatus }) {
+  const styles: Record<UserStatus, string> = {
+    ACTIVE: 'bg-emerald-500/15 text-emerald-300',
+    SUSPENDED: 'bg-amber-500/15 text-amber-300',
+    BANNED: 'bg-red-500/15 text-red-300',
+  };
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase',
+        styles[status],
+      )}
+    >
+      {status}
+    </span>
+  );
 }
 
 export function AdminUsersPanel() {
@@ -160,6 +182,49 @@ export function AdminUsersPanel() {
     }
   };
 
+  /** Ban (ACTIVE) or unban (SUSPENDED/BANNED). Admin rows are protected. */
+  const setStatus = async (
+    user: AdminUserRow,
+    next: Exclude<UserStatus, never>,
+  ) => {
+    if (user.isAdmin) {
+      setMessage('Cannot ban or suspend an admin account');
+      return;
+    }
+    let body: { status: UserStatus; reason?: string } = { status: next };
+    if (next !== 'ACTIVE') {
+      const reason = window.prompt(
+        `Reason for ${next.toLowerCase()} ${user.email}? (optional)`,
+        '',
+      );
+      // Cancel the prompt → abort the action.
+      if (reason === null) return;
+      body = { status: next, reason: reason.trim() || undefined };
+    }
+    setBusy(true);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const json = (await res.json()) as { ok?: boolean; message?: string };
+      if (!res.ok) {
+        setMessage(json.message ?? 'Status update failed');
+        return;
+      }
+      setMessage(
+        `${user.email} → ${next}${body.reason ? ` (${body.reason})` : ''}`,
+      );
+      await load();
+    } catch {
+      setMessage('Status update failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end gap-3">
@@ -226,6 +291,7 @@ export function AdminUsersPanel() {
                   />
                 </th>
                 <th className="px-4 py-3 font-semibold">User</th>
+                <th className="px-4 py-3 font-semibold">Status</th>
                 <th className="px-4 py-3 font-semibold">Balance</th>
                 <th className="px-4 py-3 font-semibold">Quests</th>
                 <th className="px-4 py-3 font-semibold">Joined</th>
@@ -262,20 +328,51 @@ export function AdminUsersPanel() {
                       {u.cantonPartyId ? ' · party bound' : ''}
                     </p>
                   </td>
+                  <td className="px-4 py-3">
+                    <StatusBadge status={u.status} />
+                    {u.status !== 'ACTIVE' && u.bannedAt ? (
+                      <p className="text-[10px] text-[var(--muted-foreground)]">
+                        {new Date(u.bannedAt).toLocaleDateString()}
+                      </p>
+                    ) : null}
+                  </td>
                   <td className="px-4 py-3 tabular-nums">{formatCc(u.balanceMicroCc)} CC</td>
                   <td className="px-4 py-3 tabular-nums">{u._count.questCompletions}</td>
                   <td className="px-4 py-3 text-xs text-[var(--muted-foreground)]">
                     {new Date(u.createdAt).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-3">
-                    <button
-                      type="button"
-                      disabled={busy || u.isAdmin}
-                      onClick={() => void deleteOne(u)}
-                      className="rounded-lg border border-red-500/30 px-3 py-1 text-xs font-semibold text-red-600 disabled:opacity-40 dark:text-red-400"
-                    >
-                      Delete
-                    </button>
+                    <div className="flex flex-wrap gap-1.5">
+                      {u.status === 'ACTIVE' ? (
+                        <button
+                          type="button"
+                          disabled={busy || u.isAdmin}
+                          onClick={() => void setStatus(u, 'BANNED')}
+                          className="inline-flex items-center gap-1 rounded-lg border border-red-500/30 px-2.5 py-1 text-xs font-semibold text-red-600 disabled:opacity-40 dark:text-red-400"
+                        >
+                          <Ban className="h-3 w-3" />
+                          Ban
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void setStatus(u, 'ACTIVE')}
+                          className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/30 px-2.5 py-1 text-xs font-semibold text-emerald-600 disabled:opacity-40 dark:text-emerald-400"
+                        >
+                          <ShieldCheck className="h-3 w-3" />
+                          Unban
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        disabled={busy || u.isAdmin}
+                        onClick={() => void deleteOne(u)}
+                        className="rounded-lg border border-red-500/30 px-3 py-1 text-xs font-semibold text-red-600 disabled:opacity-40 dark:text-red-400"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

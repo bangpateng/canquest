@@ -84,6 +84,13 @@ export type CcTransactionType =
   | 'CC_LOCK'
   | 'CC_UNLOCK';
 
+export type UserStatus = 'ACTIVE' | 'SUSPENDED' | 'BANNED';
+export const UserStatus = {
+  ACTIVE: 'ACTIVE' as UserStatus,
+  SUSPENDED: 'SUSPENDED' as UserStatus,
+  BANNED: 'BANNED' as UserStatus,
+};
+
 /** CcTransactionTypes that represent a non-custodial lock/unlock (no counterparty). */
 export const CC_LOCK_TYPES: ReadonlySet<CcTransactionType> = new Set<CcTransactionType>([
   'CC_LOCK',

@@ -38,6 +38,12 @@ model User {
   preapprovalToggleAt DateTime?
   /// Admin flag — set via ADMIN_EMAILS env or manually.
   isAdmin        Boolean         @default(false)
+  /// Account access status (ACTIVE = full access). Additive — defaults ACTIVE so existing users are unaffected.
+  status         UserStatus      @default(ACTIVE)
+  /// Timestamp of the most recent ban/suspend (null when ACTIVE).
+  bannedAt       DateTime?
+  /// Admin-supplied reason for the current ban/suspend (null when ACTIVE).
+  banReason      String?
   /// Lifetime earn points (quest/earn tasks, completion bonus, spin prizes, referral) — synced via PointsService.
   earnPoints     Int             @default(0)
   /// Linked X (Twitter) handle for social task verification (twitterapi.io).
@@ -362,6 +368,14 @@ enum SubmissionStatus {
   PENDING
   VERIFIED
   REJECTED
+}
+
+/// Account access state. ACTIVE = full access (default for all existing users).
+/// Enforcement (phase 1): login & refresh reject non-ACTIVE; ban/suspend revoke all sessions.
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  BANNED
 }
 
 // ═══════════════════════════════════════════════════════════════
