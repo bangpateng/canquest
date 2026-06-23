@@ -21,6 +21,31 @@ import { cookies } from "next/headers";
 
 type PageProps = { params: Promise<{ questId: string }> };
 
+/** Status pill — reusable badge for hero (both banner & no-banner cases). */
+function StatusPill({ status, label }: { status: Quest["status"]; label: string }) {
+  return (
+    <span className={cn(
+      "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider backdrop-blur-md",
+      status === "ACTIVE" && "border border-emerald-500/30 bg-emerald-500/20 text-emerald-300",
+      status === "COMING_SOON" && "border border-cyan-500/30 bg-cyan-500/20 text-cyan-300",
+      status === "ENDED" && "border border-white/15 bg-black/40 text-slate-300",
+    )}>
+      <span className={cn(
+        "relative flex h-1.5 w-1.5",
+        status === "ACTIVE" && (
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/70" />
+        ),
+      )}>
+        <span className={cn(
+          "relative inline-flex h-1.5 w-1.5 rounded-full",
+          status === "ACTIVE" ? "bg-emerald-400" : status === "COMING_SOON" ? "bg-cyan-400" : "bg-slate-500",
+        )} />
+      </span>
+      {label}
+    </span>
+  );
+}
+
 async function fetchQuest(questId: string): Promise<Quest | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(CQ_ACCESS_COOKIE)?.value;
@@ -95,20 +120,28 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
 
       {/* ── Hero Header ─────────────────────────────────────────────────── */}
       <header className="overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50">
-        {/* Banner — only if image exists */}
+        {/* Banner area — status + share float over it */}
         {quest.bannerImageUrl ? (
-          <div className="relative h-28 sm:h-36 md:h-40 w-full overflow-hidden">
+          <div className="relative h-32 sm:h-36 md:h-44 w-full overflow-hidden">
             <div
               className="absolute inset-0 bg-cover bg-center"
               style={{ backgroundImage: `url("${quest.bannerImageUrl}")` }}
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#0a0c14] via-[#0a0c14]/60 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#0a0c14] via-[#0a0c14]/50 to-[#0a0c14]/20" />
+            {/* Status badge floats over banner — top-left */}
+            <div className="absolute left-3 top-3 sm:left-4 sm:top-4">
+              <StatusPill status={quest.status} label={statusMeta.label} />
+            </div>
+            {/* Share floats over banner — top-right */}
+            <div className="absolute right-3 top-3 sm:right-4 sm:top-4">
+              <ShareCampaign title={quest.title} text={shareText} />
+            </div>
           </div>
         ) : (
-          /* Decorative gradient strip when no banner */
-          <div className="relative h-2 w-full overflow-hidden">
+          /* Decorative gradient strip when no banner — with floating status/share */
+          <div className="relative w-full overflow-hidden">
             <div className={cn(
-              "absolute inset-0 bg-gradient-to-r opacity-60",
+              "absolute inset-0 h-12 bg-gradient-to-r opacity-60",
               config.isDual
                 ? "from-[rgb(var(--canton-rgb)/0.8)] via-violet-500/60 to-transparent"
                 : config.accentClass.includes("violet")
@@ -117,67 +150,58 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
                     ? "from-cyan-500/80 via-cyan-400/40 to-transparent"
                     : "from-[rgb(var(--canton-rgb)/0.8)] via-[rgb(var(--canton-rgb)/0.4)] to-transparent"
             )} />
+            <div className="relative flex h-12 items-center justify-between px-3 sm:px-4">
+              <StatusPill status={quest.status} label={statusMeta.label} />
+              <ShareCampaign title={quest.title} text={shareText} />
+            </div>
           </div>
         )}
 
         {/* Header content */}
-        <div className="relative px-5 pb-5 pt-4 sm:px-6 sm:pb-6 sm:pt-5">
-          <div className="flex items-center gap-4">
-            {/* Logo — overlap banner when present, otherwise inline */}
-            <div className={cn(
-              "relative shrink-0 overflow-hidden rounded-2xl shadow-lg ring-2 ring-white/10",
-              quest.bannerImageUrl ? "-mt-12 sm:-mt-16 border-4 border-[#0a0c14] h-16 w-16 sm:h-20 sm:w-20" : "h-14 w-14 sm:h-16 sm:w-16",
-            )}>
-              {quest.logoUrl ? (
-                <img src={quest.logoUrl} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center bg-[var(--muted)] text-lg font-bold text-canton sm:text-xl">
-                  {quest.orgSlug.slice(0, 2).toUpperCase()}
-                </div>
-              )}
+        <div className="relative px-5 pb-5 sm:px-6 sm:pb-6">
+          {/* Mobile: logo overlaps up into banner; Desktop: logo inline-left */}
+          {quest.bannerImageUrl ? (
+            /* Logo overlapping the banner bottom — centered on mobile, left on desktop */
+            <div className="-mt-10 mb-3 flex items-end gap-4 sm:-mt-14 sm:mb-4">
+              <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-2xl border-4 border-[#0a0c14] bg-[var(--muted)] shadow-lg ring-2 ring-white/10 sm:h-20 sm:w-20">
+                {quest.logoUrl ? (
+                  <img src={quest.logoUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-xl font-bold text-canton sm:text-2xl">
+                    {quest.orgSlug.slice(0, 2).toUpperCase()}
+                  </div>
+                )}
+              </div>
+              {/* Type + task count inline next to logo on desktop */}
+              <div className="hidden pb-1 text-xs font-semibold uppercase tracking-wider text-slate-400 sm:block">
+                {config.shortLabel} · {quest.tasks.length} tasks
+              </div>
             </div>
+          ) : null}
 
-            {/* Title + badges */}
-            <div className="min-w-0 flex-1">
-              {/* Badge row: status + type + task count — single line */}
-              <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-                <span className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
-                  quest.status === "ACTIVE" && "border border-emerald-500/25 bg-emerald-500/15 text-emerald-300",
-                  quest.status === "COMING_SOON" && "border border-cyan-500/25 bg-cyan-500/15 text-cyan-300",
-                  quest.status === "ENDED" && "border border-white/10 bg-white/5 text-slate-300",
-                )}>
-                  <span className={cn(
-                    "relative flex h-1.5 w-1.5",
-                    quest.status === "ACTIVE" && (
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/60" />
-                    ),
-                  )}>
-                    <span className={cn(
-                      "relative inline-flex h-1.5 w-1.5 rounded-full",
-                      quest.status === "ACTIVE" ? "bg-emerald-400"
-                        : quest.status === "COMING_SOON" ? "bg-cyan-400"
-                          : "bg-slate-500",
-                    )} />
-                  </span>
-                  {statusMeta.label}
-                </span>
+          {/* Title block — full width, no logo competing for horizontal space on mobile */}
+          <div className="min-w-0">
+            {/* Mobile-only badge row (status already on banner for banner case) */}
+            {!quest.bannerImageUrl ? (
+              <div className="mb-1.5 flex items-center gap-2 sm:hidden">
+                <StatusPill status={quest.status} label={statusMeta.label} />
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                  · {config.shortLabel} · {quest.tasks.length} tasks
+                  {config.shortLabel} · {quest.tasks.length} tasks
                 </span>
               </div>
-              <p className="text-xs font-semibold text-slate-400">{quest.org}</p>
-              <h1 className="mt-0.5 text-xl font-bold leading-tight text-white sm:text-2xl">
-                {quest.title}
-              </h1>
-            </div>
-
-            {/* Share button — top-right of header */}
-            <ShareCampaign
-              title={quest.title}
-              text={shareText}
-              className="shrink-0"
-            />
+            ) : null}
+            {/* Mobile-only type/task count for banner case */}
+            {quest.bannerImageUrl ? (
+              <div className="mb-1.5 flex items-center gap-2 sm:hidden">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  {config.shortLabel} · {quest.tasks.length} tasks
+                </span>
+              </div>
+            ) : null}
+            <p className="text-xs font-semibold text-slate-400">{quest.org}</p>
+            <h1 className="mt-0.5 text-xl font-bold leading-tight text-white sm:text-2xl">
+              {quest.title}
+            </h1>
           </div>
 
           {/* Description + social links — inside header */}
