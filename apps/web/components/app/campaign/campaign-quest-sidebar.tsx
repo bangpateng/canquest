@@ -186,7 +186,6 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
         {/* Claim fee row — single line, clear */}
         {claimFeeDisplay !== null ? (
           <div className="relative flex items-center gap-2 bg-[#0a0c14]/90 px-5 py-2.5 sm:px-6">
-            <Zap className="h-3.5 w-3.5 shrink-0 text-amber-300" aria-hidden />
             <span className="text-xs font-semibold text-slate-400">Claim fee</span>
             <span className={cn(
               "ml-auto text-xs font-bold",

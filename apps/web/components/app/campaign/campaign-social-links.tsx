@@ -89,7 +89,7 @@ export function CampaignSocialLinks({ links, className }: Props) {
   if (!links.length) return null;
 
   return (
-    <div className={cn("flex flex-wrap items-center gap-3", className)}>
+    <div className={cn("flex flex-wrap items-center gap-2", className)}>
       {links.map((link) => (
         <a
           key={link.platform}
@@ -98,9 +98,9 @@ export function CampaignSocialLinks({ links, className }: Props) {
           rel="noopener noreferrer"
           title={platformLabel(link.platform)}
           aria-label={`${platformLabel(link.platform)} (opens in new tab)`}
-          className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/5 bg-[var(--muted)]/50 text-slate-400 transition-colors hover:border-[var(--primary)]/40 hover:bg-[var(--primary)]/10 hover:text-slate-100"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/5 bg-[var(--muted)]/50 text-slate-400 transition-colors hover:border-[var(--primary)]/40 hover:bg-[var(--primary)]/10 hover:text-slate-100"
         >
-          <SocialIcon platform={link.platform} className="h-5 w-5" />
+          <SocialIcon platform={link.platform} className="h-3.5 w-3.5" />
         </a>
       ))}
     </div>
