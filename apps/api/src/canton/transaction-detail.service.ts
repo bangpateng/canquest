@@ -27,6 +27,9 @@ export type TransactionDetailResponse = {
   onChainSettled: boolean;
   ledgerEvents: LedgerEventSummary[];
   ledgerFetchError: string | null;
+  /** Platform fee (CC withdraw fee) dipotong saat transfer — 0/null jika tidak ada.
+   *  Tampil di modal detail; baris fee tetap disembunyikan dari history list. */
+  platformFeeMicroCc?: string | null;
 };
 
 @Injectable()
@@ -122,6 +125,18 @@ export class TransactionDetailService {
         ? await this.users.resolveTransferCounterparty(tx.referenceId)
         : null;
 
+    // Platform fee (CC withdraw fee) yang dipotong saat transfer keluar ini.
+    // Baris fee dicatat terpisah dengan referenceId "fee:..." dan disembunyikan
+    // dari history list, tapi TETAP ditampilkan di modal detail. Di-link via
+    // rentang waktu (fee selalu dibuat bersama transfer dalam satu request send-cc).
+    let platformFeeMicroCc: string | null = null;
+    if (tx.type === 'TRANSFER_OUT') {
+      const feeRow = await this.findLinkedPlatformFee(tx.userId, tx.createdAt);
+      if (feeRow) {
+        platformFeeMicroCc = feeRow.amountMicroCc.toString();
+      }
+    }
+
     return {
       id: tx.id,
       type: tx.type,
@@ -138,7 +153,37 @@ export class TransactionDetailService {
       onChainSettled: Boolean(tx.settledAt || cantonUpdateId),
       ledgerEvents,
       ledgerFetchError,
+      platformFeeMicroCc,
     };
+  }
+
+  /**
+   * Cari baris platform fee yang terkait dengan sebuah transfer keluar.
+   * Fee row: type=TRANSFER_OUT, referenceId mulai "fee:", dibuat ±60 detik
+   * dari transfer utama (fee selalu dibuat bersamaan dalam satu request send-cc).
+   */
+  private async findLinkedPlatformFee(
+    userId: string,
+    transferCreatedAt: Date,
+  ): Promise<{ amountMicroCc: bigint } | null> {
+    try {
+      const since = new Date(transferCreatedAt.getTime() - 60_000);
+      const until = new Date(transferCreatedAt.getTime() + 60_000);
+      const row = await this.prisma.ccTransaction.findFirst({
+        where: {
+          userId,
+          type: 'TRANSFER_OUT',
+          referenceId: { startsWith: 'fee:' },
+          createdAt: { gte: since, lte: until },
+        },
+        select: { amountMicroCc: true },
+        orderBy: { createdAt: 'asc' },
+      });
+      return row ?? null;
+    } catch (err) {
+      this.logger.debug(`findLinkedPlatformFee: ${String(err)}`);
+      return null;
+    }
   }
 }
 

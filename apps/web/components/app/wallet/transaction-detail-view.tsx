@@ -28,6 +28,8 @@ export type TransactionDetail = {
   ledgerFetchError: string | null;
   /** Optional on-chain extras (present for Lighthouse on-chain items). */
   networkFeeMicroCc?: string | null;
+  /** Platform fee (CC withdraw fee) dipotong saat transfer — tampil di modal. */
+  platformFeeMicroCc?: string | null;
   /** Canton round number the transaction settled in. */
   round?: number | string | null;
   /** Estimated USD value of the amount, if known. */
