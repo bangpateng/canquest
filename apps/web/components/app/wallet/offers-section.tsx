@@ -271,7 +271,7 @@ export function OffersModal({
           ) : offers.length === 0 ? (
             <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-5 py-8 text-center">
               <p className="text-sm font-medium text-slate-400">
-                No pending offers.
+                No pending offers
               </p>
               <p className="mt-1 text-xs text-slate-500">
                 Incoming CC transfer requests will appear here.
