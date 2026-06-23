@@ -2360,12 +2360,66 @@ export class CantonLedgerService {
     );
 
     if (!ok) {
+      // Error ambigu (network/timeout/abort status 0, atau server error 5xx):
+      // command mungkin SUDAH dieksekusi validator tapi response tidak sampai
+      // client → jangan langsung bilang gagal. Verifikasi ke chain: cari
+      // LockedAmulet baru milik owner dengan expiresAt yang persis cocok.
+      // Reference: command deduplication di Canton — tx bisa sukses walau
+      // client dapat network error.
+      if (this.isAmbiguousError(status)) {
+        this.logger.warn(
+          `lockCc ambiguous error ${status} — verifying on-chain…`,
+        );
+        const verified = await this.verifyLockLanded(ownerParty, expiresAt, amountCc);
+        if (verified) {
+          this.logger.log(
+            `lockCc recovered: tx actually landed despite client error. lockedAmuletCid=${verified.slice(0, 20)}…`,
+          );
+          return { ok: true, lockedAmuletCid: verified, expiresAt };
+        }
+      }
       this.logger.warn(`lockCc failed ${status}: ${text.slice(0, 500)}`);
       return { ok: false, error: `Ledger ${status}: ${text.slice(0, 400)}` };
     }
     const lockedAmuletCid = this.findCreatedCidByTemplate(text, ':Splice.Amulet:LockedAmulet') ?? undefined;
     this.logger.log(`lockCc OK lockedAmuletCid=${(lockedAmuletCid ?? '?').slice(0,20)}…`);
     return { ok: true, lockedAmuletCid, expiresAt };
+  }
+
+  /**
+   * True untuk HTTP status yang ambigu — command mungkin sudah dieksekusi
+   * validator walau client tidak menerima response sukses.
+   *   - 0   = network error / timeout / abort (fetch threw)
+   *   - 5xx = server error setelah kemungkinan eksekusi
+   */
+  private isAmbiguousError(status: number): boolean {
+    return status === 0 || status >= 500;
+  }
+
+  /**
+   * Setelah lock error ambigu, cek apakah LockedAmulet baru benar-benar mendarat
+   * di chain untuk owner. Match via expiresAt (generasi deterministik di lockCc)
+   * + amount, sehingga akurat walau ada lock lain milik owner.
+   */
+  private async verifyLockLanded(
+    ownerParty: string,
+    expectedExpiresAt: string,
+    expectedAmount: number,
+  ): Promise<string | null> {
+    // Kasih sedikit waktu supaya chain benar-benar committed + queryable.
+    await sleep(2500);
+    try {
+      const locked = await this.findLockedAmulets(ownerParty);
+      const match = locked.find(
+        (l) =>
+          l.expiresAt === expectedExpiresAt &&
+          Math.abs(l.amount - expectedAmount) < 0.0001,
+      );
+      return match?.contractId ?? null;
+    } catch (err) {
+      this.logger.warn(`verifyLockLanded error: ${String(err)}`);
+      return null;
+    }
   }
 
   /** Daftar LockedAmulet milik ownerParty (untuk eligibility & unlock). */
@@ -2447,12 +2501,47 @@ export class CantonLedgerService {
     );
 
     if (!ok) {
+      // Error ambigu (network/timeout/abort status 0, atau 5xx): command mungkin
+      // sudah dieksekusi validator walau client tidak menerima response sukses.
+      // Verifikasi ke chain: jika LockedAmulet sudah tidak aktif (di-archive),
+      // berarti unlock sebenarnya sukses.
+      if (this.isAmbiguousError(status) && cid) {
+        this.logger.warn(
+          `unlockCc ambiguous error ${status} — verifying on-chain…`,
+        );
+        const stillLocked = await this.isLockedAmuletActive(cid, ownerParty);
+        if (!stillLocked) {
+          this.logger.log(
+            `unlockCc recovered: LockedAmulet ${cid.slice(0, 20)}… actually unlocked despite client error.`,
+          );
+          return { ok: true, unlockedCid: undefined };
+        }
+      }
       this.logger.warn(`unlockCc failed ${status}: ${text.slice(0, 500)}`);
       return { ok: false, error: `Ledger ${status}: ${text.slice(0, 400)}` };
     }
     const unlockedCid = this.findCreatedCidByTemplate(text, ':Splice.Amulet:Amulet') ?? undefined;
     this.logger.log(`unlockCc OK amulet=${(unlockedCid ?? '?').slice(0,20)}…`);
     return { ok: true, unlockedCid };
+  }
+
+  /**
+   * Cek apakah sebuah LockedAmulet (by contractId) masih AKTIF di ACS owner.
+   * Dipakai untuk verifikasi: kalau sudah tidak aktif → sudah di-unlock.
+   */
+  private async isLockedAmuletActive(
+    lockedAmuletCid: string,
+    ownerParty: string,
+  ): Promise<boolean> {
+    await sleep(2500);
+    try {
+      const locked = await this.findLockedAmulets(ownerParty);
+      return locked.some((l) => l.contractId === lockedAmuletCid);
+    } catch (err) {
+      this.logger.warn(`isLockedAmuletActive error: ${String(err)}`);
+      // Kalau gagal cek, anggap masih aktif (konservatif → jangan palsukan sukses).
+      return true;
+    }
   }
 
   /** Cari contractId dari CreatedEvent pertama yang templateId-nya berakhiran `suffix`. */
