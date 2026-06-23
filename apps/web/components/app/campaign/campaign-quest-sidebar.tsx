@@ -10,7 +10,6 @@ import {
   ListChecks,
   Sparkles,
   Ticket,
-  Trophy,
   Users,
   Zap,
 } from "lucide-react";
@@ -137,22 +136,6 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
       className="relative w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/40"
       aria-label="Campaign reward"
     >
-      {/* ── Type badge header row ─────────────────────────────────── */}
-      <div className="flex items-center gap-2 border-b border-white/[0.06] bg-white/[0.02] px-5 py-2.5 sm:px-6">
-        <Trophy className="h-3.5 w-3.5 shrink-0 text-amber-300" aria-hidden />
-        <span className={cn(
-          "rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
-          config.chipClass,
-        )}>
-          {config.shortLabel}
-        </span>
-        {slots.full && slots.isFcfs ? (
-          <span className="ml-auto rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            Slots full
-          </span>
-        ) : null}
-      </div>
-
       {/* ── Reward highlight (single hero block) ──────────────────── */}
       <div className="relative border-b border-white/[0.06]">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_90%_at_0%_0%,rgb(var(--canton-rgb)/0.10),transparent_60%)]" />

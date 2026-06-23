@@ -46,6 +46,18 @@ function StatusPill({ status, label }: { status: Quest["status"]; label: string 
   );
 }
 
+/** Type pill — reward type label, same size/style as StatusPill. */
+function TypePill({ config }: { config: ReturnType<typeof getRewardConfig> }) {
+  return (
+    <span className={cn(
+      "inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider backdrop-blur-md",
+      config.chipClass.replace("border-canton-muted", "border-canton/30").replace("bg-canton-soft", "bg-canton/15"),
+    )}>
+      {config.shortLabel}
+    </span>
+  );
+}
+
 async function fetchQuest(questId: string): Promise<Quest | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(CQ_ACCESS_COOKIE)?.value;
@@ -128,9 +140,10 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
               style={{ backgroundImage: `url("${quest.bannerImageUrl}")` }}
             />
             <div className="absolute inset-0 bg-gradient-to-t from-[#0a0c14] via-[#0a0c14]/50 to-[#0a0c14]/20" />
-            {/* Status badge floats over banner — top-left */}
-            <div className="absolute left-3 top-3 sm:left-4 sm:top-4">
+            {/* Status + Type badges float over banner — top-left */}
+            <div className="absolute left-3 top-3 flex items-center gap-1.5 sm:left-4 sm:top-4">
               <StatusPill status={quest.status} label={statusMeta.label} />
+              <TypePill config={config} />
             </div>
             {/* Share floats over banner — top-right */}
             <div className="absolute right-3 top-3 sm:right-4 sm:top-4">
@@ -151,7 +164,10 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
                     : "from-[rgb(var(--canton-rgb)/0.8)] via-[rgb(var(--canton-rgb)/0.4)] to-transparent"
             )} />
             <div className="relative flex h-12 items-center justify-between px-3 sm:px-4">
-              <StatusPill status={quest.status} label={statusMeta.label} />
+              <div className="flex items-center gap-1.5">
+                <StatusPill status={quest.status} label={statusMeta.label} />
+                <TypePill config={config} />
+              </div>
               <ShareCampaign title={quest.title} text={shareText} />
             </div>
           </div>
