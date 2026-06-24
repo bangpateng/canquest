@@ -1,10 +1,14 @@
 -- Migration: hapus tabel Spin (SpinItem, SpinResult) + tambah model EarnEntry.
--- Menjalankan: prisma migrate deploy (saat deploy ke staging/production).
+--
+-- CATATAN DEPLOY: VPS pakai `infra/redeploy.sh` yang menjalankan
+-- `prisma db push --accept-data-loss` (BUKAN `prisma migrate deploy`).
+-- Artinya perubahan schema.prisma langsung di-sync ke DB otomatis saat deploy,
+-- dan file migration ini menjadi DOKUMENTASI/REFERENSI DDL saja.
+-- Jika suatu saat beralih ke `migrate deploy`, file ini siap dipakai.
 --
 -- Konteks:
 --   - Fitur Spin dicabut; akuntansi poin terpotong dialihkan ke EarnEntry.
---   - SpinItem & SpinResult adalah tabel BASELINE (tidak ada di migration SQL manapun),
---     jingga DROP eksplisit di sini.
+--   - SpinItem & SpinResult adalah tabel BASELINE (tidak ada di migration SQL manapun).
 --   - EarnEntry mencatat partisipasi Earn (gate: lock 30 CC ATAU spend 200 poin, per-campaign).
 --   - Enum CcTransactionType.SPIN_REWARD DIPERTAHANKAN untuk data transaksi historis.
 
