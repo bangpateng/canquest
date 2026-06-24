@@ -346,10 +346,22 @@ export class PartyController {
       walletUsername = onboard.username ?? preferredUsername;
     }
 
-    const existing = await this.splice.hasTransferPreapproval(
+    // Authoritative existence check across BOTH ledger views + splice. A plain
+    // splice read that returns false on a transient error must NOT trigger a
+    // re-create here — that would silently re-enable the preapproval the user
+    // believes they disabled.
+    const spliceExisting = await this.splice.getTransferPreapproval(
       user.cantonPartyId,
     );
-    if (existing) {
+    const existingAuth = await this.ledger.getTransferPreapprovalAuthoritative(
+      user.cantonPartyId,
+      {
+        active: spliceExisting !== null,
+        expiresAt: spliceExisting?.expiresAt,
+        provider: spliceExisting?.provider,
+      },
+    );
+    if (existingAuth.active) {
       return {
         active: true,
         partyId: user.cantonPartyId,
@@ -1344,6 +1356,11 @@ export class PartyController {
 
   /**
    * Get current preapproval status for the user's wallet.
+   *
+   * Uses the authoritative on-chain read (both Ledger ACS views + Splice REST
+   * fallback). A plain Splice REST read can report inactive on any transient
+   * error while a live contract keeps CC flowing in directly — so the source of
+   * truth is the union of all sources.
    */
   @SkipThrottle()
   @Get('preapproval')
@@ -1355,15 +1372,24 @@ export class PartyController {
       );
     }
 
-    const preapproval = await this.splice.getTransferPreapproval(
+    const spliceStatus = await this.splice.getTransferPreapproval(
       user.cantonPartyId,
+    );
+    const auth = await this.ledger.getTransferPreapprovalAuthoritative(
+      user.cantonPartyId,
+      {
+        active: spliceStatus !== null,
+        expiresAt: spliceStatus?.expiresAt,
+        provider: spliceStatus?.provider,
+      },
     );
 
     return {
-      active: preapproval !== null,
-      expiresAt: preapproval?.expiresAt ?? null,
-      provider: preapproval?.provider ?? null,
-      message: preapproval
+      active: auth.active,
+      expiresAt: auth.expiresAt ?? null,
+      provider: auth.provider ?? null,
+      source: auth.source ?? null,
+      message: auth.active
         ? 'Preapproval active — incoming CC transfers arrive directly without manual accept.'
         : 'Preapproval inactive — incoming CC transfers will appear as offers that you must accept manually.',
     };
@@ -1386,11 +1412,20 @@ export class PartyController {
       );
     }
 
-    // Already active? (Ledger ACS query)
-    const existing = await this.ledger.getTransferPreapprovalViaLedger(
+    // Already active? (Authoritative read across all sources — don't burn the
+    // preapproval fee if one is already live that a single source missed.)
+    const spliceExisting = await this.splice.getTransferPreapproval(
       user.cantonPartyId,
     );
-    if (existing) {
+    const existing = await this.ledger.getTransferPreapprovalAuthoritative(
+      user.cantonPartyId,
+      {
+        active: spliceExisting !== null,
+        expiresAt: spliceExisting?.expiresAt,
+        provider: spliceExisting?.provider,
+      },
+    );
+    if (existing.active) {
       return {
         ok: true,
         alreadyActive: true,
@@ -1439,11 +1474,20 @@ export class PartyController {
       );
     }
 
-    // Check if active (Ledger ACS query)
-    const existing = await this.ledger.getTransferPreapprovalViaLedger(
+    // Authoritative read — checks BOTH ledger views + splice. A false-negative
+    // here would make us skip the cancel entirely, so we union every source.
+    const spliceStatus = await this.splice.getTransferPreapproval(
       user.cantonPartyId,
     );
-    if (!existing) {
+    const auth = await this.ledger.getTransferPreapprovalAuthoritative(
+      user.cantonPartyId,
+      {
+        active: spliceStatus !== null,
+        expiresAt: spliceStatus?.expiresAt,
+        provider: spliceStatus?.provider,
+      },
+    );
+    if (!auth.active) {
       return {
         ok: true,
         wasActive: false,
@@ -1454,17 +1498,38 @@ export class PartyController {
     // Cooldown 7 hari (gate state-change)
     this.assertPreapprovalToggleCooldown(user.preapprovalToggleAt);
 
-    // Cancel via Ledger (primary path)
+    // Cancel via Ledger (primary path). cancelTransferPreapprovalViaLedger now
+    // re-verifies the contract is actually archived before reporting success.
     const result = await this.ledger.cancelTransferPreapprovalViaLedger(
       user.cantonPartyId,
     );
     if (!result.ok) {
+      // Fallback: try Splice admin DELETE (sometimes the operator lacks CanActAs
+      // on the receiver but the admin endpoint can archive it).
+      const fallback = await this.splice.cancelTransferPreapproval(
+        user.cantonPartyId,
+      );
+      if (!fallback.ok) {
+        throw new BadRequestException(
+          `Failed to disable preapproval: ${result.error ?? 'unknown'}`,
+        );
+      }
+    }
+
+    // Final verification — only trust the toggle succeeded if the authoritative
+    // read now reports inactive. Otherwise surface the error so the UI does not
+    // wrongly show "Disabled" while a live contract keeps CC flowing in.
+    const postCheck = await this.ledger.getTransferPreapprovalAuthoritative(
+      user.cantonPartyId,
+    );
+    if (postCheck.active) {
       throw new BadRequestException(
-        `Failed to disable preapproval: ${result.error ?? 'unknown'}`,
+        'Preapproval could not be disabled on-chain — it is still active. ' +
+          'Please retry in a moment, or contact support if it persists.',
       );
     }
 
-    // Sukses → set cooldown
+    // Sukses & terverifikasi → set cooldown
     await this.users.markPreapprovalToggle(req.user.userId);
 
     return {

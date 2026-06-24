@@ -65,15 +65,19 @@ export function SettingsPreapprovalPanel() {
       > | null;
       if (!res.ok) {
         setError(formatApiError(raw));
+        // Re-fetch authoritative status — the on-chain toggle may not have
+        // taken effect, so do not trust the optimistic state.
+        await load();
         return;
       }
-      setActive(!active);
       setSuccess(
-        active
+        action === "disable"
           ? "One step transfer disabled — incoming CC will appear as offers."
           : "One step transfer enabled — incoming CC arrives directly.",
       );
-      void load();
+      // Load authoritative on-chain status rather than flipping optimistically.
+      // The backend re-verifies the cancel succeeded; load() reflects that.
+      await load();
     } catch {
       setError("Network error — try again.");
     } finally {

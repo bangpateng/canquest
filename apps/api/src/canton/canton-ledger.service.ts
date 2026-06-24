@@ -7,6 +7,10 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { KeycloakTokenService } from '../auth/keycloak-token.service';
+import {
+  cantonPartyIdsEqual,
+  normalizeCantonPartyId,
+} from '../common/canton-party-id';
 
 /**
  * HTTP client for the Canton JSON Ledger API v2.
@@ -665,13 +669,27 @@ export class CantonLedgerService {
   // READ / CANCEL TransferPreapproval via Ledger ACS (Keycloak admin token).
   // ───────────────────────────────────────────────────────────────────────────
 
-  /** ACS lookup: TransferPreapproval contract whose receiver === partyId. */
-  private async findTransferPreapprovalContract(partyId: string): Promise<{
+  /**
+   * ACS lookup: TransferPreapproval contract whose receiver === partyId.
+   *
+   * @param partyId - The receiver party whose preapproval we want to find.
+   * @param visibilityParty - Party whose contract store we query (ACS visibility).
+   *   Defaults to `partyId` (the receiver). The validator/provider party may see
+   *   contracts the receiver does not (e.g. if the operator lacks CanReadAs on
+   *   the receiver), so callers can pass the provider party here.
+   */
+  private async findTransferPreapprovalContract(
+    partyId: string,
+    visibilityParty?: string,
+  ): Promise<{
     contractId: string;
     templateId: string;
     expiresAt?: string;
     provider?: string;
   } | null> {
+    const targetReceiver = normalizeCantonPartyId(partyId) ?? partyId.trim();
+    const queryParty = visibilityParty ?? partyId;
+
     let offset: number | string = 0;
     try {
       const end = (await this.ledgerEnd()) as { offset?: number | string };
@@ -681,6 +699,8 @@ export class CantonLedgerService {
     }
 
     let rows: unknown[] = [];
+    let httpStatus = 200;
+    let httpErr = '';
     try {
       const res = await fetch(`${this.baseUrl}/v2/state/active-contracts`, {
         method: 'POST',
@@ -688,7 +708,7 @@ export class CantonLedgerService {
         body: JSON.stringify({
           eventFormat: {
             filtersByParty: {
-              [partyId]: {
+              [queryParty]: {
                 cumulative: [
                   {
                     identifierFilter: {
@@ -706,9 +726,12 @@ export class CantonLedgerService {
         }),
         signal: AbortSignal.timeout(20_000),
       });
+      httpStatus = res.status;
       if (!res.ok) {
+        httpErr = (await res.text()).slice(0, 200);
         this.logger.warn(
-          `findTransferPreapproval ${res.status}: ${(await res.text()).slice(0, 200)}`,
+          `findTransferPreapproval(queryParty=${queryParty.split('::')[0]}) ` +
+            `HTTP ${res.status}: ${httpErr}`,
         );
         return null;
       }
@@ -718,6 +741,11 @@ export class CantonLedgerService {
       this.logger.warn(`findTransferPreapproval error: ${String(err)}`);
       return null;
     }
+
+    // Diagnostic counters — log what the ACS returned so false-negatives are
+    // traceable (rights gap vs visibility vs normalization).
+    let transferPreapprovalRows = 0;
+    let matched = false;
 
     for (const entry of rows) {
       if (!entry || typeof entry !== 'object') continue;
@@ -731,11 +759,15 @@ export class CantonLedgerService {
       const ev = (jsActive?.createdEvent ?? wrapper) as Record<string, unknown>;
       const tplId = typeof ev.templateId === 'string' ? ev.templateId : '';
       if (!tplId.includes('TransferPreapproval')) continue;
+      transferPreapprovalRows++;
       const cid = typeof ev.contractId === 'string' ? ev.contractId : null;
       const args =
         (ev.createArgument as Record<string, unknown> | undefined) ?? {};
       const receiver = typeof args.receiver === 'string' ? args.receiver : '';
-      if (receiver === partyId && cid) {
+      // Normalize both sides before comparing — the on-chain receiver may be
+      // stored in a different case form than the incoming partyId.
+      if (cantonPartyIdsEqual(receiver, targetReceiver) && cid) {
+        matched = true;
         return {
           contractId: cid,
           templateId: tplId,
@@ -746,6 +778,12 @@ export class CantonLedgerService {
         };
       }
     }
+
+    this.logger.debug(
+      `findTransferPreapproval(queryParty=${queryParty.split('::')[0]}, ` +
+        `receiver=${targetReceiver.split('::')[0]}): rows=${rows.length} ` +
+        `tpRows=${transferPreapprovalRows} matched=${matched} http=${httpStatus}`,
+    );
     return null;
   }
 
@@ -760,26 +798,183 @@ export class CantonLedgerService {
     return c ? { expiresAt: c.expiresAt, provider: c.provider } : null;
   }
 
+  /**
+   * Authoritative TransferPreapproval read — source of truth for the app.
+   *
+   * Queries up to THREE independent sources and returns active=true if ANY
+   * reports an active preapproval. For money flow, a false-negative (thinking
+   * a preapproval is gone when it isn't) is far more dangerous than a
+   * false-positive, so we union the sources.
+   *
+   *   1. Ledger ACS under the RECEIVER party (operator reads as receiver).
+   *   2. Ledger ACS under the PROVIDER party (validator sees contracts the
+   *      receiver's contract store may not expose). Filtered by receiver.
+   *   3. Splice admin REST (passed in by the caller) as a tertiary check.
+   *
+   * Also returns the raw per-source diagnostics so the debug endpoint can show
+   * exactly which source saw what (useful when tracking down rights/visibility
+   * mismatches).
+   */
+  async getTransferPreapprovalAuthoritative(
+    partyId: string,
+    spliceFallback?: { active: boolean; expiresAt?: string; provider?: string },
+  ): Promise<{
+    active: boolean;
+    contractId?: string;
+    templateId?: string;
+    expiresAt?: string;
+    provider?: string;
+    source?: string;
+    sources: {
+      ledgerReceiver: boolean;
+      ledgerProvider: boolean;
+      splice: boolean | null;
+    };
+  }> {
+    const providerParty =
+      this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() || undefined;
+
+    const [receiverHit, providerHit] = await Promise.all([
+      this.findTransferPreapprovalContract(partyId).catch(() => null),
+      providerParty
+        ? this.findTransferPreapprovalContract(partyId, providerParty).catch(
+            () => null,
+          )
+        : Promise.resolve(null),
+    ]);
+
+    const spliceActive =
+      spliceFallback === undefined ? null : spliceFallback.active;
+
+    const hit = receiverHit ?? providerHit;
+    const spliceActiveOverride =
+      spliceFallback?.active &&
+      // Only trust splice as the deciding hit when neither ledger source saw it.
+      !hit
+        ? spliceFallback
+        : undefined;
+
+    if (hit) {
+      const source = receiverHit ? 'ledger:receiver' : 'ledger:provider';
+      return {
+        active: true,
+        contractId: hit.contractId,
+        templateId: hit.templateId,
+        expiresAt: hit.expiresAt,
+        provider: hit.provider,
+        source,
+        sources: {
+          ledgerReceiver: receiverHit !== null,
+          ledgerProvider: providerHit !== null,
+          splice: spliceActive,
+        },
+      };
+    }
+
+    if (spliceActiveOverride) {
+      return {
+        active: true,
+        expiresAt: spliceActiveOverride.expiresAt,
+        provider: spliceActiveOverride.provider,
+        source: 'splice:rest',
+        sources: {
+          ledgerReceiver: false,
+          ledgerProvider: false,
+          splice: true,
+        },
+      };
+    }
+
+    return {
+      active: false,
+      sources: {
+        ledgerReceiver: false,
+        ledgerProvider: false,
+        splice: spliceActive,
+      },
+    };
+  }
+
   async cancelTransferPreapprovalViaLedger(
     partyId: string,
   ): Promise<{ ok: boolean; error?: string }> {
-    const c = await this.findTransferPreapprovalContract(partyId);
+    // Find the contract authoritatively (receiver view, then provider view).
+    const receiverHit = await this.findTransferPreapprovalContract(partyId);
+    const c =
+      receiverHit ??
+      (await (async () => {
+        const providerParty = this.config
+          .get<string>('CANTON_VALIDATOR_PARTY_ID')
+          ?.trim();
+        if (!providerParty) return null;
+        return this.findTransferPreapprovalContract(partyId, providerParty);
+      })());
+
     if (!c) return { ok: true }; // nothing to cancel
+
+    // Try to exercise the cancel as the receiver first. If the operator lacks
+    // CanActAs on the receiver, fall back to acting as the provider — the DAML
+    // controller of TransferPreapproval_Cancel may be either signatory.
+    const actAsCandidates = [partyId];
+    const providerParty = this.config
+      .get<string>('CANTON_VALIDATOR_PARTY_ID')
+      ?.trim();
+    if (providerParty && !cantonPartyIdsEqual(providerParty, partyId)) {
+      actAsCandidates.push(providerParty);
+    }
+
     this.logger.log(
       `Cancelling TransferPreapproval via Ledger: cid=${c.contractId.slice(0, 20)}…`,
     );
-    const { ok, status, text } = await this.exerciseChoice(
-      c.contractId,
-      c.templateId,
-      'TransferPreapproval_Cancel',
-      {},
-      [partyId],
-    );
-    if (ok) return { ok: true };
-    this.logger.warn(
-      `Cancel preapproval failed ${status}: ${text.slice(0, 200)}`,
-    );
-    return { ok: false, error: `Ledger ${status}: ${text.slice(0, 200)}` };
+
+    let lastErr = 'unknown';
+    for (const actAs of actAsCandidates) {
+      const { ok, status, text } = await this.exerciseChoice(
+        c.contractId,
+        c.templateId,
+        'TransferPreapproval_Cancel',
+        {},
+        [actAs],
+      );
+      if (ok) {
+        // Verify the contract is actually archived on-chain (with a short
+        // retry to tolerate ledger archive latency). Trust nothing until the
+        // authoritative read confirms it is gone.
+        const gone = await this.waitForPreapprovalGone(partyId, 5, 600);
+        if (gone) {
+          this.logger.log(
+            `TransferPreapproval cancelled & verified gone (actAs=${actAs.split('::')[0]})`,
+          );
+          return { ok: true };
+        }
+        this.logger.warn(
+          `Cancel returned ok but preapproval STILL ACTIVE after verify (actAs=${actAs.split('::')[0]})`,
+        );
+        lastErr = 'cancel submitted but preapproval still active after verify';
+        continue;
+      }
+      lastErr = `Ledger ${status} (actAs=${actAs.split('::')[0]}): ${text.slice(0, 200)}`;
+      this.logger.warn(`Cancel preapproval attempt failed: ${lastErr}`);
+    }
+
+    return { ok: false, error: lastErr };
+  }
+
+  /**
+   * Poll the authoritative read until the preapproval is gone, up to `tries`
+   * attempts spaced `delayMs` apart. Returns true once confirmed inactive.
+   */
+  private async waitForPreapprovalGone(
+    partyId: string,
+    tries: number,
+    delayMs: number,
+  ): Promise<boolean> {
+    for (let i = 0; i < tries; i++) {
+      const status = await this.getTransferPreapprovalAuthoritative(partyId);
+      if (!status.active) return true;
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+    return false;
   }
 
   // ───────────────────────────────────────────────────────────────────────────
