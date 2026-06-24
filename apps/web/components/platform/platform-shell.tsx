@@ -145,12 +145,12 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
         </main>
       </div>
 
-      {/* Mobile Bottom Navigation — 7-item grid, no truncation */}
+      {/* Mobile Bottom Navigation — centered 6-item grid, no truncation */}
       <nav
-        className="fixed bottom-0 left-0 right-0 z-50 bg-slate-950/90 backdrop-blur-xl border-t border-white/[0.06] py-1.5 px-1 md:hidden"
+        className="fixed bottom-0 left-0 right-0 z-50 bg-slate-950/90 backdrop-blur-xl border-t border-white/[0.06] py-1.5 px-2 md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0.375rem)" }}
       >
-        <div className="grid grid-cols-7 w-full items-end mx-auto max-w-lg gap-0">
+        <div className="grid grid-cols-6 w-full items-center mx-auto max-w-lg gap-0">
           <NavLinks variant="mobile" hasWallet={hasWallet} />
         </div>
       </nav>
