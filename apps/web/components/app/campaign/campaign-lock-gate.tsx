@@ -1,34 +1,33 @@
 "use client";
 
-import Link from "next/link";
-import { Lock } from "lucide-react";
+import { Info } from "lucide-react";
 import { useLockStatus } from "@/lib/hooks/use-lock-status";
+import { useEarnAccessConfig } from "@/lib/hooks/use-earn-access-config";
 
 /**
- * CC Lock gate untuk halaman Earn (Spec BAGIAN 5d).
- * Render banner saat tier !== FULL (user belum kunci ≥30 CC). Tombol Join yang sebenarnya
- * dinonaktifkan tidak di-sentuh di sini — guard backend (ForbiddenException) sudah menolak
- * submit dengan pesan jelas; banner ini memberi konteks + CTA sebelum user klik.
- *
- * Tidak render apa pun saat tier === FULL (aman ikut event).
+ * Banner ringkas di atas task panel: pengingat syarat akses Earn.
+ * Hanya tampil saat user BELUM tier FULL (belum lock CC cukup).
+ * Catatan: jalur points juga valid — banner ini mengarah ke card guide untuk detail.
  */
 export function CampaignLockGate() {
   const { status } = useLockStatus({ enabled: true, pollIntervalMs: 90_000 });
+  const { entryCostPoints, ccLockAmount } = useEarnAccessConfig();
 
+  // User sudah lock CC cukup → jalur cc_lock aktif, tidak perlu banner.
   if (status.tier === "FULL") return null;
 
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.06] px-4 py-3">
-      <Lock className="h-5 w-5 shrink-0 text-emerald-400" aria-hidden />
-      <p className="flex-1 text-sm font-medium text-slate-200">
-        Lock 30 CC to join the event
+    <div className="flex items-start gap-2.5 rounded-2xl border border-amber-500/25 bg-amber-500/[0.06] px-4 py-3">
+      <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" aria-hidden />
+      <p className="flex-1 text-xs leading-relaxed text-slate-300">
+        To join this event, lock{" "}
+        <span className="font-semibold text-amber-300">{ccLockAmount} CC</span>{" "}
+        or spend{" "}
+        <span className="font-semibold text-violet-300">
+          {entryCostPoints.toLocaleString()} pts
+        </span>
+        . See the guide below for details.
       </p>
-      <Link
-        href="/wallet"
-        className="shrink-0 rounded-xl border border-emerald-500/60 px-3 py-1.5 text-xs font-semibold text-emerald-400 transition-all hover:bg-emerald-500/10"
-      >
-        Lock
-      </Link>
     </div>
   );
 }

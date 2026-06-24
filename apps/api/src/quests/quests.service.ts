@@ -121,6 +121,20 @@ export class QuestsService {
   }
 
   /**
+   * Konfigurasi gate Earn (publik) — untuk ditampilkan di card guide FE.
+   * Mengembalikan biaya points + jumlah CC lock saat ini.
+   */
+  async getEarnAccessConfig(): Promise<{
+    entryCostPoints: number;
+    ccLockAmount: number;
+  }> {
+    const entryCostPoints = await this.resolveEarnEntryCostPoints();
+    // Jumlah CC lock dibaca dari env yang sama dengan LockEligibilityService (default 30).
+    const ccLockAmount = Number(this.config.get<string>('LOCK_TIER_FULL') ?? '30');
+    return { entryCostPoints, ccLockAmount };
+  }
+
+  /**
    * Gate akses campaign Earn (per-campaign, first participation).
    * User harus penuhi SALAH SATU:
    *   1. Lock ≥ {LOCK_TIER_FULL} CC on-chain (cc_lock) — reuse LockEligibilityService.

@@ -7,6 +7,17 @@ import { QuestsService } from '../quests/quests.service';
 export class EarnPublicController {
   constructor(private readonly quests: QuestsService) {}
 
+  /**
+   * Konfigurasi gate akses Earn (publik, untuk ditampilkan di card guide FE).
+   * Biaya points + jumlah CC lock — kedua-duanya dinamis (AppSetting/env).
+   * Dideklarasikan SEBELUM route :campaignId agar tidak tertangkap sebagai param.
+   */
+  @SkipThrottle()
+  @Get('access-config')
+  async getAccessConfig() {
+    return this.quests.getEarnAccessConfig();
+  }
+
   /** Public campaign detail (no session required). */
   @SkipThrottle()
   @Get(':campaignId')

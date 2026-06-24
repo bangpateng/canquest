@@ -1,5 +1,6 @@
 import { PlatformPage } from "@/components/platform/platform-page";
 import { CampaignLockGate } from "@/components/app/campaign/campaign-lock-gate";
+import { CampaignGuide } from "@/components/app/campaign/campaign-guide";
 import { CampaignSocialLinks } from "@/components/app/campaign/campaign-social-links";
 import { QuestTaskPanel } from "@/components/app/quest/quest-task-panel";
 import { CampaignQuestSidebar } from "@/components/app/campaign/campaign-quest-sidebar";
@@ -225,6 +226,8 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
           )}
         </div>
       </header>
+
+      <CampaignGuide />
 
       <CampaignQuestSidebar quest={quest} />
 
