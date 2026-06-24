@@ -666,7 +666,7 @@ export function QuestForm({
               <input
                 type="number"
                 min="0"
-                step="0.5"
+                step="0.01"
                 value={form.claimFeeCc}
                 onChange={(e) => updateField("claimFeeCc", e.target.value)}
                 placeholder={
