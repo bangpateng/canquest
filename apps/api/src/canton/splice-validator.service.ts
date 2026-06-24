@@ -52,7 +52,6 @@ import { CantonLedgerService } from './canton-ledger.service';
 export class SpliceValidatorService {
   private readonly logger = new Logger(SpliceValidatorService.name);
   private readonly baseUrl: string | null;
-  private readonly secret: string | null;
   /**
    * Host header to send on every request to the Splice Validator API.
    *
@@ -75,106 +74,30 @@ export class SpliceValidatorService {
   ) {
     const raw = config.get<string>('CANTON_VALIDATOR_URL');
     this.baseUrl = raw ? raw.replace(/\/$/, '') : null;
-    this.secret = config.get<string>('CANTON_SPLICE_SECRET') ?? null;
     this.hostHeader =
       config.get<string>('CANTON_VALIDATOR_HOST_HEADER') ?? 'wallet.localhost';
-    // Fail fast if a weak/default shared secret is configured for HS256 in a
-    // non-development environment — anyone holding the public default could
-    // forge wallet JWTs and impersonate users on Splice.
-    this.assertSecretStrength();
+    // Fail fast at boot if LEDGER_AUTH_MODE is misconfigured.
+    this.assertAuthMode();
   }
 
   /**
-   * Refuse to run in non-development environments when the HS256 shared secret
-   * is missing, a known placeholder, or shorter than 32 bytes. Keycloak/RS256
-   * mode bypasses this check because no symmetric secret is involved.
+   * Validate LEDGER_AUTH_MODE. Only keycloak is supported — a missing/typo'd
+   * value is a config bug and failing loud here is far safer than silently
+   * operating with no auth.
    */
-  private assertSecretStrength(): void {
-    if (this.authMode === 'keycloak') return;
-    const nodeEnv = (this.config.get<string>('NODE_ENV') ?? '').toLowerCase();
-    const isProdLike =
-      nodeEnv === 'production' ||
-      nodeEnv === 'mainnet' ||
-      nodeEnv === 'staging';
-
-    const weakPlaceholders = new Set([
-      'unsafe',
-      'changeme',
-      'secret',
-      'hs256-unsafe',
-      'your-secret',
-      'your-secret-here',
-    ]);
-
-    if (!this.secret) {
-      if (isProdLike) {
-        // In production this is a hard failure: a missing secret means no
-        // auth at all OR a guessable default.
-        throw new Error(
-          'CANTON_SPLICE_SECRET is not set. Configure a random ≥32-byte secret ' +
-            'or switch LEDGER_AUTH_MODE=keycloak before running in production.',
-        );
-      }
-      return;
-    }
-
-    if (weakPlaceholders.has(this.secret.toLowerCase())) {
-      if (isProdLike) {
-        throw new Error(
-          `CANTON_SPLICE_SECRET="${this.secret}" is a known placeholder — ` +
-            'anyone can forge Splice wallet JWTs. Set a strong random secret.',
-        );
-      }
-
-      console.warn(
-        `[SpliceValidatorService] WARNING: CANTON_SPLICE_SECRET is a known ` +
-          `placeholder ("${this.secret}"). Do NOT use this in production — ` +
-          `set LEDGER_AUTH_MODE=keycloak or a strong random ≥32-byte secret.`,
-      );
-      return;
-    }
-
-    if (this.secret.length < 32 && isProdLike) {
-      throw new Error(
-        `CANTON_SPLICE_SECRET is too short (${this.secret.length} chars). ` +
-          'Use a random secret of at least 32 bytes (e.g. `openssl rand -hex 32`).',
-      );
-    }
-  }
-
-  /**
-   * Active ledger auth mode, normalized.
-   *
-   * In production we refuse to fall back to `hs256` silently — LEDGER_AUTH_MODE
-   * MUST be set explicitly. A missing/empty value is a config bug and failing
-   * loud here is far safer than accidentally minting HS256 wallet JWTs.
-   */
-  private get authMode(): 'keycloak' | 'hs256' {
+  private assertAuthMode(): void {
     const m = (this.config.get<string>('LEDGER_AUTH_MODE') ?? '')
       .trim()
       .toLowerCase();
-    if (m === 'keycloak' || m === 'hs256') return m;
-    if (process.env.NODE_ENV === 'production') {
+    if (m !== 'keycloak') {
       throw new Error(
-        'LEDGER_AUTH_MODE must be set explicitly in production (keycloak | hs256). ' +
-          'Refusing to default to hs256.',
+        `LEDGER_AUTH_MODE="${m}" is not supported. Set LEDGER_AUTH_MODE=keycloak.`,
       );
     }
-    return 'hs256';
   }
 
   get isConfigured(): boolean {
-    if (this.authMode === 'keycloak')
-      return Boolean(this.baseUrl && this.keycloak);
-    return Boolean(this.baseUrl && this.secret);
-  }
-
-  /** True hanya saat LEDGER_AUTH_MODE=hs256 (legacy). Dipakai caller untuk
-   *  memagari fallback Splice agar tidak dijalankan di mode keycloak — di
-   *  keycloak validator menolak HS256, jadi jalur ini pasti gagal dan hanya
-   *  memicu retry sia-sia + log membingungkan. */
-  get isLegacyHs256(): boolean {
-    return this.authMode === 'hs256';
+    return Boolean(this.baseUrl && this.keycloak);
   }
 
   /**
@@ -190,18 +113,12 @@ export class SpliceValidatorService {
   }
 
   /** Admin JWT token for Splice Validator API operations.
-   *  LEDGER_AUTH_MODE=keycloak → Keycloak client_credentials (validator-app-backend). */
+   *  Keycloak client_credentials (validator-app-backend). */
   private async adminToken(): Promise<string> {
-    if (this.authMode !== 'keycloak') {
-      // Only keycloak mode is supported. A different mode is a config bug.
-      throw new Error(
-        `Unsupported LEDGER_AUTH_MODE for Splice admin token. Set LEDGER_AUTH_MODE=keycloak.`,
-      );
-    }
     if (!this.keycloak) {
       throw new Error(
-        'LEDGER_AUTH_MODE=keycloak but KeycloakTokenService is not injected in SpliceValidatorService. ' +
-          'Ensure it is registered in CantonModule.',
+        'KeycloakTokenService is not injected in SpliceValidatorService. ' +
+          'Ensure it is registered in CantonModule and LEDGER_AUTH_MODE=keycloak.',
       );
     }
     return this.keycloak.getAdminLedgerToken();
@@ -224,12 +141,12 @@ export class SpliceValidatorService {
   /**
    * Auth + Content-Type headers.
    *
-   * Without a subject → admin token (Keycloak-safe). WITH a subject the legacy
-   * path minted a per-user HS256 wallet JWT — that is forbidden in Keycloak
-   * (operator) mode. We fail loud here with a pointer to the migration doc so
-   * any unmigrated per-user call-site (createTransferOffer-as-user,
-   * sendViaTransferPreapproval, acceptOfferViaWallet, etc.) surfaces
-   * immediately instead of producing a 401 from the validator.
+   * Without a subject → admin token (Keycloak operator). WITH a subject this
+   * would require a per-user wallet JWT, which does not exist in keycloak
+   * (operator) mode — the backend acts as operator for every party. We fail
+   * loud here so any per-user call-site (createTransferOffer-as-user,
+   * acceptOfferViaWallet, etc.) surfaces immediately instead of producing a
+   * 401 from the validator.
    */
   private async jsonAuthHeaders(
     subject?: string,
@@ -237,10 +154,9 @@ export class SpliceValidatorService {
     if (!subject) {
       return this.authHeadersForToken(await this.adminToken(), true);
     }
-    // Per-user wallet JWTs are a legacy hs256 concept. In keycloak (operator)
-    // mode the backend acts as operator for every party — there is no per-user
-    // Splice wallet token. Throw so any unmigrated call-site surfaces
-    // immediately instead of producing a 401 from the validator.
+    // In keycloak (operator) mode the backend acts as operator for every
+    // party — there is no per-user Splice wallet token. Throw so any
+    // per-user call-site surfaces immediately instead of producing a 401.
     throw new Error(
       `Per-user wallet auth (username=${subject}) is not available in keycloak mode. ` +
         'Migrate this call-site to the Ledger API (CIP-0056). ' +

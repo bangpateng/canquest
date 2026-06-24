@@ -674,7 +674,7 @@ export class PartyController {
     const isInternalUser = recipientDbUser !== null;
     const effectiveFeeCc = feeCc;
 
-    // ── Balance check (DB cache only — tidak blokir dengan HS256) ─────
+    // ── Balance check (DB cache — fast path) ─────
     const dbBalance = await this.prisma.ccBalance.findUnique({
       where: { userId: sender.id },
       select: { balanceMicroCc: true },
@@ -1189,19 +1189,13 @@ export class PartyController {
         );
       }
     } else {
-      // Legacy Splice TransferOffer — try Ledger API first, then Splice Wallet API.
-      // The Splice Wallet API fallback uses a per-user HS256 JWT which the
-      // validator rejects in keycloak mode, so only attempt it in legacy hs256.
+      // Legacy Splice TransferOffer — accept via Canton Ledger API.
       const result = await this.ledger.acceptTransferOffer(
         cid,
         user.cantonPartyId,
       );
       ok = result.accepted;
       updateId = result.updateId;
-      if (!ok && this.splice.isLegacyHs256) {
-        // Fallback to Splice Wallet API (legacy hs256 only)
-        ok = await this.splice.acceptOfferViaWallet(cid, user.username);
-      }
       if (!ok) {
         throw new BadRequestException('Failed to accept transfer offer.');
       }
@@ -1392,7 +1386,7 @@ export class PartyController {
       );
     }
 
-    // Already active? (Ledger ACS — no HS256)
+    // Already active? (Ledger ACS query)
     const existing = await this.ledger.getTransferPreapprovalViaLedger(
       user.cantonPartyId,
     );
@@ -1445,7 +1439,7 @@ export class PartyController {
       );
     }
 
-    // Check if active (Ledger ACS — no HS256)
+    // Check if active (Ledger ACS query)
     const existing = await this.ledger.getTransferPreapprovalViaLedger(
       user.cantonPartyId,
     );
@@ -1460,7 +1454,7 @@ export class PartyController {
     // Cooldown 7 hari (gate state-change)
     this.assertPreapprovalToggleCooldown(user.preapprovalToggleAt);
 
-    // Cancel via Ledger (primary, no HS256)
+    // Cancel via Ledger (primary path)
     const result = await this.ledger.cancelTransferPreapprovalViaLedger(
       user.cantonPartyId,
     );
@@ -1660,41 +1654,20 @@ export class PartyController {
     let accepted = false;
     let acceptMethod = '';
 
-    // Splice Wallet API (per-user HS256 JWT) hanya untuk mode legacy hs256.
-    // Di keycloak validator menolak HS256 — lewati langsung ke Canton Ledger API.
-    if (this.splice.isLegacyHs256 && this.splice.isConfigured) {
-      accepted = await this.splice.acceptOfferViaWallet(
-        contractId,
-        walletUsername,
+    const result = await this.ledger.acceptTransferOffer(
+      contractId,
+      user.cantonPartyId,
+    );
+    accepted = result.accepted;
+    if (accepted) {
+      acceptMethod = 'canton_ledger_api';
+      this.logger.log(
+        `Offer accepted via Canton Ledger API: ${contractId.slice(0, 20)}… updateId=${result.updateId?.slice(0, 16) ?? 'n/a'}`,
       );
-      if (accepted) {
-        acceptMethod = 'splice_wallet_api';
-        this.logger.log(
-          `Offer accepted via Splice Wallet API: ${contractId.slice(0, 20)}…`,
-        );
-      } else {
-        this.logger.warn(
-          `Splice Wallet API accept failed for ${contractId.slice(0, 20)}… — trying Canton Ledger API`,
-        );
-      }
-    }
-
-    if (!accepted) {
-      const result = await this.ledger.acceptTransferOffer(
-        contractId,
-        user.cantonPartyId,
+    } else {
+      this.logger.warn(
+        `Canton Ledger API accept also failed for ${contractId.slice(0, 20)}…`,
       );
-      accepted = result.accepted;
-      if (accepted) {
-        acceptMethod = 'canton_ledger_api';
-        this.logger.log(
-          `Offer accepted via Canton Ledger API: ${contractId.slice(0, 20)}… updateId=${result.updateId?.slice(0, 16) ?? 'n/a'}`,
-        );
-      } else {
-        this.logger.warn(
-          `Canton Ledger API accept also failed for ${contractId.slice(0, 20)}…`,
-        );
-      }
     }
 
     if (!accepted) {

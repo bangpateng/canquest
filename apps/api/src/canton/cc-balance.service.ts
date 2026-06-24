@@ -49,7 +49,9 @@ export class CcBalanceService {
   ) {
     const flag = config.get<string>('BALANCE_READ_FROM_DB');
     this.readFromDb = flag === undefined || flag === '' || flag === 'true';
-    this.dbMaxAgeMs = Number(config.get<string>('BALANCE_DB_MAX_AGE_MS') ?? '60000');
+    this.dbMaxAgeMs = Number(
+      config.get<string>('BALANCE_DB_MAX_AGE_MS') ?? '60000',
+    );
     this.backgroundDebounceMs = Number(
       config.get<string>('BALANCE_BACKGROUND_DEBOUNCE_MS') ?? '15000',
     );
@@ -111,7 +113,7 @@ export class CcBalanceService {
       };
     }
 
-    // Via Ledger API (admin Keycloak token, bukan HS256 per-user)
+    // Via Ledger API (Keycloak admin token, operator readAs)
     if (cantonPartyId && !cantonPartyId.startsWith('canquest:')) {
       try {
         const chain = await this.ledger.getLedgerBalance(cantonPartyId);
@@ -121,7 +123,12 @@ export class CcBalanceService {
           create: { userId, balanceMicroCc: onChainMicro },
           update: { balanceMicroCc: onChainMicro },
         });
-        return { balance: chain, source: 'chain', stale: false, updatedAt: new Date() };
+        return {
+          balance: chain,
+          source: 'chain',
+          stale: false,
+          updatedAt: new Date(),
+        };
       } catch (err) {
         this.logger.warn(`Balance Ledger fallback error: ${String(err)}`);
       }
@@ -141,8 +148,12 @@ export class CcBalanceService {
     if (now - last < this.backgroundDebounceMs) return;
     this.lastBackgroundKick.set(userId, now);
 
-    void this.inboundSync.syncUser(userId, username, cantonPartyId).catch((err) => {
-      this.logger.debug(`Background balance sync for ${userId}: ${String(err)}`);
-    });
+    void this.inboundSync
+      .syncUser(userId, username, cantonPartyId)
+      .catch((err) => {
+        this.logger.debug(
+          `Background balance sync for ${userId}: ${String(err)}`,
+        );
+      });
   }
 }

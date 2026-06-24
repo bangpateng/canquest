@@ -8,7 +8,6 @@ import {
   JOB_DISTRIBUTE_REWARD,
   JOB_ACCEPT_OFFER,
 } from './queue.constants';
-import { SpliceValidatorService } from '../canton/splice-validator.service';
 import { CantonLedgerService } from '../canton/canton-ledger.service';
 import { QuestLedgerService } from '../canton/quest-ledger.service';
 import { UsersService } from '../users/users.service';
@@ -61,7 +60,6 @@ export class LedgerJobProcessor {
   private readonly logger = new Logger(LedgerJobProcessor.name);
 
   constructor(
-    private readonly splice: SpliceValidatorService,
     private readonly ledger: CantonLedgerService,
     private readonly users: UsersService,
     private readonly prisma: PrismaService,
@@ -111,33 +109,11 @@ export class LedgerJobProcessor {
         cip56Result.updateId ?? cip56Result.transferInstructionCid ?? '';
     }
 
-    // Fallback to Splice TransferOffer if CIP-0056 failed (no Scan access).
-    // Fallback Splice HANYA untuk mode legacy hs256. Di keycloak, validator
-    // menolak HS256 — jadi jangan coba jalur yang pasti gagal; retry CIP-0056.
+    // CIP-0056 is the only supported reward path. If it fails, retry.
     if (!cip56Result.ok) {
-      if (!this.splice.isLegacyHs256) {
-        throw new Error(
-          `CIP-0056 transfer unavailable for @${username} ` +
-            `(${cip56Result.error?.slice(0, 80) ?? 'unknown'}) — will retry`,
-        );
-      }
-      this.logger.log(
-        `[Job ${job.id}] CIP-0056 unavailable, fallback to Splice TransferOffer: ${cip56Result.error?.slice(0, 80) ?? 'unknown'}`,
-      );
-      const offerContractId = await this.splice.createTransferOffer(
-        cantonPartyId,
-        amountCc,
-        description,
-      );
-      if (!offerContractId) {
-        throw new Error(
-          `Both CIP-0056 and createTransferOffer failed for @${username} — will retry`,
-        );
-      }
-      // JANGAN auto-accept — offer pending, user accept manual via menu Offers.
-      ledgerTxId = offerContractId;
-      this.logger.log(
-        `[Job ${job.id}] Splice offer created (pending) for @${username}: ${offerContractId.slice(0, 16)}…`,
+      throw new Error(
+        `CIP-0056 transfer unavailable for @${username} ` +
+          `(${cip56Result.error?.slice(0, 80) ?? 'unknown'}) — will retry`,
       );
     }
 
@@ -211,31 +187,10 @@ export class LedgerJobProcessor {
           cip56Result.updateId ?? cip56Result.transferInstructionCid ?? null;
         ccSent = true;
       } else {
-        // Fallback to Splice TransferOffer HANYA untuk mode legacy hs256.
-        if (!this.splice.isLegacyHs256) {
-          throw new Error(
-            `CIP-0056 distribute unavailable for draw=${drawId} ` +
-              `(${cip56Result.error?.slice(0, 80) ?? 'unknown'}) — will retry`,
-          );
-        }
-        this.logger.log(
-          `[Job ${job.id}] CIP-0056 unavailable, fallback: ${cip56Result.error?.slice(0, 80) ?? 'unknown'}`,
-        );
-        const offerContractId = await this.splice.createTransferOffer(
-          cantonPartyId,
-          amountCc,
-          `Quest winner reward: ${questId}`,
-        );
-        if (!offerContractId) {
-          throw new Error(
-            `Both CIP-0056 and createTransferOffer failed for draw=${drawId} — will retry`,
-          );
-        }
-        // JANGAN auto-accept — offer pending, penerima accept manual via menu Offers.
-        ledgerTxId = offerContractId;
-        ccSent = true;
-        this.logger.log(
-          `[Job ${job.id}] Splice offer created (pending) for draw=${drawId}: ${offerContractId.slice(0, 16)}…`,
+        // CIP-0056 is the only supported reward path — retry on failure.
+        throw new Error(
+          `CIP-0056 distribute unavailable for draw=${drawId} ` +
+            `(${cip56Result.error?.slice(0, 80) ?? 'unknown'}) — will retry`,
         );
       }
 
@@ -251,7 +206,7 @@ export class LedgerJobProcessor {
     }
 
     // Update WinnerDraw record
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     await (this.prisma as any).winnerDraw.update({
       where: { id: drawId },
       data: {
@@ -270,34 +225,15 @@ export class LedgerJobProcessor {
   // ── Accept Transfer Offer ────────────────────────────────────────────────────
 
   @Process(JOB_ACCEPT_OFFER)
-  async processAcceptOffer(job: Job<AcceptOfferPayload>): Promise<void> {
+  processAcceptOffer(job: Job<AcceptOfferPayload>): Promise<void> {
     const { offerContractId, username, label } = job.data;
 
-    // JOB_ACCEPT_OFFER hanya relevan di mode legacy hs256 (Splice per-user
-    // offer). Di keycloak semua transfer sudah CIP-0056 — jalur Splice offer
-    // tidak dibuat lagi. Jangan throw → jangan retry tanpa akhir bila ada job
-    // lama yang sempat ter-enqueue.
-    if (!this.splice.isLegacyHs256) {
-      this.logger.warn(
-        `[Job ${job.id}] JOB_ACCEPT_OFFER diabaikan di mode keycloak (legacy Splice). cid=${offerContractId.slice(0, 16)}… as @${username} ${label ?? ''}`,
-      );
-      return;
-    }
-
-    this.logger.log(
-      `[Job ${job.id}] AcceptOffer: ${offerContractId.slice(0, 16)}… as @${username} ${label ?? ''}`,
+    // JOB_ACCEPT_OFFER was a legacy Splice per-user offer flow. All transfers
+    // are now CIP-0056, so this path is never created anymore. Don't throw —
+    // just log and return, so any stale job left in the queue doesn't retry.
+    this.logger.warn(
+      `[Job ${job.id}] JOB_ACCEPT_OFFER is a no-op in keycloak mode (legacy Splice offer). cid=${offerContractId.slice(0, 16)}… as @${username} ${label ?? ''}`,
     );
-
-    const ok = await this.splice.acceptOfferViaWallet(
-      offerContractId,
-      username,
-    );
-    if (!ok) {
-      throw new Error(
-        `acceptOfferViaWallet failed for @${username} — will retry`,
-      );
-    }
-
-    this.logger.log(`[Job ${job.id}] ✅ Offer accepted for @${username}`);
+    return Promise.resolve();
   }
 }

@@ -662,7 +662,7 @@ export class CantonLedgerService {
   }
 
   // ───────────────────────────────────────────────────────────────────────────
-  // READ / CANCEL TransferPreapproval via Ledger ACS (Keycloak) — no HS256.
+  // READ / CANCEL TransferPreapproval via Ledger ACS (Keycloak admin token).
   // ───────────────────────────────────────────────────────────────────────────
 
   /** ACS lookup: TransferPreapproval contract whose receiver === partyId. */
@@ -783,7 +783,7 @@ export class CantonLedgerService {
   }
 
   // ───────────────────────────────────────────────────────────────────────────
-  // CREATE TransferPreapproval via Ledger (Keycloak) — no HS256.
+  // CREATE TransferPreapproval via Ledger (Keycloak admin token).
   // Grounded on real on-chain choiceArgument (canquest-fee, tx offset 838791).
   // Provider (validator-1) pre-pays the ~1.5 CC burn fee.
   // Atomic: wrong args / insufficient funds => rejected, NO fee burned (safe to retry).

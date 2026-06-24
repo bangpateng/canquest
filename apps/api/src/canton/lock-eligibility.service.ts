@@ -29,7 +29,7 @@ export interface OnChainLockedAmulet {
  * Catatan rekonsiliasi spec:
  *   MD BAGIAN 2 menyuruh baca `effective_locked_qty` dari Splice wallet balance.
  *   Itu TIDAK jalan di LEDGER_AUTH_MODE=keycloak (splice.getUserBalance() return null
- *   karena wallet REST butuh HS256 per-user yang ditolak validator). Substitusi terdekat
+ *   karena wallet REST butuh per-user token yang tidak ada di mode operator). Substitusi terdekat
  *   yang tetap ON-CHAIN (bukan tabel) = jumlahkan field `amount` dari LockedAmulet via
  *   `findLockedAmulets()` (ACS query, admin Keycloak token). Sumber kebenaran tetap chain.
  */
@@ -48,7 +48,7 @@ export class LockEligibilityService {
 
   /**
    * Jumlah CC terkunci on-chain milik ownerParty.
-   * Baca dari LockedAmulet ACS (findLockedAmulets) — keycloak-safe, tidak butuh HS256.
+   * Baca dari LockedAmulet ACS (findLockedAmulets) — keycloak-safe (operator token).
    * Return angka; default 0 jika gagal/null. Tidak melempar error.
    */
   async lockedCcOf(ownerParty: string): Promise<number> {
@@ -58,7 +58,9 @@ export class LockEligibilityService {
       const total = locks.reduce((sum, l) => sum + (Number(l.amount) || 0), 0);
       return Math.max(0, total);
     } catch (err) {
-      this.logger.warn(`lockedCcOf(${ownerParty.split('::')[0]}) error: ${String(err)}`);
+      this.logger.warn(
+        `lockedCcOf(${ownerParty.split('::')[0]}) error: ${String(err)}`,
+      );
       return 0;
     }
   }
@@ -79,12 +81,16 @@ export class LockEligibilityService {
    * Term (detik) dihitung dari selisih expiresAt − lockedAt on-chain, lalu
    * di-match ke LOCK_TERM_OPTIONS supaya termKey konsisten dengan lock normal.
    */
-  async getOnChainLockedAmulets(ownerParty: string): Promise<OnChainLockedAmulet[]> {
+  async getOnChainLockedAmulets(
+    ownerParty: string,
+  ): Promise<OnChainLockedAmulet[]> {
     if (!ownerParty || ownerParty.startsWith('canquest:')) return [];
     try {
       const raw = await this.ledger.findLockedAmulets(ownerParty);
       // Tabel term key → seconds; dipakai untuk tebak termKey yang paling dekat.
-      const { map } = parseLockTerms(this.config.get<string>('LOCK_TERM_OPTIONS'));
+      const { map } = parseLockTerms(
+        this.config.get<string>('LOCK_TERM_OPTIONS'),
+      );
       const termSecondsList = [...map.values()].sort((a, b) => a - b);
       return raw.map((l) => {
         const expiresMs = Date.parse(l.expiresAt);
@@ -104,7 +110,9 @@ export class LockEligibilityService {
         };
       });
     } catch (err) {
-      this.logger.warn(`getOnChainLockedAmulets(${ownerParty.split('::')[0]}) error: ${String(err)}`);
+      this.logger.warn(
+        `getOnChainLockedAmulets(${ownerParty.split('::')[0]}) error: ${String(err)}`,
+      );
       return [];
     }
   }
@@ -170,7 +178,9 @@ export class LockEligibilityService {
     const orphans = onChain.filter((l) => !knownCids.has(l.contractId));
     if (orphans.length === 0) return 0;
 
-    const { map } = parseLockTerms(this.config.get<string>('LOCK_TERM_OPTIONS'));
+    const { map } = parseLockTerms(
+      this.config.get<string>('LOCK_TERM_OPTIONS'),
+    );
 
     let created = 0;
     for (const lock of orphans) {
@@ -183,7 +193,11 @@ export class LockEligibilityService {
       }
       const expiresAt = new Date(expiresMs);
       const termSeconds = lock.termSeconds || 0;
-      const termKey = this.bestTermKey(map, termSeconds, [...map.values()].sort((a, b) => a - b));
+      const termKey = this.bestTermKey(
+        map,
+        termSeconds,
+        [...map.values()].sort((a, b) => a - b),
+      );
       const lockedAt = new Date(Math.max(0, expiresMs - termSeconds * 1000));
 
       try {
@@ -204,7 +218,7 @@ export class LockEligibilityService {
         created++;
         this.logger.log(
           `reconcile: backfilled orphan LockedAmulet cid=${lock.contractId.slice(0, 16)}… ` +
-          `amount=${lock.amount} owner=${ownerParty.split('::')[0]} expires=${expiresAt.toISOString()}`,
+            `amount=${lock.amount} owner=${ownerParty.split('::')[0]} expires=${expiresAt.toISOString()}`,
         );
       } catch (err) {
         // P2002 (unique) tidak mungkin di sini (cid unik), tapi jaga-jaga: skip.
