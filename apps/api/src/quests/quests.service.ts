@@ -31,6 +31,7 @@ import {
 import { CantonLedgerService } from '../canton/canton-ledger.service';
 import { CcInboundSyncService } from '../canton/cc-inbound-sync.service';
 import { SpliceValidatorService } from '../canton/splice-validator.service';
+import { LockEligibilityService } from '../canton/lock-eligibility.service';
 import { ProfileAvatarService } from '../users/profile-avatar.service';
 import { resolvePublicAvatarUrl } from '../users/user-avatar-url';
 import { PointsService } from '../users/points.service';
@@ -90,7 +91,75 @@ export class QuestsService {
     private readonly inboundSync: CcInboundSyncService,
     private readonly config: ConfigService,
     private readonly storage: R2StorageService,
+    private readonly lockEligibility: LockEligibilityService,
   ) {}
+
+  /** Biaya poin untuk ikut satu campaign Earn (jalur method='points'). */
+  private readonly earnEntryCostPoints = 200;
+
+  /**
+   * Gate akses campaign Earn (per-campaign, first participation).
+   * User harus penuhi SALAH SATU:
+   *   1. Lock ≥ {LOCK_TIER_FULL} CC on-chain (cc_lock) — reuse LockEligibilityService.
+   *   2. Spend {earnEntryCostPoints} points — catat EarnEntry pointsSpent.
+   * Dipasang di submitTask: dicek hanya saat user belum punya EarnEntry maupun
+   * submission untuk campaign ini. Pencatatan EarnEntry atomik via upsert idempoten.
+   */
+  private async ensureEarnEntry(params: {
+    userId: string;
+    userPartyId: string | null;
+    questId: string;
+  }): Promise<void> {
+    // Sudah ada entry → gate sudah dilewati sebelumnya.
+    const existing = await this.prisma.earnEntry.findUnique({
+      where: { userId_questId: { userId: params.userId, questId: params.questId } },
+    });
+    if (existing) return;
+
+    // Cek jalur cc_lock dulu (gratis dari sisi points): user punya lock ≥30 CC?
+    if (params.userPartyId) {
+      const canJoin = await this.lockEligibility.canJoinEarn(params.userPartyId);
+      if (canJoin) {
+        // Catat entry cc_lock. ccLockedMicro = 0 di sini karena jumlah lock dibaca
+        // on-chain (sumber kebenaran); EarnEntry hanya penanda method akses.
+        await this.prisma.earnEntry.upsert({
+          where: { userId_questId: { userId: params.userId, questId: params.questId } },
+          create: {
+            userId: params.userId,
+            questId: params.questId,
+            method: 'cc_lock',
+            pointsSpent: 0,
+          },
+          update: {},
+        });
+        return;
+      }
+    }
+
+    // Jalur points: cek saldo net, debit via EarnEntry dalam transaksi (anti double-charge).
+    const netPoints = await this.points.getNetPoints(params.userId);
+    if (netPoints < this.earnEntryCostPoints) {
+      throw new BadRequestException(
+        `Akses Earn butuh ${this.earnEntryCostPoints} pts (atau kunci 30 CC). Kamu punya ${netPoints} pts.`,
+      );
+    }
+    await this.prisma.$transaction(async (tx) => {
+      // Lock row-level: re-cek EarnEntry di dalam tx agar dua request paralel
+      // tidak sama-sama lolos dan menulis dua debit.
+      const again = await tx.earnEntry.findUnique({
+        where: { userId_questId: { userId: params.userId, questId: params.questId } },
+      });
+      if (again) return;
+      await tx.earnEntry.create({
+        data: {
+          userId: params.userId,
+          questId: params.questId,
+          method: 'points',
+          pointsSpent: this.earnEntryCostPoints,
+        },
+      });
+    });
+  }
 
   /** Map internal fee/ledger errors to a message the user can act on. */
   private fcfsClaimErrorMessage(detail: string): string {
@@ -901,6 +970,11 @@ export class QuestsService {
     const taskType = this.normalizeTaskType(task.type);
     const repeatable24h =
       quest.questKind === QuestKind.EARN_HUB && taskType === 'daily_check_in';
+
+    // Gate akses Earn: per-campaign, first participation. CAMPAIGN saja (bukan EARN_HUB).
+    if (quest.questKind === QuestKind.CAMPAIGN) {
+      await this.ensureEarnEntry({ userId, userPartyId, questId });
+    }
 
     const existing = await this.prisma.questSubmission.findUnique({
       where: { userId_taskId: { userId, taskId } },
@@ -2831,7 +2905,7 @@ export class QuestsService {
 
   /**
    * Leaderboard — satu rumus poin untuk weekly / monthly / all-time:
-   * task earn + quest/campaign bonus + spin (points prize) + referral.
+   * task earn + quest/campaign bonus + referral.
    */
   async getLeaderboard(
     period: 'weekly' | 'monthly' | 'all',
@@ -2839,7 +2913,7 @@ export class QuestsService {
     pageSize = 10,
   ): Promise<{ rows: LeaderboardRow[]; total: number; page: number; pageSize: number }> {
     const since = this.leaderboardSince(period);
-    // Net points = earnPoints - spin cost spent (satu sumber kebenaran untuk leaderboard)
+    // Net points = earnPoints - earn entry cost spent (satu sumber kebenaran untuk leaderboard)
     const aggregated = await this.points.buildNetPointsByUser(since);
     const sorted = aggregated; // buildNetPointsByUser sudah sorted desc
     const total = sorted.length;
@@ -2931,7 +3005,7 @@ export class QuestsService {
     totalPages: number;
   }> {
     const fetchCap = 100;
-    const [submissions, txs, completions, spinWins, referrals] = await Promise.all([
+    const [submissions, txs, completions, referrals] = await Promise.all([
       this.prisma.questSubmission.findMany({
         where: { userId, status: 'VERIFIED' },
         orderBy: { verifiedAt: 'desc' },
@@ -2948,12 +3022,6 @@ export class QuestsService {
         orderBy: { completedAt: 'desc' },
         take: fetchCap,
         include: { quest: { select: { title: true, rewardCc: true } } },
-      }),
-      this.prisma.spinResult.findMany({
-        where: { userId },
-        orderBy: { createdAt: 'desc' },
-        take: fetchCap,
-        include: { spinItem: { select: { label: true, rewardType: true, rewardPoints: true } } },
       }),
       this.prisma.referralReward.findMany({
         where: { referrerId: userId },
@@ -2979,18 +3047,6 @@ export class QuestsService {
         title: 'Task verified',
         detail: `${s.task.title} · +${s.task.points} pts`,
         time: (s.verifiedAt ?? s.submittedAt).toISOString(),
-      });
-    }
-
-    for (const r of spinWins) {
-      if (r.spinItem.rewardType !== 'points' || (r.spinItem.rewardPoints ?? 0) <= 0) {
-        continue;
-      }
-      items.push({
-        type: 'task_verified',
-        title: 'Spin reward',
-        detail: `${r.spinItem.label} · +${r.spinItem.rewardPoints} pts`,
-        time: r.createdAt.toISOString(),
       });
     }
 

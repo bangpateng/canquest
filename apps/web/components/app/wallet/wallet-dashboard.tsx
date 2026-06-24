@@ -18,10 +18,9 @@ interface WalletDashboardProps {
   onRefresh?: () => void;
 }
 
-/** tierLabel: FULL → "Full access" (hijau), SPIN → "Spin only" (kuning). */
-function tierBadge(tier: "NONE" | "SPIN" | "FULL") {
+/** tierLabel: FULL → "Full access" (hijau), NONE → kosong. */
+function tierBadge(tier: "NONE" | "FULL") {
   if (tier === "FULL") return { label: "Full access", color: "text-emerald-400" };
-  if (tier === "SPIN") return { label: "Spin only", color: "text-amber-400" };
   return { label: "", color: "text-slate-400" };
 }
 
@@ -158,7 +157,7 @@ function LockStatusBar({
   status,
   onManage,
 }: {
-  status: { lockedCc: number; tier: "NONE" | "SPIN" | "FULL" };
+  status: { lockedCc: number; tier: "NONE" | "FULL" };
   onManage: () => void;
 }) {
   const hasLock = status.lockedCc > 0;

@@ -1,7 +1,6 @@
 import {
   Body,
   Controller,
-  ForbiddenException,
   Get,
   Logger,
   Param,
@@ -20,7 +19,6 @@ import { assertHasRealWallet } from '../common/wallet-policy';
 import { QuestsService } from './quests.service';
 import { UsersService } from '../users/users.service';
 import { FeaturedAppActivityService } from '../canton/featured-app-activity.service';
-import { LockEligibilityService } from '../canton/lock-eligibility.service';
 import { LedgerQueueService } from '../queue/ledger-queue.service';
 
 type AuthedReq = Request & { user: { userId: string; email: string } };
@@ -35,7 +33,6 @@ export class QuestsController {
     private readonly users: UsersService,
     private readonly featuredActivity: FeaturedAppActivityService,
     private readonly ledgerQueue: LedgerQueueService,
-    private readonly lockEligibility: LockEligibilityService,
     private readonly config: ConfigService,
   ) {}
 
@@ -276,14 +273,6 @@ export class QuestsController {
         ok: false,
         message: 'Create your Canton wallet before submitting the quest',
       };
-    }
-
-    // CC Lock guard (Spec CC Lock BAGIAN 4): Earn (CAMPAIGN) butuh ≥30 CC terkunci.
-    // EARN_HUB daily tasks TIDAK terkena guard. Wallet sudah dipastikan ada di atas.
-    if (questKind === QuestKind.CAMPAIGN && user.cantonPartyId) {
-      if (!(await this.lockEligibility.canJoinEarn(user.cantonPartyId))) {
-        throw new ForbiddenException('Kunci minimal 30 CC untuk ikut Earn');
-      }
     }
 
     const result = await this.quests.submitQuest({

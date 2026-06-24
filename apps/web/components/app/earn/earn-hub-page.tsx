@@ -135,7 +135,7 @@ export function EarnHubPage() {
                   </span>
                 </p>
                 <p className="mt-3 text-xs sm:text-sm font-normal leading-relaxed text-slate-400 sm:mt-4 max-w-md">
-                  Complete daily tasks, invite friends, join partner campaigns, and spin the wheel to earn more.
+                  Complete daily tasks, invite friends, and join partner campaigns to earn more.
                 </p>
 
                 {/* Quick Actions */}
@@ -145,12 +145,6 @@ export function EarnHubPage() {
                     className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10 hover:shadow-[0_0_20px_rgb(var(--canton-rgb)/0.08)] sm:px-5 sm:py-3"
                   >
                     View Leaderboard
-                  </Link>
-                  <Link
-                    href={ROUTES.spinReward}
-                    className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm font-semibold text-slate-400 transition-all duration-200 hover:border-white/[0.15] hover:text-white hover:bg-white/[0.05] sm:px-5 sm:py-3"
-                  >
-                    Spend Points
                   </Link>
                 </div>
               </>

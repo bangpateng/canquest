@@ -21,7 +21,7 @@ const items = [
   {
     icon: ShieldCheck,
     title: "Reward integrity",
-    body: "Spin pools, treasury fees, and winner selection use secure server randomness with ledger-aligned records.",
+    body: "Reward pools, treasury fees, and winner selection use secure server randomness with ledger-aligned records.",
   },
 ];
 

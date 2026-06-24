@@ -1,5 +1,5 @@
 /**
- * One-off: align User.earnPoints with verified tasks, quest completions, spin point wins.
+ * One-off: align User.earnPoints with verified tasks and quest completions.
  * Usage: node scripts/sync-all-earn-points.cjs
  */
 const { PrismaClient } = require('@prisma/client');
@@ -7,7 +7,7 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 async function computePoints(userId) {
-  const [submissions, completions, spinWins] = await Promise.all([
+  const [submissions, completions] = await Promise.all([
     prisma.questSubmission.findMany({
       where: { userId, status: 'VERIFIED' },
       include: { task: { select: { points: true } } },
@@ -16,17 +16,10 @@ async function computePoints(userId) {
       where: { userId },
       include: { quest: { select: { rewardCc: true } } },
     }),
-    prisma.spinResult.findMany({
-      where: { userId },
-      include: { spinItem: { select: { rewardType: true, rewardPoints: true } } },
-    }),
   ]);
 
   let total = submissions.reduce((s, sub) => s + sub.task.points, 0);
   total += completions.reduce((s, c) => s + Math.round(c.quest.rewardCc * 10), 0);
-  total += spinWins
-    .filter((r) => r.spinItem.rewardType === 'points')
-    .reduce((s, r) => s + (r.spinItem.rewardPoints ?? 0), 0);
   return total;
 }
 

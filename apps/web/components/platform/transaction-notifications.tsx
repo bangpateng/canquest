@@ -288,7 +288,7 @@ export function TransactionNotifications() {
       case "QUEST_REWARD":
         return t("notifications.toastEarn", { amount });
       case "SPIN_REWARD":
-        return t("notifications.toastSpin", { amount });
+        return t("notifications.toastEarn", { amount });
       case "TRANSFER_OUT":
         return t("notifications.toastSent", { amount });
       case "CC_LOCK":

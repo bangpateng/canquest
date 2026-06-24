@@ -11,7 +11,6 @@ import { PartyModule } from './party/party.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { QuestsModule } from './quests/quests.module';
 import { AdminModule } from './admin/admin.module';
-import { SpinModule } from './spin/spin.module';
 import { LedgerIndexerModule } from './ledger-indexer/ledger-indexer.module';
 import { PublicModule } from './public/public.module';
 import { EarnModule } from './earn/earn.module';
@@ -46,7 +45,6 @@ const resolveApiEnvPaths = (): string[] => [
     AdminModule,
     // ── New modules ─────────────────────────────────────────────
     QueueModule,
-    SpinModule,
     LedgerIndexerModule,
     PublicModule,
     UploadsModule,

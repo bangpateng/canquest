@@ -127,7 +127,7 @@ export function QuestSubmitSection({
             <Link href="/wallet" className="font-semibold underline underline-offset-2">
               Create your wallet
             </Link>{" "}
-            first — required for Quest, Earn, and Spin Reward.
+            first — required for Quest and Earn.
           </p>
         )}
         {submitError && (

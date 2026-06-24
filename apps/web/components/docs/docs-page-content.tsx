@@ -3,7 +3,6 @@ import {
   LayoutGrid,
   Settings,
   Sparkles,
-  Ticket,
   Trophy,
   Wallet,
   type LucideIcon,
@@ -62,17 +61,6 @@ const APP_MENUS: MenuItem[] = [
       "Invite friends with your referral link to earn points per verified signup.",
     ],
     note: "Requires a Canton wallet to submit tasks and redeem rewards.",
-  },
-  {
-    icon: Ticket,
-    title: "Spin Reward",
-    path: ROUTES.spinReward,
-    summary: "Spend quest points for bonus CC and prizes.",
-    details: [
-      "Spin Reward is planned as a points-based mini-game.",
-      "Winnings will be delivered to your Canton wallet when the feature launches.",
-    ],
-    note: "Coming soon — the page is visible in the menu but not yet playable.",
   },
   {
     icon: Wallet,
@@ -243,8 +231,8 @@ export function DocsPageContent() {
               <Link href="/wallet" className="text-canton underline-offset-2 hover:underline">
                 Wallet
               </Link>{" "}
-              and enter a team invite code to create your Canton wallet. Earn and Spin Reward
-              require a wallet; Quest task submission and redemption do as well.
+              and enter a team invite code to create your Canton wallet. Earn
+              requires a wallet; Quest task submission and redemption do as well.
             </li>
             <li>
               <strong className="font-medium text-[var(--foreground)]">Start earning</strong> —
@@ -333,7 +321,7 @@ export function DocsPageContent() {
           </ul>
           <p>
             The platform header also includes theme toggle (light/dark), language picker, and
-            notifications for rewards such as CC received from Earn or Spin.
+            notifications for rewards such as CC received from Earn or quests.
           </p>
         </DocsSection>
 
@@ -391,7 +379,7 @@ export function DocsPageContent() {
 
             <DocsSubsection id="wallet-cc" title="Wallet & CC">
               <ul className="list-disc space-y-1 pl-5">
-                <li>Hold CC from campaign claims, quest redemptions, and future spin prizes.</li>
+                <li>Hold CC from campaign claims and quest redemptions.</li>
                 <li>View balance and transaction history in one place.</li>
                 <li>Send CC to other users when you are ready.</li>
               </ul>
@@ -403,14 +391,6 @@ export function DocsPageContent() {
                 <li>Connect Twitter in Settings for tasks that require it.</li>
                 <li>Switch UI language and color theme from the platform toolbar.</li>
               </ul>
-            </DocsSubsection>
-
-            <DocsSubsection id="coming-soon" title="Coming soon">
-              <p>
-                <strong className="font-medium text-[var(--foreground)]">Spin Reward</strong> will
-                let you spend quest points for a chance at bonus CC and other prizes. The menu item
-                is already visible; gameplay will be enabled in a future release.
-              </p>
             </DocsSubsection>
           </div>
 

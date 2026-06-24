@@ -7,7 +7,7 @@ export function hasRealWallet(cantonPartyId: string | null | undefined): boolean
 }
 
 export const WALLET_REQUIRED_MESSAGE =
-  'Please create your Canton wallet first to access Earn and Spin Reward.';
+  'Please create your Canton wallet first to access Earn.';
 
 export function assertHasRealWallet(cantonPartyId: string | null | undefined): void {
   if (!hasRealWallet(cantonPartyId)) {

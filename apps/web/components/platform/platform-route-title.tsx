@@ -8,8 +8,6 @@ const ROUTES: { prefix: string; title: string; subtitle: string }[] = [
   { prefix: "/overview", title: "Overview", subtitle: "Profile, rank & activity" },
   { prefix: APP_ROUTES.campaignQuests, title: "Earn", subtitle: "Partner campaigns & missions" },
   { prefix: APP_ROUTES.earnHub, title: "Quest", subtitle: "Daily tasks & redeem" },
-  { prefix: "/spin-reward", title: "Spin Reward", subtitle: "Coming soon" },
-  { prefix: "/spin-daily", title: "Spin Reward", subtitle: "Coming soon" },
   { prefix: "/wallet", title: "Wallet", subtitle: "Send, receive & balance" },
   { prefix: APP_ROUTES.leaderboard, title: "Leaderboard", subtitle: "Weekly, monthly & all-time" },
   { prefix: "/setting", title: "Settings", subtitle: "Profile & preferences" },

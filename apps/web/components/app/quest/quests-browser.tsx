@@ -310,7 +310,7 @@ export function QuestsBrowser({
               onClick={() => loadQuests()}
               className={cn(buttonVariants({ size: "sm" }), "mt-6 rounded-xl sm:mt-8")}
             >
-              {t("spin.retry")}
+              Retry
             </button>
           )}
         </div>

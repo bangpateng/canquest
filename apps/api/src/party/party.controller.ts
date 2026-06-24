@@ -513,7 +513,7 @@ export class PartyController {
     this.logger.warn(
       `Blocked claim-reward attempt user=${req.user.userId.slice(0, 8)} body=${JSON.stringify(body).slice(0, 80)}`,
     );
-    throw new ForbiddenException('This endpoint has been disabled. Rewards are only available via quest/spin flows.');
+    throw new ForbiddenException('This endpoint has been disabled. Rewards are only available via quest flows.');
   }
 
   /**

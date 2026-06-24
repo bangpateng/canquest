@@ -267,7 +267,7 @@ export function AdminUsersPanel() {
       )}
 
       <p className="text-xs text-[var(--muted-foreground)]">
-        Deleting a user removes all app data for that account: login, refresh tokens, CC balance, transaction history, quest completions, submissions, winner records, and spin results. Quest campaigns stay. On-chain Canton wallet/party is not removed from the validator.
+        Deleting a user removes all app data for that account: login, refresh tokens, CC balance, transaction history, quest completions, submissions, and winner records. Quest campaigns stay. On-chain Canton wallet/party is not removed from the validator.
       </p>
 
       {loading && !data ? (

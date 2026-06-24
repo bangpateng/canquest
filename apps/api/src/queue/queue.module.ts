@@ -1,9 +1,8 @@
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bull';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { QUEUE_LEDGER, QUEUE_SPIN } from './queue.constants';
+import { QUEUE_LEDGER } from './queue.constants';
 import { LedgerJobProcessor } from './ledger-job.processor';
-import { SpinJobProcessor } from './spin-job.processor';
 import { LedgerQueueService } from './ledger-queue.service';
 import { CantonModule } from '../canton/canton.module';
 import { UsersModule } from '../users/users.module';
@@ -46,13 +45,12 @@ import { PrismaModule } from '../prisma/prisma.module';
     }),
     BullModule.registerQueue(
       { name: QUEUE_LEDGER },
-      { name: QUEUE_SPIN },
     ),
     CantonModule,
     UsersModule,
     PrismaModule,
   ],
-  providers: [LedgerJobProcessor, SpinJobProcessor, LedgerQueueService],
+  providers: [LedgerJobProcessor, LedgerQueueService],
   exports: [BullModule, LedgerQueueService],
 })
 export class QueueModule {}

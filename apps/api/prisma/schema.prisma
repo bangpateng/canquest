@@ -11,7 +11,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// Application state: auth, quests, spins, etc.
+/// Application state: auth, quests, earn entries, etc.
 model User {
   id                      String                @id @default(cuid())
   email                   String                @unique
@@ -46,7 +46,7 @@ model User {
   bannedAt                DateTime?
   /// Admin-supplied reason for the current ban/suspend (null when ACTIVE).
   banReason               String?
-  /// Lifetime earn points (quest/earn tasks, completion bonus, spin prizes, referral) — synced via PointsService.
+  /// Lifetime earn points (quest/earn tasks, completion bonus, referral) — synced via PointsService.
   earnPoints              Int                   @default(0)
   /// Linked X (Twitter) handle for social task verification (twitterapi.io).
   twitterUsername         String?               @unique
@@ -66,12 +66,34 @@ model User {
   questSubmissions        QuestSubmission[]
   winnerDraws             WinnerDraw[]
   assignedCodes           InviteCodePool[]
-  spinResults             SpinResult[]
   referralRewardsGiven    ReferralReward[]      @relation("ReferralRewardsGiven")
   referralRewardReceived  ReferralReward?       @relation("ReferralRewardReceived")
   walletAllocations       WalletAllocationLog[]
   redeemedWalletInvites   WalletInviteCode[]    @relation("WalletInviteRedemptions")
   ccLocks                 CcLock[]
+  earnEntries             EarnEntry[]
+}
+
+/// Catatan partisipasi user di campaign Earn — sekaligus sumber pengurang poin
+/// (menggantikan SpinResult sebagai satu-satunya tempat poin terpotong).
+/// Satu baris per (user, quest): gate Earn berlaku per-campaign.
+model EarnEntry {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questId       String
+  /// Metode akses yang dipakai: 'points' | 'cc_lock'
+  method        String
+  /// Poin terpotong (0 jika method = cc_lock)
+  pointsSpent   Int      @default(0)
+  /// CC yang dikunci/terpakai dalam micro-CC (0 jika method = points)
+  ccLockedMicro BigInt   @default(0)
+  /// true jika lock CC sudah dikembalikan (khusus jalur escrow cc_lock)
+  released      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  @@unique([userId, questId])
+  @@index([questId])
 }
 
 /// One-time codes required to create a Canton wallet (admin-generated).
@@ -165,7 +187,7 @@ model CcTransaction {
   type                   CcTransactionType
   /// Human-readable description, e.g. "Quest reward: Daily Login"
   description            String
-  /// Reference to the source (questId, spinId, etc.)
+  /// Reference to the source (questId, earnEntryId, etc.)
   referenceId            String?
   /// Offer / contract ID on Canton (e.g. TransferOffer contract).
   ledgerTxId             String?
@@ -379,62 +401,7 @@ enum UserStatus {
   BANNED
 }
 
-// ═══════════════════════════════════════════════════════════════
-// SPIN REWARD SYSTEM
-// ═══════════════════════════════════════════════════════════════
-
-/**
- * Konfigurasi satu reward item dalam spin pool.
- * Admin membuat beberapa SpinItem per pool, masing-masing punya rarity & reward.
- */
-model SpinItem {
-  id           String       @id @default(cuid())
-  /// Label yang ditampilkan ke user
-  label        String
-  /// Tipe reward: 'cc' | 'points' | 'invite_code' | 'none'
-  rewardType   String       @default("none")
-  /// Jumlah CC jika rewardType = 'cc'
-  rewardCc     Float        @default(0)
-  /// Jumlah points jika rewardType = 'points'
-  rewardPoints Int          @default(0)
-  /// Probabilitas dalam persen (0–100), total semua item harus = 100
-  probability  Float        @default(0)
-  /// Warna hex untuk slot UI, e.g. '#d4ff3f'
-  color        String       @default("#d4ff3f")
-  /// Icon nama (lucide), e.g. 'coins', 'gift', 'x'
-  icon         String       @default("gift")
-  /// Apakah item ini aktif
-  active       Boolean      @default(true)
-  /// Inventory terbatas (null = unlimited)
-  inventory    Int?
-  /// Sudah berapa kali item ini dimenangkan
-  wonCount     Int          @default(0)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  spinResults  SpinResult[]
-}
-
-/**
- * Hasil satu putaran spin oleh satu user.
- * Dibuat saat spin terjadi, status PENDING → DELIVERED setelah reward dikirim.
- */
-model SpinResult {
-  id          String    @id @default(cuid())
-  userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  spinItemId  String
-  spinItem    SpinItem  @relation(fields: [spinItemId], references: [id])
-  /// Berapa points yang digunakan untuk spin ini
-  pointsSpent Int       @default(0)
-  /// Status pengiriman reward
-  delivered   Boolean   @default(false)
-  deliveredAt DateTime?
-  /// Canton ledger TX ID jika reward = CC
-  ledgerTxId  String?
-  createdAt   DateTime  @default(now())
-}
-
-/// Key-value store untuk konfigurasi aplikasi (spin cost, dll).
+/// Key-value store untuk konfigurasi aplikasi (earn entry cost, dll).
 model AppSetting {
   key       String   @id
   value     String

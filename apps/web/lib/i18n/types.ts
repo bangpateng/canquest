@@ -10,7 +10,6 @@ export type PlatformMessages = {
     overview: string;
     earn: string;
     quests: string;
-    spin: string;
     wallet: string;
     leaderboard: string;
     settings: string;
@@ -40,7 +39,6 @@ export type PlatformMessages = {
     markRead: string;
     viewWallet: string;
     toastEarn: string;
-    toastSpin: string;
     toastReceived: string;
     toastSent: string;
     toastLocked: string;
@@ -245,24 +243,5 @@ export type PlatformMessages = {
     referralLoadError: string;
     referralCopyError: string;
     referralCodeOptional: string;
-  };
-  spin: {
-    pageLead: string;
-    pointsAvailable: string;
-    spinCost: string;
-    spinNow: string;
-    spinning: string;
-    rewardsPool: string;
-    history: string;
-    historyEmpty: string;
-    noItems: string;
-    noItemsHint: string;
-    statusDelivered: string;
-    statusPending: string;
-    pointsSpent: string;
-    loadError: string;
-    retry: string;
-    comingSoon: string;
-    comingSoonHint: string;
   };
 };

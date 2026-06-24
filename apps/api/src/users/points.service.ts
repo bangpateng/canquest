@@ -27,7 +27,6 @@ export class PointsService {
    * Lifetime or period points from every source:
    * - Verified quest / earn / campaign task submissions
    * - Quest completion bonus (rewardCc × 10)
-   * - Spin wheel wins (rewardType = points)
    * - Referral rewards (referrer)
    */
   async aggregateUserPoints(userId: string, since?: Date): Promise<number> {
@@ -81,18 +80,6 @@ export class PointsService {
       bump(c.user, Math.round(c.quest.rewardCc * 10));
     }
 
-    const spinWins = await this.prisma.spinResult.findMany({
-      where: since ? { createdAt: { gte: since } } : {},
-      include: {
-        spinItem: { select: { rewardType: true, rewardPoints: true } },
-        user: { select: userSelect },
-      },
-    });
-    for (const r of spinWins) {
-      if (r.spinItem.rewardType !== 'points') continue;
-      bump(r.user, r.spinItem.rewardPoints ?? 0);
-    }
-
     const referrals = await this.prisma.referralReward.findMany({
       where: since ? { createdAt: { gte: since } } : {},
       include: { referrer: { select: userSelect } },
@@ -128,14 +115,15 @@ export class PointsService {
   }
 
   /**
-   * Net spendable points = earnPoints - total spin cost spent.
+   * Net spendable points = earnPoints - total earn entry cost spent.
    * Ini adalah satu-satunya sumber kebenaran untuk semua halaman
-   * (spin, dashboard, quest, leaderboard).
+   * (dashboard, quest, leaderboard). Poin terpotong tiap user ikut Earn
+   * (jalur method='points') — catatan ada di model EarnEntry.
    */
   async getNetPoints(userId: string): Promise<number> {
     const [earnPoints, spentResult] = await Promise.all([
       this.reconcileUserEarnPoints(userId),
-      this.prisma.spinResult.aggregate({
+      this.prisma.earnEntry.aggregate({
         where: { userId },
         _sum: { pointsSpent: true },
       }),
@@ -145,12 +133,12 @@ export class PointsService {
   }
 
   /**
-   * Net points per user untuk leaderboard — SINKRON dengan spin & dashboard.
+   * Net points per user untuk leaderboard — SINKRON dengan dashboard.
    *
-   * Net = earnPoints - total spin cost spent (sama persis dengan halaman Spin).
+   * Net = earnPoints - total earn entry cost spent.
    * Berlaku untuk semua periode (weekly, monthly, all).
    *
-   * Untuk weekly/monthly: hitung earned dalam periode, kurangi spin cost
+   * Untuk weekly/monthly: hitung earned dalam periode, kurangi earn entry cost
    * dalam periode yang sama.
    */
   async buildNetPointsByUser(since?: Date): Promise<PointsAggregateRow[]> {
@@ -158,19 +146,19 @@ export class PointsService {
     const earnedRows = await this.buildPointsByUser(since);
     if (earnedRows.length === 0) return [];
 
-    // 2. Hitung total spin cost per user dalam periode yang sama
-    const spinSpentRows = await this.prisma.spinResult.groupBy({
+    // 2. Hitung total earn entry cost per user dalam periode yang sama
+    const entrySpentRows = await this.prisma.earnEntry.groupBy({
       by: ['userId'],
       where: since ? { createdAt: { gte: since } } : {},
       _sum: { pointsSpent: true },
     });
 
     const spentMap = new Map<string, number>();
-    for (const row of spinSpentRows) {
+    for (const row of entrySpentRows) {
       spentMap.set(row.userId, row._sum.pointsSpent ?? 0);
     }
 
-    // 3. Net = earned - spin cost (min 0)
+    // 3. Net = earned - earn entry cost (min 0)
     return earnedRows
       .map((r) => ({
         ...r,

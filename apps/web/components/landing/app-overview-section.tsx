@@ -2,7 +2,6 @@ import {
   Gift,
   LayoutGrid,
   Sparkles,
-  Ticket,
   Trophy,
   Wallet,
   type LucideIcon,
@@ -14,7 +13,6 @@ const menus: { icon: LucideIcon; title: string; description: string }[] = [
   { icon: LayoutGrid, title: "Overview", description: "Dashboard and activity" },
   { icon: Gift, title: "Quest", description: "Daily hub tasks" },
   { icon: Sparkles, title: "Earn", description: "Partner campaigns" },
-  { icon: Ticket, title: "Spin", description: "Points → prizes" },
   { icon: Wallet, title: "Wallet", description: "Balance & send CC" },
   { icon: Trophy, title: "Leaderboard", description: "Rankings" },
 ];

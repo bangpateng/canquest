@@ -225,7 +225,7 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException();
     }
-    // Net points = earnPoints - spin cost spent (satu sumber kebenaran)
+    // Net points = earnPoints - earn entry cost spent (satu sumber kebenaran)
     const earnPoints = await this.users.getNetPoints(userId);
     return {
       id: user.id,

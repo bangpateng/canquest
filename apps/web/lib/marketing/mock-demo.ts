@@ -106,7 +106,7 @@ export const MOCK_QUESTS: MockQuest[] = [
     title: "Validator education cohort",
     org: "Ecosystem Fund",
     orgSlug: "EF",
-    rewardPool: "Spin tickets ×400",
+    rewardPool: "Invite codes ×400",
     participants: "8.9k",
     deadline: "Jul 1, 2026",
     taskCount: 8,
@@ -365,7 +365,6 @@ const EXTRA_LEADERBOARD_HANDLES = [
   "radix_dev",
   "infra_nina",
   "ledger_ada",
-  "spin_host",
   "vault_k",
   "oracle_m",
   "scout_n",
@@ -498,14 +497,6 @@ export const MOCK_LEADERBOARD: Record<"weekly" | "monthly" | "all", MockLeaderRo
   all: extendLeaderboardRows(BASE_ALL, EXTRA_LEADERBOARD_HANDLES, 48_000),
 };
 
-export const MOCK_SPIN_TIERS = [
-  { name: "Legendary bundle", pct: "0.5%", color: "text-canton" },
-  { name: "Rare reward", pct: "1.5%", color: "text-violet-500" },
-  { name: "CC drop", pct: "3%", color: "text-canton-muted" },
-  { name: "WL code", pct: "5%", color: "text-sky-600" },
-  { name: "Better luck next time", pct: "90%", color: "text-[var(--muted-foreground)]" },
-];
-
 export const MOCK_WALLET = {
   partyId: "canquest:user:alex_canton:demo01",
   ccBalance: "1,248.55",
@@ -559,15 +550,6 @@ export const MOCK_TRANSACTIONS: MockTx[] = [
     counterparty: "party::vala_ops",
   },
   {
-    id: "cq-tx-661d",
-    type: "Spin debit",
-    amount: "−500 pts",
-    fee: "—",
-    status: "Settled",
-    time: "May 11 · 20:31",
-    counterparty: "engine::spin_v2",
-  },
-  {
     id: "cq-tx-pending",
     type: "Send CC",
     amount: "−80 CC",
@@ -580,7 +562,7 @@ export const MOCK_TRANSACTIONS: MockTx[] = [
 
 export const MOCK_ACTIVITIES = [
   { title: "Quest cleared", detail: "Canton Builder Wave 3 · +180 pts", time: "2h ago" },
-  { title: "Spin redeemed", detail: "WL code · ALPHA-CRAFT-09", time: "5h ago" },
+  { title: "Referral reward", detail: "Friend verified · +50 pts", time: "5h ago" },
   { title: "CC transfer settled", detail: "To treasury fee route · −3 CC fee", time: "Yesterday" },
   { title: "Username locked", detail: "alex_canton bound to party placeholder", time: "May 10" },
 ];

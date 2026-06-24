@@ -42,7 +42,6 @@ async function counts() {
     inviteAssigned: await prisma.inviteCodePool.count({ where: { userId: { not: null } } }),
     ccTransactions: await prisma.ccTransaction.count(),
     ccBalances: await prisma.ccBalance.count(),
-    spinResults: await prisma.spinResult.count(),
     refreshTokens: await prisma.refreshToken.count(),
   };
 }

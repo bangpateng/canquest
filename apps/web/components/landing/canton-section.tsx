@@ -8,7 +8,7 @@ export function CantonSection() {
         <CcRewardLogo size={36} className="mx-auto" />
         <h2 className="type-display mt-5 text-xl font-bold sm:text-2xl">Canton wallet</h2>
         <p className="mt-2 text-sm leading-relaxed text-[var(--muted-foreground)]">
-          Your party ID holds CC from campaign claims and spin prizes. Send to other users when
+          Your party ID holds CC from campaign claims and quest rewards. Send to other users when
           you are ready.
         </p>
         <ul className="mt-6 space-y-2 text-left text-sm text-[var(--muted-foreground)]">

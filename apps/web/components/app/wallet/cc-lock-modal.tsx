@@ -211,7 +211,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
               disabled={lockState === "loading"}
               className="w-full rounded-2xl border border-white/5 bg-white/5 px-4 py-3 text-base font-bold tabular-nums text-slate-100 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
             />
-            <p className="text-xs text-slate-500">Lock 10 CC: Access Spin or Lock 30 CC: Access Spin & Earn</p>
+            <p className="text-xs text-slate-500">Lock 30 CC to unlock Earn campaigns.</p>
           </div>
 
           {/* Pilihan durasi — di-render dari GET /lock-terms, BUKAN hard-code */}

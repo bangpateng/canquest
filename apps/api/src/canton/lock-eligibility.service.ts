@@ -2,14 +2,13 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CantonLedgerService } from './canton-ledger.service';
 
-export type LockTier = 'NONE' | 'SPIN' | 'FULL';
+export type LockTier = 'NONE' | 'FULL';
 
 /**
  * CC Lock eligibility (non-custodial) — Spec CC Lock CanQuest.
  *
  * Menentukan tier user dari jumlah CC terkunci on-chain:
- *   - ≥ {LOCK_TIER_FULL}  (default 30) → FULL  (Earn quest + Spin)
- *   - ≥ {LOCK_TIER_SPIN}  (default 5)  → SPIN  (Spin saja)
+ *   - ≥ {LOCK_TIER_FULL}  (default 30) → FULL  (boleh ikut Earn)
  *   - else                              → NONE
  *
  * SUMBER KEBENARAN JUMLAH TERKUNCI = on-chain (semangat ATURAN EMAS #4 MD).
@@ -25,14 +24,12 @@ export type LockTier = 'NONE' | 'SPIN' | 'FULL';
 export class LockEligibilityService {
   private readonly logger = new Logger(LockEligibilityService.name);
   private readonly tierFull: number;
-  private readonly tierSpin: number;
 
   constructor(
     private readonly config: ConfigService,
     private readonly ledger: CantonLedgerService,
   ) {
     this.tierFull = Number(this.config.get<string>('LOCK_TIER_FULL') ?? '30');
-    this.tierSpin = Number(this.config.get<string>('LOCK_TIER_SPIN') ?? '5');
   }
 
   /**
@@ -52,21 +49,14 @@ export class LockEligibilityService {
     }
   }
 
-  /** Tier dari jumlah terkunci: ≥FULL → FULL ; ≥SPIN → SPIN ; else NONE. */
+  /** Tier dari jumlah terkunci: ≥FULL → FULL ; else NONE. */
   async tierOf(ownerParty: string): Promise<LockTier> {
     const locked = await this.lockedCcOf(ownerParty);
-    if (locked >= this.tierFull) return 'FULL';
-    if (locked >= this.tierSpin) return 'SPIN';
-    return 'NONE';
+    return locked >= this.tierFull ? 'FULL' : 'NONE';
   }
 
   /** Boleh ikut Earn quest (partner campaigns) — butuh tier FULL (≥30 CC). */
   async canJoinEarn(ownerParty: string): Promise<boolean> {
     return (await this.tierOf(ownerParty)) === 'FULL';
-  }
-
-  /** Boleh Spin — tier apa pun selain NONE (≥5 CC). */
-  async canSpin(ownerParty: string): Promise<boolean> {
-    return (await this.tierOf(ownerParty)) !== 'NONE';
   }
 }

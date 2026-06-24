@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useEffect } from "react";
-import { Sparkles, Ticket, Wallet, X } from "lucide-react";
+import { Sparkles, Wallet, X } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
 
 const WALLET_FEATURES = [
   { icon: Sparkles, label: "Earn", desc: "Partner campaigns" },
-  { icon: Ticket, label: "Spin Reward", desc: "Spend points, win CC" },
+  { icon: Wallet, label: "Wallet", desc: "Send & receive CC" },
 ] as const;
 
 type WalletCreatePromptProps = {
@@ -100,7 +100,7 @@ function WalletCreatePromptContent({
             Create your wallet first
           </p>
           <p className="mt-2 text-sm font-medium text-orange-200/85">
-            Needed for Earn campaigns and Spin Reward.
+            Needed to access Earn campaigns.
           </p>
         </div>
       </div>

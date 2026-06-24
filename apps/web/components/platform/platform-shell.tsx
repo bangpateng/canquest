@@ -7,7 +7,6 @@ import {
   Gift,
   LayoutGrid,
   Settings,
-  Ticket,
   Trophy,
   Wallet,
   Sparkles,
@@ -24,13 +23,12 @@ import { cn } from "@/lib/utils/utils";
 
 const navItems: {
   href: string;
-  key: "overview" | "earn" | "quests" | "spin" | "wallet" | "leaderboard" | "settings";
+  key: "overview" | "earn" | "quests" | "wallet" | "leaderboard" | "settings";
   icon: LucideIcon;
 }[] = [
   { href: "/overview", key: "overview", icon: LayoutGrid },
   { href: ROUTES.campaignQuests, key: "earn", icon: Sparkles },
   { href: ROUTES.earnHub, key: "quests", icon: Gift },
-  { href: ROUTES.spinReward, key: "spin", icon: Ticket },
   { href: "/wallet", key: "wallet", icon: Wallet },
   { href: ROUTES.leaderboard, key: "leaderboard", icon: Trophy },
   { href: "/settings", key: "settings", icon: Settings },

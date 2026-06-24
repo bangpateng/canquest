@@ -8,7 +8,6 @@ import {
   ListOrdered,
   Settings,
   Sparkles,
-  Ticket,
   Wallet,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -20,7 +19,6 @@ const navItems: { href: string; label: string; icon: LucideIcon }[] = [
   { href: ROUTES.campaignQuests, label: "Earn", icon: Sparkles },
   { href: ROUTES.earnHub, label: "Quest", icon: Gift },
   { href: "/leaderboard", label: "Rank", icon: ListOrdered },
-  { href: "/spin", label: "Spin", icon: Ticket },
   { href: "/wallet", label: "Wallet", icon: Wallet },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

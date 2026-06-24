@@ -10,7 +10,6 @@ const ROUTES: { prefix: string; title: string; subtitle: string }[] = [
   { prefix: APP_ROUTES.earnHub, title: "Quest", subtitle: "Daily tasks & redeem" },
   { prefix: "/quests", title: "Quest", subtitle: "Partner campaigns & missions" },
   { prefix: "/leaderboard", title: "Leaderboard", subtitle: "Rankings & tiers" },
-  { prefix: "/spin", title: "Spin rewards", subtitle: "Points → prizes" },
   { prefix: "/wallet", title: "Wallet", subtitle: "Send, receive & balance" },
   { prefix: "/transactions", title: "Transactions", subtitle: "Activity log" },
   { prefix: "/settings", title: "Settings", subtitle: "Identity & security" },

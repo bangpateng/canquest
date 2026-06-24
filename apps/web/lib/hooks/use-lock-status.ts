@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-export type LockTier = "NONE" | "SPIN" | "FULL";
+export type LockTier = "NONE" | "FULL";
 
 export interface ActiveLock {
   id: string;

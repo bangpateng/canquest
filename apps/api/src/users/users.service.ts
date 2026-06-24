@@ -263,7 +263,7 @@ export class UsersService {
     amountCc: number;
     type: CcTransactionType;
     description: string;
-    /** questId, spinId, etc. */
+    /** questId, earnEntryId, etc. */
     referenceId?: string | null;
     /** Legacy: stored in referenceId when referenceId is omitted (e.g. transfer peer). */
     counterparty?: string;
@@ -782,7 +782,7 @@ export class UsersService {
     return { items: serialized, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
   }
 
-  /** Lifetime points from Quest menu, Earn hub, campaign tasks, completion bonuses, spin wins. */
+  /** Lifetime points from Quest menu, Earn hub, campaign tasks, completion bonuses, referral. */
   async creditEarnPoints(userId: string, amount: number): Promise<void> {
     if (!Number.isFinite(amount) || amount <= 0) return;
     await this.prisma.user.update({
@@ -811,14 +811,14 @@ export class UsersService {
     });
   }
 
-  /** Align User.earnPoints with quest + earn + spin + referral activity. */
+  /** Align User.earnPoints with quest + earn + referral activity. */
   reconcileEarnPoints(userId: string): Promise<number> {
     return this.points.reconcileUserEarnPoints(userId);
   }
 
   /**
-   * Net spendable points = earnPoints - total spin cost spent.
-   * Satu-satunya sumber kebenaran untuk semua halaman (dashboard, quest, spin, leaderboard).
+   * Net spendable points = earnPoints - total earn entry cost spent.
+   * Satu-satunya sumber kebenaran untuk semua halaman (dashboard, quest, leaderboard).
    */
   getNetPoints(userId: string): Promise<number> {
     return this.points.getNetPoints(userId);
