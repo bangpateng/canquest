@@ -227,9 +227,10 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
         </div>
       </header>
 
-      <CampaignGuide />
-
       <CampaignQuestSidebar quest={quest} />
+
+      {/* Guide cara ikut event — diletakkan tepat di bawah sidebar reward */}
+      <CampaignGuide />
 
       {/* ── Task Panel / Auth Prompt ────────────────────────────────────── */}
       <section className="min-w-0 space-y-4">
