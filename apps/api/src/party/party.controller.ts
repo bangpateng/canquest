@@ -61,32 +61,35 @@ export class PartyController {
   private readonly logger = new Logger(PartyController.name);
 
   /** Cooldown toggle preapproval: 1× per 7 hari (tiap re-enable burn ~1.5 CC). */
-  private static readonly PREAPPROVAL_TOGGLE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+  private static readonly PREAPPROVAL_TOGGLE_COOLDOWN_MS =
+    7 * 24 * 60 * 60 * 1000;
 
   /** Lempar 400 jika masih dalam cooldown 7 hari sejak toggle terakhir. */
-  private assertPreapprovalToggleCooldown(toggledAt: Date | null | undefined): void {
-  if (!toggledAt) return;
+  private assertPreapprovalToggleCooldown(
+    toggledAt: Date | null | undefined,
+  ): void {
+    if (!toggledAt) return;
 
-  const elapsed = Date.now() - new Date(toggledAt).getTime();
-  const remaining = PartyController.PREAPPROVAL_TOGGLE_COOLDOWN_MS - elapsed;
+    const elapsed = Date.now() - new Date(toggledAt).getTime();
+    const remaining = PartyController.PREAPPROVAL_TOGGLE_COOLDOWN_MS - elapsed;
 
-  if (remaining > 0) {
-    const days = Math.ceil(remaining / (24 * 60 * 60 * 1000));
-    
-    // Format tanggal menjadi format yang mudah dibaca, misal: "June 27, 2026"
-    const nextDate = new Date(Date.now() + remaining);
-    const nextAtFormatted = nextDate.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
+    if (remaining > 0) {
+      const days = Math.ceil(remaining / (24 * 60 * 60 * 1000));
 
-    throw new BadRequestException(
-      `Preapproval settings are limited to once per week. ` +
-      `Please try again in ~${days} day(s) (after ${nextAtFormatted}).`,
-    );
+      // Format tanggal menjadi format yang mudah dibaca, misal: "June 27, 2026"
+      const nextDate = new Date(Date.now() + remaining);
+      const nextAtFormatted = nextDate.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
+
+      throw new BadRequestException(
+        `Preapproval settings are limited to once per week. ` +
+          `Please try again in ~${days} day(s) (after ${nextAtFormatted}).`,
+      );
+    }
   }
-}
 
   constructor(
     private readonly users: UsersService,
@@ -147,7 +150,9 @@ export class PartyController {
   @Get('wallet-access')
   @SkipThrottle()
   async walletAccessStatus(@Req() req: AuthedReq) {
-    const hasRedeemedInvite = await this.walletInvites.userHasRedeemedInvite(req.user.userId);
+    const hasRedeemedInvite = await this.walletInvites.userHasRedeemedInvite(
+      req.user.userId,
+    );
     return {
       requiresInviteCode: true,
       hasRedeemedInvite,
@@ -181,7 +186,10 @@ export class PartyController {
     const inviteCode = body.walletInviteCode;
 
     if (needsInviteFlow) {
-      await this.walletInvites.assertCanCreateWallet(req.user.userId, inviteCode);
+      await this.walletInvites.assertCanCreateWallet(
+        req.user.userId,
+        inviteCode,
+      );
     }
 
     let cantonPartyId: string;
@@ -222,7 +230,10 @@ export class PartyController {
 
       // Redeem invite HANYA setelah onboarding + simpan sukses
       if (needsInviteFlow) {
-        await this.walletInvites.redeemAfterWalletCreated(req.user.userId, inviteCode);
+        await this.walletInvites.redeemAfterWalletCreated(
+          req.user.userId,
+          inviteCode,
+        );
         await this.walletInvites.recordAllocation({
           userId: req.user.userId,
           username,
@@ -231,8 +242,14 @@ export class PartyController {
       }
 
       void this.featuredActivity
-        .recordActivity('wallet_created', cantonPartyId, `Wallet created for @${username}`)
-        .catch(() => { /* non-critical */ });
+        .recordActivity(
+          'wallet_created',
+          cantonPartyId,
+          `Wallet created for @${username}`,
+        )
+        .catch(() => {
+          /* non-critical */
+        });
 
       // TransferPreapproval: DEFAULT OFF.
       // JANGAN auto-create saat register — biarkan OFF supaya SEMUA CC masuk
@@ -240,7 +257,8 @@ export class PartyController {
       // baru bisa meng-enable sendiri via menu Wallet bila ingin transfer instan.
       // Jika user sebelumnya sudah enable (existing), pertahankan apa adanya.
       let preapprovalActive = false;
-      const existingPreapproval = await this.splice.hasTransferPreapproval(cantonPartyId);
+      const existingPreapproval =
+        await this.splice.hasTransferPreapproval(cantonPartyId);
       if (existingPreapproval) {
         preapprovalActive = true;
       }
@@ -255,7 +273,9 @@ export class PartyController {
             preapprovalActive,
           })
           .catch((err: unknown) => {
-            this.logger.warn(`PartyRegistration ledger record failed: ${String(err)}`);
+            this.logger.warn(
+              `PartyRegistration ledger record failed: ${String(err)}`,
+            );
           });
       }
 
@@ -273,7 +293,10 @@ export class PartyController {
       };
     } catch (err) {
       if (needsInviteFlow) {
-        await this.walletInvites.releaseReservation(req.user.userId, inviteCode);
+        await this.walletInvites.releaseReservation(
+          req.user.userId,
+          inviteCode,
+        );
       }
       throw err;
     }
@@ -284,7 +307,9 @@ export class PartyController {
   async ensurePreapproval(@Req() req: AuthedReq) {
     const user = await this.users.findById(req.user.userId);
     if (!user?.cantonPartyId) {
-      throw new BadRequestException('Create your wallet first from the Wallet page.');
+      throw new BadRequestException(
+        'Create your wallet first from the Wallet page.',
+      );
     }
     if (user.cantonPartyId.startsWith('canquest:')) {
       throw new BadRequestException(
@@ -296,7 +321,9 @@ export class PartyController {
       spliceWalletUsernameFromParty(user.cantonPartyId) ??
       normalizeWalletUsername(user.username);
     if (!preferredUsername) {
-      throw new BadRequestException('Could not resolve Splice wallet username for this party.');
+      throw new BadRequestException(
+        'Could not resolve Splice wallet username for this party.',
+      );
     }
 
     let walletUsername =
@@ -312,12 +339,16 @@ export class PartyController {
         this.logger.warn(
           `ensurePreapproval onboard failed user=${user.id.slice(0, 8)} @${preferredUsername}: ${onboard.detail ?? ''}`,
         );
-        throw new BadRequestException(onboard.detail ?? 'Wallet not registered in Splice.');
+        throw new BadRequestException(
+          onboard.detail ?? 'Wallet not registered in Splice.',
+        );
       }
       walletUsername = onboard.username ?? preferredUsername;
     }
 
-    const existing = await this.splice.hasTransferPreapproval(user.cantonPartyId);
+    const existing = await this.splice.hasTransferPreapproval(
+      user.cantonPartyId,
+    );
     if (existing) {
       return {
         active: true,
@@ -343,7 +374,11 @@ export class PartyController {
     }
 
     void this.featuredActivity
-      .recordActivity('wallet_created', user.cantonPartyId, `Preapproval enabled for @${user.username}`)
+      .recordActivity(
+        'wallet_created',
+        user.cantonPartyId,
+        `Preapproval enabled for @${user.username}`,
+      )
       .catch(() => {});
 
     return {
@@ -363,7 +398,8 @@ export class PartyController {
       return {
         hasWallet: false,
         preapproval: { active: false, walletUiUrl: this.splice.walletUiUrl },
-        message: 'No wallet found. Create your wallet first from the Wallet page.',
+        message:
+          'No wallet found. Create your wallet first from the Wallet page.',
       };
     }
 
@@ -392,7 +428,10 @@ export class PartyController {
 
   @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
   @Post('allocate')
-  async allocateCantonParty(@Req() req: AuthedReq, @Body() body: AllocateWalletDto) {
+  async allocateCantonParty(
+    @Req() req: AuthedReq,
+    @Body() body: AllocateWalletDto,
+  ) {
     const user = await this.users.findById(req.user.userId);
     if (!user) throw new BadRequestException('User not found');
 
@@ -409,7 +448,10 @@ export class PartyController {
     const inviteCode = body.walletInviteCode;
 
     if (needsInviteFlow) {
-      await this.walletInvites.assertCanCreateWallet(req.user.userId, inviteCode);
+      await this.walletInvites.assertCanCreateWallet(
+        req.user.userId,
+        inviteCode,
+      );
     }
 
     try {
@@ -424,9 +466,13 @@ export class PartyController {
           throw new ConflictException('Party ID Already Taken');
         }
         await this.users.setPartyId(req.user.userId, splicePartyId, username);
-        const storedPartyId = normalizeCantonPartyId(splicePartyId) ?? splicePartyId;
+        const storedPartyId =
+          normalizeCantonPartyId(splicePartyId) ?? splicePartyId;
         if (needsInviteFlow) {
-          await this.walletInvites.redeemAfterWalletCreated(user.id, inviteCode);
+          await this.walletInvites.redeemAfterWalletCreated(
+            user.id,
+            inviteCode,
+          );
           await this.walletInvites.recordAllocation({
             userId: user.id,
             username,
@@ -440,14 +486,20 @@ export class PartyController {
           isPlaceholder: false,
           spliceOnboarded: true,
           preapproval: { active: preapprovalActive },
-          message: 'Wallet created — Party ID allocated and registered in Splice validator.',
+          message:
+            'Wallet created — Party ID allocated and registered in Splice validator.',
         };
       }
 
       const cantonPartyId = await this.ledger.allocateParty(username);
       this.assertPartyOnValidatorParticipant(cantonPartyId);
-      await this.users.setPartyId(req.user.userId, cantonPartyId, user.username ?? undefined);
-      const storedPartyId = normalizeCantonPartyId(cantonPartyId) ?? cantonPartyId;
+      await this.users.setPartyId(
+        req.user.userId,
+        cantonPartyId,
+        user.username ?? undefined,
+      );
+      const storedPartyId =
+        normalizeCantonPartyId(cantonPartyId) ?? cantonPartyId;
       if (needsInviteFlow) {
         await this.walletInvites.redeemAfterWalletCreated(user.id, inviteCode);
         await this.walletInvites.recordAllocation({
@@ -460,11 +512,15 @@ export class PartyController {
         cantonPartyId: storedPartyId,
         isPlaceholder: false,
         spliceOnboarded: false,
-        message: 'Party ID allocated on Canton participant. Set CANTON_VALIDATOR_URL for full Splice registration.',
+        message:
+          'Party ID allocated on Canton participant. Set CANTON_VALIDATOR_URL for full Splice registration.',
       };
     } catch (err) {
       if (needsInviteFlow) {
-        await this.walletInvites.releaseReservation(req.user.userId, inviteCode);
+        await this.walletInvites.releaseReservation(
+          req.user.userId,
+          inviteCode,
+        );
       }
       throw err;
     }
@@ -472,14 +528,18 @@ export class PartyController {
 
   @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
   @Post('canton-binding')
-  async bindCantonParty(@Req() req: AuthedReq, @Body() body: CantonPartyBindingDto) {
+  async bindCantonParty(
+    @Req() req: AuthedReq,
+    @Body() body: CantonPartyBindingDto,
+  ) {
     const cantonPartyId = body.cantonPartyId.trim();
     this.assertPartyOnValidatorParticipant(cantonPartyId);
     await this.users.setPartyId(req.user.userId, cantonPartyId);
     return {
       cantonPartyId,
       isPlaceholder: false,
-      message: 'Canton Party ID saved manually. No ledger validation was performed.',
+      message:
+        'Canton Party ID saved manually. No ledger validation was performed.',
     };
   }
 
@@ -488,7 +548,10 @@ export class PartyController {
   async getBalance(@Req() req: AuthedReq) {
     const user = await this.users.findById(req.user.userId);
     if (!user?.username) {
-      return { balance: null, message: 'No wallet found. Create your wallet first.' };
+      return {
+        balance: null,
+        message: 'No wallet found. Create your wallet first.',
+      };
     }
     const display = await this.ccBalance.getDisplayBalance(
       user.id,
@@ -513,7 +576,9 @@ export class PartyController {
     this.logger.warn(
       `Blocked claim-reward attempt user=${req.user.userId.slice(0, 8)} body=${JSON.stringify(body).slice(0, 80)}`,
     );
-    throw new ForbiddenException('This endpoint has been disabled. Rewards are only available via quest flows.');
+    throw new ForbiddenException(
+      'This endpoint has been disabled. Rewards are only available via quest flows.',
+    );
   }
 
   /**
@@ -527,13 +592,12 @@ export class PartyController {
    */
   @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
   @Post('send-cc')
-  async sendCc(
-    @Req() req: AuthedReq,
-    @Body() body: SendCcDto,
-  ) {
+  async sendCc(@Req() req: AuthedReq, @Body() body: SendCcDto) {
     const sender = await this.users.findById(req.user.userId);
     if (!sender?.username || !sender.cantonPartyId) {
-      throw new BadRequestException('You need a wallet to send CC. Create yours first.');
+      throw new BadRequestException(
+        'You need a wallet to send CC. Create yours first.',
+      );
     }
 
     // DTO (SendCcDto) already enforces: number, > 0, ≤ MAX_TRANSFER_CC, finite.
@@ -543,10 +607,12 @@ export class PartyController {
     }
 
     const feeCc = Number(this.config.get<string>('TRANSACTION_FEE_CC') ?? '5');
-    const validatorPartyId = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID') ?? '';
+    const validatorPartyId =
+      this.config.get<string>('CANTON_VALIDATOR_PARTY_ID') ?? '';
 
     const recipientInput = body.recipientUsername?.trim();
-    if (!recipientInput) throw new BadRequestException('Recipient is required.');
+    if (!recipientInput)
+      throw new BadRequestException('Recipient is required.');
 
     let recipientPartyId: string;
     let recipientLabel: string;
@@ -565,10 +631,13 @@ export class PartyController {
         this.logger.warn(
           `Blocked send-cc to system party: user=${sender.id.slice(0, 8)} target=${normalizedRecipient.split('::')[0]} amount=${amount}`,
         );
-        throw new BadRequestException('Transfers to platform wallets are not allowed.');
+        throw new BadRequestException(
+          'Transfers to platform wallets are not allowed.',
+        );
       }
       recipientPartyId = normalizedRecipient;
-      recipientLabel = normalizedRecipient.split('::')[0] ?? normalizedRecipient;
+      recipientLabel =
+        normalizedRecipient.split('::')[0] ?? normalizedRecipient;
       const found = await this.users.findByPartyId(normalizedRecipient);
       recipientUsername =
         found?.username?.toLowerCase() ?? (recipientLabel || null);
@@ -578,16 +647,21 @@ export class PartyController {
         throw new BadRequestException('You cannot send CC to yourself.');
       }
       const dbUser = await this.users.findByUsernameInsensitive(username);
-      const resolved = dbUser?.cantonPartyId ?? (await this.splice.getUserPartyId(username));
+      const resolved =
+        dbUser?.cantonPartyId ?? (await this.splice.getUserPartyId(username));
       if (!resolved) {
-        throw new BadRequestException(`User "@${username}" not found or has no wallet.`);
+        throw new BadRequestException(
+          `User "@${username}" not found or has no wallet.`,
+        );
       }
       recipientPartyId = normalizeCantonPartyId(resolved) ?? resolved;
       if (this.isSystemPartyId(recipientPartyId)) {
         this.logger.warn(
           `Blocked send-cc to system wallet via @${username}: user=${sender.id.slice(0, 8)} amount=${amount}`,
         );
-        throw new BadRequestException('Transfers to platform wallets are not allowed.');
+        throw new BadRequestException(
+          'Transfers to platform wallets are not allowed.',
+        );
       }
       recipientLabel = `@${username}`;
       recipientUsername = dbUser?.username?.toLowerCase() ?? username;
@@ -595,7 +669,8 @@ export class PartyController {
 
     const description = body.memo?.trim() || `Sent to ${recipientLabel}`;
     const recipientDbUser = recipientUsername
-      ? await this.users.findByUsernameInsensitive(recipientUsername) : null;
+      ? await this.users.findByUsernameInsensitive(recipientUsername)
+      : null;
     const isInternalUser = recipientDbUser !== null;
     const effectiveFeeCc = feeCc;
 
@@ -619,7 +694,8 @@ export class PartyController {
     // ── MAIN TRANSFER via CIP-0056 (satu-satunya jalur) ─────────────
     let accepted = false;
     let ledgerTxId: string | undefined;
-    let transferMethod: 'direct' | 'offer_accept' | 'offer_only' = 'offer_accept';
+    let transferMethod: 'direct' | 'offer_accept' | 'offer_only' =
+      'offer_accept';
 
     const cip56Result = await this.ledger.executeTransferFactoryTransfer({
       senderPartyId: sender.cantonPartyId,
@@ -633,23 +709,29 @@ export class PartyController {
         accepted = true;
         transferMethod = 'direct';
         ledgerTxId = cip56Result.updateId ?? undefined;
-        this.logger.log(`CC transfer direct: ${sender.username} → ${recipientLabel} ${amount} CC`);
+        this.logger.log(
+          `CC transfer direct: ${sender.username} → ${recipientLabel} ${amount} CC`,
+        );
       } else if (cip56Result.transferKind === 'offer') {
         // Receiver tidak punya TransferPreapproval aktif.
         // JANGAN auto-accept — biarkan pending di inbox wallet receiver.
         // User terima/reject manual via menu Offers (POST /party/offers/accept|reject).
-        ledgerTxId = cip56Result.transferInstructionCid ?? cip56Result.updateId ?? undefined;
+        ledgerTxId =
+          cip56Result.transferInstructionCid ??
+          cip56Result.updateId ??
+          undefined;
         transferMethod = 'offer_only';
         this.logger.log(
           `CC transfer offer (pending): ${sender.username} → ${recipientLabel} ${amount} CC ` +
-          `— recipient must accept via Offers menu`,
+            `— recipient must accept via Offers menu`,
         );
       }
     }
 
     if (!cip56Result.ok) {
       throw new BadRequestException(
-        `Transfer gagal: ${cip56Result.error?.slice(0, 120) ?? 'unknown'}`);
+        `Transfer gagal: ${cip56Result.error?.slice(0, 120) ?? 'unknown'}`,
+      );
     }
 
     // ── FEE COLLECT (HANYA jika transfer berhasil) ───────────────────
@@ -658,8 +740,9 @@ export class PartyController {
     let feeTreasuryPartyId: string | undefined;
 
     if (effectiveFeeCc > 0 && sender.cantonPartyId && accepted) {
-      const feeParty = this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim()
-        || validatorPartyId;
+      const feeParty =
+        this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
+        validatorPartyId;
       if (feeParty) {
         try {
           const feeResult = await this.ledger.executeTransferFactoryTransfer({
@@ -684,12 +767,19 @@ export class PartyController {
             this.logger.log(
               `Fee collected: ${sender.username} → ${feeParty.split('::')[0]} ${effectiveFeeCc} CC (direct)`,
             );
-          } else if (feeResult.ok && feeResult.transferKind === 'offer' && feeResult.transferInstructionCid) {
+          } else if (
+            feeResult.ok &&
+            feeResult.transferKind === 'offer' &&
+            feeResult.transferInstructionCid
+          ) {
             const acceptR = await this.ledger.acceptTransferInstruction(
-              feeResult.transferInstructionCid, feeParty);
+              feeResult.transferInstructionCid,
+              feeParty,
+            );
             if (acceptR.ok) {
               feeCollected = true;
-              feeLedgerTxId = acceptR.updateId ?? feeResult.updateId ?? undefined;
+              feeLedgerTxId =
+                acceptR.updateId ?? feeResult.updateId ?? undefined;
               feeTreasuryPartyId = feeParty;
               await this.users.recordTransaction({
                 userId: sender.id,
@@ -701,16 +791,22 @@ export class PartyController {
                 ledgerTxId: feeLedgerTxId,
               });
               this.logger.log(
-                `Fee collected: ${sender.username} → ${feeParty.split('::')[0]} ${effectiveFeeCc} CC (offer-accept)`);
+                `Fee collected: ${sender.username} → ${feeParty.split('::')[0]} ${effectiveFeeCc} CC (offer-accept)`,
+              );
             } else {
-              this.logger.warn(`Fee offer accept failed: transfer proceeds without fee`);
+              this.logger.warn(
+                `Fee offer accept failed: transfer proceeds without fee`,
+              );
             }
           } else {
             this.logger.warn(
-              `Fee NOT collected (transferKind=${feeResult.transferKind}, ok=${feeResult.ok}). Transfer proceeds.`);
+              `Fee NOT collected (transferKind=${feeResult.transferKind}, ok=${feeResult.ok}). Transfer proceeds.`,
+            );
           }
         } catch (feeErr) {
-          this.logger.warn(`Fee collect error (non-blocking): ${String(feeErr)}`);
+          this.logger.warn(
+            `Fee collect error (non-blocking): ${String(feeErr)}`,
+          );
         }
       }
     }
@@ -728,12 +824,20 @@ export class PartyController {
       });
       transferTransactionId = outRow.id;
       if (ledgerTxId && sender.cantonPartyId) {
-        void this.txDetail.backfillUpdateId(outRow.id, ledgerTxId, sender.cantonPartyId);
+        void this.txDetail.backfillUpdateId(
+          outRow.id,
+          ledgerTxId,
+          sender.cantonPartyId,
+        );
       }
 
       if (sender.cantonPartyId) {
         void this.featuredActivity
-          .recordActivity('cc_transfer', sender.cantonPartyId, `CC transfer ${amount} CC to ${recipientLabel}`)
+          .recordActivity(
+            'cc_transfer',
+            sender.cantonPartyId,
+            `CC transfer ${amount} CC to ${recipientLabel}`,
+          )
           .catch(() => {});
       }
 
@@ -743,11 +847,16 @@ export class PartyController {
           amountCc: amount,
           type: 'TRANSFER_IN',
           description: `Received from @${sender.username}${body.memo ? `: ${body.memo.trim()}` : ''}`,
-          counterparty: normalizeCantonPartyId(sender.cantonPartyId) ?? sender.cantonPartyId,
+          counterparty:
+            normalizeCantonPartyId(sender.cantonPartyId) ??
+            sender.cantonPartyId,
           ledgerTxId: ledgerTxId,
         });
         if (recipientDbUser.username) {
-          void this.inboundSync.alignBalanceFromChain(recipientDbUser.id, recipientDbUser.username);
+          void this.inboundSync.alignBalanceFromChain(
+            recipientDbUser.id,
+            recipientDbUser.username,
+          );
         }
       }
       if (sender.username) {
@@ -799,7 +908,9 @@ export class PartyController {
           transferKind: 'USER_TO_USER',
         })
         .catch((err: unknown) => {
-          this.logger.warn(`CcTransferRecord ledger record failed: ${String(err)}`);
+          this.logger.warn(
+            `CcTransferRecord ledger record failed: ${String(err)}`,
+          );
         });
     }
 
@@ -830,16 +941,22 @@ export class PartyController {
   ) {
     const user = await this.users.findById(req.user.userId);
     if (!user?.cantonPartyId || !hasRealWallet(user.cantonPartyId)) {
-      throw new BadRequestException('No wallet found. Create your wallet first.');
+      throw new BadRequestException(
+        'No wallet found. Create your wallet first.',
+      );
     }
     const cid = body.transferInstructionCid?.trim();
-    if (!cid) throw new BadRequestException('transferInstructionCid is required.');
+    if (!cid)
+      throw new BadRequestException('transferInstructionCid is required.');
 
     this.logger.log(
       `TransferInstruction_Accept: user=@${user.username} cid=${cid.slice(0, 20)}...`,
     );
 
-    const result = await this.ledger.acceptTransferInstruction(cid, user.cantonPartyId);
+    const result = await this.ledger.acceptTransferInstruction(
+      cid,
+      user.cantonPartyId,
+    );
 
     if (!result.ok) {
       throw new BadRequestException(
@@ -876,16 +993,22 @@ export class PartyController {
   ) {
     const user = await this.users.findById(req.user.userId);
     if (!user?.cantonPartyId || !hasRealWallet(user.cantonPartyId)) {
-      throw new BadRequestException('No wallet found. Create your wallet first.');
+      throw new BadRequestException(
+        'No wallet found. Create your wallet first.',
+      );
     }
     const cid = body.transferInstructionCid?.trim();
-    if (!cid) throw new BadRequestException('transferInstructionCid is required.');
+    if (!cid)
+      throw new BadRequestException('transferInstructionCid is required.');
 
     this.logger.log(
       `TransferInstruction_Reject: user=@${user.username} cid=${cid.slice(0, 20)}...`,
     );
 
-    const result = await this.ledger.rejectTransferInstruction(cid, user.cantonPartyId);
+    const result = await this.ledger.rejectTransferInstruction(
+      cid,
+      user.cantonPartyId,
+    );
 
     if (!result.ok) {
       throw new BadRequestException(
@@ -908,16 +1031,22 @@ export class PartyController {
   ) {
     const user = await this.users.findById(req.user.userId);
     if (!user?.cantonPartyId || !hasRealWallet(user.cantonPartyId)) {
-      throw new BadRequestException('No wallet found. Create your wallet first.');
+      throw new BadRequestException(
+        'No wallet found. Create your wallet first.',
+      );
     }
     const cid = body.transferInstructionCid?.trim();
-    if (!cid) throw new BadRequestException('transferInstructionCid is required.');
+    if (!cid)
+      throw new BadRequestException('transferInstructionCid is required.');
 
     this.logger.log(
       `TransferInstruction_Withdraw: user=@${user.username} cid=${cid.slice(0, 20)}...`,
     );
 
-    const result = await this.ledger.withdrawTransferInstruction(cid, user.cantonPartyId);
+    const result = await this.ledger.withdrawTransferInstruction(
+      cid,
+      user.cantonPartyId,
+    );
 
     if (!result.ok) {
       throw new BadRequestException(
@@ -949,7 +1078,9 @@ export class PartyController {
   async listOffers(@Req() req: AuthedReq) {
     const user = await this.users.findById(req.user.userId);
     if (!user?.cantonPartyId || !hasRealWallet(user.cantonPartyId)) {
-      throw new BadRequestException('No wallet found. Create your wallet first.');
+      throw new BadRequestException(
+        'No wallet found. Create your wallet first.',
+      );
     }
 
     let offers = await this.ledger.queryPendingOffers(user.cantonPartyId);
@@ -968,7 +1099,9 @@ export class PartyController {
           expiresAt: '',
           createdAt: '',
         }));
-        this.logger.log(`Fallback Splice: ${offers.length} offers for @${user.username}`);
+        this.logger.log(
+          `Fallback Splice: ${offers.length} offers for @${user.username}`,
+        );
       }
     }
 
@@ -979,7 +1112,9 @@ export class PartyController {
         try {
           const senderUser = await this.users.findByPartyId(offer.sender);
           if (senderUser?.username) senderLabel = `@${senderUser.username}`;
-        } catch { /* keep party hint */ }
+        } catch {
+          /* keep party hint */
+        }
         return { ...offer, senderLabel };
       }),
     );
@@ -988,7 +1123,8 @@ export class PartyController {
       offers: enriched,
       total: enriched.length,
       legacyCount: enriched.filter((o) => o.type === 'transfer_offer').length,
-      cip56Count: enriched.filter((o) => o.type === 'transfer_instruction').length,
+      cip56Count: enriched.filter((o) => o.type === 'transfer_instruction')
+        .length,
     };
   }
 
@@ -1002,21 +1138,32 @@ export class PartyController {
     @Body() body: ContractActionDto,
   ) {
     const user = await this.users.findById(req.user.userId);
-    if (!user?.cantonPartyId || !user.username || !hasRealWallet(user.cantonPartyId)) {
-      throw new BadRequestException('No wallet found. Create your wallet first.');
+    if (
+      !user?.cantonPartyId ||
+      !user.username ||
+      !hasRealWallet(user.cantonPartyId)
+    ) {
+      throw new BadRequestException(
+        'No wallet found. Create your wallet first.',
+      );
     }
     const cid = body.contractId?.trim();
     if (!cid) throw new BadRequestException('contractId is required.');
 
     const offerType = body.type ?? OfferType.TRANSFER_OFFER;
-    this.logger.log(`Accept offer: user=@${user.username} type=${offerType} cid=${cid.slice(0, 20)}...`);
+    this.logger.log(
+      `Accept offer: user=@${user.username} type=${offerType} cid=${cid.slice(0, 20)}...`,
+    );
 
     // Lookup detail offer SEBELUM accept — setelah accept, offer hilang dari ledger.
     // amount + sender ini dipakai untuk catat TRANSFER_IN yang truthful di history.
     let amountCc = 0;
     let senderLabel = '';
     try {
-      const detail = await this.ledger.lookupOfferDetail(cid, user.cantonPartyId);
+      const detail = await this.ledger.lookupOfferDetail(
+        cid,
+        user.cantonPartyId,
+      );
       if (detail) {
         amountCc = parseFloat(detail.amount) || 0;
         senderLabel = detail.sender?.split('::')[0] ?? detail.sender ?? '';
@@ -1030,19 +1177,29 @@ export class PartyController {
 
     if (offerType === OfferType.TRANSFER_INSTRUCTION) {
       // CIP-0056 TransferInstruction
-      const result = await this.ledger.acceptTransferInstruction(cid, user.cantonPartyId);
+      const result = await this.ledger.acceptTransferInstruction(
+        cid,
+        user.cantonPartyId,
+      );
       ok = result.ok;
       updateId = result.updateId;
       if (!ok) {
-        throw new BadRequestException(`Failed to accept: ${result.error ?? 'unknown'}`);
+        throw new BadRequestException(
+          `Failed to accept: ${result.error ?? 'unknown'}`,
+        );
       }
     } else {
-      // Legacy Splice TransferOffer — try Ledger API first, then Splice Wallet API
-      const result = await this.ledger.acceptTransferOffer(cid, user.cantonPartyId);
+      // Legacy Splice TransferOffer — try Ledger API first, then Splice Wallet API.
+      // The Splice Wallet API fallback uses a per-user HS256 JWT which the
+      // validator rejects in keycloak mode, so only attempt it in legacy hs256.
+      const result = await this.ledger.acceptTransferOffer(
+        cid,
+        user.cantonPartyId,
+      );
       ok = result.accepted;
       updateId = result.updateId;
-      if (!ok) {
-        // Fallback to Splice Wallet API
+      if (!ok && this.splice.isLegacyHs256) {
+        // Fallback to Splice Wallet API (legacy hs256 only)
         ok = await this.splice.acceptOfferViaWallet(cid, user.username);
       }
       if (!ok) {
@@ -1055,14 +1212,18 @@ export class PartyController {
     // reward sudah punya angka yang benar. Hanya transfer dari pihak lain yang dicatat.
     let settledOwnReward = 0;
     try {
-      settledOwnReward = await this.users.markTransferInstructionSettled(cid, 'COMPLETED');
+      settledOwnReward = await this.users.markTransferInstructionSettled(
+        cid,
+        'COMPLETED',
+      );
     } catch (err) {
       this.logger.warn(`markTransferInstructionSettled failed: ${String(err)}`);
     }
 
     if (settledOwnReward === 0) {
       // Transfer masuk dari pihak lain (bukan reward pending kita) → catat TRANSFER_IN.
-      const kindLabel = offerType === 'transfer_instruction' ? 'CIP-0056' : 'legacy';
+      const kindLabel =
+        offerType === 'transfer_instruction' ? 'CIP-0056' : 'legacy';
       await this.users.recordTransaction({
         userId: user.id,
         amountCc,
@@ -1098,20 +1259,27 @@ export class PartyController {
   ) {
     const user = await this.users.findById(req.user.userId);
     if (!user?.cantonPartyId || !hasRealWallet(user.cantonPartyId)) {
-      throw new BadRequestException('No wallet found. Create your wallet first.');
+      throw new BadRequestException(
+        'No wallet found. Create your wallet first.',
+      );
     }
     const cid = body.contractId?.trim();
     if (!cid) throw new BadRequestException('contractId is required.');
 
     const offerType = body.type ?? OfferType.TRANSFER_OFFER;
-    this.logger.log(`Reject offer: user=@${user.username} type=${offerType} cid=${cid.slice(0, 20)}...`);
+    this.logger.log(
+      `Reject offer: user=@${user.username} type=${offerType} cid=${cid.slice(0, 20)}...`,
+    );
 
     if (offerType === OfferType.TRANSFER_INSTRUCTION) {
       // Lookup detail SEBELUM reject — setelah reject, offer hilang dari ledger.
       let amountCc = 0;
       let senderLabel = '';
       try {
-        const detail = await this.ledger.lookupOfferDetail(cid, user.cantonPartyId);
+        const detail = await this.ledger.lookupOfferDetail(
+          cid,
+          user.cantonPartyId,
+        );
         if (detail) {
           amountCc = parseFloat(detail.amount) || 0;
           senderLabel = detail.sender?.split('::')[0] ?? detail.sender ?? '';
@@ -1120,18 +1288,28 @@ export class PartyController {
         this.logger.warn(`lookupOfferDetail (reject) failed: ${String(err)}`);
       }
 
-      const result = await this.ledger.rejectTransferInstruction(cid, user.cantonPartyId);
+      const result = await this.ledger.rejectTransferInstruction(
+        cid,
+        user.cantonPartyId,
+      );
       if (!result.ok) {
-        throw new BadRequestException(`Failed to reject: ${result.error ?? 'unknown'}`);
+        throw new BadRequestException(
+          `Failed to reject: ${result.error ?? 'unknown'}`,
+        );
       }
 
       // Reward PENDING yang ditolak → tandai REJECTED. Transfer dari pihak lain
       // yang ditolak → catat jejak (amount 0, status REJECTED) supaya user tahu.
       let settledOwnReward = 0;
       try {
-        settledOwnReward = await this.users.markTransferInstructionSettled(cid, 'REJECTED');
+        settledOwnReward = await this.users.markTransferInstructionSettled(
+          cid,
+          'REJECTED',
+        );
       } catch (err) {
-        this.logger.warn(`markTransferInstructionSettled REJECTED failed: ${String(err)}`);
+        this.logger.warn(
+          `markTransferInstructionSettled REJECTED failed: ${String(err)}`,
+        );
       }
       if (settledOwnReward === 0) {
         await this.users.recordTransaction({
@@ -1145,13 +1323,24 @@ export class PartyController {
           status: 'REJECTED',
         });
       }
-      return { ok: true, updateId: result.updateId, message: 'Transfer rejected. CC returned to sender.' };
+      return {
+        ok: true,
+        updateId: result.updateId,
+        message: 'Transfer rejected. CC returned to sender.',
+      };
     } else {
-      const result = await this.ledger.rejectTransferOffer(cid, user.cantonPartyId);
+      const result = await this.ledger.rejectTransferOffer(
+        cid,
+        user.cantonPartyId,
+      );
       if (!result.rejected) {
         throw new BadRequestException('Failed to reject transfer offer.');
       }
-      return { ok: true, updateId: result.updateId, message: 'Transfer offer rejected.' };
+      return {
+        ok: true,
+        updateId: result.updateId,
+        message: 'Transfer offer rejected.',
+      };
     }
   }
 
@@ -1167,10 +1356,14 @@ export class PartyController {
   async getPreapprovalStatus(@Req() req: AuthedReq) {
     const user = await this.users.findById(req.user.userId);
     if (!user?.cantonPartyId || !hasRealWallet(user.cantonPartyId)) {
-      throw new BadRequestException('No wallet found. Create your wallet first.');
+      throw new BadRequestException(
+        'No wallet found. Create your wallet first.',
+      );
     }
 
-    const preapproval = await this.splice.getTransferPreapproval(user.cantonPartyId);
+    const preapproval = await this.splice.getTransferPreapproval(
+      user.cantonPartyId,
+    );
 
     return {
       active: preapproval !== null,
@@ -1189,12 +1382,20 @@ export class PartyController {
   @Post('preapproval/enable')
   async enablePreapproval(@Req() req: AuthedReq) {
     const user = await this.users.findById(req.user.userId);
-    if (!user?.cantonPartyId || !user.username || !hasRealWallet(user.cantonPartyId)) {
-      throw new BadRequestException('No wallet found. Create your wallet first.');
+    if (
+      !user?.cantonPartyId ||
+      !user.username ||
+      !hasRealWallet(user.cantonPartyId)
+    ) {
+      throw new BadRequestException(
+        'No wallet found. Create your wallet first.',
+      );
     }
 
     // Already active? (Ledger ACS — no HS256)
-    const existing = await this.ledger.getTransferPreapprovalViaLedger(user.cantonPartyId);
+    const existing = await this.ledger.getTransferPreapprovalViaLedger(
+      user.cantonPartyId,
+    );
     if (existing) {
       return {
         ok: true,
@@ -1208,9 +1409,13 @@ export class PartyController {
     this.assertPreapprovalToggleCooldown(user.preapprovalToggleAt);
 
     // Create via Ledger: exercise AmuletRules_CreateTransferPreapproval (validator-1 pays burn)
-    const result = await this.ledger.createTransferPreapprovalViaLedger(user.cantonPartyId);
+    const result = await this.ledger.createTransferPreapprovalViaLedger(
+      user.cantonPartyId,
+    );
     if (!result.ok) {
-      throw new BadRequestException(result.error ?? 'Failed to create preapproval.');
+      throw new BadRequestException(
+        result.error ?? 'Failed to create preapproval.',
+      );
     }
 
     // Sukses & burn terjadi → set cooldown
@@ -1221,7 +1426,8 @@ export class PartyController {
       alreadyActive: false,
       transferPreapprovalCid: result.transferPreapprovalCid,
       amuletPaid: result.amuletPaid,
-      message: 'Preapproval enabled — incoming CC transfers will now arrive directly.',
+      message:
+        'Preapproval enabled — incoming CC transfers will now arrive directly.',
     };
   }
 
@@ -1234,11 +1440,15 @@ export class PartyController {
   async disablePreapproval(@Req() req: AuthedReq) {
     const user = await this.users.findById(req.user.userId);
     if (!user?.cantonPartyId || !hasRealWallet(user.cantonPartyId)) {
-      throw new BadRequestException('No wallet found. Create your wallet first.');
+      throw new BadRequestException(
+        'No wallet found. Create your wallet first.',
+      );
     }
 
     // Check if active (Ledger ACS — no HS256)
-    const existing = await this.ledger.getTransferPreapprovalViaLedger(user.cantonPartyId);
+    const existing = await this.ledger.getTransferPreapprovalViaLedger(
+      user.cantonPartyId,
+    );
     if (!existing) {
       return {
         ok: true,
@@ -1251,7 +1461,9 @@ export class PartyController {
     this.assertPreapprovalToggleCooldown(user.preapprovalToggleAt);
 
     // Cancel via Ledger (primary, no HS256)
-    const result = await this.ledger.cancelTransferPreapprovalViaLedger(user.cantonPartyId);
+    const result = await this.ledger.cancelTransferPreapprovalViaLedger(
+      user.cantonPartyId,
+    );
     if (!result.ok) {
       throw new BadRequestException(
         `Failed to disable preapproval: ${result.error ?? 'unknown'}`,
@@ -1264,7 +1476,8 @@ export class PartyController {
     return {
       ok: true,
       wasActive: true,
-      message: 'Preapproval disabled — incoming CC transfers will now appear as offers.',
+      message:
+        'Preapproval disabled — incoming CC transfers will now appear as offers.',
     };
   }
 
@@ -1350,7 +1563,9 @@ export class PartyController {
 
       // Network fee (CC) applied to every transfer — sourced from env so the
       // receipt shows a consistent fee even when Lighthouse omits it.
-      const feeCc = Number(this.config.get<string>('TRANSACTION_FEE_CC') ?? '0.2');
+      const feeCc = Number(
+        this.config.get<string>('TRANSACTION_FEE_CC') ?? '0.2',
+      );
       const networkFeeMicroCc = String(Math.round(Math.abs(feeCc) * 1_000_000));
 
       // Fee party short labels — transfer ke party ini (canquest-fee/validator) disembunyikan
@@ -1363,7 +1578,8 @@ export class PartyController {
         const arr = data[key];
         if (!Array.isArray(arr)) continue;
         const filtered = arr.filter((item) => {
-          if (!item || typeof item !== 'object' || feeLabels.length === 0) return true;
+          if (!item || typeof item !== 'object' || feeLabels.length === 0)
+            return true;
           const it = item as Record<string, unknown>;
           // Cek semua field counterparty kemungkinan (sender/receiver/address/counterparty).
           const parties = [
@@ -1382,7 +1598,10 @@ export class PartyController {
         });
         data[key] = filtered.map((item) =>
           item && typeof item === 'object'
-            ? { ...(item as Record<string, unknown>), network_fee: networkFeeMicroCc }
+            ? {
+                ...(item as Record<string, unknown>),
+                network_fee: networkFeeMicroCc,
+              }
             : item,
         );
       }
@@ -1393,7 +1612,6 @@ export class PartyController {
       return { transactions: [], pagination: null };
     }
   }
-
 
   @SkipThrottle()
   @Get('transactions/:id')
@@ -1412,10 +1630,7 @@ export class PartyController {
 
   @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
   @Post('accept-offer')
-  async acceptOffer(
-    @Req() req: AuthedReq,
-    @Body() body: ContractActionDto,
-  ) {
+  async acceptOffer(@Req() req: AuthedReq, @Body() body: ContractActionDto) {
     const contractId = body.contractId?.trim();
     if (!contractId) {
       throw new BadRequestException('contractId is required.');
@@ -1423,18 +1638,24 @@ export class PartyController {
 
     const user = await this.users.findById(req.user.userId);
     if (!user?.username || !user.cantonPartyId) {
-      throw new BadRequestException('No wallet found. Create your wallet first.');
+      throw new BadRequestException(
+        'No wallet found. Create your wallet first.',
+      );
     }
 
     if (user.cantonPartyId.startsWith('canquest:')) {
-      throw new BadRequestException('Party ID is still a placeholder. Regenerate your wallet.');
+      throw new BadRequestException(
+        'Party ID is still a placeholder. Regenerate your wallet.',
+      );
     }
 
     const walletUsername =
       (await this.splice.resolveWalletUsernameForParty(user.cantonPartyId)) ??
       user.username;
 
-    this.logger.log(`Accept offer requested: user=@${walletUsername} contractId=${contractId.slice(0, 20)}…`);
+    this.logger.log(
+      `Accept offer requested: user=@${walletUsername} contractId=${contractId.slice(0, 20)}…`,
+    );
 
     let accepted = false;
     let acceptMethod = '';
@@ -1442,23 +1663,37 @@ export class PartyController {
     // Splice Wallet API (per-user HS256 JWT) hanya untuk mode legacy hs256.
     // Di keycloak validator menolak HS256 — lewati langsung ke Canton Ledger API.
     if (this.splice.isLegacyHs256 && this.splice.isConfigured) {
-      accepted = await this.splice.acceptOfferViaWallet(contractId, walletUsername);
+      accepted = await this.splice.acceptOfferViaWallet(
+        contractId,
+        walletUsername,
+      );
       if (accepted) {
         acceptMethod = 'splice_wallet_api';
-        this.logger.log(`Offer accepted via Splice Wallet API: ${contractId.slice(0, 20)}…`);
+        this.logger.log(
+          `Offer accepted via Splice Wallet API: ${contractId.slice(0, 20)}…`,
+        );
       } else {
-        this.logger.warn(`Splice Wallet API accept failed for ${contractId.slice(0, 20)}… — trying Canton Ledger API`);
+        this.logger.warn(
+          `Splice Wallet API accept failed for ${contractId.slice(0, 20)}… — trying Canton Ledger API`,
+        );
       }
     }
 
     if (!accepted) {
-      const result = await this.ledger.acceptTransferOffer(contractId, user.cantonPartyId);
+      const result = await this.ledger.acceptTransferOffer(
+        contractId,
+        user.cantonPartyId,
+      );
       accepted = result.accepted;
       if (accepted) {
         acceptMethod = 'canton_ledger_api';
-        this.logger.log(`Offer accepted via Canton Ledger API: ${contractId.slice(0, 20)}… updateId=${result.updateId?.slice(0, 16) ?? 'n/a'}`);
+        this.logger.log(
+          `Offer accepted via Canton Ledger API: ${contractId.slice(0, 20)}… updateId=${result.updateId?.slice(0, 16) ?? 'n/a'}`,
+        );
       } else {
-        this.logger.warn(`Canton Ledger API accept also failed for ${contractId.slice(0, 20)}…`);
+        this.logger.warn(
+          `Canton Ledger API accept also failed for ${contractId.slice(0, 20)}…`,
+        );
       }
     }
 
@@ -1476,16 +1711,14 @@ export class PartyController {
       accepted: true,
       contractId,
       method: acceptMethod,
-      message: 'Transfer offer accepted. Funds should appear in your wallet shortly.',
+      message:
+        'Transfer offer accepted. Funds should appear in your wallet shortly.',
     };
   }
 
   @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
   @Post('reject-offer')
-  async rejectOffer(
-    @Req() req: AuthedReq,
-    @Body() body: ContractActionDto,
-  ) {
+  async rejectOffer(@Req() req: AuthedReq, @Body() body: ContractActionDto) {
     const contractId = body.contractId?.trim();
     if (!contractId) {
       throw new BadRequestException('contractId is required.');
@@ -1493,20 +1726,29 @@ export class PartyController {
 
     const user = await this.users.findById(req.user.userId);
     if (!user?.username || !user.cantonPartyId) {
-      throw new BadRequestException('No wallet found. Create your wallet first.');
+      throw new BadRequestException(
+        'No wallet found. Create your wallet first.',
+      );
     }
 
     if (user.cantonPartyId.startsWith('canquest:')) {
-      throw new BadRequestException('Party ID is still a placeholder. Regenerate your wallet.');
+      throw new BadRequestException(
+        'Party ID is still a placeholder. Regenerate your wallet.',
+      );
     }
 
     const walletUsername =
       (await this.splice.resolveWalletUsernameForParty(user.cantonPartyId)) ??
       user.username;
 
-    this.logger.log(`Reject offer requested: user=@${walletUsername} contractId=${contractId.slice(0, 20)}…`);
+    this.logger.log(
+      `Reject offer requested: user=@${walletUsername} contractId=${contractId.slice(0, 20)}…`,
+    );
 
-    const result = await this.ledger.rejectTransferOffer(contractId, user.cantonPartyId);
+    const result = await this.ledger.rejectTransferOffer(
+      contractId,
+      user.cantonPartyId,
+    );
 
     if (!result.rejected) {
       throw new BadRequestException(
@@ -1514,7 +1756,9 @@ export class PartyController {
       );
     }
 
-    this.logger.log(`Offer rejected: @${walletUsername} contractId=${contractId.slice(0, 20)}… updateId=${result.updateId?.slice(0, 16) ?? 'n/a'}`);
+    this.logger.log(
+      `Offer rejected: @${walletUsername} contractId=${contractId.slice(0, 20)}… updateId=${result.updateId?.slice(0, 16) ?? 'n/a'}`,
+    );
 
     return {
       rejected: true,
@@ -1523,7 +1767,6 @@ export class PartyController {
       message: 'Transfer offer rejected.',
     };
   }
-
 
   // ═══════════════════════════════════════════════════════════════════════════
   // CC LOCK (non-custodial) — Spec CC Lock CanQuest
@@ -1544,7 +1787,9 @@ export class PartyController {
   async lockCc(@Req() req: AuthedReq, @Body() body: LockCcDto) {
     const user = await this.users.findById(req.user.userId);
     if (!user?.cantonPartyId || !hasRealWallet(user.cantonPartyId)) {
-      throw new BadRequestException('No wallet found. Create your wallet first.');
+      throw new BadRequestException(
+        'No wallet found. Create your wallet first.',
+      );
     }
     const ownerParty = user.cantonPartyId;
 
@@ -1592,7 +1837,7 @@ export class PartyController {
       // tetap muncul di UI & unlockable.
       this.logger.error(
         `lockCc: on-chain sukses tapi ccLock.create gagal user=${user.id.slice(0, 8)} ` +
-        `cid=${(result.lockedAmuletCid ?? '?').slice(0, 16)}… : ${String(err)} — reconcile akan backfill.`,
+          `cid=${(result.lockedAmuletCid ?? '?').slice(0, 16)}… : ${String(err)} — reconcile akan backfill.`,
       );
     }
 
@@ -1631,19 +1876,27 @@ export class PartyController {
   async unlockCc(@Req() req: AuthedReq, @Body() body: UnlockCcDto) {
     const user = await this.users.findById(req.user.userId);
     if (!user?.cantonPartyId || !hasRealWallet(user.cantonPartyId)) {
-      throw new BadRequestException('No wallet found. Create your wallet first.');
+      throw new BadRequestException(
+        'No wallet found. Create your wallet first.',
+      );
     }
     const ownerParty = user.cantonPartyId;
 
     // Pilih lock: by lockId, else expired paling awal milik user.
     let lock = null as null | {
-      id: string; lockedAmuletCid: string | null; expiresAt: Date; amountCc: any;
+      id: string;
+      lockedAmuletCid: string | null;
+      expiresAt: Date;
+      amountCc: any;
     };
     if (body.lockId?.trim()) {
       lock = await this.prisma.ccLock.findFirst({
         where: { id: body.lockId.trim(), ownerParty, status: 'LOCKED' },
       });
-      if (!lock) throw new BadRequestException('Lock tidak ditemukan atau sudah tidak aktif.');
+      if (!lock)
+        throw new BadRequestException(
+          'Lock tidak ditemukan atau sudah tidak aktif.',
+        );
     } else {
       const now = new Date();
       lock = await this.prisma.ccLock.findFirst({
@@ -1651,7 +1904,9 @@ export class PartyController {
         orderBy: { expiresAt: 'asc' },
       });
       if (!lock) {
-        throw new BadRequestException('Tidak ada lock yang siap di-unlock saat ini.');
+        throw new BadRequestException(
+          'Tidak ada lock yang siap di-unlock saat ini.',
+        );
       }
     }
 
@@ -1668,7 +1923,10 @@ export class PartyController {
       `unlockCc: user=@${user.username} lockId=${lock.id} cid=${(lock.lockedAmuletCid ?? '?').slice(0, 16)}…`,
     );
 
-    const result = await this.ledger.unlockCc(ownerParty, lock.lockedAmuletCid ?? undefined);
+    const result = await this.ledger.unlockCc(
+      ownerParty,
+      lock.lockedAmuletCid ?? undefined,
+    );
     if (!result.ok) {
       return { ok: false, error: result.error ?? 'unlock failed' };
     }
@@ -1687,7 +1945,9 @@ export class PartyController {
         type: 'CC_UNLOCK',
         description: 'CC Unlocked',
         referenceId: lock.id,
-        ledgerTxId: lock.lockedAmuletCid ? `unlock:${lock.lockedAmuletCid}` : `unlock:${lock.id}`,
+        ledgerTxId: lock.lockedAmuletCid
+          ? `unlock:${lock.lockedAmuletCid}`
+          : `unlock:${lock.id}`,
       });
     } catch (err) {
       // P2002 = sudah ada (idempoten). Selain itu: non-fatal — unlock inti tetap sukses.
@@ -1795,11 +2055,12 @@ export class PartyController {
     return {
       canton: { reachable: canton },
       splice: { reachable: splice, configured: this.splice.isConfigured },
-      message: canton && splice
-        ? 'Node connected.'
-        : !canton
-          ? 'Node connection issue'
-          : 'Node connection issue',
+      message:
+        canton && splice
+          ? 'Node connected.'
+          : !canton
+            ? 'Node connection issue'
+            : 'Node connection issue',
     };
   }
 }

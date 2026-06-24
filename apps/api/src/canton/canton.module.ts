@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from '../prisma/prisma.module';
 import { UsersModule } from '../users/users.module';
-import { Auth0Module } from '../auth/auth0.module';
 import { KeycloakTokenService } from '../auth/keycloak-token.service';
 import { KeycloakAdminService } from '../auth/keycloak-admin.service';
 import { CantonLedgerService } from './canton-ledger.service';
@@ -25,7 +24,7 @@ import { LockEligibilityService } from './lock-eligibility.service';
  *   https://docs.canton.network/appdev/modules/m4-app-architecture
  */
 @Module({
-  imports: [PrismaModule, ConfigModule, UsersModule, Auth0Module],
+  imports: [PrismaModule, ConfigModule, UsersModule],
   controllers: [],
   providers: [
     KeycloakTokenService,

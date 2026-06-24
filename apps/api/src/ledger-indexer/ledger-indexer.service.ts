@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -32,12 +37,6 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(LedgerIndexerService.name);
   // Lighthouse Explorer API base URL.
   private readonly lighthouseUrl: string;
-  // Legacy Canton JSON API properties — kept to avoid breaking getStatus()
-  // and existing env wiring. No longer used for polling.
-  private readonly baseUrl: string;
-  private readonly secret: string | null;
-  private readonly ledgerApiUser: string;
-  private readonly ledgerAudience: string;
   private readonly enabled: boolean;
   private readonly pollIntervalMs: number;
   private readonly watchParties: string[];
@@ -62,25 +61,28 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
       config.get<string>('LIGHTHOUSE_API_URL') ??
       'https://api-canton.interscan.pro/mainnet'
     ).replace(/\/$/, '');
-    this.baseUrl = (
-      config.get<string>('CANTON_JSON_API_URL') ?? 'http://127.0.0.1:7575'
-    ).replace(/\/$/, '');
-    this.secret = config.get<string>('CANTON_SPLICE_SECRET') ?? null;
-    this.ledgerApiUser = config.get<string>('CANTON_LEDGER_API_USER') ?? 'ledger-api-user';
-    this.ledgerAudience = config.get<string>('CANTON_LEDGER_API_AUDIENCE') ?? 'https://canton.network.global';
     this.enabled = config.get<string>('LEDGER_INDEXER_ENABLED') === 'true';
-    this.pollIntervalMs = Number(config.get<string>('LEDGER_INDEXER_POLL_INTERVAL_MS') ?? '15000');
+    this.pollIntervalMs = Number(
+      config.get<string>('LEDGER_INDEXER_POLL_INTERVAL_MS') ?? '15000',
+    );
     const parties = config.get<string>('LEDGER_INDEXER_PARTY_IDS') ?? '';
-    this.watchParties = parties.split(',').map((p) => p.trim()).filter(Boolean);
+    this.watchParties = parties
+      .split(',')
+      .map((p) => p.trim())
+      .filter(Boolean);
   }
 
   onModuleInit() {
     if (!this.enabled) {
-      this.logger.log('Ledger Indexer disabled (LEDGER_INDEXER_ENABLED != true)');
+      this.logger.log(
+        'Ledger Indexer disabled (LEDGER_INDEXER_ENABLED != true)',
+      );
       return;
     }
     if (this.watchParties.length === 0) {
-      this.logger.warn('Ledger Indexer enabled but LEDGER_INDEXER_PARTY_IDS is empty — skipping');
+      this.logger.warn(
+        'Ledger Indexer enabled but LEDGER_INDEXER_PARTY_IDS is empty — skipping',
+      );
       return;
     }
     this.logger.log(
@@ -89,7 +91,9 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
     );
     // Run once immediately, then on interval
     void this.poll();
-    this.timer = setInterval(() => { void this.poll(); }, this.pollIntervalMs);
+    this.timer = setInterval(() => {
+      void this.poll();
+    }, this.pollIntervalMs);
   }
 
   onModuleDestroy() {
@@ -169,7 +173,9 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
 
       if (this.loggedUnreachable) {
         this.loggedUnreachable = false;
-        this.logger.log(`Lighthouse API reachable again at ${this.lighthouseUrl}`);
+        this.logger.log(
+          `Lighthouse API reachable again at ${this.lighthouseUrl}`,
+        );
       }
 
       if (!res.ok) {
@@ -219,7 +225,8 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
    * For these we settle the matching CcTransaction (ledgerTxId = contract_id).
    */
   private async processTransaction(tx: LighthouseTransaction): Promise<void> {
-    const isCcTransfer = tx.choice === 'AmuletRules_Transfer' || tx.is_cip56 === true;
+    const isCcTransfer =
+      tx.choice === 'AmuletRules_Transfer' || tx.is_cip56 === true;
     if (!isCcTransfer) return;
     if (!tx.contract_id) return;
 
@@ -250,7 +257,9 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
     });
     const fromDb = users
       .map((u) => u.cantonPartyId)
-      .filter((p): p is string => typeof p === 'string' && !p.startsWith('canquest:'));
+      .filter(
+        (p): p is string => typeof p === 'string' && !p.startsWith('canquest:'),
+      );
     return [...new Set([...fromEnv, ...fromDb])];
   }
 

@@ -1,7 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
-import * as jwt from 'jsonwebtoken';
+import { KeycloakTokenService } from '../auth/keycloak-token.service';
 
 /**
  * FeaturedAppActivityService
@@ -25,6 +25,9 @@ import * as jwt from 'jsonwebtoken';
  * In DevNet/TestNet this is a no-op unless the validator is registered as
  * a featured app. In MainNet it generates real CC rewards.
  *
+ * Auth: Keycloak client_credentials (validator-app-backend). Tokens are
+ * fetched/cached by KeycloakTokenService.
+ *
  * Reference implementation in cn-quickstart:
  *   https://github.com/digital-asset/cn-quickstart/blob/main/quickstart/backend/src/main/java/com/digitalasset/quickstart/service/LicenseApiImpl.java
  */
@@ -33,36 +36,41 @@ export class FeaturedAppActivityService {
   private readonly logger = new Logger(FeaturedAppActivityService.name);
 
   private readonly baseUrl: string;
-  private readonly secret: string | null;
   private readonly ledgerApiUser: string;
-  private readonly ledgerAudience: string;
   private readonly appProviderPartyId: string | null;
 
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    @Optional() private readonly keycloak: KeycloakTokenService,
+  ) {
     this.baseUrl = (
       config.get<string>('CANTON_JSON_API_URL') ?? 'http://127.0.0.1:7575'
     ).replace(/\/$/, '');
-    this.secret = config.get<string>('CANTON_SPLICE_SECRET') ?? null;
     this.ledgerApiUser =
       config.get<string>('CANTON_LEDGER_API_USER') ?? 'ledger-api-user';
-    this.ledgerAudience =
-      config.get<string>('CANTON_LEDGER_API_AUDIENCE') ??
-      'https://canton.network.global';
     this.appProviderPartyId =
       config.get<string>('CANTON_APP_PROVIDER_PARTY_ID') ?? null;
   }
 
-  private ledgerToken(): string | null {
-    if (!this.secret) return null;
-    return jwt.sign(
-      { sub: this.ledgerApiUser, aud: this.ledgerAudience },
-      this.secret,
-      { algorithm: 'HS256', expiresIn: '5m' },
-    );
+  /** Resolve a ledger bearer token via Keycloak (validator-app-backend). */
+  private async ledgerToken(): Promise<string | null> {
+    if (!this.keycloak) {
+      this.logger.error(
+        'KeycloakTokenService is not injected — cannot mint featured-app ledger token. ' +
+          'Ensure KeycloakTokenService is registered in CantonModule.',
+      );
+      return null;
+    }
+    try {
+      return await this.keycloak.getAdminLedgerToken();
+    } catch (err) {
+      this.logger.error(`ledgerToken Keycloak error: ${String(err)}`);
+      return null;
+    }
   }
 
-  private authHeaders(): Record<string, string> {
-    const token = this.ledgerToken();
+  private async authHeaders(): Promise<Record<string, string>> {
+    const token = await this.ledgerToken();
     const base: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) base['Authorization'] = `Bearer ${token}`;
     return base;
@@ -82,7 +90,7 @@ export class FeaturedAppActivityService {
   get isConfigured(): boolean {
     return (
       this.isEnabled &&
-      Boolean(this.appProviderPartyId && this.secret && this.baseUrl)
+      Boolean(this.appProviderPartyId && this.keycloak && this.baseUrl)
     );
   }
 
@@ -100,7 +108,11 @@ export class FeaturedAppActivityService {
    * @param description  - optional extra context
    */
   async recordActivity(
-    activityType: 'quest_completed' | 'cc_transfer' | 'wallet_created' | 'task_verified',
+    activityType:
+      | 'quest_completed'
+      | 'cc_transfer'
+      | 'wallet_created'
+      | 'task_verified',
     userPartyId: string,
     description?: string,
   ): Promise<boolean> {
@@ -124,11 +136,13 @@ export class FeaturedAppActivityService {
     // The `#` shorthand fallback is ONLY for DevNet/TestNet where package versions
     // change frequently.
     const templateId =
-      this.config.get<string>('CANTON_FEATURED_APP_MARKER_TEMPLATE_ID')?.trim() ||
+      this.config
+        .get<string>('CANTON_FEATURED_APP_MARKER_TEMPLATE_ID')
+        ?.trim() ||
       (() => {
         this.logger.warn(
           'CANTON_FEATURED_APP_MARKER_TEMPLATE_ID not set — FeaturedAppActivityMarker will be skipped. ' +
-          'On MainNet this MUST be set to the full package hash of splice-amulet.',
+            'On MainNet this MUST be set to the full package hash of splice-amulet.',
         );
         return '';
       })();
@@ -161,7 +175,7 @@ export class FeaturedAppActivityService {
     try {
       const res = await fetch(url, {
         method: 'POST',
-        headers: this.authHeaders(),
+        headers: await this.authHeaders(),
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(15_000),
       });
@@ -181,7 +195,9 @@ export class FeaturedAppActivityService {
       return false;
     } catch (err) {
       // Network error — non-critical, the main operation already succeeded
-      this.logger.warn(`FeaturedAppActivityMarker submit failed: ${String(err)}`);
+      this.logger.warn(
+        `FeaturedAppActivityMarker submit failed: ${String(err)}`,
+      );
       return false;
     }
   }

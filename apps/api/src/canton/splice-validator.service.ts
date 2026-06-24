@@ -1,8 +1,11 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as jwt from 'jsonwebtoken';
 import { randomUUID } from 'crypto';
-import { cantonPartyIdsEqual, normalizeCantonPartyId, spliceWalletUsernameFromParty } from '../common/canton-party-id';
+import {
+  cantonPartyIdsEqual,
+  normalizeCantonPartyId,
+  spliceWalletUsernameFromParty,
+} from '../common/canton-party-id';
 import { KeycloakTokenService } from '../auth/keycloak-token.service';
 import { CantonLedgerService } from './canton-ledger.service';
 
@@ -122,7 +125,7 @@ export class SpliceValidatorService {
             'anyone can forge Splice wallet JWTs. Set a strong random secret.',
         );
       }
-      // eslint-disable-next-line no-console
+
       console.warn(
         `[SpliceValidatorService] WARNING: CANTON_SPLICE_SECRET is a known ` +
           `placeholder ("${this.secret}"). Do NOT use this in production — ` +
@@ -146,12 +149,14 @@ export class SpliceValidatorService {
    * MUST be set explicitly. A missing/empty value is a config bug and failing
    * loud here is far safer than accidentally minting HS256 wallet JWTs.
    */
-  private get authMode(): 'keycloak' | 'auth0' | 'hs256' {
-    const m = (this.config.get<string>('LEDGER_AUTH_MODE') ?? '').trim().toLowerCase();
-    if (m === 'keycloak' || m === 'auth0' || m === 'hs256') return m;
+  private get authMode(): 'keycloak' | 'hs256' {
+    const m = (this.config.get<string>('LEDGER_AUTH_MODE') ?? '')
+      .trim()
+      .toLowerCase();
+    if (m === 'keycloak' || m === 'hs256') return m;
     if (process.env.NODE_ENV === 'production') {
       throw new Error(
-        'LEDGER_AUTH_MODE must be set explicitly in production (keycloak | auth0 | hs256). ' +
+        'LEDGER_AUTH_MODE must be set explicitly in production (keycloak | hs256). ' +
           'Refusing to default to hs256.',
       );
     }
@@ -159,8 +164,8 @@ export class SpliceValidatorService {
   }
 
   get isConfigured(): boolean {
-    if (this.authMode === 'keycloak') return Boolean(this.baseUrl && this.keycloak);
-    if (this.authMode === 'auth0') return Boolean(this.baseUrl);
+    if (this.authMode === 'keycloak')
+      return Boolean(this.baseUrl && this.keycloak);
     return Boolean(this.baseUrl && this.secret);
   }
 
@@ -176,77 +181,44 @@ export class SpliceValidatorService {
    * Base headers for every Splice Validator API request.
    * Includes Host override required by nginx server_name routing on VPS 1.
    */
-  private baseHeaders(extraHeaders?: Record<string, string>): Record<string, string> {
+  private baseHeaders(
+    extraHeaders?: Record<string, string>,
+  ): Record<string, string> {
     const headers: Record<string, string> = { ...extraHeaders };
     if (this.hostHeader) headers['Host'] = this.hostHeader;
     return headers;
   }
 
-  /** JWT token for admin operations.
-   * LEDGER_AUTH_MODE=keycloak → Keycloak client_credentials (validator-app-backend).
-   * Otherwise → HS256 signed with CANTON_SPLICE_SECRET. */
-  private async adminToken(subject = 'ledger-api-user'): Promise<string> {
-    if (this.authMode === 'keycloak') {
-      if (!this.keycloak) {
-        throw new Error(
-          'LEDGER_AUTH_MODE=keycloak but KeycloakTokenService is not injected in SpliceValidatorService. ' +
-          'Ensure it is registered in CantonModule.',
-        );
-      }
-      return this.keycloak.getAdminLedgerToken();
-    }
-    const audience =
-      this.config.get<string>('CANTON_SPLICE_AUDIENCE') ?? 'https://validator.example.com';
-    return this.signToken(subject, audience);
-  }
-
-  /**
-   * Mint an HS256 per-user wallet JWT (legacy dev/testnet auth).
-   *
-   * This is the single choke-point that MUST NOT fire in Keycloak mode. If we
-   * ever reach here with authMode=keycloak it means a per-user call-site was
-   * not migrated to the Ledger API — throw loudly so it can be fixed instead of
-   * silently forging a wallet token with a secret that may not even be set.
-   */
-  private signToken(subject: string, audience: string): string {
-    if (this.authMode === 'keycloak') {
+  /** Admin JWT token for Splice Validator API operations.
+   *  LEDGER_AUTH_MODE=keycloak → Keycloak client_credentials (validator-app-backend). */
+  private async adminToken(): Promise<string> {
+    if (this.authMode !== 'keycloak') {
+      // Only keycloak mode is supported. A different mode is a config bug.
       throw new Error(
-        `HS256 wallet token refused in keycloak mode (subject=${subject}). ` +
-          'This per-user call-site must be migrated to the Ledger API. ' +
-          'See migration doc §3 (CanQuest-Fix-03-Keycloak-Migration.md).',
+        `Unsupported LEDGER_AUTH_MODE for Splice admin token. Set LEDGER_AUTH_MODE=keycloak.`,
       );
     }
-    if (!this.secret) throw new Error('CANTON_SPLICE_SECRET is not set');
-    return jwt.sign(
-      { sub: subject, aud: audience },
-      this.secret,
-      { algorithm: 'HS256', expiresIn: '5m' },
-    );
+    if (!this.keycloak) {
+      throw new Error(
+        'LEDGER_AUTH_MODE=keycloak but KeycloakTokenService is not injected in SpliceValidatorService. ' +
+          'Ensure it is registered in CantonModule.',
+      );
+    }
+    return this.keycloak.getAdminLedgerToken();
   }
 
-  /** Audiences to try for per-user wallet JWT (403 often means wrong aud or user not onboarded). */
-  private walletAudiences(): string[] {
-    return [
-      ...new Set(
-        [
-          this.config.get<string>('CANTON_SPLICE_WALLET_AUDIENCE'),
-          this.config.get<string>('CANTON_SPLICE_AUDIENCE'),
-          'https://validator.example.com',
-          'https://canton.network.global',
-        ].filter(Boolean),
-      ),
-    ] as string[];
-  }
-
-  private authHeadersForToken(token: string, json = false): Record<string, string> {
+  private authHeadersForToken(
+    token: string,
+    json = false,
+  ): Record<string, string> {
     const extra: Record<string, string> = { Authorization: `Bearer ${token}` };
     if (json) extra['Content-Type'] = 'application/json';
     return this.baseHeaders(extra);
   }
 
   /** Auth headers (Authorization + optional Host override). */
-  private async authHeaders(subject?: string): Promise<Record<string, string>> {
-    return this.authHeadersForToken(await this.adminToken(subject ?? 'ledger-api-user'));
+  private async authHeaders(): Promise<Record<string, string>> {
+    return this.authHeadersForToken(await this.adminToken());
   }
 
   /**
@@ -259,19 +231,21 @@ export class SpliceValidatorService {
    * sendViaTransferPreapproval, acceptOfferViaWallet, etc.) surfaces
    * immediately instead of producing a 401 from the validator.
    */
-  private async jsonAuthHeaders(subject?: string): Promise<Record<string, string>> {
+  private async jsonAuthHeaders(
+    subject?: string,
+  ): Promise<Record<string, string>> {
     if (!subject) {
       return this.authHeadersForToken(await this.adminToken(), true);
     }
-    if (this.authMode === 'keycloak') {
-      throw new Error(
-        `Per-user wallet auth (username=${subject}) is not available in keycloak mode. ` +
-          'Migrate this call-site to the Ledger API (CIP-0056). ' +
-          'See migration doc §3 (CanQuest-Fix-03-Keycloak-Migration.md).',
-      );
-    }
-    const aud = this.walletAudiences()[0] ?? 'https://validator.example.com';
-    return this.authHeadersForToken(this.signToken(subject, aud), true);
+    // Per-user wallet JWTs are a legacy hs256 concept. In keycloak (operator)
+    // mode the backend acts as operator for every party — there is no per-user
+    // Splice wallet token. Throw so any unmigrated call-site surfaces
+    // immediately instead of producing a 401 from the validator.
+    throw new Error(
+      `Per-user wallet auth (username=${subject}) is not available in keycloak mode. ` +
+        'Migrate this call-site to the Ledger API (CIP-0056). ' +
+        'See migration doc §3 (CanQuest-Fix-03-Keycloak-Migration.md).',
+    );
   }
 
   /**
@@ -282,21 +256,11 @@ export class SpliceValidatorService {
    * onboarding flows proceed; the operator's Keycloak token authorizes the
    * admin wallet endpoints they actually need.
    */
-  async canAccessWalletAs(username: string): Promise<boolean> {
-    if (!this.isConfigured) return false;
-    if (this.authMode === 'keycloak') return true;
-    for (const aud of this.walletAudiences()) {
-      try {
-        const res = await fetch(`${this.baseUrl}/api/validator/v0/wallet/user-status`, {
-          headers: this.authHeadersForToken(this.signToken(username, aud)),
-          signal: AbortSignal.timeout(8_000),
-        });
-        if (res.ok) return true;
-      } catch {
-        /* try next audience */
-      }
-    }
-    return false;
+  // username is part of the public interface; unused in keycloak operator mode.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  canAccessWalletAs(username: string): Promise<boolean> {
+    // In keycloak mode every onboarded user is operator-authorized.
+    return Promise.resolve(this.isConfigured);
   }
 
   /** Usernames registered in Splice (GET /admin/users). */
@@ -326,11 +290,16 @@ export class SpliceValidatorService {
     const hint = spliceWalletUsernameFromParty(partyId);
     if (hint && (await this.canAccessWalletAs(hint))) {
       const walletParty = await this.getWalletPartyId(hint);
-      if (!walletParty || cantonPartyIdsEqual(walletParty, normalized)) return hint;
+      if (!walletParty || cantonPartyIdsEqual(walletParty, normalized))
+        return hint;
     }
 
     for (const name of await this.listSpliceUsernames()) {
-      if (hint && name.toLowerCase() === hint.toLowerCase() && (await this.canAccessWalletAs(name))) {
+      if (
+        hint &&
+        name.toLowerCase() === hint.toLowerCase() &&
+        (await this.canAccessWalletAs(name))
+      ) {
         return name;
       }
       const walletParty = await this.getWalletPartyId(name);
@@ -440,7 +409,7 @@ export class SpliceValidatorService {
     const url = `${this.baseUrl}/api/validator/v0/admin/users`;
     const token = await this.adminToken();
 
-        let res: Response;
+    let res: Response;
     try {
       res = await fetch(url, {
         method: 'POST',
@@ -468,7 +437,9 @@ export class SpliceValidatorService {
     }
 
     if (!res.ok) {
-      this.logger.error(`Splice createWalletUser failed ${res.status}: ${text.slice(0, 300)}`);
+      this.logger.error(
+        `Splice createWalletUser failed ${res.status}: ${text.slice(0, 300)}`,
+      );
       return null;
     }
 
@@ -494,7 +465,7 @@ export class SpliceValidatorService {
    * Fetch a specific user's party ID from the Splice validator.
    * GET /api/validator/v0/admin/users/{username}
    */
-    async getUserPartyId(username: string): Promise<string | null> {
+  async getUserPartyId(username: string): Promise<string | null> {
     if (!this.isConfigured) return null;
     try {
       const res = await fetch(
@@ -531,7 +502,7 @@ export class SpliceValidatorService {
     const normalized = normalizeCantonPartyId(partyId) ?? partyId.trim();
     try {
       const encoded = encodeURIComponent(normalized);
-            const res = await fetch(
+      const res = await fetch(
         `${this.baseUrl}/api/validator/v0/admin/transfer-preapprovals/by-party/${encoded}`,
         {
           headers: await this.authHeaders(),
@@ -567,7 +538,8 @@ export class SpliceValidatorService {
   async cancelTransferPreapproval(
     partyId: string,
   ): Promise<{ ok: boolean; error?: string }> {
-    if (!this.isConfigured) return { ok: false, error: 'Splice not configured' };
+    if (!this.isConfigured)
+      return { ok: false, error: 'Splice not configured' };
     const normalized = normalizeCantonPartyId(partyId) ?? partyId.trim();
     const encoded = encodeURIComponent(normalized);
 
@@ -587,9 +559,14 @@ export class SpliceValidatorService {
       // If 401/403, fall through to Ledger API approach
       if (res.status !== 401 && res.status !== 403) {
         const text = await res.text();
-        return { ok: false, error: `Admin API ${res.status}: ${text.slice(0, 200)}` };
+        return {
+          ok: false,
+          error: `Admin API ${res.status}: ${text.slice(0, 200)}`,
+        };
       }
-    } catch { /* fall through */ }
+    } catch {
+      /* fall through */
+    }
 
     // Admin API failed with 401/403 — signal controller to use Ledger API
     return { ok: false, error: 'ADMIN_AUTH_FAILED' };
@@ -606,7 +583,7 @@ export class SpliceValidatorService {
     return tp ? [tp] : [];
   }
 
-    /**
+  /**
    * Check if the Splice validator API is reachable.
    *
    * Uses GET /api/validator/v0/readyz — a dedicated health/readiness endpoint
@@ -620,14 +597,11 @@ export class SpliceValidatorService {
     if (!this.baseUrl) return false;
     try {
       // Try the readyz health endpoint first (preferred, less auth overhead)
-      const healthRes = await fetch(
-        `${this.baseUrl}/api/validator/v0/readyz`,
-        {
-          method: 'GET',
-          headers: this.baseHeaders(),
-          signal: AbortSignal.timeout(4_000),
-        },
-      );
+      const healthRes = await fetch(`${this.baseUrl}/api/validator/v0/readyz`, {
+        method: 'GET',
+        headers: this.baseHeaders(),
+        signal: AbortSignal.timeout(4_000),
+      });
       // Any response (200, 401, 404, 503) means the server is reachable
       return true;
     } catch {
@@ -669,22 +643,28 @@ export class SpliceValidatorService {
     if (!this.isConfigured) return null;
 
     const effectiveSender =
-      senderUsername ?? this.config.get<string>('CANTON_VALIDATOR_ADMIN_USER') ?? 'administrator';
+      senderUsername ??
+      this.config.get<string>('CANTON_VALIDATOR_ADMIN_USER') ??
+      'administrator';
 
     // Resolve sender party ID
     const senderPartyId =
       (effectiveSender !== 'administrator'
         ? await this.getWalletPartyId(effectiveSender)
         : null) ??
-      this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ?? '';
+      this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ??
+      '';
 
     // Resolve operator/DSO party
     const dsoParty =
       this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() ||
-      this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() || '';
+      this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ||
+      '';
 
     // Deadline: 7 days from now in ISO-8601 (for transferBefore)
-    const transferBefore = new Date(Date.now() + 7 * 24 * 3_600_000).toISOString();
+    const transferBefore = new Date(
+      Date.now() + 7 * 24 * 3_600_000,
+    ).toISOString();
 
     // expires_at must be in MICROSECONDS (Unix timestamp × 1_000_000).
     const nowMicros = BigInt(Date.now()) * 1_000n;
@@ -726,14 +706,18 @@ export class SpliceValidatorService {
 
       const text = await res.text();
       if (!res.ok) {
-        this.logger.warn(`createTransferOffer ${res.status}: ${text.slice(0, 300)}`);
+        this.logger.warn(
+          `createTransferOffer ${res.status}: ${text.slice(0, 300)}`,
+        );
         return null;
       }
 
       const data = JSON.parse(text) as { offer_contract_id?: string };
       const contractId = data.offer_contract_id ?? null;
       if (contractId) {
-        this.logger.log(`TransferOffer created: ${amountCc} CC → ${receiverPartyId.split('::')[0]} (${contractId.slice(0, 20)}...)`);
+        this.logger.log(
+          `TransferOffer created: ${amountCc} CC → ${receiverPartyId.split('::')[0]} (${contractId.slice(0, 20)}...)`,
+        );
       }
       return contractId;
     } catch (err) {
@@ -749,10 +733,13 @@ export class SpliceValidatorService {
   async getWalletPartyId(username: string): Promise<string | null> {
     if (!this.isConfigured) return null;
     try {
-      const res = await fetch(`${this.baseUrl}/api/validator/v0/wallet/user-status`, {
-        headers: await this.authHeaders(),
-        signal: AbortSignal.timeout(8_000),
-      });
+      const res = await fetch(
+        `${this.baseUrl}/api/validator/v0/wallet/user-status`,
+        {
+          headers: await this.authHeaders(),
+          signal: AbortSignal.timeout(8_000),
+        },
+      );
       if (!res.ok) {
         if (res.status === 401 || res.status === 403) return null;
         return null;
@@ -761,57 +748,6 @@ export class SpliceValidatorService {
       return data.party_id?.trim() || null;
     } catch {
       return null;
-    }
-  }
-
-  /**
-   * One-step CC send when receiver has TransferPreapproval (preferred for platform fees).
-   * POST /api/validator/v0/wallet/transfer-preapproval/send  (as sender)
-   */
-  async sendViaTransferPreapproval(
-    senderUsername: string,
-    receiverPartyId: string,
-    amountCc: number,
-    description: string,
-  ): Promise<{ ok: boolean; referenceId?: string; error?: string }> {
-    if (!this.isConfigured) {
-      return { ok: false, error: 'Splice not configured' };
-    }
-    const url = `${this.baseUrl}/api/validator/v0/wallet/transfer-preapproval/send`;
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: await this.jsonAuthHeaders(senderUsername),
-        body: JSON.stringify({
-          receiver_party_id: receiverPartyId,
-          amount: amountCc.toString(),
-          description,
-          deduplication_id: randomUUID(),
-        }),
-        signal: AbortSignal.timeout(45_000),
-      });
-      const text = await res.text();
-      if (res.ok) {
-        let referenceId: string | undefined;
-        try {
-          const data = JSON.parse(text) as {
-            transfer_instruction_id?: string;
-            update_id?: string;
-            contract_id?: string;
-          };
-          referenceId =
-            data.transfer_instruction_id ?? data.contract_id ?? data.update_id;
-        } catch {
-          referenceId = undefined;
-        }
-        this.logger.log(
-          `Preapproval send: ${amountCc} CC from @${senderUsername} → ${receiverPartyId.split('::')[0]}`,
-        );
-        return { ok: true, referenceId };
-      }
-      return { ok: false, error: text.slice(0, 300) };
-    } catch (err) {
-      return { ok: false, error: String(err) };
     }
   }
 
@@ -835,7 +771,9 @@ export class SpliceValidatorService {
       null;
 
     if (!treasuryPartyId) {
-      const validatorPartyId = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
+      const validatorPartyId = this.config
+        .get<string>('CANTON_VALIDATOR_PARTY_ID')
+        ?.trim();
       if (!validatorPartyId) return null;
       treasuryPartyId = validatorPartyId;
       this.logger.warn(
@@ -866,7 +804,7 @@ export class SpliceValidatorService {
    * Reward must only be sent after this returns collected=true.
    */
   async collectClaimFeeToValidatorParty(params: {
-    senderPartyId: string;          // ← BARU: party user yang bayar fee
+    senderPartyId: string; // ← BARU: party user yang bayar fee
     senderUsername: string;
     feeCc: number;
     description: string;
@@ -880,7 +818,10 @@ export class SpliceValidatorService {
   }> {
     const validatorPartyId = params.validatorPartyId.trim();
     if (!validatorPartyId) {
-      return { collected: false, error: 'CANTON_VALIDATOR_PARTY_ID is not set' };
+      return {
+        collected: false,
+        error: 'CANTON_VALIDATOR_PARTY_ID is not set',
+      };
     }
 
     const validatorLabel = validatorPartyId.split('::')[0];
@@ -889,7 +830,7 @@ export class SpliceValidatorService {
     );
 
     const result = await this.collectPlatformFee({
-      senderPartyId: params.senderPartyId,  // ← user yang bayar fee
+      senderPartyId: params.senderPartyId, // ← user yang bayar fee
       senderUsername: params.senderUsername,
       feeCc: params.feeCc,
       description: params.description,
@@ -917,13 +858,13 @@ export class SpliceValidatorService {
    * Non-blocking: returns collected=false on error, caller decides whether to proceed.
    */
   async collectPlatformFee(params: {
-    senderPartyId: string;          // ← BARU: party user yang bayar fee
-    senderUsername?: string;        // untuk logging
+    senderPartyId: string; // ← BARU: party user yang bayar fee
+    senderUsername?: string; // untuk logging
     feeCc: number;
     description: string;
     treasuryPartyId?: string;
     treasuryAcceptUsername?: string; // backward compat, diabaikan
-    strictBalanceVerify?: boolean;   // backward compat, diabaikan
+    strictBalanceVerify?: boolean; // backward compat, diabaikan
   }): Promise<{
     collected: boolean;
     ledgerTxId?: string;
@@ -934,36 +875,54 @@ export class SpliceValidatorService {
     const { senderPartyId, feeCc, description } = params;
     const senderLabel = params.senderUsername || senderPartyId.split('::')[0];
 
-    const resolved =
-      params.treasuryPartyId
-        ? { treasuryPartyId: params.treasuryPartyId, treasuryAcceptUsername: params.treasuryAcceptUsername ?? 'administrator' }
-        : { treasuryPartyId: this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim()
-              || this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim()
-              || '', treasuryAcceptUsername: 'administrator' };
+    const resolved = params.treasuryPartyId
+      ? {
+          treasuryPartyId: params.treasuryPartyId,
+          treasuryAcceptUsername:
+            params.treasuryAcceptUsername ?? 'administrator',
+        }
+      : {
+          treasuryPartyId:
+            this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
+            this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ||
+            '',
+          treasuryAcceptUsername: 'administrator',
+        };
 
     if (!resolved?.treasuryPartyId) {
-      return { collected: false, error: 'Treasury / validator party not configured' };
+      return {
+        collected: false,
+        error: 'Treasury / validator party not configured',
+      };
     }
 
     const { treasuryPartyId } = resolved;
     const treasuryLabel = treasuryPartyId.split('::')[0];
 
     if (!this.ledger) {
-      this.logger.error('CantonLedgerService not injected — cannot execute CIP-0056 fee transfer');
-      return { collected: false, error: 'CantonLedgerService not available', treasuryPartyId };
+      this.logger.error(
+        'CantonLedgerService not injected — cannot execute CIP-0056 fee transfer',
+      );
+      return {
+        collected: false,
+        error: 'CantonLedgerService not available',
+        treasuryPartyId,
+      };
     }
 
     // ── CIP-0056 fee transfer (non-blocking, actAs=senderPartyId) ───
     try {
       const feeResult = await this.ledger.executeTransferFactoryTransfer({
-        senderPartyId,              // ← user yang BAYAR fee (claimer)
+        senderPartyId, // ← user yang BAYAR fee (claimer)
         receiverPartyId: treasuryPartyId,
         amountCc: feeCc,
         description,
       });
 
       if (feeResult.ok && feeResult.transferKind === 'direct') {
-        this.logger.log(`Platform fee ${feeCc} CC via CIP-0056 direct → ${treasuryLabel} (from ${senderLabel})`);
+        this.logger.log(
+          `Platform fee ${feeCc} CC via CIP-0056 direct → ${treasuryLabel} (from ${senderLabel})`,
+        );
         return {
           collected: true,
           ledgerTxId: feeResult.updateId ?? undefined,
@@ -972,11 +931,19 @@ export class SpliceValidatorService {
         };
       }
 
-      if (feeResult.ok && feeResult.transferKind === 'offer' && feeResult.transferInstructionCid) {
+      if (
+        feeResult.ok &&
+        feeResult.transferKind === 'offer' &&
+        feeResult.transferInstructionCid
+      ) {
         const acceptR = await this.ledger.acceptTransferInstruction(
-          feeResult.transferInstructionCid, treasuryPartyId);
+          feeResult.transferInstructionCid,
+          treasuryPartyId,
+        );
         if (acceptR.ok) {
-          this.logger.log(`Platform fee ${feeCc} CC via CIP-0056 offer-accept → ${treasuryLabel} (from ${senderLabel})`);
+          this.logger.log(
+            `Platform fee ${feeCc} CC via CIP-0056 offer-accept → ${treasuryLabel} (from ${senderLabel})`,
+          );
           return {
             collected: true,
             ledgerTxId: acceptR.updateId ?? feeResult.updateId ?? undefined,
@@ -984,12 +951,19 @@ export class SpliceValidatorService {
             treasuryPartyId,
           };
         }
-        this.logger.warn(`Fee offer accept failed for ${treasuryLabel} — transfer proceeds without fee`);
+        this.logger.warn(
+          `Fee offer accept failed for ${treasuryLabel} — transfer proceeds without fee`,
+        );
       }
 
       this.logger.warn(
-        `Fee NOT collected (transferKind=${feeResult.transferKind}, ok=${feeResult.ok}). Proceeding without fee.`);
-      return { collected: false, error: feeResult.error ?? 'CIP-0056 fee gagal', treasuryPartyId };
+        `Fee NOT collected (transferKind=${feeResult.transferKind}, ok=${feeResult.ok}). Proceeding without fee.`,
+      );
+      return {
+        collected: false,
+        error: feeResult.error ?? 'CIP-0056 fee gagal',
+        treasuryPartyId,
+      };
     } catch (feeErr) {
       this.logger.warn(`Fee collect error (non-blocking): ${String(feeErr)}`);
       return { collected: false, error: String(feeErr), treasuryPartyId };
@@ -1021,16 +995,22 @@ export class SpliceValidatorService {
   }): Promise<boolean> {
     if (params.balanceBefore === null) {
       if (params.strict) {
-        this.logger.error('Treasury fee verify failed: could not read balance before fee');
+        this.logger.error(
+          'Treasury fee verify failed: could not read balance before fee',
+        );
         return false;
       }
       return true;
     }
     await new Promise((r) => setTimeout(r, 2500));
-    const balanceAfter = await this.readTreasuryBalanceWithRetry(params.treasuryAcceptUsername);
+    const balanceAfter = await this.readTreasuryBalanceWithRetry(
+      params.treasuryAcceptUsername,
+    );
     if (balanceAfter === null) {
       if (params.strict) {
-        this.logger.error('Treasury fee verify failed: could not read balance after fee');
+        this.logger.error(
+          'Treasury fee verify failed: could not read balance after fee',
+        );
         return false;
       }
       return true;
@@ -1053,28 +1033,13 @@ export class SpliceValidatorService {
    * endpoint is unreachable. Callers should read balance from the DB
    * (BALANCE_READ_FROM_DB=true) — CcInboundSyncService keeps it in sync via the
    * Ledger API (getLedgerBalance, Keycloak admin token). Returning null here
-   * makes the DB path authoritative without ever touching signToken.
+   * makes the DB path authoritative.
    */
-    async getUserBalance(username: string): Promise<number | null> {
-    if (!this.isConfigured) return null;
-    if (this.authMode === 'keycloak') return null;
-    for (const aud of this.walletAudiences()) {
-      try {
-        const res = await fetch(`${this.baseUrl}/api/validator/v0/wallet/balance`, {
-          headers: this.authHeadersForToken(this.signToken(username, aud)),
-          signal: AbortSignal.timeout(8_000),
-        });
-        if (!res.ok) {
-          if (res.status === 401 || res.status === 403) continue;
-          return null;
-        }
-        const data = (await res.json()) as { effective_unlocked_qty?: string };
-        return data.effective_unlocked_qty ? parseFloat(data.effective_unlocked_qty) : 0;
-      } catch {
-        /* try next audience */
-      }
-    }
-    return null;
+  // username is part of the public interface; unused in keycloak operator mode.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  getUserBalance(username: string): Promise<number | null> {
+    // No per-user wallet JWT in keycloak mode — DB is authoritative.
+    return Promise.resolve(null);
   }
 
   /**
@@ -1082,35 +1047,17 @@ export class SpliceValidatorService {
    * GET /api/validator/v0/wallet/transfer-offers  (as the user)
    *
    * In Keycloak (operator) mode the per-user wallet JWT is not available. The
-   * caller (party.controller) already falls back to CantonLedgerService.
+   * caller (party.controller) falls back to CantonLedgerService
    * queryPendingOffers() (ACS query, operator readAs) — return [] here so that
-   * path is taken without ever reaching signToken.
+   * path is taken.
    */
-    async listTransferOffers(username: string): Promise<{ contractId: string; payload: unknown }[]> {
-    if (!this.isConfigured) return [];
-    if (this.authMode === 'keycloak') return [];
-    for (const aud of this.walletAudiences()) {
-      try {
-        const res = await fetch(`${this.baseUrl}/api/validator/v0/wallet/transfer-offers`, {
-          headers: this.authHeadersForToken(this.signToken(username, aud)),
-          signal: AbortSignal.timeout(8_000),
-        });
-        if (!res.ok) {
-          if (res.status === 401 || res.status === 403) continue;
-          return [];
-        }
-        const data = (await res.json()) as {
-          offers?: { contract_id?: string; payload?: unknown }[];
-        };
-        return (data.offers ?? []).map((o) => ({
-          contractId: o.contract_id ?? '',
-          payload: o.payload,
-        }));
-      } catch {
-        /* try next audience */
-      }
-    }
-    return [];
+  /* eslint-disable @typescript-eslint/no-unused-vars -- username is part of the public interface; unused in keycloak operator mode. */
+  listTransferOffers(
+    username: string,
+  ): Promise<{ contractId: string; payload: unknown }[]> {
+    /* eslint-enable @typescript-eslint/no-unused-vars */
+    // No per-user wallet JWT in keycloak mode — caller falls back to Ledger API.
+    return Promise.resolve([]);
   }
 
   /**
@@ -1131,15 +1078,21 @@ export class SpliceValidatorService {
     username: string,
   ): Promise<{ ok: boolean; status?: number; detail?: string }> {
     if (!this.isConfigured) {
-      return { ok: false, detail: 'CANTON_VALIDATOR_URL atau CANTON_SPLICE_SECRET belum di-set.' };
+      return {
+        ok: false,
+        detail: 'CANTON_VALIDATOR_URL atau CANTON_SPLICE_SECRET belum di-set.',
+      };
     }
     try {
-      const res = await fetch(`${this.baseUrl}/api/validator/v0/wallet/transfer-preapproval`, {
-        method: 'POST',
-        headers: await this.jsonAuthHeaders(),
-        body: '{}',
-        signal: AbortSignal.timeout(15_000),
-      });
+      const res = await fetch(
+        `${this.baseUrl}/api/validator/v0/wallet/transfer-preapproval`,
+        {
+          method: 'POST',
+          headers: await this.jsonAuthHeaders(),
+          body: '{}',
+          signal: AbortSignal.timeout(15_000),
+        },
+      );
       const text = await res.text();
 
       if (res.ok || res.status === 409) {
@@ -1151,20 +1104,33 @@ export class SpliceValidatorService {
 
       let detail = text.slice(0, 300);
       if (res.status === 404) {
-        detail = 'Endpoint preapproval tidak ditemukan di validator (versi Splice?). Buat lewat Splice Wallet UI.';
+        detail =
+          'Endpoint preapproval tidak ditemukan di validator (versi Splice?). Buat lewat Splice Wallet UI.';
       } else if (res.status === 401 || res.status === 403) {
         const spliceUsers = await this.listSpliceUsernames();
-        const listed = spliceUsers.some((u) => u.toLowerCase() === username.toLowerCase());
+        const listed = spliceUsers.some(
+          (u) => u.toLowerCase() === username.toLowerCase(),
+        );
         detail = listed
           ? `@${username} ada di Splice tapi wallet API menolak (403). Buat preapproval lewat Splice Wallet UI.`
           : `@${username} belum terdaftar di Splice Wallet. Buat ulang wallet saat tunnel Splice aktif.`;
       }
-      this.logger.warn(`createTransferPreapproval ${res.status} for @${username}: ${text.slice(0, 200)}`);
+      this.logger.warn(
+        `createTransferPreapproval ${res.status} for @${username}: ${text.slice(0, 200)}`,
+      );
       return { ok: false, status: res.status, detail };
     } catch (err) {
       const msg = String(err);
-      this.logger.warn(`createTransferPreapproval error for @${username}: ${msg}`);
-      return { ok: false, detail: msg.includes('ECONNREFUSED') || msg.includes('fetch failed') ? 'Tidak bisa hubungi Splice. Jalankan SSH tunnel.' : msg };
+      this.logger.warn(
+        `createTransferPreapproval error for @${username}: ${msg}`,
+      );
+      return {
+        ok: false,
+        detail:
+          msg.includes('ECONNREFUSED') || msg.includes('fetch failed')
+            ? 'Tidak bisa hubungi Splice. Jalankan SSH tunnel.'
+            : msg,
+      };
     }
   }
 
@@ -1179,7 +1145,7 @@ export class SpliceValidatorService {
     asUsername: string,
   ): Promise<boolean> {
     if (!this.isConfigured) return false;
-        try {
+    try {
       const encodedId = encodeURIComponent(contractId);
       const res = await fetch(
         `${this.baseUrl}/api/validator/v0/wallet/transfer-offers/${encodedId}/accept`,
@@ -1192,37 +1158,19 @@ export class SpliceValidatorService {
       );
       const text = await res.text();
       if (res.ok) {
-        this.logger.log(`Offer accepted via Splice Wallet API: ${contractId.slice(0, 16)}…`);
+        this.logger.log(
+          `Offer accepted via Splice Wallet API: ${contractId.slice(0, 16)}…`,
+        );
         return true;
       }
-      this.logger.warn(`Splice Wallet accept failed ${res.status}: ${text.slice(0, 200)}`);
+      this.logger.warn(
+        `Splice Wallet accept failed ${res.status}: ${text.slice(0, 200)}`,
+      );
       return false;
     } catch (err) {
       this.logger.warn(`acceptOfferViaWallet error: ${String(err)}`);
       return false;
     }
-  }
-
-  /** Accept with retries — fee offers may need a short delay before visible in wallet API. */
-  async acceptOfferViaWalletWithRetry(
-    contractId: string,
-    asUsername: string,
-    options?: { attempts?: number; delayMs?: number },
-  ): Promise<boolean> {
-    const attempts = options?.attempts ?? 5;
-    const delayMs = options?.delayMs ?? 1500;
-    for (let i = 0; i < attempts; i++) {
-      if (i > 0) {
-        await new Promise((r) => setTimeout(r, delayMs));
-      }
-      if (await this.acceptOfferViaWallet(contractId, asUsername)) {
-        if (i > 0) {
-          this.logger.log(`Offer accepted on retry ${i + 1} as ${asUsername}`);
-        }
-        return true;
-      }
-    }
-    return false;
   }
 
   /** CIP-0056 reward send — delegasi ke CantonLedgerService.sendReward. */

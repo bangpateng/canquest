@@ -1,8 +1,11 @@
-import { Injectable, Logger, Optional, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  Optional,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as jwt from 'jsonwebtoken';
 import { randomUUID } from 'crypto';
-import { Auth0TokenService } from '../auth/auth0-token.service';
 import { KeycloakTokenService } from '../auth/keycloak-token.service';
 
 /**
@@ -45,9 +48,7 @@ import { KeycloakTokenService } from '../auth/keycloak-token.service';
 export class CantonLedgerService {
   private readonly logger = new Logger(CantonLedgerService.name);
   private readonly baseUrl: string;
-  private readonly secret: string | null;
   private readonly ledgerApiUser: string;
-  private readonly ledgerAudience: string;
   /**
    * Scan API URL — hosts the Transfer Factory Registry (CIP-0056).
    * Required for executeTransferFactoryTransfer() to get factoryId + choiceContext.
@@ -57,59 +58,40 @@ export class CantonLedgerService {
 
   constructor(
     private readonly config: ConfigService,
-    @Optional() private readonly auth0: Auth0TokenService,
     @Optional() private readonly keycloak: KeycloakTokenService,
   ) {
     this.baseUrl = (
       (config.get<string>('LEDGER_API_URL') ||
-      config.get<string>('CANTON_JSON_API_URL')) ??
+        config.get<string>('CANTON_JSON_API_URL')) ??
       'http://127.0.0.1:7575'
     ).replace(/\/$/, '');
-    this.secret = config.get<string>('CANTON_SPLICE_SECRET') ?? null;
     this.ledgerApiUser =
       config.get<string>('CANTON_LEDGER_API_USER') ?? 'ledger-api-user';
-    this.ledgerAudience =
-      config.get<string>('CANTON_LEDGER_API_AUDIENCE') ?? 'https://canton.network.global';
-    this.scanUrl = (
-      config.get<string>('CANTON_SCAN_URL') ?? null
-    )?.replace(/\/$/, '') ?? null;
+    this.scanUrl =
+      (config.get<string>('CANTON_SCAN_URL') ?? null)?.replace(/\/$/, '') ??
+      null;
   }
 
   /**
-   * HS256 JWT token for Canton JSON Ledger API calls (legacy / hs256 mode).
-   * Kept intact for REVERSIBILITY — do not delete.
-   */
-  private ledgerToken(actingUser?: string): string | null {
-    if (!this.secret) return null;
-    const sub = actingUser ?? this.ledgerApiUser;
-    return jwt.sign(
-      { sub, aud: this.ledgerAudience },
-      this.secret,
-      { algorithm: 'HS256', expiresIn: '5m' },
-    );
-  }
-
-  /**
-   * Resolve the bearer token for a given ledger identity.
+   * Resolve the bearer token for a given ledger identity via Keycloak
+   * client_credentials.
    *
-   * LEDGER_AUTH_MODE=auth0  → Auth0 M2M token via client_credentials
-   *   identity='admin'  → getAdminLedgerToken()  (dapp-admin)
-   *   identity='reward' → getRewardLedgerToken() (dapp-reward)
-   * LEDGER_AUTH_MODE=hs256 (default) → HS256 JWT signed with CANTON_SPLICE_SECRET
+   *   identity='admin'  → getAdminLedgerToken()  (validator-app-backend)
+   *   identity='reward' → getRewardLedgerToken() (reward client, or same as admin)
    *
-   * This is the single choke-point for auth mode switching — all other methods
-   * call authHeaders() which calls this helper.
+   * This is the single choke-point for ledger auth — all other methods call
+   * authHeaders() which calls this helper.
    */
   private async getLedgerToken(
     identity: 'admin' | 'reward' = 'admin',
   ): Promise<string | null> {
-    const mode = this.config.get<string>('LEDGER_AUTH_MODE') ?? 'hs256';
+    const mode = this.config.get<string>('LEDGER_AUTH_MODE');
 
     if (mode === 'keycloak') {
       if (!this.keycloak) {
         this.logger.error(
           'LEDGER_AUTH_MODE=keycloak but KeycloakTokenService is not injected. ' +
-          'Ensure KeycloakTokenService is registered in CantonModule.',
+            'Ensure KeycloakTokenService is registered in CantonModule.',
         );
         return null;
       }
@@ -118,48 +100,39 @@ export class CantonLedgerService {
           ? await this.keycloak.getRewardLedgerToken()
           : await this.keycloak.getAdminLedgerToken();
       } catch (err) {
-        this.logger.error(`getLedgerToken(${identity}) Keycloak error: ${String(err)}`);
-        return null;
-      }
-    }
-
-    if (mode === 'auth0') {
-      if (!this.auth0) {
         this.logger.error(
-          'LEDGER_AUTH_MODE=auth0 but Auth0TokenService is not injected. ' +
-          'Ensure Auth0Module is imported in CantonModule.',
+          `getLedgerToken(${identity}) Keycloak error: ${String(err)}`,
         );
         return null;
       }
-      try {
-        return identity === 'reward'
-          ? await this.auth0.getRewardLedgerToken()
-          : await this.auth0.getAdminLedgerToken();
-      } catch (err) {
-        this.logger.error(`getLedgerToken(${identity}) Auth0 error: ${String(err)}`);
-        return null;
-      }
     }
 
-    // Default: hs256 — use legacy CANTON_SPLICE_SECRET token
-    return this.ledgerToken();
+    // Only keycloak mode is supported. A missing/typo'd LEDGER_AUTH_MODE is a
+    // config bug — failing loud here is far safer than silently returning no
+    // token and sending unauthenticated ledger requests.
+    throw new Error(
+      `Unsupported LEDGER_AUTH_MODE="${mode ?? ''}". Set LEDGER_AUTH_MODE=keycloak.`,
+    );
   }
 
   /**
    * Build HTTP headers for a Canton Ledger API request.
    *
-   * @param identity - 'admin' (default) or 'reward' — selects the Auth0 M2M identity
-   *                   when LEDGER_AUTH_MODE=auth0. Ignored in hs256 mode.
+   * @param identity - 'admin' (default) or 'reward' — selects the Keycloak
+   *                   client_credentials identity.
    */
   private async authHeaders(
     identity: 'admin' | 'reward' = 'admin',
   ): Promise<Record<string, string>> {
     const token = await this.getLedgerToken(identity);
     if (!token) return { 'Content-Type': 'application/json' };
-    return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+    return {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    };
   }
 
-    /**
+  /**
    * Quick health check using the /livez endpoint.
    * Per Canton docs: http://localhost:7575/livez returns HTTP 200 when the
    * JSON Ledger API is healthy.
@@ -173,7 +146,9 @@ export class CantonLedgerService {
       });
       return res.ok;
     } catch (err) {
-      this.logger.warn(`Canton JSON API not reachable at ${this.baseUrl}: ${String(err)}`);
+      this.logger.warn(
+        `Canton JSON API not reachable at ${this.baseUrl}: ${String(err)}`,
+      );
       return false;
     }
   }
@@ -210,7 +185,9 @@ export class CantonLedgerService {
     /** AuthN identity: 'admin' (default) or 'reward' for dapp-reward token. */
     identity?: 'admin' | 'reward',
     /** Use transaction-tree endpoint when CreatedEvent contract ids are needed. */
-    waitMode: 'submit-and-wait' | 'submit-and-wait-for-transaction-tree' = 'submit-and-wait',
+    waitMode:
+      | 'submit-and-wait'
+      | 'submit-and-wait-for-transaction-tree' = 'submit-and-wait',
     /**
      * CIP-0056: Disclosed contracts from the Transfer Factory Registry.
      * Required for TransferFactory_Transfer — the ledger needs these to verify
@@ -220,11 +197,8 @@ export class CantonLedgerService {
     disclosedContracts?: unknown[],
   ): Promise<{ ok: boolean; status: number; text: string }> {
     const url = `${this.baseUrl}/v2/commands/${waitMode}`;
-    const effectiveUserId = userId ?? (
-      ((this.config.get<string>('LEDGER_AUTH_MODE') ?? 'hs256') === 'keycloak')
-        ? (process.env.LEDGER_API_ADMIN_USER || this.ledgerApiUser)
-        : this.ledgerApiUser
-    );
+    const effectiveUserId =
+      userId ?? (process.env.LEDGER_API_ADMIN_USER || this.ledgerApiUser);
     const effectiveCommandId = commandId ?? randomUUID();
 
     const MAX_RETRIES = 3;
@@ -233,11 +207,11 @@ export class CantonLedgerService {
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
         const body: Record<string, unknown> = {
-            commands,
-            userId: effectiveUserId,
-            commandId: effectiveCommandId,
-            actAs,
-            readAs: actAs,
+          commands,
+          userId: effectiveUserId,
+          commandId: effectiveCommandId,
+          actAs,
+          readAs: actAs,
         };
         // CIP-0056: attach disclosed contracts when provided by the registry
         if (disclosedContracts && disclosedContracts.length > 0) {
@@ -269,7 +243,9 @@ export class CantonLedgerService {
       } catch (err) {
         if (attempt < MAX_RETRIES - 1) {
           const delay = Math.pow(2, attempt) * 150;
-          this.logger.warn(`Command fetch error (attempt ${attempt + 1}): ${String(err)} — retrying in ${delay}ms`);
+          this.logger.warn(
+            `Command fetch error (attempt ${attempt + 1}): ${String(err)} — retrying in ${delay}ms`,
+          );
           await sleep(delay);
           continue;
         }
@@ -328,7 +304,7 @@ export class CantonLedgerService {
       actAs,
       undefined,
       commandId,
-      undefined,   // identity (defaults to 'admin')
+      undefined, // identity (defaults to 'admin')
       waitMode,
       disclosedContracts,
     );
@@ -355,7 +331,7 @@ export class CantonLedgerService {
     if (!this.scanUrl) {
       this.logger.error(
         'CANTON_SCAN_URL is not set — cannot call Transfer Factory Registry. ' +
-        'Set it to your Scan API URL (e.g. https://scan.sv-1.test.global.canton.network.sync.global)',
+          'Set it to your Scan API URL (e.g. https://scan.sv-1.test.global.canton.network.sync.global)',
       );
       return null;
     }
@@ -364,7 +340,8 @@ export class CantonLedgerService {
     const validatorUrl = (
       this.config.get<string>('CANTON_VALIDATOR_URL') ?? 'http://127.0.0.1:8080'
     ).replace(/\/$/, '');
-    const hostHeader = this.config.get<string>('CANTON_VALIDATOR_HOST_HEADER') ?? '';
+    const hostHeader =
+      this.config.get<string>('CANTON_VALIDATOR_HOST_HEADER') ?? '';
 
     // Always use validator's scan-proxy — proven to work on MainNet
     // Scan-proxy is at: ${validatorUrl}/api/validator/v0/scan-proxy
@@ -387,7 +364,9 @@ export class CantonLedgerService {
 
       const text = await res.text();
       if (!res.ok) {
-        this.logger.warn(`Transfer Factory Registry ${res.status}: ${text.slice(0, 300)}`);
+        this.logger.warn(
+          `Transfer Factory Registry ${res.status}: ${text.slice(0, 300)}`,
+        );
         return null;
       }
 
@@ -401,18 +380,22 @@ export class CantonLedgerService {
       };
 
       if (!data.factoryId || !data.choiceContext) {
-        this.logger.warn('Registry response missing factoryId or choiceContext');
+        this.logger.warn(
+          'Registry response missing factoryId or choiceContext',
+        );
         return null;
       }
 
       this.logger.log(
         `Registry OK: factory=${data.factoryId.slice(0, 16)}... kind=${data.transferKind ?? 'unknown'} ` +
-        `disclosed=${data.choiceContext.disclosedContracts?.length ?? 0}`,
+          `disclosed=${data.choiceContext.disclosedContracts?.length ?? 0}`,
       );
 
       return {
         factoryId: data.factoryId,
-        choiceContextData: data.choiceContext.choiceContextData ?? { values: {} },
+        choiceContextData: data.choiceContext.choiceContextData ?? {
+          values: {},
+        },
         disclosedContracts: data.choiceContext.disclosedContracts ?? [],
         transferKind: data.transferKind ?? 'unknown',
       };
@@ -455,9 +438,8 @@ export class CantonLedgerService {
     description?: string;
     /**
      * Ledger identity to use for authentication.
-     * 'admin'  → dapp-admin (general operations, default)
-     * 'reward' → dapp-reward (CC reward transfers — JOB_SEND_CC_REWARD, JOB_DISTRIBUTE_REWARD)
-     * Only relevant when LEDGER_AUTH_MODE=auth0.
+     * 'admin'  → validator-app-backend (general operations, default)
+     * 'reward' → reward client (CC reward transfers — JOB_SEND_CC_REWARD, JOB_DISTRIBUTE_REWARD)
      */
     identity?: 'admin' | 'reward';
   }): Promise<{
@@ -467,7 +449,13 @@ export class CantonLedgerService {
     transferInstructionCid?: string | null;
     error?: string;
   }> {
-    const { senderPartyId, receiverPartyId, amountCc, description, identity = 'admin' } = params;
+    const {
+      senderPartyId,
+      receiverPartyId,
+      amountCc,
+      description,
+      identity = 'admin',
+    } = params;
 
     // ── Step 1: Query sender's Amulet holdings for inputHoldingCids ──────
     const holdings = await this.queryAmuletHoldings(senderPartyId);
@@ -482,13 +470,15 @@ export class CantonLedgerService {
     const inputHoldingCids = holdings.map((h) => h.contractId);
 
     // DSO party (instrumentId.admin) — from CANTON_DSO_PARTY_ID
-    const dsoParty = this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() || '';
+    const dsoParty =
+      this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() || '';
     if (!dsoParty) {
       return {
         ok: false,
         updateId: null,
         transferKind: 'unknown',
-        error: 'CANTON_DSO_PARTY_ID is not set — required for CIP-0056 transfer',
+        error:
+          'CANTON_DSO_PARTY_ID is not set — required for CIP-0056 transfer',
       };
     }
 
@@ -509,7 +499,9 @@ export class CantonLedgerService {
         },
         lock: null,
         requestedAt: now.toISOString(),
-        executeBefore: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+        executeBefore: new Date(
+          now.getTime() + 24 * 60 * 60 * 1000,
+        ).toISOString(),
         inputHoldingCids,
         meta: {
           values: description
@@ -518,7 +510,7 @@ export class CantonLedgerService {
         },
       },
       extraArgs: {
-        context: { values: {} },  // Will be replaced with registry's choiceContextData
+        context: { values: {} }, // Will be replaced with registry's choiceContextData
         meta: { values: {} },
       },
     };
@@ -546,9 +538,9 @@ export class CantonLedgerService {
 
     this.logger.log(
       `TransferFactory_Transfer (CIP-0056): sender=${senderPartyId.split('::')[0]} → ` +
-      `receiver=${receiverPartyId.split('::')[0]} amount=${amountCc} CC ` +
-      `kind=${registry.transferKind} factory=${registry.factoryId.slice(0, 16)}... ` +
-      `disclosed=${registry.disclosedContracts.length} identity=${identity}`,
+        `receiver=${receiverPartyId.split('::')[0]} amount=${amountCc} CC ` +
+        `kind=${registry.transferKind} factory=${registry.factoryId.slice(0, 16)}... ` +
+        `disclosed=${registry.disclosedContracts.length} identity=${identity}`,
     );
 
     const { ok, status, text } = await this.exerciseChoice(
@@ -559,7 +551,7 @@ export class CantonLedgerService {
       [senderPartyId],
       commandId,
       'submit-and-wait-for-transaction-tree',
-      registry.disclosedContracts,  // CIP-0056: pass disclosed contracts
+      registry.disclosedContracts, // CIP-0056: pass disclosed contracts
     );
 
     if (ok) {
@@ -573,12 +565,16 @@ export class CantonLedgerService {
         if (registry.transferKind === 'offer') {
           transferInstructionCid = extractCreatedContractId(text);
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
 
       this.logger.log(
         `TransferFactory_Transfer OK: kind=${registry.transferKind} ` +
-        `updateId=${updateId?.slice(0, 16) ?? 'unknown'} ` +
-        (transferInstructionCid ? `instructionCid=${transferInstructionCid.slice(0, 16)}...` : ''),
+          `updateId=${updateId?.slice(0, 16) ?? 'unknown'} ` +
+          (transferInstructionCid
+            ? `instructionCid=${transferInstructionCid.slice(0, 16)}...`
+            : ''),
       );
       return {
         ok: true,
@@ -590,7 +586,12 @@ export class CantonLedgerService {
 
     const errMsg = text.slice(0, 300);
     this.logger.warn(`TransferFactory_Transfer failed ${status}: ${errMsg}`);
-    return { ok: false, updateId: null, transferKind: registry.transferKind, error: errMsg };
+    return {
+      ok: false,
+      updateId: null,
+      transferKind: registry.transferKind,
+      error: errMsg,
+    };
   }
 
   /**
@@ -616,7 +617,11 @@ export class CantonLedgerService {
     const senderPartyId =
       params.senderPartyId ?? this.config.get<string>('CANTON_REWARD_PARTY_ID');
     if (!senderPartyId) {
-      return { ok: false, pending: false, error: 'CANTON_REWARD_PARTY_ID not configured' };
+      return {
+        ok: false,
+        pending: false,
+        error: 'CANTON_REWARD_PARTY_ID not configured',
+      };
     }
     const res = await this.executeTransferFactoryTransfer({
       senderPartyId,
@@ -625,10 +630,19 @@ export class CantonLedgerService {
       description: params.description,
     });
     if (!res.ok) {
-      return { ok: false, pending: false, error: res.error ?? 'reward transfer failed' };
+      return {
+        ok: false,
+        pending: false,
+        error: res.error ?? 'reward transfer failed',
+      };
     }
     if (res.transferKind === 'direct') {
-      return { ok: true, kind: 'direct', pending: false, rewardTxId: res.updateId ?? undefined };
+      return {
+        ok: true,
+        kind: 'direct',
+        pending: false,
+        rewardTxId: res.updateId ?? undefined,
+      };
     }
     if (res.transferKind === 'offer' && res.transferInstructionCid) {
       // One-Step OFF: biarkan pending, JANGAN accept atas nama user.
@@ -640,7 +654,11 @@ export class CantonLedgerService {
         transferInstructionCid: res.transferInstructionCid,
       };
     }
-    return { ok: false, pending: false, error: 'reward transfer failed (unknown kind)' };
+    return {
+      ok: false,
+      pending: false,
+      error: 'reward transfer failed (unknown kind)',
+    };
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -649,13 +667,18 @@ export class CantonLedgerService {
 
   /** ACS lookup: TransferPreapproval contract whose receiver === partyId. */
   private async findTransferPreapprovalContract(partyId: string): Promise<{
-    contractId: string; templateId: string; expiresAt?: string; provider?: string;
+    contractId: string;
+    templateId: string;
+    expiresAt?: string;
+    provider?: string;
   } | null> {
     let offset: number | string = 0;
     try {
       const end = (await this.ledgerEnd()) as { offset?: number | string };
       offset = end?.offset ?? 0;
-    } catch { offset = 0; }
+    } catch {
+      offset = 0;
+    }
 
     let rows: unknown[] = [];
     try {
@@ -666,7 +689,15 @@ export class CantonLedgerService {
           eventFormat: {
             filtersByParty: {
               [partyId]: {
-                cumulative: [{ identifierFilter: { WildcardFilter: { value: { includeCreatedEventBlob: false } } } }],
+                cumulative: [
+                  {
+                    identifierFilter: {
+                      WildcardFilter: {
+                        value: { includeCreatedEventBlob: false },
+                      },
+                    },
+                  },
+                ],
               },
             },
             verbose: true,
@@ -676,7 +707,9 @@ export class CantonLedgerService {
         signal: AbortSignal.timeout(20_000),
       });
       if (!res.ok) {
-        this.logger.warn(`findTransferPreapproval ${res.status}: ${(await res.text()).slice(0, 200)}`);
+        this.logger.warn(
+          `findTransferPreapproval ${res.status}: ${(await res.text()).slice(0, 200)}`,
+        );
         return null;
       }
       rows = (await res.json()) as unknown[];
@@ -689,20 +722,27 @@ export class CantonLedgerService {
     for (const entry of rows) {
       if (!entry || typeof entry !== 'object') continue;
       const wrapper = entry as Record<string, unknown>;
-      const active = wrapper.contractEntry as Record<string, unknown> | undefined;
-      const jsActive = active?.JsActiveContract as Record<string, unknown> | undefined;
+      const active = wrapper.contractEntry as
+        | Record<string, unknown>
+        | undefined;
+      const jsActive = active?.JsActiveContract as
+        | Record<string, unknown>
+        | undefined;
       const ev = (jsActive?.createdEvent ?? wrapper) as Record<string, unknown>;
       const tplId = typeof ev.templateId === 'string' ? ev.templateId : '';
       if (!tplId.includes('TransferPreapproval')) continue;
       const cid = typeof ev.contractId === 'string' ? ev.contractId : null;
-      const args = (ev.createArgument as Record<string, unknown> | undefined) ?? {};
+      const args =
+        (ev.createArgument as Record<string, unknown> | undefined) ?? {};
       const receiver = typeof args.receiver === 'string' ? args.receiver : '';
       if (receiver === partyId && cid) {
         return {
           contractId: cid,
           templateId: tplId,
-          expiresAt: typeof args.expiresAt === 'string' ? args.expiresAt : undefined,
-          provider: typeof args.provider === 'string' ? args.provider : undefined,
+          expiresAt:
+            typeof args.expiresAt === 'string' ? args.expiresAt : undefined,
+          provider:
+            typeof args.provider === 'string' ? args.provider : undefined,
         };
       }
     }
@@ -725,12 +765,20 @@ export class CantonLedgerService {
   ): Promise<{ ok: boolean; error?: string }> {
     const c = await this.findTransferPreapprovalContract(partyId);
     if (!c) return { ok: true }; // nothing to cancel
-    this.logger.log(`Cancelling TransferPreapproval via Ledger: cid=${c.contractId.slice(0, 20)}…`);
+    this.logger.log(
+      `Cancelling TransferPreapproval via Ledger: cid=${c.contractId.slice(0, 20)}…`,
+    );
     const { ok, status, text } = await this.exerciseChoice(
-      c.contractId, c.templateId, 'TransferPreapproval_Cancel', {}, [partyId],
+      c.contractId,
+      c.templateId,
+      'TransferPreapproval_Cancel',
+      {},
+      [partyId],
     );
     if (ok) return { ok: true };
-    this.logger.warn(`Cancel preapproval failed ${status}: ${text.slice(0, 200)}`);
+    this.logger.warn(
+      `Cancel preapproval failed ${status}: ${text.slice(0, 200)}`,
+    );
     return { ok: false, error: `Ledger ${status}: ${text.slice(0, 200)}` };
   }
 
@@ -740,24 +788,39 @@ export class CantonLedgerService {
   // Provider (validator-1) pre-pays the ~1.5 CC burn fee.
   // Atomic: wrong args / insufficient funds => rejected, NO fee burned (safe to retry).
   // ───────────────────────────────────────────────────────────────────────────
-  async createTransferPreapprovalViaLedger(
-    receiverPartyId: string,
-  ): Promise<{ ok: boolean; transferPreapprovalCid?: string; amuletPaid?: string; error?: string }> {
+  async createTransferPreapprovalViaLedger(receiverPartyId: string): Promise<{
+    ok: boolean;
+    transferPreapprovalCid?: string;
+    amuletPaid?: string;
+    error?: string;
+  }> {
     const provider = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID');
     const expectedDso = this.config.get<string>('CANTON_DSO_PARTY_ID');
-    if (!provider) return { ok: false, error: 'CANTON_VALIDATOR_PARTY_ID not set' };
-    if (!expectedDso) return { ok: false, error: 'CANTON_DSO_PARTY_ID not set' };
+    if (!provider)
+      return { ok: false, error: 'CANTON_VALIDATOR_PARTY_ID not set' };
+    if (!expectedDso)
+      return { ok: false, error: 'CANTON_DSO_PARTY_ID not set' };
 
     // 1) Disclosed contracts from scan-proxy (DSO-signed, with created_event_blob)
     const amuletRules = await this.fetchScanProxyContract('amulet-rules');
-    if (!amuletRules) return { ok: false, error: 'scan-proxy /amulet-rules failed' };
-    const openRound = await this.fetchScanProxyContract('open-and-issuing-mining-rounds');
-    if (!openRound) return { ok: false, error: 'scan-proxy /open-and-issuing-mining-rounds failed' };
+    if (!amuletRules)
+      return { ok: false, error: 'scan-proxy /amulet-rules failed' };
+    const openRound = await this.fetchScanProxyContract(
+      'open-and-issuing-mining-rounds',
+    );
+    if (!openRound)
+      return {
+        ok: false,
+        error: 'scan-proxy /open-and-issuing-mining-rounds failed',
+      };
 
     // 2) Provider's Amulet input — pick largest effective holding (>= ~2 CC buffer)
     const holdings = await this.queryAmuletHoldingsRaw(provider);
     if (holdings.length === 0) {
-      return { ok: false, error: `Provider ${provider} has no Amulet holding to pay preapproval fee` };
+      return {
+        ok: false,
+        error: `Provider ${provider} has no Amulet holding to pay preapproval fee`,
+      };
     }
     const round = openRound.round ?? 0;
     const scored = holdings
@@ -770,11 +833,16 @@ export class CantonLedgerService {
       .sort((a, b) => b.eff - a.eff);
     const best = scored[0];
     if (best.eff < 2) {
-      return { ok: false, error: `Provider Amulet too small (eff ~${best.eff.toFixed(4)} CC) to pay preapproval fee` };
+      return {
+        ok: false,
+        error: `Provider Amulet too small (eff ~${best.eff.toFixed(4)} CC) to pay preapproval fee`,
+      };
     }
 
     // 3) expiresAt = now + 90 days (matches on-chain lifetime)
-    const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+    const expiresAt = new Date(
+      Date.now() + 90 * 24 * 60 * 60 * 1000,
+    ).toISOString();
 
     // 4) choiceArgument — EXACT on-chain shape (offset 838791)
     const choiceArgument = {
@@ -794,13 +862,21 @@ export class CantonLedgerService {
     };
 
     const disclosedContracts = [
-      { templateId: amuletRules.templateId, contractId: amuletRules.contractId, createdEventBlob: amuletRules.blob },
-      { templateId: openRound.templateId, contractId: openRound.contractId, createdEventBlob: openRound.blob },
+      {
+        templateId: amuletRules.templateId,
+        contractId: amuletRules.contractId,
+        createdEventBlob: amuletRules.blob,
+      },
+      {
+        templateId: openRound.templateId,
+        contractId: openRound.contractId,
+        createdEventBlob: openRound.blob,
+      },
     ];
 
     this.logger.log(
       `CreateTransferPreapproval via Ledger: receiver=${receiverPartyId.slice(0, 24)}… ` +
-      `round=${round} input=${best.h.contractId.slice(0, 16)}… eff~${best.eff.toFixed(2)}CC`,
+        `round=${round} input=${best.h.contractId.slice(0, 16)}… eff~${best.eff.toFixed(2)}CC`,
     );
 
     const { ok, status, text } = await this.exerciseChoice(
@@ -815,7 +891,9 @@ export class CantonLedgerService {
     );
 
     if (!ok) {
-      this.logger.warn(`CreateTransferPreapproval failed ${status}: ${text.slice(0, 400)}`);
+      this.logger.warn(
+        `CreateTransferPreapproval failed ${status}: ${text.slice(0, 400)}`,
+      );
       return { ok: false, error: `Ledger ${status}: ${text.slice(0, 300)}` };
     }
 
@@ -824,7 +902,11 @@ export class CantonLedgerService {
     this.logger.log(
       `TransferPreapproval created cid=${(cid ?? '?').slice(0, 20)}… amuletPaid=${amuletPaid ?? '?'}`,
     );
-    return { ok: true, transferPreapprovalCid: cid ?? undefined, amuletPaid: amuletPaid ?? undefined };
+    return {
+      ok: true,
+      transferPreapprovalCid: cid ?? undefined,
+      amuletPaid: amuletPaid ?? undefined,
+    };
   }
 
   /** Scan-proxy base (CANTON_SCAN_URL preferred, else build from CANTON_VALIDATOR_URL). */
@@ -841,34 +923,66 @@ export class CantonLedgerService {
    */
   private async fetchScanProxyContract(
     seg: 'amulet-rules' | 'open-and-issuing-mining-rounds',
-  ): Promise<{ contractId: string; templateId: string; blob: string; round?: number } | null> {
+  ): Promise<{
+    contractId: string;
+    templateId: string;
+    blob: string;
+    round?: number;
+  } | null> {
     const base = this.scanProxyBase();
-    if (!base) { this.logger.error('scan-proxy base not configured (CANTON_SCAN_URL / CANTON_VALIDATOR_URL)'); return null; }
-    const hostHeader = this.config.get<string>('CANTON_VALIDATOR_HOST_HEADER') ?? '';
+    if (!base) {
+      this.logger.error(
+        'scan-proxy base not configured (CANTON_SCAN_URL / CANTON_VALIDATOR_URL)',
+      );
+      return null;
+    }
+    const hostHeader =
+      this.config.get<string>('CANTON_VALIDATOR_HOST_HEADER') ?? '';
     try {
       const headers = await this.authHeaders();
       if (hostHeader) headers['Host'] = hostHeader;
-      const res = await fetch(`${base}/${seg}`, { headers, signal: AbortSignal.timeout(15_000) });
+      const res = await fetch(`${base}/${seg}`, {
+        headers,
+        signal: AbortSignal.timeout(15_000),
+      });
       if (!res.ok) {
-        this.logger.warn(`scan-proxy /${seg} ${res.status}: ${(await res.text()).slice(0, 200)}`);
+        this.logger.warn(
+          `scan-proxy /${seg} ${res.status}: ${(await res.text()).slice(0, 200)}`,
+        );
         return null;
       }
       const data = await res.json();
 
       // collect every embedded contract { template_id, contract_id, created_event_blob, payload? }
-      const found: Array<{ contractId: string; templateId: string; blob: string; round?: number; opensAt?: string }> = [];
+      const found: Array<{
+        contractId: string;
+        templateId: string;
+        blob: string;
+        round?: number;
+        opensAt?: string;
+      }> = [];
       const walk = (n: unknown, seen = new Set<unknown>()): void => {
         if (!n || typeof n !== 'object' || seen.has(n)) return;
         seen.add(n);
         const o = n as Record<string, any>;
-        if (typeof o.contract_id === 'string' && typeof o.template_id === 'string' && typeof o.created_event_blob === 'string') {
+        if (
+          typeof o.contract_id === 'string' &&
+          typeof o.template_id === 'string' &&
+          typeof o.created_event_blob === 'string'
+        ) {
           const payload = o.payload ?? {};
           found.push({
             contractId: o.contract_id,
             templateId: o.template_id,
             blob: o.created_event_blob,
-            round: payload?.round?.number != null ? Number(payload.round.number) : undefined,
-            opensAt: typeof payload?.opensAt === 'string' ? payload.opensAt : undefined,
+            round:
+              payload?.round?.number != null
+                ? Number(payload.round.number)
+                : undefined,
+            opensAt:
+              typeof payload?.opensAt === 'string'
+                ? payload.opensAt
+                : undefined,
           });
         }
         for (const k of Object.keys(o)) walk(o[k], seen);
@@ -876,14 +990,29 @@ export class CantonLedgerService {
       walk(data);
 
       if (seg === 'amulet-rules') {
-        return found.find((c) => c.templateId.endsWith(':Splice.AmuletRules:AmuletRules')) ?? found[0] ?? null;
+        return (
+          found.find((c) =>
+            c.templateId.endsWith(':Splice.AmuletRules:AmuletRules'),
+          ) ??
+          found[0] ??
+          null
+        );
       }
       // open-and-issuing-mining-rounds: pick a currently-OPEN round, highest round number
-      const open = found.filter((c) => c.templateId.endsWith(':Splice.Round:OpenMiningRound'));
-      if (open.length === 0) { this.logger.warn('scan-proxy: no OpenMiningRound found'); return null; }
+      const open = found.filter((c) =>
+        c.templateId.endsWith(':Splice.Round:OpenMiningRound'),
+      );
+      if (open.length === 0) {
+        this.logger.warn('scan-proxy: no OpenMiningRound found');
+        return null;
+      }
       const now = Date.now();
-      const usable = open.filter((c) => !c.opensAt || Date.parse(c.opensAt) <= now);
-      const pick = (usable.length ? usable : open).sort((a, b) => (b.round ?? 0) - (a.round ?? 0))[0];
+      const usable = open.filter(
+        (c) => !c.opensAt || Date.parse(c.opensAt) <= now,
+      );
+      const pick = (usable.length ? usable : open).sort(
+        (a, b) => (b.round ?? 0) - (a.round ?? 0),
+      )[0];
       return pick ?? null;
     } catch (err) {
       this.logger.warn(`scan-proxy /${seg} error: ${String(err)}`);
@@ -894,19 +1023,25 @@ export class CantonLedgerService {
   /** Best-effort: parse a JSON response and return the first string value for `key`. */
   private deepFindString(jsonText: string, key: string): string | null {
     let root: unknown;
-    try { root = JSON.parse(jsonText); } catch { return null; }
+    try {
+      root = JSON.parse(jsonText);
+    } catch {
+      return null;
+    }
     let out: string | null = null;
     const walk = (n: unknown, seen = new Set<unknown>()): void => {
       if (out !== null || !n || typeof n !== 'object' || seen.has(n)) return;
       seen.add(n);
       const o = n as Record<string, unknown>;
-      if (typeof o[key] === 'string') { out = o[key] as string; return; }
+      if (typeof o[key] === 'string') {
+        out = o[key];
+        return;
+      }
       for (const k of Object.keys(o)) walk(o[k], seen);
     };
     walk(root);
     return out;
   }
-  
 
   /**
    * Get choiceContext from registry for accept/reject/withdraw on a TransferInstruction.
@@ -922,7 +1057,8 @@ export class CantonLedgerService {
     const validatorUrl = (
       this.config.get<string>('CANTON_VALIDATOR_URL') ?? 'http://127.0.0.1:8080'
     ).replace(/\/$/, '');
-    const hostHeader = this.config.get<string>('CANTON_VALIDATOR_HOST_HEADER') ?? '';
+    const hostHeader =
+      this.config.get<string>('CANTON_VALIDATOR_HOST_HEADER') ?? '';
     const scanBase = `${validatorUrl}/api/validator/v0/scan-proxy`;
     const encodedCid = encodeURIComponent(transferInstructionCid);
     const url = `${scanBase}/registry/transfer-instruction/v1/${encodedCid}/choice-contexts/${action}`;
@@ -940,7 +1076,9 @@ export class CantonLedgerService {
 
       if (!res.ok) {
         const text = await res.text();
-        this.logger.warn(`Choice context (${action}) ${res.status}: ${text.slice(0, 200)}`);
+        this.logger.warn(
+          `Choice context (${action}) ${res.status}: ${text.slice(0, 200)}`,
+        );
         return null;
       }
 
@@ -992,7 +1130,8 @@ export class CantonLedgerService {
 
     // Get choiceContext from registry (required for disclosedContracts)
     const choiceCtx = await this.getInstructionChoiceContext(
-      transferInstructionCid, 'accept',
+      transferInstructionCid,
+      'accept',
     );
 
     const choiceArgument = {
@@ -1018,8 +1157,12 @@ export class CantonLedgerService {
       try {
         const parsed = JSON.parse(text) as { updateId?: string };
         updateId = parsed.updateId ?? null;
-      } catch { /* ignore */ }
-      this.logger.log(`TransferInstruction_Accept succeeded: updateId=${updateId?.slice(0, 16) ?? 'unknown'}`);
+      } catch {
+        /* ignore */
+      }
+      this.logger.log(
+        `TransferInstruction_Accept succeeded: updateId=${updateId?.slice(0, 16) ?? 'unknown'}`,
+      );
       return { ok: true, updateId };
     }
 
@@ -1055,7 +1198,8 @@ export class CantonLedgerService {
     );
 
     const choiceCtx = await this.getInstructionChoiceContext(
-      transferInstructionCid, 'reject',
+      transferInstructionCid,
+      'reject',
     );
 
     const { ok, status, text } = await this.exerciseChoice(
@@ -1079,8 +1223,12 @@ export class CantonLedgerService {
       try {
         const parsed = JSON.parse(text) as { updateId?: string };
         updateId = parsed.updateId ?? null;
-      } catch { /* ignore */ }
-      this.logger.log(`TransferInstruction_Reject succeeded: updateId=${updateId?.slice(0, 16) ?? 'unknown'}`);
+      } catch {
+        /* ignore */
+      }
+      this.logger.log(
+        `TransferInstruction_Reject succeeded: updateId=${updateId?.slice(0, 16) ?? 'unknown'}`,
+      );
       return { ok: true, updateId };
     }
 
@@ -1130,13 +1278,19 @@ export class CantonLedgerService {
       try {
         const parsed = JSON.parse(text) as { updateId?: string };
         updateId = parsed.updateId ?? null;
-      } catch { /* ignore */ }
-      this.logger.log(`TransferInstruction_Withdraw succeeded: updateId=${updateId?.slice(0, 16) ?? 'unknown'}`);
+      } catch {
+        /* ignore */
+      }
+      this.logger.log(
+        `TransferInstruction_Withdraw succeeded: updateId=${updateId?.slice(0, 16) ?? 'unknown'}`,
+      );
       return { ok: true, updateId };
     }
 
     const errMsg = text.slice(0, 300);
-    this.logger.warn(`TransferInstruction_Withdraw failed ${status}: ${errMsg}`);
+    this.logger.warn(
+      `TransferInstruction_Withdraw failed ${status}: ${errMsg}`,
+    );
     return { ok: false, updateId: null, error: errMsg };
   }
 
@@ -1168,8 +1322,12 @@ export class CantonLedgerService {
       try {
         const parsed = JSON.parse(text) as { updateId?: string };
         updateId = parsed.updateId ?? null;
-      } catch { /* ignore */ }
-      this.logger.log(`TransferOffer accepted: ${receiverPartyId.split('::')[0]} updateId: ${updateId ?? 'unknown'}`);
+      } catch {
+        /* ignore */
+      }
+      this.logger.log(
+        `TransferOffer accepted: ${receiverPartyId.split('::')[0]} updateId: ${updateId ?? 'unknown'}`,
+      );
       return { accepted: true, updateId };
     }
     this.logger.warn(`TransferOffer_Accept ${status}: ${text.slice(0, 300)}`);
@@ -1204,8 +1362,12 @@ export class CantonLedgerService {
       try {
         const parsed = JSON.parse(text) as { updateId?: string };
         updateId = parsed.updateId ?? null;
-      } catch { /* ignore */ }
-      this.logger.log(`TransferOffer rejected: ${receiverPartyId.split('::')[0]} updateId: ${updateId ?? 'unknown'}`);
+      } catch {
+        /* ignore */
+      }
+      this.logger.log(
+        `TransferOffer rejected: ${receiverPartyId.split('::')[0]} updateId: ${updateId ?? 'unknown'}`,
+      );
       return { rejected: true, updateId };
     }
     this.logger.warn(`TransferOffer_Reject ${status}: ${text.slice(0, 300)}`);
@@ -1257,7 +1419,9 @@ export class CantonLedgerService {
     try {
       data = JSON.parse(text) as { partyDetails?: { party?: string } };
     } catch {
-      throw new ServiceUnavailableException('Canton returned non-JSON response.');
+      throw new ServiceUnavailableException(
+        'Canton returned non-JSON response.',
+      );
     }
 
     const partyId = data?.partyDetails?.party;
@@ -1338,7 +1502,8 @@ export class CantonLedgerService {
     });
     if (!res.ok) throw new Error(`getCurrentRound gagal HTTP ${res.status}`);
     const data = (await res.json()) as { round?: number };
-    if (!data.round) throw new Error('getCurrentRound: field round tidak ditemukan');
+    if (!data.round)
+      throw new Error('getCurrentRound: field round tidak ditemukan');
     return data.round;
   }
 
@@ -1346,22 +1511,31 @@ export class CantonLedgerService {
    * Query ACS Amulet holdings dengan data lengkap (initialAmount, createdAtRound, ratePerRound).
    * Hanya menyaring kontrak yang templateId-nya berakhiran :Splice.Amulet:Amulet milik party.
    */
-  private async queryAmuletHoldingsRaw(partyId: string): Promise<Array<{
-    contractId: string; initialAmount: string; createdAtRound: number; ratePerRound: string
-  }>> {
+  private async queryAmuletHoldingsRaw(partyId: string): Promise<
+    Array<{
+      contractId: string;
+      initialAmount: string;
+      createdAtRound: number;
+      ratePerRound: string;
+    }>
+  > {
     let offset: number | string = 0;
     try {
       const end = (await this.ledgerEnd()) as { offset?: number | string };
       offset = end?.offset ?? 0;
-    } catch { offset = 0; }
+    } catch {
+      offset = 0;
+    }
 
     const filtersByParty: Record<string, unknown> = {
       [partyId]: {
-        cumulative: [{
-          identifierFilter: {
-            WildcardFilter: { value: { includeCreatedEventBlob: false } },
+        cumulative: [
+          {
+            identifierFilter: {
+              WildcardFilter: { value: { includeCreatedEventBlob: false } },
+            },
           },
-        }],
+        ],
       },
     };
 
@@ -1381,7 +1555,9 @@ export class CantonLedgerService {
         if (!Array.isArray(allContracts)) allContracts = [];
       } else {
         const text = await res.text();
-        this.logger.warn(`queryAmuletHoldingsRaw ${res.status}: ${text.slice(0, 200)}`);
+        this.logger.warn(
+          `queryAmuletHoldingsRaw ${res.status}: ${text.slice(0, 200)}`,
+        );
       }
     } catch (err) {
       this.logger.warn(`queryAmuletHoldingsRaw error: ${String(err)}`);
@@ -1389,18 +1565,26 @@ export class CantonLedgerService {
     }
 
     const results: Array<{
-      contractId: string; initialAmount: string; createdAtRound: number; ratePerRound: string
+      contractId: string;
+      initialAmount: string;
+      createdAtRound: number;
+      ratePerRound: string;
     }> = [];
     for (const entry of allContracts) {
       if (!entry || typeof entry !== 'object') continue;
       const wrapper = entry as Record<string, unknown>;
-      const active = wrapper.contractEntry as Record<string, unknown> | undefined;
-      const jsActive = active?.JsActiveContract as Record<string, unknown> | undefined;
+      const active = wrapper.contractEntry as
+        | Record<string, unknown>
+        | undefined;
+      const jsActive = active?.JsActiveContract as
+        | Record<string, unknown>
+        | undefined;
       const ev = (jsActive?.createdEvent ?? wrapper) as Record<string, unknown>;
       const tplId = typeof ev.templateId === 'string' ? ev.templateId : '';
       if (!tplId.endsWith(':Splice.Amulet:Amulet')) continue;
       const cid = typeof ev.contractId === 'string' ? ev.contractId : null;
-      const args = (ev.createArgument as Record<string, unknown> | undefined) ?? {};
+      const args =
+        (ev.createArgument as Record<string, unknown> | undefined) ?? {};
       const owner = typeof args.owner === 'string' ? args.owner : '';
       if (owner !== partyId) continue;
       if (!cid) continue;
@@ -1408,11 +1592,16 @@ export class CantonLedgerService {
       if (!amt) continue;
       results.push({
         contractId: cid,
-        initialAmount: (typeof amt.initialAmount === 'string' ? amt.initialAmount : '0'),
-        createdAtRound: (amt.createdAt as Record<string, unknown> | undefined)?.number
-          ? Number((amt.createdAt as Record<string, unknown>).number) : 0,
-        ratePerRound: (amt.ratePerRound as Record<string, unknown> | undefined)?.rate
-          ? String((amt.ratePerRound as Record<string, unknown>).rate) : '0',
+        initialAmount:
+          typeof amt.initialAmount === 'string' ? amt.initialAmount : '0',
+        createdAtRound: (amt.createdAt as Record<string, unknown> | undefined)
+          ?.number
+          ? Number((amt.createdAt as Record<string, unknown>).number)
+          : 0,
+        ratePerRound: (amt.ratePerRound as Record<string, unknown> | undefined)
+          ?.rate
+          ? String((amt.ratePerRound as Record<string, unknown>).rate)
+          : '0',
       });
     }
     return results;
@@ -1428,9 +1617,11 @@ export class CantonLedgerService {
     const currentRound = await this.getCurrentRound();
     let total = 0;
     for (const h of holdings) {
-      const effective = Math.max(0,
+      const effective = Math.max(
+        0,
         parseFloat(h.initialAmount) -
-        Math.max(0, currentRound - h.createdAtRound) * parseFloat(h.ratePerRound)
+          Math.max(0, currentRound - h.createdAtRound) *
+            parseFloat(h.ratePerRound),
       );
       total += effective;
     }
@@ -1447,7 +1638,10 @@ export class CantonLedgerService {
       signal: AbortSignal.timeout(6_000),
     });
     const text = await res.text();
-    if (!res.ok) throw new ServiceUnavailableException(`Canton /v2/parties GET ${res.status}`);
+    if (!res.ok)
+      throw new ServiceUnavailableException(
+        `Canton /v2/parties GET ${res.status}`,
+      );
     return (JSON.parse(text) as { partyDetails: unknown[] }).partyDetails ?? [];
   }
 
@@ -1459,25 +1653,36 @@ export class CantonLedgerService {
   async discoverTransferFactoryContractId(
     operatorPartyId: string,
   ): Promise<string | null> {
-    const tplId = '#splice-amulet:Splice.ExternalPartyAmuletRules:ExternalPartyAmuletRules';
+    const tplId =
+      '#splice-amulet:Splice.ExternalPartyAmuletRules:ExternalPartyAmuletRules';
     try {
-      const contracts = await this.queryActiveContracts(tplId, [operatorPartyId]);
+      const contracts = await this.queryActiveContracts(tplId, [
+        operatorPartyId,
+      ]);
       for (const entry of contracts) {
         if (!entry || typeof entry !== 'object') continue;
         const obj = entry as Record<string, unknown>;
-        const cid = typeof obj.contractId === 'string' ? obj.contractId
-          : typeof (obj as { CreatedTreeEvent?: { contractId?: string } })?.CreatedTreeEvent?.contractId === 'string'
-            ? (obj as { CreatedTreeEvent: { contractId: string } }).CreatedTreeEvent.contractId
-            : null;
+        const cid =
+          typeof obj.contractId === 'string'
+            ? obj.contractId
+            : typeof (obj as { CreatedTreeEvent?: { contractId?: string } })
+                  ?.CreatedTreeEvent?.contractId === 'string'
+              ? (obj as { CreatedTreeEvent: { contractId: string } })
+                  .CreatedTreeEvent.contractId
+              : null;
         if (cid) {
           this.logger.log(`Discovered TransferFactory: ${cid.slice(0, 16)}...`);
           return cid;
         }
       }
-      this.logger.warn(`No ExternalPartyAmuletRules contract found for operator ${operatorPartyId.split('::')[0]}`);
+      this.logger.warn(
+        `No ExternalPartyAmuletRules contract found for operator ${operatorPartyId.split('::')[0]}`,
+      );
       return null;
     } catch (err) {
-      this.logger.warn(`discoverTransferFactoryContractId error: ${String(err)}`);
+      this.logger.warn(
+        `discoverTransferFactoryContractId error: ${String(err)}`,
+      );
       return null;
     }
   }
@@ -1489,7 +1694,8 @@ export class CantonLedgerService {
       signal: AbortSignal.timeout(6_000),
     });
     const text = await res.text();
-    if (!res.ok) throw new ServiceUnavailableException(`Canton ledger-end ${res.status}`);
+    if (!res.ok)
+      throw new ServiceUnavailableException(`Canton ledger-end ${res.status}`);
     return JSON.parse(text);
   }
 
@@ -1519,7 +1725,9 @@ export class CantonLedgerService {
     try {
       const end = (await this.ledgerEnd()) as { offset?: number | string };
       offset = end?.offset ?? 0;
-    } catch { offset = 0; }
+    } catch {
+      offset = 0;
+    }
 
     const filtersByParty: Record<string, unknown> = {};
     for (const party of effectiveReadAs) {
@@ -1555,7 +1763,9 @@ export class CantonLedgerService {
         if (!Array.isArray(allContracts)) allContracts = [];
       } else {
         const text = await res.text();
-        this.logger.warn(`queryAmuletHoldings wildcard ${res.status}: ${text.slice(0, 200)}`);
+        this.logger.warn(
+          `queryAmuletHoldings wildcard ${res.status}: ${text.slice(0, 200)}`,
+        );
       }
     } catch (err) {
       this.logger.warn(`queryAmuletHoldings error: ${String(err)}`);
@@ -1566,15 +1776,20 @@ export class CantonLedgerService {
     for (const entry of allContracts) {
       if (!entry || typeof entry !== 'object') continue;
       const wrapper = entry as Record<string, unknown>;
-      const active = wrapper.contractEntry as Record<string, unknown> | undefined;
-      const jsActive = active?.JsActiveContract as Record<string, unknown> | undefined;
+      const active = wrapper.contractEntry as
+        | Record<string, unknown>
+        | undefined;
+      const jsActive = active?.JsActiveContract as
+        | Record<string, unknown>
+        | undefined;
       const ev = (jsActive?.createdEvent ?? wrapper) as Record<string, unknown>;
 
       const tplId = typeof ev.templateId === 'string' ? ev.templateId : '';
       if (!tplId.includes('Splice.Amulet:Amulet')) continue;
 
       const cid = typeof ev.contractId === 'string' ? ev.contractId : null;
-      const args = (ev.createArgument as Record<string, unknown> | undefined) ?? {};
+      const args =
+        (ev.createArgument as Record<string, unknown> | undefined) ?? {};
 
       if (!cid) continue;
 
@@ -1585,10 +1800,13 @@ export class CantonLedgerService {
       // Extract amount from ExpiringAmount
       const amtRaw = args.amount as Record<string, unknown> | undefined;
       const amountStr =
-        typeof amtRaw?.initialAmount === 'string' ? amtRaw.initialAmount
-        : typeof amtRaw?.amount === 'string' ? amtRaw.amount
-        : typeof args.amount === 'string' ? (args.amount as string)
-        : '0';
+        typeof amtRaw?.initialAmount === 'string'
+          ? amtRaw.initialAmount
+          : typeof amtRaw?.amount === 'string'
+            ? amtRaw.amount
+            : typeof args.amount === 'string'
+              ? args.amount
+              : '0';
 
       holdings.push({ contractId: cid, amount: amountStr });
     }
@@ -1612,23 +1830,25 @@ export class CantonLedgerService {
    * @param partyId - Canton party ID to query offers for
    * @returns Array of pending offers with type, contractId, sender, receiver, amount, description
    */
-  async queryPendingOffers(
-    partyId: string,
-  ): Promise<Array<{
-    type: 'transfer_offer' | 'transfer_instruction';
-    contractId: string;
-    sender: string;
-    receiver: string;
-    amount: string;
-    description: string;
-    expiresAt: string;
-    createdAt: string;
-  }>> {
+  async queryPendingOffers(partyId: string): Promise<
+    Array<{
+      type: 'transfer_offer' | 'transfer_instruction';
+      contractId: string;
+      sender: string;
+      receiver: string;
+      amount: string;
+      description: string;
+      expiresAt: string;
+      createdAt: string;
+    }>
+  > {
     let offset: number | string = 0;
     try {
       const end = (await this.ledgerEnd()) as { offset?: number | string };
       offset = end?.offset ?? 0;
-    } catch { offset = 0; }
+    } catch {
+      offset = 0;
+    }
 
     let allContracts: unknown[] = [];
     try {
@@ -1639,11 +1859,15 @@ export class CantonLedgerService {
           eventFormat: {
             filtersByParty: {
               [partyId]: {
-                cumulative: [{
-                  identifierFilter: {
-                    WildcardFilter: { value: { includeCreatedEventBlob: false } },
+                cumulative: [
+                  {
+                    identifierFilter: {
+                      WildcardFilter: {
+                        value: { includeCreatedEventBlob: false },
+                      },
+                    },
                   },
-                }],
+                ],
               },
             },
             verbose: true,
@@ -1674,13 +1898,18 @@ export class CantonLedgerService {
     for (const entry of allContracts) {
       if (!entry || typeof entry !== 'object') continue;
       const wrapper = entry as Record<string, unknown>;
-      const active = wrapper.contractEntry as Record<string, unknown> | undefined;
-      const jsActive = active?.JsActiveContract as Record<string, unknown> | undefined;
+      const active = wrapper.contractEntry as
+        | Record<string, unknown>
+        | undefined;
+      const jsActive = active?.JsActiveContract as
+        | Record<string, unknown>
+        | undefined;
       const ev = (jsActive?.createdEvent ?? wrapper) as Record<string, unknown>;
 
       const tplId = typeof ev.templateId === 'string' ? ev.templateId : '';
       const cid = typeof ev.contractId === 'string' ? ev.contractId : null;
-      const args = (ev.createArgument as Record<string, unknown> | undefined) ?? {};
+      const args =
+        (ev.createArgument as Record<string, unknown> | undefined) ?? {};
       if (!cid) continue;
 
       // Legacy: Splice.Wallet.TransferOffer:TransferOffer
@@ -1691,9 +1920,12 @@ export class CantonLedgerService {
 
         const sender = typeof args.sender === 'string' ? args.sender : '';
         const ccAmount = typeof args.amount === 'string' ? args.amount : '0';
-        const desc = typeof args.description === 'string' ? args.description : '';
-        const expiresAt = typeof args.expiresAt === 'string' ? args.expiresAt : '';
-        const trackingId = typeof args.trackingId === 'string' ? args.trackingId : '';
+        const desc =
+          typeof args.description === 'string' ? args.description : '';
+        const expiresAt =
+          typeof args.expiresAt === 'string' ? args.expiresAt : '';
+        const trackingId =
+          typeof args.trackingId === 'string' ? args.trackingId : '';
 
         offers.push({
           type: 'transfer_offer',
@@ -1719,16 +1951,26 @@ export class CantonLedgerService {
         const transfer = args.transfer as Record<string, unknown> | undefined;
         if (!transfer) continue;
 
-        const receiver = typeof transfer.receiver === 'string' ? transfer.receiver : '';
+        const receiver =
+          typeof transfer.receiver === 'string' ? transfer.receiver : '';
         // Only show instructions where this party is the RECEIVER
         if (receiver !== partyId) continue;
 
-        const sender = typeof transfer.sender === 'string' ? transfer.sender : '';
-        const amount = typeof transfer.amount === 'string' ? transfer.amount : '0';
-        const meta = transfer.meta as Record<string, Record<string, string>> | undefined;
-        const desc = meta?.values?.['splice.lfdecentralizedtrust.org/reason'] ?? '';
-        const executeBefore = typeof transfer.executeBefore === 'string' ? transfer.executeBefore : '';
-        const requestedAt = typeof transfer.requestedAt === 'string' ? transfer.requestedAt : '';
+        const sender =
+          typeof transfer.sender === 'string' ? transfer.sender : '';
+        const amount =
+          typeof transfer.amount === 'string' ? transfer.amount : '0';
+        const meta = transfer.meta as
+          | Record<string, Record<string, string>>
+          | undefined;
+        const desc =
+          meta?.values?.['splice.lfdecentralizedtrust.org/reason'] ?? '';
+        const executeBefore =
+          typeof transfer.executeBefore === 'string'
+            ? transfer.executeBefore
+            : '';
+        const requestedAt =
+          typeof transfer.requestedAt === 'string' ? transfer.requestedAt : '';
 
         offers.push({
           type: 'transfer_instruction',
@@ -1746,8 +1988,8 @@ export class CantonLedgerService {
     if (offers.length > 0) {
       this.logger.log(
         `Pending offers: party=${partyId.split('::')[0]} found ${offers.length} ` +
-        `(${offers.filter(o => o.type === 'transfer_offer').length} legacy, ` +
-        `${offers.filter(o => o.type === 'transfer_instruction').length} CIP-0056)`,
+          `(${offers.filter((o) => o.type === 'transfer_offer').length} legacy, ` +
+          `${offers.filter((o) => o.type === 'transfer_instruction').length} CIP-0056)`,
       );
     }
     return offers;
@@ -1864,9 +2106,13 @@ export class CantonLedgerService {
         if (res.status === 413) {
           // Participant has >200 contracts for this template — normal at scale.
           // Fallback: idempotency handled by command deduplication.
-          this.logger.debug(`queryActiveContracts 413 (limit reached) — skipping ACS lookup, using command dedup`);
+          this.logger.debug(
+            `queryActiveContracts 413 (limit reached) — skipping ACS lookup, using command dedup`,
+          );
         } else {
-          this.logger.warn(`queryActiveContracts ${res.status}: ${text.slice(0, 200)}`);
+          this.logger.warn(
+            `queryActiveContracts ${res.status}: ${text.slice(0, 200)}`,
+          );
         }
         return [];
       }
@@ -1934,8 +2180,10 @@ export class CantonLedgerService {
       const contractId =
         typeof data.contractId === 'string' ? data.contractId : null;
       const args = (data.createArgument ??
-        (data.CreatedEvent as Record<string, unknown> | undefined)?.createArgument ??
-        (data.CreatedTreeEvent as Record<string, unknown> | undefined)?.createArgument ??
+        (data.CreatedEvent as Record<string, unknown> | undefined)
+          ?.createArgument ??
+        (data.CreatedTreeEvent as Record<string, unknown> | undefined)
+          ?.createArgument ??
         null) as Record<string, unknown> | null;
 
       if (!contractId) return null;
@@ -1973,10 +2221,7 @@ export class CantonLedgerService {
             ?.createArgument as Record<string, unknown> | undefined) ??
           ((obj.CreatedEvent as Record<string, unknown> | undefined)
             ?.createArgument as Record<string, unknown> | undefined);
-        const cid =
-          typeof obj.contractId === 'string'
-            ? obj.contractId
-            : null;
+        const cid = typeof obj.contractId === 'string' ? obj.contractId : null;
 
         if (!args || !cid) continue;
 
@@ -2014,19 +2259,27 @@ export class CantonLedgerService {
     createArguments: unknown,
     actAs: string[],
     commandId?: string,
-  ): Promise<{ ok: boolean; contractId: string | null; updateId: string | null; error?: string }> {
+  ): Promise<{
+    ok: boolean;
+    contractId: string | null;
+    updateId: string | null;
+    error?: string;
+  }> {
     const { ok, status, text } = await this.submitCommand(
       [{ CreateCommand: { templateId, createArguments } }],
       actAs,
       undefined,
       commandId,
-      undefined,   // identity
+      undefined, // identity
       'submit-and-wait-for-transaction-tree',
     );
 
     if (ok) {
       try {
-        const parsed = JSON.parse(text) as { updateId?: string; contractId?: string };
+        const parsed = JSON.parse(text) as {
+          updateId?: string;
+          contractId?: string;
+        };
         const contractId =
           parsed.contractId ?? extractCreatedContractId(text) ?? null;
         return {
@@ -2040,7 +2293,12 @@ export class CantonLedgerService {
     }
 
     this.logger.warn(`createContract failed ${status}: ${text.slice(0, 200)}`);
-    return { ok: false, contractId: null, updateId: null, error: text.slice(0, 300) };
+    return {
+      ok: false,
+      contractId: null,
+      updateId: null,
+      error: text.slice(0, 300),
+    };
   }
 
   /**
@@ -2123,11 +2381,15 @@ export class CantonLedgerService {
       // Endpoint ini opsional — hanya dipakai untuk transaction history lookup
       if (res.status !== 404) {
         const text = await res.text();
-        this.logger.debug(`fetchTransactionUpdates ${res.status}: ${text.slice(0, 120)}`);
+        this.logger.debug(
+          `fetchTransactionUpdates ${res.status}: ${text.slice(0, 120)}`,
+        );
       }
       return [];
     }
-    const data = (await res.json()) as { transactions?: LedgerStreamTransaction[] };
+    const data = (await res.json()) as {
+      transactions?: LedgerStreamTransaction[];
+    };
     return data.transactions ?? [];
   }
 
@@ -2140,15 +2402,20 @@ export class CantonLedgerService {
   async grantOperatorRightsOnParty(partyId: string): Promise<void> {
     const operatorId = process.env.LEDGER_API_ADMIN_USER;
     if (!operatorId) {
-      this.logger.error('LEDGER_API_ADMIN_USER belum diset — operator rights TIDAK di-grant');
+      this.logger.error(
+        'LEDGER_API_ADMIN_USER belum diset — operator rights TIDAK di-grant',
+      );
       return;
     }
-    const token = await this.keycloak!.getAdminLedgerToken();
+    const token = await this.keycloak.getAdminLedgerToken();
     const url = `${this.baseUrl}/v2/users/${encodeURIComponent(operatorId)}/rights`;
     try {
       const res = await fetch(url, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
           userId: operatorId,
           rights: [
@@ -2159,15 +2426,21 @@ export class CantonLedgerService {
         signal: AbortSignal.timeout(15_000),
       });
       if (res.ok) {
-        this.logger.log(`Operator rights granted: ${operatorId.slice(0, 8)}... → ${partyId.split('::')[0]}`);
+        this.logger.log(
+          `Operator rights granted: ${operatorId.slice(0, 8)}... → ${partyId.split('::')[0]}`,
+        );
         return;
       }
       const text = await res.text();
       if (res.status === 409 || text.includes('ALREADY_EXISTS')) {
-        this.logger.debug(`Operator rights already exist for party=${partyId.split('::')[0]}`);
+        this.logger.debug(
+          `Operator rights already exist for party=${partyId.split('::')[0]}`,
+        );
         return;
       }
-      this.logger.warn(`grantOperatorRightsOnParty ${res.status}: ${text.slice(0, 200)}`);
+      this.logger.warn(
+        `grantOperatorRightsOnParty ${res.status}: ${text.slice(0, 200)}`,
+      );
     } catch (err) {
       this.logger.warn(`grantOperatorRightsOnParty error: ${String(err)}`);
     }
@@ -2180,36 +2453,53 @@ export class CantonLedgerService {
    * POST /v2/users — IDEMPOTEN: 409 atau ALREADY_EXISTS tidak thrown.
    */
   async createLedgerUser(keycloakUuid: string, partyId: string): Promise<void> {
-    const token = await this.keycloak!.getAdminLedgerToken();
+    const token = await this.keycloak.getAdminLedgerToken();
     const url = `${this.baseUrl}/v2/users`;
     const res = await fetch(url, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user: { id: keycloakUuid, primaryParty: partyId } }),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        user: { id: keycloakUuid, primaryParty: partyId },
+      }),
       signal: AbortSignal.timeout(15_000),
     });
     if (res.ok) {
-      this.logger.log(`Ledger user created: ${keycloakUuid.slice(0, 8)}... → ${partyId.split('::')[0]}`);
+      this.logger.log(
+        `Ledger user created: ${keycloakUuid.slice(0, 8)}... → ${partyId.split('::')[0]}`,
+      );
       return;
     }
     const text = await res.text();
     if (res.status === 409 || text.includes('ALREADY_EXISTS')) {
-      this.logger.debug(`Ledger user already exists: ${keycloakUuid.slice(0, 8)}...`);
+      this.logger.debug(
+        `Ledger user already exists: ${keycloakUuid.slice(0, 8)}...`,
+      );
       return;
     }
-    throw new Error(`createLedgerUser gagal (${res.status}): ${text.slice(0, 300)}`);
+    throw new Error(
+      `createLedgerUser gagal (${res.status}): ${text.slice(0, 300)}`,
+    );
   }
 
   /**
    * Update primaryParty untuk Ledger API user.
    * PATCH /v2/users/{keycloakUuid}
    */
-  async setLedgerUserPrimaryParty(keycloakUuid: string, partyId: string): Promise<void> {
-    const token = await this.keycloak!.getAdminLedgerToken();
+  async setLedgerUserPrimaryParty(
+    keycloakUuid: string,
+    partyId: string,
+  ): Promise<void> {
+    const token = await this.keycloak.getAdminLedgerToken();
     const url = `${this.baseUrl}/v2/users/${encodeURIComponent(keycloakUuid)}`;
     const res = await fetch(url, {
       method: 'PATCH',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify({
         user: { id: keycloakUuid, primaryParty: partyId },
         updateMask: { paths: ['primary_party'] },
@@ -2217,23 +2507,33 @@ export class CantonLedgerService {
       signal: AbortSignal.timeout(15_000),
     });
     if (res.ok) {
-      this.logger.log(`Ledger user primaryParty set: ${keycloakUuid.slice(0, 8)}... → ${partyId.split('::')[0]}`);
+      this.logger.log(
+        `Ledger user primaryParty set: ${keycloakUuid.slice(0, 8)}... → ${partyId.split('::')[0]}`,
+      );
       return;
     }
     const text = await res.text();
-    throw new Error(`setLedgerUserPrimaryParty gagal (${res.status}): ${text.slice(0, 300)}`);
+    throw new Error(
+      `setLedgerUserPrimaryParty gagal (${res.status}): ${text.slice(0, 300)}`,
+    );
   }
 
   /**
    * Grant CanActAs + CanReadAs rights untuk party user sendiri.
    * POST /v2/users/{keycloakUuid}/rights — idempoten (409 diabaikan).
    */
-  async grantLedgerUserRights(keycloakUuid: string, partyId: string): Promise<void> {
-    const token = await this.keycloak!.getAdminLedgerToken();
+  async grantLedgerUserRights(
+    keycloakUuid: string,
+    partyId: string,
+  ): Promise<void> {
+    const token = await this.keycloak.getAdminLedgerToken();
     const url = `${this.baseUrl}/v2/users/${encodeURIComponent(keycloakUuid)}/rights`;
     const res = await fetch(url, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify({
         userId: keycloakUuid,
         rights: [
@@ -2244,15 +2544,21 @@ export class CantonLedgerService {
       signal: AbortSignal.timeout(15_000),
     });
     if (res.ok) {
-      this.logger.log(`Ledger user rights granted: ${keycloakUuid.slice(0, 8)}... → ${partyId.split('::')[0]}`);
+      this.logger.log(
+        `Ledger user rights granted: ${keycloakUuid.slice(0, 8)}... → ${partyId.split('::')[0]}`,
+      );
       return;
     }
     const text = await res.text();
     if (res.status === 409) {
-      this.logger.debug(`Ledger user rights already granted (409): ${keycloakUuid.slice(0, 8)}...`);
+      this.logger.debug(
+        `Ledger user rights already granted (409): ${keycloakUuid.slice(0, 8)}...`,
+      );
       return;
     }
-    throw new Error(`grantLedgerUserRights gagal (${res.status}): ${text.slice(0, 300)}`);
+    throw new Error(
+      `grantLedgerUserRights gagal (${res.status}): ${text.slice(0, 300)}`,
+    );
   }
 
   /**
@@ -2260,12 +2566,16 @@ export class CantonLedgerService {
    * Semua langkah pakai token admin Keycloak dan baseUrl dari LEDGER_API_URL.
    */
   async ensureLedgerUser(keycloakUuid: string, partyId: string): Promise<void> {
-    this.logger.log(`ensureLedgerUser start: uuid=${keycloakUuid.slice(0, 8)}... party=${partyId.split('::')[0]}`);
+    this.logger.log(
+      `ensureLedgerUser start: uuid=${keycloakUuid.slice(0, 8)}... party=${partyId.split('::')[0]}`,
+    );
     await this.createLedgerUser(keycloakUuid, partyId);
     await this.setLedgerUserPrimaryParty(keycloakUuid, partyId);
     await this.grantLedgerUserRights(keycloakUuid, partyId);
     await this.grantOperatorRightsOnParty(partyId);
-    this.logger.log(`ensureLedgerUser done: uuid=${keycloakUuid.slice(0, 8)}... party=${partyId.split('::')[0]}`);
+    this.logger.log(
+      `ensureLedgerUser done: uuid=${keycloakUuid.slice(0, 8)}... party=${partyId.split('::')[0]}`,
+    );
   }
 
   // ============================================================
@@ -2278,7 +2588,12 @@ export class CantonLedgerService {
     ownerParty: string,
     amountCc: number,
     lockSeconds: number,
-  ): Promise<{ ok: boolean; lockedAmuletCid?: string; expiresAt?: string; error?: string }> {
+  ): Promise<{
+    ok: boolean;
+    lockedAmuletCid?: string;
+    expiresAt?: string;
+    error?: string;
+  }> {
     const expectedDso = this.config.get<string>('CANTON_DSO_PARTY_ID') ?? null;
     const lockHolder =
       this.config.get<string>('CANTON_LOCK_HOLDER_PARTY')?.trim() ||
@@ -2286,23 +2601,37 @@ export class CantonLedgerService {
     if (!lockHolder) return { ok: false, error: 'lock holder party not set' };
 
     const amuletRules = await this.fetchScanProxyContract('amulet-rules');
-    if (!amuletRules) return { ok: false, error: 'scan-proxy /amulet-rules failed' };
-    const openRound = await this.fetchScanProxyContract('open-and-issuing-mining-rounds');
-    if (!openRound) return { ok: false, error: 'scan-proxy /open-and-issuing-mining-rounds failed' };
+    if (!amuletRules)
+      return { ok: false, error: 'scan-proxy /amulet-rules failed' };
+    const openRound = await this.fetchScanProxyContract(
+      'open-and-issuing-mining-rounds',
+    );
+    if (!openRound)
+      return {
+        ok: false,
+        error: 'scan-proxy /open-and-issuing-mining-rounds failed',
+      };
 
     const holdings = await this.queryAmuletHoldingsRaw(ownerParty);
-    if (holdings.length === 0) return { ok: false, error: `${ownerParty} tidak punya Amulet` };
+    if (holdings.length === 0)
+      return { ok: false, error: `${ownerParty} tidak punya Amulet` };
 
     const round = openRound.round ?? 0;
-    const scored = holdings.map((h) => {
-      const init = parseFloat(h.initialAmount) || 0;
-      const rate = parseFloat(h.ratePerRound) || 0;
-      const decay = Math.max(0, round - (h.createdAtRound || 0)) * rate;
-      return { h, eff: Math.max(0, init - decay) };
-    }).sort((a, b) => b.eff - a.eff);
+    const scored = holdings
+      .map((h) => {
+        const init = parseFloat(h.initialAmount) || 0;
+        const rate = parseFloat(h.ratePerRound) || 0;
+        const decay = Math.max(0, round - (h.createdAtRound || 0)) * rate;
+        return { h, eff: Math.max(0, init - decay) };
+      })
+      .sort((a, b) => b.eff - a.eff);
 
     const totalEff = scored.reduce((s, x) => s + x.eff, 0);
-    if (totalEff < amountCc) return { ok: false, error: `Saldo efektif ~${totalEff.toFixed(4)} < ${amountCc} CC` };
+    if (totalEff < amountCc)
+      return {
+        ok: false,
+        error: `Saldo efektif ~${totalEff.toFixed(4)} < ${amountCc} CC`,
+      };
 
     const inputs: Array<{ tag: 'InputAmulet'; value: string }> = [];
     let acc = 0;
@@ -2319,12 +2648,14 @@ export class CantonLedgerService {
         sender: ownerParty,
         provider: lockHolder,
         inputs,
-        outputs: [{
-          receiver: ownerParty,                    // self → LockedAmulet milik owner
-          receiverFeeRatio: '0.0',
-          amount: amountCc.toString(),
-          lock: { holders: [lockHolder], expiresAt, optContext: null },
-        }],
+        outputs: [
+          {
+            receiver: ownerParty, // self → LockedAmulet milik owner
+            receiverFeeRatio: '0.0',
+            amount: amountCc.toString(),
+            lock: { holders: [lockHolder], expiresAt, optContext: null },
+          },
+        ],
         beneficiaries: null,
       },
       // AmuletRules_Transfer.context is a FLAT TransferContext — NOT the nested
@@ -2342,11 +2673,21 @@ export class CantonLedgerService {
     };
 
     const disclosedContracts = [
-      { templateId: amuletRules.templateId, contractId: amuletRules.contractId, createdEventBlob: amuletRules.blob },
-      { templateId: openRound.templateId,  contractId: openRound.contractId,  createdEventBlob: openRound.blob },
+      {
+        templateId: amuletRules.templateId,
+        contractId: amuletRules.contractId,
+        createdEventBlob: amuletRules.blob,
+      },
+      {
+        templateId: openRound.templateId,
+        contractId: openRound.contractId,
+        createdEventBlob: openRound.blob,
+      },
     ];
 
-    this.logger.log(`lockCc owner=${ownerParty.slice(0,20)}… amount=${amountCc} inputs=${inputs.length} expiresAt=${expiresAt}`);
+    this.logger.log(
+      `lockCc owner=${ownerParty.slice(0, 20)}… amount=${amountCc} inputs=${inputs.length} expiresAt=${expiresAt}`,
+    );
 
     const { ok, status, text } = await this.exerciseChoice(
       amuletRules.contractId,
@@ -2370,7 +2711,11 @@ export class CantonLedgerService {
         this.logger.warn(
           `lockCc ambiguous error ${status} — verifying on-chain…`,
         );
-        const verified = await this.verifyLockLanded(ownerParty, expiresAt, amountCc);
+        const verified = await this.verifyLockLanded(
+          ownerParty,
+          expiresAt,
+          amountCc,
+        );
         if (verified) {
           this.logger.log(
             `lockCc recovered: tx actually landed despite client error. lockedAmuletCid=${verified.slice(0, 20)}…`,
@@ -2381,8 +2726,12 @@ export class CantonLedgerService {
       this.logger.warn(`lockCc failed ${status}: ${text.slice(0, 500)}`);
       return { ok: false, error: `Ledger ${status}: ${text.slice(0, 400)}` };
     }
-    const lockedAmuletCid = this.findCreatedCidByTemplate(text, ':Splice.Amulet:LockedAmulet') ?? undefined;
-    this.logger.log(`lockCc OK lockedAmuletCid=${(lockedAmuletCid ?? '?').slice(0,20)}…`);
+    const lockedAmuletCid =
+      this.findCreatedCidByTemplate(text, ':Splice.Amulet:LockedAmulet') ??
+      undefined;
+    this.logger.log(
+      `lockCc OK lockedAmuletCid=${(lockedAmuletCid ?? '?').slice(0, 20)}…`,
+    );
     return { ok: true, lockedAmuletCid, expiresAt };
   }
 
@@ -2423,25 +2772,57 @@ export class CantonLedgerService {
   }
 
   /** Daftar LockedAmulet milik ownerParty (untuk eligibility & unlock). */
-  async findLockedAmulets(ownerParty: string): Promise<Array<{
-    contractId: string; templateId: string; amount: number; expiresAt: string; holders: string[];
-  }>> {
+  async findLockedAmulets(ownerParty: string): Promise<
+    Array<{
+      contractId: string;
+      templateId: string;
+      amount: number;
+      expiresAt: string;
+      holders: string[];
+    }>
+  > {
     let offset: number | string = 0;
-    try { const end = (await this.ledgerEnd()) as { offset?: number | string }; offset = end?.offset ?? 0; } catch { offset = 0; }
+    try {
+      const end = (await this.ledgerEnd()) as { offset?: number | string };
+      offset = end?.offset ?? 0;
+    } catch {
+      offset = 0;
+    }
     const body = {
       activeAtOffset: offset,
       eventFormat: {
-        filtersByParty: { [ownerParty]: { cumulative: [{ identifierFilter: { WildcardFilter: { value: { includeCreatedEventBlob: false } } } }] } },
+        filtersByParty: {
+          [ownerParty]: {
+            cumulative: [
+              {
+                identifierFilter: {
+                  WildcardFilter: { value: { includeCreatedEventBlob: false } },
+                },
+              },
+            ],
+          },
+        },
         verbose: true,
       },
     };
-    const out: Array<{ contractId: string; templateId: string; amount: number; expiresAt: string; holders: string[] }> = [];
+    const out: Array<{
+      contractId: string;
+      templateId: string;
+      amount: number;
+      expiresAt: string;
+      holders: string[];
+    }> = [];
     try {
       const res = await fetch(`${this.baseUrl}/v2/state/active-contracts`, {
-        method: 'POST', headers: await this.authHeaders(),
-        body: JSON.stringify(body), signal: AbortSignal.timeout(20_000),
+        method: 'POST',
+        headers: await this.authHeaders(),
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(20_000),
       });
-      if (!res.ok) { this.logger.warn(`findLockedAmulets ${res.status}`); return []; }
+      if (!res.ok) {
+        this.logger.warn(`findLockedAmulets ${res.status}`);
+        return [];
+      }
       const arr = (await res.json()) as any[];
       for (const e of Array.isArray(arr) ? arr : []) {
         const ce = e?.contractEntry?.JsActiveContract?.createdEvent;
@@ -2457,7 +2838,9 @@ export class CantonLedgerService {
           holders: Array.isArray(arg.lock?.holders) ? arg.lock.holders : [],
         });
       }
-    } catch (err) { this.logger.warn(`findLockedAmulets error: ${String(err)}`); }
+    } catch (err) {
+      this.logger.warn(`findLockedAmulets error: ${String(err)}`);
+    }
     return out;
   }
 
@@ -2466,17 +2849,32 @@ export class CantonLedgerService {
     ownerParty: string,
     lockedAmuletCid?: string,
   ): Promise<{ ok: boolean; unlockedCid?: string; error?: string }> {
-    const openRound = await this.fetchScanProxyContract('open-and-issuing-mining-rounds');
-    if (!openRound) return { ok: false, error: 'scan-proxy /open-and-issuing-mining-rounds failed' };
+    const openRound = await this.fetchScanProxyContract(
+      'open-and-issuing-mining-rounds',
+    );
+    if (!openRound)
+      return {
+        ok: false,
+        error: 'scan-proxy /open-and-issuing-mining-rounds failed',
+      };
 
     const locks = await this.findLockedAmulets(ownerParty);
     let cid = lockedAmuletCid;
-    let tmpl: string | null = cid ? (locks.find((l) => l.contractId === cid)?.templateId ?? null) : null;
+    let tmpl: string | null = cid
+      ? (locks.find((l) => l.contractId === cid)?.templateId ?? null)
+      : null;
     if (!cid) {
       const now = Date.now();
-      const expired = locks.find((l) => l.expiresAt && Date.parse(l.expiresAt) <= now);
-      if (!expired) return { ok: false, error: 'tidak ada LockedAmulet yang sudah jatuh tempo' };
-      cid = expired.contractId; tmpl = expired.templateId;
+      const expired = locks.find(
+        (l) => l.expiresAt && Date.parse(l.expiresAt) <= now,
+      );
+      if (!expired)
+        return {
+          ok: false,
+          error: 'tidak ada LockedAmulet yang sudah jatuh tempo',
+        };
+      cid = expired.contractId;
+      tmpl = expired.templateId;
     }
     if (!cid) return { ok: false, error: 'LockedAmulet cid tidak ditemukan' };
     if (!tmpl) {
@@ -2484,16 +2882,22 @@ export class CantonLedgerService {
       const pkg = ar?.templateId?.split(':')[0];
       tmpl = pkg ? `${pkg}:Splice.Amulet:LockedAmulet` : null;
     }
-    if (!tmpl) return { ok: false, error: 'templateId LockedAmulet tidak diketahui' };
+    if (!tmpl)
+      return { ok: false, error: 'templateId LockedAmulet tidak diketahui' };
 
     const disclosedContracts = [
-      { templateId: openRound.templateId, contractId: openRound.contractId, createdEventBlob: openRound.blob },
+      {
+        templateId: openRound.templateId,
+        contractId: openRound.contractId,
+        createdEventBlob: openRound.blob,
+      },
     ];
 
     const { ok, status, text } = await this.exerciseChoice(
-      cid, tmpl,
+      cid,
+      tmpl,
       'LockedAmulet_OwnerExpireLockV2',
-    {},
+      {},
       [ownerParty],
       `unlock-cc-${randomUUID()}`,
       'submit-and-wait-for-transaction-tree',
@@ -2520,8 +2924,9 @@ export class CantonLedgerService {
       this.logger.warn(`unlockCc failed ${status}: ${text.slice(0, 500)}`);
       return { ok: false, error: `Ledger ${status}: ${text.slice(0, 400)}` };
     }
-    const unlockedCid = this.findCreatedCidByTemplate(text, ':Splice.Amulet:Amulet') ?? undefined;
-    this.logger.log(`unlockCc OK amulet=${(unlockedCid ?? '?').slice(0,20)}…`);
+    const unlockedCid =
+      this.findCreatedCidByTemplate(text, ':Splice.Amulet:Amulet') ?? undefined;
+    this.logger.log(`unlockCc OK amulet=${(unlockedCid ?? '?').slice(0, 20)}…`);
     return { ok: true, unlockedCid };
   }
 
@@ -2545,15 +2950,29 @@ export class CantonLedgerService {
   }
 
   /** Cari contractId dari CreatedEvent pertama yang templateId-nya berakhiran `suffix`. */
-  private findCreatedCidByTemplate(jsonText: string, suffix: string): string | null {
+  private findCreatedCidByTemplate(
+    jsonText: string,
+    suffix: string,
+  ): string | null {
     let root: unknown;
-    try { root = JSON.parse(jsonText); } catch { return null; }
+    try {
+      root = JSON.parse(jsonText);
+    } catch {
+      return null;
+    }
     let out: string | null = null;
     const walk = (n: unknown, seen = new Set<unknown>()): void => {
       if (out || !n || typeof n !== 'object' || seen.has(n)) return;
       seen.add(n);
       const o = n as Record<string, any>;
-      if (typeof o.templateId === 'string' && o.templateId.endsWith(suffix) && typeof o.contractId === 'string') { out = o.contractId; return; }
+      if (
+        typeof o.templateId === 'string' &&
+        o.templateId.endsWith(suffix) &&
+        typeof o.contractId === 'string'
+      ) {
+        out = o.contractId;
+        return;
+      }
       for (const k of Object.keys(o)) walk(o[k], seen);
     };
     walk(root);
@@ -2607,7 +3026,9 @@ function extractCreatedContractId(responseText: string): string | null {
           return rec.contractId;
         }
         // Wrapper: { CreatedTreeEvent: { value: { contractId, ... } } }
-        const tree = rec.CreatedTreeEvent as Record<string, unknown> | undefined;
+        const tree = rec.CreatedTreeEvent as
+          | Record<string, unknown>
+          | undefined;
         const inner = tree?.value as Record<string, unknown> | undefined;
         if (typeof inner?.contractId === 'string' && inner.contractId) {
           return inner.contractId;
