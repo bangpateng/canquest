@@ -94,14 +94,37 @@ export class QuestsService {
     private readonly lockEligibility: LockEligibilityService,
   ) {}
 
-  /** Biaya poin untuk ikut satu campaign Earn (jalur method='points'). */
-  private readonly earnEntryCostPoints = 200;
+  /** Default biaya poin ikut Earn (jalur method='points'). Bisa di-override via AppSetting/env. */
+  private static readonly EARN_ENTRY_COST_DEFAULT = 200;
+
+  /**
+   * Resolve biaya poin untuk ikut satu campaign Earn.
+   * Prioritas (paling dinamis → paling statis):
+   *   1. AppSetting `earn_entry_cost_points` (DB) — bisa diubah live tanpa restart.
+   *   2. env `EARN_ENTRY_COST_POINTS` — perlu restart API.
+   *   3. Default 200.
+   */
+  private async resolveEarnEntryCostPoints(): Promise<number> {
+    // 1. Cek AppSetting di DB (live, tanpa restart).
+    const setting = await this.prisma.appSetting.findUnique({
+      where: { key: 'earn_entry_cost_points' },
+    });
+    if (setting) {
+      const val = parseInt(setting.value, 10);
+      if (Number.isFinite(val) && val > 0) return val;
+    }
+    // 2. Fallback ke env.
+    const envVal = Number(this.config.get<string>('EARN_ENTRY_COST_POINTS') ?? '');
+    if (Number.isFinite(envVal) && envVal > 0) return Math.round(envVal);
+    // 3. Default.
+    return QuestsService.EARN_ENTRY_COST_DEFAULT;
+  }
 
   /**
    * Gate akses campaign Earn (per-campaign, first participation).
    * User harus penuhi SALAH SATU:
    *   1. Lock ≥ {LOCK_TIER_FULL} CC on-chain (cc_lock) — reuse LockEligibilityService.
-   *   2. Spend {earnEntryCostPoints} points — catat EarnEntry pointsSpent.
+   *   2. Spend {earn_entry_cost_points} points — catat EarnEntry pointsSpent.
    * Dipasang di submitTask: dicek hanya saat user belum punya EarnEntry maupun
    * submission untuk campaign ini. Pencatatan EarnEntry atomik via upsert idempoten.
    */
@@ -110,6 +133,8 @@ export class QuestsService {
     userPartyId: string | null;
     questId: string;
   }): Promise<void> {
+    const costPoints = await this.resolveEarnEntryCostPoints();
+
     // Sudah ada entry → gate sudah dilewati sebelumnya.
     const existing = await this.prisma.earnEntry.findUnique({
       where: { userId_questId: { userId: params.userId, questId: params.questId } },
@@ -138,9 +163,9 @@ export class QuestsService {
 
     // Jalur points: cek saldo net, debit via EarnEntry dalam transaksi (anti double-charge).
     const netPoints = await this.points.getNetPoints(params.userId);
-    if (netPoints < this.earnEntryCostPoints) {
+    if (netPoints < costPoints) {
       throw new BadRequestException(
-        `Akses Earn butuh ${this.earnEntryCostPoints} pts (atau kunci 30 CC). Kamu punya ${netPoints} pts.`,
+        `Akses Earn butuh ${costPoints} pts (atau kunci 30 CC). Kamu punya ${netPoints} pts.`,
       );
     }
     await this.prisma.$transaction(async (tx) => {
@@ -155,7 +180,7 @@ export class QuestsService {
           userId: params.userId,
           questId: params.questId,
           method: 'points',
-          pointsSpent: this.earnEntryCostPoints,
+          pointsSpent: costPoints,
         },
       });
     });
