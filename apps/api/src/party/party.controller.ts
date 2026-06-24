@@ -1570,19 +1570,31 @@ export class PartyController {
     // Metadata di cc_locks (sumber kebenaran jumlah tetap on-chain; tabel = metadata + UI)
     const lockedAt = new Date();
     const expiresAt = new Date(lockedAt.getTime() + seconds * 1000);
-    const lockRow = await this.prisma.ccLock.create({
-      data: {
-        ownerParty,
-        userId: user.id,
-        amountCc,
-        termKey: body.termKey,
-        lockSeconds: seconds,
-        lockedAt,
-        expiresAt,
-        status: 'LOCKED',
-        lockedAmuletCid: result.lockedAmuletCid ?? null,
-      },
-    });
+    let lockRow: { id: string } | null = null;
+    try {
+      lockRow = await this.prisma.ccLock.create({
+        data: {
+          ownerParty,
+          userId: user.id,
+          amountCc,
+          termKey: body.termKey,
+          lockSeconds: seconds,
+          lockedAt,
+          expiresAt,
+          status: 'LOCKED',
+          lockedAmuletCid: result.lockedAmuletCid ?? null,
+        },
+      });
+    } catch (err) {
+      // Lock inti SUDAH sukses on-chain (LockedAmulet mendarat). Kegagalan tulis
+      // baris metadata DB TIDAK boleh membatalkan lock. Reconciler di lock-status
+      // akan backfill baris dari chain (match by lockedAmuletCid) sehingga lock
+      // tetap muncul di UI & unlockable.
+      this.logger.error(
+        `lockCc: on-chain sukses tapi ccLock.create gagal user=${user.id.slice(0, 8)} ` +
+        `cid=${(result.lockedAmuletCid ?? '?').slice(0, 16)}… : ${String(err)} — reconcile akan backfill.`,
+      );
+    }
 
     // Catat ke history transaksi (tampilan). Idempotensi via @@unique(userId, ledgerTxId):
     // ledgerTxId = lockedAmuletCid → handler ulang tidak akan mendobel-catat.
@@ -1593,7 +1605,7 @@ export class PartyController {
           amountCc,
           type: 'CC_LOCK',
           description: 'CC Locked',
-          referenceId: lockRow.id,
+          referenceId: lockRow?.id,
           ledgerTxId: result.lockedAmuletCid,
         });
       } catch (err) {
@@ -1602,7 +1614,12 @@ export class PartyController {
       }
     }
 
-    return { ok: true, expiresAt, lockId: lockRow.id, lockedAmuletCid: result.lockedAmuletCid ?? null };
+    return {
+      ok: true,
+      expiresAt,
+      lockId: lockRow?.id,
+      lockedAmuletCid: result.lockedAmuletCid ?? null,
+    };
   }
 
   /**
@@ -1695,6 +1712,13 @@ export class PartyController {
    * GET /party/lock-status — status lock user.
    * lockedCc dari on-chain (lockEligibility.lockedCcOf); activeLocks dari cc_locks.
    * Countdown DIHITUNG DI FRONTEND dari expiresAt.
+   *
+   * RECONCILE: sebelum query activeLocks, selaraskan dulu tabel cc_locks dengan
+   * LockedAmulet on-chain. Ini menutup celah "lock sukses di chain tapi row DB
+   * gagal dibuat" (mis. frontend error setelah tx on-chain sukses) → CC tetap
+   * terkunci di chain tapi TIDAK muncul di UI → user tidak bisa unlock. Dengan
+   * reconcile, orphan LockedAmulet di-backfill jadi baris LOCKED sehingga muncul
+   * di activeLocks[] dan jadi unlockable. Idempoten & best-effort (non-fatal).
    */
   @SkipThrottle()
   @Get('lock-status')
@@ -1710,6 +1734,22 @@ export class PartyController {
       };
     }
     const ownerParty = user.cantonPartyId;
+
+    // ── Reconcile: backfill orphan LockedAmulet (lock on-chain, DB row hilang) ──
+    try {
+      const backfilled = await this.lockEligibility.reconcileLocksWithChain(
+        ownerParty,
+        user.id,
+      );
+      if (backfilled > 0) {
+        this.logger.log(
+          `lock-status reconcile: backfilled ${backfilled} orphan lock(s) for user=${user.id.slice(0, 8)}`,
+        );
+      }
+    } catch (err) {
+      // Non-fatal: status tetap dikembalikan (hanya reconcile yang skip).
+      this.logger.warn(`lock-status reconcile failed: ${String(err)}`);
+    }
 
     const [lockedCc, tier, activeLocks, balanceRow] = await Promise.all([
       this.lockEligibility.lockedCcOf(ownerParty),
