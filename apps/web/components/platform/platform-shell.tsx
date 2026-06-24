@@ -131,7 +131,7 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
         {/* Top Header */}
         <header className="sticky top-0 z-30 flex h-16 w-full max-w-full items-center justify-between gap-4 border-b border-white/[0.05] bg-[var(--background)]/95 px-4 backdrop-blur-2xl sm:h-[4.5rem] sm:px-6 md:px-8 lg:px-10">
           <CanQuestLogo
-            size="lg"
+            size="md"
             href="/overview"
             className="shrink-0 md:hidden"
           />
