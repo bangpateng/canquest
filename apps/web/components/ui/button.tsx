@@ -2,10 +2,6 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { forwardRef } from "react";
 import { cn } from "@/lib/utils/utils";
 
-/** Solid green CTA — matches “Copy invite link” and all primary actions site-wide. */
-export const solidPrimaryButtonClass =
-  "inline-flex items-center justify-center gap-2 rounded-lg border-0 bg-emerald-500 font-semibold text-white transition-colors hover:bg-emerald-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] active:bg-emerald-600 disabled:pointer-events-none disabled:opacity-50";
-
 export const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] disabled:pointer-events-none disabled:opacity-50",
   {

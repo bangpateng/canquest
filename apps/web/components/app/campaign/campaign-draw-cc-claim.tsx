@@ -3,10 +3,9 @@
 import type { CampaignMeta } from "@/lib/canton/campaign-reward";
 import { formatFcfsClaimFeeHint } from "@/lib/canton/campaign-reward";
 import { CampaignFcfsRewardCard } from "@/components/app/campaign/campaign-fcfs-reward-card";
+import { launchClaimConfetti } from "@/components/ui/confetti-effect";
+import { CLAIM_FAIL_MSG } from "@/lib/campaign/claim-messages";
 import { useState } from "react";
-
-const CLAIM_FAIL_MSG =
-  "Claim failed: Transaction reverted by ledger (insufficient balance or network error)";
 
 export function CampaignDrawCcClaimSection({
   questId,
@@ -52,6 +51,7 @@ export function CampaignDrawCcClaimSection({
         return;
       }
       setSuccess(data.message ?? `${rewardCc} CC sent to your wallet.`);
+      launchClaimConfetti();
       onClaimed();
     } catch {
       setError(CLAIM_FAIL_MSG);

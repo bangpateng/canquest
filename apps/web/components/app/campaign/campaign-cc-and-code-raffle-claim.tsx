@@ -3,9 +3,9 @@
 import { useState } from "react";
 import type { CampaignMeta } from "@/lib/canton/campaign-reward";
 import { CampaignFcfsRewardCard } from "@/components/app/campaign/campaign-fcfs-reward-card";
-
-const CLAIM_FAIL_MSG =
-  "Claim failed: Transaction reverted by ledger (insufficient balance or network error)";
+import { RewardReveal } from "@/components/app/campaign/reward-reveal";
+import { launchClaimConfetti } from "@/components/ui/confetti-effect";
+import { CLAIM_FAIL_MSG } from "@/lib/campaign/claim-messages";
 
 /**
  * CC + Code Combined Raffle Claim Section
@@ -68,6 +68,7 @@ export function CampaignCcAndCodeRaffleClaimSection({
             ? `${rewardCc} CC sent to your wallet! Your code: ${code}`
             : `${rewardCc} CC sent to your wallet.`),
       );
+      launchClaimConfetti();
       onClaimed();
     } catch {
       setError(CLAIM_FAIL_MSG);
@@ -118,17 +119,7 @@ export function CampaignCcAndCodeRaffleClaimSection({
         onClaim={() => void handleClaim()}
       />
       {claimedCode && (
-        <div className="rounded-2xl border border-canton/30 bg-canton/[0.06] p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-            Your Invite Code
-          </p>
-          <p className="mt-2 font-mono text-lg font-bold tracking-widest text-canton">
-            {claimedCode}
-          </p>
-          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-            Save this code — it will not be shown again after you leave this page.
-          </p>
-        </div>
+        <RewardReveal inviteCode={claimedCode} rewardCc={rewardVariant === "CC" ? 0 : rewardCc} />
       )}
     </div>
   );

@@ -77,7 +77,7 @@ export function QuestDetail({ questId }: { questId: string }) {
       .then((r) => r.json())
       .then((d: QuestData) => {
         if (d?.questKind === "EARN_HUB") {
-          router.replace("/admin/quest");
+          router.replace("/admin/quests");
           return;
         }
         setQuest(d);
@@ -188,7 +188,7 @@ export function QuestDetail({ questId }: { questId: string }) {
   const projectNameForTasks = quest
     ? resolveQuestProjectName(quest)
     : "";
-  const adminBackHref = isEarnHub ? "/admin/quest" : "/admin/earn";
+  const adminBackHref = isEarnHub ? "/admin/quests" : "/admin/earn";
 
   return (
     <div className="space-y-6">

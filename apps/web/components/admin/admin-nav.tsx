@@ -11,19 +11,12 @@ const NAV_ITEMS: {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   exact: boolean;
-  highlight?: boolean;
 }[] = [
   { href: "/admin", label: "Dashboard", icon: LayoutGrid, exact: true },
   { href: "/admin/earn", label: "Earn campaigns", icon: Scroll, exact: false },
   { href: "/admin/quests", label: "Quest hub", icon: Gift, exact: false },
   { href: "/admin/users", label: "Users", icon: Users, exact: false },
-  {
-    href: "/admin/wallet-invites",
-    label: "Generate wallet codes",
-    icon: KeyRound,
-    exact: false,
-    highlight: true,
-  },
+  { href: "/admin/wallet-invites", label: "Generate wallet codes", icon: KeyRound, exact: false },
 ];
 
 function isActive(pathname: string, href: string, exact: boolean) {
@@ -39,7 +32,7 @@ export function AdminNav({ className }: { className?: string }) {
       <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-widest text-[var(--muted-foreground)]">
         Menu
       </p>
-      {NAV_ITEMS.map(({ href, label, icon: Icon, exact, highlight }) => {
+      {NAV_ITEMS.map(({ href, label, icon: Icon, exact }) => {
         const active = isActive(pathname, href, exact);
         return (
           <Link
@@ -49,15 +42,13 @@ export function AdminNav({ className }: { className?: string }) {
               "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all",
               active
                 ? "bg-[var(--primary)]/14 text-[var(--foreground)] ring-1 ring-inset ring-[var(--primary)]/30"
-                : highlight
-                  ? "text-canton hover:bg-canton/10"
-                  : "text-[var(--muted-foreground)] hover:bg-[var(--muted)]/30 hover:text-[var(--foreground)]",
+                : "text-[var(--muted-foreground)] hover:bg-[var(--muted)]/30 hover:text-[var(--foreground)]",
             )}
           >
             <Icon
               className={cn(
                 "h-4 w-4 shrink-0",
-                active || highlight ? "text-canton" : undefined,
+                active ? "text-canton" : undefined,
               )}
             />
             <span className="leading-snug">{label}</span>

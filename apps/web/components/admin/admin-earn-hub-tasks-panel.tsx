@@ -17,7 +17,7 @@ import {
   parseQuizChoices,
   validateEarnHubTaskDraft,
 } from "@/lib/quest/quest-types";
-import { GripVertical, Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 
 export interface EarnHubTask {
   id: string;
@@ -246,7 +246,6 @@ export function AdminEarnHubTasksPanel({
                   key={t.id}
                   className="flex gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4"
                 >
-                  <GripVertical className="mt-1 h-4 w-4 shrink-0 text-[var(--muted-foreground)] opacity-40" />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-semibold text-[var(--foreground)]">{row.headline}</p>

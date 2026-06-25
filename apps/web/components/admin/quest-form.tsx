@@ -616,7 +616,7 @@ export function QuestForm({
                 <label className="mb-1.5 block text-sm font-medium">
                   Code winners quota
                   <span className="ml-1.5 text-xs font-normal text-[var(--muted-foreground)]">
-                    (sisanya dapat CC; kosong = semua dapat keduanya)
+                    (the rest get CC; leave empty = everyone gets both)
                   </span>
                 </label>
                 <input
@@ -625,7 +625,7 @@ export function QuestForm({
                   step="1"
                   value={form.codeWinnersQuota}
                   onChange={(e) => updateField("codeWinnersQuota", e.target.value)}
-                  placeholder="e.g. 6 (dari 10 pemenang dapat Code)"
+                  placeholder="e.g. 6 (of 10 winners get Code)"
                   className={inputCls}
                 />
               </div>
@@ -656,7 +656,7 @@ export function QuestForm({
               />
               {form.rewardType === "CC_AND_CODE_RAFFLE" && (
                 <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                  Shown to winners after admin draw. Non-winners see &ldquo;You Not Lucky&rdquo;.
+                  Shown to winners after admin draw. Non-winners see &ldquo;You weren&rsquo;t selected&rdquo;.
                 </p>
               )}
             </div>

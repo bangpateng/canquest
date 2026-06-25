@@ -1450,6 +1450,8 @@ export class AdminService {
       earnHub,
       totalCompletions,
       totalWinners,
+      ccDistributed,
+      codesAvailable,
     ] = await Promise.all([
       this.prisma.user.count(),
       this.prisma.quest.count({ where: { questKind: QuestKind.CAMPAIGN } }),
@@ -1459,6 +1461,14 @@ export class AdminService {
       }),
       this.prisma.questCompletion.count(),
       this.prisma.winnerDraw.count({ where: { distributed: true } }),
+      // Total CC yang sudah didistribusi sebagai reward quest (read-only aggregate).
+      // CcTransaction menyimpan micro-CC (BigInt); konversi ke CC.
+      this.prisma.ccTransaction.aggregate({
+        where: { type: 'QUEST_REWARD' },
+        _sum: { amountMicroCc: true },
+      }),
+      // Kode undangan kampanye yang belum di-assign (read-only count).
+      this.prisma.inviteCodePool.count({ where: { userId: null } }),
     ]);
     return {
       totalUsers,
@@ -1469,6 +1479,11 @@ export class AdminService {
       earnHubConfigured: !!earnHub,
       earnHubTaskCount: earnHub?._count.tasks ?? 0,
       earnHubSubmissions: earnHub?._count.submissions ?? 0,
+      // Konversi micro-CC (BigInt) → CC (number). _sum mungkin undefined/null bila kosong.
+      totalCcDistributed: ccDistributed._sum?.amountMicroCc
+        ? Number(ccDistributed._sum.amountMicroCc) / 1_000_000
+        : 0,
+      codesAvailable,
     };
   }
 

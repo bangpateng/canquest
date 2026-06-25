@@ -163,9 +163,9 @@ export function AdminQuestTable({
                     </span>
                   ) : null}
                   {typeof q.codesRemaining === "number" &&
-                  (q.rewardType.includes("INVITE") || q.rewardType === "CC_AND_INVITE") ? (
+                  q.rewardType.includes("INVITE") ? (
                     <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
-                      Sisa kode: {q.codesRemaining}
+                      Codes left: {q.codesRemaining}
                       {q._count.inviteCodes != null ? ` / ${q._count.inviteCodes}` : ""}
                     </p>
                   ) : null}
@@ -195,7 +195,7 @@ export function AdminQuestTable({
                       type="button"
                       onClick={() => void handleDelete(q)}
                       disabled={deletingId === q.id}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/8 px-3 py-1.5 text-xs font-semibold text-red-400 transition-colors hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-400 transition-colors hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {deletingId === q.id ? (
                         <span className="text-[10px]">Deleting…</span>

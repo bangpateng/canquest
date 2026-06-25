@@ -15,6 +15,7 @@ import {
 } from "@/lib/canton/campaign-reward";
 import { CampaignFcfsRewardCard } from "@/components/app/campaign/campaign-fcfs-reward-card";
 import { CampaignQuestStatusCard } from "@/components/app/campaign/campaign-quest-status-card";
+import { RewardReveal } from "@/components/app/campaign/reward-reveal";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
 import { CcRewardLogo } from "@/components/app/campaign/cc-reward-logo";
@@ -279,22 +280,9 @@ export function QuestSubmittedProof({
             <CcRewardLogo size={20} />
             <span className="text-sm font-bold text-canton">+{rewardCc ?? 0} CC sent to your wallet</span>
           </div>
-          {/* Invite code row */}
+          {/* Invite code row — konsisten dengan claim card (RewardReveal). */}
           {inviteCode ? (
-            <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 px-4 py-3">
-              <p className="text-xs font-bold uppercase tracking-wider text-violet-300/80">
-                Your Invite Code
-              </p>
-              <div className="mt-2 flex items-center justify-between gap-3">
-                <code className="font-mono text-lg font-bold tracking-widest text-violet-200">
-                  {inviteCode}
-                </code>
-                <CopyButton value={inviteCode} label="Copy code" />
-              </div>
-              <p className="mt-1.5 text-xs text-slate-500">
-                Save this code — it will not be shown again after you leave this page.
-              </p>
-            </div>
+            <RewardReveal inviteCode={inviteCode} />
           ) : (
             <p className="text-sm text-slate-400">
               {rewardStatus?.message ?? `${rewardCc ?? 0} CC and your invite code have been sent.`}

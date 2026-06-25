@@ -38,7 +38,6 @@ import {
 } from "@/lib/canton/campaign-reward";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { WalletCreatePromptModal } from "@/components/app/wallet/wallet-create-prompt";
-import { CardTitle, SectionTitle, SubsectionTitle } from "@/components/ui/typography";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
 import { hasRealWallet } from "@/lib/auth/wallet-access";
@@ -55,7 +54,6 @@ import {
   Send,
   UserPlus,
   Users,
-  Zap,
 } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import Link from "next/link";
@@ -475,60 +473,31 @@ export function QuestTaskPanel({
         </div>
       ) : null}
 
-      {/* Task list */}
-      {isEarnHub ? (
-        <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/40">
-          <ul className="divide-y divide-white/[0.05]">
-            {quest.tasks.map((task, idx) => (
-
-
-              <TaskRow
-                key={task.id}
-                index={idx + 1}
-                questId={quest.id}
-                quest={quest}
-                task={task}
-                submission={submissions[task.id] ?? null}
-                partyId={partyId}
-                twitterUsername={twitterUsername}
-                campaignEnded={taskSubmissionsBlocked}
-                sequentiallyLocked={isTaskSequentiallyLocked(idx, task.id)}
-                onBusyChange={(busy) =>
-                  setBusyTaskId((prev) => (busy ? task.id : prev === task.id ? null : prev))
-                }
-                earnHubLayout
-                onPointsEarned={onPointsEarned}
-                onVerified={(sub) => onTaskVerified(task.id, sub)}
-              />
-            ))}
-          </ul>
-        </div>
-      ) : (
-        <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/40">
-          <ul className="divide-y divide-white/[0.05]">
-            {quest.tasks.map((task, idx) => (
-              <TaskRow
-
-                key={task.id}
-                index={idx + 1}
-                questId={quest.id}
-                quest={quest}
-                task={task}
-                submission={submissions[task.id] ?? null}
-                partyId={partyId}
-                twitterUsername={twitterUsername}
-                campaignEnded={taskSubmissionsBlocked}
-                sequentiallyLocked={isTaskSequentiallyLocked(idx, task.id)}
-                onBusyChange={(busy) =>
-                  setBusyTaskId((prev) => (busy ? task.id : prev === task.id ? null : prev))
-                }
-                campaignListLayout
-                onVerified={(sub) => onTaskVerified(task.id, sub)}
-              />
-            ))}
-          </ul>
-        </div>
-      )}
+      {/* Task list — satu container untuk Earn hub & campaign (markup identik). */}
+      <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-[var(--card)] backdrop-blur-2xl shadow-2xl shadow-black/40">
+        <ul className="divide-y divide-white/[0.05]">
+          {quest.tasks.map((task, idx) => (
+            <TaskRow
+              key={task.id}
+              index={idx + 1}
+              questId={quest.id}
+              quest={quest}
+              task={task}
+              submission={submissions[task.id] ?? null}
+              partyId={partyId}
+              twitterUsername={twitterUsername}
+              campaignEnded={taskSubmissionsBlocked}
+              sequentiallyLocked={isTaskSequentiallyLocked(idx, task.id)}
+              onBusyChange={(busy) =>
+                setBusyTaskId((prev) => (busy ? task.id : prev === task.id ? null : prev))
+              }
+              earnHubLayout={isEarnHub}
+              onPointsEarned={onPointsEarned}
+              onVerified={(sub) => onTaskVerified(task.id, sub)}
+            />
+          ))}
+        </ul>
+      </div>
 
       {showFcfsClaim ? (
         <CampaignFcfsClaimSection
@@ -626,7 +595,6 @@ function TaskRow({
   twitterUsername = null,
   campaignEnded = false,
   earnHubLayout = false,
-  campaignListLayout = false,
   sequentiallyLocked = false,
   onBusyChange,
   onPointsEarned,
@@ -641,7 +609,6 @@ function TaskRow({
   twitterUsername?: string | null;
   campaignEnded?: boolean;
   earnHubLayout?: boolean;
-  campaignListLayout?: boolean;
   sequentiallyLocked?: boolean;
   onBusyChange?: (busy: boolean) => void;
   onPointsEarned?: () => void;
@@ -920,7 +887,9 @@ function TaskRow({
       })
     : null;
 
-  if (campaignListLayout) {
+  // Jalur campaign (list-row compact). Jalur Earn-hub ditangani blok di bawah
+  // (butuh earnHubDisplay); selebihnya (campaign & fallback) pakai desain ini.
+  if (!(earnHubLayout && earnHubDisplay)) {
     return (
       <li
         className={cn(
@@ -1222,7 +1191,7 @@ function TaskRow({
             ) : null}
 
             {!isVerified && !quizExpired && isQuizYesNo ? (
-              <div className="mt-3 flex rounded-lg border border-[var(--border)] bg-[var(--background)] p-0.5">
+              <div className="mt-3 flex rounded-full bg-[var(--muted)]/35 p-1">
                 {(["yes", "no"] as const).map((opt) => {
                   const key = quizAnswerKey(opt, taskType);
                   const isWrong = quizWrong !== null && quizAnswerKey(quizWrong, taskType) === key;
@@ -1235,11 +1204,11 @@ function TaskRow({
                       disabled={loading || quizExpired || sequentiallyLocked}
                       onClick={() => void submitQuizAnswer(opt)}
                       className={cn(
-                        "flex flex-1 items-center justify-center gap-1.5 rounded-md py-2 text-sm font-medium capitalize transition-colors",
+                        "flex flex-1 items-center justify-center gap-1.5 rounded-full py-2 text-sm font-medium capitalize transition-colors",
                         (quizExpired || sequentiallyLocked) && "cursor-not-allowed opacity-50",
                         isWrong
-                          ? "bg-red-500/15 text-red-300 ring-1 ring-inset ring-red-500/35"
-                          : "text-[var(--muted-foreground)] hover:bg-[var(--muted)]/30 hover:text-[var(--foreground)]",
+                          ? "bg-red-500/15 text-red-300"
+                          : "text-[var(--muted-foreground)] hover:bg-[var(--background)]/50 hover:text-[var(--foreground)]",
                       )}
                     >
                       {isPending ? <LoadingSpinner size="sm" /> : null}
@@ -1265,21 +1234,14 @@ function TaskRow({
                         disabled={loading || quizExpired || sequentiallyLocked}
                         onClick={() => void submitQuizAnswer(letter)}
                         className={cn(
-                          "flex w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
+                          "flex w-full items-center gap-2.5 rounded-xl bg-[var(--muted)]/25 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--muted)]/35",
                           quizExpired && "cursor-not-allowed opacity-50",
                           isWrong
-                            ? "border-red-500/40 bg-red-500/10 text-red-200"
-                            : "border-[var(--border)] bg-[var(--background)] hover:bg-[var(--muted)]/25",
+                            ? "bg-red-500/10 text-red-200 hover:bg-red-500/15"
+                            : "text-[var(--foreground)]",
                         )}
                       >
-                        <span
-                          className={cn(
-                            "flex h-5 w-5 shrink-0 items-center justify-center rounded text-[10px] font-bold",
-                            isWrong
-                              ? "bg-red-500/25 text-red-200"
-                              : "bg-[var(--muted)] text-[var(--muted-foreground)]",
-                          )}
-                        >
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[var(--muted)] text-[10px] font-bold text-[var(--muted-foreground)]">
                           {isPending ? <LoadingSpinner size="xs" /> : letter}
                         </span>
                         <span className="leading-snug">{label}</span>
@@ -1362,264 +1324,7 @@ function TaskRow({
       </li>
     );
   }
-
-  return (
-    <div
-      className={cn(
-        "group relative rounded-3xl border bg-[var(--card)]/90 p-6 transition-all duration-300 backdrop-blur-sm",
-        isVerified &&
-          "border-emerald-500/35 bg-gradient-to-br from-emerald-500/8 to-transparent ring-1 ring-emerald-500/20",
-        isPending && "border-orange-500/30 bg-orange-500/5",
-        !isVerified &&
-          !isPending &&
-          !sequentiallyLocked &&
-          "border-white/5 hover:border-[var(--primary)]/25 hover:shadow-[0_0_24px_rgb(var(--canton-rgb)/0.06)]",
-        sequentiallyLocked && !isVerified && "opacity-55",
-      )}
-    >
-      <div className="flex gap-5">
-        {/* Step badge */}
-        <div
-          className={cn(
-            "flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-2xl text-sm font-bold",
-            isVerified
-              ? "bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/40"
-              : "bg-[var(--muted)] text-slate-400 ring-1 ring-white/5",
-          )}
-        >
-          {isVerified ? (
-            <CheckCircle2 className="h-5 w-5" strokeWidth={2.5} />
-          ) : (
-            <>
-              <span className="text-[9px] uppercase opacity-60">Step</span>
-              <span className="type-card-title leading-none">
-                {index}
-              </span>
-            </>
-          )}
-        </div>
-
-        <div className="min-w-0 flex-1 space-y-4">
-          <div className="flex flex-wrap items-start gap-3">
-            <div className="flex min-w-0 flex-1 items-start gap-3">
-              {!isVerified && (
-                <span className="mt-1 text-slate-400">
-                  <TaskIcon type={task.type} />
-                </span>
-              )}
-              <div className="min-w-0">
-                <CardTitle className="text-xl font-bold text-slate-100">{displayTitle}</CardTitle>
-                {task.description &&
-                  !task.description.trim().startsWith("http") &&
-                  task.description.trim() !== (task.target ?? "").trim() && (
-                    <p className="mt-2 text-sm font-medium text-slate-400">
-                      {task.description}
-                    </p>
-                  )}
-              </div>
-            </div>
-
-            <div className="flex shrink-0 flex-wrap items-center gap-3">
-              {isVerified ? (
-                <>
-                  <span className="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-[10px] font-bold uppercase text-emerald-300">
-                    Verified
-                  </span>
-                  <TaskPointsLabel points={task.points} complete />
-                </>
-              ) : sequentiallyLocked ? (
-                <span className="inline-flex min-w-[5.5rem] items-center justify-center gap-1 rounded-full border border-[var(--border)] bg-[var(--muted)]/30 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[var(--muted-foreground)]">
-                  <Lock className="h-3 w-3" aria-hidden />
-                  Locked
-                </span>
-              ) : isQuiz ? null : countdown !== null && countdown > 0 ? (
-                <button
-                  type="button"
-                  disabled
-                  className={cn(
-                    buttonVariants({ size: "sm" }),
-                    "min-w-[6.5rem] rounded-full cursor-wait tabular-nums",
-                  )}
-                  aria-live="polite"
-                >
-                  {formatTaskCountdownSeconds(countdown)}
-                </button>
-              ) : loading ? (
-                <button
-                  type="button"
-                  disabled
-                  className={cn(buttonVariants({ size: "sm" }), "min-w-[5.5rem] gap-2")}
-                >
-                  <LoadingSpinner size="md" />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  disabled={actionDisabled}
-                  onClick={startTask}
-                  className={cn(
-                    buttonVariants({ size: "sm" }),
-                    "min-w-[5.5rem] font-bold",
-                  )}
-                >
-                  {actionLabel}
-                </button>
-              )}
-            </div>
-          </div>
-
-          {!isVerified && isQuiz && (
-            <p className="text-sm font-medium text-slate-400">
-              Wrong answers earn no points — keep trying until you get it right.
-            </p>
-          )}
-
-          {lockedHint ? (
-            <p className="flex items-center gap-2 text-sm font-medium text-slate-400">
-              <Lock className="h-4 w-4 shrink-0" aria-hidden />
-              {lockedHint}
-            </p>
-          ) : null}
-
-          {needsTwitter && !isVerified ? (
-            <p className="text-sm font-medium text-orange-300/90">
-              <Link href="/settings" className="font-semibold underline underline-offset-2">
-                Connect X (Twitter)
-              </Link>{" "}
-              in Settings to verify this task.
-            </p>
-          ) : null}
-
-          {!isVerified && isQuizYesNo && (
-            <div className="space-y-2">
-              <div className="flex flex-wrap gap-2">
-                {(["yes", "no"] as const).map((opt) => {
-                  const key = quizAnswerKey(opt, taskType);
-                  const isWrong = quizWrong !== null && quizAnswerKey(quizWrong, taskType) === key;
-                  const isPending =
-                    loading && quizPending !== null && quizAnswerKey(quizPending, taskType) === key;
-                  return (
-                    <button
-                      key={opt}
-                      type="button"
-                      disabled={loading || sequentiallyLocked}
-                      onClick={() => void submitQuizAnswer(opt)}
-                      className={cn(
-                        buttonVariants({
-                          variant: isWrong ? "secondary" : "secondary",
-                          size: "sm",
-                        }),
-                        "min-w-[4.5rem] rounded-full capitalize",
-                        sequentiallyLocked && "cursor-not-allowed opacity-50",
-                        isWrong && "border-red-500/40 bg-red-500/10 text-red-200 hover:bg-red-500/15",
-                      )}
-                    >
-                      {isPending ? <LoadingSpinner size="sm" className="mr-1 inline" /> : null}
-                      {opt}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {!isVerified && isQuizChoice && quizChoices.length > 0 && (
-            <div className="grid gap-2 sm:grid-cols-2">
-              {quizChoices.map((label, idx) => {
-                const letter = String.fromCharCode(65 + idx);
-                const key = quizAnswerKey(letter, taskType);
-                const isWrong = quizWrong !== null && quizAnswerKey(quizWrong, taskType) === key;
-                const isPending =
-                  loading && quizPending !== null && quizAnswerKey(quizPending, taskType) === key;
-                return (
-                  <button
-                    key={letter}
-                    type="button"
-                    disabled={loading || sequentiallyLocked}
-                    onClick={() => void submitQuizAnswer(letter)}
-                    className={cn(
-                      buttonVariants({ variant: "secondary", size: "sm" }),
-                      "h-auto rounded-xl py-2.5 text-left text-xs font-semibold",
-                      isWrong && "border-red-500/40 bg-red-500/10 text-red-200 hover:bg-red-500/15",
-                    )}
-                  >
-                    {isPending ? (
-                      <LoadingSpinner size="sm" className="mr-1 inline" />
-                    ) : (
-                      <span className="text-canton">{letter}.</span>
-                    )}{" "}
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {!isVerified && isEmailTask && (
-            <input
-              type="email"
-              value={proof}
-              onChange={(e) => setProof(e.target.value)}
-              placeholder="your@email.com"
-              disabled={loading || isVerified}
-              className="w-full max-w-lg rounded-xl border border-[var(--border)] bg-[var(--muted)]/60 px-4 py-2.5 text-sm outline-none transition-colors focus:border-[var(--primary)]/40 focus:ring-2 focus:ring-[var(--ring)]"
-            />
-          )}
-
-          {!isVerified && isPartyTask && (
-            <>
-              {needsWallet ? (
-                <button
-                  type="button"
-                  onClick={() => setWalletPromptOpen(true)}
-                  className="w-full rounded-xl border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-left text-xs text-orange-300 hover:bg-orange-500/15"
-                >
-                  Create your wallet first to submit —{" "}
-                  <span className="font-semibold underline">get started</span>
-                </button>
-              ) : (
-                <input
-                  type="text"
-                  value={proof}
-                  readOnly
-                  disabled
-                  className="w-full max-w-lg rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-2.5 font-mono text-xs text-[var(--muted-foreground)]"
-                />
-              )}
-            </>
-          )}
-
-          {error && (
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="flex-1 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-300">
-                {error}
-              </p>
-              {started && countdown === 0 && canComplete ? (
-                <button
-                  type="button"
-                  disabled={loading}
-                  onClick={() => {
-                    autoSubmitFired.current = false;
-                    void handleSubmit();
-                  }}
-                  className={cn(buttonVariants({ size: "sm", variant: "secondary" }))}
-                >
-                  Retry
-                </button>
-              ) : null}
-            </div>
-          )}
-          {successMsg && !error && (
-            <p className="text-xs font-semibold text-emerald-400">{successMsg}</p>
-          )}
-        </div>
-      </div>
-      <WalletCreatePromptModal
-        open={walletPromptOpen}
-        onClose={() => setWalletPromptOpen(false)}
-      />
-    </div>
-  );
 }
+
 
 type SubmissionStatus = "PENDING" | "VERIFIED" | "REJECTED";

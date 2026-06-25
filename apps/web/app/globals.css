@@ -72,3 +72,39 @@
     -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
   }
 }
+
+/* ── Typography primitives (used by components/ui/typography.tsx) ──
+   Sebelumnya class ini direferensikan tapi tidak terdefinisi, sehingga semua
+   heading/stat (admin & user) tampil polos tanpa styling. */
+@layer components {
+  .type-page-title {
+    @apply text-2xl font-bold tracking-tight text-[var(--foreground)] sm:text-3xl;
+  }
+  .type-section-title {
+    @apply text-lg font-semibold text-[var(--foreground)] sm:text-xl;
+  }
+  .type-subsection-title {
+    @apply text-base font-semibold text-[var(--foreground)];
+  }
+  .type-card-title {
+    @apply text-base font-semibold text-[var(--foreground)] sm:text-lg;
+  }
+  .type-toolbar-title {
+    @apply text-sm font-semibold text-[var(--foreground)] sm:text-base;
+  }
+  .type-eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)];
+  }
+  .type-eyebrow-brand {
+    @apply text-[11px] font-semibold uppercase tracking-wider text-canton;
+  }
+  .type-lead {
+    @apply text-sm text-[var(--muted-foreground)] sm:text-base;
+  }
+  .type-stat {
+    @apply text-xl font-bold tabular-nums text-[var(--foreground)] sm:text-2xl;
+  }
+  .type-hero {
+    @apply text-4xl font-extrabold tracking-tight text-[var(--foreground)] sm:text-5xl;
+  }
+}

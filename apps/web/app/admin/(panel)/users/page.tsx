@@ -15,7 +15,7 @@ export default function AdminUsersPage() {
           Users
         </h1>
         <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-          Delete test accounts from the database. Admin accounts cannot be removed.
+          Ban, suspend, or delete accounts. Admin accounts cannot be removed.
         </p>
       </div>
       <AdminUsersPanel />
