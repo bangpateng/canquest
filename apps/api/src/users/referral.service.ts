@@ -5,7 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from './users.service';
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const DEFAULT_REWARD_POINTS = 50;
+const DEFAULT_REWARD_POINTS = 20;
 
 @Injectable()
 export class ReferralService {
