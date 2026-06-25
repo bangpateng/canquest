@@ -908,22 +908,6 @@ function TaskRow({
             >
               {displayTitle}
             </p>
-            {/* Baris meta: petunjuk aksi/target atau deskripsi (truncate agar rapi). */}
-            {(() => {
-              const actionHint = taskActionHint(task, task.type);
-              const desc =
-                task.description &&
-                !task.description.trim().startsWith("http") &&
-                task.description.trim() !== (task.target ?? "").trim()
-                  ? task.description.trim()
-                  : null;
-              const meta = desc ?? actionHint;
-              return meta ? (
-                <p className="mt-0.5 truncate text-xs font-medium text-[var(--muted-foreground)]">
-                  {meta}
-                </p>
-              ) : null;
-            })()}
             {lockedHint ? (
               <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-slate-400">
                 <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden />
