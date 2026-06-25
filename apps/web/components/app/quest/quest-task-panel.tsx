@@ -459,13 +459,13 @@ export function QuestTaskPanel({
         </div>
       ) : null}
 
-      {/* Task list — satu container untuk Earn hub & campaign (markup identik). */}
-      <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-[var(--card)] backdrop-blur-2xl shadow-2xl shadow-black/40">
-        <ul className="divide-y divide-white/[0.05]">
-          {quest.tasks.map((task, idx) => (
-            <TaskRow
-              key={task.id}
-              index={idx + 1}
+      {/* Task list — satu container untuk Earn hub & campaign. Tiap task = kartu
+          standalone, jadi pakai space-y (jarak), BUKAN divide-y (garis tertimpa). */}
+      <ul className="space-y-3">
+        {quest.tasks.map((task, idx) => (
+          <TaskRow
+            key={task.id}
+            index={idx + 1}
               questId={quest.id}
               quest={quest}
               task={task}
@@ -482,8 +482,7 @@ export function QuestTaskPanel({
               onVerified={(sub) => onTaskVerified(task.id, sub)}
             />
           ))}
-        </ul>
-      </div>
+      </ul>
 
       {showFcfsClaim ? (
         <CampaignFcfsClaimSection
@@ -924,8 +923,7 @@ function TaskRow({
                 Locked
               </span>
             ) : isVerified ? (
-              <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center gap-1.5 rounded-lg bg-emerald-500 px-4 text-xs font-bold text-[var(--primary-foreground)]">
-                <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+              <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500 px-4 text-xs font-bold text-[var(--primary-foreground)]">
                 Complete
               </span>
             ) : countdown !== null && countdown > 0 ? (
