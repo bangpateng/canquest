@@ -873,7 +873,8 @@ function TaskRow({
       })
     : null;
 
-  // Jalur campaign — kartu standalone gaya Galxe/QuestN.
+  // Jalur campaign — kartu standalone, SATU baris: [icon] [title+meta] [button].
+  // Tombol sejajar dengan icon & title (kanan), tidak menabrak teks.
   // Jalur Earn-hub ditangani blok di bawah (butuh earnHubDisplay).
   if (!(earnHubLayout && earnHubDisplay)) {
     return (
@@ -893,7 +894,7 @@ function TaskRow({
             {/* Garis atas: jumlah pts (highlight). */}
             <p
               className={cn(
-                "mb-1 text-xs font-bold tabular-nums",
+                "mb-0.5 text-xs font-bold tabular-nums",
                 isVerified ? "text-emerald-400" : "text-amber-300",
               )}
             >
@@ -901,13 +902,13 @@ function TaskRow({
             </p>
             <p
               className={cn(
-                "text-sm font-semibold leading-snug text-slate-100 sm:text-base",
+                "truncate text-sm font-semibold leading-snug text-slate-100 sm:text-base",
                 isVerified && "line-through opacity-70",
               )}
             >
               {displayTitle}
             </p>
-            {/* Baris meta: petunjuk aksi/target atau deskripsi. */}
+            {/* Baris meta: petunjuk aksi/target atau deskripsi (truncate agar rapi). */}
             {(() => {
               const actionHint = taskActionHint(task, task.type);
               const desc =
@@ -918,61 +919,60 @@ function TaskRow({
                   : null;
               const meta = desc ?? actionHint;
               return meta ? (
-                <p className="mt-1 line-clamp-2 text-xs font-medium text-[var(--muted-foreground)]">
+                <p className="mt-0.5 truncate text-xs font-medium text-[var(--muted-foreground)]">
                   {meta}
                 </p>
               ) : null;
             })()}
             {lockedHint ? (
-              <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-slate-400">
+              <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-slate-400">
                 <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden />
                 {lockedHint}
               </p>
             ) : null}
           </div>
-        </div>
 
-        {/* Kotak hijau kanan = tombol status task (klik → countdown → Complete).
-            Satu tombol yang ber-transform sesuai state, tanpa badge "Done" terpisah. */}
-        <div className="mt-3 flex items-center justify-end sm:mt-0">
-          {sequentiallyLocked && !isVerified ? (
-            <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center gap-1 rounded-lg bg-[var(--muted)]/30 px-3 text-[10px] font-bold uppercase tracking-wide text-[var(--muted-foreground)]">
-              <Lock className="h-3 w-3" aria-hidden />
-              Locked
-            </span>
-          ) : isVerified ? (
-            <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center gap-1.5 rounded-lg bg-emerald-500 px-4 text-xs font-bold text-[var(--primary-foreground)]">
-              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
-              Complete
-            </span>
-          ) : countdown !== null && countdown > 0 ? (
-            <span
-              className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500/15 px-4 text-center text-xs font-bold tabular-nums text-emerald-300"
-              aria-live="polite"
-            >
-              {formatTaskCountdownSeconds(countdown)}
-            </span>
-          ) : loading ? (
-            <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500/20">
-              <LoadingSpinner size="sm" />
-            </span>
-          ) : isPending ? (
-            <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-orange-500/15 px-4 text-xs font-bold text-orange-200">
-              Pending
-            </span>
-          ) : (
-            <button
-              type="button"
-              disabled={actionDisabled}
-              onClick={startTask}
-              className={cn(
-                buttonVariants({ size: "sm" }),
-                "h-9 min-w-[5.5rem] bg-emerald-500 px-4 font-bold hover:bg-emerald-400",
-              )}
-            >
-              {actionLabel}
-            </button>
-          )}
+          {/* Kotak hijau kanan = tombol status task (sejajar, shrink-0 = tidak nabrak). */}
+          <div className="flex shrink-0 items-center">
+            {sequentiallyLocked && !isVerified ? (
+              <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center gap-1 rounded-lg bg-[var(--muted)]/30 px-3 text-[10px] font-bold uppercase tracking-wide text-[var(--muted-foreground)]">
+                <Lock className="h-3 w-3" aria-hidden />
+                Locked
+              </span>
+            ) : isVerified ? (
+              <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center gap-1.5 rounded-lg bg-emerald-500 px-4 text-xs font-bold text-[var(--primary-foreground)]">
+                <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+                Complete
+              </span>
+            ) : countdown !== null && countdown > 0 ? (
+              <span
+                className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500/15 px-4 text-center text-xs font-bold tabular-nums text-emerald-300"
+                aria-live="polite"
+              >
+                {formatTaskCountdownSeconds(countdown)}
+              </span>
+            ) : loading ? (
+              <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500/20">
+                <LoadingSpinner size="sm" />
+              </span>
+            ) : isPending ? (
+              <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-orange-500/15 px-4 text-xs font-bold text-orange-200">
+                Pending
+              </span>
+            ) : (
+              <button
+                type="button"
+                disabled={actionDisabled}
+                onClick={startTask}
+                className={cn(
+                  buttonVariants({ size: "sm" }),
+                  "h-9 min-w-[5.5rem] bg-emerald-500 px-4 font-bold hover:bg-emerald-400",
+                )}
+              >
+                {actionLabel}
+              </button>
+            )}
+          </div>
         </div>
 
         {!isVerified && isQuizYesNo ? (
