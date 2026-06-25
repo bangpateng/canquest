@@ -413,7 +413,7 @@ export function TransactionsView({
   return (
     <div className={cn(embedded ? "" : "space-y-8", className)}>
       {!embedded ? (
-        <h2 className="text-2xl font-bold text-slate-100">CC Transaction log</h2>
+        <h2 className="text-2xl font-bold text-slate-100"></h2>
       ) : null}
 
       <div

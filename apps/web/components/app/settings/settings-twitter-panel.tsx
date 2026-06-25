@@ -6,7 +6,7 @@ import { TurnstileField, useTurnstileRequired } from "@/components/platform/turn
 import { buttonVariants } from "@/components/ui/button";
 import { formatApiError } from "@/lib/api/format-api-error";
 import { cn } from "@/lib/utils/utils";
-import { AtSign, Unlink } from "lucide-react";
+import { AtSign } from "lucide-react";
 
 type TwitterStatus = {
   connected: boolean;
@@ -96,30 +96,7 @@ export function SettingsTwitterPanel({
     }
   }
 
-  async function handleDisconnect() {
-    setBusy(true);
-    setError(null);
-    setSuccess(null);
-    try {
-      const res = await fetch("/api/twitter/disconnect", {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        setError(formatApiError(data));
-        return;
-      }
-      setStatus({ connected: false, username: null });
-      setInput("");
-      setSuccess("X account disconnected.");
-      onConnected?.(null);
-    } catch {
-      setError("Network error — try again.");
-    } finally {
-      setBusy(false);
-    }
-  }
+  // Akun terhubung dikunci permanen — tidak ada disconnect/change di UI ini.
 
   return (
     <section
@@ -144,7 +121,7 @@ export function SettingsTwitterPanel({
         ) : null}
 
         {status.connected && status.username ? (
-          <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-emerald-500/15 bg-emerald-500/5 px-5 py-4 sm:px-6 sm:py-5 backdrop-blur-xl">
+          <div className="rounded-xl border border-emerald-500/15 bg-emerald-500/5 px-5 py-4 sm:px-6 sm:py-5 backdrop-blur-xl">
             <div className="flex items-center gap-3">
               <div>
                 <p className="text-xs font-semibold text-emerald-300/80 uppercase tracking-wider">Connected</p>
@@ -153,15 +130,11 @@ export function SettingsTwitterPanel({
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void handleDisconnect()}
-              className={cn(buttonVariants({ size: "sm", variant: "secondary" }), "gap-2 rounded-xl")}
-            >
-              {busy ? <LoadingSpinner size="sm" /> : <Unlink className="h-4 w-4" />}
-              Disconnect
-            </button>
+            {/* LOCK PERMANEN: akun terhubung tidak bisa diganti / dilepas. */}
+            <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-slate-400">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-500" />
+              This X account is permanently linked and cannot be changed or disconnected.
+            </p>
           </div>
         ) : (
           <form onSubmit={(e) => void handleConnect(e)} className="space-y-4">

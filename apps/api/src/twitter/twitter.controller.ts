@@ -84,6 +84,18 @@ export class TwitterController {
       );
     }
 
+    // Ambil user saat ini untuk cek lock permanen (anti gonta-ganti akun).
+    const currentUser = await this.prisma.user.findUnique({
+      where: { id: req.user.userId },
+      select: { twitterUsername: true },
+    });
+    // LOCK PERMANEN: sekali terhubung, tidak bisa diganti / dilepas.
+    if (currentUser?.twitterUsername) {
+      throw new ConflictException(
+        'This account is permanently linked to an X handle and cannot be changed. Contact support if you need help.',
+      );
+    }
+
     const normalized = normalizeTwitterUsername(body.username);
     const existing = await this.prisma.user.findFirst({
       where: {
@@ -121,6 +133,16 @@ export class TwitterController {
 
   @Delete('disconnect')
   async disconnect(@Req() req: AuthedReq) {
+    // LOCK PERMANEN: akun yang sudah terhubung tidak boleh dilepas.
+    const user = await this.prisma.user.findUnique({
+      where: { id: req.user.userId },
+      select: { twitterUsername: true },
+    });
+    if (user?.twitterUsername) {
+      throw new BadRequestException(
+        'Once an X account is linked, it cannot be disconnected. Contact support if you need help.',
+      );
+    }
     await this.prisma.user.update({
       where: { id: req.user.userId },
       data: {

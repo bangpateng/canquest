@@ -175,7 +175,7 @@ export function SettingsWalletPasswordPanel() {
               <div className="min-w-0">
                 <p
                   className={cn(
-                    "text-xs font-semibold uppercase",
+                    "text-xs font-semibold uppercase tracking-wider",
                     hasPassword ? "text-emerald-300/80" : "text-slate-500",
                   )}
                 >
