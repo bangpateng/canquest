@@ -405,6 +405,7 @@ export function AuthModal() {
               </Field>
               <PasswordInput
                 id="auth-reset-password"
+                name="newPassword"
                 label="New password"
                 autoComplete="new-password"
                 placeholder="At least 8 characters"
