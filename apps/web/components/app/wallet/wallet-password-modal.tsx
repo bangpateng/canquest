@@ -112,7 +112,7 @@ export function WalletPasswordModal({
         </div>
 
         <p className="mt-3 text-sm text-slate-400">
-          Enter your wallet password to authorize this {actionLabel.toLowerCase()}.
+          {actionLabel.toLowerCase()}.
         </p>
 
         <form onSubmit={submit} className="mt-6 space-y-5">

@@ -197,7 +197,7 @@ export const en: PlatformMessages = {
     walletNotConnected: "Wallet not connected to Splice",
     walletNotConnectedHint:
       "Recreate your wallet when the tunnel is active to enable preapproval.",
-    enablePreapproval: "Enable CIP-56 preapproval",
+    enablePreapproval: "Enable preapproval",
     enablePreapprovalBtn: "Enable preapproval",
     enabling: "Enabling…",
     generateWallet: "Generate Wallet",
@@ -205,7 +205,7 @@ export const en: PlatformMessages = {
     walletCreatedLoading: "Wallet created! Loading…",
     profileStale: "Could not refresh your profile",
     profileStaleHint:
-      "Your wallet is still saved. The validator connection may be down — balance and sends can fail until the tunnel is back.",
+      ".",
     reconnectTitle: "Reconnect wallet to node",
     reconnectHint:
       "Your username is saved but the Canton party was not registered while the node was offline. Reconnect when the tunnel is active.",
