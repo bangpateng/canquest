@@ -133,7 +133,7 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
 
   return (
     <section
-      className="relative w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/40"
+      className="relative w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-[var(--card)] backdrop-blur-2xl shadow-2xl shadow-black/40"
       aria-label="Campaign reward"
     >
       {/* ── Reward highlight (single hero block) ──────────────────── */}
@@ -143,7 +143,7 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
         {/* Reward winner + Pool — 2 equal columns */}
         <div className="relative grid grid-cols-2 gap-px bg-white/[0.04]">
           {/* Reward · winner */}
-          <div className="flex min-w-0 flex-col gap-1.5 bg-[#0a0c14]/90 px-5 py-4 sm:px-6 sm:py-5">
+          <div className="flex min-w-0 flex-col gap-1.5 bg-[var(--card)]/90 px-5 py-4 sm:px-6 sm:py-5">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 sm:text-xs">
               Reward · winner
             </span>
@@ -154,7 +154,7 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
           </div>
 
           {/* Reward Pool */}
-          <div className="flex min-w-0 flex-col gap-1.5 bg-[#0a0c14]/90 px-5 py-4 sm:px-6 sm:py-5">
+          <div className="flex min-w-0 flex-col gap-1.5 bg-[var(--card)]/90 px-5 py-4 sm:px-6 sm:py-5">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 sm:text-xs">
               Reward Pool
             </span>
@@ -185,7 +185,7 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
 
         {/* Claim fee row — single line, clear */}
         {claimFeeDisplay !== null ? (
-          <div className="relative flex items-center gap-2 bg-[#0a0c14]/90 px-5 py-2.5 sm:px-6">
+          <div className="relative flex items-center gap-2 bg-[var(--card)]/90 px-5 py-2.5 sm:px-6">
             <span className="text-xs font-semibold text-slate-400">Claim fee</span>
             <span className={cn(
               "ml-auto text-xs font-bold",
@@ -257,7 +257,7 @@ function MetricTile({
   small?: boolean;
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1.5 bg-[#0a0c14]/90 px-4 py-3">
+    <div className="flex min-w-0 flex-col gap-1.5 bg-[var(--card)]/90 px-4 py-3">
       <dt className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
         <Icon className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
         <span className="truncate">{label}</span>

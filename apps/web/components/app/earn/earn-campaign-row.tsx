@@ -113,7 +113,7 @@ export function EarnCampaignRow({
           "group relative overflow-hidden rounded-2xl border transition-all duration-300",
           completed
             ? "border-emerald-500/25 bg-gradient-to-b from-emerald-500/[0.06] to-[var(--card)]/90"
-            : "border-white/[0.06] bg-[#0a0c14]/80 hover:border-[rgb(var(--canton-rgb)/0.25)] hover:bg-[#0a0c14]/95 backdrop-blur-xl",
+            : "border-white/[0.06] bg-[var(--card)]/80 hover:border-[rgb(var(--canton-rgb)/0.25)] hover:bg-[var(--card)]/95 backdrop-blur-xl",
           quest.status === "COMING_SOON" && "opacity-90",
         )}
       >

@@ -97,7 +97,7 @@ export function EarnHubPage() {
 
       {/* ── Hero Card — Split Layout: Left (Points) + Right (Profile) ────── */}
       <section
-        className="relative w-full max-w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50"
+        className="relative w-full max-w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-[var(--card)]/80 backdrop-blur-2xl shadow-2xl shadow-black/50"
         aria-label="Points balance"
       >
         {/* Background glow — right side accent */}
