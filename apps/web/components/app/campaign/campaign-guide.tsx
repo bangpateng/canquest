@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useState } from "react";
 import Link from "next/link";
-import { Info, KeyRound, X } from "lucide-react";
+import { Info, X } from "lucide-react";
 import { useEarnAccessConfig } from "@/lib/hooks/use-earn-access-config";
 
 /**
@@ -107,18 +107,13 @@ function GuideModal({
         </button>
 
         {/* Title */}
-        <div className="flex items-center gap-2.5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]/20">
-            <KeyRound className="h-4 w-4 text-[var(--primary)]" aria-hidden />
-          </span>
-          <div>
-            <h2 id={titleId} className="text-base font-bold text-white">
-              How to join
-            </h2>
-            <p className="text-[11px] font-medium text-slate-500">
-              Eligibility to participate
-            </p>
-          </div>
+        <div>
+          <h2 id={titleId} className="text-base font-bold text-white">
+            How to join
+          </h2>
+          <p className="text-[11px] font-medium text-slate-500">
+            Eligibility to participate
+          </p>
         </div>
 
         {/* ── Access paths — ONE combined card ───────────────────── */}
