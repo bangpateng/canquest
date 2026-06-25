@@ -1078,109 +1078,147 @@ function TaskRow({
           sequentiallyLocked && !isVerified && "opacity-55",
         )}
       >
-        <div className="flex gap-3 sm:gap-4">
+        <>
+        <div className="flex items-center gap-3 sm:gap-4">
           <TaskBrandIcon
             type={task.type}
             complete={isOneTimeComplete || onRepeatCooldown}
           />
 
           <div className="min-w-0 flex-1">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-3">
-                  <p
-                    className={cn(
-                      "text-sm font-semibold leading-snug text-slate-100 sm:text-base",
-                      isOneTimeComplete && "line-through opacity-70",
-                    )}
-                  >
-                    {earnHubDisplay.headline}
-                  </p>
-                  {earnHubDisplay.showNew ? (
-                    <span className="shrink-0 rounded-lg bg-canton/20 px-2 py-1 text-xs font-bold uppercase tracking-wide text-canton">
-                      New
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-              <TaskPointsLabel
-                points={task.points}
-                complete={isOneTimeComplete || onRepeatCooldown}
-              />
-            </div>
-            {isOneTimeComplete ? (
-              <p className="mt-2 text-sm font-medium text-emerald-400/80">Completed</p>
-            ) : null}
-            {onRepeatCooldown ? (
-              <p className="mt-2 text-sm font-medium text-emerald-400/80">
-                Checked in — available again in {formatEarnHubCooldown(repeatCooldownMs)}
+            {/* Garis atas: jumlah pts (highlight) — sama dengan path campaign. */}
+            <p
+              className={cn(
+                "mb-0.5 text-xs font-bold tabular-nums",
+                isOneTimeComplete || onRepeatCooldown
+                  ? "text-emerald-400"
+                  : "text-amber-300",
+              )}
+            >
+              +{task.points} pts
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p
+                className={cn(
+                  "truncate text-sm font-semibold leading-snug text-slate-100 sm:text-base",
+                  isOneTimeComplete && "line-through opacity-70",
+                )}
+              >
+                {earnHubDisplay.headline}
               </p>
-            ) : null}
-            {canRepeatNow ? (
-              <p className="mt-2 text-sm font-medium text-canton">
+              {earnHubDisplay.showNew ? (
+                <span className="shrink-0 rounded-md bg-canton/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-canton">
+                  New
+                </span>
+              ) : null}
+            </div>
+            {/* Baris status meta ringkas (cooldown / ready / quiz ended). */}
+            {onRepeatCooldown ? (
+              <p className="mt-0.5 truncate text-xs font-medium text-emerald-400/80">
+                Checked in — ready in {formatEarnHubCooldown(repeatCooldownMs)}
+              </p>
+            ) : canRepeatNow ? (
+              <p className="mt-0.5 truncate text-xs font-medium text-canton">
                 Ready again — check in for +{task.points} pts
               </p>
-            ) : null}
-
-            {quizExpired ? (
-              <p className="mt-3 text-sm font-medium text-orange-300/90">
-                Quiz ended — points were only available for 24 hours. Your balance is unchanged if
-                you did not complete it in time.
+            ) : quizExpired ? (
+              <p className="mt-0.5 truncate text-xs font-medium text-orange-300/90">
+                Quiz ended
               </p>
             ) : null}
+          </div>
 
-            {!isVerified && !quizExpired && isQuiz ? (
-              <p className="mt-3 text-sm font-medium text-slate-400">
-                Wrong answers earn no points — keep trying until you pick the correct one (within
-                24 hours).
-              </p>
-            ) : null}
+          {/* Kotak hijau kanan = tombol status (sama dengan path campaign).
+              Satu tombol single-status: cta -> countdown -> Complete. */}
+          {!isQuiz && (
+            <div className="flex shrink-0 items-center">
+              {sequentiallyLocked && !isVerified ? (
+                <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center gap-1 rounded-lg bg-[var(--muted)]/30 px-3 text-[10px] font-bold uppercase tracking-wide text-[var(--muted-foreground)]">
+                  <Lock className="h-3 w-3" aria-hidden />
+                  Locked
+                </span>
+              ) : (isOneTimeComplete || onRepeatCooldown) && !canRepeatNow ? (
+                <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500 px-4 text-xs font-bold text-[var(--primary-foreground)]">
+                  Complete
+                </span>
+              ) : countdown !== null && countdown > 0 ? (
+                <span
+                  className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500/15 px-4 text-center text-xs font-bold tabular-nums text-emerald-300"
+                  aria-live="polite"
+                >
+                  {formatTaskCountdownSeconds(countdown)}
+                </span>
+              ) : loading ? (
+                <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500/20">
+                  <LoadingSpinner size="sm" />
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  disabled={actionDisabled || quizExpired}
+                  onClick={startTask}
+                  className={cn(
+                    buttonVariants({ size: "sm" }),
+                    "h-9 min-w-[5.5rem] bg-emerald-500 px-4 font-bold hover:bg-emerald-400",
+                  )}
+                >
+                  {isDailyCheckIn
+                    ? canRepeatNow
+                      ? "Check in"
+                      : "Check in"
+                    : actionLabel}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
 
-            {!isVerified && !quizExpired && isQuizYesNo ? (
-              <div className="mt-3 flex rounded-full bg-[var(--muted)]/35 p-1">
-                {(["yes", "no"] as const).map((opt) => {
-                  const key = quizAnswerKey(opt, taskType);
-                  const isWrong = quizWrong !== null && quizAnswerKey(quizWrong, taskType) === key;
-                  const isPending =
-                    loading && quizPending !== null && quizAnswerKey(quizPending, taskType) === key;
-                  return (
-                    <button
-                      key={opt}
-                      type="button"
-                      disabled={loading || quizExpired || sequentiallyLocked}
-                      onClick={() => void submitQuizAnswer(opt)}
-                      className={cn(
-                        "flex flex-1 items-center justify-center gap-1.5 rounded-full py-2 text-sm font-medium capitalize transition-colors",
-                        (quizExpired || sequentiallyLocked) && "cursor-not-allowed opacity-50",
-                        isWrong
-                          ? "bg-red-500/15 text-red-300"
-                          : "text-[var(--muted-foreground)] hover:bg-[var(--background)]/50 hover:text-[var(--foreground)]",
-                      )}
-                    >
-                      {isPending ? <LoadingSpinner size="sm" /> : null}
-                      {opt}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : null}
+        {/* Quiz blocks (yes/no + choice) tetap di bawah — hanya muncul utk task quiz. */}
+        {!isVerified && !quizExpired && isQuizYesNo ? (
+          <div className="mt-3 flex rounded-full bg-[var(--muted)]/35 p-1">
+            {(["yes", "no"] as const).map((opt) => {
+              const key = quizAnswerKey(opt, taskType);
+              const isWrong = quizWrong !== null && quizAnswerKey(quizWrong, taskType) === key;
+              const isPending =
+                loading && quizPending !== null && quizAnswerKey(quizPending, taskType) === key;
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  disabled={loading || quizExpired || sequentiallyLocked}
+                  onClick={() => void submitQuizAnswer(opt)}
+                  className={cn(
+                    "flex flex-1 items-center justify-center gap-1.5 rounded-full py-2 text-sm font-medium capitalize transition-colors",
+                    (quizExpired || sequentiallyLocked) && "cursor-not-allowed opacity-50",
+                    isWrong
+                      ? "bg-red-500/15 text-red-300"
+                      : "text-[var(--muted-foreground)] hover:bg-[var(--background)]/50 hover:text-[var(--foreground)]",
+                  )}
+                >
+                  {isPending ? <LoadingSpinner size="sm" /> : null}
+                  {opt}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
 
-            {!isVerified && !quizExpired && isQuizChoice && quizChoices.length > 0 ? (
-              <ul className="mt-3 space-y-1.5">
-                {quizChoices.map((label, idx) => {
-                  const letter = String.fromCharCode(65 + idx);
-                  const key = quizAnswerKey(letter, taskType);
-                  const isWrong = quizWrong !== null && quizAnswerKey(quizWrong, taskType) === key;
-                  const isPending =
-                    loading && quizPending !== null && quizAnswerKey(quizPending, taskType) === key;
-                  return (
-                    <li key={letter}>
-                      <button
-                        type="button"
-                        disabled={loading || quizExpired || sequentiallyLocked}
-                        onClick={() => void submitQuizAnswer(letter)}
-                        className={cn(
-                          "flex w-full items-center gap-2.5 rounded-xl bg-[var(--muted)]/25 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--muted)]/35",
+        {!isVerified && !quizExpired && isQuizChoice && quizChoices.length > 0 ? (
+          <ul className="mt-3 space-y-1.5">
+            {quizChoices.map((label, idx) => {
+              const letter = String.fromCharCode(65 + idx);
+              const key = quizAnswerKey(letter, taskType);
+              const isWrong = quizWrong !== null && quizAnswerKey(quizWrong, taskType) === key;
+              const isPending =
+                loading && quizPending !== null && quizAnswerKey(quizPending, taskType) === key;
+              return (
+                <li key={letter}>
+                  <button
+                    type="button"
+                    disabled={loading || quizExpired || sequentiallyLocked}
+                    onClick={() => void submitQuizAnswer(letter)}
+                    className={cn(
+                      "flex w-full items-center gap-2.5 rounded-xl bg-[var(--muted)]/25 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--muted)]/35",
                           quizExpired && "cursor-not-allowed opacity-50",
                           isWrong
                             ? "bg-red-500/10 text-red-200 hover:bg-red-500/15"
@@ -1196,50 +1234,6 @@ function TaskRow({
                   );
                 })}
               </ul>
-            ) : null}
-
-            {!isQuiz && (!isVerified || canRepeatNow) && !onRepeatCooldown ? (
-              <div className="mt-3">
-                {countdown !== null && countdown > 0 ? (
-                  <div className="flex justify-end">
-                    <span
-                      className="min-w-[6.5rem] rounded-full bg-canton/10 px-3 py-2 text-center text-xs font-semibold tabular-nums text-canton"
-                      aria-live="polite"
-                    >
-                      {formatTaskCountdownSeconds(countdown)}
-                    </span>
-                  </div>
-                ) : sequentiallyLocked ? (
-                  <div className="flex justify-end">
-                    <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center gap-1 rounded-full bg-[var(--muted)]/30 px-3 text-[10px] font-bold uppercase tracking-wide text-[var(--muted-foreground)]">
-                      <Lock className="h-3 w-3" aria-hidden />
-                      Locked
-                    </span>
-                  </div>
-                ) : loading ? (
-                  <div className="flex justify-end">
-                    <span className="flex h-9 min-w-[5.5rem] items-center justify-center rounded-full bg-[var(--muted)]/40">
-                      <LoadingSpinner size="sm" />
-                    </span>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={actionDisabled}
-                    onClick={startTask}
-                    className={cn(
-                      buttonVariants({ size: "sm" }),
-                      "h-9 w-full font-bold disabled:opacity-50",
-                    )}
-                  >
-                    {isDailyCheckIn
-                      ? canRepeatNow
-                        ? "Check in again"
-                        : "Check in"
-                      : actionLabel}
-                  </button>
-                )}
-              </div>
             ) : null}
 
             {needsTwitter && !isVerified ? (
@@ -1261,8 +1255,7 @@ function TaskRow({
               </button>
             ) : null}
             {error ? <p className="mt-2 text-xs text-red-400">{error}</p> : null}
-          </div>
-        </div>
+        </>
         <WalletCreatePromptModal
           open={walletPromptOpen}
           onClose={() => setWalletPromptOpen(false)}
