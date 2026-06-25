@@ -436,14 +436,6 @@ export function QuestTaskPanel({
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-bold uppercase tracking-wider text-white">Missions</h2>
             </div>
-            <span className="text-xs font-bold tabular-nums text-slate-400">
-              {verifiedCount}/{quest.tasks.length} done
-              {totalPoints > 0 ? (
-                <span className="ml-2 text-canton">
-                  +{earnedPoints}/{totalPoints} pts
-                </span>
-              ) : null}
-            </span>
           </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
             <div

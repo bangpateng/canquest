@@ -34,7 +34,7 @@ export function TaskBrandIcon({
         )}
       >
         <svg
-          className="h-5 w-5"
+          className="h-3.5 w-3.5"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"

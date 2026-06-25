@@ -117,9 +117,12 @@ export function QuestSubmitSection({
           type="button"
           disabled={submitting || !partyId || campaignEnded}
           onClick={onSubmit}
-          className={cn(buttonVariants({ size: "lg" }), "w-full max-w-sm py-7 text-lg font-bold")}
+          className={cn(
+            buttonVariants({ size: "sm" }),
+            "min-w-[8rem] bg-emerald-500 px-5 font-bold hover:bg-emerald-400",
+          )}
         >
-          {submitting ? <LoadingSpinner size="lg" /> : null}
+          {submitting ? <LoadingSpinner size="sm" /> : null}
           {submitting ? "Submitting…" : "Submit"}
         </button>
 
