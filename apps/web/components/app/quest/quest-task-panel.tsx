@@ -890,27 +890,23 @@ function TaskRow({
           <TaskBrandIcon type={task.type} complete={isVerified} />
 
           <div className="min-w-0 flex-1">
-            <div className="flex items-start justify-between gap-3">
-              <p
-                className={cn(
-                  "text-sm font-semibold leading-snug text-slate-100 sm:text-base",
-                  isVerified && "line-through opacity-70",
-                )}
-              >
-                {displayTitle}
-              </p>
-              {/* Points pill gaya Galxe — highlight kuning saat belum selesai. */}
-              <span
-                className={cn(
-                  "shrink-0 rounded-full px-2.5 py-1 text-xs font-bold tabular-nums",
-                  isVerified
-                    ? "bg-emerald-500/15 text-emerald-300"
-                    : "bg-amber-400/15 text-amber-300",
-                )}
-              >
-                +{task.points}
-              </span>
-            </div>
+            {/* Garis atas: jumlah pts (highlight). */}
+            <p
+              className={cn(
+                "mb-1 text-xs font-bold tabular-nums",
+                isVerified ? "text-emerald-400" : "text-amber-300",
+              )}
+            >
+              +{task.points} pts
+            </p>
+            <p
+              className={cn(
+                "text-sm font-semibold leading-snug text-slate-100 sm:text-base",
+                isVerified && "line-through opacity-70",
+              )}
+            >
+              {displayTitle}
+            </p>
             {/* Baris meta: petunjuk aksi/target atau deskripsi. */}
             {(() => {
               const actionHint = taskActionHint(task, task.type);
@@ -936,47 +932,48 @@ function TaskRow({
           </div>
         </div>
 
-        {/* Area aksi kanan-bawah: tombol CTA atau status badge. */}
-        <div className="mt-3 flex items-center justify-end gap-2 sm:mt-0 sm:justify-end">
-          {isVerified ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-300">
-              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
-              Done
-            </span>
-          ) : isPending ? (
-            <span className="rounded-full bg-orange-500/10 px-3 py-1.5 text-xs font-semibold text-orange-200">
-              Pending
-            </span>
-          ) : sequentiallyLocked ? (
-            <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center gap-1 rounded-full bg-[var(--muted)]/30 px-3 text-[10px] font-bold uppercase tracking-wide text-[var(--muted-foreground)]">
+        {/* Kotak hijau kanan = tombol status task (klik → countdown → Complete).
+            Satu tombol yang ber-transform sesuai state, tanpa badge "Done" terpisah. */}
+        <div className="mt-3 flex items-center justify-end sm:mt-0">
+          {sequentiallyLocked && !isVerified ? (
+            <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center gap-1 rounded-lg bg-[var(--muted)]/30 px-3 text-[10px] font-bold uppercase tracking-wide text-[var(--muted-foreground)]">
               <Lock className="h-3 w-3" aria-hidden />
               Locked
             </span>
+          ) : isVerified ? (
+            <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center gap-1.5 rounded-lg bg-emerald-500 px-4 text-xs font-bold text-[var(--primary-foreground)]">
+              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+              Complete
+            </span>
           ) : countdown !== null && countdown > 0 ? (
             <span
-              className="min-w-[6.5rem] rounded-full bg-canton/10 px-3 py-1.5 text-center text-xs font-semibold tabular-nums text-canton"
+              className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500/15 px-4 text-center text-xs font-bold tabular-nums text-emerald-300"
               aria-live="polite"
             >
               {formatTaskCountdownSeconds(countdown)}
             </span>
-            ) : loading ? (
-              <span className="flex h-9 min-w-[5.5rem] items-center justify-center rounded-full bg-[var(--muted)]/40">
-                <LoadingSpinner size="sm" />
-              </span>
-            ) : (
-              <button
-                type="button"
-                disabled={actionDisabled}
-                onClick={startTask}
-                className={cn(
-                  buttonVariants({ size: "sm" }),
-                  "h-9 min-w-[5.5rem] px-4 font-bold",
-                )}
-              >
-                {actionLabel}
-              </button>
-            )}
-          </div>
+          ) : loading ? (
+            <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500/20">
+              <LoadingSpinner size="sm" />
+            </span>
+          ) : isPending ? (
+            <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-orange-500/15 px-4 text-xs font-bold text-orange-200">
+              Pending
+            </span>
+          ) : (
+            <button
+              type="button"
+              disabled={actionDisabled}
+              onClick={startTask}
+              className={cn(
+                buttonVariants({ size: "sm" }),
+                "h-9 min-w-[5.5rem] bg-emerald-500 px-4 font-bold hover:bg-emerald-400",
+              )}
+            >
+              {actionLabel}
+            </button>
+          )}
+        </div>
 
         {!isVerified && isQuizYesNo ? (
           <div className="mt-3 flex rounded-full bg-[var(--muted)]/35 p-1 sm:ml-[3.25rem]">
