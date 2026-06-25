@@ -87,22 +87,35 @@ function taskActionButtonLabel(type: string): string {
   return TASK_ACTION_BUTTON_LABEL[key] ?? TASK_ACTION_BUTTON_LABEL[type] ?? "Open";
 }
 
-function taskTypeSubtitle(type: string): string {
+/**
+ * Baris meta di bawah judul mission: petunjuk aksi ringkas + target (mis. handle /
+ * link channel). Menggantikan label platform redundan lama (info platform sudah
+ * ada di ikon + judul). Kembalikan null bila tidak ada yang berguna ditampilkan.
+ */
+function taskActionHint(task: QuestTask, type: string): string | null {
   const t = normalizeType(type);
-  const labels: Record<string, string> = {
-    twitter_follow: "X (Twitter)",
-    twitter_retweet: "X (Twitter)",
-    telegram_channel: "Telegram",
-    telegram_group: "Telegram",
-    discord_join: "Discord",
-    submit_email: "Email",
-    submit_party_id: "Canton wallet",
-    submit_canton_address: "Canton wallet",
-    daily_check_in: "Daily",
-    quiz_yes_no: "Quiz",
-    quiz_choice: "Quiz",
+  const rawTarget = (task.target ?? "").trim();
+  const handle = rawTarget.replace(/^@/, "");
+
+  const hints: Record<string, string> = {
+    twitter_follow: handle
+      ? `Follow @${handle}, then tap to verify`
+      : "Tap to follow & verify",
+    twitter_retweet: handle
+      ? `Retweet @${handle}, then tap to verify`
+      : "Tap to retweet & verify",
+    telegram_channel: "Join the channel, then tap to verify",
+    telegram_group: "Join the group, then tap to verify",
+    telegram_join: "Join the channel, then tap to verify",
+    discord_join: "Join the server, then tap to verify",
+    submit_email: "Enter your email to verify",
+    submit_party_id: "Submit your Canton party ID to verify",
+    submit_canton_address: "Submit your Canton party ID to verify",
+    daily_check_in: "Check in daily to earn points",
+    quiz_yes_no: "Pick the correct answer",
+    quiz_choice: "Pick the correct answer",
   };
-  return labels[t] ?? "Mission";
+  return hints[t] ?? null;
 }
 
 function openTaskTarget(task: QuestTask, taskType: string) {
@@ -926,19 +939,23 @@ function TaskRow({
                 </p>
                 <TaskPointsLabel points={task.points} complete={isVerified} />
               </div>
-              <p className="mt-1 text-sm font-medium text-slate-400">
-                {taskTypeSubtitle(task.type)}
-              </p>
-              {isVerified ? (
-                <p className="mt-2 text-sm font-medium text-emerald-300/90">Completed</p>
-              ) : null}
-              {task.description &&
-                !task.description.trim().startsWith("http") &&
-                task.description.trim() !== (task.target ?? "").trim() && (
-                  <p className="mt-2 line-clamp-2 text-sm font-medium text-slate-400">
-                    {task.description}
+              {/* Baris meta tunggal: petunjuk aksi/target atau deskripsi. Bukan label
+                  platform redundan (info platform sudah ada di ikon + judul). */}
+              {(() => {
+                const actionHint = taskActionHint(task, task.type);
+                const desc =
+                  task.description &&
+                  !task.description.trim().startsWith("http") &&
+                  task.description.trim() !== (task.target ?? "").trim()
+                    ? task.description.trim()
+                    : null;
+                const meta = desc ?? actionHint;
+                return meta ? (
+                  <p className="mt-1 line-clamp-2 text-xs font-medium text-[var(--muted-foreground)]">
+                    {meta}
                   </p>
-                )}
+                ) : null;
+              })()}
               {lockedHint ? (
                 <p className="mt-2 flex items-center gap-1.5 text-sm font-medium text-slate-400">
                   <Lock className="h-4 w-4 shrink-0" aria-hidden />
