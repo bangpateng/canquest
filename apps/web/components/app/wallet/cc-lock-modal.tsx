@@ -5,6 +5,8 @@ import { AlertCircle, Lock, X } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { buttonVariants } from "@/components/ui/button";
 import { iconButtonClass } from "@/lib/ui/ui-button-styles";
+import { WalletPasswordModal } from "@/components/app/wallet/wallet-password-modal";
+import { useWalletPassword } from "@/lib/hooks/use-wallet-password";
 import { cn } from "@/lib/utils/utils";
 import type { ActiveLock, LockStatus } from "@/lib/hooks/use-lock-status";
 
@@ -43,6 +45,15 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
   const [lockMessage, setLockMessage] = useState("");
   const [unlockingId, setUnlockingId] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
+
+  // Gate kata sandi transaksi (opsional). pendingAction diset saat user klik
+  // Lock/Unlock tetapi wallet password aktif — dijalankan setelah konfirmasi modal.
+  const { hasPassword: hasWalletPassword } = useWalletPassword();
+  const [pwOpen, setPwOpen] = useState(false);
+  const [pwError, setPwError] = useState("");
+  const [pendingAction, setPendingAction] = useState<
+    ((password: string) => void) | null
+  >(null);
 
   // Fetch lock-terms sekali saat modal dibuka.
   useEffect(() => {
@@ -90,9 +101,16 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
     (status.availableCc == null || numericAmount <= status.availableCc);
 
   const submitLock = useCallback(
-    async (e: React.FormEvent) => {
+    async (e: React.FormEvent, password?: string) => {
       e.preventDefault();
       if (!selectedTerm || !amountValid) return;
+      // Gate: bila wallet password aktif dan belum ada input, tahan di modal.
+      if (hasWalletPassword && !password) {
+        setPwError("");
+        setPendingAction(() => (pw: string) => void submitLock(e, pw));
+        setPwOpen(true);
+        return;
+      }
       setLockState("loading");
       setLockMessage("");
       try {
@@ -100,15 +118,29 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ amountCc: numericAmount, termKey: selectedTerm }),
+          body: JSON.stringify({
+            amountCc: numericAmount,
+            termKey: selectedTerm,
+            ...(password ? { walletPassword: password } : {}),
+          }),
         });
         const data = (await res.json()) as { ok?: boolean; error?: string };
         if (!res.ok || data.ok === false) {
+          // 403 = wallet password salah — tetap di modal untuk coba lagi.
+          if (res.status === 403) {
+            setPwOpen(true);
+            setPwError(data.error ?? "Wrong wallet password.");
+            setLockState("idle");
+            return;
+          }
           setLockState("error");
           setLockMessage(data.error ?? "Lock gagal. Coba lagi.");
           return;
         }
         setLockState("idle");
+        setLockMessage("");
+        setPwOpen(false);
+        setPendingAction(null);
         setAmount("");
         onRefresh();
       } catch {
@@ -116,24 +148,42 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
         setLockMessage("Network error. Periksa koneksi.");
       }
     },
-    [selectedTerm, amountValid, numericAmount, onRefresh],
+    [selectedTerm, amountValid, numericAmount, onRefresh, hasWalletPassword],
   );
 
   const submitUnlock = useCallback(
-    async (lockId: string) => {
+    async (lockId: string, password?: string) => {
+      // Gate: bila wallet password aktif dan belum ada input, tahan di modal.
+      if (hasWalletPassword && !password) {
+        setPwError("");
+        setPendingAction(() => (pw: string) => void submitUnlock(lockId, pw));
+        setPwOpen(true);
+        return;
+      }
       setUnlockingId(lockId);
       try {
         const res = await fetch("/api/party/unlock", {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ lockId }),
+          body: JSON.stringify({
+            lockId,
+            ...(password ? { walletPassword: password } : {}),
+          }),
         });
         const data = (await res.json()) as { ok?: boolean; error?: string };
         if (!res.ok || data.ok === false) {
+          // 403 = wallet password salah — tetap di modal untuk coba lagi.
+          if (res.status === 403) {
+            setPwOpen(true);
+            setPwError(data.error ?? "Wrong wallet password.");
+            return;
+          }
           setLockState("error");
           setLockMessage(data.error ?? "Unlock failed.");
         } else {
+          setPwOpen(false);
+          setPendingAction(null);
           onRefresh();
         }
       } catch {
@@ -143,8 +193,21 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
         setUnlockingId(null);
       }
     },
-    [onRefresh],
+    [onRefresh, hasWalletPassword],
   );
+
+  // Konfirmasi password dari modal → jalankan aksi tertunda (lock/unlock).
+  function confirmWalletPassword(password: string) {
+    setPwError("");
+    const action = pendingAction;
+    if (action) action(password);
+  }
+
+  function closePasswordModal() {
+    setPwOpen(false);
+    setPwError("");
+    setPendingAction(null);
+  }
 
   if (!open) return null;
 
@@ -289,6 +352,16 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
           </div>
         )}
       </div>
+
+      {/* ── WALLET PASSWORD GATE (Lock/Unlock) ── */}
+      <WalletPasswordModal
+        open={pwOpen}
+        actionLabel={pendingAction ? "Unlock" : "Lock"}
+        error={pwError}
+        busy={lockState === "loading" || unlockingId !== null}
+        onClose={closePasswordModal}
+        onConfirm={confirmWalletPassword}
+      />
     </div>
   );
 }

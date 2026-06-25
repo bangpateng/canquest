@@ -9,10 +9,7 @@ export default function TransactionDetailPage() {
 
   return (
     <PlatformPage>
-      <PlatformPageIntro
-        title="Transaction Detail"
-        description="On-chain receipt and Canton settlement status"
-      />
+      <PlatformPageIntro/>
       <TransactionDetailView transactionId={id} />
     </PlatformPage>
   );

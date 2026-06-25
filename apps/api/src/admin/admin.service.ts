@@ -27,6 +27,8 @@ import {
   serializeQuestSocialLinks,
 } from '../quests/quest-social-links.util';
 import { QuestLedgerService } from '../canton/quest-ledger.service';
+import { CantonLedgerService } from '../canton/canton-ledger.service';
+import { hasRealWallet } from '../common/wallet-policy';
 
 @Injectable()
 export class AdminService {
@@ -39,6 +41,7 @@ export class AdminService {
     private readonly config: ConfigService,
     private readonly storage: R2StorageService,
     private readonly questLedger: QuestLedgerService,
+    private readonly ledger: CantonLedgerService,
   ) {}
 
   /** Drop replaced/removed banner & logo from R2 when not referenced by another quest. */
@@ -47,7 +50,11 @@ export class AdminService {
     previous: { bannerImageUrl: string | null; logoUrl: string | null },
     next: { bannerImageUrl?: string | null; logoUrl?: string | null },
   ): Promise<void> {
-    const tasks: Array<{ field: 'bannerImageUrl' | 'logoUrl'; old: string | null; neu: string | null }> = [];
+    const tasks: Array<{
+      field: 'bannerImageUrl' | 'logoUrl';
+      old: string | null;
+      neu: string | null;
+    }> = [];
 
     if (next.bannerImageUrl !== undefined) {
       const neu = next.bannerImageUrl?.trim() || null;
@@ -68,7 +75,9 @@ export class AdminService {
         },
       });
       if (inUse > 0) {
-        this.logger.warn(`Skip delete ${field} asset still used by another quest: ${old}`);
+        this.logger.warn(
+          `Skip delete ${field} asset still used by another quest: ${old}`,
+        );
         continue;
       }
       await this.storage.deleteQuestAssetByUrl(old);
@@ -84,7 +93,14 @@ export class AdminService {
       where: kind ? { questKind: kind } : undefined,
       include: {
         tasks: { orderBy: { order: 'asc' } },
-        _count: { select: { completions: true, submissions: true, inviteCodes: true, winnerDraws: true } },
+        _count: {
+          select: {
+            completions: true,
+            submissions: true,
+            inviteCodes: true,
+            winnerDraws: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -123,7 +139,11 @@ export class AdminService {
     });
     if (!q) return null;
     return withQuestMediaUrls(
-      { ...q, tags: this.parseTags(q.tags), socialLinks: parseQuestSocialLinks(q.socialLinks) },
+      {
+        ...q,
+        tags: this.parseTags(q.tags),
+        socialLinks: parseQuestSocialLinks(q.socialLinks),
+      },
       this.storage,
     );
   }
@@ -139,11 +159,12 @@ export class AdminService {
         orgSlug: 'CQ',
         description:
           'Daily check-in, social tasks, and quizzes. Collect points and redeem for CC and other rewards.',
-        banner: 'linear-gradient(135deg,rgba(90,217,138,0.35) 0%,rgba(17,24,39,0.9) 100%)',
+        banner:
+          'linear-gradient(135deg,rgba(90,217,138,0.35) 0%,rgba(17,24,39,0.9) 100%)',
         rewardCc: 0,
         rewardPool: 'Earn points',
         status: QuestStatus.ACTIVE,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         rewardType: RewardType.CC_ONLY as any,
         questKind: QuestKind.EARN_HUB,
         tags: JSON.stringify(['earn', 'daily']),
@@ -184,7 +205,11 @@ export class AdminService {
     });
     if (!q) throw new NotFoundException('Quest not found');
     return withQuestMediaUrls(
-      { ...q, tags: this.parseTags(q.tags), socialLinks: parseQuestSocialLinks(q.socialLinks) },
+      {
+        ...q,
+        tags: this.parseTags(q.tags),
+        socialLinks: parseQuestSocialLinks(q.socialLinks),
+      },
       this.storage,
     );
   }
@@ -210,7 +235,10 @@ export class AdminService {
     questKind: QuestKind,
   ): void {
     if (questKind !== QuestKind.CAMPAIGN) return;
-    if (normalizeRewardType((rewardType ?? RewardType.CC_ONLY) as RewardType) !== RewardType.CC_ONLY) {
+    if (
+      normalizeRewardType((rewardType ?? RewardType.CC_ONLY) as RewardType) !==
+      RewardType.CC_ONLY
+    ) {
       return;
     }
     if (maxWinners == null || maxWinners < 1) {
@@ -236,12 +264,12 @@ export class AdminService {
     endsAt?: string | null;
     status?: QuestStatus;
     rewardType?: RewardType;
-      maxWinners?: number;
-      claimFeeCc?: number | null;
-      winnerMessage?: string | null;
-      tags?: string[];
-      socialLinks?: QuestSocialLinkInput[];
-      questKind?: QuestKind;
+    maxWinners?: number;
+    claimFeeCc?: number | null;
+    winnerMessage?: string | null;
+    tags?: string[];
+    socialLinks?: QuestSocialLinkInput[];
+    questKind?: QuestKind;
     tasks?: Array<{
       type: string;
       title: string;
@@ -276,12 +304,13 @@ export class AdminService {
         bannerImageUrl: data.bannerImageUrl ?? null,
         logoUrl: data.logoUrl ?? null,
         rewardCc: data.rewardCc ?? 0,
-        rewardPool: data.rewardPool ?? (data.rewardCc ? `${data.rewardCc} CC` : 'TBD'),
+        rewardPool:
+          data.rewardPool ?? (data.rewardCc ? `${data.rewardCc} CC` : 'TBD'),
         deadline: data.deadline ?? null,
         startsAt: data.startsAt ? new Date(data.startsAt) : null,
         endsAt: data.endsAt ? new Date(data.endsAt) : null,
         status: data.status ?? QuestStatus.ACTIVE,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         rewardType: (data.rewardType ?? RewardType.CC_ONLY) as any,
         maxWinners: data.maxWinners ?? null,
         claimFeeCc: data.claimFeeCc ?? null,
@@ -330,14 +359,16 @@ export class AdminService {
           if (ledgerResult.contractId) {
             await this.prisma.quest.update({
               where: { id: quest.id },
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
               data: { ledgerCampaignId: ledgerResult.contractId } as any,
             });
             this.logger.log(
               `QuestCampaign on-chain: quest=${quest.id.slice(0, 8)} kind=${questKindDaml} contract=${ledgerResult.contractId.slice(0, 12)}...`,
             );
           } else if (ledgerResult.errors.length > 0) {
-            this.logger.warn(`QuestCampaign ledger: ${ledgerResult.errors.join(' | ')}`);
+            this.logger.warn(
+              `QuestCampaign ledger: ${ledgerResult.errors.join(' | ')}`,
+            );
           }
         } catch (err) {
           this.logger.warn(`QuestCampaign ledger failed: ${String(err)}`);
@@ -380,22 +411,28 @@ export class AdminService {
       socialLinks?: QuestSocialLinkInput[];
     },
   ) {
-    const existing = await this.prisma.quest.findUnique({ where: { id: questId } });
+    const existing = await this.prisma.quest.findUnique({
+      where: { id: questId },
+    });
     if (!existing) throw new NotFoundException('Quest not found');
 
     const nextStarts =
       data.startsAt !== undefined
         ? data.startsAt
-        : existing.startsAt?.toISOString() ?? null;
+        : (existing.startsAt?.toISOString() ?? null);
     const nextEnds =
       data.endsAt !== undefined
         ? data.endsAt
-        : existing.endsAt?.toISOString() ?? null;
+        : (existing.endsAt?.toISOString() ?? null);
     this.assertQuestSchedule(nextStarts, nextEnds);
     const nextRewardType = data.rewardType ?? existing.rewardType;
     const nextMaxWinners =
       data.maxWinners !== undefined ? data.maxWinners : existing.maxWinners;
-    this.assertCcFcfsMaxWinners(nextRewardType, nextMaxWinners, existing.questKind);
+    this.assertCcFcfsMaxWinners(
+      nextRewardType,
+      nextMaxWinners,
+      existing.questKind,
+    );
 
     await this.cleanupQuestMediaUrls(questId, existing, {
       bannerImageUrl: data.bannerImageUrl,
@@ -411,7 +448,9 @@ export class AdminService {
         }),
         ...(data.org !== undefined && { org: data.org }),
         ...(data.orgSlug !== undefined && { orgSlug: data.orgSlug }),
-        ...(data.description !== undefined && { description: data.description }),
+        ...(data.description !== undefined && {
+          description: data.description,
+        }),
         ...(data.banner !== undefined && { banner: data.banner }),
         ...(data.bannerImageUrl !== undefined && {
           bannerImageUrl: data.bannerImageUrl,
@@ -427,8 +466,10 @@ export class AdminService {
           endsAt: data.endsAt ? new Date(data.endsAt) : null,
         }),
         ...(data.status !== undefined && { status: data.status }),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ...(data.rewardType !== undefined && { rewardType: data.rewardType as any }),
+
+        ...(data.rewardType !== undefined && {
+          rewardType: data.rewardType as any,
+        }),
         ...(data.maxWinners !== undefined && { maxWinners: data.maxWinners }),
         ...(data.claimFeeCc !== undefined && { claimFeeCc: data.claimFeeCc }),
         ...(data.winnerMessage !== undefined && {
@@ -453,7 +494,9 @@ export class AdminService {
   }
 
   async deleteQuest(questId: string) {
-    const existing = await this.prisma.quest.findUnique({ where: { id: questId } });
+    const existing = await this.prisma.quest.findUnique({
+      where: { id: questId },
+    });
     if (!existing) throw new NotFoundException('Quest not found');
 
     await this.cleanupQuestMediaUrls(questId, existing, {
@@ -483,7 +526,9 @@ export class AdminService {
       repeatEvery24h?: boolean;
     },
   ) {
-    const quest = await this.prisma.quest.findUnique({ where: { id: questId } });
+    const quest = await this.prisma.quest.findUnique({
+      where: { id: questId },
+    });
     if (!quest) throw new NotFoundException('Quest not found');
     const count = await this.prisma.questTask.count({ where: { questId } });
     const repeatEvery24h = data.type === 'daily_check_in';
@@ -517,7 +562,9 @@ export class AdminService {
       repeatEvery24h?: boolean;
     },
   ) {
-    const existing = await this.prisma.questTask.findUnique({ where: { id: taskId } });
+    const existing = await this.prisma.questTask.findUnique({
+      where: { id: taskId },
+    });
     if (!existing) throw new NotFoundException('Task not found');
     const nextType = data.type ?? existing.type;
     const repeatEvery24h = nextType === 'daily_check_in';
@@ -526,12 +573,18 @@ export class AdminService {
       data: {
         ...(data.type !== undefined && { type: data.type }),
         ...(data.title !== undefined && { title: data.title }),
-        ...(data.description !== undefined && { description: data.description }),
+        ...(data.description !== undefined && {
+          description: data.description,
+        }),
         ...(data.points !== undefined && { points: data.points }),
         ...(data.target !== undefined && { target: data.target }),
         ...(data.order !== undefined && { order: data.order }),
-        ...(data.correctAnswer !== undefined && { correctAnswer: data.correctAnswer }),
-        ...(data.showNewBadge !== undefined && { showNewBadge: data.showNewBadge }),
+        ...(data.correctAnswer !== undefined && {
+          correctAnswer: data.correctAnswer,
+        }),
+        ...(data.showNewBadge !== undefined && {
+          showNewBadge: data.showNewBadge,
+        }),
         repeatEvery24h,
       },
     });
@@ -553,7 +606,10 @@ export class AdminService {
       : s;
   }
 
-  private csvFromRows(header: string[], dataRows: (string | number | null)[][]): string {
+  private csvFromRows(
+    header: string[],
+    dataRows: (string | number | null)[][],
+  ): string {
     const lines = [
       header.join(','),
       ...dataRows.map((row) => row.map((c) => this.csvEscape(c)).join(',')),
@@ -569,7 +625,7 @@ export class AdminService {
     });
     if (!quest) throw new NotFoundException('Quest not found');
 
-    const rewardType = normalizeRewardType(quest.rewardType as RewardType);
+    const rewardType = normalizeRewardType(quest.rewardType);
 
     const submissions = await this.prisma.questSubmission.findMany({
       where: { questId, status: SubmissionStatus.VERIFIED },
@@ -814,7 +870,7 @@ export class AdminService {
     });
     if (!quest) throw new NotFoundException('Quest not found');
 
-    const rewardType = normalizeRewardType(quest.rewardType as RewardType);
+    const rewardType = normalizeRewardType(quest.rewardType);
     if (
       rewardType === RewardType.INVITE_CODE_RANDOM ||
       rewardType === RewardType.INVITE_CODE ||
@@ -882,7 +938,7 @@ export class AdminService {
     }> = [];
 
     for (let i = 0; i < selectedUserIds.length; i++) {
-      const uid = selectedUserIds[i]!;
+      const uid = selectedUserIds[i];
       const code = deferCodeAssignment ? null : (availableCodes[i] ?? null);
 
       const existing = await this.prisma.winnerDraw.findUnique({
@@ -908,7 +964,13 @@ export class AdminService {
       });
 
       const user = await this.users.findById(uid);
-      if (user) results.push({ userId: uid, email: user.email, ccAmount: quest.rewardCc, inviteCode: code?.code ?? null });
+      if (user)
+        results.push({
+          userId: uid,
+          email: user.email,
+          ccAmount: quest.rewardCc,
+          inviteCode: code?.code ?? null,
+        });
     }
 
     return { added: results.length, winners: results };
@@ -919,7 +981,13 @@ export class AdminService {
       where: { questId },
       include: {
         user: {
-          select: { id: true, email: true, username: true, displayName: true, cantonPartyId: true },
+          select: {
+            id: true,
+            email: true,
+            username: true,
+            displayName: true,
+            cantonPartyId: true,
+          },
         },
       },
       orderBy: { drawnAt: 'desc' },
@@ -950,7 +1018,7 @@ export class AdminService {
       select: { rewardType: true },
     });
     if (quest) {
-      const rt = normalizeRewardType(quest.rewardType as RewardType);
+      const rt = normalizeRewardType(quest.rewardType);
       if (
         rt === RewardType.CC_MANUAL ||
         rt === RewardType.INVITE_CODE_RANDOM ||
@@ -972,7 +1040,12 @@ export class AdminService {
       },
       include: {
         user: {
-          select: { id: true, email: true, username: true, cantonPartyId: true },
+          select: {
+            id: true,
+            email: true,
+            username: true,
+            cantonPartyId: true,
+          },
         },
       },
     });
@@ -992,7 +1065,7 @@ export class AdminService {
       let ccSent = false;
       let ledgerTxId: string | null = null;
 
-          if (draw.ccAmount > 0 && user.cantonPartyId) {
+      if (draw.ccAmount > 0 && user.cantonPartyId) {
         try {
           const quest = await this.prisma.quest.findUnique({
             where: { id: questId },
@@ -1015,7 +1088,8 @@ export class AdminService {
               referenceId: questId,
               ledgerTxId: rewardResult.rewardTxId ?? undefined,
               status: rewardResult.pending ? 'PENDING' : 'COMPLETED',
-              transferInstructionCid: rewardResult.transferInstructionCid ?? null,
+              transferInstructionCid:
+                rewardResult.transferInstructionCid ?? null,
             });
           }
         } catch (err) {
@@ -1055,7 +1129,9 @@ export class AdminService {
   ──────────────────────────────────────────────────────── */
 
   async addInviteCodes(questId: string, codes: string[]) {
-    const quest = await this.prisma.quest.findUnique({ where: { id: questId } });
+    const quest = await this.prisma.quest.findUnique({
+      where: { id: questId },
+    });
     if (!quest) throw new NotFoundException('Quest not found');
 
     const created: string[] = [];
@@ -1089,7 +1165,9 @@ export class AdminService {
       id: c.id,
       code: c.code,
       assigned: !!c.userId,
-      assignedTo: c.user ? { email: c.user.email, username: c.user.username } : null,
+      assignedTo: c.user
+        ? { email: c.user.email, username: c.user.username }
+        : null,
       assignedAt: c.assignedAt,
     }));
   }
@@ -1110,7 +1188,9 @@ export class AdminService {
 
   /** Remove unassigned codes so admin can re-upload. Assigned codes are kept. */
   async deleteInviteCodes(questId: string) {
-    const quest = await this.prisma.quest.findUnique({ where: { id: questId } });
+    const quest = await this.prisma.quest.findUnique({
+      where: { id: questId },
+    });
     if (!quest) throw new NotFoundException('Quest not found');
 
     const skippedAssigned = await this.prisma.inviteCodePool.count({
@@ -1221,7 +1301,7 @@ export class AdminService {
         data: {
           status,
           bannedAt: isActive ? null : new Date(),
-          banReason: isActive ? null : (reason?.trim() || null),
+          banReason: isActive ? null : reason?.trim() || null,
         },
       }),
       // Kick every session on ban/suspend; nothing to do on unban.
@@ -1256,14 +1336,10 @@ export class AdminService {
 
     const missing = ids.filter((id) => !found.some((u) => u.id === id));
     const blocked = found.filter(
-      (u) =>
-        u.isAdmin ||
-        protectedEmails.has(u.email.toLowerCase()),
+      (u) => u.isAdmin || protectedEmails.has(u.email.toLowerCase()),
     );
     const toDelete = found.filter(
-      (u) =>
-        !u.isAdmin &&
-        !protectedEmails.has(u.email.toLowerCase()),
+      (u) => !u.isAdmin && !protectedEmails.has(u.email.toLowerCase()),
     );
 
     if (toDelete.length === 0) {
@@ -1291,16 +1367,18 @@ export class AdminService {
 
     return {
       deleted: result.count,
-      blocked: blocked.map((u) => ({ id: u.id, email: u.email, reason: 'admin' })),
+      blocked: blocked.map((u) => ({
+        id: u.id,
+        email: u.email,
+        reason: 'admin',
+      })),
       notFound: missing,
     };
   }
 
   private getProtectedAdminEmails(): Set<string> {
     const raw =
-      this.config.get<string>('ADMIN_EMAILS') ??
-      process.env.ADMIN_EMAILS ??
-      '';
+      this.config.get<string>('ADMIN_EMAILS') ?? process.env.ADMIN_EMAILS ?? '';
     const panel =
       this.config.get<string>('ADMIN_PANEL_EMAIL') ??
       process.env.ADMIN_PANEL_EMAIL ??
@@ -1409,10 +1487,14 @@ export class AdminService {
   }
 
   async deleteWalletInviteCode(id: string) {
-    const row = await this.prisma.walletInviteCode.findUnique({ where: { id } });
+    const row = await this.prisma.walletInviteCode.findUnique({
+      where: { id },
+    });
     if (!row) throw new NotFoundException('Wallet invite code not found');
     if (row.redeemedAt) {
-      throw new BadRequestException('Cannot delete a code that has already been used.');
+      throw new BadRequestException(
+        'Cannot delete a code that has already been used.',
+      );
     }
     await this.prisma.walletInviteCode.delete({ where: { id } });
     return { ok: true };
@@ -1423,13 +1505,18 @@ export class AdminService {
   ──────────────────────────────────────────────────────── */
 
   private parseTags(raw: string): string[] {
-    try { return JSON.parse(raw) as string[]; } catch { return []; }
+    try {
+      return JSON.parse(raw) as string[];
+    } catch {
+      return [];
+    }
   }
 
   /** Generate random invite codes (admin utility). */
   generateCodes(count: number, prefix = 'CQ'): string[] {
-    return Array.from({ length: count }, () =>
-      `${prefix}-${randomUUID().split('-')[0].toUpperCase()}`,
+    return Array.from(
+      { length: count },
+      () => `${prefix}-${randomUUID().split('-')[0].toUpperCase()}`,
     );
   }
 
@@ -1446,5 +1533,112 @@ export class AdminService {
       }
       return code;
     });
+  }
+
+  /**
+   * Diagnose TransferPreapproval status for a user across all sources.
+   *
+   * Used by admins to investigate the "toggle shows Disabled but transfers still
+   * arrive directly" symptom. Reports what each source sees so we can tell a
+   * rights gap (operator CanActAs/CanReadAs) from a normalization mismatch from
+   * a provider-side-only-visible contract.
+   *
+   * @param lookup - partyId OR username (with or without leading @).
+   */
+  async debugPreapproval(lookup: string): Promise<{
+    input: string;
+    resolvedPartyId: string | null;
+    resolvedUsername: string | null;
+    hasWallet: boolean;
+    authoritative: {
+      active: boolean;
+      source?: string;
+      expiresAt?: string;
+      provider?: string;
+      contractId?: string;
+    };
+    sources: {
+      ledgerReceiver: boolean;
+      ledgerProvider: boolean;
+      splice: boolean | null;
+    };
+    spliceRest: {
+      active: boolean;
+      expiresAt?: string;
+      provider?: string;
+    };
+  }> {
+    // Resolve a user by partyId or username.
+    const trimmed = lookup.trim();
+    const looksLikeParty = trimmed.includes('::');
+    let partyId: string | null = null;
+    let username: string | null = null;
+
+    if (looksLikeParty) {
+      const byParty = await this.prisma.user.findFirst({
+        where: { cantonPartyId: trimmed },
+        select: { cantonPartyId: true, username: true },
+      });
+      partyId = byParty?.cantonPartyId ?? trimmed;
+      username = byParty?.username ?? null;
+    } else {
+      const uname = trimmed.replace(/^@/, '').toLowerCase();
+      const byName = await this.prisma.user.findFirst({
+        where: { username: { equals: uname, mode: 'insensitive' } },
+        select: { cantonPartyId: true, username: true },
+      });
+      username = byName?.username ?? uname;
+      partyId = byName?.cantonPartyId ?? null;
+    }
+
+    if (!partyId || !hasRealWallet(partyId)) {
+      return {
+        input: trimmed,
+        resolvedPartyId: partyId,
+        resolvedUsername: username,
+        hasWallet: false,
+        authoritative: { active: false },
+        sources: { ledgerReceiver: false, ledgerProvider: false, splice: null },
+        spliceRest: { active: false },
+      };
+    }
+
+    const spliceRest = await this.splice.getTransferPreapproval(partyId);
+    const auth = await this.ledger.getTransferPreapprovalAuthoritative(
+      partyId,
+      {
+        active: spliceRest !== null,
+        expiresAt: spliceRest?.expiresAt,
+        provider: spliceRest?.provider,
+      },
+    );
+
+    this.logger.log(
+      `debugPreapproval @${username ?? '?'} party=${partyId.split('::')[0]} ` +
+        `authoritative.active=${auth.active} source=${auth.source ?? 'none'} ` +
+        `ledgerReceiver=${auth.sources.ledgerReceiver} ` +
+        `ledgerProvider=${auth.sources.ledgerProvider} ` +
+        `splice=${auth.sources.splice}`,
+    );
+
+    return {
+      input: trimmed,
+      resolvedPartyId: partyId,
+      resolvedUsername: username,
+      hasWallet: true,
+      authoritative: {
+        active: auth.active,
+        source: auth.source,
+        expiresAt: auth.expiresAt,
+        provider: auth.provider,
+        contractId: auth.contractId,
+      },
+      sources: auth.sources,
+      spliceRest: {
+        active: spliceRest !== null,
+        expiresAt: spliceRest?.expiresAt,
+        provider: spliceRest?.provider,
+      },
+    };
   }
 }

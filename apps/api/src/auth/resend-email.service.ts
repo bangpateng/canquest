@@ -1,4 +1,8 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 const DEFAULT_FROM = 'Naxweb Verification <noreply@canquest.cc>';
@@ -52,8 +56,12 @@ export class ResendEmailService {
 
     if (!res.ok) {
       const errText = await res.text().catch(() => '');
-      this.logger.error(`Resend failed (${res.status}): ${errText.slice(0, 200)}`);
-      throw new ServiceUnavailableException('Could not send verification email. Try again later.');
+      this.logger.error(
+        `Resend failed (${res.status}): ${errText.slice(0, 200)}`,
+      );
+      throw new ServiceUnavailableException(
+        'Could not send verification email. Try again later.',
+      );
     }
   }
 
@@ -66,7 +74,9 @@ export class ResendEmailService {
           'Email service is not configured (RESEND_API_KEY).',
         );
       }
-      this.logger.warn(`[dev] Reset code for ${to}: ${code} (RESEND_API_KEY not set)`);
+      this.logger.warn(
+        `[dev] Reset code for ${to}: ${code} (RESEND_API_KEY not set)`,
+      );
       return;
     }
 
@@ -97,8 +107,12 @@ export class ResendEmailService {
 
     if (!res.ok) {
       const errText = await res.text().catch(() => '');
-      this.logger.error(`Reset email failed (${res.status}): ${errText.slice(0, 200)}`);
-      throw new ServiceUnavailableException('Could not send reset email. Try again later.');
+      this.logger.error(
+        `Reset email failed (${res.status}): ${errText.slice(0, 200)}`,
+      );
+      throw new ServiceUnavailableException(
+        'Could not send reset email. Try again later.',
+      );
     }
   }
 
@@ -110,7 +124,9 @@ export class ResendEmailService {
     const apiKey = this.config.get<string>('RESEND_API_KEY')?.trim();
     if (!apiKey) {
       // Non-prod: just log. Best-effort, never throw.
-      this.logger.warn(`[dev] Password-changed notice for ${to} (RESEND_API_KEY not set)`);
+      this.logger.warn(
+        `[dev] Password-changed notice for ${to} (RESEND_API_KEY not set)`,
+      );
       return;
     }
 
@@ -140,10 +156,14 @@ export class ResendEmailService {
       });
       if (!res.ok) {
         const errText = await res.text().catch(() => '');
-        this.logger.warn(`Password-changed email failed (${res.status}): ${errText.slice(0, 200)}`);
+        this.logger.warn(
+          `Password-changed email failed (${res.status}): ${errText.slice(0, 200)}`,
+        );
       }
     } catch (err) {
-      this.logger.warn(`Password-changed email error for ${to}: ${String(err)}`);
+      this.logger.warn(
+        `Password-changed email error for ${to}: ${String(err)}`,
+      );
     }
   }
 }

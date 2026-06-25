@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { SpliceValidatorService } from './splice-validator.service';
@@ -38,7 +43,9 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     if (!this.enabled) {
-      this.logger.log('CC inbound sync disabled (CC_INBOUND_SYNC_ENABLED=false)');
+      this.logger.log(
+        'CC inbound sync disabled (CC_INBOUND_SYNC_ENABLED=false)',
+      );
       return;
     }
     if (!this.splice.isConfigured) {
@@ -63,11 +70,16 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
    * Update CcBalance snapshot from on-chain wallet without creating a transaction.
    * Call after Send CC / rewards already recorded TRANSFER_IN or OUT in DB.
    */
-  async alignBalanceFromChain(userId: string, username: string, cantonPartyId?: string | null): Promise<void> {
+  async alignBalanceFromChain(
+    userId: string,
+    username: string,
+    cantonPartyId?: string | null,
+  ): Promise<void> {
     if (!this.splice.isConfigured) return;
-    const onChain = cantonPartyId && !cantonPartyId.startsWith('canquest:')
-      ? await this.ledger.getLedgerBalance(cantonPartyId)
-      : await this.splice.getUserBalance(username);
+    const onChain =
+      cantonPartyId && !cantonPartyId.startsWith('canquest:')
+        ? await this.ledger.getLedgerBalance(cantonPartyId)
+        : await this.splice.getUserBalance(username);
     if (onChain === null) return;
     const onChainMicro = BigInt(Math.round(onChain * 1_000_000));
     await this.prisma.ccBalance.upsert({
@@ -78,7 +90,11 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Sync one user (call before balance / transaction list). */
-  async syncUser(userId: string, username: string, cantonPartyId?: string | null): Promise<void> {
+  async syncUser(
+    userId: string,
+    username: string,
+    cantonPartyId?: string | null,
+  ): Promise<void> {
     if (!this.enabled || !this.splice.isConfigured) return;
     if (!username || cantonPartyId?.startsWith('canquest:')) return;
     try {
@@ -100,7 +116,11 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
         select: { id: true, username: true, cantonPartyId: true },
       });
       for (const u of users) {
-        if (!u.username || !u.cantonPartyId || u.cantonPartyId.startsWith('canquest:')) {
+        if (
+          !u.username ||
+          !u.cantonPartyId ||
+          u.cantonPartyId.startsWith('canquest:')
+        ) {
           continue;
         }
         await this.syncUserBalance(u.id, u.username, u.cantonPartyId);
@@ -154,7 +174,8 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
     // S12: TRANSFER_OUT schema mungkin menyimpan magnitude positif atau negatif.
     // Gunakan Math.abs agar robust terhadap kedua konvensi — delta on-chain selalu
     // positif, jadi: reward (selalu positif) - |fee| = net delta.
-    const feeAbs = fee.amountMicroCc < 0n ? -fee.amountMicroCc : fee.amountMicroCc;
+    const feeAbs =
+      fee.amountMicroCc < 0n ? -fee.amountMicroCc : fee.amountMicroCc;
     const netMicro = reward.amountMicroCc - feeAbs;
     return netMicro === deltaMicro;
   }
@@ -165,13 +186,16 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
     cantonPartyId?: string | null,
   ): Promise<void> {
     // Pakai Ledger API (admin Keycloak token) jika ada partyId real
-    const onChain = cantonPartyId && !cantonPartyId.startsWith('canquest:')
-      ? await this.ledger.getLedgerBalance(cantonPartyId)
-      : await this.splice.getUserBalance(username);
+    const onChain =
+      cantonPartyId && !cantonPartyId.startsWith('canquest:')
+        ? await this.ledger.getLedgerBalance(cantonPartyId)
+        : await this.splice.getUserBalance(username);
     if (onChain === null) return;
 
     const onChainMicro = BigInt(Math.round(onChain * 1_000_000));
-    const existing = await this.prisma.ccBalance.findUnique({ where: { userId } });
+    const existing = await this.prisma.ccBalance.findUnique({
+      where: { userId },
+    });
 
     if (!existing) {
       await this.prisma.ccBalance.create({
@@ -216,7 +240,9 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
         // Jika race condition terjadi, error duplicate key dibungkam dan
         // balance tetap di-update di bawah — tidak ada data hilang.
         if (!String(err).includes('Unique constraint')) {
-          this.logger.warn(`upsert TRANSFER_IN failed for @${username}: ${String(err)}`);
+          this.logger.warn(
+            `upsert TRANSFER_IN failed for @${username}: ${String(err)}`,
+          );
         }
       }
 

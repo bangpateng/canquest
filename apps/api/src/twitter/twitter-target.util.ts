@@ -6,7 +6,9 @@ export function normalizeTwitterUsername(raw: string): string {
 }
 
 /** Target for twitter_follow — account to follow. */
-export function parseTwitterFollowTarget(target: string | null | undefined): string | null {
+export function parseTwitterFollowTarget(
+  target: string | null | undefined,
+): string | null {
   if (!target?.trim()) return null;
   const raw = target.trim();
   if (!raw.startsWith('http')) {
@@ -24,7 +26,9 @@ export function parseTwitterFollowTarget(target: string | null | undefined): str
 }
 
 /** Extract numeric tweet id from status URL or raw id. */
-export function parseTweetIdFromTarget(target: string | null | undefined): string | null {
+export function parseTweetIdFromTarget(
+  target: string | null | undefined,
+): string | null {
   if (!target?.trim()) return null;
   const raw = target.trim();
   const inline = raw.match(/status\/(\d{5,})/i);
@@ -34,7 +38,11 @@ export function parseTweetIdFromTarget(target: string | null | undefined): strin
     const u = new URL(raw.startsWith('http') ? raw : `https://${raw}`);
     const parts = u.pathname.split('/').filter(Boolean);
     const statusIdx = parts.indexOf('status');
-    if (statusIdx >= 0 && parts[statusIdx + 1] && /^\d{5,}$/.test(parts[statusIdx + 1])) {
+    if (
+      statusIdx >= 0 &&
+      parts[statusIdx + 1] &&
+      /^\d{5,}$/.test(parts[statusIdx + 1])
+    ) {
       return parts[statusIdx + 1];
     }
   } catch {

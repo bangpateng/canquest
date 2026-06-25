@@ -1,4 +1,12 @@
-import { IsNumber, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import {
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
 
 /**
  * Request body for POST /api/party/lock.
@@ -18,4 +26,13 @@ export class LockCcDto {
   @MinLength(1, { message: 'termKey is required.' })
   @MaxLength(32)
   termKey!: string;
+
+  /**
+   * Kata sandi transaksi opsional (wallet password). Wajib hanya bila user telah
+   * menetapkan satu — diverifikasi di awal handler.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  walletPassword?: string;
 }

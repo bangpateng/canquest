@@ -4,7 +4,12 @@ import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 
-const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+const ALLOWED_MIME = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+]);
 const MAX_BYTES = 2 * 1024 * 1024;
 
 @Injectable()
@@ -48,10 +53,15 @@ export class ProfileAvatarService {
     return `avatars/${safe}.${ext}`;
   }
 
-  async setFromDataUrl(userId: string, dataUrl: string): Promise<{ avatarUrl: string }> {
+  async setFromDataUrl(
+    userId: string,
+    dataUrl: string,
+  ): Promise<{ avatarUrl: string }> {
     const parsed = parseDataUrlImage(dataUrl);
     if (!ALLOWED_MIME.has(parsed.mime)) {
-      throw new BadRequestException('Only JPEG, PNG, WebP, or GIF images are allowed.');
+      throw new BadRequestException(
+        'Only JPEG, PNG, WebP, or GIF images are allowed.',
+      );
     }
     if (parsed.buffer.length > MAX_BYTES) {
       throw new BadRequestException('Image must be 2 MB or smaller.');
@@ -119,8 +129,8 @@ function parseDataUrlImage(input: string): { mime: string; buffer: Buffer } {
   const match = /^data:(image\/[a-z+]+);base64,(.+)$/i.exec(trimmed);
   if (match) {
     return {
-      mime: match[1]!.toLowerCase(),
-      buffer: Buffer.from(match[2]!, 'base64'),
+      mime: match[1].toLowerCase(),
+      buffer: Buffer.from(match[2], 'base64'),
     };
   }
   try {

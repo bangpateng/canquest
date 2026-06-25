@@ -29,7 +29,10 @@ export class WalletInviteCodeService {
    * Hold code for this user while they create a wallet.
    * Does not mark the code as used — only blocks other users temporarily.
    */
-  async reserveForWalletCreation(userId: string, walletInviteCode: string): Promise<void> {
+  async reserveForWalletCreation(
+    userId: string,
+    walletInviteCode: string,
+  ): Promise<void> {
     const normalized = this.normalizeCode(walletInviteCode);
     if (normalized.length < 4) {
       throw new BadRequestException({
@@ -60,7 +63,8 @@ export class WalletInviteCodeService {
       !this.reservationExpired(row.reservedAt)
     ) {
       throw new BadRequestException({
-        message: 'This wallet invite code is temporarily in use. Try again in a few minutes.',
+        message:
+          'This wallet invite code is temporarily in use. Try again in a few minutes.',
         code: 'WALLET_INVITE_RESERVED',
       });
     }
@@ -72,7 +76,10 @@ export class WalletInviteCodeService {
   }
 
   /** Release a temporary hold (failed or placeholder wallet — code stays available). */
-  async releaseReservation(userId: string, walletInviteCode?: string): Promise<void> {
+  async releaseReservation(
+    userId: string,
+    walletInviteCode?: string,
+  ): Promise<void> {
     if (!walletInviteCode?.trim()) return;
     const normalized = this.normalizeCode(walletInviteCode);
     await this.prisma.walletInviteCode.updateMany({
@@ -88,7 +95,10 @@ export class WalletInviteCodeService {
   /**
    * Before creating a wallet: reserve code unless this user already completed with one.
    */
-  async assertCanCreateWallet(userId: string, walletInviteCode?: string): Promise<void> {
+  async assertCanCreateWallet(
+    userId: string,
+    walletInviteCode?: string,
+  ): Promise<void> {
     if (await this.userHasRedeemedInvite(userId)) {
       return;
     }
@@ -106,7 +116,10 @@ export class WalletInviteCodeService {
    * Mark code as permanently used — only after a real (non-placeholder) wallet exists.
    * 1 code → 1 user forever.
    */
-  async redeemAfterWalletCreated(userId: string, walletInviteCode?: string): Promise<void> {
+  async redeemAfterWalletCreated(
+    userId: string,
+    walletInviteCode?: string,
+  ): Promise<void> {
     if (await this.userHasRedeemedInvite(userId)) {
       return;
     }

@@ -25,4 +25,3 @@ export class EarnPublicController {
     return this.quests.getQuest(campaignId);
   }
 }
-

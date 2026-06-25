@@ -6,18 +6,24 @@ import {
 describe('parseTweetIdFromTarget', () => {
   it('parses x.com status URL', () => {
     expect(
-      parseTweetIdFromTarget('https://x.com/canquest/status/1846987139428634858'),
+      parseTweetIdFromTarget(
+        'https://x.com/canquest/status/1846987139428634858',
+      ),
     ).toBe('1846987139428634858');
   });
 
   it('parses twitter.com /i/web/status URL', () => {
     expect(
-      parseTweetIdFromTarget('https://twitter.com/i/web/status/1846987139428634858'),
+      parseTweetIdFromTarget(
+        'https://twitter.com/i/web/status/1846987139428634858',
+      ),
     ).toBe('1846987139428634858');
   });
 
   it('parses raw numeric id', () => {
-    expect(parseTweetIdFromTarget('1846987139428634858')).toBe('1846987139428634858');
+    expect(parseTweetIdFromTarget('1846987139428634858')).toBe(
+      '1846987139428634858',
+    );
   });
 
   it('rejects profile-only URL', () => {

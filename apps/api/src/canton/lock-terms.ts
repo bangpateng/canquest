@@ -37,17 +37,23 @@ export function parseLockTerms(envValue: string | undefined): {
     if (!entry) continue;
     const sep = entry.lastIndexOf(':');
     if (sep <= 0) {
-      logger.warn(`LOCK_TERM_OPTIONS entry "${entry}" malformed (expected "label:seconds") — skipped`);
+      logger.warn(
+        `LOCK_TERM_OPTIONS entry "${entry}" malformed (expected "label:seconds") — skipped`,
+      );
       continue;
     }
     const key = entry.slice(0, sep).trim();
     const seconds = Number(entry.slice(sep + 1).trim());
     if (!key || !Number.isFinite(seconds) || seconds <= 0) {
-      logger.warn(`LOCK_TERM_OPTIONS entry "${entry}" invalid seconds — skipped`);
+      logger.warn(
+        `LOCK_TERM_OPTIONS entry "${entry}" invalid seconds — skipped`,
+      );
       continue;
     }
     if (seen.has(key)) {
-      logger.warn(`LOCK_TERM_OPTIONS duplicate key "${key}" — using first occurrence`);
+      logger.warn(
+        `LOCK_TERM_OPTIONS duplicate key "${key}" — using first occurrence`,
+      );
       continue;
     }
     seen.add(key);

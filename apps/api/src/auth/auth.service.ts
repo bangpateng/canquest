@@ -8,7 +8,13 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from 'crypto';
+import {
+  createHash,
+  createHmac,
+  randomBytes,
+  randomInt,
+  timingSafeEqual,
+} from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReferralService } from '../users/referral.service';
 import { UsersService } from '../users/users.service';
@@ -43,7 +49,11 @@ export class AuthService {
     private readonly resend: ResendEmailService,
   ) {}
 
-  async register(dto: { email: string; password: string; referralCode?: string }) {
+  async register(dto: {
+    email: string;
+    password: string;
+    referralCode?: string;
+  }) {
     if (process.env.AUTH_REGISTER_ENABLED === 'false') {
       throw new BadRequestException('Registration is currently disabled');
     }
@@ -58,12 +68,17 @@ export class AuthService {
       throw new ConflictException('Email already registered');
     }
 
-    const referredById = await this.resolveReferralForEmail(email, dto.referralCode);
+    const referredById = await this.resolveReferralForEmail(
+      email,
+      dto.referralCode,
+    );
     const skipOtp = process.env.AUTH_REGISTER_SKIP_OTP === 'true';
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
 
     if (existing && !existing.emailVerified) {
-      await this.prisma.refreshToken.deleteMany({ where: { userId: existing.id } });
+      await this.prisma.refreshToken.deleteMany({
+        where: { userId: existing.id },
+      });
       await this.users.resumeUnverifiedRegistration(
         existing.id,
         passwordHash,
@@ -87,7 +102,8 @@ export class AuthService {
     const referralCode = await this.referral.generateUniqueReferralCode();
     const localPart = email.split('@')[0] ?? 'User';
     const displayName =
-      localPart.charAt(0).toUpperCase() + localPart.slice(1, 80).replace(/[.+]/g, ' ');
+      localPart.charAt(0).toUpperCase() +
+      localPart.slice(1, 80).replace(/[.+]/g, ' ');
 
     const user = await this.users.create({
       email,
@@ -232,7 +248,8 @@ export class AuthService {
       email: user.email,
       displayName: user.displayName,
       username: normalizeWalletUsername(user.username) ?? user.username,
-      cantonPartyId: normalizeCantonPartyId(user.cantonPartyId) ?? user.cantonPartyId,
+      cantonPartyId:
+        normalizeCantonPartyId(user.cantonPartyId) ?? user.cantonPartyId,
       twitterUsername: user.twitterUsername,
       twitterConnectedAt: user.twitterConnectedAt?.toISOString() ?? null,
       earnPoints,
@@ -267,7 +284,9 @@ export class AuthService {
      ──────────────────────────────────────────────────────── */
 
   private resetSecret(): string {
-    return process.env.OTP_HMAC_SECRET?.trim() || process.env.JWT_ACCESS_SECRET || '';
+    return (
+      process.env.OTP_HMAC_SECRET?.trim() || process.env.JWT_ACCESS_SECRET || ''
+    );
   }
 
   private hashResetCode(userId: string, code: string): string {
@@ -301,7 +320,8 @@ export class AuthService {
         orderBy: { createdAt: 'desc' },
       });
       const onCooldown =
-        !!recent && Date.now() - recent.createdAt.getTime() < RESET_RESEND_COOLDOWN_MS;
+        !!recent &&
+        Date.now() - recent.createdAt.getTime() < RESET_RESEND_COOLDOWN_MS;
 
       if (!onCooldown) {
         const code = randomInt(100000, 1000000).toString();
@@ -392,9 +412,7 @@ export class AuthService {
   /** Secret for OTP HMAC. Falls back to the JWT secret so legacy deployments keep working. */
   private otpSecret(): string {
     return (
-      process.env.OTP_HMAC_SECRET?.trim() ||
-      process.env.JWT_ACCESS_SECRET ||
-      ''
+      process.env.OTP_HMAC_SECRET?.trim() || process.env.JWT_ACCESS_SECRET || ''
     );
   }
 

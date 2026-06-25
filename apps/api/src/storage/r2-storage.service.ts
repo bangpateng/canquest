@@ -53,7 +53,9 @@ export type QuestImageUpload = {
 };
 
 /** Bucket name only (e.g. canquest-media), not a URL. */
-export function normalizeR2BucketName(raw: string | undefined | null): string | null {
+export function normalizeR2BucketName(
+  raw: string | undefined | null,
+): string | null {
   if (!raw?.trim()) return null;
   let s = raw.trim();
   if (s.startsWith('http://') || s.startsWith('https://')) {
@@ -75,7 +77,9 @@ export function isR2S3ApiEndpoint(url: string): boolean {
 }
 
 /** Public CDN / r2.dev URL shown in Earn cards (not the cloudflarestorage.com API host). */
-export function normalizeR2PublicBaseUrl(raw: string | undefined | null): string | null {
+export function normalizeR2PublicBaseUrl(
+  raw: string | undefined | null,
+): string | null {
   if (!raw?.trim()) return null;
   const base = raw.trim().replace(/\/$/, '');
   if (isR2S3ApiEndpoint(base)) {
@@ -105,9 +109,7 @@ export class R2StorageService implements OnModuleInit {
 
     const endpoint =
       config.get<string>('R2_ENDPOINT')?.trim() ||
-      (accountId
-        ? `https://${accountId}.r2.cloudflarestorage.com`
-        : null);
+      (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : null);
 
     if (publicBaseRaw && !this.publicBase && isR2S3ApiEndpoint(publicBaseRaw)) {
       this.logger.error(
@@ -117,7 +119,13 @@ export class R2StorageService implements OnModuleInit {
       );
     }
 
-    if (accountId && accessKeyId && secretAccessKey && this.bucket && endpoint) {
+    if (
+      accountId &&
+      accessKeyId &&
+      secretAccessKey &&
+      this.bucket &&
+      endpoint
+    ) {
       this.client = new S3Client({
         region: 'auto',
         endpoint,
@@ -216,9 +224,7 @@ export class R2StorageService implements OnModuleInit {
   }
 
   private async verifyBucket(): Promise<void> {
-    await this.client!.send(
-      new HeadBucketCommand({ Bucket: this.bucket! }),
-    );
+    await this.client!.send(new HeadBucketCommand({ Bucket: this.bucket! }));
   }
 
   private formatS3Error(err: unknown): string {
@@ -267,7 +273,9 @@ export class R2StorageService implements OnModuleInit {
           'In Cloudflare → R2 → open that bucket → Settings → Public access → enable and copy the pub-….r2.dev URL from the same bucket, then restart the API and re-upload.'
         : `Public URL returned HTTP ${res.status}. Check bucket public access or custom domain.`;
 
-    this.logger.error(`R2 public URL not readable: ${publicUrl} → ${res.status}`);
+    this.logger.error(
+      `R2 public URL not readable: ${publicUrl} → ${res.status}`,
+    );
     throw new BadRequestException(`R2 public URL not reachable: ${hint}`);
   }
 
@@ -279,11 +287,18 @@ export class R2StorageService implements OnModuleInit {
     ) {
       throw new BadRequestException(`R2 upload failed: ${detail}`);
     }
-    this.logger.error(`R2 PutObject failed: ${detail}`, err instanceof Error ? err.stack : undefined);
+    this.logger.error(
+      `R2 PutObject failed: ${detail}`,
+      err instanceof Error ? err.stack : undefined,
+    );
     throw new ServiceUnavailableException(`Image upload failed: ${detail}`);
   }
 
-  assertAllowedImage(mimeType: string, sizeBytes: number, maxBytes: number): string {
+  assertAllowedImage(
+    mimeType: string,
+    sizeBytes: number,
+    maxBytes: number,
+  ): string {
     if (!ALLOWED_MIME.has(mimeType)) {
       throw new BadRequestException('Only JPEG, PNG, WebP, or GIF allowed');
     }
@@ -310,7 +325,8 @@ export class R2StorageService implements OnModuleInit {
   private detectImageMime(buf: Buffer): string | null {
     if (buf.length < 12) return null;
     // JPEG: FF D8 FF
-    if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg';
+    if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff)
+      return 'image/jpeg';
     // PNG: 89 50 4E 47 0D 0A 1A 0A
     if (
       buf[0] === 0x89 &&
@@ -353,7 +369,9 @@ export class R2StorageService implements OnModuleInit {
 
   /** Upload banner or logo; returns public HTTPS URL stored on Quest. */
   async uploadQuestAsset(input: QuestImageUpload): Promise<string> {
-    const maxBytes = Number(this.config.get<string>('QUEST_MEDIA_MAX_BYTES') ?? '5242880');
+    const maxBytes = Number(
+      this.config.get<string>('QUEST_MEDIA_MAX_BYTES') ?? '5242880',
+    );
 
     // Verifikasi magic-byte: jangan percaya Content-Type dari klien.
     // Tipe MIME final diambil dari signature buffer; bila tidak cocok format
@@ -368,7 +386,11 @@ export class R2StorageService implements OnModuleInit {
     // menentukan ekstensi & Content-Type penyimpanan.
     const mimeType = detectedMime;
 
-    const ext = this.assertAllowedImage(mimeType, input.buffer.length, maxBytes);
+    const ext = this.assertAllowedImage(
+      mimeType,
+      input.buffer.length,
+      maxBytes,
+    );
     const key = `quests/${randomUUID()}.${ext}`;
 
     if (this.isR2Enabled()) {
@@ -421,7 +443,9 @@ export class R2StorageService implements OnModuleInit {
    * Returns R2 object key or local filename when `url` is a quest asset we uploaded.
    * Ignores external paths (e.g. /quest-media/ on Vercel static).
    */
-  resolveManagedQuestAsset(url: string): { kind: 'r2'; key: string } | { kind: 'local'; filePath: string } | null {
+  resolveManagedQuestAsset(
+    url: string,
+  ): { kind: 'r2'; key: string } | { kind: 'local'; filePath: string } | null {
     const trimmed = url.trim();
     if (!trimmed) return null;
 
@@ -459,7 +483,9 @@ export class R2StorageService implements OnModuleInit {
   }
 
   /** Delete a previously uploaded quest banner/logo (R2 or local dev). Best-effort, idempotent. */
-  async deleteQuestAssetByUrl(url: string | null | undefined): Promise<boolean> {
+  async deleteQuestAssetByUrl(
+    url: string | null | undefined,
+  ): Promise<boolean> {
     const resolved = url?.trim() ? this.resolveManagedQuestAsset(url) : null;
     if (!resolved) return false;
 
@@ -486,7 +512,10 @@ export class R2StorageService implements OnModuleInit {
       this.logger.log(`Deleted local quest asset: ${resolved.filePath}`);
       return true;
     } catch (err) {
-      const code = err && typeof err === 'object' && 'code' in err ? (err as NodeJS.ErrnoException).code : null;
+      const code =
+        err && typeof err === 'object' && 'code' in err
+          ? (err as NodeJS.ErrnoException).code
+          : null;
       if (code === 'ENOENT') return true;
       this.logger.warn(
         `Local delete failed for ${resolved.filePath}: ${err instanceof Error ? err.message : String(err)}`,

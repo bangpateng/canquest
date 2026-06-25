@@ -7,4 +7,3 @@ import { EarnPublicController } from './earn-public.controller';
   controllers: [EarnPublicController],
 })
 export class EarnModule {}
-

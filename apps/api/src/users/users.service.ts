@@ -4,7 +4,11 @@ import {
   looksLikeQuestId,
   parseQuestIdFromRewardDescription,
 } from '../common/quest-reward-labels';
-import { CcTransactionType, RewardType, normalizeRewardType } from '../common/prisma-types';
+import {
+  CcTransactionType,
+  RewardType,
+  normalizeRewardType,
+} from '../common/prisma-types';
 import { PointsService } from './points.service';
 import {
   CC_TRANSACTION_HISTORY_WHERE,
@@ -94,7 +98,9 @@ export class UsersService {
   }
 
   /** Full Canton Party ID for transfer counterparty (resolves @username / legacy short labels). */
-  async resolveTransferCounterparty(referenceId: string | null): Promise<string | null> {
+  async resolveTransferCounterparty(
+    referenceId: string | null,
+  ): Promise<string | null> {
     if (!referenceId?.trim()) return null;
     const ref = referenceId.trim();
 
@@ -119,7 +125,9 @@ export class UsersService {
     }
 
     const byPrefix = await this.prisma.user.findFirst({
-      where: { cantonPartyId: { startsWith: `${username}::`, mode: 'insensitive' } },
+      where: {
+        cantonPartyId: { startsWith: `${username}::`, mode: 'insensitive' },
+      },
       select: { cantonPartyId: true },
     });
     if (byPrefix?.cantonPartyId) {
@@ -202,7 +210,11 @@ export class UsersService {
     });
   }
 
-  updatePasswordHash(userId: string, passwordHash: string, emailVerified = true) {
+  updatePasswordHash(
+    userId: string,
+    passwordHash: string,
+    emailVerified = true,
+  ) {
     return this.prisma.user.update({
       where: { id: userId },
       data: { passwordHash, emailVerified },
@@ -245,7 +257,8 @@ export class UsersService {
   }
 
   async setPartyId(userId: string, cantonPartyId: string, username?: string) {
-    const normalized = normalizeCantonPartyId(cantonPartyId) ?? cantonPartyId.trim();
+    const normalized =
+      normalizeCantonPartyId(cantonPartyId) ?? cantonPartyId.trim();
     return this.prisma.user.update({
       where: { id: userId },
       data: {
@@ -274,7 +287,9 @@ export class UsersService {
     /** cid AmuletTransferInstruction untuk reward yang masih pending. */
     transferInstructionCid?: string | null;
   }) {
-    const amountMicroCc = BigInt(Math.round(Math.abs(params.amountCc) * 1_000_000));
+    const amountMicroCc = BigInt(
+      Math.round(Math.abs(params.amountCc) * 1_000_000),
+    );
     // Debit (keluar dari saldo yang bisa dipakai): TRANSFER_OUT & CC_LOCK (dana dikunci).
     // Kredit (masuk): TRANSFER_IN, QUEST_REWARD, SPIN_REWARD, AIRDROP, CC_UNLOCK.
     const isDebit = params.type === 'TRANSFER_OUT' || params.type === 'CC_LOCK';
@@ -282,7 +297,7 @@ export class UsersService {
     const referenceId =
       params.referenceId !== undefined
         ? params.referenceId
-        : params.counterparty ?? null;
+        : (params.counterparty ?? null);
     return this.prisma.ccTransaction.create({
       data: {
         userId: params.userId,
@@ -305,7 +320,8 @@ export class UsersService {
     referenceId: string | null;
   }): string | null {
     if (tx.type !== 'QUEST_REWARD') return null;
-    if (tx.referenceId && looksLikeQuestId(tx.referenceId)) return tx.referenceId;
+    if (tx.referenceId && looksLikeQuestId(tx.referenceId))
+      return tx.referenceId;
     return parseQuestIdFromRewardDescription(tx.description);
   }
 
@@ -347,13 +363,14 @@ export class UsersService {
       const questId = this.resolveQuestIdForTransaction(tx);
       const title = questId ? titleById.get(questId) : null;
       if (!title) return tx;
-      if (
-        tx.description !== title ||
-        tx.referenceId !== questId
-      ) {
+      if (tx.description !== title || tx.referenceId !== questId) {
         backfill.push({ id: tx.id, title, questId: questId! });
       }
-      return { ...tx, description: title, referenceId: questId ?? tx.referenceId };
+      return {
+        ...tx,
+        description: title,
+        referenceId: questId ?? tx.referenceId,
+      };
     });
 
     if (backfill.length > 0) {
@@ -373,7 +390,9 @@ export class UsersService {
   }
 
   /** Where-clause for the FEED list — semua tipe yang tampil di bell (FEED_TX_TYPES). */
-  private notificationFeedWhere(userId: string): Prisma.CcTransactionWhereInput {
+  private notificationFeedWhere(
+    userId: string,
+  ): Prisma.CcTransactionWhereInput {
     return {
       userId,
       type: { in: FEED_TX_TYPES },
@@ -412,21 +431,22 @@ export class UsersService {
     const feedWhere = this.notificationFeedWhere(userId);
     const take = Math.min(30, Math.max(1, limit));
 
-    const [feedRows, badgeRows, drawAlerts, codeClaimAlerts] = await Promise.all([
-      this.prisma.ccTransaction.findMany({
-        where: feedWhere,
-        orderBy: { createdAt: 'desc' },
-        take,
-      }),
-      // Ambil baris badge (id + referenceId + type) untuk post-filter fee, lalu hitung.
-      this.prisma.ccTransaction.findMany({
-        where: this.notificationBadgeWhere(userId, lastSeenAt),
-        orderBy: { createdAt: 'desc' },
-        select: { id: true, referenceId: true, type: true, createdAt: true },
-      }),
-      this.getDrawAlerts(userId, lastSeenAt),
-      this.getCodeClaimAlerts(userId, lastSeenAt),
-    ]);
+    const [feedRows, badgeRows, drawAlerts, codeClaimAlerts] =
+      await Promise.all([
+        this.prisma.ccTransaction.findMany({
+          where: feedWhere,
+          orderBy: { createdAt: 'desc' },
+          take,
+        }),
+        // Ambil baris badge (id + referenceId + type) untuk post-filter fee, lalu hitung.
+        this.prisma.ccTransaction.findMany({
+          where: this.notificationBadgeWhere(userId, lastSeenAt),
+          orderBy: { createdAt: 'desc' },
+          select: { id: true, referenceId: true, type: true, createdAt: true },
+        }),
+        this.getDrawAlerts(userId, lastSeenAt),
+        this.getCodeClaimAlerts(userId, lastSeenAt),
+      ]);
 
     // Post-filter fee dari FEED (buang penerima = party fee).
     const feeFilteredFeed: typeof feedRows = [];
@@ -436,7 +456,8 @@ export class UsersService {
         continue;
       }
       const resolved = await this.resolveTransferCounterparty(tx.referenceId);
-      if (!isFeePartyRecipient(tx.referenceId, resolved)) feeFilteredFeed.push(tx);
+      if (!isFeePartyRecipient(tx.referenceId, resolved))
+        feeFilteredFeed.push(tx);
     }
 
     // Post-filter fee dari BADGE unread count.
@@ -471,7 +492,10 @@ export class UsersService {
     );
 
     const merged = [...serializedTx, ...drawAlerts, ...codeClaimAlerts]
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      )
       .slice(0, take);
 
     const unreadDrawCount = drawAlerts.filter((a) => a.unread).length;
@@ -505,7 +529,11 @@ export class UsersService {
         userId,
         inviteCode: { not: null },
         claimFeeLedgerTxId: { not: null },
-        quest: { rewardType: { in: ['INVITE_CODE_FCFS', 'INVITE_CODE_RANDOM', 'INVITE_CODE'] } },
+        quest: {
+          rewardType: {
+            in: ['INVITE_CODE_FCFS', 'INVITE_CODE_RANDOM', 'INVITE_CODE'],
+          },
+        },
       },
       select: {
         questId: true,
@@ -535,15 +563,15 @@ export class UsersService {
         };
       })
       .filter(Boolean) as Array<{
-        kind: 'code';
-        id: string;
-        questId: string;
-        questTitle: string;
-        code: string;
-        description: string;
-        createdAt: string;
-        unread: boolean;
-      }>;
+      kind: 'code';
+      id: string;
+      questId: string;
+      questTitle: string;
+      code: string;
+      description: string;
+      createdAt: string;
+      unread: boolean;
+    }>;
   }
 
   /** Raffle draw results — winners/losers notified after admin draw. */
@@ -565,7 +593,8 @@ export class UsersService {
     won: boolean;
     userDraw: { distributed: boolean; inviteCode: string | null } | null;
   }): { description: string; rewardCc: number | null } {
-    const { rewardType, questTitle, rewardCc, winnerMessage, won, userDraw } = params;
+    const { rewardType, questTitle, rewardCc, winnerMessage, won, userDraw } =
+      params;
     if (!won) {
       return {
         description: `Not selected for ${questTitle}. Better luck next time.`,
@@ -599,7 +628,9 @@ export class UsersService {
     }
 
     if (rewardType === RewardType.CC_AND_CODE_RAFFLE) {
-      const codePart = userDraw?.inviteCode ? ` + code: ${userDraw.inviteCode}` : "";
+      const codePart = userDraw?.inviteCode
+        ? ` + code: ${userDraw.inviteCode}`
+        : '';
       if (userDraw?.distributed) {
         return {
           description: `You won ${questTitle}! ${rewardCc} CC${codePart} sent to your wallet.`,
@@ -673,7 +704,7 @@ export class UsersService {
     }> = [];
 
     for (const c of completions) {
-      const rt = normalizeRewardType(c.quest.rewardType as RewardType);
+      const rt = normalizeRewardType(c.quest.rewardType);
       if (!this.isRaffleDrawRewardType(rt)) continue;
 
       const latestDraw = await this.prisma.winnerDraw.findFirst({
@@ -779,7 +810,13 @@ export class UsersService {
         };
       }),
     );
-    return { items: serialized, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
+    return {
+      items: serialized,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    };
   }
 
   /** Lifetime points from Quest menu, Earn hub, campaign tasks, completion bonuses, referral. */

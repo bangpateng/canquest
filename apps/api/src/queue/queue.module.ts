@@ -36,16 +36,14 @@ import { PrismaModule } from '../prisma/prisma.module';
           retryStrategy: (times: number) => Math.min(times * 200, 5_000),
         },
         defaultJobOptions: {
-          attempts: 3,                     // 3x retry otomatis
+          attempts: 3, // 3x retry otomatis
           backoff: { type: 'exponential', delay: 1_000 }, // 1s, 2s, 4s
-          removeOnComplete: 100,           // simpan 100 completed jobs
-          removeOnFail: 500,               // simpan 500 failed jobs
+          removeOnComplete: 100, // simpan 100 completed jobs
+          removeOnFail: 500, // simpan 500 failed jobs
         },
       }),
     }),
-    BullModule.registerQueue(
-      { name: QUEUE_LEDGER },
-    ),
+    BullModule.registerQueue({ name: QUEUE_LEDGER }),
     CantonModule,
     UsersModule,
     PrismaModule,

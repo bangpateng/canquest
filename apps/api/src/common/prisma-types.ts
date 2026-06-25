@@ -29,10 +29,7 @@ export function resolveQuestDisplayStatus(
 ): QuestStatus {
   const startsAt = q.startsAt ? new Date(q.startsAt) : null;
   const endsAt = q.endsAt ? new Date(q.endsAt) : null;
-  const deadline =
-    !endsAt && q.deadline?.trim()
-      ? new Date(q.deadline)
-      : null;
+  const deadline = !endsAt && q.deadline?.trim() ? new Date(q.deadline) : null;
   const hasDeadline = Boolean(deadline && Number.isFinite(deadline.getTime()));
 
   if (endsAt && endsAt < now) return QuestStatus.ENDED;
@@ -92,7 +89,5 @@ export const UserStatus = {
 };
 
 /** CcTransactionTypes that represent a non-custodial lock/unlock (no counterparty). */
-export const CC_LOCK_TYPES: ReadonlySet<CcTransactionType> = new Set<CcTransactionType>([
-  'CC_LOCK',
-  'CC_UNLOCK',
-]);
+export const CC_LOCK_TYPES: ReadonlySet<CcTransactionType> =
+  new Set<CcTransactionType>(['CC_LOCK', 'CC_UNLOCK']);

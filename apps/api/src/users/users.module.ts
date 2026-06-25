@@ -5,6 +5,7 @@ import { ReferralService } from './referral.service';
 import { ReferralController } from './referral.controller';
 import { PointsService } from './points.service';
 import { UsersService } from './users.service';
+import { WalletPasswordService } from './wallet-password.service';
 
 @Module({
   controllers: [ReferralController],
@@ -14,6 +15,7 @@ import { UsersService } from './users.service';
     ProfileAvatarService,
     ReferralService,
     WalletRequiredGuard,
+    WalletPasswordService,
   ],
   exports: [
     UsersService,
@@ -21,6 +23,7 @@ import { UsersService } from './users.service';
     ProfileAvatarService,
     ReferralService,
     WalletRequiredGuard,
+    WalletPasswordService,
   ],
 })
 export class UsersModule {}

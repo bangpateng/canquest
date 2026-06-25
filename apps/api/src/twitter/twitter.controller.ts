@@ -26,7 +26,10 @@ export class TwitterController {
     private readonly twitterApi: TwitterApiService,
   ) {}
 
-  private async backfillAvatarIfMissing(userId: string, twitterUsername: string) {
+  private async backfillAvatarIfMissing(
+    userId: string,
+    twitterUsername: string,
+  ) {
     if (!this.twitterApi.isConfigured()) return null;
     try {
       const profile = await this.twitterApi.fetchUserProfile(twitterUsername);
@@ -104,9 +107,7 @@ export class TwitterController {
         twitterUserId: resolved.userId,
         twitterAvatarUrl: resolved.profileImageUrl,
         twitterConnectedAt: now,
-        ...(resolved.displayName
-          ? { displayName: resolved.displayName }
-          : {}),
+        ...(resolved.displayName ? { displayName: resolved.displayName } : {}),
       },
     });
 

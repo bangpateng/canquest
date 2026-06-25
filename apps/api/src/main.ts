@@ -48,7 +48,9 @@ async function bootstrap() {
   // resolve a concrete allow-list. In production WEB_ORIGIN must be set to the
   // exact domain(s) (e.g. https://canquest.cc); an empty/wildcard value would
   // either be rejected by browsers or silently open the API to any origin.
-  const rawCorsOrigin = process.env.WEB_ORIGIN?.split(',').map((s) => s.trim()).filter(Boolean);
+  const rawCorsOrigin = process.env.WEB_ORIGIN?.split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
   const corsOrigin: string[] = rawCorsOrigin?.length
     ? rawCorsOrigin
     : ['http://localhost:3000'];
@@ -58,7 +60,9 @@ async function bootstrap() {
       'WEB_ORIGIN="*" is not allowed with credentials:true — refusing to start. ' +
         'Set WEB_ORIGIN to your exact production domain(s).',
     );
-    throw new Error('Invalid CORS configuration: wildcard origin with credentials.');
+    throw new Error(
+      'Invalid CORS configuration: wildcard origin with credentials.',
+    );
   }
   if (process.env.NODE_ENV === 'production' && !rawCorsOrigin?.length) {
     logger.warn(

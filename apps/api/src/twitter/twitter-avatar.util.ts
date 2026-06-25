@@ -1,7 +1,9 @@
 /** ~48×48 Twitter CDN avatar — keeps leaderboard light. */
-export function normalizeTwitterAvatarUrl(url: string | null | undefined): string | null {
+export function normalizeTwitterAvatarUrl(
+  url: string | null | undefined,
+): string | null {
   if (!url?.trim()) return null;
-  let trimmed = url.trim().replace(/^http:\/\//i, 'https://');
+  const trimmed = url.trim().replace(/^http:\/\//i, 'https://');
   if (!trimmed.includes('twimg.com')) return trimmed;
 
   if (/_normal(\.(jpe?g|png|webp))?$/i.test(trimmed)) {
@@ -12,14 +14,19 @@ export function normalizeTwitterAvatarUrl(url: string | null | undefined): strin
     return trimmed.replace(/_400x400|_bigger/i, '_normal');
   }
 
-  if (/profile_images\//i.test(trimmed) && !/_normal|_400x400|_bigger/i.test(trimmed)) {
+  if (
+    /profile_images\//i.test(trimmed) &&
+    !/_normal|_400x400|_bigger/i.test(trimmed)
+  ) {
     return trimmed.replace(/(\.(jpe?g|png|webp))$/i, '_normal$1');
   }
 
   return trimmed;
 }
 
-export function pickTwitterProfileImage(data: Record<string, unknown>): string | null {
+export function pickTwitterProfileImage(
+  data: Record<string, unknown>,
+): string | null {
   const nested =
     data.user && typeof data.user === 'object'
       ? (data.user as Record<string, unknown>)
@@ -43,7 +50,9 @@ export function pickTwitterProfileImage(data: Record<string, unknown>): string |
   return null;
 }
 
-export function pickTwitterDisplayName(data: Record<string, unknown>): string | null {
+export function pickTwitterDisplayName(
+  data: Record<string, unknown>,
+): string | null {
   const nested =
     data.user && typeof data.user === 'object'
       ? (data.user as Record<string, unknown>)

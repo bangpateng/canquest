@@ -6,7 +6,10 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 type AdminJwtPayload = { sub?: string; scope?: string; email?: string };
 
 @Injectable()
-export class AdminPanelJwtStrategy extends PassportStrategy(Strategy, 'admin-jwt') {
+export class AdminPanelJwtStrategy extends PassportStrategy(
+  Strategy,
+  'admin-jwt',
+) {
   constructor(config: ConfigService) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),

@@ -11,6 +11,8 @@ import {
 import { cn } from "@/lib/utils/utils";
 import { TransactionDetailModal } from "@/components/app/wallet/transaction-detail-modal";
 import { OffersModal, useOffers } from "@/components/app/wallet/offers-section";
+import { WalletPasswordModal } from "@/components/app/wallet/wallet-password-modal";
+import { useWalletPassword } from "@/lib/hooks/use-wallet-password";
 import { ArrowDownLeft, ArrowUpRight, X, AlertCircle, Inbox } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { useCallback, useEffect, useId, useState } from "react";
@@ -55,6 +57,11 @@ export function WalletActions({
   const [sendMessage, setSendMessage] = useState("");
   const [successTransactionId, setSuccessTransactionId] = useState<string | null>(null);
 
+  // Gate kata sandi transaksi (opsional). Modal muncul hanya bila user menetapkan satu.
+  const { hasPassword: hasWalletPassword } = useWalletPassword();
+  const [pwOpen, setPwOpen] = useState(false);
+  const [pwError, setPwError] = useState("");
+
   const close = useCallback(() => {
     setSheet(null);
     setSendState("idle");
@@ -85,8 +92,30 @@ export function WalletActions({
     setSheet("send");
   }
 
-  async function submitSend(e: React.FormEvent) {
+  // Konfirmasi password dari modal → lanjutkan send dengan password tersebut.
+  function confirmSendPassword(password: string) {
+    setPwError("");
+    // submitSend butuh event; buat event sintetis agar e.preventDefault() aman.
+    void submitSend(
+      { preventDefault: () => {} } as React.FormEvent,
+      password,
+    );
+  }
+
+  function closePasswordModal() {
+    setPwOpen(false);
+    setPwError("");
+    setSendState("idle");
+  }
+
+  async function submitSend(e: React.FormEvent, password?: string) {
     e.preventDefault();
+    // Gate: bila user menetapkan wallet password dan belum ada input, buka modal.
+    if (hasWalletPassword && !password) {
+      setPwError("");
+      setPwOpen(true);
+      return;
+    }
     const recipient = normalizeSendRecipientInput(recipientUsername);
     const amount = parseFloat(ccAmount.trim());
     if (!recipient || !amount || amount <= 0) return;
@@ -103,6 +132,7 @@ export function WalletActions({
           recipientUsername: recipient,
           amount,
           memo: memo.trim() || undefined,
+          ...(password ? { walletPassword: password } : {}),
         }),
       });
 
@@ -125,11 +155,22 @@ export function WalletActions({
       // Error hanya jika HTTP error ATAU success=false
       // accepted=false + offerPending=true = offer berhasil dibuat, receiver perlu accept manual (BUKAN error)
       if (!res.ok || data.success === false) {
+        // 403 = wallet password salah / terkunci — tahan di modal untuk coba lagi.
+        if (res.status === 403) {
+          setPwOpen(true);
+          setPwError(
+            data.message ?? data.error ?? "Wrong wallet password.",
+          );
+          setSendState("idle");
+          return;
+        }
         setSendState("error");
         setSendMessage(data.message ?? data.error ?? "Transfer failed. Please try again.");
         return;
       }
 
+      // Sukses → tutup modal password (jika terbuka) dan reset gate.
+      setPwOpen(false);
       setSheet(null);
       setSendState("idle");
       if (typeof data.transactionId === "string" && data.transactionId) {
@@ -380,6 +421,16 @@ export function WalletActions({
           </div>
         </div>
       ) : null}
+
+      {/* ── WALLET PASSWORD GATE (Send) ── */}
+      <WalletPasswordModal
+        open={pwOpen}
+        actionLabel="Send"
+        error={pwError}
+        busy={sendState === "loading"}
+        onClose={closePasswordModal}
+        onConfirm={confirmSendPassword}
+      />
 
       <TransactionDetailModal
         open={successTransactionId !== null}

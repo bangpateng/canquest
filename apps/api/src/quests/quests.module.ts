@@ -9,7 +9,14 @@ import { QueueModule } from '../queue/queue.module';
 import { TwitterModule } from '../twitter/twitter.module';
 
 @Module({
-  imports: [AuthModule, UsersModule, CantonModule, ConfigModule, QueueModule, TwitterModule],
+  imports: [
+    AuthModule,
+    UsersModule,
+    CantonModule,
+    ConfigModule,
+    QueueModule,
+    TwitterModule,
+  ],
   controllers: [QuestsController],
   providers: [QuestsService],
   exports: [QuestsService],

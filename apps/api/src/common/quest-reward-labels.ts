@@ -1,5 +1,7 @@
 /** Parse quest id from legacy CC transaction descriptions. */
-export function parseQuestIdFromRewardDescription(description: string): string | null {
+export function parseQuestIdFromRewardDescription(
+  description: string,
+): string | null {
   const trimmed = description.trim();
   const patterns = [
     /^Quest\s+winner\s+reward:\s*(.+)$/i,

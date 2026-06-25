@@ -36,4 +36,13 @@ export class SendCcDto {
   @IsString()
   @MaxLength(280)
   memo?: string;
+
+  /**
+   * Kata sandi transaksi opsional (wallet password). Wajib hanya bila user telah
+   * menetapkan satu di Settings — diverifikasi di awal handler sebelum eksekusi.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  walletPassword?: string;
 }

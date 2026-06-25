@@ -30,9 +30,7 @@ import type {
 export class LedgerQueueService {
   private readonly logger = new Logger(LedgerQueueService.name);
 
-  constructor(
-    @InjectQueue(QUEUE_LEDGER) private readonly ledgerQueue: Queue,
-  ) {}
+  constructor(@InjectQueue(QUEUE_LEDGER) private readonly ledgerQueue: Queue) {}
 
   /** Enqueue pengiriman CC reward ke user (quest reward, admin distribute, dll). */
   async enqueueCcReward(payload: SendCcRewardPayload): Promise<string> {
@@ -40,17 +38,23 @@ export class LedgerQueueService {
       jobId: `cc-reward-${payload.userId}-${payload.referenceId ?? Date.now()}`,
       priority: 2,
     });
-    this.logger.log(`Enqueued SendCcReward job ${String(job.id)} → @${payload.username} ${payload.amountCc} CC`);
+    this.logger.log(
+      `Enqueued SendCcReward job ${String(job.id)} → @${payload.username} ${payload.amountCc} CC`,
+    );
     return String(job.id);
   }
 
   /** Enqueue distribusi reward dari admin draw-winners. */
-  async enqueueDistributeReward(payload: DistributeRewardPayload): Promise<string> {
+  async enqueueDistributeReward(
+    payload: DistributeRewardPayload,
+  ): Promise<string> {
     const job = await this.ledgerQueue.add(JOB_DISTRIBUTE_REWARD, payload, {
       jobId: `distribute-${payload.drawId}`,
       priority: 3,
     });
-    this.logger.log(`Enqueued DistributeReward job ${String(job.id)} draw=${payload.drawId}`);
+    this.logger.log(
+      `Enqueued DistributeReward job ${String(job.id)} draw=${payload.drawId}`,
+    );
     return String(job.id);
   }
 
@@ -60,7 +64,9 @@ export class LedgerQueueService {
       jobId: `accept-${payload.offerContractId.slice(0, 16)}`,
       priority: 1, // high priority
     });
-    this.logger.log(`Enqueued AcceptOffer job ${String(job.id)} offer=${payload.offerContractId.slice(0, 16)}…`);
+    this.logger.log(
+      `Enqueued AcceptOffer job ${String(job.id)} offer=${payload.offerContractId.slice(0, 16)}…`,
+    );
     return String(job.id);
   }
 

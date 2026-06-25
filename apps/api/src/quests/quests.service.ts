@@ -114,7 +114,9 @@ export class QuestsService {
       if (Number.isFinite(val) && val > 0) return val;
     }
     // 2. Fallback ke env.
-    const envVal = Number(this.config.get<string>('EARN_ENTRY_COST_POINTS') ?? '');
+    const envVal = Number(
+      this.config.get<string>('EARN_ENTRY_COST_POINTS') ?? '',
+    );
     if (Number.isFinite(envVal) && envVal > 0) return Math.round(envVal);
     // 3. Default.
     return QuestsService.EARN_ENTRY_COST_DEFAULT;
@@ -130,7 +132,9 @@ export class QuestsService {
   }> {
     const entryCostPoints = await this.resolveEarnEntryCostPoints();
     // Jumlah CC lock dibaca dari env yang sama dengan LockEligibilityService (default 30).
-    const ccLockAmount = Number(this.config.get<string>('LOCK_TIER_FULL') ?? '30');
+    const ccLockAmount = Number(
+      this.config.get<string>('LOCK_TIER_FULL') ?? '30',
+    );
     return { entryCostPoints, ccLockAmount };
   }
 
@@ -151,18 +155,24 @@ export class QuestsService {
 
     // Sudah ada entry → gate sudah dilewati sebelumnya.
     const existing = await this.prisma.earnEntry.findUnique({
-      where: { userId_questId: { userId: params.userId, questId: params.questId } },
+      where: {
+        userId_questId: { userId: params.userId, questId: params.questId },
+      },
     });
     if (existing) return;
 
     // Cek jalur cc_lock dulu (gratis dari sisi points): user punya lock ≥30 CC?
     if (params.userPartyId) {
-      const canJoin = await this.lockEligibility.canJoinEarn(params.userPartyId);
+      const canJoin = await this.lockEligibility.canJoinEarn(
+        params.userPartyId,
+      );
       if (canJoin) {
         // Catat entry cc_lock. ccLockedMicro = 0 di sini karena jumlah lock dibaca
         // on-chain (sumber kebenaran); EarnEntry hanya penanda method akses.
         await this.prisma.earnEntry.upsert({
-          where: { userId_questId: { userId: params.userId, questId: params.questId } },
+          where: {
+            userId_questId: { userId: params.userId, questId: params.questId },
+          },
           create: {
             userId: params.userId,
             questId: params.questId,
@@ -179,14 +189,16 @@ export class QuestsService {
     const netPoints = await this.points.getNetPoints(params.userId);
     if (netPoints < costPoints) {
       throw new BadRequestException(
-        `Akses Earn butuh ${costPoints} pts (atau kunci 30 CC). Kamu punya ${netPoints} pts.`,
+        `Unlock Earn with ${costPoints} pts or 30 CC. You currently have ${netPoints} pts.`,
       );
     }
     await this.prisma.$transaction(async (tx) => {
       // Lock row-level: re-cek EarnEntry di dalam tx agar dua request paralel
       // tidak sama-sama lolos dan menulis dua debit.
       const again = await tx.earnEntry.findUnique({
-        where: { userId_questId: { userId: params.userId, questId: params.questId } },
+        where: {
+          userId_questId: { userId: params.userId, questId: params.questId },
+        },
       });
       if (again) return;
       await tx.earnEntry.create({
@@ -227,10 +239,15 @@ export class QuestsService {
     maxWinners: number | null;
     questKind?: QuestKind | string;
   }): boolean {
-    if (normalizeRewardType(quest.rewardType as RewardType) !== RewardType.CC_ONLY) {
+    if (
+      normalizeRewardType(quest.rewardType as RewardType) !== RewardType.CC_ONLY
+    ) {
       return false;
     }
-    if (quest.questKind === QuestKind.CAMPAIGN || quest.questKind === 'CAMPAIGN') {
+    if (
+      quest.questKind === QuestKind.CAMPAIGN ||
+      quest.questKind === 'CAMPAIGN'
+    ) {
       return true;
     }
     return (quest.maxWinners ?? 0) > 0;
@@ -238,12 +255,20 @@ export class QuestsService {
 
   /** CC raffle (admin type "5 · Token CC manual"): admin draw after event; winners claim CC. */
   requiresDrawCcClaim(quest: { rewardType: RewardType | string }): boolean {
-    return normalizeRewardType(quest.rewardType as RewardType) === RewardType.CC_MANUAL;
+    return (
+      normalizeRewardType(quest.rewardType as RewardType) ===
+      RewardType.CC_MANUAL
+    );
   }
 
   /** CC + Code combined raffle: admin draw after event; winners claim both CC and invite code. */
-  requiresCcAndCodeRaffleClaim(quest: { rewardType: RewardType | string }): boolean {
-    return normalizeRewardType(quest.rewardType as RewardType) === RewardType.CC_AND_CODE_RAFFLE;
+  requiresCcAndCodeRaffleClaim(quest: {
+    rewardType: RewardType | string;
+  }): boolean {
+    return (
+      normalizeRewardType(quest.rewardType as RewardType) ===
+      RewardType.CC_AND_CODE_RAFFLE
+    );
   }
 
   isCampaignEnded(quest: {
@@ -257,7 +282,9 @@ export class QuestsService {
   }
 
   async getCampaignMeta(questId: string) {
-    const quest = await this.prisma.quest.findUnique({ where: { id: questId } });
+    const quest = await this.prisma.quest.findUnique({
+      where: { id: questId },
+    });
     if (!quest) {
       return {
         ended: false,
@@ -279,8 +306,7 @@ export class QuestsService {
     let slotsFull = false;
     if (maxWinners != null && maxWinners > 0) {
       const isCodeFcfs =
-        normalizeRewardType(quest.rewardType as RewardType) ===
-        RewardType.INVITE_CODE_FCFS;
+        normalizeRewardType(quest.rewardType) === RewardType.INVITE_CODE_FCFS;
       if (isCodeFcfs) {
         const codesAssigned = await this.prisma.inviteCodePool.count({
           where: { questId, userId: { not: null } },
@@ -298,11 +324,7 @@ export class QuestsService {
     }
     const endRaw = quest.endsAt ?? quest.deadline ?? null;
     const end =
-      endRaw instanceof Date
-        ? endRaw
-        : endRaw
-          ? new Date(endRaw)
-          : null;
+      endRaw instanceof Date ? endRaw : endRaw ? new Date(endRaw) : null;
     return {
       ended: this.isCampaignEnded(quest),
       endsAt: end && !Number.isNaN(end.getTime()) ? end.toISOString() : null,
@@ -325,7 +347,9 @@ export class QuestsService {
   }
 
   private fcfsReservationTtlMs(): number {
-    return Number(this.config.get<string>('FCFS_RESERVATION_TTL_MS') ?? '300000');
+    return Number(
+      this.config.get<string>('FCFS_RESERVATION_TTL_MS') ?? '300000',
+    );
   }
 
   private fcfsSlotsRemaining(maxWinners: number, taken: number): number {
@@ -348,7 +372,10 @@ export class QuestsService {
     }
   }
 
-  private countFcfsSlotsTaken(questId: string, tx: PrismaTx | PrismaService = this.prisma) {
+  private countFcfsSlotsTaken(
+    questId: string,
+    tx: PrismaTx | PrismaService = this.prisma,
+  ) {
     return tx.winnerDraw.count({ where: { questId } });
   }
 
@@ -375,7 +402,10 @@ export class QuestsService {
         questId: params.questId,
         userId: params.userId,
         distributed: false,
-        OR: [{ fcfsClaimLockedAt: null }, { fcfsClaimLockedAt: { lt: staleCutoff } }],
+        OR: [
+          { fcfsClaimLockedAt: null },
+          { fcfsClaimLockedAt: { lt: staleCutoff } },
+        ],
       },
       data: { fcfsClaimLockedAt: new Date() },
     });
@@ -386,7 +416,11 @@ export class QuestsService {
     return true;
   }
 
-  private releaseFcfsOnChainLock(questId: string, userId: string, drawId: string): void {
+  private releaseFcfsOnChainLock(
+    questId: string,
+    userId: string,
+    drawId: string,
+  ): void {
     this.fcfsClaimInFlight.delete(this.fcfsClaimLockKey(questId, userId));
     void this.prisma.winnerDraw
       .updateMany({
@@ -502,7 +536,10 @@ export class QuestsService {
    * claims read the same free row, then the second upsert silently overwrote
    * the first assignment — one code leaked and was mis-attributed.
    */
-  private async reserveInviteCode(questId: string, userId: string): Promise<string | null> {
+  private async reserveInviteCode(
+    questId: string,
+    userId: string,
+  ): Promise<string | null> {
     return this.prisma.$transaction(async (tx) => {
       const free = await tx.$queryRaw<{ id: string; code: string }[]>`
         SELECT id, code FROM "InviteCodePool"
@@ -533,7 +570,7 @@ export class QuestsService {
           ...q,
           tags: this.parseTags(q.tags),
           socialLinks: parseQuestSocialLinks(q.socialLinks),
-          rewardType: normalizeRewardType(q.rewardType as RewardType),
+          rewardType: normalizeRewardType(q.rewardType),
           status: resolveQuestDisplayStatus(q),
         },
         this.storage,
@@ -541,9 +578,7 @@ export class QuestsService {
     );
     const withSummary = await this.attachCampaignSummaries(mapped);
     const withStatus = withSummary.map((q) => this.applyCampaignListStatus(q));
-    return status
-      ? withStatus.filter((q) => q.status === status)
-      : withStatus;
+    return status ? withStatus.filter((q) => q.status === status) : withStatus;
   }
 
   /** FCFS campaigns with no slots left surface as ENDED (Earn tabs + detail header). */
@@ -554,7 +589,9 @@ export class QuestsService {
       campaignSummary?: QuestCampaignSummary;
     },
   >(q: T): T {
-    const rt = q.rewardType ? normalizeRewardType(q.rewardType as RewardType) : null;
+    const rt = q.rewardType
+      ? normalizeRewardType(q.rewardType as RewardType)
+      : null;
     const isCodeFcfs = rt === RewardType.INVITE_CODE_FCFS;
     const codeSlotsFull =
       isCodeFcfs &&
@@ -640,7 +677,8 @@ export class QuestsService {
     }
 
     const isInviteCodeFcfs = (q: { rewardType: RewardType | string }) =>
-      normalizeRewardType(q.rewardType as RewardType) === RewardType.INVITE_CODE_FCFS;
+      normalizeRewardType(q.rewardType as RewardType) ===
+      RewardType.INVITE_CODE_FCFS;
 
     return quests.map((q) => {
       const maxWinners = q.maxWinners;
@@ -653,8 +691,7 @@ export class QuestsService {
         maxWinners != null && maxWinners > 0
           ? this.fcfsSlotsRemaining(maxWinners, taken)
           : null;
-      const slotsTaken =
-        maxWinners != null && maxWinners > 0 ? taken : null;
+      const slotsTaken = maxWinners != null && maxWinners > 0 ? taken : null;
       const slotsFull =
         remainingSlots != null && maxWinners != null && maxWinners > 0
           ? remainingSlots <= 0
@@ -711,7 +748,7 @@ export class QuestsService {
       ...q,
       tags: this.parseTags(q.tags),
       socialLinks: parseQuestSocialLinks(q.socialLinks),
-      rewardType: normalizeRewardType(q.rewardType as RewardType),
+      rewardType: normalizeRewardType(q.rewardType),
       status: resolveQuestDisplayStatus(q),
     };
   }
@@ -767,7 +804,7 @@ export class QuestsService {
         ...q,
         tags: this.parseTags(q.tags),
         socialLinks: parseQuestSocialLinks(q.socialLinks),
-        rewardType: normalizeRewardType(q.rewardType as RewardType),
+        rewardType: normalizeRewardType(q.rewardType),
         status: resolveQuestDisplayStatus(q),
       },
       this.storage,
@@ -811,7 +848,9 @@ export class QuestsService {
     ledgerRewardId: string | null;
     ledgerTaskSubmissionIds: unknown;
   }): QuestLedgerSubmitResult {
-    const taskSubmissionIds = this.parseLedgerTaskIds(completion.ledgerTaskSubmissionIds);
+    const taskSubmissionIds = this.parseLedgerTaskIds(
+      completion.ledgerTaskSubmissionIds,
+    );
     const hasOnChain =
       !!completion.ledgerParticipationId || taskSubmissionIds.length > 0;
     return {
@@ -901,7 +940,9 @@ export class QuestsService {
         payoutTxId: params.payoutTxId,
       });
       if (!marked.ok) {
-        this.logger.warn(`QuestReward mark claimed: ${marked.errors.join(' | ')}`);
+        this.logger.warn(
+          `QuestReward mark claimed: ${marked.errors.join(' | ')}`,
+        );
       }
     }
   }
@@ -909,7 +950,9 @@ export class QuestsService {
   private parseLedgerTaskIds(raw: unknown): string[] {
     if (!raw) return [];
     if (Array.isArray(raw)) {
-      return raw.filter((x): x is string => typeof x === 'string' && x.length > 0);
+      return raw.filter(
+        (x): x is string => typeof x === 'string' && x.length > 0,
+      );
     }
     return [];
   }
@@ -979,11 +1022,10 @@ export class QuestsService {
     });
     if (!quest) throw new NotFoundException('Quest not found');
 
-    if (
-      quest.questKind === QuestKind.CAMPAIGN &&
-      this.isCampaignEnded(quest)
-    ) {
-      throw new BadRequestException('This campaign has ended. Submissions are closed.');
+    if (quest.questKind === QuestKind.CAMPAIGN && this.isCampaignEnded(quest)) {
+      throw new BadRequestException(
+        'This campaign has ended. Submissions are closed.',
+      );
     }
 
     if (
@@ -1049,7 +1091,9 @@ export class QuestsService {
             void this.questLedger
               .recordDailyCheckIn({
                 userPartyId,
-                username: (await this.users.findById(userId))?.username ?? userPartyId.split('::')[0],
+                username:
+                  (await this.users.findById(userId))?.username ??
+                  userPartyId.split('::')[0],
                 userId,
                 checkInDate: today,
                 pointsAwarded: task.points,
@@ -1080,7 +1124,8 @@ export class QuestsService {
       }
     }
     if (
-      (taskType === 'submit_party_id' || taskType === 'submit_canton_address') &&
+      (taskType === 'submit_party_id' ||
+        taskType === 'submit_canton_address') &&
       !proof?.trim() &&
       userPartyId
     ) {
@@ -1093,7 +1138,9 @@ export class QuestsService {
         throw new BadRequestException('Please select an answer.');
       }
       if (!this.canAutoVerify(taskType, task.correctAnswer, proof)) {
-        throw new BadRequestException('Incorrect answer. No points awarded — try again.');
+        throw new BadRequestException(
+          'Incorrect answer. No points awarded — try again.',
+        );
       }
     }
 
@@ -1113,7 +1160,9 @@ export class QuestsService {
         questId,
         taskId,
         proof: proof ?? null,
-        status: autoVerify ? SubmissionStatus.VERIFIED : SubmissionStatus.PENDING,
+        status: autoVerify
+          ? SubmissionStatus.VERIFIED
+          : SubmissionStatus.PENDING,
         verifiedAt: autoVerify ? new Date() : null,
       },
     });
@@ -1122,11 +1171,7 @@ export class QuestsService {
       await this.users.creditEarnPoints(userId, task.points);
     }
 
-    if (
-      autoVerify &&
-      userPartyId &&
-      this.questLedger.isConfigured()
-    ) {
+    if (autoVerify && userPartyId && this.questLedger.isConfigured()) {
       const taskLedger = await this.questLedger.recordTaskSubmission({
         questId,
         questKind: this.damlQuestKind(quest.questKind),
@@ -1165,7 +1210,8 @@ export class QuestsService {
     const existing = await this.prisma.questCompletion.findUnique({
       where: { userId_questId: { userId, questId } },
     });
-    if (existing) return { justCompleted: false, rewardMicroCc: existing.rewardMicroCc };
+    if (existing)
+      return { justCompleted: false, rewardMicroCc: existing.rewardMicroCc };
 
     const quest = await this.prisma.quest.findUnique({
       where: { id: questId },
@@ -1305,9 +1351,12 @@ export class QuestsService {
       where: { userId, questId, status: SubmissionStatus.VERIFIED },
     });
 
-    const rewardType = normalizeRewardType(quest.rewardType as RewardType);
+    const rewardType = normalizeRewardType(quest.rewardType);
     let rewardCc = 0;
-    if (rewardType === RewardType.CC_ONLY || rewardType === RewardType.CC_AND_INVITE) {
+    if (
+      rewardType === RewardType.CC_ONLY ||
+      rewardType === RewardType.CC_AND_INVITE
+    ) {
       rewardCc = quest.rewardCc;
     }
 
@@ -1317,7 +1366,9 @@ export class QuestsService {
       rewardType === RewardType.CC_AND_INVITE;
 
     if (needsInvite && quest.maxWinners && !requiresPaidInviteClaim(quest)) {
-      const slotsUsed = await this.prisma.winnerDraw.count({ where: { questId } });
+      const slotsUsed = await this.prisma.winnerDraw.count({
+        where: { questId },
+      });
       if (slotsUsed < quest.maxWinners) {
         // Atomically reserve a code. The previous findFirst+update pattern had
         // a TOCTOU race: two parallel submissions read the same free row, then
@@ -1392,7 +1443,9 @@ export class QuestsService {
 
   /** User-facing winner / waitlist / FCFS status for a quest */
   async getQuestRewardStatus(userId: string, questId: string) {
-    const quest = await this.prisma.quest.findUnique({ where: { id: questId } });
+    const quest = await this.prisma.quest.findUnique({
+      where: { id: questId },
+    });
     if (!quest) {
       return {
         state: 'unknown' as const,
@@ -1401,7 +1454,7 @@ export class QuestsService {
       };
     }
 
-    const rewardType = normalizeRewardType(quest.rewardType as RewardType);
+    const rewardType = normalizeRewardType(quest.rewardType);
     const completion = await this.prisma.questCompletion.findUnique({
       where: { userId_questId: { userId, questId } },
     });
@@ -1423,10 +1476,14 @@ export class QuestsService {
         return {
           state: 'winner' as const,
           inviteCode: null,
-          message: custom || 'Kamu pemenang! Cek email kamu untuk langkah selanjutnya.',
+          message:
+            custom ||
+            'Kamu pemenang! Cek email kamu untuk langkah selanjutnya.',
         };
       }
-      const drawsHeld = await this.prisma.winnerDraw.count({ where: { questId } });
+      const drawsHeld = await this.prisma.winnerDraw.count({
+        where: { questId },
+      });
       if (drawsHeld > 0) {
         return {
           state: 'not_winner' as const,
@@ -1444,8 +1501,7 @@ export class QuestsService {
       return {
         state: 'waitlist' as const,
         inviteCode: null,
-        message:
-          'Pemenang akan diumumkan setelah event berakhir.',
+        message: 'Pemenang akan diumumkan setelah event berakhir.',
       };
     }
 
@@ -1523,7 +1579,9 @@ export class QuestsService {
           message: `You won the raffle! Pay ${fee} CC claim fee to reveal your code.`,
         };
       }
-      const drawsHeld = await this.prisma.winnerDraw.count({ where: { questId } });
+      const drawsHeld = await this.prisma.winnerDraw.count({
+        where: { questId },
+      });
       if (drawsHeld > 0) {
         return {
           state: 'not_winner' as const,
@@ -1558,7 +1616,9 @@ export class QuestsService {
           message: `You won ${quest.rewardCc} CC. Pay ${fee} CC claim fee to receive your reward.`,
         };
       }
-      const drawsHeld = await this.prisma.winnerDraw.count({ where: { questId } });
+      const drawsHeld = await this.prisma.winnerDraw.count({
+        where: { questId },
+      });
       if (drawsHeld > 0) {
         return {
           state: 'not_winner' as const,
@@ -1570,7 +1630,8 @@ export class QuestsService {
         return {
           state: 'pending_draw' as const,
           inviteCode: null,
-          message: 'The event has ended. Winners will be announced after the admin draw.',
+          message:
+            'The event has ended. Winners will be announced after the admin draw.',
         };
       }
       return {
@@ -1611,7 +1672,8 @@ export class QuestsService {
         return {
           state: 'fcfs_missed' as const,
           inviteCode: null,
-          message: 'All FCFS slots were claimed. Better luck on the next campaign.',
+          message:
+            'All FCFS slots were claimed. Better luck on the next campaign.',
         };
       }
       const fee = resolveClaimFeeCc(quest) ?? 3;
@@ -1629,7 +1691,9 @@ export class QuestsService {
         return {
           state: 'cc_reward' as const,
           inviteCode: draw.inviteCode,
-          message: custom || `Congratulations! You received ${quest.rewardCc} CC and code: ${draw.inviteCode}`,
+          message:
+            custom ||
+            `Congratulations! You received ${quest.rewardCc} CC and code: ${draw.inviteCode}`,
         };
       }
       if (draw?.distributed && !draw.inviteCode) {
@@ -1653,10 +1717,14 @@ export class QuestsService {
         return {
           state: 'fcfs_claimable' as const,
           inviteCode: null,
-          message: custom || `You won! Pay ${fee} CC claim fee to receive ${quest.rewardCc} CC + your invite code.`,
+          message:
+            custom ||
+            `You won! Pay ${fee} CC claim fee to receive ${quest.rewardCc} CC + your invite code.`,
         };
       }
-      const drawsHeld = await this.prisma.winnerDraw.count({ where: { questId } });
+      const drawsHeld = await this.prisma.winnerDraw.count({
+        where: { questId },
+      });
       if (drawsHeld > 0) {
         return {
           state: 'not_winner' as const,
@@ -1668,7 +1736,8 @@ export class QuestsService {
         return {
           state: 'pending_draw' as const,
           inviteCode: null,
-          message: 'The event has ended. Winners will be announced after the admin draw.',
+          message:
+            'The event has ended. Winners will be announced after the admin draw.',
         };
       }
       return {
@@ -1715,13 +1784,19 @@ export class QuestsService {
   }> {
     const { userId, questId, username, cantonPartyId } = params;
     if (!username?.trim() || !cantonPartyId?.trim()) {
-      throw new BadRequestException('Create your Canton wallet before claiming.');
+      throw new BadRequestException(
+        'Create your Canton wallet before claiming.',
+      );
     }
 
-    const quest = await this.prisma.quest.findUnique({ where: { id: questId } });
+    const quest = await this.prisma.quest.findUnique({
+      where: { id: questId },
+    });
     if (!quest) throw new NotFoundException('Quest not found');
     if (!this.requiresFcfsCcClaim(quest)) {
-      throw new BadRequestException('This campaign does not use FCFS CC claim.');
+      throw new BadRequestException(
+        'This campaign does not use FCFS CC claim.',
+      );
     }
     if (this.isCampaignEnded(quest)) {
       throw new BadRequestException('This campaign has ended.');
@@ -1736,12 +1811,18 @@ export class QuestsService {
     const rewardCc = quest.rewardCc;
     const maxWinners = quest.maxWinners ?? 0;
 
-    const validatorPartyId = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
+    const validatorPartyId = this.config
+      .get<string>('CANTON_VALIDATOR_PARTY_ID')
+      ?.trim();
     if (!validatorPartyId) {
-      throw new BadRequestException('Validator party is not configured on the server.');
+      throw new BadRequestException(
+        'Validator party is not configured on the server.',
+      );
     }
 
-    let reserveResult: Awaited<ReturnType<QuestsService['reserveFcfsSlotLocked']>>;
+    let reserveResult: Awaited<
+      ReturnType<QuestsService['reserveFcfsSlotLocked']>
+    >;
     try {
       reserveResult = await this.reserveFcfsSlotLocked({
         questId,
@@ -1823,7 +1904,9 @@ export class QuestsService {
       const balance = await this.splice.getUserBalance(username);
       if (balance !== null && balance < feeCc) {
         if (isNewReservation) {
-          await this.prisma.winnerDraw.delete({ where: { id: reservedDrawId } }).catch(() => {});
+          await this.prisma.winnerDraw
+            .delete({ where: { id: reservedDrawId } })
+            .catch(() => {});
         }
         throw new BadRequestException(FCFS_CLAIM_FAIL_MSG);
       }
@@ -1841,7 +1924,9 @@ export class QuestsService {
     });
     if (!onChainLocked) {
       if (isNewReservation) {
-        await this.prisma.winnerDraw.delete({ where: { id: reservedDrawId } }).catch(() => {});
+        await this.prisma.winnerDraw
+          .delete({ where: { id: reservedDrawId } })
+          .catch(() => {});
       }
       throw new BadRequestException(
         'Claim already in progress. Wait a moment before trying again.',
@@ -1861,7 +1946,6 @@ export class QuestsService {
       // Best-effort — tidak memblokir CC transfer jika ledger tidak tersedia.
       let claimSessionId: string | null = null;
       if (this.questLedger.isClaimSessionConfigured() && cantonPartyId) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const campaignContractId = (quest as any).ledgerCampaignId ?? null;
         if (campaignContractId) {
           const claimResult = await this.questLedger.claimFcfsSlot({
@@ -1871,12 +1955,18 @@ export class QuestsService {
           });
           claimSessionId = claimResult.claimContractId;
           if (claimResult.errors.length > 0) {
-            this.logger.warn(`ClaimFcfsSlot warnings: ${claimResult.errors.join(' | ')}`);
+            this.logger.warn(
+              `ClaimFcfsSlot warnings: ${claimResult.errors.join(' | ')}`,
+            );
           } else {
-            this.logger.log(`ClaimFcfsSlot OK: user=@${username} quest=${questId.slice(0, 8)} claim=${claimSessionId?.slice(0, 12)}`);
+            this.logger.log(
+              `ClaimFcfsSlot OK: user=@${username} quest=${questId.slice(0, 8)} claim=${claimSessionId?.slice(0, 12)}`,
+            );
           }
         } else {
-          this.logger.warn(`ClaimFcfsSlot skipped: no ledgerCampaignId for quest=${questId}`);
+          this.logger.warn(
+            `ClaimFcfsSlot skipped: no ledgerCampaignId for quest=${questId}`,
+          );
         }
       }
 
@@ -1904,7 +1994,13 @@ export class QuestsService {
       // Persist fee TX early so retries don't double-charge and slot stays reserved.
       if (!drawNow?.claimFeeLedgerTxId) {
         await this.prisma.winnerDraw.updateMany({
-          where: { id: reservedDrawId, questId, userId, distributed: false, claimFeeLedgerTxId: null },
+          where: {
+            id: reservedDrawId,
+            questId,
+            userId,
+            distributed: false,
+            claimFeeLedgerTxId: null,
+          },
           data: { claimFeeLedgerTxId: feeTxId },
         });
       }
@@ -1930,7 +2026,8 @@ export class QuestsService {
       if (!rewardResult.ok) {
         throw new Error(rewardResult.error ?? 'reward transfer failed');
       }
-      const rewardTxId = rewardResult.rewardTxId ?? `reward-${Date.now()}-${userId.slice(0, 8)}`;
+      const rewardTxId =
+        rewardResult.rewardTxId ?? `reward-${Date.now()}-${userId.slice(0, 8)}`;
       const rewardPending = rewardResult.pending;
       this.logger.log(
         `FCFS reward ${rewardCc} CC → ${cantonPartyId.split('::')[0]} ` +
@@ -1975,20 +2072,24 @@ export class QuestsService {
         void this.inboundSync
           .alignBalanceFromChain(userId, username)
           .catch((err) =>
-            this.logger.warn(`Balance sync failed (non-blocking): ${String(err)}`),
+            this.logger.warn(
+              `Balance sync failed (non-blocking): ${String(err)}`,
+            ),
           );
       }
 
       const rewardMicroCc = BigInt(Math.round(rewardCc * 1_000_000));
       await this.prisma.$transaction([
         this.prisma.winnerDraw.update({
-          where: { id: reservedDrawId! },
+          where: { id: reservedDrawId },
           data: {
             distributed: true,
             ccAmount: rewardCc,
             claimFeeLedgerTxId: feeTxId,
             ledgerTxId: rewardTxId,
-            ...(claimSessionId ? { claimSessionContractId: claimSessionId } : {}),
+            ...(claimSessionId
+              ? { claimSessionContractId: claimSessionId }
+              : {}),
           },
         }),
         this.prisma.questCompletion.upsert({
@@ -2065,27 +2166,37 @@ export class QuestsService {
   }> {
     const { userId, questId, username, cantonPartyId } = params;
     if (!username?.trim() || !cantonPartyId?.trim()) {
-      throw new BadRequestException('Create your Canton wallet before claiming.');
+      throw new BadRequestException(
+        'Create your Canton wallet before claiming.',
+      );
     }
 
-    const quest = await this.prisma.quest.findUnique({ where: { id: questId } });
+    const quest = await this.prisma.quest.findUnique({
+      where: { id: questId },
+    });
     if (!quest) throw new NotFoundException('Quest not found');
     if (!this.requiresDrawCcClaim(quest)) {
-      throw new BadRequestException('This campaign does not use raffle CC claim.');
+      throw new BadRequestException(
+        'This campaign does not use raffle CC claim.',
+      );
     }
 
     const completion = await this.prisma.questCompletion.findUnique({
       where: { userId_questId: { userId, questId } },
     });
     if (!completion) {
-      throw new BadRequestException('Submit the quest before claiming your reward.');
+      throw new BadRequestException(
+        'Submit the quest before claiming your reward.',
+      );
     }
 
     const draw = await this.prisma.winnerDraw.findUnique({
       where: { questId_userId: { questId, userId } },
     });
     if (!draw) {
-      throw new BadRequestException('You were not selected in the raffle draw.');
+      throw new BadRequestException(
+        'You were not selected in the raffle draw.',
+      );
     }
     if (draw.distributed) {
       const rewardStatus = await this.getQuestRewardStatus(userId, questId);
@@ -2100,9 +2211,13 @@ export class QuestsService {
 
     const feeCc = resolveClaimFeeCc(quest) ?? 3;
     const rewardCc = quest.rewardCc;
-    const validatorPartyId = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
+    const validatorPartyId = this.config
+      .get<string>('CANTON_VALIDATOR_PARTY_ID')
+      ?.trim();
     if (!validatorPartyId) {
-      throw new BadRequestException('Validator party is not configured on the server.');
+      throw new BadRequestException(
+        'Validator party is not configured on the server.',
+      );
     }
 
     const balance = await this.splice.getUserBalance(username);
@@ -2156,7 +2271,6 @@ export class QuestsService {
       // claimSessionId untuk atomicFeeAndReward.
       let claimSessionId: string | null = null;
       if (this.questLedger.isClaimSessionConfigured() && cantonPartyId) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const campaignContractId = (quest as any).ledgerCampaignId ?? null;
         if (campaignContractId) {
           const claimResult = await this.questLedger.drawRaffleWinner({
@@ -2166,14 +2280,18 @@ export class QuestsService {
           });
           claimSessionId = claimResult.claimContractId;
           if (claimResult.errors.length > 0) {
-            this.logger.warn(`DrawRaffleWinner warnings: ${claimResult.errors.join(' | ')}`);
+            this.logger.warn(
+              `DrawRaffleWinner warnings: ${claimResult.errors.join(' | ')}`,
+            );
           } else {
             this.logger.log(
               `DrawRaffleWinner OK: user=@${username} quest=${questId.slice(0, 8)} claim=${claimSessionId?.slice(0, 12)}`,
             );
           }
         } else {
-          this.logger.warn(`DrawRaffleWinner skipped: no ledgerCampaignId for quest=${questId}`);
+          this.logger.warn(
+            `DrawRaffleWinner skipped: no ledgerCampaignId for quest=${questId}`,
+          );
         }
       }
 
@@ -2248,7 +2366,9 @@ export class QuestsService {
         void this.inboundSync
           .alignBalanceFromChain(userId, username)
           .catch((err) =>
-            this.logger.warn(`Balance sync failed (non-blocking): ${String(err)}`),
+            this.logger.warn(
+              `Balance sync failed (non-blocking): ${String(err)}`,
+            ),
           );
       }
 
@@ -2262,7 +2382,9 @@ export class QuestsService {
             claimFeeLedgerTxId: feeTxId,
             ledgerTxId: rewardOfferId,
             distributedAt: new Date(),
-            ...(claimSessionId ? { claimSessionContractId: claimSessionId } : {}),
+            ...(claimSessionId
+              ? { claimSessionContractId: claimSessionId }
+              : {}),
           },
         }),
         this.prisma.questCompletion.upsert({
@@ -2323,27 +2445,35 @@ export class QuestsService {
   }> {
     const { userId, questId, username, cantonPartyId } = params;
     if (!username?.trim() || !cantonPartyId?.trim()) {
-      throw new BadRequestException('Create your Canton wallet before claiming.');
+      throw new BadRequestException(
+        'Create your Canton wallet before claiming.',
+      );
     }
 
-    const quest = await this.prisma.quest.findUnique({ where: { id: questId } });
+    const quest = await this.prisma.quest.findUnique({
+      where: { id: questId },
+    });
     if (!quest) throw new NotFoundException('Quest not found');
 
-    const rewardType = normalizeRewardType(quest.rewardType as RewardType);
+    const rewardType = normalizeRewardType(quest.rewardType);
     const paidInvite =
       requiresPaidInviteClaim(quest) &&
       (rewardType === RewardType.INVITE_CODE_FCFS ||
         rewardType === RewardType.INVITE_CODE_RANDOM ||
         rewardType === RewardType.INVITE_CODE);
     if (!paidInvite) {
-      throw new BadRequestException('This campaign does not use paid code claim.');
+      throw new BadRequestException(
+        'This campaign does not use paid code claim.',
+      );
     }
 
     const completion = await this.prisma.questCompletion.findUnique({
       where: { userId_questId: { userId, questId } },
     });
     if (!completion) {
-      throw new BadRequestException('Submit the quest before claiming your code.');
+      throw new BadRequestException(
+        'Submit the quest before claiming your code.',
+      );
     }
 
     const allDone = await this.areAllTasksVerified(userId, questId);
@@ -2370,10 +2500,14 @@ export class QuestsService {
       rewardType === RewardType.INVITE_CODE
     ) {
       if (!existingDraw) {
-        throw new BadRequestException('You were not selected in the raffle draw.');
+        throw new BadRequestException(
+          'You were not selected in the raffle draw.',
+        );
       }
       if (this.isCampaignEnded(quest) === false) {
-        const drawsHeld = await this.prisma.winnerDraw.count({ where: { questId } });
+        const drawsHeld = await this.prisma.winnerDraw.count({
+          where: { questId },
+        });
         if (drawsHeld === 0) {
           throw new BadRequestException('Winners have not been drawn yet.');
         }
@@ -2402,9 +2536,13 @@ export class QuestsService {
       }
     }
 
-    const validatorPartyId = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
+    const validatorPartyId = this.config
+      .get<string>('CANTON_VALIDATOR_PARTY_ID')
+      ?.trim();
     if (!validatorPartyId) {
-      throw new BadRequestException('Validator party is not configured on the server.');
+      throw new BadRequestException(
+        'Validator party is not configured on the server.',
+      );
     }
 
     let feeTxId: string;
@@ -2457,35 +2595,41 @@ export class QuestsService {
 
     let codeClaimSessionId: string | null = null;
     if (this.questLedger.isClaimSessionConfigured() && cantonPartyId) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const campaignContractId = (quest as any).ledgerCampaignId ?? null;
       if (campaignContractId) {
         const claimId = `code-${existingDraw?.id ?? userId.slice(0, 12)}-${Date.now().toString(36)}`;
         try {
-          const claimResult = codeClaimKind === 'CODE_FCFS'
-            ? await this.questLedger.claimFcfsSlot({
-                campaignContractId,
-                userPartyId: cantonPartyId,
-                claimId,
-              })
-            : await this.questLedger.drawRaffleWinner({
-                campaignContractId,
-                userPartyId: cantonPartyId,
-                claimId,
-              });
+          const claimResult =
+            codeClaimKind === 'CODE_FCFS'
+              ? await this.questLedger.claimFcfsSlot({
+                  campaignContractId,
+                  userPartyId: cantonPartyId,
+                  claimId,
+                })
+              : await this.questLedger.drawRaffleWinner({
+                  campaignContractId,
+                  userPartyId: cantonPartyId,
+                  claimId,
+                });
           codeClaimSessionId = claimResult.claimContractId;
           if (claimResult.errors.length > 0) {
-            this.logger.warn(`QuestCampaign ${codeClaimKind} warnings: ${claimResult.errors.join(' | ')}`);
+            this.logger.warn(
+              `QuestCampaign ${codeClaimKind} warnings: ${claimResult.errors.join(' | ')}`,
+            );
           } else {
             this.logger.log(
               `QuestCampaign ${codeClaimKind} OK: user=@${username} quest=${questId.slice(0, 8)} claim=${codeClaimSessionId?.slice(0, 12)}`,
             );
           }
         } catch (err) {
-          this.logger.warn(`QuestCampaign ${codeClaimKind} failed (non-blocking): ${String(err)}`);
+          this.logger.warn(
+            `QuestCampaign ${codeClaimKind} failed (non-blocking): ${String(err)}`,
+          );
         }
       } else {
-        this.logger.warn(`QuestCampaign ${codeClaimKind} skipped: no ledgerCampaignId for quest=${questId}`);
+        this.logger.warn(
+          `QuestCampaign ${codeClaimKind} skipped: no ledgerCampaignId for quest=${questId}`,
+        );
       }
     }
 
@@ -2548,7 +2692,12 @@ export class QuestsService {
     return {
       ok: true,
       message: `Your code is ready. (${feeCc} CC fee paid).`,
-      inviteCode: (await this.prisma.winnerDraw.findUnique({ where: { questId_userId: { questId, userId } } }))?.inviteCode ?? null,
+      inviteCode:
+        (
+          await this.prisma.winnerDraw.findUnique({
+            where: { questId_userId: { questId, userId } },
+          })
+        )?.inviteCode ?? null,
       feeCc,
       rewardStatus,
     };
@@ -2577,24 +2726,34 @@ export class QuestsService {
   }> {
     const { userId, questId, username, cantonPartyId } = params;
     if (!username?.trim() || !cantonPartyId?.trim()) {
-      throw new BadRequestException('Create your Canton wallet before claiming.');
+      throw new BadRequestException(
+        'Create your Canton wallet before claiming.',
+      );
     }
-    const quest = await this.prisma.quest.findUnique({ where: { id: questId } });
+    const quest = await this.prisma.quest.findUnique({
+      where: { id: questId },
+    });
     if (!quest) throw new NotFoundException('Quest not found');
     if (!this.requiresCcAndCodeRaffleClaim(quest)) {
-      throw new BadRequestException('This campaign does not use CC + Code combined raffle claim.');
+      throw new BadRequestException(
+        'This campaign does not use CC + Code combined raffle claim.',
+      );
     }
     const completion = await this.prisma.questCompletion.findUnique({
       where: { userId_questId: { userId, questId } },
     });
     if (!completion) {
-      throw new BadRequestException('Submit the quest before claiming your reward.');
+      throw new BadRequestException(
+        'Submit the quest before claiming your reward.',
+      );
     }
     const draw = await this.prisma.winnerDraw.findUnique({
       where: { questId_userId: { questId, userId } },
     });
     if (!draw) {
-      throw new BadRequestException('You were not selected in the raffle draw.');
+      throw new BadRequestException(
+        'You were not selected in the raffle draw.',
+      );
     }
     if (draw.distributed) {
       const rewardStatus = await this.getQuestRewardStatus(userId, questId);
@@ -2611,13 +2770,19 @@ export class QuestsService {
     }
     const codesLeft = await this.countAvailableInviteCodes(questId);
     if (codesLeft <= 0) {
-      throw new BadRequestException('No invite codes left in the pool. Contact support.');
+      throw new BadRequestException(
+        'No invite codes left in the pool. Contact support.',
+      );
     }
     const feeCc = resolveClaimFeeCc(quest) ?? 5;
     const rewardCc = quest.rewardCc;
-    const validatorPartyId = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
+    const validatorPartyId = this.config
+      .get<string>('CANTON_VALIDATOR_PARTY_ID')
+      ?.trim();
     if (!validatorPartyId) {
-      throw new BadRequestException('Validator party is not configured on the server.');
+      throw new BadRequestException(
+        'Validator party is not configured on the server.',
+      );
     }
     const balance = await this.splice.getUserBalance(username);
     if (balance !== null && balance < feeCc) {
@@ -2665,10 +2830,14 @@ export class QuestsService {
 
       // v11.1: exercise DrawRaffleWinner di QuestCampaign on-chain untuk dapat
       // claimSessionId (sebelumnya flow CC+Code raffle tidak punya DAML audit).
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       const ccCodeCampaignCid = (quest as any).ledgerCampaignId ?? null;
       let ccCodeClaimSessionId: string | null = null;
-      if (this.questLedger.isClaimSessionConfigured() && cantonPartyId && ccCodeCampaignCid) {
+      if (
+        this.questLedger.isClaimSessionConfigured() &&
+        cantonPartyId &&
+        ccCodeCampaignCid
+      ) {
         try {
           const claimResult = await this.questLedger.drawRaffleWinner({
             campaignContractId: ccCodeCampaignCid,
@@ -2677,14 +2846,18 @@ export class QuestsService {
           });
           ccCodeClaimSessionId = claimResult.claimContractId;
           if (claimResult.errors.length > 0) {
-            this.logger.warn(`DrawRaffleWinner (CC+Code) warnings: ${claimResult.errors.join(' | ')}`);
+            this.logger.warn(
+              `DrawRaffleWinner (CC+Code) warnings: ${claimResult.errors.join(' | ')}`,
+            );
           } else {
             this.logger.log(
               `DrawRaffleWinner (CC+Code) OK: user=@${username} quest=${questId.slice(0, 8)} claim=${ccCodeClaimSessionId?.slice(0, 12)}`,
             );
           }
         } catch (err) {
-          this.logger.warn(`DrawRaffleWinner (CC+Code) failed (non-blocking): ${String(err)}`);
+          this.logger.warn(
+            `DrawRaffleWinner (CC+Code) failed (non-blocking): ${String(err)}`,
+          );
         }
       }
 
@@ -2706,7 +2879,8 @@ export class QuestsService {
           amountCc: rewardCc,
           description: `CC+Code raffle reward — ${quest.title}`,
         });
-        if (!rewardResult.ok) throw new Error(rewardResult.error ?? 'CC reward transfer failed');
+        if (!rewardResult.ok)
+          throw new Error(rewardResult.error ?? 'CC reward transfer failed');
         rewardOfferId = rewardResult.rewardTxId ?? `reward-${Date.now()}`;
         this.logger.log(
           `Raffle reward ${rewardCc} CC → ${cantonPartyId.split('::')[0]} ` +
@@ -2728,7 +2902,9 @@ export class QuestsService {
           void this.inboundSync
             .alignBalanceFromChain(userId, username)
             .catch((err) =>
-              this.logger.warn(`Balance sync failed (non-blocking): ${String(err)}`),
+              this.logger.warn(
+                `Balance sync failed (non-blocking): ${String(err)}`,
+              ),
             );
         }
       }
@@ -2739,7 +2915,9 @@ export class QuestsService {
       // update so a code is never marked distributed without being claimed.
       const claimedCode = await this.reserveInviteCode(questId, userId);
       if (!claimedCode) {
-        throw new Error('No invite codes available after fee was paid. Contact support.');
+        throw new Error(
+          'No invite codes available after fee was paid. Contact support.',
+        );
       }
       const rewardMicroCc = BigInt(Math.round(rewardCc * 1_000_000));
       await this.prisma.$transaction([
@@ -2756,15 +2934,26 @@ export class QuestsService {
         }),
         this.prisma.questCompletion.upsert({
           where: { userId_questId: { userId, questId } },
-          create: { userId, questId, rewardMicroCc, completedAt: completion.completedAt },
+          create: {
+            userId,
+            questId,
+            rewardMicroCc,
+            completedAt: completion.completedAt,
+          },
           update: { rewardMicroCc },
         }),
       ]);
       const finalCode = claimedCode;
       if (cantonPartyId && rewardOfferId) {
         void this.syncCampaignLedgerAfterPayout({
-          userId, questId, userPartyId: cantonPartyId, rewardCc, payoutTxId: rewardOfferId,
-        }).catch((err) => this.logger.warn(`CC+Code raffle ledger sync failed: ${String(err)}`));
+          userId,
+          questId,
+          userPartyId: cantonPartyId,
+          rewardCc,
+          payoutTxId: rewardOfferId,
+        }).catch((err) =>
+          this.logger.warn(`CC+Code raffle ledger sync failed: ${String(err)}`),
+        );
       }
 
       // v11.1: Atomic DAML audit trail (fee + reward) + reveal code on-chain.
@@ -2841,7 +3030,9 @@ export class QuestsService {
 
     // Gunakan ledgerTxId dari Splice jika ada; fallback ke UUID agar DAML
     // AtomicFeeAndReward tidak gagal assertion "feeTxId tidak boleh kosong".
-    const ledgerTxId = feeResult.ledgerTxId?.trim() || `fee-${Date.now()}-${params.userId.slice(0, 8)}`;
+    const ledgerTxId =
+      feeResult.ledgerTxId?.trim() ||
+      `fee-${Date.now()}-${params.userId.slice(0, 8)}`;
     const feeLabel = params.feeTargetPartyId.split('::')[0];
     await this.users.recordTransaction({
       userId: params.userId,
@@ -2940,7 +3131,7 @@ export class QuestsService {
     return quest;
   }
 
-    /* ─── Leaderboard ─── */
+  /* ─── Leaderboard ─── */
 
   /**
    * Leaderboard — satu rumus poin untuk weekly / monthly / all-time:
@@ -2950,7 +3141,12 @@ export class QuestsService {
     period: 'weekly' | 'monthly' | 'all',
     page = 1,
     pageSize = 10,
-  ): Promise<{ rows: LeaderboardRow[]; total: number; page: number; pageSize: number }> {
+  ): Promise<{
+    rows: LeaderboardRow[];
+    total: number;
+    page: number;
+    pageSize: number;
+  }> {
     const since = this.leaderboardSince(period);
     // Net points = earnPoints - earn entry cost spent (satu sumber kebenaran untuk leaderboard)
     const aggregated = await this.points.buildNetPointsByUser(since);
@@ -3000,7 +3196,9 @@ export class QuestsService {
     return { rows, total, page, pageSize };
   }
 
-  private leaderboardSince(period: 'weekly' | 'monthly' | 'all'): Date | undefined {
+  private leaderboardSince(
+    period: 'weekly' | 'monthly' | 'all',
+  ): Date | undefined {
     if (period === 'all') return undefined;
     const now = Date.now();
     const ms =
@@ -3049,7 +3247,10 @@ export class QuestsService {
         where: { userId, status: 'VERIFIED' },
         orderBy: { verifiedAt: 'desc' },
         take: fetchCap,
-        include: { task: { select: { title: true, points: true } }, quest: { select: { title: true } } },
+        include: {
+          task: { select: { title: true, points: true } },
+          quest: { select: { title: true } },
+        },
       }),
       this.prisma.ccTransaction.findMany({
         where: { userId },
@@ -3142,10 +3343,14 @@ export class QuestsService {
         return true;
       case 'quiz_yes_no':
         if (!correctAnswer || !proof) return false;
-        return proof.trim().toLowerCase() === correctAnswer.trim().toLowerCase();
+        return (
+          proof.trim().toLowerCase() === correctAnswer.trim().toLowerCase()
+        );
       case 'quiz_choice':
         if (!correctAnswer || !proof) return false;
-        return proof.trim().toUpperCase() === correctAnswer.trim().toUpperCase();
+        return (
+          proof.trim().toUpperCase() === correctAnswer.trim().toUpperCase()
+        );
       case 'daily_check_in':
         return true;
       case 'submit_party_id':

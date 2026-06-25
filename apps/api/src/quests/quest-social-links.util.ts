@@ -45,7 +45,9 @@ function normalizeUrl(raw: string): string | null {
   }
 }
 
-export function parseQuestSocialLinks(raw: string | null | undefined): QuestSocialLink[] {
+export function parseQuestSocialLinks(
+  raw: string | null | undefined,
+): QuestSocialLink[] {
   if (!raw?.trim()) return [];
   try {
     const parsed = JSON.parse(raw) as unknown;

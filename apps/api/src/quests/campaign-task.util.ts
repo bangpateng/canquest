@@ -10,8 +10,8 @@ export function isCampaignSocialTaskType(type: string): boolean {
   );
 }
 
-export function filterCampaignParticipantTasks<
-  T extends { type: string },
->(tasks: T[]): T[] {
+export function filterCampaignParticipantTasks<T extends { type: string }>(
+  tasks: T[],
+): T[] {
   return tasks.filter((t) => isCampaignSocialTaskType(t.type));
 }

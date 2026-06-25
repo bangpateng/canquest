@@ -32,6 +32,11 @@ import { QuestLedgerService } from '../canton/quest-ledger.service';
     QueueModule,
   ],
   controllers: [AdminAuthController, AdminController, AdminUploadsController],
-  providers: [AdminService, AdminGuard, AdminPanelJwtStrategy, QuestLedgerService],
+  providers: [
+    AdminService,
+    AdminGuard,
+    AdminPanelJwtStrategy,
+    QuestLedgerService,
+  ],
 })
 export class AdminModule {}

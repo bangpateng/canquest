@@ -68,7 +68,7 @@ export class KeycloakAdminService {
     if (!adminUser || !adminPass) {
       throw new Error(
         'KEYCLOAK_ADMIN_USER / KEYCLOAK_ADMIN_PASSWORD belum diset — ' +
-        'diperlukan untuk manage user di Keycloak',
+          'diperlukan untuk manage user di Keycloak',
       );
     }
 
@@ -104,9 +104,7 @@ export class KeycloakAdminService {
       accessToken: data.access_token,
       expiresAt: Date.now() + data.expires_in * 1000,
     };
-    this.logger.debug(
-      `Admin token Keycloak baru (exp ${data.expires_in}s)`,
-    );
+    this.logger.debug(`Admin token Keycloak baru (exp ${data.expires_in}s)`);
     return data.access_token;
   }
 

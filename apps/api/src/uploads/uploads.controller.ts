@@ -11,7 +11,10 @@ import type { Response } from 'express';
 import { createReadStream, existsSync } from 'fs';
 import path from 'path';
 import { ConfigService } from '@nestjs/config';
-import { ProfileAvatarService, contentTypeForPath } from '../users/profile-avatar.service';
+import {
+  ProfileAvatarService,
+  contentTypeForPath,
+} from '../users/profile-avatar.service';
 import { R2StorageService } from '../storage/r2-storage.service';
 
 @Controller('uploads')
@@ -25,7 +28,10 @@ export class UploadsController {
   /** Public avatar image — safe user id only (cuid). */
   @Get('avatars/:userId')
   @SkipThrottle()
-  serveAvatar(@Param('userId') userId: string, @Res({ passthrough: true }) res: Response) {
+  serveAvatar(
+    @Param('userId') userId: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     if (!/^[a-zA-Z0-9_-]+$/.test(userId)) {
       throw new NotFoundException();
     }
@@ -45,7 +51,8 @@ export class UploadsController {
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
   async serveCcRewardLogo(@Res({ passthrough: true }) res: Response) {
     const key =
-      this.config.get<string>('CC_REWARD_LOGO_R2_KEY')?.trim() || 'quests/C (1).png';
+      this.config.get<string>('CC_REWARD_LOGO_R2_KEY')?.trim() ||
+      'quests/C (1).png';
     if (!/^quests\/[a-zA-Z0-9 ()_.-]+\.(png|jpg|jpeg|webp|gif)$/i.test(key)) {
       throw new NotFoundException();
     }

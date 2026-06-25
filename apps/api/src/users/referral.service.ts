@@ -137,7 +137,7 @@ export class ReferralService {
   private randomCode(length: number): string {
     let out = '';
     for (let i = 0; i < length; i++) {
-      out += CODE_CHARS[randomBytes(1)[0]! % CODE_CHARS.length];
+      out += CODE_CHARS[randomBytes(1)[0] % CODE_CHARS.length];
     }
     return out;
   }

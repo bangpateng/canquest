@@ -29,6 +29,22 @@ export class AdminController {
     return this.admin.getDashboardStats();
   }
 
+  /* ── Preapproval diagnostics ── */
+
+  /**
+   * Diagnose TransferPreapproval status for a user across all sources.
+   * Pass ?user=<partyId> or ?user=@username.
+   */
+  @Get('preapproval-debug')
+  preapprovalDebug(@Query('user') user?: string) {
+    if (!user?.trim()) {
+      return {
+        error: 'Provide ?user=<partyId-with-double-colon> or ?user=@username',
+      };
+    }
+    return this.admin.debugPreapproval(user);
+  }
+
   /* ── Quest CRUD ── */
 
   @Get('quests')
@@ -253,7 +269,11 @@ export class AdminController {
   @Post('wallet-invites')
   generateWalletInvites(
     @Body()
-    body: { count?: number; codes?: string[]; note?: string },
+    body: {
+      count?: number;
+      codes?: string[];
+      note?: string;
+    },
   ) {
     return this.admin.generateWalletInviteCodes(body);
   }
@@ -271,11 +291,7 @@ export class AdminController {
     @Query('pageSize') pageSize?: string,
     @Query('q') q?: string,
   ) {
-    return this.admin.listUsers(
-      Number(page ?? 1),
-      Number(pageSize ?? 20),
-      q,
-    );
+    return this.admin.listUsers(Number(page ?? 1), Number(pageSize ?? 20), q);
   }
 
   @Delete('users/:userId')

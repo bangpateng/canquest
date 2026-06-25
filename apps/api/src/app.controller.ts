@@ -85,7 +85,9 @@ export class AppController {
 
     const balanceFromDb = this.config.get<string>('BALANCE_READ_FROM_DB');
     const readFromDb =
-      balanceFromDb === undefined || balanceFromDb === '' || balanceFromDb === 'true';
+      balanceFromDb === undefined ||
+      balanceFromDb === '' ||
+      balanceFromDb === 'true';
 
     return {
       ok: spliceReachable && ledgerReachable,
@@ -100,15 +102,18 @@ export class AppController {
       },
       balance: {
         readFromDb,
-        dbMaxAgeMs: Number(this.config.get<string>('BALANCE_DB_MAX_AGE_MS') ?? '60000'),
+        dbMaxAgeMs: Number(
+          this.config.get<string>('BALANCE_DB_MAX_AGE_MS') ?? '60000',
+        ),
         backgroundDebounceMs: Number(
           this.config.get<string>('BALANCE_BACKGROUND_DEBOUNCE_MS') ?? '15000',
         ),
       },
       inboundSync: {
-        enabled:
-          this.config.get<string>('CC_INBOUND_SYNC_ENABLED') !== 'false',
-        pollMs: Number(this.config.get<string>('CC_INBOUND_SYNC_POLL_MS') ?? '30000'),
+        enabled: this.config.get<string>('CC_INBOUND_SYNC_ENABLED') !== 'false',
+        pollMs: Number(
+          this.config.get<string>('CC_INBOUND_SYNC_POLL_MS') ?? '30000',
+        ),
       },
       hint: !spliceReachable
         ? 'Splice unreachable — check WireGuard, CANTON_VALIDATOR_URL, validator on VPS 1.'

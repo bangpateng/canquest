@@ -16,18 +16,18 @@ export const throttlerConfig: ThrottlerModuleOptions = {
   throttlers: [
     {
       name: 'default',
-      ttl: 60_000,   // 1 menit
-      limit: 300,    // 300 req/menit per IP (navigasi menu + BFF; was 120)
+      ttl: 60_000, // 1 menit
+      limit: 300, // 300 req/menit per IP (navigasi menu + BFF; was 120)
     },
     {
       name: 'auth',
-      ttl: 60_000,   // 1 menit
-      limit: 10,     // 10 percobaan login/register per menit per IP
+      ttl: 60_000, // 1 menit
+      limit: 10, // 10 percobaan login/register per menit per IP
     },
     {
       name: 'ledger',
-      ttl: 60_000,   // 1 menit
-      limit: 30,     // 30 ledger operations per menit per IP
+      ttl: 60_000, // 1 menit
+      limit: 30, // 30 ledger operations per menit per IP
     },
   ],
 };

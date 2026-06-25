@@ -2,7 +2,10 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
-import { CantonLedgerService, type LedgerStreamEvent } from './canton-ledger.service';
+import {
+  CantonLedgerService,
+  type LedgerStreamEvent,
+} from './canton-ledger.service';
 import { isPlatformFeeTransaction } from '../users/cc-transaction-visibility';
 
 export type LedgerEventSummary = {
@@ -51,7 +54,10 @@ export class TransactionDetailService {
   cantonScanUrl(updateId: string | null | undefined): string | null {
     if (!updateId?.trim()) return null;
     if (this.scanTxUrlTemplate.includes('{updateId}')) {
-      return this.scanTxUrlTemplate.replace('{updateId}', encodeURIComponent(updateId));
+      return this.scanTxUrlTemplate.replace(
+        '{updateId}',
+        encodeURIComponent(updateId),
+      );
     }
     return `${this.scanTxUrlTemplate.replace(/\/$/, '')}/${encodeURIComponent(updateId)}`;
   }
@@ -64,7 +70,10 @@ export class TransactionDetailService {
   ): Promise<void> {
     if (!contractId || !partyId) return;
     try {
-      const updateId = await this.ledger.findUpdateIdForContract(contractId, partyId);
+      const updateId = await this.ledger.findUpdateIdForContract(
+        contractId,
+        partyId,
+      );
       if (!updateId) return;
       await this.prisma.ccTransaction.updateMany({
         where: { id: ccTransactionId, cantonUpdateId: null },
@@ -75,7 +84,10 @@ export class TransactionDetailService {
     }
   }
 
-  async getDetailForUser(userId: string, ccTransactionId: string): Promise<TransactionDetailResponse> {
+  async getDetailForUser(
+    userId: string,
+    ccTransactionId: string,
+  ): Promise<TransactionDetailResponse> {
     const [tx, user] = await Promise.all([
       this.prisma.ccTransaction.findFirst({
         where: { id: ccTransactionId, userId },
@@ -187,7 +199,9 @@ export class TransactionDetailService {
   }
 }
 
-function summarizeLedgerEvents(events: LedgerStreamEvent[]): LedgerEventSummary[] {
+function summarizeLedgerEvents(
+  events: LedgerStreamEvent[],
+): LedgerEventSummary[] {
   const out: LedgerEventSummary[] = [];
   for (const event of events) {
     if (event.created?.contractId) {

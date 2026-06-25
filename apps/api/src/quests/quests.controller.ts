@@ -127,7 +127,10 @@ export class QuestsController {
   }
 
   @Get(':questId/progress')
-  async questProgress(@Param('questId') questId: string, @Req() req: AuthedReq) {
+  async questProgress(
+    @Param('questId') questId: string,
+    @Req() req: AuthedReq,
+  ) {
     await this.requireWalletForCampaignQuest(questId, req.user.userId);
     const p = await this.quests.getUserProgress(req.user.userId, questId);
     return {
@@ -145,7 +148,10 @@ export class QuestsController {
   @Get(':questId/reward-status')
   @UseGuards(WalletRequiredGuard)
   async rewardStatus(@Param('questId') questId: string, @Req() req: AuthedReq) {
-    const rewardStatus = await this.quests.getQuestRewardStatus(req.user.userId, questId);
+    const rewardStatus = await this.quests.getQuestRewardStatus(
+      req.user.userId,
+      questId,
+    );
     const campaignMeta = await this.quests.getCampaignMeta(questId);
     return { ...rewardStatus, campaignMeta };
   }
@@ -200,7 +206,10 @@ export class QuestsController {
   @Post(':questId/claim-cc-and-code-raffle')
   @UseGuards(WalletRequiredGuard)
   @Throttle({ ledger: { limit: 3, ttl: 60_000 } })
-  async claimCcAndCodeRaffle(@Param('questId') questId: string, @Req() req: AuthedReq) {
+  async claimCcAndCodeRaffle(
+    @Param('questId') questId: string,
+    @Req() req: AuthedReq,
+  ) {
     const user = await this.users.findById(req.user.userId);
     if (!user) return { ok: false, message: 'User not found' };
     return this.quests.claimCcAndCodeRaffleReward({
@@ -235,11 +244,20 @@ export class QuestsController {
 
     if (status === 'VERIFIED' && user.cantonPartyId) {
       void this.featuredActivity
-        .recordActivity('task_verified', user.cantonPartyId, `Task ${taskId} in quest ${questId}`)
-        .catch(() => { /* non-critical */ });
+        .recordActivity(
+          'task_verified',
+          user.cantonPartyId,
+          `Task ${taskId} in quest ${questId}`,
+        )
+        .catch(() => {
+          /* non-critical */
+        });
     }
 
-    const allTasksVerified = await this.quests.areAllTasksVerified(user.id, questId);
+    const allTasksVerified = await this.quests.areAllTasksVerified(
+      user.id,
+      questId,
+    );
 
     return {
       ok: true,
@@ -254,10 +272,7 @@ export class QuestsController {
    * Final quest submit — Web2 completion in DB; optional DAML proof + CIP-56 CC when enabled.
    */
   @Post(':questId/submit')
-  async submitQuest(
-    @Param('questId') questId: string,
-    @Req() req: AuthedReq,
-  ) {
+  async submitQuest(@Param('questId') questId: string, @Req() req: AuthedReq) {
     const user = await this.users.findById(req.user.userId);
     if (!user) return { ok: false, message: 'User not found' };
 
@@ -283,13 +298,23 @@ export class QuestsController {
     });
 
     if (!result.ok) {
-      return { ok: false, message: result.message, rewardStatus: result.rewardStatus };
+      return {
+        ok: false,
+        message: result.message,
+        rewardStatus: result.rewardStatus,
+      };
     }
 
     if (user.cantonPartyId) {
       void this.featuredActivity
-        .recordActivity('quest_completed', user.cantonPartyId, `Quest ${questId} submitted`)
-        .catch(() => { /* non-critical */ });
+        .recordActivity(
+          'quest_completed',
+          user.cantonPartyId,
+          `Quest ${questId} submitted`,
+        )
+        .catch(() => {
+          /* non-critical */
+        });
     }
 
     const campaignMeta = await this.quests.getCampaignMeta(questId);
@@ -306,7 +331,9 @@ export class QuestsController {
       user.cantonPartyId
     ) {
       const questTitle = await this.quests.getQuestTitle(questId);
-      this.logger.log(`Enqueue quest CC reward: ${result.rewardCc} CC → ${user.username}`);
+      this.logger.log(
+        `Enqueue quest CC reward: ${result.rewardCc} CC → ${user.username}`,
+      );
       void this.ledgerQueue
         .enqueueCcReward({
           userId: user.id,

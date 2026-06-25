@@ -39,9 +39,7 @@ export class WalletOnboardingService {
     // a. Password acak — penanganan password user sesungguhnya di Fase 5
     const password = randomBytes(24).toString('hex');
 
-    this.logger.log(
-      `onboardWallet start: @${input.username} (${input.email})`,
-    );
+    this.logger.log(`onboardWallet start: @${input.username} (${input.email})`);
 
     // b. Buat / dapatkan user Keycloak
     const keycloakId = await this.keycloakAdmin.createUserAndGetId({
@@ -56,13 +54,11 @@ export class WalletOnboardingService {
     );
 
     // c. Onboard di Splice validator → party_id
-    const partyId = await this.spliceValidator.createWalletUser(
-      input.username,
-    );
+    const partyId = await this.spliceValidator.createWalletUser(input.username);
     if (!partyId) {
       throw new Error(
         `Splice createWalletUser gagal untuk @${input.username} — ` +
-        'pastikan validator reachable dan username belum dipakai',
+          'pastikan validator reachable dan username belum dipakai',
       );
     }
     this.logger.log(

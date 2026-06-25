@@ -34,7 +34,9 @@ export class AdminGuard implements CanActivate {
       norm(process.env.ADMIN_PANEL_EMAIL)?.toLowerCase();
 
     if (!expected || user.email.toLowerCase() !== expected) {
-      throw new ForbiddenException('Admin credentials were updated — sign in again');
+      throw new ForbiddenException(
+        'Admin credentials were updated — sign in again',
+      );
     }
 
     return true;

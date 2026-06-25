@@ -46,7 +46,10 @@ export class AdminAuthController {
   private static readonly MAX_FAILED_ATTEMPTS = 5;
   private static readonly LOCKOUT_WINDOW_MS = 15 * 60 * 1000;
   private static readonly THROTTLE_WINDOW_MS = 15 * 60 * 1000;
-  private readonly failedAttempts = new Map<string, { count: number; firstAt: number }>();
+  private readonly failedAttempts = new Map<
+    string,
+    { count: number; firstAt: number }
+  >();
   private readonly lockedUntil = new Map<string, number>();
   private lastSweep = 0;
 

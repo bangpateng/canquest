@@ -5,7 +5,10 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { pickTwitterDisplayName, pickTwitterProfileImage } from './twitter-avatar.util';
+import {
+  pickTwitterDisplayName,
+  pickTwitterProfileImage,
+} from './twitter-avatar.util';
 import {
   normalizeTwitterUsername,
   parseTweetIdFromTarget,
@@ -46,7 +49,10 @@ export class TwitterApiService {
     return key;
   }
 
-  private async getJson<T>(path: string, params: Record<string, string>): Promise<T> {
+  private async getJson<T>(
+    path: string,
+    params: Record<string, string>,
+  ): Promise<T> {
     const url = new URL(path, this.baseUrl);
     for (const [k, v] of Object.entries(params)) {
       if (v) url.searchParams.set(k, v);
@@ -55,7 +61,8 @@ export class TwitterApiService {
       headers: { 'X-API-Key': this.apiKey() },
       signal: AbortSignal.timeout(20_000),
     });
-    const body = (await res.json().catch(() => ({}))) as TwitterApiEnvelope<T> & T;
+    const body = (await res.json().catch(() => ({}))) as TwitterApiEnvelope<T> &
+      T;
     if (!res.ok) {
       const errBody = body as { message?: string; error?: number };
       const msg =
@@ -74,7 +81,9 @@ export class TwitterApiService {
   }
 
   /** Validate handle exists on X and return canonical username + id when available. */
-  async resolveUser(username: string): Promise<{ username: string; userId: string | null }> {
+  async resolveUser(
+    username: string,
+  ): Promise<{ username: string; userId: string | null }> {
     const profile = await this.fetchUserProfile(username);
     return { username: profile.username, userId: profile.userId };
   }
@@ -85,11 +94,14 @@ export class TwitterApiService {
     if (!name || !/^[a-z0-9_]{1,15}$/i.test(name)) {
       throw new BadRequestException('Invalid X username.');
     }
-    const payload = await this.getJson<Record<string, unknown>>('/twitter/user/info', {
-      userName: name,
-    });
+    const payload = await this.getJson<Record<string, unknown>>(
+      '/twitter/user/info',
+      {
+        userName: name,
+      },
+    );
     const envelope = payload as TwitterApiEnvelope<Record<string, unknown>>;
-    const data = (envelope.data ?? payload) as Record<string, unknown>;
+    const data = envelope.data ?? payload;
     const nested =
       data.user && typeof data.user === 'object'
         ? (data.user as Record<string, unknown>)
@@ -100,7 +112,9 @@ export class TwitterApiService {
       nested.username ??
       data.userName ??
       name;
-    const resolved = normalizeTwitterUsername(String(resolvedRaw).replace(/^@/, ''));
+    const resolved = normalizeTwitterUsername(
+      String(resolvedRaw).replace(/^@/, ''),
+    );
     const idRaw = nested.id ?? nested.userId ?? data.id;
     return {
       username: resolved,
@@ -110,23 +124,31 @@ export class TwitterApiService {
     };
   }
 
-  async userFollowsTarget(sourceUsername: string, targetUsername: string): Promise<boolean> {
+  async userFollowsTarget(
+    sourceUsername: string,
+    targetUsername: string,
+  ): Promise<boolean> {
     const source = normalizeTwitterUsername(sourceUsername);
     const target = normalizeTwitterUsername(targetUsername);
     if (!source || !target) return false;
 
-    const payload = await this.getJson<{ following?: boolean; followed_by?: boolean }>(
-      '/twitter/user/check_follow_relationship',
-      { source_user_name: source, target_user_name: target },
-    );
+    const payload = await this.getJson<{
+      following?: boolean;
+      followed_by?: boolean;
+    }>('/twitter/user/check_follow_relationship', {
+      source_user_name: source,
+      target_user_name: target,
+    });
     const data =
-      (payload as TwitterApiEnvelope<{ following?: boolean }>).data ??
-      (payload as { following?: boolean });
+      (payload as TwitterApiEnvelope<{ following?: boolean }>).data ?? payload;
     return Boolean(data.following);
   }
 
   /** Check if user retweeted a tweet (scans retweeters list, limited pages). */
-  async userRetweetedTweet(username: string, tweetId: string): Promise<boolean> {
+  async userRetweetedTweet(
+    username: string,
+    tweetId: string,
+  ): Promise<boolean> {
     const needle = normalizeTwitterUsername(username);
     if (!needle || !tweetId) return false;
 
@@ -152,7 +174,9 @@ export class TwitterApiService {
       const data = root.data ?? payload;
       const users = data.users ?? [];
       for (const u of users) {
-        const handle = normalizeTwitterUsername(u.userName ?? u.screen_name ?? '');
+        const handle = normalizeTwitterUsername(
+          u.userName ?? u.screen_name ?? '',
+        );
         if (handle === needle) return true;
       }
 
@@ -164,10 +188,15 @@ export class TwitterApiService {
     return false;
   }
 
-  async verifyFollowTask(userUsername: string, taskTarget: string | null): Promise<void> {
+  async verifyFollowTask(
+    userUsername: string,
+    taskTarget: string | null,
+  ): Promise<void> {
     const target = parseTwitterFollowTarget(taskTarget);
     if (!target) {
-      throw new BadRequestException('This follow task has an invalid target account.');
+      throw new BadRequestException(
+        'This follow task has an invalid target account.',
+      );
     }
     const following = await this.userFollowsTarget(userUsername, target);
     if (!following) {
@@ -177,7 +206,10 @@ export class TwitterApiService {
     }
   }
 
-  async verifyRetweetTask(userUsername: string, taskTarget: string | null): Promise<void> {
+  async verifyRetweetTask(
+    userUsername: string,
+    taskTarget: string | null,
+  ): Promise<void> {
     const tweetId = parseTweetIdFromTarget(taskTarget);
     if (!tweetId) {
       throw new BadRequestException(

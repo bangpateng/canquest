@@ -1118,7 +1118,7 @@ function TaskRow({
 
         {needsTwitter && !isVerified ? (
           <p className="mt-2 text-xs text-orange-300/90 sm:ml-[3.25rem]">
-            <Link href="/setting#twitter" className="font-semibold underline underline-offset-2">
+            <Link href="/settings" className="font-semibold underline underline-offset-2">
               Connect X
             </Link>{" "}
             in Settings first.
@@ -1335,7 +1335,7 @@ function TaskRow({
 
             {needsTwitter && !isVerified ? (
               <p className="mt-2 text-[11px] text-orange-300/90">
-                <Link href="/setting#twitter" className="font-semibold underline underline-offset-2">
+                <Link href="/settings" className="font-semibold underline underline-offset-2">
                   Connect X (Twitter)
                 </Link>{" "}
                 in Settings to verify follow and retweet tasks.
@@ -1482,7 +1482,7 @@ function TaskRow({
 
           {needsTwitter && !isVerified ? (
             <p className="text-sm font-medium text-orange-300/90">
-              <Link href="/setting#twitter" className="font-semibold underline underline-offset-2">
+              <Link href="/settings" className="font-semibold underline underline-offset-2">
                 Connect X (Twitter)
               </Link>{" "}
               in Settings to verify this task.

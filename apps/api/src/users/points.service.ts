@@ -43,7 +43,8 @@ export class PointsService {
       const existing = map.get(user.id);
       if (existing) {
         existing.points += delta;
-        if (!existing.username && user.username) existing.username = user.username;
+        if (!existing.username && user.username)
+          existing.username = user.username;
         if (!existing.displayName && user.displayName) {
           existing.displayName = user.displayName;
         }

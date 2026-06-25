@@ -51,7 +51,7 @@ const resolveApiEnvPaths = (): string[] => [
     StorageModule,
     TwitterModule,
   ],
-    controllers: [AppController],
+  controllers: [AppController],
   providers: [
     // Apply ThrottlerGuard globally — semua endpoint dilindungi rate limit
     {
@@ -61,5 +61,3 @@ const resolveApiEnvPaths = (): string[] => [
   ],
 })
 export class AppModule {}
-
-
