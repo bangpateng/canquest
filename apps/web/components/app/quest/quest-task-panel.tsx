@@ -38,6 +38,7 @@ import {
 } from "@/lib/canton/campaign-reward";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { WalletCreatePromptModal } from "@/components/app/wallet/wallet-create-prompt";
+import { TaskBrandIcon } from "@/components/app/quest/task-brand-icon";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
 import { hasRealWallet } from "@/lib/auth/wallet-access";
@@ -129,34 +130,6 @@ function openTaskTarget(task: QuestTask, taskType: string) {
     if (handle) {
       window.open(`https://x.com/${handle}`, "_blank", "noopener,noreferrer");
     }
-  }
-}
-
-function TaskIcon({ type, className }: { type: string; className?: string }) {
-  const common = cn("h-5 w-5 shrink-0", className);
-  const t = normalizeType(type);
-  switch (t as QuestTaskType) {
-    case "twitter_follow":
-      return <UserPlus className={common} aria-hidden />;
-    case "twitter_retweet":
-      return <Repeat2 className={common} aria-hidden />;
-    case "telegram_channel":
-    case "telegram_group":
-      return <Send className={common} aria-hidden />;
-    case "discord_join":
-      return <Users className={common} aria-hidden />;
-    case "submit_email":
-      return <Mail className={common} aria-hidden />;
-    case "submit_party_id":
-    case "submit_canton_address":
-      return <Fingerprint className={common} aria-hidden />;
-    case "daily_check_in" as QuestTaskType:
-      return <CalendarCheck className={common} aria-hidden />;
-    case "quiz_yes_no" as QuestTaskType:
-    case "quiz_choice" as QuestTaskType:
-      return <HelpCircle className={common} aria-hidden />;
-    default:
-      return <Circle className={common} aria-hidden />;
   }
 }
 
@@ -900,93 +873,92 @@ function TaskRow({
       })
     : null;
 
-  // Jalur campaign (list-row compact). Jalur Earn-hub ditangani blok di bawah
-  // (butuh earnHubDisplay); selebihnya (campaign & fallback) pakai desain ini.
+  // Jalur campaign — kartu standalone gaya Galxe/QuestN.
+  // Jalur Earn-hub ditangani blok di bawah (butuh earnHubDisplay).
   if (!(earnHubLayout && earnHubDisplay)) {
     return (
       <li
         className={cn(
-          "px-6 py-5 transition-colors",
-          isVerified ? "bg-emerald-500/10" : "hover:bg-[var(--muted)]/15",
+          "rounded-2xl border bg-[var(--card)] p-4 transition-all duration-200 sm:p-5",
+          isVerified
+            ? "border-emerald-500/30 bg-emerald-500/[0.06]"
+            : "border-white/[0.06] hover:border-[var(--primary)]/30",
           sequentiallyLocked && !isVerified && "opacity-55",
         )}
       >
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-5">
-          <div className="flex min-w-0 flex-1 items-start gap-4">
-            <span
-              className={cn(
-                "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl",
-                isVerified
-                  ? "bg-emerald-500/12 text-emerald-400"
-                  : "bg-[var(--muted)]/45 text-slate-400",
-              )}
-            >
-              {isVerified ? (
-                <Check className="h-5 w-5" strokeWidth={2.5} aria-hidden />
-              ) : (
-                <TaskIcon type={task.type} className="h-4 w-4" />
-              )}
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-start justify-between gap-3">
-                <p
-                  className={cn(
-                    "text-base font-semibold leading-snug text-slate-100",
-                    isVerified && "text-slate-100 line-through opacity-80",
-                  )}
-                >
-                  {displayTitle}
-                </p>
-                <TaskPointsLabel points={task.points} complete={isVerified} />
-              </div>
-              {/* Baris meta tunggal: petunjuk aksi/target atau deskripsi. Bukan label
-                  platform redundan (info platform sudah ada di ikon + judul). */}
-              {(() => {
-                const actionHint = taskActionHint(task, task.type);
-                const desc =
-                  task.description &&
-                  !task.description.trim().startsWith("http") &&
-                  task.description.trim() !== (task.target ?? "").trim()
-                    ? task.description.trim()
-                    : null;
-                const meta = desc ?? actionHint;
-                return meta ? (
-                  <p className="mt-1 line-clamp-2 text-xs font-medium text-[var(--muted-foreground)]">
-                    {meta}
-                  </p>
-                ) : null;
-              })()}
-              {lockedHint ? (
-                <p className="mt-2 flex items-center gap-1.5 text-sm font-medium text-slate-400">
-                  <Lock className="h-4 w-4 shrink-0" aria-hidden />
-                  {lockedHint}
-                </p>
-              ) : null}
-            </div>
-          </div>
+        <div className="flex items-center gap-3 sm:gap-4">
+          <TaskBrandIcon type={task.type} complete={isVerified} />
 
-          <div className="flex shrink-0 items-center justify-end gap-3 sm:pl-3">
-            {isVerified ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-300">
-                <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
-                Done
-              </span>
-            ) : isPending ? (
-              <span className="rounded-full bg-orange-500/10 px-3 py-1.5 text-xs font-semibold text-orange-200">
-                Pending
-              </span>
-            ) : sequentiallyLocked ? (
-              <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center gap-1 rounded-full bg-[var(--muted)]/30 px-3 text-[10px] font-bold uppercase tracking-wide text-[var(--muted-foreground)]">
-                <Lock className="h-3 w-3" aria-hidden />
-                Locked
-              </span>
-            ) : countdown !== null && countdown > 0 ? (
-              <span
-                className="min-w-[6.5rem] rounded-full bg-canton/10 px-3 py-1.5 text-center text-xs font-semibold tabular-nums text-canton"
-                aria-live="polite"
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-3">
+              <p
+                className={cn(
+                  "text-sm font-semibold leading-snug text-slate-100 sm:text-base",
+                  isVerified && "line-through opacity-70",
+                )}
               >
-                {formatTaskCountdownSeconds(countdown)}
+                {displayTitle}
+              </p>
+              {/* Points pill gaya Galxe — highlight kuning saat belum selesai. */}
+              <span
+                className={cn(
+                  "shrink-0 rounded-full px-2.5 py-1 text-xs font-bold tabular-nums",
+                  isVerified
+                    ? "bg-emerald-500/15 text-emerald-300"
+                    : "bg-amber-400/15 text-amber-300",
+                )}
+              >
+                +{task.points}
               </span>
+            </div>
+            {/* Baris meta: petunjuk aksi/target atau deskripsi. */}
+            {(() => {
+              const actionHint = taskActionHint(task, task.type);
+              const desc =
+                task.description &&
+                !task.description.trim().startsWith("http") &&
+                task.description.trim() !== (task.target ?? "").trim()
+                  ? task.description.trim()
+                  : null;
+              const meta = desc ?? actionHint;
+              return meta ? (
+                <p className="mt-1 line-clamp-2 text-xs font-medium text-[var(--muted-foreground)]">
+                  {meta}
+                </p>
+              ) : null;
+            })()}
+            {lockedHint ? (
+              <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-slate-400">
+                <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                {lockedHint}
+              </p>
+            ) : null}
+          </div>
+        </div>
+
+        {/* Area aksi kanan-bawah: tombol CTA atau status badge. */}
+        <div className="mt-3 flex items-center justify-end gap-2 sm:mt-0 sm:justify-end">
+          {isVerified ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-300">
+              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+              Done
+            </span>
+          ) : isPending ? (
+            <span className="rounded-full bg-orange-500/10 px-3 py-1.5 text-xs font-semibold text-orange-200">
+              Pending
+            </span>
+          ) : sequentiallyLocked ? (
+            <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center gap-1 rounded-full bg-[var(--muted)]/30 px-3 text-[10px] font-bold uppercase tracking-wide text-[var(--muted-foreground)]">
+              <Lock className="h-3 w-3" aria-hidden />
+              Locked
+            </span>
+          ) : countdown !== null && countdown > 0 ? (
+            <span
+              className="min-w-[6.5rem] rounded-full bg-canton/10 px-3 py-1.5 text-center text-xs font-semibold tabular-nums text-canton"
+              aria-live="polite"
+            >
+              {formatTaskCountdownSeconds(countdown)}
+            </span>
             ) : loading ? (
               <span className="flex h-9 min-w-[5.5rem] items-center justify-center rounded-full bg-[var(--muted)]/40">
                 <LoadingSpinner size="sm" />
@@ -1005,7 +977,6 @@ function TaskRow({
               </button>
             )}
           </div>
-        </div>
 
         {!isVerified && isQuizYesNo ? (
           <div className="mt-3 flex rounded-full bg-[var(--muted)]/35 p-1 sm:ml-[3.25rem]">
@@ -1129,31 +1100,18 @@ function TaskRow({
     return (
       <li
         className={cn(
-          "px-6 py-5 transition-colors",
+          "rounded-2xl border bg-[var(--card)] p-4 transition-all duration-200 sm:p-5",
           isOneTimeComplete || onRepeatCooldown
-            ? "bg-emerald-500/10"
-            : "hover:bg-[var(--muted)]/15",
+            ? "border-emerald-500/30 bg-emerald-500/[0.06]"
+            : "border-white/[0.06] hover:border-[var(--primary)]/30",
           sequentiallyLocked && !isVerified && "opacity-55",
         )}
       >
-        <div className="flex gap-4">
-          <div className="relative shrink-0">
-            <span
-              className={cn(
-                "flex h-12 w-12 items-center justify-center rounded-2xl",
-                isOneTimeComplete || onRepeatCooldown
-                  ? "bg-emerald-500/12 text-emerald-400"
-                  : "bg-[var(--muted)]/45 text-slate-400",
-              )}
-            >
-              <TaskIcon type={task.type} className="h-4 w-4" />
-            </span>
-            {isOneTimeComplete || onRepeatCooldown ? (
-              <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white ring-2 ring-[var(--card)]">
-                <Check className="h-2.5 w-2.5" strokeWidth={3} />
-              </span>
-            ) : null}
-          </div>
+        <div className="flex gap-3 sm:gap-4">
+          <TaskBrandIcon
+            type={task.type}
+            complete={isOneTimeComplete || onRepeatCooldown}
+          />
 
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-3">
@@ -1161,8 +1119,8 @@ function TaskRow({
                 <div className="flex flex-wrap items-center gap-3">
                   <p
                     className={cn(
-                      "text-base font-semibold leading-snug text-slate-100",
-                      isOneTimeComplete && "text-slate-100 line-through opacity-80",
+                      "text-sm font-semibold leading-snug text-slate-100 sm:text-base",
+                      isOneTimeComplete && "line-through opacity-70",
                     )}
                   >
                     {earnHubDisplay.headline}
