@@ -28,6 +28,7 @@ interface Winner {
   cantonPartyId: string | null;
   ccAmount: number;
   inviteCode: string | null;
+  rewardVariant?: "CODE" | "CC" | null;
   distributed: boolean;
   ledgerTxId: string | null;
   drawnAt: string;
@@ -449,6 +450,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
                 <thead>
                   <tr className="border-b border-[var(--border)] bg-[var(--muted)]/50 text-left">
                     <th className="px-4 py-3 font-semibold">Winner</th>
+                    <th className="px-4 py-3 font-semibold">Variant</th>
                     <th className="px-4 py-3 font-semibold">CC</th>
                     <th className="px-4 py-3 font-semibold">Invite Code</th>
                     <th className="px-4 py-3 font-semibold">Status</th>
@@ -465,6 +467,19 @@ export function WinnersPanel({ questId }: { questId: string }) {
                           <p className="font-mono text-[10px] text-[var(--muted-foreground)]">
                             {w.cantonPartyId.split("::")[0]}::…
                           </p>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {w.rewardVariant === "CODE" ? (
+                          <span className="inline-flex rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                            Code
+                          </span>
+                        ) : w.rewardVariant === "CC" ? (
+                          <span className="inline-flex rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                            CC
+                          </span>
+                        ) : (
+                          <span className="text-xs text-[var(--muted-foreground)]">Both</span>
                         )}
                       </td>
                       <td className="px-4 py-3 font-semibold tabular-nums">

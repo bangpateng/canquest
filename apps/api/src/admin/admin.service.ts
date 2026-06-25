@@ -265,6 +265,7 @@ export class AdminService {
     status?: QuestStatus;
     rewardType?: RewardType;
     maxWinners?: number;
+    codeWinnersQuota?: number | null;
     claimFeeCc?: number | null;
     winnerMessage?: string | null;
     tags?: string[];
@@ -306,14 +307,15 @@ export class AdminService {
         rewardCc: data.rewardCc ?? 0,
         rewardPool:
           data.rewardPool ?? (data.rewardCc ? `${data.rewardCc} CC` : 'TBD'),
+        maxWinners: data.maxWinners ?? null,
+        codeWinnersQuota: data.codeWinnersQuota ?? null,
+        claimFeeCc: data.claimFeeCc ?? null,
         deadline: data.deadline ?? null,
         startsAt: data.startsAt ? new Date(data.startsAt) : null,
         endsAt: data.endsAt ? new Date(data.endsAt) : null,
         status: data.status ?? QuestStatus.ACTIVE,
 
         rewardType: (data.rewardType ?? RewardType.CC_ONLY) as any,
-        maxWinners: data.maxWinners ?? null,
-        claimFeeCc: data.claimFeeCc ?? null,
         winnerMessage: data.winnerMessage?.trim() || null,
         questKind,
         tags: JSON.stringify(data.tags ?? []),
@@ -405,6 +407,7 @@ export class AdminService {
       status?: QuestStatus;
       rewardType?: RewardType;
       maxWinners?: number | null;
+      codeWinnersQuota?: number | null;
       claimFeeCc?: number | null;
       winnerMessage?: string | null;
       tags?: string[];
@@ -471,6 +474,9 @@ export class AdminService {
           rewardType: data.rewardType as any,
         }),
         ...(data.maxWinners !== undefined && { maxWinners: data.maxWinners }),
+        ...(data.codeWinnersQuota !== undefined && {
+          codeWinnersQuota: data.codeWinnersQuota,
+        }),
         ...(data.claimFeeCc !== undefined && { claimFeeCc: data.claimFeeCc }),
         ...(data.winnerMessage !== undefined && {
           winnerMessage: data.winnerMessage?.trim() || null,
@@ -884,6 +890,16 @@ export class AdminService {
           'Add invite codes on the Winners page before running a draw.',
         );
       }
+      // CC_AND_CODE_RAFFLE dengan variant split: kuota CODE harus ≤ kode tersedia.
+      if (
+        rewardType === RewardType.CC_AND_CODE_RAFFLE &&
+        quest.codeWinnersQuota != null &&
+        quest.codeWinnersQuota > codeCount
+      ) {
+        throw new BadRequestException(
+          `Not enough codes: you set ${quest.codeWinnersQuota} Code winners but only ${codeCount} codes are available.`,
+        );
+      }
     }
 
     let selectedUserIds: string[];
@@ -913,6 +929,30 @@ export class AdminService {
       return { added: 0, winners: [] };
     }
 
+    // CC_AND_CODE_RAFFLE variant split: bila admin menetapkan codeWinnersQuota,
+    // bagi pemenang terpilih menjadi varian CODE dan CC (acak, dikunci saat draw).
+    // Null/0 quota = perilaku lama (semua pemenang "both", rewardVariant null).
+    const useVariantSplit =
+      rewardType === RewardType.CC_AND_CODE_RAFFLE &&
+      quest.codeWinnersQuota != null &&
+      quest.codeWinnersQuota > 0;
+
+    // Map userId -> rewardVariant ('CODE' | 'CC' | null). Null = legacy both.
+    const variantByUser = new Map<string, 'CODE' | 'CC' | null>();
+    if (useVariantSplit) {
+      // Acak urutan pemenang (Fisher–Yates dengan CSPRNG), lalu tetapkan kuota
+      // pertama sebagai CODE dan sisanya sebagai CC.
+      const shuffled = [...selectedUserIds];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = randomInt(0, i + 1);
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      const codeCount = Math.min(quest.codeWinnersQuota!, shuffled.length);
+      for (let i = 0; i < shuffled.length; i++) {
+        variantByUser.set(shuffled[i], i < codeCount ? 'CODE' : 'CC');
+      }
+    }
+
     // Get invite codes if needed
     const needCodes =
       rewardType === RewardType.INVITE_CODE_RANDOM ||
@@ -935,11 +975,13 @@ export class AdminService {
       email: string;
       ccAmount: number;
       inviteCode: string | null;
+      rewardVariant: 'CODE' | 'CC' | null;
     }> = [];
 
     for (let i = 0; i < selectedUserIds.length; i++) {
       const uid = selectedUserIds[i];
       const code = deferCodeAssignment ? null : (availableCodes[i] ?? null);
+      const variant = variantByUser.get(uid) ?? null;
 
       const existing = await this.prisma.winnerDraw.findUnique({
         where: { questId_userId: { questId, userId: uid } },
@@ -953,13 +995,19 @@ export class AdminService {
         });
       }
 
+      // Varian menentukan janji reward: CODE → kode (ccAmount 0, kode di-claim
+      // nanti); CC → token (ccAmount = rewardCc, tanpa kode); null → both (legacy).
+      const promisedCc =
+        variant === 'CODE' ? 0 : variant === 'CC' ? quest.rewardCc : quest.rewardCc;
+
       await this.prisma.winnerDraw.create({
         data: {
           questId,
           userId: uid,
-          ccAmount: quest.rewardCc,
+          ccAmount: promisedCc,
           inviteCode: code?.code ?? null,
           distributed: false,
+          rewardVariant: variant,
         },
       });
 
@@ -968,8 +1016,9 @@ export class AdminService {
         results.push({
           userId: uid,
           email: user.email,
-          ccAmount: quest.rewardCc,
+          ccAmount: promisedCc,
           inviteCode: code?.code ?? null,
+          rewardVariant: variant,
         });
     }
 
@@ -1001,6 +1050,7 @@ export class AdminService {
       cantonPartyId: d.user.cantonPartyId,
       ccAmount: d.ccAmount,
       inviteCode: d.inviteCode,
+      rewardVariant: d.rewardVariant as 'CODE' | 'CC' | null,
       distributed: d.distributed,
       ledgerTxId: d.ledgerTxId,
       drawnAt: d.drawnAt,

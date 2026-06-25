@@ -57,6 +57,7 @@ interface QuestFormProps {
     status: string;
     rewardType: string;
     maxWinners: number | null;
+    codeWinnersQuota?: number | null;
     claimFeeCc?: number | null;
     winnerMessage?: string | null;
     tags: string[];
@@ -99,6 +100,10 @@ export function QuestForm({
     status: initialData?.status ?? "ACTIVE",
     rewardType: initialRewardType(),
     maxWinners: String(initialData?.maxWinners ?? ""),
+    codeWinnersQuota:
+      initialData && (initialData as Record<string, unknown>).codeWinnersQuota != null
+        ? String((initialData as Record<string, unknown>).codeWinnersQuota)
+        : "",
     claimFeeCc: initialData?.claimFeeCc != null ? String(initialData.claimFeeCc) : "",
     winnerMessage: initialData?.winnerMessage ?? "",
     tags: (initialData?.tags ?? []).join(", "),
@@ -302,6 +307,10 @@ export function QuestForm({
         status: form.status,
         rewardType: form.rewardType,
         maxWinners: maxW,
+        codeWinnersQuota:
+          form.rewardType === "CC_AND_CODE_RAFFLE" && form.codeWinnersQuota.trim()
+            ? Number(form.codeWinnersQuota)
+            : null,
         claimFeeCc: form.claimFeeCc.trim() ? Number(form.claimFeeCc) : null,
         winnerMessage: form.winnerMessage.trim() || null,
         tags: form.tags
@@ -598,6 +607,25 @@ export function QuestForm({
                   value={form.maxWinners}
                   onChange={(e) => updateField("maxWinners", e.target.value)}
                   placeholder="e.g. 50"
+                  className={inputCls}
+                />
+              </div>
+            )}
+            {form.rewardType === "CC_AND_CODE_RAFFLE" && (
+              <div>
+                <label className="mb-1.5 block text-sm font-medium">
+                  Code winners quota
+                  <span className="ml-1.5 text-xs font-normal text-[var(--muted-foreground)]">
+                    (sisanya dapat CC; kosong = semua dapat keduanya)
+                  </span>
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={form.codeWinnersQuota}
+                  onChange={(e) => updateField("codeWinnersQuota", e.target.value)}
+                  placeholder="e.g. 6 (dari 10 pemenang dapat Code)"
                   className={inputCls}
                 />
               </div>

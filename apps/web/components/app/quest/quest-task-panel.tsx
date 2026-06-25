@@ -565,6 +565,7 @@ export function QuestTaskPanel({
           questId={quest.id}
           partyId={partyId}
           rewardCc={quest.rewardCc}
+          rewardVariant={rewardStatus?.rewardVariant ?? null}
           campaignMeta={campaignMeta}
           onClaimed={() => loadProgress()}
         />

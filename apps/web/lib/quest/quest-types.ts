@@ -31,6 +31,8 @@ export interface QuestRewardStatus {
   state: QuestRewardState;
   inviteCode: string | null;
   message: string;
+  /** CC_AND_CODE_RAFFLE: varian pemenang ('CODE' | 'CC'); null = legacy both / not applicable. */
+  rewardVariant?: "CODE" | "CC" | null;
 }
 
 export interface QuestTask {

@@ -17,12 +17,14 @@ export function CampaignCcAndCodeRaffleClaimSection({
   questId,
   partyId,
   rewardCc,
+  rewardVariant,
   campaignMeta,
   onClaimed,
 }: {
   questId: string;
   partyId: string | null;
   rewardCc: number;
+  rewardVariant: "CODE" | "CC" | null;
   campaignMeta: CampaignMeta;
   onClaimed: () => void;
 }) {
@@ -74,16 +76,37 @@ export function CampaignCcAndCodeRaffleClaimSection({
     }
   }
 
-  const description = fee > 0
-    ? `Pay ${fee} CC claim fee on-chain to receive ${rewardCc} CC + your invite code`
-    : `Claim your ${rewardCc} CC reward and invite code`;
+  // Label menyesuaikan varian pemenang.
+  const isCodeOnly = rewardVariant === "CODE";
+  const isCcOnly = rewardVariant === "CC";
+  const wonLabel = isCodeOnly
+    ? "You won · Code"
+    : isCcOnly
+      ? `You won · ${rewardCc} CC`
+      : `You won · ${rewardCc} CC + Code`;
+  const claimLabel = isCodeOnly
+    ? "Claim your Code"
+    : isCcOnly
+      ? `Claim ${rewardCc} CC`
+      : `Claim ${rewardCc} CC + Code`;
+  const description = isCodeOnly
+    ? fee > 0
+      ? `Pay ${fee} CC claim fee on-chain to reveal your invite code`
+      : "Claim your invite code"
+    : isCcOnly
+      ? fee > 0
+        ? `Pay ${fee} CC claim fee on-chain to receive ${rewardCc} CC`
+        : `Claim your ${rewardCc} CC reward`
+      : fee > 0
+        ? `Pay ${fee} CC claim fee on-chain to receive ${rewardCc} CC + your invite code`
+        : `Claim your ${rewardCc} CC reward and invite code`;
 
   return (
     <div className="space-y-3">
       <CampaignFcfsRewardCard
         mode="claim"
         sectionLabel="CC + Code Raffle reward"
-        slotsLabel={`You won · ${rewardCc} CC + Code`}
+        slotsLabel={wonLabel}
         description={description}
         rewardCc={rewardCc}
         partyId={partyId}
@@ -91,7 +114,7 @@ export function CampaignCcAndCodeRaffleClaimSection({
         isSubmitting={isSubmitting}
         error={error}
         success={success}
-        claimButtonLabel={`Claim ${rewardCc} CC + Code`}
+        claimButtonLabel={claimLabel}
         onClaim={() => void handleClaim()}
       />
       {claimedCode && (

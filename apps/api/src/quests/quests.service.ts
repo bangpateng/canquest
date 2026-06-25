@@ -1686,37 +1686,68 @@ export class QuestsService {
 
     // ── CC + Code Combined Raffle ──────────────────────────────────────────
     if (rewardType === RewardType.CC_AND_CODE_RAFFLE) {
+      const variant = draw?.rewardVariant as 'CODE' | 'CC' | null;
       if (draw?.distributed && draw.inviteCode) {
         const custom = quest.winnerMessage?.trim();
         return {
           state: 'cc_reward' as const,
           inviteCode: draw.inviteCode,
+          rewardVariant: variant,
           message:
             custom ||
             `Congratulations! You received ${quest.rewardCc} CC and code: ${draw.inviteCode}`,
         };
       }
       if (draw?.distributed && !draw.inviteCode) {
+        // Varian CC (kode null) atau reward pending.
         return {
           state: 'cc_reward' as const,
           inviteCode: null,
-          message: `${quest.rewardCc} CC sent to your wallet. Code will be assigned shortly.`,
+          rewardVariant: variant,
+          message:
+            variant === 'CC'
+              ? `${quest.rewardCc} CC sent to your wallet.`
+              : `${quest.rewardCc} CC sent to your wallet. Code will be assigned shortly.`,
         };
       }
       if (draw) {
         const fee = resolveClaimFeeCc(quest) ?? 5;
+        const custom = quest.winnerMessage?.trim();
+        // Pesan pre-claim menyesuaikan varian pemenang.
+        if (variant === 'CODE') {
+          return {
+            state: 'fcfs_claimable' as const,
+            inviteCode: null,
+            rewardVariant: variant,
+            message:
+              custom ||
+              `You won a Code! Pay ${fee} CC claim fee to reveal your invite code.`,
+          };
+        }
+        if (variant === 'CC') {
+          return {
+            state: 'fcfs_claimable' as const,
+            inviteCode: null,
+            rewardVariant: variant,
+            message:
+              custom ||
+              `You won ${quest.rewardCc} CC! Pay ${fee} CC claim fee to receive it.`,
+          };
+        }
+        // Legacy both (variant null): butuh kode tersedia.
         const codesLeft = await this.countAvailableInviteCodes(questId);
         if (codesLeft <= 0) {
           return {
             state: 'fcfs_missed' as const,
             inviteCode: null,
+            rewardVariant: variant,
             message: 'No codes left in the pool. Contact support.',
           };
         }
-        const custom = quest.winnerMessage?.trim();
         return {
           state: 'fcfs_claimable' as const,
           inviteCode: null,
+          rewardVariant: variant,
           message:
             custom ||
             `You won! Pay ${fee} CC claim fee to receive ${quest.rewardCc} CC + your invite code.`,
@@ -1729,6 +1760,7 @@ export class QuestsService {
         return {
           state: 'not_winner' as const,
           inviteCode: null,
+          rewardVariant: null,
           message: 'You were not selected in the raffle draw.',
         };
       }
@@ -1736,6 +1768,7 @@ export class QuestsService {
         return {
           state: 'pending_draw' as const,
           inviteCode: null,
+          rewardVariant: null,
           message:
             'The event has ended. Winners will be announced after the admin draw.',
         };
@@ -1743,6 +1776,7 @@ export class QuestsService {
       return {
         state: 'waitlist' as const,
         inviteCode: null,
+        rewardVariant: null,
         message: 'Winners will be announced after the event ends.',
       };
     }
@@ -2722,6 +2756,7 @@ export class QuestsService {
     rewardCc: number;
     inviteCode: string | null;
     feeCc: number;
+    rewardVariant: 'CODE' | 'CC' | null;
     rewardStatus: Awaited<ReturnType<QuestsService['getQuestRewardStatus']>>;
   }> {
     const { userId, questId, username, cantonPartyId } = params;
@@ -2765,17 +2800,25 @@ export class QuestsService {
         rewardCc: quest.rewardCc,
         inviteCode: draw.inviteCode,
         feeCc: 0,
+        rewardVariant: draw.rewardVariant as 'CODE' | 'CC' | null,
         rewardStatus,
       };
     }
-    const codesLeft = await this.countAvailableInviteCodes(questId);
-    if (codesLeft <= 0) {
-      throw new BadRequestException(
-        'No invite codes left in the pool. Contact support.',
-      );
+    // Varian reward pemenang (CC_AND_CODE_RAFFLE split): 'CODE', 'CC', atau null (legacy both).
+    const variant = draw.rewardVariant as 'CODE' | 'CC' | null;
+
+    // Cek kode tersedia hanya bila pemenang ini akan menerima kode (varian CODE
+    // atau legacy both). Varian CC tidak butuh kode.
+    if (variant !== 'CC') {
+      const codesLeft = await this.countAvailableInviteCodes(questId);
+      if (codesLeft <= 0) {
+        throw new BadRequestException(
+          'No invite codes left in the pool. Contact support.',
+        );
+      }
     }
     const feeCc = resolveClaimFeeCc(quest) ?? 5;
-    const rewardCc = quest.rewardCc;
+    const rewardCc = variant === 'CODE' ? 0 : quest.rewardCc;
     const validatorPartyId = this.config
       .get<string>('CANTON_VALIDATOR_PARTY_ID')
       ?.trim();
@@ -2820,13 +2863,17 @@ export class QuestsService {
           rewardCc: quest.rewardCc,
           inviteCode: drawNow.inviteCode,
           feeCc: 0,
+          rewardVariant: drawNow.rewardVariant as 'CODE' | 'CC' | null,
           rewardStatus,
         };
       }
 
       // v11.1: assertRewardPool DULU sebelum collectClaimFee (konsisten dengan FCFS/raffle).
       // Mencegah user kena fee charge tapi reward gagal karena pool kosong.
-      await this.assertRewardPool(rewardCc);
+      // (Varian CODE tidak mengirim CC → rewardCc=0 → lewati assert pool.)
+      if (rewardCc > 0) {
+        await this.assertRewardPool(rewardCc);
+      }
 
       // v11.1: exercise DrawRaffleWinner di QuestCampaign on-chain untuk dapat
       // claimSessionId (sebelumnya flow CC+Code raffle tidak punya DAML audit).
@@ -2913,11 +2960,16 @@ export class QuestsService {
       // same code row — findFirst+update had that TOCTOU race. The transaction
       // below merges the code assignment with the winnerDraw/questCompletion
       // update so a code is never marked distributed without being claimed.
-      const claimedCode = await this.reserveInviteCode(questId, userId);
-      if (!claimedCode) {
-        throw new Error(
-          'No invite codes available after fee was paid. Contact support.',
-        );
+      //
+      // Varian CC tidak menerima kode → lewati reserveInviteCode.
+      let claimedCode: string | null = null;
+      if (variant !== 'CC') {
+        claimedCode = await this.reserveInviteCode(questId, userId);
+        if (!claimedCode) {
+          throw new Error(
+            'No invite codes available after fee was paid. Contact support.',
+          );
+        }
       }
       const rewardMicroCc = BigInt(Math.round(rewardCc * 1_000_000));
       await this.prisma.$transaction([
@@ -2973,25 +3025,35 @@ export class QuestsService {
             `AtomicFeeAndReward (CC+Code) failed (non-blocking): ${atomicResult.errors.join(' | ')}`,
           );
         }
-        // Reveal kode yang baru di-assign dari pool.
-        const revealRes = await this.questLedger.revealRewardCode({
-          claimContractId: atomicResult.claimFinalCid ?? ccCodeClaimSessionId,
-          code: finalCode,
-        });
-        if (!revealRes.ok) {
-          this.logger.warn(
-            `RevealRewardCode (CC+Code) failed (non-blocking): ${revealRes.errors.join(' | ')}`,
-          );
+        // Reveal kode yang baru di-assign dari pool (hanya bila ada kode).
+        if (finalCode) {
+          const revealRes = await this.questLedger.revealRewardCode({
+            claimContractId: atomicResult.claimFinalCid ?? ccCodeClaimSessionId,
+            code: finalCode,
+          });
+          if (!revealRes.ok) {
+            this.logger.warn(
+              `RevealRewardCode (CC+Code) failed (non-blocking): ${revealRes.errors.join(' | ')}`,
+            );
+          }
         }
       }
 
       const rewardStatus = await this.getQuestRewardStatus(userId, questId);
+      // Pesan akhir menyesuaikan varian: CODE (hanya kode), CC (hanya token), both (legacy).
+      const message =
+        variant === 'CODE'
+          ? `Congratulations! Your invite code is: ${finalCode}`
+          : variant === 'CC'
+            ? `Congratulations! ${rewardCc} CC sent to your wallet.`
+            : `Congratulations! ${rewardCc} CC sent to your wallet and your code is: ${finalCode}`;
       return {
         ok: true,
-        message: `Congratulations! ${rewardCc} CC sent to your wallet and your code is: ${finalCode}`,
+        message,
         rewardCc,
         inviteCode: finalCode,
         feeCc,
+        rewardVariant: variant,
         rewardStatus,
       };
     } catch (err) {

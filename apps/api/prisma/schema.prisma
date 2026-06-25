@@ -269,6 +269,8 @@ model Quest {
   rewardType       RewardType        @default(CC_ONLY)
   /// Max number of winners (null = unlimited / all completers rewarded)
   maxWinners       Int?
+  /// CC_AND_CODE_RAFFLE: berapa pemenang yang dapat CODE (sisanya dapat CC). Null = semua pemenang dapat keduanya (perilaku lama).
+  codeWinnersQuota Int?
   /// On-chain claim fee (CC) before user receives code/CC; null = use reward-type default (2 code / 3 token FCFS).
   claimFeeCc       Float?
   /// Custom message shown to raffle/email winners (admin dashboard).
@@ -325,6 +327,8 @@ model WinnerDraw {
   ccAmount               Float     @default(0)
   /// Invite code assigned (if applicable)
   inviteCode             String?
+  /// CC_AND_CODE_RAFFLE: varian reward pemenang — 'CODE' atau 'CC'. Null = varian lama (keduanya) untuk kompatibilitas.
+  rewardVariant          String?
   /// Whether the reward has been distributed on-chain
   distributed            Boolean   @default(false)
   /// Canton ledger TX id after CC distribution
