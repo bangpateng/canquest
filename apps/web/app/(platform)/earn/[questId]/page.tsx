@@ -14,7 +14,7 @@ import { getRewardConfig } from "@/lib/quest/quest-engine";
 import { buttonVariants } from "@/components/ui/button";
 import { surfaceCardClass } from "@/lib/ui/ui-tokens";
 import { cn } from "@/lib/utils/utils";
-import { ArrowLeft, Sparkles } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { cookies } from "next/headers";
@@ -237,16 +237,11 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
           <QuestTaskPanel quest={quest} />
         ) : (
           <div className={cn(surfaceCardClass, "bg-[#0a0c14]/80 p-5 text-center")}>
-            <div className="flex flex-col items-center gap-3">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]/20">
-                <Sparkles className="h-7 w-7 text-[var(--primary)]" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-white">Sign in to participate</h2>
-                <p className="mt-2 text-sm text-slate-400 max-w-sm mx-auto">
-                  You need an account to complete missions and claim rewards.
-                </p>
-              </div>
+            <div>
+              <h2 className="text-lg font-semibold text-white">Sign in to participate</h2>
+              <p className="mt-2 text-sm text-slate-400 max-w-sm mx-auto">
+                You need an account to complete missions and claim rewards.
+              </p>
             </div>
             <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-center">
               <Link
