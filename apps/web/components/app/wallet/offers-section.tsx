@@ -313,7 +313,7 @@ export function OffersModal({
                               )}
                             >
                               {offer.type === "transfer_instruction"
-                                ? ""
+                                ? "CIP-56"
                                 : "Legacy"}
                             </span>
                           </div>
