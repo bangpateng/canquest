@@ -4,37 +4,12 @@ import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 export interface PointsCardProps {
-  totalEarned: number;
-  spent: number;
+  /** Saldo tersedia (sisa) = total earned - spent di Earn events. */
   remaining: number;
   loading: boolean;
 }
 
-function SubStat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone: "muted" | "warn";
-}) {
-  return (
-    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3">
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{label}</p>
-      <p
-        className={
-          "mt-0.5 text-lg font-bold tabular-nums " +
-          (tone === "warn" ? "text-rose-400" : "text-white")
-        }
-      >
-        {value.toLocaleString()}
-      </p>
-    </div>
-  );
-}
-
-export function PointsCard({ totalEarned, spent, remaining, loading }: PointsCardProps) {
+export function PointsCard({ remaining, loading }: PointsCardProps) {
   const t = usePlatformT();
 
   return (
@@ -50,7 +25,7 @@ export function PointsCard({ totalEarned, spent, remaining, loading }: PointsCar
           </span>
         </div>
 
-        {/* Headline: remaining (net spendable) */}
+        {/* Headline: remaining (saldo tersedia) */}
         <div className="mt-5">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             {t("dashboard.pointsRemaining")}
@@ -65,20 +40,6 @@ export function PointsCard({ totalEarned, spent, remaining, loading }: PointsCar
             </p>
           )}
           <p className="mt-1 text-xs text-slate-500">{t("dashboard.pointsRemainingHint")}</p>
-        </div>
-
-        {/* Sub-stats */}
-        <div className="mt-5 grid grid-cols-2 gap-3">
-          <SubStat
-            label={t("dashboard.pointsTotal")}
-            value={totalEarned}
-            tone="muted"
-          />
-          <SubStat
-            label={t("dashboard.pointsSpent")}
-            value={spent}
-            tone="warn"
-          />
         </div>
       </div>
     </div>

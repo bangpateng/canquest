@@ -12,7 +12,7 @@ const LEADERBOARD_PAGE_SIZE = 5;
 const TABS = [
   { id: "weekly" as const, label: "Weekly" },
   { id: "monthly" as const, label: "Monthly" },
-  { id: "all" as const, label: "All time" },
+  { id: "all" as const, label: "All time (balance)" },
 ];
 
 interface LeaderboardRow {

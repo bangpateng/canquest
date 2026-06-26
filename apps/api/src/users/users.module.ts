@@ -3,12 +3,13 @@ import { WalletRequiredGuard } from '../common/wallet-required.guard';
 import { ProfileAvatarService } from './profile-avatar.service';
 import { ReferralService } from './referral.service';
 import { ReferralController } from './referral.controller';
+import { PointsController } from './points.controller';
 import { PointsService } from './points.service';
 import { UsersService } from './users.service';
 import { WalletPasswordService } from './wallet-password.service';
 
 @Module({
-  controllers: [ReferralController],
+  controllers: [ReferralController, PointsController],
   providers: [
     UsersService,
     PointsService,

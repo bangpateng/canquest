@@ -168,4 +168,63 @@ export class PointsService {
       .filter((r) => r.points > 0)
       .sort((a, b) => b.points - a.points);
   }
+
+  /**
+   * Saldo points mutakhir (snapshot) per user untuk leaderboard "All time".
+   *
+   * Berbeda dari buildNetPointsByUser (yang menghitung earned-in-window);
+   * ini = total lifetime earned - total spent sepanjang masa, mengikuti
+   * getNetPoints(). Reconcile tiap user ke User.earnPoints dulu supaya
+   * konsisten dengan saldo Dashboard / /users/me/points.
+   */
+  async buildRemainingPointsByUser(): Promise<PointsAggregateRow[]> {
+    // 1. Total earned per user (lifetime) dari activity records.
+    const earnedRows = await this.buildPointsByUser();
+    if (earnedRows.length === 0) return [];
+
+    // 2. Total earn entry cost sepanjang masa per user.
+    const entrySpentRows = await this.prisma.earnEntry.groupBy({
+      by: ['userId'],
+      _sum: { pointsSpent: true },
+    });
+    const spentMap = new Map<string, number>();
+    for (const row of entrySpentRows) {
+      spentMap.set(row.userId, row._sum.pointsSpent ?? 0);
+    }
+
+    // 3. Reconcile tiap user ke User.earnPoints (Math.max manual credits),
+    //    lalu saldo = max(stored earned, computed earned) - spent (min 0).
+    const userIds = earnedRows.map((r) => r.id);
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, earnPoints: true },
+    });
+    const storedEarned = new Map<string, number>();
+    for (const u of users) storedEarned.set(u.id, u.earnPoints);
+
+    const rows = earnedRows.map((r) => {
+      const totalEarned = Math.max(storedEarned.get(r.id) ?? 0, r.points);
+      const spent = spentMap.get(r.id) ?? 0;
+      return { ...r, points: Math.max(0, totalEarned - spent) };
+    });
+
+    // 4. Persen otomatis reconciled earnPoints balik ke DB (selisih > 0).
+    await Promise.all(
+      rows
+        .filter((r) => {
+          const stored = storedEarned.get(r.id) ?? 0;
+          const computed = earnedRows.find((e) => e.id === r.id)!.points;
+          return computed > stored;
+        })
+        .map((r) => {
+          const computed = earnedRows.find((e) => e.id === r.id)!.points;
+          return this.prisma.user.update({
+            where: { id: r.id },
+            data: { earnPoints: computed },
+          });
+        }),
+    );
+
+    return rows.filter((r) => r.points > 0).sort((a, b) => b.points - a.points);
+  }
 }

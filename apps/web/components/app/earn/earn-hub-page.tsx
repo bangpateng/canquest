@@ -13,7 +13,7 @@ import { useEffect, useState } from "react";
 export function EarnHubPage() {
   const [partyId, setPartyId] = useState<string | null>(null);
   const [twitterUsername, setTwitterUsername] = useState<string | null>(null);
-  const [earnPoints, setEarnPoints] = useState(0);
+  const [pointsRemaining, setPointsRemaining] = useState(0);
   const [hub, setHub] = useState<Quest | null>(null);
   const [hubLoading, setHubLoading] = useState(true);
   const [hubError, setHubError] = useState<string | null>(null);
@@ -33,9 +33,10 @@ export function EarnHubPage() {
           cache: "no-store" as const,
           signal: AbortSignal.timeout(12_000),
         };
-        const [hubRes, meRes] = await Promise.all([
+        const [hubRes, meRes, pointsRes] = await Promise.all([
           fetch("/api/quests/earn-hub", fetchOpts),
           fetch("/api/me", fetchOpts),
+          fetch("/api/points", fetchOpts),
         ]);
 
         if (!cancelled) {
@@ -43,17 +44,24 @@ export function EarnHubPage() {
             const me = (await meRes.json()) as {
               cantonPartyId?: string | null;
               twitterUsername?: string | null;
-              earnPoints?: number;
             };
             setPartyId(
               hasRealWallet(me.cantonPartyId) ? me.cantonPartyId!.trim() : null,
             );
             setTwitterUsername(me.twitterUsername?.trim() || null);
-            setEarnPoints(typeof me.earnPoints === "number" ? me.earnPoints : 0);
           } else {
             setPartyId(null);
           }
           setMeLoading(false);
+        }
+
+        if (!cancelled) {
+          if (pointsRes.ok) {
+            const pts = (await pointsRes.json()) as { remaining?: number };
+            setPointsRemaining(
+              typeof pts.remaining === "number" ? pts.remaining : 0,
+            );
+          }
         }
 
         if (!cancelled) {
@@ -126,16 +134,16 @@ export function EarnHubPage() {
             ) : (
               <>
                 <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-2">
-                  Total Points Earned
+                  Available Points
                 </p>
                 <p className="text-4xl font-extrabold tabular-nums leading-none tracking-tight text-white sm:text-5xl md:text-6xl glow-text">
-                  {earnPoints.toLocaleString()}
+                  {pointsRemaining.toLocaleString()}
                   <span className="ml-2 text-base font-semibold text-[var(--primary)] sm:ml-2.5 sm:text-lg md:text-xl">
                     pts
                   </span>
                 </p>
                 <p className="mt-3 text-xs sm:text-sm font-normal leading-relaxed text-slate-400 sm:mt-4 max-w-md">
-                  Complete daily tasks, invite friends, and join partner campaigns to earn more.
+                  Your spendable balance. Complete daily tasks and invite friends to earn more.
                 </p>
 
                 {/* Quick Actions */}
@@ -179,11 +187,11 @@ export function EarnHubPage() {
                 viewerPartyId={partyId}
                 viewerTwitterUsername={twitterUsername}
                 onPointsEarned={() => {
-                  void fetch("/api/me", { credentials: "include", cache: "no-store" })
+                  void fetch("/api/points", { credentials: "include", cache: "no-store" })
                     .then((r) => (r.ok ? r.json() : null))
-                    .then((me: { earnPoints?: number } | null) => {
-                      if (me && typeof me.earnPoints === "number") {
-                        setEarnPoints(me.earnPoints);
+                    .then((pts: { remaining?: number } | null) => {
+                      if (pts && typeof pts.remaining === "number") {
+                        setPointsRemaining(pts.remaining);
                       }
                     })
                     .catch(() => undefined);

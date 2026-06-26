@@ -3279,10 +3279,13 @@ export class QuestsService {
     page: number;
     pageSize: number;
   }> {
-    const since = this.leaderboardSince(period);
-    // Net points = earnPoints - earn entry cost spent (satu sumber kebenaran untuk leaderboard)
-    const aggregated = await this.points.buildNetPointsByUser(since);
-    const sorted = aggregated; // buildNetPointsByUser sudah sorted desc
+    // "All time" = saldo points mutakhir (lifetime total - spent), sinkron dengan
+    // Dashboard / /users/me/points. Weekly/Monthly tetap kompetisi aktivitas periode.
+    const aggregated =
+      period === 'all'
+        ? await this.points.buildRemainingPointsByUser()
+        : await this.points.buildNetPointsByUser(this.leaderboardSince(period));
+    const sorted = aggregated; // sudah sorted desc
     const total = sorted.length;
     const skip = (page - 1) * pageSize;
     const pageRows = sorted.slice(skip, skip + pageSize);

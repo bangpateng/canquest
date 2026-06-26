@@ -14,6 +14,10 @@ import { ProfileCard } from "./profile-card";
 import { CcHoldingsCard } from "./cc-holdings-card";
 import { PointsCard } from "./points-card";
 import { ActivityStatsCard } from "./activity-stats-card";
+import {
+  getPointsBalance,
+  type PointsBalance,
+} from "@/lib/services/api/points";
 
 const FOCUS_REFETCH_MIN_MS = 60_000;
 const throttleFocusRefetch = createRefetchThrottle(FOCUS_REFETCH_MIN_MS);
@@ -74,6 +78,7 @@ const EMPTY_STATS: DashboardStats = {
 export function DashboardView() {
   const [me, setMe] = useState<Me | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [pointsBalance, setPointsBalance] = useState<PointsBalance | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -81,9 +86,12 @@ export function DashboardView() {
     if (!opts?.background) setLoading(true);
     setLoadError(null);
     try {
-      const [meResult, statsResult] = await Promise.all([
+      const [meResult, statsResult, pointsResult] = await Promise.all([
         fetchJson<Me>("/api/me"),
         fetchJson<DashboardStats>("/api/quests/dashboard-stats"),
+        getPointsBalance().then(
+          (data) => ({ ok: true, data }) as { ok: true; data: PointsBalance },
+        ).catch(() => ({ ok: false, data: null }) as { ok: false; data: null }),
       ]);
 
       if (meResult.ok && meResult.data) {
@@ -94,15 +102,12 @@ export function DashboardView() {
         if (cached) setMe((prev) => prev ?? cached);
       }
       if (statsResult.ok && statsResult.data) {
-        const earnPoints =
-          typeof meResult.data?.earnPoints === "number"
-            ? meResult.data.earnPoints
-            : statsResult.data.totalPoints;
-        setStats({ ...statsResult.data, totalPoints: earnPoints });
-      } else if (meResult.ok && typeof meResult.data?.earnPoints === "number") {
-        setStats({ ...EMPTY_STATS, totalPoints: meResult.data.earnPoints });
+        setStats(statsResult.data);
       } else {
         setStats(EMPTY_STATS);
+      }
+      if (pointsResult.ok && pointsResult.data) {
+        setPointsBalance(pointsResult.data);
       }
 
       if (!meResult.ok && !statsResult.ok) {
@@ -193,9 +198,7 @@ export function DashboardView() {
               {/* Points (4 cols) */}
               <div className="sm:col-span-1 lg:col-span-4">
                 <PointsCard
-                  totalEarned={s.totalPoints}
-                  spent={s.pointsSpent ?? 0}
-                  remaining={s.pointsRemaining ?? s.totalPoints}
+                  remaining={pointsBalance?.remaining ?? s.pointsRemaining ?? 0}
                   loading={loading}
                 />
               </div>
