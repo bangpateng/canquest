@@ -213,16 +213,14 @@ export function QuestSubmittedProof({
         description={
           "You were not selected in the raffle draw. Thanks for participating — better luck on the next campaign."
         }
-        icon={CheckCircle2}
       />
     );
   }
 
   if (uiKind === "waitlist_email" && state === "winner") {
     return (
-      <section className="relative overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-b from-emerald-500/12 via-[var(--card)] to-[var(--card)] p-8 text-center ring-1 ring-emerald-500/20">
-        <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-400" />
-        <PageTitle className="mt-4">Congratulations — you&apos;re selected!</PageTitle>
+      <section className="rounded-2xl border border-white/[0.06] bg-[var(--card)] p-8 text-center">
+        <PageTitle>Congratulations — you&apos;re selected!</PageTitle>
         <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted-foreground)]">
           {rewardStatus?.message ??
             "You were selected in the draw. Check your email or the message below for next steps."}
@@ -233,9 +231,8 @@ export function QuestSubmittedProof({
 
   if (uiKind === "waitlist_email" && state === "waitlist") {
     return (
-      <section className="relative overflow-hidden rounded-2xl border border-sky-500/30 bg-gradient-to-b from-sky-500/10 via-[var(--card)] to-[var(--card)] p-8 text-center">
-        <CheckCircle2 className="mx-auto h-10 w-10 text-sky-400" />
-        <PageTitle className="mt-4">You&apos;re on the waitlist</PageTitle>
+      <section className="rounded-2xl border border-white/[0.06] bg-[var(--card)] p-8 text-center">
+        <PageTitle>You&apos;re on the waitlist</PageTitle>
         <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted-foreground)]">
           {rewardStatus?.message ??
             "Your email is registered. We will contact you if you are selected."}
@@ -260,27 +257,22 @@ export function QuestSubmittedProof({
         label="CC + Code Raffle"
         title="Entry recorded"
         description="Winners will be announced after the event ends. You will receive both CC and an invite code."
-        icon={CheckCircle2}
       />
     );
   }
 
   if (uiKind === "cc_and_code_raffle" && state === "cc_reward") {
     return (
-      <section className="relative overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-b from-emerald-500/12 via-[var(--card)] to-[var(--card)] p-6 ring-1 ring-emerald-500/20">
-        <div className="flex items-center gap-3">
-          <CheckCircle2 className="h-8 w-8 shrink-0 text-emerald-400" />
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-emerald-400/80">
-              Raffle Reward
-            </p>
-            <p className="mt-0.5 text-base font-bold text-white">Reward claimed</p>
-          </div>
+      <section className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[var(--card)] p-6">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-emerald-400/80">
+            Raffle Reward
+          </p>
+          <p className="mt-0.5 text-base font-bold text-white">Reward claimed</p>
         </div>
         <div className="mt-4 space-y-3">
           {/* CC reward row */}
           <div className="flex items-center gap-3 rounded-xl border border-[var(--primary)]/20 bg-[var(--primary)]/10 px-4 py-3">
-            <CcRewardLogo size={20} />
             <span className="text-sm font-bold text-canton">+{rewardCc ?? 0} CC sent to your wallet</span>
           </div>
           {/* Invite code row — konsisten dengan claim card (RewardReveal). */}
@@ -303,7 +295,6 @@ export function QuestSubmittedProof({
         label="Quest submitted"
         title="Entry recorded"
         description="Winners will be announced after the event ends."
-        icon={CheckCircle2}
       />
     );
   }
@@ -315,16 +306,14 @@ export function QuestSubmittedProof({
         label="Raffle reward"
         title="Reward claimed"
         description={`${rewardCc ?? 0} CC has been sent to your wallet.`}
-        icon={CheckCircle2}
       />
     );
   }
 
   if (uiKind === "cc_manual" && state === "cc_reward") {
     return (
-      <section className="relative overflow-hidden rounded-3xl border border-emerald-500/30 bg-gradient-to-b from-emerald-500/12 via-[var(--card)] to-[var(--card)] p-10 text-center ring-1 ring-emerald-500/20">
-        <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-400" />
-        <PageTitle className="mt-6 text-2xl font-bold text-slate-100">Campaign complete</PageTitle>
+      <section className="rounded-2xl border border-white/[0.06] bg-[var(--card)] p-8 text-center">
+        <PageTitle className="text-2xl font-bold text-slate-100">Campaign complete</PageTitle>
         <p className="mx-auto mt-3 max-w-md text-sm font-medium text-slate-400">
           {rewardStatus?.message ??
             `${rewardCc ?? 0} CC will be sent manually by the team via bulk sender. Watch your wallet and email.`}
@@ -344,7 +333,6 @@ export function QuestSubmittedProof({
         label="Draw pending"
         title="Submitted — awaiting draw"
         description={pendingDescription}
-        icon={Clock}
       />
     );
   }

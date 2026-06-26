@@ -429,14 +429,9 @@ export function QuestTaskPanel({
         </div>
       ) : null}
 
-      {/* Missions header with live progress — consistent for all quest types */}
+      {/* Progress bar — tanpa header teks "Missions". */}
       {quest.tasks.length > 0 ? (
-        <div className="flex flex-col gap-3 rounded-2xl border border-white/[0.06] bg-[var(--card)]/60 px-4 py-4 backdrop-blur-2xl sm:px-5">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-white">Missions</h2>
-            </div>
-          </div>
+        <div className="rounded-2xl border border-white/[0.06] bg-[var(--card)]/60 px-4 py-3 backdrop-blur-2xl sm:px-5">
           <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
             <div
               className={cn(
