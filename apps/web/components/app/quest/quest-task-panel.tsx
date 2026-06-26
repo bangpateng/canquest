@@ -173,9 +173,27 @@ export function QuestTaskPanel({
   /** While a task is counting down or submitting, no other task can be started. */
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
 
+  // Ticks every minute so quizzes that cross the 24h boundary disappear live
+  // (without a full page reload). Points already earned stay in the balance.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // On the Quest hub, hide quizzes that ended (>24h since publish) entirely.
+  // Points users earned are already credited to their balance and are not removed.
+  const visibleTasks = useMemo(
+    () =>
+      isEarnHub
+        ? quest.tasks.filter((t) => !isEarnHubQuizExpired(t, now))
+        : quest.tasks,
+    [isEarnHub, quest.tasks, now],
+  );
+
   const firstOpenTaskIdx = useMemo(
-    () => quest.tasks.findIndex((t) => submissions[t.id]?.status !== "VERIFIED"),
-    [quest.tasks, submissions],
+    () => visibleTasks.findIndex((t) => submissions[t.id]?.status !== "VERIFIED"),
+    [visibleTasks, submissions],
   );
 
   const isTaskSequentiallyLocked = useCallback(
@@ -268,23 +286,25 @@ export function QuestTaskPanel({
   }, [loadProgress, viewerPartyId, viewerTwitterUsername]);
 
   const verifiedCount = useMemo(
-    () => quest.tasks.filter((t) => submissions[t.id]?.status === "VERIFIED").length,
-    [quest.tasks, submissions],
+    () => visibleTasks.filter((t) => submissions[t.id]?.status === "VERIFIED").length,
+    [visibleTasks, submissions],
   );
   const totalPoints = useMemo(
-    () => quest.tasks.reduce((s, t) => s + t.points, 0),
-    [quest.tasks],
+    () => visibleTasks.reduce((s, t) => s + t.points, 0),
+    [visibleTasks],
   );
   const earnedPoints = useMemo(
     () =>
-      quest.tasks.reduce(
+      visibleTasks.reduce(
         (s, t) => s + (submissions[t.id]?.status === "VERIFIED" ? t.points : 0),
         0,
       ),
-    [quest.tasks, submissions],
+    [visibleTasks, submissions],
   );
-  const pct = quest.tasks.length ? Math.round((verifiedCount / quest.tasks.length) * 100) : 0;
-  const allDone = verifiedCount === quest.tasks.length && quest.tasks.length > 0;
+  const pct = visibleTasks.length
+    ? Math.round((verifiedCount / visibleTasks.length) * 100)
+    : 0;
+  const allDone = verifiedCount === visibleTasks.length && visibleTasks.length > 0;
   const campaignEnded = !isEarnHub && isCampaignEnded(quest, campaignMeta);
   const fcfsSlotsFull =
     !isEarnHub &&
@@ -332,8 +352,8 @@ export function QuestTaskPanel({
   function onTaskVerified(taskId: string, sub: QuestSubmission) {
     setSubmissions((prev) => {
       const next = { ...prev, [taskId]: sub };
-      const count = quest.tasks.filter((t) => next[t.id]?.status === "VERIFIED").length;
-      setAllTasksVerified(count === quest.tasks.length && quest.tasks.length > 0);
+      const count = visibleTasks.filter((t) => next[t.id]?.status === "VERIFIED").length;
+      setAllTasksVerified(count === visibleTasks.length && visibleTasks.length > 0);
       return next;
     });
   }
@@ -437,7 +457,7 @@ export function QuestTaskPanel({
       ) : null}
 
       {/* Progress bar — tanpa header teks "Missions". */}
-      {quest.tasks.length > 0 ? (
+      {visibleTasks.length > 0 ? (
         <div className="rounded-2xl border border-white/[0.06] bg-[var(--card)]/60 px-4 py-3 backdrop-blur-2xl sm:px-5">
           <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
             <div
@@ -456,7 +476,7 @@ export function QuestTaskPanel({
       {/* Task list — satu container untuk Earn hub & campaign. Tiap task = kartu
           standalone, jadi pakai space-y (jarak), BUKAN divide-y (garis tertimpa). */}
       <ul className="space-y-3">
-        {quest.tasks.map((task, idx) => (
+        {visibleTasks.map((task, idx) => (
           <TaskRow
             key={task.id}
             index={idx + 1}
