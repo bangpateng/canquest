@@ -58,6 +58,14 @@ export interface UserDashboardStats {
   questsCompleted: number;
   txCount: number;
   weeklyRank: number;
+  /** Lifetime points spent on Earn entries (method='points'). */
+  pointsSpent: number;
+  /** Net spendable points = lifetime earned - spent. */
+  pointsRemaining: number;
+  /** Completions of EARN_HUB quests (the Quest hub menu). */
+  earnHubCompleted: number;
+  /** Completions of CAMPAIGN quests (the Earn menu). */
+  campaignCompleted: number;
 }
 
 export interface ActivityItem {
@@ -3335,9 +3343,27 @@ export class QuestsService {
   async getUserDashboardStats(userId: string): Promise<UserDashboardStats> {
     const totalPoints = await this.users.reconcileEarnPoints(userId);
 
-    const [completions, txCount] = await Promise.all([
+    const [
+      completions,
+      txCount,
+      spentResult,
+      pointsRemaining,
+      earnHubCompleted,
+      campaignCompleted,
+    ] = await Promise.all([
       this.prisma.questCompletion.count({ where: { userId } }),
       this.prisma.ccTransaction.count({ where: { userId } }),
+      this.prisma.earnEntry.aggregate({
+        where: { userId },
+        _sum: { pointsSpent: true },
+      }),
+      this.users.getNetPoints(userId),
+      this.prisma.questCompletion.count({
+        where: { userId, quest: { questKind: 'EARN_HUB' } },
+      }),
+      this.prisma.questCompletion.count({
+        where: { userId, quest: { questKind: 'CAMPAIGN' } },
+      }),
     ]);
 
     const weeklyBoard = await this.getLeaderboard('weekly', 1, 10_000);
@@ -3349,6 +3375,10 @@ export class QuestsService {
       questsCompleted: completions,
       txCount,
       weeklyRank,
+      pointsSpent: spentResult._sum.pointsSpent ?? 0,
+      pointsRemaining,
+      earnHubCompleted,
+      campaignCompleted,
     };
   }
 

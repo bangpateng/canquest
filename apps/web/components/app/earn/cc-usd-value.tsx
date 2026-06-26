@@ -21,7 +21,7 @@ interface CcUsdValueProps {
  * Contoh: <span>10 CC <CcUsdValue cc={10} /></span>  →  10 CC ≈ $1.64
  */
 export function CcUsdValue({ cc, className, prefix = "≈ " }: CcUsdValueProps) {
-  const price = useCcPrice();
+  const { price } = useCcPrice();
   if (!price || cc <= 0) return null;
 
   const usd = cc * price;

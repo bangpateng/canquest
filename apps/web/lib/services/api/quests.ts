@@ -6,6 +6,14 @@ export interface DashboardStats {
   questsCompleted: number;
   txCount: number;
   weeklyRank: number;
+  /** Lifetime points spent on Earn entries (method='points'). */
+  pointsSpent: number;
+  /** Net spendable points = lifetime earned - spent. */
+  pointsRemaining: number;
+  /** Completions of EARN_HUB quests (the Quest hub menu). */
+  earnHubCompleted: number;
+  /** Completions of CAMPAIGN quests (the Earn menu). */
+  campaignCompleted: number;
 }
 
 export interface ActivityItem {

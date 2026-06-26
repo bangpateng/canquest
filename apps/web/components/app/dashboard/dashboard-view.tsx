@@ -1,12 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { SectionTitle, StatValue } from "@/components/ui/typography";
-import { cn } from "@/lib/utils/utils";
-import { CheckCircle2, Coins, Gift, TrendingUp, Trophy, Zap, Sparkles } from "lucide-react";
+import { usePlatformT } from "@/lib/i18n/platform-provider";
+import { CheckCircle2, Coins, Trophy } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { ListPagination } from "@/components/app/list/list-pagination";
-import { useCcBalance } from "@/lib/hooks/use-cc-balance";
 import { createRefetchThrottle } from "@/lib/utils/refetch-throttle";
 import {
   cacheWalletMe,
@@ -14,7 +12,13 @@ import {
   readCachedWalletMe,
   readLastWalletUserId,
 } from "@/lib/auth/wallet-session-cache";
-import { usePlatformT } from "@/lib/i18n/platform-provider";
+import { cn } from "@/lib/utils/utils";
+
+import { CcPriceCard } from "./cc-price-card";
+import { ProfileCard } from "./profile-card";
+import { CcHoldingsCard } from "./cc-holdings-card";
+import { PointsCard } from "./points-card";
+import { ActivityStatsCard } from "./activity-stats-card";
 
 const FOCUS_REFETCH_MIN_MS = 60_000;
 const throttleFocusRefetch = createRefetchThrottle(FOCUS_REFETCH_MIN_MS);
@@ -27,6 +31,8 @@ interface Me {
   displayName?: string | null;
   username?: string | null;
   cantonPartyId?: string | null;
+  twitterUsername?: string | null;
+  avatarUrl?: string | null;
   earnPoints?: number;
 }
 
@@ -35,6 +41,10 @@ interface DashboardStats {
   questsCompleted: number;
   txCount: number;
   weeklyRank: number;
+  pointsSpent?: number;
+  pointsRemaining?: number;
+  earnHubCompleted?: number;
+  campaignCompleted?: number;
 }
 
 interface ActivityItem {
@@ -98,6 +108,17 @@ async function fetchJson<T>(url: string): Promise<{ ok: boolean; data: T | null 
     clearTimeout(timer);
   }
 }
+
+const EMPTY_STATS: DashboardStats = {
+  totalPoints: 0,
+  questsCompleted: 0,
+  txCount: 0,
+  weeklyRank: 0,
+  pointsSpent: 0,
+  pointsRemaining: 0,
+  earnHubCompleted: 0,
+  campaignCompleted: 0,
+};
 
 export function DashboardView() {
   const t = usePlatformT();
@@ -166,14 +187,9 @@ export function DashboardView() {
             : statsResult.data.totalPoints;
         setStats({ ...statsResult.data, totalPoints: earnPoints });
       } else if (meResult.ok && typeof meResult.data?.earnPoints === "number") {
-        setStats({
-          totalPoints: meResult.data.earnPoints,
-          questsCompleted: 0,
-          txCount: 0,
-          weeklyRank: 0,
-        });
+        setStats({ ...EMPTY_STATS, totalPoints: meResult.data.earnPoints });
       } else {
-        setStats({ totalPoints: 0, questsCompleted: 0, txCount: 0, weeklyRank: 0 });
+        setStats(EMPTY_STATS);
       }
 
       if (!meResult.ok && !statsResult.ok) {
@@ -207,98 +223,30 @@ export function DashboardView() {
     void fetchActivity(activityPage);
   }, [fetchActivity, activityPage]);
 
-  const lifetimePoints =
-    typeof me?.earnPoints === "number"
-      ? me.earnPoints
-      : (stats?.totalPoints ?? 0);
-
   const hasWallet = isRealCantonPartyId(me?.cantonPartyId);
-
-  const { balance, loading: balanceLoading } = useCcBalance({
-    enabled: hasWallet,
-    pollIntervalMs: 90_000,
-  });
-
-  const statCards = [
-    {
-      key: "weeklyRank",
-      title: t("dashboard.weeklyRank"),
-      value: loading ? null : stats?.weeklyRank ? `#${stats.weeklyRank}` : "—",
-      hint: t("dashboard.weeklyRankHint"),
-      icon: Trophy,
-      gradient: "from-amber-500/20 to-orange-500/5",
-      iconBg: "bg-amber-500/10 ring-amber-500/20",
-      iconColor: "text-amber-400",
-    },
-    {
-      key: "ccBalance",
-      title: t("dashboard.ccBalance"),
-      value: loading || (hasWallet && balanceLoading)
-        ? null
-        : !hasWallet
-          ? t("dashboard.noWallet")
-          : balance !== null
-            ? `${balance.toFixed(4)} CC`
-            : "—",
-      hint: hasWallet ? t("dashboard.ccBalanceHintLive") : t("dashboard.ccBalanceHintCreate"),
-      icon: Coins,
-      gradient: "from-blue-500/20 to-cyan-500/5",
-      iconBg: "bg-blue-500/10 ring-blue-500/20",
-      iconColor: "text-blue-400",
-    },
-    {
-      key: "ccTransactions",
-      title: t("dashboard.ccTransactions"),
-      value: loading ? null : (stats?.txCount ?? 0).toString(),
-      hint: t("dashboard.ccTransactionsHint"),
-      icon: Zap,
-      gradient: "from-purple-500/20 to-violet-500/5",
-      iconBg: "bg-purple-500/10 ring-purple-500/20",
-      iconColor: "text-purple-400",
-    },
-    {
-      key: "questsCompleted",
-      title: t("dashboard.questsCompleted"),
-      value: loading ? null : (stats?.questsCompleted ?? 0).toString(),
-      hint: t("dashboard.questsCompletedHint"),
-      icon: Gift,
-      gradient: "from-emerald-500/20 to-teal-500/5",
-      iconBg: "bg-emerald-500/10 ring-emerald-500/20",
-      iconColor: "text-emerald-400",
-    },
-    {
-      key: "questPoints",
-      title: t("dashboard.questPoints"),
-      value: loading ? null : lifetimePoints.toLocaleString(),
-      hint: t("dashboard.questPointsHint"),
-      icon: TrendingUp,
-      gradient: "from-rose-500/20 to-pink-500/5",
-      iconBg: "bg-rose-500/10 ring-rose-500/20",
-      iconColor: "text-rose-400",
-    },
-  ];
+  const s = stats ?? EMPTY_STATS;
 
   return (
     <div className="w-full max-w-full overflow-x-hidden font-sans">
       <div className="w-full min-h-screen max-w-7xl mx-auto">
         <div className="space-y-5 md:space-y-6">
 
-          {/* ── Welcome Banner ───────────────────────────────────────────── */}
+          {/* ── Page Header ──────────────────────────────────────────────── */}
           {!loadError && (
-            <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50 p-6 sm:p-8">
+            <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[var(--card)]/80 backdrop-blur-2xl shadow-2xl shadow-black/50 p-6 sm:p-8">
               <div
                 className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_100%_0%,rgb(var(--canton-rgb)/0.08),transparent_60%)]"
                 aria-hidden
               />
               <div className="relative">
                 <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
-                    {me?.displayName
-                      ? `Welcome back, ${me.displayName.split(" ")[0]}`
-                      : "Welcome to CanQuest"}
-                  </h1>
-                  <p className="mt-1 text-sm text-slate-400">
-                    Complete quests, earn CC tokens, and climb the leaderboard.
-                  </p>
+                  {me?.displayName
+                    ? t("dashboard.welcomeBack", { name: me.displayName.split(" ")[0] })
+                    : t("dashboard.welcomeGuest")}
+                </h1>
+                <p className="mt-1 text-sm text-slate-400">
+                  {t("dashboard.overviewSubtitle")}
+                </p>
               </div>
             </div>
           )}
@@ -328,117 +276,52 @@ export function DashboardView() {
             </div>
           ) : null}
 
-          {/* ── Premium Bento Grid ─────────────────────────────────────── */}
-          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 md:gap-5">
-            {/* Hero Card — Weekly Rank (Large Feature, spans 7 cols, 2 rows) */}
-            <div className="sm:col-span-2 lg:col-span-7 lg:row-span-2 relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50 transition-all duration-300 hover:border-white/[0.08] group p-6 sm:p-8 md:p-10">
-              <div
-                className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_100%_0%,rgb(251_191_36/0.06),transparent_70%)]"
-                aria-hidden
-              />
-              <div className="relative flex flex-col h-full justify-between">
-                <div>
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/10 ring-1 ring-amber-500/20 transition-all duration-300 group-hover:ring-amber-500/30 group-hover:scale-105">
-                      <Trophy className="h-7 w-7 text-amber-400" aria-hidden />
-                    </div>
-                    <div>
-                      <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
-                        {statCards[0].title}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="mt-8">
-                    {statCards[0].value === null ? (
-                      <div className="flex items-center h-24">
-                        <LoadingSpinner size="xl" tone="muted" />
-                      </div>
-                    ) : (
-                      <p className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-white glow-text">
-                        {statCards[0].value}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                {statCards[0].hint ? (
-                  <p className="mt-8 text-xs sm:text-sm text-slate-400 font-normal leading-relaxed line-clamp-2">
-                    {statCards[0].hint}
-                  </p>
-                ) : null}
+          {/* ── Cards Bento Grid ─────────────────────────────────────────── */}
+          {!loadError && (
+            <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 md:gap-5">
+              {/* Profile (full width on mobile, 6 cols on desktop) */}
+              <div className="sm:col-span-2 lg:col-span-6">
+                <ProfileCard
+                  displayName={me?.displayName}
+                  username={me?.username}
+                  twitterUsername={me?.twitterUsername}
+                  avatarUrl={me?.avatarUrl}
+                  weeklyRank={loading ? null : s.weeklyRank || null}
+                  loading={loading}
+                />
               </div>
-            </div>
 
-            {/* CC Balance Card — Prominent Secondary (5 cols) */}
-            <div className="sm:col-span-2 lg:col-span-5 lg:row-span-2 relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50 transition-all duration-300 hover:border-white/[0.08] group p-5 sm:p-6 md:p-8">
-              <div
-                className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_50%_0%,rgb(59_130_246/0.06),transparent_70%)]"
-                aria-hidden
-              />
-              <div className="relative flex flex-col h-full">
-                <div className="flex items-start justify-between mb-4">
-                  <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
-                    {statCards[1].title}
-                  </span>
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10 ring-1 ring-blue-500/20 transition-all duration-300 group-hover:ring-blue-500/30 group-hover:scale-105">
-                    <Coins className="h-5 w-5 text-blue-400" aria-hidden />
-                  </div>
-                </div>
-                <div className="mt-6 flex-1 flex items-center">
-                  {statCards[1].value === null ? (
-                    <LoadingSpinner size="lg" tone="muted" />
-                  ) : (
-                    <p className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight text-white break-words">
-                      {statCards[1].value}
-                    </p>
-                  )}
-                </div>
-                {statCards[1].hint ? (
-                  <p className="mt-6 text-xs sm:text-sm text-slate-400 font-normal leading-relaxed line-clamp-2">
-                    {statCards[1].hint}
-                  </p>
-                ) : null}
+              {/* CC Price + chart (6 cols) */}
+              <div className="sm:col-span-2 lg:col-span-6">
+                <CcPriceCard />
               </div>
-            </div>
 
-            {/* Compact Stat Cards — 3 across bottom (4 cols each) */}
-            {statCards.slice(2).map((card) => {
-              const Icon = card.icon;
-              return (
-                <div
-                  key={card.key}
-                  className="lg:col-span-4 relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50 transition-all duration-300 hover:border-white/[0.08] group p-5 sm:p-6"
-                >
-                  {/* Subtle gradient accent */}
-                  <div
-                    className={`pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_100%_0%,var(--tw-gradient-from),transparent_70%)] bg-gradient-to-br ${card.gradient}`}
-                    aria-hidden
-                  />
-                  <div className="relative flex items-start justify-between mb-4">
-                    <span className="text-xs sm:text-sm font-medium text-slate-500 tracking-tight">
-                      {card.title}
-                    </span>
-                    <div className={cn("flex h-9 w-9 items-center justify-center rounded-lg ring-1 transition-all duration-300 group-hover:scale-105", card.iconBg)}>
-                      <Icon className={cn("h-4 w-4", card.iconColor)} aria-hidden />
-                    </div>
-                  </div>
-                  <div className="relative mt-4">
-                    {card.value === null ? (
-                      <LoadingSpinner size="lg" tone="muted" />
-                    ) : (
-                      <p className="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight text-white">
-                        {card.value}
-                      </p>
-                    )}
-                  </div>
-                  {card.hint ? (
-                    <p className="relative mt-4 text-xs text-slate-500 font-normal leading-relaxed line-clamp-2">
-                      {card.hint}
-                    </p>
-                  ) : null}
-                </div>
-              );
-            })}
-          </section>
+              {/* CC Holdings (4 cols) */}
+              <div className="sm:col-span-2 lg:col-span-4">
+                <CcHoldingsCard hasWallet={hasWallet} />
+              </div>
+
+              {/* Points (4 cols) */}
+              <div className="sm:col-span-1 lg:col-span-4">
+                <PointsCard
+                  totalEarned={s.totalPoints}
+                  spent={s.pointsSpent ?? 0}
+                  remaining={s.pointsRemaining ?? s.totalPoints}
+                  loading={loading}
+                />
+              </div>
+
+              {/* Activity totals (4 cols) */}
+              <div className="sm:col-span-1 lg:col-span-4">
+                <ActivityStatsCard
+                  questsDone={s.earnHubCompleted ?? 0}
+                  earnDone={s.campaignCompleted ?? 0}
+                  onchainTx={s.txCount}
+                  loading={loading}
+                />
+              </div>
+            </section>
+          )}
 
           {/* ── Recent Activity — same layout as Wallet transactions ───── */}
           <section className="w-full overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]">

@@ -109,6 +109,27 @@ export type PlatformMessages = {
     noActivity: string;
     browseEarn: string;
     browseQuests: string;
+    // ── Redesigned Overview cards ──
+    overviewTitle: string;
+    overviewSubtitle: string;
+    ccPrice: string;
+    ccPriceLive: string;
+    change24h: string;
+    priceLoading: string;
+    portfolioValue: string;
+    availableCc: string;
+    lockedCc: string;
+    noWalletCreate: string;
+    pointsTotal: string;
+    pointsSpent: string;
+    pointsRemaining: string;
+    pointsRemainingHint: string;
+    questsDone: string;
+    earnDone: string;
+    onchainTx: string;
+    connectTwitter: string;
+    viewLeaderboard: string;
+    welcomeGuest: string;
   };
   quests: {
     searchPlaceholder: string;
