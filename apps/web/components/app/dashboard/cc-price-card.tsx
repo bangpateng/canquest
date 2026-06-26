@@ -180,7 +180,7 @@ export function CcPriceCard() {
         </div>
 
         <p className="mt-3 text-[11px] font-medium text-slate-600">
-          Bybit · CCUSDT · 24h chart · live price every 30s
+          CCUSDT · 24h chart
         </p>
       </div>
     </div>
