@@ -4,17 +4,36 @@ import { useCcPrice } from "@/lib/hooks/use-cc-price";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { TrendingDown, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils/utils";
+import { useCallback, useEffect, useState } from "react";
 
-/** Renders a smooth SVG sparkline (area + line) of recent CC prices. */
+/**
+ * Kartu harga CC + sparkline 24 jam (kline Bybit).
+ *
+ * History 24 jam di-fetch sekali saat mount (+ refetch saat fokus), lalu titik
+ * terakhir diperbarui dengan harga live dari useCcPrice. Karena history pakai
+ * data pasar asli, grafik tetap konsisten walau halaman di-refresh.
+ */
+
+const HISTORY_REFETCH_MIN_MS = 5 * 60_000;
+
+function lastHistoryFetchAt(): number {
+  return (typeof window !== "undefined" && window.__ccHistAt) || 0;
+}
+function setHistoryFetchAt(ts: number): void {
+  if (typeof window !== "undefined") window.__ccHistAt = ts;
+}
+// Cache module-level lintas instance kartu (mis. StrictMode double-mount).
+let cachedHistory: number[] = [];
+
 function Sparkline({ data, positive }: { data: number[]; positive: boolean }) {
   const W = 280;
-  const H = 64;
+  const H = 72;
   const PAD = 4;
 
   if (data.length < 2) {
     return (
-      <div className="flex h-16 items-center justify-center text-[11px] text-slate-600">
-        Collecting market data…
+      <div className="flex h-[72px] items-center justify-center text-[11px] text-slate-600">
+        Loading 24h chart…
       </div>
     );
   }
@@ -30,14 +49,16 @@ function Sparkline({ data, positive }: { data: number[]; positive: boolean }) {
     return [x, y] as const;
   });
 
-  const line = points.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`).join(" ");
+  const line = points
+    .map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`)
+    .join(" ");
   const area = `${line} L${points[points.length - 1]![0].toFixed(2)},${H} L${points[0]![0].toFixed(2)},${H} Z`;
 
   const stroke = positive ? "rgb(var(--canton-rgb))" : "#f87171";
   const fill = positive ? "rgb(var(--canton-rgb))" : "#f87171";
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="h-16 w-full" preserveAspectRatio="none" aria-hidden>
+    <svg viewBox={`0 0 ${W} ${H}`} className="h-[72px] w-full" preserveAspectRatio="none" aria-hidden>
       <defs>
         <linearGradient id="cc-spark-fill" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={fill} stopOpacity="0.28" />
@@ -60,9 +81,44 @@ function Sparkline({ data, positive }: { data: number[]; positive: boolean }) {
 
 export function CcPriceCard() {
   const t = usePlatformT();
-  const { price, change24hPct, history } = useCcPrice();
+  const { price, change24hPct } = useCcPrice();
+  const [history, setHistory] = useState<number[]>(cachedHistory);
 
-  const positive = (change24hPct ?? 0) >= 0;
+  const fetchHistory = useCallback(async (opts?: { silent?: boolean }) => {
+    const now = Date.now();
+    if (opts?.silent && now - lastHistoryFetchAt() < HISTORY_REFETCH_MIN_MS) return;
+    setHistoryFetchAt(now);
+    try {
+      const r = await fetch("/api/party/cc-price-history", { credentials: "include" });
+      if (!r.ok) return;
+      const d = (await r.json()) as { prices?: number[] };
+      if (Array.isArray(d?.prices) && d.prices.length >= 2) {
+        cachedHistory = d.prices;
+        setHistory(d.prices);
+      }
+    } catch {
+      /* diam */
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchHistory();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void fetchHistory({ silent: true });
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [fetchHistory]);
+
+  // Gabungkan history dengan harga live: titik terakhir = harga realtime.
+  const chartData =
+    history.length > 0 && price !== null
+      ? [...history.slice(0, -1), price]
+      : history;
+
+  // Arah grafik: bandingkan titik awal vs akhir (bukan cuma 24h% ticker).
+  const trendUp = chartData.length >= 2 ? chartData[chartData.length - 1]! >= chartData[0]! : true;
+  const positive = change24hPct !== null ? change24hPct >= 0 : trendUp;
   const hasChange = change24hPct !== null;
 
   return (
@@ -120,11 +176,11 @@ export function CcPriceCard() {
         </div>
 
         <div className="relative mt-5">
-          <Sparkline data={history} positive={positive} />
+          <Sparkline data={chartData} positive={positive} />
         </div>
 
         <p className="mt-3 text-[11px] font-medium text-slate-600">
-          Bybit · CCUSDT · updates every 30s
+          Bybit · CCUSDT · 24h chart · live price every 30s
         </p>
       </div>
     </div>

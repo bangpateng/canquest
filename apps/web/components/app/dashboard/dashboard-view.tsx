@@ -231,26 +231,6 @@ export function DashboardView() {
       <div className="w-full min-h-screen max-w-7xl mx-auto">
         <div className="space-y-5 md:space-y-6">
 
-          {/* ── Page Header ──────────────────────────────────────────────── */}
-          {!loadError && (
-            <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[var(--card)]/80 backdrop-blur-2xl shadow-2xl shadow-black/50 p-6 sm:p-8">
-              <div
-                className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_100%_0%,rgb(var(--canton-rgb)/0.08),transparent_60%)]"
-                aria-hidden
-              />
-              <div className="relative">
-                <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
-                  {me?.displayName
-                    ? t("dashboard.welcomeBack", { name: me.displayName.split(" ")[0] })
-                    : t("dashboard.welcomeGuest")}
-                </h1>
-                <p className="mt-1 text-sm text-slate-400">
-                  {t("dashboard.overviewSubtitle")}
-                </p>
-              </div>
-            </div>
-          )}
-
           {/* ── Error Banner ─────────────────────────────────────────────── */}
           {loadError ? (
             <div className="rounded-2xl border border-orange-500/20 bg-orange-500/10 backdrop-blur-xl shadow-xl shadow-black/30 px-5 py-4 sm:px-6 sm:py-5">

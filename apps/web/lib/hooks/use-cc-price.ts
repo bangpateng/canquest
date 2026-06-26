@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 /**
  * Shared CC/USD price hook.
@@ -11,26 +11,25 @@ import { useEffect, useRef, useState } from "react";
  * Mengembalikan:
  *  - price: harga terakhir (number) atau null saat belum tersedia.
  *  - change24hPct: persen perubahan 24 jam (number, sudah dalam %) atau null.
- *  - history: buffer harga selama sesi ini (number[]) untuk sparkline.
+ *
+ * Catatan: history 24 jam untuk sparkline di-serve terpisah lewat
+ * /api/party/cc-price-history (kline Bybit) — dipakai langsung oleh kartu
+ * harga di Overview, bukan di hook ini, supaya tidak dibebani polling.
  */
-
-const MAX_HISTORY = 60;
-
-let cachedPrice: number | null = null;
-let cachedChange24hPct: number | null = null;
-const history: number[] = [];
 
 interface CcPriceState {
   price: number | null;
   change24hPct: number | null;
-  history: number[];
 }
+
+let cachedPrice: number | null = null;
+let cachedChange24hPct: number | null = null;
 
 const subscribers = new Set<(s: CcPriceState) => void>();
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 function snapshot(): CcPriceState {
-  return { price: cachedPrice, change24hPct: cachedChange24hPct, history: [...history] };
+  return { price: cachedPrice, change24hPct: cachedChange24hPct };
 }
 
 function notify(): void {
@@ -49,8 +48,6 @@ async function fetchPrice(): Promise<void> {
     let changed = false;
     if (typeof d?.lastPrice === "number" && d.lastPrice > 0) {
       cachedPrice = d.lastPrice;
-      history.push(d.lastPrice);
-      if (history.length > MAX_HISTORY) history.splice(0, history.length - MAX_HISTORY);
       changed = true;
     }
     if (typeof d?.change24hPct === "number" && !Number.isNaN(d.change24hPct)) {
@@ -65,15 +62,9 @@ async function fetchPrice(): Promise<void> {
 
 export function useCcPrice(): CcPriceState {
   const [state, setState] = useState<CcPriceState>(snapshot);
-  // Keep referensi stabil untuk effect deps.
-  const mounted = useRef(true);
 
   useEffect(() => {
-    mounted.current = true;
-    const listener = (s: CcPriceState) => {
-      if (mounted.current) setState(s);
-    };
-    subscribers.add(listener);
+    subscribers.add(setState);
     setState(snapshot());
 
     if (!pollTimer) {
@@ -82,8 +73,7 @@ export function useCcPrice(): CcPriceState {
     }
 
     return () => {
-      mounted.current = false;
-      subscribers.delete(listener);
+      subscribers.delete(setState);
       if (subscribers.size === 0 && pollTimer) {
         clearInterval(pollTimer);
         pollTimer = null;
