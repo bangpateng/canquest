@@ -9,6 +9,7 @@ import {
   UserPlus,
   Repeat2,
   Send,
+  SendHorizonal,
   Users,
 } from "lucide-react";
 
@@ -75,6 +76,9 @@ export function TaskBrandIcon({
       break;
     case "daily_check_in":
       glyph = <CalendarCheck className={cls} aria-hidden />;
+      break;
+    case "send_transaction":
+      glyph = <SendHorizonal className={cls} aria-hidden />;
       break;
     case "quiz_yes_no":
     case "quiz_choice":

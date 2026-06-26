@@ -19,6 +19,7 @@ import {
   isEarnHubQuizType,
   isEarnHubRepeatableTask,
   isEarnHubSocialType,
+  isSendTransactionTask,
   parseQuizChoices,
 } from "@/lib/quest/quest-types";
 import { CampaignFcfsClaimSection } from "@/components/app/campaign/campaign-fcfs-claim";
@@ -165,6 +166,10 @@ export function QuestTaskPanel({
     viewerTwitterUsername,
   );
   const [campaignMeta, setCampaignMeta] = useState<CampaignMeta | null>(null);
+  /** taskId → { required, today } live progress for send-transaction tasks. */
+  const [sendProgress, setSendProgress] = useState<
+    Record<string, { required: number; today: number }>
+  >({});
   /** While a task is counting down or submitting, no other task can be started. */
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
 
@@ -202,6 +207,7 @@ export function QuestTaskPanel({
           cantonLedgerConfigured?: boolean;
           ledger?: QuestLedgerProof | null;
           campaignMeta?: CampaignMeta;
+          sendProgress?: Record<string, { required: number; today: number }>;
           message?: string;
         };
         if (!r.ok) {
@@ -212,6 +218,7 @@ export function QuestTaskPanel({
         setCantonLedgerConfigured(Boolean(data.cantonLedgerConfigured));
         if (data.rewardStatus) setRewardStatus(data.rewardStatus);
         if (data.campaignMeta) setCampaignMeta(data.campaignMeta);
+        if (data.sendProgress) setSendProgress(data.sendProgress);
         if (data.completed) {
           setRewardCc(data.rewardCc ?? 0);
           if (data.ledger) setLedgerProof(data.ledger);
@@ -461,6 +468,7 @@ export function QuestTaskPanel({
               twitterUsername={twitterUsername}
               campaignEnded={taskSubmissionsBlocked}
               sequentiallyLocked={isTaskSequentiallyLocked(idx, task.id)}
+              sendProgress={sendProgress[task.id]}
               onBusyChange={(busy) =>
                 setBusyTaskId((prev) => (busy ? task.id : prev === task.id ? null : prev))
               }
@@ -568,6 +576,7 @@ function TaskRow({
   campaignEnded = false,
   earnHubLayout = false,
   sequentiallyLocked = false,
+  sendProgress,
   onBusyChange,
   onPointsEarned,
   onVerified,
@@ -582,6 +591,7 @@ function TaskRow({
   campaignEnded?: boolean;
   earnHubLayout?: boolean;
   sequentiallyLocked?: boolean;
+  sendProgress?: { required: number; today: number };
   onBusyChange?: (busy: boolean) => void;
   onPointsEarned?: () => void;
   onVerified: (sub: QuestSubmission) => void;
@@ -594,6 +604,7 @@ function TaskRow({
   const isQuizChoice = taskType === "quiz_choice";
   const isQuizYesNo = taskType === "quiz_yes_no";
   const isDailyCheckIn = taskType === "daily_check_in";
+  const isSendTx = isSendTransactionTask(taskType);
   const quizChoices = isQuizChoice ? parseQuizChoices(task.target) : [];
 
   const [proof, setProof] = useState(
@@ -629,9 +640,9 @@ function TaskRow({
     taskType === "telegram_group" ||
     taskType === "discord_join";
 
-  /** Quest hub (/quest): wallet only for party-ID tasks. Partner campaigns (/earn): wallet required. */
+  /** Quest hub (/quest): wallet only for party-ID + send-transaction tasks. Partner campaigns (/earn): wallet required. */
   const needsWallet = earnHubLayout
-    ? isPartyTask && !hasRealWallet(partyId)
+    ? (isPartyTask || isSendTx) && !hasRealWallet(partyId)
     : !hasRealWallet(partyId);
 
   function requireWallet(): boolean {
@@ -677,7 +688,7 @@ function TaskRow({
   }, [countdown]);
 
   const canComplete =
-    isQuiz || isDailyCheckIn
+    isQuiz || isDailyCheckIn || isSendTx
       ? Boolean(proof.trim())
       : countdown === 0 &&
         started &&
@@ -689,10 +700,10 @@ function TaskRow({
     if (requireWallet()) return;
     if (requireTwitter()) return;
     if (isPartyTask && !partyId) return;
-    if (isDailyCheckIn) {
+    if (isDailyCheckIn || isSendTx) {
       if (onRepeatCooldown) return;
       autoSubmitFired.current = false;
-      setProof("checked_in");
+      setProof(isSendTx ? "sent_tx" : "checked_in");
       setStarted(true);
       setCountdown(0);
       setError(null);
@@ -802,7 +813,7 @@ function TaskRow({
   }
 
   useEffect(() => {
-    if (isQuiz || isDailyCheckIn) return;
+    if (isQuiz || isDailyCheckIn || isSendTx) return;
     if (
       !isVerified &&
       started &&
@@ -814,17 +825,18 @@ function TaskRow({
       autoSubmitFired.current = true;
       void handleSubmit();
     }
-  }, [countdown, started, isVerified, loading, canComplete, isQuiz, isDailyCheckIn]);
+  }, [countdown, started, isVerified, loading, canComplete, isQuiz, isDailyCheckIn, isSendTx]);
 
   useEffect(() => {
-    if (!isDailyCheckIn || loading || onRepeatCooldown) return;
+    if ((!isDailyCheckIn && !isSendTx) || loading || onRepeatCooldown) return;
     if (isVerified && !canRepeatNow) return;
     if (started && countdown === 0 && proof && !autoSubmitFired.current) {
       autoSubmitFired.current = true;
-      void handleSubmit("checked_in");
+      void handleSubmit(isSendTx ? "sent_tx" : "checked_in");
     }
   }, [
     isDailyCheckIn,
+    isSendTx,
     started,
     countdown,
     proof,
@@ -1107,10 +1119,14 @@ function TaskRow({
                 </span>
               ) : null}
             </div>
-            {/* Baris status meta ringkas (cooldown / ready / quiz ended). */}
+            {/* Baris status meta ringkas (cooldown / ready / quiz ended / send progress). */}
             {onRepeatCooldown ? (
               <p className="mt-0.5 truncate text-xs font-medium text-emerald-400/80">
-                Checked in — ready in {formatEarnHubCooldown(repeatCooldownMs)}
+                {isSendTx ? "Verified" : "Checked in"} — ready in {formatEarnHubCooldown(repeatCooldownMs)}
+              </p>
+            ) : canRepeatNow && isSendTx ? (
+              <p className="mt-0.5 truncate text-xs font-medium text-canton">
+                Ready — verify for +{task.points} pts
               </p>
             ) : canRepeatNow ? (
               <p className="mt-0.5 truncate text-xs font-medium text-canton">
@@ -1119,6 +1135,11 @@ function TaskRow({
             ) : quizExpired ? (
               <p className="mt-0.5 truncate text-xs font-medium text-orange-300/90">
                 Quiz ended
+              </p>
+            ) : null}
+            {isSendTx && sendProgress ? (
+              <p className="mt-0.5 truncate text-xs font-medium text-slate-400">
+                {sendProgress.today}/{sendProgress.required} sends in the last 24h
               </p>
             ) : null}
           </div>

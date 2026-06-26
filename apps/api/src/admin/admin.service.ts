@@ -176,6 +176,29 @@ export class AdminService {
               points: 10,
               order: 0,
             },
+            // Send-transaction daily tasks (1× / 3× / 5×) — wallet required, resets every 24h.
+            // Required count stored in `target`; repeatEvery24h derived from type.
+            {
+              type: 'send_transaction',
+              title: 'Send 1 transaction',
+              points: 10,
+              target: '1',
+              order: 1,
+            },
+            {
+              type: 'send_transaction',
+              title: 'Send 3 transactions',
+              points: 20,
+              target: '3',
+              order: 2,
+            },
+            {
+              type: 'send_transaction',
+              title: 'Send 5 transactions',
+              points: 30,
+              target: '5',
+              order: 3,
+            },
           ],
         },
       },
@@ -537,7 +560,8 @@ export class AdminService {
     });
     if (!quest) throw new NotFoundException('Quest not found');
     const count = await this.prisma.questTask.count({ where: { questId } });
-    const repeatEvery24h = data.type === 'daily_check_in';
+    const repeatEvery24h =
+      data.type === 'daily_check_in' || data.type === 'send_transaction';
     return this.prisma.questTask.create({
       data: {
         questId,
@@ -573,7 +597,8 @@ export class AdminService {
     });
     if (!existing) throw new NotFoundException('Task not found');
     const nextType = data.type ?? existing.type;
-    const repeatEvery24h = nextType === 'daily_check_in';
+    const repeatEvery24h =
+      nextType === 'daily_check_in' || nextType === 'send_transaction';
     return this.prisma.questTask.update({
       where: { id: taskId },
       data: {

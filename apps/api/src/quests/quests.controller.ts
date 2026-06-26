@@ -142,6 +142,7 @@ export class QuestsController {
       cantonLedgerConfigured: p.cantonLedgerConfigured,
       ledger: this.quests.toApiLedgerProof(p.ledger, p.rewardCc),
       campaignMeta: p.campaignMeta,
+      sendProgress: p.sendProgress,
     };
   }
 

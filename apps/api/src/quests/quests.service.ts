@@ -830,6 +830,10 @@ export class QuestsService {
     const completed = !!completion;
     const allTasksVerified = await this.areAllTasksVerified(userId, questId);
     const campaignMeta = await this.getCampaignMeta(questId);
+    const sendProgress = await this.buildSendTransactionProgress(
+      userId,
+      questId,
+    );
     return {
       completed,
       allTasksVerified,
@@ -839,7 +843,37 @@ export class QuestsService {
       cantonLedgerConfigured: this.questLedger.isConfigured(),
       ledger: completion ? this.ledgerFromCompletion(completion) : null,
       campaignMeta,
+      sendProgress,
     };
+  }
+
+  /**
+   * Live progress for send-transaction tasks: { [taskId]: { required, today } }.
+   * `today` counts real CC sends (TRANSFER_OUT, fees excluded) in the last 24h.
+   * Used by the Quest UI to show "3/5 sends".
+   */
+  private async buildSendTransactionProgress(
+    userId: string,
+    questId: string,
+  ): Promise<Record<string, { required: number; today: number }>> {
+    const quest = await this.prisma.quest.findUnique({
+      where: { id: questId },
+      select: { tasks: { select: { id: true, type: true, target: true } } },
+    });
+    const sendTasks = (quest?.tasks ?? []).filter((t) =>
+      this.normalizeTaskType(t.type) === 'send_transaction',
+    );
+    if (sendTasks.length === 0) return {};
+    const windowStart = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const today = await this.countRecentUserSends(userId, windowStart);
+    const result: Record<string, { required: number; today: number }> = {};
+    for (const t of sendTasks) {
+      result[t.id] = {
+        required: this.parseSendTransactionRequired(t.target),
+        today,
+      };
+    }
+    return result;
   }
 
   /** Map stored completion row → API ledger proof (survives page reload). */
@@ -1049,8 +1083,10 @@ export class QuestsService {
     }
 
     const taskType = this.normalizeTaskType(task.type);
+    const isSendTxTask = taskType === 'send_transaction';
     const repeatable24h =
-      quest.questKind === QuestKind.EARN_HUB && taskType === 'daily_check_in';
+      quest.questKind === QuestKind.EARN_HUB &&
+      (taskType === 'daily_check_in' || isSendTxTask);
 
     // Gate akses Earn: per-campaign, first participation. CAMPAIGN saja (bukan EARN_HUB).
     if (quest.questKind === QuestKind.CAMPAIGN) {
@@ -1075,18 +1111,31 @@ export class QuestsService {
               `Come back in ~${hoursLeft} hour(s) to earn points again.`,
             );
           }
+
+          // Send-transaction: require a real wallet + enough real CC sends in the last 24h.
+          if (isSendTxTask) {
+            const result = await this.verifySendTransactionTask({
+              userId,
+              userPartyId,
+              requiredCount: this.parseSendTransactionRequired(task.target),
+            });
+            if (!result.ok) {
+              throw new BadRequestException(result.message);
+            }
+          }
+
           const now = new Date();
           await this.prisma.questSubmission.update({
             where: { id: existing.id },
             data: {
-              proof: proof?.trim() || 'checked_in',
+              proof: proof?.trim() || (isSendTxTask ? 'sent_tx' : 'checked_in'),
               verifiedAt: now,
               submittedAt: now,
             },
           });
           await this.users.creditEarnPoints(userId, task.points);
           // canquest-v6: daily check-in dicatat on-chain via DailyCheckIn template
-          if (userPartyId && this.questLedger.isClaimSessionConfigured()) {
+          if (taskType === 'daily_check_in' && userPartyId && this.questLedger.isClaimSessionConfigured()) {
             const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
             void this.questLedger
               .recordDailyCheckIn({
@@ -1146,6 +1195,19 @@ export class QuestsService {
 
     if (taskType === 'twitter_follow' || taskType === 'twitter_retweet') {
       await this.verifyTwitterTaskForUser(userId, taskType, task.target);
+    }
+
+    // Send-transaction (first-time): require wallet + enough real CC sends in the last 24h.
+    if (isSendTxTask) {
+      const result = await this.verifySendTransactionTask({
+        userId,
+        userPartyId,
+        requiredCount: this.parseSendTransactionRequired(task.target),
+      });
+      if (!result.ok) {
+        throw new BadRequestException(result.message);
+      }
+      proof = 'sent_tx';
     }
 
     // Auto-verify logic by task type
@@ -3394,6 +3456,61 @@ export class QuestsService {
     return type;
   }
 
+  /** Required number of sends for a send-transaction task (stored in task.target). Min 1. */
+  private parseSendTransactionRequired(target: string | null | undefined): number {
+    const n = parseInt((target ?? '').trim(), 10);
+    return Number.isFinite(n) && n > 0 ? n : 1;
+  }
+
+  /** True when the user has a real Canton wallet (not a local placeholder). */
+  private hasRealWallet(cantonPartyId: string | null | undefined): boolean {
+    const id = cantonPartyId?.trim();
+    return Boolean(id && !id.startsWith('canquest:'));
+  }
+
+  /**
+   * Count a user's REAL outgoing CC sends since `since`: TRANSFER_OUT rows whose
+   * referenceId does NOT start with `fee:` (platform fees are hidden from history
+   * and must not count as a "send transaction"). One real send = 1 count.
+   */
+  private async countRecentUserSends(userId: string, since: Date): Promise<number> {
+    return this.prisma.ccTransaction.count({
+      where: {
+        userId,
+        type: 'TRANSFER_OUT',
+        NOT: { referenceId: { startsWith: 'fee:' } },
+        createdAt: { gte: since },
+      },
+    });
+  }
+
+  /**
+   * Verify a send-transaction task: wallet required + the user made at least
+   * `requiredCount` real CC sends in the last 24 hours. Returns ok=false with an
+   * English message when not met (no points, no submission row created).
+   */
+  private async verifySendTransactionTask(params: {
+    userId: string;
+    userPartyId: string;
+    requiredCount: number;
+  }): Promise<{ ok: boolean; message?: string }> {
+    if (!this.hasRealWallet(params.userPartyId)) {
+      return {
+        ok: false,
+        message: 'Create your Canton wallet first to complete this task.',
+      };
+    }
+    const windowStart = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const today = await this.countRecentUserSends(params.userId, windowStart);
+    if (today < params.requiredCount) {
+      return {
+        ok: false,
+        message: `You have sent ${today}/${params.requiredCount} transaction(s) in the last 24 hours. Send more CC to complete this task.`,
+      };
+    }
+    return { ok: true };
+  }
+
   private canAutoVerify(
     type: string,
     correctAnswer: string | null,
@@ -3414,6 +3531,8 @@ export class QuestsService {
           proof.trim().toUpperCase() === correctAnswer.trim().toUpperCase()
         );
       case 'daily_check_in':
+        return true;
+      case 'send_transaction':
         return true;
       case 'submit_party_id':
       case 'submit_canton_address':

@@ -135,6 +135,11 @@ export type QuestTaskType =
 /** CanQuest Earn hub (user menu Quest) — admin adds these only */
 export const EARN_HUB_TASK_TYPE_OPTIONS: { value: string; label: string; hint?: string }[] = [
   { value: "daily_check_in", label: "Daily check-in", hint: "Once per day (streak coming soon)" },
+  {
+    value: "send_transaction",
+    label: "Send transaction (1× / 3× / 5×)",
+    hint: "Wallet required · resets every 24 hours · counts real CC sends (fees excluded)",
+  },
   { value: "twitter_follow", label: "Follow Twitter CanQuest", hint: "X profile URL" },
   { value: "twitter_retweet", label: "Retweet post CanQuest", hint: "Post URL to retweet" },
   { value: "telegram_channel", label: "Join Telegram channel CanQuest", hint: "t.me/… channel link" },
@@ -251,9 +256,25 @@ export const EARN_HUB_NEW_LABEL_TTL_MS = 24 * 60 * 60 * 1000;
 /** Cooldown before repeatable tasks (daily check-in, etc.) can earn points again. */
 export const EARN_HUB_REPEAT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
-/** Only daily check-in repeats every 24h; other tasks stay on Quest when done but are one-time. */
+/** Only daily check-in and send-transaction repeat every 24h; other tasks stay on Quest when done but are one-time. */
 export function isEarnHubRepeatableTask(task: { type: string }): boolean {
-  return task.type === "daily_check_in";
+  return task.type === "daily_check_in" || task.type === "send_transaction";
+}
+
+/** Send-transaction tasks: require the user to make N real CC sends within 24h. */
+export function isSendTransactionTask(type: string): boolean {
+  return type === "send_transaction";
+}
+
+/** Required number of sends for a send-transaction task (stored in task.target). Min 1. */
+export function getSendTransactionRequiredCount(target: string | null | undefined): number {
+  const n = parseInt((target ?? "").trim(), 10);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+/** Human title for a send-transaction task ("Send 3 transaction(s)"). */
+export function sendTransactionTitle(requiredCount: number): string {
+  return `Send ${requiredCount} transaction${requiredCount === 1 ? "" : "s"}`;
 }
 
 export function getEarnHubRepeatCooldownMs(
@@ -388,7 +409,8 @@ export function earnHubTaskToDraft(task: {
     choiceC: choices[2] ?? "",
     choiceD: choices[3] ?? "",
     showNewBadge: Boolean(task.showNewBadge),
-    repeatEvery24h: task.type === "daily_check_in",
+    repeatEvery24h:
+      task.type === "daily_check_in" || task.type === "send_transaction",
   };
 }
 
@@ -474,7 +496,24 @@ export function buildEarnHubTaskPayload(input: {
   const points = Math.max(0, input.points);
 
   const showNewBadge = Boolean(input.showNewBadge);
-  const repeatEvery24h = input.type === "daily_check_in";
+  const repeatEvery24h =
+    input.type === "daily_check_in" || input.type === "send_transaction";
+
+  if (input.type === "send_transaction") {
+    const required = getSendTransactionRequiredCount(input.target);
+    const customTitle = input.title?.trim();
+    return {
+      type: input.type,
+      title: customTitle || sendTransactionTitle(required),
+      description: null,
+      points,
+      // required send count is stored in target
+      target: String(required),
+      correctAnswer: null,
+      showNewBadge,
+      repeatEvery24h: true,
+    };
+  }
 
   if (input.type === "quiz_yes_no") {
     const q = input.title?.trim() || "Quiz question";
@@ -740,6 +779,7 @@ export function formatQuestDeadlineDisplay(
 
 export const TASK_ACTION_BUTTON_LABEL: Record<string, string> = {
   daily_check_in: "Check in",
+  send_transaction: "Verify",
   quiz_yes_no: "Answer",
   quiz_choice: "Answer",
   twitter_follow: "Twitter",

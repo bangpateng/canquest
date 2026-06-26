@@ -4,7 +4,10 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import {
   earnHubTaskTypeLabel,
   EARN_HUB_TASK_TYPE_OPTIONS,
+  getSendTransactionRequiredCount,
   isEarnHubQuizType,
+  isSendTransactionTask,
+  sendTransactionTitle,
 } from "@/lib/quest/quest-types";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
@@ -49,6 +52,7 @@ export function AdminEarnHubTaskForm({
   const isQuiz = isEarnHubQuizType(draft.type);
   const isQuizChoice = draft.type === "quiz_choice";
   const isQuizYesNo = draft.type === "quiz_yes_no";
+  const isSendTx = isSendTransactionTask(draft.type);
   const needsUrl =
     draft.type === "twitter_follow" ||
     draft.type === "twitter_retweet" ||
@@ -65,13 +69,16 @@ export function AdminEarnHubTaskForm({
         <select
           id={`${idPrefix}-type`}
           value={draft.type}
-          onChange={(e) =>
+          onChange={(e) => {
+            const nextType = e.target.value;
             setDraft((p) => ({
               ...p,
-              type: e.target.value,
-              correctAnswer: e.target.value === "quiz_choice" ? "A" : "yes",
-            }))
-          }
+              type: nextType,
+              correctAnswer: nextType === "quiz_choice" ? "A" : "yes",
+              // Default required count when switching to send-transaction.
+              target: nextType === "send_transaction" && !p.target.trim() ? "1" : p.target,
+            }));
+          }}
           className={inputCls}
         >
           {EARN_HUB_TASK_TYPE_OPTIONS.map((o) => (
@@ -88,7 +95,7 @@ export function AdminEarnHubTaskForm({
       {!isQuiz ? (
         <div>
           <label className="mb-1.5 block text-sm font-medium" htmlFor={`${idPrefix}-title`}>
-            Title shown on Quest *
+            Title shown on Quest{draft.type === "daily_check_in" ? " *" : isSendTx ? "" : " *"}
           </label>
           <input
             id={`${idPrefix}-title`}
@@ -98,14 +105,18 @@ export function AdminEarnHubTaskForm({
             placeholder={
               draft.type === "daily_check_in"
                 ? "e.g. Daily check-in"
-                : needsUrl
-                  ? "e.g. Follow @canquest or Retweet our post"
-                  : "Task title"
+                : isSendTx
+                  ? sendTransactionTitle(getSendTransactionRequiredCount(draft.target))
+                  : needsUrl
+                    ? "e.g. Follow @canquest or Retweet our post"
+                    : "Task title"
             }
             className={inputCls}
           />
           <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-            This is the only line users see — pick any label you want.
+            {isSendTx
+              ? "Optional — defaults to “Send N transaction(s)” based on the required count."
+              : "This is the only line users see — pick any label you want."}
           </p>
         </div>
       ) : null}
@@ -137,17 +148,66 @@ export function AdminEarnHubTaskForm({
         </span>
       </label>
 
+      {isSendTx ? (
+        <div className="space-y-3">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium">
+              Required sends
+            </label>
+            <div className="flex flex-wrap items-center gap-2">
+              {[1, 3, 5].map((n) => {
+                const active =
+                  getSendTransactionRequiredCount(draft.target) === n;
+                return (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setDraft((p) => ({ ...p, target: String(n) }))}
+                    className={cn(
+                      "rounded-full border px-4 py-1.5 text-sm font-semibold transition-colors",
+                      active
+                        ? "border-canton bg-canton/15 text-canton"
+                        : "border-[var(--border)] bg-[var(--muted)]/30 text-[var(--muted-foreground)] hover:border-[var(--foreground)]/40",
+                    )}
+                  >
+                    {n}×
+                  </button>
+                );
+              })}
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={draft.target || ""}
+                onChange={(e) => setDraft((p) => ({ ...p, target: e.target.value }))}
+                placeholder="Custom"
+                className={cn(inputCls, "max-w-[7rem] py-1.5")}
+              />
+            </div>
+            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+              Task title:{" "}
+              <strong>{sendTransactionTitle(getSendTransactionRequiredCount(draft.target))}</strong>
+            </p>
+          </div>
+          <p className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-[var(--muted-foreground)]">
+            <strong className="text-amber-400">Send transaction</strong> requires a Canton wallet and
+            resets every <strong className="text-canton">24 hours</strong>. Only real outgoing CC sends
+            count (platform fees excluded).
+          </p>
+        </div>
+      ) : null}
+
       {draft.type === "daily_check_in" ? (
         <p className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs text-[var(--muted-foreground)]">
           <strong className="text-emerald-400">Daily check-in</strong> stays on Quest permanently.
           Users can check in again every <strong className="text-canton">24 hours</strong> for more
           points.
         </p>
-      ) : (
+      ) : !isSendTx ? (
         <p className="text-xs text-[var(--muted-foreground)]">
           Other tasks stay visible on Quest after completion (one-time — no extra settings needed).
         </p>
-      )}
+      ) : null}
 
       {needsUrl ? (
         <div>
