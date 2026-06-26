@@ -112,7 +112,7 @@ export function DashboardView() {
 
       if (!meResult.ok && !statsResult.ok) {
         setLoadError(
-          "Could not load dashboard. Make sure API is running on port 3001 and you are logged in.",
+          "Could not load dashboard",
         );
       }
     } finally {
