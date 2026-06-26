@@ -1,7 +1,6 @@
 "use client";
 
 import { usePlatformT } from "@/lib/i18n/platform-provider";
-import { Gift, Sparkles, Zap } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 export interface ActivityStatsCardProps {
@@ -12,25 +11,16 @@ export interface ActivityStatsCardProps {
 }
 
 function Stat({
-  icon,
-  iconBg,
-  iconColor,
   label,
   value,
   loading,
 }: {
-  icon: React.ReactNode;
-  iconBg: string;
-  iconColor: string;
   label: string;
   value: number;
   loading: boolean;
 }) {
   return (
-    <div className="flex flex-col items-center gap-2 text-center">
-      <div className={"flex h-10 w-10 items-center justify-center rounded-xl ring-1 " + iconBg}>
-        <span className={iconColor}>{icon}</span>
-      </div>
+    <div className="flex flex-col items-center gap-1.5 text-center">
       {loading ? (
         <LoadingSpinner size="sm" tone="muted" />
       ) : (
@@ -63,25 +53,16 @@ export function ActivityStatsCard({
         </span>
         <div className="mt-5 grid grid-cols-3 gap-3">
           <Stat
-            icon={<Gift className="h-5 w-5" aria-hidden />}
-            iconBg="bg-emerald-500/10 ring-emerald-500/20"
-            iconColor="text-emerald-400"
             label={t("dashboard.questsDone")}
             value={questsDone}
             loading={loading}
           />
           <Stat
-            icon={<Sparkles className="h-5 w-5" aria-hidden />}
-            iconBg="bg-cyan-500/10 ring-cyan-500/20"
-            iconColor="text-cyan-400"
             label={t("dashboard.earnDone")}
             value={earnDone}
             loading={loading}
           />
           <Stat
-            icon={<Zap className="h-5 w-5" aria-hidden />}
-            iconBg="bg-violet-500/10 ring-violet-500/20"
-            iconColor="text-violet-400"
             label={t("dashboard.onchainTx")}
             value={onchainTx}
             loading={loading}

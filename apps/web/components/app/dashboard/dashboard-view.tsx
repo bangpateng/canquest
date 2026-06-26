@@ -1,18 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { usePlatformT } from "@/lib/i18n/platform-provider";
-import { CheckCircle2, Coins, Trophy } from "lucide-react";
-import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { ListPagination } from "@/components/app/list/list-pagination";
-import { createRefetchThrottle } from "@/lib/utils/refetch-throttle";
 import {
   cacheWalletMe,
   isRealCantonPartyId,
   readCachedWalletMe,
   readLastWalletUserId,
 } from "@/lib/auth/wallet-session-cache";
-import { cn } from "@/lib/utils/utils";
+import { createRefetchThrottle } from "@/lib/utils/refetch-throttle";
 
 import { CcPriceCard } from "./cc-price-card";
 import { ProfileCard } from "./profile-card";
@@ -22,8 +17,6 @@ import { ActivityStatsCard } from "./activity-stats-card";
 
 const FOCUS_REFETCH_MIN_MS = 60_000;
 const throttleFocusRefetch = createRefetchThrottle(FOCUS_REFETCH_MIN_MS);
-
-const ACTIVITY_PAGE_SIZE = 5;
 
 interface Me {
   id?: string;
@@ -46,48 +39,6 @@ interface DashboardStats {
   earnHubCompleted?: number;
   campaignCompleted?: number;
 }
-
-interface ActivityItem {
-  type: "quest_completed" | "task_verified" | "cc_transfer";
-  title: string;
-  detail: string;
-  time: string;
-}
-
-interface ActivityPage {
-  items: ActivityItem[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
-}
-
-function timeAgo(
-  iso: string,
-  t: (key: string, params?: Record<string, string | number>) => string,
-): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60_000);
-  const hours = Math.floor(diff / 3_600_000);
-  const days = Math.floor(diff / 86_400_000);
-  if (mins < 1) return t("time.justNow");
-  if (mins < 60) return t("time.minutesAgo", { n: mins });
-  if (hours < 24) return t("time.hoursAgo", { n: hours });
-  if (days === 1) return t("time.yesterday");
-  return t("time.daysAgo", { n: days });
-}
-
-const ACTIVITY_ICON: Record<ActivityItem["type"], React.ElementType> = {
-  quest_completed: Trophy,
-  task_verified: CheckCircle2,
-  cc_transfer: Coins,
-};
-
-const ACTIVITY_COLOR: Record<ActivityItem["type"], string> = {
-  quest_completed: "bg-[var(--primary)]/15 text-[var(--primary)]",
-  task_verified: "bg-emerald-500/15 text-emerald-400",
-  cc_transfer: "bg-blue-500/15 text-blue-400",
-};
 
 const FETCH_TIMEOUT_MS = 12_000;
 
@@ -121,48 +72,10 @@ const EMPTY_STATS: DashboardStats = {
 };
 
 export function DashboardView() {
-  const t = usePlatformT();
   const [me, setMe] = useState<Me | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [activityData, setActivityData] = useState<ActivityPage | null>(null);
-  const [activityPage, setActivityPage] = useState(1);
-  const [activityLoading, setActivityLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-
-  const fetchActivity = useCallback(async (page: number) => {
-    setActivityLoading(true);
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    try {
-      const res = await fetch(
-        `/api/quests/activity?page=${page}&pageSize=${ACTIVITY_PAGE_SIZE}`,
-        { credentials: "include", signal: controller.signal },
-      );
-      if (res.ok) {
-        setActivityData((await res.json()) as ActivityPage);
-      } else {
-        setActivityData({
-          items: [],
-          total: 0,
-          page,
-          pageSize: ACTIVITY_PAGE_SIZE,
-          totalPages: 1,
-        });
-      }
-    } catch {
-      setActivityData({
-        items: [],
-        total: 0,
-        page,
-        pageSize: ACTIVITY_PAGE_SIZE,
-        totalPages: 1,
-      });
-    } finally {
-      clearTimeout(timer);
-      setActivityLoading(false);
-    }
-  }, []);
 
   const fetchAll = useCallback(async (opts?: { background?: boolean }) => {
     if (!opts?.background) setLoading(true);
@@ -218,10 +131,6 @@ export function DashboardView() {
       document.removeEventListener("visibilitychange", refreshOnVisible);
     };
   }, [fetchAll]);
-
-  useEffect(() => {
-    void fetchActivity(activityPage);
-  }, [fetchActivity, activityPage]);
 
   const hasWallet = isRealCantonPartyId(me?.cantonPartyId);
   const s = stats ?? EMPTY_STATS;
@@ -302,86 +211,6 @@ export function DashboardView() {
               </div>
             </section>
           )}
-
-          {/* ── Recent Activity — same layout as Wallet transactions ───── */}
-          <section className="w-full overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]">
-            <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3 md:px-5">
-              <h2 className="text-sm font-semibold text-[var(--foreground)]">
-                {t("dashboard.recentActivity")}
-              </h2>
-            </div>
-
-            {activityLoading ? (
-              <div className="flex items-center justify-center py-16">
-                <LoadingSpinner size="lg" />
-              </div>
-            ) : !activityData || activityData.items.length === 0 ? (
-              <div className="py-16 text-center text-sm text-[var(--muted-foreground)]">
-                {t("dashboard.noActivity")}
-              </div>
-            ) : (
-              <>
-                {/* Desktop table */}
-                <table className="w-full text-left hidden md:table">
-                  <thead className="text-xs font-semibold uppercase text-[var(--muted-foreground)]">
-                    <tr>
-                      <th className="px-4 py-3 md:px-5">Type</th>
-                      <th className="px-4 py-3 md:px-5">Title</th>
-                      <th className="px-4 py-3 md:px-5">Detail</th>
-                      <th className="px-4 py-3 text-right md:px-5">When</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activityData.items.map((item, i) => {
-                      const Icon = ACTIVITY_ICON[item.type];
-                      const colorClass = ACTIVITY_COLOR[item.type];
-                      return (
-                        <tr key={`${item.type}-${item.time}-${i}`} className="border-t border-[var(--border)] transition-colors hover:bg-[var(--muted)]/50">
-                          <td className="px-4 py-3 md:px-5">
-                            <span className={cn("inline-flex h-8 w-8 items-center justify-center rounded-lg", colorClass)}>
-                              <Icon className="h-4 w-4" aria-hidden />
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 md:px-5 text-sm font-semibold text-[var(--foreground)] truncate">{item.title}</td>
-                          <td className="px-4 py-3 md:px-5 text-sm text-[var(--muted-foreground)] max-w-[16rem] truncate">{item.detail}</td>
-                          <td className="px-4 py-3 md:px-5 text-xs text-[var(--muted-foreground)] text-right whitespace-nowrap">{timeAgo(item.time, t)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-
-                {/* Mobile list */}
-                <ul className="divide-y divide-[var(--border)] md:hidden">
-                  {activityData.items.map((item, i) => {
-                    const Icon = ACTIVITY_ICON[item.type];
-                    const colorClass = ACTIVITY_COLOR[item.type];
-                    return (
-                      <li key={`${item.type}-${item.time}-${i}`} className="flex items-center gap-3 px-4 py-3">
-                        <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", colorClass)}>
-                          <Icon className="h-4 w-4" />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-[var(--foreground)] truncate">{item.title}</p>
-                          <p className="text-xs text-[var(--muted-foreground)] truncate">{item.detail}</p>
-                        </div>
-                        <span className="shrink-0 text-xs text-[var(--muted-foreground)]">{timeAgo(item.time, t)}</span>
-                      </li>
-                    );
-                  })}
-                </ul>
-
-                <ListPagination
-                  className="px-4 py-3"
-                  page={activityPage}
-                  totalPages={activityData.totalPages}
-                  total={activityData.total}
-                  disabled={activityLoading}
-                  onPageChange={setActivityPage}
-                />
-              </>
-            )}
-          </section>
         </div>
       </div>
     </div>

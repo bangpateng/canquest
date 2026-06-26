@@ -3,7 +3,7 @@
 import { useLockStatus } from "@/lib/hooks/use-lock-status";
 import { useCcPrice } from "@/lib/hooks/use-cc-price";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
-import { Lock, Wallet } from "lucide-react";
+import { Wallet } from "lucide-react";
 import Link from "next/link";
 
 function formatCc(n: number): string {
@@ -81,12 +81,7 @@ export function CcHoldingsCard({ hasWallet }: CcHoldingsCardProps) {
 
         {/* Available */}
         <div className="mt-5 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10 ring-1 ring-blue-500/20">
-              <Wallet className="h-4 w-4 text-blue-400" aria-hidden />
-            </div>
-            <span className="text-sm font-medium text-slate-400">{t("dashboard.availableCc")}</span>
-          </div>
+          <span className="text-sm font-medium text-slate-400">{t("dashboard.availableCc")}</span>
           <div className="text-right">
             {loading ? (
               <span className="text-sm text-slate-600">…</span>
@@ -103,12 +98,7 @@ export function CcHoldingsCard({ hasWallet }: CcHoldingsCardProps) {
 
         {/* Locked */}
         <div className="mt-3 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10 ring-1 ring-amber-500/20">
-              <Lock className="h-4 w-4 text-amber-400" aria-hidden />
-            </div>
-            <span className="text-sm font-medium text-slate-400">{t("dashboard.lockedCc")}</span>
-          </div>
+          <span className="text-sm font-medium text-slate-400">{t("dashboard.lockedCc")}</span>
           <div className="text-right">
             {loading ? (
               <span className="text-sm text-slate-600">…</span>

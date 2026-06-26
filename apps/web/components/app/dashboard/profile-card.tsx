@@ -2,7 +2,6 @@
 
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { ROUTES } from "@/lib/routing/app-routes";
-import { Trophy } from "lucide-react";
 import Link from "next/link";
 
 const AVATAR_GRADIENTS = [
@@ -104,18 +103,13 @@ export function ProfileCard({
 
       {/* Weekly rank strip */}
       <div className="relative mt-5 flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10 ring-1 ring-amber-500/20">
-            <Trophy className="h-5 w-5 text-amber-400" aria-hidden />
-          </div>
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-              {t("dashboard.weeklyRank")}
-            </p>
-            <p className="text-xl font-extrabold tabular-nums tracking-tight text-white">
-              {loading || weeklyRank === null ? "—" : `#${weeklyRank}`}
-            </p>
-          </div>
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            {t("dashboard.weeklyRank")}
+          </p>
+          <p className="text-xl font-extrabold tabular-nums tracking-tight text-white">
+            {loading || weeklyRank === null ? "—" : `#${weeklyRank}`}
+          </p>
         </div>
         <Link
           href={ROUTES.leaderboard}
