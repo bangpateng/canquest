@@ -25,7 +25,13 @@ import { CantonLedgerService } from './canton-ledger.service';
  *     without the offer/accept round-trip.
  *     See: https://docs.canton.network/appdev/modules/m7-canton-coin-preapprovals
  *
- * Setup — SSH tunnel from VPS 2 to VPS 1:
+ * Setup — PROD (recommended, no SSH tunnel):
+ *
+ *   # apps/api/.env:
+ *   CANTON_VALIDATOR_URL=https://api-canquest.nodelab.my.id
+ *   CANTON_VALIDATOR_HOST_HEADER=                 # KOSONG — gateway route via SNI/Host domain
+ *
+ * Setup — DEV (SSH tunnel from VPS 2 to VPS 1):
  *
  *   # Get validator Docker IP on VPS 1:
  *   docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' splice-validator-validator-1
@@ -39,9 +45,8 @@ import { CantonLedgerService } from './canton-ledger.service';
  *   CANTON_VALIDATOR_URL=http://127.0.0.1:5003
  *   CANTON_VALIDATOR_HOST_HEADER=wallet.localhost   # required when routing through nginx
  *
- * Auth — hs-256-unsafe shared secret (devnet/testnet):
- *   CANTON_SPLICE_SECRET=unsafe
- *   CANTON_SPLICE_AUDIENCE=https://validator.example.com
+ * Auth — Keycloak client_credentials (LEDGER_AUTH_MODE=keycloak), the ONLY supported mode.
+ * Legacy hs-256-unsafe / CANTON_SPLICE_SECRET removed.
  *
  * TransferPreapproval lifecycle (per Canton docs):
  *   1. Created via POST /api/validator/v0/wallet/transfer-preapproval (as user; singular path)
@@ -74,8 +79,10 @@ export class SpliceValidatorService {
   ) {
     const raw = config.get<string>('CANTON_VALIDATOR_URL');
     this.baseUrl = raw ? raw.replace(/\/$/, '') : null;
-    this.hostHeader =
-      config.get<string>('CANTON_VALIDATOR_HOST_HEADER') ?? 'wallet.localhost';
+    // Host header kosong secara default di prod: gateway publik (api-canquest.nodelab.my.id)
+    // route via SNI/Host domain, bukan wallet.localhost nginx. Dev SSH-tunnel masih bisa
+    // override via CANTON_VALIDATOR_HOST_HEADER=wallet.localhost.
+    this.hostHeader = config.get<string>('CANTON_VALIDATOR_HOST_HEADER') ?? '';
     // Fail fast at boot if LEDGER_AUTH_MODE is misconfigured.
     this.assertAuthMode();
   }

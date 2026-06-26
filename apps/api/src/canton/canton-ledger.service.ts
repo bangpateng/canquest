@@ -20,7 +20,13 @@ import {
  *   https://docs.canton.network/appdev/modules/m4-backend-dev
  *   https://docs.canton.network/appdev/modules/m7-error-handling
  *
- * Setup (VPS 2 → VPS 1 participant):
+ * PROD setup (recommended — no SSH tunnel):
+ *   LEDGER_API_URL=https://api-ledger-canquest.nodelab.my.id
+ *   LEDGER_AUTH_MODE=keycloak
+ *   LEDGER_API_ADMIN_USER=<UUID admin Keycloak>  (userId for submit / grant rights)
+ *   Verify: curl https://api-ledger-canquest.nodelab.my.id/livez  → HTTP 200
+ *
+ * DEV setup (SSH tunnel to participant node):
  *   1. Get participant Docker IP on VPS 1:
  *      docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' splice-validator-participant-1
  *   2. Open SSH tunnel (keep terminal open):
@@ -37,10 +43,9 @@ import {
  *   POST /v2/state/active-contracts          — query ACS (active contract set)
  *   GET  /livez                              — health check
  *
- * Auth: Splice uses hs-256-unsafe in devnet/testnet. Set:
- *   CANTON_SPLICE_SECRET=unsafe
- *   CANTON_LEDGER_API_AUDIENCE=https://canton.network.global
- *   CANTON_LEDGER_API_USER=ledger-api-user
+ * Auth: Keycloak client_credentials (LEDGER_AUTH_MODE=keycloak) — the ONLY
+ * supported mode. Legacy hs256/`CANTON_SPLICE_SECRET` removed; SpliceValidatorService
+ * throws at boot if LEDGER_AUTH_MODE != keycloak.
  *
  * Error handling follows Module 7 patterns:
  *   - FAILED_PRECONDITION / ABORTED → contention → retry with backoff
@@ -64,13 +69,25 @@ export class CantonLedgerService {
     private readonly config: ConfigService,
     @Optional() private readonly keycloak: KeycloakTokenService,
   ) {
-    this.baseUrl = (
-      (config.get<string>('LEDGER_API_URL') ||
-        config.get<string>('CANTON_JSON_API_URL')) ??
-      'http://127.0.0.1:7575'
-    ).replace(/\/$/, '');
+    // LEDGER_API_URL wajib di prod (gateway publik api-ledger-canquest.nodelab.my.id).
+    // Fallback ke CANTON_JSON_API_URL hanya untuk dev (SSH tunnel localhost:7575).
+    // JANGAN pernah fallback ke localhost di produksi — itu menyembunyikan misconfig.
+    const ledgerUrl =
+      config.get<string>('LEDGER_API_URL') ||
+      config.get<string>('CANTON_JSON_API_URL');
+    if (!ledgerUrl) {
+      throw new Error(
+        'LEDGER_API_URL (atau CANTON_JSON_API_URL) belum diset — ' +
+          'prod: https://api-ledger-canquest.nodelab.my.id',
+      );
+    }
+    this.baseUrl = ledgerUrl.replace(/\/$/, '');
+    // userId operator untuk submit commands / grant rights.
+    // Prioritas: LEDGER_API_ADMIN_USER (UUID admin Keycloak) → CANTON_LEDGER_API_USER (legacy).
     this.ledgerApiUser =
-      config.get<string>('CANTON_LEDGER_API_USER') ?? 'ledger-api-user';
+      config.get<string>('LEDGER_API_ADMIN_USER') ||
+      config.get<string>('CANTON_LEDGER_API_USER') ||
+      'ledger-api-user';
     this.scanUrl =
       (config.get<string>('CANTON_SCAN_URL') ?? null)?.replace(/\/$/, '') ??
       null;
@@ -201,8 +218,7 @@ export class CantonLedgerService {
     disclosedContracts?: unknown[],
   ): Promise<{ ok: boolean; status: number; text: string }> {
     const url = `${this.baseUrl}/v2/commands/${waitMode}`;
-    const effectiveUserId =
-      userId ?? (process.env.LEDGER_API_ADMIN_USER || this.ledgerApiUser);
+    const effectiveUserId = userId ?? this.ledgerApiUser;
     const effectiveCommandId = commandId ?? randomUUID();
 
     const MAX_RETRIES = 3;
@@ -2591,14 +2607,14 @@ export class CantonLedgerService {
   /**
    * Grant CanActAs + CanReadAs rights to the operator (admin) for a party.
    * Allows the backend to submit commands + query ACS on behalf of this party.
-   * Operator ID from LEDGER_API_ADMIN_USER env.
+   * Operator ID from LEDGER_API_ADMIN_USER (fallback CANTON_LEDGER_API_USER).
    * IDEMPOTEN: 409 / ALREADY_EXISTS diabaikan.
    */
   async grantOperatorRightsOnParty(partyId: string): Promise<void> {
-    const operatorId = process.env.LEDGER_API_ADMIN_USER;
+    const operatorId = this.ledgerApiUser;
     if (!operatorId) {
       this.logger.error(
-        'LEDGER_API_ADMIN_USER belum diset — operator rights TIDAK di-grant',
+        'LEDGER_API_ADMIN_USER / CANTON_LEDGER_API_USER belum diset — operator rights TIDAK di-grant',
       );
       return;
     }
