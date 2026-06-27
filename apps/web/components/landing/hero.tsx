@@ -17,7 +17,7 @@ export function LandingHero() {
       <div className="gradient-mesh absolute inset-0 opacity-70" aria-hidden />
 
       <LandingShell className="relative py-16 text-center md:py-20 lg:py-24">
-        <p className="type-eyebrow-brand">Non-custodial CC lock · Canton-native</p>
+        <p className="type-eyebrow-brand">Canquest on Canton Network</p>
 
         <h1 className="type-display mx-auto mt-4 max-w-2xl text-[2rem] font-bold leading-tight tracking-tight sm:text-4xl lg:text-5xl">
           Lock CC.{" "}

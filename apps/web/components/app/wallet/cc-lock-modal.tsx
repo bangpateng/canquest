@@ -134,7 +134,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
             return;
           }
           setLockState("error");
-          setLockMessage(data.error ?? "Lock gagal. Coba lagi.");
+          setLockMessage(data.error ?? "Lock failed. Please try again.");
           return;
         }
         setLockState("idle");
@@ -145,7 +145,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
         onRefresh();
       } catch {
         setLockState("error");
-        setLockMessage("Network error. Periksa koneksi.");
+        setLockMessage("Network error. Check your connection.");
       }
     },
     [selectedTerm, amountValid, numericAmount, onRefresh, hasWalletPassword],
@@ -219,7 +219,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
       <button
         type="button"
         className="fixed inset-0 bg-black/55 backdrop-blur-[2px]"
-        aria-label="Tutup"
+        aria-label="Close"
         onClick={onClose}
       />
       <div
@@ -239,7 +239,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
             type="button"
             onClick={onClose}
             className={iconButtonClass("h-9 w-9 shrink-0")}
-            aria-label="Tutup"
+            aria-label="Close"
           >
             <X className="h-4 w-4" />
           </button>
@@ -270,7 +270,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
               autoComplete="off"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              placeholder="mis. 30"
+              placeholder="e.g. 30"
               disabled={lockState === "loading"}
               className="w-full rounded-2xl border border-white/5 bg-white/5 px-4 py-3 text-base font-bold tabular-nums text-slate-100 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
             />
@@ -304,7 +304,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
               </div>
             </div>
           ) : (
-            <p className="text-xs text-slate-500">Memuat opsi durasi…</p>
+            <p className="text-xs text-slate-500">Loading duration options…</p>
           )}
 
           {lockState === "error" && (
@@ -413,15 +413,15 @@ function ActiveLockRow({
   );
 }
 
-/** Format milidetik → "Xd Yh Zm" / "Yh Zm Ws" / "Zs" (compact). */
+/** Format milliseconds → "Xd Yh Zm" / "Yh Zm Ws" / "Zs" (compact). */
 function formatCountdown(ms: number): string {
   const totalSec = Math.floor(ms / 1000);
   const d = Math.floor(totalSec / 86400);
   const h = Math.floor((totalSec % 86400) / 3600);
   const m = Math.floor((totalSec % 3600) / 60);
   const s = totalSec % 60;
-  if (d > 0) return `${d}h ${h}j ${m}m`;
-  if (h > 0) return `${h}j ${m}m ${s}d`;
-  if (m > 0) return `${m}m ${s}d`;
-  return `${s}d`;
+  if (d > 0) return `${d}d ${h}h ${m}m`;
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
 }
