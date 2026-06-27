@@ -33,7 +33,7 @@ const sizes = {
   /** Compact rows (inline, breadcrumbs) */
   sm: { height: 20, maxWidth: 145 },
   /** Headers — landing & platform (`h-16`), footer */
-  md: { height: 24, maxWidth: 174 },
+  md: { height: 20, maxWidth: 145 },
   /** Desktop sidebar / desktop nav */
   lg: { height: 28, maxWidth: 202 },
   /** Hero / large feature */
