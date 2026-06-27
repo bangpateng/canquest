@@ -6,20 +6,20 @@ import { useTheme } from "@/components/providers/theme-provider";
 import { cn } from "@/lib/utils/utils";
 
 /**
- * Canonical asset size — `public/canquest-logo.svg` viewBox is `0 45 600 95`,
- * cropped to the wordmark's true ink bounds (ink y:[53,132], vertical center
- * 92.5) so the text sits perfectly centered in the box. The earlier
- * `0 40 600 90` crop left the wordmark off-center, which made the logo sit
- * higher/lower than adjacent header badges.
+ * Canonical asset size — `public/canquest-logo.svg` viewBox is `0 45 600 83`,
+ * cropped to the WHITE GLYPH ink bounds (white text y:[53,120], vertical center
+ * 86.5). Note: the yellow-green gradient band sits lower than the glyphs, so
+ * centering on total ink leaves the text sitting too high — centering on the
+ * glyphs alone makes the wordmark line up exactly with adjacent header badges.
  */
 export const CANQUEST_LOGO_WIDTH = 600;
-export const CANQUEST_LOGO_HEIGHT = 95;
+export const CANQUEST_LOGO_HEIGHT = 83;
 export const CANQUEST_LOGO_ASPECT = CANQUEST_LOGO_WIDTH / CANQUEST_LOGO_HEIGHT;
 
 const LOCKUP_SRC = "/canquest-logo.svg";
 
 /**
- * Display sizes — height drives width via the SVG aspect ratio (600:95 ≈ 6.32).
+ * Display sizes — height drives width via the SVG aspect ratio (600:83 ≈ 7.23).
  * Heights target standard web conventions for each placement so the lockup is
  * not oversized next to adjacent icons/controls:
  *   - headers (`h-16` ≈ 64px)  → logo height ~24px (about 1/3 of the bar)
@@ -29,15 +29,15 @@ const LOCKUP_SRC = "/canquest-logo.svg";
  * small/large, bump its `height` here rather than overriding width at call sites.
  */
 const sizes = {
-  xs: { height: 16, maxWidth: 101 },
+  xs: { height: 16, maxWidth: 116 },
   /** Compact rows (inline, breadcrumbs) */
-  sm: { height: 20, maxWidth: 126 },
+  sm: { height: 20, maxWidth: 145 },
   /** Headers — landing & platform (`h-16`), footer */
-  md: { height: 24, maxWidth: 152 },
+  md: { height: 24, maxWidth: 174 },
   /** Desktop sidebar / desktop nav */
-  lg: { height: 28, maxWidth: 177 },
+  lg: { height: 28, maxWidth: 202 },
   /** Hero / large feature */
-  xl: { height: 36, maxWidth: 228 },
+  xl: { height: 36, maxWidth: 260 },
 } as const;
 
 type CanQuestLogoProps = {
