@@ -1,7 +1,6 @@
 import {
   CalendarDays,
   Gift,
-  Megaphone,
   Rocket,
   Sparkles,
   Ticket,
@@ -10,13 +9,12 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { ContactForm } from "@/components/cooperation/contact-form";
 import {
   CooperationMobileNav,
   CooperationSidebar,
 } from "@/components/cooperation/cooperation-sidebar";
 import { LandingShell } from "@/components/landing/landing-shell";
-import { buttonVariants } from "@/components/ui/button";
-import { getCooperationContactLinks } from "@/lib/config/site-config";
 import { cn } from "@/lib/utils/utils";
 
 const OFFERINGS: { icon: LucideIcon; title: string; description: string }[] = [
@@ -93,8 +91,6 @@ function CooperationSubsection({
 }
 
 export function CooperationPageContent() {
-  const contactLinks = getCooperationContactLinks();
-
   return (
     <div className="border-b border-[var(--border)]">
       <LandingShell className="py-10 pb-16 md:py-12">
@@ -108,8 +104,9 @@ export function CooperationPageContent() {
                 Cooperate with CanQuest
               </h1>
               <p className="mt-3 text-sm leading-relaxed text-[var(--muted-foreground)] sm:text-base">
-                Launch campaigns and events on CanQuest — reach the Canton community, distribute
-                rewards, and grow your project with quest-based activations.
+                Launch campaigns and events in front of a community of verified,
+                sybil-resistant users. Your rewards reach real participants — not farms of
+                fake accounts — and grow your project with quest-based activations.
               </p>
             </header>
 
@@ -284,59 +281,25 @@ export function CooperationPageContent() {
               </ul>
             </CooperationSection>
 
-            <CooperationSection id="get-in-touch" title="Contact us" className="border-b-0">
+            <CooperationSection id="partner-form" title="Partner with us" className="border-b-0">
               <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 sm:p-8">
-                <div className="flex items-start gap-3">
+                <div className="mb-6 flex items-start gap-3">
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-canton-subtle">
-                    <Megaphone className="h-5 w-5 text-canton" aria-hidden />
+                    <Rocket className="h-5 w-5 text-canton" aria-hidden />
                   </span>
                   <div>
                     <p className="font-semibold text-[var(--foreground)]">
-                      Ready to run a campaign or event?
+                      Work with CanQuest
                     </p>
                     <p className="mt-2">
-                      Reach us on Twitter or Telegram with your proposal. We typically respond
-                      within a few business days.
+                      Fill in the form below and our team will get back to you. Submissions
+                      land directly in our inbox — we typically reply within a few business
+                      days.
                     </p>
                   </div>
                 </div>
 
-                {contactLinks.length > 0 ? (
-                  <div className="mt-6 flex flex-wrap gap-3">
-                    {contactLinks.map((link) => (
-                      <a
-                        key={link.href}
-                        href={link.href}
-                        target="_blank"
-                        rel="noreferrer"
-                        className={buttonVariants({ variant: "secondary" })}
-                      >
-                        {link.label}
-                      </a>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="mt-4 text-xs">
-                    Set{" "}
-                    <code className="rounded bg-[var(--muted)]/40 px-1 py-0.5">
-                      NEXT_PUBLIC_TWITTER_URL
-                    </code>{" "}
-                    and{" "}
-                    <code className="rounded bg-[var(--muted)]/40 px-1 py-0.5">
-                      NEXT_PUBLIC_TELEGRAM_URL
-                    </code>{" "}
-                    in your environment.
-                  </p>
-                )}
-
-                <p className="mt-6 flex flex-wrap items-center gap-2 text-xs">
-                  <Rocket className="h-3.5 w-3.5 text-canton" aria-hidden />
-                  New to CanQuest? Read the{" "}
-                  <Link href="/docs" className="text-canton underline-offset-2 hover:underline">
-                    user documentation
-                  </Link>{" "}
-                  to see how campaigns appear to players.
-                </p>
+                <ContactForm />
               </div>
 
               <div className="mt-8 grid gap-3 sm:grid-cols-3">

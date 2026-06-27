@@ -6,6 +6,7 @@ export type DocsNavItem = {
 
 export const DOCS_NAV: DocsNavItem[] = [
   { id: "introduction", title: "Introduction" },
+  { id: "integrity", title: "Anti-sybil & verification" },
   { id: "getting-started", title: "Getting started" },
   { id: "landing-page", title: "Landing page" },
   { id: "app-menus", title: "App menus" },

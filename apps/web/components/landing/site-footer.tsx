@@ -10,7 +10,13 @@ export function SiteFooter() {
     <footer className="border-t border-[var(--border)] bg-[var(--background)]">
       <LandingShell className="flex flex-col gap-6 py-10 md:py-12">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <CanQuestLogo size="md" href="/" />
+          <div className="max-w-sm">
+            <CanQuestLogo size="md" href="/" />
+            <p className="mt-3 text-xs text-[var(--muted-foreground)]">
+              On-chain quests for real, verified humans. Anti-sybil by design — so the
+              rewards go to genuine contributors.
+            </p>
+          </div>
           <nav
             className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-[var(--muted-foreground)]"
             aria-label="Footer links"

@@ -19,5 +19,5 @@ export const COOPERATION_NAV: CooperationNavItem[] = [
   },
   { id: "how-it-works", title: "How it works" },
   { id: "what-we-need", title: "What we need from you" },
-  { id: "get-in-touch", title: "Contact us" },
+  { id: "partner-form", title: "Partner with us" },
 ];

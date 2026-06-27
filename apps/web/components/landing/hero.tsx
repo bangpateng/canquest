@@ -5,7 +5,11 @@ import { LandingShell } from "@/components/landing/landing-shell";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
 
-const STEPS = ["Pick a campaign", "Complete tasks", "Receive CC & Waitlist Access"] as const;
+const STEPS = [
+  "Prove you're a real user",
+  "Complete verified tasks",
+  "Earn real on-chain rewards",
+] as const;
 
 export function LandingHero() {
   return (
@@ -13,15 +17,17 @@ export function LandingHero() {
       <div className="gradient-mesh absolute inset-0 opacity-40" aria-hidden />
 
       <LandingShell className="relative py-16 text-center md:py-20 lg:py-24">
-        <p className="type-eyebrow-brand">CanQuest on Canton</p>
+        <p className="type-eyebrow-brand">On-chain quests, built for real users</p>
 
         <h1 className="type-display mx-auto mt-4 max-w-2xl text-[2rem] font-bold leading-tight tracking-tight sm:text-4xl lg:text-5xl">
-          Complete quests.{" "}
-          <span className="text-gradient-brand">Get paid in CC.</span>
+          Quests that respect{" "}
+          <span className="text-gradient-brand">real people.</span>
         </h1>
 
         <p className="mx-auto mt-4 max-w-lg text-base leading-relaxed text-[var(--muted-foreground)]">
-          Partner missions, daily hub tasks, and a Canton wallet — one account for all of it.
+          Every account is human-verified and sybil-resistant — so the rewards you
+          earn actually mean something. Partner missions, daily tasks, and a Canton
+          wallet, all in one account.
         </p>
 
         <ol className="mx-auto mt-10 flex max-w-md flex-col gap-3 sm:max-w-none sm:flex-row sm:justify-center sm:gap-8">
@@ -40,14 +46,14 @@ export function LandingHero() {
 
         <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <LaunchAppButton size="lg" className="w-full rounded-full px-8 sm:w-auto" />
-          <a href="#campaigns" className="inline-flex w-full justify-center sm:w-auto">
+          <a href="#integrity" className="inline-flex w-full justify-center sm:w-auto">
             <span
               className={cn(
                 buttonVariants({ variant: "secondary", size: "lg" }),
                 "inline-flex w-full rounded-full sm:w-auto",
               )}
             >
-              View campaigns
+              Why it&apos;s fair
             </span>
           </a>
         </div>

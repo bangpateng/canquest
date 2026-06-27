@@ -10,11 +10,11 @@ import { LandingSection } from "@/components/landing/landing-section";
 import { SectionHeader } from "@/components/landing/section-header";
 
 const menus: { icon: LucideIcon; title: string; description: string }[] = [
-  { icon: LayoutGrid, title: "Overview", description: "Dashboard and activity" },
-  { icon: Gift, title: "Quest", description: "Daily hub tasks" },
+  { icon: LayoutGrid, title: "Overview", description: "Dashboard, balance & activity" },
   { icon: Sparkles, title: "Earn", description: "Partner campaigns" },
-  { icon: Wallet, title: "Wallet", description: "Balance & send CC" },
-  { icon: Trophy, title: "Leaderboard", description: "Rankings" },
+  { icon: Gift, title: "Quests", description: "Daily verified tasks" },
+  { icon: Wallet, title: "Wallet", description: "Your Canton party ID" },
+  { icon: Trophy, title: "Leaderboard", description: "Rank among real users" },
 ];
 
 export function AppOverviewSection() {
@@ -22,7 +22,7 @@ export function AppOverviewSection() {
     <LandingSection id="app">
       <SectionHeader
         eyebrow="App"
-        title="What you get after login"
+        title="Everything in one verified account"
         align="center"
         className="mb-8 md:mb-10"
       />

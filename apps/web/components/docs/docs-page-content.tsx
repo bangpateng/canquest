@@ -99,9 +99,9 @@ const APP_MENUS: MenuItem[] = [
 
 const LANDING_SECTIONS = [
   {
-    anchor: "#campaigns",
-    title: "Earn (campaigns)",
-    description: "Preview featured partner campaigns before you sign in.",
+    anchor: "#integrity",
+    title: "Integrity",
+    description: "How CanQuest keeps rewards honest — anti-sybil verification and one wallet per person.",
   },
   {
     anchor: "#app",
@@ -167,8 +167,8 @@ export function DocsPageContent() {
                 CanQuest user guide
               </h1>
               <p className="mt-3 text-sm leading-relaxed text-[var(--muted-foreground)] sm:text-base">
-                Everything you need to know about the website menus, sign-in flow, and what you can
-                do on CanQuest.
+                How CanQuest works — human verification, anti-sybil sign-up, the app menus,
+                and what you can earn as a genuine participant.
               </p>
             </header>
 
@@ -177,9 +177,15 @@ export function DocsPageContent() {
           <p>
             <strong className="font-medium text-[var(--foreground)]">CanQuest</strong> is a quest
             platform on the{" "}
-            <strong className="font-medium text-[var(--foreground)]">Canton network</strong>. You
-            complete missions from partners and daily CanQuest tasks, earn points, climb the
-            leaderboard, and claim rewards — not only{" "}
+            <strong className="font-medium text-[var(--foreground)]">Canton network</strong> built
+            around <strong className="font-medium text-[var(--foreground)]">real users</strong>. We
+            verify that each account belongs to a genuine person and actively resist sybil farming
+            — so the points you earn, the ranks you climb, and the rewards you claim actually mean
+            something. They aren&apos;t diluted by bot armies or multi-account abuse.
+          </p>
+          <p>
+            As a verified participant you complete missions from partners and daily CanQuest tasks,
+            earn points, climb the leaderboard, and claim rewards — not only{" "}
             <strong className="font-medium text-[var(--foreground)]">CC (Canton Coin)</strong>, but
             also <strong className="font-medium text-[var(--foreground)]">invite codes</strong> and{" "}
             <strong className="font-medium text-[var(--foreground)]">access codes</strong> for
@@ -206,6 +212,45 @@ export function DocsPageContent() {
               landing page
             </Link>{" "}
             to browse campaigns, or launch the app to sign in and start earning.
+          </p>
+        </DocsSection>
+
+        <DocsSection id="integrity" title="Anti-sybil & verification">
+          <p>
+            Keeping rewards honest is core to CanQuest. Several layers make sure rewards go to real
+            people, not farms of fake accounts:
+          </p>
+          <ul className="list-disc space-y-2 pl-5">
+            <li>
+              <strong className="font-medium text-[var(--foreground)]">Email OTP verification</strong>{" "}
+              — every account confirms a real email with a one-time code before it&apos;s usable.
+            </li>
+            <li>
+              <strong className="font-medium text-[var(--foreground)]">Captcha at sign-up</strong>{" "}
+              — a Cloudflare Turnstile challenge blocks automated registration.
+            </li>
+            <li>
+              <strong className="font-medium text-[var(--foreground)]">Disposable-email block</strong>{" "}
+              — throwaway email domains are rejected, raising the cost of mass account creation.
+            </li>
+            <li>
+              <strong className="font-medium text-[var(--foreground)]">One wallet per person</strong>{" "}
+              — wallet creation requires a team invite code under a daily quota, so a single human
+              gets a single on-chain party ID.
+            </li>
+            <li>
+              <strong className="font-medium text-[var(--foreground)]">Server-verified tasks</strong>{" "}
+              — task completion, points, and reward draws are decided on the server with audit
+              trails; the browser never controls the outcome.
+            </li>
+            <li>
+              <strong className="font-medium text-[var(--foreground)]">Rate limiting</strong> —
+              global throttling and replay protection guard sensitive actions across the platform.
+            </li>
+          </ul>
+          <p>
+            The practical upshot: the leaderboard you compete on and the reward pools you draw from
+            aren&apos;t flooded with bots. Play fairly and your effort is what counts.
           </p>
         </DocsSection>
 
@@ -395,7 +440,11 @@ export function DocsPageContent() {
           </div>
 
           <p className="pt-6 text-xs">
-            Questions or partnership inquiries? Reach us through the social links in the site footer.
+            Questions or partnership inquiries? Use the{" "}
+            <Link href="/cooperation#partner-form" className="text-canton underline-offset-2 hover:underline">
+              partnership form
+            </Link>{" "}
+            — submissions go straight to our team.
           </p>
         </DocsSection>
           </div>

@@ -166,4 +166,97 @@ export class ResendEmailService {
       );
     }
   }
+
+  /**
+   * Cooperation / partnership form submission → forwarded to the team inbox.
+   *
+   * Throws in production when email is not configured so the controller surfaces a
+   * clear 503 to the submitter. In non-production it logs the payload instead, so the
+   * form is still testable locally without a Resend key.
+   */
+  async sendContactSubmission(
+    to: string,
+    payload: {
+      name: string;
+      email: string;
+      organization?: string | null;
+      collaborationType?: string | null;
+      budget?: string | null;
+      message: string;
+    },
+  ): Promise<void> {
+    const apiKey = this.config.get<string>('RESEND_API_KEY')?.trim();
+    if (!apiKey) {
+      if (process.env.NODE_ENV === 'production') {
+        throw new ServiceUnavailableException(
+          'Email delivery is not configured (RESEND_API_KEY).',
+        );
+      }
+      this.logger.warn(
+        `[dev] Contact submission to ${to}: ${JSON.stringify(payload).slice(0, 400)}`,
+      );
+      return;
+    }
+
+    const from =
+      this.config.get<string>('RESEND_FROM_EMAIL')?.trim() || DEFAULT_FROM;
+
+    const esc = (s: string) =>
+      s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    const row = (label: string, value?: string | null) =>
+      value && value.trim()
+        ? `<tr><td style="color:#888;padding:4px 12px 4px 0;vertical-align:top;font-size:13px">${esc(
+            label,
+          )}</td><td style="padding:4px 0;font-size:14px">${esc(value)}</td></tr>`
+        : '';
+
+    const html = `
+      <div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px">
+        <h2 style="margin:0 0 12px">New partnership submission</h2>
+        <p style="color:#555;margin:0 0 16px">Someone filled in the Cooperation form on canquest.cc.</p>
+        <table style="border-collapse:collapse;width:100%">
+          ${row('Name', payload.name)}
+          ${row('Email', payload.email)}
+          ${row('Organization / Project', payload.organization)}
+          ${row('Collaboration type', payload.collaborationType)}
+          ${row('Budget', payload.budget)}
+        </table>
+        <h3 style="margin:20px 0 6px;font-size:14px">Message</h3>
+        <p style="white-space:pre-wrap;background:#f6f7f9;border-radius:8px;padding:12px;margin:0;font-size:14px">${esc(
+          payload.message,
+        )}</p>
+        <p style="color:#888;font-size:12px;margin-top:24px">Reply directly to the submitter at ${esc(
+          payload.email,
+        )}.</p>
+      </div>
+    `.trim();
+
+    // reply_to keeps the team's reply addressed to the submitter.
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from,
+        to: [to],
+        reply_to: payload.email,
+        subject: `Partnership request — ${payload.name}`,
+        html,
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      this.logger.error(
+        `Contact submission email failed (${res.status}): ${errText.slice(0, 200)}`,
+      );
+      throw new ServiceUnavailableException(
+        'Could not deliver your message. Please try again later.',
+      );
+    }
+  }
 }
