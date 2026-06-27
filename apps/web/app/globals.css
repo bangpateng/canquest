@@ -77,6 +77,34 @@
    Sebelumnya class ini direferensikan tapi tidak terdefinisi, sehingga semua
    heading/stat (admin & user) tampil polos tanpa styling. */
 @layer components {
+  /* Surface effects (glass + mesh).
+     Dulu direferensikan di banyak komponen landing/docs/cooperation
+     tapi tidak punya definisi, jadi efeknya nol. Opacity mesh diatur inline. */
+  .gradient-mesh {
+    background-image:
+      radial-gradient(ellipse 60% 50% at 15% 0%, rgb(var(--canton-rgb) / 0.22), transparent 60%),
+      radial-gradient(ellipse 50% 45% at 85% 10%, rgb(var(--canton-cyan-rgb) / 0.16), transparent 65%),
+      radial-gradient(ellipse 70% 60% at 50% 100%, rgb(var(--canton-rgb) / 0.10), transparent 70%);
+    background-repeat: no-repeat;
+  }
+  .glass-card {
+    background-color: rgb(var(--canton-rgb) / 0.03);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.05),
+      0 8px 32px rgb(0 0 0 / 0.18);
+    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+  }
+  .glass-card-hover:hover {
+    transform: translateY(-2px);
+    border-color: rgb(var(--canton-rgb) / 0.35);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.07),
+      0 0 24px rgb(var(--canton-rgb) / 0.14),
+      0 12px 40px rgb(0 0 0 / 0.28);
+  }
+
   .type-page-title {
     @apply text-2xl font-bold tracking-tight text-[var(--foreground)] sm:text-3xl;
   }

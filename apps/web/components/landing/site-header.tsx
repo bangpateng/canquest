@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ShieldCheck, Sparkles, Wallet, X } from "lucide-react";
+import { Lock, Sparkles, Wallet, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { CanQuestLogo } from "@/components/ui/canquest-logo";
 import { LaunchAppButton } from "@/components/landing/launch-app-button";
@@ -10,7 +10,7 @@ import { iconButtonClass } from "@/lib/ui/ui-button-styles";
 import { cn } from "@/lib/utils/utils";
 
 const nav: { href: string; label: string; icon: LucideIcon; description: string }[] = [
-  { href: "#integrity", label: "Integrity", icon: ShieldCheck, description: "Anti-sybil" },
+  { href: "#lock", label: "Lock", icon: Lock, description: "How it works" },
   { href: "#app", label: "App", icon: Sparkles, description: "Features" },
   { href: "#canton", label: "Wallet", icon: Wallet, description: "Canton CC" },
 ];

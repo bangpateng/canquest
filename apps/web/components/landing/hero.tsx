@@ -6,28 +6,27 @@ import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
 
 const STEPS = [
-  "Prove you're a real user",
-  "Complete verified tasks",
-  "Earn real on-chain rewards",
+  "Lock 30 CC on-chain",
+  "Get Full access",
+  "Earn campaign rewards",
 ] as const;
 
 export function LandingHero() {
   return (
-    <section className="relative border-b border-[var(--border)]">
-      <div className="gradient-mesh absolute inset-0 opacity-40" aria-hidden />
+    <section className="relative overflow-hidden border-b border-[var(--border)]">
+      <div className="gradient-mesh absolute inset-0 opacity-70" aria-hidden />
 
       <LandingShell className="relative py-16 text-center md:py-20 lg:py-24">
-        <p className="type-eyebrow-brand">On-chain quests, built for real users</p>
+        <p className="type-eyebrow-brand">Non-custodial CC lock · Canton-native</p>
 
         <h1 className="type-display mx-auto mt-4 max-w-2xl text-[2rem] font-bold leading-tight tracking-tight sm:text-4xl lg:text-5xl">
-          Quests that respect{" "}
-          <span className="text-gradient-brand">real people.</span>
+          Lock CC.{" "}
+          <span className="text-gradient-brand">Unlock real campaigns.</span>
         </h1>
 
         <p className="mx-auto mt-4 max-w-lg text-base leading-relaxed text-[var(--muted-foreground)]">
-          Every account is human-verified and sybil-resistant — so the rewards you
-          earn actually mean something. Partner missions, daily tasks, and a Canton
-          wallet, all in one account.
+          Commit CC from your own wallet to reach Full access and join partner campaigns —
+          invite codes, early drops, and CC rewards for genuine participants, not bots.
         </p>
 
         <ol className="mx-auto mt-10 flex max-w-md flex-col gap-3 sm:max-w-none sm:flex-row sm:justify-center sm:gap-8">
@@ -46,14 +45,14 @@ export function LandingHero() {
 
         <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <LaunchAppButton size="lg" className="w-full rounded-full px-8 sm:w-auto" />
-          <a href="#integrity" className="inline-flex w-full justify-center sm:w-auto">
+          <a href="#lock" className="inline-flex w-full justify-center sm:w-auto">
             <span
               className={cn(
                 buttonVariants({ variant: "secondary", size: "lg" }),
                 "inline-flex w-full rounded-full sm:w-auto",
               )}
             >
-              Why it&apos;s fair
+              How locking works
             </span>
           </a>
         </div>

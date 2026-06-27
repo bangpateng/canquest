@@ -1,6 +1,7 @@
 import {
   Gift,
   LayoutGrid,
+  Settings,
   Sparkles,
   Trophy,
   Wallet,
@@ -11,10 +12,11 @@ import { SectionHeader } from "@/components/landing/section-header";
 
 const menus: { icon: LucideIcon; title: string; description: string }[] = [
   { icon: LayoutGrid, title: "Overview", description: "Dashboard, balance & activity" },
-  { icon: Sparkles, title: "Earn", description: "Partner campaigns" },
+  { icon: Sparkles, title: "Earn", description: "Partner campaigns (needs 30 CC lock)" },
   { icon: Gift, title: "Quests", description: "Daily verified tasks" },
-  { icon: Wallet, title: "Wallet", description: "Your Canton party ID" },
+  { icon: Wallet, title: "Wallet", description: "Canton party ID & lock CC" },
   { icon: Trophy, title: "Leaderboard", description: "Rank among real users" },
+  { icon: Settings, title: "Settings", description: "Account & referral link" },
 ];
 
 export function AppOverviewSection() {

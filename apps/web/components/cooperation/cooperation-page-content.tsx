@@ -38,9 +38,9 @@ const OFFERINGS: { icon: LucideIcon; title: string; description: string }[] = [
   },
   {
     icon: Users,
-    title: "Canton-native audience",
+    title: "High-intent, committed audience",
     description:
-      "Reach users who already have a Canton wallet and understand on-chain CC rewards.",
+      "Reach users who have already locked CC on-chain to earn Full access — real participants who put skin in the game, not free-riders or bots.",
   },
 ];
 

@@ -99,9 +99,9 @@ const APP_MENUS: MenuItem[] = [
 
 const LANDING_SECTIONS = [
   {
-    anchor: "#integrity",
-    title: "Integrity",
-    description: "How CanQuest keeps rewards honest — anti-sybil verification and one wallet per person.",
+    anchor: "#lock",
+    title: "Lock (how it works)",
+    description: "The non-custodial CC lock mechanic that unlocks Full access and Earn campaigns.",
   },
   {
     anchor: "#app",
@@ -111,7 +111,7 @@ const LANDING_SECTIONS = [
   {
     anchor: "#canton",
     title: "Wallet / Canton",
-    description: "How CC rewards land in your on-chain Canton wallet.",
+    description: "How your Canton party ID and CC balance work.",
   },
 ] as const;
 
@@ -254,6 +254,50 @@ export function DocsPageContent() {
           </p>
         </DocsSection>
 
+        <DocsSection id="cc-lock" title="CC Lock & Earn access">
+          <p>
+            The heart of CanQuest is a <strong className="font-medium text-[var(--foreground)]">non-custodial CC lock</strong>.
+            You commit CC from your own wallet to prove intent and unlock access to partner
+            campaigns — your funds are never taken away.
+          </p>
+          <ul className="list-disc space-y-2 pl-5">
+            <li>
+              <strong className="font-medium text-[var(--foreground)]">Lock 30 CC</strong> on-chain
+              from your wallet (the threshold is configurable per network).
+            </li>
+            <li>
+              Your account is instantly promoted to{" "}
+              <strong className="font-medium text-[var(--foreground)]">Full access</strong> tier —
+              this is read straight from the chain, not a manual approval.
+            </li>
+            <li>
+              Full access lets you join partner missions under{" "}
+              <Link href="/earn" className="text-canton underline-offset-2 hover:underline">
+                Earn
+              </Link>{" "}
+              and claim their rewards.
+            </li>
+            <li>
+              Choose a lock term — <strong className="font-medium text-[var(--foreground)]">7, 15, or 30 days</strong> —
+              based on how long you want to commit.
+            </li>
+            <li>
+              When the term ends, unlock and your{" "}
+              <strong className="font-medium text-[var(--foreground)]">CC returns in full</strong>.
+              A small network holding fee applies while locked.
+            </li>
+          </ul>
+          <p>
+            You manage locks from the{" "}
+            <Link href="/wallet" className="text-canton underline-offset-2 hover:underline">
+              Wallet
+            </Link>{" "}
+            page — create a lock, watch its countdown, and unlock it once the term expires. Quest
+            points and redemptions (Quests menu) work without a lock; only partner campaigns in
+            Earn require Full access.
+          </p>
+        </DocsSection>
+
         <DocsSection id="getting-started" title="Getting started">
           <ol className="list-decimal space-y-3 pl-5">
             <li>
@@ -281,8 +325,12 @@ export function DocsPageContent() {
             </li>
             <li>
               <strong className="font-medium text-[var(--foreground)]">Start earning</strong> —
-              pick a partner campaign under Earn or complete daily tasks under Quests, then claim
-              your rewards.
+              complete daily tasks under Quests right away. To join partner campaigns in Earn,
+              lock 30 CC from your wallet first to reach Full access (see{" "}
+              <a href="#cc-lock" className="text-canton underline-offset-2 hover:underline">
+                CC Lock
+              </a>
+              ), then claim your rewards.
             </li>
           </ol>
           <div className="pt-2">
