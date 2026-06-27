@@ -30,7 +30,7 @@ export function LockSection() {
     <LandingSection id="lock">
       <SectionHeader
         eyebrow="How it works"
-        title="Lock CC. Unlock real campaigns."
+        title=""
         align="center"
         description="The core mechanic of CanQuest. A non-custodial commitment that separates genuine participants from free-riders and bots."
         className="mb-8 md:mb-10"
@@ -46,9 +46,6 @@ export function LockSection() {
                 <div className="flex items-center gap-3">
                   <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-canton-subtle ring-1 ring-[var(--primary)]/15">
                     <Icon className="h-5 w-5 text-canton" aria-hidden />
-                  </span>
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-canton-subtle text-xs font-bold text-canton">
-                    {i + 1}
                   </span>
                 </div>
                 <h3 className="type-section-title mt-4">{step.title}</h3>
