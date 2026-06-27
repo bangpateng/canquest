@@ -48,7 +48,7 @@ export function SiteHeader() {
       <header className="sticky top-0 z-50 bg-[var(--background)]/80 backdrop-blur-xl">
         <LandingShell className="flex h-16 items-center justify-between gap-4">
           <div className="flex shrink-0 items-center justify-start">
-            <CanQuestLogo size="lg" href="/" onClick={close} />
+            <CanQuestLogo size="md" href="/" onClick={close} />
           </div>
 
           <nav className="hidden flex-1 items-center justify-center gap-1 md:flex" aria-label="Main">

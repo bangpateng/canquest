@@ -106,7 +106,7 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
       {/* Desktop Sidebar — hidden on mobile */}
       <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-white/[0.05] bg-slate-950/95 px-4 py-8 backdrop-blur-2xl md:flex">
         <div className="mb-6 min-w-0 px-2">
-          <CanQuestLogo size="lg" href="/overview" />
+          <CanQuestLogo size="md" href="/overview" />
         </div>
         <p className="mb-6 px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-600">
           {t("shell.platform")}
