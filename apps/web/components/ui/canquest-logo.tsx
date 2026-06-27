@@ -19,21 +19,25 @@ export const CANQUEST_LOGO_ASPECT = CANQUEST_LOGO_WIDTH / CANQUEST_LOGO_HEIGHT;
 const LOCKUP_SRC = "/canquest-logo.svg";
 
 /**
- * Display sizes — height drives width via aspect ratio. The SVG box is now
- * cropped to the wordmark (~6.67:1), so the width per unit height is larger
- * than before. maxWidth caps growth so the logo fits tight rows (mobile
- * headers) while keeping the target visual height.
+ * Display sizes — height drives width via the SVG aspect ratio (600:90 ≈ 6.67).
+ * Heights target standard web conventions for each placement so the lockup is
+ * not oversized next to adjacent icons/controls:
+ *   - headers (`h-16` ≈ 64px)  → logo height ~24px (about 1/3 of the bar)
+ *   - desktop sidebar / footer → ~28px
+ * maxWidth caps the rendered width so tight rows (mobile headers) never reserve
+ * more horizontal space than the wordmark needs. If a placement feels too
+ * small/large, bump its `height` here rather than overriding width at call sites.
  */
 const sizes = {
-  xs: { height: 18, maxWidth: 120 },
-  /** Compact rows (still readable) */
-  sm: { height: 24, maxWidth: 160 },
-  /** Mobile platform / landing header */
-  md: { height: 28, maxWidth: 188 },
-  /** Sidebar & desktop nav */
-  lg: { height: 34, maxWidth: 227 },
-  /** Footer / hero */
-  xl: { height: 44, maxWidth: 294 },
+  xs: { height: 16, maxWidth: 107 },
+  /** Compact rows (inline, breadcrumbs) */
+  sm: { height: 20, maxWidth: 134 },
+  /** Headers — landing & platform (`h-16`), footer */
+  md: { height: 24, maxWidth: 160 },
+  /** Desktop sidebar / desktop nav */
+  lg: { height: 28, maxWidth: 187 },
+  /** Hero / large feature */
+  xl: { height: 36, maxWidth: 240 },
 } as const;
 
 type CanQuestLogoProps = {
