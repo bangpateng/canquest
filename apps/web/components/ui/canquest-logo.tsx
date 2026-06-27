@@ -6,26 +6,23 @@ import { useTheme } from "@/components/providers/theme-provider";
 import { cn } from "@/lib/utils/utils";
 
 /**
- * Canonical asset size — taken directly from the SVG's real bounding box
- * (`getBBox()` → x≈3.42, y=0, w≈593, h=180). The wordmark fills the full
- * height of the box, so NO vertical cropping is needed. A previous version
- * cropped the viewBox to `0 40 600 90`, which sliced ~40px off the top and
- * ~50px off the bottom of the glyphs (making the logo look broken) and used
- * a wrong 6.67:1 aspect instead of the true ~3.29:1. The SVG viewBox should
- * be `3.42 0 593.14 180` to match these values.
+ * Canonical asset size — `public/canquest-logo.svg` viewBox was cropped to
+ * `0 40 600 90` to remove the large vertical whitespace above/below the
+ * wordmark (it sat low in a 180px box, looking misaligned with adjacent
+ * header icons). The drawn content now fills the box, so the wordmark centers
+ * cleanly.
  */
-export const CANQUEST_LOGO_WIDTH = 593;
-export const CANQUEST_LOGO_HEIGHT = 180;
-export const CANQUEST_LOGO_ASPECT = CANQUEST_LOGO_WIDTH / CANQUEST_LOGO_HEIGHT; // ≈ 3.29
+export const CANQUEST_LOGO_WIDTH = 600;
+export const CANQUEST_LOGO_HEIGHT = 90;
+export const CANQUEST_LOGO_ASPECT = CANQUEST_LOGO_WIDTH / CANQUEST_LOGO_HEIGHT;
 
 const LOCKUP_SRC = "/canquest-logo.svg";
 
 /**
- * Display sizes — height drives width via aspect ratio. With the corrected
- * ~3.29:1 box, rendered width per unit height is roughly half of the old
- * (broken) values, so the maxWidth caps below are generous and effectively
- * never clip; they remain only as a safety ceiling for very tight rows.
- * If a size feels too small, bump its `height` rather than touching maxWidth.
+ * Display sizes — height drives width via aspect ratio. The SVG box is now
+ * cropped to the wordmark (~6.67:1), so the width per unit height is larger
+ * than before. maxWidth caps growth so the logo fits tight rows (mobile
+ * headers) while keeping the target visual height.
  */
 const sizes = {
   xs: { height: 18, maxWidth: 120 },
@@ -72,7 +69,7 @@ export function CanQuestLogo({
         sizes={`(max-width: 640px) ${maxWidth}px, ${maxWidth}px`}
         className={cn(
           "block h-auto max-h-[var(--logo-h)] w-auto max-w-[var(--logo-max-w)] object-contain object-left",
-          /* Wordmark is white in SVG — invert for readability on light theme */
+          /* Wordmark is white in SVG — readable on light platform theme */
           theme === "light" && "brightness-0",
         )}
         style={
