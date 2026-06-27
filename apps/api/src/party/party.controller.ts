@@ -128,10 +128,10 @@ export class PartyController {
       `Party participant mismatch: got …${got?.slice(-16) ?? '?'} expected …${expected?.slice(-16) ?? '?'}`,
     );
     throw new BadRequestException(
-      'Wallet was created on the wrong Canton participant (suffix after :: does not match your TestNet validator). ' +
-        'Both SSH tunnels must target the same validator stack on 162.250.190.204: ' +
+      'Wallet was created on the wrong Canton participant (suffix after :: does not match your validator). ' +
+        'Both tunnels must target the same validator stack: ' +
         '7575 → participant container, 8080 → nginx (wallet.localhost). ' +
-        'Do not use DevNet (162.250.191.46). Re-run tunnel-testnet.ps1 with correct Docker IPs, then create a new wallet.',
+        'Do not mix networks (DevNet vs TestNet). Re-run the tunnel script with correct Docker IPs, then create a new wallet.',
     );
   }
 

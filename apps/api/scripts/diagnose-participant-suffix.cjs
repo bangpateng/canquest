@@ -89,7 +89,7 @@ async function spliceUserParty(username) {
     console.log(
       '\n⚠️  Multiple participants on :7575 — wallet fallback may create wrong suffix (12200dd7… vs 1220cc5c…).',
     );
-    console.log('Fix: point tunnel 7575 to splice-validator-participant-1 on 162.250.190.204 (TestNet).');
+    console.log('Fix: point tunnel 7575 to the splice-validator-participant-1 container on your validator.');
   }
   console.log('');
 })().catch((e) => {

@@ -99,3 +99,37 @@ Thumbs.db
 *.swp
 *.swo
 nul
+
+# ─── Internal / infra docs (host IPs, deploy runbooks, investigation notes) ──
+# Keep these LOCAL only — repo is public. They leak infrastructure topology.
+docs/CANTON_KONEKSI_VPS_GRPC_VS_JSON.md
+docs/CANTON_STABLE_CONNECTION.md
+docs/CANTON_TESTNET.md
+docs/NETWORK_TOPOLOGY.md
+docs/GUIDE_DEPLOY_FULL.md
+docs/TUTORIAL_DEPLOY_INDONESIA.md
+docs/VPS2_DEPLOY.md
+docs/VPS2_OPERATIONS_RUNBOOK.md
+docs/DAML_DEPLOY_VPS.md
+docs/DAML_SDK_SETUP.md
+docs/MAINNET_DEPLOY_CANQUEST_v10.md
+docs/MAINNET_MIGRATION_GUIDE.md
+docs/PERFORMANCE_API.md
+apps/api/env.example.txt
+dokumentasi.txt
+probe-out-preapproval-choice-argument.json
+diff_auth.txt
+diff_party.txt
+CREATE_PREAPPROVAL_LEDGER_INVESTIGATION.md
+ONE_STEP_TOGGLE_AUDIT.md
+PREAPPROVAL_LEDGER_MIGRATION_PLAN.md
+QUESTS_SERVICE_MIGRATION_DIFF.md
+REWARD_CIP56_MIGRATION_ANALYSIS.md
+
+# ─── Infra config & ops scripts with host IPs (local only) ───────────────────
+infra/nginx/canquest-api.conf
+infra/nginx/canquest.conf
+infra/systemd/canton-tunnel.service.example
+infra/env/api.env.testnet.example
+scripts/tunnel-testnet.ps1
+scripts/vps2-deploy-from-windows.ps1

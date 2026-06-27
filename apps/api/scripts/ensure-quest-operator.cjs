@@ -182,7 +182,7 @@ function assertParticipantSuffix(partyId) {
   const got = partySuffix(partyId);
   if (expected && got && expected !== got) {
     console.error(
-      `\nParticipant suffix mismatch!\n  operator: …${got?.slice(-16)}\n  validator: …${expected?.slice(-16)}\nFix tunnel — 7575 must target TestNet participant 172.18.0.5\n`,
+      `\nParticipant suffix mismatch!\n  operator: …${got?.slice(-16)}\n  validator: …${expected?.slice(-16)}\nFix tunnel — 7575 must target the correct participant container.\n`,
     );
     return false;
   }
@@ -205,7 +205,7 @@ async function main() {
 Could not create or resolve Splice user "${operatorName}".
 
 Fix:
-  1. Tunnel 7575 + 8080 to TestNet 162.250.190.204 (172.18.0.5 + 172.18.0.7)
+  1. Tunnel 7575 + 8080 to your validator's participant + nginx containers
   2. Re-run: node scripts/ensure-quest-operator.cjs ${operatorName}
 `);
     process.exit(1);

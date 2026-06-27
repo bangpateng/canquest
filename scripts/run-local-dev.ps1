@@ -69,5 +69,5 @@ try {
 Write-Host ""
 Write-Host "Open: http://localhost:3000" -ForegroundColor Cyan
 Write-Host 'TestNet tunnel: scripts\tunnel-testnet.ps1 -ParticipantIp <IP> -NginxIp <IP>'
-Write-Host 'See docs/CANTON_TESTNET.md — validator VPS: 162.250.190.204'
+Write-Host 'See the private Canton runbook for your validator VPS host.'
 Write-Host 'Register invite: CANQUEST | Admin login: ADMIN_PANEL_EMAIL in apps/api/.env'

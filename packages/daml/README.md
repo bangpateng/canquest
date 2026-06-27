@@ -37,66 +37,19 @@ Cari baris `main package id:` di output.
 
 ## Deploy ke mana?
 
-DAR **tidak** di-deploy ke Vercel/web. DAR di-upload ke **Canton Participant** di **VPS validator** (TestNet CanQuest):
+DAR **tidak** di-deploy ke Vercel/web. DAR di-upload ke **Canton Participant** pada validator node Anda (TestNet/MainNet). Detail infrastruktur (host, tunnel, port mapping, party IDs validator) bersifat **privat** — lihat runbook internal, jangan di-commit ke repo public.
 
-| Langkah | Di mana | Port |
-|---------|---------|------|
-| Build `.dar` | Laptop Windows (Docker) atau VPS app | — |
-| Upload DAR | **Participant Canton** di VPS validator | **7575** |
-| Set env + restart | VPS app (Nest API) atau laptop dev | **3001** |
-
-**TestNet validator:** `162.250.190.204` (lihat `docs/CANTON_TESTNET.md`).
-
-### 1. Buka tunnel (terminal terpisah, tetap hidup)
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\tunnel-testnet.ps1 -ParticipantIp 172.19.0.5 -NginxIp 172.19.0.6
-```
-
-(Ganti IP participant/nginx jika berbeda — cek dengan `docker inspect` di VPS validator.)
-
-Verifikasi:
-
-```powershell
-curl http://127.0.0.1:7575/livez
-```
-
-### 2. Upload DAR ke participant
-
-Pastikan `apps/api/.env` punya `CANTON_JSON_API_URL=http://127.0.0.1:7575` dan `CANTON_SPLICE_SECRET=...`.
-
-```powershell
-cd apps\api
-npm run daml:upload
-```
-
-Atau manual:
-
-```powershell
-node scripts/upload-daml-dar.cjs
-```
-
-### 3. Isi `.env` API + nyalakan ledger
+Setelah DAR ter-upload, isi di `apps/api/.env`:
 
 ```env
 CANTON_DAML_PACKAGE_ID=<main package id dari inspect-dar>
-# Treasury / fees (validator wallet):
-CANTON_VALIDATOR_PARTY_ID=naxweb-validator-1::1220cc5c…
-# DAML signatory (terpisah — buat via Splice user canquest-operator):
-CANTON_OPERATOR_PARTY_ID=canquest-operator::1220cc5c…
+CANTON_VALIDATOR_PARTY_ID=<party id validator wallet>
+CANTON_OPERATOR_PARTY_ID=<party id DAML signatory, via Splice user canquest-operator>
 QUEST_LEDGER_ENABLED=true
 CLAIM_SESSION_LEDGER_ENABLED=true
 ```
 
-Buat operator terpisah (tunnel 7575+8080 harus hidup):
-
-```bash
-cd apps/api
-npm run quest:operator
-# salin CANTON_OPERATOR_PARTY_ID ke .env
-```
-
-Restart API: `npm run start:dev` (dev) atau `pm2 restart canquest-api` (production VPS).
+Restart API: `npm run start:dev` (dev) atau `pm2 restart canquest-api` (production).
 
 ---
 

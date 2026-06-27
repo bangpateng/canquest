@@ -30,9 +30,7 @@ npm run dev:web
 
 ## Production deploy (VPS + Vercel)
 
-**Start here:** [docs/GUIDE_DEPLOY_FULL.md](docs/GUIDE_DEPLOY_FULL.md) — clone GitHub, WireGuard, VPS 1 validator, VPS 2 API, Vercel, smoke tests.
-
-Also: [docs/NETWORK_TOPOLOGY.md](docs/NETWORK_TOPOLOGY.md), [docs/TUTORIAL_DEPLOY_INDONESIA.md](docs/TUTORIAL_DEPLOY_INDONESIA.md).
+Deploy & infrastructure runbooks are kept **private** (they contain host IPs, tunnel setup, and ops steps). Contact the maintainer for access. For self-hosting, start from `.env.example` / `web.env.production.example` and the public architecture docs under `docs/`.
 
 ## Phase 1 (current)
 
