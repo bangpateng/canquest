@@ -96,7 +96,7 @@ export function CanQuestLogo({
       <Link
         href={href}
         onClick={onClick}
-        className="inline-flex w-fit max-w-full min-w-0 justify-start self-start"
+        className="inline-flex w-fit max-w-full min-w-0 justify-start self-center"
       >
         {inner}
       </Link>

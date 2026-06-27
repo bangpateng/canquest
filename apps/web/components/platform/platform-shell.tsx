@@ -130,11 +130,11 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden pb-24 md:pb-0" style={{ maxWidth: '100%' }}>
         {/* Top Header */}
         <header className="sticky top-0 z-30 flex h-16 w-full max-w-full items-center justify-between gap-4 border-b border-white/[0.05] bg-[var(--background)]/95 px-4 backdrop-blur-2xl sm:h-[4.5rem] sm:px-6 md:px-8 lg:px-10">
-          <CanQuestLogo
-            size="md"
-            href="/overview"
-            className="md:hidden"
-          />
+          {/* Match landing-header structure: wrap logo in a flex/centered box so
+              the lockup sits vertically centered like on the landing page. */}
+          <div className="flex shrink-0 items-center justify-start md:hidden">
+            <CanQuestLogo size="md" href="/overview" />
+          </div>
           <div className="hidden flex-1 md:block" />
           <PlatformToolbar />
         </header>
