@@ -6,34 +6,36 @@ import { useTheme } from "@/components/providers/theme-provider";
 import { cn } from "@/lib/utils/utils";
 
 /**
- * Canonical asset size — `public/canquest-logo.svg` viewBox was cropped to
- * `0 40 600 90` to remove the large vertical whitespace above/below the
- * wordmark (it sat low in a 180px box, looking misaligned with adjacent
- * header icons). The drawn content now fills the box, so the wordmark centers
- * cleanly.
+ * Canonical asset size. `public/canquest-logo.svg` was re-cropped to the true
+ * wordmark bounds: the glyphs span x[48.4, 596.5] on the original 600×180
+ * canvas, so the prior `viewBox="0 40 600 90"` left a ~48px dead-zone on the
+ * LEFT that made the lockup sit off-center ("jomplang") inside centered
+ * wrappers, and clipped the gradient tail of the "Q" by ~2.6px at the bottom.
+ * The viewBox is now `42 46 558 90` (left dead-zone removed, ~6px more at the
+ * bottom so the accent is fully visible), giving an honest aspect of 558/90.
  */
-export const CANQUEST_LOGO_WIDTH = 600;
+export const CANQUEST_LOGO_WIDTH = 558;
 export const CANQUEST_LOGO_HEIGHT = 90;
 export const CANQUEST_LOGO_ASPECT = CANQUEST_LOGO_WIDTH / CANQUEST_LOGO_HEIGHT;
 
 const LOCKUP_SRC = "/canquest-logo.svg";
 
 /**
- * Display sizes — height drives width via aspect ratio. The SVG box is now
- * cropped to the wordmark (~6.67:1), so the width per unit height is larger
- * than before. maxWidth caps growth so the logo fits tight rows (mobile
- * headers) while keeping the target visual height.
+ * Display sizes — height drives width via the aspect ratio above, and
+ * `maxWidth` is clamped to that computed width so tight rows (mobile headers,
+ * sidebars) never reserve more horizontal space than the wordmark needs. This
+ * keeps the logo from rendering oversized next to adjacent header icons.
  */
 const sizes = {
-  xs: { height: 18, maxWidth: 120 },
+  xs: { height: 16, maxWidth: 99 },
   /** Compact rows (still readable) */
-  sm: { height: 24, maxWidth: 160 },
+  sm: { height: 20, maxWidth: 124 },
   /** Mobile platform / landing header */
-  md: { height: 28, maxWidth: 188 },
+  md: { height: 24, maxWidth: 149 },
   /** Sidebar & desktop nav */
-  lg: { height: 34, maxWidth: 227 },
+  lg: { height: 28, maxWidth: 174 },
   /** Footer / hero */
-  xl: { height: 44, maxWidth: 294 },
+  xl: { height: 36, maxWidth: 223 },
 } as const;
 
 type CanQuestLogoProps = {
