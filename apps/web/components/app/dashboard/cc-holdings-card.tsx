@@ -5,6 +5,7 @@ import { useCcPrice } from "@/lib/hooks/use-cc-price";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { Wallet } from "lucide-react";
 import Link from "next/link";
+import { CcRewardLogo } from "@/components/app/campaign/cc-reward-logo";
 
 function formatCc(n: number): string {
   return n.toLocaleString(undefined, {
@@ -87,7 +88,10 @@ export function CcHoldingsCard({ hasWallet }: CcHoldingsCardProps) {
               <span className="text-sm text-slate-600">…</span>
             ) : (
               <>
-                <p className="text-base font-bold tabular-nums text-white">{formatCc(available)}</p>
+                <p className="flex items-center justify-end gap-1.5 text-base font-bold tabular-nums text-white">
+                  <CcRewardLogo size={16} className="text-canton" />
+                  {formatCc(available)}
+                </p>
                 {availableUsd !== null && (
                   <p className="text-[11px] tabular-nums text-slate-500">≈ ${formatUsd(availableUsd)}</p>
                 )}
@@ -104,7 +108,10 @@ export function CcHoldingsCard({ hasWallet }: CcHoldingsCardProps) {
               <span className="text-sm text-slate-600">…</span>
             ) : (
               <>
-                <p className="text-base font-bold tabular-nums text-white">{formatCc(locked)}</p>
+                <p className="flex items-center justify-end gap-1.5 text-base font-bold tabular-nums text-white">
+                  <CcRewardLogo size={16} className="text-amber-400" />
+                  {formatCc(locked)}
+                </p>
                 {lockedUsd !== null && (
                   <p className="text-[11px] tabular-nums text-slate-500">≈ ${formatUsd(lockedUsd)}</p>
                 )}
