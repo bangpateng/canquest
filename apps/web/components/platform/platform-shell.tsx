@@ -133,7 +133,7 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
           <CanQuestLogo
             size="md"
             href="/overview"
-            className="shrink-0 md:hidden"
+            className="md:hidden"
           />
           <div className="hidden flex-1 md:block" />
           <PlatformToolbar />

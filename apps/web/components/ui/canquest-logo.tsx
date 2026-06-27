@@ -60,7 +60,7 @@ export function CanQuestLogo({
   const inner = (
     <span
       className={cn(
-        "inline-flex w-fit max-w-full shrink-0 items-center justify-start text-[var(--foreground)]",
+        "inline-flex w-fit max-w-full items-center justify-start text-[var(--foreground)]",
         href || onClick ? "transition-opacity hover:opacity-90" : "",
         className,
       )}
@@ -70,9 +70,13 @@ export function CanQuestLogo({
         alt="CanQuest"
         width={width}
         height={height}
-        sizes={`(max-width: 640px) ${maxWidth}px, ${maxWidth}px`}
+        sizes={`(max-width: 640px) 100vw, ${maxWidth}px`}
         className={cn(
-          "block h-auto max-h-[var(--logo-h)] w-auto max-w-[var(--logo-max-w)] object-contain object-left",
+          /* width is capped at the natural max, but `min-w-0 max-w-full`
+             lets the wordmark shrink to fit narrow mobile headers instead of
+             overflowing/being cut off. `h-auto` + `max-h` keeps the target
+             visual height when there is room. */
+          "block h-auto w-auto min-w-0 max-w-full max-h-[var(--logo-h)] object-contain object-left",
           /* Wordmark is white in SVG — readable on light platform theme */
           theme === "light" && "brightness-0",
         )}
@@ -92,7 +96,7 @@ export function CanQuestLogo({
       <Link
         href={href}
         onClick={onClick}
-        className="inline-flex w-fit max-w-full shrink-0 justify-start self-start"
+        className="inline-flex w-fit max-w-full min-w-0 justify-start self-start"
       >
         {inner}
       </Link>
