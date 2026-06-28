@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils/utils";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
@@ -64,14 +63,14 @@ export function RewardHowToUse({
               {url ? (
                 <>
                   <span aria-hidden>: </span>
-                  <Link
-                    href={url}
+                  <a
+                    href={ensureAbsoluteUrl(url)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="font-medium text-canton underline underline-offset-2 hover:text-canton/80 break-all"
                   >
                     {prettyUrl(url)}
-                  </Link>
+                  </a>
                 </>
               ) : null}
             </div>
@@ -134,4 +133,16 @@ function prettyUrl(raw: string): string {
     s = s.replace(/^https?:\/\//, "").replace(/^www\./, "");
   }
   return s.length > 48 ? `${s.slice(0, 45)}…` : s;
+}
+
+/**
+ * Pastikan URL absolut (punya protokol) supaya <a href> benar-benar redirect
+ * ke web luar, bukan diperlakukan sebagai route internal app.
+ * "www.canquest.cc" → "https://www.canquest.cc"
+ */
+function ensureAbsoluteUrl(raw: string): string {
+  const s = raw.trim();
+  if (!s) return s;
+  if (/^https?:\/\//i.test(s)) return s;
+  return `https://${s}`;
 }
