@@ -63,7 +63,7 @@ export class TransactionDetailService {
     ).replace(/\/$/, '');
   }
 
-  cantonScanUrl(eventId: string | null | undefined): string | null {
+  lighthouseUrl(eventId: string | null | undefined): string | null {
     if (!eventId?.trim()) return null;
     if (this.scanTxUrlTemplate.includes('{updateId}')) {
       return this.scanTxUrlTemplate.replace(
@@ -228,7 +228,7 @@ export class TransactionDetailService {
       settledAt: tx.settledAt?.toISOString() ?? null,
       createdAt: tx.createdAt.toISOString(),
       cantonPartyId: user?.cantonPartyId ?? null,
-      cantonScanUrl: this.cantonScanUrl(eventId),
+      cantonScanUrl: this.lighthouseUrl(eventId),
       onChainSettled: Boolean(tx.settledAt || cantonUpdateId),
       ledgerEvents,
       ledgerFetchError,

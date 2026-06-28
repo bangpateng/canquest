@@ -3070,7 +3070,7 @@ export class CantonLedgerService {
   ): Promise<{
     ok: boolean;
     unlockedCid?: string;
-    /** Canton update id dari exercise (untuk CantonScan). */
+    /** Canton update id dari exercise (untuk link explorer Lighthouse). */
     updateId?: string;
     error?: string;
   }> {
@@ -3151,7 +3151,7 @@ export class CantonLedgerService {
     }
     const unlockedCid =
       this.findCreatedCidByTemplate(text, ':Splice.Amulet:Amulet') ?? undefined;
-    // Extract updateId dari response exercise (untuk link CantonScan). Konsisten
+    // Extract updateId dari response exercise (untuk link explorer Lighthouse). Konsisten
     // dengan pattern accept/reject TransferInstruction di file ini.
     let updateId: string | undefined;
     try {

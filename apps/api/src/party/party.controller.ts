@@ -2073,7 +2073,7 @@ export class PartyController {
     });
 
     // Catat ke history transaksi (tampilan). Idempotensi via @@unique(userId, ledgerTxId):
-    // pakai updateId ASLI dari exercise (link CantonScan benar). Fallback ke amulet cid
+    // pakai updateId ASLI dari exercise (link Lighthouse benar). Fallback ke amulet cid
     // baru bila updateId tidak tersedia (kasus ambiguous-recovery). Relasi ke lock asli
     // disimpan di cantonUpdateId + referenceId (lock.id).
     const unlockLedgerTxId =
