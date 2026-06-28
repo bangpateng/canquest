@@ -94,6 +94,7 @@ export function CampaignInviteClaimSection({
       {claimedCode && (
         <RewardReveal
           inviteCode={claimedCode}
+          rewardType={rewardType}
           redeemUrl={campaignMeta.redeemUrl}
           redeemInstructions={campaignMeta.redeemInstructions}
         />

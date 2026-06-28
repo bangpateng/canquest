@@ -196,7 +196,7 @@ export const en: PlatformMessages = {
     copied: "Copied",
     howToUseTitle: "How to use your code",
     howToUseStepRegister: "Register",
-    howToUseStepUseCode: "Paste your code",
+    howToUseStepUseCode: "Claim your code",
     howToUseStepDone: "Done",
     howToUseOpen: "Open",
   },

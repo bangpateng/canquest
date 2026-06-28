@@ -285,6 +285,7 @@ export function QuestSubmittedProof({
           {inviteCode ? (
             <RewardReveal
               inviteCode={inviteCode}
+              rewardType={rewardType}
               redeemUrl={redeemUrl}
               redeemInstructions={redeemInstructions}
             />
@@ -359,6 +360,7 @@ export function QuestSubmittedProof({
           <RewardReveal
             inviteCode={inviteCode}
             rewardCc={showCcReward ? (rewardCc ?? 0) : 0}
+            rewardType={rewardType}
             redeemUrl={redeemUrl}
             redeemInstructions={redeemInstructions}
           />

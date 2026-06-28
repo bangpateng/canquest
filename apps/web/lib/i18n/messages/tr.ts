@@ -197,7 +197,7 @@ export const tr: PlatformMessages = {
     copied: "Kopyalandı",
     howToUseTitle: "Kodunuz nasıl kullanılır",
     howToUseStepRegister: "Kaydolun",
-    howToUseStepUseCode: "Kodunuzu yapıştırın",
+    howToUseStepUseCode: "Kodunuzu kullanın",
     howToUseStepDone: "Bitti",
     howToUseOpen: "Aç",
   },

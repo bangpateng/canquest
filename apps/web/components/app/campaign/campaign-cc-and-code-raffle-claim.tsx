@@ -122,6 +122,7 @@ export function CampaignCcAndCodeRaffleClaimSection({
         <RewardReveal
           inviteCode={claimedCode}
           rewardCc={rewardVariant === "CC" ? 0 : rewardCc}
+          rewardType="CC_AND_CODE_RAFFLE"
           redeemUrl={campaignMeta.redeemUrl}
           redeemInstructions={campaignMeta.redeemInstructions}
         />

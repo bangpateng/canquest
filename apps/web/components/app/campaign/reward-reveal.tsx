@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, Ticket } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { RewardHowToUse } from "@/components/app/campaign/reward-how-to-use";
+import { CcRewardLogo } from "@/components/app/campaign/cc-reward-logo";
+import { getRewardConfig } from "@/lib/quest/quest-engine";
 
 /**
  * Satu card reveal hadiah setelah claim berhasil — konsisten untuk semua tipe
@@ -15,6 +17,7 @@ import { RewardHowToUse } from "@/components/app/campaign/reward-how-to-use";
 export function RewardReveal({
   inviteCode,
   rewardCc,
+  rewardType,
   redeemUrl,
   redeemInstructions,
   className,
@@ -23,6 +26,8 @@ export function RewardReveal({
   inviteCode?: string | null;
   /** Jumlah CC yang dikirim (boleh null/0 bila reward hanya kode). */
   rewardCc?: number | null;
+  /** Tipe reward — menentukan icon header (Code/Waitlist = Ticket, CC = CC logo). */
+  rewardType?: string | null;
   /** Link register/landing proyek (shown in "How to use" section). */
   redeemUrl?: string | null;
   /** Instruksi custom redeem; kosong = pakai template 3-step default. */
@@ -33,6 +38,12 @@ export function RewardReveal({
 
   if (!inviteCode && !rewardCc) return null;
 
+  // Icon header menyesuaikan tipe reward:
+  //  - CC token   → CC reward logo
+  //  - Code / Waitlist email / CC+Code → Ticket (icon waitlist/code)
+  const config = getRewardConfig(rewardType);
+  const isCcOnly = config.isCcToken && !inviteCode;
+
   return (
     <div
       className={cn(
@@ -40,14 +51,30 @@ export function RewardReveal({
         className,
       )}
     >
-      {/* Header — teks saja, tanpa icon box */}
-      <div>
-        <p className="text-base font-bold text-[var(--foreground)]">
-          {t("earnCampaigns.congratsTitle")}
-        </p>
-        <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
-          {t("earnCampaigns.rewardsReady")}
-        </p>
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <span
+          className={cn(
+            "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
+            isCcOnly
+              ? "bg-canton/15 text-canton"
+              : "bg-violet-500/15 text-violet-400",
+          )}
+        >
+          {isCcOnly ? (
+            <CcRewardLogo size={18} />
+          ) : (
+            <Ticket className="h-5 w-5" strokeWidth={2.5} aria-hidden />
+          )}
+        </span>
+        <div className="min-w-0">
+          <p className="text-base font-bold text-[var(--foreground)]">
+            {t("earnCampaigns.congratsTitle")}
+          </p>
+          <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+            {t("earnCampaigns.rewardsReady")}
+          </p>
+        </div>
       </div>
 
       {/* Reward rows */}
