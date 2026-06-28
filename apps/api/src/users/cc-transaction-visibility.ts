@@ -79,3 +79,28 @@ export function isFeePartyRecipient(
     labels.some((label) => c === label || c.startsWith(`${label}::`)),
   );
 }
+
+/**
+ * True jika baris CcTransaction adalah platform-fee / claim-fee (bukan send
+ * peer-to-peer yang sebenarnya). Dipakai quest send-transaction counter agar
+ * "send ke canquest-fee" tidak terhitung sebagai 1 transaksi send.
+ *
+ * Tiga penanda (identik dengan CC_TRANSACTION_HISTORY_WHERE + isFeePartyRecipient):
+ *   1. referenceId prefix "fee:"        — marker eksplisit
+ *   2. description "Platform fee…" / "… CC claim fee"  — backward-compat
+ *   3. counterparty (referenceId) == short label party fee eksak / "label::"
+ */
+export function isFeeTransactionRow(
+  referenceId: string | null | undefined,
+  description: string | null | undefined,
+): boolean {
+  const ref = referenceId?.trim() ?? '';
+  if (ref.startsWith('fee:')) return true;
+  const desc = description ?? '';
+  if (desc.startsWith('Platform fee')) return true;
+  if (desc.includes(' CC claim fee')) return true;
+  // Counterparty short label (sebelum "::") == party fee — cakup path yang
+  // menyimpan party penerima di referenceId tanpa marker "fee:" (mis. row
+  // "Sent to canquest-fee…"). isFeePartyRecipient handle match eksak label.
+  return isFeePartyRecipient(ref, ref);
+}

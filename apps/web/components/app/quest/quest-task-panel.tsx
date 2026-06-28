@@ -285,6 +285,57 @@ export function QuestTaskPanel({
       .catch(() => {});
   }, [loadProgress, viewerPartyId, viewerTwitterUsername]);
 
+  // ── Realtime progress for send-transaction tasks ──────────────────────────
+  // Agar progress "3/5 sends" update otomatis saat CC benar-benar diterima di
+  // chain (inbound sync / polling tx-history). Polling 10s, pause saat tab
+  // hidden, refetch instan pada event 'cc:new-tx' (bell/transaksi baru).
+  // Hanya aktif bila quest punya task send_transaction yang belum selesai.
+  const hasUnresolvedSendTx = useMemo(
+    () =>
+      visibleTasks.some(
+        (t) =>
+          isSendTransactionTask(t.type) &&
+          submissions[t.id]?.status !== "VERIFIED",
+      ),
+    [visibleTasks, submissions],
+  );
+  useEffect(() => {
+    if (!hasUnresolvedSendTx) return;
+    const POLL_MS = 10_000;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    const startPoll = () => {
+      if (intervalId) clearInterval(intervalId);
+      intervalId = setInterval(() => {
+        void loadProgress();
+      }, POLL_MS);
+    };
+    const stopPoll = () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+    startPoll();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        void loadProgress();
+        startPoll();
+      } else {
+        stopPoll();
+      }
+    };
+    // 'cc:new-tx' dipancarkan bell saat ada tx masuk/keluar baru → refetch
+    // langsung supaya progres naik tanpa menunggu interval 10s berikutnya.
+    const onNewTx = () => void loadProgress();
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("cc:new-tx", onNewTx);
+    return () => {
+      stopPoll();
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("cc:new-tx", onNewTx);
+    };
+  }, [hasUnresolvedSendTx, loadProgress]);
+
   const verifiedCount = useMemo(
     () => visibleTasks.filter((t) => submissions[t.id]?.status === "VERIFIED").length,
     [visibleTasks, submissions],

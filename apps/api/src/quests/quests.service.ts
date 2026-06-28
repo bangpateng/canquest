@@ -41,6 +41,7 @@ import { TwitterApiService } from '../twitter/twitter-api.service';
 import { R2StorageService } from '../storage/r2-storage.service';
 import { withQuestMediaUrls } from '../storage/quest-media.util';
 import { parseQuestSocialLinks } from './quest-social-links.util';
+import { isFeeTransactionRow } from '../users/cc-transaction-visibility';
 
 export interface LeaderboardRow {
   rank: number;
@@ -3502,19 +3503,38 @@ export class QuestsService {
   }
 
   /**
-   * Count a user's REAL outgoing CC sends since `since`: TRANSFER_OUT rows whose
-   * referenceId does NOT start with `fee:` (platform fees are hidden from history
-   * and must not count as a "send transaction"). One real send = 1 count.
+   * Count a user's REAL outgoing CC sends since `since`. Only a genuine,
+   * completed peer-to-peer CC send counts:
+   *   - type = TRANSFER_OUT
+   *   - status = COMPLETED  (offer-only sends are PENDING — CC has not actually
+   *     moved until the recipient accepts, so they must NOT count)
+   *   - counterparty is NOT a platform fee party
+   *
+   * Fee rows are excluded three ways (mirrors CC_TRANSACTION_HISTORY_WHERE +
+   * isFeePartyRecipient so every fee path is covered):
+   *   1. referenceId prefix "fee:"        — explicit marker written at fee creation
+   *   2. description prefix "Platform fee" / contains " CC claim fee"
+   *   3. counterparty short label == a fee party label (e.g. "canquest-fee"),
+   *      with or without the "::" suffix — catches unmarked legacy/alternate rows.
+   *
+   * One real send = 1 count.
    */
   private async countRecentUserSends(userId: string, since: Date): Promise<number> {
-    return this.prisma.ccTransaction.count({
+    const rows = await this.prisma.ccTransaction.findMany({
       where: {
         userId,
         type: 'TRANSFER_OUT',
-        NOT: { referenceId: { startsWith: 'fee:' } },
+        status: 'COMPLETED',
         createdAt: { gte: since },
       },
+      select: { referenceId: true, description: true },
     });
+    let count = 0;
+    for (const tx of rows) {
+      if (isFeeTransactionRow(tx.referenceId, tx.description)) continue;
+      count++;
+    }
+    return count;
   }
 
   /**

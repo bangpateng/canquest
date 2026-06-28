@@ -137,8 +137,8 @@ export const EARN_HUB_TASK_TYPE_OPTIONS: { value: string; label: string; hint?: 
   { value: "daily_check_in", label: "Daily check-in", hint: "Once per day (streak coming soon)" },
   {
     value: "send_transaction",
-    label: "Send transaction (1× / 3× / 5×)",
-    hint: "Wallet required · resets every 24 hours · counts real CC sends (fees excluded)",
+    label: "Send transaction (custom count)",
+    hint: "Wallet required · resets every 24 hours · set any count (1×, 3×, 5×, …) · counts only real completed CC sends (fees & pending offers excluded)",
   },
   { value: "twitter_follow", label: "Follow Twitter CanQuest", hint: "X profile URL" },
   { value: "twitter_retweet", label: "Retweet post CanQuest", hint: "Post URL to retweet" },
