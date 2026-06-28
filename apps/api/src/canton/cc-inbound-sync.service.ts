@@ -226,7 +226,7 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
             userId,
             amountMicroCc: deltaMicro,
             type: 'TRANSFER_IN',
-            description: 'CC received',
+            description: `Received ${deltaCc} CC from Canton network`,
             referenceId: 'Canton network',
             ledgerTxId,
             settledAt: new Date(),

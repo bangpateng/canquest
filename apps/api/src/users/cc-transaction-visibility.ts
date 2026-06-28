@@ -27,8 +27,10 @@ export const CC_TRANSACTION_HISTORY_WHERE: Prisma.CcTransactionWhereInput = {
       { description: { startsWith: 'Platform fee' } },
       /** Claim-fee rows: "Sent N CC claim fee" (FCFS / raffle / code claim). */
       { description: { contains: ' CC claim fee' } },
-      /** Balance-sync net rows (e.g. +17 after FCFS); fee + reward lines are enough. */
-      { ledgerTxId: { startsWith: 'inbound-sync:' } },
+      // NOTE: baris inbound-sync (TRANSFER_IN via balance sync) TIDAK lagi
+      // disembunyikan — itu adalah satu-satunya jejak transfer masuk dari user
+      // lain yang tidak melalui offer. User minta semua received tampil di
+      // history + notifikasi.
     ],
   },
 };

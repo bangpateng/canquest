@@ -841,11 +841,29 @@ export class UsersService {
     transferInstructionCid: string,
     status: 'COMPLETED' | 'REJECTED',
   ): Promise<number> {
-    const r = await this.prisma.ccTransaction.updateMany({
+    // Ambil dulu row PENDING yang cocok supaya bisa bersihkan suffix deskripsi
+    // "[pending — recipient must accept offer]" saat offer selesai (accept/reject).
+    const pendingRows = await this.prisma.ccTransaction.findMany({
       where: { transferInstructionCid, status: 'PENDING' },
-      data: { status, settledAt: status === 'COMPLETED' ? new Date() : null },
+      select: { id: true, description: true },
     });
-    return r.count;
+    if (pendingRows.length === 0) return 0;
+
+    const settledAt = status === 'COMPLETED' ? new Date() : null;
+    for (const row of pendingRows) {
+      const cleanDesc = row.description
+        .replace(/\s*\[pending[^\]]*\]\s*/i, '')
+        .trim();
+      await this.prisma.ccTransaction.update({
+        where: { id: row.id },
+        data: {
+          status,
+          settledAt,
+          ...(cleanDesc !== row.description ? { description: cleanDesc } : {}),
+        },
+      });
+    }
+    return pendingRows.length;
   }
 
   /** Catat waktu toggle preapproval (enable/disable) untuk cooldown anti-spam 7 hari. */
