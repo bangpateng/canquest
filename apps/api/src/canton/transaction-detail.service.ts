@@ -1,5 +1,4 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import {
@@ -46,14 +45,14 @@ export class TransactionDetailService {
   private readonly scanTxUrlTemplate: string;
 
   constructor(
-    private readonly config: ConfigService,
     private readonly prisma: PrismaService,
     private readonly ledger: CantonLedgerService,
     private readonly users: UsersService,
   ) {
-    this.scanTxUrlTemplate =
-      config.get<string>('CANTON_SCAN_TX_URL')?.trim() ||
-      'https://lighthouse.xyz/transfers/{updateId}';
+    // Tx explorer SELALU pakai lighthouse.xyz (hardcoded) — bukan cantonscan.
+    // Jangan baca CANTON_SCAN_TX_URL lagi supaya link konsisten lighthouse di
+    // semua environment.
+    this.scanTxUrlTemplate = 'https://lighthouse.xyz/transfers/{updateId}';
   }
 
   cantonScanUrl(updateId: string | null | undefined): string | null {

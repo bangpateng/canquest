@@ -49,7 +49,7 @@ export interface TxItem {
   receiverAddress?: string | null;
   /** Lighthouse event id (format "122072…:0") — used for the explorer link. */
   eventId?: string | null;
-  /** Direct CantonScan link for this on-chain item, if known. */
+  /** Lighthouse explorer link for this on-chain item (injected by backend). */
   cantonScanUrl?: string | null;
   /** Network fee paid, in microCC. */
   networkFeeMicroCc?: string | null;

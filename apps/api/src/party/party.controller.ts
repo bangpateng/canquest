@@ -1739,14 +1739,24 @@ export class PartyController {
             );
           });
         });
-        data[key] = filtered.map((item) =>
-          item && typeof item === 'object'
-            ? {
-                ...(item as Record<string, unknown>),
-                network_fee: networkFeeMicroCc,
-              }
-            : item,
-        );
+        data[key] = filtered.map((item): unknown => {
+          if (!item || typeof item !== 'object') return item;
+          const it = item as Record<string, unknown>;
+          // Inject scan_url lighthouse.xyz untuk item on-chain (link explorer di
+          // list & detail). Pakai update_id / event_id / contract_id yang ada.
+          const eventId =
+            (typeof it.update_id === 'string' && it.update_id) ||
+            (typeof it.event_id === 'string' && it.event_id) ||
+            (typeof it.contract_id === 'string' && it.contract_id) ||
+            '';
+          return {
+            ...it,
+            network_fee: networkFeeMicroCc,
+            scan_url: eventId
+              ? `https://lighthouse.xyz/transfers/${encodeURIComponent(eventId)}`
+              : null,
+          };
+        });
       }
 
       return data;
