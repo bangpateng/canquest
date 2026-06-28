@@ -20,11 +20,14 @@ export function RewardHowToUse({
   redeemInstructions,
   inviteCode,
   className,
+  flat = false,
 }: {
   redeemUrl?: string | null;
   redeemInstructions?: string | null;
   inviteCode?: string | null;
   className?: string;
+  /** flat=true → menyatu di card induk (tanpa border/bg sendiri). */
+  flat?: boolean;
 }) {
   const t = usePlatformT();
 
@@ -35,7 +38,14 @@ export function RewardHowToUse({
   if (!url && !instructions) return null;
 
   return (
-    <div className={cn("rounded-xl border border-canton-muted bg-canton-subtle/60 p-4", className)}>
+    <div
+      className={cn(
+        flat
+          ? "" // menyatu di card induk (border/padding diatur induk)
+          : "rounded-xl border border-canton-muted bg-canton-subtle/60 p-4",
+        className,
+      )}
+    >
       <p className="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
         {t("earnCampaigns.howToUseTitle")}
       </p>

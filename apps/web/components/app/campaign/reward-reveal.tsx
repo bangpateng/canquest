@@ -1,22 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, Sparkles, Ticket } from "lucide-react";
+import { Check, Copy } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { RewardHowToUse } from "@/components/app/campaign/reward-how-to-use";
-import { CcRewardLogo } from "@/components/app/campaign/cc-reward-logo";
 
 /**
- * Blok tampilan "reveal" hadiah setelah claim berhasil — konsisten untuk semua
- * tipe reward. Sebelumnya kode invite-code ditampilkan dalam 3 desain berbeda
- * (violet di quest-submit-section, canton di raffle-claim, inline di tempat lain).
- * Sekarang satu komponen, desain canton-consistent, dengan copy button + how-to-use.
- *
- * Icon header menyesuaikan tipe reward:
- *  - Code (invite) → icon Ticket (kode)
- *  - CC            → CC reward logo
+ * Satu card reveal hadiah setelah claim berhasil — konsisten untuk semua tipe
+ * reward (Code, CC, CC+Code). Bersih: header teks (tanpa icon box), baris code +
+ * tombol copy (tanpa kotak), lalu "How to use your code" menyatu di card yang sama.
  */
 export function RewardReveal({
   inviteCode,
@@ -39,10 +33,6 @@ export function RewardReveal({
 
   if (!inviteCode && !rewardCc) return null;
 
-  // Icon header: reward Code (invite) = Ticket; CC (token) = CC logo.
-  // CC + Code (dual): kalau ada code, tampilkan Ticket (code di-highlight).
-  const isCodeReward = Boolean(inviteCode);
-
   return (
     <div
       className={cn(
@@ -50,76 +40,55 @@ export function RewardReveal({
         className,
       )}
     >
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <span
-          className={cn(
-            "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
-            isCodeReward
-              ? "bg-violet-500/15 text-violet-400"
-              : "bg-canton/15 text-canton",
-          )}
-        >
-          {isCodeReward ? (
-            <Ticket className="h-5 w-5" strokeWidth={2.5} aria-hidden />
-          ) : (
-            <CcRewardLogo size={18} />
-          )}
-        </span>
-        <div className="min-w-0">
-          <p className="text-sm font-bold text-[var(--foreground)]">
-            {t("earnCampaigns.congratsTitle")}
-          </p>
-          <p className="text-xs text-[var(--muted-foreground)]">
-            {t("earnCampaigns.rewardsReady")}
-          </p>
-        </div>
+      {/* Header — teks saja, tanpa icon box */}
+      <div>
+        <p className="text-base font-bold text-[var(--foreground)]">
+          {t("earnCampaigns.congratsTitle")}
+        </p>
+        <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+          {t("earnCampaigns.rewardsReady")}
+        </p>
       </div>
 
       {/* Reward rows */}
-      <div className="mt-4 space-y-3">
+      <div className="mt-4 space-y-4">
         {rewardCc ? (
-          <div className="flex items-center justify-between gap-3 rounded-xl border border-canton-muted bg-[var(--card)]/40 px-4 py-3">
-            <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                {t("earnCampaigns.ccReward")}
-              </p>
-              <p className="font-mono text-lg font-bold tabular-nums text-canton">
-                +{rewardCc} CC
-              </p>
-            </div>
-            <span className="flex items-center gap-1.5 text-xs font-medium text-canton">
-              <Sparkles className="h-3.5 w-3.5" aria-hidden />
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="font-mono text-lg font-bold tabular-nums text-canton">
+              +{rewardCc} CC
+            </p>
+            <span className="text-xs font-medium text-[var(--muted-foreground)]">
               {t("earnCampaigns.ccSentToWallet")}
             </span>
           </div>
         ) : null}
 
         {inviteCode ? (
-          <div className="rounded-xl border border-canton-muted bg-[var(--card)]/40 px-4 py-3">
+          <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
               {t("earnCampaigns.yourCode")}
             </p>
-            <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="font-mono text-lg font-bold tracking-widest text-canton">
+            <div className="mt-1.5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="font-mono text-xl font-bold tracking-widest text-canton">
                 {inviteCode}
               </p>
               <CopyButton value={inviteCode} label={t("earnCampaigns.copy")} />
             </div>
-            <p className="mt-2 text-xs text-[var(--muted-foreground)]">
+            <p className="mt-1.5 text-xs text-[var(--muted-foreground)]">
               {t("earnCampaigns.saveCodeWarn")}
             </p>
           </div>
         ) : null}
       </div>
 
-      {/* How to use — only for code rewards, self-gates when no redeem config. */}
+      {/* How to use — menyatu di card yang sama; self-gate bila tidak ada config redeem. */}
       {inviteCode ? (
         <RewardHowToUse
           inviteCode={inviteCode}
           redeemUrl={redeemUrl}
           redeemInstructions={redeemInstructions}
-          className="mt-4"
+          className="mt-4 border-t border-canton-muted pt-4"
+          flat
         />
       ) : null}
     </div>

@@ -348,21 +348,13 @@ export function QuestSubmittedProof({
   }
 
   return (
-    <section className="relative overflow-hidden rounded-3xl border border-emerald-500/30 bg-gradient-to-b from-emerald-500/12 via-[var(--card)] to-[var(--card)] ring-1 ring-emerald-500/20">
-      <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-[radial-gradient(ellipse_at_top,rgb(var(--canton-rgb)/0.25)_0%,transparent_70%)]"
-        aria-hidden
-      />
-
-      <div className="relative px-8 pb-6 pt-10 text-center">
+    <div className="space-y-6">
         {uiKind === "waitlist_code" && state === "winner" && inviteCode ? (
           <p className="text-sm font-medium text-violet-300">
             {t("earnCampaigns.congratsWinnerCode")}
           </p>
         ) : null}
-      </div>
 
-      <div className="relative space-y-6 px-6 pb-8">
         {(inviteCode || showCcReward) && uiKind !== "cc_fcfs" ? (
           <RewardReveal
             inviteCode={inviteCode}
@@ -448,13 +440,12 @@ export function QuestSubmittedProof({
             )}
           </div>
         )}
-      </div>
 
       {ledger && ledger.errors.length > 0 && (
-        <div className="mx-4 mb-4 rounded-xl border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-xs text-orange-200">
+        <div className="rounded-xl border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-xs text-orange-200">
           {ledger.errors.join(" · ")}
         </div>
       )}
-    </section>
+    </div>
   );
 }
