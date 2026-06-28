@@ -36,7 +36,7 @@ export function RewardReveal({
   return (
     <div
       className={cn(
-        "rounded-2xl border border-canton-muted bg-canton-subtle p-5",
+        "rounded-2xl border border-white/[0.06] bg-[var(--card)] p-5",
         className,
       )}
     >
@@ -87,7 +87,7 @@ export function RewardReveal({
           inviteCode={inviteCode}
           redeemUrl={redeemUrl}
           redeemInstructions={redeemInstructions}
-          className="mt-4 border-t border-canton-muted pt-4"
+          className="mt-4 border-t border-white/[0.06] pt-4"
           flat
         />
       ) : null}
