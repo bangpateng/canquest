@@ -40,6 +40,8 @@ export type TransactionDetail = {
   receiverAddress?: string | null;
   /** Lighthouse event id — used for the explorer link. */
   eventId?: string | null;
+  /** Status row: COMPLETED | PENDING | REJECTED (offer pending → PENDING). */
+  status?: string | null;
 };
 
 

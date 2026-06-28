@@ -33,6 +33,11 @@ export type TransactionDetailResponse = {
   /** Platform fee (CC withdraw fee) dipotong saat transfer — 0/null jika tidak ada.
    *  Tampil di modal detail; baris fee tetap disembunyikan dari history list. */
   platformFeeMicroCc?: string | null;
+  /** Lighthouse explorer event id — dipakai untuk link explorer lighthouse.xyz.
+   *  = cantonUpdateId bila tersedia, fallback ledgerContractId. */
+  eventId?: string | null;
+  /** Status row: COMPLETED | PENDING | REJECTED (offer pending → PENDING). */
+  status?: string | null;
 };
 
 @Injectable()
@@ -48,7 +53,7 @@ export class TransactionDetailService {
   ) {
     this.scanTxUrlTemplate =
       config.get<string>('CANTON_SCAN_TX_URL')?.trim() ||
-      'https://www.cantonscan.com/tx/{updateId}';
+      'https://lighthouse.xyz/transfers/{updateId}';
   }
 
   cantonScanUrl(updateId: string | null | undefined): string | null {
@@ -149,6 +154,10 @@ export class TransactionDetailService {
       }
     }
 
+    // Event id untuk link explorer lighthouse.xyz: preferensi cantonUpdateId (id
+    // transaksi ledger asli), fallback ke ledgerTxId (contract/offer id).
+    const eventId = cantonUpdateId ?? tx.ledgerTxId ?? null;
+
     return {
       id: tx.id,
       type: tx.type,
@@ -161,11 +170,13 @@ export class TransactionDetailService {
       settledAt: tx.settledAt?.toISOString() ?? null,
       createdAt: tx.createdAt.toISOString(),
       cantonPartyId: user?.cantonPartyId ?? null,
-      cantonScanUrl: this.cantonScanUrl(cantonUpdateId),
+      cantonScanUrl: this.cantonScanUrl(eventId),
       onChainSettled: Boolean(tx.settledAt || cantonUpdateId),
       ledgerEvents,
       ledgerFetchError,
       platformFeeMicroCc,
+      eventId,
+      status: tx.status,
     };
   }
 

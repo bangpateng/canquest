@@ -172,9 +172,13 @@ export function TransactionDetailContent({
   // Tx ID for copy/explorer — prefer Lighthouse event id, fall back to update/contract id.
   const txId =
     detail.eventId ?? detail.cantonUpdateId ?? detail.ledgerContractId ?? detail.id;
-  const lighthouseUrl = detail.eventId
-    ? `${LIGHTHOUSE_TX_BASE}/${encodeURIComponent(detail.eventId)}`
-    : null;
+  // Explorer link: PREFERENSI backend cantonScanUrl (sudah pakai lighthouse.xyz dan
+  // format yang benar). Fallback: bangun dari eventId bila backend tidak kasih URL.
+  const lighthouseUrl =
+    detail.cantonScanUrl ??
+    (detail.eventId
+      ? `${LIGHTHOUSE_TX_BASE}/${encodeURIComponent(detail.eventId)}`
+      : null);
 
   const feeCc = microCcToCc(detail.networkFeeMicroCc);
   const platformFeeCc = microCcToCc(detail.platformFeeMicroCc);
@@ -287,7 +291,11 @@ export function TransactionDetailContent({
 
           <ReceiptField label="Status">
             <span className="inline-flex items-center gap-1.5">
-              {detail.onChainSettled ? (
+              {detail.status === "PENDING" ? (
+                <span className="font-medium text-amber-400">Pending</span>
+              ) : detail.status === "REJECTED" ? (
+                <span className="font-medium text-red-400">Rejected</span>
+              ) : detail.onChainSettled ? (
                 <>
                   <ShieldCheck className="h-4 w-4 shrink-0 text-green-500" />
                   <span className="font-semibold">Settled</span>
@@ -326,7 +334,7 @@ export function TransactionDetailContent({
             rel="noopener noreferrer"
             className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-white/5 bg-[var(--muted)]/40 px-5 py-2.5 text-sm font-semibold text-slate-100 transition-colors hover:bg-[var(--muted)]"
           >
-            View on CantonScan
+            View on Lighthouse
             <ExternalLink className="h-4 w-4" />
           </a>
         ) : null}

@@ -421,17 +421,31 @@ export function TransactionsView({
           partyId,
         );
 
-        // Dedup: key = ledgerTxId / cantonUpdateId. Buang on-chain item yang sudah ada di DB.
+        // Dedup multi-key: kumpulkan SEMUA id di DB (ledgerTxId, cantonUpdateId,
+        // transferInstructionCid) supaya item on-chain yang id-nya berbentuk beda
+        // (contract_id vs update_id) tetap bisa di-match dan tidak dobel.
         const dbKeys = new Set<string>();
         for (const tx of dbItems) {
-          const k = (tx.ledgerTxId ?? tx.cantonUpdateId ?? "").trim();
-          if (k) dbKeys.add(k);
+          for (const k of [
+            tx.ledgerTxId,
+            tx.cantonUpdateId,
+            tx.transferInstructionCid,
+          ]) {
+            const v = (k ?? "").trim();
+            if (v) dbKeys.add(v);
+          }
         }
         const fallbackOnchain = onchainItems.filter((tx) => {
-          const k = (tx.ledgerTxId ?? tx.cantonUpdateId ?? "").trim();
-          // Tidak punya key → tidak bisa dedup → tetap masuk (jarang).
-          if (!k) return true;
-          return !dbKeys.has(k);
+          // Cek semua kemungkinan key on-chain — cukup satu match untuk dianggap duplikat.
+          const keys = [
+            tx.ledgerTxId,
+            tx.cantonUpdateId,
+            tx.eventId,
+          ]
+            .map((k) => (k ?? "").trim())
+            .filter(Boolean);
+          if (keys.length === 0) return true; // tidak ada key → tidak bisa dedup → tetap masuk.
+          return !keys.some((k) => dbKeys.has(k));
         });
 
         const all = [...dbItems, ...fallbackOnchain];

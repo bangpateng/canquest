@@ -27,6 +27,9 @@ type TransactionDetailModalProps = {
 
 /** Build a TransactionDetail straight from an on-chain TxItem (no DB round-trip). */
 function buildDetailFromTxItem(tx: TxItem): TransactionDetail {
+  // Event id untuk link explorer: preferensi eventId (Lighthouse), fallback
+  // cantonUpdateId / ledgerTxId.
+  const eventId = tx.eventId ?? tx.cantonUpdateId ?? tx.ledgerTxId ?? null;
   return {
     id: tx.id,
     type: tx.type,
@@ -48,7 +51,8 @@ function buildDetailFromTxItem(tx: TxItem): TransactionDetail {
     usdEstimate: tx.usdEstimate ?? null,
     senderAddress: tx.senderAddress ?? null,
     receiverAddress: tx.receiverAddress ?? null,
-    eventId: tx.eventId ?? null,
+    eventId,
+    status: tx.status ?? "COMPLETED",
   };
 }
 
