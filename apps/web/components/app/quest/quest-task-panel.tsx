@@ -615,6 +615,8 @@ export function QuestTaskPanel({
           ledger={ledgerProof}
           rewardType={quest.rewardType}
           campaignMeta={campaignMeta}
+          redeemUrl={quest.redeemUrl}
+          redeemInstructions={quest.redeemInstructions}
         />
       )}
 
@@ -630,6 +632,8 @@ export function QuestTaskPanel({
           ledger={ledgerProof}
           rewardType={quest.rewardType}
           campaignMeta={campaignMeta}
+          redeemUrl={quest.redeemUrl}
+          redeemInstructions={quest.redeemInstructions}
         />
       ) : null}
     </div>

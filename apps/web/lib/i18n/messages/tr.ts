@@ -185,6 +185,21 @@ export const tr: PlatformMessages = {
     slotsFullClosedBanner:
       "Tüm ödül slotları dolu. Yeni katılımcılar bu kampanyaya katılamaz.",
     codeLabel: "Invite Codes",
+    congratsTitle: "Tebrikler!",
+    rewardsReady: "Ödülleriniz aşağıda hazır",
+    congratsWinnerCode: "Kazanan — ödül kodunuzu aşağıdan kopyalayın.",
+    saveCodeWarn:
+      "Bu kodu kaydedin — sayfayı terk ettikten sonra tekrar gösterilmeyecek.",
+    yourCode: "Kodunuz",
+    ccReward: "CC ödülü",
+    ccSentToWallet: "Cüzdanınıza gönderildi",
+    copy: "Kopyala",
+    copied: "Kopyalandı",
+    howToUseTitle: "Kodunuz nasıl kullanılır",
+    howToUseStepRegister: "Projeye kaydolun",
+    howToUseStepUseCode: "Kodunuzu girin",
+    howToUseStepDone: "Bitti",
+    howToUseOpen: "Aç",
   },
   quests: {
     searchPlaceholder: "Başlık, kuruluş, havuz ara…",

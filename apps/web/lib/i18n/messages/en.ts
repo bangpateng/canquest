@@ -184,6 +184,21 @@ export const en: PlatformMessages = {
       "All reward slots are taken. You can still view your tasks if you already joined.",
     slotsFullClosedBanner:
       "All reward slots are taken. New participants cannot join this campaign.",
+    congratsTitle: "Congratulations!",
+    rewardsReady: "Your rewards are ready below",
+    congratsWinnerCode: "Winner — copy your reward code below.",
+    saveCodeWarn:
+      "Save this code — it will not be shown again after you leave this page.",
+    yourCode: "Your code",
+    ccReward: "CC reward",
+    ccSentToWallet: "Sent to your wallet",
+    copy: "Copy",
+    copied: "Copied",
+    howToUseTitle: "How to use your code",
+    howToUseStepRegister: "Register at the project",
+    howToUseStepUseCode: "Enter your code",
+    howToUseStepDone: "Done",
+    howToUseOpen: "Open",
   },
   quests: {
     searchPlaceholder: "Search title, org, pool…",

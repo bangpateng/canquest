@@ -291,6 +291,8 @@ export class AdminService {
     codeWinnersQuota?: number | null;
     claimFeeCc?: number | null;
     winnerMessage?: string | null;
+    redeemUrl?: string | null;
+    redeemInstructions?: string | null;
     tags?: string[];
     socialLinks?: QuestSocialLinkInput[];
     questKind?: QuestKind;
@@ -340,6 +342,8 @@ export class AdminService {
 
         rewardType: (data.rewardType ?? RewardType.CC_ONLY) as any,
         winnerMessage: data.winnerMessage?.trim() || null,
+        redeemUrl: data.redeemUrl?.trim() || null,
+        redeemInstructions: data.redeemInstructions?.trim() || null,
         questKind,
         tags: JSON.stringify(data.tags ?? []),
         socialLinks: serializeQuestSocialLinks(
@@ -433,6 +437,8 @@ export class AdminService {
       codeWinnersQuota?: number | null;
       claimFeeCc?: number | null;
       winnerMessage?: string | null;
+      redeemUrl?: string | null;
+      redeemInstructions?: string | null;
       tags?: string[];
       socialLinks?: QuestSocialLinkInput[];
     },
@@ -503,6 +509,12 @@ export class AdminService {
         ...(data.claimFeeCc !== undefined && { claimFeeCc: data.claimFeeCc }),
         ...(data.winnerMessage !== undefined && {
           winnerMessage: data.winnerMessage?.trim() || null,
+        }),
+        ...(data.redeemUrl !== undefined && {
+          redeemUrl: data.redeemUrl?.trim() || null,
+        }),
+        ...(data.redeemInstructions !== undefined && {
+          redeemInstructions: data.redeemInstructions?.trim() || null,
         }),
         ...(data.tags !== undefined && { tags: JSON.stringify(data.tags) }),
         ...(data.socialLinks !== undefined && {

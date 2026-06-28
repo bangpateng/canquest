@@ -2,7 +2,7 @@
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import Link from "next/link";
-import { PageTitle, SectionTitle, StatValue } from "@/components/ui/typography";
+import { PageTitle } from "@/components/ui/typography";
 import type { QuestRewardStatus, RewardType } from "@/lib/quest/quest-types";
 import {
   campaignUiKind,
@@ -18,8 +18,7 @@ import { CampaignQuestStatusCard } from "@/components/app/campaign/campaign-ques
 import { RewardReveal } from "@/components/app/campaign/reward-reveal";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
-import { CcRewardLogo } from "@/components/app/campaign/cc-reward-logo";
-import { Check, CheckCircle2, ChevronDown, Clock, Copy, Shield, Sparkles, Ticket } from "lucide-react";
+import { Check, CheckCircle2, ChevronDown, Copy, Shield } from "lucide-react";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { useState } from "react";
 
@@ -150,13 +149,20 @@ export function QuestSubmittedProof({
   ledger,
   rewardType,
   campaignMeta,
+  redeemUrl,
+  redeemInstructions,
 }: {
   rewardCc: number | null;
   rewardStatus: QuestRewardStatus | null;
   ledger: QuestLedgerProof | null;
   rewardType?: RewardType | string | null;
   campaignMeta?: CampaignMeta | null;
+  /** Link register/landing proyek (shown in "How to use" reveal). */
+  redeemUrl?: string | null;
+  /** Instruksi custom redeem; kosong = pakai template 3-step default. */
+  redeemInstructions?: string | null;
 }) {
+  const t = usePlatformT();
   const rt = (rewardType ?? "CC_ONLY") as RewardType;
   const state = rewardStatus?.state;
   const inviteCode = rewardCodeFromStatus(rewardStatus);
@@ -277,7 +283,11 @@ export function QuestSubmittedProof({
           </div>
           {/* Invite code row — konsisten dengan claim card (RewardReveal). */}
           {inviteCode ? (
-            <RewardReveal inviteCode={inviteCode} />
+            <RewardReveal
+              inviteCode={inviteCode}
+              redeemUrl={redeemUrl}
+              redeemInstructions={redeemInstructions}
+            />
           ) : (
             <p className="text-sm text-slate-400">
               {rewardStatus?.message ?? `${rewardCc ?? 0} CC and your invite code have been sent.`}
@@ -352,55 +362,37 @@ export function QuestSubmittedProof({
             aria-hidden
           />
         </div>
-        <PageTitle className="mt-6 text-2xl font-bold text-slate-100">Congratulations!</PageTitle>
+        <PageTitle className="mt-6 text-2xl font-bold text-slate-100">
+          {t("earnCampaigns.congratsTitle")}
+        </PageTitle>
         <p className="mt-2 text-sm font-medium text-slate-400">
           {showCcReward || inviteCode
-            ? "Your rewards are ready below"
+            ? t("earnCampaigns.rewardsReady")
             : rewardStatus?.message ?? "Quest recorded successfully"}
         </p>
         {uiKind === "waitlist_code" && state === "winner" && inviteCode ? (
-          <p className="mt-2 text-sm font-medium text-violet-300">Winner — copy your reward code below.</p>
+          <p className="mt-2 text-sm font-medium text-violet-300">
+            {t("earnCampaigns.congratsWinnerCode")}
+          </p>
         ) : null}
       </div>
 
       <div className="relative space-y-6 px-6 pb-8">
-        {inviteCode && (
-          <div className="rounded-3xl border border-violet-500/35 bg-gradient-to-br from-violet-500/15 to-[var(--card)] p-6">
-            <div className="flex items-center gap-3 text-xs font-bold uppercase tracking-wider text-violet-300/80">
-              <Ticket className="h-5 w-5" />
-              Your code
-            </div>
-            <div className="mt-5 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-              <StatValue className="text-4xl font-bold tracking-wide text-slate-100">
-                {inviteCode}
-              </StatValue>
-              <CopyButton value={inviteCode} />
-            </div>
-            {isCcAndInvite && (
-              <p className="mt-4 text-sm font-medium text-slate-400">
-                {rewardStatus?.message}
-              </p>
-            )}
-          </div>
-        )}
+        {(inviteCode || showCcReward) && uiKind !== "cc_fcfs" ? (
+          <RewardReveal
+            inviteCode={inviteCode}
+            rewardCc={showCcReward ? (rewardCc ?? 0) : 0}
+            redeemUrl={redeemUrl}
+            redeemInstructions={redeemInstructions}
+          />
+        ) : null}
 
-        {showCcReward && uiKind !== "cc_fcfs" && (
-          <div className="flex items-center gap-5 rounded-3xl border border-[var(--primary)]/30 bg-gradient-to-r from-[var(--primary)]/15 to-[rgb(var(--canton-cyan-rgb)/0.08)] p-6">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[var(--primary)]/25">
-              <CcRewardLogo size={28} />
-            </div>
-            <div className="min-w-0 flex-1 text-left">
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                CC reward
-              </p>
-              <StatValue className="text-2xl font-bold text-canton">+{rewardCc} CC</StatValue>
-              <p className="mt-1 flex items-center gap-2 text-sm font-medium text-slate-400">
-                <Sparkles className="h-4 w-4 text-canton" />
-                Sent to your wallet
-              </p>
-            </div>
-          </div>
-        )}
+        {/* Pesan custom pemenang (CC_AND_INVITE legacy / waitlist code winner). */}
+        {isCcAndInvite && rewardStatus?.message ? (
+          <p className="rounded-2xl border border-white/5 bg-[var(--muted)]/40 px-6 py-4 text-center text-sm font-medium text-slate-100">
+            {rewardStatus.message}
+          </p>
+        ) : null}
 
         {!isCcAndInvite &&
           rewardStatus?.message &&

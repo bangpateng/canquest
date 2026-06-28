@@ -92,6 +92,8 @@ export class AdminController {
       maxWinners?: number;
       claimFeeCc?: number | null;
       winnerMessage?: string | null;
+      redeemUrl?: string | null;
+      redeemInstructions?: string | null;
       tags?: string[];
       socialLinks?: QuestSocialLinkInput[];
       questKind?: QuestKind;
@@ -132,6 +134,8 @@ export class AdminController {
       maxWinners?: number | null;
       claimFeeCc?: number | null;
       winnerMessage?: string | null;
+      redeemUrl?: string | null;
+      redeemInstructions?: string | null;
       tags?: string[];
       socialLinks?: QuestSocialLinkInput[];
     },

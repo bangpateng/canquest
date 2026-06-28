@@ -283,6 +283,10 @@ model Quest {
   claimFeeCc       Float?
   /// Custom message shown to raffle/email winners (admin dashboard).
   winnerMessage    String?
+  /// Link register/landing proyek untuk redeem code (shown in "How to use your code" reveal).
+  redeemUrl        String?
+  /// Instruksi custom redeem (multi-line). Kosong = pakai template 3-step default (Register → Use code → Done).
+  redeemInstructions String?
   /// CAMPAIGN = partner campaigns (user menu Earn). EARN_HUB = CanQuest daily tasks (user menu Quest).
   questKind        QuestKind         @default(CAMPAIGN)
   /// DAML QuestCampaign contract ID on Canton ledger (set after admin creates quest).

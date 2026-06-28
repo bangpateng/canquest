@@ -18,6 +18,7 @@ import {
   validateQuestForm,
   type ActiveRewardCode,
 } from "@/lib/quest/quest-engine";
+import { isInviteRewardType } from "@/lib/quest/quest-types";
 import { RewardTypePicker } from "@/components/admin/reward-type-picker";
 import type { QuestSocialLink } from "@/lib/quest/quest-social-links";
 import { QuestSocialLinksEditor } from "@/components/admin/quest-social-links-editor";
@@ -60,6 +61,8 @@ interface QuestFormProps {
     codeWinnersQuota?: number | null;
     claimFeeCc?: number | null;
     winnerMessage?: string | null;
+    redeemUrl?: string | null;
+    redeemInstructions?: string | null;
     tags: string[];
     socialLinks?: QuestSocialLink[];
     startsAt?: string | null;
@@ -106,6 +109,8 @@ export function QuestForm({
         : "",
     claimFeeCc: initialData?.claimFeeCc != null ? String(initialData.claimFeeCc) : "",
     winnerMessage: initialData?.winnerMessage ?? "",
+    redeemUrl: initialData?.redeemUrl ?? "",
+    redeemInstructions: initialData?.redeemInstructions ?? "",
     tags: (initialData?.tags ?? []).join(", "),
   });
 
@@ -313,6 +318,8 @@ export function QuestForm({
             : null,
         claimFeeCc: form.claimFeeCc.trim() ? Number(form.claimFeeCc) : null,
         winnerMessage: form.winnerMessage.trim() || null,
+        redeemUrl: form.redeemUrl.trim() || null,
+        redeemInstructions: form.redeemInstructions.trim() || null,
         tags: form.tags
           .split(",")
           .map((t) => t.trim())
@@ -659,6 +666,51 @@ export function QuestForm({
                   Shown to winners after admin draw. Non-winners see &ldquo;You weren&rsquo;t selected&rdquo;.
                 </p>
               )}
+            </div>
+          )}
+
+          {/* How to use your code — only for invite-code reward types. */}
+          {(isInviteRewardType(form.rewardType) || rewardConfig.isDual) && (
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/20 p-4 space-y-4">
+              <div>
+                <p className="text-sm font-semibold text-[var(--foreground)]">
+                  How to use your code
+                </p>
+                <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+                  Shown to winners after they claim their code. Leave both empty to skip the section.
+                </p>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium">Register / redeem URL</label>
+                <input
+                  type="url"
+                  value={form.redeemUrl}
+                  onChange={(e) => updateField("redeemUrl", e.target.value)}
+                  placeholder="https://app.project.io/register"
+                  className={inputCls}
+                />
+                <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                  Opens as an &ldquo;Open&rdquo; button in the default 3-step template.
+                </p>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium">
+                  Custom instructions
+                  <span className="ml-1.5 text-xs font-normal text-[var(--muted-foreground)]">
+                    (optional)
+                  </span>
+                </label>
+                <textarea
+                  value={form.redeemInstructions}
+                  onChange={(e) => updateField("redeemInstructions", e.target.value)}
+                  rows={3}
+                  placeholder={"e.g. 1. Register at the link above\n2. Paste your code at checkout\n3. Your account is credited"}
+                  className={cn(inputCls, "resize-y font-mono text-xs")}
+                />
+                <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                  Leave empty to use the default 3-step template (Register &rarr; Enter code &rarr; Done).
+                </p>
+              </div>
             </div>
           )}
 

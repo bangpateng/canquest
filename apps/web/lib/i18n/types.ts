@@ -199,6 +199,20 @@ export type PlatformMessages = {
     slotsFullBanner: string;
     slotsFullClosedBanner: string;
     codeLabel: string;
+    congratsTitle: string;
+    rewardsReady: string;
+    congratsWinnerCode: string;
+    saveCodeWarn: string;
+    yourCode: string;
+    ccReward: string;
+    ccSentToWallet: string;
+    copy: string;
+    copied: string;
+    howToUseTitle: string;
+    howToUseStepRegister: string;
+    howToUseStepUseCode: string;
+    howToUseStepDone: string;
+    howToUseOpen: string;
   };
   wallet: {
     createTitle: string;

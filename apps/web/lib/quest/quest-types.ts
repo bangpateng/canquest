@@ -66,6 +66,12 @@ export interface Quest {
   rewardType?: RewardType;
   maxWinners?: number | null;
   claimFeeCc?: number | null;
+  /** Custom winner message shown after draw/claim (admin dashboard). */
+  winnerMessage?: string | null;
+  /** Link register/landing proyek untuk redeem code (shown in "How to use" reveal). */
+  redeemUrl?: string | null;
+  /** Instruksi custom redeem; kosong = pakai template 3-step default. */
+  redeemInstructions?: string | null;
   campaignSummary?: QuestCampaignSummary;
   deadline: string | null;
   startsAt?: string | null;

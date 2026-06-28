@@ -18,6 +18,10 @@ export type CampaignMeta = {
   requiresDrawCcClaim?: boolean;
   requiresPaidInviteClaim?: boolean;
   codesRemaining?: number | null;
+  /** Link register/landing proyek (shown in "How to use" reveal). */
+  redeemUrl?: string | null;
+  /** Instruksi custom redeem; kosong = pakai template 3-step default. */
+  redeemInstructions?: string | null;
 };
 
 /** Earn list cards — mirrors API `campaignSummary` on GET /quests */

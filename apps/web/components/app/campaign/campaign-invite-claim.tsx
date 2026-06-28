@@ -91,7 +91,13 @@ export function CampaignInviteClaimSection({
         claimButtonLabel="Claim"
         onClaim={() => void handleClaim()}
       />
-      {claimedCode && <RewardReveal inviteCode={claimedCode} />}
+      {claimedCode && (
+        <RewardReveal
+          inviteCode={claimedCode}
+          redeemUrl={campaignMeta.redeemUrl}
+          redeemInstructions={campaignMeta.redeemInstructions}
+        />
+      )}
     </div>
   );
 }

@@ -307,6 +307,8 @@ export class QuestsService {
         requiresDrawCcClaim: false,
         requiresPaidInviteClaim: false,
         codesRemaining: null as number | null,
+        redeemUrl: null as string | null,
+        redeemInstructions: null as string | null,
       };
     }
     const maxWinners = quest.maxWinners;
@@ -346,6 +348,8 @@ export class QuestsService {
       requiresDrawCcClaim: this.requiresDrawCcClaim(quest),
       requiresPaidInviteClaim: requiresPaidInviteClaim(quest),
       codesRemaining: await this.countAvailableInviteCodes(questId),
+      redeemUrl: quest.redeemUrl ?? null,
+      redeemInstructions: quest.redeemInstructions ?? null,
     };
   }
 

@@ -119,7 +119,12 @@ export function CampaignCcAndCodeRaffleClaimSection({
         onClaim={() => void handleClaim()}
       />
       {claimedCode && (
-        <RewardReveal inviteCode={claimedCode} rewardCc={rewardVariant === "CC" ? 0 : rewardCc} />
+        <RewardReveal
+          inviteCode={claimedCode}
+          rewardCc={rewardVariant === "CC" ? 0 : rewardCc}
+          redeemUrl={campaignMeta.redeemUrl}
+          redeemInstructions={campaignMeta.redeemInstructions}
+        />
       )}
     </div>
   );
