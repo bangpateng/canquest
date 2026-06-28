@@ -14,6 +14,7 @@ import { ProfileCard } from "./profile-card";
 import { CcHoldingsCard } from "./cc-holdings-card";
 import { PointsCard } from "./points-card";
 import { ActivityStatsCard } from "./activity-stats-card";
+import { PageLoading } from "@/components/ui/loading-spinner";
 import {
   getPointsBalance,
   type PointsBalance,
@@ -139,11 +140,19 @@ export function DashboardView() {
 
   const hasWallet = isRealCantonPartyId(me?.cantonPartyId);
   const s = stats ?? EMPTY_STATS;
+  // Spinner awal hanya saat fetch pertama (sebelum data ada), sama seperti menu lain.
+  // Background refetch (focus/visibility) tidak men-trigger ini, jadi kartu tidak berkedip.
+  const initialLoading = loading && !stats && !me;
 
   return (
     <div className="w-full max-w-full overflow-x-hidden font-sans">
       <div className="w-full min-h-screen max-w-7xl mx-auto">
         <div className="space-y-5 md:space-y-6">
+
+          {/* ── Initial Loading Spinner (first load / refresh) ───────────── */}
+          {initialLoading ? (
+            <PageLoading minHeight="min-h-[60vh]" />
+          ) : null}
 
           {/* ── Error Banner ─────────────────────────────────────────────── */}
           {loadError ? (
@@ -171,7 +180,7 @@ export function DashboardView() {
           ) : null}
 
           {/* ── Cards Bento Grid ─────────────────────────────────────────── */}
-          {!loadError && (
+          {!initialLoading && !loadError && (
             <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 md:gap-5">
               {/* Profile (full width on mobile, 6 cols on desktop) */}
               <div className="sm:col-span-2 lg:col-span-6">

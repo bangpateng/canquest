@@ -58,7 +58,7 @@ export function ProfileCard({
       />
       <div className="relative flex items-center gap-4">
         <div
-          className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl ring-2 ring-white/10"
+          className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full ring-2 ring-white/10"
           aria-hidden
           style={avatarSrc ? undefined : { backgroundImage: avatarGradient(seed) }}
         >
@@ -73,7 +73,7 @@ export function ProfileCard({
               referrerPolicy="no-referrer"
             />
           ) : (
-            <span className="text-lg font-bold uppercase tracking-wider text-white">
+            <span className="text-base font-bold uppercase tracking-wider text-white">
               {getInitials(name)}
             </span>
           )}
