@@ -57,7 +57,7 @@ export function getSiteSocialLinks(): SiteSocialLink[] {
   const brandKit = process.env.NEXT_PUBLIC_BRAND_KIT_URL;
   if (brandKit?.trim()) {
     const href = normalizeHttpUrl(brandKit);
-    if (href) links.push({ id: "brand_kit", label: "Brand Kit", href });
+    if (href) links.push({ id: "brand_kit", label: "Download assets", href });
   }
 
   return links;

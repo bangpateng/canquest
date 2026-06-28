@@ -27,6 +27,9 @@ export function SiteFooter() {
             <Link href="/cooperation" className="transition-colors hover:text-[var(--foreground)]">
               Cooperation
             </Link>
+            <Link href="/brand-kit" className="transition-colors hover:text-[var(--foreground)]">
+              Brand Kit
+            </Link>
             {social.map((link) => (
               <a
                 key={link.id}
