@@ -59,7 +59,7 @@ export function RewardHowToUse({
         <ol className="mt-3 space-y-2.5">
           <li className="flex items-start gap-3">
             <StepBadge n={1} />
-            <div className="min-w-0 flex-1 flex-wrap items-center gap-1.5 text-sm leading-relaxed text-[var(--foreground)]">
+            <div className="min-w-0 flex-1 flex-wrap items-center gap-1.5 text-xs leading-relaxed text-[var(--muted-foreground)]">
               <span>{t("earnCampaigns.howToUseStepRegister")}</span>
               {url ? (
                 <>
@@ -80,7 +80,7 @@ export function RewardHowToUse({
           <li className="flex items-start gap-3">
             <StepBadge n={2} />
             <div className="min-w-0">
-              <span className="text-sm leading-relaxed text-[var(--foreground)]">
+              <span className="text-xs leading-relaxed text-[var(--muted-foreground)]">
                 {t("earnCampaigns.howToUseStepUseCode")}
                 {inviteCode ? (
                   <>
@@ -97,7 +97,7 @@ export function RewardHowToUse({
           <li className="flex items-start gap-3">
             <StepBadge n={3} done />
             <div className="min-w-0">
-              <span className="text-sm leading-relaxed text-[var(--foreground)]">
+              <span className="text-xs leading-relaxed text-[var(--muted-foreground)]">
                 {t("earnCampaigns.howToUseStepDone")} ✅
               </span>
             </div>
