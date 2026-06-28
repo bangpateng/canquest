@@ -1,17 +1,22 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, Check, Copy, Sparkles } from "lucide-react";
+import { Check, Copy, Sparkles, Ticket } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { RewardHowToUse } from "@/components/app/campaign/reward-how-to-use";
+import { CcRewardLogo } from "@/components/app/campaign/cc-reward-logo";
 
 /**
  * Blok tampilan "reveal" hadiah setelah claim berhasil — konsisten untuk semua
  * tipe reward. Sebelumnya kode invite-code ditampilkan dalam 3 desain berbeda
  * (violet di quest-submit-section, canton di raffle-claim, inline di tempat lain).
  * Sekarang satu komponen, desain canton-consistent, dengan copy button + how-to-use.
+ *
+ * Icon header menyesuaikan tipe reward:
+ *  - Code (invite) → icon Ticket (kode)
+ *  - CC            → CC reward logo
  */
 export function RewardReveal({
   inviteCode,
@@ -34,6 +39,10 @@ export function RewardReveal({
 
   if (!inviteCode && !rewardCc) return null;
 
+  // Icon header: reward Code (invite) = Ticket; CC (token) = CC logo.
+  // CC + Code (dual): kalau ada code, tampilkan Ticket (code di-highlight).
+  const isCodeReward = Boolean(inviteCode);
+
   return (
     <div
       className={cn(
@@ -43,8 +52,19 @@ export function RewardReveal({
     >
       {/* Header */}
       <div className="flex items-center gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-500">
-          <CheckCircle2 className="h-5 w-5" strokeWidth={2.5} aria-hidden />
+        <span
+          className={cn(
+            "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
+            isCodeReward
+              ? "bg-violet-500/15 text-violet-400"
+              : "bg-canton/15 text-canton",
+          )}
+        >
+          {isCodeReward ? (
+            <Ticket className="h-5 w-5" strokeWidth={2.5} aria-hidden />
+          ) : (
+            <CcRewardLogo size={18} />
+          )}
         </span>
         <div className="min-w-0">
           <p className="text-sm font-bold text-[var(--foreground)]">

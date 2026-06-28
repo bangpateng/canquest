@@ -18,7 +18,7 @@ import { CampaignQuestStatusCard } from "@/components/app/campaign/campaign-ques
 import { RewardReveal } from "@/components/app/campaign/reward-reveal";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
-import { Check, CheckCircle2, ChevronDown, Copy, Shield } from "lucide-react";
+import { Check, ChevronDown, Copy, Shield } from "lucide-react";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { useState } from "react";
 
@@ -355,23 +355,8 @@ export function QuestSubmittedProof({
       />
 
       <div className="relative px-8 pb-6 pt-10 text-center">
-        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-[var(--primary)] shadow-[0_0_32px_rgb(var(--canton-rgb)/0.4)] ring-4 ring-[var(--primary)]/20">
-          <CheckCircle2
-            className="h-10 w-10 text-[var(--primary-foreground)]"
-            strokeWidth={2.5}
-            aria-hidden
-          />
-        </div>
-        <PageTitle className="mt-6 text-2xl font-bold text-slate-100">
-          {t("earnCampaigns.congratsTitle")}
-        </PageTitle>
-        <p className="mt-2 text-sm font-medium text-slate-400">
-          {showCcReward || inviteCode
-            ? t("earnCampaigns.rewardsReady")
-            : rewardStatus?.message ?? "Quest recorded successfully"}
-        </p>
         {uiKind === "waitlist_code" && state === "winner" && inviteCode ? (
-          <p className="mt-2 text-sm font-medium text-violet-300">
+          <p className="text-sm font-medium text-violet-300">
             {t("earnCampaigns.congratsWinnerCode")}
           </p>
         ) : null}
