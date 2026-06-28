@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import {
@@ -43,8 +44,10 @@ export type TransactionDetailResponse = {
 export class TransactionDetailService {
   private readonly logger = new Logger(TransactionDetailService.name);
   private readonly scanTxUrlTemplate: string;
+  private readonly lighthouseApiUrl: string;
 
   constructor(
+    private readonly config: ConfigService,
     private readonly prisma: PrismaService,
     private readonly ledger: CantonLedgerService,
     private readonly users: UsersService,
@@ -53,17 +56,68 @@ export class TransactionDetailService {
     // Jangan baca CANTON_SCAN_TX_URL lagi supaya link konsisten lighthouse di
     // semua environment.
     this.scanTxUrlTemplate = 'https://lighthouse.xyz/transfers/{updateId}';
+    // Base URL API Lighthouse (data, BUKAN explorer UI) untuk resolve event_id.
+    this.lighthouseApiUrl = (
+      config.get<string>('LIGHTHOUSE_API_URL') ??
+      'https://api-canton.interscan.pro/mainnet'
+    ).replace(/\/$/, '');
   }
 
-  cantonScanUrl(updateId: string | null | undefined): string | null {
-    if (!updateId?.trim()) return null;
+  cantonScanUrl(eventId: string | null | undefined): string | null {
+    if (!eventId?.trim()) return null;
     if (this.scanTxUrlTemplate.includes('{updateId}')) {
       return this.scanTxUrlTemplate.replace(
         '{updateId}',
-        encodeURIComponent(updateId),
+        encodeURIComponent(eventId),
       );
     }
-    return `${this.scanTxUrlTemplate.replace(/\/$/, '')}/${encodeURIComponent(updateId)}`;
+    return `${this.scanTxUrlTemplate.replace(/\/$/, '')}/${encodeURIComponent(eventId)}`;
+  }
+
+  /**
+   * Resolve Lighthouse event_id (format "1220…:N") dari Canton update_id/contractId.
+   *
+   * DB menyimpan Canton update_id ("1220…", tanpa suffix ":N"), tapi link explorer
+   * lighthouse.xyz/transfers/{id} BUTUH event_id ("1220…:N" — root hash + node index).
+   * Node index ":N" tidak bisa ditebak, jadi kita query transfer on-chain party ini
+   * dari Lighthouse API lalu cari update_id yang cocok → ambil event_id-nya.
+   *
+   * Non-fatal: kalau gagal/timeout, return null (link explorer tidak tampil, tapi
+   * data transaksi tetap muncul).
+   */
+  async resolveLighthouseEventId(
+    partyId: string,
+    updateIdOrContractId: string | null | undefined,
+  ): Promise<string | null> {
+    const id = updateIdOrContractId?.trim();
+    if (!id || !partyId) return null;
+    // Sudah format event_id? ("…:N") → langsung pakai.
+    if (/:[0-9]+$/.test(id)) return id;
+    try {
+      const url = `${this.lighthouseApiUrl}/api/parties/${encodeURIComponent(partyId)}/transfers?limit=50`;
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(8_000),
+      });
+      if (!res.ok) return null;
+      const data = (await res.json()) as {
+        transfers?: Array<{ update_id?: string; event_id?: string }>;
+      };
+      const transfers = data.transfers ?? [];
+      // Cari transfer yang update_id ATAU event_id (root) cocok.
+      const match = transfers.find(
+        (t) =>
+          t.update_id === id ||
+          (t.event_id ?? '').replace(/:[0-9]+$/, '') === id,
+      );
+      return match?.event_id ?? null;
+    } catch (err) {
+      this.logger.debug(
+        `resolveLighthouseEventId(${id.slice(0, 16)}…): ${String(err)}`,
+      );
+      return null;
+    }
   }
 
   /** Resolve ledger updateId for a contract and persist on CcTransaction. */
@@ -153,9 +207,14 @@ export class TransactionDetailService {
       }
     }
 
-    // Event id untuk link explorer lighthouse.xyz: preferensi cantonUpdateId (id
-    // transaksi ledger asli), fallback ke ledgerTxId (contract/offer id).
-    const eventId = cantonUpdateId ?? tx.ledgerTxId ?? null;
+    // Event id untuk link explorer lighthouse.xyz: DB menyimpan Canton update_id
+    // ("1220…" tanpa ":N"), tapi lighthouse.xyz/transfers/{id} BUTUH event_id
+    // ("1220…:N"). Resolve dari Lighthouse API via party transfers lookup.
+    const rawId = cantonUpdateId ?? tx.ledgerTxId ?? null;
+    const eventId = await this.resolveLighthouseEventId(
+      user?.cantonPartyId ?? '',
+      rawId,
+    );
 
     return {
       id: tx.id,

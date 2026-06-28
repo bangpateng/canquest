@@ -1743,11 +1743,11 @@ export class PartyController {
           if (!item || typeof item !== 'object') return item;
           const it = item as Record<string, unknown>;
           // Inject scan_url lighthouse.xyz untuk item on-chain (link explorer di
-          // list & detail). Pakai update_id / event_id / contract_id yang ada.
+          // list & detail). WAJIB pakai event_id (format "1220…:N") — bukan
+          // update_id ("1220…" tanpa ":N") yang membuat link rusak/kosong.
           const eventId =
-            (typeof it.update_id === 'string' && it.update_id) ||
             (typeof it.event_id === 'string' && it.event_id) ||
-            (typeof it.contract_id === 'string' && it.contract_id) ||
+            (typeof it.update_id === 'string' && it.update_id) ||
             '';
           return {
             ...it,
