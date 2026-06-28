@@ -250,6 +250,10 @@ export const en: PlatformMessages = {
     airdrop: "Airdrop",
     ccLocked: "CC Locked",
     ccUnlocked: "CC Unlocked",
+    offerRejected: "Offer rejected",
+    offerWithdrawn: "Transfer cancelled",
+    preapprovalEnabled: "Preapproval enabled",
+    preapprovalDisabled: "Preapproval disabled",
   },
   settings: {
     signingOut: "Signing out…",

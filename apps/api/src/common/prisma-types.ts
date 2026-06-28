@@ -79,7 +79,15 @@ export type CcTransactionType =
   | 'TRANSFER_OUT'
   | 'AIRDROP'
   | 'CC_LOCK'
-  | 'CC_UNLOCK';
+  | 'CC_UNLOCK'
+  /// Receiver menolak incoming TransferInstruction (onchain exercise).
+  | 'OFFER_REJECTED'
+  /// Sender menarik kembali TransferInstruction yang belum di-accept.
+  | 'OFFER_WITHDRAWN'
+  /// User mengaktifkan TransferPreapproval (onchain create, burn fee).
+  | 'PREAPPROVAL_ENABLED'
+  /// User menonaktifkan TransferPreapproval (onchain archive).
+  | 'PREAPPROVAL_DISABLED';
 
 export type UserStatus = 'ACTIVE' | 'SUSPENDED' | 'BANNED';
 export const UserStatus = {

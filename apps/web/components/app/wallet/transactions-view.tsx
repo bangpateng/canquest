@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/utils/utils";
 import { ListPagination } from "@/components/app/list/list-pagination";
-import { ArrowDownLeft, ArrowUpRight, Gift, Lock, LockOpen, RefreshCw, Zap } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Ban, Gift, Lock, LockOpen, RefreshCw, ShieldCheck, ShieldOff, Undo2, Zap } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { TransactionDetailModal } from "@/components/app/wallet/transaction-detail-modal";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
@@ -17,7 +17,18 @@ const DB_TRANSACTIONS_PROXY = "/api/party/transactions";
 export interface TxItem {
   id: string;
   amountMicroCc: string;
-  type: "QUEST_REWARD" | "SPIN_REWARD" | "TRANSFER_IN" | "TRANSFER_OUT" | "AIRDROP" | "CC_LOCK" | "CC_UNLOCK";
+  type:
+    | "QUEST_REWARD"
+    | "SPIN_REWARD"
+    | "TRANSFER_IN"
+    | "TRANSFER_OUT"
+    | "AIRDROP"
+    | "CC_LOCK"
+    | "CC_UNLOCK"
+    | "OFFER_REJECTED"
+    | "OFFER_WITHDRAWN"
+    | "PREAPPROVAL_ENABLED"
+    | "PREAPPROVAL_DISABLED";
   description: string;
   referenceId: string | null;
   counterparty?: string | null;
@@ -95,7 +106,19 @@ const TX_TYPE_KEYS: Record<TxItem["type"], string> = {
   AIRDROP: "transactions.airdrop",
   CC_LOCK: "transactions.ccLocked",
   CC_UNLOCK: "transactions.ccUnlocked",
+  OFFER_REJECTED: "transactions.offerRejected",
+  OFFER_WITHDRAWN: "transactions.offerWithdrawn",
+  PREAPPROVAL_ENABLED: "transactions.preapprovalEnabled",
+  PREAPPROVAL_DISABLED: "transactions.preapprovalDisabled",
 };
+
+/** Type toggle onchain (reject/withdraw/preapproval) — amount 0, tampil netral. */
+const TOGGLE_TX_TYPES: ReadonlySet<TxItem["type"]> = new Set([
+  "OFFER_REJECTED",
+  "OFFER_WITHDRAWN",
+  "PREAPPROVAL_ENABLED",
+  "PREAPPROVAL_DISABLED",
+]);
 
 function TxStatusBadge({ status }: { status?: TxItem["status"] }) {
   if (!status || status === "COMPLETED") return null;
@@ -122,6 +145,14 @@ function TxTypeIcon({ type }: { type: TxItem["type"] }) {
       return <Lock className="h-4 w-4" />;
     case "CC_UNLOCK":
       return <LockOpen className="h-4 w-4" />;
+    case "OFFER_REJECTED":
+      return <Ban className="h-4 w-4" />;
+    case "OFFER_WITHDRAWN":
+      return <Undo2 className="h-4 w-4" />;
+    case "PREAPPROVAL_ENABLED":
+      return <ShieldCheck className="h-4 w-4" />;
+    case "PREAPPROVAL_DISABLED":
+      return <ShieldOff className="h-4 w-4" />;
     case "QUEST_REWARD":
     case "SPIN_REWARD":
     case "AIRDROP":
@@ -142,6 +173,13 @@ function txIconBg(type: TxItem["type"]): string {
       return "bg-amber-500/10 text-amber-500";
     case "CC_UNLOCK":
       return "bg-green-500/10 text-green-500";
+    case "OFFER_REJECTED":
+    case "OFFER_WITHDRAWN":
+    case "PREAPPROVAL_DISABLED":
+      // Aksi toggle netral — slate, bukan merah (tidak ada pergerakan CC).
+      return "bg-slate-500/10 text-slate-400";
+    case "PREAPPROVAL_ENABLED":
+      return "bg-blue-500/10 text-blue-400";
     case "QUEST_REWARD":
       return "bg-[var(--primary)]/15 text-[var(--foreground)]";
     case "SPIN_REWARD":
@@ -153,14 +191,32 @@ function txIconBg(type: TxItem["type"]): string {
 }
 
 function amountColor(type: TxItem["type"]): string {
+  // Toggle (amount 0) → slate netral.
+  if (TOGGLE_TX_TYPES.has(type)) return "text-slate-400";
   // CC_LOCK = debit (amber, netral — bukan merah transfer).
   if (type === "CC_LOCK") return "text-amber-500";
   return type === "TRANSFER_OUT" ? "text-red-500" : "text-green-500";
 }
 
 function amountSign(type: TxItem["type"]): string {
+  // Toggle → tanpa tanda (amount 0).
+  if (TOGGLE_TX_TYPES.has(type)) return "";
   // CC_LOCK = tanda − (dana dikunci / arah keluar untuk display).
   return type === "TRANSFER_OUT" || type === "CC_LOCK" ? "\u2212" : "+";
+}
+
+/** Render amount cell: toggle (amount 0) → "—" netral, bukan "+0.0000 CC". */
+function AmountText({ tx }: { tx: TxItem }) {
+  if (TOGGLE_TX_TYPES.has(tx.type)) {
+    return <span className="text-slate-500">\u2014</span>;
+  }
+  const ccAmt = Math.abs(Number(tx.amountMicroCc)) / 1_000_000;
+  return (
+    <>
+      {amountSign(tx.type)}
+      {ccAmt.toFixed(4)} CC
+    </>
+  );
 }
 
 function txDisplayTitle(tx: TxItem, fallback: string): string {
@@ -317,17 +373,22 @@ export function TransactionsView({
 }: TransactionsViewProps) {
   const t = usePlatformT();
   const embedded = variant === "embedded";
-  const txLabel = (type: TxItem["type"]) => t(TX_TYPE_KEYS[type]);
   // Type column = arah transaksi yang ramah. Lock/unlock pakai label sendiri (bukan Sent/Received).
   const txDirection = (type: TxItem["type"]): string => {
     if (type === "CC_LOCK") return t(TX_TYPE_KEYS.CC_LOCK);
     if (type === "CC_UNLOCK") return t(TX_TYPE_KEYS.CC_UNLOCK);
+    if (TOGGLE_TX_TYPES.has(type)) return t(TX_TYPE_KEYS[type]);
     return type === "TRANSFER_OUT" ? "Sent" : "Received";
   };
   const [txPage, setTxPage] = useState<TxPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [modalTx, setModalTx] = useState<TxItem | null>(null);
+
+  /** Polling 20s untuk history list — sinkron dengan bell notification.
+   * Pause saat tab hidden untuk hemat resource; immediate refetch saat visible.
+   * Pattern = use-transaction-notifications.ts. */
+  const TX_POLL_MS = 20_000;
 
 
   const fetchTxns = useCallback(
@@ -400,6 +461,51 @@ export function TransactionsView({
   useEffect(() => {
     void fetchTxns(currentPage);
   }, [fetchTxns, currentPage, refreshKey]);
+
+  // ── Polling 20s + cross-surface sync ──────────────────────────────────────
+  // History list harus realtime: (a) incoming transfer dari akun lain muncul
+  // tanpa manual refresh, (b) bell notification sudah toast → list ikut refresh.
+  useEffect(() => {
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+
+    const startPoll = () => {
+      if (intervalId) clearInterval(intervalId);
+      intervalId = setInterval(
+        () => void fetchTxns(currentPage),
+        TX_POLL_MS,
+      );
+    };
+    const stopPoll = () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+
+    startPoll();
+
+    // Refetch langsung saat tab kembali visible + restart interval.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        void fetchTxns(currentPage);
+        startPoll();
+      } else {
+        stopPoll();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    // Cross-surface sync: bell notification emit 'cc:new-tx' saat ada toast baru
+    // → list langsung refetch (tanpa tunggu interval 20s berikutnya).
+    const onNewTx = () => void fetchTxns(currentPage);
+    window.addEventListener("cc:new-tx", onNewTx);
+
+    return () => {
+      stopPoll();
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("cc:new-tx", onNewTx);
+    };
+  }, [fetchTxns, currentPage]);
 
   function changePage(p: number) {
     setCurrentPage(p);
@@ -475,7 +581,6 @@ export function TransactionsView({
                 </thead>
                 <tbody>
                   {txPage.items.map((tx) => {
-                    const ccAmt = Math.abs(Number(tx.amountMicroCc)) / 1_000_000;
                     const date = new Date(tx.createdAt).toLocaleString("en-GB", {
                       day: "2-digit",
                       month: "short",
@@ -511,8 +616,7 @@ export function TransactionsView({
                             amountColor(tx.type),
                           )}
                         >
-                          {amountSign(tx.type)}
-                          {ccAmt.toFixed(4)} CC
+                          <AmountText tx={tx} />
                         </td>
                         <td className="max-w-[12rem] truncate px-5 py-3.5 sm:px-6 sm:py-4 text-sm font-medium text-slate-400">
                            {tx.description}
@@ -538,7 +642,6 @@ export function TransactionsView({
 
             <ul className="divide-y divide-white/[0.04] md:hidden">
               {txPage.items.map((tx) => {
-                const ccAmt = Math.abs(Number(tx.amountMicroCc)) / 1_000_000;
                 const date = new Date(tx.createdAt).toLocaleString("en-GB", {
                   day: "2-digit",
                   month: "short",
@@ -578,8 +681,7 @@ export function TransactionsView({
                              amountColor(tx.type),
                            )}
                          >
-                           {amountSign(tx.type)}
-                           {ccAmt.toFixed(4)} CC
+                           <AmountText tx={tx} />
                          </p>
                        </div>
                     </button>

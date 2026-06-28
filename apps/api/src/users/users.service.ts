@@ -33,6 +33,10 @@ export const FEED_TX_TYPES: CcTransactionType[] = [
   'TRANSFER_OUT',
   'CC_LOCK',
   'CC_UNLOCK',
+  'OFFER_REJECTED',
+  'OFFER_WITHDRAWN',
+  'PREAPPROVAL_ENABLED',
+  'PREAPPROVAL_DISABLED',
 ];
 
 /**
@@ -48,6 +52,10 @@ export const BADGE_UNREAD_TX_TYPES: CcTransactionType[] = [
   'TRANSFER_OUT',
   'CC_LOCK',
   'CC_UNLOCK',
+  'OFFER_REJECTED',
+  'OFFER_WITHDRAWN',
+  'PREAPPROVAL_ENABLED',
+  'PREAPPROVAL_DISABLED',
 ];
 
 /** @deprecated Use FEED_TX_TYPES (feed) / BADGE_UNREAD_TX_TYPES (badge). */

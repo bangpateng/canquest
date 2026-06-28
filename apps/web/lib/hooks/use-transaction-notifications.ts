@@ -11,7 +11,11 @@ export type NotificationTx = {
     | "TRANSFER_IN"
     | "TRANSFER_OUT"
     | "CC_LOCK"
-    | "CC_UNLOCK";
+    | "CC_UNLOCK"
+    | "OFFER_REJECTED"
+    | "OFFER_WITHDRAWN"
+    | "PREAPPROVAL_ENABLED"
+    | "PREAPPROVAL_DISABLED";
   description: string;
   amountMicroCc: string;
   referenceId: string | null;
@@ -125,6 +129,11 @@ export function useTransactionNotifications(
           }
           if (fresh.length > 0) {
             setToasts((prev) => [...fresh, ...prev].slice(0, 3));
+            // Cross-surface sync: beri tahu history list & surface lain bahwa
+            // ada tx baru, supaya mereka refetch tanpa tunggu polling sendiri.
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(new CustomEvent("cc:new-tx"));
+            }
           }
         } else {
           for (const item of data.items) knownIds.current.add(item.id);

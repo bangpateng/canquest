@@ -3,7 +3,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, Check, Copy, ExternalLink, Lock, LockOpen, ShieldCheck } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Check, Copy, ExternalLink, Lock, LockOpen, ShieldCheck, Zap } from "lucide-react";
 
 import type { TransactionDetail } from "@/components/app/wallet/transaction-detail-view";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
@@ -150,8 +150,12 @@ export function TransactionDetailContent({
   const isLock = detail.type === "CC_LOCK";
   const isUnlock = detail.type === "CC_UNLOCK";
   const isTransfer = isOut || isIn;
-  // Lock/unlock = non-custodial: TIDAK punya counterparty, jangan tampilkan From/To.
-  const isLockLike = isLock || isUnlock;
+  // Toggle onchain (reject/withdraw/preapproval) — amount 0, tampil netral.
+  const isToggle =
+    detail.type === "OFFER_REJECTED" ||
+    detail.type === "OFFER_WITHDRAWN" ||
+    detail.type === "PREAPPROVAL_ENABLED" ||
+    detail.type === "PREAPPROVAL_DISABLED";
   // Debit (negatif): TRANSFER_OUT & CC_LOCK. Kredit (positif): sisanya termasuk CC_UNLOCK.
   const isDebit = isOut || isLock;
 
@@ -198,11 +202,13 @@ export function TransactionDetailContent({
           <span
             className={cn(
               "flex h-11 w-11 items-center justify-center rounded-full",
-              isLock
-                ? "bg-amber-500/15 text-amber-500"
-                : isUnlock || isIn
-                  ? "bg-green-500/15 text-green-500"
-                  : "bg-red-500/15 text-red-500",
+              isToggle
+                ? "bg-slate-500/15 text-slate-400"
+                : isLock
+                  ? "bg-amber-500/15 text-amber-500"
+                  : isUnlock || isIn
+                    ? "bg-green-500/15 text-green-500"
+                    : "bg-red-500/15 text-red-500",
             )}
             aria-hidden
           >
@@ -212,23 +218,27 @@ export function TransactionDetailContent({
               <LockOpen className="h-5 w-5" />
             ) : isIn ? (
               <ArrowDownLeft className="h-5 w-5" />
-            ) : (
+            ) : isOut ? (
               <ArrowUpRight className="h-5 w-5" />
+            ) : (
+              <Zap className="h-5 w-5" />
             )}
           </span>
           <p
             className={cn(
               "mt-3 font-bold tabular-nums",
               compact ? "text-3xl" : "text-4xl",
-              isLock
-                ? "text-amber-500"
-                : isOut
-                  ? "text-red-500"
-                  : "text-green-500",
+              isToggle
+                ? "text-slate-400"
+                : isLock
+                  ? "text-amber-500"
+                  : isOut
+                    ? "text-red-500"
+                    : "text-green-500",
             )}
           >
-            {isDebit ? "−" : "+"}
-            {ccAmt.toFixed(4)} CC
+            {isToggle ? "" : isDebit ? "\u2212" : "+"}
+            {isToggle ? "—" : `${ccAmt.toFixed(4)} CC`}
           </p>
           {usdDisplay != null ? (
             <p className="mt-0.5 text-sm font-medium text-slate-400 tabular-nums">

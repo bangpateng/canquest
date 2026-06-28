@@ -62,6 +62,18 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
     onRefresh?.();
   }, [refreshWithRetries, onRefresh]);
 
+  /**
+   * Setelah aksi LOCK / UNLOCK: refresh lock-status + balance + history list.
+   * Lock/unlock mempengaruhi ketiga-tiganya (CC_LOCK/CC_UNLOCK adalah row history,
+   * dan locked balance mengurangi/menambah available balance). Tanpa ini, row
+   * history baru tidak muncul sampai poll berikutnya (45-60s).
+   */
+  const handleLockAction = useCallback(() => {
+    refreshLock();
+    refreshWithRetries();
+    setTxRefreshKey((k) => k + 1);
+  }, [refreshLock, refreshWithRetries]);
+
   return (
     <div className="w-full max-w-full min-w-0 overflow-x-hidden space-y-5 md:space-y-6 font-sans">
       {/* ── Balance Hero Card ───────────────────────────────────────────── */}
@@ -141,7 +153,7 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
         open={lockOpen}
         onClose={() => setLockOpen(false)}
         status={lockStatus}
-        onRefresh={refreshLock}
+        onRefresh={handleLockAction}
       />
     </div>
   );

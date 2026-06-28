@@ -895,6 +895,10 @@ export class PartyController {
         description: `${description} [pending — recipient must accept offer]`,
         counterparty: recipientPartyId,
         ledgerTxId,
+        // Status PENDING: dana sudah keluar sebagai offer, tapi belum diterima
+        // receiver. Saat offer di-accept, acceptOfferInbox update ke COMPLETED.
+        status: 'PENDING',
+        transferInstructionCid: cip56Result.transferInstructionCid ?? null,
       });
       void this.inboundSync.alignBalanceFromChain(sender.id, sender.username);
       return {
@@ -1038,6 +1042,23 @@ export class PartyController {
       );
     }
 
+    // Catat history (tx id ASLI dari exercise). Non-fatal: onchain reject tetap
+    // sukses walau pencatatan gagal — gap "terkirim tapi history gagal" dihindari.
+    try {
+      await this.users.recordTransaction({
+        userId: user.id,
+        amountCc: 0,
+        type: 'OFFER_REJECTED',
+        description: 'Rejected incoming CC transfer',
+        referenceId: cid,
+        ledgerTxId: result.updateId ?? cid,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `OFFER_REJECTED history record failed (cid=${cid.slice(0, 16)}): ${String(err)}`,
+      );
+    }
+
     return {
       ok: true,
       updateId: result.updateId,
@@ -1073,6 +1094,22 @@ export class PartyController {
     if (!result.ok) {
       throw new BadRequestException(
         `Failed to withdraw transfer instruction: ${result.error ?? 'unknown error'}`,
+      );
+    }
+
+    // Catat history (tx id ASLI dari exercise). Non-fatal.
+    try {
+      await this.users.recordTransaction({
+        userId: user.id,
+        amountCc: 0,
+        type: 'OFFER_WITHDRAWN',
+        description: 'Cancelled outgoing CC transfer',
+        referenceId: cid,
+        ledgerTxId: result.updateId ?? cid,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `OFFER_WITHDRAWN history record failed (cid=${cid.slice(0, 16)}): ${String(err)}`,
       );
     }
 
@@ -1457,6 +1494,23 @@ export class PartyController {
       );
     }
 
+    // Catat history (tx id = contract preapproval cid). Non-fatal: toggle tetap
+    // sukses walau pencatatan gagal. Burn fee dicatat juga agar ada jejak.
+    try {
+      await this.users.recordTransaction({
+        userId: user.id,
+        amountCc: Number(result.amuletPaid ?? 0),
+        type: 'PREAPPROVAL_ENABLED',
+        description: 'Preapproval enabled — direct transfers',
+        referenceId: user.cantonPartyId,
+        ledgerTxId: result.transferPreapprovalCid ?? undefined,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `PREAPPROVAL_ENABLED history record failed: ${String(err)}`,
+      );
+    }
+
     // Sukses & burn terjadi → set cooldown
     await this.users.markPreapprovalToggle(req.user.userId);
 
@@ -1541,6 +1595,26 @@ export class PartyController {
 
     // Sukses & terverifikasi → set cooldown
     await this.users.markPreapprovalToggle(req.user.userId);
+
+    // Catat history (tx id = updateId dari cancel exercise). Non-fatal: toggle
+    // tetap sukses walau pencatatan gagal. Fallback marker bila updateId tidak
+    // tersedia (e.g. lewat Splice fallback path).
+    try {
+      await this.users.recordTransaction({
+        userId: user.id,
+        amountCc: 0,
+        type: 'PREAPPROVAL_DISABLED',
+        description: 'Preapproval disabled — manual accept required',
+        referenceId: user.cantonPartyId,
+        ledgerTxId:
+          result.updateId ??
+          `preapproval:disable:${user.cantonPartyId}:${Date.now()}`,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `PREAPPROVAL_DISABLED history record failed: ${String(err)}`,
+      );
+    }
 
     return {
       ok: true,
@@ -1989,7 +2063,16 @@ export class PartyController {
     });
 
     // Catat ke history transaksi (tampilan). Idempotensi via @@unique(userId, ledgerTxId):
-    // prefix "unlock:" membedakan dari row CC_LOCK agar dua-duanya bisa ada untuk lock yang sama.
+    // pakai updateId ASLI dari exercise (link CantonScan benar). Fallback ke amulet cid
+    // baru bila updateId tidak tersedia (kasus ambiguous-recovery). Relasi ke lock asli
+    // disimpan di cantonUpdateId + referenceId (lock.id).
+    const unlockLedgerTxId =
+      result.updateId ??
+      (result.unlockedCid
+        ? `unlock:${result.unlockedCid}`
+        : lock.lockedAmuletCid
+          ? `unlock:${lock.lockedAmuletCid}`
+          : `unlock:${lock.id}`);
     try {
       await this.users.recordTransaction({
         userId: user.id,
@@ -1997,9 +2080,8 @@ export class PartyController {
         type: 'CC_UNLOCK',
         description: 'CC Unlocked',
         referenceId: lock.id,
-        ledgerTxId: lock.lockedAmuletCid
-          ? `unlock:${lock.lockedAmuletCid}`
-          : `unlock:${lock.id}`,
+        ledgerTxId: unlockLedgerTxId,
+        cantonUpdateId: lock.lockedAmuletCid ?? undefined,
       });
     } catch (err) {
       // P2002 = sudah ada (idempoten). Selain itu: non-fatal — unlock inti tetap sukses.
@@ -2052,7 +2134,10 @@ export class PartyController {
     @Req() req: AuthedReq,
     @Body() body: RemoveWalletPasswordDto,
   ) {
-    await this.walletPassword.clearPassword(req.user.userId, body.currentPassword);
+    await this.walletPassword.clearPassword(
+      req.user.userId,
+      body.currentPassword,
+    );
     this.logger.log(
       `wallet password removed: user=${req.user.userId.slice(0, 8)}`,
     );

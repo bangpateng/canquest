@@ -5,12 +5,16 @@ import { useEffect, useRef, useState } from "react";
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  Ban,
   Bell,
   Gift,
   Lock,
   LockOpen,
+  ShieldCheck,
+  ShieldOff,
   Sparkles,
   Ticket,
+  Undo2,
   X,
 } from "lucide-react";
 import { iconButtonClass } from "@/lib/ui/ui-button-styles";
@@ -56,6 +60,14 @@ function txLabel(
       return t("transactions.ccLocked");
     case "CC_UNLOCK":
       return t("transactions.ccUnlocked");
+    case "OFFER_REJECTED":
+      return t("transactions.offerRejected");
+    case "OFFER_WITHDRAWN":
+      return t("transactions.offerWithdrawn");
+    case "PREAPPROVAL_ENABLED":
+      return t("transactions.preapprovalEnabled");
+    case "PREAPPROVAL_DISABLED":
+      return t("transactions.preapprovalDisabled");
     default:
       return tx.description;
   }
@@ -129,6 +141,12 @@ function NotificationRow({ item }: { item: NotificationItem }) {
   const tx = item;
   const ccAmt = Math.abs(Number(tx.amountMicroCc)) / 1_000_000;
   const title = tx.description?.trim() || txLabel(tx, t);
+  // Toggle onchain (amount 0) — netral, tanpa amount sign.
+  const isToggle =
+    tx.type === "OFFER_REJECTED" ||
+    tx.type === "OFFER_WITHDRAWN" ||
+    tx.type === "PREAPPROVAL_ENABLED" ||
+    tx.type === "PREAPPROVAL_DISABLED";
   // Arah: TRANSFER_OUT & CC_LOCK = keluar (−), sisanya = masuk (+).
   const isDebit = tx.type === "TRANSFER_OUT" || tx.type === "CC_LOCK";
 
@@ -142,14 +160,20 @@ function NotificationRow({ item }: { item: NotificationItem }) {
           ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
           : tx.type === "CC_UNLOCK"
             ? "bg-green-500/10 text-green-600 dark:text-green-400"
-            : "bg-[var(--primary)]/15 text-[var(--foreground)]",
+            : tx.type === "PREAPPROVAL_ENABLED"
+              ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
+              : isToggle
+                ? "bg-[var(--muted)] text-[var(--muted-foreground)]"
+                : "bg-[var(--primary)]/15 text-[var(--foreground)]",
   );
 
   const amountClass = cn(
     "shrink-0 text-sm font-semibold tabular-nums",
-    isDebit
-      ? "text-red-600 dark:text-red-400"
-      : "text-green-600 dark:text-green-400",
+    isToggle
+      ? "text-[var(--muted-foreground)]"
+      : isDebit
+        ? "text-red-600 dark:text-red-400"
+        : "text-green-600 dark:text-green-400",
   );
 
   return (
@@ -167,6 +191,14 @@ function NotificationRow({ item }: { item: NotificationItem }) {
             <Lock className="h-4 w-4" aria-hidden />
           ) : tx.type === "CC_UNLOCK" ? (
             <LockOpen className="h-4 w-4" aria-hidden />
+          ) : tx.type === "OFFER_REJECTED" ? (
+            <Ban className="h-4 w-4" aria-hidden />
+          ) : tx.type === "OFFER_WITHDRAWN" ? (
+            <Undo2 className="h-4 w-4" aria-hidden />
+          ) : tx.type === "PREAPPROVAL_ENABLED" ? (
+            <ShieldCheck className="h-4 w-4" aria-hidden />
+          ) : tx.type === "PREAPPROVAL_DISABLED" ? (
+            <ShieldOff className="h-4 w-4" aria-hidden />
           ) : (
             <Gift className="h-4 w-4" aria-hidden />
           )}
@@ -179,10 +211,14 @@ function NotificationRow({ item }: { item: NotificationItem }) {
             {txLabel(tx, t)} · {timeAgo(tx.createdAt, t)}
           </span>
         </span>
-        <span className={amountClass}>
-          {isDebit ? "\u2212" : "+"}
-          {ccAmt.toLocaleString(undefined, { maximumFractionDigits: 6 })} CC
-        </span>
+        {isToggle ? (
+          <span className={amountClass}>—</span>
+        ) : (
+          <span className={amountClass}>
+            {isDebit ? "\u2212" : "+"}
+            {ccAmt.toLocaleString(undefined, { maximumFractionDigits: 6 })} CC
+          </span>
+        )}
       </Link>
     </li>
   );
@@ -272,6 +308,14 @@ export function TransactionNotifications() {
         return <Lock className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />;
       case "CC_UNLOCK":
         return <LockOpen className="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />;
+      case "OFFER_REJECTED":
+        return <Ban className="mt-0.5 h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" />;
+      case "OFFER_WITHDRAWN":
+        return <Undo2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" />;
+      case "PREAPPROVAL_ENABLED":
+        return <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />;
+      case "PREAPPROVAL_DISABLED":
+        return <ShieldOff className="mt-0.5 h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" />;
       default:
         return <Gift className="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />;
     }
@@ -295,6 +339,14 @@ export function TransactionNotifications() {
         return t("notifications.toastLocked", { amount });
       case "CC_UNLOCK":
         return t("notifications.toastUnlocked", { amount });
+      case "OFFER_REJECTED":
+        return t("transactions.offerRejected");
+      case "OFFER_WITHDRAWN":
+        return t("transactions.offerWithdrawn");
+      case "PREAPPROVAL_ENABLED":
+        return t("transactions.preapprovalEnabled");
+      case "PREAPPROVAL_DISABLED":
+        return t("transactions.preapprovalDisabled");
       case "TRANSFER_IN":
       default:
         return t("notifications.toastReceived", { amount });

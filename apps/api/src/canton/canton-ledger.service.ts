@@ -913,7 +913,7 @@ export class CantonLedgerService {
 
   async cancelTransferPreapprovalViaLedger(
     partyId: string,
-  ): Promise<{ ok: boolean; error?: string }> {
+  ): Promise<{ ok: boolean; updateId?: string; error?: string }> {
     // Find the contract authoritatively (receiver view, then provider view).
     const receiverHit = await this.findTransferPreapprovalContract(partyId);
     const c =
@@ -953,15 +953,23 @@ export class CantonLedgerService {
         [actAs],
       );
       if (ok) {
+        // Extract updateId (Canton tx id) dari response untuk pencatatan history.
+        let updateId: string | undefined;
+        try {
+          const parsed = JSON.parse(text) as { updateId?: string };
+          updateId = parsed.updateId ?? undefined;
+        } catch {
+          /* ignore parse error */
+        }
         // Verify the contract is actually archived on-chain (with a short
         // retry to tolerate ledger archive latency). Trust nothing until the
         // authoritative read confirms it is gone.
         const gone = await this.waitForPreapprovalGone(partyId, 5, 600);
         if (gone) {
           this.logger.log(
-            `TransferPreapproval cancelled & verified gone (actAs=${actAs.split('::')[0]})`,
+            `TransferPreapproval cancelled & verified gone (actAs=${actAs.split('::')[0]}) updateId=${updateId?.slice(0, 16) ?? 'unknown'}`,
           );
-          return { ok: true };
+          return { ok: true, updateId };
         }
         this.logger.warn(
           `Cancel returned ok but preapproval STILL ACTIVE after verify (actAs=${actAs.split('::')[0]})`,
@@ -3059,7 +3067,13 @@ export class CantonLedgerService {
   async unlockCc(
     ownerParty: string,
     lockedAmuletCid?: string,
-  ): Promise<{ ok: boolean; unlockedCid?: string; error?: string }> {
+  ): Promise<{
+    ok: boolean;
+    unlockedCid?: string;
+    /** Canton update id dari exercise (untuk CantonScan). */
+    updateId?: string;
+    error?: string;
+  }> {
     const openRound = await this.fetchScanProxyContract(
       'open-and-issuing-mining-rounds',
     );
@@ -3137,8 +3151,19 @@ export class CantonLedgerService {
     }
     const unlockedCid =
       this.findCreatedCidByTemplate(text, ':Splice.Amulet:Amulet') ?? undefined;
-    this.logger.log(`unlockCc OK amulet=${(unlockedCid ?? '?').slice(0, 20)}…`);
-    return { ok: true, unlockedCid };
+    // Extract updateId dari response exercise (untuk link CantonScan). Konsisten
+    // dengan pattern accept/reject TransferInstruction di file ini.
+    let updateId: string | undefined;
+    try {
+      const parsed = JSON.parse(text) as { updateId?: string };
+      updateId = parsed.updateId ?? undefined;
+    } catch {
+      /* ignore parse error */
+    }
+    this.logger.log(
+      `unlockCc OK amulet=${(unlockedCid ?? '?').slice(0, 20)}… updateId=${updateId?.slice(0, 16) ?? 'unknown'}`,
+    );
+    return { ok: true, unlockedCid, updateId };
   }
 
   /**

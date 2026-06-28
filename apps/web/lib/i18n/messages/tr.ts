@@ -251,6 +251,10 @@ export const tr: PlatformMessages = {
     airdrop: "Airdrop",
     ccLocked: "CC kilitlendi",
     ccUnlocked: "CC kilidi açıldı",
+    offerRejected: "Teklif reddedildi",
+    offerWithdrawn: "Transfer iptal edildi",
+    preapprovalEnabled: "Ön onay etkinleştirildi",
+    preapprovalDisabled: "Ön onay devre dışı bırakıldı",
   },
   settings: {
     signingOut: "Çıkış yapılıyor…",

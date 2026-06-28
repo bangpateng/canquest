@@ -247,6 +247,10 @@ export type PlatformMessages = {
     airdrop: string;
     ccLocked: string;
     ccUnlocked: string;
+    offerRejected: string;
+    offerWithdrawn: string;
+    preapprovalEnabled: string;
+    preapprovalDisabled: string;
   };
   settings: {
     signingOut: string;
