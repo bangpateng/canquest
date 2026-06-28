@@ -2810,6 +2810,8 @@ export class CantonLedgerService {
   ): Promise<{
     ok: boolean;
     lockedAmuletCid?: string;
+    /** Canton transaction update id (root) — untuk link explorer Lighthouse. */
+    updateId?: string;
     expiresAt?: string;
     error?: string;
   }> {
@@ -2948,10 +2950,18 @@ export class CantonLedgerService {
     const lockedAmuletCid =
       this.findCreatedCidByTemplate(text, ':Splice.Amulet:LockedAmulet') ??
       undefined;
+    // Extract updateId dari response exercise (untuk link explorer Lighthouse).
+    let updateId: string | undefined;
+    try {
+      const parsed = JSON.parse(text) as { updateId?: string };
+      updateId = parsed.updateId ?? undefined;
+    } catch {
+      /* ignore parse error */
+    }
     this.logger.log(
-      `lockCc OK lockedAmuletCid=${(lockedAmuletCid ?? '?').slice(0, 20)}…`,
+      `lockCc OK lockedAmuletCid=${(lockedAmuletCid ?? '?').slice(0, 20)}… updateId=${updateId?.slice(0, 16) ?? 'unknown'}`,
     );
-    return { ok: true, lockedAmuletCid, expiresAt };
+    return { ok: true, lockedAmuletCid, updateId, expiresAt };
   }
 
   /**

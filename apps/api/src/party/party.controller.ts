@@ -1985,7 +1985,10 @@ export class PartyController {
           type: 'CC_LOCK',
           description: 'CC Locked',
           referenceId: lockRow?.id,
-          ledgerTxId: result.lockedAmuletCid,
+          // ledgerTxId = updateId transaksi (untuk link explorer Lighthouse);
+          // fallback ke lockedAmuletCid bila updateId tidak tersedia.
+          ledgerTxId: result.updateId ?? result.lockedAmuletCid,
+          cantonUpdateId: result.lockedAmuletCid,
         });
       } catch (err) {
         // P2002 = sudah ada (idempoten). Selain itu: non-fatal — lock inti tetap sukses.
