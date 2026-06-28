@@ -207,8 +207,6 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
     if (onChainMicro > existing.balanceMicroCc) {
       const deltaMicro = onChainMicro - existing.balanceMicroCc;
       const deltaCc = Number(deltaMicro) / 1_000_000;
-      const ledgerTxId = `inbound-sync:${userId}:${onChainMicro.toString()}`;
-
       if (await this.isExplainedByRecentAppActivity(userId, deltaMicro)) {
         await this.prisma.ccBalance.update({
           where: { userId },
@@ -217,34 +215,13 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
         return;
       }
 
-      // upsert dengan unique constraint @@unique([userId, ledgerTxId])
-      // agar dua sync konkuren tidak create baris duplikat.
-      try {
-        await this.prisma.ccTransaction.upsert({
-          where: { userId_ledgerTxId: { userId, ledgerTxId } },
-          create: {
-            userId,
-            amountMicroCc: deltaMicro,
-            type: 'TRANSFER_IN',
-            description: `Received ${deltaCc} CC from Canton network`,
-            referenceId: 'Canton network',
-            ledgerTxId,
-            settledAt: new Date(),
-          },
-          update: {}, // no-op jika sudah ada
-        });
-        this.logger.log(
-          `Recorded TRANSFER_IN ${deltaCc} CC for @${username} (balance sync)`,
-        );
-      } catch (err) {
-        // Jika race condition terjadi, error duplicate key dibungkam dan
-        // balance tetap di-update di bawah — tidak ada data hilang.
-        if (!String(err).includes('Unique constraint')) {
-          this.logger.warn(
-            `upsert TRANSFER_IN failed for @${username}: ${String(err)}`,
-          );
-        }
-      }
+      // JANGAN create row history synthetic (ledgerTxId "inbound-sync:...") — itu
+      // bukan tx onchain asli dan tidak punya CID event_id Lighthouse yang valid.
+      // Transfer masuk asli sudah tampil di history via fallback on-chain
+      // (Lighthouse, dengan event_id yang benar). Balance tetap di-sync di bawah.
+      this.logger.log(
+        `Balance +${deltaCc} CC for @${username} synced from chain (no synthetic history row)`,
+      );
 
       await this.prisma.ccBalance.update({
         where: { userId },
