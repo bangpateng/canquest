@@ -141,22 +141,46 @@ export function WinnersPanel({ questId }: { questId: string }) {
         body: JSON.stringify(body),
       },
     );
-    const data = (await res.json()) as {
-      distributed: number;
-      results: { email: string; ccSent: boolean; ccAmount: number }[];
+    const data = (await res.json().catch(() => ({}))) as {
+      distributed?: number;
+      failed?: number;
+      results?: {
+        drawId: string;
+        userId: string;
+        email: string;
+        ccSent: boolean;
+        ccAmount: number;
+      }[];
     };
     if (res.ok) {
+      // ccSent-aware: hanya mark distributed=true untuk winner yang BENAR-BENAR
+      // terkirim onchain. Yang gagal tetap "Pending" → tombol Send muncul lagi
+      // → admin bisa retry tanpa double-pay (backend filter distributed:false).
+      const sentDrawIds = new Set(
+        (data.results ?? []).filter((r) => r.ccSent).map((r) => r.drawId),
+      );
+      const inScope = (w: Winner) =>
+        drawId === "all" || w.drawId === drawId;
       setWinners((prev) =>
         prev.map((w) =>
-          drawId === "all" || w.drawId === drawId
+          inScope(w) && sentDrawIds.has(w.drawId)
             ? { ...w, distributed: true, distributedAt: new Date().toISOString() }
             : w,
         ),
       );
-      setMessage({
-        type: "ok",
-        text: `${data.distributed} reward(s) distributed.`,
-      });
+      const sent = data.distributed ?? 0;
+      const failed = data.failed ?? 0;
+      if (failed > 0) {
+        setMessage({
+          type: "err",
+          text: `${sent} sent, ${failed} failed on-chain. Failed winners stay "Pending" — click Send again to retry.`,
+        });
+      } else {
+        setMessage({
+          type: "ok",
+          text: `${sent} reward(s) distributed.`,
+        });
+      }
     } else {
       setMessage({ type: "err", text: "Distribution failed" });
     }

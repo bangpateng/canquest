@@ -1090,7 +1090,7 @@ export class AdminService {
   async distributeRewards(questId: string, drawIds?: string[]) {
     const quest = await this.prisma.quest.findUnique({
       where: { id: questId },
-      select: { rewardType: true },
+      select: { rewardType: true, title: true },
     });
     if (quest) {
       const rt = normalizeRewardType(quest.rewardType);
@@ -1125,28 +1125,30 @@ export class AdminService {
       },
     });
 
-    if (draws.length === 0) return { distributed: 0, results: [] };
+    if (draws.length === 0) return { distributed: 0, failed: 0, results: [] };
 
     const results: Array<{
+      drawId: string;
       userId: string;
       email: string;
       ccSent: boolean;
       ccAmount: number;
       inviteCode: string | null;
+      error: string | null;
     }> = [];
+
+    // Quest title dipakai sebagai deskripsi reward — sudah di-fetch di atas
+    // (bersama rewardType). Cukup ambil label-nya, jangan fetch ulang per draw.
+    const rewardLabel = quest?.title ?? 'Quest';
 
     for (const draw of draws) {
       const user = draw.user;
       let ccSent = false;
       let ledgerTxId: string | null = null;
+      let failureReason: string | null = null;
 
       if (draw.ccAmount > 0 && user.cantonPartyId) {
         try {
-          const quest = await this.prisma.quest.findUnique({
-            where: { id: questId },
-            select: { title: true },
-          });
-          const rewardLabel = quest?.title ?? 'Quest';
           const rewardResult = await this.splice.sendReward({
             receiverPartyId: user.cantonPartyId,
             amountCc: draw.ccAmount,
@@ -1166,37 +1168,63 @@ export class AdminService {
               transferInstructionCid:
                 rewardResult.transferInstructionCid ?? null,
             });
+          } else {
+            failureReason =
+              rewardResult.error ?? 'Reward transfer failed on-chain';
           }
         } catch (err) {
-          this.logger.warn(
-            `CC reward failed for ${user.email}: ${err instanceof Error ? err.message : String(err)}`,
-          );
+          failureReason = err instanceof Error ? err.message : String(err);
         }
+      } else if (draw.ccAmount <= 0) {
+        // Tidak ada CC untuk dikirim (mis. winner varian CODE atau ccAmount 0).
+        // Tidak ada transfer gagal — anggap selesai tanpa CC.
+        ccSent = true;
+      } else if (!user.cantonPartyId) {
+        failureReason =
+          'Winner has no Canton wallet (cantonPartyId missing) — cannot send CC';
       }
 
+      if (failureReason) {
+        this.logger.warn(
+          `DISTRIBUTE_FAIL draw=${draw.id} user=${user.email}: ${failureReason}`,
+        );
+      }
+
+      // ⚠️ Anti-silent-failure: distributed HANYA true jika CC benar-benar terkirim
+      // (atau tidak ada CC yang perlu dikirim). Sebelumnya distributed selalu di-set
+      // true walau transfer gagal → user tidak bisa retry & UI bilang "Sent" padahal
+      // CC tidak masuk. Sekarang draw yang gagal tetap `distributed=false` sehingga
+      // tombol Send muncul lagi di admin UI dan bisa di-retry tanpa double-pay
+      // (query filter `distributed:false` + endpoint claim juga cek distributed).
       await this.prisma.winnerDraw.update({
         where: { id: draw.id },
         data: {
-          distributed: true,
-          ledgerTxId: ledgerTxId ?? undefined,
-          distributedAt: new Date(),
+          distributed: ccSent,
+          // Jangan overwrite ledgerTxId yang sudah ada dengan null saat retry gagal.
+          ...(ledgerTxId ? { ledgerTxId } : {}),
+          distributedAt: ccSent ? new Date() : null,
         },
       });
 
       results.push({
+        drawId: draw.id,
         userId: draw.userId,
         email: draw.user.email,
         ccSent,
         ccAmount: draw.ccAmount,
         inviteCode: draw.inviteCode,
+        error: failureReason,
       });
 
       this.logger.log(
-        `Reward distributed: ${draw.user.email} — ${draw.ccAmount} CC (sent: ${String(ccSent)}) code: ${draw.inviteCode ?? 'none'}`,
+        `Reward distribute draw=${draw.id}: ${draw.user.email} — ${draw.ccAmount} CC (sent: ${String(ccSent)}) code: ${draw.inviteCode ?? 'none'}` +
+          (failureReason ? ` reason=${failureReason}` : ''),
       );
     }
 
-    return { distributed: results.length, results };
+    const sentCount = results.filter((r) => r.ccSent).length;
+    const failedCount = results.length - sentCount;
+    return { distributed: sentCount, failed: failedCount, results };
   }
 
   /* ────────────────────────────────────────────────────────

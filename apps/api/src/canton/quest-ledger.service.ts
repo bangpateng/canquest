@@ -1170,7 +1170,9 @@ export class QuestLedgerService implements OnModuleInit {
       return { ok: true, claimFinalCid, txLogCid, errors: [] };
     }
 
-    this.logger.warn(`AtomicFeeAndReward failed: ${text.slice(0, 300)}`);
+    this.logger.warn(
+      `DAML_AUDIT_TRAIL_FAIL AtomicFeeAndReward claimContractId=${params.claimContractId.slice(0, 16)} referenceId=${params.referenceId} amountMicroCc=${params.amountMicroCc}: ${text.slice(0, 300)}`,
+    );
     return {
       ok: false,
       claimFinalCid: null,

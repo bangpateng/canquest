@@ -2154,7 +2154,7 @@ export class QuestsService {
         });
         if (!atomicResult.ok) {
           this.logger.warn(
-            `AtomicFeeAndReward FCFS failed (non-blocking): ${atomicResult.errors.join(' | ')}`,
+            `DAML_AUDIT_TRAIL_FAIL AtomicFeeAndReward FCFS quest=${questId.slice(0, 8)} user=@${username} (non-blocking): ${atomicResult.errors.join(' | ')}`,
           );
         }
       }
@@ -2447,7 +2447,7 @@ export class QuestsService {
         });
         if (!atomicResult.ok) {
           this.logger.warn(
-            `AtomicFeeAndReward DrawCC failed (non-blocking): ${atomicResult.errors.join(' | ')}`,
+            `DAML_AUDIT_TRAIL_FAIL AtomicFeeAndReward DrawCC quest=${questId.slice(0, 8)} user=@${username} (non-blocking): ${atomicResult.errors.join(' | ')}`,
           );
         }
       }
@@ -2783,7 +2783,7 @@ export class QuestsService {
         });
         if (!revealRes.ok) {
           this.logger.warn(
-            `RevealRewardCode (${codeClaimKind}) failed (non-blocking): ${revealRes.errors.join(' | ')}`,
+            `DAML_AUDIT_TRAIL_FAIL RevealRewardCode ${codeClaimKind} quest=${questId.slice(0, 8)} user=@${username} (non-blocking): ${revealRes.errors.join(' | ')}`,
           );
         }
       }
@@ -3092,7 +3092,7 @@ export class QuestsService {
         });
         if (!atomicResult.ok) {
           this.logger.warn(
-            `AtomicFeeAndReward (CC+Code) failed (non-blocking): ${atomicResult.errors.join(' | ')}`,
+            `DAML_AUDIT_TRAIL_FAIL AtomicFeeAndReward CC+Code quest=${questId.slice(0, 8)} user=@${username} (non-blocking): ${atomicResult.errors.join(' | ')}`,
           );
         }
         // Reveal kode yang baru di-assign dari pool (hanya bila ada kode).
@@ -3103,7 +3103,7 @@ export class QuestsService {
           });
           if (!revealRes.ok) {
             this.logger.warn(
-              `RevealRewardCode (CC+Code) failed (non-blocking): ${revealRes.errors.join(' | ')}`,
+              `DAML_AUDIT_TRAIL_FAIL RevealRewardCode CC+Code quest=${questId.slice(0, 8)} user=@${username} code=${finalCode.slice(0, 6)}… (non-blocking): ${revealRes.errors.join(' | ')}`,
             );
           }
         }
