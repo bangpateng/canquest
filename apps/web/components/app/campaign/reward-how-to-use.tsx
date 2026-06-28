@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils/utils";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
@@ -49,10 +50,21 @@ export function RewardHowToUse({
       </p>
 
       {instructions ? (
-        // Instruksi custom admin — tampilkan apa adanya (hormati newline).
-        <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-[var(--foreground)]">
-          {instructions}
-        </p>
+        // Instruksi custom admin — URL di dalamnya otomatis jadi link klik.
+        // Font/warna/ukuran samakan "Your rewards are ready below" (text-xs muted).
+        <div className="mt-2 space-y-1.5">
+          {instructions
+            .split(/\n/)
+            .filter((line) => line.trim().length > 0)
+            .map((line, i) => (
+              <p
+                key={i}
+                className="whitespace-pre-wrap text-xs leading-relaxed text-[var(--muted-foreground)]"
+              >
+                {renderTextWithLinks(line)}
+              </p>
+            ))}
+        </div>
       ) : (
         // Template 3-step default.
         <ol className="mt-3 space-y-2.5">
@@ -145,4 +157,54 @@ function ensureAbsoluteUrl(raw: string): string {
   if (!s) return s;
   if (/^https?:\/\//i.test(s)) return s;
   return `https://${s}`;
+}
+
+/**
+ * Regex untuk mendeteksi URL (http/https atau www.) di dalam teks bebas.
+ */
+const URL_RE = /(?:https?:\/\/[^\s]+|www\.[^\s]+)/gi;
+
+/**
+ * Render teks bebas, mengubah SETIAP URL di dalamnya menjadi <a> yang bisa diklik
+ * (buka tab baru). Dipakai untuk instruksi custom admin supaya URL-nya aktif.
+ */
+function renderTextWithLinks(text: string): ReactNode {
+  const parts: ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  // Salin regex (stateful dengan /g) supaya bisa di-loop.
+  const re = new RegExp(URL_RE.source, "gi");
+  let key = 0;
+
+  while ((match = re.exec(text)) !== null) {
+    const start = match.index;
+    const rawUrl = match[0];
+
+    // Teks sebelum URL.
+    if (start > lastIndex) {
+      parts.push(text.slice(lastIndex, start));
+    }
+
+    const href = ensureAbsoluteUrl(rawUrl);
+    parts.push(
+      <a
+        key={`url-${key++}`}
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="font-medium text-canton underline underline-offset-2 hover:text-canton/80 break-all"
+      >
+        {rawUrl}
+      </a>,
+    );
+
+    lastIndex = start + rawUrl.length;
+  }
+
+  // Sisa teks setelah URL terakhir.
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return parts.length > 0 ? parts : text;
 }
