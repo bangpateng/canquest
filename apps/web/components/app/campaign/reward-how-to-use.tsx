@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CheckCircle2, ExternalLink } from "lucide-react";
-import { buttonVariants } from "@/components/ui/button";
+import { CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils/utils";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 
@@ -46,7 +45,7 @@ export function RewardHowToUse({
         className,
       )}
     >
-      <p className="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
+      <p className="text-sm font-bold text-[var(--foreground)]">
         {t("earnCampaigns.howToUseTitle")}
       </p>
 
@@ -60,23 +59,20 @@ export function RewardHowToUse({
         <ol className="mt-3 space-y-2.5">
           <li className="flex items-start gap-3">
             <StepBadge n={1} />
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-              <span className="text-sm leading-relaxed text-[var(--foreground)]">
-                {t("earnCampaigns.howToUseStepRegister")}
-              </span>
+            <div className="min-w-0 flex-1 flex-wrap items-center gap-1.5 text-sm leading-relaxed text-[var(--foreground)]">
+              <span>{t("earnCampaigns.howToUseStepRegister")}</span>
               {url ? (
-                <Link
-                  href={url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={cn(
-                    buttonVariants({ size: "sm" }),
-                    "gap-1.5",
-                  )}
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  {t("earnCampaigns.howToUseOpen")}
-                </Link>
+                <>
+                  <span aria-hidden>: </span>
+                  <Link
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-canton underline underline-offset-2 hover:text-canton/80 break-all"
+                  >
+                    {prettyUrl(url)}
+                  </Link>
+                </>
               ) : null}
             </div>
           </li>
@@ -126,4 +122,16 @@ function StepBadge({ n, done }: { n: number; done?: boolean }) {
       {done ? <CheckCircle2 className="h-4 w-4" strokeWidth={2.5} /> : n}
     </span>
   );
+}
+
+/** Tampilkan URL lebih bersih: buang protokol + www, batasi panjang. */
+function prettyUrl(raw: string): string {
+  let s = raw.trim();
+  try {
+    const u = new URL(s);
+    s = u.hostname.replace(/^www\./, "") + (u.pathname && u.pathname !== "/" ? u.pathname : "");
+  } catch {
+    s = s.replace(/^https?:\/\//, "").replace(/^www\./, "");
+  }
+  return s.length > 48 ? `${s.slice(0, 45)}…` : s;
 }
