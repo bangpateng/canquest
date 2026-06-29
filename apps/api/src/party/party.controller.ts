@@ -713,115 +713,124 @@ export class PartyController {
     }
     // Kalau null → ledger akan menolak jika dana kurang
 
-    // ── TRANSFER + FEE via CIP-56 ────────────────────────────────────
-    // Fase B: bila ada fee, gunakan executeTransferWithFee (ATOMIC — 1 tx id
-    // untuk transfer + fee, commit bareng atau gagal bareng, anti fee-bocor).
-    // Bila tidak ada fee (effectiveFeeCc==0), pakai transfer tunggal biasa.
+    // ── MAIN TRANSFER via CIP-0056 (satu-satunya jalur) ─────────────
     let accepted = false;
     let ledgerTxId: string | undefined;
     let transferMethod: 'direct' | 'offer_accept' | 'offer_only' =
       'offer_accept';
-    let feeCollected = false;
-    let feeLedgerTxId: string | undefined;
-    let feeTreasuryPartyId: string | undefined;
 
-    const feeParty =
-      this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
-      validatorPartyId;
+    const cip56Result = await this.ledger.executeTransferFactoryTransfer({
+      senderPartyId: sender.cantonPartyId,
+      receiverPartyId: recipientPartyId,
+      amountCc: amount,
+      description,
+    });
 
-    if (effectiveFeeCc > 0 && sender.cantonPartyId && feeParty) {
-      // ── ATOMIC path: transfer + fee dalam 1 Canton transaction ──
-      const atomicResult = await this.ledger.executeTransferWithFee({
-        senderPartyId: sender.cantonPartyId,
-        receiverPartyId: recipientPartyId,
-        amountCc: amount,
-        feeCc: effectiveFeeCc,
-        feeRecipientPartyId: feeParty,
-        description,
-        atomicRequired: false, // fallback non-atomic bila preapproval kurang
-      });
-
-      if (atomicResult.ok) {
-        if (atomicResult.atomic) {
-          // Atomic sukses: 1 tx id untuk transfer + fee (keduanya direct)
-          accepted = true;
-          transferMethod = 'direct';
-          ledgerTxId = atomicResult.updateId ?? undefined;
-          feeCollected = true;
-          feeLedgerTxId = atomicResult.feeUpdateId ?? undefined;
-          feeTreasuryPartyId = feeParty;
-          this.logger.log(
-            `CC transfer+fee ATOMIC: ${sender.username} → ${recipientLabel} ${amount} CC + fee ${effectiveFeeCc} CC (1 tx id)`,
-          );
-        } else {
-          // Fallback non-atomic berhasil (ok:true berarti main+fee transfer sukses).
-          // Catatan: ledger mungkin tidak kembalikan updateId di root response,
-          // jami jangan pakai keberadaan updateId sebagai indikator kesuksesan.
-          accepted = true;
-          transferMethod = 'direct';
-          ledgerTxId = atomicResult.updateId ?? undefined;
-          feeCollected = true;
-          feeLedgerTxId = atomicResult.feeUpdateId ?? undefined;
-          feeTreasuryPartyId = feeParty;
-          this.logger.log(
-            `CC transfer+fee non-atomic fallback OK: ${sender.username} → ${recipientLabel} ${amount} CC (fee ${effectiveFeeCc} CC)`,
-          );
-        }
-      } else {
-        throw new BadRequestException(
-          `Transfer gagal: ${atomicResult.error?.slice(0, 120) ?? 'unknown'}`,
+    if (cip56Result.ok) {
+      if (cip56Result.transferKind === 'direct') {
+        accepted = true;
+        transferMethod = 'direct';
+        ledgerTxId = cip56Result.updateId ?? undefined;
+        this.logger.log(
+          `CC transfer direct: ${sender.username} → ${recipientLabel} ${amount} CC`,
         );
-      }
-    } else {
-      // ── Transfer tunggal (tanpa fee) — jalur lama ──
-      const cip56Result = await this.ledger.executeTransferFactoryTransfer({
-        senderPartyId: sender.cantonPartyId,
-        receiverPartyId: recipientPartyId,
-        amountCc: amount,
-        description,
-      });
-
-      if (cip56Result.ok) {
-        if (cip56Result.transferKind === 'direct') {
-          accepted = true;
-          transferMethod = 'direct';
-          ledgerTxId = cip56Result.updateId ?? undefined;
-          this.logger.log(
-            `CC transfer direct: ${sender.username} → ${recipientLabel} ${amount} CC`,
-          );
-        } else if (cip56Result.transferKind === 'offer') {
-          // Receiver tidak punya TransferPreapproval aktif.
-          // JANGAN auto-accept — biarkan pending di inbox wallet receiver.
-          ledgerTxId =
-            cip56Result.transferInstructionCid ??
-            cip56Result.updateId ??
-            undefined;
-          transferMethod = 'offer_only';
-          this.logger.log(
-            `CC transfer offer (pending): ${sender.username} → ${recipientLabel} ${amount} CC ` +
-              `— recipient must accept via Offers menu`,
-          );
-        }
-      }
-
-      if (!cip56Result.ok) {
-        throw new BadRequestException(
-          `Transfer gagal: ${cip56Result.error?.slice(0, 120) ?? 'unknown'}`,
+      } else if (cip56Result.transferKind === 'offer') {
+        // Receiver tidak punya TransferPreapproval aktif.
+        // JANGAN auto-accept — biarkan pending di inbox wallet receiver.
+        // User terima/reject manual via menu Offers (POST /party/offers/accept|reject).
+        ledgerTxId =
+          cip56Result.transferInstructionCid ??
+          cip56Result.updateId ??
+          undefined;
+        transferMethod = 'offer_only';
+        this.logger.log(
+          `CC transfer offer (pending): ${sender.username} → ${recipientLabel} ${amount} CC ` +
+            `— recipient must accept via Offers menu`,
         );
       }
     }
 
-    // ── Record fee transaction (bila fee terkumpul, atomic atau fallback) ──
-    if (feeCollected && feeTreasuryPartyId) {
-      await this.users.recordTransaction({
-        userId: sender.id,
-        amountCc: effectiveFeeCc,
-        type: 'TRANSFER_OUT',
-        description: `Platform fee (transfer to ${recipientLabel})`,
-        // Penanda "fee:" → filter visibility A3 sembunyikan baris ini dari history user.
-        referenceId: `fee:${normalizeCantonPartyId(feeTreasuryPartyId) ?? feeTreasuryPartyId}`,
-        ledgerTxId: feeLedgerTxId,
-      });
+    if (!cip56Result.ok) {
+      throw new BadRequestException(
+        `Transfer gagal: ${cip56Result.error?.slice(0, 120) ?? 'unknown'}`,
+      );
+    }
+
+    // ── FEE COLLECT (HANYA jika transfer berhasil) ───────────────────
+    let feeCollected = false;
+    let feeLedgerTxId: string | undefined;
+    let feeTreasuryPartyId: string | undefined;
+
+    if (effectiveFeeCc > 0 && sender.cantonPartyId && accepted) {
+      const feeParty =
+        this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
+        validatorPartyId;
+      if (feeParty) {
+        try {
+          const feeResult = await this.ledger.executeTransferFactoryTransfer({
+            senderPartyId: sender.cantonPartyId,
+            receiverPartyId: feeParty,
+            amountCc: effectiveFeeCc,
+            description: `Platform fee: ${recipientLabel}`,
+          });
+          if (feeResult.ok && feeResult.transferKind === 'direct') {
+            feeCollected = true;
+            feeLedgerTxId = feeResult.updateId ?? undefined;
+            feeTreasuryPartyId = feeParty;
+            await this.users.recordTransaction({
+              userId: sender.id,
+              amountCc: effectiveFeeCc,
+              type: 'TRANSFER_OUT',
+              description: `Platform fee (transfer to ${recipientLabel})`,
+              // Penanda "fee:" → filter visibility A3 sembunyikan baris ini dari history user.
+              referenceId: `fee:${normalizeCantonPartyId(feeParty) ?? feeParty}`,
+              ledgerTxId: feeLedgerTxId,
+            });
+            this.logger.log(
+              `Fee collected: ${sender.username} → ${feeParty.split('::')[0]} ${effectiveFeeCc} CC (direct)`,
+            );
+          } else if (
+            feeResult.ok &&
+            feeResult.transferKind === 'offer' &&
+            feeResult.transferInstructionCid
+          ) {
+            const acceptR = await this.ledger.acceptTransferInstruction(
+              feeResult.transferInstructionCid,
+              feeParty,
+            );
+            if (acceptR.ok) {
+              feeCollected = true;
+              feeLedgerTxId =
+                acceptR.updateId ?? feeResult.updateId ?? undefined;
+              feeTreasuryPartyId = feeParty;
+              await this.users.recordTransaction({
+                userId: sender.id,
+                amountCc: effectiveFeeCc,
+                type: 'TRANSFER_OUT',
+                description: `Platform fee (transfer to ${recipientLabel})`,
+                // Penanda "fee:" → filter visibility A3 sembunyikan baris ini dari history user.
+                referenceId: `fee:${normalizeCantonPartyId(feeParty) ?? feeParty}`,
+                ledgerTxId: feeLedgerTxId,
+              });
+              this.logger.log(
+                `Fee collected: ${sender.username} → ${feeParty.split('::')[0]} ${effectiveFeeCc} CC (offer-accept)`,
+              );
+            } else {
+              this.logger.warn(
+                `Fee offer accept failed: transfer proceeds without fee`,
+              );
+            }
+          } else {
+            this.logger.warn(
+              `Fee NOT collected (transferKind=${feeResult.transferKind}, ok=${feeResult.ok}). Transfer proceeds.`,
+            );
+          }
+        } catch (feeErr) {
+          this.logger.warn(
+            `Fee collect error (non-blocking): ${String(feeErr)}`,
+          );
+        }
+      }
     }
 
     // ── Step 3: Record + response ──────────────────────────────────────
@@ -889,7 +898,7 @@ export class PartyController {
         // Status PENDING: dana sudah keluar sebagai offer, tapi belum diterima
         // receiver. Saat offer di-accept, acceptOfferInbox update ke COMPLETED.
         status: 'PENDING',
-        transferInstructionCid: ledgerTxId ?? null,
+        transferInstructionCid: cip56Result.transferInstructionCid ?? null,
       });
       void this.inboundSync.alignBalanceFromChain(sender.id, sender.username);
       return {
