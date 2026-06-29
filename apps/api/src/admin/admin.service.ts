@@ -1157,7 +1157,38 @@ export class AdminService {
       const user = draw.user;
       let ccSent = false;
       let ledgerTxId: string | null = null;
+      let rewardPending = false;
+      let rewardInstructionCid: string | null = null;
       let failureReason: string | null = null;
+
+      // ⚠️ SECURITY (C3): Atomic claim BEFORE sending CC. Two concurrent
+      // distribute requests (double-click, two admin tabs, retry storm) both
+      // read `distributed:false` above and would both call sendReward → the
+      // winner is paid twice. We atomically flip the draw to distributed=true
+      // with a conditional updateMany: only the request that affects count===1
+      // owns the draw. Others get count===0 and skip. Mirrors the
+      // acquireFcfsOnChainLock pattern in quests.service.ts.
+      const claimed = await this.prisma.winnerDraw.updateMany({
+        where: { id: draw.id, distributed: false },
+        data: { distributed: true },
+      });
+      if (claimed.count !== 1) {
+        // Another concurrent request already claimed this draw — skip it to
+        // avoid a double payout. It will be reported as already-handled.
+        results.push({
+          drawId: draw.id,
+          userId: draw.userId,
+          email: draw.user.email,
+          ccSent: true,
+          ccAmount: draw.ccAmount,
+          inviteCode: draw.inviteCode,
+          error: 'Already distributed by a concurrent request',
+        });
+        this.logger.warn(
+          `DISTRIBUTE_SKIP draw=${draw.id}: already claimed concurrently`,
+        );
+        continue;
+      }
 
       if (draw.ccAmount > 0 && user.cantonPartyId) {
         try {
@@ -1169,23 +1200,41 @@ export class AdminService {
           if (rewardResult.ok) {
             ccSent = true; // dispatched (direct atau pending offer)
             ledgerTxId = rewardResult.rewardTxId ?? null;
-            await this.users.recordTransaction({
-              userId: user.id,
-              amountCc: draw.ccAmount,
-              type: 'QUEST_REWARD',
-              description: rewardLabel,
-              referenceId: questId,
-              ledgerTxId: rewardResult.rewardTxId ?? undefined,
-              status: rewardResult.pending ? 'PENDING' : 'COMPLETED',
-              transferInstructionCid:
-                rewardResult.transferInstructionCid ?? null,
-            });
+            rewardPending = rewardResult.pending;
+            rewardInstructionCid = rewardResult.transferInstructionCid ?? null;
           } else {
             failureReason =
               rewardResult.error ?? 'Reward transfer failed on-chain';
           }
         } catch (err) {
           failureReason = err instanceof Error ? err.message : String(err);
+        }
+
+        // SECURITY (C3): recordTransaction is OUTSIDE the sendReward try/catch.
+        // Once sendReward succeeds, CC has left the wallet on-chain (irreversible).
+        // If recordTransaction threw inside the try above, failureReason would be
+        // set and distributed would flip back to false → a retry would sendReward
+        // AGAIN (double payout). Now a DB-history failure is logged but does NOT
+        // mark the draw as failed, because the money already moved. We persist the
+        // ledgerTxId so a support reconciliation can backfill the history row.
+        if (ccSent) {
+          try {
+            await this.users.recordTransaction({
+              userId: user.id,
+              amountCc: draw.ccAmount,
+              type: 'QUEST_REWARD',
+              description: rewardLabel,
+              referenceId: questId,
+              ledgerTxId: ledgerTxId ?? undefined,
+              status: rewardPending ? 'PENDING' : 'COMPLETED',
+              transferInstructionCid: rewardInstructionCid,
+            });
+          } catch (recordErr) {
+            // CC already moved — do NOT mark distributed=false. Log + persist txId.
+            this.logger.error(
+              `DISTRIBUTE_HISTORY_FAIL draw=${draw.id}: CC sent (txId=${ledgerTxId ?? 'n/a'}) but history record threw: ${recordErr instanceof Error ? recordErr.message : String(recordErr)}`,
+            );
+          }
         }
       } else if (draw.ccAmount <= 0) {
         // Tidak ada CC untuk dikirim (mis. winner varian CODE atau ccAmount 0).
@@ -1208,6 +1257,9 @@ export class AdminService {
       // CC tidak masuk. Sekarang draw yang gagal tetap `distributed=false` sehingga
       // tombol Send muncul lagi di admin UI dan bisa di-retry tanpa double-pay
       // (query filter `distributed:false` + endpoint claim juga cek distributed).
+      // NOTE: we already flipped distributed=true above for the atomic claim. If
+      // the transfer failed (ccSent=false) we flip it BACK to false so the draw
+      // remains retryable — and so a later retry can re-claim it.
       await this.prisma.winnerDraw.update({
         where: { id: draw.id },
         data: {

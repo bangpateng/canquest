@@ -10,12 +10,20 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { QuestKind, QuestStatus, RewardType } from '../common/prisma-types';
+import { QuestKind } from '../common/prisma-types';
 
 import { AdminService } from './admin.service';
 import { AdminGuard } from './admin.guard';
 import { SetUserStatusDto } from './dto/set-user-status.dto';
-import type { QuestSocialLinkInput } from '../quests/quest-social-links.util';
+import {
+  AddTaskDto,
+  CreateQuestDto,
+  DistributeRewardsDto,
+  DrawWinnersDto,
+  InviteCodesDto,
+  UpdateQuestDto,
+  UpdateTaskDto,
+} from './dto/admin-quest.dto';
 
 @Controller('admin')
 @UseGuards(AuthGuard('admin-jwt'), AdminGuard)
@@ -71,74 +79,14 @@ export class AdminController {
   }
 
   @Post('quests')
-  createQuest(
-    @Body()
-    body: {
-      title: string;
-      projectName?: string | null;
-      org: string;
-      orgSlug: string;
-      description: string;
-      banner?: string;
-      bannerImageUrl?: string | null;
-      logoUrl?: string | null;
-      rewardCc?: number;
-      rewardPool?: string;
-      deadline?: string;
-      startsAt?: string | null;
-      endsAt?: string | null;
-      status?: QuestStatus;
-      rewardType?: RewardType;
-      maxWinners?: number;
-      claimFeeCc?: number | null;
-      winnerMessage?: string | null;
-      redeemUrl?: string | null;
-      redeemInstructions?: string | null;
-      tags?: string[];
-      socialLinks?: QuestSocialLinkInput[];
-      questKind?: QuestKind;
-      tasks?: Array<{
-        type: string;
-        title: string;
-        description?: string;
-        points?: number;
-        target?: string;
-        order?: number;
-        correctAnswer?: string;
-      }>;
-    },
-  ) {
+  createQuest(@Body() body: CreateQuestDto) {
     return this.admin.createQuest(body);
   }
 
   @Patch('quests/:questId')
   updateQuest(
     @Param('questId') questId: string,
-    @Body()
-    body: {
-      title?: string;
-      projectName?: string | null;
-      org?: string;
-      orgSlug?: string;
-      description?: string;
-      banner?: string;
-      bannerImageUrl?: string | null;
-      logoUrl?: string | null;
-      rewardCc?: number;
-      rewardPool?: string;
-      deadline?: string | null;
-      startsAt?: string | null;
-      endsAt?: string | null;
-      status?: QuestStatus;
-      rewardType?: RewardType;
-      maxWinners?: number | null;
-      claimFeeCc?: number | null;
-      winnerMessage?: string | null;
-      redeemUrl?: string | null;
-      redeemInstructions?: string | null;
-      tags?: string[];
-      socialLinks?: QuestSocialLinkInput[];
-    },
+    @Body() body: UpdateQuestDto,
   ) {
     return this.admin.updateQuest(questId, body);
   }
@@ -153,18 +101,7 @@ export class AdminController {
   @Post('quests/:questId/tasks')
   addTask(
     @Param('questId') questId: string,
-    @Body()
-    body: {
-      type: string;
-      title: string;
-      description?: string;
-      points?: number;
-      target?: string;
-      order?: number;
-      correctAnswer?: string;
-      showNewBadge?: boolean;
-      repeatEvery24h?: boolean;
-    },
+    @Body() body: AddTaskDto,
   ) {
     return this.admin.addTask(questId, body);
   }
@@ -172,18 +109,7 @@ export class AdminController {
   @Patch('tasks/:taskId')
   updateTask(
     @Param('taskId') taskId: string,
-    @Body()
-    body: {
-      type?: string;
-      title?: string;
-      description?: string | null;
-      points?: number;
-      target?: string | null;
-      order?: number;
-      correctAnswer?: string | null;
-      showNewBadge?: boolean;
-      repeatEvery24h?: boolean;
-    },
+    @Body() body: UpdateTaskDto,
   ) {
     return this.admin.updateTask(taskId, body);
   }
@@ -210,7 +136,7 @@ export class AdminController {
   @Post('quests/:questId/draw-winners')
   drawWinners(
     @Param('questId') questId: string,
-    @Body() body: { count?: number; userIds?: string[] },
+    @Body() body: DrawWinnersDto,
   ) {
     return this.admin.drawWinners(questId, body);
   }
@@ -225,7 +151,7 @@ export class AdminController {
   @Post('quests/:questId/distribute-rewards')
   distributeRewards(
     @Param('questId') questId: string,
-    @Body() body: { drawIds?: string[] },
+    @Body() body: DistributeRewardsDto,
   ) {
     return this.admin.distributeRewards(questId, body.drawIds);
   }
@@ -235,7 +161,7 @@ export class AdminController {
   @Post('quests/:questId/invite-codes')
   addInviteCodes(
     @Param('questId') questId: string,
-    @Body() body: { codes?: string[]; generateCount?: number; prefix?: string },
+    @Body() body: InviteCodesDto,
   ) {
     const codes =
       body.codes ??

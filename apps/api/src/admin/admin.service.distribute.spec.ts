@@ -38,7 +38,7 @@ describe('AdminService.distributeRewards — anti-silent-failure', () => {
   let service: AdminService;
   let prisma: {
     quest: { findUnique: jest.Mock };
-    winnerDraw: { findMany: jest.Mock; update: jest.Mock };
+    winnerDraw: { findMany: jest.Mock; update: jest.Mock; updateMany: jest.Mock };
   };
   let splice: { sendReward: jest.Mock };
   let users: { recordTransaction: jest.Mock };
@@ -77,7 +77,13 @@ describe('AdminService.distributeRewards — anti-silent-failure', () => {
     };
   }
 
-  /** Capture every winnerDraw.update call so we can assert distributed flag. */
+  /**
+   * Capture every winnerDraw.update call so we can assert the final distributed
+   * flag. The atomic claim uses updateMany (returns {count}), the finalization
+   * uses update. We only track the finalization update calls here — updateMany
+   * is set up in beforeEach to always succeed (count: 1) so the current request
+   * wins the claim.
+   */
   function trackWinnerDrawUpdates(): WinnerDrawUpdateCall[] {
     const calls: WinnerDrawUpdateCall[] = [];
     prisma.winnerDraw.update.mockImplementation((args: any) => {
@@ -102,6 +108,10 @@ describe('AdminService.distributeRewards — anti-silent-failure', () => {
       winnerDraw: {
         findMany: jest.fn(),
         update: jest.fn().mockResolvedValue({}),
+        // C3 atomic claim: by default the current request wins the draw
+        // (count: 1). Tests can override this to {count: 0} to simulate a
+        // concurrent claim that already won.
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     };
     splice = { sendReward: jest.fn() };
@@ -270,5 +280,65 @@ describe('AdminService.distributeRewards — anti-silent-failure', () => {
     );
     expect(splice.sendReward).not.toHaveBeenCalled();
     expect(prisma.winnerDraw.update).not.toHaveBeenCalled();
+  });
+
+  // ── C3: atomic claim prevents double payout on concurrent requests ──────────
+
+  it('skips a draw already claimed by a concurrent request (no double-pay)', async () => {
+    // Simulate a second admin tab / double-click that won the atomic claim
+    // first → updateMany returns count: 0 for THIS request.
+    prisma.winnerDraw.findMany.mockResolvedValue([makeDraw()]);
+    prisma.winnerDraw.updateMany.mockResolvedValue({ count: 0 });
+
+    const result = await service.distributeRewards(QUEST_ID);
+
+    // CRITICAL: sendReward must NOT be called — CC must not leave the wallet.
+    expect(splice.sendReward).not.toHaveBeenCalled();
+    // No finalization update either (claim failed → continue before update).
+    expect(prisma.winnerDraw.update).not.toHaveBeenCalled();
+    // Reported as already-handled, not as a fresh send.
+    expect(result.results[0].error).toContain('concurrent');
+    expect(result.distributed).toBe(1); // counts as handled, not failed
+  });
+
+  it('keeps distributed=false on failure so a later retry can re-claim', async () => {
+    // First attempt: claim wins (count:1) but sendReward fails.
+    prisma.winnerDraw.findMany.mockResolvedValue([makeDraw()]);
+    splice.sendReward.mockResolvedValue({
+      ok: false,
+      pending: false,
+      error: 'insufficient funds',
+    });
+    const updates = trackWinnerDrawUpdates();
+
+    const result = await service.distributeRewards(QUEST_ID);
+
+    expect(updates[0].distributed).toBe(false); // flipped back → retryable
+    expect(result.failed).toBe(1);
+
+    // Simulate the retry: sendReward now succeeds, claim wins again.
+    prisma.winnerDraw.findMany.mockResolvedValue([makeDraw()]);
+    prisma.winnerDraw.updateMany.mockResolvedValue({ count: 1 });
+    splice.sendReward.mockResolvedValue({
+      ok: true,
+      pending: false,
+      rewardTxId: 'tx-retry',
+    });
+    const updates2: WinnerDrawUpdateCall[] = [];
+    prisma.winnerDraw.update.mockImplementation((args: any) => {
+      updates2.push({
+        id: args.where?.id,
+        distributed: args.data?.distributed,
+        ledgerTxId: args.data?.ledgerTxId,
+        distributedAt: args.data?.distributedAt ?? null,
+      });
+      return Promise.resolve({});
+    });
+
+    const result2 = await service.distributeRewards(QUEST_ID);
+
+    expect(updates2[0].distributed).toBe(true);
+    expect(updates2[0].ledgerTxId).toBe('tx-retry');
+    expect(result2.distributed).toBe(1);
   });
 });
