@@ -93,34 +93,42 @@ export class AdminAuthController {
       norm(this.config.get<string>('ADMIN_PANEL_EMAIL'))?.toLowerCase() ||
       norm(process.env.ADMIN_PANEL_EMAIL)?.toLowerCase();
 
-    // Prefer a pre-hashed credential (ADMIN_PANEL_PASSWORD_HASH, bcrypt) so the
-    // raw password never sits in .env / backups. Fall back to the legacy
-    // plaintext ADMIN_PANEL_PASSWORD for backward compatibility (e2e demo
-    // scripts, existing deployments). Either may be configured — never both.
+    // SECURITY (H2): In production the admin password MUST be stored as a bcrypt
+    // hash (ADMIN_PANEL_PASSWORD_HASH), never as plaintext. A plaintext password
+    // in .env / backups is directly readable with no cracking. The plaintext
+    // fallback (ADMIN_PANEL_PASSWORD) is allowed ONLY outside production for
+    // local dev / demo scripts.
     const expectedHash =
       norm(this.config.get<string>('ADMIN_PANEL_PASSWORD_HASH')) ||
       norm(process.env.ADMIN_PANEL_PASSWORD_HASH);
-    const expectedPass =
-      norm(this.config.get<string>('ADMIN_PANEL_PASSWORD')) ||
-      norm(process.env.ADMIN_PANEL_PASSWORD);
+    const isProduction =
+      (this.config.get<string>('NODE_ENV') ?? process.env.NODE_ENV) ===
+      'production';
+    const expectedPass = isProduction
+      ? '' // never read plaintext in production
+      : norm(this.config.get<string>('ADMIN_PANEL_PASSWORD')) ||
+        norm(process.env.ADMIN_PANEL_PASSWORD);
 
-    if (!expectedEmail || (!expectedHash && !expectedPass)) {
-      throw new InternalServerErrorException(
-        [
-          'Admin panel credentials are not configured (ADMIN_PANEL_EMAIL and one of',
-          'ADMIN_PANEL_PASSWORD_HASH / ADMIN_PANEL_PASSWORD).',
-          'Set them in apps/api/.env or ensure no empty OS-level env duplicates those names, then restart the API.',
-        ].join(' '),
-      );
+    if (!expectedEmail || !expectedHash) {
+      if (isProduction || !expectedPass) {
+        throw new InternalServerErrorException(
+          [
+            'Admin panel credentials are not configured.',
+            'Production requires ADMIN_PANEL_EMAIL + ADMIN_PANEL_PASSWORD_HASH (bcrypt).',
+            'Generate a hash: node -e "console.log(require(\'bcrypt\').hashSync(\'YOUR_PASSWORD\', 12))"',
+            'Set them in apps/api/.env or ensure no empty OS-level env duplicates those names, then restart the API.',
+          ].join(' '),
+        );
+      }
     }
 
     const email = login.email.trim().toLowerCase();
     // Constant-time comparison on BOTH fields so neither email nor password
     // leaks through response timing.
     const emailOk = safeEqualString(email, expectedEmail);
-    // bcrypt.verify is internally constant-time; legacy plaintext path uses
-    // safeEqualString to avoid timing leaks. Both are awaited/evaluated before
-    // the branch so the failure path looks identical to a success-mismatch.
+    // bcrypt.verify is internally constant-time; legacy plaintext path (dev
+    // only) uses safeEqualString to avoid timing leaks. Both are evaluated so
+    // the failure path looks identical to a success-mismatch.
     const passOk = expectedHash
       ? await bcrypt.compare(login.password ?? '', expectedHash)
       : safeEqualString(login.password ?? '', expectedPass);

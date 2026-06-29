@@ -14,7 +14,11 @@ export class AdminPanelJwtStrategy extends PassportStrategy(
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: config.getOrThrow<string>('JWT_ACCESS_SECRET'),
+      // SECURITY (H1): verify admin tokens with the dedicated ADMIN_JWT_SECRET,
+      // NOT JWT_ACCESS_SECRET. This is the verify-side counterpart of
+      // admin.module.ts JwtModule — a user-secret leak can no longer mint admin
+      // tokens, because admin tokens are signed AND verified with ADMIN_JWT_SECRET.
+      secretOrKey: config.getOrThrow<string>('ADMIN_JWT_SECRET'),
     });
   }
 

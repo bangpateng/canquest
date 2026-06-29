@@ -85,24 +85,57 @@ function platformLabel(platform: QuestSocialLink["platform"]): string {
   return labels[platform];
 }
 
+/**
+ * SECURITY (H4): Only allow http(s) URLs in social link hrefs.
+ * A campaign creator (admin/partner) controls link.url, and an <a href> that
+ * points to javascript:, data:, or vbscript: executes attacker script in the
+ * page origin on click — which can call /api/party/send-cc with the victim's
+ * auth cookie and drain their wallet. Reject anything that isn't http/https.
+ */
+function safeSocialUrl(raw: string): string | null {
+  try {
+    const u = new URL(raw);
+    return u.protocol === "http:" || u.protocol === "https:" ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
 export function CampaignSocialLinks({ links, className }: Props) {
   if (!links.length) return null;
 
   return (
     <div className={cn("flex flex-wrap items-center gap-2", className)}>
-      {links.map((link) => (
-        <a
-          key={link.platform}
-          href={link.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          title={platformLabel(link.platform)}
-          aria-label={`${platformLabel(link.platform)} (opens in new tab)`}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/5 bg-[var(--muted)]/50 text-slate-400 transition-colors hover:border-[var(--primary)]/40 hover:bg-[var(--primary)]/10 hover:text-slate-100"
-        >
-          <SocialIcon platform={link.platform} className="h-3.5 w-3.5" />
-        </a>
-      ))}
+      {links.map((link) => {
+        const safe = safeSocialUrl(link.url);
+        // Render an inert span (no href) for disallowed schemes so the icon is
+        // still visible but is not clickable/weaponizable.
+        if (!safe) {
+          return (
+            <span
+              key={link.platform}
+              title={`${platformLabel(link.platform)} (invalid link)`}
+              aria-disabled
+              className="inline-flex h-8 w-8 cursor-not-allowed items-center justify-center rounded-lg border border-white/5 bg-[var(--muted)]/50 text-slate-600 opacity-60"
+            >
+              <SocialIcon platform={link.platform} className="h-3.5 w-3.5" />
+            </span>
+          );
+        }
+        return (
+          <a
+            key={link.platform}
+            href={safe}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={platformLabel(link.platform)}
+            aria-label={`${platformLabel(link.platform)} (opens in new tab)`}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/5 bg-[var(--muted)]/50 text-slate-400 transition-colors hover:border-[var(--primary)]/40 hover:bg-[var(--primary)]/10 hover:text-slate-100"
+          >
+            <SocialIcon platform={link.platform} className="h-3.5 w-3.5" />
+          </a>
+        );
+      })}
     </div>
   );
 }

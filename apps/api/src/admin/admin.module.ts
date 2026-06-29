@@ -21,10 +21,26 @@ import { QuestLedgerService } from '../canton/quest-ledger.service';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        secret: config.getOrThrow<string>('JWT_ACCESS_SECRET'),
-        signOptions: { expiresIn: '8h' },
-      }),
+      useFactory: (config: ConfigService) => {
+        // SECURITY (H1): Admin panel MUST use a distinct signing secret from user
+        // JWTs. Sharing JWT_ACCESS_SECRET means a single secret leak lets an
+        // attacker forge admin tokens ({ sub:'admin-panel', scope:'admin-panel' })
+        // and gain full reward-distribution power. The AdminPanelJwtStrategy
+        // reads the same ADMIN_JWT_SECRET for verification.
+        const adminSecret = config.getOrThrow<string>('ADMIN_JWT_SECRET');
+        const userSecret = config.get<string>('JWT_ACCESS_SECRET') ?? '';
+        if (adminSecret === userSecret) {
+          throw new Error(
+            'ADMIN_JWT_SECRET must differ from JWT_ACCESS_SECRET — ' +
+              'a shared secret defeats key separation. Generate a unique ' +
+              'ADMIN_JWT_SECRET (node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'hex\'))").',
+          );
+        }
+        return {
+          secret: adminSecret,
+          signOptions: { expiresIn: '8h' },
+        };
+      },
     }),
     UsersModule,
     CantonModule,
