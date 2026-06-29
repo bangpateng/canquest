@@ -751,15 +751,23 @@ export class CantonLedgerService {
     }
 
     // ── Step 0: cek preapproval kedua recipient (syarat direct/atomic) ────────
+    // Pakai getTransferPreapprovalAuthoritative (union 3 sumber: receiver + provider
+    // + splice) karena hasTransferPreapprovalViaLedger hanya cek receiver ACS,
+    // yang 403 untuk receiver cross-participant (operator tidak punya CanReadAs ke
+    // receiver). Preapproval itu signatory provider (validator), jadi cek via
+    // provider party yang operator bisa baca.
     const [receiverPre, feePre] = await Promise.all([
-      this.hasTransferPreapprovalViaLedger(receiverPartyId),
-      this.hasTransferPreapprovalViaLedger(feeRecipientPartyId),
+      this.getTransferPreapprovalAuthoritative(receiverPartyId).catch(() => null),
+      this.getTransferPreapprovalAuthoritative(feeRecipientPartyId).catch(() => null),
     ]);
 
-    if (!receiverPre || !feePre) {
+    const receiverOk = !!receiverPre?.active;
+    const feeOk = !!feePre?.active;
+
+    if (!receiverOk || !feeOk) {
       const missing = [
-        !receiverPre ? 'receiver' : null,
-        !feePre ? 'feeRecipient' : null,
+        !receiverOk ? 'receiver' : null,
+        !feeOk ? 'feeRecipient' : null,
       ]
         .filter(Boolean)
         .join(', ');

@@ -754,21 +754,17 @@ export class PartyController {
             `CC transfer+fee ATOMIC: ${sender.username} → ${recipientLabel} ${amount} CC + fee ${effectiveFeeCc} CC (1 tx id)`,
           );
         } else {
-          // Fallback non-atomic berhasil (transfer direct + fee direct terpisah)
+          // Fallback non-atomic berhasil (ok:true berarti main+fee transfer sukses).
+          // Catatan: ledger mungkin tidak kembalikan updateId di root response,
+          // jami jangan pakai keberadaan updateId sebagai indikator kesuksesan.
           accepted = true;
           transferMethod = 'direct';
           ledgerTxId = atomicResult.updateId ?? undefined;
-          if (atomicResult.feeUpdateId) {
-            feeCollected = true;
-            feeLedgerTxId = atomicResult.feeUpdateId;
-            feeTreasuryPartyId = feeParty;
-          } else {
-            this.logger.warn(
-              `Fee NOT collected after non-atomic fallback: ${atomicResult.error ?? 'unknown'}`,
-            );
-          }
+          feeCollected = true;
+          feeLedgerTxId = atomicResult.feeUpdateId ?? undefined;
+          feeTreasuryPartyId = feeParty;
           this.logger.log(
-            `CC transfer+fee non-atomic fallback OK: ${sender.username} → ${recipientLabel} ${amount} CC`,
+            `CC transfer+fee non-atomic fallback OK: ${sender.username} → ${recipientLabel} ${amount} CC (fee ${effectiveFeeCc} CC)`,
           );
         }
       } else {
