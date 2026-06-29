@@ -2127,6 +2127,21 @@ export class QuestsService {
           `(${rewardPending ? 'PENDING — user accepts in wallet' : 'direct'})`,
       );
 
+      // ⚠️ SECURITY (C1): Persist distributed=true + ledgerTxId IMMEDIATELY after
+      // sendReward succeeds, with a conditional updateMany. CC has now left the
+      // reward wallet on-chain (irreversible). If recordTransaction / the
+      // completion upsert below throws, the draw is already marked distributed
+      // so a retry short-circuits at the top-of-function `draw.distributed`
+      // check instead of sending the reward AGAIN (double payout).
+      await this.prisma.winnerDraw.updateMany({
+        where: { id: reservedDrawId, distributed: false },
+        data: {
+          distributed: true,
+          ledgerTxId: rewardTxId,
+          distributedAt: new Date(),
+        },
+      });
+
       // canquest-v21: Atomic DAML choice — fee + reward receipt dalam SATU transaksi.
       // Jika salah satu gagal, Canton rollback seluruhnya. Tidak ada partial commit.
       // (CC movement asli tetap via CIP-56; choice ini hanya menulis receipt.)
@@ -2143,17 +2158,26 @@ export class QuestsService {
         }
       }
 
-      await this.users.recordTransaction({
-        userId,
-        amountCc: rewardCc,
-        type: 'QUEST_REWARD',
-        description: `Received ${rewardCc} CC reward`,
-        referenceId: questId,
-        counterparty: rewardPartyId.split('::')[0],
-        ledgerTxId: rewardTxId,
-        status: rewardPending ? 'PENDING' : 'COMPLETED',
-        transferInstructionCid: rewardResult.transferInstructionCid ?? null,
-      });
+      // ⚠️ SECURITY (C1): recordTransaction is NON-FATAL. CC already moved
+      // on-chain and distributed is already persisted true above. A throw here
+      // must NOT cause a re-send on the next request.
+      try {
+        await this.users.recordTransaction({
+          userId,
+          amountCc: rewardCc,
+          type: 'QUEST_REWARD',
+          description: `Received ${rewardCc} CC reward`,
+          referenceId: questId,
+          counterparty: rewardPartyId.split('::')[0],
+          ledgerTxId: rewardTxId,
+          status: rewardPending ? 'PENDING' : 'COMPLETED',
+          transferInstructionCid: rewardResult.transferInstructionCid ?? null,
+        });
+      } catch (recordErr) {
+        this.logger.error(
+          `CLAIM_HISTORY_FAIL FCFS quest=${questId.slice(0, 8)} user=@${username}: reward sent (txId=${rewardTxId}) but history record threw: ${recordErr instanceof Error ? recordErr.message : String(recordErr)}`,
+        );
+      }
 
       // Asynchronous State Pattern — non-blocking balance sync
       if (username) {
@@ -2171,10 +2195,9 @@ export class QuestsService {
         this.prisma.winnerDraw.update({
           where: { id: reservedDrawId },
           data: {
-            distributed: true,
             ccAmount: rewardCc,
             claimFeeLedgerTxId: feeTxId,
-            ledgerTxId: rewardTxId,
+            // distributed + ledgerTxId already persisted above; keep them.
             ...(claimSessionId
               ? { claimSessionContractId: claimSessionId }
               : {}),
@@ -2387,18 +2410,60 @@ export class QuestsService {
       // Mencegah user kena fee charge tapi reward gagal karena pool kosong.
       await this.assertRewardPool(rewardCc);
 
-      const feeTxId = await this.collectClaimFee({
-        userId,
-        cantonPartyId,
-        username,
-        questTitle: quest.title,
-        feeCc,
-        feeLabel: 'Raffle claim fee',
-        feeTargetPartyId: this.feeTargetPartyId ?? validatorPartyId,
-      });
+      // ⚠️ SECURITY (C1): Fee idempotency guard. If a previous attempt already
+      // collected the fee (claimFeeLedgerTxId persisted) but failed before the
+      // reward was sent, re-using that txId here avoids charging the user twice
+      // on retry. Mirrors claimFcfsReward (line ~2075) and claimInviteReward.
+      const feeTxId =
+        drawNow?.claimFeeLedgerTxId ??
+        (await this.collectClaimFee({
+          userId,
+          cantonPartyId,
+          username,
+          questTitle: quest.title,
+          feeCc,
+          feeLabel: 'Raffle claim fee',
+          feeTargetPartyId: this.feeTargetPartyId ?? validatorPartyId,
+        }));
+
+      // Persist fee txId early so a retry after this point doesn't double-charge.
+      if (!drawNow?.claimFeeLedgerTxId) {
+        await this.prisma.winnerDraw.updateMany({
+          where: {
+            id: draw.id,
+            questId,
+            userId,
+            distributed: false,
+            claimFeeLedgerTxId: null,
+          },
+          data: { claimFeeLedgerTxId: feeTxId },
+        });
+      }
 
       // Re-check pool setelah fee terkumpul (race defense).
       await this.assertRewardPool(rewardCc);
+
+      // ⚠️ SECURITY (C1): Re-check distributed under the lock RIGHT BEFORE
+      // sendReward. If a previous attempt sent the reward on-chain but failed
+      // to commit distributed=true (DB error), the row would still show
+      // distributed=false and this attempt would re-send → double payout. We
+      // also record the reward txId the moment the transfer succeeds so a
+      // crash leaves an auditable trail. See C1 writeup.
+      const drawPreSend = await this.prisma.winnerDraw.findUnique({
+        where: { id: draw.id },
+        select: { distributed: true, ledgerTxId: true },
+      });
+      if (drawPreSend?.distributed) {
+        const rewardStatus = await this.getQuestRewardStatus(userId, questId);
+        return {
+          ok: true,
+          message: 'You already claimed this reward.',
+          rewardCc: quest.rewardCc,
+          feeCc: 0,
+          rewardStatus,
+        };
+      }
+
       const rewardResult = await this.cantonLedger.sendReward({
         receiverPartyId: cantonPartyId,
         amountCc: rewardCc,
@@ -2414,6 +2479,21 @@ export class QuestsService {
         `Draw reward ${rewardCc} CC → ${cantonPartyId.split('::')[0]} ` +
           `(${rewardPending ? 'PENDING — user accepts in wallet' : 'direct'})`,
       );
+
+      // ⚠️ SECURITY (C1): Persist distributed=true + ledgerTxId IMMEDIATELY after
+      // sendReward succeeds, with a conditional updateMany. CC has now left the
+      // reward wallet on-chain (irreversible). If anything after this throws,
+      // the draw is already marked distributed=true so a retry short-circuits
+      // instead of sending the reward again. We do NOT wait for recordTransaction
+      // (history) here — that is moved after this guard and is non-fatal.
+      await this.prisma.winnerDraw.updateMany({
+        where: { id: draw.id, distributed: false },
+        data: {
+          distributed: true,
+          ledgerTxId: rewardOfferId,
+          distributedAt: new Date(),
+        },
+      });
 
       // canquest-v11.1: Atomic DAML choice — fee + reward + audit trail dalam SATU transaksi.
       // v11.1 fix: hapus branch earnClaimSessionId legacy (deprecated stub selalu null).
@@ -2432,17 +2512,27 @@ export class QuestsService {
         }
       }
 
-      await this.users.recordTransaction({
-        userId,
-        amountCc: rewardCc,
-        type: 'QUEST_REWARD',
-        description: `Received ${rewardCc} CC raffle reward`,
-        referenceId: questId,
-        counterparty: validatorPartyId.split('::')[0],
-        ledgerTxId: rewardOfferId,
-        status: rewardPending ? 'PENDING' : 'COMPLETED',
-        transferInstructionCid: rewardResult.transferInstructionCid ?? null,
-      });
+      // ⚠️ SECURITY (C1): recordTransaction is now NON-FATAL. CC already moved
+      // on-chain and distributed is already persisted true above. If this throws
+      // we must NOT re-send the reward on the next request — and we won't,
+      // because distributed=true is already committed.
+      try {
+        await this.users.recordTransaction({
+          userId,
+          amountCc: rewardCc,
+          type: 'QUEST_REWARD',
+          description: `Received ${rewardCc} CC raffle reward`,
+          referenceId: questId,
+          counterparty: validatorPartyId.split('::')[0],
+          ledgerTxId: rewardOfferId,
+          status: rewardPending ? 'PENDING' : 'COMPLETED',
+          transferInstructionCid: rewardResult.transferInstructionCid ?? null,
+        });
+      } catch (recordErr) {
+        this.logger.error(
+          `CLAIM_HISTORY_FAIL DrawCC quest=${questId.slice(0, 8)} user=@${username}: reward sent (txId=${rewardOfferId}) but history record threw: ${recordErr instanceof Error ? recordErr.message : String(recordErr)}`,
+        );
+      }
 
       // Asynchronous State Pattern: balance sync tidak memblokir response HTTP.
       // UI Next.js langsung menerima response, balance di-refresh di belakang.
@@ -2461,11 +2551,9 @@ export class QuestsService {
         this.prisma.winnerDraw.update({
           where: { id: draw.id },
           data: {
-            distributed: true,
             ccAmount: rewardCc,
             claimFeeLedgerTxId: feeTxId,
-            ledgerTxId: rewardOfferId,
-            distributedAt: new Date(),
+            // distributed + ledgerTxId already persisted above; keep them.
             ...(claimSessionId
               ? { claimSessionContractId: claimSessionId }
               : {}),
@@ -2958,19 +3046,56 @@ export class QuestsService {
         }
       }
 
-      const feeTxId = await this.collectClaimFee({
-        userId,
-        cantonPartyId,
-        username,
-        questTitle: quest.title,
-        feeCc,
-        feeLabel: 'CC+Code raffle claim fee',
-        feeTargetPartyId: this.feeTargetPartyId ?? validatorPartyId,
-      });
+      // ⚠️ SECURITY (C1): Fee idempotency guard — re-use an existing fee txId if a
+      // previous attempt already charged the fee, so a retry doesn't double-charge.
+      const feeTxId =
+        drawNow?.claimFeeLedgerTxId ??
+        (await this.collectClaimFee({
+          userId,
+          cantonPartyId,
+          username,
+          questTitle: quest.title,
+          feeCc,
+          feeLabel: 'CC+Code raffle claim fee',
+          feeTargetPartyId: this.feeTargetPartyId ?? validatorPartyId,
+        }));
+
+      // Persist fee txId early so a retry after this point doesn't double-charge.
+      if (!drawNow?.claimFeeLedgerTxId) {
+        await this.prisma.winnerDraw.updateMany({
+          where: {
+            id: draw.id,
+            questId,
+            userId,
+            distributed: false,
+            claimFeeLedgerTxId: null,
+          },
+          data: { claimFeeLedgerTxId: feeTxId },
+        });
+      }
+
       // Re-check pool setelah fee (race defense).
       await this.assertRewardPool(rewardCc);
       let rewardOfferId: string | null = null;
       if (rewardCc > 0) {
+        // ⚠️ SECURITY (C1): Re-check distributed right before sendReward.
+        const drawPreSend = await this.prisma.winnerDraw.findUnique({
+          where: { id: draw.id },
+          select: { distributed: true, ledgerTxId: true },
+        });
+        if (drawPreSend?.distributed) {
+          const rewardStatus = await this.getQuestRewardStatus(userId, questId);
+          return {
+            ok: true,
+            message: 'You already claimed this reward.',
+            rewardCc: quest.rewardCc,
+            inviteCode: drawPreSend.ledgerTxId ? null : null,
+            feeCc: 0,
+            rewardVariant: variant,
+            rewardStatus,
+          };
+        }
+
         const rewardResult = await this.cantonLedger.sendReward({
           receiverPartyId: cantonPartyId,
           amountCc: rewardCc,
@@ -2983,17 +3108,40 @@ export class QuestsService {
           `Raffle reward ${rewardCc} CC → ${cantonPartyId.split('::')[0]} ` +
             `(${rewardResult.pending ? 'PENDING — user accepts in wallet' : 'direct'})`,
         );
-        await this.users.recordTransaction({
-          userId,
-          amountCc: rewardCc,
-          type: 'QUEST_REWARD',
-          description: `Received ${rewardCc} CC raffle reward`,
-          referenceId: questId,
-          counterparty: validatorPartyId.split('::')[0],
-          ledgerTxId: rewardOfferId,
-          status: rewardResult.pending ? 'PENDING' : 'COMPLETED',
-          transferInstructionCid: rewardResult.transferInstructionCid ?? null,
+
+        // ⚠️ SECURITY (C1): Persist distributed=true + ledgerTxId IMMEDIATELY after
+        // sendReward succeeds. CC has now left the reward wallet on-chain
+        // (irreversible). If reserveInviteCode or the completion upsert below
+        // throws, the draw is already marked distributed so a retry short-circuits
+        // instead of sending the reward AGAIN (double payout). This is the exact
+        // fix for the C1 scenario where code exhaustion caused a re-send.
+        await this.prisma.winnerDraw.updateMany({
+          where: { id: draw.id, distributed: false },
+          data: {
+            distributed: true,
+            ledgerTxId: rewardOfferId,
+            distributedAt: new Date(),
+          },
         });
+
+        // recordTransaction is NON-FATAL — CC already moved on-chain + distributed persisted.
+        try {
+          await this.users.recordTransaction({
+            userId,
+            amountCc: rewardCc,
+            type: 'QUEST_REWARD',
+            description: `Received ${rewardCc} CC raffle reward`,
+            referenceId: questId,
+            counterparty: validatorPartyId.split('::')[0],
+            ledgerTxId: rewardOfferId,
+            status: rewardResult.pending ? 'PENDING' : 'COMPLETED',
+            transferInstructionCid: rewardResult.transferInstructionCid ?? null,
+          });
+        } catch (recordErr) {
+          this.logger.error(
+            `CLAIM_HISTORY_FAIL CC+Code quest=${questId.slice(0, 8)} user=@${username}: reward sent (txId=${rewardOfferId}) but history record threw: ${recordErr instanceof Error ? recordErr.message : String(recordErr)}`,
+          );
+        }
         // Asynchronous State Pattern — non-blocking balance sync
         if (username) {
           void this.inboundSync
