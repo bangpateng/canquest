@@ -33,7 +33,12 @@ model User {
   otpAttempts             Int                   @default(0)
   username                String?               @unique
   /// Canton ledger party identifier after binding — follow Participant / Ledger API contracts.
-  cantonPartyId           String?
+  /// SECURITY (H6): @unique enforces 1 wallet ↔ 1 account at the DB level. Without
+  /// this, a single Canton wallet could be bound to many accounts, letting one
+  /// attacker claim quest rewards / FCFS slots / raffle entries N times via N
+  /// email accounts sharing one funded wallet. The app-layer findByPartyId check
+  /// in party.controller is a TOCTOU guard; this constraint is the source of truth.
+  cantonPartyId           String?               @unique
   /// Keycloak user UUID (sub) — identity bridge between web2 User and on-chain Ledger API user.
   keycloakId              String?               @unique
   /// Last time user toggled preapproval (enable/disable). Cooldown 7 hari anti-spam burn.

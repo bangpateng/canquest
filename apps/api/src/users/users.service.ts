@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   looksLikeQuestId,
@@ -254,28 +254,63 @@ export class UsersService {
   ) {
     const normalized =
       normalizeCantonPartyId(params.partyId) ?? params.partyId.trim();
-    return this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        cantonPartyId: normalized,
-        keycloakId: params.keycloakId,
-        username: params.username?.trim() || undefined,
-      },
-    });
+    try {
+      return await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          cantonPartyId: normalized,
+          keycloakId: params.keycloakId,
+          username: params.username?.trim() || undefined,
+        },
+      });
+    } catch (err) {
+      // SECURITY (H6): cantonPartyId is now @unique. A P2002 means this wallet
+      // is already bound to another account — the DB is the source of truth,
+      // catching the TOCTOU race that the app-layer findByPartyId check misses.
+      if (this.isUniquePartyViolation(err)) {
+        throw new ConflictException('Party ID Already Taken');
+      }
+      throw err;
+    }
   }
 
   async setPartyId(userId: string, cantonPartyId: string, username?: string) {
     const normalized =
       normalizeCantonPartyId(cantonPartyId) ?? cantonPartyId.trim();
-    return this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        cantonPartyId: normalized,
-        ...(username !== undefined
-          ? { username: normalizeWalletUsername(username) }
-          : {}),
-      },
-    });
+    try {
+      return await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          cantonPartyId: normalized,
+          ...(username !== undefined
+            ? { username: normalizeWalletUsername(username) }
+            : {}),
+        },
+      });
+    } catch (err) {
+      // SECURITY (H6): cantonPartyId is now @unique — surface a clear conflict
+      // instead of an opaque Prisma error when a wallet is double-bound.
+      if (this.isUniquePartyViolation(err)) {
+        throw new ConflictException('Party ID Already Taken');
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Detect a Prisma unique-constraint violation (P2002) on cantonPartyId.
+   * Used by setCantonIdentity/setPartyId to translate the DB-level uniqueness
+   * guard (added in H6) into a user-facing ConflictException.
+   */
+  private isUniquePartyViolation(err: unknown): boolean {
+    if (!err || typeof err !== 'object') return false;
+    const e = err as { code?: string; meta?: { target?: string[] } };
+    if (e.code !== 'P2002') return false;
+    const target = e.meta?.target ?? [];
+    return (
+      target.includes('cantonPartyId') ||
+      target.includes('User_cantonPartyId_key')
+    );
   }
 
   /** Record a CC debit or credit in the local DB (audit trail). */
