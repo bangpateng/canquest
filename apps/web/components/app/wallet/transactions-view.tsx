@@ -423,7 +423,13 @@ export function TransactionsView({
 
         // Dedup multi-key: kumpulkan SEMUA id di DB (ledgerTxId, cantonUpdateId,
         // transferInstructionCid) supaya item on-chain yang id-nya berbentuk beda
-        // (contract_id vs update_id) tetap bisa di-match dan tidak dobel.
+        // (contract_id vs update_id vs event_id) tetap bisa di-match dan tidak dobel.
+        //
+        // Penting: DB menyimpan Canton update_id ("1220…", tanpa ":N") sedangkan
+        // on-chain event_id = "1220…:N". Keduanya adalah transaksi yang SAMA, jadi
+        // kita normalisasi dengan menghapus suffix ":N" sebelum dibandingkan.
+        const stripSuffix = (s: string): string =>
+          s.replace(/:[0-9]+$/, "").trim();
         const dbKeys = new Set<string>();
         for (const tx of dbItems) {
           for (const k of [
@@ -431,18 +437,14 @@ export function TransactionsView({
             tx.cantonUpdateId,
             tx.transferInstructionCid,
           ]) {
-            const v = (k ?? "").trim();
+            const v = stripSuffix(k ?? "");
             if (v) dbKeys.add(v);
           }
         }
         const fallbackOnchain = onchainItems.filter((tx) => {
           // Cek semua kemungkinan key on-chain — cukup satu match untuk dianggap duplikat.
-          const keys = [
-            tx.ledgerTxId,
-            tx.cantonUpdateId,
-            tx.eventId,
-          ]
-            .map((k) => (k ?? "").trim())
+          const keys = [tx.ledgerTxId, tx.cantonUpdateId, tx.eventId]
+            .map((k) => stripSuffix(k ?? ""))
             .filter(Boolean);
           if (keys.length === 0) return true; // tidak ada key → tidak bisa dedup → tetap masuk.
           return !keys.some((k) => dbKeys.has(k));
