@@ -39,11 +39,27 @@ echo "    ✓ API node_modules installed"
 cd "${APP_DIR}"
 
 # ───────────────────────────────────────────────────────────────
-echo "==> [3/6] Prisma generate + sync database schema"
+echo "==> [3/6] Prisma generate + apply migrations"
 cd "${API_DIR}"
 npx prisma generate
-npx prisma db push --accept-data-loss
-echo "    ✓ Database schema synced"
+
+# SECURITY (M9): Use 'migrate deploy' instead of 'db push --accept-data-loss'.
+# 'db push --accept-data-loss' can silently drop columns/tables on the production
+# DB that holds real wallet balances and CC history — and it SKIPS the migration
+# SQL files (so de-dup logic like the H6 cantonPartyId migration never runs).
+# 'migrate deploy' applies only reviewed migration files, non-destructively.
+#
+# Safety net: dump the DB first so a bad migration can be rolled back.
+DB_BACKUP="/tmp/canquest_db_backup_$(date +%Y%m%d_%H%M%S).sql"
+if pg_dump "$DATABASE_URL" > "${DB_BACKUP}" 2>/dev/null; then
+  echo "    ✓ DB backup saved to ${DB_BACKUP}"
+else
+  echo "    ⚠  Could not dump DB (DATABASE_URL may be set per-process by PM2)."
+  echo "       Continuing — if you have shell DB access, back up manually first."
+fi
+
+npx prisma migrate deploy
+echo "    ✓ Database migrations applied"
 cd "${APP_DIR}"
 
 # ───────────────────────────────────────────────────────────────

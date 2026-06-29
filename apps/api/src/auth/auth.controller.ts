@@ -50,8 +50,17 @@ export class AuthController {
     return this.auth.login(body);
   }
 
-  /** Refresh token — default tier (120/mnt) */
+  /**
+   * Refresh token.
+   * SECURITY (M2): previously had NO @Throttle, falling through to the default
+   * tier (300 req/min/IP). That allowed a stolen refresh token to be hammered
+   * 300×/min — minting a new access token + refresh row on every call (token-
+   * fountain amplification, DB bloat). 30/min is plenty for legitimate use
+   * (tokens expire every 15 min, so a normal session refreshes ~4×/hour) while
+   * capping abuse. Tighter than default, looser than login (no password here).
+   */
   @Post('refresh')
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   refresh(@Body() body: RefreshTokenDto) {
     return this.auth.refresh(body.refreshToken);
   }
