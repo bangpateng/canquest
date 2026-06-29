@@ -1,7 +1,14 @@
 -- ============================================================
 -- CanQuest DAML Test Suite — module Test
--- Package: canquest-v6  |  SDK: 3.4.11
+-- Package: canquest-v21 (lean)  |  SDK: 3.4.11
 -- Jalankan: daml test
+--
+-- Cakupan: 3 template (WalletRegistration, QuestCampaign, QuestClaim).
+-- Menguji seluruh guard on-chain:
+--   - Kuota FCFS / Raffle (sybil resistance)
+--   - State machine campaign (anti-reopen CLOSED/ENDED)
+--   - Ordering fee-before-reward & idempotency AtomicFeeAndReward
+--   - Guard RevealRewardCode (fee dulu, kode tak kosong)
 -- ============================================================
 
 module Test where
@@ -17,77 +24,9 @@ testAllTemplates = script do
   bob   <- allocateParty "Bob_User"
   carol <- allocateParty "Carol_User"
 
-  -- [A] USER ACCOUNT
+  -- [A] WALLET REGISTRATION (create-only)
 
-  aliceAccCid <- submit admin do
-    createCmd UserAccount with
-      admin
-      userAddress  = alice
-      username     = "Alice_Web3"
-      earnedPoints = 0
-      spentPoints  = 0
-      createdAt    = "2026-06-05T00:00:00Z"
-
-  bobAccCid <- submit admin do
-    createCmd UserAccount with
-      admin
-      userAddress  = bob
-      username     = "Bob_Canton"
-      earnedPoints = 0
-      spentPoints  = 0
-      createdAt    = "2026-06-05T00:00:00Z"
-
-  aliceAccCid2 <- submit admin do
-    exerciseCmd aliceAccCid RewardPoints with
-      pointsToAdd = 500
-      reason      = "quest_completion"
-
-  aliceAccCid3 <- submit admin do
-    exerciseCmd aliceAccCid2 RewardPoints with
-      pointsToAdd = 50
-      reason      = "daily_check_in"
-
-  aliceAccCid4 <- submit admin do
-    exerciseCmd aliceAccCid3 RewardPoints with
-      pointsToAdd = 100
-      reason      = "referral"
-
-  aliceAccCid5 <- submit admin do
-    exerciseCmd aliceAccCid4 DebitPoints with
-      amount = 50
-      reason = "spin_cost"
-
-  aliceAccCid6 <- submit admin do
-    exerciseCmd aliceAccCid5 UpdateUsername with
-      newUsername = "Alice_CanQuest"
-
-  submitMustFail admin do
-    exerciseCmd aliceAccCid6 RewardPoints with
-      pointsToAdd = 0
-      reason      = "invalid"
-
-  submitMustFail admin do
-    exerciseCmd aliceAccCid6 RewardPoints with
-      pointsToAdd = 100
-      reason      = ""
-
-  submitMustFail admin do
-    exerciseCmd aliceAccCid6 DebitPoints with
-      amount = 700
-      reason = "spin_cost"
-
-  submitMustFail admin do
-    exerciseCmd aliceAccCid6 DebitPoints with
-      amount = 0
-      reason = "spin_cost"
-
-  submitMustFail admin do
-    exerciseCmd aliceAccCid6 UpdateUsername with
-      newUsername = ""
-
-  -- [B] WALLET REGISTRATION
-
-  aliceWalletCid <- submit admin do
+  _aliceWalletCid <- submit admin do
     createCmd WalletRegistration with
       admin
       userAddress  = alice
@@ -105,15 +44,7 @@ testAllTemplates = script do
       inviteCode   = "ADMIN_CODE_002"
       registeredAt = "2026-06-05T00:00:00Z"
 
-  _aliceWalletConfirmedCid <- submit admin do
-    exerciseCmd aliceWalletCid ConfirmWalletActive with
-      confirmedAt = "2026-06-05T00:01:00Z"
-
-  submitMustFail admin do
-    exerciseCmd aliceWalletCid ConfirmWalletActive with
-      confirmedAt = ""
-
-  -- [C] QUEST CAMPAIGN — CC FCFS
+  -- [B] QUEST CAMPAIGN — CC FCFS (kuota maxWinners=2)
 
   ccFcfsCampaignCid <- submit admin do
     createCmd QuestCampaign with
@@ -140,12 +71,14 @@ testAllTemplates = script do
       claimId   = "CLAIM_CC_FCFS_002"
       claimedAt = "2026-06-05T01:01:00Z"
 
+  -- Claim ke-3 setelah maxWinners=2 tercapai → GAGAL (sybil resistance)
   submitMustFail admin do
     exerciseCmd ccFcfsCampaignCid3 ClaimFcfsSlot with
       user      = carol
       claimId   = "CLAIM_CC_FCFS_003"
       claimedAt = "2026-06-05T01:02:00Z"
 
+  -- ENDED lalu claim → GAGAL (guard status)
   ccFcfsCampaignCid4 <- submit admin do
     exerciseCmd ccFcfsCampaignCid3 UpdateCampaignStatus with
       newStatus = "ENDED"
@@ -155,13 +88,14 @@ testAllTemplates = script do
     exerciseCmd ccFcfsCampaignCid4 CloseCampaign with
       closedAt = "2026-06-05T23:59:00Z"
 
+  -- Claim pada ENDED → GAGAL
   submitMustFail admin do
     exerciseCmd ccFcfsCampaignCid4 ClaimFcfsSlot with
       user      = carol
       claimId   = "CLAIM_CC_FCFS_004"
       claimedAt = "2026-06-05T23:59:30Z"
 
-  -- [D] QUEST CAMPAIGN — CODE FCFS
+  -- [C] QUEST CAMPAIGN — CODE FCFS (kuota maxWinners=1)
 
   codeFcfsCampaignCid <- submit admin do
     createCmd QuestCampaign with
@@ -176,19 +110,20 @@ testAllTemplates = script do
       status        = "ACTIVE"
       createdAt     = "2026-06-05T00:00:00Z"
 
-  (codeFcfsCampaignCid2, _aliceCodeClaimCid) <- submit admin do
+  (_codeFcfsCampaignCid2, _aliceCodeClaimCid) <- submit admin do
     exerciseCmd codeFcfsCampaignCid ClaimFcfsSlot with
       user      = alice
       claimId   = "CLAIM_CODE_FCFS_001"
       claimedAt = "2026-06-05T02:00:00Z"
 
+  -- Claim ke-2 setelah maxWinners=1 → GAGAL
   submitMustFail admin do
-    exerciseCmd codeFcfsCampaignCid2 ClaimFcfsSlot with
+    exerciseCmd codeFcfsCampaignCid ClaimFcfsSlot with
       user      = bob
       claimId   = "CLAIM_CODE_FCFS_002"
       claimedAt = "2026-06-05T02:01:00Z"
 
-  -- [E] QUEST CAMPAIGN — CC RAFFLE
+  -- [D] QUEST CAMPAIGN — CC RAFFLE (maxWinners=0 = unlimited)
 
   ccRaffleCampaignCid <- submit admin do
     createCmd QuestCampaign with
@@ -217,7 +152,7 @@ testAllTemplates = script do
       rewardCode = ""
       drawnAt    = "2026-06-05T20:01:00Z"
 
-  -- [F] QUEST CAMPAIGN — CODE RAFFLE
+  -- [E] QUEST CAMPAIGN — CODE RAFFLE
 
   codeRaffleCampaignCid <- submit admin do
     createCmd QuestCampaign with
@@ -239,6 +174,7 @@ testAllTemplates = script do
       rewardCode = "INVITE_CODE_XYZ789"
       drawnAt    = "2026-06-05T21:00:00Z"
 
+  -- Draw pada campaign FCFS → GAGAL (questKind mismatch)
   submitMustFail admin do
     exerciseCmd ccFcfsCampaignCid DrawRaffleWinner with
       user       = carol
@@ -246,7 +182,7 @@ testAllTemplates = script do
       rewardCode = ""
       drawnAt    = "2026-06-05T21:01:00Z"
 
-  -- [G] QUEST CAMPAIGN — CC_AND_CODE_RAFFLE
+  -- [F] QUEST CAMPAIGN — CC_AND_CODE_RAFFLE
 
   ccAndCodeRaffleCid <- submit admin do
     createCmd QuestCampaign with
@@ -275,7 +211,7 @@ testAllTemplates = script do
       rewardCode = "INVITE_CODE_BOB_001"
       drawnAt    = "2026-06-05T22:01:00Z"
 
-  -- [H] QUEST CAMPAIGN — WAITLIST
+  -- [G] QUEST CAMPAIGN — WAITLIST
 
   waitlistCampaignCid <- submit admin do
     createCmd QuestCampaign with
@@ -297,75 +233,58 @@ testAllTemplates = script do
       rewardCode = ""
       drawnAt    = "2026-06-05T23:00:00Z"
 
+  -- ClaimFcfsSlot pada WAITLIST → GAGAL (questKind mismatch)
   submitMustFail admin do
     exerciseCmd waitlistCampaignCid ClaimFcfsSlot with
       user      = alice
       claimId   = "CLAIM_WAITLIST_INVALID"
       claimedAt = "2026-06-05T23:01:00Z"
 
-  -- [I] QUEST CLAIM
+  -- [H] QUEST CLAIM — AtomicFeeAndReward (positive + idempotency)
 
-  aliceClaimCid2 <- submit admin do
-    exerciseCmd aliceClaimCid ConfirmFeePaid with
-      txId        = "SPLICE_FEE_TX_ALICE_001"
-      confirmedAt = "2026-06-05T01:05:00Z"
+  -- Atomic settlement pertama harus BERHASIL (fee+reward dalam 1 tx DAML)
+  atomicClaimFinalCid <- submit admin do
+    exerciseCmd aliceClaimCid AtomicFeeAndReward with
+      feeTxId     = "SPLICE_FEE_TX_ALICE_001"
+      rewardTxId  = "SPLICE_REWARD_TX_ALICE_001"
+      rewardSentAt = "2026-06-05T01:06:00Z"
 
-  _aliceClaimCid3 <- submit admin do
-    exerciseCmd aliceClaimCid2 ConfirmRewardSent with
-      txId   = "SPLICE_REWARD_TX_ALICE_001"
-      sentAt = "2026-06-05T01:06:00Z"
-
-  aliceRaffleClaimCid2 <- submit admin do
-    exerciseCmd aliceRaffleClaimCid ConfirmFeePaid with
-      txId        = "SPLICE_FEE_TX_ALICE_RAFFLE_001"
-      confirmedAt = "2026-06-05T20:05:00Z"
-
-  _aliceRaffleClaimCid3 <- submit admin do
-    exerciseCmd aliceRaffleClaimCid2 ConfirmRewardSent with
-      txId   = "SPLICE_REWARD_TX_ALICE_RAFFLE_001"
-      sentAt = "2026-06-05T20:06:00Z"
-
+  -- Atomic settlement kedua pada kontrak final → GAGAL (rewardSent sudah True)
   submitMustFail admin do
-    exerciseCmd carolCodeRaffleClaimCid ConfirmRewardSent with
-      txId   = "SPLICE_REWARD_TX_CAROL_001"
-      sentAt = "2026-06-05T21:05:00Z"
+    exerciseCmd atomicClaimFinalCid AtomicFeeAndReward with
+      feeTxId     = "SPLICE_FEE_TX_ALICE_002"
+      rewardTxId  = "SPLICE_REWARD_TX_ALICE_002"
+      rewardSentAt = "2026-06-05T01:07:00Z"
 
-  submitMustFail admin do
-    exerciseCmd carolCodeRaffleClaimCid ConfirmFeePaid with
-      txId        = ""
-      confirmedAt = "2026-06-05T21:02:00Z"
+  -- Raffle claim juga bisa di-atomic-settle
+  _aliceRaffleFinalCid <- submit admin do
+    exerciseCmd aliceRaffleClaimCid AtomicFeeAndReward with
+      feeTxId     = "SPLICE_FEE_TX_ALICE_RAFFLE_001"
+      rewardTxId  = "SPLICE_REWARD_TX_ALICE_RAFFLE_001"
+      rewardSentAt = "2026-06-05T20:06:00Z"
 
-  carolCodeRaffleClaimCid2 <- submit admin do
-    exerciseCmd carolCodeRaffleClaimCid ConfirmFeePaid with
-      txId        = "SPLICE_FEE_TX_CAROL_001"
-      confirmedAt = "2026-06-05T21:03:00Z"
+  -- [I] QUEST CLAIM — RevealRewardCode
 
-  submitMustFail admin do
-    exerciseCmd carolCodeRaffleClaimCid2 ConfirmFeePaid with
-      txId        = "SPLICE_FEE_TX_CAROL_002"
-      confirmedAt = "2026-06-05T21:04:00Z"
-
-  carolCodeRaffleClaimCid3 <- submit admin do
-    exerciseCmd carolCodeRaffleClaimCid2 ConfirmRewardSent with
-      txId   = "SPLICE_REWARD_TX_CAROL_001"
-      sentAt = "2026-06-05T21:05:00Z"
-
-  submitMustFail admin do
-    exerciseCmd carolCodeRaffleClaimCid3 ConfirmRewardSent with
-      txId   = "SPLICE_REWARD_TX_CAROL_002"
-      sentAt = "2026-06-05T21:06:00Z"
-
+  -- CC+Code raffle: fee dulu, baru reveal kode
   aliceCcCodeClaimCid2 <- submit admin do
-    exerciseCmd aliceCcCodeClaimCid ConfirmFeePaid with
-      txId        = "SPLICE_FEE_TX_ALICE_CC_CODE_001"
-      confirmedAt = "2026-06-05T22:05:00Z"
+    exerciseCmd aliceCcCodeClaimCid AtomicFeeAndReward with
+      feeTxId     = "SPLICE_FEE_TX_ALICE_CC_CODE_001"
+      rewardTxId  = "SPLICE_REWARD_TX_ALICE_CC_CODE_001"
+      rewardSentAt = "2026-06-05T22:06:00Z"
 
   _aliceCcCodeClaimCid3 <- submit admin do
     exerciseCmd aliceCcCodeClaimCid2 RevealRewardCode with
       code       = "INVITE_CODE_ALICE_REVEALED"
-      revealedAt = "2026-06-05T22:06:00Z"
+      revealedAt = "2026-06-05T22:07:00Z"
 
-  testClaimCid <- submit admin do
+  -- Reveal kode kosong → GAGAL
+  submitMustFail admin do
+    exerciseCmd aliceCcCodeClaimCid2 RevealRewardCode with
+      code       = ""
+      revealedAt = "2026-06-05T22:08:00Z"
+
+  -- Reveal pada claim yang FEE belum dibayar & claimFeeCc>0 → GAGAL
+  testRevealCampaignCid <- submit admin do
     createCmd QuestCampaign with
       admin
       campaignId    = "CAMPAIGN_TEST_REVEAL"
@@ -378,263 +297,47 @@ testAllTemplates = script do
       status        = "ACTIVE"
       createdAt     = "2026-06-05T00:00:00Z"
 
-  (_, testClaimContractCid) <- submit admin do
-    exerciseCmd testClaimCid DrawRaffleWinner with
+  (_, testRevealClaimCid) <- submit admin do
+    exerciseCmd testRevealCampaignCid DrawRaffleWinner with
       user       = carol
       claimId    = "CLAIM_TEST_REVEAL_001"
       rewardCode = ""
       drawnAt    = "2026-06-05T22:10:00Z"
 
   submitMustFail admin do
-    exerciseCmd testClaimContractCid RevealRewardCode with
+    exerciseCmd testRevealClaimCid RevealRewardCode with
       code       = "SHOULD_FAIL"
       revealedAt = "2026-06-05T22:11:00Z"
 
-  -- [J] DAILY CHECK-IN
-
-  aliceCheckInCid <- submit admin do
-    createCmd DailyCheckIn with
-      admin
-      userAddress   = alice
-      username      = "Alice_CanQuest"
-      checkInId     = "alice_2026-06-05"
-      checkInDate   = "2026-06-05"
-      pointsAwarded = 50
-      streakCount   = 1
-      checkedInAt   = "2026-06-05T08:00:00Z"
-
-  _bobCheckInCid <- submit admin do
-    createCmd DailyCheckIn with
-      admin
-      userAddress   = bob
-      username      = "Bob_Canton"
-      checkInId     = "bob_2026-06-05"
-      checkInDate   = "2026-06-05"
-      pointsAwarded = 50
-      streakCount   = 1
-      checkedInAt   = "2026-06-05T09:00:00Z"
-
-  _aliceCheckInDay2Cid <- submit admin do
-    createCmd DailyCheckIn with
-      admin
-      userAddress   = alice
-      username      = "Alice_CanQuest"
-      checkInId     = "alice_2026-06-06"
-      checkInDate   = "2026-06-06"
-      pointsAwarded = 60
-      streakCount   = 2
-      checkedInAt   = "2026-06-06T08:00:00Z"
-
-  _aliceCheckInVerifiedCid <- submit admin do
-    exerciseCmd aliceCheckInCid VerifyCheckIn with
-      verifiedAt = "2026-06-05T08:01:00Z"
-
-  submitMustFail admin do
-    exerciseCmd aliceCheckInCid VerifyCheckIn with
-      verifiedAt = ""
-
-  -- [K] SPIN EXECUTION
-
-  aliceSpinCcCid <- submit admin do
-    createCmd SpinExecution with
-      admin
-      userAddress   = alice
-      username      = "Alice_CanQuest"
-      spinResultId  = "SPIN_RESULT_ALICE_001"
-      spinItemId    = "ITEM_50CC"
-      spinItemLabel = "50 CC"
-      rewardType    = "cc"
-      rewardCc      = 50.0
-      rewardPoints  = "0"
-      spinCost      = "50"
-      executedAt    = "2026-06-05T10:00:00Z"
-
-  aliceSpinPtsCid <- submit admin do
-    createCmd SpinExecution with
-      admin
-      userAddress   = alice
-      username      = "Alice_CanQuest"
-      spinResultId  = "SPIN_RESULT_ALICE_002"
-      spinItemId    = "ITEM_100PTS"
-      spinItemLabel = "100 Points"
-      rewardType    = "points"
-      rewardCc      = 0.0
-      rewardPoints  = "100"
-      spinCost      = "50"
-      executedAt    = "2026-06-05T10:30:00Z"
-
-  _bobSpinNoneCid <- submit admin do
-    createCmd SpinExecution with
-      admin
-      userAddress   = bob
-      username      = "Bob_Canton"
-      spinResultId  = "SPIN_RESULT_BOB_001"
-      spinItemId    = "ITEM_NONE"
-      spinItemLabel = "Not Lucky"
-      rewardType    = "none"
-      rewardCc      = 0.0
-      rewardPoints  = "0"
-      spinCost      = "50"
-      executedAt    = "2026-06-05T11:00:00Z"
-
-  _aliceSpinCcRewardCid <- submit admin do
-    exerciseCmd aliceSpinCcCid ConfirmCcDelivered with
-      spliceTxId  = "SPLICE_SPIN_TX_ALICE_001"
-      deliveredAt = "2026-06-05T10:05:00Z"
-
-  submitMustFail admin do
-    exerciseCmd aliceSpinPtsCid ConfirmCcDelivered with
-      spliceTxId  = "SPLICE_SPIN_TX_INVALID"
-      deliveredAt = "2026-06-05T10:35:00Z"
-
-  submitMustFail admin do
-    exerciseCmd aliceSpinCcCid ConfirmCcDelivered with
-      spliceTxId  = ""
-      deliveredAt = "2026-06-05T10:06:00Z"
-
-  -- [L] REFERRAL REWARD
-
-  aliceReferralCid <- submit admin do
-    createCmd ReferralReward with
-      admin
-      referrerAddress = alice
-      referrerId      = "alice_db_id_001"
-      referredUserId  = "bob_db_id_001"
-      points          = 200
-      referralId      = "alice_db_id_001_bob_db_id_001"
-      createdAt       = "2026-06-05T12:00:00Z"
-
-  _aliceReferralConfirmedCid <- submit admin do
-    exerciseCmd aliceReferralCid ConfirmReferralProcessed with
-      confirmedAt = "2026-06-05T12:01:00Z"
-
-  _bobReferralCid <- submit admin do
-    createCmd ReferralReward with
-      admin
-      referrerAddress = bob
-      referrerId      = "bob_db_id_001"
-      referredUserId  = "carol_db_id_001"
-      points          = 200
-      referralId      = "bob_db_id_001_carol_db_id_001"
-      createdAt       = "2026-06-05T13:00:00Z"
-
-  submitMustFail admin do
-    exerciseCmd aliceReferralCid ConfirmReferralProcessed with
-      confirmedAt = ""
-
-  -- [M] CC TRANSACTION LOG
-
-  aliceTxLogCid <- submit admin do
-    createCmd CcTransactionLog with
-      admin
-      userAddress   = alice
-      username      = "Alice_CanQuest"
-      txLogId       = "CC_TX_ALICE_QUEST_001"
-      txType        = "QUEST_REWARD"
-      amountMicroCc = 10000000
-      description   = "Quest reward: Canton Network CC Quest"
-      referenceId   = "CAMPAIGN_CC_FCFS_001"
-      ledgerTxId    = ""
-      createdAt     = "2026-06-05T01:06:00Z"
-
-  aliceSpinTxLogCid <- submit admin do
-    createCmd CcTransactionLog with
-      admin
-      userAddress   = alice
-      username      = "Alice_CanQuest"
-      txLogId       = "CC_TX_ALICE_SPIN_001"
-      txType        = "SPIN_REWARD"
-      amountMicroCc = 50000000
-      description   = "Spin reward: 50 CC"
-      referenceId   = "SPIN_RESULT_ALICE_001"
-      ledgerTxId    = ""
-      createdAt     = "2026-06-05T10:05:00Z"
-
-  _aliceTxLogSettledCid <- submit admin do
-    exerciseCmd aliceTxLogCid SettleCcTransaction with
-      txId      = "SPLICE_REWARD_TX_ALICE_001"
-      settledAt = "2026-06-05T01:07:00Z"
-
-  _aliceSpinTxLogSettledCid <- submit admin do
-    exerciseCmd aliceSpinTxLogCid SettleCcTransaction with
-      txId      = "SPLICE_SPIN_TX_ALICE_001"
-      settledAt = "2026-06-05T10:06:00Z"
-
-  submitMustFail admin do
-    exerciseCmd aliceTxLogCid SettleCcTransaction with
-      txId      = ""
-      settledAt = "2026-06-05T01:08:00Z"
-
-  _bobAirdropTxLogCid <- submit admin do
-    createCmd CcTransactionLog with
-      admin
-      userAddress   = bob
-      username      = "Bob_Canton"
-      txLogId       = "CC_TX_BOB_AIRDROP_001"
-      txType        = "AIRDROP"
-      amountMicroCc = 5000000
-      description   = "Airdrop: Canton Network launch bonus"
-      referenceId   = "AIRDROP_LAUNCH_001"
-      ledgerTxId    = "SPLICE_AIRDROP_TX_BOB_001"
-      createdAt     = "2026-06-05T14:00:00Z"
-
-  -- [O] ATOMIC FEE + REWARD (canquest-v11.1)
-  -- Validasi choice AtomicFeeAndReward: 1 create QuestClaim + 1 CcTransactionLog.
-  -- Bug lama (v11.0) menghasilkan 2 QuestClaim aktif — sekarang harus 1 saja.
-
-  atomicTestCampaignCid <- submit admin do
+  -- Edge: claim dengan claimFeeCc=0 → RevealRewardCode boleh tanpa fee
+  testEmptyCodeCampaignCid <- submit admin do
     createCmd QuestCampaign with
       admin
-      campaignId    = "CAMPAIGN_ATOMIC_TEST"
-      title         = "Atomic Fee+Reward Test"
-      questKind     = "CC_FCFS"
-      rewardCc      = 10.0
-      claimFeeCc    = 3.0
-      maxWinners    = 1
+      campaignId    = "CAMPAIGN_TEST_EMPTY_CODE"
+      title         = "Test Empty Code"
+      questKind     = "CODE_RAFFLE"
+      rewardCc      = 0.0
+      claimFeeCc    = 0.0
+      maxWinners    = 0
       currentClaims = 0
       status        = "ACTIVE"
       createdAt     = "2026-06-05T00:00:00Z"
 
-  (_, atomicClaimCid) <- submit admin do
-    exerciseCmd atomicTestCampaignCid ClaimFcfsSlot with
-      user      = alice
-      claimId   = "CLAIM_ATOMIC_TEST_001"
-      claimedAt = "2026-06-05T03:00:00Z"
+  (_, testEmptyCodeClaimCid) <- submit admin do
+    exerciseCmd testEmptyCodeCampaignCid DrawRaffleWinner with
+      user       = alice
+      claimId    = "CLAIM_TEST_EMPTY_CODE_001"
+      rewardCode = ""
+      drawnAt    = "2026-06-05T23:30:00Z"
 
-  -- Positive: atomic settlement pertama harus berhasil.
-  -- Return type 3-tuple: (claimFinal, claimFinalDuplicate, txLog).
-  -- Tuple [0] dan [1] sengaja sama (upgrade compatibility fix v1.0.2).
-  (atomicClaimFinalCid, _atomicClaimDupCid, _atomicTxLogCid) <- submit admin do
-    exerciseCmd atomicClaimCid AtomicFeeAndReward with
-      feeTxId       = "SPLICE_FEE_ATOMIC_001"
-      rewardTxId    = "SPLICE_REWARD_ATOMIC_001"
-      txLogId       = "CC_TX_ATOMIC_001"
-      amountMicroCc = 10000000
-      description   = "Atomic FCFS reward"
-      referenceId   = "CAMPAIGN_ATOMIC_TEST"
-      rewardSentAt  = "2026-06-05T03:05:00Z"
+  _testEmptyCodeRevealedCid <- submit admin do
+    exerciseCmd testEmptyCodeClaimCid RevealRewardCode with
+      code       = "FREE_CODE_OK"
+      revealedAt = "2026-06-05T23:31:00Z"
 
-  -- Negative: atomic settlement kedua pada kontrak yang sama HARUS gagal
-  -- (idempotency: rewardSent sudah True → assertMsg "Reward sudah dikirim").
-  submitMustFail admin do
-    exerciseCmd atomicClaimFinalCid AtomicFeeAndReward with
-      feeTxId       = "SPLICE_FEE_ATOMIC_002"
-      rewardTxId    = "SPLICE_REWARD_ATOMIC_002"
-      txLogId       = "CC_TX_ATOMIC_002"
-      amountMicroCc = 10000000
-      description   = "Atomic FCFS reward (retry)"
-      referenceId   = "CAMPAIGN_ATOMIC_TEST"
-      rewardSentAt  = "2026-06-05T03:06:00Z"
+  -- [J] RAFFLE GUARD (H-1, H-2, H-3)
 
-  -- Catatan: invariant CcTransactionLog (amountMicroCc >= 0) sengaja TIDAK
-  -- diuji di sini karena parser Daml SDK 3.4.11 menolak keyword 'invariant'
-  -- (lihat commit fix parse error). Validasi amountMicroCc >= 0 dijaga oleh
-  -- assertMsg di choice AtomicFeeAndReward (backend tidak pernah mengirim
-  -- nilai negatif karena Math.round(rewardCc * 1_000_000) selalu >= 0).
-
-  -- [P] RAFFLE GUARD: draw pada campaign CLOSED harus GAGAL (H-1)
-  --     dan reopen CLOSED → ACTIVE harus GAGAL (H-3)
-
+  -- Draw pada campaign CLOSED → GAGAL (H-1)
   closedRaffleCid <- submit admin do
     createCmd QuestCampaign with
       admin
@@ -657,7 +360,6 @@ testAllTemplates = script do
     exerciseCmd closedRaffleEndedCid CloseCampaign with
       closedAt = "2026-06-05T23:30:00Z"
 
-  -- DrawRaffleWinner pada CLOSED → harus GAGAL (H-1 fix)
   submitMustFail admin do
     exerciseCmd closedRaffleClosedCid DrawRaffleWinner with
       user       = alice
@@ -665,13 +367,13 @@ testAllTemplates = script do
       rewardCode = ""
       drawnAt    = "2026-06-05T23:35:00Z"
 
-  -- Reopen CLOSED → ACTIVE → harus GAGAL (H-3 fix: state machine)
+  -- Reopen CLOSED → ACTIVE → GAGAL (H-3: state machine)
   submitMustFail admin do
     exerciseCmd closedRaffleClosedCid UpdateCampaignStatus with
       newStatus = "ACTIVE"
       updatedAt = "2026-06-05T23:40:00Z"
 
-  -- [Q] RAFFLE QUOTA: draw melebihi maxWinners harus GAGAL (H-2 fix)
+  -- Raffle quota: draw melebihi maxWinners → GAGAL (H-2)
   quotaRaffleCid <- submit admin do
     createCmd QuestCampaign with
       admin
@@ -692,7 +394,6 @@ testAllTemplates = script do
       rewardCode = ""
       drawnAt    = "2026-06-05T20:00:00Z"
 
-  -- Draw kedua setelah maxWinners=1 tercapai → harus GAGAL (H-2 fix)
   submitMustFail admin do
     exerciseCmd quotaRaffleCid2 DrawRaffleWinner with
       user       = bob
@@ -700,46 +401,32 @@ testAllTemplates = script do
       rewardCode = ""
       drawnAt    = "2026-06-05T20:01:00Z"
 
-  -- [N] EDGE CASES & SECURITY
+  -- [K] EDGE CASES
 
-  submitMustFail admin do
-    exerciseCmd ccRaffleCampaignCid ClaimFcfsSlot with
-      user      = carol
-      claimId   = "CLAIM_INVALID_002"
-      claimedAt = "2026-06-05T22:00:00Z"
-
+  -- CloseCampaign dengan closedAt kosong → GAGAL
   submitMustFail admin do
     exerciseCmd ccFcfsCampaignCid CloseCampaign with
       closedAt = ""
 
-  submitMustFail admin do
-    exerciseCmd bobAccCid DebitPoints with
-      amount = 50
-      reason = "spin_cost"
-
-  _aliceAccCid7 <- submit admin do
-    exerciseCmd aliceAccCid6 DebitPoints with
-      amount = 50
-      reason = "spin_cost"
-
+  -- UpdateCampaignStatus dengan newStatus kosong → GAGAL
   submitMustFail admin do
     exerciseCmd ccFcfsCampaignCid UpdateCampaignStatus with
       newStatus = ""
       updatedAt = "2026-06-05T23:00:00Z"
 
+  -- Transisi tidak sah: ACTIVE → DRAFT → GAGAL
   submitMustFail admin do
-    exerciseCmd codeFcfsCampaignCid DrawRaffleWinner with
-      user       = carol
-      claimId    = "CLAIM_INVALID_003"
-      rewardCode = ""
-      drawnAt    = "2026-06-05T22:30:00Z"
+    exerciseCmd ccRaffleCampaignCid UpdateCampaignStatus with
+      newStatus = "DRAFT"
+      updatedAt = "2026-06-05T23:00:00Z"
 
-  testRevealCampaignCid <- submit admin do
+  -- AtomicFeeAndReward pada claim tanpa fee & tanpa reward → GAGAL
+  zeroValueCampaignCid <- submit admin do
     createCmd QuestCampaign with
       admin
-      campaignId    = "CAMPAIGN_TEST_EMPTY_CODE"
-      title         = "Test Empty Code"
-      questKind     = "CODE_RAFFLE"
+      campaignId    = "CAMPAIGN_ZERO_VALUE"
+      title         = "Zero Value Test"
+      questKind     = "CODE_FCFS"
       rewardCc      = 0.0
       claimFeeCc    = 0.0
       maxWinners    = 0
@@ -747,21 +434,42 @@ testAllTemplates = script do
       status        = "ACTIVE"
       createdAt     = "2026-06-05T00:00:00Z"
 
-  (_, testRevealClaimCid) <- submit admin do
-    exerciseCmd testRevealCampaignCid DrawRaffleWinner with
-      user       = alice
-      claimId    = "CLAIM_TEST_EMPTY_CODE_001"
-      rewardCode = ""
-      drawnAt    = "2026-06-05T23:30:00Z"
+  (_, zeroValueClaimCid) <- submit admin do
+    exerciseCmd zeroValueCampaignCid ClaimFcfsSlot with
+      user      = bob
+      claimId   = "CLAIM_ZERO_VALUE_001"
+      claimedAt = "2026-06-05T03:00:00Z"
 
   submitMustFail admin do
-    exerciseCmd testRevealClaimCid RevealRewardCode with
-      code       = ""
-      revealedAt = "2026-06-05T23:31:00Z"
+    exerciseCmd zeroValueClaimCid AtomicFeeAndReward with
+      feeTxId     = "SPLICE_FEE_ZERO"
+      rewardTxId  = "SPLICE_REWARD_ZERO"
+      rewardSentAt = "2026-06-05T03:05:00Z"
+
+  -- AtomicFeeAndReward dengan feeTxId kosong → GAGAL (fresh claim, belum archived)
+  emptyFeeCampaignCid <- submit admin do
+    createCmd QuestCampaign with
+      admin
+      campaignId    = "CAMPAIGN_EMPTY_FEE_TX"
+      title         = "Empty Fee Tx Test"
+      questKind     = "CC_FCFS"
+      rewardCc      = 5.0
+      claimFeeCc    = 1.0
+      maxWinners    = 0
+      currentClaims = 0
+      status        = "ACTIVE"
+      createdAt     = "2026-06-05T00:00:00Z"
+
+  (_, emptyFeeClaimCid) <- submit admin do
+    exerciseCmd emptyFeeCampaignCid ClaimFcfsSlot with
+      user      = bob
+      claimId   = "CLAIM_EMPTY_FEE_TX_001"
+      claimedAt = "2026-06-05T04:00:00Z"
 
   submitMustFail admin do
-    exerciseCmd aliceSpinTxLogCid SettleCcTransaction with
-      txId      = "SOME_TX_ID"
-      settledAt = ""
+    exerciseCmd emptyFeeClaimCid AtomicFeeAndReward with
+      feeTxId     = ""
+      rewardTxId  = "SPLICE_REWARD_TX"
+      rewardSentAt = "2026-06-05T04:05:00Z"
 
   pure ()

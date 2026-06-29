@@ -4,18 +4,19 @@ import { randomUUID } from 'crypto';
 import { CantonLedgerService } from './canton-ledger.service';
 
 /**
- * DAML template paths — module Main (canquest-v10, DAR yang ter-deploy di ledger)
+ * DAML template paths — module Main (canquest-v21 lean, DAR yang ter-deploy di ledger)
  *
- * Templates:
- *   Main:UserAccount        — akun user on-chain (earnedPoints & spentPoints)
- *   Main:WalletRegistration — bukti pembuatan wallet / Party ID
- *   Main:QuestCampaign      — template induk quest (6 questKind)
- *   Main:QuestClaim         — bukti klaim quest + confirmFee + confirmReward + revealCode
- *   Main:DailyCheckIn       — check-in harian on-chain
- *   Main:SpinExecution      — audit trail spin on-chain
- *   Main:SpinCcReward       — bukti CC reward dari spin sudah dikirim
- *   Main:ReferralReward     — bukti referral reward dikreditkan
- *   Main:CcTransactionLog   — audit trail setiap CC credit/debit event
+ * Templates (3 — yang benar-benar dipakai backend):
+ *   Main:WalletRegistration — jangkar identitas on-chain (Party ID)
+ *   Main:QuestCampaign      — template induk quest (6 questKind) + state machine
+ *   Main:QuestClaim         — bukti klaim: AtomicFeeAndReward + RevealRewardCode
+ *
+ * YANG TIDAK ADA ON-CHAIN (off-chain Postgres):
+ *   - Poin user        → User.earnPoints + EarnEntry (backend DB)
+ *   - Daily check-in   → QuestSubmission unik + cooldown 24h (backend DB)
+ *   - Referral reward  → ReferralReward (backend DB)
+ *   - Audit trail CC   → redundan; ledger Canton sudah audit mutlak
+ *   - Spin             → feature removed (tabel di-drop)
  *
  * Authorization pattern (Canton M3):
  *   signatory admin  — operator signs all contracts
@@ -25,24 +26,12 @@ import { CantonLedgerService } from './canton-ledger.service';
  * so a Canton outage does not break the main application flow.
  */
 const TPL = {
-  UserAccount: 'Main:UserAccount',
   WalletRegistration: 'Main:WalletRegistration',
   QuestCampaign: 'Main:QuestCampaign',
   QuestClaim: 'Main:QuestClaim',
-  DailyCheckIn: 'Main:DailyCheckIn',
-  SpinExecution: 'Main:SpinExecution',
-  SpinCcReward: 'Main:SpinCcReward',
-  ReferralReward: 'Main:ReferralReward',
-  CcTransactionLog: 'Main:CcTransactionLog',
 } as const;
 
 // ── Result types ──────────────────────────────────────────────────────────────
-
-export interface UserAccountLedgerResult {
-  ledgerEnabled: boolean;
-  contractId: string | null;
-  errors: string[];
-}
 
 export interface WalletRegistrationLedgerResult {
   ledgerEnabled: boolean;
@@ -60,31 +49,6 @@ export interface QuestClaimLedgerResult {
   ledgerEnabled: boolean;
   campaignContractId: string | null;
   claimContractId: string | null;
-  errors: string[];
-}
-
-export interface DailyCheckInLedgerResult {
-  ledgerEnabled: boolean;
-  contractId: string | null;
-  errors: string[];
-}
-
-export interface SpinExecutionLedgerResult {
-  ledgerEnabled: boolean;
-  spinExecutionContractId: string | null;
-  errors: string[];
-}
-
-export interface MissionClaimLedgerResult {
-  ledgerEnabled: boolean;
-  missionContractId: string | null;
-  accountContractId: string | null;
-  errors: string[];
-}
-
-export interface SpinLedgerResult {
-  ledgerEnabled: boolean;
-  contractId: string | null;
   errors: string[];
 }
 
@@ -364,144 +328,7 @@ export class QuestLedgerService implements OnModuleInit {
     return cids;
   }
 
-  // ── 1. UserAccount ──────────────────────────────────────────────────────────
-
-  async ensureUserAccount(params: {
-    userPartyId: string;
-    username: string;
-  }): Promise<UserAccountLedgerResult> {
-    const result: UserAccountLedgerResult = {
-      ledgerEnabled: false,
-      contractId: null,
-      errors: [],
-    };
-    if (!this.isConfigured()) return result;
-    const tpl = this.templateId(TPL.UserAccount);
-    const operator = this.operatorPartyId;
-    if (!operator) {
-      result.errors.push('Canton operator party not configured');
-      return result;
-    }
-    const reachErr = await this.ensureReachable();
-    if (reachErr) {
-      result.errors.push(reachErr);
-      return result;
-    }
-    result.ledgerEnabled = true;
-    await this.ledger
-      .grantUserRights(operator)
-      .catch((err) =>
-        this.logger.warn(`grantUserRights(operator) failed: ${String(err)}`),
-      );
-    const existing = this.findContractId(
-      await this.ledger.queryActiveContracts(tpl, [operator]),
-      (args) => args.userAddress === params.userPartyId,
-    );
-    if (existing) {
-      result.contractId = existing;
-      return result;
-    }
-    const res = await this.ledger.createContract(
-      tpl,
-      {
-        admin: operator,
-        userAddress: params.userPartyId,
-        username: params.username,
-        earnedPoints: this.intStr(0),
-        spentPoints: this.intStr(0),
-        createdAt: new Date().toISOString(),
-      },
-      [operator],
-      `useracct-${params.username}`,
-    );
-    if (res.ok && res.contractId) {
-      this.logger.log(
-        `UserAccount created: @${params.username} → ${params.userPartyId.split('::')[0]}`,
-      );
-      result.contractId = res.contractId;
-    } else {
-      result.errors.push(
-        this.formatLedgerError(res.error, 'Failed to create UserAccount'),
-      );
-    }
-    return result;
-  }
-
-  async rewardUser(params: {
-    accountContractId: string;
-    pointsToAdd: number;
-    reason: string;
-  }): Promise<{ ok: boolean; newContractId: string | null; errors: string[] }> {
-    if (!this.isConfigured())
-      return {
-        ok: false,
-        newContractId: null,
-        errors: ['Quest ledger disabled'],
-      };
-    const tpl = this.templateId(TPL.UserAccount);
-    const operator = this.operatorPartyId;
-    if (!operator)
-      return {
-        ok: false,
-        newContractId: null,
-        errors: ['Canton operator party not configured'],
-      };
-    const { ok, text } = await this.ledger.exerciseChoice(
-      params.accountContractId,
-      tpl,
-      'RewardPoints',
-      {
-        pointsToAdd: this.intStr(params.pointsToAdd),
-        reason: params.reason || 'quest_completion',
-      },
-      [operator],
-      `reward-points-${randomUUID()}`,
-    );
-    if (ok) {
-      const cids = this.extractContractIds(text);
-      return { ok: true, newContractId: cids[0] ?? null, errors: [] };
-    }
-    return { ok: false, newContractId: null, errors: [text.slice(0, 200)] };
-  }
-
-  async debitPoints(params: {
-    accountContractId: string;
-    amount: number;
-    reason: string;
-  }): Promise<{ ok: boolean; newContractId: string | null; errors: string[] }> {
-    if (!this.isConfigured())
-      return {
-        ok: false,
-        newContractId: null,
-        errors: ['Quest ledger disabled'],
-      };
-    const tpl = this.templateId(TPL.UserAccount);
-    const operator = this.operatorPartyId;
-    if (!operator)
-      return {
-        ok: false,
-        newContractId: null,
-        errors: ['Canton operator party not configured'],
-      };
-    const { ok, text } = await this.ledger.exerciseChoice(
-      params.accountContractId,
-      tpl,
-      'DebitPoints',
-      {
-        amount: this.intStr(params.amount),
-        reason: params.reason || 'spin_cost',
-      },
-      [operator],
-      `debit-points-${randomUUID()}`,
-    );
-    if (ok) {
-      const cids = this.extractContractIds(text);
-      return { ok: true, newContractId: cids[0] ?? null, errors: [] };
-    }
-    return { ok: false, newContractId: null, errors: [text.slice(0, 200)] };
-  }
-
-  // ── 2. WalletRegistration ───────────────────────────────────────────────────
+  // ── 1. WalletRegistration ───────────────────────────────────────────────────
 
   async registerWallet(params: {
     userPartyId: string;
@@ -569,39 +396,7 @@ export class QuestLedgerService implements OnModuleInit {
     return result;
   }
 
-  async confirmWalletActive(params: {
-    walletContractId: string;
-  }): Promise<{ ok: boolean; newContractId: string | null; errors: string[] }> {
-    if (!this.isConfigured())
-      return {
-        ok: false,
-        newContractId: null,
-        errors: ['Quest ledger disabled'],
-      };
-    const tpl = this.templateId(TPL.WalletRegistration);
-    const operator = this.operatorPartyId;
-    if (!operator)
-      return {
-        ok: false,
-        newContractId: null,
-        errors: ['Canton operator party not configured'],
-      };
-    const { ok, text } = await this.ledger.exerciseChoice(
-      params.walletContractId,
-      tpl,
-      'ConfirmWalletActive',
-      { confirmedAt: new Date().toISOString() },
-      [operator],
-      `confirm-wallet-${randomUUID()}`,
-    );
-    if (ok) {
-      const cids = this.extractContractIds(text);
-      return { ok: true, newContractId: cids[0] ?? null, errors: [] };
-    }
-    return { ok: false, newContractId: null, errors: [text.slice(0, 200)] };
-  }
-
-  // ── 3. QuestCampaign ────────────────────────────────────────────────────────
+  // ── 2. QuestCampaign ────────────────────────────────────────────────────────
 
   static mapRewardTypeToQuestKind(
     rewardType: string,
@@ -802,246 +597,7 @@ export class QuestLedgerService implements OnModuleInit {
     return result;
   }
 
-  // ── 4. QuestClaim ───────────────────────────────────────────────────────────
-
-  async confirmFeePaid(params: {
-    claimContractId: string;
-    feeTxId: string;
-  }): Promise<{ ok: boolean; newContractId: string | null; errors: string[] }> {
-    if (!this.isClaimSessionConfigured())
-      return {
-        ok: false,
-        newContractId: null,
-        errors: ['Claim session ledger disabled'],
-      };
-    const tpl = this.templateId(TPL.QuestClaim);
-    const operator = this.operatorPartyId;
-    if (!operator)
-      return {
-        ok: false,
-        newContractId: null,
-        errors: ['Canton operator party not configured'],
-      };
-    const { ok, text } = await this.ledger.exerciseChoice(
-      params.claimContractId,
-      tpl,
-      'ConfirmFeePaid',
-      { txId: params.feeTxId, confirmedAt: new Date().toISOString() },
-      [operator],
-      `confirm-fee-${randomUUID()}`,
-    );
-    if (ok) {
-      const cids = this.extractContractIds(text);
-      return { ok: true, newContractId: cids[0] ?? null, errors: [] };
-    }
-    return { ok: false, newContractId: null, errors: [text.slice(0, 200)] };
-  }
-
-  async confirmRewardSent(params: {
-    claimContractId: string;
-    rewardTxId: string;
-  }): Promise<{ ok: boolean; newContractId: string | null; errors: string[] }> {
-    if (!this.isClaimSessionConfigured())
-      return {
-        ok: false,
-        newContractId: null,
-        errors: ['Claim session ledger disabled'],
-      };
-    const tpl = this.templateId(TPL.QuestClaim);
-    const operator = this.operatorPartyId;
-    if (!operator)
-      return {
-        ok: false,
-        newContractId: null,
-        errors: ['Canton operator party not configured'],
-      };
-    const { ok, text } = await this.ledger.exerciseChoice(
-      params.claimContractId,
-      tpl,
-      'ConfirmRewardSent',
-      { txId: params.rewardTxId, sentAt: new Date().toISOString() },
-      [operator],
-      `confirm-reward-${randomUUID()}`,
-    );
-    if (ok) {
-      const cids = this.extractContractIds(text);
-      return { ok: true, newContractId: cids[0] ?? null, errors: [] };
-    }
-    return { ok: false, newContractId: null, errors: [text.slice(0, 200)] };
-  }
-
-  // ── 5. DailyCheckIn ─────────────────────────────────────────────────────────
-
-  async recordDailyCheckIn(params: {
-    userPartyId: string;
-    username: string;
-    userId: string;
-    checkInDate: string;
-    pointsAwarded: number;
-    streakCount: number;
-  }): Promise<DailyCheckInLedgerResult> {
-    const result: DailyCheckInLedgerResult = {
-      ledgerEnabled: false,
-      contractId: null,
-      errors: [],
-    };
-    if (!this.isClaimSessionConfigured()) return result;
-    const tpl = this.templateId(TPL.DailyCheckIn);
-    const operator = this.operatorPartyId;
-    if (!operator) {
-      result.errors.push('Canton operator party not configured');
-      return result;
-    }
-    const reachErr = await this.ensureReachable();
-    if (reachErr) {
-      result.errors.push(reachErr);
-      return result;
-    }
-    result.ledgerEnabled = true;
-    const checkInId = `${params.userId}_${params.checkInDate}`;
-    const existing = this.findContractId(
-      await this.ledger.queryActiveContracts(tpl, [operator]),
-      (args) => args.checkInId === checkInId,
-    );
-    if (existing) {
-      result.contractId = existing;
-      return result;
-    }
-    const res = await this.ledger.createContract(
-      tpl,
-      {
-        admin: operator,
-        userAddress: params.userPartyId,
-        username: params.username,
-        checkInId,
-        checkInDate: params.checkInDate,
-        pointsAwarded: this.intStr(params.pointsAwarded),
-        streakCount: this.intStr(params.streakCount),
-        checkedInAt: new Date().toISOString(),
-      },
-      [operator],
-      `daily-checkin-${checkInId}-${randomUUID()}`,
-    );
-    if (res.ok && res.contractId) {
-      this.logger.log(
-        `DailyCheckIn recorded: @${params.username} date=${params.checkInDate} streak=${params.streakCount}`,
-      );
-      result.contractId = res.contractId;
-    } else {
-      result.errors.push(
-        this.formatLedgerError(res.error, 'Failed to record DailyCheckIn'),
-      );
-    }
-    return result;
-  }
-
-  // ── 6. SpinExecution ────────────────────────────────────────────────────────
-
-  async recordSpinExecution(params: {
-    userPartyId: string;
-    username: string;
-    spinResultId: string;
-    spinItemId: string;
-    spinItemLabel: string;
-    rewardType: string;
-    rewardCc: number;
-    rewardPoints: number;
-    spinCost: number;
-    executedAt: string;
-    accountContractId?: string | null;
-  }): Promise<SpinExecutionLedgerResult> {
-    const result: SpinExecutionLedgerResult = {
-      ledgerEnabled: false,
-      spinExecutionContractId: null,
-      errors: [],
-    };
-    if (!this.isClaimSessionConfigured()) return result;
-    const tpl = this.templateId(TPL.SpinExecution);
-    const operator = this.operatorPartyId;
-    if (!operator) {
-      result.errors.push('Canton operator party not configured');
-      return result;
-    }
-    const reachErr = await this.ensureReachable();
-    if (reachErr) {
-      result.errors.push(reachErr);
-      return result;
-    }
-    result.ledgerEnabled = true;
-    await this.ledger
-      .grantUserRights(operator)
-      .catch((err) =>
-        this.logger.warn(`grantUserRights(operator) failed: ${String(err)}`),
-      );
-    const res = await this.ledger.createContract(
-      tpl,
-      {
-        admin: operator,
-        userAddress: params.userPartyId,
-        username: params.username,
-        spinResultId: params.spinResultId,
-        spinItemId: params.spinItemId,
-        spinItemLabel: params.spinItemLabel,
-        rewardType: params.rewardType,
-        rewardCc: this.dec(params.rewardCc),
-        rewardPoints: String(params.rewardPoints),
-        spinCost: this.dec(params.spinCost),
-        executedAt: params.executedAt,
-      },
-      [operator],
-      `spin-exec-${params.spinResultId}`,
-    );
-    if (res.ok && res.contractId) {
-      this.logger.log(
-        `SpinExecution recorded: @${params.username} item="${params.spinItemLabel}" type=${params.rewardType} spinResultId=${params.spinResultId.slice(0, 8)}`,
-      );
-      result.spinExecutionContractId = res.contractId;
-    } else {
-      result.errors.push(
-        this.formatLedgerError(res.error, 'Failed to record SpinExecution'),
-      );
-    }
-    return result;
-  }
-
-  async confirmSpinCcDelivered(params: {
-    spinExecutionContractId: string;
-    spliceTxId: string;
-  }): Promise<{
-    ok: boolean;
-    ccRewardContractId: string | null;
-    errors: string[];
-  }> {
-    if (!this.isClaimSessionConfigured())
-      return { ok: true, ccRewardContractId: null, errors: [] };
-    const tpl = this.templateId(TPL.SpinExecution);
-    const operator = this.operatorPartyId;
-    if (!operator)
-      return {
-        ok: false,
-        ccRewardContractId: null,
-        errors: ['Canton operator party not configured'],
-      };
-    const { ok, text } = await this.ledger.exerciseChoice(
-      params.spinExecutionContractId,
-      tpl,
-      'ConfirmCcDelivered',
-      { spliceTxId: params.spliceTxId, deliveredAt: new Date().toISOString() },
-      [operator],
-      `confirm-spin-cc-${randomUUID()}`,
-    );
-    if (ok) {
-      const cids = this.extractContractIds(text);
-      return { ok: true, ccRewardContractId: cids[0] ?? null, errors: [] };
-    }
-    return {
-      ok: false,
-      ccRewardContractId: null,
-      errors: [text.slice(0, 200)],
-    };
-  }
-
-  // ── 7. QuestClaim: RevealRewardCode ─────────────────────────────────────────
+  // ── 3. QuestClaim: RevealRewardCode ─────────────────────────────────────────
 
   async revealRewardCode(params: {
     claimContractId: string;
@@ -1080,48 +636,36 @@ export class QuestLedgerService implements OnModuleInit {
    * AtomicFeeAndReward — single DAML choice yang menggabungkan:
    *   1. ConfirmFeePaid    (fee terbayar)
    *   2. ConfirmRewardSent (reward terkirim)
-   *   3. CcTransactionLog  (audit trail)
    *
-   * Canton menjamin ketiga status di atas ditulis ATOMIC dalam 1 transaksi:
+   * Canton menjamin kedua status di atas ditulis ATOMIC dalam 1 transaksi:
    * jika salah satu assert gagal, seluruh transaksi rollback otomatis.
    *
    * ⚠️ MODEL PEMINDAHAN CC (penting):
-   *   Choice ini HANYA menulis audit trail on-chain. Pemindahan CC (Amulet)
+   *   Choice ini HANYA menulis receipt on-chain. Pemindahan CC (Amulet)
    *   ASLI terjadi di Canton Token Standard (CIP-56 TransferFactory) di luar
    *   DAML — lihat canton-ledger.service.ts:executeTransferFactoryTransfer.
    *   "Atomic" di sini = atomicity PENULISAN STATUS, bukan atomicity CC.
    *
-   * v1.0.2 UPGRADE COMPATIBILITY:
-   *   DAML choice tetap return 3-tuple (ContractId QuestClaim, ContractId
-   *   QuestClaim, ContractId CcTransactionLog) supaya bisa upgrade dari
-   *   v1.0.1 (Canton melarang ubah return type choice saat package upgrade).
-   *   Tuple [0] dan [1] MERUJUK KE CONTRACT ID YANG SAMA (claimFinalCid).
-   *   Tidak ada lagi double-create QuestClaim (bug v1.0.1 sudah di-fix).
+   * v21: return type disederhanakan jadi ContractId QuestClaim tunggal.
+   *   Versi lama (≤ v11.1) pakai 3-tuple demi upgrade-compat v1.0.1, dan
+   *   create CcTransactionLog (sekarang dihapus — redundan dengan ledger).
+   *   canquest-v21 = fresh package, constraint upgrade gugur.
    *
-   *   Backend parse: cids[0] = claimFinal, cids[2] = txLog.
-   *   extractContractIds akan otomatis dedupe karena tuple [0]==[1].
-   *
-   * @returns { claimFinalCid, txLogCid } — claimFinal dari cids[0], txLog dari cids[1] setelah dedupe
+   * @returns { claimFinalCid } — contract ID QuestClaim hasil exercise
    */
   async atomicFeeAndReward(params: {
     claimContractId: string;
     feeTxId: string;
     rewardTxId: string;
-    txLogId: string;
-    amountMicroCc: number;
-    description: string;
-    referenceId: string;
   }): Promise<{
     ok: boolean;
     claimFinalCid: string | null;
-    txLogCid: string | null;
     errors: string[];
   }> {
     if (!this.isClaimSessionConfigured()) {
       return {
         ok: false,
         claimFinalCid: null,
-        txLogCid: null,
         errors: ['Claim session ledger disabled'],
       };
     }
@@ -1131,7 +675,6 @@ export class QuestLedgerService implements OnModuleInit {
       return {
         ok: false,
         claimFinalCid: null,
-        txLogCid: null,
         errors: ['Canton operator party not configured'],
       };
     }
@@ -1144,10 +687,6 @@ export class QuestLedgerService implements OnModuleInit {
       {
         feeTxId: params.feeTxId,
         rewardTxId: params.rewardTxId,
-        txLogId: params.txLogId,
-        amountMicroCc: this.intStr(params.amountMicroCc),
-        description: params.description,
-        referenceId: params.referenceId,
         rewardSentAt: now,
       },
       [operator],
@@ -1157,219 +696,24 @@ export class QuestLedgerService implements OnModuleInit {
 
     if (ok) {
       const cids = this.extractContractIds(text);
-      // DAML return 3-tuple: (claimFinal, claimFinal, txLog).
-      // extractContractIds otomatis dedupe → hasil: [claimFinal, txLog].
-      // Tapi kalau ternyata tidak dedupe (edge case), ambil posisi paling aman:
-      //   - claimFinalCid = cids[0]
-      //   - txLogCid = cids[cids.length - 1]  (selalu contract terakhir)
       const claimFinalCid = cids[0] ?? null;
-      const txLogCid = cids.length >= 2 ? cids[cids.length - 1] : null;
       this.logger.log(
-        `AtomicFeeAndReward OK: claimFinal=${claimFinalCid?.slice(0, 12)} txLog=${txLogCid?.slice(0, 12)} (cids count=${cids.length})`,
+        `AtomicFeeAndReward OK: claimFinal=${claimFinalCid?.slice(0, 12)} (cids count=${cids.length})`,
       );
-      return { ok: true, claimFinalCid, txLogCid, errors: [] };
+      return { ok: true, claimFinalCid, errors: [] };
     }
 
     this.logger.warn(
-      `DAML_AUDIT_TRAIL_FAIL AtomicFeeAndReward claimContractId=${params.claimContractId.slice(0, 16)} referenceId=${params.referenceId} amountMicroCc=${params.amountMicroCc}: ${text.slice(0, 300)}`,
+      `DAML_AUDIT_TRAIL_FAIL AtomicFeeAndReward claimContractId=${params.claimContractId.slice(0, 16)}: ${text.slice(0, 300)}`,
     );
     return {
       ok: false,
       claimFinalCid: null,
-      txLogCid: null,
       errors: [this.formatLedgerError(text, 'AtomicFeeAndReward failed')],
     };
   }
 
-  // ── 8. ReferralReward ────────────────────────────────────────────────────────
-
-  async recordReferralReward(params: {
-    referrerPartyId: string;
-    referrerId: string;
-    referredUserId: string;
-    points: number;
-  }): Promise<{ ok: boolean; contractId: string | null; errors: string[] }> {
-    if (!this.isClaimSessionConfigured())
-      return {
-        ok: false,
-        contractId: null,
-        errors: ['Claim session ledger disabled'],
-      };
-    const tpl = this.templateId(TPL.ReferralReward);
-    const operator = this.operatorPartyId;
-    if (!operator)
-      return {
-        ok: false,
-        contractId: null,
-        errors: ['Canton operator party not configured'],
-      };
-    const reachErr = await this.ensureReachable();
-    if (reachErr) return { ok: false, contractId: null, errors: [reachErr] };
-    const referralId = `${params.referrerId}_${params.referredUserId}`;
-    const existing = this.findContractId(
-      await this.ledger.queryActiveContracts(tpl, [operator]),
-      (args) => args.referralId === referralId,
-    );
-    if (existing) {
-      return { ok: true, contractId: existing, errors: [] };
-    }
-    const res = await this.ledger.createContract(
-      tpl,
-      {
-        admin: operator,
-        referrerAddress: params.referrerPartyId,
-        referrerId: params.referrerId,
-        referredUserId: params.referredUserId,
-        points: this.intStr(params.points),
-        referralId,
-        createdAt: new Date().toISOString(),
-      },
-      [operator],
-      `referral-reward-${referralId}`,
-    );
-    if (res.ok && res.contractId) {
-      return { ok: true, contractId: res.contractId, errors: [] };
-    }
-    return {
-      ok: false,
-      contractId: null,
-      errors: [
-        this.formatLedgerError(res.error, 'Failed to record ReferralReward'),
-      ],
-    };
-  }
-
-  // ── 9. CcTransactionLog ──────────────────────────────────────────────────────
-
-  async recordCcTransactionLog(params: {
-    userPartyId: string;
-    username: string;
-    txLogId: string;
-    txType:
-      | 'QUEST_REWARD'
-      | 'SPIN_REWARD'
-      | 'TRANSFER_IN'
-      | 'TRANSFER_OUT'
-      | 'AIRDROP';
-    amountMicroCc: number;
-    description: string;
-    referenceId: string;
-    ledgerTxId?: string;
-  }): Promise<{ ok: boolean; contractId: string | null; errors: string[] }> {
-    if (!this.isClaimSessionConfigured())
-      return {
-        ok: false,
-        contractId: null,
-        errors: ['Claim session ledger disabled'],
-      };
-    const tpl = this.templateId(TPL.CcTransactionLog);
-    const operator = this.operatorPartyId;
-    if (!operator)
-      return {
-        ok: false,
-        contractId: null,
-        errors: ['Canton operator party not configured'],
-      };
-    const reachErr = await this.ensureReachable();
-    if (reachErr) return { ok: false, contractId: null, errors: [reachErr] };
-    const res = await this.ledger.createContract(
-      tpl,
-      {
-        admin: operator,
-        userAddress: params.userPartyId,
-        username: params.username,
-        txLogId: params.txLogId,
-        txType: params.txType,
-        amountMicroCc: this.intStr(params.amountMicroCc),
-        description: params.description,
-        referenceId: params.referenceId,
-        ledgerTxId: params.ledgerTxId ?? '',
-        createdAt: new Date().toISOString(),
-      },
-      [operator],
-      `cc-tx-log-${params.txLogId}`,
-    );
-    if (res.ok && res.contractId) {
-      return { ok: true, contractId: res.contractId, errors: [] };
-    }
-    return {
-      ok: false,
-      contractId: null,
-      errors: [
-        this.formatLedgerError(res.error, 'Failed to record CcTransactionLog'),
-      ],
-    };
-  }
-
-  async settleCcTransactionLog(params: {
-    txLogContractId: string;
-    txId: string;
-  }): Promise<{ ok: boolean; newContractId: string | null; errors: string[] }> {
-    if (!this.isClaimSessionConfigured())
-      return {
-        ok: false,
-        newContractId: null,
-        errors: ['Claim session ledger disabled'],
-      };
-    const tpl = this.templateId(TPL.CcTransactionLog);
-    const operator = this.operatorPartyId;
-    if (!operator)
-      return {
-        ok: false,
-        newContractId: null,
-        errors: ['Canton operator party not configured'],
-      };
-    const { ok, text } = await this.ledger.exerciseChoice(
-      params.txLogContractId,
-      tpl,
-      'SettleCcTransaction',
-      { txId: params.txId, settledAt: new Date().toISOString() },
-      [operator],
-      `settle-cc-tx-${randomUUID()}`,
-    );
-    if (ok) {
-      const cids = this.extractContractIds(text);
-      return { ok: true, newContractId: cids[0] ?? null, errors: [] };
-    }
-    return { ok: false, newContractId: null, errors: [text.slice(0, 200)] };
-  }
-
   // ── Legacy / deprecated stubs ───────────────────────────────────────────────
-
-  async createMission(params: {
-    missionId: string;
-    rewardPoints: number;
-    maxQuota: number;
-  }): Promise<{ contractId: string | null; error?: string }> {
-    const result = await this.createQuestCampaign({
-      campaignId: params.missionId,
-      title: `Mission ${params.missionId}`,
-      questKind: 'CC_FCFS',
-      rewardCc: 0,
-      claimFeeCc: 0,
-      maxWinners: params.maxQuota,
-    });
-    if (result.contractId) return { contractId: result.contractId };
-    return { contractId: null, error: result.errors.join(' | ') };
-  }
-
-  async claimMission(params: {
-    missionContractId: string;
-    userPartyId: string;
-    accountContractId: string;
-  }): Promise<MissionClaimLedgerResult> {
-    const claimResult = await this.claimFcfsSlot({
-      campaignContractId: params.missionContractId,
-      userPartyId: params.userPartyId,
-      claimId: `mission-claim-${randomUUID()}`,
-    });
-    return {
-      ledgerEnabled: claimResult.ledgerEnabled,
-      missionContractId: claimResult.campaignContractId,
-      accountContractId: claimResult.claimContractId,
-      errors: claimResult.errors,
-    };
-  }
 
   /** @deprecated */
   async ensureParticipation(params: {
@@ -1436,19 +780,18 @@ export class QuestLedgerService implements OnModuleInit {
     if (!params.userPartyId) return { ok: true, contractId: null, errors: [] };
     const resolvedUsername =
       params.username ?? params.partyHint ?? params.userPartyId.split('::')[0];
+    // v21: hanya create WalletRegistration. UserAccount dihapus (poin off-chain).
     const walletResult = await this.registerWallet({
       userPartyId: params.userPartyId,
       username: resolvedUsername,
       partyId: params.userPartyId,
       inviteCode: params.inviteCode ?? '',
     });
-    const accountResult = await this.ensureUserAccount({
-      userPartyId: params.userPartyId,
-      username: resolvedUsername,
-    });
-    const errors = [...walletResult.errors, ...accountResult.errors];
-    const ok = !!walletResult.contractId || !!accountResult.contractId;
-    return { ok, contractId: walletResult.contractId, errors };
+    return {
+      ok: !!walletResult.contractId,
+      contractId: walletResult.contractId,
+      errors: walletResult.errors,
+    };
   }
 
   /** @deprecated */
@@ -1472,25 +815,19 @@ export class QuestLedgerService implements OnModuleInit {
   }): Promise<{ contractId: string | null; error?: string }> {
     return { contractId: null };
   }
-  /** @deprecated */
+  /** @deprecated — v21: gunakan atomicFeeAndReward (gabungan fee+reward) */
   async markEarnClaimFeePaid(params: {
     sessionContractId: string;
     feeTxId: string;
   }): Promise<{ ok: boolean; errors: string[] }> {
-    return this.confirmFeePaid({
-      claimContractId: params.sessionContractId,
-      feeTxId: params.feeTxId,
-    }).then((r) => ({ ok: r.ok, errors: r.errors }));
+    return { ok: true, errors: [] };
   }
-  /** @deprecated */
+  /** @deprecated — v21: gunakan atomicFeeAndReward (gabungan fee+reward) */
   async markEarnClaimRewardSent(params: {
     sessionContractId: string;
     rewardTxId: string;
   }): Promise<{ ok: boolean; errors: string[] }> {
-    return this.confirmRewardSent({
-      claimContractId: params.sessionContractId,
-      rewardTxId: params.rewardTxId,
-    }).then((r) => ({ ok: r.ok, errors: r.errors }));
+    return { ok: true, errors: [] };
   }
   /** @deprecated */
   async markClaimFeePaid(params: {

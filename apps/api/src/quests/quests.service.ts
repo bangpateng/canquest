@@ -1147,24 +1147,8 @@ export class QuestsService {
             },
           });
           await this.users.creditEarnPoints(userId, task.points);
-          // canquest-v6: daily check-in dicatat on-chain via DailyCheckIn template
-          if (taskType === 'daily_check_in' && userPartyId && this.questLedger.isClaimSessionConfigured()) {
-            const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-            void this.questLedger
-              .recordDailyCheckIn({
-                userPartyId,
-                username:
-                  (await this.users.findById(userId))?.username ??
-                  userPartyId.split('::')[0],
-                userId,
-                checkInDate: today,
-                pointsAwarded: task.points,
-                streakCount: 1,
-              })
-              .catch((err) =>
-                this.logger.warn(`Daily check-in ledger: ${String(err)}`),
-              );
-          }
+          // canquest-v21: daily check-in sepenuhnya off-chain (Postgres QuestSubmission
+          // unik + cooldown 24h). Template DailyCheckIn dihapus dari DAML (redundan).
           this.logger.log(
             `Task re-submitted (24h repeat): user=${userId.slice(0, 8)} task=${taskId}`,
           );
@@ -2143,19 +2127,14 @@ export class QuestsService {
           `(${rewardPending ? 'PENDING — user accepts in wallet' : 'direct'})`,
       );
 
-      // canquest-v11.1: Atomic DAML choice — fee + reward + audit trail dalam SATU transaksi.
+      // canquest-v21: Atomic DAML choice — fee + reward receipt dalam SATU transaksi.
       // Jika salah satu gagal, Canton rollback seluruhnya. Tidak ada partial commit.
-      // v11.1 fix: signature sekarang mengembalikan tuple 2 (claimFinalCid, txLogCid),
-      // bukan tuple 3 seperti v11.0 (yang akibatkan bug double-create QuestClaim).
+      // (CC movement asli tetap via CIP-56; choice ini hanya menulis receipt.)
       if (claimSessionId) {
         const atomicResult = await this.questLedger.atomicFeeAndReward({
           claimContractId: claimSessionId,
           feeTxId,
           rewardTxId: rewardTxId,
-          txLogId: `fcfstx-${reservedDrawId.slice(0, 12)}`,
-          amountMicroCc: Math.round(rewardCc * 1_000_000),
-          description: `FCFS reward — ${quest.title}`,
-          referenceId: questId,
         });
         if (!atomicResult.ok) {
           this.logger.warn(
@@ -2445,10 +2424,6 @@ export class QuestsService {
           claimContractId: claimSessionId,
           feeTxId,
           rewardTxId: rewardOfferId,
-          txLogId: `drawtx-${draw.id.slice(0, 12)}`,
-          amountMicroCc: Math.round(rewardCc * 1_000_000),
-          description: `Raffle reward — ${quest.title}`,
-          referenceId: questId,
         });
         if (!atomicResult.ok) {
           this.logger.warn(
@@ -3090,10 +3065,6 @@ export class QuestsService {
           claimContractId: ccCodeClaimSessionId,
           feeTxId,
           rewardTxId: rewardOfferId,
-          txLogId: `cccodetx-${draw.id.slice(0, 12)}`,
-          amountMicroCc: Math.round(rewardCc * 1_000_000),
-          description: `CC+Code raffle reward — ${quest.title}`,
-          referenceId: questId,
         });
         if (!atomicResult.ok) {
           this.logger.warn(

@@ -1,29 +1,35 @@
 sdk-version: 3.4.11
 # ============================================================
-# CanQuest DAML Package — canquest-v4
-# Version: 1.0.3
+# CanQuest DAML Package — canquest-v21 (lean)
+# Version: 2.0.0
 # SDK: 3.4.11 (Canton Network)
 #
+# Model lean (3 template) — lihat CHANGELOG di Main.daml.
+#
 # Templates (module Main):
-#   1. UserAccount        — akun user on-chain (poin earned & spent)
-#   2. WalletRegistration — bukti pembuatan wallet/party ID
-#   3. QuestCampaign      — template induk quest (semua 8 RewardType)
-#   4. QuestClaim         — bukti klaim quest + fee + reward + reveal code
-#   5. DailyCheckIn       — check-in harian on-chain
-#   6. SpinExecution      — audit trail spin on-chain
-#   7. SpinCcReward       — bukti CC reward dari spin
-#   8. ReferralReward     — bukti referral reward dikreditkan
-#   9. CcTransactionLog   — audit trail setiap CC credit/debit event
+#   1. WalletRegistration — jangkar identitas on-chain (admin sign, user observer)
+#   2. QuestCampaign      — mesin klaim anti-sybil (FCFS / Raffle + state machine)
+#   3. QuestClaim         — receipt klaim: AtomicFeeAndReward + RevealRewardCode
+#
+# YANG TIDAK ADA DI ON-CHAIN (sengaja, off-chain di Postgres):
+#   - Poin user (earnedPoints/spentPoints)  → backend DB
+#   - Daily check-in (gate 24h)             → backend DB (QuestSubmission unik)
+#   - Referral reward                       → backend DB
+#   - Audit trail CC (CcTransactionLog)     → redundan, ledger Canton sudah audit
+#   - Spin (feature removed)                → tabel di-drop
+#
+# CC/Amulet ASLI bergerak di Canton Token Standard (CIP-56 TransferFactory)
+# di luar DAML, di-orkestrasi backend. DAML Main hanya receipt + anti-sybil.
 #
 # Authorization pattern (Canton M3):
-#   signatory admin  — operator yang menandatangani semua kontrak
-#   observer user    — user hanya bisa melihat, tidak bisa submit sendiri
+#   signatory admin  — operator menandatangani semua kontrak
+#   observer user    — user hanya lihat, tidak bisa submit sendiri
 #
 # Docs: https://docs.canton.network/appdev/modules/m3-dev-environment
 # ============================================================
-name: canquest-v20
+name: canquest-v21
 source: daml
-version: 1.0.0
+version: 2.0.0
 dependencies:
   - daml-prim
   - daml-stdlib
