@@ -9,7 +9,10 @@ import { CQ_ADMIN_ACCESS_COOKIE } from '@/lib/auth/auth-cookies';
 export default async function AdminLoginPage() {
   const jar = await cookies();
   const token = jar.get(CQ_ADMIN_ACCESS_COOKIE)?.value;
-  const secret = process.env.JWT_ACCESS_SECRET;
+  // SECURITY (H1): Admin tokens are signed with ADMIN_JWT_SECRET, distinct from
+  // the user JWT_ACCESS_SECRET. The backend admin module signs with this same
+  // secret — verify with it too, or every admin login silently fails.
+  const secret = process.env.ADMIN_JWT_SECRET;
 
   if (token && secret) {
     try {

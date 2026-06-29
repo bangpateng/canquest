@@ -22,7 +22,9 @@ function LogoutButton() {
 export default async function AdminPanelLayout({ children }: { children: ReactNode }) {
   const jar = await cookies();
   const token = jar.get(CQ_ADMIN_ACCESS_COOKIE)?.value;
-  const secret = process.env.JWT_ACCESS_SECRET;
+  // SECURITY (H1): Admin tokens are signed with ADMIN_JWT_SECRET. Must verify
+  // with the same secret as the backend admin module, or the panel is unreachable.
+  const secret = process.env.ADMIN_JWT_SECRET;
 
   if (!token || !secret) {
     redirect("/admin/login");
