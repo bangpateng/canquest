@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, Ticket } from "lucide-react";
+import { Check, Copy, Sparkles, Ticket } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
@@ -38,11 +38,16 @@ export function RewardReveal({
 
   if (!inviteCode && !rewardCc) return null;
 
-  // Icon header menyesuaikan tipe reward:
-  //  - CC token   → CC reward logo
-  //  - Code / Waitlist email / CC+Code → Ticket (icon waitlist/code)
+  // Icon header menyesuaikan tipe reward — sumber kebenaran tunggal:
+  // resolveIconKind() di quest-engine, sama seperti card/row/sidebar.
+  //  - CC token              → CC reward logo
+  //  - Waitlist email        → Sparkles (icon waitlist)
+  //  - Code                  → Ticket (icon code)
+  //  - CC + Code (dual)      → CC logo + Ticket (kedua reward tampil)
   const config = getRewardConfig(rewardType);
+  const isDual = config.isDual;
   const isCcOnly = config.isCcToken && !inviteCode;
+  const isWaitlist = config.code === "WAITLIST_EMAIL";
 
   return (
     <div
@@ -53,20 +58,34 @@ export function RewardReveal({
     >
       {/* Header */}
       <div className="flex items-center gap-3">
-        <span
-          className={cn(
-            "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
-            isCcOnly
-              ? "bg-canton/15 text-canton"
-              : "bg-violet-500/15 text-violet-400",
-          )}
-        >
-          {isCcOnly ? (
-            <CcRewardLogo size={18} />
-          ) : (
-            <Ticket className="h-5 w-5" strokeWidth={2.5} aria-hidden />
-          )}
-        </span>
+        {/* Dual reward (CC + Code): tampilkan CC logo + icon code berdampingan
+            untuk menandakan kedua jenis reward. Fungsi raffle (ada pemenang CC
+            & ada pemenang code) tidak berubah — ini murni tampilan icon header. */}
+        {isDual ? (
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center gap-0.5 rounded-xl bg-gradient-to-br from-canton/15 to-violet-500/15">
+            <CcRewardLogo size={16} />
+            <Ticket className="h-4 w-4 text-violet-300" strokeWidth={2.5} aria-hidden />
+          </span>
+        ) : (
+          <span
+            className={cn(
+              "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
+              isCcOnly
+                ? "bg-canton/15 text-canton"
+                : isWaitlist
+                  ? "bg-cyan-500/15 text-cyan-300"
+                  : "bg-violet-500/15 text-violet-400",
+            )}
+          >
+            {isCcOnly ? (
+              <CcRewardLogo size={18} />
+            ) : isWaitlist ? (
+              <Sparkles className="h-5 w-5" strokeWidth={2.5} aria-hidden />
+            ) : (
+              <Ticket className="h-5 w-5" strokeWidth={2.5} aria-hidden />
+            )}
+          </span>
+        )}
         <div className="min-w-0">
           <p className="text-base font-bold text-[var(--foreground)]">
             {t("earnCampaigns.congratsTitle")}
