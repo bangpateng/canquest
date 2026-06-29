@@ -1,12 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, Loader2, Send } from "lucide-react";
-import { TurnstileField } from "@/components/platform/turnstile-field";
+import { CheckCircle2, Mail, Send } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
 
-type Status = "idle" | "submitting" | "success" | "error";
+type Status = "idle" | "success";
 
 const COLLABORATION_TYPES = [
   { value: "earn_campaign", label: "Earn campaign" },
@@ -25,16 +24,16 @@ const BUDGETS = [
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** Inbox that receives partnership submissions. */
+const CONTACT_EMAIL = "team@canquest.cc";
+
 export function ContactForm() {
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
-  const [resetKey, setResetKey] = useState(0);
+  const [mailtoHref, setMailtoHref] = useState<string | null>(null);
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (status === "submitting") return;
-
     setError(null);
 
     const form = e.currentTarget;
@@ -46,42 +45,47 @@ export function ContactForm() {
     const budget = String(fd.get("budget") ?? "").trim();
     const message = String(fd.get("message") ?? "").trim();
 
-    if (!name) return setError("Please enter your name.");
-    if (!EMAIL_RE.test(email)) return setError("Please enter a valid email address.");
-    if (message.length < 10) return setError("Tell us a bit more (at least 10 characters).");
-
-    setStatus("submitting");
-    try {
-      const res = await fetch("/api/contact", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          email,
-          organization: organization || undefined,
-          collaborationType: collaborationType || undefined,
-          budget: budget || undefined,
-          message,
-          turnstileToken: turnstileToken ?? undefined,
-        }),
-      });
-      const data = (await res.json().catch(() => ({}))) as { message?: string };
-
-      if (!res.ok) {
-        setStatus("error");
-        setError(data.message ?? "Something went wrong. Please try again.");
-        setResetKey((k) => k + 1); // force Turnstile re-challenge
-        return;
-      }
-
-      setStatus("success");
-      form.reset();
-      setResetKey((k) => k + 1);
-    } catch {
-      setStatus("error");
-      setError("Network error. Please check your connection and try again.");
-      setResetKey((k) => k + 1);
+    if (!name) {
+      setError("Please enter your name.");
+      return;
     }
+    if (!EMAIL_RE.test(email)) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+    if (message.length < 10) {
+      setError("Tell us a bit more (at least 10 characters).");
+      return;
+    }
+
+    // No server / no API: the visitor sends the email from their own client.
+    const typeLabel =
+      COLLABORATION_TYPES.find((t) => t.value === collaborationType)?.label ??
+      collaborationType;
+
+    const lines = [
+      `Name: ${name}`,
+      `Email: ${email}`,
+      organization ? `Organization / Project: ${organization}` : null,
+      typeLabel ? `Collaboration type: ${typeLabel}` : null,
+      budget ? `Estimated budget: ${budget}` : null,
+      "",
+      "Message:",
+      message,
+      "",
+      "— Sent via canquest.cc/cooperation",
+    ].filter((v) => v !== null) as string[];
+
+    const subject = `Partnership inquiry — ${name}`;
+    const body = lines.join("\r\n");
+    const href = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(
+      subject,
+    )}&body=${encodeURIComponent(body)}`;
+
+    setMailtoHref(href);
+    // Opens the visitor's default mail client with everything pre-filled.
+    window.location.href = href;
+    setStatus("success");
   }
 
   if (status === "success") {
@@ -89,18 +93,50 @@ export function ContactForm() {
       <div className="flex flex-col items-center gap-3 rounded-2xl border border-canton-strong/30 bg-canton-subtle/40 px-6 py-10 text-center">
         <CheckCircle2 className="h-10 w-10 text-canton" aria-hidden />
         <p className="text-base font-semibold text-[var(--foreground)]">
-          Thanks — your message is on its way.
+          Your email app should have opened.
         </p>
         <p className="max-w-sm text-sm text-[var(--muted-foreground)]">
-          Our team received your submission and will reply to your email, usually within a
-          few business days.
+          We&apos;ve drafted a message addressed to{" "}
+          <span className="font-medium text-[var(--foreground)]">
+            {CONTACT_EMAIL}
+          </span>{" "}
+          with your details. Just hit <strong>send</strong> in your mail app and
+          our team will reply within a few business days.
         </p>
+
+        {mailtoHref ? (
+          <a
+            href={mailtoHref}
+            className={cn(
+              buttonVariants({ size: "sm" }),
+              "mt-1 rounded-full",
+            )}
+          >
+            <Mail className="h-4 w-4" aria-hidden />
+            Reopen my email app
+          </a>
+        ) : null}
+
+        <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+          No mail app? Send it manually to{" "}
+          <a
+            href={`mailto:${CONTACT_EMAIL}`}
+            className="font-medium text-canton underline-offset-2 hover:underline"
+          >
+            {CONTACT_EMAIL}
+          </a>
+          .
+        </p>
+
         <button
           type="button"
-          onClick={() => setStatus("idle")}
+          onClick={() => {
+            setStatus("idle");
+            setMailtoHref(null);
+          }}
           className="mt-2 text-sm text-canton underline-offset-2 hover:underline"
         >
-          Send another message
+          Start a new message
         </button>
       </div>
     );
@@ -205,13 +241,6 @@ export function ContactForm() {
         />
       </div>
 
-      <div>
-        <p className="mb-2 text-xs font-medium text-[var(--muted-foreground)]">
-          Human check <span className="text-canton">*</span>
-        </p>
-        <TurnstileField onToken={setTurnstileToken} resetKey={resetKey} />
-      </div>
-
       {error ? (
         <p className="rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 text-sm text-red-300">
           {error}
@@ -220,30 +249,21 @@ export function ContactForm() {
 
       <button
         type="submit"
-        disabled={status === "submitting"}
         className={cn(
           buttonVariants({ size: "lg" }),
           "w-full justify-center rounded-full sm:w-auto",
-          status === "submitting" && "opacity-70",
         )}
       >
-        {status === "submitting" ? (
-          <>
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-            Sending…
-          </>
-        ) : (
-          <>
-            <Send className="h-4 w-4" aria-hidden />
-            Send to our team
-          </>
-        )}
+        <Send className="h-4 w-4" aria-hidden />
+        Send to our team
       </button>
 
       <p className="text-xs text-[var(--muted-foreground)]">
-        Your submission goes straight to{" "}
-        <span className="font-medium text-[var(--foreground)]">team@canquest.cc</span>. We
-        only use your details to reply about your proposal.
+        Clicking send opens your email app with a message addressed to{" "}
+        <span className="font-medium text-[var(--foreground)]">
+          {CONTACT_EMAIL}
+        </span>
+        . You send it yourself — we never store your details on a server.
       </p>
     </form>
   );
