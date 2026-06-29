@@ -681,6 +681,407 @@ export class CantonLedgerService {
     };
   }
 
+  /**
+   * ATOMIC TRANSFER + PLATFORM FEE (CIP-56 multi-command, Fase B).
+   *
+   * Pengirim mengirim 2 transfer dalam SATU Canton transaction:
+   *   1. amountCc  sender → receiverPartyId   (transfer utama)
+   *   2. feeCc     sender → feeRecipientPartyId (platform fee)
+   *
+   * Canton menjamin: semua command dalam satu submit = commit all-or-nothing.
+   * Tidak ada partial commit (transfer jadi tapi fee bocor, atau sebaliknya).
+   * Bukti pola ini terverifikasi di MainNet: update id 1220c3...f4236a berisi
+   * 2 TransferFactory_Transfer (transfer + fee validator) dalam 1 transaksi.
+   *
+   * Mekanisme (Splice Amulet = UTXO-like):
+   *   - Query holdings pengirim SEKALI → pool inputHoldingCids.
+   *   - PARTISI pool jadi 2 set disjoint: [transfer] + [fee].
+   *     Holdings tidak boleh dikonsumsi 2x dalam 1 tx (konflik konsumsi).
+   *   - 2 registry call (factory + choiceContext masing-masing receiver).
+   *   - Bangun array 2 ExerciseCommand TransferFactory_Transfer.
+   *   - Submit dalam 1 submitCommand → 1 updateId atomic.
+   *
+   * SYARAT: kedua recipient (receiver + feeRecipient) harus punya
+   * TransferPreapproval aktif agar transferKind="direct" (1-step atomic).
+   * Tanpa preapproval pada salah satu → fallback ke executeTransferFactoryTransfer
+   * terpisah (non-atomic), atau throw bila atomicRequired.
+   *
+   * @returns { ok, updateId, transferKind } tunggal untuk kedua transfer
+   */
+  async executeTransferWithFee(params: {
+    senderPartyId: string;
+    receiverPartyId: string;
+    amountCc: number;
+    feeCc: number;
+    feeRecipientPartyId: string;
+    description?: string;
+    /**
+     * Jika true (default) & salah satu recipient tidak punya preapproval → throw.
+     * Jika false → fallback ke 2 executeTransferFactoryTransfer terpisah (non-atomic).
+     */
+    atomicRequired?: boolean;
+    identity?: 'admin' | 'reward';
+  }): Promise<{
+    ok: boolean;
+    updateId: string | null;
+    transferKind: string;
+    feeUpdateId?: string | null;
+    atomic: boolean;
+    error?: string;
+  }> {
+    const {
+      senderPartyId,
+      receiverPartyId,
+      amountCc,
+      feeCc,
+      feeRecipientPartyId,
+      description,
+      atomicRequired = true,
+      identity = 'admin',
+    } = params;
+
+    if (feeCc <= 0 || amountCc <= 0) {
+      return {
+        ok: false,
+        updateId: null,
+        transferKind: 'unknown',
+        atomic: false,
+        error: 'amountCc and feeCc must be > 0 for atomic transfer+fee',
+      };
+    }
+
+    // ── Step 0: cek preapproval kedua recipient (syarat direct/atomic) ────────
+    const [receiverPre, feePre] = await Promise.all([
+      this.hasTransferPreapprovalViaLedger(receiverPartyId),
+      this.hasTransferPreapprovalViaLedger(feeRecipientPartyId),
+    ]);
+
+    if (!receiverPre || !feePre) {
+      const missing = [
+        !receiverPre ? 'receiver' : null,
+        !feePre ? 'feeRecipient' : null,
+      ]
+        .filter(Boolean)
+        .join(', ');
+      this.logger.warn(
+        `executeTransferWithFee: preapproval missing for ${missing} — atomic not possible (direct required)`,
+      );
+      if (atomicRequired) {
+        return {
+          ok: false,
+          updateId: null,
+          transferKind: 'unknown',
+          atomic: false,
+          error: `Atomic transfer+fee requires TransferPreapproval on both recipients; missing: ${missing}`,
+        };
+      }
+      // Fallback non-atomic: 2 transfer terpisah (transfer jalan, fee terpisah)
+      return this.executeTransferWithFeeFallback(params);
+    }
+
+    // ── Step 1: query holdings pengirim sekali, validasi total ───────────────
+    const holdings = await this.queryAmuletHoldings(senderPartyId);
+    if (holdings.length === 0) {
+      return {
+        ok: false,
+        updateId: null,
+        transferKind: 'unknown',
+        atomic: false,
+        error: 'Sender has no Amulet holdings — cannot fund transfer+fee',
+      };
+    }
+
+    // Total dana yang dibutuhkan (Canton Numeric string). Jumlahkan holdings.
+    const totalNeeded = amountCc + feeCc;
+    const totalAvailable = holdings.reduce(
+      (sum, h) => sum + Number(h.amount || '0'),
+      0,
+    );
+    if (totalAvailable < totalNeeded) {
+      return {
+        ok: false,
+        updateId: null,
+        transferKind: 'unknown',
+        atomic: false,
+        error: `Insufficient holdings: need ${totalNeeded} CC (${amountCc} + ${feeCc} fee), have ${totalAvailable} CC`,
+      };
+    }
+
+    // ── Step 2: PARTISI holdings jadi 2 set disjoint ─────────────────────────
+    // Strategi: kumpulkan holdings sampai cukup untuk amountCc (transfer utama),
+    // sisanya dialokasikan untuk fee. Keduanya disjoint.
+    // Cap 100 inputs per sub-transfer (Splice limit).
+    const MAX_INPUTS = 100;
+    const transferInputs: string[] = [];
+    const feeInputs: string[] = [];
+    let transferAccum = 0;
+    let feeAccum = 0;
+
+    for (const h of holdings) {
+      if (transferInputs.length >= MAX_INPUTS && feeInputs.length >= MAX_INPUTS) {
+        break;
+      }
+      const amt = Number(h.amount || '0');
+      if (amt <= 0) continue;
+
+      if (transferAccum < amountCc && transferInputs.length < MAX_INPUTS) {
+        transferInputs.push(h.contractId);
+        transferAccum += amt;
+      } else if (feeAccum < feeCc && feeInputs.length < MAX_INPUTS) {
+        feeInputs.push(h.contractId);
+        feeAccum += amt;
+      }
+    }
+
+    if (transferAccum < amountCc) {
+      return {
+        ok: false,
+        updateId: null,
+        transferKind: 'unknown',
+        atomic: false,
+        error: `Cannot partition holdings for transfer: need ${amountCc}, partitioned ${transferAccum}`,
+      };
+    }
+    if (feeAccum < feeCc) {
+      return {
+        ok: false,
+        updateId: null,
+        transferKind: 'unknown',
+        atomic: false,
+        error: `Cannot partition holdings for fee: need ${feeCc}, partitioned ${feeAccum}`,
+      };
+    }
+
+    const dsoParty =
+      this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() || '';
+    if (!dsoParty) {
+      return {
+        ok: false,
+        updateId: null,
+        transferKind: 'unknown',
+        atomic: false,
+        error: 'CANTON_DSO_PARTY_ID is not set — required for CIP-0056 transfer',
+      };
+    }
+
+    // ── Step 3: bangun choiceArguments untuk masing-masing transfer ──────────
+    const now = new Date();
+    const buildChoiceArgs = (
+      receiver: string,
+      amount: number,
+      inputCids: string[],
+      metaDesc: string | undefined,
+    ): Record<string, unknown> => {
+      const base: Record<string, unknown> = {
+        expectedAdmin: dsoParty,
+        transfer: {
+          sender: senderPartyId,
+          receiver,
+          amount: amount.toFixed(10),
+          instrumentId: { admin: dsoParty, id: 'Amulet' },
+          lock: null,
+          requestedAt: now.toISOString(),
+          executeBefore: new Date(
+            now.getTime() + 24 * 60 * 60 * 1000,
+          ).toISOString(),
+          inputHoldingCids: inputCids,
+          meta: metaDesc
+            ? { values: { 'splice.lfdecentralizedtrust.org/reason': metaDesc } }
+            : { values: {} },
+        },
+        extraArgs: {
+          context: { values: {} }, // akan diisi registry
+          meta: { values: {} },
+        },
+      };
+      return base;
+    };
+
+    const transferArgs = buildChoiceArgs(
+      receiverPartyId,
+      amountCc,
+      transferInputs,
+      description,
+    );
+    const feeArgs = buildChoiceArgs(
+      feeRecipientPartyId,
+      feeCc,
+      feeInputs,
+      `Platform fee: ${description ?? 'transfer'}`,
+    );
+
+    // ── Step 4: 2 registry call (factory + choiceContext masing-masing) ──────
+    const [transferReg, feeReg] = await Promise.all([
+      this.callTransferFactoryRegistry(transferArgs),
+      this.callTransferFactoryRegistry(feeArgs),
+    ]);
+
+    if (!transferReg || !feeReg) {
+      return {
+        ok: false,
+        updateId: null,
+        transferKind: 'unknown',
+        atomic: false,
+        error:
+          'Transfer Factory Registry call failed for one or both transfers — check CANTON_SCAN_URL',
+      };
+    }
+
+    // Inject choiceContextData per transfer
+    (transferArgs.extraArgs as Record<string, unknown>).context =
+      transferReg.choiceContextData;
+    (feeArgs.extraArgs as Record<string, unknown>).context =
+      feeReg.choiceContextData;
+
+    // ── Step 5: bangun 2 ExerciseCommand, submit dalam 1 transaksi ───────────
+    const factoryInterfaceId =
+      '#splice-api-token-transfer-instruction-v1:Splice.Api.Token.TransferInstructionV1:TransferFactory';
+    const commandId = `transfer-with-fee-${senderPartyId.slice(0, 12)}-${randomUUID().slice(0, 16)}`;
+
+    const commands = [
+      {
+        ExerciseCommand: {
+          templateId: factoryInterfaceId,
+          contractId: transferReg.factoryId,
+          choice: 'TransferFactory_Transfer',
+          choiceArgument: transferArgs,
+        },
+      },
+      {
+        ExerciseCommand: {
+          templateId: factoryInterfaceId,
+          contractId: feeReg.factoryId,
+          choice: 'TransferFactory_Transfer',
+          choiceArgument: feeArgs,
+        },
+      },
+    ];
+
+    // Gabungkan disclosedContracts dari kedua registry call (dedupe by contractId)
+    const seenDisclosed = new Set<string>();
+    const mergedDisclosed: unknown[] = [];
+    for (const d of [
+      ...(transferReg.disclosedContracts ?? []),
+      ...(feeReg.disclosedContracts ?? []),
+    ]) {
+      const dc = d as Record<string, unknown>;
+      const dcCid = typeof dc.contractId === 'string' ? dc.contractId : '';
+      if (dcCid && !seenDisclosed.has(dcCid)) {
+        seenDisclosed.add(dcCid);
+        mergedDisclosed.push(d);
+      }
+    }
+
+    this.logger.log(
+      `TransferWithFee atomic (CIP-56): sender=${senderPartyId.split('::')[0]} → ` +
+        `main=${receiverPartyId.split('::')[0]} (${amountCc} CC) + ` +
+        `fee=${feeRecipientPartyId.split('::')[0]} (${feeCc} CC) ` +
+        `transferInputs=${transferInputs.length} feeInputs=${feeInputs.length} ` +
+        `disclosed=${mergedDisclosed.length} identity=${identity}`,
+    );
+
+    const { ok, status, text } = await this.submitCommand(
+      commands,
+      [senderPartyId],
+      undefined,
+      commandId,
+      identity,
+      'submit-and-wait-for-transaction-tree',
+      mergedDisclosed,
+    );
+
+    if (ok) {
+      let updateId: string | null = null;
+      try {
+        const parsed = JSON.parse(text);
+        updateId = parsed.updateId ?? null;
+      } catch {
+        /* ignore */
+      }
+      this.logger.log(
+        `TransferWithFee atomic OK: updateId=${updateId?.slice(0, 16) ?? 'unknown'}`,
+      );
+      return {
+        ok: true,
+        updateId,
+        transferKind: 'direct',
+        feeUpdateId: updateId, // atomic: 1 tx id untuk keduanya
+        atomic: true,
+      };
+    }
+
+    const errMsg = text.slice(0, 300);
+    this.logger.warn(
+      `TransferWithFee atomic failed ${status}: ${errMsg}`,
+    );
+    return {
+      ok: false,
+      updateId: null,
+      transferKind: 'direct',
+      atomic: false,
+      error: errMsg,
+    };
+  }
+
+  /**
+   * Fallback non-atomic untuk transfer+fee: 2 executeTransferFactoryTransfer
+   * terpisah. Dipakai saat salah satu recipient tidak punya preapproval dan
+   * atomicRequired=false.
+   *
+   * ⚠️ NON-ATOMIC: transfer bisa berhasil tanpa fee (fee bocor) bila fee gagal.
+   */
+  private async executeTransferWithFeeFallback(params: {
+    senderPartyId: string;
+    receiverPartyId: string;
+    amountCc: number;
+    feeCc: number;
+    feeRecipientPartyId: string;
+    description?: string;
+    identity?: 'admin' | 'reward';
+  }): Promise<{
+    ok: boolean;
+    updateId: string | null;
+    transferKind: string;
+    feeUpdateId?: string | null;
+    atomic: boolean;
+    error?: string;
+  }> {
+    this.logger.warn(
+      'executeTransferWithFee: falling back to NON-ATOMIC 2-transfer mode',
+    );
+    const main = await this.executeTransferFactoryTransfer({
+      senderPartyId: params.senderPartyId,
+      receiverPartyId: params.receiverPartyId,
+      amountCc: params.amountCc,
+      description: params.description,
+      identity: params.identity,
+    });
+    if (!main.ok) {
+      return {
+        ok: false,
+        updateId: null,
+        transferKind: main.transferKind,
+        atomic: false,
+        error: `Main transfer failed: ${main.error ?? 'unknown'}`,
+      };
+    }
+    const fee = await this.executeTransferFactoryTransfer({
+      senderPartyId: params.senderPartyId,
+      receiverPartyId: params.feeRecipientPartyId,
+      amountCc: params.feeCc,
+      description: `Platform fee: ${params.description ?? 'transfer'}`,
+      identity: params.identity,
+    });
+    return {
+      ok: main.ok && fee.ok,
+      updateId: main.updateId,
+      transferKind: main.transferKind,
+      feeUpdateId: fee.updateId,
+      atomic: false,
+      error: fee.ok ? undefined : `Fee transfer failed: ${fee.error ?? 'unknown'} (main transfer OK)`,
+    };
+  }
+
   // ───────────────────────────────────────────────────────────────────────────
   // READ / CANCEL TransferPreapproval via Ledger ACS (Keycloak admin token).
   // ───────────────────────────────────────────────────────────────────────────
