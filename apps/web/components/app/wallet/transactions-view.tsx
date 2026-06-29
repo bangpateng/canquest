@@ -9,9 +9,10 @@ import { TransactionDetailModal } from "@/components/app/wallet/transaction-deta
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 
 export const TRANSACTIONS_PAGE_SIZE = 5;
-/** Server-side proxy to onchain tx — partyId comes from JWT on the backend. */
-const LIGHTHOUSE_PROXY = "/api/party/transactions/onchain";
-/** Server-side proxy to DB transactions — source of truth (fee filtered, lock/unlock recorded). */
+/** Server-side proxy to DB transactions — SINGLE source of truth.
+ * Merge on-chain (Lighthouse) dihapus dari list untuk mencegah duplikat
+ * (format id beda antara DB update_id dan onchain event_id). Link explorer
+ * Lighthouse tetap di-resolve backend saat buka detail. */
 const DB_TRANSACTIONS_PROXY = "/api/party/transactions";
 
 export interface TxItem {
@@ -58,36 +59,6 @@ export interface TxItem {
   /** Estimated USD value of the amount, if known. */
   usdEstimate?: number | null;
 }
-
-
-
-/** Generic on-chain item from Lighthouse — fields vary per endpoint */
-interface LighthouseOnChainItem {
-  id: number;
-  sender?: string;
-  receiver?: string;
-  sender_address?: string;
-  receiver_address?: string;
-  event_id?: string;
-  amount?: string;
-  amount_cc?: string;
-  created_at?: string;
-  timestamp?: string;
-  update_id?: string;
-  contract_id?: string;
-  type?: string;
-  description?: string;
-  kind?: string;
-  counterparty?: string;
-  party_id?: string;
-  round?: number | string;
-  fee?: string;
-  fee_cc?: string;
-  /** Network fee in microCC, injected by the backend from TRANSACTION_FEE_CC. */
-  network_fee?: string;
-  scan_url?: string;
-}
-
 
 
 interface TxPage {
@@ -240,129 +211,6 @@ type TransactionsViewProps = {
   partyId?: string | null;
 };
 
-/** Resolve tx type from on-chain item fields */
-function inferOnChainType(item: LighthouseOnChainItem, partyId: string): TxItem["type"] {
-  const kind = (item.kind ?? item.type ?? "").toLowerCase();
-
-  if (kind.includes("reward") || kind.includes("quest")) return "QUEST_REWARD";
-  if (kind.includes("spin") || kind.includes("wheel")) return "SPIN_REWARD";
-  if (kind.includes("airdrop") || kind.includes("claim")) return "AIRDROP";
-
-  // Transfer detection by sender/receiver
-  const sender = item.sender_address ?? item.sender;
-  const receiver = item.receiver_address ?? item.receiver;
-  if (sender && receiver) {
-    return sender === partyId ? "TRANSFER_OUT" : "TRANSFER_IN";
-  }
-
-  // Fallback: check negative amounts
-  const amountStr = item.amount ?? item.amount_cc ?? "0";
-  const amount = Number(amountStr);
-  if (amount < 0) return "TRANSFER_OUT";
-  return "TRANSFER_IN";
-}
-
-/** Build description from on-chain item */
-function inferOnChainDescription(item: LighthouseOnChainItem, type: TxItem["type"]): string {
-  if (item.description?.trim()) return item.description;
-
-  const counterparty = item.counterparty
-    ?? item.receiver_address ?? item.sender_address
-    ?? item.receiver ?? item.sender ?? "";
-  const short = counterparty.split("::")[0] ?? counterparty.slice(0, 12);
-
-  switch (type) {
-    case "TRANSFER_OUT":
-      return `Sent to ${short}…`;
-    case "TRANSFER_IN":
-      return `Received from ${short}…`;
-    case "QUEST_REWARD":
-      return "Quest reward";
-    case "SPIN_REWARD":
-      return "Spin reward";
-    case "AIRDROP":
-      return "Airdrop";
-    default:
-      return "On-chain transaction";
-  }
-}
-
-/** Convert a Lighthouse on-chain item to TxItem */
-function lighthouseToTxItem(
-  item: LighthouseOnChainItem,
-  partyId: string,
-): TxItem {
-  const type = inferOnChainType(item, partyId);
-  const amountStr = item.amount ?? item.amount_cc ?? "0";
-  const amount = Math.abs(Number(amountStr));
-  const timestamp = item.created_at ?? item.timestamp ?? new Date().toISOString();
-  const description = inferOnChainDescription(item, type);
-
-  // Keep the real sender/receiver addresses separate so the detail modal can
-  // render From/To correctly (and tag only the matching one as "You").
-  const senderAddress = item.sender_address ?? item.sender ?? null;
-  const receiverAddress = item.receiver_address ?? item.receiver ?? null;
-
-  // Network fee — backend injects network_fee (microCC). Fall back to fee/fee_cc
-  // (CC), and finally to 0.2 CC (200000 microCC) so the receipt always shows it.
-  let networkFeeMicroCc: string;
-  if (item.network_fee != null && item.network_fee !== "") {
-    networkFeeMicroCc = String(item.network_fee);
-  } else {
-    const feeStr = item.fee ?? item.fee_cc ?? null;
-    networkFeeMicroCc =
-      feeStr != null && feeStr !== "" && Number.isFinite(Number(feeStr))
-        ? String(Math.round(Math.abs(Number(feeStr)) * 1_000_000))
-        : "200000";
-  }
-
-  return {
-    id: `lh-${item.id}`,
-    amountMicroCc: String(Math.round(amount * 1_000_000)),
-    type,
-    description,
-    referenceId: null,
-    // List view keeps the counterparty column clean for on-chain items — the
-    // description already says "Sent to …" / "Received from …".
-    counterparty: null,
-    ledgerTxId: item.contract_id ?? null,
-    cantonUpdateId: item.update_id ?? item.event_id ?? null,
-    settledAt: timestamp,
-    createdAt: timestamp,
-    source: "onchain" as const,
-    partyId,
-    senderAddress,
-    receiverAddress,
-    eventId: item.event_id ?? null,
-    cantonScanUrl: item.scan_url ?? null,
-    networkFeeMicroCc,
-    round: item.round ?? null,
-    usdEstimate: null,
-  };
-}
-
-
-
-/** Fetch on-chain items from a Lighthouse endpoint, convert to TxItem[] */
-async function fetchLighthouseEndpoint(
-  url: string,
-  partyId: string,
-): Promise<TxItem[]> {
-  try {
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) return [];
-    const data = await res.json();
-
-    // Response bisa berupa array langsung atau { items: [...], data: [...] }
-    const items: LighthouseOnChainItem[] = Array.isArray(data)
-      ? data
-      : (data.transfers ?? data.items ?? data.transactions ?? data.rewards ?? data.data ?? []);
-
-    return items.map((item) => lighthouseToTxItem(item, partyId));
-  } catch {
-    return [];
-  }
-}
 
 export function TransactionsView({
   variant = "page",
@@ -401,10 +249,10 @@ export function TransactionsView({
         }
 
         // ── DB adalah sumber utama (source of truth). ──────────────────────────
-        // DB sudah benar: fee terfilter (server-side), CC_LOCK/CC_UNLOCK tercatat,
-        // send/received ada. On-chain dipakai HANYA sebagai fallback untuk item yang
-        // DB belum punya (transfer dari luar yang belum ter-sync), dengan dedup agar
-        // tidak dobel.
+        // ── DB adalah SATU-satunya sumber history (single source of truth). ────
+        // Merge on-chain (Lighthouse) dihapus: format id beda (update_id vs
+        // event_id) membuat dedup tidak pernah sempurna → duplikat. Link explorer
+        // Lighthouse tetap di-resolve backend saat buka detail modal.
         const dbRes = await fetch(
           `${DB_TRANSACTIONS_PROXY}?page=1&pageSize=200`,
           { credentials: "include", cache: "no-store" },
@@ -415,42 +263,8 @@ export function TransactionsView({
           source: "db" as const,
         }));
 
-        // ── On-chain fallback (fee sudah difilter di backend onchain proxy). ───
-        const onchainItems = await fetchLighthouseEndpoint(
-          `${LIGHTHOUSE_PROXY}?limit=200`,
-          partyId,
-        );
-
-        // Dedup multi-key: kumpulkan SEMUA id di DB (ledgerTxId, cantonUpdateId,
-        // transferInstructionCid) supaya item on-chain yang id-nya berbentuk beda
-        // (contract_id vs update_id vs event_id) tetap bisa di-match dan tidak dobel.
-        //
-        // Penting: DB menyimpan Canton update_id ("1220…", tanpa ":N") sedangkan
-        // on-chain event_id = "1220…:N". Keduanya adalah transaksi yang SAMA, jadi
-        // kita normalisasi dengan menghapus suffix ":N" sebelum dibandingkan.
-        const stripSuffix = (s: string): string =>
-          s.replace(/:[0-9]+$/, "").trim();
-        const dbKeys = new Set<string>();
-        for (const tx of dbItems) {
-          for (const k of [
-            tx.ledgerTxId,
-            tx.cantonUpdateId,
-            tx.transferInstructionCid,
-          ]) {
-            const v = stripSuffix(k ?? "");
-            if (v) dbKeys.add(v);
-          }
-        }
-        const fallbackOnchain = onchainItems.filter((tx) => {
-          // Cek semua kemungkinan key on-chain — cukup satu match untuk dianggap duplikat.
-          const keys = [tx.ledgerTxId, tx.cantonUpdateId, tx.eventId]
-            .map((k) => stripSuffix(k ?? ""))
-            .filter(Boolean);
-          if (keys.length === 0) return true; // tidak ada key → tidak bisa dedup → tetap masuk.
-          return !keys.some((k) => dbKeys.has(k));
-        });
-
-        const all = [...dbItems, ...fallbackOnchain];
+        // Sort + paginate client-side (backend sudah return sorted desc by createdAt).
+        const all = [...dbItems];
         all.sort(
           (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
         );

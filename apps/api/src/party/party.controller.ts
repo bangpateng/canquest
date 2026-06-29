@@ -1654,7 +1654,9 @@ export class PartyController {
     const user = await this.users.findById(req.user.userId);
     if (!user) throw new BadRequestException('User not found.');
     const p = Math.max(1, parseInt(page ?? '1', 10) || 1);
-    const ps = Math.min(20, Math.max(1, parseInt(pageSize ?? '5', 10) || 5));
+    // Cap 200 (sebelumnya 20) — history list fetch pageSize=200 untuk dapat semua
+    // row user. Cap lama 20 membuat row di luar 20 terbaru tidak pernah muncul.
+    const ps = Math.min(200, Math.max(1, parseInt(pageSize ?? '5', 10) || 5));
     return this.users.getTransactions(user.id, p, ps);
   }
 
