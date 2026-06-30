@@ -87,6 +87,19 @@ export class AuthController {
     return this.auth.getMe(req.user.userId);
   }
 
+  /**
+   * Mint token SSE ephemeral (60s) untuk connect ke /api/realtime/stream.
+   * Diproteksi access token utama (AuthGuard jwt) — userId sudah terverifikasi.
+   * Throttle longgar (30/menit) karena token cepat expired & butuh di-refresh
+   * tiap ~50 detik selama sesi SSE aktif.
+   */
+  @Post('sse-token')
+  @UseGuards(AuthGuard('jwt'))
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  sseToken(@Req() req: AuthedReq) {
+    return this.auth.issueSseToken(req.user.userId);
+  }
+
   @Post('me/avatar')
   @UseGuards(AuthGuard('jwt'))
   @Throttle({ default: { limit: 20, ttl: 60_000 } })

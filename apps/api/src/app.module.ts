@@ -21,6 +21,7 @@ import { TwitterModule } from './twitter/twitter.module';
 import { throttlerConfig } from './common/throttler.config';
 import { MaintenanceModule } from './common/maintenance.module';
 import { MaintenanceGuard } from './common/maintenance.guard';
+import { RealtimeModule } from './realtime/realtime.module';
 
 /** Load API env from `apps/api/.env` even when npm workspaces run Nest with cwd at repo root. */
 const resolveApiEnvPaths = (): string[] => [
@@ -54,6 +55,9 @@ const resolveApiEnvPaths = (): string[] => [
     TwitterModule,
     // ── Global maintenance mode (live toggle via AppSetting) ─────
     MaintenanceModule,
+    // ── Realtime SSE push (@Global, supaya RealtimeService bisa di-inject
+    //    di service mana pun untuk emit event) ──────────────────────
+    RealtimeModule,
   ],
   controllers: [AppController],
   providers: [

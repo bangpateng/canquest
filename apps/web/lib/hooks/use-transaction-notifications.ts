@@ -55,7 +55,7 @@ export type NotificationFeed = {
   items: NotificationItem[];
 };
 
-const DEFAULT_POLL_MS = 28_000;
+const DEFAULT_POLL_MS = 120_000;
 
 type ToastPayload = {
   id: string;

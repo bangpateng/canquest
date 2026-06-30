@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { queryKeys } from "@/lib/queries/query-keys";
 
-const DEFAULT_POLL_MS = 45_000;
+const DEFAULT_POLL_MS = 90_000;
 
 type UseCcBalanceOptions = {
   /** When false, no fetch/poll (e.g. user has no wallet yet). */

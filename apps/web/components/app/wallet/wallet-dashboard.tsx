@@ -34,11 +34,11 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
     loading: balanceLoading,
     refresh: fetchBalance,
     refreshWithRetries,
-  } = useCcBalance({ enabled: hasWallet, pollIntervalMs: 45_000 });
+  } = useCcBalance({ enabled: hasWallet, pollIntervalMs: 90_000 });
   const {
     status: lockStatus,
     refreshWithRetries: refreshLock,
-  } = useLockStatus({ enabled: hasWallet, pollIntervalMs: 60_000 });
+  } = useLockStatus({ enabled: hasWallet, pollIntervalMs: 120_000 });
   // Harga CC dari hook shared (di-dedup global oleh TanStack Query) — menggantikan
   // polling inline /api/party/cc-price duplikat yang ada sebelumnya.
   // Null (belum ada data) → treat sebagai 0 (guard `> 0` menyembunyikan tampilan).

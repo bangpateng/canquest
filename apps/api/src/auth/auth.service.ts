@@ -259,6 +259,28 @@ export class AuthService {
     };
   }
 
+  /**
+   * Issue token SSE ephemeral (60 detik) untuk seorang user.
+   *
+   * Token ini dipakai frontend untuk connect ke /api/realtime/stream?token=...
+   * Kenapa ephemeral terpisah, bukan pakai access token utama?
+   *  - Access token utama (15 menit, banyak scope) di httpOnly cookie → tidak
+   *    bisa dibaca JS client → tidak bisa dikirim via EventSource biasa.
+   *  - Token SSE di-query-param bisa muncul di log → dibuat pendek (60s) + ditandai
+   *    `kind: 'sse'` supaya guard SSE hanya terima token jenis ini.
+   *
+   * Dipanggil dari controller yang sudah dilindungi AuthGuard('jwt') → userId
+   * sudah terverifikasi dari access token utama.
+   */
+  async issueSseToken(userId: string): Promise<{ token: string; expiresIn: number }> {
+    const expiresIn = 60; // detik
+    const token = await this.jwt.signAsync(
+      { sub: userId, kind: 'sse' },
+      { expiresIn },
+    );
+    return { token, expiresIn };
+  }
+
   private async resolveReferralForEmail(
     email: string,
     referralCode?: string,

@@ -239,7 +239,8 @@ export function TransactionsView({
   // beda → duplikat). refetchInterval menggantikan polling manual 20s; refetch
   // saat tab focus/reconnect otomatis. `loading` (isPending) hanya true saat
   // first-load — poll background TIDAK memunculkan spinner (bug lama).
-  const POLL_MS = 20_000;
+  // SSE jadi sumber utama update; polling ini hanya fallback safety-net.
+  const POLL_MS = 60_000;
   const query = useQuery({
     queryKey: queryKeys.party.transactions.page(currentPage),
     queryFn: async (): Promise<TxPage> => {

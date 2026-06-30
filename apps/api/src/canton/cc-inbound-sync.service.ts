@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { SpliceValidatorService } from './splice-validator.service';
 import { CantonLedgerService } from './canton-ledger.service';
 
@@ -33,6 +34,7 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly splice: SpliceValidatorService,
     private readonly ledger: CantonLedgerService,
+    private readonly realtime: RealtimeService,
   ) {
     const flag = this.config.get<string>('CC_INBOUND_SYNC_ENABLED');
     this.enabled = flag === undefined || flag === '' || flag === 'true';
@@ -226,6 +228,15 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
       await this.prisma.ccBalance.update({
         where: { userId },
         data: { balanceMicroCc: onChainMicro },
+      });
+
+      // Push realtime: balance naik (transfer masuk dari chain/akun lain).
+      // Frontend invalidate cache balance + transactions (on-chain row baru
+      // muncul via fallback Lighthouse).
+      this.realtime.push(userId, 'balance:changed', null);
+      this.realtime.push(userId, 'transaction:new', {
+        type: 'TRANSFER_IN',
+        source: 'onchain',
       });
       return;
     }

@@ -13,22 +13,26 @@ import { MaintenanceService } from './maintenance.service';
  * Dijalankan untuk SEMUA request API. Saat maintenance aktif, request yang
  * BUKAN exempt ditolak dengan 503 Service Unavailable.
  *
- * Exempt (selalu lewat, bahkan saat maintenance):
- *   - /api/health        → liveness/readiness probe infra tidak boleh gagal.
- *   - /api/admin         → admin harus bisa mematikan maintenance (recovery).
- *   - /api/public/maintenance → status publik agar FE bisa baca & tampilkan.
- *
- * Body 503 memuat flag `maintenance: true` supaya FE (apiFetch) bisa bedakan
- * dari error 503 biasa dan langsung memunculkan overlay maintenance.
- */
-@Injectable()
-export class MaintenanceGuard implements CanActivate {
-  /** Path prefix yang selalu diizinkan saat maintenance. */
-  private static readonly EXEMPT_PREFIXES = [
-    '/api/health',
-    '/api/admin',
-    '/api/public/maintenance',
-  ];
+   * Exempt (selalu lewat, bahkan saat maintenance):
+   *   - /api/health        → liveness/readiness probe infra tidak boleh gagal.
+   *   - /api/admin         → admin harus bisa mematikan maintenance (recovery).
+   *   - /api/public/maintenance → status publik agar FE bisa baca & tampilkan.
+   *   - /api/realtime      → koneksi SSE panjang; idle saat maintenance tidak
+   *                          membahayakan, dan deteksi maintenance FE lewat
+   *                          poll gate terpisah (cq:maintenance via apiFetch).
+   *
+   * Body 503 memuat flag `maintenance: true` supaya FE (apiFetch) bisa bedakan
+   * dari error 503 biasa dan langsung memunculkan overlay maintenance.
+   */
+  @Injectable()
+  export class MaintenanceGuard implements CanActivate {
+    /** Path prefix yang selalu diizinkan saat maintenance. */
+    private static readonly EXEMPT_PREFIXES = [
+      '/api/health',
+      '/api/admin',
+      '/api/public/maintenance',
+      '/api/realtime',
+    ];
 
   constructor(private readonly maintenance: MaintenanceService) {}
 

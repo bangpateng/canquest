@@ -1,5 +1,6 @@
 import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import {
   looksLikeQuestId,
   parseQuestIdFromRewardDescription,
@@ -73,6 +74,7 @@ export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly points: PointsService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   findByEmail(email: string) {
@@ -341,7 +343,7 @@ export class UsersService {
       params.referenceId !== undefined
         ? params.referenceId
         : (params.counterparty ?? null);
-    return this.prisma.ccTransaction.create({
+    const tx = await this.prisma.ccTransaction.create({
       data: {
         userId: params.userId,
         amountMicroCc: signed,
@@ -355,6 +357,20 @@ export class UsersService {
         settledAt: params.status === 'PENDING' ? null : new Date(),
       },
     });
+
+    // ── Realtime push ────────────────────────────────────────────────────
+    // Setiap tx baru = event untuk pemiliknya. Hanya COMPLETED yang dipush
+    // (PENDING/REJECTED tidak relevan untuk update UI realtime). Balance juga
+    // berubah untuk tx COMPLETED → invalidasi cache balance di frontend.
+    if (tx.status === 'COMPLETED') {
+      this.realtime.push(params.userId, 'transaction:new', {
+        id: tx.id,
+        type: tx.type,
+      });
+      this.realtime.push(params.userId, 'balance:changed', null);
+    }
+
+    return tx;
   }
 
   private resolveQuestIdForTransaction(tx: {
