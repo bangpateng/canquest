@@ -12,7 +12,7 @@ import { SectionHeader } from "@/components/landing/section-header";
 
 const menus: { icon: LucideIcon; title: string; description: string }[] = [
   { icon: LayoutGrid, title: "Overview", description: "Dashboard, balance & activity" },
-  { icon: Sparkles, title: "Earn", description: "Partner campaigns (needs 30 CC lock)" },
+  { icon: Sparkles, title: "Earn", description: "Partner campaigns (Full access)" },
   { icon: Gift, title: "Quests", description: "Daily verified tasks" },
   { icon: Wallet, title: "Wallet", description: "Canton party ID & lock CC" },
   { icon: Trophy, title: "Leaderboard", description: "Rank among real users" },

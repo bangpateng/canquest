@@ -5,12 +5,6 @@ import { LandingShell } from "@/components/landing/landing-shell";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
 
-const STEPS = [
-  "Lock 30 CC on-chain",
-  "Get Full access",
-  "Earn campaign rewards",
-] as const;
-
 export function LandingHero() {
   return (
     <section className="relative overflow-hidden border-b border-[var(--border)]">
@@ -28,20 +22,6 @@ export function LandingHero() {
           Commit CC from your own wallet to reach Full access and join partner campaigns —
           invite codes, early drops, and CC rewards for genuine participants, not bots.
         </p>
-
-        <ol className="mx-auto mt-10 flex max-w-md flex-col gap-3 sm:max-w-none sm:flex-row sm:justify-center sm:gap-8">
-          {STEPS.map((step, i) => (
-            <li
-              key={step}
-              className="flex items-center justify-center gap-2 text-sm text-[var(--foreground)]"
-            >
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-canton-subtle text-xs font-bold text-canton">
-                {i + 1}
-              </span>
-              {step}
-            </li>
-          ))}
-        </ol>
 
         <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <LaunchAppButton size="lg" className="w-full rounded-full px-8 sm:w-auto" />

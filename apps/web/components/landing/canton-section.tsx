@@ -11,7 +11,7 @@ export function CantonSection() {
         </h2>
         <p className="mt-2 text-sm leading-relaxed text-[var(--muted-foreground)]">
           Your party ID is your on-chain home on Canton. It holds your CC balance and powers
-          the lock — the same wallet you commit 30 CC from to reach Full access.
+          the lock.
         </p>
         <ul className="mt-6 space-y-2 text-left text-sm text-[var(--muted-foreground)]">
           <li className="flex gap-2">
@@ -19,12 +19,6 @@ export function CantonSection() {
               ·
             </span>
             One party ID per verified human (invite-gated)
-          </li>
-          <li className="flex gap-2">
-            <span className="text-canton" aria-hidden>
-              ·
-            </span>
-            Lock CC right from your wallet — funds stay yours
           </li>
           <li className="flex gap-2">
             <span className="text-canton" aria-hidden>
