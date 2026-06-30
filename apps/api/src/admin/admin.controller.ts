@@ -6,15 +6,18 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { QuestKind } from '../common/prisma-types';
+import { MaintenanceService } from '../common/maintenance.service';
 
 import { AdminService } from './admin.service';
 import { AdminGuard } from './admin.guard';
 import { SetUserStatusDto } from './dto/set-user-status.dto';
+import { SetMaintenanceDto } from './dto/maintenance.dto';
 import {
   AddTaskDto,
   CreateQuestDto,
@@ -28,7 +31,10 @@ import {
 @Controller('admin')
 @UseGuards(AuthGuard('admin-jwt'), AdminGuard)
 export class AdminController {
-  constructor(private readonly admin: AdminService) {}
+  constructor(
+    private readonly admin: AdminService,
+    private readonly maintenance: MaintenanceService,
+  ) {}
 
   /* ── Dashboard stats ── */
 
@@ -249,5 +255,22 @@ export class AdminController {
     @Body() body: SetUserStatusDto,
   ) {
     return this.admin.setUserStatus(userId, body.status, body.reason);
+  }
+
+  /* ── Maintenance mode (live toggle via AppSetting) ── */
+
+  @Get('maintenance')
+  getMaintenance() {
+    return this.maintenance.getStatus();
+  }
+
+  @Put('maintenance')
+  setMaintenance(@Body() body: SetMaintenanceDto) {
+    return this.maintenance.setStatus({
+      enabled: body.enabled,
+      title: body.title,
+      message: body.message,
+      estimatedEnd: body.estimatedEnd ?? null,
+    });
   }
 }

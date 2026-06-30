@@ -13,8 +13,55 @@ const LEGACY_REDIRECTS: Record<string, string> = {
   '/quest': '/quests',
 };
 
-export function middleware(request: NextRequest) {
+// ── Maintenance mode (server-side rewrite to /maintenance) ───────────────────
+// Cache modul-level TTL 5 detik supaya fetch tidak dibombard tiap request.
+let maintenanceCache: { on: boolean; expiresAt: number } | null = null;
+const MAINTENANCE_TTL_MS = 5_000;
+
+async function isMaintenanceOn(request: NextRequest): Promise<boolean> {
+  const now = Date.now();
+  if (maintenanceCache && maintenanceCache.expiresAt > now) {
+    return maintenanceCache.on;
+  }
+  let on = false;
+  try {
+    // Origin sendiri — route /api/* di-exclude dari matcher jadi tidak rekursif.
+    const res = await fetch(
+      new URL('/api/public/maintenance', request.nextUrl.origin),
+      { cache: 'no-store' },
+    );
+    if (res.ok) {
+      const data = (await res.json()) as { enabled?: boolean };
+      on = Boolean(data.enabled);
+    }
+  } catch {
+    on = false; // fail-open
+  }
+  maintenanceCache = { on, expiresAt: now + MAINTENANCE_TTL_MS };
+  return on;
+}
+
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // ── Defense-in-depth: jangan pernah kunci area yang butuh untuk recovery ──
+  // /admin (admin panel), /api (BFF/proxy), /maintenance (anti-loop), dan path
+  // statis (mengandung titik) TIDAK boleh ter-rewrite. Matcher di config sudah
+  // exclude, tapi pengecekan eksplisit di sini menjamin keamanan di semua versi.
+  if (
+    pathname === '/maintenance' ||
+    pathname.startsWith('/admin') ||
+    pathname.startsWith('/api') ||
+    /\.[^/]+$/.test(pathname) // file statis (favicon.ico, robots.txt, dll.)
+  ) {
+    return NextResponse.next();
+  }
+
+  // ── Maintenance gate (paling awal) ──────────────────────────────────────
+  // Saat ON, SEMUA path non-admin/non-api di-rewrite ke /maintenance.
+  if (await isMaintenanceOn(request)) {
+    return NextResponse.rewrite(new URL('/maintenance', request.url));
+  }
 
   // Legacy path redirects (same host — canquest.cc only)
   if (LEGACY_REDIRECTS[pathname]) {
@@ -52,25 +99,10 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
+  // Match hampir semua path, KECUALI: /api/* (BFF/proxy), /admin/* (recovery),
+  // /_next/* (static), /maintenance (anti-loop), dan path mengandung titik
+  // (file statis seperti favicon.ico, robot.txt, gambar).
   matcher: [
-    '/',
-    '/login',
-    '/login/:path*',
-    '/register',
-    '/register/:path*',
-    '/quests',
-    '/quests/:path*',
-    '/leaderboard',
-    '/leaderboard/:path*',
-    '/wallet',
-    '/wallet/:path*',
-    '/settings',
-    '/settings/:path*',
-    '/overview',
-    '/overview/:path*',
-    '/quest',
-    '/quest/:path*',
-    '/earn',
-    '/earn/:path*',
+    '/((?!api|admin|_next|maintenance|.*\\..*).*)',
   ],
 };

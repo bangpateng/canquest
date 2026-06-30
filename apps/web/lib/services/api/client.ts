@@ -41,6 +41,17 @@ export async function apiFetch<T = unknown>(
   const data: unknown = await res.json().catch(() => null);
 
   if (!res.ok) {
+    // Maintenance 503 → sinyalkan overlay global tampil INSTAN (tanpa nunggu poll).
+    if (
+      res.status === 503 &&
+      data &&
+      typeof data === 'object' &&
+      (data as { maintenance?: unknown }).maintenance === true &&
+      typeof window !== 'undefined'
+    ) {
+      window.dispatchEvent(new CustomEvent('cq:maintenance'));
+    }
+
     const msg =
       data &&
       typeof data === 'object' &&

@@ -7,9 +7,11 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { ConfigService } from '@nestjs/config';
 import { QuestsService } from '../quests/quests.service';
 import { ResendEmailService } from '../auth/resend-email.service';
+import { MaintenanceService } from '../common/maintenance.service';
 import { ContactDto } from './contact.dto';
 
 /** Unauthenticated marketing endpoints. */
@@ -19,12 +21,24 @@ export class PublicController {
     private readonly quests: QuestsService,
     private readonly mailer: ResendEmailService,
     private readonly config: ConfigService,
+    private readonly maintenance: MaintenanceService,
   ) {}
 
   @Get('quests')
   featuredQuests(@Query('limit') limit?: string) {
     const n = Math.min(12, Math.max(1, parseInt(limit ?? '6', 10) || 6));
     return this.quests.listFeaturedQuests(n);
+  }
+
+  /**
+   * Status mode maintenance (publik, tanpa throttle, tanpa guard).
+   * Dipakai frontend (overlay client + middleware Next) untuk menampilkan
+   * layar maintenance tanpa membombardir DB — service sudah cache 5 detik.
+   */
+  @Get('maintenance')
+  @SkipThrottle()
+  async maintenanceStatus() {
+    return this.maintenance.getStatus();
   }
 
   @Get('leaderboard')

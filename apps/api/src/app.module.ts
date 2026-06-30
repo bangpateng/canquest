@@ -19,6 +19,8 @@ import { StorageModule } from './storage/storage.module';
 import { QueueModule } from './queue/queue.module';
 import { TwitterModule } from './twitter/twitter.module';
 import { throttlerConfig } from './common/throttler.config';
+import { MaintenanceModule } from './common/maintenance.module';
+import { MaintenanceGuard } from './common/maintenance.guard';
 
 /** Load API env from `apps/api/.env` even when npm workspaces run Nest with cwd at repo root. */
 const resolveApiEnvPaths = (): string[] => [
@@ -50,6 +52,8 @@ const resolveApiEnvPaths = (): string[] => [
     UploadsModule,
     StorageModule,
     TwitterModule,
+    // ── Global maintenance mode (live toggle via AppSetting) ─────
+    MaintenanceModule,
   ],
   controllers: [AppController],
   providers: [
@@ -57,6 +61,12 @@ const resolveApiEnvPaths = (): string[] => [
     {
       provide: APP_GUARD,
       useClass: ThrottlerBehindProxyGuard,
+    },
+    // Maintenance guard global — menolak semua request non-exempt saat ON.
+    // Berjalan setelah Throttler. Admin/health/status-maintenance di-exempt.
+    {
+      provide: APP_GUARD,
+      useClass: MaintenanceGuard,
     },
   ],
 })
