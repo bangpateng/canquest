@@ -11,8 +11,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: {
+            // Cache dianggap segar 60s — refetch dalam jendela ini no-op.
             staleTime: 60_000,
-            refetchOnWindowFocus: false,
+            // Perilaku dApp: data otomatis refresh saat user kembali ke tab
+            // atau saat koneksi pulih. Background & SILENT (tidak ada spinner).
+            refetchOnWindowFocus: true,
+            refetchOnReconnect: true,
+            // 2x retry sudah cukup; 3x (default) terlalu lama untuk error server.
+            retry: 2,
           },
         },
       }),

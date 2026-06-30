@@ -1,6 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+
+import { queryKeys } from "@/lib/queries/query-keys";
 
 export type LockTier = "NONE" | "FULL";
 
@@ -38,70 +41,51 @@ type UseLockStatusOptions = {
 /**
  * Live CC Lock status from `/api/party/lock-status`.
  * lockedCc/tier = on-chain truth; activeLocks = metadata rows for the manage UI.
- * Polls on an interval so unlock eligibility reflects without manual refresh.
+ *
+ * Di-back TanStack Query: background poll via refetchInterval (SILENT),
+ * `loading` hanya true saat first-load. Refetch saat tab focus / reconnect.
  */
 export function useLockStatus(options: UseLockStatusOptions = {}) {
   const { enabled = true, pollIntervalMs = 45_000 } = options;
+  const queryClient = useQueryClient();
 
-  const [status, setStatus] = useState<LockStatus>(EMPTY);
-  const [loading, setLoading] = useState(enabled);
+  const fetchStatus = useCallback(async (): Promise<LockStatus> => {
+    const res = await fetch("/api/party/lock-status", {
+      credentials: "include",
+      cache: "no-store",
+      signal: AbortSignal.timeout(12_000),
+    });
+    if (!res.ok) throw new Error(`lock-status ${res.status}`);
+    const data = (await res.json()) as Partial<LockStatus>;
+    return {
+      lockedCc: data.lockedCc ?? 0,
+      availableCc: data.availableCc ?? null,
+      tier: data.tier ?? "NONE",
+      activeLocks: data.activeLocks ?? [],
+      hasWallet: data.hasWallet ?? false,
+    };
+  }, []);
 
-  const fetchStatus = useCallback(
-    async (opts?: { silent?: boolean }) => {
-      if (!enabled) return;
-      if (!opts?.silent) setLoading(true);
-      try {
-        const res = await fetch("/api/party/lock-status", {
-          credentials: "include",
-          cache: "no-store",
-          signal: AbortSignal.timeout(12_000),
-        });
-        if (res.ok) {
-          const data = (await res.json()) as Partial<LockStatus>;
-          setStatus({
-            lockedCc: data.lockedCc ?? 0,
-            availableCc: data.availableCc ?? null,
-            tier: data.tier ?? "NONE",
-            activeLocks: data.activeLocks ?? [],
-            hasWallet: data.hasWallet ?? false,
-          });
-        }
-      } catch {
-        /* silent — keep last known status */
-      } finally {
-        if (!opts?.silent) setLoading(false);
-      }
-    },
-    [enabled],
-  );
+  const query = useQuery({
+    queryKey: queryKeys.party.lockStatus,
+    queryFn: fetchStatus,
+    enabled,
+    staleTime: pollIntervalMs,
+    refetchInterval: enabled ? pollIntervalMs : false,
+    refetchOnWindowFocus: enabled,
+    retry: 2,
+  });
 
-  /** Immediate refresh + follow-up polls (chain settlement can lag a few seconds). */
   const refreshWithRetries = useCallback(() => {
-    void fetchStatus();
-    const delays = [3_000, 8_000];
-    const timers = delays.map((ms) =>
-      setTimeout(() => void fetchStatus({ silent: true }), ms),
-    );
-    return () => timers.forEach(clearTimeout);
-  }, [fetchStatus]);
-
-  useEffect(() => {
-    if (!enabled) {
-      setLoading(false);
-      return;
-    }
-    void fetchStatus();
-    const id = setInterval(
-      () => void fetchStatus({ silent: true }),
-      pollIntervalMs,
-    );
-    return () => clearInterval(id);
-  }, [enabled, fetchStatus, pollIntervalMs]);
+    void queryClient.invalidateQueries({ queryKey: queryKeys.party.lockStatus });
+  }, [queryClient]);
 
   return {
-    status,
-    loading,
-    refresh: fetchStatus,
+    status: enabled ? (query.data ?? EMPTY) : EMPTY,
+    /** true hanya saat first-load (belum ada data). Background poll tidak memicu. */
+    loading: enabled ? query.isPending : false,
+    refresh: () =>
+      queryClient.invalidateQueries({ queryKey: queryKeys.party.lockStatus }),
     refreshWithRetries,
   };
 }

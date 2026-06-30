@@ -1,120 +1,69 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-const DEFAULT_POLL_MS = 30_000;
+import { queryKeys } from "@/lib/queries/query-keys";
+
+const DEFAULT_POLL_MS = 45_000;
 
 type UseCcBalanceOptions = {
   /** When false, no fetch/poll (e.g. user has no wallet yet). */
   enabled?: boolean;
   pollIntervalMs?: number;
-  pauseWhenHidden?: boolean;
 };
 
 /**
  * Live CC balance from `/api/party/balance` (triggers inbound sync on the API).
- * Polls on an interval so inbound transfers and sends show up without a full page reload.
+ *
+ * Di-back oleh TanStack Query:
+ *  - Polling background via `refetchInterval` — SILENT (tidak ada spinner).
+ *  - `loading` = true HANYA saat first-load (sebelum data pertama turun),
+ *    persis seperti dApp: spinner muncul sekali, lalu update diam-diam.
+ *  - Refetch otomatis saat tab kembali focus / koneksi pulih.
+ *  - Cache global → konsumsi hook di banyak komponen tetap 1 request.
  */
 export function useCcBalance(options: UseCcBalanceOptions = {}) {
-  const {
-    enabled = true,
-    pollIntervalMs = DEFAULT_POLL_MS,
-    pauseWhenHidden = true,
-  } = options;
+  const { enabled = true, pollIntervalMs = DEFAULT_POLL_MS } = options;
+  const queryClient = useQueryClient();
 
-  const [balance, setBalance] = useState<number | null>(null);
-  const [loading, setLoading] = useState(enabled);
-  const [error, setError] = useState(false);
+  const fetchBalance = useCallback(async (): Promise<number> => {
+    const res = await fetch("/api/party/balance", {
+      credentials: "include",
+      cache: "no-store",
+      signal: AbortSignal.timeout(12_000),
+    });
+    if (!res.ok) throw new Error(`balance ${res.status}`);
+    const data = (await res.json()) as { balance?: number | null };
+    return data.balance ?? 0;
+  }, []);
 
-  const fetchBalance = useCallback(
-    async (opts?: { silent?: boolean }) => {
-      if (!enabled) return;
-      if (!opts?.silent) setLoading(true);
-      setError(false);
-      try {
-        const res = await fetch("/api/party/balance", {
-          credentials: "include",
-          cache: "no-store",
-          signal: AbortSignal.timeout(12_000),
-        });
-        if (res.ok) {
-          const data = (await res.json()) as { balance?: number | null };
-          setBalance(data.balance ?? 0);
-        } else {
-          setError(true);
-        }
-      } catch {
-        setError(true);
-      } finally {
-        if (!opts?.silent) setLoading(false);
-      }
-    },
-    [enabled],
-  );
+  const query = useQuery({
+    queryKey: queryKeys.party.balance,
+    queryFn: fetchBalance,
+    enabled,
+    staleTime: pollIntervalMs,
+    refetchInterval: enabled ? pollIntervalMs : false,
+    refetchOnWindowFocus: enabled,
+    // Balance adalah angka — keep last value saat refetch gagal (no flicker).
+    retry: 2,
+  });
 
-  /** Immediate refresh + follow-up polls (chain settlement can lag a few seconds). */
+  /**
+   * Mutasi (send/lock) umumnya butuh konfirmasi on-chain yang lag beberapa
+   * detik. Alih-alih 3 timer retry manual, kita invalidate cache lalu minta
+   * react-query refetch; refetchInterval akan menjaga sinkronisasi lanjutan.
+   */
   const refreshWithRetries = useCallback(() => {
-    void fetchBalance();
-    const delays = [3_000, 8_000, 20_000];
-    const timers = delays.map((ms) =>
-      setTimeout(() => void fetchBalance({ silent: true }), ms),
-    );
-    return () => timers.forEach(clearTimeout);
-  }, [fetchBalance]);
-
-  useEffect(() => {
-    if (!enabled) {
-      setLoading(false);
-      return;
-    }
-
-    void fetchBalance();
-
-    let intervalId: ReturnType<typeof setInterval> | null = null;
-
-    const startPoll = () => {
-      if (intervalId) clearInterval(intervalId);
-      intervalId = setInterval(
-        () => void fetchBalance({ silent: true }),
-        pollIntervalMs,
-      );
-    };
-
-    const stopPoll = () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-        intervalId = null;
-      }
-    };
-
-    startPoll();
-
-    const onVisible = () => {
-      if (document.visibilityState === "visible") {
-        void fetchBalance({ silent: true });
-        startPoll();
-      } else if (pauseWhenHidden) {
-        stopPoll();
-      }
-    };
-
-    if (pauseWhenHidden && typeof document !== "undefined") {
-      document.addEventListener("visibilitychange", onVisible);
-    }
-
-    return () => {
-      stopPoll();
-      if (pauseWhenHidden && typeof document !== "undefined") {
-        document.removeEventListener("visibilitychange", onVisible);
-      }
-    };
-  }, [enabled, fetchBalance, pollIntervalMs, pauseWhenHidden]);
+    void queryClient.invalidateQueries({ queryKey: queryKeys.party.balance });
+  }, [queryClient]);
 
   return {
-    balance,
-    loading,
-    error,
-    refresh: fetchBalance,
+    balance: enabled ? (query.data ?? null) : null,
+    /** true hanya saat first-load (belum ada data). Background poll tidak memicu. */
+    loading: enabled ? query.isPending : false,
+    error: query.isError,
+    refresh: () => queryClient.invalidateQueries({ queryKey: queryKeys.party.balance }),
     refreshWithRetries,
   };
 }

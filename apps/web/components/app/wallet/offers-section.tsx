@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils/utils";
 import { buttonVariants } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { iconButtonClass } from "@/lib/ui/ui-button-styles";
 import { ArrowDownLeft, Check, X, Clock } from "lucide-react";
+import { queryKeys } from "@/lib/queries/query-keys";
 
 export interface OfferItem {
   type: "transfer_offer" | "transfer_instruction";
@@ -55,51 +57,70 @@ export function senderDisplay(offer: OfferItem): string {
  * Hook: fetch & re-fetch pending incoming offers.
  * Dipakai oleh badge tombol "Offers" (count) dan modal Offers.
  *
+ * Di-back TanStack Query: poll 30s via refetchInterval (silent, no flicker),
+ * refetch saat tab focus/reconnect, cache global di-dedup.
+ *
  * refresh() mengembalikan jumlah offer setelah fetch — berguna untuk
  * pemilik tombol (wallet-actions) agar tahu apakah perlu menampilkan badge.
+ * setOffers tetap disediakan untuk optimistic remove lokal (accept/reject).
  */
 export function useOffers() {
-  const [offers, setOffers] = useState<OfferItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  const query = useQuery({
+    queryKey: queryKeys.party.offers,
+    queryFn: async (): Promise<{ items: OfferItem[]; error: string | null }> => {
+      try {
+        const res = await fetch("/api/party/offers", { credentials: "include" });
+        const data = (await res.json()) as OffersResponse;
+        if (!res.ok) {
+          return { items: [], error: data.message ?? `Server error (HTTP ${res.status}).` };
+        }
+        return { items: data.offers ?? [], error: null };
+      } catch {
+        return { items: [], error: "Network error. Check your connection." };
+      }
+    },
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+    retry: 2,
+  });
+
+  const data = query.data;
+  const offers = data?.items ?? [];
+  const error = data?.error ?? null;
+
+  /** Optimistic remove lokal (accept/reject) — update cache react-query. */
+  const setOffers = useCallback(
+    (updater: (prev: OfferItem[]) => OfferItem[]) => {
+      queryClient.setQueryData<{ items: OfferItem[]; error: string | null } | undefined>(
+        queryKeys.party.offers,
+        (prev) => {
+          const items = prev?.items ?? [];
+          return { items: updater(items), error: null };
+        },
+      );
+    },
+    [queryClient],
+  );
 
   const refresh = useCallback(async () => {
-    try {
-      const res = await fetch("/api/party/offers", { credentials: "include" });
-      const data = (await res.json()) as OffersResponse;
-      if (!res.ok) {
-        setOffers([]);
-        setError(data.message ?? `Server error (HTTP ${res.status}).`);
-        return 0;
-      }
-      const list = data.offers ?? [];
-      setOffers(list);
-      setError(null);
-      return list.length;
-    } catch {
-      setOffers([]);
-      setError("Network error. Check your connection.");
-      return 0;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    await queryClient.invalidateQueries({ queryKey: queryKeys.party.offers });
+    const latest = queryClient.getQueryData<{ items: OfferItem[] } | undefined>(
+      queryKeys.party.offers,
+    );
+    return latest?.items.length ?? 0;
+  }, [queryClient]);
 
-  useEffect(() => {
-    void refresh();
-    // Poll ringan tiap 30s supaya badge selalu up-to-date tanpa reload.
-    const id = setInterval(() => void refresh(), 30_000);
-    return () => clearInterval(id);
-  }, [refresh]);
-
-  return { offers, loading, error, refresh, setOffers };
+  return { offers, loading: query.isPending, error, refresh, setOffers };
 }
 
 /**
  * Remove satu offer dari list lokal (setelah accept/reject sukses).
  */
 export function removeOfferLocally(
-  setOffers: React.Dispatch<React.SetStateAction<OfferItem[]>>,
+  setOffers: (updater: (prev: OfferItem[]) => OfferItem[]) => void,
   contractId: string,
 ) {
   setOffers((prev) => prev.filter((o) => o.contractId !== contractId));
@@ -113,7 +134,7 @@ export interface OffersModalProps {
   offers: OfferItem[];
   loading: boolean;
   error: string | null;
-  setOffers: React.Dispatch<React.SetStateAction<OfferItem[]>>;
+  setOffers: (updater: (prev: OfferItem[]) => OfferItem[]) => void;
   onRefresh?: () => void;
 }
 

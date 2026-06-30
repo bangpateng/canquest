@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+
+import { queryKeys } from "@/lib/queries/query-keys";
 
 export type NotificationTx = {
   kind: "transaction";
@@ -65,90 +68,94 @@ type ToastPayload = {
 
 type UseTransactionNotificationsOptions = {
   pollIntervalMs?: number;
-  pauseWhenHidden?: boolean;
 };
 
 export function useTransactionNotifications(
   options: UseTransactionNotificationsOptions = {},
 ) {
-  const { pollIntervalMs = DEFAULT_POLL_MS, pauseWhenHidden = true } = options;
+  const { pollIntervalMs = DEFAULT_POLL_MS } = options;
 
-  const [feed, setFeed] = useState<NotificationFeed | null>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [toasts, setToasts] = useState<ToastPayload[]>([]);
   const initialPollDone = useRef(false);
   const knownIds = useRef(new Set<string>());
 
+  const fetchFeed = useCallback(async (): Promise<NotificationFeed> => {
+    const res = await fetch("/api/party/notifications?limit=12", {
+      credentials: "include",
+      cache: "no-store",
+      signal: AbortSignal.timeout(12_000),
+    });
+    if (!res.ok) throw new Error(`notifications ${res.status}`);
+    return (await res.json()) as NotificationFeed;
+  }, []);
+
+  const query = useQuery({
+    queryKey: queryKeys.party.notifications,
+    queryFn: fetchFeed,
+    staleTime: pollIntervalMs,
+    refetchInterval: pollIntervalMs,
+    refetchOnWindowFocus: true,
+    retry: 2,
+  });
+
+  // ── Diff feed untuk toast + invalidate cache cross-surface ────────────────
+  // Saat data feed berubah (poll/refetch), cek apakah ada item baru. Item baru
+  // → push toast + invalidate cache transactions/quests supaya surface lain
+  // ikut update TANPA event bus manual (cc:new-tx diganti invalidateQueries).
+  const feed = query.data ?? null;
+  useEffect(() => {
+    if (!feed) return;
+
+    if (initialPollDone.current) {
+      const fresh: ToastPayload[] = [];
+      for (const item of feed.items) {
+        if (knownIds.current.has(item.id)) continue;
+        knownIds.current.add(item.id);
+        const created = new Date(item.createdAt).getTime();
+        if (Date.now() - created > 120_000) continue;
+        if (item.kind === "draw") {
+          fresh.push({
+            id: item.id,
+            kind: "draw",
+            drawKind: item.drawKind,
+            amountCc: item.rewardCc ?? 0,
+            description: item.description,
+          });
+        } else if (item.kind === "code") {
+          fresh.push({
+            id: item.id,
+            kind: "code",
+            amountCc: 0,
+            description: `${item.questTitle}: ${item.code}`,
+          });
+        } else {
+          fresh.push({
+            id: item.id,
+            kind: "transaction",
+            txType: item.type,
+            amountCc: Math.abs(Number(item.amountMicroCc)) / 1_000_000,
+            description: item.description,
+          });
+        }
+      }
+      if (fresh.length > 0) {
+        setToasts((prev) => [...fresh, ...prev].slice(0, 3));
+        // Cross-surface sync: ganti event bus 'cc:new-tx' lama.
+        // Invalidasi cache transactions + quests → surface terkait refetch
+        // otomatis via react-query (background, silent, no flicker).
+        void queryClient.invalidateQueries({ queryKey: queryKeys.party.transactions.all });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.quests.all });
+      }
+    } else {
+      for (const item of feed.items) knownIds.current.add(item.id);
+      initialPollDone.current = true;
+    }
+  }, [feed, queryClient]);
+
   const dismissToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
-
-  const fetchFeed = useCallback(
-    async (opts?: { silent?: boolean }) => {
-      if (!opts?.silent) setLoading(true);
-      try {
-        const res = await fetch("/api/party/notifications?limit=12", {
-          credentials: "include",
-          cache: "no-store",
-          signal: AbortSignal.timeout(12_000),
-        });
-        if (!res.ok) return;
-        const data = (await res.json()) as NotificationFeed;
-
-        if (initialPollDone.current) {
-          const fresh: ToastPayload[] = [];
-          for (const item of data.items) {
-            if (knownIds.current.has(item.id)) continue;
-            knownIds.current.add(item.id);
-            const created = new Date(item.createdAt).getTime();
-            if (Date.now() - created > 120_000) continue;
-            if (item.kind === "draw") {
-              fresh.push({
-                id: item.id,
-                kind: "draw",
-                drawKind: item.drawKind,
-                amountCc: item.rewardCc ?? 0,
-                description: item.description,
-              });
-            } else if (item.kind === "code") {
-              fresh.push({
-                id: item.id,
-                kind: "code",
-                amountCc: 0,
-                description: `${item.questTitle}: ${item.code}`,
-              });
-            } else {
-              fresh.push({
-                id: item.id,
-                kind: "transaction",
-                txType: item.type,
-                amountCc: Math.abs(Number(item.amountMicroCc)) / 1_000_000,
-                description: item.description,
-              });
-            }
-          }
-          if (fresh.length > 0) {
-            setToasts((prev) => [...fresh, ...prev].slice(0, 3));
-            // Cross-surface sync: beri tahu history list & surface lain bahwa
-            // ada tx baru, supaya mereka refetch tanpa tunggu polling sendiri.
-            if (typeof window !== "undefined") {
-              window.dispatchEvent(new CustomEvent("cc:new-tx"));
-            }
-          }
-        } else {
-          for (const item of data.items) knownIds.current.add(item.id);
-          initialPollDone.current = true;
-        }
-
-        setFeed(data);
-      } catch {
-        /* ignore transient network errors */
-      } finally {
-        if (!opts?.silent) setLoading(false);
-      }
-    },
-    [],
-  );
 
   const markSeen = useCallback(async () => {
     try {
@@ -156,63 +163,23 @@ export function useTransactionNotifications(
         method: "POST",
         credentials: "include",
       });
-      setFeed((prev) =>
-        prev ? { ...prev, unreadCount: 0, lastSeenAt: new Date().toISOString() } : prev,
-      );
+      void queryClient.invalidateQueries({ queryKey: queryKeys.party.notifications });
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [queryClient]);
 
-  useEffect(() => {
-    void fetchFeed();
-
-    let intervalId: ReturnType<typeof setInterval> | null = null;
-
-    const startPoll = () => {
-      if (intervalId) clearInterval(intervalId);
-      intervalId = setInterval(
-        () => void fetchFeed({ silent: true }),
-        pollIntervalMs,
-      );
-    };
-
-    const stopPoll = () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-        intervalId = null;
-      }
-    };
-
-    startPoll();
-
-    const onVisible = () => {
-      if (document.visibilityState === "visible") {
-        void fetchFeed({ silent: true });
-        startPoll();
-      } else if (pauseWhenHidden) {
-        stopPoll();
-      }
-    };
-
-    if (pauseWhenHidden && typeof document !== "undefined") {
-      document.addEventListener("visibilitychange", onVisible);
-    }
-
-    return () => {
-      stopPoll();
-      if (pauseWhenHidden && typeof document !== "undefined") {
-        document.removeEventListener("visibilitychange", onVisible);
-      }
-    };
-  }, [fetchFeed, pollIntervalMs, pauseWhenHidden]);
+  const refresh = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.party.notifications });
+  }, [queryClient]);
 
   return {
     feed,
-    loading,
+    /** true hanya saat first-load (belum ada data). */
+    loading: query.isPending,
     toasts,
     dismissToast,
     markSeen,
-    refresh: fetchFeed,
+    refresh,
   };
 }

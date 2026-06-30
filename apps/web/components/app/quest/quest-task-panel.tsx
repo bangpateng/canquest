@@ -157,6 +157,9 @@ export function QuestTaskPanel({
   const [rewardCc, setRewardCc] = useState<number | null>(null);
   const [progressLoading, setProgressLoading] = useState(true);
   const [progressError, setProgressError] = useState<string | null>(null);
+  /** True setelah data progress pertama berhasil turun. Polling background setelah
+   *  ini bersifat silent (no spinner) → mencegah flicker tiap 10s. */
+  const progressDoneFirstLoad = useRef(false);
   const [submittingQuest, setSubmittingQuest] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [ledgerProof, setLedgerProof] = useState<QuestLedgerProof | null>(null);
@@ -205,64 +208,80 @@ export function QuestTaskPanel({
     [firstOpenTaskIdx, busyTaskId],
   );
 
-  const loadProgress = useCallback(() => {
-    setProgressLoading(true);
-    setProgressError(null);
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20_000);
-    fetch(`/api/quests/${quest.id}/progress`, {
-      credentials: "include",
-      cache: "no-store",
-      signal: controller.signal,
-    })
-      .then(async (r) => {
-        const data = (await r.json()) as {
-          completed?: boolean;
-          allTasksVerified?: boolean;
-          submissions?: QuestSubmission[];
-          rewardStatus?: QuestRewardStatus;
-          rewardCc?: number;
-          cantonLedgerConfigured?: boolean;
-          ledger?: QuestLedgerProof | null;
-          campaignMeta?: CampaignMeta;
-          sendProgress?: Record<string, { required: number; today: number }>;
-          message?: string;
-        };
-        if (!r.ok) {
-          throw new Error(data.message ?? "Could not load quest progress");
-        }
-        setQuestCompleted(Boolean(data.completed));
-        setAllTasksVerified(data.allTasksVerified ?? false);
-        setCantonLedgerConfigured(Boolean(data.cantonLedgerConfigured));
-        if (data.rewardStatus) setRewardStatus(data.rewardStatus);
-        if (data.campaignMeta) setCampaignMeta(data.campaignMeta);
-        if (data.sendProgress) setSendProgress(data.sendProgress);
-        if (data.completed) {
-          setRewardCc(data.rewardCc ?? 0);
-          if (data.ledger) setLedgerProof(data.ledger);
-        }
-        const map: Record<string, QuestSubmission> = {};
-        for (const s of data.submissions ?? []) map[s.taskId] = s;
-        setSubmissions(map);
+  const loadProgress = useCallback(
+    (opts?: { silent?: boolean }) => {
+      // `silent` = poll background / event-driven refetch → JANGANGGAL flip spinner.
+      // Hanya first-load (sebelum data pertama turun) yang menampilkan loading,
+      // persis seperti dApp: spinner sekali, lalu update diam-diam. Ini memperbaiki
+      // bug flicker 10s di mana seluruh panel collapse jadi spinner tiap poll.
+      if (!opts?.silent || !progressDoneFirstLoad.current) {
+        setProgressLoading(true);
+      }
+      setProgressError(null);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 20_000);
+      fetch(`/api/quests/${quest.id}/progress`, {
+        credentials: "include",
+        cache: "no-store",
+        signal: controller.signal,
       })
-      .catch((err: unknown) => {
-        const msg =
-          err instanceof DOMException && err.name === "AbortError"
-            ? "Request timed out — check API and login session"
-            : err instanceof Error
-              ? err.message
-              : "Could not load quest progress";
-        setProgressError(msg);
-      })
-      .finally(() => {
-        clearTimeout(timeout);
-        setProgressLoading(false);
-      });
-  }, [quest.id]);
+        .then(async (r) => {
+          const data = (await r.json()) as {
+            completed?: boolean;
+            allTasksVerified?: boolean;
+            submissions?: QuestSubmission[];
+            rewardStatus?: QuestRewardStatus;
+            rewardCc?: number;
+            cantonLedgerConfigured?: boolean;
+            ledger?: QuestLedgerProof | null;
+            campaignMeta?: CampaignMeta;
+            sendProgress?: Record<string, { required: number; today: number }>;
+            message?: string;
+          };
+          if (!r.ok) {
+            throw new Error(data.message ?? "Could not load quest progress");
+          }
+          setQuestCompleted(Boolean(data.completed));
+          setAllTasksVerified(data.allTasksVerified ?? false);
+          setCantonLedgerConfigured(Boolean(data.cantonLedgerConfigured));
+          if (data.rewardStatus) setRewardStatus(data.rewardStatus);
+          if (data.campaignMeta) setCampaignMeta(data.campaignMeta);
+          if (data.sendProgress) setSendProgress(data.sendProgress);
+          if (data.completed) {
+            setRewardCc(data.rewardCc ?? 0);
+            if (data.ledger) setLedgerProof(data.ledger);
+          }
+          const map: Record<string, QuestSubmission> = {};
+          for (const s of data.submissions ?? []) map[s.taskId] = s;
+          setSubmissions(map);
+          progressDoneFirstLoad.current = true;
+        })
+        .catch((err: unknown) => {
+          const msg =
+            err instanceof DOMException && err.name === "AbortError"
+              ? "Request timed out — check API and login session"
+              : err instanceof Error
+                ? err.message
+                : "Could not load quest progress";
+          setProgressError(msg);
+        })
+        .finally(() => {
+          clearTimeout(timeout);
+          setProgressLoading(false);
+        });
+    },
+    [quest.id],
+  );
 
   useEffect(() => {
     setPartyId(viewerPartyId);
   }, [viewerPartyId]);
+
+  // Reset first-load flag saat quest berubah (jika panel dipertahankan tanpa
+  // remount) → spinner tampil untuk quest baru, bukan blank.
+  useEffect(() => {
+    progressDoneFirstLoad.current = false;
+  }, [quest.id]);
 
   useEffect(() => {
     setTwitterUsername(viewerTwitterUsername);
@@ -305,8 +324,9 @@ export function QuestTaskPanel({
     let intervalId: ReturnType<typeof setInterval> | null = null;
     const startPoll = () => {
       if (intervalId) clearInterval(intervalId);
+      // Poll SILENT — no spinner flicker (bug lama: panel collapse tiap 10s).
       intervalId = setInterval(() => {
-        void loadProgress();
+        void loadProgress({ silent: true });
       }, POLL_MS);
     };
     const stopPoll = () => {
@@ -318,15 +338,15 @@ export function QuestTaskPanel({
     startPoll();
     const onVisible = () => {
       if (document.visibilityState === "visible") {
-        void loadProgress();
+        void loadProgress({ silent: true });
         startPoll();
       } else {
         stopPoll();
       }
     };
     // 'cc:new-tx' dipancarkan bell saat ada tx masuk/keluar baru → refetch
-    // langsung supaya progres naik tanpa menunggu interval 10s berikutnya.
-    const onNewTx = () => void loadProgress();
+    // langsung (silent) supaya progres naik tanpa menunggu interval 10s berikutnya.
+    const onNewTx = () => void loadProgress({ silent: true });
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("cc:new-tx", onNewTx);
     return () => {

@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { WalletActions } from "@/components/app/wallet/wallet-actions";
 import { CcLockModal } from "@/components/app/wallet/cc-lock-modal";
 import { TransactionsView } from "@/components/app/wallet/transactions-view";
 import { RefreshCw, Lock } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useCcBalance } from "@/lib/hooks/use-cc-balance";
+import { useCcPrice } from "@/lib/hooks/use-cc-price";
 import { useLockStatus } from "@/lib/hooks/use-lock-status";
 import { formatPartyIdForDisplay } from "@/lib/canton/canton-party-id";
 import { isRealCantonPartyId } from "@/lib/auth/wallet-session-cache";
@@ -38,23 +39,13 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
     status: lockStatus,
     refreshWithRetries: refreshLock,
   } = useLockStatus({ enabled: hasWallet, pollIntervalMs: 60_000 });
-  const [ccUsdPrice, setCcUsdPrice] = useState(0);
+  // Harga CC dari hook shared (di-dedup global oleh TanStack Query) — menggantikan
+  // polling inline /api/party/cc-price duplikat yang ada sebelumnya.
+  // Null (belum ada data) → treat sebagai 0 (guard `> 0` menyembunyikan tampilan).
+  const { price: ccUsdPrice } = useCcPrice();
+  const ccUsd = ccUsdPrice ?? 0;
   const [txRefreshKey, setTxRefreshKey] = useState(0);
   const [lockOpen, setLockOpen] = useState(false);
-
-  useEffect(() => {
-    const pollPrice = () => {
-      fetch("/api/party/cc-price", { credentials: "include" })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((d: { lastPrice?: number | null } | null) => {
-          if (d?.lastPrice) setCcUsdPrice(d.lastPrice);
-        })
-        .catch(() => {});
-    };
-    pollPrice();
-    const interval = setInterval(pollPrice, 30_000);
-    return () => clearInterval(interval);
-  }, []);
 
   const handleBalanceRefresh = useCallback(() => {
     refreshWithRetries();
@@ -88,9 +79,9 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
             <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
               {t("wallet.balance")}
             </span>
-            {ccUsdPrice > 0 && (
+            {ccUsd > 0 && (
               <span className="inline-block text-[10px] sm:text-xs font-semibold tracking-wider text-[var(--primary)]">
-                1 CC ≈ ${ccUsdPrice.toFixed(6)}
+                1 CC ≈ ${ccUsd.toFixed(6)}
               </span>
             )}
           </div>
@@ -122,10 +113,10 @@ export function WalletDashboard({ me, onRefresh }: WalletDashboardProps) {
               </>
             )}
           </p>
-          {!balanceLoading && ccUsdPrice > 0 && balance !== null ? (
+          {!balanceLoading && ccUsd > 0 && balance !== null ? (
             <p className="relative mt-4 text-sm font-medium text-slate-500 sm:mt-5 sm:text-base md:text-lg">
               ≈ $
-              {(balance * ccUsdPrice).toLocaleString("en-US", {
+              {(balance * ccUsd).toLocaleString("en-US", {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
               })}{" "}

@@ -1,12 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+
+import { queryKeys } from "@/lib/queries/query-keys";
 
 /**
  * Shared CC/USD price hook.
  *
  * Memanggil /api/party/cc-price (realtime Bybit CCUSDT) setiap 30 detik.
- * Di-dedup lintas komponen: berapa pun komponen yang pakai, hanya ada SATU interval.
+ *
+ * Dedup lintas komponen di-handle otomatis oleh TanStack Query: berapa pun
+ * komponen yang pakai hook ini, hanya ada SATU network request per window
+ * refetch (cache global queryKeys.party.ccPrice).
  *
  * Mengembalikan:
  *  - price: harga terakhir (number) atau null saat belum tersedia.
@@ -22,64 +27,33 @@ interface CcPriceState {
   change24hPct: number | null;
 }
 
-let cachedPrice: number | null = null;
-let cachedChange24hPct: number | null = null;
+const EMPTY: CcPriceState = { price: null, change24hPct: null };
 
-const subscribers = new Set<(s: CcPriceState) => void>();
-let pollTimer: ReturnType<typeof setInterval> | null = null;
-
-function snapshot(): CcPriceState {
-  return { price: cachedPrice, change24hPct: cachedChange24hPct };
-}
-
-function notify(): void {
-  const snap = snapshot();
-  subscribers.forEach((fn) => fn(snap));
-}
-
-async function fetchPrice(): Promise<void> {
-  try {
-    const r = await fetch("/api/party/cc-price", { credentials: "include" });
-    if (!r.ok) return;
-    const d = (await r.json()) as {
-      lastPrice?: number | null;
-      change24hPct?: number | null;
-    };
-    let changed = false;
-    if (typeof d?.lastPrice === "number" && d.lastPrice > 0) {
-      cachedPrice = d.lastPrice;
-      changed = true;
-    }
-    if (typeof d?.change24hPct === "number" && !Number.isNaN(d.change24hPct)) {
-      cachedChange24hPct = d.change24hPct;
-      changed = true;
-    }
-    if (changed) notify();
-  } catch {
-    /* diam — harga hanya untuk tampilan, jangan ganggu UI */
-  }
+async function fetchPrice(): Promise<CcPriceState> {
+  const r = await fetch("/api/party/cc-price", { credentials: "include" });
+  if (!r.ok) return EMPTY;
+  const d = (await r.json()) as {
+    lastPrice?: number | null;
+    change24hPct?: number | null;
+  };
+  return {
+    price: typeof d?.lastPrice === "number" && d.lastPrice > 0 ? d.lastPrice : null,
+    change24hPct:
+      typeof d?.change24hPct === "number" && !Number.isNaN(d.change24hPct)
+        ? d.change24hPct
+        : null,
+  };
 }
 
 export function useCcPrice(): CcPriceState {
-  const [state, setState] = useState<CcPriceState>(snapshot);
+  const { data } = useQuery({
+    queryKey: queryKeys.party.ccPrice,
+    queryFn: fetchPrice,
+    // Harga tampilan — boleh stale lebih lama, tapi tetap refresh berkala.
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+  });
 
-  useEffect(() => {
-    subscribers.add(setState);
-    setState(snapshot());
-
-    if (!pollTimer) {
-      void fetchPrice();
-      pollTimer = setInterval(() => void fetchPrice(), 30_000);
-    }
-
-    return () => {
-      subscribers.delete(setState);
-      if (subscribers.size === 0 && pollTimer) {
-        clearInterval(pollTimer);
-        pollTimer = null;
-      }
-    };
-  }, []);
-
-  return state;
+  return data ?? EMPTY;
 }

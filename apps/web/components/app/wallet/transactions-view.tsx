@@ -1,12 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils/utils";
 import { ListPagination } from "@/components/app/list/list-pagination";
 import { ArrowDownLeft, ArrowUpRight, Ban, Gift, Lock, LockOpen, RefreshCw, ShieldCheck, ShieldOff, Undo2, Zap } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { TransactionDetailModal } from "@/components/app/wallet/transaction-detail-modal";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
+import { queryKeys } from "@/lib/queries/query-keys";
 
 export const TRANSACTIONS_PAGE_SIZE = 5;
 /** Server-side proxy to DB transactions — SINGLE source of truth.
@@ -221,6 +223,7 @@ export function TransactionsView({
 }: TransactionsViewProps) {
   const t = usePlatformT();
   const embedded = variant === "embedded";
+  const queryClient = useQueryClient();
   // Type column = arah transaksi yang ramah. Lock/unlock pakai label sendiri (bukan Sent/Received).
   const txDirection = (type: TxItem["type"]): string => {
     if (type === "CC_LOCK") return t(TX_TYPE_KEYS.CC_LOCK);
@@ -228,122 +231,69 @@ export function TransactionsView({
     if (TOGGLE_TX_TYPES.has(type)) return t(TX_TYPE_KEYS[type]);
     return type === "TRANSFER_OUT" ? "Sent" : "Received";
   };
-  const [txPage, setTxPage] = useState<TxPage | null>(null);
-  const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [modalTx, setModalTx] = useState<TxItem | null>(null);
 
-  /** Polling 20s untuk history list — sinkron dengan bell notification.
-   * Pause saat tab hidden untuk hemat resource; immediate refetch saat visible.
-   * Pattern = use-transaction-notifications.ts. */
-  const TX_POLL_MS = 20_000;
-
-
-  const fetchTxns = useCallback(
-    async (page: number) => {
-      setLoading(true);
-      try {
-        if (!partyId) {
-          setTxPage({ items: [], total: 0, page, pageSize, totalPages: 0 });
-          return;
-        }
-
-        // ── DB adalah sumber utama (source of truth). ──────────────────────────
-        // ── DB adalah SATU-satunya sumber history (single source of truth). ────
-        // Merge on-chain (Lighthouse) dihapus: format id beda (update_id vs
-        // event_id) membuat dedup tidak pernah sempurna → duplikat. Link explorer
-        // Lighthouse tetap di-resolve backend saat buka detail modal.
-        const dbRes = await fetch(
-          `${DB_TRANSACTIONS_PROXY}?page=1&pageSize=200`,
-          { credentials: "include", cache: "no-store" },
-        ).catch(() => null);
-        const dbData = dbRes?.ok ? ((await dbRes.json()) as { items?: TxItem[] }) : null;
-        const dbItems: TxItem[] = (dbData?.items ?? []).map((tx) => ({
-          ...tx,
-          source: "db" as const,
-        }));
-
-        // Sort + paginate client-side (backend sudah return sorted desc by createdAt).
-        const all = [...dbItems];
-        all.sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-        );
-
-        const start = (page - 1) * pageSize;
-        const paged = all.slice(start, start + pageSize);
-
-        setTxPage({
-          items: paged,
-          total: all.length,
-          page,
-          pageSize,
-          totalPages: Math.max(1, Math.ceil(all.length / pageSize)),
-        });
-      } catch {
-        setTxPage({ items: [], total: 0, page, pageSize, totalPages: 0 });
-      } finally {
-        setLoading(false);
+  // ── Data: TanStack Query (background refetch SILENT, no flicker) ──────────
+  // DB adalah SATU-satunya sumber history. Merge on-chain dihapus (format id
+  // beda → duplikat). refetchInterval menggantikan polling manual 20s; refetch
+  // saat tab focus/reconnect otomatis. `loading` (isPending) hanya true saat
+  // first-load — poll background TIDAK memunculkan spinner (bug lama).
+  const POLL_MS = 20_000;
+  const query = useQuery({
+    queryKey: queryKeys.party.transactions.page(currentPage),
+    queryFn: async (): Promise<TxPage> => {
+      if (!partyId) {
+        return { items: [], total: 0, page: currentPage, pageSize, totalPages: 0 };
       }
-    },
-    [pageSize, partyId],
-  );
+      const dbRes = await fetch(
+        `${DB_TRANSACTIONS_PROXY}?page=1&pageSize=200`,
+        { credentials: "include", cache: "no-store" },
+      ).catch(() => null);
+      const dbData = dbRes?.ok ? ((await dbRes.json()) as { items?: TxItem[] }) : null;
+      const dbItems: TxItem[] = (dbData?.items ?? []).map((tx) => ({
+        ...tx,
+        source: "db" as const,
+      }));
 
-  useEffect(() => {
-    void fetchTxns(currentPage);
-  }, [fetchTxns, currentPage, refreshKey]);
-
-  // ── Polling 20s + cross-surface sync ──────────────────────────────────────
-  // History list harus realtime: (a) incoming transfer dari akun lain muncul
-  // tanpa manual refresh, (b) bell notification sudah toast → list ikut refresh.
-  useEffect(() => {
-    let intervalId: ReturnType<typeof setInterval> | null = null;
-
-    const startPoll = () => {
-      if (intervalId) clearInterval(intervalId);
-      intervalId = setInterval(
-        () => void fetchTxns(currentPage),
-        TX_POLL_MS,
+      const all = [...dbItems];
+      all.sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );
-    };
-    const stopPoll = () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-        intervalId = null;
-      }
-    };
 
-    startPoll();
+      const start = (currentPage - 1) * pageSize;
+      const paged = all.slice(start, start + pageSize);
+      return {
+        items: paged,
+        total: all.length,
+        page: currentPage,
+        pageSize,
+        totalPages: Math.max(1, Math.ceil(all.length / pageSize)),
+      };
+    },
+    enabled: Boolean(partyId),
+    staleTime: POLL_MS,
+    refetchInterval: POLL_MS,
+    refetchOnWindowFocus: true,
+    retry: 2,
+  });
 
-    // Refetch langsung saat tab kembali visible + restart interval.
-    const onVisible = () => {
-      if (document.visibilityState === "visible") {
-        void fetchTxns(currentPage);
-        startPoll();
-      } else {
-        stopPoll();
-      }
-    };
-    document.addEventListener("visibilitychange", onVisible);
+  const txPage = query.data ?? null;
+  // First-load spinner (isPending), BUKAN isFetching → poll background silent.
+  const loading = query.isPending;
 
-    // Cross-surface sync: bell notification emit 'cc:new-tx' saat ada toast baru
-    // → list langsung refetch (tanpa tunggu interval 20s berikutnya).
-    const onNewTx = () => void fetchTxns(currentPage);
-    window.addEventListener("cc:new-tx", onNewTx);
-
-    return () => {
-      stopPoll();
-      document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("cc:new-tx", onNewTx);
-    };
-  }, [fetchTxns, currentPage]);
+  // refreshKey bump dari parent (wallet-dashboard) → invalidate semua halaman tx.
+  useEffect(() => {
+    if (refreshKey === 0) return;
+    void queryClient.invalidateQueries({ queryKey: queryKeys.party.transactions.all });
+  }, [refreshKey, queryClient]);
 
   function changePage(p: number) {
     setCurrentPage(p);
-    void fetchTxns(p);
   }
 
   function refresh() {
-    void fetchTxns(currentPage);
+    void queryClient.invalidateQueries({ queryKey: queryKeys.party.transactions.all });
   }
 
   return (
