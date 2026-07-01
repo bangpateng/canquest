@@ -14,6 +14,8 @@ interface FraudReferral {
   referredUserId: string;
   referredEmail: string;
   referredDomain: string;
+  isGmailAlias: boolean;
+  canonicalEmail: string;
   referredStatus: UserStatus | null;
   points: number;
   createdAt: string;
@@ -267,7 +269,8 @@ export function AdminReferralAuditPanel() {
             No flagged referrals found
           </p>
           <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-            Every referral used an allowed webmail domain. Nothing to clean up.
+            All referrals use allowed webmail domains with no alias farming.
+            Nothing to clean up.
           </p>
         </div>
       ) : (
@@ -275,13 +278,13 @@ export function AdminReferralAuditPanel() {
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3">
             <p className="flex items-center gap-2 text-sm font-semibold text-amber-300">
               <AlertTriangle className="h-4 w-4" />
-              {data.totalFlagged} referral(s) flagged — using email domains
-              outside the allowed webmail list.
+              {data.totalFlagged} referral(s) flagged
             </p>
             <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-              Top referrers below (sorted by points gained from flagged
-              referrals). Expand a referrer to see &amp; remove individual
-              referrals.
+              Flagged when the referred email is from a non-webmail domain OR a
+              Gmail alias (dots/plus, e.g. gener.a.tor@gmail.com = generator@gmail.com).
+              Normal Gmail/Yahoo/Outlook are NOT flagged. Top referrers below —
+              expand to remove individual referrals.
             </p>
           </div>
 
@@ -351,13 +354,27 @@ export function AdminReferralAuditPanel() {
                                     <div>
                                       <p className="font-medium">
                                         {r.referredEmail}{' '}
-                                        <span className="text-[10px] font-bold uppercase text-red-300">
-                                          @{r.referredDomain}
-                                        </span>
+                                        {r.isGmailAlias ? (
+                                          <span
+                                            className="ml-1 inline-flex rounded-md bg-purple-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-purple-300"
+                                            title={`Gmail alias — canonical: ${r.canonicalEmail}`}
+                                          >
+                                            gmail alias
+                                          </span>
+                                        ) : (
+                                          <span className="text-[10px] font-bold uppercase text-red-300">
+                                            @{r.referredDomain}
+                                          </span>
+                                        )}
                                       </p>
                                       <p className="text-[11px] text-[var(--muted-foreground)]">
                                         {r.points} pts ·{' '}
                                         {new Date(r.createdAt).toLocaleDateString()}
+                                        {r.isGmailAlias && (
+                                          <span className="text-purple-300/80">
+                                            {' '}· = {r.canonicalEmail}
+                                          </span>
+                                        )}
                                       </p>
                                     </div>
                                   </div>

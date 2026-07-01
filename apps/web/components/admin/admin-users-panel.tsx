@@ -48,6 +48,9 @@ interface ReferralRow {
   referredEmail: string;
   referredDomain: string;
   nonAllowedDomain: boolean;
+  isGmailAlias: boolean;
+  canonicalEmail: string;
+  fraudSignal: boolean;
   referredStatus: UserStatus | null;
   referredVerified: boolean;
   referredCreatedAt: string | null;
@@ -595,11 +598,19 @@ export function AdminUsersPanel() {
                       className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--muted)]/20 px-4 py-3"
                     >
                       <div className="min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <p className="truncate font-semibold">{r.referredEmail}</p>
-                          {r.nonAllowedDomain && (
+                          {r.isGmailAlias && (
+                            <span
+                              className="inline-flex items-center rounded-md bg-purple-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-purple-300"
+                              title={`Gmail alias — canonical: ${r.canonicalEmail}`}
+                            >
+                              gmail alias
+                            </span>
+                          )}
+                          {r.nonAllowedDomain && !r.isGmailAlias && (
                             <span className="inline-flex items-center rounded-md bg-red-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-red-300">
-                              non-gmail
+                              non-webmail
                             </span>
                           )}
                           {r.referredStatus && r.referredStatus !== 'ACTIVE' && (
@@ -611,6 +622,11 @@ export function AdminUsersPanel() {
                         <p className="text-xs text-[var(--muted-foreground)]">
                           @{r.referredDomain || '—'} · {r.points} pts ·{' '}
                           {new Date(r.createdAt).toLocaleDateString()}
+                          {r.isGmailAlias && (
+                            <span className="text-purple-300/80">
+                              {' '}· = {r.canonicalEmail}
+                            </span>
+                          )}
                         </p>
                       </div>
                       <button

@@ -15,6 +15,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TwitterApiService } from './twitter-api.service';
 import { ConnectTwitterDto } from './dto/connect-twitter.dto';
 import { normalizeTwitterUsername } from './twitter-target.util';
+import { ReferralService } from '../users/referral.service';
 
 type AuthedReq = Request & { user: { userId: string; email: string } };
 
@@ -24,6 +25,7 @@ export class TwitterController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly twitterApi: TwitterApiService,
+    private readonly referral: ReferralService,
   ) {}
 
   private async backfillAvatarIfMissing(
@@ -122,6 +124,12 @@ export class TwitterController {
         ...(resolved.displayName ? { displayName: resolved.displayName } : {}),
       },
     });
+
+    // Saat X baru saja terhubung, coba selesaikan referral (jika semua syarat
+    // terpenuhi: emailVerified + twitterUsername + punya referredById). Idempoten
+    // — hanya memberi reward sekali per referred user. Ini menutup celah farming
+    // referral dengan akun email yang diverifikasi tapi tidak pernah connect X.
+    await this.referral.completeReferralForUser(req.user.userId);
 
     return {
       ok: true,

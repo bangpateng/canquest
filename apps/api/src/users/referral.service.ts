@@ -63,7 +63,17 @@ export class ReferralService {
   }
 
   /**
-   * After referred user verifies email (or skip-OTP register), credit referrer once.
+   * Kredit referrer sekali. Syarat SEMUA harus terpenuhi (anti-farm):
+   * 1. referred punya referredById (didapat dari kode referral saat register).
+   * 2. referred.emailVerified === true (verifikasi OTP email).
+   * 3. referred.twitterUsername terisi (sudah connect akun X).
+   * 4. belum pernah dapat reward (idempoten, @unique di DB sebagai backstop).
+   * 5. bukan self-referral.
+   *
+   * Dipanggil dari: verifyOtp (path normal), skip-OTP register/login, DAN
+   * twitter/connect (saat user baru saja menghubungkan X). Karena reward bersifat
+   * idempoten, memanggilnya dari banyak tempat aman — hanya yang pertama memenuhi
+   * semua syarat yang akan membuat baris ReferralReward.
    */
   async completeReferralForUser(referredUserId: string): Promise<void> {
     const referred = await this.prisma.user.findUnique({
@@ -71,12 +81,16 @@ export class ReferralService {
       select: {
         id: true,
         emailVerified: true,
+        twitterUsername: true,
         referredById: true,
         referralRewardReceived: { select: { id: true } },
       },
     });
 
     if (!referred?.referredById || !referred.emailVerified) return;
+    // Syarat ketiga: HARUS sudah connect X. Tanpa ini, referrer bisa difarm
+    // dengan akun email saja (termasuk alias gmail yang dimanipulasi).
+    if (!referred.twitterUsername?.trim()) return;
     if (referred.referralRewardReceived) return;
     if (referred.referredById === referredUserId) return;
 

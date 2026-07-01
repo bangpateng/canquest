@@ -33,7 +33,23 @@ import { PointsService } from '../users/points.service';
 import {
   isAllowedEmailDomain,
   getDomainFromEmail,
+  isGmailAliasVariant,
+  canonicalEmail,
 } from '../common/disposable-email';
+
+/**
+ * true jika sebuah email referral dianggap fraud-signal:
+ *   - domain di luar allowlist webmail, ATAU
+ *   - alias Gmail yang dimanipulasi (titik/plus) — mis. gener.a.tor.1c@gmail.com.
+ * Dipakai konsisten di getUserReferrals, listReferralFraud, revokeReferralsBulk.
+ */
+function isReferralFraudSignal(email: string | null | undefined): boolean {
+  if (!email) return false;
+  if (isGmailAliasVariant(email)) return true;
+  const domain = getDomainFromEmail(email);
+  if (!domain) return false;
+  return !isAllowedEmailDomain(domain);
+}
 
 @Injectable()
 export class AdminService {
@@ -1625,13 +1641,18 @@ export class AdminService {
         earnPoints: owner.earnPoints,
       },
       referrals: rewards.map((r) => {
-        const domain = getDomainFromEmail(r.referredUser?.email);
+        const email = r.referredUser?.email;
+        const domain = getDomainFromEmail(email);
         return {
           rewardId: r.id,
           referredUserId: r.referredUserId,
-          referredEmail: r.referredUser?.email ?? '(deleted user)',
+          referredEmail: email ?? '(deleted user)',
           referredDomain: domain,
-          nonAllowedDomain: !isAllowedEmailDomain(r.referredUser?.email),
+          nonAllowedDomain: !isAllowedEmailDomain(email),
+          isGmailAlias: isGmailAliasVariant(email),
+          canonicalEmail: canonicalEmail(email),
+          // Flag gabungan: domain non-allowlist ATAU alias Gmail dimanipulasi.
+          fraudSignal: isReferralFraudSignal(email),
           referredStatus: r.referredUser?.status ?? null,
           referredVerified: r.referredUser?.emailVerified ?? false,
           referredCreatedAt: r.referredUser?.createdAt ?? null,
@@ -1741,10 +1762,11 @@ export class AdminService {
     });
 
     const protectedEmails = this.getProtectedAdminEmails();
-    const flagged = rewards.filter((r) => {
-      const domain = getDomainFromEmail(r.referredUser?.email);
-      return !isAllowedEmailDomain(domain) && domain !== '';
-    });
+    // Flag gabungan: domain di luar allowlist webmail ATAU alias Gmail yang
+    // dimanipulasi (titik/plus). Gmail biasa (non-alias) TIDAK diflag.
+    const flagged = rewards.filter((r) =>
+      isReferralFraudSignal(r.referredUser?.email),
+    );
 
     // Ringkasan per-pengundang.
     const byReferrer = new Map<
@@ -1790,6 +1812,8 @@ export class AdminService {
         referredUserId: r.referredUserId,
         referredEmail: r.referredUser?.email ?? '(deleted user)',
         referredDomain: getDomainFromEmail(r.referredUser?.email),
+        isGmailAlias: isGmailAliasVariant(r.referredUser?.email),
+        canonicalEmail: canonicalEmail(r.referredUser?.email),
         referredStatus: r.referredUser?.status ?? null,
         points: r.points,
         createdAt: r.createdAt,
@@ -1839,9 +1863,8 @@ export class AdminService {
         return false; // lindungi admin
       }
       if (useAll) {
-        // mode all: hanya yang di luar allowlist (auto-flag)
-        const domain = getDomainFromEmail(r.referredUser?.email);
-        return domain !== '' && !isAllowedEmailDomain(domain);
+        // mode all: flag gabungan — domain non-allowlist ATAU alias Gmail
+        return isReferralFraudSignal(r.referredUser?.email);
       }
       // mode ids: yang dicentang admin
       return requestedIds.includes(r.referredUserId);

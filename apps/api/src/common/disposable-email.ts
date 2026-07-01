@@ -277,6 +277,58 @@ export function getAllowedEmailDomainList(): string[] {
   return [...ALLOWED_EMAIL_DOMAINS];
 }
 
+/**
+ * Bentuk kanonik dari sebuah alamat email — dipakai mendeteksi alias farming.
+ *
+ * Aturan Gmail (gmail.com + googlemail.com):
+ *   - titik di local-part diabaikan: gener.a.tor@gmail.com == generator@gmail.com
+ *   - plus-addressing diabaikan: user+tag@gmail.com == user@gmail.com
+ * Misal `gener.a.tor.1c@gmail.com` dan `gener.ato.r1.c@gmail.com` → keduanya
+ * `generator1c@gmail.com`. Referrer yang mengundang puluhan varian seperti itu
+ * adalah indikasi farming yang kuat.
+ *
+ * Domain lain: plus-addressing juga di-strip (banyak provider mendukungnya),
+ * titik dipertahankan (hanya Gmail/Googlemail yang mengabaikan titik).
+ *
+ * Mengembalikan string kosong jika email tidak valid.
+ */
+export function canonicalEmail(email: string | null | undefined): string {
+  if (!email) return '';
+  const lower = email.trim().toLowerCase();
+  const at = lower.lastIndexOf('@');
+  if (at < 0) return '';
+  let local = lower.slice(0, at);
+  const domain = lower.slice(at + 1);
+  if (!local || !domain) return '';
+
+  // Strip plus-addressing untuk semua domain (user+tag → user).
+  const plusIdx = local.indexOf('+');
+  if (plusIdx >= 0) local = local.slice(0, plusIdx);
+
+  // Hanya gmail/googlemail yang mengabaikan titik di local-part.
+  if (domain === 'gmail.com' || domain === 'googlemail.com') {
+    local = local.replace(/\./g, '');
+  }
+
+  return `${local}@${domain}`;
+}
+
+/**
+ * true jika email terlihat seperti alias Gmail yang dimanipulasi (titik/plus).
+ * Dipakai admin fraud detection untuk menandai referral mencurigakan WALAUI
+ * domainnya gmail. True bila: domain gmail/googlemail DAN bentuk kanoniknya
+ * berbeda dari bentuk aslinya (artinya ada titik/plus yang dihilangkan).
+ */
+export function isGmailAliasVariant(email: string | null | undefined): boolean {
+  if (!email) return false;
+  const lower = email.trim().toLowerCase();
+  const at = lower.lastIndexOf('@');
+  if (at < 0) return false;
+  const domain = lower.slice(at + 1);
+  if (domain !== 'gmail.com' && domain !== 'googlemail.com') return false;
+  return canonicalEmail(email) !== lower;
+}
+
 /** Hasil validasi email saat registrasi. */
 export type EmailValidationResult =
   | { ok: true }
