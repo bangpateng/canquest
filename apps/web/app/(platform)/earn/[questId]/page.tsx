@@ -1,5 +1,4 @@
 import { PlatformPage } from "@/components/platform/platform-page";
-import { CampaignGuide } from "@/components/app/campaign/campaign-guide";
 import { CampaignEligibilityBadge } from "@/components/app/campaign/campaign-eligibility-badge";
 import { CampaignSocialLinks } from "@/components/app/campaign/campaign-social-links";
 import { QuestTaskPanel } from "@/components/app/quest/quest-task-panel";
@@ -228,9 +227,6 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
       </header>
 
       <CampaignQuestSidebar quest={quest} />
-
-      {/* Guide cara ikut event — diletakkan tepat di bawah sidebar reward */}
-      <CampaignGuide quest={quest} />
 
       {/* ── Task Panel / Auth Prompt ────────────────────────────────────── */}
       <section className="min-w-0 space-y-4">

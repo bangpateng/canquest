@@ -136,23 +136,6 @@ export class QuestsService {
   }
 
   /**
-   * Konfigurasi gate Earn (publik) — untuk ditampilkan di card guide FE.
-   * Mengembalikan biaya points + jumlah CC lock saat ini (nilai DEFAULT GLOBAL).
-   * Untuk nilai per-campaign, pakai resolveQuestEntryGate(quest).
-   */
-  async getEarnAccessConfig(): Promise<{
-    entryCostPoints: number;
-    ccLockAmount: number;
-  }> {
-    const entryCostPoints = await this.resolveEarnEntryCostPoints();
-    // Jumlah CC lock dibaca dari env yang sama dengan LockEligibilityService (default 30).
-    const ccLockAmount = Number(
-      this.config.get<string>('LOCK_TIER_FULL') ?? '30',
-    );
-    return { entryCostPoints, ccLockAmount };
-  }
-
-  /**
    * Default global CC lock amount (env LOCK_TIER_FULL, default 30).
    * Dipakai sebagai fallback bila quest tidak override entryCcLock.
    */
