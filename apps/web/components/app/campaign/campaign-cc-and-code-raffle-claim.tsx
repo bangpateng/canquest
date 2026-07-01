@@ -110,6 +110,7 @@ export function CampaignCcAndCodeRaffleClaimSection({
         slotsLabel={wonLabel}
         description={description}
         rewardCc={rewardCc}
+        rewardType="CC_AND_CODE_RAFFLE"
         partyId={partyId}
         canClaim
         isSubmitting={isSubmitting}

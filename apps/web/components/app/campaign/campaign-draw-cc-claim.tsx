@@ -67,6 +67,7 @@ export function CampaignDrawCcClaimSection({
       slotsLabel={`You won · ${rewardCc} CC`}
       description={feeHint}
       rewardCc={rewardCc}
+      rewardType="CC_MANUAL"
       partyId={partyId}
       canClaim
       isSubmitting={isSubmitting}

@@ -82,6 +82,7 @@ export function CampaignFcfsClaimSection({
       slotsLabel={canClaim ? slotsLabel : "Checking slot availability…"}
       description={feeHint}
       rewardCc={rewardCc}
+      rewardType="CC_ONLY"
       partyId={partyId}
       canClaim={canClaim}
       isSubmitting={isSubmitting}
