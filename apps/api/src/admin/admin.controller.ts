@@ -226,8 +226,14 @@ export class AdminController {
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
     @Query('q') q?: string,
+    @Query('sort') sort?: string,
   ) {
-    return this.admin.listUsers(Number(page ?? 1), Number(pageSize ?? 20), q);
+    return this.admin.listUsers(
+      Number(page ?? 1),
+      Number(pageSize ?? 20),
+      q,
+      sort === 'points_desc' ? 'points_desc' : 'recent',
+    );
   }
 
   @Delete('users/:userId')
@@ -255,6 +261,29 @@ export class AdminController {
     @Body() body: SetUserStatusDto,
   ) {
     return this.admin.setUserStatus(userId, body.status, body.reason);
+  }
+
+  /* ── Referral moderation ── */
+
+  /** Daftar akun yang diundang seorang user (untuk modal "view referrals"). */
+  @Get('users/:userId/referrals')
+  getUserReferrals(@Param('userId') userId: string) {
+    return this.admin.getUserReferrals(userId);
+  }
+
+  /** Pra-tinjau fraud: semua referral dari email di luar allowlist webmail. */
+  @Get('users/referrals/fraud')
+  listReferralFraud() {
+    return this.admin.listReferralFraud();
+  }
+
+  /**
+   * Cabut satu referral + clawback poin pengundang.
+   * :referredUserId = user yang diundang (kunci unik ReferralReward.referredUserId).
+   */
+  @Delete('referrals/:referredUserId')
+  revokeReferral(@Param('referredUserId') referredUserId: string) {
+    return this.admin.revokeReferral(referredUserId);
   }
 
   /* ── Maintenance mode (live toggle via AppSetting) ── */

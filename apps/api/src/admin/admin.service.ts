@@ -29,6 +29,11 @@ import {
 import { QuestLedgerService } from '../canton/quest-ledger.service';
 import { CantonLedgerService } from '../canton/canton-ledger.service';
 import { hasRealWallet } from '../common/wallet-policy';
+import { PointsService } from '../users/points.service';
+import {
+  isAllowedEmailDomain,
+  getDomainFromEmail,
+} from '../common/disposable-email';
 
 @Injectable()
 export class AdminService {
@@ -42,6 +47,7 @@ export class AdminService {
     private readonly storage: R2StorageService,
     private readonly questLedger: QuestLedgerService,
     private readonly ledger: CantonLedgerService,
+    private readonly points: PointsService,
   ) {}
 
   /** Drop replaced/removed banner & logo from R2 when not referenced by another quest. */
@@ -1379,7 +1385,12 @@ export class AdminService {
      USER MANAGEMENT
   ──────────────────────────────────────────────────────── */
 
-  async listUsers(page = 1, pageSize = 20, search?: string) {
+  async listUsers(
+    page = 1,
+    pageSize = 20,
+    search?: string,
+    sort: 'recent' | 'points_desc' = 'recent',
+  ) {
     const skip = (page - 1) * pageSize;
     const q = search?.trim();
     const where = q
@@ -1392,12 +1403,17 @@ export class AdminService {
         }
       : undefined;
 
+    const orderBy =
+      sort === 'points_desc'
+        ? [{ earnPoints: 'desc' as const }, { createdAt: 'desc' as const }]
+        : [{ createdAt: 'desc' as const }];
+
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
         where,
         skip,
         take: pageSize,
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         select: {
           id: true,
           email: true,
@@ -1409,8 +1425,16 @@ export class AdminService {
           status: true,
           bannedAt: true,
           createdAt: true,
+          earnPoints: true,
+          referredById: true,
+          referralCode: true,
           ccBalance: { select: { balanceMicroCc: true } },
-          _count: { select: { questCompletions: true } },
+          _count: {
+            select: {
+              questCompletions: true,
+              referralRewardsGiven: true,
+            },
+          },
         },
       }),
       this.prisma.user.count({ where }),
@@ -1524,6 +1548,24 @@ export class AdminService {
       data: { userId: null, assignedAt: null },
     });
 
+    // Clawback sebelum hapus: cabut semua ReferralReward yang diberikan user-user
+    // ini selaku referrer, supaya tidak ada poin phantom tersisa & poin merekonsiliasi.
+    // ReferralReward.referrer memiliki onDelete: Cascade — kalau tidak dicabut dulu,
+    // reward-nya otomatis terhapus TANPA clawback earnPoints. Maka lakukan eksplisit.
+    for (const id of deleteIds) {
+      const given = await this.prisma.referralReward.findMany({
+        where: { referrerId: id },
+        select: { referredUserId: true },
+      });
+      for (const g of given) {
+        await this.revokeReferral(g.referredUserId).catch((err) => {
+          this.logger.warn(
+            `Clawback skipped during delete (user ${id}): ${err?.message ?? err}`,
+          );
+        });
+      }
+    }
+
     const result = await this.prisma.user.deleteMany({
       where: { id: { in: deleteIds } },
     });
@@ -1540,6 +1582,218 @@ export class AdminService {
         reason: 'admin',
       })),
       notFound: missing,
+    };
+  }
+
+  /* ────────────────────────────────────────────────────────
+     Referral moderation — list, revoke (clawback), and fraud sweep.
+     Used by /admin/users (view referrals) and /admin/referrals (audit).
+     ──────────────────────────────────────────────────────── */
+
+  /**
+   * Daftar ReferralReward yang diberikan seorang user (siapa yang dia undang).
+   * Menyertakan flag nonAllowedDomain untuk menandai referral dari email di luar
+   * allowlist webmail (indikasi kuat fraud).
+   */
+  async getUserReferrals(userId: string) {
+    const owner = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, isAdmin: true, earnPoints: true },
+    });
+    if (!owner) throw new NotFoundException('User not found');
+
+    const rewards = await this.prisma.referralReward.findMany({
+      where: { referrerId: userId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        referredUser: {
+          select: {
+            id: true,
+            email: true,
+            emailVerified: true,
+            status: true,
+            createdAt: true,
+          },
+        },
+      },
+    });
+
+    return {
+      referrer: {
+        id: owner.id,
+        email: owner.email,
+        earnPoints: owner.earnPoints,
+      },
+      referrals: rewards.map((r) => {
+        const domain = getDomainFromEmail(r.referredUser?.email);
+        return {
+          rewardId: r.id,
+          referredUserId: r.referredUserId,
+          referredEmail: r.referredUser?.email ?? '(deleted user)',
+          referredDomain: domain,
+          nonAllowedDomain: !isAllowedEmailDomain(r.referredUser?.email),
+          referredStatus: r.referredUser?.status ?? null,
+          referredVerified: r.referredUser?.emailVerified ?? false,
+          referredCreatedAt: r.referredUser?.createdAt ?? null,
+          points: r.points,
+          createdAt: r.createdAt,
+        };
+      }),
+    };
+  }
+
+  /**
+   * Cabut satu ReferralReward (berdasarkan referredUserId) + clawback poin
+   * pengundang. Hapus record referral lalu reconcile earnPoints referrer
+   * sehingga poin turun permanen (Math.max di reconcile tidak akan menghidupkan
+   * lagi karena sumber reward sudah hilang).
+   */
+  async revokeReferral(referredUserId: string) {
+    const reward = await this.prisma.referralReward.findUnique({
+      where: { referredUserId },
+      select: {
+        id: true,
+        referrerId: true,
+        referredUserId: true,
+        points: true,
+        referrer: { select: { email: true, isAdmin: true } },
+      },
+    });
+    if (!reward) {
+      throw new NotFoundException('Referral reward not found for this user');
+    }
+
+    // Lindungi admin: jangan clawback jika referrer adalah admin.
+    const protectedEmails = this.getProtectedAdminEmails();
+    if (
+      reward.referrer.isAdmin ||
+      protectedEmails.has(reward.referrer.email.toLowerCase())
+    ) {
+      throw new BadRequestException('Cannot revoke referral of an admin account');
+    }
+
+    // 1. Hapus record referral (sumber poin).
+    await this.prisma.referralReward.delete({ where: { id: reward.id } });
+
+    // 2. Null-kan referredById si referred (optional, relasi onDelete: SetNull
+    //    hanya berlaku saat User dihapus; di sini user tetap, jadi bersihkan manual).
+    await this.prisma.user
+      .update({
+        where: { id: reward.referredUserId },
+        data: { referredById: null },
+      })
+      .catch(() => {
+        /* referred user mungkin sudah dihapus — abaikan */
+      });
+
+    // 3. Reconcile earnPoints referrer ke nilai computed pasca-hapus.
+    //    Karena reward hilang dari sumber, aggregate menghasilkan nilai lebih rendah;
+    //    kita paksa tulis ulang earnPoints (bukan Math.max) supaya clawback permanen.
+    const computed = await this.points.aggregateUserPoints(reward.referrerId);
+    await this.prisma.user.update({
+      where: { id: reward.referrerId },
+      data: { earnPoints: computed },
+    });
+
+    this.logger.warn(
+      `Referral revoked: referrer ${reward.referrerId} lost ${reward.points} pts ` +
+        `(referred ${reward.referredUserId}). earnPoints → ${computed}.`,
+    );
+
+    return {
+      ok: true,
+      revoked: true,
+      referrerId: reward.referrerId,
+      referredUserId: reward.referredUserId,
+      pointsClawedBack: reward.points,
+      referrerEarnPointsNow: computed,
+    };
+  }
+
+  /**
+   * Pra-tinjau fraud: semua ReferralReward di mana email referred DI LUAR allowlist.
+   * Mengelompokkan per-pengundang untuk sweep massal. Aman dipanggil read-only.
+   */
+  async listReferralFraud() {
+    const rewards = await this.prisma.referralReward.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        referrer: {
+          select: {
+            id: true,
+            email: true,
+            isAdmin: true,
+            status: true,
+            earnPoints: true,
+            referralCode: true,
+          },
+        },
+        referredUser: {
+          select: {
+            id: true,
+            email: true,
+            emailVerified: true,
+            status: true,
+            createdAt: true,
+          },
+        },
+      },
+    });
+
+    const protectedEmails = this.getProtectedAdminEmails();
+    const flagged = rewards.filter((r) => {
+      const domain = getDomainFromEmail(r.referredUser?.email);
+      return !isAllowedEmailDomain(domain) && domain !== '';
+    });
+
+    // Ringkasan per-pengundang.
+    const byReferrer = new Map<
+      string,
+      {
+        referrerId: string;
+        referrerEmail: string;
+        referrerEarnPoints: number;
+        isAdmin: boolean;
+        isProtected: boolean;
+        flaggedCount: number;
+        totalPoints: number;
+      }
+    >();
+    for (const r of flagged) {
+      const existing =
+        byReferrer.get(r.referrerId) ??
+        {
+          referrerId: r.referrerId,
+          referrerEmail: r.referrer.email,
+          referrerEarnPoints: r.referrer.earnPoints,
+          isAdmin: r.referrer.isAdmin,
+          isProtected: protectedEmails.has(
+            r.referrer.email.toLowerCase(),
+          ),
+          flaggedCount: 0,
+          totalPoints: 0,
+        };
+      existing.flaggedCount += 1;
+      existing.totalPoints += r.points;
+      byReferrer.set(r.referrerId, existing);
+    }
+
+    return {
+      totalFlagged: flagged.length,
+      referrers: [...byReferrer.values()].sort(
+        (a, b) => b.totalPoints - a.totalPoints,
+      ),
+      referrals: flagged.map((r) => ({
+        rewardId: r.id,
+        referrerId: r.referrerId,
+        referrerEmail: r.referrer.email,
+        referredUserId: r.referredUserId,
+        referredEmail: r.referredUser?.email ?? '(deleted user)',
+        referredDomain: getDomainFromEmail(r.referredUser?.email),
+        referredStatus: r.referredUser?.status ?? null,
+        points: r.points,
+        createdAt: r.createdAt,
+      })),
     };
   }
 

@@ -23,7 +23,7 @@ import {
   normalizeCantonPartyId,
   normalizeWalletUsername,
 } from '../common/canton-party-id';
-import { isDisposableEmail } from '../common/disposable-email';
+import { validateRegistrationEmail } from '../common/disposable-email';
 import { ResendEmailService } from './resend-email.service';
 
 const BCRYPT_ROUNDS = 12;
@@ -59,8 +59,11 @@ export class AuthService {
     }
     const email = dto.email.trim().toLowerCase();
 
-    if (isDisposableEmail(email)) {
-      throw new BadRequestException('Please use a permanent email address.');
+    // Validasi email registrasi: blok disposable + batasi ke allowlist webmail
+    // (anti-sybil referral). Pakai helper terpusat supaya pesan konsisten.
+    const emailCheck = validateRegistrationEmail(email);
+    if (!emailCheck.ok) {
+      throw new BadRequestException(emailCheck.message);
     }
 
     const existing = await this.users.findByEmail(email);

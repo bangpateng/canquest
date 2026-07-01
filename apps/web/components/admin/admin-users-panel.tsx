@@ -1,7 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Search, Trash2, Shield, Ban, ShieldCheck } from 'lucide-react';
+import {
+  Search,
+  Trash2,
+  Shield,
+  Ban,
+  ShieldCheck,
+  X,
+  Users as UsersIcon,
+} from 'lucide-react';
 import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils/utils';
 import { inputClass } from '@/lib/ui/ui-tokens';
@@ -19,8 +27,11 @@ interface AdminUserRow {
   status: UserStatus;
   bannedAt: string | null;
   createdAt: string;
+  earnPoints: number;
+  referredById: string | null;
+  referralCode: string | null;
   balanceMicroCc: string;
-  _count: { questCompletions: number };
+  _count: { questCompletions: number; referralRewardsGiven: number };
 }
 
 interface UsersResponse {
@@ -29,6 +40,24 @@ interface UsersResponse {
   page: number;
   pageSize: number;
   totalPages: number;
+}
+
+interface ReferralRow {
+  rewardId: string;
+  referredUserId: string;
+  referredEmail: string;
+  referredDomain: string;
+  nonAllowedDomain: boolean;
+  referredStatus: UserStatus | null;
+  referredVerified: boolean;
+  referredCreatedAt: string | null;
+  points: number;
+  createdAt: string;
+}
+
+interface ReferralsResponse {
+  referrer: { id: string; email: string; earnPoints: number };
+  referrals: ReferralRow[];
 }
 
 function formatCc(micro: string) {
@@ -59,9 +88,16 @@ export function AdminUsersPanel() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [sort, setSort] = useState<'recent' | 'points_desc'>('recent');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+
+  // Modal referral state
+  const [referralModalUser, setReferralModalUser] = useState<AdminUserRow | null>(null);
+  const [referrals, setReferrals] = useState<ReferralsResponse | null>(null);
+  const [referralsLoading, setReferralsLoading] = useState(false);
+  const [referralMessage, setReferralMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -69,6 +105,7 @@ export function AdminUsersPanel() {
     const params = new URLSearchParams({
       page: String(page),
       pageSize: '25',
+      sort,
     });
     if (search.trim()) params.set('q', search.trim());
     try {
@@ -86,7 +123,7 @@ export function AdminUsersPanel() {
     } finally {
       setLoading(false);
     }
-  }, [page, search]);
+  }, [page, search, sort]);
 
   useEffect(() => {
     void load();
@@ -225,6 +262,71 @@ export function AdminUsersPanel() {
     }
   };
 
+  /** Buka modal daftar referral seorang user. */
+  const openReferrals = async (user: AdminUserRow) => {
+    setReferralModalUser(user);
+    setReferrals(null);
+    setReferralMessage(null);
+    setReferralsLoading(true);
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}/referrals`, {
+        cache: 'no-store',
+      });
+      if (!res.ok) {
+        setReferralMessage('Failed to load referrals');
+        return;
+      }
+      const json = (await res.json()) as ReferralsResponse;
+      setReferrals(json);
+    } catch {
+      setReferralMessage('API unreachable');
+    } finally {
+      setReferralsLoading(false);
+    }
+  };
+
+  /** Cabut satu referral + clawback poin. */
+  const revokeReferral = async (row: ReferralRow) => {
+    const flagged = row.nonAllowedDomain
+      ? '\n\n⚠️ This referral used a non-allowed email domain.'
+      : '';
+    if (
+      !confirm(
+        `Remove referral from ${row.referredEmail}?\n\nThe referrer will lose ${row.points} points (clawback). The referred user stays but loses their referral link.${flagged}`,
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setReferralMessage(null);
+    try {
+      const res = await fetch(
+        `/api/admin/referrals/${row.referredUserId}`,
+        { method: 'DELETE' },
+      );
+      const json = (await res.json()) as {
+        ok?: boolean;
+        pointsClawedBack?: number;
+        referrerEarnPointsNow?: number;
+        message?: string;
+      };
+      if (!res.ok) {
+        setReferralMessage(json.message ?? 'Revoke failed');
+        return;
+      }
+      setReferralMessage(
+        `Removed referral · clawed back ${json.pointsClawedBack ?? row.points} pts. Referrer now at ${json.referrerEarnPointsNow ?? '?'} pts.`,
+      );
+      // Refresh modal + tabel utama.
+      if (referralModalUser) await openReferrals(referralModalUser);
+      await load();
+    } catch {
+      setReferralMessage('Revoke failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end gap-3">
@@ -241,6 +343,18 @@ export function AdminUsersPanel() {
             className={cn(inputClass, "py-2.5 pl-10 pr-4")}
           />
         </div>
+        <select
+          value={sort}
+          onChange={(e) => {
+            setSort(e.target.value as 'recent' | 'points_desc');
+            setPage(1);
+          }}
+          className={cn(inputClass, 'py-2.5 pr-8')}
+          aria-label="Sort users"
+        >
+          <option value="recent">Most recent</option>
+          <option value="points_desc">Top points</option>
+        </select>
         <button
           type="button"
           onClick={() => void load()}
@@ -267,7 +381,7 @@ export function AdminUsersPanel() {
       )}
 
       <p className="text-xs text-[var(--muted-foreground)]">
-        Deleting a user removes all app data for that account: login, refresh tokens, CC balance, transaction history, quest completions, submissions, and winner records. Quest campaigns stay. On-chain Canton wallet/party is not removed from the validator.
+        Deleting a user removes all app data for that account: login, refresh tokens, CC balance, transaction history, quest completions, submissions, and winner records. Their given referral rewards are clawed back first. On-chain Canton wallet/party is not removed from the validator.
       </p>
 
       {loading && !data ? (
@@ -275,7 +389,7 @@ export function AdminUsersPanel() {
       ) : !data || data.users.length === 0 ? (
         <p className="text-sm text-[var(--muted-foreground)]">No users found.</p>
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-[var(--border)]">
+        <div className="overflow-x-auto overflow-hidden rounded-2xl border border-[var(--border)]">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] bg-[var(--muted)]/50 text-left">
@@ -292,7 +406,9 @@ export function AdminUsersPanel() {
                 </th>
                 <th className="px-4 py-3 font-semibold">User</th>
                 <th className="px-4 py-3 font-semibold">Status</th>
+                <th className="px-4 py-3 font-semibold">Points</th>
                 <th className="px-4 py-3 font-semibold">Balance</th>
+                <th className="px-4 py-3 font-semibold">Invited</th>
                 <th className="px-4 py-3 font-semibold">Quests</th>
                 <th className="px-4 py-3 font-semibold">Joined</th>
                 <th className="px-4 py-3 font-semibold">Actions</th>
@@ -336,7 +452,26 @@ export function AdminUsersPanel() {
                       </p>
                     ) : null}
                   </td>
+                  <td className="px-4 py-3 font-semibold tabular-nums">
+                    {u.earnPoints.toLocaleString()}
+                  </td>
                   <td className="px-4 py-3 tabular-nums">{formatCc(u.balanceMicroCc)} CC</td>
+                  <td className="px-4 py-3 tabular-nums">
+                    <button
+                      type="button"
+                      disabled={u._count.referralRewardsGiven === 0}
+                      onClick={() => void openReferrals(u)}
+                      className={
+                        u._count.referralRewardsGiven === 0
+                          ? 'text-[var(--muted-foreground)]'
+                          : 'inline-flex items-center gap-1 rounded-md bg-blue-500/15 px-2 py-0.5 font-semibold text-blue-300 hover:bg-blue-500/25'
+                      }
+                      title={u._count.referralRewardsGiven === 0 ? 'No referrals' : 'View referred users'}
+                    >
+                      <UsersIcon className="h-3 w-3" />
+                      {u._count.referralRewardsGiven}
+                    </button>
+                  </td>
                   <td className="px-4 py-3 tabular-nums">{u._count.questCompletions}</td>
                   <td className="px-4 py-3 text-xs text-[var(--muted-foreground)]">
                     {new Date(u.createdAt).toLocaleDateString()}
@@ -403,6 +538,94 @@ export function AdminUsersPanel() {
             >
               Next
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal daftar referral */}
+      {referralModalUser && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setReferralModalUser(null)}
+        >
+          <div
+            className="max-h-[85vh] w-full max-w-2xl overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-4">
+              <div>
+                <h3 className="text-base font-bold">
+                  Referrals by {referralModalUser.email}
+                </h3>
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  Current points:{' '}
+                  {referrals ? referrals.referrer.earnPoints.toLocaleString() : '…'}
+                  {' · '}
+                  Remove a referral to claw back its points.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReferralModalUser(null)}
+                className="rounded-lg p-1.5 text-[var(--muted-foreground)] hover:bg-[var(--muted)]"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {referralMessage && (
+              <p className="mx-5 mt-4 rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 text-sm">
+                {referralMessage}
+              </p>
+            )}
+
+            <div className="max-h-[60vh] overflow-y-auto p-5">
+              {referralsLoading ? (
+                <p className="text-sm text-[var(--muted-foreground)]">Loading…</p>
+              ) : !referrals || referrals.referrals.length === 0 ? (
+                <p className="text-sm text-[var(--muted-foreground)]">
+                  No referrals yet.
+                </p>
+              ) : (
+                <ul className="space-y-2">
+                  {referrals.referrals.map((r) => (
+                    <li
+                      key={r.rewardId}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--muted)]/20 px-4 py-3"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate font-semibold">{r.referredEmail}</p>
+                          {r.nonAllowedDomain && (
+                            <span className="inline-flex items-center rounded-md bg-red-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-red-300">
+                              non-gmail
+                            </span>
+                          )}
+                          {r.referredStatus && r.referredStatus !== 'ACTIVE' && (
+                            <span className="inline-flex items-center rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-300">
+                              {r.referredStatus}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-[var(--muted-foreground)]">
+                          @{r.referredDomain || '—'} · {r.points} pts ·{' '}
+                          {new Date(r.createdAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void revokeReferral(r)}
+                        className="shrink-0 rounded-lg border border-red-500/30 px-3 py-1 text-xs font-semibold text-red-600 disabled:opacity-40 dark:text-red-400"
+                      >
+                        Remove · −{r.points}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         </div>
       )}
