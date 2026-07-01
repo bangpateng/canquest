@@ -281,10 +281,12 @@ export function AdminReferralAuditPanel() {
               {data.totalFlagged} referral(s) flagged
             </p>
             <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-              Flagged when the referred email is from a non-webmail domain OR a
-              Gmail alias (dots/plus, e.g. gener.a.tor@gmail.com = generator@gmail.com).
-              Normal Gmail/Yahoo/Outlook are NOT flagged. Top referrers below —
-              expand to remove individual referrals.
+              Flagged when: (1) the referred email is from a non-webmail domain,
+              OR (2) a referrer invited <strong>2+ Gmail addresses that resolve
+              to the same inbox</strong> (dots/plus are ignored by Gmail — e.g.
+              gener.a.tor@gmail.com = generator@gmail.com). A single Gmail
+              invite (even with dots) is <strong>NOT</strong> flagged. Top
+              referrers below — expand to remove individual referrals.
             </p>
           </div>
 

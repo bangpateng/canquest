@@ -14,8 +14,9 @@ export default function AdminReferralsPage() {
         <h1 className="type-page-title mt-2">Referral audit</h1>
         <p className="mt-1 text-sm text-[var(--muted-foreground)]">
           Spot and clean up referral fraud. Referrals are flagged when the
-          invited email is from a non-webmail domain <strong>or</strong> a Gmail
-          alias (dots/plus tricks). Normal Gmail/Yahoo/Outlook are not flagged.
+          invited email is from a non-webmail domain, <strong>or</strong> when a
+          referrer invited 2+ Gmail addresses that resolve to the same inbox
+          (dots/plus are ignored by Gmail). A single Gmail invite is not flagged.
           Remove them to claw back the points they earned the referrer.
         </p>
         <p className="mt-1 text-xs text-[var(--muted-foreground)]">
