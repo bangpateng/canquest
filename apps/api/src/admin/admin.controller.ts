@@ -286,6 +286,21 @@ export class AdminController {
     return this.admin.revokeReferral(referredUserId);
   }
 
+  /**
+   * Bulk revoke banyak referral sekaligus (server-side, untuk ribuan item).
+   * Body: { referredUserIds?: string[] } untuk hapus yang dicentang, ATAU
+   *       { all: true } untuk hapus SEMUA referral di luar allowlist (auto-flag).
+   */
+  @Post('referrals/revoke-bulk')
+  revokeReferralsBulk(
+    @Body() body: { referredUserIds?: string[]; all?: boolean },
+  ) {
+    return this.admin.revokeReferralsBulk({
+      referredUserIds: body.referredUserIds,
+      all: body.all,
+    });
+  }
+
   /* ── Maintenance mode (live toggle via AppSetting) ── */
 
   @Get('maintenance')

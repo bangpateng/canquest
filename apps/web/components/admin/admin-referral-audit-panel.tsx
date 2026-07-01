@@ -91,34 +91,70 @@ export function AdminReferralAuditPanel() {
     if (selected.size === 0) return;
     if (
       !confirm(
-        `Remove ${selected.size} flagged referral(s)?\n\nEach referrer loses the points from these referrals (clawback). The referred users stay but lose their referral link.`,
+        `Remove ${selected.size} flagged referral(s)?\n\nEach referrer loses the points from these referrals (clawback). The referred users stay but lose their referral link. This runs server-side in one batch.`,
       )
     ) {
       return;
     }
     setBusy(true);
     setMessage(null);
-    let ok = 0;
-    let fail = 0;
-    let clawed = 0;
     try {
-      for (const referredUserId of selected) {
-        const res = await fetch(`/api/admin/referrals/${referredUserId}`, {
-          method: 'DELETE',
-        });
-        if (res.ok) {
-          ok += 1;
-          const j = (await res.json().catch(() => ({}))) as {
-            pointsClawedBack?: number;
-          };
-          clawed += j.pointsClawedBack ?? 0;
-        } else {
-          fail += 1;
-        }
+      const res = await fetch('/api/admin/referrals/revoke-bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ referredUserIds: [...selected] }),
+      });
+      const j = (await res.json().catch(() => ({}))) as {
+        revoked?: number;
+        pointsClawedBack?: number;
+        referrersUpdated?: number;
+        message?: string;
+      };
+      if (!res.ok) {
+        setMessage(j.message ?? 'Bulk remove failed');
+        return;
       }
       setMessage(
-        `Removed ${ok} referral(s) · clawed back ${clawed} pts` +
-          (fail > 0 ? ` · ${fail} failed` : ''),
+        `Removed ${j.revoked ?? 0} referral(s) · clawed back ${j.pointsClawedBack ?? 0} pts across ${j.referrersUpdated ?? 0} referrer(s).`,
+      );
+      await load();
+    } catch {
+      setMessage('Request failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Hapus SEMUA referral yang auto-flag (di luar allowlist) sekaligus di server. */
+  const revokeAllFlagged = async () => {
+    if (!data || data.totalFlagged === 0) return;
+    if (
+      !confirm(
+        `Remove ALL ${data.totalFlagged} flagged referral(s)?\n\nThis removes every referral whose email is outside the allowed webmail list, and claws back all their points across every referrer in one server-side batch. This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setMessage(null);
+    try {
+      const res = await fetch('/api/admin/referrals/revoke-bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ all: true }),
+      });
+      const j = (await res.json().catch(() => ({}))) as {
+        revoked?: number;
+        pointsClawedBack?: number;
+        referrersUpdated?: number;
+        message?: string;
+      };
+      if (!res.ok) {
+        setMessage(j.message ?? 'Bulk remove failed');
+        return;
+      }
+      setMessage(
+        `Removed ${j.revoked ?? 0} referral(s) · clawed back ${j.pointsClawedBack ?? 0} pts across ${j.referrersUpdated ?? 0} referrer(s).`,
       );
       await load();
     } catch {
@@ -200,7 +236,20 @@ export function AdminReferralAuditPanel() {
           )}
         >
           <Trash2 className="h-4 w-4" />
-          Remove {selected.size > 0 ? `(${selected.size})` : ''}
+          Remove selected {selected.size > 0 ? `(${selected.size})` : ''}
+        </button>
+        <button
+          type="button"
+          onClick={() => void revokeAllFlagged()}
+          disabled={busy || !data || data.totalFlagged === 0}
+          title="Remove every referral outside the allowed webmail list, in one server-side batch"
+          className={cn(
+            buttonVariants({ variant: 'danger' }),
+            'gap-2 border-red-400 bg-transparent text-red-500 hover:bg-red-600 hover:text-white disabled:opacity-50',
+          )}
+        >
+          <Trash2 className="h-4 w-4" />
+          Remove ALL flagged{data ? ` (${data.totalFlagged})` : ''}
         </button>
       </div>
 

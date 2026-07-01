@@ -1797,6 +1797,120 @@ export class AdminService {
     };
   }
 
+  /**
+   * Bulk revoke banyak ReferralReward sekaligus + clawback per referrer.
+   * Dipakai untuk sweep massal referral fraud (ribuan item). Jauh lebih cepat &
+   * reliable daripada memanggil revokeReferral() satu per satu dari browser.
+   *
+   * Mode:
+   * - ids:   hapus reward berdasarkan referredUserId tertentu (centangan admin).
+   * - all:   hapus SEMUA reward yang referred-nya di luar allowlist (auto-flag).
+   *
+   * Strategi: kelompokkan reward yang akan dihapus per referrer, hapus massal
+   * dalam satu deleteMany, lalu reconcile setiap referrer SEKALI (bukan per reward).
+   * Mengembalikan ringkasan: jumlah dihapus, total poin clawback, error.
+   */
+  async revokeReferralsBulk(opts: {
+    referredUserIds?: string[];
+    all?: boolean;
+  }) {
+    const requestedIds = [...new Set((opts.referredUserIds ?? []).map((id) => id.trim()).filter(Boolean))];
+    const useAll = opts.all === true;
+
+    if (!useAll && requestedIds.length === 0) {
+      throw new BadRequestException('No referral IDs provided');
+    }
+
+    // 1. Ambil semua reward yang akan dihapus (filter allowlist jika mode all).
+    const protectedEmails = this.getProtectedAdminEmails();
+    const allRewards = await this.prisma.referralReward.findMany({
+      select: {
+        id: true,
+        referrerId: true,
+        referredUserId: true,
+        points: true,
+        referrer: { select: { email: true, isAdmin: true } },
+        referredUser: { select: { email: true } },
+      },
+    });
+
+    const target = allRewards.filter((r) => {
+      if (r.referrer.isAdmin || protectedEmails.has(r.referrer.email.toLowerCase())) {
+        return false; // lindungi admin
+      }
+      if (useAll) {
+        // mode all: hanya yang di luar allowlist (auto-flag)
+        const domain = getDomainFromEmail(r.referredUser?.email);
+        return domain !== '' && !isAllowedEmailDomain(domain);
+      }
+      // mode ids: yang dicentang admin
+      return requestedIds.includes(r.referredUserId);
+    });
+
+    if (target.length === 0) {
+      return {
+        ok: true,
+        revoked: 0,
+        pointsClawedBack: 0,
+        referrersUpdated: 0,
+        skippedAdmin: 0,
+        message: 'Nothing to revoke',
+      };
+    }
+
+    const targetIds = target.map((r) => r.id);
+    const referrerIds = [...new Set(target.map((r) => r.referrerId))];
+
+    // 2. Hapus massal SEMUA reward target dalam satu query.
+    const deleteResult = await this.prisma.referralReward.deleteMany({
+      where: { id: { in: targetIds } },
+    });
+
+    // 3. Null-kan referredById semua referred user terkait (batch).
+    const referredIds = target.map((r) => r.referredUserId).filter(Boolean);
+    if (referredIds.length > 0) {
+      await this.prisma.user
+        .updateMany({
+          where: { id: { in: referredIds } },
+          data: { referredById: null },
+        })
+        .catch(() => {
+          /* referred user mungkin sudah dihapus — abaikan */
+        });
+    }
+
+    // 4. Reconcile setiap referrer SEKALI (recompute earnPoints pasca-hapus).
+    //    Karena semua reward target sudah hilang dari sumber, aggregate otomatis
+    //    menghasilkan nilai lebih rendah; tulis ulang earnPoints supaya permanen.
+    let totalClawed = 0;
+    for (const r of target) totalClawed += r.points;
+
+    await Promise.all(
+      referrerIds.map(async (referrerId) => {
+        const computed = await this.points.aggregateUserPoints(referrerId);
+        await this.prisma.user.update({
+          where: { id: referrerId },
+          data: { earnPoints: computed },
+        });
+      }),
+    );
+
+    const skippedAdmin = allRewards.length - target.length - (useAll ? 0 : 0);
+
+    this.logger.warn(
+      `Bulk referral revoke: ${deleteResult.count} rewards deleted, ` +
+        `${totalClawed} pts clawed back across ${referrerIds.length} referrer(s).`,
+    );
+
+    return {
+      ok: true,
+      revoked: deleteResult.count,
+      pointsClawedBack: totalClawed,
+      referrersUpdated: referrerIds.length,
+      skippedAdmin,
+    };
+  }
+
   private getProtectedAdminEmails(): Set<string> {
     const raw =
       this.config.get<string>('ADMIN_EMAILS') ?? process.env.ADMIN_EMAILS ?? '';
