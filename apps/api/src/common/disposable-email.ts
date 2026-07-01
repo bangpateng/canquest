@@ -298,15 +298,19 @@ export function canonicalEmail(email: string | null | undefined): string {
   const at = lower.lastIndexOf('@');
   if (at < 0) return '';
   let local = lower.slice(0, at);
-  const domain = lower.slice(at + 1);
+  let domain = lower.slice(at + 1);
   if (!local || !domain) return '';
+
+  // googlemail.com adalah domain alternatif Gmail → inbox yang sama.
+  // Normalisasi ke gmail.com supaya user@googlemail.com == user@gmail.com.
+  if (domain === 'googlemail.com') domain = 'gmail.com';
 
   // Strip plus-addressing untuk semua domain (user+tag → user).
   const plusIdx = local.indexOf('+');
   if (plusIdx >= 0) local = local.slice(0, plusIdx);
 
   // Hanya gmail/googlemail yang mengabaikan titik di local-part.
-  if (domain === 'gmail.com' || domain === 'googlemail.com') {
+  if (domain === 'gmail.com') {
     local = local.replace(/\./g, '');
   }
 

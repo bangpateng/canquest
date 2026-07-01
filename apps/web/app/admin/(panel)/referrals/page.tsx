@@ -15,14 +15,16 @@ export default function AdminReferralsPage() {
         <p className="mt-1 text-sm text-[var(--muted-foreground)]">
           Spot and clean up referral fraud. Referrals are flagged when the
           invited email is from a non-webmail domain, <strong>or</strong> when a
-          referrer invited 2+ Gmail addresses that resolve to the same inbox
-          (dots/plus are ignored by Gmail). A single Gmail invite is not flagged.
-          Remove them to claw back the points they earned the referrer.
+          referrer invited 2+ addresses that resolve to the same inbox (dots for
+          Gmail, plus-addressing across all webmail: Outlook, Yahoo, Proton,
+          iCloud, etc.). A single invite is never flagged. Remove them to claw
+          back the points they earned the referrer.
         </p>
         <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-          <strong>Going forward:</strong> a referral reward now requires the
-          invited user to verify their email <strong>and</strong> connect an X
-          (Twitter) account — closing the farming loophole.
+          <strong>Going forward:</strong> a referral reward requires the invited
+          user to verify their email <strong>and</strong> connect an X (Twitter)
+          account, <strong>and</strong> duplicate aliases (same canonical inbox)
+          are blocked at reward time — closing the farming loophole.
         </p>
       </div>
       <AdminReferralAuditPanel />

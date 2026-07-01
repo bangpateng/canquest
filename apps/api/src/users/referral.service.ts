@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from './users.service';
+import { canonicalEmail } from '../common/disposable-email';
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const DEFAULT_REWARD_POINTS = 20;
@@ -69,6 +70,10 @@ export class ReferralService {
    * 3. referred.twitterUsername terisi (sudah connect akun X).
    * 4. belum pernah dapat reward (idempoten, @unique di DB sebagai backstop).
    * 5. bukan self-referral.
+   * 6. BUKAN alias duplikat: referrer belum punya referral lain dengan canonical
+   *    email yang sama (anti farming via Gmail dot/plus, Outlook plus, dll).
+   *    Alias TUNGGAL tetap diizinkan (mis. kakak-adik sekandung sah); hanya
+   *    duplikat ke-2+ dari referrer yang sama yang diblokir.
    *
    * Dipanggil dari: verifyOtp (path normal), skip-OTP register/login, DAN
    * twitter/connect (saat user baru saja menghubungkan X). Karena reward bersifat
@@ -80,6 +85,7 @@ export class ReferralService {
       where: { id: referredUserId },
       select: {
         id: true,
+        email: true,
         emailVerified: true,
         twitterUsername: true,
         referredById: true,
@@ -96,6 +102,7 @@ export class ReferralService {
 
     const points = this.rewardPointsPerInvite();
     const referrerId = referred.referredById;
+    const referredCanonical = canonicalEmail(referred.email);
 
     try {
       await this.prisma.$transaction(async (tx) => {
@@ -103,6 +110,25 @@ export class ReferralService {
           where: { referredUserId },
         });
         if (existing) return;
+
+        // Anti alias-farming: cek apakah referrer SUDAH punya referral lain yang
+        // canonical email-nya sama dengan referred ini. Re-check di dalam tx agar
+        // aman terhadap race (dua OTP-verify bersamaan).
+        if (referredCanonical) {
+          const priorRewards = await tx.referralReward.findMany({
+            where: { referrerId },
+            select: { referredUser: { select: { email: true } } },
+          });
+          const hasDuplicate = priorRewards.some(
+            (r) => canonicalEmail(r.referredUser?.email) === referredCanonical,
+          );
+          if (hasDuplicate) {
+            this.logger.warn(
+              `Referral reward blocked (alias duplicate): referred ${referredUserId} (${referred.email}) canonical=${referredCanonical} already referred by ${referrerId}`,
+            );
+            return; // jangan bayarkan — tapi tidak throw (user tetap login).
+          }
+        }
 
         await tx.referralReward.create({
           data: {

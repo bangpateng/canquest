@@ -359,9 +359,9 @@ export function AdminReferralAuditPanel() {
                                         {r.isGmailAlias ? (
                                           <span
                                             className="ml-1 inline-flex rounded-md bg-purple-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-purple-300"
-                                            title={`Gmail alias — canonical: ${r.canonicalEmail}`}
+                                            title={`Alias duplicate — canonical: ${r.canonicalEmail}`}
                                           >
-                                            gmail alias
+                                            alias duplicate
                                           </span>
                                         ) : (
                                           <span className="text-[10px] font-bold uppercase text-red-300">

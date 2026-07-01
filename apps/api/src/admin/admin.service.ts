@@ -57,18 +57,19 @@ type ReferralEmailSource = {
 
 /**
  * Bangun set kunci (referrerId|canonicalEmail) yang muncul ≥2 kali (= cluster
- * farming gmail). Dipakai untuk flag item-item dalam cluster duplikat itu saja.
+ * alias farming). Dipakai untuk flag item-item dalam cluster duplikat itu saja.
+ *
+ * Mencakup SEMUA domain webmail allowlist — bukan Gmail saja. canonicalEmail()
+ * sudah menormalisasi: strip plus-addressing untuk semua domain + strip dot
+ * untuk Gmail/Googlemail + treat googlemail.com == gmail.com. Jadi alias
+ * Outlook (user+1@/user+2@), Yahoo, Proton, iCloud dari satu referrer ikut
+ * terdeteksi sebagai cluster duplikat, bukan cuma Gmail.
  */
-function buildGmailClusterKeys(sources: ReferralEmailSource[]): Set<string> {
+function buildAliasClusterKeys(sources: ReferralEmailSource[]): Set<string> {
   const counts = new Map<string, number>();
   for (const s of sources) {
     const email = s.referredEmail;
     if (!email) continue;
-    const domain = getDomainFromEmail(email);
-    // Hanya gmail/googlemail yang menormalisasi titik (cluster hunting relevan
-    // di sana). Domain lain: cluster pada bentuk persis (plus-addressing sudah
-    // distrip oleh canonicalEmail).
-    if (domain !== 'gmail.com' && domain !== 'googlemail.com') continue;
     const key = `${s.referrerId}|${canonicalEmail(email)}`;
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
@@ -85,18 +86,16 @@ function isNonWebmailDomain(email: string | null | undefined): boolean {
 }
 
 /**
- * True jika sebuah referral termasuk gmail alias farming: domain gmail DAN
- * (referrerId|canonicalEmail)-nya ada di set cluster duplikat (≥2 varian).
- * Varian gmail TUNGGAL tidak diflag.
+ * True jika sebuah referral termasuk alias farming (semua webmail): canonical
+ * email-nya ada di set cluster duplikat (≥2 varian dari referrer yang sama).
+ * Varian TUNGGAL tidak diflag (mis. kakak-adik sekandung sah).
  */
-function isInGmailCluster(
+function isInAliasCluster(
   email: string | null | undefined,
   referrerId: string,
   clusterKeys: Set<string>,
 ): boolean {
   if (!email) return false;
-  const domain = getDomainFromEmail(email);
-  if (domain !== 'gmail.com' && domain !== 'googlemail.com') return false;
   return clusterKeys.has(`${referrerId}|${canonicalEmail(email)}`);
 }
 
@@ -1719,7 +1718,7 @@ export class AdminService {
 
     // Bangun cluster duplikat gmail (referrerId ini saja). Hanya varian yang
     // menormalisasi ke mailbox sama ≥2 kali yang dianggap farming.
-    const clusterKeys = buildGmailClusterKeys(
+    const clusterKeys = buildAliasClusterKeys(
       rewards.map((r) => ({
         referrerId: userId,
         referredEmail: r.referredUser?.email,
@@ -1735,7 +1734,7 @@ export class AdminService {
       referrals: rewards.map((r) => {
         const email = r.referredUser?.email;
         const domain = getDomainFromEmail(email);
-        const inCluster = isInGmailCluster(email, userId, clusterKeys);
+        const inCluster = isInAliasCluster(email, userId, clusterKeys);
         const nonWebmail = isNonWebmailDomain(email);
         return {
           rewardId: r.id,
@@ -1860,7 +1859,7 @@ export class AdminService {
     // Bangun cluster duplikat gmail di seluruh dataset (per referrer). Hanya
     // varian yang menormalisasi ke mailbox sama ≥2 kali dari satu pengundang yang
     // dianggap farming. Gmail tunggal (mis. john.doe@gmail.com) TIDAK diflag.
-    const clusterKeys = buildGmailClusterKeys(
+    const clusterKeys = buildAliasClusterKeys(
       rewards.map((r) => ({
         referrerId: r.referrerId,
         referredEmail: r.referredUser?.email,
@@ -1871,7 +1870,7 @@ export class AdminService {
       const email = r.referredUser?.email;
       return (
         isNonWebmailDomain(email) ||
-        isInGmailCluster(email, r.referrerId, clusterKeys)
+        isInAliasCluster(email, r.referrerId, clusterKeys)
       );
     });
 
@@ -1921,7 +1920,7 @@ export class AdminService {
           referredUserId: r.referredUserId,
           referredEmail: email ?? '(deleted user)',
           referredDomain: getDomainFromEmail(email),
-          isGmailAlias: isInGmailCluster(email, r.referrerId, clusterKeys),
+          isGmailAlias: isInAliasCluster(email, r.referrerId, clusterKeys),
           canonicalEmail: canonicalEmail(email),
           referredStatus: r.referredUser?.status ?? null,
           points: r.points,
@@ -1969,7 +1968,7 @@ export class AdminService {
     });
 
     // Bangun cluster duplikat gmail sebelum filter (perlu seluruh dataset).
-    const clusterKeys = buildGmailClusterKeys(
+    const clusterKeys = buildAliasClusterKeys(
       allRewards.map((r) => ({
         referrerId: r.referrerId,
         referredEmail: r.referredUser?.email,
@@ -1986,7 +1985,7 @@ export class AdminService {
         const email = r.referredUser?.email;
         return (
           isNonWebmailDomain(email) ||
-          isInGmailCluster(email, r.referrerId, clusterKeys)
+          isInAliasCluster(email, r.referrerId, clusterKeys)
         );
       }
       // mode ids: yang dicentang admin
