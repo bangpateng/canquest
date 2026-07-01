@@ -217,12 +217,17 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
         return;
       }
 
-      // JANGAN create row history synthetic (ledgerTxId "inbound-sync:...") — itu
-      // bukan tx onchain asli dan tidak punya CID event_id Lighthouse yang valid.
-      // Transfer masuk asli sudah tampil di history via fallback on-chain
-      // (Lighthouse, dengan event_id yang benar). Balance tetap di-sync di bawah.
+      // Transfer masuk asli terdeteksi (balance naik BUKAN dari aktivitas app).
+      // FE sudah memakai DB sebagai single source of truth (merge on-chain
+      // dihapus), jadi kita WAJIB catat baris TRANSFER_IN supaya received CC
+      // muncul di history + notifikasi.
+      //
+      // Sumber balance API hanya memberi delta jumlah, BUKAN sender/CID asli.
+      // Pakai ledgerTxId ter-marker "inbound-sync:{partyId}:{ts}" supaya jelas
+      // ini row hasil sync (bukan tx Lighthouse). cc-transaction-visibility.ts
+      // sudah eksplisit TIDAK menyembunyikan baris inbound-sync.
       this.logger.log(
-        `Balance +${deltaCc} CC for @${username} synced from chain (no synthetic history row)`,
+        `Balance +${deltaCc} CC for @${username} synced from chain → recording TRANSFER_IN`,
       );
 
       await this.prisma.ccBalance.update({
@@ -230,9 +235,29 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
         data: { balanceMicroCc: onChainMicro },
       });
 
-      // Push realtime: balance naik (transfer masuk dari chain/akun lain).
-      // Frontend invalidate cache balance + transactions (on-chain row baru
-      // muncul via fallback Lighthouse).
+      try {
+        await this.prisma.ccTransaction.create({
+          data: {
+            userId,
+            amountMicroCc: deltaMicro,
+            type: 'TRANSFER_IN',
+            description: `Received ${deltaCc} CC (on-chain)`,
+            // referenceId = party pemilik (counterparty tidak diketahui dari balance API).
+            referenceId: cantonPartyId ?? username,
+            ledgerTxId: `inbound-sync:${cantonPartyId ?? username}:${Date.now()}`,
+            status: 'COMPLETED',
+            settledAt: new Date(),
+          },
+        });
+      } catch (err) {
+        // Jangan gagalkan sync hanya karena insert row bermasalah (mis. race
+        // duplikat). Balance sudah ter-update; history row opsional.
+        this.logger.warn(
+          `Failed to record inbound TRANSFER_IN for @${username}: ${String(err)}`,
+        );
+      }
+
+      // Push realtime: balance naik + tx baru → FE refresh list & notifikasi.
       this.realtime.push(userId, 'balance:changed', null);
       this.realtime.push(userId, 'transaction:new', {
         type: 'TRANSFER_IN',

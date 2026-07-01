@@ -1275,15 +1275,42 @@ export class PartyController {
 
     if (settledOwnReward === 0) {
       // Transfer masuk dari pihak lain (bukan reward pending kita) → catat TRANSFER_IN.
+      // Bila lookupOfferDetail gagal (amountCc = 0), coba tebus nilai asli dari
+      // delta balance on-chain supaya history tidak menampilkan "Received 0 CC".
+      let resolvedAmount = amountCc;
+      if (resolvedAmount === 0) {
+        try {
+          const afterBal = await this.ledger.getLedgerBalance(
+            user.cantonPartyId,
+          );
+          if (afterBal != null) {
+            const beforeRow = await this.prisma.ccBalance.findUnique({
+              where: { userId: user.id },
+            });
+            const beforeCc = beforeRow
+              ? Number(beforeRow.balanceMicroCc) / 1_000_000
+              : 0;
+            resolvedAmount = Math.max(
+              0,
+              Math.round((afterBal - beforeCc) * 1e6) / 1e6,
+            );
+          }
+        } catch (err) {
+          this.logger.warn(
+            `balance-delta amount resolve failed: ${String(err)}`,
+          );
+        }
+      }
+
       const kindLabel =
-        offerType === 'transfer_instruction' ? 'CIP-0056' : 'legacy';
+        offerType === OfferType.TRANSFER_INSTRUCTION ? 'CIP-0056' : 'legacy';
       await this.users.recordTransaction({
         userId: user.id,
-        amountCc,
+        amountCc: resolvedAmount,
         type: 'TRANSFER_IN',
         description:
-          amountCc > 0
-            ? `Received ${amountCc} CC${senderLabel ? ` from ${senderLabel}` : ''}`
+          resolvedAmount > 0
+            ? `Received ${resolvedAmount} CC${senderLabel ? ` from ${senderLabel}` : ''}`
             : `Accepted incoming ${kindLabel} transfer`,
         counterparty: senderLabel || undefined,
         ledgerTxId: updateId ?? cid,
@@ -1382,12 +1409,55 @@ export class PartyController {
         message: 'Transfer rejected. CC returned to sender.',
       };
     } else {
+      // Legacy Splice TransferOffer — lookup detail SEBELUM reject (offer hilang setelahnya).
+      let amountCc = 0;
+      let senderLabel = '';
+      try {
+        const detail = await this.ledger.lookupOfferDetail(
+          cid,
+          user.cantonPartyId,
+        );
+        if (detail) {
+          amountCc = parseFloat(detail.amount) || 0;
+          senderLabel = detail.sender?.split('::')[0] ?? detail.sender ?? '';
+        }
+      } catch (err) {
+        this.logger.warn(
+          `lookupOfferDetail (legacy reject) failed: ${String(err)}`,
+        );
+      }
+
       const result = await this.ledger.rejectTransferOffer(
         cid,
         user.cantonPartyId,
       );
       if (!result.rejected) {
         throw new BadRequestException('Failed to reject transfer offer.');
+      }
+
+      // Reward PENDING yang ditolak → tandai REJECTED. Transfer dari pihak lain
+      // yang ditolak → catat jejak OFFER_REJECTED supaya user punya riwayatnya.
+      let settledOwnReward = 0;
+      try {
+        settledOwnReward = await this.users.markTransferInstructionSettled(
+          cid,
+          'REJECTED',
+        );
+      } catch (err) {
+        this.logger.warn(
+          `markTransferInstructionSettled REJECTED (legacy) failed: ${String(err)}`,
+        );
+      }
+      if (settledOwnReward === 0) {
+        await this.users.recordTransaction({
+          userId: user.id,
+          amountCc: 0, // reject tidak menggerakkan saldo receiver
+          type: 'OFFER_REJECTED',
+          description:
+            `Rejected incoming transfer${senderLabel ? ` from ${senderLabel}` : ''}` +
+            (amountCc > 0 ? ` (${amountCc} CC)` : ''),
+          ledgerTxId: result.updateId ?? cid,
+        });
       }
       return {
         ok: true,
@@ -1837,6 +1907,51 @@ export class PartyController {
       );
     }
 
+    // Lookup detail SEBELUM accept (offer hilang dari ledger setelah accept).
+    let amountCc = 0;
+    let senderLabel = '';
+    try {
+      const detail = await this.ledger.lookupOfferDetail(
+        contractId,
+        user.cantonPartyId,
+      );
+      if (detail) {
+        amountCc = parseFloat(detail.amount) || 0;
+        senderLabel = detail.sender?.split('::')[0] ?? detail.sender ?? '';
+      }
+    } catch (err) {
+      this.logger.warn(
+        `lookupOfferDetail (legacy accept) failed: ${String(err)}`,
+      );
+    }
+
+    // Reward PENDING yang diterima → tandai COMPLETED. Transfer dari pihak lain
+    // → catat TRANSFER_IN supaya muncul di history + notifikasi.
+    let settledOwnReward = 0;
+    try {
+      settledOwnReward = await this.users.markTransferInstructionSettled(
+        contractId,
+        'COMPLETED',
+      );
+    } catch (err) {
+      this.logger.warn(
+        `markTransferInstructionSettled (legacy) failed: ${String(err)}`,
+      );
+    }
+    if (settledOwnReward === 0) {
+      await this.users.recordTransaction({
+        userId: user.id,
+        amountCc,
+        type: 'TRANSFER_IN',
+        description:
+          amountCc > 0
+            ? `Received ${amountCc} CC${senderLabel ? ` from ${senderLabel}` : ''}`
+            : 'Accepted incoming transfer',
+        counterparty: senderLabel || undefined,
+        ledgerTxId: result.updateId ?? contractId,
+      });
+    }
+
     if (user.username) {
       void this.inboundSync.alignBalanceFromChain(user.id, user.username);
     }
@@ -1888,6 +2003,49 @@ export class PartyController {
       throw new BadRequestException(
         'Could not reject the transfer offer. The offer may have expired or been processed already.',
       );
+    }
+
+    // Lookup detail SEBELUM reject (offer hilang dari ledger setelah reject).
+    let amountCc = 0;
+    let senderLabel = '';
+    try {
+      const detail = await this.ledger.lookupOfferDetail(
+        contractId,
+        user.cantonPartyId,
+      );
+      if (detail) {
+        amountCc = parseFloat(detail.amount) || 0;
+        senderLabel = detail.sender?.split('::')[0] ?? detail.sender ?? '';
+      }
+    } catch (err) {
+      this.logger.warn(
+        `lookupOfferDetail (legacy reject) failed: ${String(err)}`,
+      );
+    }
+
+    // Reward PENDING yang ditolak → tandai REJECTED. Transfer dari pihak lain
+    // → catat OFFER_REJECTED supaya user punya riwayat + notifikasi.
+    let settledOwnReward = 0;
+    try {
+      settledOwnReward = await this.users.markTransferInstructionSettled(
+        contractId,
+        'REJECTED',
+      );
+    } catch (err) {
+      this.logger.warn(
+        `markTransferInstructionSettled (legacy reject) failed: ${String(err)}`,
+      );
+    }
+    if (settledOwnReward === 0) {
+      await this.users.recordTransaction({
+        userId: user.id,
+        amountCc: 0,
+        type: 'OFFER_REJECTED',
+        description:
+          `Rejected incoming transfer${senderLabel ? ` from ${senderLabel}` : ''}` +
+          (amountCc > 0 ? ` (${amountCc} CC)` : ''),
+        ledgerTxId: result.updateId ?? contractId,
+      });
     }
 
     this.logger.log(

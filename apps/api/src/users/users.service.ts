@@ -896,11 +896,14 @@ export class UsersService {
     // "[pending — recipient must accept offer]" saat offer selesai (accept/reject).
     const pendingRows = await this.prisma.ccTransaction.findMany({
       where: { transferInstructionCid, status: 'PENDING' },
-      select: { id: true, description: true },
+      select: { id: true, userId: true, description: true },
     });
     if (pendingRows.length === 0) return 0;
 
     const settledAt = status === 'COMPLETED' ? new Date() : null;
+    // Kumpulkan userId pemilik row unik untuk realtime push di akhir (Fix:
+    // sebelumnya sender tidak diberi tahu saat offer-nya di-accept/reject).
+    const ownerIds = new Set<string>();
     for (const row of pendingRows) {
       const cleanDesc = row.description
         .replace(/\s*\[pending[^\]]*\]\s*/i, '')
@@ -913,7 +916,21 @@ export class UsersService {
           ...(cleanDesc !== row.description ? { description: cleanDesc } : {}),
         },
       });
+      ownerIds.add(row.userId);
     }
+
+    // Notifikasi langsung ke pemilik row (biasanya SENDER offer): row PENDING
+    // mereka kini COMPLETED (CC diterima lawan) atau REJECTED (CC kembali).
+    // recordTransaction() hanya push untuk tx COMPLETED baru; flip status PENDING
+    // → COMPLETED lewat sini, jadi push eksplisit agar UI sender update live.
+    // Untuk COMPLETED juga invalidate cache balance (CC keluar dari escrow).
+    for (const ownerId of ownerIds) {
+      this.realtime.push(ownerId, 'transaction:new', { status });
+      if (status === 'COMPLETED') {
+        this.realtime.push(ownerId, 'balance:changed', null);
+      }
+    }
+
     return pendingRows.length;
   }
 
