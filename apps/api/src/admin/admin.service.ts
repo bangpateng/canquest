@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  EntryGateMode,
   QuestKind,
   QuestStatus,
   RewardType,
@@ -366,6 +367,10 @@ export class AdminService {
     tags?: string[];
     socialLinks?: QuestSocialLinkInput[];
     questKind?: QuestKind;
+    /** Per-event Earn access gate (CAMPAIGN only). */
+    entryGateMode?: EntryGateMode;
+    entryCcLock?: number | null;
+    entryCostPoints?: number | null;
     tasks?: Array<{
       type: string;
       title: string;
@@ -415,6 +420,16 @@ export class AdminService {
         redeemUrl: data.redeemUrl?.trim() || null,
         redeemInstructions: data.redeemInstructions?.trim() || null,
         questKind,
+        // Per-event Earn access gate (CAMPAIGN). Null = global default.
+        entryGateMode: (data.entryGateMode ?? EntryGateMode.CC_OR_POINTS) as any,
+        entryCcLock:
+          data.entryCcLock != null && data.entryCcLock > 0
+            ? data.entryCcLock
+            : null,
+        entryCostPoints:
+          data.entryCostPoints != null && data.entryCostPoints > 0
+            ? data.entryCostPoints
+            : null,
         tags: JSON.stringify(data.tags ?? []),
         socialLinks: serializeQuestSocialLinks(
           normalizeQuestSocialLinksForSave(data.socialLinks ?? []),
@@ -511,6 +526,10 @@ export class AdminService {
       redeemInstructions?: string | null;
       tags?: string[];
       socialLinks?: QuestSocialLinkInput[];
+      /** Per-event Earn access gate (CAMPAIGN only). */
+      entryGateMode?: EntryGateMode;
+      entryCcLock?: number | null;
+      entryCostPoints?: number | null;
     },
   ) {
     const existing = await this.prisma.quest.findUnique({
@@ -587,6 +606,22 @@ export class AdminService {
           redeemInstructions: data.redeemInstructions?.trim() || null,
         }),
         ...(data.tags !== undefined && { tags: JSON.stringify(data.tags) }),
+        // Per-event Earn access gate (CAMPAIGN). null = clear override → global default.
+        ...(data.entryGateMode !== undefined && {
+          entryGateMode: data.entryGateMode as any,
+        }),
+        ...(data.entryCcLock !== undefined && {
+          entryCcLock:
+            data.entryCcLock != null && data.entryCcLock > 0
+              ? data.entryCcLock
+              : null,
+        }),
+        ...(data.entryCostPoints !== undefined && {
+          entryCostPoints:
+            data.entryCostPoints != null && data.entryCostPoints > 0
+              ? data.entryCostPoints
+              : null,
+        }),
         ...(data.socialLinks !== undefined && {
           socialLinks: serializeQuestSocialLinks(
             normalizeQuestSocialLinksForSave(data.socialLinks),

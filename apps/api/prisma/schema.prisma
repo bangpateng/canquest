@@ -93,7 +93,7 @@ model EarnEntry {
   userId        String
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   questId       String
-  /// Metode akses yang dipakai: 'points' | 'cc_lock'
+  /// Metode akses yang dipakai: 'points' | 'cc_lock' | 'none' (mode gate NONE / event gratis)
   method        String
   /// Poin terpotong (0 jika method = cc_lock)
   pointsSpent   Int      @default(0)
@@ -297,6 +297,14 @@ model Quest {
   /// DAML QuestCampaign contract ID on Canton ledger (set after admin creates quest).
   /// Used by claimFcfsSlot() / drawRaffleWinner() to reference the on-chain campaign.
   ledgerCampaignId String?
+  /// Mode gate akses Earn per-campaign (configurable dari dashboard admin).
+  /// CC_OR_POINTS (default) = lock CC atau spend points (perilaku lama).
+  /// CC_ONLY / POINTS_ONLY / NONE = admin pilih per-event.
+  entryGateMode    EntryGateMode     @default(CC_OR_POINTS)
+  /// Override jumlah CC yang harus di-lock (jalur cc_lock). Null = pakai default global (LOCK_TIER_FULL, 30).
+  entryCcLock      Int?
+  /// Override biaya points (jalur points). Null = pakai default global (earn_entry_cost_points AppSetting / 200).
+  entryCostPoints  Int?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   tasks            QuestTask[]
@@ -406,6 +414,16 @@ model QuestSubmission {
 enum QuestKind {
   CAMPAIGN
   EARN_HUB
+}
+
+/// Mode gate akses Earn per-campaign (di-set admin per-event).
+/// CC_OR_POINTS = lock CC ATAU spend points (default, perilaku lama).
+/// CC_ONLY = hanya lock CC. POINTS_ONLY = hanya spend points. NONE = tanpa gate (event gratis).
+enum EntryGateMode {
+  CC_OR_POINTS
+  CC_ONLY
+  POINTS_ONLY
+  NONE
 }
 
 enum QuestStatus {

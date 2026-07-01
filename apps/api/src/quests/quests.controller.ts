@@ -157,6 +157,24 @@ export class QuestsController {
     return { ...rewardStatus, campaignMeta };
   }
 
+  /**
+   * Eligibility gate Earn untuk satu campaign (READ-ONLY).
+   * Mengembalikan status eligible + alasan untuk badge FE.
+   * Tidak throw bila tidak eligible — FE yang menampilkan pesan.
+   */
+  @Get(':questId/eligibility')
+  async questEligibility(
+    @Param('questId') questId: string,
+    @Req() req: AuthedReq,
+  ) {
+    const user = await this.users.findById(req.user.userId);
+    return this.quests.getQuestEligibility(
+      req.user.userId,
+      questId,
+      user?.cantonPartyId ?? null,
+    );
+  }
+
   /** FCFS CC — claim fee on-chain + reward from pool (first-come slots). */
   @Post(':questId/claim-fcfs')
   @UseGuards(WalletRequiredGuard)

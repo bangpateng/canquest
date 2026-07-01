@@ -36,6 +36,34 @@ const QUEST_STATUSES = [
   { value: "ENDED", label: "Ended" },
 ];
 
+/** Per-event Earn access gate mode options (mirrors backend EntryGateMode enum). */
+const ENTRY_GATE_MODE_OPTIONS: {
+  value: string;
+  label: string;
+  hint: string;
+}[] = [
+  {
+    value: "CC_OR_POINTS",
+    label: "CC lock OR Points",
+    hint: "Default. User can lock CC or spend points (either one).",
+  },
+  {
+    value: "CC_ONLY",
+    label: "CC lock only",
+    hint: "User must lock the required CC. No points path.",
+  },
+  {
+    value: "POINTS_ONLY",
+    label: "Points only",
+    hint: "User must spend the required points. No CC lock path.",
+  },
+  {
+    value: "NONE",
+    label: "No gate (free)",
+    hint: "Anyone can join without CC lock or points. Use for free events.",
+  },
+];
+
 export type AdminQuestKind = "CAMPAIGN" | "EARN_HUB";
 
 interface QuestFormProps {
@@ -67,6 +95,10 @@ interface QuestFormProps {
     socialLinks?: QuestSocialLink[];
     startsAt?: string | null;
     endsAt?: string | null;
+    /** Per-event Earn access gate (CAMPAIGN only). */
+    entryGateMode?: string | null;
+    entryCcLock?: number | null;
+    entryCostPoints?: number | null;
   };
 }
 
@@ -112,6 +144,11 @@ export function QuestForm({
     redeemUrl: initialData?.redeemUrl ?? "",
     redeemInstructions: initialData?.redeemInstructions ?? "",
     tags: (initialData?.tags ?? []).join(", "),
+    // Per-event Earn access gate (CAMPAIGN only). Empty = global default.
+    entryGateMode: initialData?.entryGateMode ?? "CC_OR_POINTS",
+    entryCcLock: initialData?.entryCcLock != null ? String(initialData.entryCcLock) : "",
+    entryCostPoints:
+      initialData?.entryCostPoints != null ? String(initialData.entryCostPoints) : "",
   });
 
   const [socialLinks, setSocialLinks] = useState<QuestSocialLink[]>(
@@ -326,6 +363,15 @@ export function QuestForm({
           .filter(Boolean),
         ...(questKind === "CAMPAIGN" && {
           socialLinks: socialLinks.filter((l) => l.url.trim()),
+        }),
+        // Per-event Earn access gate (CAMPAIGN only).
+        ...(questKind === "CAMPAIGN" && {
+          entryGateMode: form.entryGateMode,
+          // Empty string → null (clear override → global default).
+          entryCcLock: form.entryCcLock.trim() ? Number(form.entryCcLock) : null,
+          entryCostPoints: form.entryCostPoints.trim()
+            ? Number(form.entryCostPoints)
+            : null,
         }),
         ...(!isEdit && { questKind }),
         ...(tasks.length > 0 && {
@@ -782,6 +828,94 @@ export function QuestForm({
         </section>
       ) : null}
 
+      {/* Earn access gate — CAMPAIGN only */}
+      {questKind === "CAMPAIGN" ? (
+        <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[11px] font-bold text-[var(--primary)]">
+              4
+            </span>
+            <h2 className="type-section-title">Earn access gate</h2>
+          </div>
+          <p className="text-xs text-[var(--muted-foreground)]">
+            Requirement to join this event. Users see an &ldquo;Eligible / Not eligible&rdquo;
+            badge on the campaign page based on these settings.
+          </p>
+          <div className="space-y-4">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">Gate mode</label>
+              <select
+                value={form.entryGateMode}
+                onChange={(e) => updateField("entryGateMode", e.target.value)}
+                className={inputCls}
+              >
+                {ENTRY_GATE_MODE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                {ENTRY_GATE_MODE_OPTIONS.find((o) => o.value === form.entryGateMode)?.hint}
+              </p>
+            </div>
+
+            {form.entryGateMode !== "NONE" ? (
+              <div className="grid gap-4 sm:grid-cols-2">
+                {(form.entryGateMode === "CC_OR_POINTS" ||
+                  form.entryGateMode === "CC_ONLY") && (
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium">
+                      CC lock required
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={form.entryCcLock}
+                      onChange={(e) => updateField("entryCcLock", e.target.value)}
+                      placeholder="Global default (30)"
+                      className={inputCls}
+                    />
+                    <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                      Amount of CC the user must lock on-chain. Leave empty to use the
+                      global default.
+                    </p>
+                  </div>
+                )}
+                {(form.entryGateMode === "CC_OR_POINTS" ||
+                  form.entryGateMode === "POINTS_ONLY") && (
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium">
+                      Points to spend
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={form.entryCostPoints}
+                      onChange={(e) =>
+                        updateField("entryCostPoints", e.target.value)
+                      }
+                      placeholder="Global default (200)"
+                      className={inputCls}
+                    />
+                    <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                      Points deducted from the user&rsquo;s balance to join. Leave empty to
+                      use the global default.
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="rounded-lg bg-[var(--muted)]/30 px-3 py-2.5 text-xs text-[var(--muted-foreground)]">
+                No access requirement — any logged-in user can join this event for free.
+              </p>
+            )}
+          </div>
+        </section>
+      ) : null}
+
       {/* Tasks (optional at creation) */}
       {!isEdit && (
         <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-4">
@@ -791,7 +925,7 @@ export function QuestForm({
             className="type-section-title flex w-full items-center justify-between"
           >
             <span className="flex items-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[11px] font-bold text-[var(--primary)]">{questKind === "CAMPAIGN" ? "4" : "3"}</span>
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[11px] font-bold text-[var(--primary)]">{questKind === "CAMPAIGN" ? "5" : "3"}</span>
               Tasks ({tasks.length})
             </span>
             {showTasks ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}

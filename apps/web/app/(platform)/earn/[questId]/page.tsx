@@ -1,5 +1,6 @@
 import { PlatformPage } from "@/components/platform/platform-page";
 import { CampaignGuide } from "@/components/app/campaign/campaign-guide";
+import { CampaignEligibilityBadge } from "@/components/app/campaign/campaign-eligibility-badge";
 import { CampaignSocialLinks } from "@/components/app/campaign/campaign-social-links";
 import { QuestTaskPanel } from "@/components/app/quest/quest-task-panel";
 import { CampaignQuestSidebar } from "@/components/app/campaign/campaign-quest-sidebar";
@@ -229,12 +230,16 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
       <CampaignQuestSidebar quest={quest} />
 
       {/* Guide cara ikut event — diletakkan tepat di bawah sidebar reward */}
-      <CampaignGuide />
+      <CampaignGuide quest={quest} />
 
       {/* ── Task Panel / Auth Prompt ────────────────────────────────────── */}
       <section className="min-w-0 space-y-4">
         {isAuthed ? (
-          <QuestTaskPanel quest={quest} />
+          <>
+            {/* Eligibility badge — tampilkan hanya untuk user yang login */}
+            <CampaignEligibilityBadge questId={quest.id} />
+            <QuestTaskPanel quest={quest} />
+          </>
         ) : (
           <div className={cn(surfaceCardClass, "bg-[#0a0c14]/80 p-5 text-center")}>
             <div>

@@ -9,6 +9,32 @@ export const QuestKind = {
   EARN_HUB: 'EARN_HUB' as QuestKind,
 };
 
+/**
+ * Mode gate akses Earn per-campaign (di-set admin per-event).
+ * CC_OR_POINTS = lock CC ATAU spend points (default, perilaku lama).
+ * CC_ONLY = hanya lock CC. POINTS_ONLY = hanya spend points. NONE = tanpa gate (event gratis).
+ */
+export type EntryGateMode = 'CC_OR_POINTS' | 'CC_ONLY' | 'POINTS_ONLY' | 'NONE';
+export const EntryGateMode = {
+  CC_OR_POINTS: 'CC_OR_POINTS' as EntryGateMode,
+  CC_ONLY: 'CC_ONLY' as EntryGateMode,
+  POINTS_ONLY: 'POINTS_ONLY' as EntryGateMode,
+  NONE: 'NONE' as EntryGateMode,
+};
+export const ENTRY_GATE_MODES: EntryGateMode[] = [
+  'CC_OR_POINTS',
+  'CC_ONLY',
+  'POINTS_ONLY',
+  'NONE',
+];
+export function normalizeEntryGateMode(
+  m: string | null | undefined,
+): EntryGateMode {
+  return ENTRY_GATE_MODES.includes(m as EntryGateMode)
+    ? (m as EntryGateMode)
+    : EntryGateMode.CC_OR_POINTS;
+}
+
 export type QuestStatus = 'ACTIVE' | 'COMING_SOON' | 'ENDED';
 export const QuestStatus = {
   ACTIVE: 'ACTIVE' as QuestStatus,

@@ -15,7 +15,13 @@ import {
   ValidateNested,
 } from 'class-validator';
 
-import { QuestKind, QuestStatus, RewardType } from '../../common/prisma-types';
+import {
+  EntryGateMode,
+  ENTRY_GATE_MODES,
+  QuestKind,
+  QuestStatus,
+  RewardType,
+} from '../../common/prisma-types';
 
 /**
  * SECURITY (C2): All admin money-bearing endpoints MUST use class-validator
@@ -93,6 +99,7 @@ export class AdminSocialLinkDto {
 const REWARD_TYPES = Object.values(RewardType);
 const QUEST_STATUSES = Object.values(QuestStatus);
 const QUEST_KINDS = Object.values(QuestKind);
+const ENTRY_GATE_MODE_VALUES = Object.values(ENTRY_GATE_MODES);
 
 /** Common money/numeric fields shared by create + update. Extracted so both
  *  DTOs stay in sync — a bound added here protects both paths. NOTE: maxWinners
@@ -226,6 +233,25 @@ export class CreateQuestDto extends QuestMoneyFields {
   @IsIn(QUEST_KINDS)
   questKind?: QuestKind;
 
+  /** Per-event Earn access gate (CAMPAIGN only). */
+  @IsOptional()
+  @IsIn(ENTRY_GATE_MODE_VALUES)
+  entryGateMode?: EntryGateMode;
+
+  /** Override CC lock requirement; null/undefined = global default (LOCK_TIER_FULL). */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(1000000)
+  entryCcLock?: number;
+
+  /** Override points cost; null/undefined = global default (earn_entry_cost_points). */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(10000000)
+  entryCostPoints?: number;
+
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(200)
@@ -332,6 +358,25 @@ export class UpdateQuestDto extends QuestMoneyFields {
   @ValidateNested({ each: true })
   @Type(() => AdminSocialLinkDto)
   socialLinks?: AdminSocialLinkDto[];
+
+  /** Per-event Earn access gate (CAMPAIGN only). */
+  @IsOptional()
+  @IsIn(ENTRY_GATE_MODE_VALUES)
+  entryGateMode?: EntryGateMode;
+
+  /** Override CC lock requirement; null = clear override → global default. */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(1000000)
+  entryCcLock?: number | null;
+
+  /** Override points cost; null = clear override → global default. */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(10000000)
+  entryCostPoints?: number | null;
 }
 
 export class AddTaskDto {

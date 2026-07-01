@@ -10,6 +10,8 @@ import {
   QuestStatus,
   RewardType,
   SubmissionStatus,
+  EntryGateMode,
+  normalizeEntryGateMode,
   normalizeRewardType,
   resolveQuestDisplayStatus,
 } from '../common/prisma-types';
@@ -135,7 +137,8 @@ export class QuestsService {
 
   /**
    * Konfigurasi gate Earn (publik) — untuk ditampilkan di card guide FE.
-   * Mengembalikan biaya points + jumlah CC lock saat ini.
+   * Mengembalikan biaya points + jumlah CC lock saat ini (nilai DEFAULT GLOBAL).
+   * Untuk nilai per-campaign, pakai resolveQuestEntryGate(quest).
    */
   async getEarnAccessConfig(): Promise<{
     entryCostPoints: number;
@@ -150,10 +153,48 @@ export class QuestsService {
   }
 
   /**
+   * Default global CC lock amount (env LOCK_TIER_FULL, default 30).
+   * Dipakai sebagai fallback bila quest tidak override entryCcLock.
+   */
+  private resolveGlobalCcLockAmount(): number {
+    return Number(this.config.get<string>('LOCK_TIER_FULL') ?? '30');
+  }
+
+  /**
+   * Resolve gate akses Earn untuk satu quest (per-event override → fallback global).
+   * Null/undefined pada quest = pakai default global (backward-compatible).
+   */
+  async resolveQuestEntryGate(quest: {
+    entryGateMode?: string | null;
+    entryCcLock?: number | null;
+    entryCostPoints?: number | null;
+  }): Promise<{
+    mode: EntryGateMode;
+    ccLockAmount: number;
+    costPoints: number;
+  }> {
+    const mode = normalizeEntryGateMode(quest.entryGateMode ?? null);
+    // Override per-event jika admin set nilai > 0; else fallback global.
+    const overrideCc = Number(quest.entryCcLock);
+    const ccLockAmount =
+      Number.isFinite(overrideCc) && overrideCc > 0
+        ? Math.floor(overrideCc)
+        : this.resolveGlobalCcLockAmount();
+    const overridePts = Number(quest.entryCostPoints);
+    const costPoints =
+      Number.isFinite(overridePts) && overridePts > 0
+        ? Math.floor(overridePts)
+        : await this.resolveEarnEntryCostPoints();
+    return { mode, ccLockAmount, costPoints };
+  }
+
+  /**
    * Gate akses campaign Earn (per-campaign, first participation).
-   * User harus penuhi SALAH SATU:
-   *   1. Lock ≥ {LOCK_TIER_FULL} CC on-chain (cc_lock) — reuse LockEligibilityService.
-   *   2. Spend {earn_entry_cost_points} points — catat EarnEntry pointsSpent.
+   * Mode gate di-set per-event admin (entryGateMode):
+   *   - CC_OR_POINTS (default): lock ≥ {ccLockAmount} CC ATAU spend {costPoints} points.
+   *   - CC_ONLY: hanya lock CC.
+   *   - POINTS_ONLY: hanya spend points.
+   *   - NONE: tanpa gate (event gratis) — langsung catat entry tanpa syarat.
    * Dipasang di submitTask: dicek hanya saat user belum punya EarnEntry maupun
    * submission untuk campaign ini. Pencatatan EarnEntry atomik via upsert idempoten.
    */
@@ -161,8 +202,32 @@ export class QuestsService {
     userId: string;
     userPartyId: string | null;
     questId: string;
+    quest: {
+      entryGateMode?: string | null;
+      entryCcLock?: number | null;
+      entryCostPoints?: number | null;
+    };
   }): Promise<void> {
-    const costPoints = await this.resolveEarnEntryCostPoints();
+    const { mode, ccLockAmount, costPoints } = await this.resolveQuestEntryGate(
+      params.quest,
+    );
+
+    // NONE = tanpa gate → catat entry gratis (method 'none') tanpa syarat.
+    if (mode === EntryGateMode.NONE) {
+      await this.prisma.earnEntry.upsert({
+        where: {
+          userId_questId: { userId: params.userId, questId: params.questId },
+        },
+        create: {
+          userId: params.userId,
+          questId: params.questId,
+          method: 'none',
+          pointsSpent: 0,
+        },
+        update: {},
+      });
+      return;
+    }
 
     // Sudah ada entry → gate sudah dilewati sebelumnya.
     const existing = await this.prisma.earnEntry.findUnique({
@@ -172,12 +237,14 @@ export class QuestsService {
     });
     if (existing) return;
 
-    // Cek jalur cc_lock dulu (gratis dari sisi points): user punya lock ≥30 CC?
-    if (params.userPartyId) {
-      const canJoin = await this.lockEligibility.canJoinEarn(
+    // Jalur CC lock aktif untuk mode CC_OR_POINTS dan CC_ONLY.
+    const ccGateActive =
+      mode === EntryGateMode.CC_OR_POINTS || mode === EntryGateMode.CC_ONLY;
+    if (ccGateActive && params.userPartyId) {
+      const lockedCc = await this.lockEligibility.lockedCcOf(
         params.userPartyId,
       );
-      if (canJoin) {
+      if (lockedCc >= ccLockAmount) {
         // Catat entry cc_lock. ccLockedMicro = 0 di sini karena jumlah lock dibaca
         // on-chain (sumber kebenaran); EarnEntry hanya penanda method akses.
         await this.prisma.earnEntry.upsert({
@@ -196,31 +263,188 @@ export class QuestsService {
       }
     }
 
-    // Jalur points: cek saldo net, debit via EarnEntry dalam transaksi (anti double-charge).
-    const netPoints = await this.points.getNetPoints(params.userId);
-    if (netPoints < costPoints) {
+    // Jalur points aktif untuk mode CC_OR_POINTS dan POINTS_ONLY.
+    const pointsGateActive =
+      mode === EntryGateMode.CC_OR_POINTS || mode === EntryGateMode.POINTS_ONLY;
+    if (pointsGateActive) {
+      // Cek saldo net, debit via EarnEntry dalam transaksi (anti double-charge).
+      const netPoints = await this.points.getNetPoints(params.userId);
+      if (netPoints >= costPoints) {
+        await this.prisma.$transaction(async (tx) => {
+          // Lock row-level: re-cek EarnEntry di dalam tx agar dua request paralel
+          // tidak sama-sama lolos dan menulis dua debit.
+          const again = await tx.earnEntry.findUnique({
+            where: {
+              userId_questId: {
+                userId: params.userId,
+                questId: params.questId,
+              },
+            },
+          });
+          if (again) return;
+          await tx.earnEntry.create({
+            data: {
+              userId: params.userId,
+              questId: params.questId,
+              method: 'points',
+              pointsSpent: costPoints,
+            },
+          });
+        });
+        return;
+      }
+      // Saldo points tidak cukup → gagal dgn pesan sesuai mode.
+      if (mode === EntryGateMode.POINTS_ONLY) {
+        throw new BadRequestException(
+          `Spend ${costPoints} pts to join. You currently have ${netPoints} pts.`,
+        );
+      }
       throw new BadRequestException(
-        `Unlock Earn with ${costPoints} pts or 30 CC. You currently have ${netPoints} pts.`,
+        `Unlock Earn with ${costPoints} pts or ${ccLockAmount} CC. You currently have ${netPoints} pts.`,
       );
     }
-    await this.prisma.$transaction(async (tx) => {
-      // Lock row-level: re-cek EarnEntry di dalam tx agar dua request paralel
-      // tidak sama-sama lolos dan menulis dua debit.
-      const again = await tx.earnEntry.findUnique({
-        where: {
-          userId_questId: { userId: params.userId, questId: params.questId },
-        },
-      });
-      if (again) return;
-      await tx.earnEntry.create({
-        data: {
-          userId: params.userId,
-          questId: params.questId,
-          method: 'points',
-          pointsSpent: costPoints,
-        },
-      });
+
+    // Mode CC_ONLY dan user tidak memenuhi syarat CC lock.
+    throw new BadRequestException(
+      `Lock ${ccLockAmount} CC to join this event.`,
+    );
+  }
+
+  /**
+   * Cek eligibility user untuk satu campaign (READ-ONLY, tidak throw, tidak debit).
+   * Dipakai badge FE untuk menampilkan "Eligible / Not eligible" + alasan.
+   * Mencerminkan logika ensureEarnEntry tanpa side-effect.
+   */
+  async getQuestEligibility(
+    userId: string,
+    questId: string,
+    userPartyId: string | null,
+  ): Promise<{
+    eligible: boolean;
+    mode: EntryGateMode;
+    ccLockAmount: number;
+    entryCostPoints: number;
+    lockedCc: number;
+    netPoints: number;
+    hasEntry: boolean;
+    reason: string;
+  }> {
+    const quest = await this.prisma.quest.findUnique({
+      where: { id: questId },
+      select: {
+        questKind: true,
+        entryGateMode: true,
+        entryCcLock: true,
+        entryCostPoints: true,
+      },
     });
+    if (!quest) throw new NotFoundException('Quest not found');
+
+    // Bukan CAMPAIGN (mis. EARN_HUB) → tidak ada gate, selalu eligible.
+    if (quest.questKind !== QuestKind.CAMPAIGN) {
+      return {
+        eligible: true,
+        mode: EntryGateMode.NONE,
+        ccLockAmount: 0,
+        entryCostPoints: 0,
+        lockedCc: 0,
+        netPoints: 0,
+        hasEntry: false,
+        reason: 'No access gate for this quest.',
+      };
+    }
+
+    const { mode, ccLockAmount, costPoints } =
+      await this.resolveQuestEntryGate(quest);
+
+    // Sudah punya entry? → gate sudah dilewati.
+    const existing = await this.prisma.earnEntry.findUnique({
+      where: { userId_questId: { userId, questId } },
+    });
+    if (existing) {
+      return {
+        eligible: true,
+        mode,
+        ccLockAmount,
+        entryCostPoints: costPoints,
+        lockedCc: 0,
+        netPoints: 0,
+        hasEntry: true,
+        reason: 'Access already unlocked for this event.',
+      };
+    }
+
+    // NONE = tanpa gate.
+    if (mode === EntryGateMode.NONE) {
+      return {
+        eligible: true,
+        mode,
+        ccLockAmount: 0,
+        entryCostPoints: 0,
+        lockedCc: 0,
+        netPoints: 0,
+        hasEntry: false,
+        reason: 'Free event — no access requirement.',
+      };
+    }
+
+    // Hitung sekali: jumlah CC terkunci + saldo net points.
+    const [lockedCc, netPoints] = await Promise.all([
+      userPartyId
+        ? this.lockEligibility.lockedCcOf(userPartyId)
+        : Promise.resolve(0),
+      this.points.getNetPoints(userId),
+    ]);
+
+    const ccOk = lockedCc >= ccLockAmount;
+    const pointsOk = netPoints >= costPoints;
+
+    // CC_OR_POINTS: cukup salah satu.
+    if (mode === EntryGateMode.CC_OR_POINTS) {
+      const eligible = ccOk || pointsOk;
+      return {
+        eligible,
+        mode,
+        ccLockAmount,
+        entryCostPoints: costPoints,
+        lockedCc,
+        netPoints,
+        hasEntry: false,
+        reason: eligible
+          ? 'You meet the access requirement.'
+          : `Lock ${ccLockAmount} CC or spend ${costPoints} pts. You have ${lockedCc} CC and ${netPoints} pts.`,
+      };
+    }
+
+    // CC_ONLY: hanya CC lock.
+    if (mode === EntryGateMode.CC_ONLY) {
+      return {
+        eligible: ccOk,
+        mode,
+        ccLockAmount,
+        entryCostPoints: costPoints,
+        lockedCc,
+        netPoints,
+        hasEntry: false,
+        reason: ccOk
+          ? 'You meet the CC lock requirement.'
+          : `Lock ${ccLockAmount} CC to join. You currently have ${lockedCc} CC locked.`,
+      };
+    }
+
+    // POINTS_ONLY: hanya points.
+    return {
+      eligible: pointsOk,
+      mode,
+      ccLockAmount,
+      entryCostPoints: costPoints,
+      lockedCc,
+      netPoints,
+      hasEntry: false,
+      reason: pointsOk
+        ? 'You have enough points to join.'
+        : `Spend ${costPoints} pts to join. You currently have ${netPoints} pts.`,
+    };
   }
 
   /** Map internal fee/ledger errors to a message the user can act on. */
@@ -875,8 +1099,8 @@ export class QuestsService {
       where: { id: questId },
       select: { tasks: { select: { id: true, type: true, target: true } } },
     });
-    const sendTasks = (quest?.tasks ?? []).filter((t) =>
-      this.normalizeTaskType(t.type) === 'send_transaction',
+    const sendTasks = (quest?.tasks ?? []).filter(
+      (t) => this.normalizeTaskType(t.type) === 'send_transaction',
     );
     if (sendTasks.length === 0) return {};
     const windowStart = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -1067,6 +1291,9 @@ export class QuestsService {
         maxWinners: true,
         endsAt: true,
         deadline: true,
+        entryGateMode: true,
+        entryCcLock: true,
+        entryCostPoints: true,
       },
     });
     if (!quest) throw new NotFoundException('Quest not found');
@@ -1105,7 +1332,7 @@ export class QuestsService {
 
     // Gate akses Earn: per-campaign, first participation. CAMPAIGN saja (bukan EARN_HUB).
     if (quest.questKind === QuestKind.CAMPAIGN) {
-      await this.ensureEarnEntry({ userId, userPartyId, questId });
+      await this.ensureEarnEntry({ userId, userPartyId, questId, quest });
     }
 
     const existing = await this.prisma.questSubmission.findUnique({
@@ -1193,7 +1420,12 @@ export class QuestsService {
     }
 
     if (taskType === 'twitter_follow' || taskType === 'twitter_retweet') {
-      await this.verifyTwitterTaskForUser(userId, taskId, taskType, task.target);
+      await this.verifyTwitterTaskForUser(
+        userId,
+        taskId,
+        taskType,
+        task.target,
+      );
     }
 
     // Send-transaction (first-time): require wallet + enough real CC sends in the last 24h.
@@ -3616,7 +3848,9 @@ export class QuestsService {
   }
 
   /** Required number of sends for a send-transaction task (stored in task.target). Min 1. */
-  private parseSendTransactionRequired(target: string | null | undefined): number {
+  private parseSendTransactionRequired(
+    target: string | null | undefined,
+  ): number {
     const n = parseInt((target ?? '').trim(), 10);
     return Number.isFinite(n) && n > 0 ? n : 1;
   }
@@ -3644,7 +3878,10 @@ export class QuestsService {
    *
    * One real send = 1 count.
    */
-  private async countRecentUserSends(userId: string, since: Date): Promise<number> {
+  private async countRecentUserSends(
+    userId: string,
+    since: Date,
+  ): Promise<number> {
     const rows = await this.prisma.ccTransaction.findMany({
       where: {
         userId,

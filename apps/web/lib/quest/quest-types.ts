@@ -14,6 +14,13 @@ export type RewardType =
   | "CC_MANUAL"
   | "CC_AND_CODE_RAFFLE";
 
+/**
+ * Mode gate akses Earn per-campaign (di-set admin per-event).
+ * CC_OR_POINTS = lock CC ATAU spend points (default).
+ * CC_ONLY = hanya lock CC. POINTS_ONLY = hanya spend points. NONE = tanpa gate (gratis).
+ */
+export type EntryGateMode = "CC_OR_POINTS" | "CC_ONLY" | "POINTS_ONLY" | "NONE";
+
 export type QuestRewardState =
   | "in_progress"
   | "waitlist"
@@ -80,9 +87,43 @@ export interface Quest {
   tags: string[];
   socialLinks?: QuestSocialLink[];
   questKind?: "CAMPAIGN" | "EARN_HUB";
+  /** Per-event Earn access gate (CAMPAIGN only). Null/undefined = CC_OR_POINTS (default). */
+  entryGateMode?: EntryGateMode | null;
+  /** Override CC lock requirement (null = global default). */
+  entryCcLock?: number | null;
+  /** Override points cost (null = global default). */
+  entryCostPoints?: number | null;
   createdAt: string;
   tasks: QuestTask[];
 }
+
+/** Human labels for admin + display (mirrors backend EntryGateMode enum). */
+export const ENTRY_GATE_MODE_OPTIONS: {
+  value: EntryGateMode;
+  label: string;
+  hint: string;
+}[] = [
+  {
+    value: "CC_OR_POINTS",
+    label: "CC lock OR Points",
+    hint: "User can lock CC or spend points (either one). Default behaviour.",
+  },
+  {
+    value: "CC_ONLY",
+    label: "CC lock only",
+    hint: "User must lock the required CC. No points path.",
+  },
+  {
+    value: "POINTS_ONLY",
+    label: "Points only",
+    hint: "User must spend the required points. No CC lock path.",
+  },
+  {
+    value: "NONE",
+    label: "No gate (free)",
+    hint: "Anyone can join without CC lock or points.",
+  },
+];
 
 export interface QuestSubmission {
   id: string;

@@ -4,31 +4,78 @@ import { useEffect, useId, useState } from "react";
 import Link from "next/link";
 import { Info, X } from "lucide-react";
 import { useEarnAccessConfig } from "@/lib/hooks/use-earn-access-config";
+import type { Quest } from "@/lib/quest/quest-types";
 
 /**
  * Compact "How to join" banner with a "See details" button that opens a modal.
  *
- * The banner is a single line:
- *   "To join this event, lock 30 CC or spend 500 pts. See details"
+ * Mode-aware (per-event): reads the quest's entryGateMode + per-event overrides.
+ * Falls back to the global access config for events that don't override.
+ * NONE = the banner is hidden entirely (free event, no requirement).
  *
- * The modal shows both access paths in ONE combined card.
  * Placed right below the reward sidebar on the campaign detail page.
  */
-export function CampaignGuide() {
-  const { entryCostPoints, ccLockAmount } = useEarnAccessConfig();
+export function CampaignGuide({ quest }: { quest: Quest }) {
+  const { entryCostPoints: globalPts, ccLockAmount: globalCc } =
+    useEarnAccessConfig();
   const [open, setOpen] = useState(false);
+
+  // Resolve per-event values (override → global default).
+  const mode = quest.entryGateMode ?? "CC_OR_POINTS";
+  const ccLockAmount =
+    quest.entryCcLock != null && quest.entryCcLock > 0
+      ? quest.entryCcLock
+      : globalCc;
+  const entryCostPoints =
+    quest.entryCostPoints != null && quest.entryCostPoints > 0
+      ? quest.entryCostPoints
+      : globalPts;
+
+  // NONE = no gate → hide the guide entirely.
+  if (mode === "NONE") return null;
+
+  // Build the single-line summary based on mode.
+  const summary = (() => {
+    if (mode === "CC_ONLY") {
+      return (
+        <>
+          {"To join this event, lock "}
+          <span className="font-semibold text-amber-300">{ccLockAmount} CC</span>
+          {"."}
+        </>
+      );
+    }
+    if (mode === "POINTS_ONLY") {
+      return (
+        <>
+          {"To join this event, spend "}
+          <span className="font-semibold text-violet-300">
+            {entryCostPoints.toLocaleString()} pts
+          </span>
+          {"."}
+        </>
+      );
+    }
+    // CC_OR_POINTS (default)
+    return (
+      <>
+        {"To join this event, lock "}
+        <span className="font-semibold text-amber-300">{ccLockAmount} CC</span>
+        {" or spend "}
+        <span className="font-semibold text-violet-300">
+          {entryCostPoints.toLocaleString()} pts
+        </span>
+        {"."}
+      </>
+    );
+  })();
 
   return (
     <>
       <div className="flex items-start gap-2.5 rounded-2xl border border-amber-500/25 bg-amber-500/[0.06] px-4 py-3">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" aria-hidden />
         <p className="flex-1 text-xs leading-relaxed text-slate-300">
-          To join this event, lock{" "}
-          <span className="font-semibold text-amber-300">{ccLockAmount} CC</span> or spend{" "}
-          <span className="font-semibold text-violet-300">
-            {entryCostPoints.toLocaleString()} pts
-          </span>
-          .{" "}
+          {summary}{" "}
           <button
             type="button"
             onClick={() => setOpen(true)}
@@ -42,6 +89,7 @@ export function CampaignGuide() {
       <GuideModal
         open={open}
         onClose={() => setOpen(false)}
+        mode={mode}
         entryCostPoints={entryCostPoints}
         ccLockAmount={ccLockAmount}
       />
@@ -49,15 +97,17 @@ export function CampaignGuide() {
   );
 }
 
-/** Guide modal — both access paths in a single combined card. */
+/** Guide modal — access path(s) in a single card, shown based on mode. */
 function GuideModal({
   open,
   onClose,
+  mode,
   entryCostPoints,
   ccLockAmount,
 }: {
   open: boolean;
   onClose: () => void;
+  mode: NonNullable<Quest["entryGateMode"]>;
   entryCostPoints: number;
   ccLockAmount: number;
 }) {
@@ -79,6 +129,9 @@ function GuideModal({
   }, [open, onClose]);
 
   if (!open) return null;
+
+  const showCc = mode === "CC_OR_POINTS" || mode === "CC_ONLY";
+  const showPts = mode === "CC_OR_POINTS" || mode === "POINTS_ONLY";
 
   return (
     <div
@@ -119,53 +172,57 @@ function GuideModal({
         {/* ── Access paths — ONE combined card ───────────────────── */}
         <div className="mt-5 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-            Access — choose one
+            {showCc && showPts ? "Access — choose one" : "Access"}
           </p>
 
-          {/* Option 1: Lock CC */}
-          <div className="mt-3">
-            <p className="text-xs leading-relaxed text-slate-300">
-              Lock{" "}
-              <Link
-                href="/wallet"
-                onClick={onClose}
-                className="font-bold text-emerald-300 underline-offset-2 hover:underline"
-              >
-                {ccLockAmount} CC
-              </Link>{" "}
-              on-chain. Your points stay untouched — CC unlocks after the term ends.
-            </p>
-          </div>
+          {showCc && (
+            <div className="mt-3">
+              <p className="text-xs leading-relaxed text-slate-300">
+                Lock{" "}
+                <Link
+                  href="/wallet"
+                  onClick={onClose}
+                  className="font-bold text-emerald-300 underline-offset-2 hover:underline"
+                >
+                  {ccLockAmount} CC
+                </Link>{" "}
+                on-chain. Your points stay untouched — CC unlocks after the term ends.
+              </p>
+            </div>
+          )}
 
-          {/* Divider */}
-          <div className="my-3 flex items-center gap-2.5">
-            <span className="h-px flex-1 bg-white/[0.06]" />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-600">
-              or
-            </span>
-            <span className="h-px flex-1 bg-white/[0.06]" />
-          </div>
+          {showCc && showPts && (
+            // Divider
+            <div className="my-3 flex items-center gap-2.5">
+              <span className="h-px flex-1 bg-white/[0.06]" />
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-600">
+                or
+              </span>
+              <span className="h-px flex-1 bg-white/[0.06]" />
+            </div>
+          )}
 
-          {/* Option 2: Spend Points */}
-          <div>
-            <p className="text-xs leading-relaxed text-slate-300">
-              Spend{" "}
-              <Link
-                href="/quests"
-                onClick={onClose}
-                className="font-bold text-violet-300 underline-offset-2 hover:underline"
-              >
-                {entryCostPoints.toLocaleString()} pts
-              </Link>{" "}
-              from your balance. No CC lock needed — deducted once per campaign.
-            </p>
-          </div>
+          {showPts && (
+            <div className={showCc ? "" : "mt-3"}>
+              <p className="text-xs leading-relaxed text-slate-300">
+                Spend{" "}
+                <Link
+                  href="/quests"
+                  onClick={onClose}
+                  className="font-bold text-violet-300 underline-offset-2 hover:underline"
+                >
+                  {entryCostPoints.toLocaleString()} pts
+                </Link>{" "}
+                from your balance. No CC lock needed — deducted once per campaign.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Footer note */}
         <p className="mt-4 text-[10px] leading-relaxed text-slate-600">
-          Access is checked once per campaign — on the first task you submit. If you
-          qualify via CC lock, points are never spent.
+          Access is checked once per campaign — on the first task you submit.
+          {showCc && " If you qualify via CC lock, points are never spent."}
         </p>
       </div>
     </div>

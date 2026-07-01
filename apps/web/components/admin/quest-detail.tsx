@@ -52,6 +52,10 @@ interface QuestData {
   tags: string[];
   socialLinks?: QuestSocialLink[];
   questKind?: "CAMPAIGN" | "EARN_HUB";
+  /** Per-event Earn access gate (CAMPAIGN only). */
+  entryGateMode?: string | null;
+  entryCcLock?: number | null;
+  entryCostPoints?: number | null;
   tasks: Task[];
   _count: { completions: number; winnerDraws: number };
 }
