@@ -17,11 +17,7 @@ export function LandingHero() {
           Lock CC.{" "}
           <span className="text-gradient-brand">Unlock real campaigns.</span>
         </h1>
-
-        <p className="mx-auto mt-4 max-w-lg text-base leading-relaxed text-[var(--muted-foreground)]">
-          Commit CC from your own wallet to reach Full access and join partner campaigns —
-          invite codes, early drops, and CC rewards for genuine participants, not bots.
-        </p>
+        
 
         <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <LaunchAppButton size="lg" className="w-full rounded-full px-8 sm:w-auto" />

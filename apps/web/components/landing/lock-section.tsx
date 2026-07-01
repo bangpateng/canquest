@@ -11,7 +11,7 @@ const FLOW = [
   {
     icon: Lock,
     title: "Lock CC on-chain",
-    body: `Commit ${LOCK_TIER_FULL} CC from your wallet. It stays yours the whole time — non-custodial, returned in full when you unlock.`,
+    body: `Lock ${LOCK_TIER_FULL} CC from your wallet. It stays yours the whole time — non-custodial, returned in full when you unlock.`,
   },
   {
     icon: Sparkles,
@@ -23,7 +23,7 @@ const FLOW = [
     title: "Earn real rewards",
     body: "Full access unlocks partner campaigns in Earn: claim CC, invite codes, and early-access drops meant for committed users.",
   },
-];
+]; 
 
 export function LockSection() {
   return (
