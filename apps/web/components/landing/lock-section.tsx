@@ -10,20 +10,20 @@ const TERMS = ["7d", "15d", "30d"] as const;
 const FLOW = [
   {
     icon: Lock,
-    title: "Lock CC on-chain",
-    body: `Lock ${LOCK_TIER_FULL} CC from your wallet. It stays yours the whole time — non-custodial, returned in full when you unlock.`,
+    title: "Lock CC or redeem points",
+    body: `Lock ${LOCK_TIER_FULL} CC from your wallet, or redeem points — your choice, set per event. CC stays yours the whole time: non-custodial, returned in full when you unlock.`,
   },
   {
     icon: Sparkles,
     title: "Reach Full access",
-    body: `Once ${LOCK_TIER_FULL} CC is locked, your account is promoted to the Full access tier on-chain. No ticket, no approval — instant.`,
+    body: `Once the requirement is met, your account is promoted to the Full access tier on-chain. No ticket, no approval — instant.`,
   },
   {
     icon: Gift,
-    title: "Earn real rewards",
-    body: "Full access unlocks partner campaigns in Earn: claim CC, invite codes, and early-access drops meant for committed users.",
+    title: "Get early access",
+    body: "Full access unlocks partner campaigns in Earn — early access to ecosystem projects, invite codes, and drops for verified users.",
   },
-]; 
+];
 
 export function LockSection() {
   return (
@@ -32,7 +32,7 @@ export function LockSection() {
         eyebrow="How it works"
         title=""
         align="center"
-        description="The core mechanic of CanQuest. A non-custodial commitment that separates genuine participants from free-riders and bots."
+        description="How users earn access to partner campaigns. A non-custodial commitment (or points) that verifies genuine interest — set per event."
         className="mb-8 md:mb-10"
       />
 

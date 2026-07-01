@@ -19,7 +19,7 @@ const items = [
   {
     icon: Wallet,
     title: "Invite-gated Canton wallet",
-    body: "Each person gets exactly one on-chain party ID, and wallet creation requires a team invite code under a daily quota. You can't spin up unlimited wallets to farm rewards.",
+    body: "Each person gets exactly one on-chain party ID, and wallet creation requires a team invite code under a daily quota — so partner projects reach real humans, not bot farms.",
   },
   {
     icon: ServerCog,
@@ -48,9 +48,9 @@ export function FeaturesSection() {
     <LandingSection id="integrity" variant="muted">
       <SectionHeader
         eyebrow="Why CanQuest"
-        title="Anti-sybil by design"
+        title="Built for real growth, not farming"
         align="center"
-        description="We protect the reward pool from bots and multi-account farming, so genuine contributors are the ones who benefit."
+        description="Partner projects get verified, active early users — not airdrop farmers. Every safeguard below exists to keep the growth genuine."
         className="mb-8 md:mb-10"
       />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

@@ -17,9 +17,9 @@ const space = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "CanQuest — Quest on Canton",
+  title: "CanQuest — Growth layer for Canton ecosystem projects",
   description:
-    "Enterprise Web3 quest platform: earn points, compete on leaderboards, and build on the Canton network.",
+    "CanQuest helps Canton ecosystem projects acquire verified early users — not farmers. Users get early access to partner projects.",
   metadataBase: new URL("https://canquest.cc"),
   icons: {
     icon: [
