@@ -9,6 +9,7 @@ import {
   pickTwitterDisplayName,
   pickTwitterProfileImage,
 } from './twitter-avatar.util';
+import { TwitterCacheService } from './twitter-cache.service';
 import {
   normalizeTwitterUsername,
   parseTweetIdFromTarget,
@@ -28,12 +29,28 @@ type TwitterApiEnvelope<T> = {
   data?: T;
 };
 
+/**
+ * Konversi nilai `unknown` (dari JSON API) ke string secara aman.
+ * Hindari `String(obj)` yang menghasilkan `'[object Object]'` untuk object.
+ */
+function toSafeString(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'bigint') {
+    return String(value);
+  }
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  return '';
+}
+
 @Injectable()
 export class TwitterApiService {
   private readonly logger = new Logger(TwitterApiService.name);
   private readonly baseUrl = 'https://api.twitterapi.io';
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    private readonly config: ConfigService,
+    private readonly cache: TwitterCacheService,
+  ) {}
 
   isConfigured(): boolean {
     return Boolean(this.config.get<string>('TWITTERAPI_IO_KEY')?.trim());
@@ -94,6 +111,17 @@ export class TwitterApiService {
     if (!name || !/^[a-z0-9_]{1,15}$/i.test(name)) {
       throw new BadRequestException('Invalid X username.');
     }
+
+    // Cache hit → hindari hit API. Profile stabil (24 jam).
+    const cached = await this.cache.getProfile(name);
+    if (cached) {
+      try {
+        return JSON.parse(cached) as TwitterUserProfile;
+      } catch {
+        // JSON corrupt → anggap miss, lanjut fetch.
+      }
+    }
+
     const payload = await this.getJson<Record<string, unknown>>(
       '/twitter/user/info',
       {
@@ -113,15 +141,23 @@ export class TwitterApiService {
       data.userName ??
       name;
     const resolved = normalizeTwitterUsername(
-      String(resolvedRaw).replace(/^@/, ''),
+      toSafeString(resolvedRaw).replace(/^@/, ''),
     );
     const idRaw = nested.id ?? nested.userId ?? data.id;
-    return {
+    const profile: TwitterUserProfile = {
       username: resolved,
-      userId: idRaw != null ? String(idRaw).trim() : null,
+      userId: idRaw != null ? toSafeString(idRaw).trim() : null,
       displayName: pickTwitterDisplayName(data),
       profileImageUrl: pickTwitterProfileImage(data),
     };
+    // Profile positif di-cache 24 jam. Bila resolve melempar (di atas),
+    // tidak di-cache di sini — caller (settings/leaderboard) menangani error.
+    await this.cache.setProfile(
+      name,
+      JSON.stringify(profile),
+      TwitterCacheService.TTL.PROFILE_POSITIVE_SEC,
+    );
+    return profile;
   }
 
   async userFollowsTarget(
@@ -132,6 +168,10 @@ export class TwitterApiService {
     const target = normalizeTwitterUsername(targetUsername);
     if (!source || !target) return false;
 
+    // Cache hit → hindari hit API. Follow stabil.
+    const cached = await this.cache.getFollow(source, target);
+    if (cached !== null) return cached;
+
     const payload = await this.getJson<{
       following?: boolean;
       followed_by?: boolean;
@@ -141,7 +181,9 @@ export class TwitterApiService {
     });
     const data =
       (payload as TwitterApiEnvelope<{ following?: boolean }>).data ?? payload;
-    return Boolean(data.following);
+    const following = Boolean(data.following);
+    await this.cache.setFollow(source, target, following);
+    return following;
   }
 
   /** Check if user retweeted a tweet (scans retweeters list, limited pages). */
@@ -152,8 +194,13 @@ export class TwitterApiService {
     const needle = normalizeTwitterUsername(username);
     if (!needle || !tweetId) return false;
 
+    // Cache hit → hindari hit API. Retweet positif stabil (6 jam).
+    const cached = await this.cache.getRetweet(needle, tweetId);
+    if (cached !== null) return cached;
+
     let cursor = '';
     const maxPages = 5;
+    let retweeted = false;
     for (let page = 0; page < maxPages; page++) {
       const params: Record<string, string> = { tweetId };
       if (cursor) params.cursor = cursor;
@@ -177,15 +224,22 @@ export class TwitterApiService {
         const handle = normalizeTwitterUsername(
           u.userName ?? u.screen_name ?? '',
         );
-        if (handle === needle) return true;
+        if (handle === needle) {
+          retweeted = true;
+          break;
+        }
       }
+      if (retweeted) break;
 
       const hasNext = data.has_next_page === true;
       const next = data.next_cursor ?? data.cursor ?? '';
       if (!hasNext || !next || next === cursor) break;
       cursor = next;
     }
-    return false;
+
+    // Cache hasil akhir (positif 6 jam / negatif 90 dtk).
+    await this.cache.setRetweet(needle, tweetId, retweeted);
+    return retweeted;
   }
 
   async verifyFollowTask(

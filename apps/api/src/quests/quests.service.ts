@@ -38,6 +38,7 @@ import { PointsService } from '../users/points.service';
 import { UsersService } from '../users/users.service';
 import { hydrateTwitterAvatarUrls } from '../twitter/hydrate-twitter-avatars';
 import { TwitterApiService } from '../twitter/twitter-api.service';
+import { TwitterCacheService } from '../twitter/twitter-cache.service';
 import { R2StorageService } from '../storage/r2-storage.service';
 import { withQuestMediaUrls } from '../storage/quest-media.util';
 import { parseQuestSocialLinks } from './quest-social-links.util';
@@ -96,6 +97,7 @@ export class QuestsService {
     private readonly users: UsersService,
     private readonly points: PointsService,
     private readonly twitterApi: TwitterApiService,
+    private readonly twitterCache: TwitterCacheService,
     private readonly splice: SpliceValidatorService,
     private readonly inboundSync: CcInboundSyncService,
     private readonly config: ConfigService,
@@ -1191,7 +1193,7 @@ export class QuestsService {
     }
 
     if (taskType === 'twitter_follow' || taskType === 'twitter_retweet') {
-      await this.verifyTwitterTaskForUser(userId, taskType, task.target);
+      await this.verifyTwitterTaskForUser(userId, taskId, taskType, task.target);
     }
 
     // Send-transaction (first-time): require wallet + enough real CC sends in the last 24h.
@@ -3729,9 +3731,22 @@ export class QuestsService {
 
   private async verifyTwitterTaskForUser(
     userId: string,
+    taskId: string,
     taskType: string,
     taskTarget: string | null,
   ): Promise<void> {
+    // Cooldown server-side 15 detik per (user, task). Mendukung countdown
+    // frontend 5 detik (TASK_COUNTDOWN_SEC) DAN melindungi dari bypass:
+    // double-click, network replay, multi-tab, dan bot. SET NX EX di Redis
+    // → atomic. Bila Redis down, acquireCooldown() return true (tidak blokir).
+    const cdKey = this.twitterCache.cooldownKey(userId, taskId);
+    const gotSlot = await this.twitterCache.acquireCooldown(cdKey, 15);
+    if (!gotSlot) {
+      throw new BadRequestException(
+        'Please wait a few seconds before verifying this task again.',
+      );
+    }
+
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { twitterUsername: true },
