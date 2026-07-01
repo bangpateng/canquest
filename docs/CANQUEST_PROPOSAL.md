@@ -56,23 +56,25 @@ The strategic thesis is simple:
 
 ## 4. Product Overview
 
-CanQuest is a quest and reward platform built natively on the Canton Network. It provides a single surface for projects to run campaigns and for users to earn access through genuine activity.
+CanQuest is a Canton-native growth platform. It provides a single surface for ecosystem projects to run campaigns and acquire **verified early users**, while users get **early access** to those partner projects through genuine activity. CC rewards are part of the experience — a bonus on top of access, not the reason to participate.
 
 Core capabilities:
 
-- Commitment-based access (lock CC or burn earned points)
+- Commitment-based access gating (lock CC, redeem points, or free — configurable per event)
 - Daily quest hub with server-verified tasks (social, quizzes, check-ins, on-chain transaction detection)
 - Partner campaign engine (on-chain CC payouts, invite/access codes, waitlist slots, FCFS and raffle draws)
 - Canton wallet (balance, send/receive/lock/unlock, invite-gated creation)
 - Dashboard, transaction history with CantonScan integrity, leaderboard, and referrals
 - Partner toolchain for campaign creation, reward inventory, winner draws, and on-chain distribution
 
-To reach **Full access** and join partner campaigns, a user proves commitment through one of two paths:
+To join a partner campaign, a user meets the access requirement set **per event** by the partner. Four modes are supported:
 
-- **Lock CC** — commit CC non-custodially from their own Canton wallet (entry at 30 CC, scalable higher). Returned in full at unlock.
-- **Burn points** — active users who earn 5,000 points through quests can burn them to unlock access.
+- **Lock CC** — commit CC non-custodially from their own Canton wallet (default tier 30 CC, configurable per event). Returned in full at unlock.
+- **Redeem points** — spend earned points from daily quest activity (default 200 points, configurable per event).
+- **Lock CC *or* redeem points** — the default; either path works.
+- **No gate** — a free event any verified user can join.
 
-One Canton party = one verified identity. Either path requires real effort or capital, so farming becomes irrational.
+One Canton party = one verified identity. The commitment path requires real effort or capital, so farming becomes irrational.
 
 ---
 
@@ -85,7 +87,7 @@ CanQuest drives **utility-based activity**. Every lock, quest, claim, and transf
 CanQuest is a ready-made growth channel. A project defines its tasks and rewards; CanQuest delivers **verified, active Canton users** — not passive airdrop claimants. Projects can launch campaigns in days, not months, without building their own anti-bot or reward infrastructure.
 
 ### For Users
-A familiar quest experience that rewards genuine participation. Users hold and use CC, complete tasks, compete on leaderboards, and earn access — while every action is recorded on-chain with full transparency.
+A familiar campaign experience whose real value is **early access** to ecosystem projects — often before they are widely known. Users complete genuine tasks, earn a verified standing, and unlock partner campaigns. CC rewards are a bonus on top, never the headline. Every action is recorded on-chain with full transparency.
 
 ### For Canton as a Strategic Partner
 A measurable, usage-tied contribution to ecosystem growth. CanQuest's revenue scales with real transaction volume, and its growth directly translates into more CC movement and more network fee income.
@@ -133,7 +135,7 @@ Claim fees and reward payouts settle through Canton's standard transfer flow, wi
 Each user is a real Canton party. This is what makes Sybil resistance structural: a bot cannot farm a campaign by cheaply replicating wallets, because it cannot cheaply replicate locked CC across verified parties.
 
 ### Retention Loop
-The two commitment paths are deliberately designed to keep users active. The **burn path** consumes points, pulling users back into daily quests to earn more — while CC keeps moving on-chain through repeated, genuine activity.
+The commitment paths are deliberately designed to keep users active. The **points path** draws from a balance earned through daily quests, pulling users back into ongoing activity — while CC keeps moving on-chain through repeated, genuine actions.
 
 ---
 
@@ -212,7 +214,7 @@ Current readiness includes:
 
 The following short videos show the platform in action. Each is 1–2 minutes, focused on one flow.
 
-- **CC Lock & Full Access** — locking CC (or burning points) and reaching Full access.
+- **CC Lock & Full Access** — locking CC (or redeeming points) and reaching Full access.
   `LINK: <paste your video link here>`
 - **Reward Claim** — paying the CC claim fee on-chain and receiving the reward.
   `LINK: <paste your video link here>`
@@ -245,7 +247,7 @@ Position CanQuest as the default verified-growth infrastructure for Canton, with
 
 CanQuest should be evaluated by usage, revenue, and Canton ecosystem impact.
 
-- Commitments created (CC locks + points burns)
+- Commitments created (CC locks + points redeemed)
 - Total CC locked (non-custodial)
 - Active Canton parties
 - On-chain CC transfer volume
@@ -270,7 +272,7 @@ Canton-specific concepts can be difficult for new users.
 
 ### Reward-System Abuse
 Reward products are inherently exposed to farming and exploitation attempts.
-**Mitigation:** Commitment is required *before* any reward (CC lock or points burn), identity is one Canton party per verified human, and all settlement is DAML-enforced on-ledger. This makes farming economically irrational — the structural core of CanQuest's design.
+**Mitigation:** Access is gated behind verified activity (CC lock, points redeem, or a per-event setting), identity is one Canton party per verified human, and all settlement is DAML-enforced on-ledger. This makes farming economically irrational — the structural core of CanQuest's design.
 
 ### Regulatory and Operational Requirements
 Reward and fee products require careful operational controls.

@@ -30,15 +30,17 @@ CanQuest
 
 ## FIELD 4 — Summary of Company and Background *(Required)*
 ```
-CanQuest is a Canton-native growth and quest platform built to bring real user
-activity and recurring fee revenue into the Canton Network.
+CanQuest is a Canton-native growth platform built to help Canton ecosystem
+projects acquire verified, active early users — and to generate recurring fee
+revenue for the network from real activity.
 
 The team operates from Indonesia with a focus on onboarding crypto-native users
-in Southeast Asia into Canton through a familiar quest-and-reward experience.
-Instead of relying on airdrops or short-term incentives, CanQuest converts
-external crypto users into genuine Canton participants: every user journey
-involves locking Canton Coin (CC), completing verified activities, transacting
-on-ledger, and paying claim fees.
+in Southeast Asia into Canton through a familiar campaign experience. CanQuest
+is not a farming or airdrop-claim platform: it connects ecosystem projects with
+genuine early users whose participation is verified (one Canton party = one
+human) and who gain early access to those projects. Every user journey involves
+locking Canton Coin (CC) or redeeming earned points, completing verified
+activities, transacting on-ledger, and paying claim fees.
 
 CanQuest is mainnet-deployed and internally validated as a controlled pilot,
 with the full product flow exercised by the core team using real CC and real
@@ -123,15 +125,18 @@ https://canquest.cc/brand-kit
 
 ## FIELD 15 — Provide a summary of what your application will do *(Required)*
 ```
-CanQuest is a quest-and-reward / user-growth platform built natively on the
-Canton Network. It gives Canton ecosystem projects a ready-made, Sybil-resistant
-channel to acquire verified, active users, while giving end users a familiar way
-to enter Canton and a practical reason to hold, lock, move, and use Canton Coin.
+CanQuest is a Canton-native growth platform. It gives Canton ecosystem projects
+a ready-made, Sybil-resistant channel to acquire verified, active early users,
+while giving end users early access to those partner projects through genuine
+activity. CC rewards are part of the experience — a bonus on top of access,
+not the reason to participate.
 
 Core product surfaces:
-- Commitment-based access gating — users unlock "Full access" by either locking
-  CC non-custodially (entry at 30 CC, returned in full at unlock) or by burning
-  5,000 earned points.
+- Commitment-based access gating — to join a partner campaign, a user meets a
+  requirement set per event by the partner. Four modes: lock CC non-custodially
+  (default tier 30 CC, returned in full at unlock), redeem earned points
+  (default 200 points), lock CC or redeem points (default — either path), or a
+  free event. Configurable per campaign from the admin dashboard.
 - Daily quest hub — server-verified tasks (X/Twitter follow & retweet, Telegram,
   Discord, quizzes, daily check-ins with streaks, and on-chain transaction
   detection).
@@ -168,7 +173,7 @@ CanQuest serves three distinct user groups:
    transactions, claim fees) and recurring fee revenue.
 
 Our "one Canton party = one verified identity" rule, combined with the
-commitment requirement (locked CC or burned points), is what makes these users
+commitment requirement (locked CC or redeemed points), is what makes these users
 bona fide rather than farmed.
 ```
 
@@ -178,9 +183,11 @@ CanQuest interacts with Canton Network across all three layers:
 
 (A) Canton Coin (CC) utility:
 - Non-custodial CC locking via Canton's native LockedAmulet primitive. Users
-  commit CC (entry tier 30 CC) from their own wallet; CC never leaves their
-  control, yet the network earns a holding fee throughout the lock term (7d /
-  15d / 30d terms). Returned in full at unlock.
+  who take the CC-lock access path commit CC (default tier 30 CC, configurable
+  per event) from their own wallet; CC never leaves their control, yet the
+  network earns a holding fee throughout the lock term (7d / 15d / 30d terms).
+  Returned in full at unlock. The access gate is configurable per campaign
+  (CC lock, points redeem, both, or free).
 - Claim fees and reward payouts settle as real CC transfers using Canton's
   standard CIP-0056 transfer flow (createTransferPreapproval,
   preapproval-based execution, scan-proxy verification).
@@ -254,7 +261,7 @@ holding or speculation. The reward-earning activities are:
    activity is created on-ledger.
 
 Crucially, every one of these activities is gated behind verified party identity
-and a real commitment (locked CC or burned points), so the activity the network
+and a real commitment (locked CC or redeemed points), so the activity the network
 rewards is bona fide and not farmed.
 ```
 
@@ -291,9 +298,10 @@ claims on Canton Mainnet. Conservative pre-launch pilot estimates.)
   events are bursty at term boundaries).
 - Estimated daily transactions network-wide from the app: ~400–1,200 in steady
   state, scaling as the cohort grows.
-- Estimated CC volume in play: with a 30 CC entry lock tier and 1,000+ locked
+- Estimated CC volume in play: with a 30 CC default lock tier and 1,000+ locked
   users, ≥ 30,000 CC locked concurrently, plus per-claim fees (~2–3 CC) and
-  reward payouts flowing through the platform.
+  reward payouts flowing through the platform. (Users may also join via the
+  points path, which is lighter on CC volume but still drives quest activity.)
 - Fee/revenue note: every locked CC accrues a network holding fee for the lock
   term, so CanQuest user growth directly translates into recurring network fee
   income, in addition to per-transaction claim/transfer fees.
@@ -431,9 +439,10 @@ Yes — CanQuest is designed around structural, not heuristic, Sybil resistance:
 - One Canton Party = one verified identity. Party IDs are unique per user at the
   database level (unique constraint on cantonPartyId). A bot cannot cheaply
   replicate wallets to farm a campaign.
-- Commitment gating. To reach "Full access" a user must either lock CC
-  non-custodially (LockedAmulet, ≥30 CC, capital at risk) or burn 5,000 earned
-  points (real effort). Either path makes farming irrational.
+- Commitment gating. To reach "Full access" a user must meet a per-event
+  access requirement: lock CC non-custodially (LockedAmulet, ≥30 CC, capital
+  at risk), redeem earned points (default 200, real effort), or a partner-set
+  combination. Either path makes farming irrational.
 - DAML-enforced claim engine. Campaign quotas (FCFS slots, raffle winner caps)
   and the campaign state machine (DRAFT/PAUSED/ACTIVE/ENDED/CLOSED) are enforced
   on-ledger and cannot be bypassed from the client.
