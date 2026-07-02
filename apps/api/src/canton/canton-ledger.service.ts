@@ -578,35 +578,19 @@ export class CantonLedgerService {
       let updateId: string | null = null;
       let transferInstructionCid: string | null = null;
       try {
+        // updateId nested di transactionTree.updateId (bukan root) — lihat
+        // extractUpdateIdFromTree. parsed dipakai untuk extract contract id offer.
         const parsed = JSON.parse(text);
-        updateId = parsed.updateId ?? null;
+        updateId = extractUpdateIdFromTree(text);
         // If transferKind = "offer", extract the TransferInstruction contract ID
         // from the CreatedEvent tree for the receiver to accept later
         if (registry.transferKind === 'offer') {
           transferInstructionCid = extractCreatedContractId(text);
         }
+        void parsed; // dipertahankan untuk debugging masa depan bila perlu
       } catch {
         /* ignore */
       }
-
-      // ── TEMP DEBUG: log struktur response ledger untuk cari field update_id ──
-      // Dihapus setelah format response ledger diketahui.
-      try {
-        const dbg = JSON.parse(text);
-        const topKeys = Object.keys(dbg);
-        this.logger.warn(
-          `[DEBUG-LEDGER-RESP] topKeys=${topKeys.join(',')} ` +
-            `updateId=${updateId ?? 'NULL'} ` +
-            `hasUpdateId=${'updateId' in dbg} ` +
-            `hasUpdate_id=${'update_id' in dbg} ` +
-            `bodySlice=${text.slice(0, 600)}`,
-        );
-      } catch {
-        this.logger.warn(
-          `[DEBUG-LEDGER-RESP] NON-JSON body (len=${text.length}) head=${text.slice(0, 300)}`,
-        );
-      }
-      // ── END TEMP DEBUG ──
 
       this.logger.log(
         `TransferFactory_Transfer OK: kind=${registry.transferKind} ` +
@@ -978,7 +962,7 @@ export class CantonLedgerService {
         let updateId: string | undefined;
         try {
           const parsed = JSON.parse(text) as { updateId?: string };
-          updateId = parsed.updateId ?? undefined;
+          updateId = extractUpdateIdFromTree(text) ?? undefined;
         } catch {
           /* ignore parse error */
         }
@@ -1144,7 +1128,7 @@ export class CantonLedgerService {
     let updateId: string | undefined;
     try {
       const parsed = JSON.parse(text) as { updateId?: string };
-      updateId = parsed.updateId ?? undefined;
+      updateId = extractUpdateIdFromTree(text) ?? undefined;
     } catch {
       /* ignore parse error */
     }
@@ -1406,7 +1390,7 @@ export class CantonLedgerService {
       let updateId: string | null = null;
       try {
         const parsed = JSON.parse(text) as { updateId?: string };
-        updateId = parsed.updateId ?? null;
+        updateId = extractUpdateIdFromTree(text) ?? null;
       } catch {
         /* ignore */
       }
@@ -1472,7 +1456,7 @@ export class CantonLedgerService {
       let updateId: string | null = null;
       try {
         const parsed = JSON.parse(text) as { updateId?: string };
-        updateId = parsed.updateId ?? null;
+        updateId = extractUpdateIdFromTree(text) ?? null;
       } catch {
         /* ignore */
       }
@@ -1527,7 +1511,7 @@ export class CantonLedgerService {
       let updateId: string | null = null;
       try {
         const parsed = JSON.parse(text) as { updateId?: string };
-        updateId = parsed.updateId ?? null;
+        updateId = extractUpdateIdFromTree(text) ?? null;
       } catch {
         /* ignore */
       }
@@ -1571,7 +1555,7 @@ export class CantonLedgerService {
       let updateId: string | null = null;
       try {
         const parsed = JSON.parse(text) as { updateId?: string };
-        updateId = parsed.updateId ?? null;
+        updateId = extractUpdateIdFromTree(text) ?? null;
       } catch {
         /* ignore */
       }
@@ -1611,7 +1595,7 @@ export class CantonLedgerService {
       let updateId: string | null = null;
       try {
         const parsed = JSON.parse(text) as { updateId?: string };
-        updateId = parsed.updateId ?? null;
+        updateId = extractUpdateIdFromTree(text) ?? null;
       } catch {
         /* ignore */
       }
@@ -2535,7 +2519,7 @@ export class CantonLedgerService {
         return {
           ok: true,
           contractId,
-          updateId: parsed.updateId ?? null,
+          updateId: extractUpdateIdFromTree(text) ?? null,
         };
       } catch {
         return { ok: true, contractId: null, updateId: null };
@@ -2985,7 +2969,7 @@ export class CantonLedgerService {
     let updateId: string | undefined;
     try {
       const parsed = JSON.parse(text) as { updateId?: string };
-      updateId = parsed.updateId ?? undefined;
+      updateId = extractUpdateIdFromTree(text) ?? undefined;
     } catch {
       /* ignore parse error */
     }
@@ -3197,7 +3181,7 @@ export class CantonLedgerService {
     let updateId: string | undefined;
     try {
       const parsed = JSON.parse(text) as { updateId?: string };
-      updateId = parsed.updateId ?? undefined;
+      updateId = extractUpdateIdFromTree(text) ?? undefined;
     } catch {
       /* ignore parse error */
     }
@@ -3312,6 +3296,50 @@ function extractCreatedContractId(responseText: string): string | null {
         }
       }
       for (const v of Object.values(rec)) stack.push(v);
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+/**
+ * Extract Canton update_id ("1220…") dari response submit-and-wait ledger.
+ *
+ * Ledger Canton JSON API (:7575) membungkus updateId di dalam `transactionTree`:
+ *   { "transactionTree": { "updateId": "1220…", "eventsById": {...} } }
+ * Bukan di root. Helper ini membaca `transactionTree.updateId` (path resmi),
+ * fallback ke root `updateId` (untuk response non-tree), lalu deep-search
+ * field string apa pun yang diawali "1220" (safety net).
+ */
+function extractUpdateIdFromTree(responseText: string): string | null {
+  try {
+    const parsed = JSON.parse(responseText) as Record<string, unknown>;
+    // 1. Path resmi: transactionTree.updateId
+    const tree = parsed.transactionTree as Record<string, unknown> | undefined;
+    if (typeof tree?.updateId === 'string' && tree.updateId) {
+      return tree.updateId;
+    }
+    // 2. Root updateId (response non-tree, mis. beberapa endpoint lain)
+    if (typeof parsed.updateId === 'string' && parsed.updateId) {
+      return parsed.updateId;
+    }
+    // 3. Safety net: deep-search string pertama berawalan "1220"
+    const stack: unknown[] = [parsed];
+    while (stack.length > 0) {
+      const cur = stack.pop();
+      if (!cur || typeof cur !== 'object') continue;
+      if (Array.isArray(cur)) {
+        for (const item of cur) stack.push(item);
+        continue;
+      }
+      const rec = cur as Record<string, unknown>;
+      for (const [k, v] of Object.entries(rec)) {
+        if (k === 'updateId' && typeof v === 'string' && v.startsWith('1220')) {
+          return v;
+        }
+        if (v && typeof v === 'object') stack.push(v);
+      }
     }
   } catch {
     /* ignore */
