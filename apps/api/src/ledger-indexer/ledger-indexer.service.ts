@@ -20,7 +20,7 @@ import { ModoApiService, type ModoTransfer } from '../canton/modo-api.service';
  *   Each transfer: { eventId "1220…:N", transferType, createdAt(ms), … }.
  *
  * What gets indexed:
- *   - transferType === "Transfer" (a CC transfer on-chain)
+ *   - CC transfers (transferType ∈ {Transfer, Instruction, Mergesplit})
  *     → settle matching CcTransaction (set settledAt + cantonUpdateId)
  *
  * Architecture:
@@ -198,9 +198,21 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * CC transfer type names used by Modo. Includes "Transfer" (direct CIP-56),
+   * "Instruction" (transfer-instruction create/accept), and "Mergesplit" (mint
+   * rebalancing). Rows with non-zero CC movement that touch this party settle
+   * the matching CcTransaction. Non-CC event types are ignored.
+   */
+  private static readonly CC_TRANSFER_TYPES = new Set([
+    'Transfer',
+    'Instruction',
+    'Mergesplit',
+  ]);
+
+  /**
    * Process one Modo transfer.
    *
-   * A CC transfer on-chain is identified by transferType === "Transfer".
+   * A CC transfer on-chain is identified by transferType ∈ CC_TRANSFER_TYPES.
    * For these we settle the matching CcTransaction. Match keys:
    *   - cantonUpdateId = eventId root (eventId without ":N")
    *   - ledgerTxId also matched against the eventId root as a fallback (the
@@ -208,7 +220,7 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
    *     transaction root for CIP-56 transfers).
    */
   private async processTransfer(tx: ModoTransfer): Promise<void> {
-    if (tx.transferType !== 'Transfer') return;
+    if (!LedgerIndexerService.CC_TRANSFER_TYPES.has(tx.transferType)) return;
     if (!tx.eventId) return;
 
     const updateId = tx.eventId.replace(/:[0-9]+$/, '');
