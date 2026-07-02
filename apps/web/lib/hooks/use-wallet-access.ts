@@ -1,36 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import { hasRealWallet } from "@/lib/auth/wallet-access";
+import { useMe } from "@/lib/hooks/use-me";
 
-type MeWallet = {
-  cantonPartyId?: string | null;
-};
-
+/**
+ * Party ID + wallet status from the shared `/api/me` cache (useMe).
+ *
+ * Sebelumnya fetch /api/me mentah sendiri; sekarang re-use cache useMe supaya
+ * /api/me dipanggil sekali untuk semua komponen (mengurangi beban Vercel).
+ */
 export function useWalletAccess() {
-  const [partyId, setPartyId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/me", { credentials: "include", cache: "no-store" });
-      if (!res.ok) {
-        setPartyId(null);
-        return;
-      }
-      const me = (await res.json()) as MeWallet;
-      setPartyId(me.cantonPartyId?.trim() || null);
-    } catch {
-      setPartyId(null);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  const { me, loading, refresh } = useMe();
+  const partyId = me?.cantonPartyId?.trim() || null;
 
   return {
     loading,

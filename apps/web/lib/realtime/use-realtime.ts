@@ -47,6 +47,14 @@ export function useRealtime(): void {
         if (!res.ok) {
           // 401 = belum login. Diam — jangan loop retry (bakal spam BFF).
           if (res.status === 401) return;
+          // 429 = rate-limited (Vercel serverless / backend throttle). JANGAN
+          // reconnect cepat — itu cuma memperburuk storm & memenuhi console
+          // error. Paksa backoff panjang lalu coba lagi.
+          if (res.status === 429) {
+            retryMs = Math.max(retryMs, 30_000);
+            scheduleReconnect();
+            return;
+          }
           throw new Error(`sse-token ${res.status}`);
         }
         const data = (await res.json()) as { token?: string };
