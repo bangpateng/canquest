@@ -77,7 +77,7 @@ export class TransactionDetailService {
     private readonly modo: ModoApiService,
   ) {}
 
-  /** Explorer link via Modo (cc.modo.link/mainnet/updates/{id}). */
+  /** Explorer link via Modo (cc.modo.link/mainnet/event/{id}:0). */
   explorerUrl(eventId: string | null | undefined): string | null {
     return this.modo.explorerUrl(eventId);
   }
@@ -163,7 +163,7 @@ export class TransactionDetailService {
         ledgerEvents = summarizeLedgerEvents(onChain.events);
       } else {
         ledgerFetchError =
-          'On-chain detail unavailable (ledger unreachable or update not indexed yet).';
+          '';
       }
     }
 

@@ -115,7 +115,10 @@ type TransactionDetailContentProps = {
   compact?: boolean;
 };
 
-const MODO_TX_BASE = "https://cc.modo.link/mainnet/updates";
+// Modo explorer: event page (/event/{id}:0) — menampilkan detail aksi utama
+// (sender/receiver/amount) yang user butuhkan saat klik "View on Modo". Root
+// event node ":0" = exercise choice utama, konsisten untuk semua jenis tx.
+const MODO_TX_BASE = "https://cc.modo.link/mainnet/event";
 
 export function TransactionDetailContent({
   detail,
@@ -176,14 +179,14 @@ export function TransactionDetailContent({
   const rawTxId =
     detail.eventId ?? detail.cantonUpdateId ?? detail.ledgerContractId ?? null;
   const txId = isInternal ? null : rawTxId;
-  // Explorer link: PREFERENSI backend cantonScanUrl (sudah pakai cc.modo.link dan
-  // format yang benar). Fallback: bangun dari eventId (strip suffix ":N" dulu,
-  // konsisten dengan backend) bila backend tidak kasih URL.
+  // Explorer link: PREFERENSI backend cantonScanUrl (sudah pakai event page
+  // cc.modo.link). Fallback: bangun dari eventId (strip suffix ":N" lalu tambah
+  // ":0" untuk root event, encode ":" jadi %3A) bila backend tidak kasih URL.
   const explorerUrl = isInternal
     ? null
     : (detail.cantonScanUrl ??
       (detail.eventId
-        ? `${MODO_TX_BASE}/${encodeURIComponent(detail.eventId.replace(/:[0-9]+$/, ""))}`
+        ? `${MODO_TX_BASE}/${encodeURIComponent(detail.eventId.replace(/:[0-9]+$/, ""))}%3A0`
         : null));
 
   const feeCc = microCcToCc(detail.networkFeeMicroCc);

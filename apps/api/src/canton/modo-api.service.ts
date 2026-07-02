@@ -6,7 +6,7 @@ import { ConfigService } from '@nestjs/config';
  *
  * Replaces the former Lighthouse Explorer usage across:
  *   - Onchain transaction history (GET /v1/transfers/{partyId})
- *   - Explorer link generation (cc.modo.link/mainnet/updates/{id})
+ *   - Explorer link generation (cc.modo.link/mainnet/event/{id}:0)
  *   - Event-id / update-id resolution + contract-detail lookups
  *   - Ledger indexer settlement sync
  *
@@ -37,15 +37,25 @@ export class ModoApiService {
   }
 
   /**
-   * Build a Modo explorer link for an update / event id.
-   * Trims a trailing ":N" observation index (event_id → update_id) because the
-   * explorer targets the update, not the observation node.
+   * Build a Modo explorer link for an update id.
+   *
+   * Targets the EVENT page (/event/{id}:0), bukan update page (/updates/{id}):
+   *   - Event page menampilkan detail aksi utama (sender/receiver/amount untuk
+   *     transfer) yang user butuhkan saat klik "View on Modo".
+   *   - Root event node ":0" = exercise choice utama (AmuletRules_Transfer /
+   *     LockedAmulet_OwnerExpireLockV2 / preapproval choice) — konsisten untuk
+   *     semua jenis transaksi.
+   *   - updateId disimpan tanpa suffix ":N"; suffix ":0" ditambahkan di sini.
+   *
    * Returns null for empty input.
    */
   explorerUrl(updateId: string | null | undefined): string | null {
     if (!updateId?.trim()) return null;
     const id = updateId.trim().replace(/:[0-9]+$/, '');
-    return `https://cc.modo.link/mainnet/updates/${encodeURIComponent(id)}`;
+    // encodeURIComponent encode ":" jadi "%3A" → ":0" jadi "%3A0". Modo accept
+    // keduanya; pakai %3A0 agar URL aman (titik dua bisa ambigu di beberapa
+    // parser) konsisten dengan URL contoh yang sudah diverifikasi jalan.
+    return `https://cc.modo.link/mainnet/event/${encodeURIComponent(id)}%3A0`;
   }
 
   /**
