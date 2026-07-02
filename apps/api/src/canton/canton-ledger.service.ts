@@ -2810,7 +2810,7 @@ export class CantonLedgerService {
   ): Promise<{
     ok: boolean;
     lockedAmuletCid?: string;
-    /** Canton transaction update id (root) — untuk link explorer Lighthouse. */
+    /** Canton transaction update id (root) — untuk link explorer Modo. */
     updateId?: string;
     expiresAt?: string;
     error?: string;
@@ -2950,7 +2950,7 @@ export class CantonLedgerService {
     const lockedAmuletCid =
       this.findCreatedCidByTemplate(text, ':Splice.Amulet:LockedAmulet') ??
       undefined;
-    // Extract updateId dari response exercise (untuk link explorer Lighthouse).
+    // Extract updateId dari response exercise (untuk link explorer Modo).
     let updateId: string | undefined;
     try {
       const parsed = JSON.parse(text) as { updateId?: string };
@@ -3080,7 +3080,7 @@ export class CantonLedgerService {
   ): Promise<{
     ok: boolean;
     unlockedCid?: string;
-    /** Canton update id dari exercise (untuk link explorer Lighthouse). */
+    /** Canton update id dari exercise (untuk link explorer Modo). */
     updateId?: string;
     error?: string;
   }> {
@@ -3161,7 +3161,7 @@ export class CantonLedgerService {
     }
     const unlockedCid =
       this.findCreatedCidByTemplate(text, ':Splice.Amulet:Amulet') ?? undefined;
-    // Extract updateId dari response exercise (untuk link explorer Lighthouse). Konsisten
+    // Extract updateId dari response exercise (untuk link explorer Modo). Konsisten
     // dengan pattern accept/reject TransferInstruction di file ini.
     let updateId: string | undefined;
     try {

@@ -224,7 +224,7 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
       //
       // Sumber balance API hanya memberi delta jumlah, BUKAN sender/CID asli.
       // Pakai ledgerTxId ter-marker "inbound-sync:{partyId}:{ts}" supaya jelas
-      // ini row hasil sync (bukan tx Lighthouse). cc-transaction-visibility.ts
+      // ini row hasil sync (bukan tx explorer). cc-transaction-visibility.ts
       // sudah eksplisit TIDAK menyembunyikan baris inbound-sync.
       this.logger.log(
         `Balance +${deltaCc} CC for @${username} synced from chain → recording TRANSFER_IN`,

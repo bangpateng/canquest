@@ -12,9 +12,9 @@ import { queryKeys } from "@/lib/queries/query-keys";
 
 export const TRANSACTIONS_PAGE_SIZE = 5;
 /** Server-side proxy to DB transactions — SINGLE source of truth.
- * Merge on-chain (Lighthouse) dihapus dari list untuk mencegah duplikat
- * (format id beda antara DB update_id dan onchain event_id). Link explorer
- * Lighthouse tetap di-resolve backend saat buka detail. */
+ * Merge on-chain dihapus dari list untuk mencegah duplikat (format id beda
+ * antara DB update_id dan onchain event_id). Link explorer tetap di-resolve
+ * backend (kini via Modo) saat buka detail. */
 const DB_TRANSACTIONS_PROXY = "/api/party/transactions";
 
 export interface TxItem {
@@ -50,9 +50,9 @@ export interface TxItem {
   senderAddress?: string | null;
   /** Real receiver address (on-chain). */
   receiverAddress?: string | null;
-  /** Lighthouse event id (format "122072…:0") — used for the explorer link. */
+  /** Explorer event/update id — used for the explorer link. */
   eventId?: string | null;
-  /** Lighthouse explorer link for this on-chain item (injected by backend). */
+  /** Explorer link for this on-chain item (injected by backend via Modo). */
   cantonScanUrl?: string | null;
   /** Network fee paid, in microCC. */
   networkFeeMicroCc?: string | null;
@@ -209,7 +209,7 @@ type TransactionsViewProps = {
   pageSize?: number;
   refreshKey?: number;
   className?: string;
-  /** Canton party ID for on-chain lookup (5N Lighthouse). If empty, skip on-chain. */
+  /** Canton party ID for on-chain lookup (via Modo). If empty, skip on-chain. */
   partyId?: string | null;
 };
 
@@ -484,8 +484,8 @@ export function TransactionsView({
       </div>
 
       {/* Transaction Detail Modal.
-          On-chain items (id "lh-…") are rendered directly from the TxItem —
-          they don't exist in the DB and a fetch would 404. DB items fetch as before. */}
+          List is DB-only, so onchainTx is always null here. The prop is kept
+          for the component contract; DB items fetch detail as before. */}
       <TransactionDetailModal
         open={modalTx !== null}
         transactionId={modalTx?.id ?? null}

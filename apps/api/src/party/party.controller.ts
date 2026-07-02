@@ -28,6 +28,7 @@ import { CcBalanceService } from '../canton/cc-balance.service';
 import { TransactionDetailService } from '../canton/transaction-detail.service';
 import { QuestLedgerService } from '../canton/quest-ledger.service';
 import { LockEligibilityService } from '../canton/lock-eligibility.service';
+import { ModoApiService } from '../canton/modo-api.service';
 import { parseLockTerms } from '../canton/lock-terms';
 import {
   cantonPartyIdsEqual,
@@ -112,6 +113,7 @@ export class PartyController {
     private readonly lockEligibility: LockEligibilityService,
     private readonly prisma: PrismaService,
     private readonly walletPassword: WalletPasswordService,
+    private readonly modo: ModoApiService,
   ) {}
 
   private assertPartyOnValidatorParticipant(partyId: string): void {
@@ -1731,7 +1733,7 @@ export class PartyController {
   }
 
   /**
-   * Onchain transactions from the Lighthouse Explorer API for the user's party.
+   * Onchain transactions from the Modo Transfer API for the user's party.
    *
    * NOTE: Must be declared BEFORE `@Get('transactions/:id')` so NestJS matches
    * the static `onchain` segment instead of treating it as the `:id` param.
@@ -1751,89 +1753,101 @@ export class PartyController {
       return { transactions: [], pagination: null };
     }
 
-    const lighthouseUrl = (
-      this.config.get<string>('LIGHTHOUSE_API_URL') ??
-      'https://api-canton.interscan.pro/mainnet'
-    ).replace(/\/$/, '');
+    // Fail-soft: kalau Modo belum dikonfigurasi (MODO_API_KEY hilang), jangan
+    // throw — kembalikan list kosong supaya UI wallet tetap render.
+    if (!this.modo.isConfigured()) {
+      this.logger.warn(
+        'Modo onchain fetch skipped — MODO_API_URL/MODO_API_KEY not set',
+      );
+      return { transactions: [], pagination: null };
+    }
 
-    const url = new URL(
-      `${lighthouseUrl}/api/parties/${encodeURIComponent(partyId)}/transfers`,
+    const size = Math.min(
+      100,
+      Math.max(1, parseInt(limit ?? '15', 10) || 15),
     );
-    const n = Math.min(50, Math.max(1, parseInt(limit ?? '15', 10) || 15));
-    url.searchParams.set('limit', String(n));
-    if (cursor) url.searchParams.set('cursor', cursor);
 
     try {
-      const res = await fetch(url.toString(), {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(10_000),
+      const result = await this.modo.getTransfersByParty(partyId, {
+        size,
+        role: 'ANY',
+        sortBy: 'AGE',
+        cursor: cursor || undefined,
       });
-      if (!res.ok) {
-        this.logger.warn(`Lighthouse onchain fetch HTTP ${res.status}`);
+      if (!result) {
+        this.logger.warn('Modo onchain fetch returned no result (upstream error)');
         return { transactions: [], pagination: null };
       }
 
-      const data = (await res.json()) as Record<string, unknown>;
-
-      // Network fee (CC) applied to every transfer — sourced from env so the
-      // receipt shows a consistent fee even when Lighthouse omits it.
-      const feeCc = Number(
+      // Network fee fallback (CC) — dipakai HANYA bila item.fee tidak ada di
+      // response Modo. Sourced from TRANSACTION_FEE_CC env (default 0.2 CC).
+      const fallbackFeeCc = Number(
         this.config.get<string>('TRANSACTION_FEE_CC') ?? '0.2',
       );
-      const networkFeeMicroCc = String(Math.round(Math.abs(feeCc) * 1_000_000));
+      const fallbackFeeMicroCc = String(
+        Math.round(Math.abs(fallbackFeeCc) * 1_000_000),
+      );
 
-      // Fee party short labels — transfer ke party ini (canquest-fee/validator) disembunyikan
-      // dari history on-chain agar konsisten dengan filter DB (CC_TRANSACTION_HISTORY_WHERE).
+      // Fee party short labels — transfer ke party ini (canquest-fee/validator)
+      // disembunyikan dari history on-chain agar konsisten dengan filter DB
+      // (CC_TRANSACTION_HISTORY_WHERE).
       const feeLabels = feePartyLabels();
+      const isFeeParty = (party: string | null | undefined): boolean => {
+        if (!party || feeLabels.length === 0) return false;
+        const v = party.trim();
+        if (!v) return false;
+        return feeLabels.some(
+          (label) => v === label || v.startsWith(`${label}::`),
+        );
+      };
 
-      // Inject network_fee + filter baris fee (counterparty = party fee) dari setiap
-      // array transfer di response.
-      for (const key of ['transfers', 'transactions', 'items', 'data']) {
-        const arr = data[key];
-        if (!Array.isArray(arr)) continue;
-        const filtered = arr.filter((item) => {
-          if (!item || typeof item !== 'object' || feeLabels.length === 0)
-            return true;
-          const it = item as Record<string, unknown>;
-          // Cek semua field counterparty kemungkinan (sender/receiver/address/counterparty).
-          const parties = [
-            it.sender_address ?? it.sender,
-            it.receiver_address ?? it.receiver,
-            it.counterparty,
-            it.party_id,
-          ];
-          return !parties.some((p) => {
-            if (typeof p !== 'string' || !p.trim()) return false;
-            const v = p.trim();
-            return feeLabels.some(
-              (label) => v === label || v.startsWith(`${label}::`),
-            );
-          });
-        });
-        data[key] = filtered.map((item): unknown => {
-          if (!item || typeof item !== 'object') return item;
-          const it = item as Record<string, unknown>;
-          // Inject scan_url lighthouse.xyz untuk item on-chain (link explorer di
-          // list & detail). WAJIB pakai event_id (format "1220…:N") — bukan
-          // update_id ("1220…" tanpa ":N") yang membuat link rusak/kosong.
-          const eventId =
-            (typeof it.event_id === 'string' && it.event_id) ||
-            (typeof it.update_id === 'string' && it.update_id) ||
-            '';
+      const transactions = result.transfers
+        .filter((tx) => {
+          // Buang transfer yang SEMUA sender/receiver-nya party fee/validator.
+          const senders = tx.senders ?? [];
+          const receivers = tx.receivers ?? [];
+          const senderParties = senders.map((s) => s.partyId);
+          const receiverParties = receivers.map((r) => r.partyId);
+          const allParties = [...senderParties, ...receiverParties];
+          if (allParties.length === 0) return true;
+          return !allParties.every((p) => isFeeParty(p));
+        })
+        .map((tx) => {
+          const sender = tx.senders?.[0];
+          const receiver = tx.receivers?.[0];
+          const counterparty =
+            sender?.partyId === partyId
+              ? receiver?.accountName
+              : sender?.accountName;
           return {
-            ...it,
-            network_fee: networkFeeMicroCc,
-            scan_url: eventId
-              ? `https://lighthouse.xyz/transfers/${encodeURIComponent(eventId)}`
-              : null,
+            id: tx.eventId,
+            event_id: tx.eventId,
+            kind: tx.transferType ?? null,
+            sender_address: sender?.partyId ?? null,
+            receiver_address: receiver?.partyId ?? null,
+            counterparty: counterparty ?? null,
+            amount: String(tx.amount ?? 0),
+            created_at: new Date(Number(tx.createdAt)).toISOString(),
+            network_fee:
+              tx.fee != null
+                ? String(Math.round(Math.abs(tx.fee) * 1_000_000))
+                : fallbackFeeMicroCc,
+            contract_id: null,
+            update_id: null,
+            round: null,
+            scan_url: this.modo.explorerUrl(tx.eventId),
           };
         });
-      }
 
-      return data;
+      return {
+        transactions,
+        pagination: {
+          has_next: result.hasNextPage,
+          next_cursor: result.nextCursor,
+        },
+      };
     } catch (err) {
-      this.logger.warn(`Lighthouse onchain fetch error: ${String(err)}`);
+      this.logger.warn(`Modo onchain fetch error: ${String(err)}`);
       return { transactions: [], pagination: null };
     }
   }
@@ -2145,7 +2159,7 @@ export class PartyController {
           type: 'CC_LOCK',
           description: 'CC Locked',
           referenceId: lockRow?.id,
-          // ledgerTxId = updateId transaksi (untuk link explorer Lighthouse);
+          // ledgerTxId = updateId transaksi (untuk link explorer Modo);
           // fallback ke lockedAmuletCid bila updateId tidak tersedia.
           ledgerTxId: result.updateId ?? result.lockedAmuletCid,
           cantonUpdateId: result.lockedAmuletCid,
@@ -2236,7 +2250,7 @@ export class PartyController {
     });
 
     // Catat ke history transaksi (tampilan). Idempotensi via @@unique(userId, ledgerTxId):
-    // pakai updateId ASLI dari exercise (link Lighthouse benar). Fallback ke amulet cid
+    // pakai updateId ASLI dari exercise (link Modo benar). Fallback ke amulet cid
     // baru bila updateId tidak tersedia (kasus ambiguous-recovery). Relasi ke lock asli
     // disimpan di cantonUpdateId + referenceId (lock.id).
     const unlockLedgerTxId =
