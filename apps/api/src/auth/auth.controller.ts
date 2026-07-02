@@ -90,12 +90,14 @@ export class AuthController {
   /**
    * Mint token SSE ephemeral (60s) untuk connect ke /api/realtime/stream.
    * Diproteksi access token utama (AuthGuard jwt) — userId sudah terverifikasi.
-   * Throttle longgar (30/menit) karena token cepat expired & butuh di-refresh
-   * tiap ~50 detik selama sesi SSE aktif.
+   * Skip throttle: token sudah dilindungi JWT auth guard + ephemeral (60s).
+   * SSE reconnect loop minta token baru tiap drop koneksi — throttle 30/menit
+   * bikin 429 saat koneksi flap, yang justru memperburuk reconnect storm.
+   * Sama ringan seperti /me (tidak ada DB write, cuma sign JWT).
    */
   @Post('sse-token')
   @UseGuards(AuthGuard('jwt'))
-  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @SkipThrottle()
   sseToken(@Req() req: AuthedReq) {
     return this.auth.issueSseToken(req.user.userId);
   }

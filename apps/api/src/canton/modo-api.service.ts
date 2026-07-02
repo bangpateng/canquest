@@ -130,11 +130,14 @@ export class ModoApiService {
    * always returns the bare updateId form.
    *
    * Strategy:
-   *   1. Already "…:N"? → strip the ":N" → bare updateId.
+   *   1. Internal marker ("inbound-sync:…", "fee:…", etc.) → null (no link).
+   *      MUST be checked before the ":N" regex: inbound-sync ids end with a
+   *      Date.now() timestamp ("…:1782975432746") that the regex would match.
    *   2. Bare "1220…" (looks like updateId) → use as-is.
-   *   3. Looks like a contract id (not "1220…")? → resolve via contract detail
+   *   3. eventId "…:N" → strip the ":N" → bare updateId.
+   *   4. Looks like a contract id (not "1220…")? → resolve via contract detail
    *      `creatingUpdate`.
-   *   4. Internal/non-onchain marker (e.g. "inbound-sync:…") → null (no link).
+   *   5. Unknown → null.
    */
   async resolveUpdateId(
     partyId: string,
@@ -142,11 +145,13 @@ export class ModoApiService {
   ): Promise<string | null> {
     const id = updateIdOrContractId?.trim();
     if (!id) return null;
-    // 1. eventId "…:N" → strip suffix.
-    if (/:[0-9]+$/.test(id)) return id.replace(/:[0-9]+$/, '');
-    // 2. Bare updateId.
+    // 1. Internal/non-onchain marker — never has an explorer link.
+    if (this.isInternalMarker(id)) return null;
+    // 2. Bare updateId (on-chain transaction root, format "1220…").
     if (id.startsWith('1220')) return id;
-    // 3. Contract id → creatingUpdate.
+    // 3. eventId "…:N" → strip suffix → bare updateId.
+    if (/:[0-9]+$/.test(id)) return id.replace(/:[0-9]+$/, '');
+    // 4. Contract id → creatingUpdate.
     if (id.length > 16) {
       const contract = await this.getContractDetail(id);
       const creatingUpdate = contract?.creatingUpdate ?? contract?.creatingEvent;
@@ -154,8 +159,23 @@ export class ModoApiService {
         return creatingUpdate.startsWith('1220') ? creatingUpdate : null;
       }
     }
-    // 4. Internal marker / unknown → no explorer link.
+    // 5. Unknown → no explorer link.
     return null;
+  }
+
+  /**
+   * True for internal-only ledger markers that never map to an on-chain Modo
+   * transfer (no explorer link). Covers inbound-sync balance-sync rows, fee
+   * rows, and any other "<word>:" synthetic id that is not a Canton hash.
+   */
+  private isInternalMarker(id: string): boolean {
+    if (id.startsWith('1220')) return false;
+    // Synthetic markers: "inbound-sync:…", "fee:…", etc. — a known word before
+    // the first colon, not a hex party suffix.
+    if (/^[a-z][a-z0-9-]*:/i.test(id) && !id.includes('::')) return true;
+    // Also catch "inbound-sync:party::suffix" (has :: but starts with a marker).
+    if (/^(inbound-sync|fee|claim|manual|placeholder):/i.test(id)) return true;
+    return false;
   }
 
   /** @deprecated alias kept for the resolver callers in TransactionDetailService. */
