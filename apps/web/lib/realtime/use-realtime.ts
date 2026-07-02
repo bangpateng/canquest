@@ -29,7 +29,7 @@ export function useRealtime(): void {
 
   useEffect(() => {
     let cancelled = false;
-    let retryMs = 5_000;
+    let retryMs = 1_000;
 
     /** Minta token ephemeral lalu buka koneksi SSE. */
     const connect = async () => {
@@ -47,14 +47,6 @@ export function useRealtime(): void {
         if (!res.ok) {
           // 401 = belum login. Diam — jangan loop retry (bakal spam BFF).
           if (res.status === 401) return;
-          // 429 = rate-limited (Vercel serverless / backend throttle). JANGAN
-          // reconnect cepat — itu cuma memperburuk storm & memenuhi console
-          // error. Paksa backoff panjang lalu coba lagi.
-          if (res.status === 429) {
-            retryMs = Math.max(retryMs, 30_000);
-            scheduleReconnect();
-            return;
-          }
           throw new Error(`sse-token ${res.status}`);
         }
         const data = (await res.json()) as { token?: string };
@@ -74,7 +66,7 @@ export function useRealtime(): void {
       });
       esRef.current = es;
       // Koneksi sukses → reset backoff.
-      retryMs = 5_000;
+      retryMs = 1_000;
 
       // Server konfirmasi koneksi sukses → schedule refresh token berikutnya.
       es.addEventListener("ready", () => {
@@ -115,12 +107,12 @@ export function useRealtime(): void {
       };
     };
 
-    /** Reconnect dengan backoff eksponensial (mulai 5s, maks 60s). */
+    /** Reconnect dengan backoff eksponensial (maks 30s). */
     const scheduleReconnect = () => {
       if (cancelled) return;
       if (tokenTimerRef.current) clearTimeout(tokenTimerRef.current);
       tokenTimerRef.current = setTimeout(() => void connect(), retryMs);
-      retryMs = Math.min(retryMs * 2, 60_000);
+      retryMs = Math.min(retryMs * 2, 30_000);
     };
 
     void connect();

@@ -11,10 +11,11 @@ import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { queryKeys } from "@/lib/queries/query-keys";
 
 export const TRANSACTIONS_PAGE_SIZE = 5;
-/** On-chain (Modo API) is the SINGLE source of transaction history.
- * Each item is a Canton CC transfer from Modo /transfers/{partyId}, with a
- * correct explorer link (scan_url → cc.modo.link/mainnet/updates/{id}). */
-const ONCHAIN_TRANSACTIONS_PROXY = "/api/party/transactions/onchain";
+/** Server-side proxy to DB transactions — SINGLE source of truth.
+ * Merge on-chain (Lighthouse) dihapus dari list untuk mencegah duplikat
+ * (format id beda antara DB update_id dan onchain event_id). Link explorer
+ * Lighthouse tetap di-resolve backend saat buka detail. */
+const DB_TRANSACTIONS_PROXY = "/api/party/transactions";
 
 export interface TxItem {
   id: string;
@@ -49,9 +50,9 @@ export interface TxItem {
   senderAddress?: string | null;
   /** Real receiver address (on-chain). */
   receiverAddress?: string | null;
-  /** Modo event id (format "122072…:0") — used for the explorer link. */
+  /** Lighthouse event id (format "122072…:0") — used for the explorer link. */
   eventId?: string | null;
-  /** Modo explorer link for this on-chain item (injected by backend). */
+  /** Lighthouse explorer link for this on-chain item (injected by backend). */
   cantonScanUrl?: string | null;
   /** Network fee paid, in microCC. */
   networkFeeMicroCc?: string | null;
@@ -68,58 +69,6 @@ interface TxPage {
   page: number;
   pageSize: number;
   totalPages: number;
-}
-
-/** Raw on-chain transfer shape returned by /party/transactions/onchain (Modo). */
-interface OnchainTx {
-  event_id: string;
-  update_id?: string;
-  transfer_type?: string;
-  amount: number | string;
-  fee: number | string;
-  created_at: number;
-  sender_address: string | null;
-  sender_name?: string | null;
-  receiver_address: string | null;
-  receiver_name?: string | null;
-  network_fee: string;
-  scan_url: string | null;
-}
-
-interface OnchainResponse {
-  transactions: OnchainTx[];
-  pagination?: { has_next?: boolean; next_cursor?: string | null } | null;
-}
-
-/** microCC helper: Modo `amount` is CC (decimal), DB stores microCC (int). */
-function ccToMicroCc(cc: number | string): string {
-  return String(Math.round(Math.abs(Number(cc) || 0) * 1_000_000));
-}
-
-/** Map a Modo on-chain transfer to the TxItem shape used by the list/detail UI. */
-function onchainToTxItem(tx: OnchainTx, ownPartyId: string): TxItem {
-  const isOut = tx.sender_address === ownPartyId;
-  const type: TxItem["type"] = isOut ? "TRANSFER_OUT" : "TRANSFER_IN";
-  return {
-    id: tx.event_id,
-    amountMicroCc: ccToMicroCc(tx.amount),
-    type,
-    description: isOut ? "Sent CC (on-chain)" : "Received CC (on-chain)",
-    referenceId: isOut ? tx.receiver_address : tx.sender_address,
-    counterparty: isOut ? tx.receiver_address : tx.sender_address,
-    ledgerTxId: tx.update_id ?? tx.event_id,
-    cantonUpdateId: tx.update_id ?? null,
-    settledAt: new Date(tx.created_at).toISOString(),
-    createdAt: new Date(tx.created_at).toISOString(),
-    status: "COMPLETED",
-    source: "onchain",
-    partyId: ownPartyId,
-    senderAddress: tx.sender_address,
-    receiverAddress: tx.receiver_address,
-    eventId: tx.event_id,
-    cantonScanUrl: tx.scan_url,
-    networkFeeMicroCc: tx.network_fee,
-  };
 }
 
 const TX_TYPE_KEYS: Record<TxItem["type"], string> = {
@@ -260,7 +209,7 @@ type TransactionsViewProps = {
   pageSize?: number;
   refreshKey?: number;
   className?: string;
-  /** Canton party ID for on-chain lookup (Modo API). If empty, skip on-chain. */
+  /** Canton party ID for on-chain lookup (5N Lighthouse). If empty, skip on-chain. */
   partyId?: string | null;
 };
 
@@ -286,10 +235,11 @@ export function TransactionsView({
   const [modalTx, setModalTx] = useState<TxItem | null>(null);
 
   // ── Data: TanStack Query (background refetch SILENT, no flicker) ──────────
-  // History 100% dari API Modo (on-chain per-party transfers). Setiap baris =
-  // transfer CC on-chain dengan link explorer (cc.modo.link). refetchInterval
-  // menggantikan polling manual; refetch saat tab focus otomatis. `loading`
-  // (isPending) hanya true saat first-load — poll background SILENT.
+  // DB adalah SATU-satunya sumber history. Merge on-chain dihapus (format id
+  // beda → duplikat). refetchInterval menggantikan polling manual 20s; refetch
+  // saat tab focus/reconnect otomatis. `loading` (isPending) hanya true saat
+  // first-load — poll background TIDAK memunculkan spinner (bug lama).
+  // SSE jadi sumber utama update; polling ini hanya fallback safety-net.
   const POLL_MS = 60_000;
   const query = useQuery({
     queryKey: queryKeys.party.transactions.page(currentPage),
@@ -297,18 +247,17 @@ export function TransactionsView({
       if (!partyId) {
         return { items: [], total: 0, page: currentPage, pageSize, totalPages: 0 };
       }
-      // Fetch on-chain transfers from Modo (paginated server-side; grab a
-      // generous batch then slice locally — the API is cursor-based, so for
-      // now we pull the newest page which covers typical history depth).
-      const res = await fetch(
-        `${ONCHAIN_TRANSACTIONS_PROXY}?limit=100`,
+      const dbRes = await fetch(
+        `${DB_TRANSACTIONS_PROXY}?page=1&pageSize=200`,
         { credentials: "include", cache: "no-store" },
       ).catch(() => null);
-      const data = res?.ok ? ((await res.json()) as OnchainResponse) : null;
-      const raw: OnchainTx[] = data?.transactions ?? [];
+      const dbData = dbRes?.ok ? ((await dbRes.json()) as { items?: TxItem[] }) : null;
+      const dbItems: TxItem[] = (dbData?.items ?? []).map((tx) => ({
+        ...tx,
+        source: "db" as const,
+      }));
 
-      const all: TxItem[] = raw.map((tx) => onchainToTxItem(tx, partyId));
-      // Modo returns newest-first already, but sort defensively.
+      const all = [...dbItems];
       all.sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );

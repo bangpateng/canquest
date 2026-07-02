@@ -13,9 +13,6 @@
 export const queryKeys = {
   party: {
     all: ["party"] as const,
-    /** Current user profile (/api/me). Shared by all components so /api/me
-     *  is fetched ONCE per stale window, not 6× per navigation. */
-    me: ["party", "me"] as const,
     balance: ["party", "balance"] as const,
     lockStatus: ["party", "lock-status"] as const,
     ccPrice: ["party", "cc-price"] as const,

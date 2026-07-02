@@ -115,9 +115,7 @@ type TransactionDetailContentProps = {
   compact?: boolean;
 };
 
-// Modo explorer. updateId = eventId without trailing ":N". Backend (cantonScanUrl)
-// is authoritative; this fallback only triggers if the backend omits the URL.
-const MODO_EXPLORER_BASE = "https://cc.modo.link/mainnet/updates";
+const LIGHTHOUSE_TX_BASE = "https://lighthouse.xyz/transfers";
 
 export function TransactionDetailContent({
   detail,
@@ -171,17 +169,15 @@ export function TransactionDetailContent({
   const toAddress =
     detail.receiverAddress ?? (isIn ? ownAddress : detail.counterparty) ?? null;
 
-  // Tx ID for copy/explorer — prefer Modo event id, fall back to update/contract id.
+  // Tx ID for copy/explorer — prefer Lighthouse event id, fall back to update/contract id.
   const txId =
     detail.eventId ?? detail.cantonUpdateId ?? detail.ledgerContractId ?? detail.id;
-  // Explorer link: PREFERENSI backend cantonScanUrl (sudah pakai cc.modo.link dan
-  // format yang benar). Fallback: bangun dari eventId/updateId bila backend tidak
-  // kasih URL — strip ":N" karena explorer pakai updateId.
-  const fallbackId = detail.eventId ?? detail.cantonUpdateId ?? null;
-  const explorerUrl =
+  // Explorer link: PREFERENSI backend cantonScanUrl (sudah pakai lighthouse.xyz dan
+  // format yang benar). Fallback: bangun dari eventId bila backend tidak kasih URL.
+  const lighthouseUrl =
     detail.cantonScanUrl ??
-    (fallbackId
-      ? `${MODO_EXPLORER_BASE}/${encodeURIComponent(fallbackId.replace(/:[0-9]+$/, ""))}`
+    (detail.eventId
+      ? `${LIGHTHOUSE_TX_BASE}/${encodeURIComponent(detail.eventId)}`
       : null);
 
   const feeCc = microCcToCc(detail.networkFeeMicroCc);
@@ -313,9 +309,9 @@ export function TransactionDetailContent({
           {txId ? (
             <ReceiptField label="Tx ID" mono>
               <span className="inline-flex items-center justify-end gap-1.5">
-                {explorerUrl ? (
+                {lighthouseUrl ? (
                   <a
-                    href={explorerUrl}
+                    href={lighthouseUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-[var(--primary)] underline-offset-2 hover:underline"
@@ -338,7 +334,7 @@ export function TransactionDetailContent({
             rel="noopener noreferrer"
             className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-white/5 bg-[var(--muted)]/40 px-5 py-2.5 text-sm font-semibold text-slate-100 transition-colors hover:bg-[var(--muted)]"
           >
-            View on Modo
+            View on Lighthouse
             <ExternalLink className="h-4 w-4" />
           </a>
         ) : null}

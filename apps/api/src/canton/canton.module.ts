@@ -13,7 +13,6 @@ import { CcBalanceService } from './cc-balance.service';
 import { TransactionDetailService } from './transaction-detail.service';
 import { QuestLedgerService } from './quest-ledger.service';
 import { LockEligibilityService } from './lock-eligibility.service';
-import { ModoApiService } from './modo-api.service';
 
 /**
  * CantonModule wires together:
@@ -39,7 +38,6 @@ import { ModoApiService } from './modo-api.service';
     QuestLedgerService,
     WalletOnboardingService,
     LockEligibilityService,
-    ModoApiService,
   ],
   exports: [
     CantonLedgerService,
@@ -51,7 +49,6 @@ import { ModoApiService } from './modo-api.service';
     QuestLedgerService,
     WalletOnboardingService,
     LockEligibilityService,
-    ModoApiService,
   ],
 })
 export class CantonModule {}

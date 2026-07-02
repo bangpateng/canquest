@@ -14,10 +14,9 @@ const LEGACY_REDIRECTS: Record<string, string> = {
 };
 
 // ── Maintenance mode (server-side rewrite to /maintenance) ───────────────────
-// Cache modul-level TTL 60 detik. Di Vercel serverless cache ini per-instance,
-// tapi TTL panjang membatasi total hit ke backend (sebelumnya 5s → 429 storm).
+// Cache modul-level TTL 5 detik supaya fetch tidak dibombard tiap request.
 let maintenanceCache: { on: boolean; expiresAt: number } | null = null;
-const MAINTENANCE_TTL_MS = 60_000;
+const MAINTENANCE_TTL_MS = 5_000;
 
 async function isMaintenanceOn(request: NextRequest): Promise<boolean> {
   const now = Date.now();

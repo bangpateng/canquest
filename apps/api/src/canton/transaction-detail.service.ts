@@ -6,7 +6,6 @@ import {
   CantonLedgerService,
   type LedgerStreamEvent,
 } from './canton-ledger.service';
-import { ModoApiService } from './modo-api.service';
 import { isPlatformFeeTransaction } from '../users/cc-transaction-visibility';
 
 export type LedgerEventSummary = {
@@ -34,7 +33,7 @@ export type TransactionDetailResponse = {
   /** Platform fee (CC withdraw fee) dipotong saat transfer — 0/null jika tidak ada.
    *  Tampil di modal detail; baris fee tetap disembunyikan dari history list. */
   platformFeeMicroCc?: string | null;
-  /** Modo explorer event id — dipakai untuk link explorer modo.link/transfers/{id}.
+  /** Lighthouse explorer event id — dipakai untuk link explorer lighthouse.xyz.
    *  = cantonUpdateId bila tersedia, fallback ledgerContractId. */
   eventId?: string | null;
   /** Status row: COMPLETED | PENDING | REJECTED (offer pending → PENDING). */
@@ -44,36 +43,51 @@ export type TransactionDetailResponse = {
 @Injectable()
 export class TransactionDetailService {
   private readonly logger = new Logger(TransactionDetailService.name);
+  private readonly scanTxUrlTemplate: string;
+  private readonly lighthouseApiUrl: string;
 
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
     private readonly ledger: CantonLedgerService,
     private readonly users: UsersService,
-    private readonly modo: ModoApiService,
   ) {
-    // Tx explorer selalu pakai modo.link/transfers/{eventId} (via ModoApiService).
+    // Tx explorer SELALU pakai lighthouse.xyz (hardcoded) — bukan cantonscan.
+    // Jangan baca CANTON_SCAN_TX_URL lagi supaya link konsisten lighthouse di
+    // semua environment.
+    this.scanTxUrlTemplate = 'https://lighthouse.xyz/transfers/{updateId}';
+    // Base URL API Lighthouse (data, BUKAN explorer UI) untuk resolve event_id.
+    this.lighthouseApiUrl = (
+      config.get<string>('LIGHTHOUSE_API_URL') ??
+      'https://api-canton.interscan.pro/mainnet'
+    ).replace(/\/$/, '');
   }
 
-  /** Explorer link for an event id ("1220…:N"). Null if id empty. */
   lighthouseUrl(eventId: string | null | undefined): string | null {
-    // Nama method dipertahankan untuk kompatibilitas pemanggil; sekarang
-    // menghasilkan link Modo (bukan Lighthouse).
-    return this.modo.explorerUrl(eventId);
+    if (!eventId?.trim()) return null;
+    if (this.scanTxUrlTemplate.includes('{updateId}')) {
+      return this.scanTxUrlTemplate.replace(
+        '{updateId}',
+        encodeURIComponent(eventId),
+      );
+    }
+    return `${this.scanTxUrlTemplate.replace(/\/$/, '')}/${encodeURIComponent(eventId)}`;
   }
 
   /**
-   * Resolve Modo event id ("1220…:N") dari Canton update_id/contractId.
+   * Resolve Lighthouse event_id (format "1220…:N") dari Canton update_id/contractId.
    *
    * DB menyimpan Canton update_id ("1220…", tanpa suffix ":N"), tapi link explorer
-   * modo.link/transfers/{id} BUTUH event_id ("1220…:N" — root hash + node index).
+   * lighthouse.xyz/transfers/{id} BUTUH event_id ("1220…:N" — root hash + node index).
    *
-   * Strategi (didelegasikan ke ModoApiService.resolveEventId):
+   * Strategi:
    *  1. Sudah format "…:N"? → langsung pakai.
-   *  2. Cari di /transfers party ini (Modo) — cari eventId yang root-nya cocok.
+   *  2. Cari di endpoint /transfers party ini (untuk send/received). Lighthouse
+   *     hanya memberi event_id (:N) untuk transfer — cari update_id yang cocok.
    *  3. Tidak ketemu (lock/unlock/preapproval — bukan transfer)? → pakai
    *     "{update_id}:0". Canton transaction root selalu node index 0, dan
-   *     modo.link/transfers/{updateId}:0 me-resolve ke transaction root.
+   *     lighthouse.xyz/transfers/{updateId}:0 me-resolve ke transaction root
+   *     (yang menampilkan semua event di tree, termasuk lock/unlock).
    *
    * Non-fatal: kalau input kosong, return null (link explorer tidak tampil,
    * tapi data transaksi tetap muncul).
@@ -82,8 +96,40 @@ export class TransactionDetailService {
     partyId: string,
     updateIdOrContractId: string | null | undefined,
   ): Promise<string | null> {
-    // Nama method dipertahankan; resolver kini memakai API Modo.
-    return this.modo.resolveEventId(partyId, updateIdOrContractId);
+    const id = updateIdOrContractId?.trim();
+    if (!id) return null;
+    // 1. Sudah format event_id? ("…:N") → langsung pakai.
+    if (/:[0-9]+$/.test(id)) return id;
+
+    // 2. Cari di transfer Lighthouse (untuk send/received).
+    try {
+      const url = `${this.lighthouseApiUrl}/api/parties/${encodeURIComponent(partyId)}/transfers?limit=50`;
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(8_000),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as {
+          transfers?: Array<{ update_id?: string; event_id?: string }>;
+        };
+        const match = (data.transfers ?? []).find(
+          (t) =>
+            t.update_id === id ||
+            (t.event_id ?? '').replace(/:[0-9]+$/, '') === id,
+        );
+        if (match?.event_id) return match.event_id;
+      }
+    } catch (err) {
+      this.logger.debug(
+        `resolveLighthouseEventId transfer lookup(${id.slice(0, 16)}…): ${String(err)}`,
+      );
+    }
+
+    // 3. Non-transfer (lock/unlock/preapproval) — pakai root event "{id}:0".
+    // Canton transaction root selalu node 0; lighthouse.xyz/{id}:0 menampilkan
+    // transaction tree lengkap (termasuk event lock/unlock/preapproval).
+    return id.startsWith('1220') ? `${id}:0` : null;
   }
 
   /** Resolve ledger updateId for a contract and persist on CcTransaction. */
@@ -173,8 +219,8 @@ export class TransactionDetailService {
       }
     }
 
-    // Event id untuk link explorer modo.link. Preferensi ledgerTxId (biasanya
-    // = update_id transaksi, format "1220…") — itu yang cocok untuk link Modo.
+    // Event id untuk link explorer lighthouse.xyz. Preferensi ledgerTxId (biasanya
+    // = update_id transaksi, format "1220…") — itu yang cocok untuk link Lighthouse.
     // cantonUpdateId bisa berupa contract id (format beda) → jangan dipakai utama.
     const rawId = tx.ledgerTxId ?? cantonUpdateId ?? null;
     const eventId = await this.resolveLighthouseEventId(

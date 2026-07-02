@@ -28,7 +28,6 @@ import { CcBalanceService } from '../canton/cc-balance.service';
 import { TransactionDetailService } from '../canton/transaction-detail.service';
 import { QuestLedgerService } from '../canton/quest-ledger.service';
 import { LockEligibilityService } from '../canton/lock-eligibility.service';
-import { ModoApiService } from '../canton/modo-api.service';
 import { parseLockTerms } from '../canton/lock-terms';
 import {
   cantonPartyIdsEqual,
@@ -113,7 +112,6 @@ export class PartyController {
     private readonly lockEligibility: LockEligibilityService,
     private readonly prisma: PrismaService,
     private readonly walletPassword: WalletPasswordService,
-    private readonly modo: ModoApiService,
   ) {}
 
   private assertPartyOnValidatorParticipant(partyId: string): void {
@@ -1753,22 +1751,33 @@ export class PartyController {
       return { transactions: [], pagination: null };
     }
 
-    const size = Math.min(50, Math.max(1, parseInt(limit ?? '15', 10) || 15));
-    // Modo per-party endpoint is cursor-based; `cursor` is the opaque nextCursor
-    // from the previous response (undefined = first/newest page).
+    const lighthouseUrl = (
+      this.config.get<string>('LIGHTHOUSE_API_URL') ??
+      'https://api-canton.interscan.pro/mainnet'
+    ).replace(/\/$/, '');
+
+    const url = new URL(
+      `${lighthouseUrl}/api/parties/${encodeURIComponent(partyId)}/transfers`,
+    );
+    const n = Math.min(50, Math.max(1, parseInt(limit ?? '15', 10) || 15));
+    url.searchParams.set('limit', String(n));
+    if (cursor) url.searchParams.set('cursor', cursor);
 
     try {
-      const result = await this.modo.getTransfersByParty(partyId, {
-        size,
-        cursor: cursor || undefined,
+      const res = await fetch(url.toString(), {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(10_000),
       });
-      if (!result) {
-        this.logger.warn(`Modo onchain fetch failed for party ${partyId.slice(0, 16)}…`);
+      if (!res.ok) {
+        this.logger.warn(`Lighthouse onchain fetch HTTP ${res.status}`);
         return { transactions: [], pagination: null };
       }
 
+      const data = (await res.json()) as Record<string, unknown>;
+
       // Network fee (CC) applied to every transfer — sourced from env so the
-      // receipt shows a consistent fee even when the API omits it.
+      // receipt shows a consistent fee even when Lighthouse omits it.
       const feeCc = Number(
         this.config.get<string>('TRANSACTION_FEE_CC') ?? '0.2',
       );
@@ -1778,52 +1787,53 @@ export class PartyController {
       // dari history on-chain agar konsisten dengan filter DB (CC_TRANSACTION_HISTORY_WHERE).
       const feeLabels = feePartyLabels();
 
-      const isFeeParty = (party?: string): boolean => {
-        if (typeof party !== 'string' || !party.trim()) return false;
-        const v = party.trim();
-        return feeLabels.some(
-          (label) => v === label || v.startsWith(`${label}::`),
-        );
-      };
-
-      // Normalize Modo transfers to the shape the frontend expects, inject
-      // network_fee + scan_url (modo.link/transfers/{eventId}), and drop rows
-      // whose only counterparty is a fee party.
-      const transactions = result.transfers
-        .filter((tx) => {
-          if (feeLabels.length === 0) return true;
-          const allParties = [
-            ...tx.senders.map((s) => s.partyId),
-            ...tx.receivers.map((r) => r.partyId),
+      // Inject network_fee + filter baris fee (counterparty = party fee) dari setiap
+      // array transfer di response.
+      for (const key of ['transfers', 'transactions', 'items', 'data']) {
+        const arr = data[key];
+        if (!Array.isArray(arr)) continue;
+        const filtered = arr.filter((item) => {
+          if (!item || typeof item !== 'object' || feeLabels.length === 0)
+            return true;
+          const it = item as Record<string, unknown>;
+          // Cek semua field counterparty kemungkinan (sender/receiver/address/counterparty).
+          const parties = [
+            it.sender_address ?? it.sender,
+            it.receiver_address ?? it.receiver,
+            it.counterparty,
+            it.party_id,
           ];
-          // Sembunyikan baris yang hanya melibatkan party fee (fee leg internal).
-          return allParties.some((p) => !isFeeParty(p));
-        })
-        .map((tx) => ({
-          event_id: tx.eventId,
-          update_id: tx.eventId.replace(/:[0-9]+$/, ''),
-          transfer_type: tx.transferType,
-          amount: tx.amount,
-          fee: tx.fee,
-          amulet_price: tx.amuletPrice,
-          created_at: tx.createdAt,
-          sender_address: tx.senders[0]?.partyId ?? null,
-          sender_name: tx.senders[0]?.accountName ?? null,
-          receiver_address: tx.receivers[0]?.partyId ?? null,
-          receiver_name: tx.receivers[0]?.accountName ?? null,
-          network_fee: networkFeeMicroCc,
-          scan_url: this.modo.explorerUrl(tx.eventId),
-        }));
+          return !parties.some((p) => {
+            if (typeof p !== 'string' || !p.trim()) return false;
+            const v = p.trim();
+            return feeLabels.some(
+              (label) => v === label || v.startsWith(`${label}::`),
+            );
+          });
+        });
+        data[key] = filtered.map((item): unknown => {
+          if (!item || typeof item !== 'object') return item;
+          const it = item as Record<string, unknown>;
+          // Inject scan_url lighthouse.xyz untuk item on-chain (link explorer di
+          // list & detail). WAJIB pakai event_id (format "1220…:N") — bukan
+          // update_id ("1220…" tanpa ":N") yang membuat link rusak/kosong.
+          const eventId =
+            (typeof it.event_id === 'string' && it.event_id) ||
+            (typeof it.update_id === 'string' && it.update_id) ||
+            '';
+          return {
+            ...it,
+            network_fee: networkFeeMicroCc,
+            scan_url: eventId
+              ? `https://lighthouse.xyz/transfers/${encodeURIComponent(eventId)}`
+              : null,
+          };
+        });
+      }
 
-      return {
-        transactions,
-        pagination: {
-          has_next: result.hasNextPage,
-          next_cursor: result.nextCursor,
-        },
-      };
+      return data;
     } catch (err) {
-      this.logger.warn(`Modo onchain fetch error: ${String(err)}`);
+      this.logger.warn(`Lighthouse onchain fetch error: ${String(err)}`);
       return { transactions: [], pagination: null };
     }
   }
