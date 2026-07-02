@@ -115,7 +115,9 @@ type TransactionDetailContentProps = {
   compact?: boolean;
 };
 
-const MODO_TX_BASE = "https://modo.link/transfers";
+// Modo explorer. updateId = eventId without trailing ":N". Backend (cantonScanUrl)
+// is authoritative; this fallback only triggers if the backend omits the URL.
+const MODO_EXPLORER_BASE = "https://cc.modo.link/mainnet/updates";
 
 export function TransactionDetailContent({
   detail,
@@ -172,12 +174,14 @@ export function TransactionDetailContent({
   // Tx ID for copy/explorer — prefer Modo event id, fall back to update/contract id.
   const txId =
     detail.eventId ?? detail.cantonUpdateId ?? detail.ledgerContractId ?? detail.id;
-  // Explorer link: PREFERENSI backend cantonScanUrl (sudah pakai modo.link dan
-  // format yang benar). Fallback: bangun dari eventId bila backend tidak kasih URL.
+  // Explorer link: PREFERENSI backend cantonScanUrl (sudah pakai cc.modo.link dan
+  // format yang benar). Fallback: bangun dari eventId/updateId bila backend tidak
+  // kasih URL — strip ":N" karena explorer pakai updateId.
+  const fallbackId = detail.eventId ?? detail.cantonUpdateId ?? null;
   const explorerUrl =
     detail.cantonScanUrl ??
-    (detail.eventId
-      ? `${MODO_TX_BASE}/${encodeURIComponent(detail.eventId)}`
+    (fallbackId
+      ? `${MODO_EXPLORER_BASE}/${encodeURIComponent(fallbackId.replace(/:[0-9]+$/, ""))}`
       : null);
 
   const feeCc = microCcToCc(detail.networkFeeMicroCc);

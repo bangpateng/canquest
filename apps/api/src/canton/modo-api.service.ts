@@ -10,7 +10,8 @@ import { ConfigService } from '@nestjs/config';
  *
  * Base URL:  MODO_API_URL (default https://api.modo.link/canton-mainnet/v1)
  * Auth:      MODO_API_KEY  sent as header `x-api-key` on every request.
- * Explorer:  https://modo.link/transfers/{eventId}  (eventId = "1220…:N")
+ * Explorer:  https://cc.modo.link/mainnet/updates/{updateId}
+ *            (updateId = eventId without the trailing ":N", format "1220…")
  *
  * Endpoints (see https://docs.modo.link/api-reference):
  *   GET /transfers/{partyId}?role=ANY&size=&sortBy=&cursor=  (cursor-based)
@@ -75,10 +76,14 @@ export class ModoApiService {
     this.apiKey = config.get<string>('MODO_API_KEY') || undefined;
   }
 
-  /** Explorer link for a transfer event id ("1220…:N"). Null if id empty. */
-  explorerUrl(eventId: string | null | undefined): string | null {
-    if (!eventId?.trim()) return null;
-    return `https://modo.link/transfers/${encodeURIComponent(eventId.trim())}`;
+  /**
+   * Explorer link for an updateId (or eventId — ":N" suffix stripped if present).
+   * Null if id empty. Pattern: https://cc.modo.link/mainnet/updates/{updateId}
+   */
+  explorerUrl(updateId: string | null | undefined): string | null {
+    if (!updateId?.trim()) return null;
+    const id = updateId.trim().replace(/:[0-9]+$/, '');
+    return `https://cc.modo.link/mainnet/updates/${encodeURIComponent(id)}`;
   }
 
   /** Whether the service is usable (base + key configured). */
@@ -118,51 +123,47 @@ export class ModoApiService {
   }
 
   /**
-   * Resolve a Modo event id ("…:N") for a Canton updateId/contractId.
+   * Resolve a Canton updateId ("1220…", no ":N") for explorer linking.
    *
-   * DB stores Canton update_id ("1220…", no ":N"), but explorer links need
-   * event_id ("1220…:N"). Strategy:
-   *   1. Already "…:N"? → use as-is.
-   *   2. Search the party's recent transfers for one whose eventId root matches.
-   *   3. Looks like a contract id (not "1220…")? → fetch contract detail,
-   *      use its `creatingUpdate`, then "{creatingUpdate}:0".
-   *   4. Fallback "{updateId}:0" (Canton transaction root is always node 0).
+   * The explorer link cc.modo.link/mainnet/updates/{id} needs an updateId
+   * (no ":N" suffix). Accepts either an eventId ("…:N") or updateId ("…") and
+   * always returns the bare updateId form.
+   *
+   * Strategy:
+   *   1. Already "…:N"? → strip the ":N" → bare updateId.
+   *   2. Bare "1220…" (looks like updateId) → use as-is.
+   *   3. Looks like a contract id (not "1220…")? → resolve via contract detail
+   *      `creatingUpdate`.
+   *   4. Internal/non-onchain marker (e.g. "inbound-sync:…") → null (no link).
    */
-  async resolveEventId(
+  async resolveUpdateId(
     partyId: string,
     updateIdOrContractId: string | null | undefined,
   ): Promise<string | null> {
     const id = updateIdOrContractId?.trim();
     if (!id) return null;
-    // 1. Already an event id?
-    if (/:[0-9]+$/.test(id)) return id;
-
-    // 2. Look it up in this party's recent transfers.
-    try {
-      const page = await this.getTransfersByParty(partyId, { size: 100 });
-      const match = page?.transfers.find((t) => {
-        const root = t.eventId.replace(/:[0-9]+$/, '');
-        return root === id;
-      });
-      if (match?.eventId) return match.eventId;
-    } catch (err) {
-      this.logger.debug(
-        `resolveEventId transfer lookup(${id.slice(0, 16)}…): ${String(err)}`,
-      );
-    }
-
-    // 3. Contract id (not "1220…") → resolve via contract detail creatingUpdate.
-    if (!id.startsWith('1220')) {
+    // 1. eventId "…:N" → strip suffix.
+    if (/:[0-9]+$/.test(id)) return id.replace(/:[0-9]+$/, '');
+    // 2. Bare updateId.
+    if (id.startsWith('1220')) return id;
+    // 3. Contract id → creatingUpdate.
+    if (id.length > 16) {
       const contract = await this.getContractDetail(id);
       const creatingUpdate = contract?.creatingUpdate ?? contract?.creatingEvent;
       if (creatingUpdate) {
-        return creatingUpdate.startsWith('1220') ? `${creatingUpdate}:0` : null;
+        return creatingUpdate.startsWith('1220') ? creatingUpdate : null;
       }
-      return null;
     }
+    // 4. Internal marker / unknown → no explorer link.
+    return null;
+  }
 
-    // 4. Non-transfer update (lock/unlock/preapproval) → root node 0.
-    return `${id}:0`;
+  /** @deprecated alias kept for the resolver callers in TransactionDetailService. */
+  resolveEventId(
+    partyId: string,
+    updateIdOrContractId: string | null | undefined,
+  ): Promise<string | null> {
+    return this.resolveUpdateId(partyId, updateIdOrContractId);
   }
 
   /** Contract detail (incl. `creatingUpdate` linking contractId → updateId). */
