@@ -786,6 +786,7 @@ export class PartyController {
               // Penanda "fee:" → filter visibility A3 sembunyikan baris ini dari history user.
               referenceId: `fee:${normalizeCantonPartyId(feeParty) ?? feeParty}`,
               ledgerTxId: feeLedgerTxId,
+              cantonUpdateId: feeLedgerTxId,
             });
             this.logger.log(
               `Fee collected: ${sender.username} → ${feeParty.split('::')[0]} ${effectiveFeeCc} CC (direct)`,
@@ -812,6 +813,7 @@ export class PartyController {
                 // Penanda "fee:" → filter visibility A3 sembunyikan baris ini dari history user.
                 referenceId: `fee:${normalizeCantonPartyId(feeParty) ?? feeParty}`,
                 ledgerTxId: feeLedgerTxId,
+                cantonUpdateId: feeLedgerTxId,
               });
               this.logger.log(
                 `Fee collected: ${sender.username} → ${feeParty.split('::')[0]} ${effectiveFeeCc} CC (offer-accept)`,
@@ -843,7 +845,10 @@ export class PartyController {
         type: 'TRANSFER_OUT',
         description,
         counterparty: recipientPartyId,
+        // ledgerTxId + cantonUpdateId = Canton update_id ("1220…") supaya link
+        // explorer langsung jalan tanpa lazy-fill.
         ledgerTxId: ledgerTxId,
+        cantonUpdateId: ledgerTxId,
       });
       transferTransactionId = outRow.id;
       if (ledgerTxId && sender.cantonPartyId) {
@@ -873,7 +878,10 @@ export class PartyController {
           counterparty:
             normalizeCantonPartyId(sender.cantonPartyId) ??
             sender.cantonPartyId,
+          // ledgerTxId + cantonUpdateId = Canton update_id ("1220…") — update
+          // yang sama dengan row sender (satu transfer = satu ledger update).
           ledgerTxId: ledgerTxId,
+          cantonUpdateId: ledgerTxId,
         });
         if (recipientDbUser.username) {
           void this.inboundSync.alignBalanceFromChain(
