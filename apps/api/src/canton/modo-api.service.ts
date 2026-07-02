@@ -12,6 +12,13 @@ import { ConfigService } from '@nestjs/config';
  * Auth:      MODO_API_KEY  sent as header `x-api-key` on every request.
  * Explorer:  https://modo.link/transfers/{eventId}  (eventId = "1220…:N")
  *
+ * Endpoints (see https://docs.modo.link/api-reference):
+ *   GET /transfers/{partyId}?role=ANY&size=&sortBy=&cursor=  (cursor-based)
+ *       → { content[], hasNextPage, nextCursor }
+ *   GET /transfers?size=                                       (page-based, all)
+ *   GET /contracts/{contractId}                                → creatingUpdate
+ *   GET /updates/{updateId}/raw-details
+ *
  * All methods are non-fatal: on error they log + return null/[] so callers
  * (transaction detail, indexer, on-chain endpoint) degrade gracefully.
  */
@@ -23,9 +30,9 @@ export interface ModoTransferParty {
   imageUrl: string | null;
 }
 
-/** One transfer row from Modo GET /transfers (and /transfers?partyId=). */
+/** One transfer row from Modo. */
 export interface ModoTransfer {
-  /** "1220…:N" — root event hash + node index. Splits into updateId (:0 part). */
+  /** "1220…:N" — root event hash + node index. updateId = eventId without ":N". */
   eventId: string;
   transferType: string; // "Transfer" | "Mergesplit" | …
   senders: ModoTransferParty[];
@@ -33,35 +40,25 @@ export interface ModoTransfer {
   /** CC amount as a decimal string/number, e.g. 100.0000000000 */
   amount: number | string;
   fee: number | string;
-  amuletPrice: number | string;
+  amuletPrice?: number | string;
   /** Unix epoch millis. */
   createdAt: number;
 }
 
-interface ModoTransfersResponse {
-  content: ModoTransfer[];
-  pageable?: { pageNumber?: number; pageSize?: number };
-  last?: boolean;
-  totalPages?: number;
-  totalElements?: number;
-  size?: number;
-  number?: number;
-}
-
-interface ModoUpdate {
-  updateId: string;
-  recordTime?: number;
-  effectiveAt?: number;
-  rootEventIds?: string;
-  eventsCount?: number;
-}
-
-export interface ModoTransfersPage {
+/** A page of transfers from the cursor-based per-party endpoint. */
+export interface ModoTransfersByPartyPage {
   transfers: ModoTransfer[];
-  /** Whether this is the final page (no more results). */
-  last: boolean;
-  pageNumber: number;
-  totalPages: number;
+  hasNextPage: boolean;
+  nextCursor: string | null;
+}
+
+interface ModoContractDetail {
+  contractId: string;
+  templateId?: string;
+  creatingEvent?: string;
+  /** updateId that created this contract — key link contractId → updateId. */
+  creatingUpdate?: string;
+  createdAt?: number;
 }
 
 @Injectable()
@@ -90,53 +87,46 @@ export class ModoApiService {
   }
 
   /**
-   * Paginated transfers, optionally filtered to a single party.
-   * `page` is 0-based. Returns null on error / not configured.
+   * Transfers for a single party (PATH param endpoint — per docs).
+   * Cursor-based: pass `cursor` (a previous `nextCursor`) to page forward.
+   * Returns null on error / not configured.
    */
-  async getTransfers(
-    opts: { partyId?: string; size?: number; page?: number } = {},
-  ): Promise<ModoTransfersPage | null> {
-    if (!this.isConfigured()) {
-      this.logger.debug('getTransfers skipped (MODO_API_KEY not configured)');
-      return null;
-    }
-    const url = new URL(`${this.baseUrl}/transfers`);
-    if (opts.partyId) url.searchParams.set('partyId', opts.partyId);
+  async getTransfersByParty(
+    partyId: string,
+    opts: { size?: number; role?: string; sortBy?: string; cursor?: string } = {},
+  ): Promise<ModoTransfersByPartyPage | null> {
+    if (!this.isConfigured() || !partyId?.trim()) return null;
+    const url = new URL(
+      `${this.baseUrl}/transfers/${encodeURIComponent(partyId.trim())}`,
+    );
     url.searchParams.set('size', String(opts.size ?? 50));
-    if (opts.page !== undefined) url.searchParams.set('page', String(opts.page));
+    url.searchParams.set('role', opts.role ?? 'ANY');
+    url.searchParams.set('sortBy', opts.sortBy ?? 'CREATED_AT');
+    if (opts.cursor) url.searchParams.set('cursor', opts.cursor);
 
-    const data = await this.getJson<ModoTransfersResponse>(url.toString());
+    const data = await this.getJson<{
+      content?: ModoTransfer[];
+      hasNextPage?: boolean;
+      nextCursor?: string;
+    }>(url.toString());
     if (!data) return null;
-    const content = Array.isArray(data.content) ? data.content : [];
     return {
-      transfers: content,
-      last: data.last ?? true,
-      pageNumber: data.pageable?.pageNumber ?? data.number ?? opts.page ?? 0,
-      totalPages: data.totalPages ?? 1,
+      transfers: Array.isArray(data.content) ? data.content : [],
+      hasNextPage: Boolean(data.hasNextPage),
+      nextCursor: data.nextCursor ?? null,
     };
-  }
-
-  /** Convenience: all recent transfers (page 0). */
-  async getRecentTransfers(size = 50): Promise<ModoTransfer[]> {
-    const page = await this.getTransfers({ size });
-    return page?.transfers ?? [];
-  }
-
-  /** Raw update detail by updateId ("1220…" without ":N"). Null on miss/error. */
-  async getUpdate(updateId: string): Promise<ModoUpdate | null> {
-    if (!this.isConfigured() || !updateId?.trim()) return null;
-    const url = `${this.baseUrl}/updates/${encodeURIComponent(updateId.trim())}`;
-    return this.getJson<ModoUpdate>(url);
   }
 
   /**
    * Resolve a Modo event id ("…:N") for a Canton updateId/contractId.
    *
    * DB stores Canton update_id ("1220…", no ":N"), but explorer links need
-   * event_id ("1220…:N"). Strategy mirrors the old Lighthouse resolver:
+   * event_id ("1220…:N"). Strategy:
    *   1. Already "…:N"? → use as-is.
-   *   2. Search the party's transfers for one whose eventId root matches → use it.
-   *   3. Fallback "{updateId}:0" (Canton transaction root is always node 0).
+   *   2. Search the party's recent transfers for one whose eventId root matches.
+   *   3. Looks like a contract id (not "1220…")? → fetch contract detail,
+   *      use its `creatingUpdate`, then "{creatingUpdate}:0".
+   *   4. Fallback "{updateId}:0" (Canton transaction root is always node 0).
    */
   async resolveEventId(
     partyId: string,
@@ -149,7 +139,7 @@ export class ModoApiService {
 
     // 2. Look it up in this party's recent transfers.
     try {
-      const page = await this.getTransfers({ partyId, size: 50 });
+      const page = await this.getTransfersByParty(partyId, { size: 100 });
       const match = page?.transfers.find((t) => {
         const root = t.eventId.replace(/:[0-9]+$/, '');
         return root === id;
@@ -161,8 +151,32 @@ export class ModoApiService {
       );
     }
 
-    // 3. Non-transfer (lock/unlock/preapproval) → root node 0.
-    return id.startsWith('1220') ? `${id}:0` : null;
+    // 3. Contract id (not "1220…") → resolve via contract detail creatingUpdate.
+    if (!id.startsWith('1220')) {
+      const contract = await this.getContractDetail(id);
+      const creatingUpdate = contract?.creatingUpdate ?? contract?.creatingEvent;
+      if (creatingUpdate) {
+        return creatingUpdate.startsWith('1220') ? `${creatingUpdate}:0` : null;
+      }
+      return null;
+    }
+
+    // 4. Non-transfer update (lock/unlock/preapproval) → root node 0.
+    return `${id}:0`;
+  }
+
+  /** Contract detail (incl. `creatingUpdate` linking contractId → updateId). */
+  async getContractDetail(contractId: string): Promise<ModoContractDetail | null> {
+    if (!this.isConfigured() || !contractId?.trim()) return null;
+    const url = `${this.baseUrl}/contracts/${encodeURIComponent(contractId.trim())}`;
+    return this.getJson<ModoContractDetail>(url);
+  }
+
+  /** Raw update detail (transaction tree) for an updateId. */
+  async getUpdateRawDetails(updateId: string): Promise<unknown | null> {
+    if (!this.isConfigured() || !updateId?.trim()) return null;
+    const url = `${this.baseUrl}/updates/${encodeURIComponent(updateId.trim())}/raw-details`;
+    return this.getJson<unknown>(url);
   }
 
   // ── internals ────────────────────────────────────────────────────────────

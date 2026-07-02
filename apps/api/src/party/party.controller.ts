@@ -1754,11 +1754,14 @@ export class PartyController {
     }
 
     const size = Math.min(50, Math.max(1, parseInt(limit ?? '15', 10) || 15));
-    // Modo pagination is page-based; treat `cursor` as the page number.
-    const page = Math.max(0, parseInt(cursor ?? '0', 10) || 0);
+    // Modo per-party endpoint is cursor-based; `cursor` is the opaque nextCursor
+    // from the previous response (undefined = first/newest page).
 
     try {
-      const result = await this.modo.getTransfers({ partyId, size, page });
+      const result = await this.modo.getTransfersByParty(partyId, {
+        size,
+        cursor: cursor || undefined,
+      });
       if (!result) {
         this.logger.warn(`Modo onchain fetch failed for party ${partyId.slice(0, 16)}…`);
         return { transactions: [], pagination: null };
@@ -1815,10 +1818,8 @@ export class PartyController {
       return {
         transactions,
         pagination: {
-          page: result.pageNumber,
-          total_pages: result.totalPages,
-          has_next: !result.last,
-          next_cursor: result.last ? null : String(result.pageNumber + 1),
+          has_next: result.hasNextPage,
+          next_cursor: result.nextCursor,
         },
       };
     } catch (err) {

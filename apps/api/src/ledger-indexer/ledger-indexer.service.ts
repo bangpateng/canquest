@@ -15,8 +15,8 @@ import { ModoApiService, type ModoTransfer } from '../canton/modo-api.service';
  * (api.modo.link/canton-mainnet/v1), which is the explorer/data layer we link to.
  *
  * Modo API (via ModoApiService):
- *   GET /transfers?partyId={partyId}&size=50&page={n}
- *   Returns page-based pagination ({ content, pageable.pageNumber, last }).
+ *   GET /transfers/{partyId}?role=ANY&size=50&sortBy=CREATED_AT&cursor={cursor}
+ *   Cursor-based pagination ({ content, hasNextPage, nextCursor }).
  *   Each transfer: { eventId "1220…:N", transferType, createdAt(ms), … }.
  *
  * What gets indexed:
@@ -42,8 +42,8 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
   private readonly watchParties: string[];
 
   private timer: NodeJS.Timeout | null = null;
-  /** Last fully-processed page per party id (0-based Modo pages). */
-  private lastPages: Map<string, number> = new Map();
+  /** Last seen eventId per party id — stop a poll cycle once we re-encounter it. */
+  private lastSeenEvent: Map<string, string> = new Map();
   private running = false;
   /** Avoid log spam when API is down — warn once until reachable again */
   private loggedUnreachable = false;
@@ -127,8 +127,9 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
    * Poll each watched party separately via the Modo API.
    *
    * For each party:
-   *   GET /transfers?partyId={partyId}&size=50&page={n}
-   *   - Start from the stored page, walk forward until `last` page or cap.
+   *   GET /transfers/{partyId}?role=ANY&size=50&sortBy=CREATED_AT&cursor={cursor}
+   *   - Start from page 1 (no cursor = newest first), page forward via nextCursor.
+   *   - Stop early once we reach an eventId we already processed last cycle.
    */
   private async fetchAndProcessUpdates(): Promise<void> {
     const parties = await this.resolveWatchParties();
@@ -139,22 +140,20 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** Fetch and process transfers for a single party, following pagination. */
+  /** Fetch and process transfers for a single party, following the cursor. */
   private async pollParty(partyId: string): Promise<void> {
-    // Always start at page 0 — newest transfers are on page 0, and we want to
-    // catch freshly-settled transfers even if older pages shifted. We cap the
-    // number of pages per cycle so this stays bounded.
-    let page = 0;
+    const lastSeen = this.lastSeenEvent.get(partyId);
+    let cursor: string | undefined = undefined;
     let pagesProcessed = 0;
-    const seenEventIds = new Set<string>();
+    let newestProcessed: string | null = null;
+    let stoppedAtKnown = false;
 
     while (pagesProcessed < LedgerIndexerService.MAX_PAGES_PER_POLL) {
       pagesProcessed += 1;
 
-      const result = await this.modo.getTransfers({
-        partyId,
+      const result = await this.modo.getTransfersByParty(partyId, {
         size: LedgerIndexerService.PAGE_SIZE,
-        page,
+        cursor,
       });
 
       if (!result) {
@@ -173,24 +172,29 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
       }
 
       const transfers = result.transfers ?? [];
-      if (transfers.length === 0) return;
+      if (transfers.length === 0) break;
 
       this.logger.debug(
-        `Ledger Indexer: ${transfers.length} transfers (page ${page}) for party ${partyId.slice(0, 16)}…`,
+        `Ledger Indexer: ${transfers.length} transfers (page ${pagesProcessed}) for party ${partyId.slice(0, 16)}…`,
       );
 
       for (const tx of transfers) {
-        // Dedupe within this cycle (an event can appear once per page boundary).
-        if (seenEventIds.has(tx.eventId)) continue;
-        seenEventIds.add(tx.eventId);
+        // Reached an event we already processed last cycle → done for now.
+        if (lastSeen && tx.eventId === lastSeen) {
+          stoppedAtKnown = true;
+          break;
+        }
+        if (!newestProcessed) newestProcessed = tx.eventId; // first = newest
         await this.processTransfer(tx);
       }
 
-      this.lastPages.set(partyId, page);
-
-      if (result.last) return;
-      page += 1;
+      if (stoppedAtKnown || !result.hasNextPage || !result.nextCursor) break;
+      cursor = result.nextCursor;
     }
+
+    // Remember the newest eventId we touched this cycle (first in newest-first
+    // order) so the next cycle stops when it re-encounters it.
+    if (newestProcessed) this.lastSeenEvent.set(partyId, newestProcessed);
   }
 
   /**
@@ -257,7 +261,7 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
         ? (this.config.get<string>('MODO_API_URL') ??
           'https://api.modo.link/canton-mainnet/v1')
         : null,
-      lastPages: Object.fromEntries(this.lastPages),
+      lastSeenEvent: Object.fromEntries(this.lastSeenEvent),
       watchParties: this.watchParties.length,
       pollIntervalMs: this.pollIntervalMs,
     };
