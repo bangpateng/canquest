@@ -1,26 +1,29 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 /**
- * Lighthouse Explorer API proxy.
+ * Modo API proxy.
  *
- * Proxies GET requests from the browser to the Lighthouse Explorer API to
- * avoid CORS issues. Path segments are encoded and the final URL is
- * validated to stay under the configured origin to prevent SSRF / open-proxy
- * behavior if LIGHTHOUSE_API_URL is ever misconfigured.
+ * Proxies GET requests from the browser to the Modo data API (api.modo.link),
+ * injecting the secret `x-api-key` server-side so the key never reaches the
+ * browser. Path segments are encoded and the final URL is validated to stay
+ * under the configured origin to prevent SSRF / open-proxy behavior if
+ * MODO_API_URL is ever misconfigured.
  *
  * Example:
- *   GET /api/lighthouse/api/parties/canquest-validator-1::123/tx?limit=15
- *   → GET https://api-canton.interscan.pro/mainnet/api/parties/canquest-validator-1::123/tx?limit=15
+ *   GET /api/modo/transfers?partyId=canquest-validator-1::123&size=15
+ *   → GET https://api.modo.link/canton-mainnet/v1/transfers?partyId=…&size=15
+ *     with header x-api-key: <MODO_API_KEY>
  */
-const LIGHTHOUSE_BASE = (
-  process.env.LIGHTHOUSE_API_URL ??
-  "https://api-canton.interscan.pro/mainnet"
+const MODO_BASE = (
+  process.env.MODO_API_URL ?? "https://api.modo.link/canton-mainnet/v1"
 ).replace(/\/$/, "");
+
+const MODO_API_KEY = process.env.MODO_API_KEY ?? "";
 
 // Pre-parse the allowed origin once so every request can be checked against it.
 const ALLOWED_ORIGIN = (() => {
   try {
-    return new URL(LIGHTHOUSE_BASE).origin;
+    return new URL(MODO_BASE).origin;
   } catch {
     return null;
   }
@@ -37,7 +40,7 @@ export async function GET(
 
   if (!ALLOWED_ORIGIN) {
     return NextResponse.json(
-      { error: "Lighthouse proxy misconfigured" },
+      { error: "Modo proxy misconfigured" },
       { status: 502 },
     );
   }
@@ -63,7 +66,11 @@ export async function GET(
 
   try {
     const res = await fetch(url.toString(), {
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        // Secret injected server-side — never exposed to the browser.
+        ...(MODO_API_KEY ? { "x-api-key": MODO_API_KEY } : {}),
+      },
       next: { revalidate: 0 },
       signal: AbortSignal.timeout(15_000),
     });
@@ -75,7 +82,7 @@ export async function GET(
     const message =
       err instanceof Error ? err.message : "Upstream request failed";
     return NextResponse.json(
-      { error: "Lighthouse proxy error", message },
+      { error: "Modo proxy error", message },
       { status: 502 },
     );
   }

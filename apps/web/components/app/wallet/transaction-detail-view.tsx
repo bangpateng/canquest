@@ -26,7 +26,7 @@ export type TransactionDetail = {
     templateId: string;
   }>;
   ledgerFetchError: string | null;
-  /** Optional on-chain extras (present for Lighthouse on-chain items). */
+  /** Optional on-chain extras (present for Modo on-chain items). */
   networkFeeMicroCc?: string | null;
   /** Platform fee (CC withdraw fee) dipotong saat transfer — tampil di modal. */
   platformFeeMicroCc?: string | null;
@@ -38,7 +38,7 @@ export type TransactionDetail = {
   senderAddress?: string | null;
   /** Real receiver address (on-chain transfers). */
   receiverAddress?: string | null;
-  /** Lighthouse event id — used for the explorer link. */
+  /** Modo event id — used for the explorer link. */
   eventId?: string | null;
   /** Status row: COMPLETED | PENDING | REJECTED (offer pending → PENDING). */
   status?: string | null;

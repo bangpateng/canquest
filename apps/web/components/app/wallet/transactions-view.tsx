@@ -12,9 +12,9 @@ import { queryKeys } from "@/lib/queries/query-keys";
 
 export const TRANSACTIONS_PAGE_SIZE = 5;
 /** Server-side proxy to DB transactions — SINGLE source of truth.
- * Merge on-chain (Lighthouse) dihapus dari list untuk mencegah duplikat
+ * Merge on-chain (Modo) dihapus dari list untuk mencegah duplikat
  * (format id beda antara DB update_id dan onchain event_id). Link explorer
- * Lighthouse tetap di-resolve backend saat buka detail. */
+ * Modo tetap di-resolve backend saat buka detail. */
 const DB_TRANSACTIONS_PROXY = "/api/party/transactions";
 
 export interface TxItem {
@@ -50,9 +50,9 @@ export interface TxItem {
   senderAddress?: string | null;
   /** Real receiver address (on-chain). */
   receiverAddress?: string | null;
-  /** Lighthouse event id (format "122072…:0") — used for the explorer link. */
+  /** Modo event id (format "122072…:0") — used for the explorer link. */
   eventId?: string | null;
-  /** Lighthouse explorer link for this on-chain item (injected by backend). */
+  /** Modo explorer link for this on-chain item (injected by backend). */
   cantonScanUrl?: string | null;
   /** Network fee paid, in microCC. */
   networkFeeMicroCc?: string | null;
@@ -209,7 +209,7 @@ type TransactionsViewProps = {
   pageSize?: number;
   refreshKey?: number;
   className?: string;
-  /** Canton party ID for on-chain lookup (5N Lighthouse). If empty, skip on-chain. */
+  /** Canton party ID for on-chain lookup (Modo API). If empty, skip on-chain. */
   partyId?: string | null;
 };
 

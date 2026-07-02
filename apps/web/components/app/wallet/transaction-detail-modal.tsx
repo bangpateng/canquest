@@ -17,7 +17,7 @@ type TransactionDetailModalProps = {
   /** Caller's Canton party ID — used to decide which address is "You" and IN vs OUT. */
   partyId?: string | null;
   /**
-   * On-chain (Lighthouse) item. When provided, the receipt is built directly from
+   * On-chain (Modo) item. When provided, the receipt is built directly from
    * this item and the DB is NOT queried — on-chain ids (e.g. "lh-123") do not exist
    * in the database and would otherwise 404 ("Transaction not found").
    */
@@ -27,7 +27,7 @@ type TransactionDetailModalProps = {
 
 /** Build a TransactionDetail straight from an on-chain TxItem (no DB round-trip). */
 function buildDetailFromTxItem(tx: TxItem): TransactionDetail {
-  // Event id untuk link explorer: preferensi eventId (Lighthouse), fallback
+  // Event id untuk link explorer: preferensi eventId (Modo), fallback
   // cantonUpdateId / ledgerTxId.
   const eventId = tx.eventId ?? tx.cantonUpdateId ?? tx.ledgerTxId ?? null;
   return {

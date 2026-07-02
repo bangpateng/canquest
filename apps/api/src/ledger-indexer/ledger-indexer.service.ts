@@ -6,61 +6,58 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { ModoApiService, type ModoTransfer } from '../canton/modo-api.service';
 
 /**
- * LedgerIndexerService — poll Canton ledger transaction updates & sync to DB.
+ * LedgerIndexerService — poll Canton CC transfers via the Modo API & sync to DB.
  *
- * Uses the Lighthouse Explorer API (public, no auth) instead of the Canton
- * JSON API directly, because the Canton JSON API at :7575 does not support
- * the /v2/updates/transactions endpoint.
+ * Previously polled the Lighthouse Explorer API; now polls the Modo API
+ * (api.modo.link/canton-mainnet/v1), which is the explorer/data layer we link to.
  *
- * Lighthouse Explorer API:
- *   GET {LIGHTHOUSE_API_URL}/api/parties/{partyId}/tx?limit=50&cursor={cursor}
- *   Returns paginated transaction data keyed by cursor.
+ * Modo API (via ModoApiService):
+ *   GET /transfers?partyId={partyId}&size=50&page={n}
+ *   Returns page-based pagination ({ content, pageable.pageNumber, last }).
+ *   Each transfer: { eventId "1220…:N", transferType, createdAt(ms), … }.
  *
  * What gets indexed:
- *   - AmuletRules_Transfer (or is_cip56) → CC transfer onchain
- *     → update CcTransaction.settledAt + cantonUpdateId
+ *   - transferType === "Transfer" (a CC transfer on-chain)
+ *     → settle matching CcTransaction (set settledAt + cantonUpdateId)
  *
  * Architecture:
  *   - Polling every INDEXER_POLL_INTERVAL ms (default 15 seconds)
- *   - Stores last processed cursor per party in an in-memory Map
+ *   - Tracks last processed page per party in-memory (Modo is page-based)
  *   - Does not block the HTTP server (setInterval, cleanup in OnModuleDestroy)
  *
  * Enable with env:
  *   LEDGER_INDEXER_ENABLED=true
  *   LEDGER_INDEXER_PARTY_IDS=party1::hash,party2::hash   (comma-separated)
- *   LIGHTHOUSE_API_URL=https://api-canton.interscan.pro/mainnet
+ *   MODO_API_URL=https://api.modo.link/canton-mainnet/v1
+ *   MODO_API_KEY=…
  */
 @Injectable()
 export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(LedgerIndexerService.name);
-  // Lighthouse Explorer API base URL.
-  private readonly lighthouseUrl: string;
   private readonly enabled: boolean;
   private readonly pollIntervalMs: number;
   private readonly watchParties: string[];
 
   private timer: NodeJS.Timeout | null = null;
-  /** Last processed cursor per party id (Lighthouse pagination cursor). */
-  private lastCursors: Map<string, number> = new Map();
+  /** Last fully-processed page per party id (0-based Modo pages). */
+  private lastPages: Map<string, number> = new Map();
   private running = false;
   /** Avoid log spam when API is down — warn once until reachable again */
   private loggedUnreachable = false;
 
   /** Max pages fetched per party per poll cycle to avoid timeouts. */
   private static readonly MAX_PAGES_PER_POLL = 5;
-  /** Page size for Lighthouse transaction queries. */
-  private static readonly PAGE_LIMIT = 50;
+  /** Page size for Modo transfer queries. */
+  private static readonly PAGE_SIZE = 50;
 
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly modo: ModoApiService,
   ) {
-    this.lighthouseUrl = (
-      config.get<string>('LIGHTHOUSE_API_URL') ??
-      'https://api-canton.interscan.pro/mainnet'
-    ).replace(/\/$/, '');
     this.enabled = config.get<string>('LEDGER_INDEXER_ENABLED') === 'true';
     this.pollIntervalMs = Number(
       config.get<string>('LEDGER_INDEXER_POLL_INTERVAL_MS') ?? '15000',
@@ -79,6 +76,12 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
       );
       return;
     }
+    if (!this.modo.isConfigured()) {
+      this.logger.warn(
+        'Ledger Indexer enabled but MODO_API_KEY is not set — skipping',
+      );
+      return;
+    }
     if (this.watchParties.length === 0) {
       this.logger.warn(
         'Ledger Indexer enabled but LEDGER_INDEXER_PARTY_IDS is empty — skipping',
@@ -86,7 +89,7 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
       return;
     }
     this.logger.log(
-      `Ledger Indexer started (Lighthouse) — polling every ${this.pollIntervalMs}ms ` +
+      `Ledger Indexer started (Modo) — polling every ${this.pollIntervalMs}ms ` +
         `for ${this.watchParties.length} parties`,
     );
     // Run once immediately, then on interval
@@ -105,7 +108,7 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Poll one batch of transactions from the Lighthouse Explorer API.
+   * Poll one batch of transfers from the Modo API.
    * Skips if a previous poll is still running.
    */
   private async poll(): Promise<void> {
@@ -121,12 +124,11 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Poll each watched party separately via the Lighthouse Explorer API.
+   * Poll each watched party separately via the Modo API.
    *
    * For each party:
-   *   GET {lighthouseUrl}/api/parties/{partyId}/tx?limit=50[&cursor={cursor}]
-   *   - Resume from the stored cursor if present.
-   *   - Follow pagination (has_next → next_cursor) up to MAX_PAGES_PER_POLL.
+   *   GET /transfers?partyId={partyId}&size=50&page={n}
+   *   - Start from the stored page, walk forward until `last` page or cap.
    */
   private async fetchAndProcessUpdates(): Promise<void> {
     const parties = await this.resolveWatchParties();
@@ -137,35 +139,29 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** Fetch and process transactions for a single party, following pagination. */
+  /** Fetch and process transfers for a single party, following pagination. */
   private async pollParty(partyId: string): Promise<void> {
-    let cursor = this.lastCursors.get(partyId);
-    let pages = 0;
+    // Always start at page 0 — newest transfers are on page 0, and we want to
+    // catch freshly-settled transfers even if older pages shifted. We cap the
+    // number of pages per cycle so this stays bounded.
+    let page = 0;
+    let pagesProcessed = 0;
+    const seenEventIds = new Set<string>();
 
-    while (pages < LedgerIndexerService.MAX_PAGES_PER_POLL) {
-      pages += 1;
+    while (pagesProcessed < LedgerIndexerService.MAX_PAGES_PER_POLL) {
+      pagesProcessed += 1;
 
-      const url = new URL(
-        `${this.lighthouseUrl}/api/parties/${encodeURIComponent(partyId)}/tx`,
-      );
-      url.searchParams.set('limit', String(LedgerIndexerService.PAGE_LIMIT));
-      if (cursor !== undefined) {
-        url.searchParams.set('cursor', String(cursor));
-      }
+      const result = await this.modo.getTransfers({
+        partyId,
+        size: LedgerIndexerService.PAGE_SIZE,
+        page,
+      });
 
-      let res: Response;
-      try {
-        res = await fetch(url.toString(), {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-          signal: AbortSignal.timeout(10_000),
-        });
-      } catch (err) {
+      if (!result) {
         if (!this.loggedUnreachable) {
           this.loggedUnreachable = true;
           this.logger.warn(
-            `Lighthouse API not reachable at ${this.lighthouseUrl} (indexer keeps retrying). ` +
-              `Detail: ${String(err)}`,
+            `Modo API not reachable/indexed (indexer keeps retrying) for party ${partyId.slice(0, 16)}…`,
           );
         }
         return;
@@ -173,78 +169,67 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
 
       if (this.loggedUnreachable) {
         this.loggedUnreachable = false;
-        this.logger.log(
-          `Lighthouse API reachable again at ${this.lighthouseUrl}`,
-        );
+        this.logger.log(`Modo API reachable again for party ${partyId.slice(0, 16)}…`);
       }
 
-      if (!res.ok) {
-        this.logger.debug(
-          `Ledger Indexer poll HTTP ${res.status} for party ${partyId.slice(0, 16)}…`,
-        );
-        return;
-      }
-
-      const data = (await res.json()) as LighthouseResponse;
-      const txs = data.transactions ?? [];
-
-      if (txs.length === 0) return;
+      const transfers = result.transfers ?? [];
+      if (transfers.length === 0) return;
 
       this.logger.debug(
-        `Ledger Indexer: ${txs.length} transactions for party ${partyId.slice(0, 16)}…`,
+        `Ledger Indexer: ${transfers.length} transfers (page ${page}) for party ${partyId.slice(0, 16)}…`,
       );
 
-      for (const tx of txs) {
-        await this.processTransaction(tx);
+      for (const tx of transfers) {
+        // Dedupe within this cycle (an event can appear once per page boundary).
+        if (seenEventIds.has(tx.eventId)) continue;
+        seenEventIds.add(tx.eventId);
+        await this.processTransfer(tx);
       }
 
-      // Advance cursor to the latest transaction id on this page so we do not
-      // re-process it next cycle, even if the API does not paginate further.
-      const lastTx = txs[txs.length - 1];
-      if (lastTx?.id !== undefined) {
-        this.lastCursors.set(partyId, lastTx.id);
-      }
+      this.lastPages.set(partyId, page);
 
-      const pagination = data.pagination;
-      if (!pagination?.has_next || pagination.next_cursor === undefined) {
-        return;
-      }
-
-      cursor = pagination.next_cursor;
-      this.lastCursors.set(partyId, pagination.next_cursor);
+      if (result.last) return;
+      page += 1;
     }
   }
 
   /**
-   * Process one Lighthouse transaction.
+   * Process one Modo transfer.
    *
-   * A CC transfer onchain is identified by either:
-   *   - choice === "AmuletRules_Transfer", or
-   *   - is_cip56 === true
-   *
-   * For these we settle the matching CcTransaction (ledgerTxId = contract_id).
+   * A CC transfer on-chain is identified by transferType === "Transfer".
+   * For these we settle the matching CcTransaction. Match keys:
+   *   - cantonUpdateId = eventId root (eventId without ":N")
+   *   - ledgerTxId also matched against the eventId root as a fallback (the
+   *     app records the Canton contract/offer id there, which may equal the
+   *     transaction root for CIP-56 transfers).
    */
-  private async processTransaction(tx: LighthouseTransaction): Promise<void> {
-    const isCcTransfer =
-      tx.choice === 'AmuletRules_Transfer' || tx.is_cip56 === true;
-    if (!isCcTransfer) return;
-    if (!tx.contract_id) return;
+  private async processTransfer(tx: ModoTransfer): Promise<void> {
+    if (tx.transferType !== 'Transfer') return;
+    if (!tx.eventId) return;
+
+    const updateId = tx.eventId.replace(/:[0-9]+$/, '');
+    const settledAt = new Date(tx.createdAt);
 
     try {
-      await this.prisma.ccTransaction.updateMany({
+      // Settle by cantonUpdateId OR ledgerTxId equal to the transfer root.
+      const settled = await this.prisma.ccTransaction.updateMany({
         where: {
-          ledgerTxId: tx.contract_id,
           settledAt: null,
+          OR: [{ cantonUpdateId: updateId }, { ledgerTxId: updateId }],
         },
         data: {
-          settledAt: new Date(tx.record_time),
-          cantonUpdateId: tx.update_id,
+          settledAt,
+          cantonUpdateId: updateId,
         },
       });
 
-      this.logger.debug(`Indexed CC transfer: ${tx.update_id.slice(0, 16)}…`);
+      if (settled.count > 0) {
+        this.logger.debug(
+          `Indexed CC transfer: ${updateId.slice(0, 16)}… (${settled.count} row)`,
+        );
+      }
     } catch (err) {
-      this.logger.warn(`processTransaction error: ${String(err)}`);
+      this.logger.warn(`processTransfer error: ${String(err)}`);
     }
   }
 
@@ -268,35 +253,13 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
     return {
       enabled: this.enabled,
       running: this.running,
-      lighthouseUrl: this.lighthouseUrl,
-      lastCursors: Object.fromEntries(this.lastCursors),
+      modoUrl: this.modo.isConfigured()
+        ? (this.config.get<string>('MODO_API_URL') ??
+          'https://api.modo.link/canton-mainnet/v1')
+        : null,
+      lastPages: Object.fromEntries(this.lastPages),
       watchParties: this.watchParties.length,
       pollIntervalMs: this.pollIntervalMs,
     };
   }
-}
-
-// ── Type helpers ──────────────────────────────────────────────────────────────
-
-interface LighthousePagination {
-  has_next: boolean;
-  has_previous: boolean;
-  next_cursor: number;
-  previous_cursor: number;
-}
-
-interface LighthouseTransaction {
-  id: number;
-  update_id: string;
-  record_time: string;
-  choice: string;
-  consuming: boolean;
-  acting_parties: string[];
-  contract_id: string;
-  is_cip56: boolean;
-}
-
-interface LighthouseResponse {
-  pagination: LighthousePagination;
-  transactions: LighthouseTransaction[];
 }
