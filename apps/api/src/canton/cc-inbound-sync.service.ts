@@ -125,7 +125,15 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
         ) {
           continue;
         }
-        await this.syncUserBalance(u.id, u.username, u.cantonPartyId);
+        // Per-user try/catch: satu user gagal (auth 401 / network) TIDAK boleh
+        // crash app atau menghentikan sync user lain.
+        try {
+          await this.syncUserBalance(u.id, u.username, u.cantonPartyId);
+        } catch (err) {
+          this.logger.warn(
+            `syncAllUsers: syncUserBalance failed for @${u.username}: ${String(err)}`,
+          );
+        }
       }
     } finally {
       this.running = false;

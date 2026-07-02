@@ -1724,21 +1724,47 @@ export class CantonLedgerService {
   }
 
   /** Ambil current mining round dari Validator API (admin Keycloak token). */
+  /**
+   * Ambil nomor round Canton saat ini dari validator balance endpoint.
+   *
+   * NON-FATAL: bila validator/Keycloak sementara unavailable (401/network),
+   * return 0 + log warn — JANGAN throw. Ini dipanggil oleh background sync
+   * (cc-inbound-sync) untuk semua user; satu failure tidak boleh crash app.
+   * Caller wajib handle round=0 sebagai "tidak diketahui".
+   */
   async getCurrentRound(): Promise<number> {
-    if (!this.keycloak) throw new Error('KeycloakTokenService not injected');
-    const token = await this.keycloak.getAdminLedgerToken();
-    const validatorUrl = (
-      this.config.get<string>('CANTON_VALIDATOR_URL') ?? ''
-    ).replace(/\/$/, '');
-    const res = await fetch(`${validatorUrl}/api/validator/v0/wallet/balance`, {
-      headers: { Authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(8_000),
-    });
-    if (!res.ok) throw new Error(`getCurrentRound gagal HTTP ${res.status}`);
-    const data = (await res.json()) as { round?: number };
-    if (!data.round)
-      throw new Error('getCurrentRound: field round tidak ditemukan');
-    return data.round;
+    if (!this.keycloak) {
+      this.logger.warn('getCurrentRound: KeycloakTokenService not injected');
+      return 0;
+    }
+    try {
+      const token = await this.keycloak.getAdminLedgerToken();
+      const validatorUrl = (
+        this.config.get<string>('CANTON_VALIDATOR_URL') ?? ''
+      ).replace(/\/$/, '');
+      const res = await fetch(
+        `${validatorUrl}/api/validator/v0/wallet/balance`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: AbortSignal.timeout(8_000),
+        },
+      );
+      if (!res.ok) {
+        this.logger.warn(
+          `getCurrentRound HTTP ${res.status} (non-fatal, return 0)`,
+        );
+        return 0;
+      }
+      const data = (await res.json()) as { round?: number };
+      if (!data.round) {
+        this.logger.warn('getCurrentRound: field round tidak ditemukan');
+        return 0;
+      }
+      return data.round;
+    } catch (err) {
+      this.logger.warn(`getCurrentRound error (non-fatal): ${String(err)}`);
+      return 0;
+    }
   }
 
   /**

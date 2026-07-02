@@ -24,10 +24,16 @@ export class ModoApiService {
   private readonly apiKey: string | undefined;
 
   constructor(config: ConfigService) {
-    this.baseUrl = (
+    // Normalisasi: MODO_API_URL boleh ditulis dengan atau tanpa suffix /v1.
+    // Kode method selalu tambah /v1/ di path, jadi kalau user set /v1 di env,
+    // strip dulu supaya tidak jadi double /v1/v1/ (menyebabkan 403).
+    const raw = (
       config.get<string>('MODO_API_URL') ??
       'https://api.modo.link/canton-mainnet'
-    ).replace(/\/$/, '');
+    )
+      .replace(/\/$/, '')
+      .replace(/\/v1$/i, '');
+    this.baseUrl = raw;
     this.apiKey = config.get<string>('MODO_API_KEY') || undefined;
   }
 
