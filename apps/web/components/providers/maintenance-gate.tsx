@@ -15,7 +15,10 @@ interface MaintenanceStatus {
   estimatedEnd: string | null;
 }
 
-const POLL_INTERVAL_MS = 15_000;
+// Poll ringan (jaring pengaman). Reaksi utama tetap event `cq:maintenance` (503).
+// Sebelumnya 15s → membanjiri endpoint /api/public/maintenance dan memicu 429
+// di Vercel serverless. 120s cukup untuk fallback tanpa banjir.
+const POLL_INTERVAL_MS = 120_000;
 
 /**
  * Gate reaktif mode maintenance.
@@ -56,6 +59,8 @@ export function MaintenanceGate() {
           cache: "no-store",
           signal: controller.signal,
         });
+        // 429 = rate-limited by platform; diam (fail-open) supaya tidak spam
+        // console. Polling berikutnya / event cq:maintenance tetap jalan.
         if (!res.ok) return;
         const data = (await res.json()) as MaintenanceStatus;
         if (!cancelled) setStatus(data.enabled ? data : null);
