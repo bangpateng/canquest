@@ -27,10 +27,16 @@ export const CC_TRANSACTION_HISTORY_WHERE: Prisma.CcTransactionWhereInput = {
       { description: { startsWith: 'Platform fee' } },
       /** Claim-fee rows: "Sent N CC claim fee" (FCFS / raffle / code claim). */
       { description: { contains: ' CC claim fee' } },
-      // NOTE: baris inbound-sync (TRANSFER_IN via balance sync) TIDAK lagi
-      // disembunyikan — itu adalah satu-satunya jejak transfer masuk dari user
-      // lain yang tidak melalui offer. User minta semua received tampil di
-      // history + notifikasi.
+      /**
+       * Inbound-sync artifacts: baris TRANSFER_IN yang dibuat cc-inbound-sync.service
+       * saat balance on-chain naik. referenceId di-set ke partyId user sendiri (balance
+       * API tidak tahu pengirim asli), jadi tampil sebagai "From (You) → To (You)" yang
+       * membingungkan. Transfer masuk asli dari pihak lain sudah tampil di on-chain
+       * history (Modo API) dengan sender/receiver yang benar, jadi row DB ini redundan
+       * + menyesatkan. Balance tetap di-update akurat oleh sync; hanya display yang
+       * disembunyikan.
+       */
+      { ledgerTxId: { startsWith: 'inbound-sync:' } },
     ],
   },
 };
