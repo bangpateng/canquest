@@ -589,6 +589,25 @@ export class CantonLedgerService {
         /* ignore */
       }
 
+      // ── TEMP DEBUG: log struktur response ledger untuk cari field update_id ──
+      // Dihapus setelah format response ledger diketahui.
+      try {
+        const dbg = JSON.parse(text);
+        const topKeys = Object.keys(dbg);
+        this.logger.warn(
+          `[DEBUG-LEDGER-RESP] topKeys=${topKeys.join(',')} ` +
+            `updateId=${updateId ?? 'NULL'} ` +
+            `hasUpdateId=${'updateId' in dbg} ` +
+            `hasUpdate_id=${'update_id' in dbg} ` +
+            `bodySlice=${text.slice(0, 600)}`,
+        );
+      } catch {
+        this.logger.warn(
+          `[DEBUG-LEDGER-RESP] NON-JSON body (len=${text.length}) head=${text.slice(0, 300)}`,
+        );
+      }
+      // ── END TEMP DEBUG ──
+
       this.logger.log(
         `TransferFactory_Transfer OK: kind=${registry.transferKind} ` +
           `updateId=${updateId?.slice(0, 16) ?? 'unknown'} ` +
