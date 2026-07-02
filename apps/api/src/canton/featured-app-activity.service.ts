@@ -43,8 +43,12 @@ export class FeaturedAppActivityService {
     private readonly config: ConfigService,
     @Optional() private readonly keycloak: KeycloakTokenService,
   ) {
+    // LEDGER_API_URL adalah var kanonik (gateway publik prod).
+    // CANTON_JSON_API_URL dipertahankan sebagai fallback dev (SSH tunnel localhost:7575).
     this.baseUrl = (
-      config.get<string>('CANTON_JSON_API_URL') ?? 'http://127.0.0.1:7575'
+      config.get<string>('LEDGER_API_URL') ||
+      config.get<string>('CANTON_JSON_API_URL') ||
+      'http://127.0.0.1:7575'
     ).replace(/\/$/, '');
     this.ledgerApiUser =
       config.get<string>('CANTON_LEDGER_API_USER') ?? 'ledger-api-user';

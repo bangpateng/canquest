@@ -118,7 +118,7 @@ export class AppController {
       hint: !spliceReachable
         ? 'Splice unreachable — check WireGuard, CANTON_VALIDATOR_URL, validator on VPS 1.'
         : !ledgerReachable
-          ? 'Ledger unreachable — check CANTON_JSON_API_URL and participant tunnel.'
+          ? 'Ledger unreachable — check LEDGER_API_URL and participant tunnel.'
           : readFromDb
             ? 'Canton OK; balance should be fast from DB with background sync.'
             : 'Set BALANCE_READ_FROM_DB=true for faster GET /party/balance.',

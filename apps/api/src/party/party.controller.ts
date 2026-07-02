@@ -1397,7 +1397,8 @@ export class PartyController {
       }
 
       // Reward PENDING yang ditolak → tandai REJECTED. Transfer dari pihak lain
-      // yang ditolak → catat jejak (amount 0, status REJECTED) supaya user tahu.
+      // yang ditolak → catat jejak OFFER_REJECTED (amount 0) supaya user punya
+      // riwayatnya. Konsisten dengan legacy branch di bawah dan rejectTransferInstruction.
       let settledOwnReward = 0;
       try {
         settledOwnReward = await this.users.markTransferInstructionSettled(
@@ -1414,13 +1415,12 @@ export class PartyController {
         await this.users.recordTransaction({
           userId: user.id,
           amountCc: 0, // reject tidak menggerakkan saldo receiver
-          type: 'TRANSFER_IN',
+          type: 'OFFER_REJECTED',
           description:
             `Rejected incoming transfer${senderLabel ? ` from ${senderLabel}` : ''}` +
             (amountCc > 0 ? ` (${amountCc} CC)` : ''),
           ledgerTxId: result.updateId ?? cid,
           cantonUpdateId: result.updateId ?? undefined,
-          status: 'REJECTED',
         });
       }
       return {
