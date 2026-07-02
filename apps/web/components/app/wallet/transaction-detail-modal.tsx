@@ -52,6 +52,7 @@ function buildDetailFromTxItem(tx: TxItem): TransactionDetail {
     senderAddress: tx.senderAddress ?? null,
     receiverAddress: tx.receiverAddress ?? null,
     eventId,
+    isInternalMarker: tx.isInternalMarker ?? false,
     status: tx.status ?? "COMPLETED",
   };
 }

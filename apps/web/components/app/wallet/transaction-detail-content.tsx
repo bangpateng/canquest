@@ -169,16 +169,22 @@ export function TransactionDetailContent({
   const toAddress =
     detail.receiverAddress ?? (isIn ? ownAddress : detail.counterparty) ?? null;
 
-  // Tx ID for copy/explorer — prefer explorer event id, fall back to update/contract id.
-  const txId =
-    detail.eventId ?? detail.cantonUpdateId ?? detail.ledgerContractId ?? detail.id;
+  // Tx ID untuk copy/explorer — HANYA id on-chain real (event/update/contract id).
+  // JANGAN fallback ke detail.id (DB cuid) — itu menyesatkan user. Marker internal
+  // (fee/inbound-sync/unlock/preapproval/reward-) disembunyikan (bukan on-chain tx).
+  const isInternal = detail.isInternalMarker === true;
+  const rawTxId =
+    detail.eventId ?? detail.cantonUpdateId ?? detail.ledgerContractId ?? null;
+  const txId = isInternal ? null : rawTxId;
   // Explorer link: PREFERENSI backend cantonScanUrl (sudah pakai cc.modo.link dan
-  // format yang benar). Fallback: bangun dari eventId bila backend tidak kasih URL.
-  const explorerUrl =
-    detail.cantonScanUrl ??
-    (detail.eventId
-      ? `${MODO_TX_BASE}/${encodeURIComponent(detail.eventId)}`
-      : null);
+  // format yang benar). Fallback: bangun dari eventId (strip suffix ":N" dulu,
+  // konsisten dengan backend) bila backend tidak kasih URL.
+  const explorerUrl = isInternal
+    ? null
+    : (detail.cantonScanUrl ??
+      (detail.eventId
+        ? `${MODO_TX_BASE}/${encodeURIComponent(detail.eventId.replace(/:[0-9]+$/, ""))}`
+        : null));
 
   const feeCc = microCcToCc(detail.networkFeeMicroCc);
   const platformFeeCc = microCcToCc(detail.platformFeeMicroCc);

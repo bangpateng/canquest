@@ -52,6 +52,9 @@ export interface TxItem {
   receiverAddress?: string | null;
   /** Explorer event/update id — used for the explorer link. */
   eventId?: string | null;
+  /** True bila tx id marker internal (fee/inbound-sync/unlock/preapproval/reward-)
+   *  — link explorer disembunyikan. */
+  isInternalMarker?: boolean;
   /** Explorer link for this on-chain item (injected by backend via Modo). */
   cantonScanUrl?: string | null;
   /** Network fee paid, in microCC. */
@@ -403,13 +406,24 @@ export function TransactionsView({
                            {tx.description}
                          </td>
                          <td className="px-5 py-3.5 sm:px-6 sm:py-4">
-                          <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-1 font-mono text-xs font-medium text-[var(--primary)]">
-                            {tx.cantonUpdateId
-                              ? `${tx.cantonUpdateId.slice(0, 10)}\u2026`
-                              : tx.ledgerTxId
-                                ? `${tx.ledgerTxId.slice(0, 10)}\u2026`
-                                : "View"}
-                          </span>
+                          {(() => {
+                            // Tampilkan HANYA id on-chain real (update_id "1220…" / contract id).
+                            // Marker internal (fee/inbound-sync/unlock/preapproval/reward-) dan
+                            // null → tampilkan "View" generik, BUKAN id yang menyesatkan.
+                            const raw =
+                              tx.cantonUpdateId ?? tx.ledgerTxId ?? null;
+                            const looksReal =
+                              !!raw &&
+                              (raw.startsWith("1220") ||
+                                (raw.startsWith("00") && /^[0-9a-f]+$/.test(raw)));
+                            return (
+                              <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-1 font-mono text-xs font-medium text-[var(--primary)]">
+                                {looksReal
+                                  ? `${(raw as string).slice(0, 10)}\u2026`
+                                  : "View"}
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td className="whitespace-nowrap px-5 py-3.5 sm:px-6 sm:py-4 text-sm font-medium text-slate-400">
                           {date}

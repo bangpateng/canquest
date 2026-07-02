@@ -105,8 +105,9 @@ export class LedgerJobProcessor {
       //   Biarkan AmuletTransferInstruction pending di inbox wallet receiver;
       //   user accept/reject manual via menu Offers.
       accepted = cip56Result.transferKind === 'direct';
-      ledgerTxId =
-        cip56Result.updateId ?? cip56Result.transferInstructionCid ?? '';
+      // ledgerTxId = Canton update_id ("1220…") supaya link explorer jalan.
+      // contract_id (transferInstructionCid) tidak disimpan di kolom tx.
+      ledgerTxId = cip56Result.updateId ?? '';
     }
 
     // CIP-0056 is the only supported reward path. If it fails, retry.
@@ -124,6 +125,7 @@ export class LedgerJobProcessor {
       type: 'QUEST_REWARD',
       description,
       ledgerTxId,
+      cantonUpdateId: cip56Result.updateId ?? undefined,
     });
 
     if (referenceId && this.questLedger.isConfigured()) {
@@ -183,8 +185,8 @@ export class LedgerJobProcessor {
         // Preapproval ON (direct) → CC langsung masuk.
         // Preapproval OFF (offer) → JANGAN auto-accept. Biarkan pending,
         //   penerima accept/reject manual via menu Offers.
-        ledgerTxId =
-          cip56Result.updateId ?? cip56Result.transferInstructionCid ?? null;
+        // ledgerTxId = Canton update_id ("1220…") supaya link explorer jalan.
+        ledgerTxId = cip56Result.updateId ?? null;
         ccSent = true;
       } else {
         // CIP-0056 is the only supported reward path — retry on failure.
@@ -201,6 +203,7 @@ export class LedgerJobProcessor {
           type: 'QUEST_REWARD',
           description: `Quest winner reward: ${questId}`,
           ledgerTxId,
+          cantonUpdateId: cip56Result.updateId ?? undefined,
         });
       }
     }

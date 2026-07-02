@@ -40,6 +40,9 @@ export type TransactionDetail = {
   receiverAddress?: string | null;
   /** Explorer event/update id — used for the explorer link. */
   eventId?: string | null;
+  /** True bila tx id adalah marker internal (fee/inbound-sync/unlock/preapproval/
+   *  reward-) — BUKAN transaksi on-chain real. Link explorer disembunyikan. */
+  isInternalMarker?: boolean;
   /** Status row: COMPLETED | PENDING | REJECTED (offer pending → PENDING). */
   status?: string | null;
 };

@@ -36,9 +36,35 @@ export type TransactionDetailResponse = {
   /** Modo explorer event/update id — dipakai untuk link explorer cc.modo.link.
    *  = cantonUpdateId bila tersedia, fallback ledgerContractId. */
   eventId?: string | null;
+  /** True bila tx id adalah marker internal (fee/inbound-sync/unlock/preapproval:disable/
+   *  reward-) — BUKAN transaksi on-chain real. Frontend sembunyikan link explorer untuk
+   *  row ini dan tampilkan tx id sebagai teks biasa (tidak menyesatkan user). */
+  isInternalMarker?: boolean;
   /** Status row: COMPLETED | PENDING | REJECTED (offer pending → PENDING). */
   status?: string | null;
 };
+
+/**
+ * Deteksi apakah sebuah tx id adalah "marker internal" (bukan transaksi on-chain real).
+ * Marker: namespace prefix tanpa "::", atau prefix eksplisit (fee/inbound-sync/unlock/
+ * preapproval:disable/reward-/claim/manual/placeholder). Update id asli ("1220…") dan
+ * contract id Canton ("00…") BUKAN marker.
+ */
+function isInternalTxMarker(id: string | null | undefined): boolean {
+  if (!id) return false;
+  const v = id.trim();
+  if (!v) return false;
+  if (v.startsWith('1220')) return false;
+  if (v.startsWith('00') && /^[0-9a-f]+$/.test(v)) return false; // Canton contract id
+  if (/^[a-z][a-z0-9-]*:/i.test(v) && !v.includes('::')) return true;
+  if (
+    /^(inbound-sync|fee|unlock|preapproval:disable|preapproval|reward-|claim|manual|placeholder)/i.test(
+      v,
+    )
+  )
+    return true;
+  return false;
+}
 
 @Injectable()
 export class TransactionDetailService {
@@ -163,10 +189,12 @@ export class TransactionDetailService {
     // cocok untuk link explorer. cantonUpdateId bisa berupa contract id (format
     // beda) → jangan dipakai utama.
     const rawId = tx.ledgerTxId ?? cantonUpdateId ?? null;
-    const eventId = await this.resolveExplorerId(
-      user?.cantonPartyId ?? '',
-      rawId,
-    );
+    const internalMarker = isInternalTxMarker(rawId);
+    // Marker internal (fee/inbound-sync/unlock/preapproval:disable/reward-) TIDAK
+    // di-resolve ke link explorer (bukan on-chain tx real) → eventId null.
+    const eventId = internalMarker
+      ? null
+      : await this.resolveExplorerId(user?.cantonPartyId ?? '', rawId);
 
     return {
       id: tx.id,
@@ -180,12 +208,13 @@ export class TransactionDetailService {
       settledAt: tx.settledAt?.toISOString() ?? null,
       createdAt: tx.createdAt.toISOString(),
       cantonPartyId: user?.cantonPartyId ?? null,
-      cantonScanUrl: this.explorerUrl(eventId),
+      cantonScanUrl: internalMarker ? null : this.explorerUrl(eventId),
       onChainSettled: Boolean(tx.settledAt || cantonUpdateId),
       ledgerEvents,
       ledgerFetchError,
       platformFeeMicroCc,
       eventId,
+      isInternalMarker: internalMarker,
       status: tx.status,
     };
   }

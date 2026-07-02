@@ -666,11 +666,13 @@ export class CantonLedgerService {
     }
     if (res.transferKind === 'offer' && res.transferInstructionCid) {
       // One-Step OFF: biarkan pending, JANGAN accept atas nama user.
+      // rewardTxId = Canton update_id (format "1220…") supaya link explorer jalan.
+      // transferInstructionCid disimpan terpisah (contract_id, BUKAN untuk explorer).
       return {
         ok: true,
         kind: 'offer',
         pending: true,
-        rewardTxId: res.updateId ?? res.transferInstructionCid,
+        rewardTxId: res.updateId ?? undefined,
         transferInstructionCid: res.transferInstructionCid,
       };
     }
@@ -1011,6 +1013,7 @@ export class CantonLedgerService {
     ok: boolean;
     transferPreapprovalCid?: string;
     amuletPaid?: string;
+    updateId?: string;
     error?: string;
   }> {
     const provider = this.config.get<string>('CANTON_VALIDATOR_PARTY_ID');
@@ -1118,13 +1121,22 @@ export class CantonLedgerService {
 
     const cid = this.deepFindString(text, 'transferPreapprovalCid');
     const amuletPaid = this.deepFindString(text, 'amuletPaid');
+    // Extract updateId dari response exercise (untuk link explorer Modo).
+    let updateId: string | undefined;
+    try {
+      const parsed = JSON.parse(text) as { updateId?: string };
+      updateId = parsed.updateId ?? undefined;
+    } catch {
+      /* ignore parse error */
+    }
     this.logger.log(
-      `TransferPreapproval created cid=${(cid ?? '?').slice(0, 20)}… amuletPaid=${amuletPaid ?? '?'}`,
+      `TransferPreapproval created cid=${(cid ?? '?').slice(0, 20)}… amuletPaid=${amuletPaid ?? '?'} updateId=${updateId?.slice(0, 16) ?? 'unknown'}`,
     );
     return {
       ok: true,
       transferPreapprovalCid: cid ?? undefined,
       amuletPaid: amuletPaid ?? undefined,
+      updateId,
     };
   }
 

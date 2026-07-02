@@ -1329,7 +1329,11 @@ export class AdminService {
               type: 'QUEST_REWARD',
               description: rewardLabel,
               referenceId: questId,
+              // ledgerTxId = rewardTxId = Canton update_id (setelah fix sendReward
+              // offer-path). cantonUpdateId diset sama supaya link explorer langsung
+              // jalan tanpa lazy-fill.
               ledgerTxId: ledgerTxId ?? undefined,
+              cantonUpdateId: ledgerTxId ?? undefined,
               status: rewardPending ? 'PENDING' : 'COMPLETED',
               transferInstructionCid: rewardInstructionCid,
             });

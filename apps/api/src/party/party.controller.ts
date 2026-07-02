@@ -740,10 +740,9 @@ export class PartyController {
         // Receiver tidak punya TransferPreapproval aktif.
         // JANGAN auto-accept — biarkan pending di inbox wallet receiver.
         // User terima/reject manual via menu Offers (POST /party/offers/accept|reject).
-        ledgerTxId =
-          cip56Result.transferInstructionCid ??
-          cip56Result.updateId ??
-          undefined;
+        // ledgerTxId = Canton update_id ("1220…") supaya link explorer jalan.
+        // contract_id (transferInstructionCid) disimpan di field terpisah di row.
+        ledgerTxId = cip56Result.updateId ?? undefined;
         transferMethod = 'offer_only';
         this.logger.log(
           `CC transfer offer (pending): ${sender.username} → ${recipientLabel} ${amount} CC ` +
@@ -998,7 +997,10 @@ export class PartyController {
       type: 'TRANSFER_IN',
       description: 'Accepted incoming CC transfer (CIP-0056 Two-Step)',
       counterparty: 'sender',
+      // Preferensi Canton update_id ("1220…") untuk link explorer; fallback
+      // contract_id (cid) bila ledger response tidak ter-parse.
       ledgerTxId: result.updateId ?? cid,
+      cantonUpdateId: result.updateId ?? undefined,
     });
 
     if (user.username) {
@@ -1054,6 +1056,7 @@ export class PartyController {
         description: 'Rejected incoming CC transfer',
         referenceId: cid,
         ledgerTxId: result.updateId ?? cid,
+        cantonUpdateId: result.updateId ?? undefined,
       });
     } catch (err) {
       this.logger.warn(
@@ -1108,6 +1111,7 @@ export class PartyController {
         description: 'Cancelled outgoing CC transfer',
         referenceId: cid,
         ledgerTxId: result.updateId ?? cid,
+        cantonUpdateId: result.updateId ?? undefined,
       });
     } catch (err) {
       this.logger.warn(
@@ -1270,6 +1274,7 @@ export class PartyController {
       settledOwnReward = await this.users.markTransferInstructionSettled(
         cid,
         'COMPLETED',
+        updateId ?? undefined,
       );
     } catch (err) {
       this.logger.warn(`markTransferInstructionSettled failed: ${String(err)}`);
@@ -1315,7 +1320,10 @@ export class PartyController {
             ? `Received ${resolvedAmount} CC${senderLabel ? ` from ${senderLabel}` : ''}`
             : `Accepted incoming ${kindLabel} transfer`,
         counterparty: senderLabel || undefined,
+        // Preferensi Canton update_id ("1220…") untuk link explorer; fallback
+        // contract_id (cid) bila ledger response tidak ter-parse.
         ledgerTxId: updateId ?? cid,
+        cantonUpdateId: updateId ?? undefined,
       });
     }
 
@@ -1387,6 +1395,7 @@ export class PartyController {
         settledOwnReward = await this.users.markTransferInstructionSettled(
           cid,
           'REJECTED',
+          result.updateId ?? undefined,
         );
       } catch (err) {
         this.logger.warn(
@@ -1402,6 +1411,7 @@ export class PartyController {
             `Rejected incoming transfer${senderLabel ? ` from ${senderLabel}` : ''}` +
             (amountCc > 0 ? ` (${amountCc} CC)` : ''),
           ledgerTxId: result.updateId ?? cid,
+          cantonUpdateId: result.updateId ?? undefined,
           status: 'REJECTED',
         });
       }
@@ -1444,6 +1454,7 @@ export class PartyController {
         settledOwnReward = await this.users.markTransferInstructionSettled(
           cid,
           'REJECTED',
+          result.updateId ?? undefined,
         );
       } catch (err) {
         this.logger.warn(
@@ -1459,6 +1470,7 @@ export class PartyController {
             `Rejected incoming transfer${senderLabel ? ` from ${senderLabel}` : ''}` +
             (amountCc > 0 ? ` (${amountCc} CC)` : ''),
           ledgerTxId: result.updateId ?? cid,
+          cantonUpdateId: result.updateId ?? undefined,
         });
       }
       return {
@@ -1575,7 +1587,11 @@ export class PartyController {
         type: 'PREAPPROVAL_ENABLED',
         description: 'Preapproval enabled — direct transfers',
         referenceId: user.cantonPartyId,
-        ledgerTxId: result.transferPreapprovalCid ?? undefined,
+        // ledgerTxId + cantonUpdateId = Canton update_id ("1220…") untuk link explorer.
+        // transferPreapprovalCid (contract_id) tidak disimpan di kolom tx — biarkan null
+        // bila updateId tidak ada; link disembunyikan (bukan contract_id yang menyesatkan).
+        ledgerTxId: result.updateId ?? undefined,
+        cantonUpdateId: result.updateId ?? undefined,
       });
     } catch (err) {
       this.logger.warn(
@@ -1669,8 +1685,10 @@ export class PartyController {
     await this.users.markPreapprovalToggle(req.user.userId);
 
     // Catat history (tx id = updateId dari cancel exercise). Non-fatal: toggle
-    // tetap sukses walau pencatatan gagal. Fallback marker bila updateId tidak
-    // tersedia (e.g. lewat Splice fallback path).
+    // tetap sukses walau pencatatan gagal. Bila updateId tidak tersedia (e.g. lewat
+    // Splice fallback path), ledgerTxId null — link explorer disembunyikan (bukan
+    // marker palsu). NULL ledgerTxId aman: unique constraint Postgres mengizinkan
+    // beberapa row NULL untuk userId yang sama.
     try {
       await this.users.recordTransaction({
         userId: user.id,
@@ -1678,9 +1696,8 @@ export class PartyController {
         type: 'PREAPPROVAL_DISABLED',
         description: 'Preapproval disabled — manual accept required',
         referenceId: user.cantonPartyId,
-        ledgerTxId:
-          result.updateId ??
-          `preapproval:disable:${user.cantonPartyId}:${Date.now()}`,
+        ledgerTxId: result.updateId ?? undefined,
+        cantonUpdateId: result.updateId ?? undefined,
       });
     } catch (err) {
       this.logger.warn(
@@ -1946,6 +1963,7 @@ export class PartyController {
       settledOwnReward = await this.users.markTransferInstructionSettled(
         contractId,
         'COMPLETED',
+        result.updateId ?? undefined,
       );
     } catch (err) {
       this.logger.warn(
@@ -2044,6 +2062,7 @@ export class PartyController {
       settledOwnReward = await this.users.markTransferInstructionSettled(
         contractId,
         'REJECTED',
+        result.updateId ?? undefined,
       );
     } catch (err) {
       this.logger.warn(
@@ -2150,8 +2169,10 @@ export class PartyController {
     }
 
     // Catat ke history transaksi (tampilan). Idempotensi via @@unique(userId, ledgerTxId):
-    // ledgerTxId = lockedAmuletCid → handler ulang tidak akan mendobel-catat.
-    if (result.lockedAmuletCid) {
+    // ledgerTxId = Canton update_id ("1220…") → handler ulang tidak akan mendobel-catat,
+    // dan link explorer Modo langsung jalan. lockedAmuletCid tersimpan terpisah di
+    // ccLocks (dipakai saat unlock), tidak perlu duplikat di kolom cantonUpdateId.
+    if (result.updateId || result.lockedAmuletCid) {
       try {
         await this.users.recordTransaction({
           userId: user.id,
@@ -2159,10 +2180,11 @@ export class PartyController {
           type: 'CC_LOCK',
           description: 'CC Locked',
           referenceId: lockRow?.id,
-          // ledgerTxId = updateId transaksi (untuk link explorer Modo);
-          // fallback ke lockedAmuletCid bila updateId tidak tersedia.
+          // ledgerTxId + cantonUpdateId = Canton update_id supaya link explorer jalan.
+          // Fallback ke lockedAmuletCid (contract_id) bila updateId tidak ter-parse —
+          // link akan di-resolve lazy via Modo /v1/contracts/{id}.
           ledgerTxId: result.updateId ?? result.lockedAmuletCid,
-          cantonUpdateId: result.lockedAmuletCid,
+          cantonUpdateId: result.updateId ?? undefined,
         });
       } catch (err) {
         // P2002 = sudah ada (idempoten). Selain itu: non-fatal — lock inti tetap sukses.
@@ -2250,16 +2272,10 @@ export class PartyController {
     });
 
     // Catat ke history transaksi (tampilan). Idempotensi via @@unique(userId, ledgerTxId):
-    // pakai updateId ASLI dari exercise (link Modo benar). Fallback ke amulet cid
-    // baru bila updateId tidak tersedia (kasus ambiguous-recovery). Relasi ke lock asli
-    // disimpan di cantonUpdateId + referenceId (lock.id).
-    const unlockLedgerTxId =
-      result.updateId ??
-      (result.unlockedCid
-        ? `unlock:${result.unlockedCid}`
-        : lock.lockedAmuletCid
-          ? `unlock:${lock.lockedAmuletCid}`
-          : `unlock:${lock.id}`);
+    // ledgerTxId + cantonUpdateId = Canton update_id ASLI dari exercise (link Modo benar).
+    // Relasi ke lock asli disimpan di referenceId (lock.id); lockedAmuletCid asli tetap
+    // di ccLocks. Bila updateId tidak ter-parse, ledgerTxId null → link explorer
+    // disembunyikan (bukan marker palsu).
     try {
       await this.users.recordTransaction({
         userId: user.id,
@@ -2267,8 +2283,8 @@ export class PartyController {
         type: 'CC_UNLOCK',
         description: 'CC Unlocked',
         referenceId: lock.id,
-        ledgerTxId: unlockLedgerTxId,
-        cantonUpdateId: lock.lockedAmuletCid ?? undefined,
+        ledgerTxId: result.updateId ?? undefined,
+        cantonUpdateId: result.updateId ?? undefined,
       });
     } catch (err) {
       // P2002 = sudah ada (idempoten). Selain itu: non-fatal — unlock inti tetap sukses.

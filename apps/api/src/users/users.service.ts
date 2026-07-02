@@ -887,10 +887,17 @@ export class UsersService {
     });
   }
 
-  /** Saat offer pending di-accept/reject manual, update status tx reward terkait. */
+  /**
+   * Saat offer pending di-accept/reject manual, update status tx reward terkait.
+   *
+   * `cantonUpdateId` (opsional) = Canton update_id dari exercise accept/reject
+   * — bila diberikan, ditulis ke kolom cantonUpdateId supaya link explorer
+   * langsung tersedia tanpa menunggu lazy-fill / indexer.
+   */
   async markTransferInstructionSettled(
     transferInstructionCid: string,
     status: 'COMPLETED' | 'REJECTED',
+    cantonUpdateId?: string,
   ): Promise<number> {
     // Ambil dulu row PENDING yang cocok supaya bisa bersihkan suffix deskripsi
     // "[pending — recipient must accept offer]" saat offer selesai (accept/reject).
@@ -913,6 +920,7 @@ export class UsersService {
         data: {
           status,
           settledAt,
+          ...(cantonUpdateId ? { cantonUpdateId } : {}),
           ...(cleanDesc !== row.description ? { description: cleanDesc } : {}),
         },
       });
