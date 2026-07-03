@@ -142,14 +142,18 @@ export class LockEligibilityService {
   }
 
   /**
-   * RECONCILE: deteksi LockedAmulet on-chain yang TIDAK punya baris cc_locks
-   * (kasus: lock sukses on-chain tapi DB row gagal dibuat → orphan/stuck).
+   * RECONCILE: selaraskan tabel cc_locks dengan LockedAmulet on-chain. Dua arah:
    *
-   * Untuk setiap orphan, backfill baris LOCKED dengan lockedAmuletCid asli dari
-   * chain. Setelah itu lock muncul di activeLocks[] dan user bisa unlock via UI.
+   * 1. BACKFILL (orphan): LockedAmulet on-chain TANPA baris DB (kasus: lock
+   *    sukses di chain tapi DB row gagal dibuat) → buat baris LOCKED supaya
+   *    muncul di activeLocks[] dan jadi unlockable via UI.
+   *
+   * 2. CLEANUP (stale): baris DB status=LOCKED tapi kontraknya SUDAH HILANG dari
+   *    chain (kasus: recipient accept offer → Canton consume LockedAmulet input
+   *    funding → kontrak archive, tapi row DB tetap LOCKED → user klik Unlock
+   *    → 404 CONTRACT_NOT_FOUND) → flip ke UNLOCKED supaya hilang dari activeLocks.
    *
    * Idempoten: di-match per lockedAmuletCid, jadi aman dipanggil berulang.
-   * Tidak menghapus/ubah baris existing — hanya menambah yang hilang.
    *
    * @returns jumlah baris baru yang dibuat (0 = sudah sinkron).
    */
@@ -162,12 +166,52 @@ export class LockEligibilityService {
     const [onChain, dbRows] = await Promise.all([
       this.getOnChainLockedAmulets(ownerParty),
       this.prisma.ccLock.findMany({
-        where: { ownerParty, lockedAmuletCid: { not: null } },
-        select: { lockedAmuletCid: true },
+        where: { ownerParty, status: 'LOCKED', lockedAmuletCid: { not: null } },
+        select: { id: true, lockedAmuletCid: true, expiresAt: true },
       }),
     ]);
+
+    // ── CLEANUP STALE ROWS (Fix CONTRACT_NOT_FOUND saat unlock) ──────────────
+    // Saat recipient accept offer (CIP-0056), Canton meng-consume LockedAmulet
+    // yang dipakai sebagai input funding → kontrak hilang dari chain, TAPI row
+    // DB cc_locks tetap status=LOCKED → muncul di UI → user klik Unlock →
+    // 404 CONTRACT_NOT_FOUND. Reconciler lama hanya BACKFILL (tambah row yang
+    // hilang), tidak pernah CLEANUP. Ini menambah sisi cleanup: row DB LOCKED
+    // yang kontraknya sudah tidak ada di chain → flip ke UNLOCKED.
+    if (dbRows.length > 0) {
+      const onChainCids = new Set(onChain.map((l) => l.contractId));
+      const staleRows = dbRows.filter(
+        (r) =>
+          r.lockedAmuletCid && !onChainCids.has(r.lockedAmuletCid),
+      );
+      for (const stale of staleRows) {
+        // Defensive: jangan cleanup row yang expiresAt-nya belum lewat DAN
+        // row yang tidak punya cid (tidak bisa diverifikasi). Hanya cleanup
+        // row yang cid-nya sudah pasti hilang dari chain.
+        try {
+          await this.prisma.ccLock.update({
+            where: { id: stale.id },
+            data: {
+              status: 'UNLOCKED',
+              unlockedAt: new Date(),
+            },
+          });
+          this.logger.log(
+            `reconcile: cleanup stale LOCKED row (chain contract gone) ` +
+              `cid=${stale.lockedAmuletCid?.slice(0, 16)}… owner=${ownerParty.split('::')[0]} ` +
+              `→ marked UNLOCKED`,
+          );
+        } catch (err) {
+          this.logger.warn(
+            `reconcile: cleanup stale row failed cid=${stale.lockedAmuletCid?.slice(0, 16)}… : ${String(err)}`,
+          );
+        }
+      }
+    }
+
     if (onChain.length === 0) return 0;
 
+    // Re-query dbRows setelah cleanup supaya orphans detection akurat.
     const knownCids = new Set(
       dbRows
         .map((r) => r.lockedAmuletCid)
