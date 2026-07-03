@@ -67,6 +67,16 @@ type AuthedReq = Request & { user: { userId: string; email: string } };
 export class PartyController {
   private readonly logger = new Logger(PartyController.name);
 
+  /**
+   * In-memory mutex per-user untuk sendCc. Mencegah dua request konkuren
+   * (multi-tab / double-click cepat / scripted client) lewati balance check
+   * bersamaan lalu submit dua transfer. Request kedua yang masuk saat user
+   * masih punya transfer in-flight langsung ditolak 409.
+   * NOTE: scoped per-process — cukup untuk single-instance API. Kalau API
+   * di-scale multi-instance, ganti ke Redis SET NX.
+   */
+  private readonly sendCcInFlight = new Set<string>();
+
   /** Cooldown toggle preapproval: 1× per 7 hari (tiap re-enable burn ~1.5 CC). */
   private static readonly PREAPPROVAL_TOGGLE_COOLDOWN_MS =
     7 * 24 * 60 * 60 * 1000;
@@ -624,6 +634,20 @@ export class PartyController {
     // Gate kata sandi transaksi (opsional): wajib hanya bila user telah menetapkan satu.
     await this.walletPassword.assertGate(sender.id, body.walletPassword);
 
+    // Per-user mutex (Fix fund-safety #2): cegah dua transfer konkuren dari user
+    // yang sama (multi-tab / double-click cepat / scripted client dengan nonce
+    // beda). Tanpa ini, dua request bisa lewati balance check bersamaan lalu
+    // submit dua transfer → overdraft. commandId dedup (Fix #1) hanya cover
+    // nonce sama; lock ini cover nonce beda. try/finally menjamin release di
+    // SEMUA jalur keluar (throw, return, crash).
+    if (this.sendCcInFlight.has(sender.id)) {
+      throw new ConflictException(
+        'You have a transfer in progress. Please wait for it to complete.',
+      );
+    }
+    this.sendCcInFlight.add(sender.id);
+    try {
+
     // DTO (SendCcDto) already enforces: number, > 0, ≤ MAX_TRANSFER_CC, finite.
     const amount = Number(body.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -726,6 +750,7 @@ export class PartyController {
       receiverPartyId: recipientPartyId,
       amountCc: amount,
       description,
+      clientNonce: body.clientNonce, // dedup ledger — double-click jadi 1 transfer
     });
 
     if (cip56Result.ok) {
@@ -839,23 +864,39 @@ export class PartyController {
     // ── Step 3: Record + response ──────────────────────────────────────
     let transferTransactionId: string | undefined;
     if (accepted) {
-      const outRow = await this.users.recordTransaction({
-        userId: sender.id,
-        amountCc: amount,
-        type: 'TRANSFER_OUT',
-        description,
-        counterparty: recipientPartyId,
-        // ledgerTxId + cantonUpdateId = Canton update_id ("1220…") supaya link
-        // explorer langsung jalan tanpa lazy-fill.
-        ledgerTxId: ledgerTxId,
-        cantonUpdateId: ledgerTxId,
-      });
-      transferTransactionId = outRow.id;
-      if (ledgerTxId && sender.cantonPartyId) {
-        void this.txDetail.backfillUpdateId(
-          outRow.id,
-          ledgerTxId,
-          sender.cantonPartyId,
+      // Fund-safety #4: ledger SUDAH sukses (CC sudah keluar on-chain). Kalau
+      // recordTransaction throw (DB down), CC pergi tanpa audit trail. Bungkus
+      // agar: (a) tidak throw ke user seolah transfer gagal — transfer NYATA
+      // berhasil; (b) log ALERT kuat + data lengkap supaya bisa reconcile manual;
+      // (c) balance self-heal via cc-inbound-sync (≤30s). History row hilang =
+      // reconcile manual dari log ini + ledgerTxId.
+      try {
+        const outRow = await this.users.recordTransaction({
+          userId: sender.id,
+          amountCc: amount,
+          type: 'TRANSFER_OUT',
+          description,
+          counterparty: recipientPartyId,
+          // ledgerTxId + cantonUpdateId = Canton update_id ("1220…") supaya link
+          // explorer langsung jalan tanpa lazy-fill.
+          ledgerTxId: ledgerTxId,
+          cantonUpdateId: ledgerTxId,
+        });
+        transferTransactionId = outRow.id;
+        if (ledgerTxId && sender.cantonPartyId) {
+          void this.txDetail.backfillUpdateId(
+            outRow.id,
+            ledgerTxId,
+            sender.cantonPartyId,
+          );
+        }
+      } catch (err) {
+        this.logger.error(
+          `⚠️ AUDIT-TRAIL LOSS: ledger transfer SUCCEEDED but DB record failed. ` +
+            `sender=${sender.id} @${sender.username} amount=${amount} CC ` +
+            `recipient=${recipientLabel} ledgerTxId=${ledgerTxId ?? 'n/a'}. ` +
+            `CC LEFT on-chain; balance will self-heal via sync. HISTORY ROW MISSING — ` +
+            `reconcile manually from this log. Error: ${String(err)}`,
         );
       }
 
@@ -870,19 +911,28 @@ export class PartyController {
       }
 
       if (isInternalUser && recipientDbUser) {
-        await this.users.recordTransaction({
-          userId: recipientDbUser.id,
-          amountCc: amount,
-          type: 'TRANSFER_IN',
-          description: `Received from @${sender.username}${body.memo ? `: ${body.memo.trim()}` : ''}`,
-          counterparty:
-            normalizeCantonPartyId(sender.cantonPartyId) ??
-            sender.cantonPartyId,
-          // ledgerTxId + cantonUpdateId = Canton update_id ("1220…") — update
-          // yang sama dengan row sender (satu transfer = satu ledger update).
-          ledgerTxId: ledgerTxId,
-          cantonUpdateId: ledgerTxId,
-        });
+        try {
+          await this.users.recordTransaction({
+            userId: recipientDbUser.id,
+            amountCc: amount,
+            type: 'TRANSFER_IN',
+            description: `Received from @${sender.username}${body.memo ? `: ${body.memo.trim()}` : ''}`,
+            counterparty:
+              normalizeCantonPartyId(sender.cantonPartyId) ??
+              sender.cantonPartyId,
+            // ledgerTxId + cantonUpdateId = Canton update_id ("1220…") — update
+            // yang sama dengan row sender (satu transfer = satu ledger update).
+            ledgerTxId: ledgerTxId,
+            cantonUpdateId: ledgerTxId,
+          });
+        } catch (err) {
+          // Recipient row hilang kurang kritis — recipient balance self-heal
+          // via sync INCREASE branch. Tetap log supaya reconcile-aware.
+          this.logger.warn(
+            `Recipient TRANSFER_IN row failed (will self-heal via sync): ` +
+              `recipient=${recipientDbUser.id} ledgerTxId=${ledgerTxId ?? 'n/a'}: ${String(err)}`,
+          );
+        }
         if (recipientDbUser.username) {
           void this.inboundSync.alignBalanceFromChain(
             recipientDbUser.id,
@@ -897,18 +947,32 @@ export class PartyController {
 
     // ── Offer-only: return pending status (not an error) ─────────────────
     if (transferMethod === 'offer_only') {
-      const pendingRow = await this.users.recordTransaction({
-        userId: sender.id,
-        amountCc: amount,
-        type: 'TRANSFER_OUT',
-        description: `${description} [pending — recipient must accept offer]`,
-        counterparty: recipientPartyId,
-        ledgerTxId,
-        // Status PENDING: dana sudah keluar sebagai offer, tapi belum diterima
-        // receiver. Saat offer di-accept, acceptOfferInbox update ke COMPLETED.
-        status: 'PENDING',
-        transferInstructionCid: cip56Result.transferInstructionCid ?? null,
-      });
+      // Fund-safety #4: offer SUDAH dibuat on-chain. Bungkus DB write supaya
+      // kegagalan tidak tampak sebagai "transfer gagal" (offer nyata terbuat).
+      let pendingRowId: string | undefined;
+      try {
+        const pendingRow = await this.users.recordTransaction({
+          userId: sender.id,
+          amountCc: amount,
+          type: 'TRANSFER_OUT',
+          description: `${description} [pending — recipient must accept offer]`,
+          counterparty: recipientPartyId,
+          ledgerTxId,
+          // Status PENDING: dana sudah keluar sebagai offer, tapi belum diterima
+          // receiver. Saat offer di-accept, acceptOfferInbox update ke COMPLETED.
+          status: 'PENDING',
+          transferInstructionCid: cip56Result.transferInstructionCid ?? null,
+        });
+        pendingRowId = pendingRow.id;
+      } catch (err) {
+        this.logger.error(
+          `⚠️ AUDIT-TRAIL LOSS (offer): offer SUCCEEDED but DB record failed. ` +
+            `sender=${sender.id} @${sender.username} amount=${amount} CC ` +
+            `recipient=${recipientLabel} ledgerTxId=${ledgerTxId ?? 'n/a'} ` +
+            `instructionCid=${cip56Result.transferInstructionCid ?? 'n/a'}. ` +
+            `Reconcile manually. Error: ${String(err)}`,
+        );
+      }
       void this.inboundSync.alignBalanceFromChain(sender.id, sender.username);
       return {
         success: true,
@@ -922,7 +986,7 @@ export class PartyController {
         offerPending: true,
         offerContractId: ledgerTxId,
         message: `Transfer offer created for ${amount} CC to ${recipientLabel}. The recipient must accept this offer manually (different participant wallet). Offer ID: ${ledgerTxId?.slice(0, 20)}…`,
-        transactionId: pendingRow.id,
+        transactionId: pendingRowId,
       };
     }
 
@@ -962,6 +1026,10 @@ export class PartyController {
       message,
       transactionId: transferTransactionId,
     };
+    } finally {
+      // Fund-safety #2: wajib release lock di SEMUA jalur keluar (return/throw).
+      this.sendCcInFlight.delete(sender.id);
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

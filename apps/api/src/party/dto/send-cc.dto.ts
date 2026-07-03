@@ -45,4 +45,15 @@ export class SendCcDto {
   @IsString()
   @MaxLength(64)
   walletPassword?: string;
+
+  /**
+   * Idempotency nonce — UUID baru per klik Send. Dipakai untuk derive commandId
+   * ledger yang DETERMINISTIK sehingga double-click / retry / multi-tab yang kirim
+   * nonce sama di-dedup oleh Canton menjadi SATU transfer (bukan dua). Frontend
+   * wajib generate crypto.randomUUID() sekali per submit attempt.
+   */
+  @IsString()
+  @MinLength(8, { message: 'Idempotency nonce is required.' })
+  @MaxLength(64)
+  clientNonce!: string;
 }

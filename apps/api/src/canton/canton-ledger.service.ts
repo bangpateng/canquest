@@ -5,7 +5,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { KeycloakTokenService } from '../auth/keycloak-token.service';
 import {
   cantonPartyIdsEqual,
@@ -462,6 +462,13 @@ export class CantonLedgerService {
      * 'reward' → reward client (CC reward transfers — JOB_SEND_CC_REWARD, JOB_DISTRIBUTE_REWARD)
      */
     identity?: 'admin' | 'reward';
+    /**
+     * Idempotency nonce dari client (UUID per Send click). Kalau diset, commandId
+     * ledger jadi DETERMINISTIK (hash dari sender+receiver+amount+nonce) → Canton
+     * dedup dua submit dengan nonce sama menjadi SATU transfer. Mencegah double-send
+     * akibat retry/double-click/multi-tab. Wajib untuk operasi user-initiated (sendCc).
+     */
+    clientNonce?: string;
   }): Promise<{
     ok: boolean;
     updateId: string | null;
@@ -475,6 +482,7 @@ export class CantonLedgerService {
       amountCc,
       description,
       identity = 'admin',
+      clientNonce,
     } = params;
 
     // ── Step 1: Query sender's Amulet holdings for inputHoldingCids ──────
@@ -554,7 +562,16 @@ export class CantonLedgerService {
     const factoryInterfaceId =
       '#splice-api-token-transfer-instruction-v1:Splice.Api.Token.TransferInstructionV1:TransferFactory';
 
-    const commandId = `transfer-factory-${senderPartyId.slice(0, 12)}-${randomUUID().slice(0, 16)}`;
+    // commandId DETERMINISTIK kalau clientNonce diset → Canton dedup replay jadi 1 transfer.
+    // Tanpa nonce (reward/job path) fallback ke randomUUID (operasi background unik per run).
+    const commandId = clientNonce
+      ? `tf-${createHash('sha256')
+          .update(
+            `${senderPartyId}|${receiverPartyId}|${amountCc.toFixed(10)}|${clientNonce}`,
+          )
+          .digest('hex')
+          .slice(0, 32)}`
+      : `transfer-factory-${senderPartyId.slice(0, 12)}-${randomUUID().slice(0, 16)}`;
 
     this.logger.log(
       `TransferFactory_Transfer (CIP-0056): sender=${senderPartyId.split('::')[0]} → ` +

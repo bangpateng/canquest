@@ -132,6 +132,12 @@ export function WalletActions({
           recipientUsername: recipient,
           amount,
           memo: memo.trim() || undefined,
+          // Idempotency nonce: satu UUID per klik Send. Double-click / browser
+          // retry yang kirim nonce sama di-dedup backend + ledger jadi 1 transfer.
+          clientNonce:
+            typeof crypto !== "undefined" && crypto.randomUUID
+              ? crypto.randomUUID()
+              : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
           ...(password ? { walletPassword: password } : {}),
         }),
       });
