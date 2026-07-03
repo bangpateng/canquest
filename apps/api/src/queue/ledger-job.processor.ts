@@ -83,6 +83,33 @@ export class LedgerJobProcessor {
       `[Job ${job.id}] SendCcReward (CIP-0056): ${amountCc} CC → @${username} (attempt ${job.attemptsMade + 1})`,
     );
 
+    // ── Fund-safety #5: re-check guard (cegah double payout saat BullMQ retry) ──
+    // jobId dedup (cc-reward-${userId}-${referenceId}) blok re-enqueue, TAPI BullMQ
+    // retry internal (attempts:3) re-run job yang sama kalau throw. Tanpa guard ini,
+    // retry setelah DB-error bisa re-send CC (commandId random → tidak di-dedup ledger)
+    // → double payout. Cek apakah reward untuk quest/user ini sudah pernah tercatat.
+    if (referenceId) {
+      const alreadyPaid = await this.prisma.ccTransaction.findFirst({
+        where: {
+          userId,
+          type: 'QUEST_REWARD',
+          // referenceId quest disimpan di description (audit label), bukan kolom
+          // terpisah — match via ledgerTxId existence (reward sent = row exists).
+          ledgerTxId: { not: null },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, ledgerTxId: true },
+      });
+      if (alreadyPaid) {
+        this.logger.warn(
+          `[Job ${job.id}] ⚠️ SKIP double-payout: reward untuk @${username} ` +
+            `sudah tercatat (txId=${alreadyPaid.ledgerTxId?.slice(0, 16) ?? 'n/a'}). ` +
+            `BullMQ retry di-skip — CC tidak dikirim ulang.`,
+        );
+        return; // job selesai sukses, tidak re-send CC
+      }
+    }
+
     // Validator party sends the reward
     const validatorPartyId =
       this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ?? '';
@@ -118,31 +145,51 @@ export class LedgerJobProcessor {
       );
     }
 
-    // Step 3: catat transaksi ke DB
-    await this.users.recordTransaction({
-      userId,
-      amountCc,
-      type: 'QUEST_REWARD',
-      description,
-      ledgerTxId,
-      cantonUpdateId: cip56Result.updateId ?? undefined,
-    });
+    // Step 3: catat transaksi ke DB.
+    // ── Fund-safety #5: JANGAN throw kalau DB write gagal setelah CC sudah terkirim.
+    // Throw akan trigger BullMQ retry → re-send CC (commandId random → double payout).
+    // Bungkus: log AUDIT-TRAIL LOSS + tetap anggap job sukses supaya tidak retry.
+    // Balance self-heal via cc-inbound-sync; history row reconcile manual dari log.
+    try {
+      await this.users.recordTransaction({
+        userId,
+        amountCc,
+        type: 'QUEST_REWARD',
+        description,
+        ledgerTxId,
+        cantonUpdateId: cip56Result.updateId ?? undefined,
+      });
+    } catch (err) {
+      this.logger.error(
+        `[Job ${job.id}] ⚠️ AUDIT-TRAIL LOSS: reward CC SUDAH terkirim tapi DB record gagal. ` +
+          `user=${userId} @${username} amount=${amountCc} CC ledgerTxId=${ledgerTxId.slice(0, 16)}… ` +
+          `TIDAK throw (cegah retry double-payout). Balance self-heal via sync. ` +
+          `History row MISSING — reconcile manual. Error: ${String(err)}`,
+      );
+      // Sengaja tidak throw — CC sudah pergi, retry hanya akan double-payout.
+    }
 
     if (referenceId && this.questLedger.isConfigured()) {
-      const completion = await this.prisma.questCompletion.findUnique({
-        where: { userId_questId: { userId, questId: referenceId } },
-        select: { ledgerRewardId: true },
-      });
-      if (completion?.ledgerRewardId) {
-        const marked = await this.questLedger.markRewardClaimed({
-          rewardContractId: completion.ledgerRewardId,
-          payoutTxId: ledgerTxId,
+      try {
+        const completion = await this.prisma.questCompletion.findUnique({
+          where: { userId_questId: { userId, questId: referenceId } },
+          select: { ledgerRewardId: true },
         });
-        if (!marked.ok) {
-          this.logger.warn(
-            `[Job ${job.id}] QuestReward mark claimed: ${marked.errors.join(' | ')}`,
-          );
+        if (completion?.ledgerRewardId) {
+          const marked = await this.questLedger.markRewardClaimed({
+            rewardContractId: completion.ledgerRewardId,
+            payoutTxId: ledgerTxId,
+          });
+          if (!marked.ok) {
+            this.logger.warn(
+              `[Job ${job.id}] QuestReward mark claimed: ${marked.errors.join(' | ')}`,
+            );
+          }
         }
+      } catch (err) {
+        this.logger.warn(
+          `[Job ${job.id}] markRewardClaimed failed (non-blocking): ${String(err)}`,
+        );
       }
     }
 
@@ -197,27 +244,45 @@ export class LedgerJobProcessor {
       }
 
       if (ccSent && ledgerTxId) {
-        await this.users.recordTransaction({
-          userId,
-          amountCc,
-          type: 'QUEST_REWARD',
-          description: `Quest winner reward: ${questId}`,
-          ledgerTxId,
-          cantonUpdateId: cip56Result.updateId ?? undefined,
-        });
+        // ── Fund-safety #6: JANGAN throw kalau DB write gagal setelah CC terkirim.
+        // Throw → BullMQ retry → re-send CC (commandId random) → double payout.
+        try {
+          await this.users.recordTransaction({
+            userId,
+            amountCc,
+            type: 'QUEST_REWARD',
+            description: `Quest winner reward: ${questId}`,
+            ledgerTxId,
+            cantonUpdateId: cip56Result.updateId ?? undefined,
+          });
+        } catch (err) {
+          this.logger.error(
+            `[Job ${job.id}] ⚠️ AUDIT-TRAIL LOSS: distribute reward CC SUDAH terkirim tapi DB record gagal. ` +
+              `draw=${drawId} user=${userId} amount=${amountCc} CC ledgerTxId=${ledgerTxId.slice(0, 16)}… ` +
+              `TIDAK throw (cegah retry double-payout). Error: ${String(err)}`,
+          );
+        }
       }
     }
 
-    // Update WinnerDraw record
+    // ── Fund-safety #6: conditional update — hanya flip distributed=true kalau belum.
+    // Plain update() menimpa apapun nilainya → retry bisa re-flip yang sudah distributed.
+    // updateMany WHERE distributed:false = atomic conditional → hanya 1 job yang berhasil.
     // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-    await (this.prisma as any).winnerDraw.update({
-      where: { id: drawId },
+    const upd = await (this.prisma as any).winnerDraw.updateMany({
+      where: { id: drawId, distributed: false },
       data: {
         distributed: true,
         ledgerTxId: ledgerTxId ?? undefined,
         distributedAt: new Date(),
       },
     });
+    if (upd.count === 0) {
+      this.logger.warn(
+        `[Job ${job.id}] ⚠️ draw=${drawId} already distributed — skip (cegah double-payout).`,
+      );
+      return; // sudah distributed job lain/retry sebelumnya → jangan lanjut
+    }
 
     this.logger.log(
       `[Job ${job.id}] ✅ draw=${drawId} distributed ccSent=${String(ccSent)} ` +
