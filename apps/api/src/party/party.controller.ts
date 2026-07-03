@@ -1357,7 +1357,17 @@ export class PartyController {
     }
 
     if (settledOwnReward === 0) {
-      // Transfer masuk dari pihak lain (bukan reward pending kita) → catat TRANSFER_IN.
+      // (legacy branch) Reward pending kita TIDAK ditemukan → lanjut catat
+      // TRANSFER_IN untuk penerima di bawah.
+    }
+
+    // ── PENERIMA selalu dapat history TRANSFER_IN saat accept (Fix UX) ──
+    // Sebelumnya: recordTransaction TRANSFER_IN hanya jalan kalau
+    // settledOwnReward === 0. Tapi markTransferInstructionSettled match row
+    // PENDING global (milik SENDER, via transferInstructionCid) → return >0 →
+    // blok ini di-skip → PENERIMA tidak dapat history. Cegah double via unique
+    // constraint @@unique([userId, ledgerTxId]), bukan via settledOwnReward.
+    {
       // Bila lookupOfferDetail gagal (amountCc = 0), coba tebus nilai asli dari
       // delta balance on-chain supaya history tidak menampilkan "Received 0 CC".
       let resolvedAmount = amountCc;
@@ -1387,20 +1397,28 @@ export class PartyController {
 
       const kindLabel =
         offerType === OfferType.TRANSFER_INSTRUCTION ? 'CIP-0056' : 'legacy';
-      await this.users.recordTransaction({
-        userId: user.id,
-        amountCc: resolvedAmount,
-        type: 'TRANSFER_IN',
-        description:
-          resolvedAmount > 0
-            ? `Received ${resolvedAmount} CC${senderLabel ? ` from ${senderLabel}` : ''}`
-            : `Accepted incoming ${kindLabel} transfer`,
-        counterparty: senderLabel || undefined,
-        // Preferensi Canton update_id ("1220…") untuk link explorer; fallback
-        // contract_id (cid) bila ledger response tidak ter-parse.
-        ledgerTxId: updateId ?? cid,
-        cantonUpdateId: updateId ?? undefined,
-      });
+      try {
+        await this.users.recordTransaction({
+          userId: user.id,
+          amountCc: resolvedAmount,
+          type: 'TRANSFER_IN',
+          description:
+            resolvedAmount > 0
+              ? `Received ${resolvedAmount} CC${senderLabel ? ` from ${senderLabel}` : ''}`
+              : `Accepted incoming ${kindLabel} transfer`,
+          counterparty: senderLabel || undefined,
+          // Preferensi Canton update_id ("1220…") untuk link explorer; fallback
+          // contract_id (cid) bila ledger response tidak ter-parse.
+          ledgerTxId: updateId ?? cid,
+          cantonUpdateId: updateId ?? undefined,
+        });
+      } catch (err) {
+        // Unique constraint (P2002) = row sudah ada (idempotent retry) → OK.
+        // Error lain = audit-trail loss untuk penerima; balance self-heal via sync.
+        this.logger.warn(
+          `Recipient TRANSFER_IN on accept failed (cid=${cid.slice(0, 16)}…): ${String(err)}`,
+        );
+      }
     }
 
     if (user.username) {
@@ -1479,7 +1497,13 @@ export class PartyController {
           `markTransferInstructionSettled REJECTED failed: ${String(err)}`,
         );
       }
-      if (settledOwnReward === 0) {
+      // ── PENERIMA selalu dapat history OFFER_REJECTED saat reject (Fix UX) ──
+      // Sebelumnya: recordTransaction OFFER_REJECTED hanya jalan kalau
+      // settledOwnReward === 0. Tapi markTransferInstructionSettled match row
+      // PENDING global (milik SENDER) → return >0 → blok di-skip → PENERIMA
+      // tidak dapat history reject. Cegah double via unique constraint
+      // @@unique([userId, ledgerTxId]), bukan via settledOwnReward.
+      try {
         await this.users.recordTransaction({
           userId: user.id,
           amountCc: 0, // reject tidak menggerakkan saldo receiver
@@ -1490,6 +1514,10 @@ export class PartyController {
           ledgerTxId: result.updateId ?? cid,
           cantonUpdateId: result.updateId ?? undefined,
         });
+      } catch (err) {
+        this.logger.warn(
+          `Recipient OFFER_REJECTED on reject failed (cid=${cid.slice(0, 16)}…): ${String(err)}`,
+        );
       }
       return {
         ok: true,
@@ -1537,7 +1565,13 @@ export class PartyController {
           `markTransferInstructionSettled REJECTED (legacy) failed: ${String(err)}`,
         );
       }
-      if (settledOwnReward === 0) {
+      // ── PENERIMA selalu dapat history OFFER_REJECTED saat reject (Fix UX) ──
+      // Sebelumnya: recordTransaction OFFER_REJECTED hanya jalan kalau
+      // settledOwnReward === 0. Tapi markTransferInstructionSettled match row
+      // PENDING global (milik SENDER) → return >0 → blok di-skip → PENERIMA
+      // tidak dapat history reject. Cegah double via unique constraint
+      // @@unique([userId, ledgerTxId]), bukan via settledOwnReward.
+      try {
         await this.users.recordTransaction({
           userId: user.id,
           amountCc: 0, // reject tidak menggerakkan saldo receiver
@@ -1548,6 +1582,10 @@ export class PartyController {
           ledgerTxId: result.updateId ?? cid,
           cantonUpdateId: result.updateId ?? undefined,
         });
+      } catch (err) {
+        this.logger.warn(
+          `Recipient OFFER_REJECTED on reject failed (cid=${cid.slice(0, 16)}…): ${String(err)}`,
+        );
       }
       return {
         ok: true,
@@ -2046,7 +2084,13 @@ export class PartyController {
         `markTransferInstructionSettled (legacy) failed: ${String(err)}`,
       );
     }
-    if (settledOwnReward === 0) {
+    // ── PENERIMA selalu dapat history TRANSFER_IN saat accept (Fix UX) ──
+    // Sebelumnya: recordTransaction TRANSFER_IN hanya jalan kalau
+    // settledOwnReward === 0. Tapi markTransferInstructionSettled match row
+    // PENDING global (milik SENDER) → return >0 → blok di-skip → PENERIMA
+    // tidak dapat history. Cegah double via unique constraint
+    // @@unique([userId, ledgerTxId]), bukan via settledOwnReward.
+    try {
       await this.users.recordTransaction({
         userId: user.id,
         amountCc,
@@ -2057,7 +2101,12 @@ export class PartyController {
             : 'Accepted incoming transfer',
         counterparty: senderLabel || undefined,
         ledgerTxId: result.updateId ?? contractId,
+        cantonUpdateId: result.updateId ?? undefined,
       });
+    } catch (err) {
+      this.logger.warn(
+        `Recipient TRANSFER_IN on legacy accept failed (cid=${contractId.slice(0, 16)}…): ${String(err)}`,
+      );
     }
 
     if (user.username) {
@@ -2145,7 +2194,11 @@ export class PartyController {
         `markTransferInstructionSettled (legacy reject) failed: ${String(err)}`,
       );
     }
-    if (settledOwnReward === 0) {
+    // ── PENERIMA selalu dapat history OFFER_REJECTED saat reject (Fix UX) ──
+    // Lihat catatan di acceptOfferInbox: markTransferInstructionSettled match
+    // row PENDING global (milik SENDER) → return >0 → blok lama di-skip →
+    // PENERIMA tidak dapat history reject. Cegah double via unique constraint.
+    try {
       await this.users.recordTransaction({
         userId: user.id,
         amountCc: 0,
@@ -2154,7 +2207,12 @@ export class PartyController {
           `Rejected incoming transfer${senderLabel ? ` from ${senderLabel}` : ''}` +
           (amountCc > 0 ? ` (${amountCc} CC)` : ''),
         ledgerTxId: result.updateId ?? contractId,
+        cantonUpdateId: result.updateId ?? undefined,
       });
+    } catch (err) {
+      this.logger.warn(
+        `Recipient OFFER_REJECTED on legacy reject failed (cid=${contractId.slice(0, 16)}…): ${String(err)}`,
+      );
     }
 
     this.logger.log(
