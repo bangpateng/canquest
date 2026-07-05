@@ -14,6 +14,7 @@ import { TransactionDetailService } from './transaction-detail.service';
 import { QuestLedgerService } from './quest-ledger.service';
 import { LockEligibilityService } from './lock-eligibility.service';
 import { ModoApiService } from './modo-api.service';
+import { OfferReconcilerService } from './offer-reconciler.service';
 
 /**
  * CantonModule wires together:
@@ -40,6 +41,7 @@ import { ModoApiService } from './modo-api.service';
     WalletOnboardingService,
     LockEligibilityService,
     ModoApiService,
+    OfferReconcilerService,
   ],
   exports: [
     CantonLedgerService,
@@ -52,6 +54,7 @@ import { ModoApiService } from './modo-api.service';
     WalletOnboardingService,
     LockEligibilityService,
     ModoApiService,
+    OfferReconcilerService,
   ],
 })
 export class CantonModule {}
