@@ -15,19 +15,36 @@ interface MaintenanceStatus {
   estimatedEnd: string | null;
 }
 
-const POLL_INTERVAL_MS = 15_000;
+/**
+ * Interval saat maintenance AKTIF — butuh deteksi "maintenance selesai"
+ * dengan cepat supaya user bisa lanjut begitu admin mematikan.
+ */
+const POLL_WHEN_ACTIVE_MS = 15_000;
+
+/**
+ * Interval saat maintenance NONAKTIF — tidak perlu cek terus. Backend akan
+ * kirim 503 saat maintenance diaktifkan, yang memicu event `cq:maintenance`
+ * dari apiFetch → gate cek 1x instan. Jadi polling lama hanya safety-net.
+ *
+ * 5 menit = 1 function invocation per user per 5 menit (vs 4/menit sebelumnya).
+ */
+const POLL_WHEN_IDLE_MS = 5 * 60 * 1000;
 
 /**
  * Gate reaktif mode maintenance.
  *
  * Dipasang di <Providers>, jadi aktif di seluruh app. Saat maintenance ON:
- *   - Polling GET /api/public/maintenance tiap 15s.
- *   - Dengarkan event `cq:maintenance` dari apiFetch (503) → tampil INSTAN.
+ *   - GET /api/public/maintenance tiap 15s (deteksi "selesai" cepat).
+ * Saat maintenance OFF:
+ *   - Backoff ke polling tiap 5 menit (bukan 15s) → hemat Vercel function invocations.
+ *
+ * Reaktivitas INSTAN tetap jalan via event `cq:maintenance` dari apiFetch:
+ * saat backend kirim 503, event dispatch → gate cek 1x → overlay tampil.
  *   - Render overlay full-screen yang memblokir SEMUA interaksi.
  *   - No-op di path /admin (admin panel tetap hidup untuk recovery).
  *
  * Catatan: ini lapisan UX. Penegakan keamanan ada di backend (MaintenanceGuard 503).
- * Untuk direct URL/refresh, middleware.ts men-rewrite ke /maintenance (anti-flash).
+ * Para direct URL/refresh, middleware.ts men-rewrite ke /maintenance (anti-flash).
  */
 export function MaintenanceGate() {
   const pathname = usePathname();
@@ -48,19 +65,44 @@ export function MaintenanceGate() {
     }
 
     let cancelled = false;
-    const controller = new AbortController();
+    let controller: AbortController | null = null;
+    let timer: number | null = null;
+
+    const scheduleNext = (delayMs: number) => {
+      if (timer !== null) window.clearTimeout(timer);
+      timer = window.setTimeout(async () => {
+        await check();
+      }, delayMs);
+    };
 
     const check = async () => {
+      if (cancelled) return;
+      controller?.abort();
+      controller = new AbortController();
       try {
         const res = await fetch("/api/public/maintenance", {
           cache: "no-store",
           signal: controller.signal,
         });
-        if (!res.ok) return;
+        if (!res.ok) {
+          // Network error / non-200 → jangan spam, idle poll.
+          scheduleNext(POLL_WHEN_IDLE_MS);
+          return;
+        }
         const data = (await res.json()) as MaintenanceStatus;
-        if (!cancelled) setStatus(data.enabled ? data : null);
+        if (cancelled) return;
+        if (data.enabled) {
+          setStatus(data);
+          // Maintenance AKTIF → cek sering supaya deteksi "selesai" cepat.
+          scheduleNext(POLL_WHEN_ACTIVE_MS);
+        } else {
+          setStatus(null);
+          // Maintenance NONAKTIF → backoff ke idle (event cq:maintenance yang
+          // akan kasih sinyal instan saat admin mengaktifkan lagi).
+          scheduleNext(POLL_WHEN_IDLE_MS);
+        }
       } catch {
-        /* ignore — polling berikutnya / event handler */
+        if (!cancelled) scheduleNext(POLL_WHEN_IDLE_MS);
       }
     };
 
@@ -71,13 +113,12 @@ export function MaintenanceGate() {
     window.addEventListener("cq:maintenance", onEvent);
 
     void check();
-    const timer = window.setInterval(check, POLL_INTERVAL_MS);
 
     return () => {
       cancelled = true;
-      controller.abort();
+      controller?.abort();
+      if (timer !== null) window.clearTimeout(timer);
       window.removeEventListener("cq:maintenance", onEvent);
-      window.clearInterval(timer);
     };
   }, [isAdmin]);
 
