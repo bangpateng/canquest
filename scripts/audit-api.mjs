@@ -48,24 +48,17 @@ if (!BASE || (!TOKEN && (!EMAIL || !PASSWORD))) {
 }
 
 // ── GET endpoints that are SAFE to auto-hit (read-only, no side effects) ──────
-// Path uses literal [param] placeholders; the script substitutes them below.
+// NOTE: only endpoints that exist on the BACKEND (Nest). BFF-only Next.js route
+// handlers (e.g. /api/auth/session, /api/me, /api/party/cc-price) are NOT here
+// because they 404 when hit directly on the backend — they only exist behind
+// the Vercel/Next proxy. To audit those, point --base at the web frontend.
 const SAFE_GET_ENDPOINTS = [
-  // Auth & session
-  '/api/auth/session',
-  '/api/config/public',
+  // Backend-only
   '/api/public/maintenance',
-
-  // User / profile
-  '/api/me',
-  '/api/points',
-  '/api/referral',
-  '/api/leaderboard',
   '/api/twitter/status',
 
   // Party / wallet (require wallet)
   '/api/party/balance',
-  '/api/party/cc-price',
-  '/api/party/cc-price-history',
   '/api/party/fee-config',
   '/api/party/ledger-status',
   '/api/party/lock-status',
@@ -76,7 +69,6 @@ const SAFE_GET_ENDPOINTS = [
   '/api/party/preapproval-status',
   '/api/party/transactions',
   '/api/party/transactions/onchain',
-  '/api/party/username',
   '/api/party/wallet-access',
 
   // Quests (read-only)
