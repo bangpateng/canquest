@@ -137,19 +137,27 @@ async function login() {
     body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
   });
   const elapsed = Date.now() - t0;
+  const text = await res.text();
+  let body = {};
+  try { body = text ? JSON.parse(text) : {}; } catch { body = { raw: text }; }
+
+  // Backend returns token in body JSON: { accessToken: "..." } OR { access_token: "..." }
+  // Some setups also set cq_access cookie. Try body first, fallback to cookie.
+  const tokenFromBody =
+    body.accessToken || body.access_token || body.token || body.jwt;
   const setCookie = res.headers.get('set-cookie') || '';
-  // Extract cq_access cookie value
-  const match = setCookie.match(/cq_access=([^;]+)/);
-  if (!match) {
-    const body = await res.text();
+  const cookieMatch = setCookie.match(/cq_access=([^;]+)/);
+
+  const token = tokenFromBody || (cookieMatch ? cookieMatch[1] : null);
+  if (!token) {
     console.error(
-      red(`✗ Login failed (${res.status}) in ${elapsed}ms — no cq_access cookie.`),
+      red(`✗ Login failed (${res.status}) in ${elapsed}ms — no token in response.`),
     );
-    console.error(gray(`   Response: ${truncate(body, 200)}`));
+    console.error(gray(`   Response: ${truncate(text, 200)}`));
     process.exit(2);
   }
-  console.log(green(`✓ Login OK in ${elapsed}ms — cookie captured.`));
-  return match[1];
+  console.log(green(`✓ Login OK in ${elapsed}ms — token captured.`));
+  return token;
 }
 
 async function hit(path, token) {
