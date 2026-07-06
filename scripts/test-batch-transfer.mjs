@@ -157,7 +157,7 @@ async function login() {
 async function getHoldings(token, partyId) {
   console.log(`\n📦 Querying holdings for ${partyId.split('::')[0]}…`);
   // Get ledger end offset first
-  const endRes = await postJson(`${LEDGER_API}/v2/state ledger-end`, {}, token);
+  const endRes = await postJson(`${LEDGER_API}/v2/state/ledger-end`, {}, token);
   const offset = endRes.data?.offset ?? '0';
 
   const body = {
@@ -176,15 +176,22 @@ async function getHoldings(token, partyId) {
   const res = await postJson(`${LEDGER_API}/v2/state/active-contracts`, body, token, 20_000);
   if (!res.ok) throw new Error(`ACS query failed ${res.status}: ${res.text.slice(0, 200)}`);
   const arr = Array.isArray(res.data) ? res.data : [];
+
+  // Filter PERSIS seperti queryAmuletHoldingsRaw di backend:
+  //  - templateId endsWith ':Splice.Amulet:Amulet'
+  //  - createArgument.owner === partyId
+  //  - amount.initialAmount = nominal (string numeric)
   const holdings = [];
   for (const entry of arr) {
     const ce = entry?.contractEntry?.JsActiveContract?.createdEvent ?? entry;
     const tpl = typeof ce?.templateId === 'string' ? ce.templateId : '';
-    if (!tpl.includes(':Splice.Amulet:Amulet') || tpl.includes('LockedAmulet')) continue;
+    if (!tpl.endsWith(':Splice.Amulet:Amulet')) continue;
     const arg = ce?.createArgument ?? {};
-    const cid = ce?.contractId;
-    const amt = arg?.amount?.initialAmount ?? arg?.initialAmount ?? '0';
-    if (cid) holdings.push({ contractId: cid, amount: parseFloat(amt) || 0 });
+    const owner = typeof arg.owner === 'string' ? arg.owner : '';
+    if (owner !== partyId) continue; // ← filter owner, ini yang hilang
+    const cid = typeof ce?.contractId === 'string' ? ce.contractId : null;
+    const amtStr = arg?.amount?.initialAmount ?? '0';
+    if (cid) holdings.push({ contractId: cid, amount: parseFloat(amtStr) || 0 });
   }
   holdings.sort((a, b) => b.amount - a.amount);
   console.log(`✓ Found ${holdings.length} holding(s). Total: ${holdings.reduce((s, h) => s + h.amount, 0).toFixed(6)} CC`);
