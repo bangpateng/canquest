@@ -44,6 +44,33 @@ function parseArgs(argv) {
 }
 const args = parseArgs(process.argv.slice(2));
 
+// ── Load .env file langsung (hindari export shell yang error pada value spasi) ─
+function loadEnvFile(filePath) {
+  try {
+    const fs = require('fs');
+    const content = fs.readFileSync(filePath, 'utf8');
+    for (const line of content.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx === -1) continue;
+      const key = trimmed.slice(0, eqIdx).trim();
+      let val = trimmed.slice(eqIdx + 1).trim();
+      // Strip surrounding quotes ("..." or '...')
+      if ((val.startsWith('"') && val.endsWith('"')) ||
+          (val.startsWith("'") && val.endsWith("'"))) {
+        val = val.slice(1, -1);
+      }
+      if (key && !(key in process.env)) {
+        process.env[key] = val;
+      }
+    }
+  } catch {
+    // .env tidak ditemukan — skip, andalkan env var eksplisit.
+  }
+}
+loadEnvFile(args.env ?? '/var/www/canquest/apps/api/.env');
+
 const SENDER = args.sender;
 const RECEIVER = args.receiver;
 const FEE_PARTY = args.fee;
