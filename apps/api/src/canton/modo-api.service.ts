@@ -12,7 +12,7 @@ import { ConfigService } from '@nestjs/config';
  *
  * Env:
  *   MODO_API_URL=https://api.modo.link/canton-mainnet   (base, TANPA /v1)
- *   MODO_API_KEY=<api key>                              (header x-api-key)
+ *   MODO_API_KEY=<api key>                              (header X-API-Key)
  *
  * Fail-soft: every fetch returns null on HTTP error / non-OK so callers can
  * degrade gracefully (empty list, null explorer link) instead of throwing.
@@ -160,13 +160,13 @@ export class ModoApiService {
     return update && update.startsWith('1220') ? update : null;
   }
 
-  /** Shared GET with x-api-key, 12s timeout, fail-soft → null. */
+  /** Shared GET with X-API-Key, 12s timeout, fail-soft → null. */
   private async getJson<T>(url: string): Promise<T | null> {
     try {
       const res = await fetch(url, {
         method: 'GET',
         headers: {
-          ...(this.apiKey ? { 'x-api-key': this.apiKey } : {}),
+          ...(this.apiKey ? { 'X-API-Key': this.apiKey } : {}),
           'Content-Type': 'application/json',
         },
         signal: AbortSignal.timeout(12_000),
