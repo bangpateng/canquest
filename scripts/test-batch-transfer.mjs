@@ -77,22 +77,34 @@ const FEE_PARTY = args.fee;
 const AMOUNT_CC = parseFloat(args.amount ?? '0.001');
 
 const KEYCLOAK_URL = process.env.KEYCLOAK_URL;
-const LEDGER_API = process.env.LEDGER_API;
-const VALIDATOR_API = process.env.VALIDATOR_API;
+const LEDGER_API = process.env.LEDGER_API_URL ?? process.env.LEDGER_API;
+const VALIDATOR_API = process.env.CANTON_VALIDATOR_URL ?? process.env.VALIDATOR_API;
 const CLIENT_ID = process.env.LEDGER_CLIENT_ID ?? 'validator-app-backend';
 const CLIENT_SECRET = process.env.LEDGER_CLIENT_SECRET;
 const ADMIN_USER = process.env.LEDGER_API_ADMIN_USER;
 const DSO_PARTY = process.env.CANTON_DSO_PARTY_ID;
 const SCAN_BASE = process.env.CANTON_SCAN_URL
-  ?? (VALIDATOR_API ? `${VALIDATOR_API}/v0/scan-proxy` : null);
+  ?? (VALIDATOR_API ? `${VALIDATOR_API}/api/validator/v0/scan-proxy` : null);
 
 if (!SENDER || !RECEIVER || !FEE_PARTY) {
   console.error('Usage: test-batch-transfer.mjs --sender <p> --receiver <p> --fee <p> [--amount 0.001]');
   process.exit(1);
 }
-if (!KEYCLOAK_URL || !LEDGER_API || !CLIENT_SECRET || !ADMIN_USER || !DSO_PARTY || !SCAN_BASE) {
-  console.error('Missing env vars. Need: KEYCLOAK_URL, LEDGER_API, LEDGER_CLIENT_SECRET,');
-  console.error('LEDGER_API_ADMIN_USER, CANTON_DSO_PARTY_ID, (CANTON_SCAN_URL or VALIDATOR_API).');
+const missing = [];
+if (!KEYCLOAK_URL) missing.push('KEYCLOAK_URL');
+if (!LEDGER_API) missing.push('LEDGER_API_URL');
+if (!CLIENT_SECRET) missing.push('LEDGER_CLIENT_SECRET');
+if (!ADMIN_USER) missing.push('LEDGER_API_ADMIN_USER');
+if (!DSO_PARTY) missing.push('CANTON_DSO_PARTY_ID');
+if (!SCAN_BASE) missing.push('CANTON_SCAN_URL or CANTON_VALIDATOR_URL');
+if (missing.length > 0) {
+  console.error(`\n❌ Missing env vars: ${missing.join(', ')}`);
+  console.error(`   .env path: ${args.env ?? '/var/www/canquest/apps/api/.env'}`);
+  console.error('\n   Cek isi .env Anda:');
+  for (const m of missing) {
+    const val = process.env[m] ?? '(not set)';
+    console.error(`     ${m} = ${m.includes('SECRET') ? '<hidden>' : val}`);
+  }
   process.exit(1);
 }
 
