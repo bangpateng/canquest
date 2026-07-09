@@ -18,7 +18,7 @@ export interface OnChainLockedAmulet {
 }
 
 /**
- * CC Lock eligibility (non-custodial) — Spec CC Lock CanQuest.
+ * CC Lock eligibility — Spec CC Lock CanQuest.
  *
  * Menentukan tier user dari jumlah CC terkunci on-chain:
  *   - ≥ {LOCK_TIER_FULL}  (default 30) → FULL  (boleh ikut Earn)

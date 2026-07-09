@@ -2228,7 +2228,7 @@ export class PartyController {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // CC LOCK (non-custodial) — Spec CC Lock CanQuest
+  // CC LOCK — Spec CC Lock CanQuest (CC stays owned by user's party; returned at expiry)
   // ownerParty di-resolve dari user login (JANGAN terima ownerParty mentah dari body).
   // ═══════════════════════════════════════════════════════════════════════════
 

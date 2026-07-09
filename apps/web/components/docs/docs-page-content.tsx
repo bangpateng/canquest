@@ -101,7 +101,7 @@ const LANDING_SECTIONS = [
   {
     anchor: "#lock",
     title: "Lock (how it works)",
-    description: "The non-custodial CC lock mechanic that unlocks Full access and Earn campaigns.",
+    description: "The CC lock mechanic that unlocks Full access and Earn campaigns — your CC stays in your wallet.",
   },
   {
     anchor: "#app",
@@ -256,7 +256,7 @@ export function DocsPageContent() {
 
         <DocsSection id="cc-lock" title="CC Lock & Earn access">
           <p>
-            The heart of CanQuest is a <strong className="font-medium text-[var(--foreground)]">non-custodial CC lock</strong>.
+            The heart of CanQuest is a <strong className="font-medium text-[var(--foreground)]">CC lock that keeps your funds in your wallet</strong>.
             You commit CC from your own wallet to prove intent and unlock access to partner
             campaigns — your funds are never taken away.
           </p>

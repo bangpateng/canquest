@@ -11,7 +11,7 @@ const FLOW = [
   {
     icon: Lock,
     title: "Lock CC or redeem points",
-    body: `Lock ${LOCK_TIER_FULL} CC from your wallet, or redeem points — your choice, set per event. CC stays yours the whole time: non-custodial, returned in full when you unlock.`,
+    body: `Lock ${LOCK_TIER_FULL} CC from your wallet, or redeem points — your choice, set per event. CC stays yours the whole time — locked in your wallet and returned in full when you unlock.`,
   },
   {
     icon: Sparkles,
@@ -32,7 +32,7 @@ export function LockSection() {
         eyebrow="How it works"
         title=""
         align="center"
-        description="How users earn access to partner campaigns. A non-custodial commitment (or points) that verifies genuine interest — set per event."
+        description="How users earn access to partner campaigns. A commitment of your own CC (or points) that verifies genuine interest — set per event."
         className="mb-8 md:mb-10"
       />
 
@@ -125,7 +125,7 @@ export function LockSection() {
         <p className="mt-5 flex items-start gap-2 rounded-xl border border-dashed border-[var(--border)] bg-[var(--muted)]/30 px-4 py-3 text-xs leading-relaxed text-[var(--muted-foreground)]">
           <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-canton" aria-hidden />
           <span>
-            <strong className="font-medium text-[var(--foreground)]">Non-custodial.</strong>{" "}
+            <strong className="font-medium text-[var(--foreground)]">Your CC stays yours.</strong>{" "}
             Your CC is never transferred away — it is locked in your own wallet and returned in
             full when the term ends. A small network holding fee applies while locked.
           </span>

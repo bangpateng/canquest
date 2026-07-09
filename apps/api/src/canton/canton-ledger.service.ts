@@ -2856,7 +2856,8 @@ export class CantonLedgerService {
   }
 
   // ============================================================
-  // CC LOCK (non-custodial) — self-lock via native LockedAmulet
+  // CC LOCK — self-lock via native LockedAmulet (CC stays owned by the user's party;
+  // returned in full at expiry). Note: wallet custody is operator-managed (custodial).
   // Coin tetap milik owner; hanya kembali ke owner setelah expiresAt.
   // ============================================================
 
