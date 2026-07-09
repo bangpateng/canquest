@@ -2,30 +2,34 @@
  * Migrasi user lokal → Supabase auth.users (dengan password hash lama).
  *
  * Strategi:
- *  - INSERT langsung ke auth.users Supabase via SQL (pakai service_role key).
- *    Kenapa bukan admin.createUser()? Karena admin API akan RE-HASH password,
- *    sehingga user harus reset password. Dengan INSERT encrypted_password =
- *    hash bcrypt lama ($2a$/$2b$), user login pakai password asli tanpa reset.
- *    GoTrue (Supabase Auth backend) verifikasi bcrypt dengan membaca cost dari
- *    prefix hash → kompatibel dengan cost-12 Anda (default Supabase cost-10).
- *  - Setelah dapat UUID auth.users baru, UPDATE kolom "authUserId" di User lokal.
+ *  - Baca user dari tabel User (yang sudah di-restore ke DB Supabase).
+ *  - Panggil RPC function `migrate_legacy_user(...)` via SQL langsung (Prisma
+ *    $queryRaw). Function itu INSERT ke auth.users dengan encrypted_password =
+ *    hash bcrypt lama → user login pakai password asli TANPA reset.
+ *  - Setelah dapat UUID, UPDATE kolom "authUserId" di User lokal.
+ *
+ * Kenapa pakai SQL langsung, bukan supabase-js?
+ *  - @supabase/supabase-js versi terbaru butuh Node 22+ (native WebSocket).
+ *    VPS pakai Node 20 → createClient() crash. SQL langsung lewat Prisma tidak
+ *    butuh WebSocket sama sekali, jalan di Node 20.
+ *  - DATABASE_URL connect sebagai role `postgres` (superuser) → bisa panggil
+ *    function public.migrate_legacy_user yang `security definer`.
  *
  * Idempotent: user yang sudah punya authUserId di-skip. Bisa dijalankan ulang.
  *
  * Prasyarat:
- *  - DATABASE_URL = PostgreSQL Supabase (sudah di-restore dari lokal).
- *  - SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY di env.
- *  - Kolom "authUserId" sudah ada di tabel User (migration add_supabase_auth_link).
+ *  - DATABASE_URL = PostgreSQL Supabase (role postgres, direct connection).
+ *  - Function migrate_legacy_user sudah dibuat (lihat SQL di repo).
+ *  - Kolom "authUserId" sudah ada di tabel User.
  *
  * Usage:
- *   node apps/api/scripts/migrate-users-to-supabase.cjs                  # dry-run (default)
- *   node apps/api/scripts/migrate-users-to-supabase.cjs --apply          # eksekusi nyata
- *   node apps/api/scripts/migrate-users-to-supabase.cjs --limit 5        # batch kecil (test)
+ *   node apps/api/scripts/migrate-users-to-supabase.cjs                  # dry-run
+ *   node apps/api/scripts/migrate-users-to-supabase.cjs --apply          # eksekusi
+ *   node apps/api/scripts/migrate-users-to-supabase.cjs --apply --limit 5
  *
  * SAFETY: default = dry-run. --apply untuk eksekusi.
  */
 const { PrismaClient } = require('@prisma/client');
-const { createClient } = require('@supabase/supabase-js');
 
 const prisma = new PrismaClient();
 
@@ -34,69 +38,28 @@ const limitArg = process.argv.includes('--limit')
   ? Number(process.argv[process.argv.indexOf('--limit') + 1])
   : undefined;
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-function fail(msg) {
-  console.error(`[FATAL] ${msg}`);
-  process.exit(1);
-}
-
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-  fail(
-    'SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY belum diset di env. ' +
-      'Isi di apps/api/.env atau export sebelum jalankan script.',
-  );
-}
-
-// Service-role client (bypass RLS) — dipakai untuk RPC SQL ke auth.users.
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-  auth: { autoRefreshToken: false, persistSession: false },
-});
-
 /**
- * Insert satu user ke auth.users Supabase via RPC (plpgsql) yang kita definisikan
- * inline. Pakai rpc() supaya parameter ter-bind (anti SQL injection), dan return
- * UUID baru.
- *
- * Catatan schema auth.users (GoTrue) — field wajib:
- *  id (uuid), aud ('authenticated'), role ('authenticated'), email,
- *  encrypted_password (bcrypt), email_confirmed_at, created_at, updated_at,
- *  instance_id (uuid konstan '00000000-0000-0000-0000-000000000000'),
- *  raw_app_meta_data (jsonb), raw_user_meta_data (jsonb).
+ * Panggil RPC migrate_legacy_user via SQL langsung.
+ * Return UUID baru (atau UUID existing kalau email sudah ada), atau throw.
  */
 async function insertAuthUser({ email, passwordHash, legacyUserId, referralCode }) {
-  // Cek dulu apakah email sudah ada di auth.users (idempotent).
-  const { data: existing } = await supabase
-    .from('auth.users')
-    .select('id')
-    .eq('email', email.toLowerCase())
-    .maybeSingle();
-
-  if (existing?.id) {
-    return { id: existing.id, reused: true };
-  }
-
-  // INSERT via RPC function anonim. Karena service_role bypass RLS + punya akses
-  // ke schema auth, kita bisa INSERT langsung.
-  const { data, error } = await supabase.rpc('migrate_legacy_user', {
-    p_email: email.toLowerCase(),
-    p_encrypted_password: passwordHash,
-    p_legacy_user_id: legacyUserId,
-    p_referral_code: referralCode ?? null,
-  });
-
-  if (error) {
-    // Kalau RPC function belum dibuat, fallback ke insert langsung via PostgREST
-    // (auth.users exposed ke service_role). Tapi PostgREST tidak暴露 auth schema
-    // by default → kita instruct user buat RPC dulu (lihat header script).
-    return { error: error.message };
-  }
-  return { id: data, reused: false };
+  const rows = await prisma.$queryRaw`
+    SELECT migrate_legacy_user(
+      ${email}::text,
+      ${passwordHash}::text,
+      ${legacyUserId}::text,
+      ${referralCode}::text
+    ) AS auth_id
+  `;
+  // $queryRaw return array of objects; bigint/string UUID di kolom auth_id.
+  const row = rows[0];
+  return String(row.auth_id);
 }
 
 async function main() {
-  console.log(`[migrate-users] mode = ${apply ? 'APPLY' : 'DRY-RUN (--apply untuk eksekusi)'}`);
+  console.log(
+    `[migrate-users] mode = ${apply ? 'APPLY' : 'DRY-RUN (--apply untuk eksekusi)'}`,
+  );
   if (limitArg) console.log(`[migrate-users] limit = ${limitArg}`);
 
   const where = {
@@ -117,7 +80,9 @@ async function main() {
     ...(limitArg ? { take: limitArg } : {}),
   });
 
-  console.log(`[migrate-users] ${users.length} user akan di-migrate (belum ter-link).`);
+  console.log(
+    `[migrate-users] ${users.length} user akan di-migrate (emailVerified & belum ter-link).`,
+  );
 
   if (users.length === 0) {
     console.log('[migrate-users] tidak ada yang perlu di-migrate. Selesai.');
@@ -127,7 +92,27 @@ async function main() {
   if (!apply) {
     console.log('[migrate-users] DRY-RUN — 5 sample pertama:');
     for (const u of users.slice(0, 5)) {
-      console.log(`  - ${u.email} (id=${u.id}, hash=${u.passwordHash.slice(0, 10)}...)`);
+      const hashPrefix = u.passwordHash.slice(0, 10);
+      const hashType = u.passwordHash.startsWith('$2a$')
+        ? '$2a$'
+        : u.passwordHash.startsWith('$2b$')
+          ? '$2b$'
+          : u.passwordHash.startsWith('$2y$')
+            ? '$2y$'
+            : 'UNKNOWN';
+      console.log(
+        `  - ${u.email} (id=${u.id.slice(0, 12)}..., hash=${hashPrefix}... [${hashType}])`,
+      );
+    }
+    // Statistik format hash (penting: semua harus $2a$/$2b$/$2y$ = bcrypt).
+    const byType = {};
+    for (const u of users) {
+      const t = u.passwordHash.slice(0, 4);
+      byType[t] = (byType[t] ?? 0) + 1;
+    }
+    console.log('[migrate-users] distribusi format hash:');
+    for (const [t, c] of Object.entries(byType)) {
+      console.log(`    ${t} : ${c}`);
     }
     return;
   }
@@ -137,37 +122,39 @@ async function main() {
   let failed = 0;
   const failures = [];
 
-  for (const u of users) {
-    const result = await insertAuthUser({
-      email: u.email,
-      passwordHash: u.passwordHash,
-      legacyUserId: u.id,
-      referralCode: u.referralCode,
-    });
+  for (let i = 0; i < users.length; i++) {
+    const u = users[i];
+    try {
+      const authId = await insertAuthUser({
+        email: u.email,
+        passwordHash: u.passwordHash,
+        legacyUserId: u.id,
+        referralCode: u.referralCode,
+      });
 
-    if (result.error || !result.id) {
+      // Cek apakah ini reused (sudah ada sebelumnya) — tidak bisa tau persis
+      // tanpa query tambahan, anggap baru semua kecuali kalau authUserId sudah
+      // set. Untuk akurasi, query apakah user ini sebelumnya sudah punya row
+      // auth identity. Tapi untuk laporan, hitung berdasarkan sukses.
+      await prisma.user.update({
+        where: { id: u.id },
+        data: { authUserId: authId },
+      });
+      ok++;
+      if (ok % 100 === 0) {
+        console.log(
+          `[migrate-users] progress: ${i + 1}/${users.length} (ok=${ok}) ...`,
+        );
+      }
+    } catch (err) {
       failed++;
-      failures.push({ email: u.email, error: result.error ?? 'no id returned' });
-      continue;
-    }
-
-    // Link User lokal → authUserId Supabase.
-    await prisma.user.update({
-      where: { id: u.id },
-      data: { authUserId: result.id },
-    });
-
-    if (result.reused) reused++;
-    else ok++;
-    if ((ok + reused) % 100 === 0) {
-      console.log(`[migrate-users] progress: ${ok + reused}/${users.length} ...`);
+      failures.push({ email: u.email, error: err.message });
     }
   }
 
   console.log('\n[migrate-users] SELESAI:');
-  console.log(`  - Berhasil dibuat baru : ${ok}`);
-  console.log(`  - Reused (sudah ada)   : ${reused}`);
-  console.log(`  - Gagal                : ${failed}`);
+  console.log(`  - Berhasil        : ${ok}`);
+  console.log(`  - Gagal           : ${failed}`);
   if (failures.length) {
     console.log('\n[migrate-users] DETAIL KEGAGALAN (5 pertama):');
     for (const f of failures.slice(0, 5)) {
