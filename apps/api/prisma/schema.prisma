@@ -18,6 +18,10 @@ model User {
   displayName             String?
   /// Relative path under uploads root, e.g. avatars/{userId}.jpg
   avatarPath              String?
+  /// UUID dari auth.users Supabase (sumber otentikasi setelah migrasi).
+  /// JWT Supabase berisi `sub` = UUID ini; JwtStrategy resolve ke User.id (cuid) via kolom ini.
+  /// Nullable selama transisi (user lama belum di-link, user baru diisi saat register).
+  authUserId              String?  @unique
   passwordHash            String
   inviteCode              String?
   /// Unique code this user shares for friend referrals (e.g. CQ8X4K2M).

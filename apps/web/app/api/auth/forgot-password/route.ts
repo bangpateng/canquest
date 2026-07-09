@@ -1,10 +1,18 @@
 import { postJsonParse } from '@/lib/api/internal-api-url';
 import { clientIpFromRequest, verifyTurnstileToken } from '@/lib/api/turnstile';
+import { isSupabaseAuthEnabled } from '@/lib/supabase/config';
+import { getSupabaseServerClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
 /**
- * Forgot-password BFF — verifies Turnstile, then forwards to Nest.
- * Nest always replies generically (anti-enumeration); we pass it through unchanged.
+ * Forgot-password BFF.
+ *
+ * Mode Supabase: supabase.auth.resetPasswordForEmail() mengirim email reset
+ * bawaan Supabase (anti-enumerasi: Supabase tetap balas generic kalau email
+ * tidak ada). Redirect URL di-set di dashboard Supabase Auth config.
+ * Mode legacy: forward ke Nest /auth/forgot-password (anti-enumerasi generic).
+ *
+ * Selalu verifikasi Turnstile dulu (anti-bot) di kedua mode.
  */
 export async function POST(req: Request) {
   let body: { email?: string; turnstileToken?: string };
@@ -20,10 +28,23 @@ export async function POST(req: Request) {
   );
   if (!captcha.ok) return captcha.response;
 
-  const { turnstileToken: _t, ...nestBody } = body;
+  const email = body.email?.trim().toLowerCase();
+  if (!email) {
+    return NextResponse.json({ message: 'Email required' }, { status: 400 });
+  }
+
+  if (isSupabaseAuthEnabled()) {
+    const supabase = await getSupabaseServerClient();
+    await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${process.env.NEXT_PUBLIC_WEB_ORIGIN ?? ''}/reset-password`,
+    });
+    // Selalu balas generic (anti-enumerasi), terlepas apakah email ada.
+    return NextResponse.json({ ok: true });
+  }
+
   const { res, data } = await postJsonParse<Record<string, unknown>>(
     '/auth/forgot-password',
-    nestBody,
+    { email },
   );
   // Always forward as-is; Nest response is intentionally generic.
   return NextResponse.json(data, { status: res.ok ? 200 : res.status });

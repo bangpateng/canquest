@@ -92,6 +92,14 @@ export class UsersService {
     return this.prisma.user.findUnique({ where: { username: normalized } });
   }
 
+  /**
+   * Lookup User by UUID auth.users Supabase.
+   * Dipakai JwtStrategy mode Supabase untuk resolve `sub` (UUID) → User.id (cuid).
+   */
+  findByAuthUserId(authUserId: string) {
+    return this.prisma.user.findUnique({ where: { authUserId } });
+  }
+
   /** Case-insensitive username lookup (Send CC / party resolve). */
   findByUsernameInsensitive(username: string) {
     return this.prisma.user.findFirst({
@@ -150,6 +158,8 @@ export class UsersService {
   async create(params: {
     email: string;
     passwordHash: string;
+    /** UUID auth.users Supabase — diisi saat register via Supabase Auth. */
+    authUserId?: string | null;
     displayName?: string | null;
     inviteCode?: string;
     referredById?: string | null;
@@ -163,7 +173,11 @@ export class UsersService {
     return this.prisma.user.create({
       data: {
         email: params.email,
+        // passwordHash tetap diisi (legacy field) untuk kompatibilitas rollback;
+        // akan di-drop di Phase 6 cleanup. Saat register via Supabase Auth, hash
+        // password sebenarnya disimpan di auth.users Supabase, bukan di sini.
         passwordHash: params.passwordHash,
+        authUserId: params.authUserId ?? null,
         displayName: params.displayName ?? null,
         inviteCode: params.inviteCode ?? null,
         referredById: params.referredById ?? null,
@@ -174,6 +188,14 @@ export class UsersService {
         twitterAvatarUrl: params.twitterAvatarUrl ?? null,
         twitterConnectedAt: params.twitterConnectedAt ?? null,
       },
+    });
+  }
+
+  /** Link User lokal ke UUID auth.users Supabase (dipakai saat import 2k user). */
+  linkAuthUserId(userId: string, authUserId: string) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { authUserId },
     });
   }
 

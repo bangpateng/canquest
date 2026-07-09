@@ -9,6 +9,7 @@ import { AuthModule } from './auth/auth.module';
 import { CantonModule } from './canton/canton.module';
 import { PartyModule } from './party/party.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { SupabaseModule } from './supabase/supabase.module';
 import { QuestsModule } from './quests/quests.module';
 import { AdminModule } from './admin/admin.module';
 import { LedgerIndexerModule } from './ledger-indexer/ledger-indexer.module';
@@ -40,6 +41,7 @@ const resolveApiEnvPaths = (): string[] => [
     ThrottlerModule.forRoot(throttlerConfig),
     // ── Core modules ─────────────────────────────────────────────
     PrismaModule,
+    SupabaseModule, // @Global: SupabaseService (service_role client) untuk Auth
     AuthModule,
     CantonModule,
     PartyModule,
