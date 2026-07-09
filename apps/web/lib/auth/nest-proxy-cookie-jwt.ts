@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 import { CQ_ACCESS_COOKIE } from '@/lib/auth/auth-cookies';
 import { internalApiBase } from '@/lib/api/internal-api-url';
+import { getSupabaseConfig } from '@/lib/supabase/config';
 
 async function upstreamToNext(upstream: Response): Promise<NextResponse> {
   const text = await upstream.text();
@@ -19,14 +20,37 @@ export type NestProxyOptions = {
   upstreamTimeoutMs?: number;
 };
 
-/** Forward to Nest `/api/**` using `cq_access` as Bearer JWT (Route Handlers only). */
+/**
+ * Ambil access token dari request untuk dikirim sebagai Bearer ke Nest.
+ *
+ * Urutan prioritas:
+ *  1. Supabase access token dari cookie `sb-*-access-token` (mode Supabase).
+ *  2. Legacy `cq_access` cookie (mode HS256 / rollback / user belum re-login).
+ *
+ * Token Supabase diverifikasi JwtStrategy di Nest (mode SUPABASE_AUTH_ENABLED=true);
+ * token legacy diverifikasi JwtStrategy HS256 (mode false). Nest dispatch berdasarkan
+ * flag-nya sendiri, jadi kedua token bisa hidup berdampingan selama transisi.
+ */
+function extractAccessToken(req: NextRequest): string | null {
+  const config = getSupabaseConfig();
+  if (config) {
+    const supabaseCookie = req.cookies
+      .getAll()
+      .find((c) => c.name.startsWith('sb-') && c.name.includes('access-token'));
+    if (supabaseCookie?.value) return supabaseCookie.value;
+  }
+  // Fallback legacy (selama transisi / mode rollback).
+  return req.cookies.get(CQ_ACCESS_COOKIE)?.value ?? null;
+}
+
+/** Forward to Nest `/api/**` using Supabase/legacy access token as Bearer JWT (Route Handlers only). */
 export async function nestWithAccessCookie(
   req: NextRequest,
   pathSuffix: string,
   init: RequestInit,
   options?: NestProxyOptions,
 ): Promise<NextResponse> {
-  const token = req.cookies.get(CQ_ACCESS_COOKIE)?.value;
+  const token = extractAccessToken(req);
   if (!token) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   }
