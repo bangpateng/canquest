@@ -64,7 +64,7 @@ async function main() {
 
   const where = {
     emailVerified: true,
-    passwordHash: { not: null },
+    NOT: { passwordHash: null },
     authUserId: null,
   };
   const users = await prisma.user.findMany({
