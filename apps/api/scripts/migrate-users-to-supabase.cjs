@@ -62,12 +62,14 @@ async function main() {
   );
   if (limitArg) console.log(`[migrate-users] limit = ${limitArg}`);
 
+  // passwordHash didefinisikan non-null di schema Prisma, jadi tidak bisa di-
+  // filter untuk null via Prisma API. Filter di JS setelah fetch (skip hash
+  // kosong / non-bcrypt). Ambil semua emailVerified & belum ter-link.
   const where = {
     emailVerified: true,
-    NOT: { passwordHash: null },
     authUserId: null,
   };
-  const users = await prisma.user.findMany({
+  const rawUsers = await prisma.user.findMany({
     where,
     select: {
       id: true,
@@ -80,8 +82,25 @@ async function main() {
     ...(limitArg ? { take: limitArg } : {}),
   });
 
+  // Filter di JS: hanya hash bcrypt valid ($2a$/$2b$/$2y$) minimal 50 char.
+  const BCRYPT_RE = /^\$2[aby]\$\d{2}\$.{50,}$/;
+  const users = rawUsers.filter((u) => {
+    const h = u.passwordHash;
+    if (!h || typeof h !== 'string') return false;
+    return BCRYPT_RE.test(h);
+  });
+  const skipped = rawUsers.length - users.length;
+
   console.log(
-    `[migrate-users] ${users.length} user akan di-migrate (emailVerified & belum ter-link).`,
+    `[migrate-users] ${rawUsers.length} user emailVerified & belum ter-link.`,
+  );
+  if (skipped > 0) {
+    console.log(
+      `[migrate-users] ${skipped} user di-SKIP (passwordHash kosong/non-bcrypt).`,
+    );
+  }
+  console.log(
+    `[migrate-users] ${users.length} user akan di-migrate (hash bcrypt valid).`,
   );
 
   if (users.length === 0) {
