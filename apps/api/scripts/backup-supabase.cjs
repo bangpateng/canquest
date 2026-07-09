@@ -78,12 +78,19 @@ function main() {
   const fullPath = path.join(OUTPUT_DIR, fileName);
   const start = Date.now();
 
+  // Supabase (PostgreSQL 17) butuh pg_dump v17+ untuk menghindari version mismatch
+  // ("server version: 17.6; pg_dump version: 16.x"). Cek path v17 dulu, fallback
+  // ke pg_dump default di PATH (yang mungkin v16 — akan gagal untuk Supabase).
+  const PG_DUMP_V17 = '/usr/lib/postgresql/17/bin/pg_dump';
+  const pgDumpBin = fs.existsSync(PG_DUMP_V17) ? PG_DUMP_V17 : 'pg_dump';
+
   console.log(`[backup] mulai → ${fullPath}`);
+  console.log(`[backup] pg_dump: ${pgDumpBin}`);
 
   try {
     // pg_dump custom format: kompresi built-in, support selective restore.
     execFileSync(
-      'pg_dump',
+      pgDumpBin,
       [
         DATABASE_URL,
         '--format=custom',
