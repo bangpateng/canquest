@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { CQ_ACCESS_COOKIE } from '@/lib/auth/auth-cookies';
 import { internalApiBase } from '@/lib/api/internal-api-url';
 import { getSupabaseConfig } from '@/lib/supabase/config';
+import { getSupabaseServerClient } from '@/lib/supabase/server';
 
 async function upstreamToNext(upstream: Response): Promise<NextResponse> {
   const text = await upstream.text();
@@ -24,20 +25,29 @@ export type NestProxyOptions = {
  * Ambil access token dari request untuk dikirim sebagai Bearer ke Nest.
  *
  * Urutan prioritas:
- *  1. Supabase access token dari cookie `sb-*-access-token` (mode Supabase).
+ *  1. Supabase access token — via getSession() dari @supabase/ssr server client.
+ *     Kenapa getSession(), bukan baca cookie manual?
+ *     @supabase/ssr menyimpan session di cookie `sb-<ref>-auth-token` dalam
+ *     format base64-encoded JSON (atau ter-chunk jadi sb-...-auth-token.0/.1/...).
+ *     getSession() menangani decode + reassemble semua itu dengan benar.
  *  2. Legacy `cq_access` cookie (mode HS256 / rollback / user belum re-login).
  *
- * Token Supabase diverifikasi JwtStrategy di Nest (mode SUPABASE_AUTH_ENABLED=true);
- * token legacy diverifikasi JwtStrategy HS256 (mode false). Nest dispatch berdasarkan
- * flag-nya sendiri, jadi kedua token bisa hidup berdampingan selama transisi.
+ * Token Supabase diverifikasi JwtStrategy di Nest (JWKS ES256); token legacy
+ * diverifikasi JwtStrategy HS256. Nest dispatch berdasarkan alg token.
  */
-function extractAccessToken(req: NextRequest): string | null {
+async function extractAccessToken(req: NextRequest): Promise<string | null> {
   const config = getSupabaseConfig();
   if (config) {
-    const supabaseCookie = req.cookies
-      .getAll()
-      .find((c) => c.name.startsWith('sb-') && c.name.includes('access-token'));
-    if (supabaseCookie?.value) return supabaseCookie.value;
+    try {
+      // Pakai server client yang baca cookie dari Next cookie store.
+      const supabase = await getSupabaseServerClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session?.access_token) return session.access_token;
+    } catch {
+      // getSession gagal (mis. cookie corrupt) → fall through ke legacy.
+    }
   }
   // Fallback legacy (selama transisi / mode rollback).
   return req.cookies.get(CQ_ACCESS_COOKIE)?.value ?? null;
@@ -50,7 +60,7 @@ export async function nestWithAccessCookie(
   init: RequestInit,
   options?: NestProxyOptions,
 ): Promise<NextResponse> {
-  const token = extractAccessToken(req);
+  const token = await extractAccessToken(req);
   if (!token) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   }

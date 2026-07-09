@@ -46,10 +46,11 @@ async function isMaintenanceOn(request: NextRequest): Promise<boolean> {
 /** True bila user memiliki session aktif (Supabase sb-* cookie ATAU legacy cq_access). */
 function hasSession(request: NextRequest): boolean {
   if (isSupabaseAuthEnabled()) {
-    // Supabase cookie format: sb-<project-ref>-access-token
+    // @supabase/ssr menyimpan session di cookie `sb-<ref>-auth-token`
+    // (bisa ter-chunk jadi sb-...-auth-token.0/.1/...). Cek prefix sb- + auth-token.
     const hasSupabase = request.cookies
       .getAll()
-      .some((c) => c.name.startsWith('sb-') && c.name.includes('access-token'));
+      .some((c) => c.name.startsWith('sb-') && c.name.includes('auth-token'));
     // Legacy fallback selama transisi (user yang belum re-login).
     return hasSupabase || request.cookies.has(CQ_ACCESS_COOKIE);
   }
