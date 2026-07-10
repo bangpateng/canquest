@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { useCcBalance } from "@/lib/hooks/use-cc-balance";
 import { useTokenPrices } from "@/lib/hooks/use-token-prices";
 import { isRealCantonPartyId } from "@/lib/auth/wallet-session-cache";
 import { formatPartyIdForDisplay } from "@/lib/canton/canton-party-id";
@@ -41,22 +40,16 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
   const hasWallet = isRealCantonPartyId(me.cantonPartyId);
   const displayPartyId = formatPartyIdForDisplay(me.cantonPartyId);
 
-  const {
-    balance: ccBalance,
-    loading: ccLoading,
-    refresh: fetchCcBalance,
-    refreshWithRetries,
-  } = useCcBalance({ enabled: hasWallet, pollIntervalMs: 90_000 });
-
   // Harga semua token dari Cantex DEX (rate vs USDCx = USD anchor).
   const { prices: tokenPrices } = useTokenPrices();
 
-  // Token list dari Cantex pools + saldo off-chain.
+  // Token list + SEMUA saldo (CC + non-CC) dari satu endpoint swap/balances.
   const [swapTokens, setSwapTokens] = useState<SwapToken[]>([]);
   const [tokenBalances, setTokenBalances] = useState<Record<string, string>>(
     {},
   );
-  const [tokensLoading, setTokensLoading] = useState(false);
+  const [ccBalance, setCcBalance] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
 
   // CC price: cari "Amulet::admin" di price map (setelah swapTokens load).
   const ccInstrumentKey = swapTokens.find((t) => t.isCC);
@@ -66,7 +59,7 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
   const ccUsd = ccKey ? tokenPrices[ccKey] ?? 0 : 0;
 
   const loadTokens = useCallback(async () => {
-    setTokensLoading(true);
+    setLoading(true);
     try {
       const [poolsRes, balRes] = await Promise.all([
         fetch("/api/party/swap/pools", { credentials: "include" }),
@@ -79,11 +72,12 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
       if (balRes.ok) {
         const bal = (await balRes.json()) as BalancesResponse;
         setTokenBalances(bal.tokens ?? {});
+        setCcBalance(bal.cc ?? 0);
       }
     } catch {
       /* non-fatal — token cards tetap render pakai saldo 0 */
     } finally {
-      setTokensLoading(false);
+      setLoading(false);
     }
   }, []);
 
@@ -92,14 +86,12 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
   }, [hasWallet, loadTokens]);
 
   const handleRefresh = useCallback(() => {
-    refreshWithRetries();
     void loadTokens();
     onRefresh?.();
-  }, [refreshWithRetries, loadTokens, onRefresh]);
+  }, [loadTokens, onRefresh]);
 
   // Total USD value = CC value + semua token non-CC value (Cantex prices).
-  const ccValue =
-    !ccLoading && ccUsd > 0 && ccBalance !== null ? ccBalance * ccUsd : 0;
+  const ccValue = ccUsd > 0 && ccBalance !== null ? ccBalance * ccUsd : 0;
   let tokenNonCcValue = 0;
   for (const t of swapTokens) {
     if (t.isCC) continue;
@@ -132,12 +124,12 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
           </span>
           <button
             type="button"
-            onClick={() => void fetchCcBalance()}
-            disabled={ccLoading}
+            onClick={handleRefresh}
+            disabled={loading}
             className="rounded-xl p-2.5 text-slate-400 transition-all duration-200 hover:bg-white/[0.06] hover:text-slate-100 disabled:opacity-40"
             aria-label="Refresh balance"
           >
-            {ccLoading ? (
+            {loading ? (
               <LoadingSpinner size="sm" tone="muted" />
             ) : (
               <RefreshCw className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -147,7 +139,7 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
 
         <div className="relative">
           <p className="relative text-3xl font-extrabold tabular-nums leading-none tracking-tight text-white sm:text-4xl md:text-5xl glow-text">
-            {ccLoading ? (
+            {loading ? (
               <span className="text-slate-500">—</span>
             ) : (
               <>
@@ -174,7 +166,7 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
           <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500">
             My Tokens
           </h2>
-          {tokensLoading && (
+          {loading && (
             <LoadingSpinner size="sm" tone="muted" />
           )}
         </div>
@@ -183,7 +175,7 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
           <TokenCard
             symbol="Amulet"
             balance={
-              ccLoading ? "—" : (ccBalance?.toFixed(4) ?? "0.0000")
+              loading ? "—" : (ccBalance?.toFixed(4) ?? "0.0000")
             }
             fiatValue={ccValue > 0 ? `$${ccFiatStr}` : undefined}
             onClick={() => router.push(ROUTES.walletToken("cc"))}
