@@ -690,6 +690,22 @@ function logoFileName(symbol: string): string {
   return display.toLowerCase().replace(/[^a-z0-9]/g, "-");
 }
 
+/** API origin untuk upload proxy (sama pattern dengan cc-reward-logo). */
+function apiOrigin(): string {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+  if (apiUrl) {
+    try {
+      return new URL(apiUrl).origin;
+    } catch {
+      /* fall through */
+    }
+  }
+  return (
+    process.env.NEXT_PUBLIC_API_ORIGIN?.replace(/\/$/, "") ??
+    "https://api.canquest.cc"
+  );
+}
+
 function TokenLogo({
   symbol,
   size = "md",
@@ -700,7 +716,8 @@ function TokenLogo({
   const [imgError, setImgError] = useState(false);
   const letter = displayName(symbol).charAt(0).toUpperCase();
   const dim = size === "sm" ? "h-6 w-6 text-[11px]" : "h-8 w-8 text-sm";
-  const src = `/tokens/${logoFileName(symbol)}.png`;
+  // Logo dari R2 via API proxy: /api/uploads/token-logo/<symbol>
+  const src = `${apiOrigin()}/api/uploads/token-logo/${logoFileName(symbol)}`;
 
   // Coba gambar dulu; kalau gagal load → fallback gradient circle.
   if (!imgError) {

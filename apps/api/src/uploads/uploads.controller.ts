@@ -68,6 +68,35 @@ export class UploadsController {
     return new StreamableFile(asset.stream);
   }
 
+  /**
+   * Token logo untuk Swap modal — stream dari R2 key `tokens/<symbol>.png`.
+   * Symbol di-normalisasi (lowercase, display name mapping CC↔Amulet).
+   * 404 kalau logo belum di-upload → FE fallback ke gradient circle.
+   */
+  @Get('token-logo/:symbol')
+  @Throttle({ default: { limit: 120, ttl: 60_000 } })
+  async serveTokenLogo(
+    @Param('symbol') symbol: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    // Sanitize: hanya alphanumeric + dash.
+    const clean = symbol.toLowerCase().replace(/[^a-z0-9-]/g, '');
+    if (!clean || clean.length > 64) {
+      throw new NotFoundException();
+    }
+    const key = `tokens/${clean}.png`;
+    const asset = await this.storage.getQuestAssetStream(key);
+    if (!asset) {
+      throw new NotFoundException();
+    }
+    res.set({
+      'Content-Type': asset.contentType,
+      'Cache-Control': 'public, max-age=86400',
+      'Cross-Origin-Resource-Policy': 'cross-origin',
+    });
+    return new StreamableFile(asset.stream);
+  }
+
   /** Stream quest banner/logo from Cloudflare R2 (works even when r2.dev public URL is misconfigured). */
   @Get('quests/:filename')
   @SkipThrottle()
