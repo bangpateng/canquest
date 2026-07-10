@@ -69,9 +69,10 @@ export class UploadsController {
   }
 
   /**
-   * Token logo untuk Swap modal — stream dari R2 key `tokens/<symbol>.png`.
+   * Token logo untuk Swap modal — stream dari R2 key `tokens/<symbol>.<ext>`.
    * Symbol di-normalisasi (lowercase, display name mapping CC↔Amulet).
-   * 404 kalau logo belum di-upload → FE fallback ke gradient circle.
+   * Coba beberapa format berurutan: webp → png → jpg → gif.
+   * 404 kalau tidak ada satupun → FE fallback ke gradient circle.
    */
   @Get('token-logo/:symbol')
   @Throttle({ default: { limit: 120, ttl: 60_000 } })
@@ -84,8 +85,14 @@ export class UploadsController {
     if (!clean || clean.length > 64) {
       throw new NotFoundException();
     }
-    const key = `tokens/${clean}.png`;
-    const asset = await this.storage.getQuestAssetStream(key);
+    // Coba format dalam urutan preferensi (webp paling kecil, png lossless).
+    const exts = ['webp', 'png', 'jpg', 'jpeg', 'gif'];
+    let asset: { stream: NodeJS.ReadableStream; contentType: string } | null =
+      null;
+    for (const ext of exts) {
+      asset = await this.storage.getQuestAssetStream(`tokens/${clean}.${ext}`);
+      if (asset) break;
+    }
     if (!asset) {
       throw new NotFoundException();
     }
