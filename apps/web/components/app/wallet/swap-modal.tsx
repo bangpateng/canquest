@@ -684,10 +684,11 @@ function SwapCard({
 // dengan huruf pertama. Next.js Image TIDAK dipakai disini supaya onError
 // fallback cepat (no blur placeholder) untuk token yang belum punya logo.
 
-/** Normalize symbol ke nama file (CC & Amulet → cc, TokenX → tokenx). */
+/** Sanitize symbol ke nama file — PRESERVE CASE (match R2 upload as-is).
+ * EDELx → EDELx, cETH → cETH, CC → CC. Hanya strip special chars. */
 function logoFileName(symbol: string): string {
   const display = displayName(symbol);
-  return display.toLowerCase().replace(/[^a-z0-9]/g, "-");
+  return display.replace(/[^a-zA-Z0-9]/g, "-");
 }
 
 /** API origin untuk upload proxy (sama pattern dengan cc-reward-logo). */
