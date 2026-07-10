@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, RefreshCw, Lock } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -15,6 +15,12 @@ import { CcLockModal } from "./cc-lock-modal";
 import { TransactionsView } from "./transactions-view";
 import { TokenLogo, displayName } from "./token-logo";
 import { ROUTES } from "@/lib/routing/app-routes";
+
+interface SwapToken {
+  instrumentId: string;
+  instrumentAdmin: string;
+  isCC?: boolean;
+}
 
 interface TokenDetailViewProps {
   tokenId: string;
@@ -50,6 +56,46 @@ export function TokenDetailView({ tokenId, me }: TokenDetailViewProps) {
   const [txRefreshKey, setTxRefreshKey] = useState(0);
   const [lockOpen, setLockOpen] = useState(false);
 
+  // Non-CC token: resolve instrument asli + saldo off-chain.
+  const [tokenInfo, setTokenInfo] = useState<SwapToken | null>(null);
+  const [tokenBalance, setTokenBalance] = useState<number>(0);
+
+  useEffect(() => {
+    if (isCC) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [poolsRes, balRes] = await Promise.all([
+          fetch("/api/party/swap/pools", { credentials: "include" }),
+          fetch("/api/party/swap/balances", { credentials: "include" }),
+        ]);
+        if (poolsRes.ok) {
+          const data = (await poolsRes.json()) as { tokens?: SwapToken[] };
+          // Match tokenId (lowercase) ke instrumentId asli (case-sensitive).
+          const found = (data.tokens ?? []).find(
+            (t) =>
+              t.instrumentId.toLowerCase().replace(/[^a-z0-9]/g, "-") ===
+              tokenId,
+          );
+          if (!cancelled && found) setTokenInfo(found);
+        }
+        if (balRes.ok && tokenInfo) {
+          const bal = (await balRes.json()) as {
+            tokens: Record<string, string>;
+          };
+          const key = `${tokenInfo.instrumentId}::${tokenInfo.instrumentAdmin}`;
+          if (!cancelled)
+            setTokenBalance(parseFloat(bal.tokens[key] ?? "0"));
+        }
+      } catch {
+        /* non-fatal */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isCC, tokenId, tokenInfo]);
+
   const handleBalanceRefresh = useCallback(() => {
     refreshWithRetries();
     setTxRefreshKey((k) => k + 1);
@@ -62,10 +108,13 @@ export function TokenDetailView({ tokenId, me }: TokenDetailViewProps) {
   }, [refreshLock, refreshWithRetries]);
 
   // Token display info.
-  const symbol = isCC ? "Amulet" : tokenId;
+  const symbol = isCC ? "Amulet" : (tokenInfo?.instrumentId ?? tokenId);
   const display = displayName(symbol);
   const change = change24hPct ?? 0;
   const isPositive = change >= 0;
+  const displayBalance = isCC
+    ? (balance?.toFixed(4) ?? "0.0000")
+    : tokenBalance.toFixed(4);
 
   return (
     <div className="w-full max-w-full min-w-0 space-y-5 font-sans">
@@ -114,11 +163,11 @@ export function TokenDetailView({ tokenId, me }: TokenDetailViewProps) {
 
         <div className="relative">
           <p className="text-3xl font-extrabold tabular-nums leading-none tracking-tight text-white sm:text-4xl">
-            {balanceLoading ? (
+            {balanceLoading && isCC ? (
               <span className="text-slate-500">—</span>
             ) : (
               <>
-                {isCC ? (balance?.toFixed(4) ?? "0.0000") : "0.0000"}{" "}
+                {displayBalance}{" "}
                 <span className="text-base font-semibold text-slate-500 sm:text-lg">
                   {display}
                 </span>
