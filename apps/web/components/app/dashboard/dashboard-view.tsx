@@ -9,9 +9,8 @@ import {
 } from "@/lib/auth/wallet-session-cache";
 import { createRefetchThrottle } from "@/lib/utils/refetch-throttle";
 
-import { CcPriceCard } from "./cc-price-card";
-import { ProfileCard } from "./profile-card";
 import { CcHoldingsCard } from "./cc-holdings-card";
+import { ProfileCard } from "./profile-card";
 import { PointsCard } from "./points-card";
 import { ActivityStatsCard } from "./activity-stats-card";
 import { PageLoading } from "@/components/ui/loading-spinner";
@@ -182,8 +181,8 @@ export function DashboardView() {
           {/* ── Cards Bento Grid ─────────────────────────────────────────── */}
           {!initialLoading && !loadError && (
             <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 md:gap-5">
-              {/* Profile (full width on mobile, 6 cols on desktop) */}
-              <div className="sm:col-span-2 lg:col-span-6">
+              {/* Profile (full width on mobile, 12 cols on desktop) */}
+              <div className="sm:col-span-2 lg:col-span-12">
                 <ProfileCard
                   displayName={me?.displayName}
                   username={me?.username}
@@ -192,11 +191,6 @@ export function DashboardView() {
                   weeklyRank={loading ? null : s.weeklyRank || null}
                   loading={loading}
                 />
-              </div>
-
-              {/* CC Price + chart (6 cols) */}
-              <div className="sm:col-span-2 lg:col-span-6">
-                <CcPriceCard />
               </div>
 
               {/* CC Holdings (4 cols) */}

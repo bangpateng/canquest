@@ -1,25 +1,21 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-
 import { queryKeys } from "@/lib/queries/query-keys";
+import { useTokenPrices } from "@/lib/hooks/use-token-prices";
 
 /**
- * Shared CC/USD price hook.
+ * Shared CC/USD price hook — Cantex DEX real-time (WS live feed).
  *
- * Memanggil /api/party/cc-price (realtime Bybit CCUSDT) setiap 30 detik.
- *
- * Dedup lintas komponen di-handle otomatis oleh TanStack Query: berapa pun
- * komponen yang pakai hook ini, hanya ada SATU network request per window
- * refetch (cache global queryKeys.party.ccPrice).
+ * Sebelumnya: Bybit CCUSDT spot ticker.
+ * Sekarang: Cantex DEX rate (Amulet→USDCx via public WS price feed).
  *
  * Mengembalikan:
- *  - price: harga terakhir (number) atau null saat belum tersedia.
- *  - change24hPct: persen perubahan 24 jam (number, sudah dalam %) atau null.
+ *  - price: harga CC dari Cantex DEX (number) atau null.
+ *  - change24hPct: null (Cantex tidak punya history API — dihilangkan).
  *
- * Catatan: history 24 jam untuk sparkline di-serve terpisah lewat
- * /api/party/cc-price-history (kline Bybit) — dipakai langsung oleh kartu
- * harga di Overview, bukan di hook ini, supaya tidak dibebani polling.
+ * Tetap export { price, change24hPct } supaya semua consumer lama (cards,
+ * sidebar, detail view) tidak perlu berubah. change24hPct selalu null
+ * = UI yang menampilkannya otomatis disembunyikan (guard null).
  */
 
 interface CcPriceState {
@@ -29,31 +25,17 @@ interface CcPriceState {
 
 const EMPTY: CcPriceState = { price: null, change24hPct: null };
 
-async function fetchPrice(): Promise<CcPriceState> {
-  const r = await fetch("/api/party/cc-price", { credentials: "include" });
-  if (!r.ok) return EMPTY;
-  const d = (await r.json()) as {
-    lastPrice?: number | null;
-    change24hPct?: number | null;
-  };
-  return {
-    price: typeof d?.lastPrice === "number" && d.lastPrice > 0 ? d.lastPrice : null,
-    change24hPct:
-      typeof d?.change24hPct === "number" && !Number.isNaN(d.change24hPct)
-        ? d.change24hPct
-        : null,
-  };
-}
-
 export function useCcPrice(): CcPriceState {
-  const { data } = useQuery({
-    queryKey: queryKeys.party.ccPrice,
-    queryFn: fetchPrice,
-    // Harga tampilan — boleh stale lebih lama, tapi tetap refresh berkala.
-    staleTime: 30_000,
-    refetchInterval: 30_000,
-    refetchOnWindowFocus: true,
-  });
-
-  return data ?? EMPTY;
+  const { prices } = useTokenPrices();
+  // Cari harga Amulet (CC) di price map.
+  // Key format: "<instrumentId>::<instrumentAdmin>".
+  const ccKey = Object.keys(prices).find((k) =>
+    k.toUpperCase().startsWith("AMULET::"),
+  );
+  const price = ccKey ? prices[ccKey] ?? null : null;
+  if (price === null) return EMPTY;
+  return { price, change24hPct: null };
 }
+
+/** Query key tetap dipertahankan untuk backward-compat (invalidation calls). */
+export const CC_PRICE_QUERY_KEY = queryKeys.party.ccPrice;
