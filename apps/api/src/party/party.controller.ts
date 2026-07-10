@@ -2616,6 +2616,47 @@ export class PartyController {
   }
 
   /**
+   * GET /party/swap/balances — saldo user untuk SEMUA token swap-able.
+   * Dipakai frontend untuk tombol percent (25/50/75/MAX) di setiap token,
+   * bukan cuma CC. CC saldo dari CcBalance (on-chain mirror); token non-CC
+   * dari CantexTokenBalance (off-chain custody — Phase 2, sekarang 0).
+   */
+  @Get('swap/balances')
+  @SkipThrottle()
+  async swapBalances(@Req() req: AuthedReq) {
+    const user = await this.users.findById(req.user.userId);
+    if (!user) {
+      throw new ForbiddenException('User not found.');
+    }
+    // CC saldo (micro → decimal).
+    const ccBal = await this.prisma.ccBalance.findUnique({
+      where: { userId: user.id },
+      select: { balanceMicroCc: true },
+    });
+    const ccAmount = ccBal
+      ? Number(ccBal.balanceMicroCc) / 1_000_000
+      : 0;
+    // Non-CC token saldo (off-chain custody).
+    const tokenBals = await this.prisma.cantexTokenBalance.findMany({
+      where: { userId: user.id },
+      select: {
+        instrumentId: true,
+        instrumentAdmin: true,
+        balance: true,
+      },
+    });
+    // Format: { "<instrumentId>::<admin>": "<decimal string>" }
+    const tokens: Record<string, string> = {};
+    for (const t of tokenBals) {
+      tokens[`${t.instrumentId}::${t.instrumentAdmin}`] = t.balance.toString();
+    }
+    return {
+      cc: ccAmount,
+      tokens,
+    };
+  }
+
+  /**
    * GET /party/swap/pools — daftar SEMUA token yang bisa di-swap (termasuk
    * Amulet/CC). User bisa pilih token mana pun di slot atas ATAU bawah.
    * Live dari Cantex DEX (read-only, no risk).

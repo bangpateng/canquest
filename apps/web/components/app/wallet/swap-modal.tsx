@@ -98,6 +98,12 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
   const [tokensLoading, setTokensLoading] = useState(false);
   const [tokensError, setTokensError] = useState<string | null>(null);
 
+  // Saldo per-token (CC + non-CC). Key = "<id>::<admin>", value = decimal string.
+  const [balances, setBalances] = useState<{
+    cc: number;
+    tokens: Record<string, string>;
+  }>({ cc: 0, tokens: {} });
+
   // Two independent slots — user can pick any token in either.
   const [sellToken, setSellToken] = useState<SwapToken | null>(null);
   const [buyToken, setBuyToken] = useState<SwapToken | null>(null);
@@ -139,11 +145,14 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
     setTokensLoading(true);
     setTokensError(null);
     try {
-      const res = await fetch("/api/party/swap/pools", {
-        credentials: "include",
-      });
-      const data = (await res.json()) as PoolsResponse & { message?: string };
-      if (!res.ok) {
+      const [poolsRes, balRes] = await Promise.all([
+        fetch("/api/party/swap/pools", { credentials: "include" }),
+        fetch("/api/party/swap/balances", { credentials: "include" }),
+      ]);
+      const data = (await poolsRes.json()) as PoolsResponse & {
+        message?: string;
+      };
+      if (!poolsRes.ok) {
         setTokensError(data.message ?? "Could not load tokens.");
         return;
       }
@@ -154,6 +163,14 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
       const firstNonCC = list.find((t) => !t.isCC);
       setSellToken(cc ?? list[0] ?? null);
       setBuyToken(firstNonCC ?? (list[1] ?? null));
+      // Load balances (CC + non-CC) — non-blocking, jangan gagal kalau error.
+      if (balRes.ok) {
+        const bal = (await balRes.json()) as {
+          cc: number;
+          tokens: Record<string, string>;
+        };
+        setBalances(bal);
+      }
     } catch {
       setTokensError("Network error. Check your connection.");
     } finally {
@@ -212,17 +229,27 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
   if (!open) return null;
 
   const sellIsCC = Boolean(sellToken?.isCC);
+  // Saldo token yang dijual (CC dari prop, non-CC dari balances.tokens).
+  const sellBalance = sellToken
+    ? sellIsCC
+      ? typeof balance === "number"
+        ? balance
+        : balances.cc
+      : parseFloat(
+          balances.tokens[
+            `${sellToken.instrumentId}::${sellToken.instrumentAdmin}`
+          ] ?? "0",
+        )
+    : 0;
   const insufficientBalance =
-    sellIsCC && typeof balance === "number" && parseFloat(amount) > balance;
+    sellBalance > 0 && parseFloat(amount) > sellBalance;
   const sameToken =
     sellToken && buyToken && sellToken.instrumentId === buyToken.instrumentId;
 
-  // Percent quick-select (only when sell = CC and we know balance).
+  // Percent quick-select — works for ANY token (CC + non-CC).
   const setPercent = (pct: number) => {
-    if (sellIsCC && typeof balance === "number") {
-      setAmount(
-        (balance * pct).toFixed(6).replace(/\.?0+$/, ""),
-      );
+    if (sellBalance > 0) {
+      setAmount((sellBalance * pct).toFixed(6).replace(/\.?0+$/, ""));
     }
   };
 
@@ -311,12 +338,10 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                 onAmountChange={setAmount}
                 isInput
                 balance={
-                  sellIsCC && typeof balance === "number"
-                    ? balance.toFixed(4)
-                    : undefined
+                  sellBalance > 0 ? sellBalance.toFixed(4) : undefined
                 }
                 onPercentClick={
-                  sellIsCC ? setPercent : undefined
+                  sellBalance > 0 ? setPercent : undefined
                 }
                 tokens={tokens}
                 selectedToken={sellToken}
