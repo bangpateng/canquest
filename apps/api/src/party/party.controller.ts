@@ -42,6 +42,7 @@ import {
 } from '../common/canton-party-id';
 import { hasRealWallet } from '../common/wallet-policy';
 import { CantexClient } from '../cantex/cantex-client';
+import { CantexPriceFeedService } from '../cantex/cantex-price-feed.service';
 import { isCantexEnabled } from '../cantex/cantex.config';
 import { CantexError } from '../cantex/cantex.types';
 import { UsersService } from '../users/users.service';
@@ -131,6 +132,7 @@ export class PartyController {
     private readonly walletPassword: WalletPasswordService,
     private readonly modo: ModoApiService,
     private readonly cantex: CantexClient,
+    private readonly cantexPrices: CantexPriceFeedService,
   ) {}
 
   private assertPartyOnValidatorParticipant(partyId: string): void {
@@ -2668,8 +2670,8 @@ export class PartyController {
       throw new ServiceUnavailableException('Swap is not enabled.');
     }
     try {
-      const prices = await this.cantex.getTokenPrices();
-      return { prices, source: 'cantex_dex' };
+      const prices = await this.cantexPrices.getTokenPrices();
+      return { prices, source: 'cantex_ws_live' };
     } catch (err) {
       this.logger.error(
         `swap/prices failed: ${(err as Error).message}`,

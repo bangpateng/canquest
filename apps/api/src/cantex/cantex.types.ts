@@ -125,6 +125,20 @@ export type WsEventType =
   | 'Funding.WithdrawalCompleted'
   | 'Funding.WithdrawalFailed';
 
+/**
+ * Ticker update dari public WS channel (market.<TOKEN>-<TOKEN>.ticker).
+ * Port dari Python SDK TickerEvent (lines 1024-1049).
+ * event_type = "snapshot" (first frame) | "update" (subsequent).
+ */
+export interface TickerEvent {
+  channel: string;
+  market: string; // mis. "CC-USDCx"
+  price: Decimal;
+  priceTs: number; // timestamp data (data.ts)
+  serverTs: number; // timestamp server (raw.ts)
+  eventType: 'snapshot' | 'update';
+}
+
 /** Error hierarki (mirror Python SDK). */
 export class CantexError extends Error {
   constructor(
