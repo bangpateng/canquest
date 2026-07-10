@@ -90,13 +90,19 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
     onRefresh?.();
   }, [refreshWithRetries, loadTokens, onRefresh]);
 
-  const ccFiat =
-    !ccLoading && ccUsd > 0 && ccBalance !== null
-      ? (ccBalance * ccUsd).toLocaleString("en-US", {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        })
-      : null;
+  // Total USD value — Phase 1: CC only (token non-CC saldo 0).
+  // Phase 2: tambah rate token non-CC × saldo × harga CC.
+  const ccUsdValue =
+    !ccLoading && ccUsd > 0 && ccBalance !== null ? ccBalance * ccUsd : 0;
+  const totalUsd = ccUsdValue;
+  const totalUsdStr = totalUsd.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const ccFiatStr = ccUsdValue.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
   return (
     <div className="w-full max-w-full min-w-0 space-y-5 md:space-y-6 font-sans">
@@ -107,16 +113,9 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
           aria-hidden
         />
         <div className="relative flex items-center justify-between gap-3 mb-6 sm:mb-8">
-          <div className="flex items-center gap-3">
-            <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
-              Balance
-            </span>
-            {ccUsd > 0 && (
-              <span className="inline-block text-[10px] sm:text-xs font-semibold tracking-wider text-[var(--primary)]">
-                1 CC ≈ ${ccUsd.toFixed(6)}
-              </span>
-            )}
-          </div>
+          <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
+            Total Balance
+          </span>
           <button
             type="button"
             onClick={() => void fetchCcBalance()}
@@ -133,21 +132,21 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
         </div>
 
         <div className="relative">
-          <p className="relative text-3xl font-extrabold tabular-nums leading-none tracking-tight text-white sm:text-4xl md:text-5xl">
+          <p className="relative text-3xl font-extrabold tabular-nums leading-none tracking-tight text-white sm:text-4xl md:text-5xl glow-text">
             {ccLoading ? (
               <span className="text-slate-500">—</span>
             ) : (
               <>
-                {ccBalance?.toFixed(4) ?? "0.0000"}{" "}
+                ${totalUsdStr}{" "}
                 <span className="text-base font-semibold text-slate-500 sm:text-lg md:text-xl">
-                  CC
+                  USD
                 </span>
               </>
             )}
           </p>
-          {!ccLoading && ccUsd > 0 && ccBalance !== null ? (
+          {ccUsd > 0 && !ccLoading ? (
             <p className="relative mt-4 text-sm font-medium text-slate-500 sm:mt-5 sm:text-base md:text-lg">
-              ≈ ${ccFiat} USD
+              1 CC ≈ ${ccUsd.toFixed(6)}
             </p>
           ) : null}
         </div>
@@ -177,7 +176,7 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
             balance={
               ccLoading ? "—" : (ccBalance?.toFixed(4) ?? "0.0000")
             }
-            fiatValue={ccFiat ? `$${ccFiat}` : undefined}
+            fiatValue={ccUsdValue > 0 ? `$${ccFiatStr}` : undefined}
             change24hPct={change24hPct ?? undefined}
             onClick={() => router.push(ROUTES.walletToken("cc"))}
           />

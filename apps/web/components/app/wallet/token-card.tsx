@@ -41,10 +41,10 @@ export function TokenCard({
         "hover:border-white/15 hover:bg-[#0d1018]/90 active:scale-[0.99]",
       )}
     >
-      <TokenLogo symbol={symbol} size="lg" />
+      <TokenLogo symbol={symbol} size="md" />
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-base font-bold text-white">{display}</span>
+          <span className="text-sm font-bold text-slate-100">{display}</span>
           {change24hPct !== undefined && (
             <span
               className={cn(
