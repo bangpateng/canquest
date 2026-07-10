@@ -158,11 +158,6 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
               </>
             )}
           </p>
-          {ccUsd > 0 && !ccLoading ? (
-            <p className="relative mt-4 text-sm font-medium text-slate-500 sm:mt-5 sm:text-base md:text-lg">
-              1 CC ≈ ${ccUsd.toFixed(6)}
-            </p>
-          ) : null}
         </div>
       </div>
 

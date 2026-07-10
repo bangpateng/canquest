@@ -175,11 +175,6 @@ export function TokenDetailView({ tokenId, me }: TokenDetailViewProps) {
             </div>
           )}
         </div>
-        {isCC && ccUsd > 0 && (
-          <p className="mt-2 text-xs text-slate-600">
-            1 CC ≈ ${ccUsd.toFixed(6)}
-          </p>
-        )}
       </div>
 
       {/* ── Actions ── */}
