@@ -2865,4 +2865,45 @@ export class PartyController {
       );
     }
   }
+
+  /**
+   * POST /party/swap/provision — create Cantex pool trading account (one-off).
+   * Dipanggil sekali untuk provisioning. Idempotent: kalau sudah ada, return OK.
+   */
+  @Throttle({ default: { limit: 2, ttl: 60_000 } })
+  @Post('swap/provision')
+  async swapProvision() {
+    if (!isCantexEnabled()) {
+      throw new ServiceUnavailableException('Swap is not enabled.');
+    }
+    try {
+      const admin = await this.cantex.getAccountAdmin();
+      if (admin.hasTradingAccount) {
+        return {
+          success: true,
+          message: 'Trading account already exists.',
+          tradingAccountContractId: admin.tradingAccountContractId,
+        };
+      }
+      // Create pool trading account.
+      await this.cantex.createTradingAccount();
+      // Verify.
+      const after = await this.cantex.getAccountAdmin();
+      return {
+        success: after.hasTradingAccount,
+        message: after.hasTradingAccount
+          ? 'Trading account created successfully.'
+          : 'Provisioning submitted but not confirmed yet. Try again in 30s.',
+        tradingAccountContractId: after.tradingAccountContractId,
+      };
+    } catch (err) {
+      this.logger.error(
+        `swap/provision failed: ${(err as Error).message}`,
+        (err as Error).stack,
+      );
+      throw new BadRequestException(
+        `Provisioning failed: ${(err as Error).message}`,
+      );
+    }
+  }
 }

@@ -312,6 +312,39 @@ export class CantexClient {
     return parseAccountAdmin(raw);
   }
 
+  /**
+   * Create pool trading account (operator flow).
+   * POST /v1/ledger/transaction/build/pool/create_account → sign → submit.
+   * Only call if hasTradingAccount === false.
+   */
+  async createTradingAccount(): Promise<Record<string, unknown>> {
+    this.ensureReady();
+    // 1. Build.
+    const buildRes = await this.request<{
+      id: string;
+      context?: { transaction_hash?: string };
+    }>('POST', '/v1/ledger/transaction/build/pool/create_account', {
+      json: {},
+    });
+    const buildId = buildRes.id;
+    const txHash = buildRes.context?.transaction_hash;
+    if (!buildId || !txHash) {
+      throw new CantexError(
+        `create_account build missing id/hash: ${JSON.stringify(buildRes).slice(0, 200)}`,
+      );
+    }
+    // 2. Sign (Ed25519, standard base64 decode).
+    const hashBytes = Buffer.from(txHash, 'base64');
+    const sig = this.operator!.signSync(hashBytes);
+    // 3. Submit.
+    return this.request('POST', '/v1/ledger/transaction/submit', {
+      json: {
+        id: buildId,
+        operatorKeySignedTransactionHash: sig.toString('base64url'),
+      },
+    });
+  }
+
   // ── Execution methods (Phase 2 — swap + transfer) ──────────────────────
 
   /**
