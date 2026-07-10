@@ -11,6 +11,7 @@ import {
   Post,
   Query,
   Req,
+  ServiceUnavailableException,
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
@@ -40,6 +41,9 @@ import {
   spliceWalletUsernameFromParty,
 } from '../common/canton-party-id';
 import { hasRealWallet } from '../common/wallet-policy';
+import { CantexClient } from '../cantex/cantex-client';
+import { isCantexEnabled } from '../cantex/cantex.config';
+import { CantexError } from '../cantex/cantex.types';
 import { UsersService } from '../users/users.service';
 import { WalletPasswordService } from '../users/wallet-password.service';
 import { feePartyLabels } from '../users/cc-transaction-visibility';
@@ -59,6 +63,8 @@ import {
   OfferType,
   TransferInstructionActionDto,
 } from './dto/contract-action.dto';
+import { SwapQuoteDto } from './dto/swap-quote.dto';
+import { SwapDto } from './dto/swap.dto';
 
 type AuthedReq = Request & { user: { userId: string; email: string } };
 
@@ -124,6 +130,7 @@ export class PartyController {
     private readonly prisma: PrismaService,
     private readonly walletPassword: WalletPasswordService,
     private readonly modo: ModoApiService,
+    private readonly cantex: CantexClient,
   ) {}
 
   private assertPartyOnValidatorParticipant(partyId: string): void {
@@ -2586,5 +2593,165 @@ export class PartyController {
             ? 'Node connection issue'
             : 'Node connection issue',
     };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // SWAP — Cantex DEX integration (CC ↔ semua token Cantex)
+  // Custodial Wintip-style: token non-CC di off-chain CantexTokenBalance.
+  // ═══════════════════════════════════════════════════════════════════════
+
+  /** GET /party/swap/status — apakah fitur swap aktif (CANTEX_ENABLED). */
+  @Get('swap/status')
+  @SkipThrottle()
+  async swapStatus() {
+    const enabled = isCantexEnabled();
+    return {
+      enabled,
+      phase: 'quote', // 'quote' (Phase 1) | 'execution' (Phase 2)
+      executionReady: false,
+      message: enabled
+        ? 'Swap quote live. Execution coming soon.'
+        : 'Swap not enabled.',
+    };
+  }
+
+  /**
+   * GET /party/swap/pools — daftar token yang bisa di-swap dengan CC.
+   * Filter: hanya pool yang salah satu leg = CC (Amulet).
+   * Live dari Cantex DEX (read-only, no risk).
+   */
+  @Get('swap/pools')
+  @SkipThrottle()
+  async swapPools(@Req() req: AuthedReq) {
+    if (!isCantexEnabled()) {
+      throw new ServiceUnavailableException('Swap is not enabled.');
+    }
+    // Wallet gate — swap butuh wallet (CC ada di party user).
+    const user = await this.users.findById(req.user.userId);
+    if (!user?.cantonPartyId || !hasRealWallet(user.cantonPartyId)) {
+      throw new ForbiddenException(
+        'You need a Canton wallet to use swap. Create yours first.',
+      );
+    }
+    const ccInstrument = {
+      id: process.env.CANTEX_CC_INSTRUMENT_ID ?? 'Amulet',
+      admin: process.env.CANTEX_CC_INSTRUMENT_ADMIN ?? '',
+    };
+    try {
+      const tokens = await this.cantex.getSwappableTokens(ccInstrument);
+      return {
+        ccInstrument,
+        tokens: tokens.map((t) => ({
+          instrumentId: t.id,
+          instrumentAdmin: t.admin,
+        })),
+      };
+    } catch (err) {
+      this.logger.error(
+        `swap/pools failed: ${(err as Error).message}`,
+        (err as Error).stack,
+      );
+      throw new ServiceUnavailableException(
+        'Could not reach Cantex DEX. Try again later.',
+      );
+    }
+  }
+
+  /**
+   * POST /party/swap/quote — live swap quote (preview sebelum konfirmasi).
+   * Tampilkan: output estimate, price impact, fees.
+   * Live dari Cantex DEX (read-only, no risk).
+   */
+  @Post('swap/quote')
+  @SkipThrottle()
+  async swapQuote(@Req() req: AuthedReq, @Body() body: SwapQuoteDto) {
+    if (!isCantexEnabled()) {
+      throw new ServiceUnavailableException('Swap is not enabled.');
+    }
+    const ccInstrument = {
+      id: process.env.CANTEX_CC_INSTRUMENT_ID ?? 'Amulet',
+      admin: process.env.CANTEX_CC_INSTRUMENT_ADMIN ?? '',
+    };
+    // Tentukan sell/buy berdasar arah.
+    const isCcToToken = body.direction === 'CC_TO_TOKEN';
+    const sellInstrument = isCcToToken
+      ? ccInstrument
+      : { id: body.instrumentId, admin: body.instrumentAdmin };
+    const buyInstrument = isCcToToken
+      ? { id: body.instrumentId, admin: body.instrumentAdmin }
+      : ccInstrument;
+    try {
+      const quote = await this.cantex.getQuote({
+        sellAmount: String(body.amount),
+        sellInstrumentId: sellInstrument.id,
+        sellInstrumentAdmin: sellInstrument.admin,
+        buyInstrumentId: buyInstrument.id,
+        buyInstrumentAdmin: buyInstrument.admin,
+      });
+      return {
+        direction: body.direction,
+        sellAmount: quote.sellAmount.toString(),
+        sellInstrument: quote.sellInstrument,
+        buyInstrument: quote.buyInstrument,
+        // Estimasi output (yang dibeli user).
+        outputAmount: quote.returned.amount.toString(),
+        outputInstrument: quote.returned.instrument,
+        // Fee + price impact.
+        fees: {
+          feePercentage: quote.fees.feePercentage.toString(),
+          adminFee: quote.fees.amountAdmin.toString(),
+          liquidityFee: quote.fees.amountLiquidity.toString(),
+          networkFee: quote.fees.networkFee.amount.toString(),
+          feeInstrument: quote.fees.instrument,
+        },
+        prices: {
+          slippage: quote.prices.slippage.toString(),
+          tradePrice: quote.prices.trade.toString(),
+          tradePriceNoFees: quote.prices.tradeNoFees.toString(),
+          poolPriceBefore: quote.prices.poolBefore.toString(),
+          poolPriceAfter: quote.prices.poolAfter.toString(),
+        },
+        estimatedTimeSeconds: quote.estimatedTimeSeconds,
+      };
+    } catch (err) {
+      if (err instanceof CantexError) {
+        this.logger.warn(`swap/quote Cantex error: ${err.message}`);
+        throw new BadRequestException(
+          `Could not get quote: ${err.message}`,
+        );
+      }
+      this.logger.error(
+        `swap/quote failed: ${(err as Error).message}`,
+        (err as Error).stack,
+      );
+      throw new ServiceUnavailableException(
+        'Could not reach Cantex DEX. Try again later.',
+      );
+    }
+  }
+
+  /**
+   * POST /party/swap — execute swap (Phase 1: stub 503; Phase 2: live).
+   *
+   * Phase 1: return 503 supaya frontend tampilkan "coming soon" state.
+   * Phase 2 akan mengganti ini dengan swap.service.executeSwap().
+   */
+  @Throttle({ ledger: { limit: 5, ttl: 60_000 } })
+  @Post('swap')
+  async swap(@Req() req: AuthedReq, @Body() body: SwapDto) {
+    // Validate wallet gate even in Phase 1 (UX: clear error early).
+    const user = await this.users.findById(req.user.userId);
+    if (!user?.cantonPartyId || !hasRealWallet(user.cantonPartyId)) {
+      throw new ForbiddenException(
+        'You need a Canton wallet to use swap. Create yours first.',
+      );
+    }
+    if (!isCantexEnabled()) {
+      throw new ServiceUnavailableException('Swap is not enabled.');
+    }
+    // Phase 1: execution belum live.
+    throw new ServiceUnavailableException(
+      'Swap execution is coming soon. Quote preview is live — try GET /party/swap/pools and POST /party/swap/quote.',
+    );
   }
 }

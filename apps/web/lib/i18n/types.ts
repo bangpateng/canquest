@@ -265,6 +265,8 @@ export type PlatformMessages = {
     offerWithdrawn: string;
     preapprovalEnabled: string;
     preapprovalDisabled: string;
+    swapOut: string;
+    swapIn: string;
   };
   settings: {
     signingOut: string;

@@ -7,6 +7,7 @@ import { resolve } from 'path';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
 import { CantonModule } from './canton/canton.module';
+import { CantexModule } from './cantex/cantex.module';
 import { PartyModule } from './party/party.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { SupabaseModule } from './supabase/supabase.module';
@@ -44,6 +45,7 @@ const resolveApiEnvPaths = (): string[] => [
     SupabaseModule, // @Global: SupabaseService (service_role client) untuk Auth
     AuthModule,
     CantonModule,
+    CantexModule, // @Global: CantexClient (DEX swap — Phase 1: read-only pools/quote)
     PartyModule,
     QuestsModule,
     EarnModule,

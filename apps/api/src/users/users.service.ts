@@ -38,6 +38,8 @@ export const FEED_TX_TYPES: CcTransactionType[] = [
   'OFFER_WITHDRAWN',
   'PREAPPROVAL_ENABLED',
   'PREAPPROVAL_DISABLED',
+  'SWAP_OUT',
+  'SWAP_IN',
 ];
 
 /**
@@ -57,6 +59,8 @@ export const BADGE_UNREAD_TX_TYPES: CcTransactionType[] = [
   'OFFER_WITHDRAWN',
   'PREAPPROVAL_ENABLED',
   'PREAPPROVAL_DISABLED',
+  'SWAP_OUT',
+  'SWAP_IN',
 ];
 
 /** @deprecated Use FEED_TX_TYPES (feed) / BADGE_UNREAD_TX_TYPES (badge). */
@@ -357,9 +361,12 @@ export class UsersService {
     const amountMicroCc = BigInt(
       Math.round(Math.abs(params.amountCc) * 1_000_000),
     );
-    // Debit (keluar dari saldo yang bisa dipakai): TRANSFER_OUT & CC_LOCK (dana dikunci).
-    // Kredit (masuk): TRANSFER_IN, QUEST_REWARD, SPIN_REWARD, AIRDROP, CC_UNLOCK.
-    const isDebit = params.type === 'TRANSFER_OUT' || params.type === 'CC_LOCK';
+    // Debit (keluar dari saldo yang bisa dipakai): TRANSFER_OUT, CC_LOCK, SWAP_OUT.
+    // Kredit (masuk): TRANSFER_IN, QUEST_REWARD, SPIN_REWARD, AIRDROP, CC_UNLOCK, SWAP_IN.
+    const isDebit =
+      params.type === 'TRANSFER_OUT' ||
+      params.type === 'CC_LOCK' ||
+      params.type === 'SWAP_OUT';
     const signed = isDebit ? -amountMicroCc : amountMicroCc;
     const referenceId =
       params.referenceId !== undefined

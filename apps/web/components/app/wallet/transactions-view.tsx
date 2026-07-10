@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils/utils";
 import { ListPagination } from "@/components/app/list/list-pagination";
-import { ArrowDownLeft, ArrowUpRight, Ban, Gift, Lock, LockOpen, RefreshCw, ShieldCheck, ShieldOff, Undo2, Zap } from "lucide-react";
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Ban, Gift, Lock, LockOpen, RefreshCw, ShieldCheck, ShieldOff, Undo2, Zap } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { TransactionDetailModal } from "@/components/app/wallet/transaction-detail-modal";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
@@ -31,7 +31,9 @@ export interface TxItem {
     | "OFFER_REJECTED"
     | "OFFER_WITHDRAWN"
     | "PREAPPROVAL_ENABLED"
-    | "PREAPPROVAL_DISABLED";
+    | "PREAPPROVAL_DISABLED"
+    | "SWAP_OUT"
+    | "SWAP_IN";
   description: string;
   referenceId: string | null;
   counterparty?: string | null;
@@ -86,6 +88,8 @@ const TX_TYPE_KEYS: Record<TxItem["type"], string> = {
   OFFER_WITHDRAWN: "transactions.offerWithdrawn",
   PREAPPROVAL_ENABLED: "transactions.preapprovalEnabled",
   PREAPPROVAL_DISABLED: "transactions.preapprovalDisabled",
+  SWAP_OUT: "transactions.swapOut",
+  SWAP_IN: "transactions.swapIn",
 };
 
 /** Type toggle onchain (reject/withdraw/preapproval) — amount 0, tampil netral. */
@@ -133,6 +137,9 @@ function TxTypeIcon({ type }: { type: TxItem["type"] }) {
     case "SPIN_REWARD":
     case "AIRDROP":
       return <Gift className="h-4 w-4" />;
+    case "SWAP_OUT":
+    case "SWAP_IN":
+      return <ArrowLeftRight className="h-4 w-4" />;
     default:
       return <Zap className="h-4 w-4" />;
   }
@@ -161,6 +168,12 @@ function txIconBg(type: TxItem["type"]): string {
     case "SPIN_REWARD":
     case "AIRDROP":
       return "bg-purple-500/10 text-purple-500";
+    case "SWAP_OUT":
+      // CC keluar — merah (sama transfer out).
+      return "bg-red-500/10 text-red-500";
+    case "SWAP_IN":
+      // CC masuk — hijau (sama transfer in).
+      return "bg-green-500/10 text-green-500";
     default:
       return "bg-blue-500/10 text-blue-500";
   }

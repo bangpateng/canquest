@@ -11,13 +11,14 @@ import {
 import { cn } from "@/lib/utils/utils";
 import { TransactionDetailModal } from "@/components/app/wallet/transaction-detail-modal";
 import { OffersModal, useOffers } from "@/components/app/wallet/offers-section";
+import { SwapModal } from "@/components/app/wallet/swap-modal";
 import { WalletPasswordModal } from "@/components/app/wallet/wallet-password-modal";
 import { useWalletPassword } from "@/lib/hooks/use-wallet-password";
-import { ArrowDownLeft, ArrowUpRight, X, AlertCircle, Inbox } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight, X, AlertCircle, Inbox } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { useCallback, useEffect, useId, useState } from "react";
 
-type Sheet = null | "send" | "receive" | "offers";
+type Sheet = null | "send" | "receive" | "offers" | "swap";
 type SendState = "idle" | "loading" | "success" | "error";
 
 interface WalletActionsProps {
@@ -209,7 +210,7 @@ export function WalletActions({
 
   return (
     <>
-      <div className="grid w-full min-w-0 grid-cols-3 gap-3 sm:gap-4">
+      <div className="grid w-full min-w-0 grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
         <button
           type="button"
           onClick={openSend}
@@ -250,6 +251,17 @@ export function WalletActions({
               {offersCount}
             </span>
           )}
+        </button>
+        <button
+          type="button"
+          onClick={() => setSheet("swap")}
+          className={cn(
+            buttonVariants({ variant: "secondary", size: "sm" }),
+            "w-full justify-center gap-2",
+          )}
+        >
+          <ArrowLeftRight className="h-5 w-5 shrink-0" aria-hidden />
+          Swap
         </button>
       </div>
 
@@ -525,6 +537,13 @@ export function WalletActions({
           void refreshOffers();
           onBalanceRefresh?.();
         }}
+      />
+
+      <SwapModal
+        open={sheet === "swap"}
+        onClose={() => setSheet(null)}
+        balance={balance}
+        onBalanceRefresh={onBalanceRefresh}
       />
     </>
   );

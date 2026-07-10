@@ -269,6 +269,8 @@ export const en: PlatformMessages = {
     offerWithdrawn: "Transfer cancelled",
     preapprovalEnabled: "Preapproval enabled",
     preapprovalDisabled: "Preapproval disabled",
+    swapOut: "Swap (CC out)",
+    swapIn: "Swap (CC in)",
   },
   settings: {
     signingOut: "Signing out…",

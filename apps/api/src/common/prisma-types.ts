@@ -113,7 +113,11 @@ export type CcTransactionType =
   /// User mengaktifkan TransferPreapproval (onchain create, burn fee).
   | 'PREAPPROVAL_ENABLED'
   /// User menonaktifkan TransferPreapproval (onchain archive).
-  | 'PREAPPROVAL_DISABLED';
+  | 'PREAPPROVAL_DISABLED'
+  /// CC keluar ke Cantex trading account (swap CC → token).
+  | 'SWAP_OUT'
+  /// CC masuk dari Cantex trading account (swap token → CC).
+  | 'SWAP_IN';
 
 export type UserStatus = 'ACTIVE' | 'SUSPENDED' | 'BANNED';
 export const UserStatus = {

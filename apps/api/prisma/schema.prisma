@@ -87,6 +87,10 @@ model User {
   redeemedWalletInvites   WalletInviteCode[]    @relation("WalletInviteRedemptions")
   ccLocks                 CcLock[]
   earnEntries             EarnEntry[]
+  /// Off-chain custody: saldo token non-CC user di Cantex trading account shared.
+  cantexTokenBalances     CantexTokenBalance[]
+  /// Riwayat swap CC ↔ token Cantex DEX.
+  swapTransactions        SwapTransaction[]
 }
 
 /// Catatan partisipasi user di campaign Earn — sekaligus sumber pengurang poin
@@ -234,6 +238,64 @@ enum CcTransactionType {
   PREAPPROVAL_ENABLED
   /// User menonaktifkan TransferPreapproval (onchain archive).
   PREAPPROVAL_DISABLED
+  /// CC keluar dari party user menuju Cantex trading account (swap CC → token).
+  SWAP_OUT
+  /// CC masuk ke party user dari Cantex trading account (swap token → CC).
+  SWAP_IN
+}
+
+/// Off-chain custody untuk token non-CC (Cantex DEX). Token asli berada di
+/// Cantex trading account yang shared (cantex::1220c6...); CanQuest mencatat
+/// kepemilikan per-user di sini (model custodial Wintip-style).
+/// Saldo pakai Decimal(38,18) karena Cantex API memakai decimal-string amounts.
+model CantexTokenBalance {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Cantex instrument id, mis. "TokenX" / "Amulet".
+  instrumentId    String
+  /// Cantex instrument admin party, mis. "DSO::1220...".
+  instrumentAdmin String
+  /// Saldo human-decimal (bukan micro-units).
+  balance         Decimal  @default(0) @db.Decimal(38, 18)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, instrumentId, instrumentAdmin])
+  @@index([userId])
+}
+
+/// Audit trail lengkap untuk setiap swap CC ↔ token Cantex DEX (multi-leg).
+model SwapTransaction {
+  id                  String   @id @default(cuid())
+  userId              String
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// "CC_TO_TOKEN" (swap CC → token) | "TOKEN_TO_CC" (swap token → CC).
+  direction           String
+  /// Instrumen yang dijual.
+  sellInstrumentId    String
+  sellInstrumentAdmin String
+  sellAmount          Decimal  @db.Decimal(38, 18)
+  /// Instrumen yang dibeli.
+  buyInstrumentId     String
+  buyInstrumentAdmin  String
+  /// Jumlah yang dibeli — null sampai Cantex SwapExecuted event diterima.
+  buyAmount           Decimal? @db.Decimal(38, 18)
+  /// Cantex pool contract id (opsional, untuk referensi).
+  poolContractId      String?
+  /// id dari /v1/intent/build/pool/swap (build response).
+  cantexSubmissionId  String?
+  /// Canton update id untuk leg CC (transfer user↔trading account).
+  ccLedgerTxId        String?
+  /// PENDING (sedang diproses) | EXECUTED (sukses) | FAILED (gagal).
+  status              String   @default("PENDING")
+  /// Idempotency key dari client — mencegah double-submit swap yang sama.
+  clientNonce         String   @unique
+  swapExecutedAt      DateTime?
+  errorMessage        String?
+  createdAt           DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 /// CC Lock (non-custodial) — metadata untuk LockedAmulet on-chain.

@@ -270,6 +270,8 @@ export const tr: PlatformMessages = {
     offerWithdrawn: "Transfer iptal edildi",
     preapprovalEnabled: "Ön onay etkinleştirildi",
     preapprovalDisabled: "Ön onay devre dışı bırakıldı",
+    swapOut: "Takas (CC çıkış)",
+    swapIn: "Takas (CC giriş)",
   },
   settings: {
     signingOut: "Çıkış yapılıyor…",
