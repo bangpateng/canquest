@@ -193,9 +193,11 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
             onClick={() => router.push(ROUTES.walletToken("cc"))}
           />
 
-          {/* Non-CC tokens from Cantex pools */}
+          {/* Non-CC tokens — only active ones (coming soon hidden) */}
           {swapTokens
-            .filter((t) => !t.isCC)
+            .filter(
+              (t) => !t.isCC && isTokenActive(t.instrumentId, t.isCC),
+            )
             .map((t) => {
               const key = `${t.instrumentId}::${t.instrumentAdmin}`;
               const bal = parseFloat(tokenBalances[key] ?? "0");
@@ -207,14 +209,12 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
                       maximumFractionDigits: 2,
                     })}`
                   : undefined;
-              const active = isTokenActive(t.instrumentId, t.isCC);
               return (
                 <TokenCard
                   key={key}
                   symbol={t.instrumentId}
                   balance={bal.toFixed(4)}
                   fiatValue={fiat}
-                  comingSoon={!active}
                   onClick={() =>
                     router.push(
                       ROUTES.walletToken(

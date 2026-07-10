@@ -214,7 +214,7 @@ export function TokenDetailView({ tokenId, me }: TokenDetailViewProps) {
       ) : (
         <div className="rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 p-4 text-center">
           <p className="text-sm text-slate-400">
-            Swap {display} dari menu Swap di halaman utama wallet.
+            Swap {display} from the Swap menu on the main wallet page.
           </p>
         </div>
       )}

@@ -8,7 +8,6 @@ import { iconButtonClass } from "@/lib/ui/ui-button-styles";
 import {
   ArrowDown,
   ChevronDown,
-  Lock,
   Settings,
   X,
   AlertCircle,
@@ -442,6 +441,7 @@ function TokenPicker({
 
   const filtered = tokens.filter(
     (t) =>
+      isSwapActive(t.instrumentId, t.isCC) &&
       (!excludeToken ||
         t.instrumentId !== excludeToken.instrumentId) &&
       t.instrumentId.toLowerCase().includes(search.toLowerCase()),
@@ -490,48 +490,32 @@ function TokenPicker({
               No tokens found.
             </p>
           ) : (
-            filtered.map((t) => {
-              const active = isSwapActive(t.instrumentId, t.isCC);
-              return (
-                <button
-                  key={`${t.instrumentId}::${t.instrumentAdmin}`}
-                  type="button"
-                  disabled={!active}
-                  onClick={() => {
-                    if (!active) return;
-                    onSelect(t);
-                    onClose();
-                  }}
-                  className={cn(
-                    "flex w-full items-center gap-3 rounded-xl p-3 text-left transition",
-                    active
-                      ? "hover:bg-white/5"
-                      : "cursor-not-allowed opacity-40",
-                  )}
-                >
-                  <TokenLogo symbol={t.instrumentId} />
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-white">
-                      {displayName(t.instrumentId)}
-                      {t.isCC && (
-                        <span className="ml-1.5 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-400">
-                          CC
-                        </span>
-                      )}
-                    </p>
-                    <p className="truncate text-[11px] text-slate-500">
-                      {t.instrumentAdmin.slice(0, 20)}...
-                    </p>
-                  </div>
-                  {!active && (
-                    <span className="ml-auto flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-400">
-                      <Lock className="h-2.5 w-2.5" />
-                      SOON
-                    </span>
-                  )}
-                </button>
-              );
-            })
+            filtered.map((t) => (
+              <button
+                key={`${t.instrumentId}::${t.instrumentAdmin}`}
+                type="button"
+                onClick={() => {
+                  onSelect(t);
+                  onClose();
+                }}
+                className="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-white/5"
+              >
+                <TokenLogo symbol={t.instrumentId} />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-white">
+                    {displayName(t.instrumentId)}
+                    {t.isCC && (
+                      <span className="ml-1.5 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-400">
+                        CC
+                      </span>
+                    )}
+                  </p>
+                  <p className="truncate text-[11px] text-slate-500">
+                    {t.instrumentAdmin.slice(0, 20)}...
+                  </p>
+                </div>
+              </button>
+            ))
           )}
         </div>
       </div>
