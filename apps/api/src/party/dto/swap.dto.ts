@@ -1,5 +1,5 @@
 import {
-  IsEnum,
+  IsBoolean,
   IsNumber,
   IsOptional,
   IsString,
@@ -10,29 +10,35 @@ import {
 } from 'class-validator';
 
 /**
- * Request body for POST /api/party/swap — execute swap CC ↔ token Cantex.
+ * Request body for POST /api/party/swap — execute swap (pair FLEKSIBEL).
  *
  * Phase 1: endpoint return 503 (swap execution coming soon).
- * Phase 2: full execution (transfer CC leg + Cantex intent swap + WS confirm).
+ * Phase 2: full execution.
  *
- * clientNonce wajib — idempotency key frontend (crypto.randomUUID()),
- * dipakai untuk dedup retry/double-click (sama pattern dengan sendCc).
+ * clientNonce wajib — idempotency key frontend (crypto.randomUUID()).
  */
 export class SwapDto {
-  @IsEnum(['CC_TO_TOKEN', 'TOKEN_TO_CC'])
-  direction!: 'CC_TO_TOKEN' | 'TOKEN_TO_CC';
-
-  /** Instrument id token target (bukan CC). */
+  /** Instrumen yang dijual (slot atas). */
   @IsString()
   @MinLength(1)
   @MaxLength(128)
-  instrumentId!: string;
+  sellInstrumentId!: string;
 
-  /** Admin party token target. */
   @IsString()
   @MinLength(1)
   @MaxLength(256)
-  instrumentAdmin!: string;
+  sellInstrumentAdmin!: string;
+
+  /** Instrumen yang dibeli (slot bawah). */
+  @IsString()
+  @MinLength(1)
+  @MaxLength(128)
+  buyInstrumentId!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(256)
+  buyInstrumentAdmin!: string;
 
   /** Jumlah yang dijual (human decimal). */
   @IsNumber()
@@ -45,6 +51,11 @@ export class SwapDto {
   @IsString()
   @MaxLength(64)
   walletPassword?: string;
+
+  /** True bila sell = CC (untuk custody routing di Phase 2). */
+  @IsOptional()
+  @IsBoolean()
+  sellIsCC?: boolean;
 
   /** Idempotency nonce — UUID baru per klik Swap. */
   @IsString()

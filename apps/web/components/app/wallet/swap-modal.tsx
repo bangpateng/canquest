@@ -11,22 +11,22 @@ import {
   Settings,
   X,
   AlertCircle,
+  Search,
 } from "lucide-react";
 
 // ── Types ───────────────────────────────────────────────────────────────
 
-interface SwappableToken {
+interface SwapToken {
   instrumentId: string;
   instrumentAdmin: string;
+  isCC?: boolean;
 }
 
 interface PoolsResponse {
-  ccInstrument: { id: string; admin: string };
-  tokens: SwappableToken[];
+  tokens: SwapToken[];
 }
 
 interface QuoteResponse {
-  direction: string;
   sellAmount: string;
   sellInstrument: { id: string; admin: string };
   buyInstrument: { id: string; admin: string };
@@ -52,23 +52,44 @@ interface SwapModalProps {
   onBalanceRefresh?: () => void;
 }
 
-type Direction = "CC_TO_TOKEN" | "TOKEN_TO_CC";
+// ── Color map for token logos (deterministic by symbol) ─────────────────
 
-const CC_SYMBOL = "CC";
+const LOGO_COLORS: Record<string, string> = {
+  CC: "from-amber-400 to-amber-600",
+  AMULET: "from-amber-400 to-amber-600",
+};
+const FALLBACK_GRADIENTS = [
+  "from-blue-400 to-blue-600",
+  "from-emerald-400 to-emerald-600",
+  "from-purple-400 to-purple-600",
+  "from-pink-400 to-pink-600",
+  "from-cyan-400 to-cyan-600",
+  "from-orange-400 to-orange-600",
+  "from-indigo-400 to-indigo-600",
+  "from-rose-400 to-rose-600",
+];
+
+function gradientFor(symbol: string): string {
+  const key = symbol.toUpperCase();
+  if (LOGO_COLORS[key]) return LOGO_COLORS[key];
+  // Hash symbol → pick gradient deterministically.
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) | 0;
+  return FALLBACK_GRADIENTS[Math.abs(hash) % FALLBACK_GRADIENTS.length]!;
+}
 
 // ── Component ───────────────────────────────────────────────────────────
 
 export function SwapModal({ open, onClose, balance }: SwapModalProps) {
   const titleId = useId();
 
-  const [tokens, setTokens] = useState<SwappableToken[]>([]);
+  const [tokens, setTokens] = useState<SwapToken[]>([]);
   const [tokensLoading, setTokensLoading] = useState(false);
   const [tokensError, setTokensError] = useState<string | null>(null);
 
-  const [direction, setDirection] = useState<Direction>("CC_TO_TOKEN");
-  const [selectedToken, setSelectedToken] = useState<SwappableToken | null>(
-    null,
-  );
+  // Two independent slots — user can pick any token in either.
+  const [sellToken, setSellToken] = useState<SwapToken | null>(null);
+  const [buyToken, setBuyToken] = useState<SwapToken | null>(null);
   const [amount, setAmount] = useState("");
 
   const [quote, setQuote] = useState<QuoteResponse | null>(null);
@@ -88,13 +109,13 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  // Check swap status (enabled/phase) on open.
+  // Check swap status on open.
   useEffect(() => {
     if (!open) return;
     fetch("/api/party/swap/status", { credentials: "include" })
       .then((r) => r.json())
       .then(
-        (d: { enabled?: boolean; phase?: string; message?: string }) => {
+        (d: { enabled?: boolean; message?: string }) => {
           setStatusEnabled(Boolean(d.enabled));
           setStatus(d.message ?? null);
         },
@@ -102,7 +123,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
       .catch(() => setStatus(null));
   }, [open]);
 
-  // Fetch swappable tokens when modal opens.
+  // Fetch all tokens when modal opens.
   const loadTokens = useCallback(async () => {
     setTokensLoading(true);
     setTokensError(null);
@@ -112,19 +133,22 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
       });
       const data = (await res.json()) as PoolsResponse & { message?: string };
       if (!res.ok) {
-        setTokensError(data.message ?? "Could not load swap tokens.");
+        setTokensError(data.message ?? "Could not load tokens.");
         return;
       }
-      setTokens(data.tokens ?? []);
-      if (data.tokens.length > 0 && !selectedToken) {
-        setSelectedToken(data.tokens[0]!);
-      }
+      const list = data.tokens ?? [];
+      setTokens(list);
+      // Default: sell = CC (Amulet), buy = first non-CC token.
+      const cc = list.find((t) => t.isCC);
+      const firstNonCC = list.find((t) => !t.isCC);
+      setSellToken(cc ?? list[0] ?? null);
+      setBuyToken(firstNonCC ?? (list[1] ?? null));
     } catch {
       setTokensError("Network error. Check your connection.");
     } finally {
       setTokensLoading(false);
     }
-  }, [selectedToken]);
+  }, []);
 
   useEffect(() => {
     if (open && statusEnabled) void loadTokens();
@@ -133,7 +157,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
   // Debounced live quote.
   useEffect(() => {
     const amt = parseFloat(amount);
-    if (!selectedToken || !amt || amt <= 0) {
+    if (!sellToken || !buyToken || !amt || amt <= 0 || sellToken.instrumentId === buyToken.instrumentId) {
       setQuote(null);
       setQuoteError(null);
       return;
@@ -147,10 +171,12 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
           credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            direction,
-            instrumentId: selectedToken.instrumentId,
-            instrumentAdmin: selectedToken.instrumentAdmin,
+            sellInstrumentId: sellToken.instrumentId,
+            sellInstrumentAdmin: sellToken.instrumentAdmin,
+            buyInstrumentId: buyToken.instrumentId,
+            buyInstrumentAdmin: buyToken.instrumentAdmin,
             amount: amt,
+            sellIsCC: sellToken.isCC,
           }),
         });
         const data = (await res.json()) as QuoteResponse & {
@@ -170,35 +196,29 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
       }
     }, 500);
     return () => clearTimeout(timer);
-  }, [amount, selectedToken, direction]);
+  }, [amount, sellToken, buyToken]);
 
   if (!open) return null;
 
-  // Input symbol: CC_TO_TOKEN → user enters CC; TOKEN_TO_CC → user enters token.
-  const inputSymbol =
-    direction === "CC_TO_TOKEN"
-      ? CC_SYMBOL
-      : (selectedToken?.instrumentId ?? "TOKEN");
-  const outputSymbol =
-    direction === "CC_TO_TOKEN"
-      ? (selectedToken?.instrumentId ?? "TOKEN")
-      : CC_SYMBOL;
-
+  const sellIsCC = Boolean(sellToken?.isCC);
   const insufficientBalance =
-    direction === "CC_TO_TOKEN" &&
-    typeof balance === "number" &&
-    parseFloat(amount) > balance;
+    sellIsCC && typeof balance === "number" && parseFloat(amount) > balance;
+  const sameToken =
+    sellToken && buyToken && sellToken.instrumentId === buyToken.instrumentId;
 
-  // Percent quick-select (only for CC_TO_TOKEN where we know balance).
+  // Percent quick-select (only when sell = CC and we know balance).
   const setPercent = (pct: number) => {
-    if (direction === "CC_TO_TOKEN" && typeof balance === "number") {
-      setAmount((balance * pct).toFixed(6).replace(/\.?0+$/, ""));
+    if (sellIsCC && typeof balance === "number") {
+      setAmount(
+        (balance * pct).toFixed(6).replace(/\.?0+$/, ""),
+      );
     }
   };
 
-  // Flip direction.
-  const flipDirection = () => {
-    setDirection((d) => (d === "CC_TO_TOKEN" ? "TOKEN_TO_CC" : "CC_TO_TOKEN"));
+  // Flip sell <-> buy.
+  const flipTokens = () => {
+    setSellToken(buyToken);
+    setBuyToken(sellToken);
     setAmount("");
     setQuote(null);
   };
@@ -222,10 +242,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
       >
         {/* Header */}
         <div className="mb-5 flex items-center justify-between">
-          <h2
-            id={titleId}
-            className="text-lg font-bold text-white"
-          >
+          <h2 id={titleId} className="text-lg font-bold text-white">
             Swap
           </h2>
           <div className="flex items-center gap-2">
@@ -258,113 +275,243 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
           </div>
         ) : null}
 
-        {/* Swap cards */}
-        <div className="relative space-y-2">
-          {/* ── YOU PAY ── */}
-          <SwapCard
-            label="You Pay"
-            amount={amount}
-            onAmountChange={setAmount}
-            isInput
-            balance={
-              direction === "CC_TO_TOKEN"
-                ? typeof balance === "number"
-                  ? balance.toFixed(4)
-                  : undefined
-                : undefined
-            }
-            onPercentClick={direction === "CC_TO_TOKEN" ? setPercent : undefined}
-            isLoading={tokensLoading}
-            error={tokensError}
-            tokens={tokens}
-            selectedToken={selectedToken}
-            onSelectToken={setSelectedToken}
-            tokenIsCC={direction === "CC_TO_TOKEN"}
-          />
+        {/* Loading state */}
+        {tokensLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <LoadingSpinner className="h-6 w-6" />
+          </div>
+        ) : tokensError ? (
+          <div className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>{tokensError}</span>
+          </div>
+        ) : tokens.length === 0 ? (
+          <p className="py-12 text-center text-sm text-slate-400">
+            No tokens available for swap yet.
+          </p>
+        ) : (
+          <>
+            {/* Swap cards */}
+            <div className="relative space-y-2">
+              {/* ── SLOT ATAS (sell) ── */}
+              <SwapCard
+                label="You Pay"
+                amount={amount}
+                onAmountChange={setAmount}
+                isInput
+                balance={
+                  sellIsCC && typeof balance === "number"
+                    ? balance.toFixed(4)
+                    : undefined
+                }
+                onPercentClick={
+                  sellIsCC ? setPercent : undefined
+                }
+                tokens={tokens}
+                selectedToken={sellToken}
+                onSelectToken={setSellToken}
+                excludeToken={buyToken}
+              />
 
-          {/* ── Direction button (circle, overlapping) ── */}
-          <div className="relative z-10 flex justify-center">
+              {/* ── Flip button ── */}
+              <div className="relative z-10 flex justify-center">
+                <button
+                  type="button"
+                  onClick={flipTokens}
+                  className="flex h-10 w-10 items-center justify-center rounded-full border-4 border-[#0a0b0d] bg-[#1a1d23] text-amber-400 transition hover:rotate-180 hover:bg-[#252a32]"
+                  aria-label="Flip tokens"
+                >
+                  <ArrowDown className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* ── SLOT BAWAH (buy) ── */}
+              <SwapCard
+                label="You Get (est.)"
+                amount={quote ? formatAmount(quote.outputAmount) : ""}
+                isInput={false}
+                isLoading={quoteLoading}
+                tokens={tokens}
+                selectedToken={buyToken}
+                onSelectToken={setBuyToken}
+                excludeToken={sellToken}
+                estimated
+              />
+            </div>
+
+            {/* Same token warning */}
+            {sameToken && (
+              <p className="mt-3 text-center text-sm text-amber-400">
+                Select different tokens to swap.
+              </p>
+            )}
+
+            {/* Insufficient balance */}
+            {insufficientBalance && (
+              <p className="mt-3 text-center text-sm font-medium text-red-400">
+                Insufficient CC balance
+              </p>
+            )}
+
+            {/* Quote details */}
+            {!sameToken &&
+              (quoteError ? (
+                <div className="mt-3 flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{quoteError}</span>
+                </div>
+              ) : quote ? (
+                <div className="mt-3 space-y-2 rounded-xl border border-white/5 bg-[#13151a] p-4 text-xs">
+                  <DetailRow
+                    label="Rate"
+                    value={`1 ${sellToken?.instrumentId} ≈ ${formatPrice(quote.prices.tradePrice)} ${buyToken?.instrumentId}`}
+                  />
+                  <DetailRow
+                    label="Price Impact"
+                    value={`${formatPct(quote.prices.slippage)}%`}
+                    valueClass={
+                      parseFloat(quote.prices.slippage) > 3
+                        ? "text-red-400"
+                        : "text-emerald-400"
+                    }
+                  />
+                  <DetailRow
+                    label="Swap Fee"
+                    value={`${formatAmount(quote.fees.adminFee)} ${quote.outputInstrument.id} (${formatPct(quote.fees.feePercentage)}%)`}
+                  />
+                  <DetailRow
+                    label="Network Fee"
+                    value={`${formatAmount(quote.fees.networkFee)} ${quote.outputInstrument.id}`}
+                  />
+                </div>
+              ) : null)}
+
+            {/* CTA */}
             <button
               type="button"
-              onClick={flipDirection}
-              className="flex h-10 w-10 items-center justify-center rounded-full border-4 border-[#0a0b0d] bg-[#1a1d23] text-amber-400 transition hover:rotate-180 hover:bg-[#252a32]"
-              aria-label="Flip swap direction"
+              disabled
+              className={cn(
+                buttonVariants({ size: "sm" }),
+                "mt-4 w-full cursor-not-allowed opacity-60",
+              )}
             >
-              <ArrowDown className="h-4 w-4" />
+              Swap Coming Soon
             </button>
-          </div>
-
-          {/* ── YOU GET ── */}
-          <SwapCard
-            label="You Get (est.)"
-            amount={quote ? formatAmount(quote.outputAmount) : ""}
-            isInput={false}
-            isLoading={quoteLoading}
-            tokenIsCC={direction === "TOKEN_TO_CC"}
-            selectedToken={selectedToken}
-            estimated
-          />
-        </div>
-
-        {/* Insufficient balance */}
-        {insufficientBalance && (
-          <p className="mt-3 text-center text-sm font-medium text-red-400">
-            Insufficient CC balance
-          </p>
+            <p className="mt-2 text-center text-[11px] text-slate-500">
+              Quote preview is live. Execution enabled in next phase.
+            </p>
+          </>
         )}
-
-        {/* Quote details */}
-        {quoteError ? (
-          <div className="mt-3 flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            <span>{quoteError}</span>
-          </div>
-        ) : quote ? (
-          <div className="mt-3 space-y-2 rounded-xl border border-white/5 bg-[#13151a] p-4 text-xs">
-            <DetailRow
-              label="Rate"
-              value={`1 ${inputSymbol} ≈ ${formatPrice(quote.prices.tradePrice)} ${outputSymbol}`}
-            />
-            <DetailRow
-              label="Price Impact"
-              value={`${formatPct(quote.prices.slippage)}%`}
-              valueClass={
-                parseFloat(quote.prices.slippage) > 3
-                  ? "text-red-400"
-                  : "text-emerald-400"
-              }
-            />
-            <DetailRow
-              label="Swap Fee"
-              value={`${formatAmount(quote.fees.adminFee)} ${quote.outputInstrument.id} (${formatPct(quote.fees.feePercentage)}%)`}
-            />
-            <DetailRow
-              label="Network Fee"
-              value={`${formatAmount(quote.fees.networkFee)} ${quote.outputInstrument.id}`}
-            />
-          </div>
-        ) : null}
-
-        {/* CTA button */}
-        <button
-          type="button"
-          disabled
-          className={cn(
-            buttonVariants({ size: "sm" }),
-            "mt-4 w-full cursor-not-allowed opacity-60",
-          )}
-        >
-          Swap Coming Soon
-        </button>
-        <p className="mt-2 text-center text-[11px] text-slate-500">
-          Quote preview is live. Execution enabled in next phase.
-        </p>
       </div>
     </div>
   );
 }
 
-// ── Swap Card (input/output token slot) ─────────────────────────────────
+// ── Token Selector Modal (pop-up list with search) ──────────────────────
+
+interface TokenPickerProps {
+  open: boolean;
+  onClose: () => void;
+  tokens: SwapToken[];
+  selectedToken: SwapToken | null;
+  onSelect: (t: SwapToken) => void;
+  excludeToken?: SwapToken | null;
+}
+
+function TokenPicker({
+  open,
+  onClose,
+  tokens,
+  onSelect,
+  excludeToken,
+}: TokenPickerProps) {
+  const [search, setSearch] = useState("");
+  if (!open) return null;
+
+  const filtered = tokens.filter(
+    (t) =>
+      (!excludeToken ||
+        t.instrumentId !== excludeToken.instrumentId) &&
+      t.instrumentId.toLowerCase().includes(search.toLowerCase()),
+  );
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center"
+      role="presentation"
+    >
+      <button
+        type="button"
+        className="fixed inset-0 bg-black/70 backdrop-blur-sm"
+        aria-label="Close token list"
+        onClick={onClose}
+      />
+      <div className="relative z-10 w-full max-w-md rounded-t-3xl border border-white/10 bg-[#0a0b0d] p-5 shadow-2xl sm:rounded-3xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-base font-bold text-white">Select Token</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className={iconButtonClass(
+              "h-8 w-8 text-slate-400 hover:text-slate-200",
+            )}
+            aria-label="Close"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        {/* Search */}
+        <div className="relative mb-4">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+          <input
+            type="text"
+            placeholder="Search token..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full rounded-xl border border-white/10 bg-[#13151a] py-2.5 pl-10 pr-4 text-sm text-white outline-none placeholder:text-slate-600 focus:border-amber-500/50"
+          />
+        </div>
+        {/* List */}
+        <div className="max-h-[50vh] space-y-1 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <p className="py-8 text-center text-sm text-slate-500">
+              No tokens found.
+            </p>
+          ) : (
+            filtered.map((t) => (
+              <button
+                key={`${t.instrumentId}::${t.instrumentAdmin}`}
+                type="button"
+                onClick={() => {
+                  onSelect(t);
+                  onClose();
+                }}
+                className="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-white/5"
+              >
+                <TokenLogo symbol={t.instrumentId} />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-white">
+                    {t.instrumentId}
+                    {t.isCC && (
+                      <span className="ml-1.5 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-400">
+                        CC
+                      </span>
+                    )}
+                  </p>
+                  <p className="truncate text-[11px] text-slate-500">
+                    {t.instrumentAdmin.slice(0, 20)}...
+                  </p>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Swap Card (slot) ────────────────────────────────────────────────────
 
 interface SwapCardProps {
   label: string;
@@ -374,11 +521,10 @@ interface SwapCardProps {
   balance?: string;
   onPercentClick?: (pct: number) => void;
   isLoading?: boolean;
-  error?: string | null;
-  tokens?: SwappableToken[];
-  selectedToken?: SwappableToken | null;
-  onSelectToken?: (t: SwappableToken) => void;
-  tokenIsCC: boolean;
+  tokens: SwapToken[];
+  selectedToken: SwapToken | null;
+  onSelectToken: (t: SwapToken) => void;
+  excludeToken?: SwapToken | null;
   estimated?: boolean;
 }
 
@@ -390,128 +536,129 @@ function SwapCard({
   balance,
   onPercentClick,
   isLoading,
-  error,
   tokens,
   selectedToken,
   onSelectToken,
-  tokenIsCC,
+  excludeToken,
   estimated,
 }: SwapCardProps) {
-  // Native <select> styled to blend with custom token chip.
-  return (
-    <div className="rounded-2xl border border-white/5 bg-[#13151a] p-4">
-      <div className="mb-2 flex items-center justify-between">
-        <span className="text-xs font-medium text-slate-500">{label}</span>
-        {isInput && balance && (
-          <div className="flex items-center gap-1.5">
-            <span className="text-[11px] text-slate-500">Bal: {balance}</span>
-            {onPercentClick && (
-              <div className="flex gap-1">
-                {[0.25, 0.5, 0.75].map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => onPercentClick(p)}
-                    className="rounded bg-[#252a32] px-1.5 py-0.5 text-[10px] font-semibold text-slate-300 hover:bg-[#323842] hover:text-white"
-                  >
-                    {p === 0.25 ? "25" : p === 0.5 ? "50" : "75"}%
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => onPercentClick(1)}
-                  className="rounded bg-[#252a32] px-1.5 py-0.5 text-[10px] font-semibold text-amber-400 hover:bg-[#323842]"
-                >
-                  MAX
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-      <div className="flex items-center gap-3">
-        {/* Amount */}
-        {isInput ? (
-          <input
-            type="number"
-            inputMode="decimal"
-            min="0"
-            step="0.000001"
-            placeholder="0.0"
-            value={amount ?? ""}
-            onChange={(e) => onAmountChange?.(e.target.value)}
-            className="w-full min-w-0 flex-1 bg-transparent text-2xl font-bold text-white outline-none placeholder:text-slate-600"
-          />
-        ) : (
-          <span
-            className={cn(
-              "w-full min-w-0 flex-1 text-2xl font-bold",
-              estimated ? "text-amber-300" : "text-white",
-            )}
-          >
-            {amount || "0.0"}
-          </span>
-        )}
+  const [pickerOpen, setPickerOpen] = useState(false);
 
-        {/* Token selector chip */}
-        {tokenIsCC ? (
-          <div className="flex shrink-0 items-center gap-2 rounded-full bg-[#252a32] px-3 py-2">
-            <TokenAvatar symbol={CC_SYMBOL} />
-            <span className="text-sm font-semibold text-white">{CC_SYMBOL}</span>
-          </div>
-        ) : isLoading ? (
-          <div className="flex shrink-0 items-center gap-2 rounded-full bg-[#252a32] px-3 py-2">
-            <LoadingSpinner className="h-4 w-4" />
-          </div>
-        ) : error ? (
-          <div className="shrink-0 rounded-full bg-red-500/20 px-3 py-2 text-xs text-red-400">
-            Error
-          </div>
-        ) : tokens && tokens.length > 0 ? (
-          <div className="relative shrink-0">
-            <select
-              value={
-                selectedToken
-                  ? `${selectedToken.instrumentId}::${selectedToken.instrumentAdmin}`
-                  : ""
-              }
-              onChange={(e) => {
-                const found = tokens.find(
-                  (t) =>
-                    `${t.instrumentId}::${t.instrumentAdmin}` === e.target.value,
-                );
-                if (found && onSelectToken) onSelectToken(found);
-              }}
-              className="cursor-pointer appearance-none rounded-full bg-[#252a32] py-2 pl-3 pr-8 text-sm font-semibold text-white outline-none hover:bg-[#323842]"
+  return (
+    <>
+      <div className="rounded-2xl border border-white/5 bg-[#13151a] p-4">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-xs font-medium text-slate-500">{label}</span>
+          {isInput && balance && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] text-slate-500">Bal: {balance}</span>
+              {onPercentClick && (
+                <div className="flex gap-1">
+                  {[0.25, 0.5, 0.75].map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => onPercentClick(p)}
+                      className="rounded bg-[#252a32] px-1.5 py-0.5 text-[10px] font-semibold text-slate-300 hover:bg-[#323842] hover:text-white"
+                    >
+                      {p === 0.25 ? "25" : p === 0.5 ? "50" : "75"}%
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => onPercentClick(1)}
+                    className="rounded bg-[#252a32] px-1.5 py-0.5 text-[10px] font-semibold text-amber-400 hover:bg-[#323842]"
+                  >
+                    MAX
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          {/* Amount */}
+          {isInput ? (
+            <input
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="0.000001"
+              placeholder="0.0"
+              value={amount ?? ""}
+              onChange={(e) => onAmountChange?.(e.target.value)}
+              className="w-full min-w-0 flex-1 bg-transparent text-2xl font-bold text-white outline-none placeholder:text-slate-600"
+            />
+          ) : (
+            <span
+              className={cn(
+                "w-full min-w-0 flex-1 text-2xl font-bold",
+                estimated
+                  ? isLoading
+                    ? "text-slate-600"
+                    : "text-amber-300"
+                  : "text-white",
+              )}
             >
-              {tokens.map((t) => (
-                <option
-                  key={`${t.instrumentId}::${t.instrumentAdmin}`}
-                  value={`${t.instrumentId}::${t.instrumentAdmin}`}
-                  className="bg-[#13151a]"
-                >
-                  {t.instrumentId}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          </div>
-        ) : (
-          <div className="shrink-0 rounded-full bg-[#252a32] px-3 py-2 text-xs text-slate-500">
-            No tokens
-          </div>
-        )}
+              {isLoading ? "…" : (amount || "0.0")}
+            </span>
+          )}
+
+          {/* Token selector chip — klik buka picker */}
+          <button
+            type="button"
+            onClick={() => setPickerOpen(true)}
+            className="flex shrink-0 items-center gap-2 rounded-full bg-[#252a32] px-3 py-2 transition hover:bg-[#323842]"
+          >
+            {selectedToken ? (
+              <>
+                <TokenLogo symbol={selectedToken.instrumentId} size="sm" />
+                <span className="text-sm font-semibold text-white">
+                  {selectedToken.instrumentId}
+                </span>
+              </>
+            ) : (
+              <span className="text-sm font-semibold text-slate-400">
+                Select
+              </span>
+            )}
+            <ChevronDown className="h-4 w-4 text-slate-400" />
+          </button>
+        </div>
       </div>
-    </div>
+
+      {/* Token picker pop-up */}
+      <TokenPicker
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        tokens={tokens}
+        selectedToken={selectedToken}
+        onSelect={onSelectToken}
+        excludeToken={excludeToken}
+      />
+    </>
   );
 }
 
-// ── Token Avatar (circle with first letter) ─────────────────────────────
+// ── Token Logo (gradient circle with first letter) ──────────────────────
 
-function TokenAvatar({ symbol }: { symbol: string }) {
+function TokenLogo({
+  symbol,
+  size = "md",
+}: {
+  symbol: string;
+  size?: "sm" | "md";
+}) {
   const letter = symbol.charAt(0).toUpperCase();
+  const dim = size === "sm" ? "h-6 w-6 text-[11px]" : "h-8 w-8 text-sm";
   return (
-    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-[11px] font-bold text-black">
+    <span
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br font-bold text-black",
+        gradientFor(symbol),
+        dim,
+      )}
+    >
       {letter}
     </span>
   );

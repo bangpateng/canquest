@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsNumber,
   IsOptional,
   IsString,
@@ -9,46 +10,52 @@ import {
 } from 'class-validator';
 
 /**
- * Request body for POST /api/party/swap/quote.
+ * Request body for POST /api/party/swap/quote — pair FLEKSIBEL.
  *
- * Meminta live quote dari Cantex DEX. Dipakai frontend untuk preview
- * (output estimate, price impact, fees) SEBELUM user konfirmasi swap.
+ * Frontend kirim sell/buy instrument langsung (token mana pun di slot atas
+ * atau bawah). Tidak ada hardcode "direction CC↔token" — user bisa swap
+ * token apa pun ke token apa pun selama ada pool AMM Cantex untuk pair itu.
  *
- * Amount disini adalah human decimal CC (bukan micro), karena Cantex API
- * memakai decimal-string amounts.
+ * Amulet = CC (CanQuest currency). FE menandai via isCC dari pools response.
  */
-export const MAX_SWAP_CC = 1_000_000;
+export const MAX_SWAP_AMOUNT = 1_000_000;
 
 export class SwapQuoteDto {
-  /** Arah swap. */
-  @IsString()
-  @MinLength(1)
-  direction!: 'CC_TO_TOKEN' | 'TOKEN_TO_CC';
-
-  /** Instrument id token target (bukan CC). Mis. "TokenX". */
+  /** Instrumen yang dijual (slot atas). */
   @IsString()
   @MinLength(1)
   @MaxLength(128)
-  instrumentId!: string;
+  sellInstrumentId!: string;
 
-  /** Admin party token target. Mis. "DSO::1220...". */
   @IsString()
   @MinLength(1)
   @MaxLength(256)
-  instrumentAdmin!: string;
+  sellInstrumentAdmin!: string;
 
-  /**
-   * Jumlah yang dijual (human decimal).
-   * CC_TO_TOKEN: jumlah CC.
-   * TOKEN_TO_CC: jumlah token.
-   */
+  /** Instrumen yang dibeli (slot bawah). */
+  @IsString()
+  @MinLength(1)
+  @MaxLength(128)
+  buyInstrumentId!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(256)
+  buyInstrumentAdmin!: string;
+
+  /** Jumlah yang dijual (human decimal, bukan micro). */
   @IsNumber()
   @Min(0.000001, { message: 'Amount must be greater than 0.' })
-  @Max(MAX_SWAP_CC, { message: 'Amount exceeds swap ceiling.' })
+  @Max(MAX_SWAP_AMOUNT, { message: 'Amount exceeds swap ceiling.' })
   amount!: number;
 
   @IsOptional()
   @IsString()
   @MaxLength(256)
   maxNetworkFee?: string;
+
+  /** Optional flag FE: true bila sell = CC (untuk pengecekan saldo). */
+  @IsOptional()
+  @IsBoolean()
+  sellIsCC?: boolean;
 }

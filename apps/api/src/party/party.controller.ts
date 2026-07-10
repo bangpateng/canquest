@@ -2616,8 +2616,8 @@ export class PartyController {
   }
 
   /**
-   * GET /party/swap/pools — daftar token yang bisa di-swap dengan CC.
-   * Filter: hanya pool yang salah satu leg = CC (Amulet).
+   * GET /party/swap/pools — daftar SEMUA token yang bisa di-swap (termasuk
+   * Amulet/CC). User bisa pilih token mana pun di slot atas ATAU bawah.
    * Live dari Cantex DEX (read-only, no risk).
    */
   @Get('swap/pools')
@@ -2633,17 +2633,15 @@ export class PartyController {
         'You need a Canton wallet to use swap. Create yours first.',
       );
     }
-    const ccInstrument = {
-      id: process.env.CANTEX_CC_INSTRUMENT_ID ?? 'Amulet',
-      admin: process.env.CANTEX_CC_INSTRUMENT_ADMIN ?? '',
-    };
     try {
-      const tokens = await this.cantex.getSwappableTokens(ccInstrument);
+      const instruments = await this.cantex.getAllSwapInstruments();
+      // Tandai mana yang CC/Amulet (untuk logo + label FE).
+      const ccId = (process.env.CANTEX_CC_INSTRUMENT_ID ?? 'Amulet').toLowerCase();
       return {
-        ccInstrument,
-        tokens: tokens.map((t) => ({
+        tokens: instruments.map((t) => ({
           instrumentId: t.id,
           instrumentAdmin: t.admin,
+          isCC: t.id.toLowerCase() === ccId,
         })),
       };
     } catch (err) {
@@ -2668,28 +2666,24 @@ export class PartyController {
     if (!isCantexEnabled()) {
       throw new ServiceUnavailableException('Swap is not enabled.');
     }
-    const ccInstrument = {
-      id: process.env.CANTEX_CC_INSTRUMENT_ID ?? 'Amulet',
-      admin: process.env.CANTEX_CC_INSTRUMENT_ADMIN ?? '',
-    };
-    // Tentukan sell/buy berdasar arah.
-    const isCcToToken = body.direction === 'CC_TO_TOKEN';
-    const sellInstrument = isCcToToken
-      ? ccInstrument
-      : { id: body.instrumentId, admin: body.instrumentAdmin };
-    const buyInstrument = isCcToToken
-      ? { id: body.instrumentId, admin: body.instrumentAdmin }
-      : ccInstrument;
+    // Validasi: sell != buy (tidak bisa swap token ke dirinya sendiri).
+    if (
+      body.sellInstrumentId === body.buyInstrumentId &&
+      body.sellInstrumentAdmin === body.buyInstrumentAdmin
+    ) {
+      throw new BadRequestException(
+        'Cannot swap a token to itself. Select different tokens.',
+      );
+    }
     try {
       const quote = await this.cantex.getQuote({
         sellAmount: String(body.amount),
-        sellInstrumentId: sellInstrument.id,
-        sellInstrumentAdmin: sellInstrument.admin,
-        buyInstrumentId: buyInstrument.id,
-        buyInstrumentAdmin: buyInstrument.admin,
+        sellInstrumentId: body.sellInstrumentId,
+        sellInstrumentAdmin: body.sellInstrumentAdmin,
+        buyInstrumentId: body.buyInstrumentId,
+        buyInstrumentAdmin: body.buyInstrumentAdmin,
       });
       return {
-        direction: body.direction,
         sellAmount: quote.sellAmount.toString(),
         sellInstrument: quote.sellInstrument,
         buyInstrument: quote.buyInstrument,

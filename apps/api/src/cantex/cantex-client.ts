@@ -336,6 +336,24 @@ export class CantexClient {
     return [...seen.values()];
   }
 
+  /**
+   * SEMUA instrumen unik dari semua pool AMM Cantex (termasuk Amulet/CC).
+   * Dipakai frontend untuk token picker yang fleksibel — user bisa pilih
+   * token mana pun di slot atas ATAU bawah (model DEX proper seperti
+   * Uniswap/Cantex), bukan hardcode CC ↔ token lain.
+   */
+  async getAllSwapInstruments(): Promise<InstrumentId[]> {
+    const pools = await this.getPools();
+    const seen = new Map<string, InstrumentId>();
+    for (const p of pools) {
+      for (const leg of [p.tokenA, p.tokenB]) {
+        const key = `${leg.id}::${leg.admin}`;
+        if (!seen.has(key)) seen.set(key, leg);
+      }
+    }
+    return [...seen.values()];
+  }
+
   /** POST /v2/pools/quote → live swap quote. */
   async getQuote(params: QuoteParams): Promise<SwapQuote> {
     const raw = await this.request<RawSwapQuote>('POST', '/v2/pools/quote', {
