@@ -71,27 +71,32 @@ export class UploadsController {
 
   /**
    * Token logo untuk Swap modal — stream dari R2 key `tokens/<symbol>.<ext>`.
-   * Symbol di-normalisasi (lowercase, display name mapping CC↔Amulet).
-   * Coba beberapa format berurutan: webp → png → jpg → gif.
+   * Coba beberapa case (CC, cc) + format (webp, png, jpg) berurutan.
+   * R2 case-sensitive → kita coba beberapa variant supaya match file apa pun
+   * yang di-upload admin (CC.webp, cc.webp, dll).
    * 404 kalau tidak ada satupun → FE fallback ke gradient circle.
    */
   @Get('token-logo/:symbol')
   @Throttle({ default: { limit: 120, ttl: 60_000 } })
   async serveTokenLogo(
-    @Param('symbol') symbol: string,
+    @Param('symbol') rawSymbol: string,
     @Res({ passthrough: true }) res: Response,
   ) {
-    // Sanitize: hanya alphanumeric + dash.
-    const clean = symbol.toLowerCase().replace(/[^a-z0-9-]/g, '');
-    if (!clean || clean.length > 64) {
+    // Sanitize base: alphanumeric + dash, preserve case info.
+    const base = rawSymbol.replace(/[^a-zA-Z0-9-]/g, '');
+    if (!base || base.length > 64) {
       throw new NotFoundException();
     }
-    // Coba format dalam urutan preferensi (webp paling kecil, png lossless).
+    // Case variants untuk dicoba (R2 case-sensitive).
+    // CC → ['CC', 'cc'], TokenX → ['TokenX', 'tokenx']
+    const cases = [base, base.toUpperCase(), base.toLowerCase()];
     const exts = ['webp', 'png', 'jpg', 'jpeg', 'gif'];
     let asset: { stream: Readable; contentType: string } | null = null;
-    for (const ext of exts) {
-      asset = await this.storage.getQuestAssetStream(`tokens/${clean}.${ext}`);
-      if (asset) break;
+    outer: for (const c of cases) {
+      for (const ext of exts) {
+        asset = await this.storage.getQuestAssetStream(`tokens/${c}.${ext}`);
+        if (asset) break outer;
+      }
     }
     if (!asset) {
       throw new NotFoundException();
