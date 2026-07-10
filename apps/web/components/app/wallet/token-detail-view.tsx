@@ -1,0 +1,240 @@
+"use client";
+
+import { useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, RefreshCw, Lock } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { useCcBalance } from "@/lib/hooks/use-cc-balance";
+import { useCcPrice } from "@/lib/hooks/use-cc-price";
+import { useLockStatus } from "@/lib/hooks/use-lock-status";
+import { formatPartyIdForDisplay } from "@/lib/canton/canton-party-id";
+import { isRealCantonPartyId } from "@/lib/auth/wallet-session-cache";
+import { cn } from "@/lib/utils/utils";
+import { WalletActions } from "./wallet-actions";
+import { CcLockModal } from "./cc-lock-modal";
+import { TransactionsView } from "./transactions-view";
+import { TokenLogo, displayName } from "./token-logo";
+import { ROUTES } from "@/lib/routing/app-routes";
+
+interface TokenDetailViewProps {
+  tokenId: string;
+  me: { username?: string | null; cantonPartyId?: string | null };
+}
+
+/**
+ * Detail view untuk token yang dipilih (/wallet/<tokenId>).
+ *
+ * tokenId === "cc": balance hero + Send/Receive/Swap + Lock + Activity history.
+ * tokenId lain (Phase 2): balance + Swap saja (Send/Receive non-CC belum ada).
+ */
+export function TokenDetailView({ tokenId, me }: TokenDetailViewProps) {
+  const router = useRouter();
+  const isCC = tokenId.toLowerCase() === "cc";
+  const hasWallet = isRealCantonPartyId(me.cantonPartyId);
+  const displayPartyId = formatPartyIdForDisplay(me.cantonPartyId);
+
+  // CC-specific hooks (hanya fetch untuk CC).
+  const {
+    balance,
+    loading: balanceLoading,
+    refresh: fetchBalance,
+    refreshWithRetries,
+  } = useCcBalance({ enabled: hasWallet && isCC, pollIntervalMs: 90_000 });
+  const {
+    status: lockStatus,
+    refreshWithRetries: refreshLock,
+  } = useLockStatus({ enabled: hasWallet && isCC, pollIntervalMs: 120_000 });
+  const { price: ccUsdPrice, change24hPct } = useCcPrice();
+  const ccUsd = ccUsdPrice ?? 0;
+
+  const [txRefreshKey, setTxRefreshKey] = useState(0);
+  const [lockOpen, setLockOpen] = useState(false);
+
+  const handleBalanceRefresh = useCallback(() => {
+    refreshWithRetries();
+    setTxRefreshKey((k) => k + 1);
+  }, [refreshWithRetries]);
+
+  const handleLockAction = useCallback(() => {
+    refreshLock();
+    refreshWithRetries();
+    setTxRefreshKey((k) => k + 1);
+  }, [refreshLock, refreshWithRetries]);
+
+  // Token display info.
+  const symbol = isCC ? "Amulet" : tokenId;
+  const display = displayName(symbol);
+  const change = change24hPct ?? 0;
+  const isPositive = change >= 0;
+
+  return (
+    <div className="w-full max-w-full min-w-0 space-y-5 font-sans">
+      {/* Back button */}
+      <button
+        type="button"
+        onClick={() => router.push(ROUTES.walletToken("cc").replace("/cc", ""))}
+        className="flex items-center gap-2 text-sm font-medium text-slate-400 transition hover:text-slate-200"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Wallet
+      </button>
+
+      {/* ── Balance Hero Card ───────────────────────────────────────────── */}
+      <div className="relative w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50 p-6 sm:p-8">
+        <div
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_0%,rgb(var(--canton-rgb)/0.10),transparent_70%)]"
+          aria-hidden
+        />
+        <div className="relative flex items-start justify-between gap-3 mb-6">
+          <div className="flex items-center gap-3">
+            <TokenLogo symbol={symbol} size="lg" />
+            <div>
+              <h1 className="text-xl font-bold text-white">{display}</h1>
+              {isCC && ccUsd > 0 && (
+                <span className="text-xs text-slate-500">
+                  1 CC ≈ ${ccUsd.toFixed(6)}
+                </span>
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => void fetchBalance()}
+            disabled={balanceLoading}
+            className="rounded-xl p-2.5 text-slate-400 transition hover:bg-white/[0.06] hover:text-slate-100 disabled:opacity-40"
+            aria-label="Refresh balance"
+          >
+            {balanceLoading ? (
+              <LoadingSpinner size="sm" tone="muted" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+          </button>
+        </div>
+
+        <div className="relative">
+          <p className="text-3xl font-extrabold tabular-nums leading-none tracking-tight text-white sm:text-4xl">
+            {balanceLoading ? (
+              <span className="text-slate-500">—</span>
+            ) : (
+              <>
+                {isCC ? (balance?.toFixed(4) ?? "0.0000") : "0.0000"}{" "}
+                <span className="text-base font-semibold text-slate-500 sm:text-lg">
+                  {display}
+                </span>
+              </>
+            )}
+          </p>
+          <div className="mt-3 flex items-center gap-3">
+            {isCC && !balanceLoading && ccUsd > 0 && balance !== null && (
+              <span className="text-sm font-medium text-slate-500">
+                ≈ $
+                {(balance * ccUsd).toLocaleString("en-US", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}{" "}
+                USD
+              </span>
+            )}
+            {change24hPct !== undefined && (
+              <span
+                className={cn(
+                  "text-xs font-semibold tabular-nums",
+                  isPositive ? "text-emerald-400" : "text-red-400",
+                )}
+              >
+                {isPositive ? "+" : ""}
+                {change.toFixed(2)}%
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Actions (CC: full, non-CC: swap only Phase 2) ── */}
+      {isCC ? (
+        <>
+          {/* Lock status bar */}
+          {hasWallet && lockStatus.hasWallet && (
+            <LockStatusBar status={lockStatus} onManage={() => setLockOpen(true)} />
+          )}
+
+          <WalletActions
+            partyId={displayPartyId}
+            balance={balance}
+            onBalanceRefresh={handleBalanceRefresh}
+          />
+
+          {/* Activity history — CC only */}
+          <div>
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500">
+              Activity
+            </h2>
+            <TransactionsView
+              variant="embedded"
+              refreshKey={txRefreshKey}
+              partyId={me.cantonPartyId ?? null}
+            />
+          </div>
+
+          {/* Lock modal */}
+          <CcLockModal
+            open={lockOpen}
+            onClose={() => setLockOpen(false)}
+            status={lockStatus}
+            onRefresh={handleLockAction}
+          />
+        </>
+      ) : (
+        <div className="rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 p-6 text-center">
+          <p className="text-sm text-slate-400">
+            {display} swap tersedia lewat menu Swap di halaman CC.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Lock status bar (dipindah dari wallet-dashboard). */
+function LockStatusBar({
+  status,
+  onManage,
+}: {
+  status: { lockedCc: number; tier: "NONE" | "FULL" };
+  onManage: () => void;
+}) {
+  const hasLock = status.lockedCc > 0;
+  const badge =
+    status.tier === "FULL"
+      ? { label: "Full access", color: "text-emerald-400" }
+      : { label: "", color: "text-slate-400" };
+
+  return (
+    <div className="flex w-full items-center justify-between gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.04] px-4 py-2.5">
+      <div className="flex min-w-0 items-center gap-2 text-sm">
+        <Lock className="h-4 w-4 shrink-0 text-emerald-400" aria-hidden />
+        {hasLock ? (
+          <span className="truncate text-slate-200">
+            Locked{" "}
+            <span className="font-semibold">{status.lockedCc} CC</span>
+            {badge.label && (
+              <span className={cn("ml-1.5 font-medium", badge.color)}>
+                · {badge.label}
+              </span>
+            )}
+          </span>
+        ) : (
+          <span className="truncate text-slate-400">No CC locked</span>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={onManage}
+        className="shrink-0 rounded-xl border border-emerald-500/60 bg-transparent px-3 py-1.5 text-xs font-semibold text-emerald-400 transition hover:bg-emerald-500/10"
+      >
+        {hasLock ? "Manage" : "Lock"}
+      </button>
+    </div>
+  );
+}

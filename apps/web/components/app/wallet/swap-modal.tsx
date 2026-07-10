@@ -52,42 +52,10 @@ interface SwapModalProps {
   onBalanceRefresh?: () => void;
 }
 
-// ── Display name mapping (internal Cantex name → user-facing) ───────────
-// Amulet = nama internal Cantex untuk CC. Untuk user CanQuest, tampilkan "CC".
-const DISPLAY_NAMES: Record<string, string> = {
-  AMULET: "CC",
-};
-
-/** Convert internal instrument id → display name (Amulet → CC). */
-function displayName(id: string): string {
-  return DISPLAY_NAMES[id.toUpperCase()] ?? id;
-}
-
-// ── Color map for token logos (deterministic by symbol) ─────────────────
-
-const LOGO_COLORS: Record<string, string> = {
-  CC: "from-amber-400 to-amber-600",
-  AMULET: "from-amber-400 to-amber-600",
-};
-const FALLBACK_GRADIENTS = [
-  "from-blue-400 to-blue-600",
-  "from-emerald-400 to-emerald-600",
-  "from-purple-400 to-purple-600",
-  "from-pink-400 to-pink-600",
-  "from-cyan-400 to-cyan-600",
-  "from-orange-400 to-orange-600",
-  "from-indigo-400 to-indigo-600",
-  "from-rose-400 to-rose-600",
-];
-
-function gradientFor(symbol: string): string {
-  const key = symbol.toUpperCase();
-  if (LOGO_COLORS[key]) return LOGO_COLORS[key];
-  // Hash symbol → pick gradient deterministically.
-  let hash = 0;
-  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) | 0;
-  return FALLBACK_GRADIENTS[Math.abs(hash) % FALLBACK_GRADIENTS.length]!;
-}
+import {
+  TokenLogo,
+  displayName,
+} from "@/components/app/wallet/token-logo";
 
 // ── Component ───────────────────────────────────────────────────────────
 
@@ -673,74 +641,6 @@ function SwapCard({
         excludeToken={excludeToken}
       />
     </>
-  );
-}
-
-// ── Token Logo (image file → fallback gradient circle) ──────────────────
-//
-// Sistem logo: taruh file gambar di apps/web/public/tokens/<symbol>.png
-// (atau .svg/.jpg). Contoh: public/tokens/cc.png, public/tokens/Amulet.svg
-// Kalau file ada → tampilkan gambar. Kalau tidak → fallback gradient circle
-// dengan huruf pertama. Next.js Image TIDAK dipakai disini supaya onError
-// fallback cepat (no blur placeholder) untuk token yang belum punya logo.
-
-/** Sanitize symbol ke nama file — PRESERVE CASE (match R2 upload as-is).
- * EDELx → EDELx, cETH → cETH, CC → CC. Hanya strip special chars. */
-function logoFileName(symbol: string): string {
-  const display = displayName(symbol);
-  return display.replace(/[^a-zA-Z0-9]/g, "-");
-}
-
-/** API origin untuk upload proxy (sama pattern dengan cc-reward-logo). */
-function apiOrigin(): string {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
-  if (apiUrl) {
-    try {
-      return new URL(apiUrl).origin;
-    } catch {
-      /* fall through */
-    }
-  }
-  return (
-    process.env.NEXT_PUBLIC_API_ORIGIN?.replace(/\/$/, "") ??
-    "https://api.canquest.cc"
-  );
-}
-
-function TokenLogo({
-  symbol,
-  size = "md",
-}: {
-  symbol: string;
-  size?: "sm" | "md";
-}) {
-  const [imgError, setImgError] = useState(false);
-  const letter = displayName(symbol).charAt(0).toUpperCase();
-  const dim = size === "sm" ? "h-6 w-6 text-[11px]" : "h-8 w-8 text-sm";
-  // Logo dari R2 via API proxy: /api/uploads/token-logo/<symbol>
-  const src = `${apiOrigin()}/api/uploads/token-logo/${logoFileName(symbol)}`;
-
-  // Coba gambar dulu; kalau gagal load → fallback gradient circle.
-  if (!imgError) {
-    return (
-      <img
-        src={src}
-        alt={displayName(symbol)}
-        onError={() => setImgError(true)}
-        className={cn("shrink-0 rounded-full object-cover", dim)}
-      />
-    );
-  }
-  return (
-    <span
-      className={cn(
-        "flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br font-bold text-black",
-        gradientFor(symbol),
-        dim,
-      )}
-    >
-      {letter}
-    </span>
   );
 }
 

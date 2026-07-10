@@ -15,4 +15,6 @@ export const ROUTES = {
   earnHub: "/quests",
   /** Rankings — below Wallet in nav */
   leaderboard: "/leaderboard",
+  /** Wallet token detail — /wallet/cc, /wallet/cbtc, etc. */
+  walletToken: (tokenId: string) => `/wallet/${tokenId}`,
 } as const;
