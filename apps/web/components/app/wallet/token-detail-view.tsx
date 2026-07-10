@@ -14,7 +14,6 @@ import { WalletActions } from "./wallet-actions";
 import { CcLockModal } from "./cc-lock-modal";
 import { TransactionsView } from "./transactions-view";
 import { TokenLogo, displayName } from "./token-logo";
-import { ROUTES } from "@/lib/routing/app-routes";
 
 interface SwapToken {
   instrumentId: string;
@@ -50,7 +49,7 @@ export function TokenDetailView({ tokenId, me }: TokenDetailViewProps) {
     status: lockStatus,
     refreshWithRetries: refreshLock,
   } = useLockStatus({ enabled: hasWallet && isCC, pollIntervalMs: 120_000 });
-  const { price: ccUsdPrice, change24hPct } = useCcPrice();
+  const { price: ccUsdPrice } = useCcPrice();
   const ccUsd = ccUsdPrice ?? 0;
 
   const [txRefreshKey, setTxRefreshKey] = useState(0);
@@ -110,97 +109,80 @@ export function TokenDetailView({ tokenId, me }: TokenDetailViewProps) {
   // Token display info.
   const symbol = isCC ? "Amulet" : (tokenInfo?.instrumentId ?? tokenId);
   const display = displayName(symbol);
-  const change = change24hPct ?? 0;
-  const isPositive = change >= 0;
   const displayBalance = isCC
     ? (balance?.toFixed(4) ?? "0.0000")
     : tokenBalance.toFixed(4);
+  const usdValue =
+    isCC && !balanceLoading && ccUsd > 0 && balance !== null
+      ? (balance * ccUsd).toLocaleString("en-US", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })
+      : null;
 
   return (
-    <div className="w-full max-w-full min-w-0 space-y-5 font-sans">
-      {/* Back button */}
-      <button
-        type="button"
-        onClick={() => router.push(ROUTES.walletToken("cc").replace("/cc", ""))}
-        className="flex items-center gap-2 text-sm font-medium text-slate-400 transition hover:text-slate-200"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Wallet
-      </button>
-
-      {/* ── Balance Hero Card ───────────────────────────────────────────── */}
-      <div className="relative w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50 p-6 sm:p-8">
-        <div
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_0%,rgb(var(--canton-rgb)/0.10),transparent_70%)]"
-          aria-hidden
-        />
-        <div className="relative flex items-start justify-between gap-3 mb-6">
-          <div className="flex items-center gap-3">
-            <TokenLogo symbol={symbol} size="lg" />
-            <div>
-              <h1 className="text-xl font-bold text-white">{display}</h1>
-              {isCC && ccUsd > 0 && (
-                <span className="text-xs text-slate-500">
-                  1 CC ≈ ${ccUsd.toFixed(6)}
-                </span>
-              )}
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => void fetchBalance()}
-            disabled={balanceLoading}
-            className="rounded-xl p-2.5 text-slate-400 transition hover:bg-white/[0.06] hover:text-slate-100 disabled:opacity-40"
-            aria-label="Refresh balance"
-          >
-            {balanceLoading ? (
-              <LoadingSpinner size="sm" tone="muted" />
-            ) : (
-              <RefreshCw className="h-4 w-4" />
-            )}
-          </button>
-        </div>
-
-        <div className="relative">
-          <p className="text-3xl font-extrabold tabular-nums leading-none tracking-tight text-white sm:text-4xl">
-            {balanceLoading && isCC ? (
-              <span className="text-slate-500">—</span>
-            ) : (
-              <>
-                {displayBalance}{" "}
-                <span className="text-base font-semibold text-slate-500 sm:text-lg">
-                  {display}
-                </span>
-              </>
-            )}
-          </p>
-          <div className="mt-3 flex items-center gap-3">
-            {isCC && !balanceLoading && ccUsd > 0 && balance !== null && (
-              <span className="text-sm font-medium text-slate-500">
-                ≈ $
-                {(balance * ccUsd).toLocaleString("en-US", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}{" "}
-                USD
-              </span>
-            )}
-            {change24hPct !== undefined && (
-              <span
-                className={cn(
-                  "text-xs font-semibold tabular-nums",
-                  isPositive ? "text-emerald-400" : "text-red-400",
-                )}
-              >
-                {isPositive ? "+" : ""}
-                {change.toFixed(2)}%
-              </span>
-            )}
-          </div>
-        </div>
+    <div className="w-full max-w-full min-w-0 space-y-4 font-sans">
+      {/* ── Header bar: back + title ── */}
+      <div className="flex items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={() => router.push("/wallet")}
+          className="flex items-center gap-2 text-sm font-medium text-slate-400 transition hover:text-slate-200"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Wallet
+        </button>
+        <button
+          type="button"
+          onClick={() => void fetchBalance()}
+          disabled={balanceLoading}
+          className="rounded-lg p-2 text-slate-400 transition hover:bg-white/[0.06] hover:text-slate-100 disabled:opacity-40"
+          aria-label="Refresh balance"
+        >
+          {balanceLoading ? (
+            <LoadingSpinner size="sm" tone="muted" />
+          ) : (
+            <RefreshCw className="h-4 w-4" />
+          )}
+        </button>
       </div>
 
-      {/* ── Actions (CC: full, non-CC: swap only Phase 2) ── */}
+      {/* ── Token header: logo + name + balance (compact, inline) ── */}
+      <div className="rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 p-4 sm:p-5">
+        <div className="flex items-center gap-3">
+          <TokenLogo symbol={symbol} size="md" />
+          <div className="min-w-0 flex-1">
+            <h1 className="text-sm font-semibold text-slate-100">{display}</h1>
+            <p className="text-xl font-bold tabular-nums text-white sm:text-2xl">
+              {balanceLoading && isCC ? (
+                <span className="text-slate-500">—</span>
+              ) : (
+                <>
+                  {displayBalance}{" "}
+                  <span className="text-sm font-medium text-slate-500">
+                    {display}
+                  </span>
+                </>
+              )}
+            </p>
+          </div>
+          {usdValue && (
+            <div className="text-right">
+              <span className="text-xs text-slate-500">≈</span>{" "}
+              <span className="text-sm font-semibold tabular-nums text-slate-300">
+                ${usdValue}
+              </span>
+            </div>
+          )}
+        </div>
+        {isCC && ccUsd > 0 && (
+          <p className="mt-2 text-xs text-slate-600">
+            1 CC ≈ ${ccUsd.toFixed(6)}
+          </p>
+        )}
+      </div>
+
+      {/* ── Actions ── */}
       {isCC ? (
         <>
           {/* Lock status bar */}
@@ -235,9 +217,9 @@ export function TokenDetailView({ tokenId, me }: TokenDetailViewProps) {
           />
         </>
       ) : (
-        <div className="rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 p-6 text-center">
+        <div className="rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 p-4 text-center">
           <p className="text-sm text-slate-400">
-            {display} swap tersedia lewat menu Swap di halaman CC.
+            Swap {display} dari menu Swap di halaman utama wallet.
           </p>
         </div>
       )}
