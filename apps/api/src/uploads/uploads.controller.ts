@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
+import type { Readable } from 'stream';
 import { createReadStream, existsSync } from 'fs';
 import path from 'path';
 import { ConfigService } from '@nestjs/config';
@@ -87,8 +88,7 @@ export class UploadsController {
     }
     // Coba format dalam urutan preferensi (webp paling kecil, png lossless).
     const exts = ['webp', 'png', 'jpg', 'jpeg', 'gif'];
-    let asset: { stream: NodeJS.ReadableStream; contentType: string } | null =
-      null;
+    let asset: { stream: Readable; contentType: string } | null = null;
     for (const ext of exts) {
       asset = await this.storage.getQuestAssetStream(`tokens/${clean}.${ext}`);
       if (asset) break;
