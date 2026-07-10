@@ -8,6 +8,18 @@ import { useTokenPrices } from "@/lib/hooks/use-token-prices";
 import { isRealCantonPartyId } from "@/lib/auth/wallet-session-cache";
 import { formatPartyIdForDisplay } from "@/lib/canton/canton-party-id";
 import { ROUTES } from "@/lib/routing/app-routes";
+
+/**
+ * Token yang SUDAH aktif untuk swap (selain CC).
+ * Token lain tampil "Coming Soon" sampai di-enable bertahap.
+ */
+const ACTIVE_SWAP_TOKENS = new Set(["USDCX"]);
+
+/** Cek apakah token ini aktif untuk swap/detail. CC selalu aktif. */
+function isTokenActive(symbol: string, isCC?: boolean): boolean {
+  if (isCC) return true;
+  return ACTIVE_SWAP_TOKENS.has(symbol.toUpperCase());
+}
 import { WalletActions } from "./wallet-actions";
 import { TokenCard } from "./token-card";
 
@@ -195,12 +207,14 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
                       maximumFractionDigits: 2,
                     })}`
                   : undefined;
+              const active = isTokenActive(t.instrumentId, t.isCC);
               return (
                 <TokenCard
                   key={key}
                   symbol={t.instrumentId}
                   balance={bal.toFixed(4)}
                   fiatValue={fiat}
+                  comingSoon={!active}
                   onClick={() =>
                     router.push(
                       ROUTES.walletToken(
