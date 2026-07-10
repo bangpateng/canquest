@@ -37,7 +37,7 @@ import {
   TokenBalance,
 } from './cantex.types';
 import { IntentTradingKeySigner, OperatorKeySigner } from './cantex-signers';
-import { getCantexConfig } from './cantex.config';
+import { getCantexConfig, validateCantexConfig } from './cantex.config';
 
 /** Retryable HTTP statuses (mirror Python `_request`, lines 1384-1466). */
 const RETRYABLE_STATUS = new Set([429, 502, 503, 504]);
@@ -76,8 +76,8 @@ async function fetchWithTimeout(
 @Injectable()
 export class CantexClient {
   private readonly logger = new Logger(CantexClient.name);
-  private readonly operator: OperatorKeySigner;
-  private readonly trading: IntentTradingKeySigner;
+  private operator: OperatorKeySigner | null = null;
+  private trading: IntentTradingKeySigner | null = null;
   private readonly baseUrl: string;
   private readonly apiKeyPath: string | null;
 
@@ -85,18 +85,32 @@ export class CantexClient {
   private authPromise: Promise<string> | null = null; // serialize concurrent auth
 
   constructor() {
-    const cfg = getCantexConfig(true); // throws jika key missing
-    this.operator = OperatorKeySigner.fromHex(cfg.operatorKeyHex);
-    this.trading = IntentTradingKeySigner.fromHex(cfg.tradingKeyHex);
+    // PRINSIP: constructor TIDAK pernah throw. Config dibaca apa adanya;
+    // signer di-instantiate LAZY saat pertama kali dipakai (ensureReady()).
+    const cfg = getCantexConfig();
     this.baseUrl = cfg.apiBaseUrl;
     this.apiKeyPath = cfg.apiKeyPath;
-    // Pre-load cached api_key dari file bila ada.
-    this.apiKey = null;
+  }
+
+  /**
+   * Lazy-init signer + validasi config. Dipanggil sebelum operasi Cantex
+   * manapun. Throw CantexError bila config belum lengkap.
+   */
+  private ensureReady(): void {
+    if (this.operator && this.trading) return;
+    const cfg = getCantexConfig();
+    const err = validateCantexConfig(cfg);
+    if (err) {
+      throw new CantexError(`Cantex tidak siap: ${err}`);
+    }
+    this.operator = OperatorKeySigner.fromHex(cfg.operatorKeyHex);
+    this.trading = IntentTradingKeySigner.fromHex(cfg.tradingKeyHex);
   }
 
   // ── Public: intent trading public key (untuk create_intent_account Phase 2) ──
   getTradingPublicKeyHexDer(): string {
-    return this.trading.getPublicKeyHexDer();
+    this.ensureReady();
+    return this.trading!.getPublicKeyHexDer();
   }
 
   // ── Auth ──────────────────────────────────────────────────────────────
@@ -107,6 +121,7 @@ export class CantexClient {
    * Idempotent: cache in-memory + file. Serialize concurrent calls.
    */
   async authenticate(force = false): Promise<string> {
+    this.ensureReady(); // lazy-init signer + validasi config
     if (this.apiKey && !force) {
       // Probe cache validity.
       try {
@@ -135,7 +150,8 @@ export class CantexClient {
   }
 
   private async runAuthFlow(): Promise<string> {
-    const publicKey = this.operator.getPublicKeyB64();
+    this.ensureReady();
+    const publicKey = this.operator!.getPublicKeyB64();
     // 1. Begin challenge.
     const begin = await this.request<{ message: string; challengeId: string }>(
       'POST',
@@ -148,7 +164,7 @@ export class CantexClient {
       );
     }
     // 2. Sign challenge message (UTF-8 bytes).
-    const sig = this.operator.signSync(Buffer.from(begin.message, 'utf8'));
+    const sig = this.operator!.signSync(Buffer.from(begin.message, 'utf8'));
     // 3. Finish → api_key.
     const finish = await this.request<{ api_key: string }>(
       'POST',

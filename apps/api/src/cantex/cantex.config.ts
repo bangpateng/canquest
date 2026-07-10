@@ -1,23 +1,16 @@
 /**
  * Config reader untuk Cantex DEX integration.
  *
- * Semua secret (operator/trading key) dibaca dari env di startup. Key TIDAK
- * boleh di-log atau dikirim ke client. File api-key Cantex (hasil authenticate)
- * disimpan di path dengan permission 600.
+ * PRINSIP: TIDAK PERNAH throw saat startup. Config dibaca apa adanya.
+ * Validasi dilakukan LAZY (saat method CantexClient dipanggil) via
+ * `validateCantexConfig()` — sehingga API tetap start walau config
+ * Cantex belum lengkap, dan endpoint swap return 503 dengan pesan jelas.
+ *
+ * Semua secret (operator/trading key) dibaca dari env. Key TIDAK boleh
+ * di-log atau dikirim ke client.
  */
 
 const env = process.env;
-
-function required(name: string): string {
-  const v = env[name];
-  if (!v || !v.trim()) {
-    throw new Error(
-      `Cantex: env ${name} wajib di-set untuk swap feature. ` +
-        `Lihat docs/SWAP_SETUP.md.`,
-    );
-  }
-  return v.trim();
-}
 
 export interface CantexConfig {
   /** Feature flag — false = endpoint swap return 503. */
@@ -40,16 +33,11 @@ export interface CantexConfig {
 
 let cached: CantexConfig | null = null;
 
-/**
- * Membaca config dari env. `requireKeys=false` (default untuk health/startup)
- * mengembalikan config parsial tanpa throw — client lazy-init hanya saat
- * `CANTEX_ENABLED=true`.
- */
-export function getCantexConfig(requireKeys = false): CantexConfig {
+/** Membaca config dari env. TIDAK PERNAH throw — aman dipanggil saat startup. */
+export function getCantexConfig(): CantexConfig {
   if (cached) return cached;
-  const enabled = env.CANTEX_ENABLED === 'true';
   const cfg: CantexConfig = {
-    enabled,
+    enabled: env.CANTEX_ENABLED === 'true',
     apiBaseUrl: (env.CANTEX_API_BASE_URL ?? 'https://api.cantex.io').replace(
       /\/$/,
       '',
@@ -63,20 +51,30 @@ export function getCantexConfig(requireKeys = false): CantexConfig {
     ccInstrumentId: env.CANTEX_CC_INSTRUMENT_ID ?? 'Amulet',
     ccInstrumentAdmin: env.CANTEX_CC_INSTRUMENT_ADMIN ?? '',
   };
-  if (requireKeys && enabled) {
-    required('CANTEX_OPERATOR_KEY');
-    required('CANTEX_TRADING_KEY');
-    if (!cfg.ccInstrumentAdmin) {
-      throw new Error(
-        'Cantex: CANTEX_CC_INSTRUMENT_ADMIN wajib di-set (didapat dari getPools() pertama kali).',
-      );
-    }
-  }
   cached = cfg;
   return cfg;
 }
 
+/**
+ * Validasi config. Return pesan error (string) bila ada masalah,
+ * atau null bila config lengkap & siap pakai. TIDAK throw.
+ *
+ * Dipanggil lazy oleh CantexClient.ensureReady() saat method dipanggil.
+ */
+export function validateCantexConfig(cfg?: CantexConfig): string | null {
+  const c = cfg ?? getCantexConfig();
+  if (!c.operatorKeyHex || !/^[0-9a-fA-F]{64}$/.test(c.operatorKeyHex)) {
+    return 'CANTEX_OPERATOR_KEY belum di-set atau bukan 64 hex chars (Ed25519 private key).';
+  }
+  if (!c.tradingKeyHex || !/^[0-9a-fA-F]{64}$/.test(c.tradingKeyHex)) {
+    return 'CANTEX_TRADING_KEY belum di-set atau bukan 64 hex chars (secp256k1 private key).';
+  }
+  // ccInstrumentAdmin boleh kosong di awal — akan diisi setelah getPools()
+  // pertama. Endpoint getPools() tetap jalan (ccInstrument dari env lokal).
+  return null;
+}
+
 /** True jika fitur swap diaktifkan via env (CANTEX_ENABLED=true). */
 export function isCantexEnabled(): boolean {
-  return getCantexConfig(false).enabled;
+  return getCantexConfig().enabled;
 }
