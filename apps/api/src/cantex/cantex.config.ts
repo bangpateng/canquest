@@ -47,7 +47,7 @@ export function getCantexConfig(): CantexConfig {
     apiKeyPath: env.CANTEX_API_KEY_PATH ?? null,
     tradingAccountParty:
       env.CANTEX_TRADING_ACCOUNT_PARTY ??
-      'cantex::1220c6c1c6221fac767f94d553f99b7ff1b36c928971168e1b2a0477469c7b07264b',
+      'cantex::12201fa0f3b54c22801b30516a6aa75119fd06d98edae8188f9f92c3c71849868b87',
     ccInstrumentId: env.CANTEX_CC_INSTRUMENT_ID ?? 'Amulet',
     ccInstrumentAdmin: env.CANTEX_CC_INSTRUMENT_ADMIN ?? '',
   };

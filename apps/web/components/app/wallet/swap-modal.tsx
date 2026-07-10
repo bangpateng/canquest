@@ -91,6 +91,13 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
   const [status, setStatus] = useState<string | null>(null);
   const [statusEnabled, setStatusEnabled] = useState(true);
 
+  // Swap execution state.
+  const [swapState, setSwapState] = useState<
+    "idle" | "loading" | "success" | "error"
+  >("idle");
+  const [swapMessage, setSwapMessage] = useState("");
+  const [swapOutput, setSwapOutput] = useState("");
+
   // Escape to close.
   useEffect(() => {
     if (!open) return;
@@ -234,6 +241,53 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
     setBuyToken(sellToken);
     setAmount("");
     setQuote(null);
+  };
+
+  // Execute swap via POST /api/party/swap.
+  const submitSwap = async () => {
+    if (!sellToken || !buyToken || !amount || sameToken || insufficientBalance)
+      return;
+    setSwapState("loading");
+    setSwapMessage("");
+    setSwapOutput("");
+    try {
+      const res = await fetch("/api/party/swap", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sellInstrumentId: sellToken.instrumentId,
+          sellInstrumentAdmin: sellToken.instrumentAdmin,
+          buyInstrumentId: buyToken.instrumentId,
+          buyInstrumentAdmin: buyToken.instrumentAdmin,
+          amount: parseFloat(amount),
+          sellIsCC: sellToken.isCC,
+          clientNonce:
+            typeof crypto !== "undefined" && crypto.randomUUID
+              ? crypto.randomUUID()
+              : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        }),
+      });
+      const data = (await res.json()) as {
+        success?: boolean;
+        outputAmount?: string;
+        message?: string;
+      };
+      if (!res.ok || !data.success) {
+        setSwapState("error");
+        setSwapMessage(
+          data.message ?? "Swap failed. Please try again.",
+        );
+        return;
+      }
+      setSwapState("success");
+      setSwapOutput(data.outputAmount ?? "");
+      // Refresh balances.
+      void loadTokens();
+    } catch {
+      setSwapState("error");
+      setSwapMessage("Network error. Check your connection.");
+    }
   };
 
   return (
@@ -397,20 +451,76 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                 </div>
               ) : null)}
 
-            {/* CTA */}
-            <button
-              type="button"
-              disabled
-              className={cn(
-                buttonVariants({ size: "sm" }),
-                "mt-4 w-full cursor-not-allowed opacity-60",
-              )}
-            >
-              Swap Coming Soon
-            </button>
-            <p className="mt-2 text-center text-[11px] text-slate-500">
-              Quote preview is live. Execution enabled in next phase.
-            </p>
+            {/* CTA / Swap execution */}
+            {swapState === "success" ? (
+              <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-center">
+                <p className="text-sm font-semibold text-emerald-400">
+                  Swap completed!
+                </p>
+                {swapOutput && (
+                  <p className="mt-1 text-xs text-slate-400">
+                    Received {swapOutput}{" "}
+                    {displayName(buyToken?.instrumentId ?? "")}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSwapState("idle");
+                    setAmount("");
+                  }}
+                  className={cn(
+                    buttonVariants({ size: "sm" }),
+                    "mt-3 w-full",
+                  )}
+                >
+                  Done
+                </button>
+              </div>
+            ) : swapState === "error" ? (
+              <div className="mt-4 space-y-2">
+                <div className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{swapMessage}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSwapState("idle")}
+                  className={cn(
+                    buttonVariants({ size: "sm" }),
+                    "w-full",
+                  )}
+                >
+                  Try Again
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={submitSwap}
+                disabled={
+                  swapState === "loading" ||
+                  !amount ||
+                  !quote ||
+                  Boolean(sameToken) ||
+                  insufficientBalance
+                }
+                className={cn(
+                  buttonVariants({ size: "sm" }),
+                  "mt-4 w-full",
+                )}
+              >
+                {swapState === "loading"
+                  ? "Swapping..."
+                  : insufficientBalance
+                    ? "Insufficient Balance"
+                    : sameToken
+                      ? "Select Different Tokens"
+                      : !amount
+                        ? "Enter Amount"
+                        : `Swap ${displayName(sellToken?.instrumentId ?? "")} → ${displayName(buyToken?.instrumentId ?? "")}`}
+              </button>
+            )}
           </>
         )}
       </div>

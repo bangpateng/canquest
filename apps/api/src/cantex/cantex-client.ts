@@ -306,6 +306,228 @@ export class CantexClient {
     return parseAccountInfo(raw);
   }
 
+  /** GET /v1/account/admin → trading account status (has_intent_account, etc). */
+  async getAccountAdmin(): Promise<AccountAdmin> {
+    const raw = await this.request<RawAccountAdmin>('GET', '/v1/account/admin');
+    return parseAccountAdmin(raw);
+  }
+
+  // ── Execution methods (Phase 2 — swap + transfer) ──────────────────────
+
+  /**
+   * Build + sign + submit a swap intent (secp256k1 flow).
+   * Port Python SDK _build_sign_submit(intent=True).
+   * Returns raw submission result from Cantex.
+   */
+  async buildAndSubmitSwap(params: {
+    sellAmount: string;
+    sellInstrumentId: string;
+    sellInstrumentAdmin: string;
+    buyInstrumentId: string;
+    buyInstrumentAdmin: string;
+    maxNetworkFee?: string;
+  }): Promise<Record<string, unknown>> {
+    this.ensureReady();
+    // 1. Build intent.
+    const payload: Record<string, string> = {
+      sellAmount: params.sellAmount,
+      sellInstrumentId: params.sellInstrumentId,
+      sellInstrumentAdmin: params.sellInstrumentAdmin,
+      buyInstrumentId: params.buyInstrumentId,
+      buyInstrumentAdmin: params.buyInstrumentAdmin,
+    };
+    if (params.maxNetworkFee) payload['maxNetworkFee'] = params.maxNetworkFee;
+    const buildRes = await this.request<{
+      id: string;
+      intent?: { digest?: string };
+    }>('POST', '/v1/intent/build/pool/swap', { json: payload });
+    const buildId = buildRes.id;
+    const digest = buildRes.intent?.digest;
+    if (!buildId || !digest) {
+      throw new CantexError(
+        `Swap build missing id/digest: ${JSON.stringify(buildRes).slice(0, 200)}`,
+      );
+    }
+    // 2. Sign digest (secp256k1 DER, no re-hash).
+    const sig = this.trading!.signDigestHex(digest);
+    // 3. Submit.
+    return this.request('POST', '/v1/intent/submit', {
+      json: { id: buildId, intentTradingKeySignature: sig },
+    });
+  }
+
+  /**
+   * Build + sign + submit a CC transfer (Ed25519 operator flow).
+   * Port Python SDK transfer().
+   */
+  async transferCC(params: {
+    receiver: string;
+    amount: string;
+    instrumentId: string;
+    instrumentAdmin: string;
+    memo?: string;
+  }): Promise<Record<string, unknown>> {
+    this.ensureReady();
+    // 1. Build transfer.
+    const buildRes = await this.request<{
+      id: string;
+      context?: { transaction_hash?: string };
+    }>('POST', '/v1/ledger/transaction/build/transfer', {
+      json: {
+        instrumentAdmin: params.instrumentAdmin,
+        instrumentId: params.instrumentId,
+        receiver: params.receiver,
+        amount: params.amount,
+        memo: params.memo ?? '',
+      },
+    });
+    const buildId = buildRes.id;
+    const txHash = buildRes.context?.transaction_hash;
+    if (!buildId || !txHash) {
+      throw new CantexError(
+        `Transfer build missing id/hash: ${JSON.stringify(buildRes).slice(0, 200)}`,
+      );
+    }
+    // 2. Sign transaction_hash (STANDARD base64 decode, NOT base64url).
+    const hashBytes = Buffer.from(txHash, 'base64');
+    const sig = this.operator!.signSync(hashBytes);
+    // 3. Submit.
+    return this.request('POST', '/v1/ledger/transaction/submit', {
+      json: {
+        id: buildId,
+        operatorKeySignedTransactionHash: sig.toString('base64url'),
+      },
+    });
+  }
+
+  /**
+   * Execute swap + wait for on-ledger confirmation via private WS.
+   * Port Python SDK swap_and_confirm(). Returns SwapExecuted details.
+   *
+   * CRITICAL: open WS BEFORE submitting swap (don't miss the event).
+   */
+  async swapAndConfirm(
+    params: {
+      sellAmount: string;
+      sellInstrumentId: string;
+      sellInstrumentAdmin: string;
+      buyInstrumentId: string;
+      buyInstrumentAdmin: string;
+    },
+    timeoutMs = 60_000,
+  ): Promise<SwapExecutedDetails> {
+    this.ensureReady();
+    const cfg = getCantexConfig();
+    // 1. Open private WS BEFORE submitting.
+    const wsUrl =
+      cfg.apiBaseUrl.replace('https://', 'wss://').replace('http://', 'ws://') +
+      '/v1/ws/private';
+    const apiKey = this.apiKey ?? (await this.authenticate());
+    const ws = new (await import('ws')).default(wsUrl, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+
+    try {
+      // Wait for WS open.
+      await new Promise<void>((resolve, reject) => {
+        const openTimer = setTimeout(
+          () => reject(new CantexTimeoutError('WS open timeout')),
+          10_000,
+        );
+        ws.once('open', () => {
+          clearTimeout(openTimer);
+          resolve();
+        });
+        ws.once('error', (err: Error) => {
+          clearTimeout(openTimer);
+          reject(new CantexError(`WS error: ${err.message}`, err));
+        });
+      });
+
+      // 2. Submit swap.
+      await this.buildAndSubmitSwap(params);
+
+      // 3. Listen for SwapExecuted / SwapFailed.
+      const result = await new Promise<SwapExecutedDetails>(
+        (resolve, reject) => {
+          const timer = setTimeout(() => {
+            reject(
+              new CantexTimeoutError(`Swap confirm timeout (${timeoutMs}ms)`),
+            );
+          }, timeoutMs);
+
+          const onMessage = (raw: { toString: () => string }) => {
+            const text = raw.toString();
+            let frame: Record<string, unknown>;
+            try {
+              frame = JSON.parse(text) as Record<string, unknown>;
+            } catch {
+              return; // ignore non-JSON
+            }
+            // Ping → pong.
+            if (frame['op'] === 'ping') {
+              ws.send(JSON.stringify({ op: 'pong' }));
+              return;
+            }
+            const eventType = frame['type'] as string | undefined;
+            const data = (frame['data'] ?? {}) as Record<string, unknown>;
+
+            if (eventType === 'Pool.SwapPending') return;
+            if (eventType === 'Pool.SwapExecuted') {
+              clearTimeout(timer);
+              const sd = (data['swap_details'] ?? {}) as Record<
+                string,
+                unknown
+              >;
+              const tk = (data['ticker'] ?? {}) as Record<string, unknown>;
+              resolve({
+                inputAmount:
+                  typeof sd['input_amount'] === 'string'
+                    ? sd['input_amount']
+                    : '0',
+                outputAmount:
+                  typeof sd['output_amount'] === 'string'
+                    ? sd['output_amount']
+                    : '0',
+                adminFeeAmount:
+                  typeof sd['admin_fee_amount'] === 'string'
+                    ? sd['admin_fee_amount']
+                    : '0',
+                liquidityFeeAmount:
+                  typeof sd['liquidity_fee_amount'] === 'string'
+                    ? sd['liquidity_fee_amount']
+                    : '0',
+                price: typeof tk['price'] === 'string' ? tk['price'] : '0',
+              });
+            }
+            if (eventType === 'Pool.SwapFailed') {
+              clearTimeout(timer);
+              const details = (data['details'] ?? {}) as Record<
+                string,
+                unknown
+              >;
+              const errMsg =
+                typeof details['error'] === 'string'
+                  ? details['error']
+                  : 'unknown';
+              reject(new CantexError(`Swap failed: ${errMsg}`));
+            }
+          };
+
+          ws.on('message', onMessage);
+          ws.once('close', () => {
+            clearTimeout(timer);
+            reject(new CantexError('WS closed before swap confirmation'));
+          });
+        },
+      );
+
+      return result;
+    } finally {
+      ws.close();
+    }
+  }
+
   /** GET /v2/pools/info → semua pool AMM. */
   async getPools(): Promise<Pool[]> {
     const raw = await this.request<RawPoolsInfo>('GET', '/v2/pools/info');
@@ -606,5 +828,49 @@ function parseSwapQuote(r: RawSwapQuote): SwapQuote {
     fees: parseQuoteFees(r.fees),
     prices: parseQuotePrices(r.prices),
     estimatedTimeSeconds: r.estimated_time_seconds ?? 0,
+  };
+}
+
+// ── Phase 2 types ───────────────────────────────────────────────────────
+
+/** Hasil SwapExecuted event dari WS — detail swap yang sudah on-chain. */
+export interface SwapExecutedDetails {
+  inputAmount: string;
+  outputAmount: string;
+  adminFeeAmount: string;
+  liquidityFeeAmount: string;
+  price: string;
+}
+
+/** GET /v1/account/admin response (trading account provisioning status). */
+export interface AccountAdmin {
+  address: string;
+  userId: string;
+  hasIntentAccount: boolean;
+  hasTradingAccount: boolean;
+  intentAccountContractId?: string;
+  tradingAccountContractId?: string;
+}
+
+interface RawAccountAdmin {
+  party_id?: {
+    address?: string;
+    contracts?: {
+      pool_intent_account?: { contract_id?: string };
+      pool_trading_account?: { contract_id?: string };
+    };
+  };
+  user_id?: string;
+}
+
+function parseAccountAdmin(r: RawAccountAdmin): AccountAdmin {
+  const contracts = r.party_id?.contracts ?? {};
+  return {
+    address: r.party_id?.address ?? '',
+    userId: r.user_id ?? '',
+    hasIntentAccount: Boolean(contracts.pool_intent_account),
+    hasTradingAccount: Boolean(contracts.pool_trading_account),
+    intentAccountContractId: contracts.pool_intent_account?.contract_id,
+    tradingAccountContractId: contracts.pool_trading_account?.contract_id,
   };
 }

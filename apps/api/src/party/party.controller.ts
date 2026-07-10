@@ -43,6 +43,7 @@ import {
 import { hasRealWallet } from '../common/wallet-policy';
 import { CantexClient } from '../cantex/cantex-client';
 import { CantexPriceFeedService } from '../cantex/cantex-price-feed.service';
+import { SwapService } from '../cantex/swap.service';
 import { isCantexEnabled } from '../cantex/cantex.config';
 import { CantexError } from '../cantex/cantex.types';
 import { UsersService } from '../users/users.service';
@@ -133,6 +134,7 @@ export class PartyController {
     private readonly modo: ModoApiService,
     private readonly cantex: CantexClient,
     private readonly cantexPrices: CantexPriceFeedService,
+    private readonly swapService: SwapService,
   ) {}
 
   private assertPartyOnValidatorParticipant(partyId: string): void {
@@ -656,188 +658,162 @@ export class PartyController {
     }
     this.sendCcInFlight.add(sender.id);
     try {
-
-    // DTO (SendCcDto) already enforces: number, > 0, ≤ MAX_TRANSFER_CC, finite.
-    const amount = Number(body.amount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      throw new BadRequestException('Amount must be greater than 0.');
-    }
-
-    const feeCc = Number(this.config.get<string>('TRANSACTION_FEE_CC') ?? '5');
-    const validatorPartyId =
-      this.config.get<string>('CANTON_VALIDATOR_PARTY_ID') ?? '';
-
-    const recipientInput = body.recipientUsername?.trim();
-    if (!recipientInput)
-      throw new BadRequestException('Recipient is required.');
-
-    let recipientPartyId: string;
-    let recipientLabel: string;
-    let recipientUsername: string | null = null;
-
-    if (looksLikeCantonPartyId(recipientInput)) {
-      const normalizedRecipient = normalizeCantonPartyId(recipientInput);
-      if (!normalizedRecipient) {
-        throw new BadRequestException('Invalid Party ID format.');
+      // DTO (SendCcDto) already enforces: number, > 0, ≤ MAX_TRANSFER_CC, finite.
+      const amount = Number(body.amount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        throw new BadRequestException('Amount must be greater than 0.');
       }
-      if (cantonPartyIdsEqual(normalizedRecipient, sender.cantonPartyId)) {
-        throw new BadRequestException('You cannot send CC to yourself.');
-      }
-      // Block transfers to platform-owned wallets (validator/reward/fee/operator).
-      if (this.isSystemPartyId(normalizedRecipient)) {
-        this.logger.warn(
-          `Blocked send-cc to system party: user=${sender.id.slice(0, 8)} target=${normalizedRecipient.split('::')[0]} amount=${amount}`,
-        );
-        throw new BadRequestException(
-          'Transfers to platform wallets are not allowed.',
-        );
-      }
-      recipientPartyId = normalizedRecipient;
-      recipientLabel =
-        normalizedRecipient.split('::')[0] ?? normalizedRecipient;
-      const found = await this.users.findByPartyId(normalizedRecipient);
-      recipientUsername =
-        found?.username?.toLowerCase() ?? (recipientLabel || null);
-    } else {
-      const username = recipientInput.replace(/^@/, '').toLowerCase();
-      if (username === sender.username?.toLowerCase()) {
-        throw new BadRequestException('You cannot send CC to yourself.');
-      }
-      const dbUser = await this.users.findByUsernameInsensitive(username);
-      const resolved =
-        dbUser?.cantonPartyId ?? (await this.splice.getUserPartyId(username));
-      if (!resolved) {
-        throw new BadRequestException(
-          `User "@${username}" not found or has no wallet.`,
-        );
-      }
-      recipientPartyId = normalizeCantonPartyId(resolved) ?? resolved;
-      if (this.isSystemPartyId(recipientPartyId)) {
-        this.logger.warn(
-          `Blocked send-cc to system wallet via @${username}: user=${sender.id.slice(0, 8)} amount=${amount}`,
-        );
-        throw new BadRequestException(
-          'Transfers to platform wallets are not allowed.',
-        );
-      }
-      recipientLabel = `@${username}`;
-      recipientUsername = dbUser?.username?.toLowerCase() ?? username;
-    }
 
-    const description = body.memo?.trim() || `Sent to ${recipientLabel}`;
-    const recipientDbUser = recipientUsername
-      ? await this.users.findByUsernameInsensitive(recipientUsername)
-      : null;
-    const isInternalUser = recipientDbUser !== null;
-    const effectiveFeeCc = feeCc;
-
-    // ── Balance check (DB cache — fast path) ─────
-    const dbBalance = await this.prisma.ccBalance.findUnique({
-      where: { userId: sender.id },
-      select: { balanceMicroCc: true },
-    });
-    if (dbBalance) {
-      const cachedCc = Number(dbBalance.balanceMicroCc) / 1_000_000;
-      if (cachedCc < amount + effectiveFeeCc) {
-        throw new BadRequestException(
-          effectiveFeeCc > 0
-            ? `Insufficient balance. Need ${amount + effectiveFeeCc} CC (${amount} transfer + ${effectiveFeeCc} platform fee).`
-            : `Insufficient balance. Need ${amount} CC.`,
-        );
-      }
-    }
-    // Kalau null → ledger akan menolak jika dana kurang
-
-    // ── MAIN TRANSFER via CIP-0056 (satu-satunya jalur) ─────────────
-    let accepted = false;
-    let ledgerTxId: string | undefined;
-    let transferMethod: 'direct' | 'offer_accept' | 'offer_only' =
-      'offer_accept';
-
-    const cip56Result = await this.ledger.executeTransferFactoryTransfer({
-      senderPartyId: sender.cantonPartyId,
-      receiverPartyId: recipientPartyId,
-      amountCc: amount,
-      description,
-      clientNonce: body.clientNonce, // dedup ledger — double-click jadi 1 transfer
-    });
-
-    if (cip56Result.ok) {
-      if (cip56Result.transferKind === 'direct') {
-        accepted = true;
-        transferMethod = 'direct';
-        ledgerTxId = cip56Result.updateId ?? undefined;
-        this.logger.log(
-          `CC transfer direct: ${sender.username} → ${recipientLabel} ${amount} CC`,
-        );
-      } else if (cip56Result.transferKind === 'offer') {
-        // Receiver tidak punya TransferPreapproval aktif.
-        // JANGAN auto-accept — biarkan pending di inbox wallet receiver.
-        // User terima/reject manual via menu Offers (POST /party/offers/accept|reject).
-        // ledgerTxId = Canton update_id ("1220…") supaya link explorer jalan.
-        // contract_id (transferInstructionCid) disimpan di field terpisah di row.
-        ledgerTxId = cip56Result.updateId ?? undefined;
-        transferMethod = 'offer_only';
-        this.logger.log(
-          `CC transfer offer (pending): ${sender.username} → ${recipientLabel} ${amount} CC ` +
-            `— recipient must accept via Offers menu`,
-        );
-      }
-    }
-
-    if (!cip56Result.ok) {
-      throw new BadRequestException(
-        `Transfer gagal: ${cip56Result.error?.slice(0, 120) ?? 'unknown'}`,
+      const feeCc = Number(
+        this.config.get<string>('TRANSACTION_FEE_CC') ?? '5',
       );
-    }
+      const validatorPartyId =
+        this.config.get<string>('CANTON_VALIDATOR_PARTY_ID') ?? '';
 
-    // ── FEE COLLECT (HANYA jika transfer berhasil) ───────────────────
-    let feeCollected = false;
-    let feeLedgerTxId: string | undefined;
-    let feeTreasuryPartyId: string | undefined;
+      const recipientInput = body.recipientUsername?.trim();
+      if (!recipientInput)
+        throw new BadRequestException('Recipient is required.');
 
-    if (effectiveFeeCc > 0 && sender.cantonPartyId && accepted) {
-      const feeParty =
-        this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
-        validatorPartyId;
-      if (feeParty) {
-        try {
-          const feeResult = await this.ledger.executeTransferFactoryTransfer({
-            senderPartyId: sender.cantonPartyId,
-            receiverPartyId: feeParty,
-            amountCc: effectiveFeeCc,
-            description: `Platform fee: ${recipientLabel}`,
-          });
-          if (feeResult.ok && feeResult.transferKind === 'direct') {
-            feeCollected = true;
-            feeLedgerTxId = feeResult.updateId ?? undefined;
-            feeTreasuryPartyId = feeParty;
-            await this.users.recordTransaction({
-              userId: sender.id,
+      let recipientPartyId: string;
+      let recipientLabel: string;
+      let recipientUsername: string | null = null;
+
+      if (looksLikeCantonPartyId(recipientInput)) {
+        const normalizedRecipient = normalizeCantonPartyId(recipientInput);
+        if (!normalizedRecipient) {
+          throw new BadRequestException('Invalid Party ID format.');
+        }
+        if (cantonPartyIdsEqual(normalizedRecipient, sender.cantonPartyId)) {
+          throw new BadRequestException('You cannot send CC to yourself.');
+        }
+        // Block transfers to platform-owned wallets (validator/reward/fee/operator).
+        if (this.isSystemPartyId(normalizedRecipient)) {
+          this.logger.warn(
+            `Blocked send-cc to system party: user=${sender.id.slice(0, 8)} target=${normalizedRecipient.split('::')[0]} amount=${amount}`,
+          );
+          throw new BadRequestException(
+            'Transfers to platform wallets are not allowed.',
+          );
+        }
+        recipientPartyId = normalizedRecipient;
+        recipientLabel =
+          normalizedRecipient.split('::')[0] ?? normalizedRecipient;
+        const found = await this.users.findByPartyId(normalizedRecipient);
+        recipientUsername =
+          found?.username?.toLowerCase() ?? (recipientLabel || null);
+      } else {
+        const username = recipientInput.replace(/^@/, '').toLowerCase();
+        if (username === sender.username?.toLowerCase()) {
+          throw new BadRequestException('You cannot send CC to yourself.');
+        }
+        const dbUser = await this.users.findByUsernameInsensitive(username);
+        const resolved =
+          dbUser?.cantonPartyId ?? (await this.splice.getUserPartyId(username));
+        if (!resolved) {
+          throw new BadRequestException(
+            `User "@${username}" not found or has no wallet.`,
+          );
+        }
+        recipientPartyId = normalizeCantonPartyId(resolved) ?? resolved;
+        if (this.isSystemPartyId(recipientPartyId)) {
+          this.logger.warn(
+            `Blocked send-cc to system wallet via @${username}: user=${sender.id.slice(0, 8)} amount=${amount}`,
+          );
+          throw new BadRequestException(
+            'Transfers to platform wallets are not allowed.',
+          );
+        }
+        recipientLabel = `@${username}`;
+        recipientUsername = dbUser?.username?.toLowerCase() ?? username;
+      }
+
+      const description = body.memo?.trim() || `Sent to ${recipientLabel}`;
+      const recipientDbUser = recipientUsername
+        ? await this.users.findByUsernameInsensitive(recipientUsername)
+        : null;
+      const isInternalUser = recipientDbUser !== null;
+      const effectiveFeeCc = feeCc;
+
+      // ── Balance check (DB cache — fast path) ─────
+      const dbBalance = await this.prisma.ccBalance.findUnique({
+        where: { userId: sender.id },
+        select: { balanceMicroCc: true },
+      });
+      if (dbBalance) {
+        const cachedCc = Number(dbBalance.balanceMicroCc) / 1_000_000;
+        if (cachedCc < amount + effectiveFeeCc) {
+          throw new BadRequestException(
+            effectiveFeeCc > 0
+              ? `Insufficient balance. Need ${amount + effectiveFeeCc} CC (${amount} transfer + ${effectiveFeeCc} platform fee).`
+              : `Insufficient balance. Need ${amount} CC.`,
+          );
+        }
+      }
+      // Kalau null → ledger akan menolak jika dana kurang
+
+      // ── MAIN TRANSFER via CIP-0056 (satu-satunya jalur) ─────────────
+      let accepted = false;
+      let ledgerTxId: string | undefined;
+      let transferMethod: 'direct' | 'offer_accept' | 'offer_only' =
+        'offer_accept';
+
+      const cip56Result = await this.ledger.executeTransferFactoryTransfer({
+        senderPartyId: sender.cantonPartyId,
+        receiverPartyId: recipientPartyId,
+        amountCc: amount,
+        description,
+        clientNonce: body.clientNonce, // dedup ledger — double-click jadi 1 transfer
+      });
+
+      if (cip56Result.ok) {
+        if (cip56Result.transferKind === 'direct') {
+          accepted = true;
+          transferMethod = 'direct';
+          ledgerTxId = cip56Result.updateId ?? undefined;
+          this.logger.log(
+            `CC transfer direct: ${sender.username} → ${recipientLabel} ${amount} CC`,
+          );
+        } else if (cip56Result.transferKind === 'offer') {
+          // Receiver tidak punya TransferPreapproval aktif.
+          // JANGAN auto-accept — biarkan pending di inbox wallet receiver.
+          // User terima/reject manual via menu Offers (POST /party/offers/accept|reject).
+          // ledgerTxId = Canton update_id ("1220…") supaya link explorer jalan.
+          // contract_id (transferInstructionCid) disimpan di field terpisah di row.
+          ledgerTxId = cip56Result.updateId ?? undefined;
+          transferMethod = 'offer_only';
+          this.logger.log(
+            `CC transfer offer (pending): ${sender.username} → ${recipientLabel} ${amount} CC ` +
+              `— recipient must accept via Offers menu`,
+          );
+        }
+      }
+
+      if (!cip56Result.ok) {
+        throw new BadRequestException(
+          `Transfer gagal: ${cip56Result.error?.slice(0, 120) ?? 'unknown'}`,
+        );
+      }
+
+      // ── FEE COLLECT (HANYA jika transfer berhasil) ───────────────────
+      let feeCollected = false;
+      let feeLedgerTxId: string | undefined;
+      let feeTreasuryPartyId: string | undefined;
+
+      if (effectiveFeeCc > 0 && sender.cantonPartyId && accepted) {
+        const feeParty =
+          this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
+          validatorPartyId;
+        if (feeParty) {
+          try {
+            const feeResult = await this.ledger.executeTransferFactoryTransfer({
+              senderPartyId: sender.cantonPartyId,
+              receiverPartyId: feeParty,
               amountCc: effectiveFeeCc,
-              type: 'TRANSFER_OUT',
-              description: `Platform fee (transfer to ${recipientLabel})`,
-              // Penanda "fee:" → filter visibility A3 sembunyikan baris ini dari history user.
-              referenceId: `fee:${normalizeCantonPartyId(feeParty) ?? feeParty}`,
-              ledgerTxId: feeLedgerTxId,
-              cantonUpdateId: feeLedgerTxId,
+              description: `Platform fee: ${recipientLabel}`,
             });
-            this.logger.log(
-              `Fee collected: ${sender.username} → ${feeParty.split('::')[0]} ${effectiveFeeCc} CC (direct)`,
-            );
-          } else if (
-            feeResult.ok &&
-            feeResult.transferKind === 'offer' &&
-            feeResult.transferInstructionCid
-          ) {
-            const acceptR = await this.ledger.acceptTransferInstruction(
-              feeResult.transferInstructionCid,
-              feeParty,
-            );
-            if (acceptR.ok) {
+            if (feeResult.ok && feeResult.transferKind === 'direct') {
               feeCollected = true;
-              feeLedgerTxId =
-                acceptR.updateId ?? feeResult.updateId ?? undefined;
+              feeLedgerTxId = feeResult.updateId ?? undefined;
               feeTreasuryPartyId = feeParty;
               await this.users.recordTransaction({
                 userId: sender.id,
@@ -850,139 +826,208 @@ export class PartyController {
                 cantonUpdateId: feeLedgerTxId,
               });
               this.logger.log(
-                `Fee collected: ${sender.username} → ${feeParty.split('::')[0]} ${effectiveFeeCc} CC (offer-accept)`,
+                `Fee collected: ${sender.username} → ${feeParty.split('::')[0]} ${effectiveFeeCc} CC (direct)`,
               );
+            } else if (
+              feeResult.ok &&
+              feeResult.transferKind === 'offer' &&
+              feeResult.transferInstructionCid
+            ) {
+              const acceptR = await this.ledger.acceptTransferInstruction(
+                feeResult.transferInstructionCid,
+                feeParty,
+              );
+              if (acceptR.ok) {
+                feeCollected = true;
+                feeLedgerTxId =
+                  acceptR.updateId ?? feeResult.updateId ?? undefined;
+                feeTreasuryPartyId = feeParty;
+                await this.users.recordTransaction({
+                  userId: sender.id,
+                  amountCc: effectiveFeeCc,
+                  type: 'TRANSFER_OUT',
+                  description: `Platform fee (transfer to ${recipientLabel})`,
+                  // Penanda "fee:" → filter visibility A3 sembunyikan baris ini dari history user.
+                  referenceId: `fee:${normalizeCantonPartyId(feeParty) ?? feeParty}`,
+                  ledgerTxId: feeLedgerTxId,
+                  cantonUpdateId: feeLedgerTxId,
+                });
+                this.logger.log(
+                  `Fee collected: ${sender.username} → ${feeParty.split('::')[0]} ${effectiveFeeCc} CC (offer-accept)`,
+                );
+              } else {
+                this.logger.warn(
+                  `Fee offer accept failed: transfer proceeds without fee`,
+                );
+              }
             } else {
               this.logger.warn(
-                `Fee offer accept failed: transfer proceeds without fee`,
+                `Fee NOT collected (transferKind=${feeResult.transferKind}, ok=${feeResult.ok}). Transfer proceeds.`,
               );
             }
-          } else {
+          } catch (feeErr) {
             this.logger.warn(
-              `Fee NOT collected (transferKind=${feeResult.transferKind}, ok=${feeResult.ok}). Transfer proceeds.`,
+              `Fee collect error (non-blocking): ${String(feeErr)}`,
             );
           }
-        } catch (feeErr) {
-          this.logger.warn(
-            `Fee collect error (non-blocking): ${String(feeErr)}`,
-          );
         }
       }
-    }
 
-    // ── Step 3: Record + response ──────────────────────────────────────
-    let transferTransactionId: string | undefined;
-    if (accepted) {
-      // Fund-safety #4: ledger SUDAH sukses (CC sudah keluar on-chain). Kalau
-      // recordTransaction throw (DB down), CC pergi tanpa audit trail. Bungkus
-      // agar: (a) tidak throw ke user seolah transfer gagal — transfer NYATA
-      // berhasil; (b) log ALERT kuat + data lengkap supaya bisa reconcile manual;
-      // (c) balance self-heal via cc-inbound-sync (≤30s). History row hilang =
-      // reconcile manual dari log ini + ledgerTxId.
-      try {
-        const outRow = await this.users.recordTransaction({
-          userId: sender.id,
-          amountCc: amount,
-          type: 'TRANSFER_OUT',
-          description,
-          counterparty: recipientPartyId,
-          // ledgerTxId + cantonUpdateId = Canton update_id ("1220…") supaya link
-          // explorer langsung jalan tanpa lazy-fill.
-          ledgerTxId: ledgerTxId,
-          cantonUpdateId: ledgerTxId,
-        });
-        transferTransactionId = outRow.id;
-        if (ledgerTxId && sender.cantonPartyId) {
-          void this.txDetail.backfillUpdateId(
-            outRow.id,
-            ledgerTxId,
-            sender.cantonPartyId,
-          );
-        }
-      } catch (err) {
-        this.logger.error(
-          `⚠️ AUDIT-TRAIL LOSS: ledger transfer SUCCEEDED but DB record failed. ` +
-            `sender=${sender.id} @${sender.username} amount=${amount} CC ` +
-            `recipient=${recipientLabel} ledgerTxId=${ledgerTxId ?? 'n/a'}. ` +
-            `CC LEFT on-chain; balance will self-heal via sync. HISTORY ROW MISSING — ` +
-            `reconcile manually from this log. Error: ${String(err)}`,
-        );
-      }
-
-      if (sender.cantonPartyId) {
-        void this.featuredActivity
-          .recordActivity(
-            'cc_transfer',
-            sender.cantonPartyId,
-            `CC transfer ${amount} CC to ${recipientLabel}`,
-          )
-          .catch(() => {});
-      }
-
-      if (isInternalUser && recipientDbUser) {
+      // ── Step 3: Record + response ──────────────────────────────────────
+      let transferTransactionId: string | undefined;
+      if (accepted) {
+        // Fund-safety #4: ledger SUDAH sukses (CC sudah keluar on-chain). Kalau
+        // recordTransaction throw (DB down), CC pergi tanpa audit trail. Bungkus
+        // agar: (a) tidak throw ke user seolah transfer gagal — transfer NYATA
+        // berhasil; (b) log ALERT kuat + data lengkap supaya bisa reconcile manual;
+        // (c) balance self-heal via cc-inbound-sync (≤30s). History row hilang =
+        // reconcile manual dari log ini + ledgerTxId.
         try {
-          await this.users.recordTransaction({
-            userId: recipientDbUser.id,
+          const outRow = await this.users.recordTransaction({
+            userId: sender.id,
             amountCc: amount,
-            type: 'TRANSFER_IN',
-            description: `Received from @${sender.username}${body.memo ? `: ${body.memo.trim()}` : ''}`,
-            counterparty:
-              normalizeCantonPartyId(sender.cantonPartyId) ??
-              sender.cantonPartyId,
-            // ledgerTxId + cantonUpdateId = Canton update_id ("1220…") — update
-            // yang sama dengan row sender (satu transfer = satu ledger update).
+            type: 'TRANSFER_OUT',
+            description,
+            counterparty: recipientPartyId,
+            // ledgerTxId + cantonUpdateId = Canton update_id ("1220…") supaya link
+            // explorer langsung jalan tanpa lazy-fill.
             ledgerTxId: ledgerTxId,
             cantonUpdateId: ledgerTxId,
           });
+          transferTransactionId = outRow.id;
+          if (ledgerTxId && sender.cantonPartyId) {
+            void this.txDetail.backfillUpdateId(
+              outRow.id,
+              ledgerTxId,
+              sender.cantonPartyId,
+            );
+          }
         } catch (err) {
-          // Recipient row hilang kurang kritis — recipient balance self-heal
-          // via sync INCREASE branch. Tetap log supaya reconcile-aware.
-          this.logger.warn(
-            `Recipient TRANSFER_IN row failed (will self-heal via sync): ` +
-              `recipient=${recipientDbUser.id} ledgerTxId=${ledgerTxId ?? 'n/a'}: ${String(err)}`,
+          this.logger.error(
+            `⚠️ AUDIT-TRAIL LOSS: ledger transfer SUCCEEDED but DB record failed. ` +
+              `sender=${sender.id} @${sender.username} amount=${amount} CC ` +
+              `recipient=${recipientLabel} ledgerTxId=${ledgerTxId ?? 'n/a'}. ` +
+              `CC LEFT on-chain; balance will self-heal via sync. HISTORY ROW MISSING — ` +
+              `reconcile manually from this log. Error: ${String(err)}`,
           );
         }
-        if (recipientDbUser.username) {
-          void this.inboundSync.alignBalanceFromChain(
-            recipientDbUser.id,
-            recipientDbUser.username,
-          );
-        }
-      }
-      if (sender.username) {
-        void this.inboundSync.alignBalanceFromChain(sender.id, sender.username);
-      }
-    }
 
-    // ── Offer-only: return pending status (not an error) ─────────────────
-    if (transferMethod === 'offer_only') {
-      // Fund-safety #4: offer SUDAH dibuat on-chain. Bungkus DB write supaya
-      // kegagalan tidak tampak sebagai "transfer gagal" (offer nyata terbuat).
-      let pendingRowId: string | undefined;
-      try {
-        const pendingRow = await this.users.recordTransaction({
-          userId: sender.id,
-          amountCc: amount,
-          type: 'TRANSFER_OUT',
-          description: `${description} [pending — recipient must accept offer]`,
-          counterparty: recipientPartyId,
-          ledgerTxId,
-          // Status PENDING: dana sudah keluar sebagai offer, tapi belum diterima
-          // receiver. Saat offer di-accept, acceptOfferInbox update ke COMPLETED.
-          status: 'PENDING',
-          transferInstructionCid: cip56Result.transferInstructionCid ?? null,
-        });
-        pendingRowId = pendingRow.id;
-      } catch (err) {
-        this.logger.error(
-          `⚠️ AUDIT-TRAIL LOSS (offer): offer SUCCEEDED but DB record failed. ` +
-            `sender=${sender.id} @${sender.username} amount=${amount} CC ` +
-            `recipient=${recipientLabel} ledgerTxId=${ledgerTxId ?? 'n/a'} ` +
-            `instructionCid=${cip56Result.transferInstructionCid ?? 'n/a'}. ` +
-            `Reconcile manually. Error: ${String(err)}`,
-        );
+        if (sender.cantonPartyId) {
+          void this.featuredActivity
+            .recordActivity(
+              'cc_transfer',
+              sender.cantonPartyId,
+              `CC transfer ${amount} CC to ${recipientLabel}`,
+            )
+            .catch(() => {});
+        }
+
+        if (isInternalUser && recipientDbUser) {
+          try {
+            await this.users.recordTransaction({
+              userId: recipientDbUser.id,
+              amountCc: amount,
+              type: 'TRANSFER_IN',
+              description: `Received from @${sender.username}${body.memo ? `: ${body.memo.trim()}` : ''}`,
+              counterparty:
+                normalizeCantonPartyId(sender.cantonPartyId) ??
+                sender.cantonPartyId,
+              // ledgerTxId + cantonUpdateId = Canton update_id ("1220…") — update
+              // yang sama dengan row sender (satu transfer = satu ledger update).
+              ledgerTxId: ledgerTxId,
+              cantonUpdateId: ledgerTxId,
+            });
+          } catch (err) {
+            // Recipient row hilang kurang kritis — recipient balance self-heal
+            // via sync INCREASE branch. Tetap log supaya reconcile-aware.
+            this.logger.warn(
+              `Recipient TRANSFER_IN row failed (will self-heal via sync): ` +
+                `recipient=${recipientDbUser.id} ledgerTxId=${ledgerTxId ?? 'n/a'}: ${String(err)}`,
+            );
+          }
+          if (recipientDbUser.username) {
+            void this.inboundSync.alignBalanceFromChain(
+              recipientDbUser.id,
+              recipientDbUser.username,
+            );
+          }
+        }
+        if (sender.username) {
+          void this.inboundSync.alignBalanceFromChain(
+            sender.id,
+            sender.username,
+          );
+        }
       }
-      void this.inboundSync.alignBalanceFromChain(sender.id, sender.username);
+
+      // ── Offer-only: return pending status (not an error) ─────────────────
+      if (transferMethod === 'offer_only') {
+        // Fund-safety #4: offer SUDAH dibuat on-chain. Bungkus DB write supaya
+        // kegagalan tidak tampak sebagai "transfer gagal" (offer nyata terbuat).
+        let pendingRowId: string | undefined;
+        try {
+          const pendingRow = await this.users.recordTransaction({
+            userId: sender.id,
+            amountCc: amount,
+            type: 'TRANSFER_OUT',
+            description: `${description} [pending — recipient must accept offer]`,
+            counterparty: recipientPartyId,
+            ledgerTxId,
+            // Status PENDING: dana sudah keluar sebagai offer, tapi belum diterima
+            // receiver. Saat offer di-accept, acceptOfferInbox update ke COMPLETED.
+            status: 'PENDING',
+            transferInstructionCid: cip56Result.transferInstructionCid ?? null,
+          });
+          pendingRowId = pendingRow.id;
+        } catch (err) {
+          this.logger.error(
+            `⚠️ AUDIT-TRAIL LOSS (offer): offer SUCCEEDED but DB record failed. ` +
+              `sender=${sender.id} @${sender.username} amount=${amount} CC ` +
+              `recipient=${recipientLabel} ledgerTxId=${ledgerTxId ?? 'n/a'} ` +
+              `instructionCid=${cip56Result.transferInstructionCid ?? 'n/a'}. ` +
+              `Reconcile manually. Error: ${String(err)}`,
+          );
+        }
+        void this.inboundSync.alignBalanceFromChain(sender.id, sender.username);
+        return {
+          success: true,
+          from: sender.username,
+          to: recipientLabel,
+          amount,
+          fee: feeCc,
+          feeCollected,
+          totalDeducted: feeCollected ? feeCc : 0,
+          accepted: false,
+          offerPending: true,
+          offerContractId: ledgerTxId,
+          message: `Transfer offer created for ${amount} CC to ${recipientLabel}. The recipient must accept this offer manually (different participant wallet). Offer ID: ${ledgerTxId?.slice(0, 20)}…`,
+          transactionId: pendingRowId,
+        };
+      }
+
+      const totalDeducted = amount + (feeCollected ? feeCc : 0);
+      const message = `Sent ${amount} CC to ${recipientLabel} (platform fee ${feeCc} CC).`;
+
+      if (sender.cantonPartyId && accepted) {
+        void this.questLedger
+          .recordCcTransfer({
+            senderPartyId: sender.cantonPartyId,
+            recipientPartyId,
+            amountCc: amount,
+            feeCc: feeCollected ? feeCc : 0,
+            totalDeductedCc: totalDeducted,
+            memo: body.memo?.trim(),
+            transferTxId: ledgerTxId,
+            feeTxId: feeLedgerTxId,
+            transferKind: 'USER_TO_USER',
+          })
+          .catch((err: unknown) => {
+            this.logger.warn(
+              `CcTransferRecord ledger record failed: ${String(err)}`,
+            );
+          });
+      }
+
       return {
         success: true,
         from: sender.username,
@@ -990,51 +1035,12 @@ export class PartyController {
         amount,
         fee: feeCc,
         feeCollected,
-        totalDeducted: feeCollected ? feeCc : 0,
-        accepted: false,
-        offerPending: true,
-        offerContractId: ledgerTxId,
-        message: `Transfer offer created for ${amount} CC to ${recipientLabel}. The recipient must accept this offer manually (different participant wallet). Offer ID: ${ledgerTxId?.slice(0, 20)}…`,
-        transactionId: pendingRowId,
+        totalDeducted,
+        accepted: true,
+        transferMethod,
+        message,
+        transactionId: transferTransactionId,
       };
-    }
-
-    const totalDeducted = amount + (feeCollected ? feeCc : 0);
-    const message = `Sent ${amount} CC to ${recipientLabel} (platform fee ${feeCc} CC).`;
-
-    if (sender.cantonPartyId && accepted) {
-      void this.questLedger
-        .recordCcTransfer({
-          senderPartyId: sender.cantonPartyId,
-          recipientPartyId,
-          amountCc: amount,
-          feeCc: feeCollected ? feeCc : 0,
-          totalDeductedCc: totalDeducted,
-          memo: body.memo?.trim(),
-          transferTxId: ledgerTxId,
-          feeTxId: feeLedgerTxId,
-          transferKind: 'USER_TO_USER',
-        })
-        .catch((err: unknown) => {
-          this.logger.warn(
-            `CcTransferRecord ledger record failed: ${String(err)}`,
-          );
-        });
-    }
-
-    return {
-      success: true,
-      from: sender.username,
-      to: recipientLabel,
-      amount,
-      fee: feeCc,
-      feeCollected,
-      totalDeducted,
-      accepted: true,
-      transferMethod,
-      message,
-      transactionId: transferTransactionId,
-    };
     } finally {
       // Fund-safety #2: wajib release lock di SEMUA jalur keluar (return/throw).
       this.sendCcInFlight.delete(sender.id);
@@ -1902,10 +1908,7 @@ export class PartyController {
       return { transactions: [], pagination: null };
     }
 
-    const size = Math.min(
-      100,
-      Math.max(1, parseInt(limit ?? '15', 10) || 15),
-    );
+    const size = Math.min(100, Math.max(1, parseInt(limit ?? '15', 10) || 15));
 
     try {
       const result = await this.modo.getTransfersByParty(partyId, {
@@ -1915,7 +1918,9 @@ export class PartyController {
         cursor: cursor || undefined,
       });
       if (!result) {
-        this.logger.warn('Modo onchain fetch returned no result (upstream error)');
+        this.logger.warn(
+          'Modo onchain fetch returned no result (upstream error)',
+        );
         return { transactions: [], pagination: null };
       }
 
@@ -2635,9 +2640,7 @@ export class PartyController {
       where: { userId: user.id },
       select: { balanceMicroCc: true },
     });
-    const ccAmount = ccBal
-      ? Number(ccBal.balanceMicroCc) / 1_000_000
-      : 0;
+    const ccAmount = ccBal ? Number(ccBal.balanceMicroCc) / 1_000_000 : 0;
     // Non-CC token saldo (off-chain custody).
     const tokenBals = await this.prisma.cantexTokenBalance.findMany({
       where: { userId: user.id },
@@ -2704,7 +2707,9 @@ export class PartyController {
     try {
       const instruments = await this.cantex.getAllSwapInstruments();
       // Tandai mana yang CC/Amulet (untuk logo + label FE).
-      const ccId = (process.env.CANTEX_CC_INSTRUMENT_ID ?? 'Amulet').toLowerCase();
+      const ccId = (
+        process.env.CANTEX_CC_INSTRUMENT_ID ?? 'Amulet'
+      ).toLowerCase();
       return {
         tokens: instruments.map((t) => ({
           instrumentId: t.id,
@@ -2778,9 +2783,7 @@ export class PartyController {
     } catch (err) {
       if (err instanceof CantexError) {
         this.logger.warn(`swap/quote Cantex error: ${err.message}`);
-        throw new BadRequestException(
-          `Could not get quote: ${err.message}`,
-        );
+        throw new BadRequestException(`Could not get quote: ${err.message}`);
       }
       this.logger.error(
         `swap/quote failed: ${(err as Error).message}`,
@@ -2793,27 +2796,73 @@ export class PartyController {
   }
 
   /**
-   * POST /party/swap — execute swap (Phase 1: stub 503; Phase 2: live).
-   *
-   * Phase 1: return 503 supaya frontend tampilkan "coming soon" state.
-   * Phase 2 akan mengganti ini dengan swap.service.executeSwap().
+   * POST /party/swap — execute swap CC ↔ token (live, custodial Wintip-style).
+   * SwapService handles the full flow: CC transfer + Cantex swap + WS confirm +
+   * off-chain balance update + platform fee.
    */
   @Throttle({ ledger: { limit: 5, ttl: 60_000 } })
   @Post('swap')
   async swap(@Req() req: AuthedReq, @Body() body: SwapDto) {
-    // Validate wallet gate even in Phase 1 (UX: clear error early).
+    if (!isCantexEnabled()) {
+      throw new ServiceUnavailableException('Swap is not enabled.');
+    }
     const user = await this.users.findById(req.user.userId);
     if (!user?.cantonPartyId || !hasRealWallet(user.cantonPartyId)) {
       throw new ForbiddenException(
         'You need a Canton wallet to use swap. Create yours first.',
       );
     }
+    const result = await this.swapService.executeSwap(req.user.userId, {
+      sellInstrumentId: body.sellInstrumentId,
+      sellInstrumentAdmin: body.sellInstrumentAdmin,
+      buyInstrumentId: body.buyInstrumentId,
+      buyInstrumentAdmin: body.buyInstrumentAdmin,
+      amount: body.amount,
+      walletPassword: body.walletPassword,
+      sellIsCC: body.sellIsCC,
+      clientNonce: body.clientNonce,
+    });
+    if (!result.success) {
+      throw new BadRequestException(
+        result.message ?? 'Swap failed. Please try again.',
+      );
+    }
+    return {
+      success: true,
+      direction: result.direction,
+      outputAmount: result.outputAmount,
+      swapId: result.swapId,
+    };
+  }
+
+  /**
+   * GET /party/swap/account-status — cek apakah Cantex trading account sudah
+   * provisioned (pool trading account + intent account). Dipakai untuk
+   * debugging/provisioning check.
+   */
+  @Get('swap/account-status')
+  @SkipThrottle()
+  async swapAccountStatus() {
     if (!isCantexEnabled()) {
       throw new ServiceUnavailableException('Swap is not enabled.');
     }
-    // Phase 1: execution belum live.
-    throw new ServiceUnavailableException(
-      'Swap execution is coming soon. Quote preview is live — try GET /party/swap/pools and POST /party/swap/quote.',
-    );
+    try {
+      const admin = await this.cantex.getAccountAdmin();
+      return {
+        address: admin.address,
+        hasIntentAccount: admin.hasIntentAccount,
+        hasTradingAccount: admin.hasTradingAccount,
+        intentAccountContractId: admin.intentAccountContractId,
+        tradingAccountContractId: admin.tradingAccountContractId,
+        ready: admin.hasIntentAccount && admin.hasTradingAccount,
+      };
+    } catch (err) {
+      this.logger.error(
+        `swap/account-status failed: ${(err as Error).message}`,
+      );
+      throw new ServiceUnavailableException(
+        'Could not check Cantex account status.',
+      );
+    }
   }
 }
