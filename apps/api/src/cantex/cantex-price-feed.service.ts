@@ -11,7 +11,6 @@
  */
 
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { Decimal } from '@prisma/client/runtime/library';
 import { CantexClient, type TokenPriceMap } from './cantex-client';
 import { CantexWebSocketClient, parseTickerEvent } from './cantex-ws';
 import { getCantexConfig } from './cantex.config';
@@ -27,14 +26,14 @@ export class CantexPriceFeedService implements OnModuleInit {
 
   constructor(private readonly client: CantexClient) {}
 
-  async onModuleInit(): Promise<void> {
+  onModuleInit(): void {
     if (!this.isEnabled()) {
       this.logger.log('Cantex disabled — price feed tidak start.');
       return;
     }
     // Non-blocking init (jangan block API startup).
-    this.initPromise = this.init().catch((err) => {
-      this.logger.error(`Price feed init failed: ${err.message}`);
+    this.initPromise = this.init().catch((err: unknown) => {
+      this.logger.error(`Price feed init failed: ${(err as Error).message}`);
     });
   }
 

@@ -94,11 +94,13 @@ export class CantexWebSocketClient {
       }
     });
 
-    this.ws.on('message', (data: WebSocket.RawData) => {
-      const text = data.toString();
+    this.ws.on('message', (raw: WebSocket.RawData) => {
+      // RawData = Buffer | ArrayBuffer | Buffer[]. toString handles all.
+      // eslint-disable-next-line @typescript-eslint/no-base-to-string
+      const text = raw.toString();
       let frame: Record<string, unknown>;
       try {
-        frame = JSON.parse(text);
+        frame = JSON.parse(text) as Record<string, unknown>;
       } catch {
         this.logger.warn(`WS invalid JSON: ${text.slice(0, 100)}`);
         return;
@@ -177,7 +179,11 @@ export function parseTickerEvent(
   return {
     channel,
     market: (data['market'] as string) ?? '',
-    price: new Decimal(String(data['price'] ?? '0')),
+    price: new Decimal(
+      typeof data['price'] === 'number'
+        ? String(data['price'])
+        : ((data['price'] as string) ?? '0'),
+    ),
     priceTs: Number(data['ts'] ?? 0),
     serverTs: Number(frame['ts'] ?? 0),
     eventType: eventType === 'snapshot' ? 'snapshot' : 'update',
