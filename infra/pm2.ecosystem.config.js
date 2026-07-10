@@ -1,4 +1,4 @@
-// VPS 2 — NestJS API (:3001) + Next.js web (:3000). Nginx fronts both (see infra/nginx/canquest.conf).
+// VPS — NestJS API (:3001) only. Web is on Vercel.
 const path = require('path');
 const fs = require('fs');
 
@@ -27,9 +27,7 @@ function loadEnvFile(envPath) {
   return out;
 }
 
-const webDir = path.join(root, 'apps/web');
 const apiEnv = loadEnvFile(path.join(apiDir, '.env'));
-const webEnv = loadEnvFile(path.join(webDir, '.env'));
 
 // npm workspaces installs api deps under apps/api/node_modules (not always at repo root)
 const nodePath = [path.join(root, 'node_modules'), path.join(apiDir, 'node_modules')]
@@ -38,26 +36,6 @@ const nodePath = [path.join(root, 'node_modules'), path.join(apiDir, 'node_modul
 
 module.exports = {
   apps: [
-    {
-      name: 'canquest-web',
-      cwd: webDir,
-      script: 'node_modules/next/dist/bin/next',
-      args: 'start -p 3000',
-      instances: 1,
-      exec_mode: 'fork',
-      env_production: {
-        NODE_ENV: 'production',
-        ...webEnv,
-      },
-      watch: false,
-      max_memory_restart: '768M',
-      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-      error_file: path.join(root, 'logs/web-error.log'),
-      out_file: path.join(root, 'logs/web-out.log'),
-      merge_logs: true,
-      restart_delay: 3000,
-      autorestart: true,
-    },
     {
       name: 'canquest-api',
       cwd: root,
