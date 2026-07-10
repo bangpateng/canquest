@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useCcBalance } from "@/lib/hooks/use-cc-balance";
-import { useCcPrice } from "@/lib/hooks/use-cc-price";
+import { useTokenPrices } from "@/lib/hooks/use-token-prices";
 import { isRealCantonPartyId } from "@/lib/auth/wallet-session-cache";
 import { formatPartyIdForDisplay } from "@/lib/canton/canton-party-id";
 import { ROUTES } from "@/lib/routing/app-routes";
@@ -48,8 +48,8 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
     refreshWithRetries,
   } = useCcBalance({ enabled: hasWallet, pollIntervalMs: 90_000 });
 
-  const { price: ccUsdPrice, change24hPct } = useCcPrice();
-  const ccUsd = ccUsdPrice ?? 0;
+  // Harga semua token dari Cantex DEX (rate vs USDCx = USD anchor).
+  const { prices: tokenPrices } = useTokenPrices();
 
   // Token list dari Cantex pools + saldo off-chain.
   const [swapTokens, setSwapTokens] = useState<SwapToken[]>([]);
@@ -57,6 +57,13 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
     {},
   );
   const [tokensLoading, setTokensLoading] = useState(false);
+
+  // CC price: cari "Amulet::admin" di price map (setelah swapTokens load).
+  const ccInstrumentKey = swapTokens.find((t) => t.isCC);
+  const ccKey = ccInstrumentKey
+    ? `${ccInstrumentKey.instrumentId}::${ccInstrumentKey.instrumentAdmin}`
+    : null;
+  const ccUsd = ccKey ? tokenPrices[ccKey] ?? 0 : 0;
 
   const loadTokens = useCallback(async () => {
     setTokensLoading(true);
@@ -90,16 +97,23 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
     onRefresh?.();
   }, [refreshWithRetries, loadTokens, onRefresh]);
 
-  // Total USD value — Phase 1: CC only (token non-CC saldo 0).
-  // Phase 2: tambah rate token non-CC × saldo × harga CC.
-  const ccUsdValue =
+  // Total USD value = CC value + semua token non-CC value (Cantex prices).
+  const ccValue =
     !ccLoading && ccUsd > 0 && ccBalance !== null ? ccBalance * ccUsd : 0;
-  const totalUsd = ccUsdValue;
+  let tokenNonCcValue = 0;
+  for (const t of swapTokens) {
+    if (t.isCC) continue;
+    const key = `${t.instrumentId}::${t.instrumentAdmin}`;
+    const price = tokenPrices[key];
+    const bal = parseFloat(tokenBalances[key] ?? "0");
+    if (price && bal > 0) tokenNonCcValue += bal * price;
+  }
+  const totalUsd = ccValue + tokenNonCcValue;
   const totalUsdStr = totalUsd.toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-  const ccFiatStr = ccUsdValue.toLocaleString("en-US", {
+  const ccFiatStr = ccValue.toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
@@ -176,8 +190,7 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
             balance={
               ccLoading ? "—" : (ccBalance?.toFixed(4) ?? "0.0000")
             }
-            fiatValue={ccUsdValue > 0 ? `$${ccFiatStr}` : undefined}
-            change24hPct={change24hPct ?? undefined}
+            fiatValue={ccValue > 0 ? `$${ccFiatStr}` : undefined}
             onClick={() => router.push(ROUTES.walletToken("cc"))}
           />
 
@@ -187,11 +200,20 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
             .map((t) => {
               const key = `${t.instrumentId}::${t.instrumentAdmin}`;
               const bal = parseFloat(tokenBalances[key] ?? "0");
+              const price = tokenPrices[key];
+              const fiat =
+                price && bal > 0
+                  ? `$${(bal * price).toLocaleString("en-US", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}`
+                  : undefined;
               return (
                 <TokenCard
                   key={key}
                   symbol={t.instrumentId}
                   balance={bal.toFixed(4)}
+                  fiatValue={fiat}
                   onClick={() =>
                     router.push(
                       ROUTES.walletToken(

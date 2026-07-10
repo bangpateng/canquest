@@ -2657,6 +2657,31 @@ export class PartyController {
   }
 
   /**
+   * GET /party/swap/prices — harga USD semua token dari Cantex DEX
+   * (rate token→USDCx, USDCx = $1 anchor). Cache 30s di CantexClient.
+   * Dipakai frontend untuk total balance USD + per-token fiat value.
+   */
+  @Get('swap/prices')
+  @SkipThrottle()
+  async swapPrices() {
+    if (!isCantexEnabled()) {
+      throw new ServiceUnavailableException('Swap is not enabled.');
+    }
+    try {
+      const prices = await this.cantex.getTokenPrices();
+      return { prices, source: 'cantex_dex' };
+    } catch (err) {
+      this.logger.error(
+        `swap/prices failed: ${(err as Error).message}`,
+        (err as Error).stack,
+      );
+      throw new ServiceUnavailableException(
+        'Could not fetch token prices. Try again later.',
+      );
+    }
+  }
+
+  /**
    * GET /party/swap/pools — daftar SEMUA token yang bisa di-swap (termasuk
    * Amulet/CC). User bisa pilih token mana pun di slot atas ATAU bawah.
    * Live dari Cantex DEX (read-only, no risk).

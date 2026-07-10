@@ -16,6 +16,7 @@ export const queryKeys = {
     balance: ["party", "balance"] as const,
     lockStatus: ["party", "lock-status"] as const,
     ccPrice: ["party", "cc-price"] as const,
+    tokenPrices: ["party", "token-prices"] as const,
     offers: ["party", "offers"] as const,
     notifications: ["party", "notifications"] as const,
     transactions: {
