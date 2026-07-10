@@ -651,7 +651,19 @@ function SwapCard({
   );
 }
 
-// ── Token Logo (gradient circle with first letter) ──────────────────────
+// ── Token Logo (image file → fallback gradient circle) ──────────────────
+//
+// Sistem logo: taruh file gambar di apps/web/public/tokens/<symbol>.png
+// (atau .svg/.jpg). Contoh: public/tokens/cc.png, public/tokens/Amulet.svg
+// Kalau file ada → tampilkan gambar. Kalau tidak → fallback gradient circle
+// dengan huruf pertama. Next.js Image TIDAK dipakai disini supaya onError
+// fallback cepat (no blur placeholder) untuk token yang belum punya logo.
+
+/** Normalize symbol ke nama file (CC & Amulet → cc, TokenX → tokenx). */
+function logoFileName(symbol: string): string {
+  const display = displayName(symbol);
+  return display.toLowerCase().replace(/[^a-z0-9]/g, "-");
+}
 
 function TokenLogo({
   symbol,
@@ -660,8 +672,22 @@ function TokenLogo({
   symbol: string;
   size?: "sm" | "md";
 }) {
-  const letter = symbol.charAt(0).toUpperCase();
+  const [imgError, setImgError] = useState(false);
+  const letter = displayName(symbol).charAt(0).toUpperCase();
   const dim = size === "sm" ? "h-6 w-6 text-[11px]" : "h-8 w-8 text-sm";
+  const src = `/tokens/${logoFileName(symbol)}.png`;
+
+  // Coba gambar dulu; kalau gagal load → fallback gradient circle.
+  if (!imgError) {
+    return (
+      <img
+        src={src}
+        alt={displayName(symbol)}
+        onError={() => setImgError(true)}
+        className={cn("shrink-0 rounded-full object-cover", dim)}
+      />
+    );
+  }
   return (
     <span
       className={cn(
