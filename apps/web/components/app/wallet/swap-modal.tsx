@@ -5,7 +5,13 @@ import { cn } from "@/lib/utils/utils";
 import { buttonVariants } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { iconButtonClass } from "@/lib/ui/ui-button-styles";
-import { ArrowLeftRight, ArrowDown, X, AlertCircle } from "lucide-react";
+import {
+  ArrowDown,
+  ChevronDown,
+  Settings,
+  X,
+  AlertCircle,
+} from "lucide-react";
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -52,11 +58,7 @@ const CC_SYMBOL = "CC";
 
 // ── Component ───────────────────────────────────────────────────────────
 
-export function SwapModal({
-  open,
-  onClose,
-  balance,
-}: SwapModalProps) {
+export function SwapModal({ open, onClose, balance }: SwapModalProps) {
   const titleId = useId();
 
   const [tokens, setTokens] = useState<SwappableToken[]>([]);
@@ -64,7 +66,9 @@ export function SwapModal({
   const [tokensError, setTokensError] = useState<string | null>(null);
 
   const [direction, setDirection] = useState<Direction>("CC_TO_TOKEN");
-  const [selectedToken, setSelectedToken] = useState<SwappableToken | null>(null);
+  const [selectedToken, setSelectedToken] = useState<SwappableToken | null>(
+    null,
+  );
   const [amount, setAmount] = useState("");
 
   const [quote, setQuote] = useState<QuoteResponse | null>(null);
@@ -89,10 +93,12 @@ export function SwapModal({
     if (!open) return;
     fetch("/api/party/swap/status", { credentials: "include" })
       .then((r) => r.json())
-      .then((d: { enabled?: boolean; phase?: string; message?: string }) => {
-        setStatusEnabled(Boolean(d.enabled));
-        setStatus(d.message ?? null);
-      })
+      .then(
+        (d: { enabled?: boolean; phase?: string; message?: string }) => {
+          setStatusEnabled(Boolean(d.enabled));
+          setStatus(d.message ?? null);
+        },
+      )
       .catch(() => setStatus(null));
   }, [open]);
 
@@ -147,7 +153,9 @@ export function SwapModal({
             amount: amt,
           }),
         });
-        const data = (await res.json()) as QuoteResponse & { message?: string };
+        const data = (await res.json()) as QuoteResponse & {
+          message?: string;
+        };
         if (!res.ok) {
           setQuoteError(data.message ?? "Could not get quote.");
           setQuote(null);
@@ -167,13 +175,33 @@ export function SwapModal({
   if (!open) return null;
 
   // Input symbol: CC_TO_TOKEN → user enters CC; TOKEN_TO_CC → user enters token.
-  const inputSymbol = direction === "CC_TO_TOKEN" ? CC_SYMBOL : selectedToken?.instrumentId ?? "TOKEN";
-  const outputSymbol = direction === "CC_TO_TOKEN" ? (selectedToken?.instrumentId ?? "TOKEN") : CC_SYMBOL;
+  const inputSymbol =
+    direction === "CC_TO_TOKEN"
+      ? CC_SYMBOL
+      : (selectedToken?.instrumentId ?? "TOKEN");
+  const outputSymbol =
+    direction === "CC_TO_TOKEN"
+      ? (selectedToken?.instrumentId ?? "TOKEN")
+      : CC_SYMBOL;
 
   const insufficientBalance =
     direction === "CC_TO_TOKEN" &&
     typeof balance === "number" &&
     parseFloat(amount) > balance;
+
+  // Percent quick-select (only for CC_TO_TOKEN where we know balance).
+  const setPercent = (pct: number) => {
+    if (direction === "CC_TO_TOKEN" && typeof balance === "number") {
+      setAmount((balance * pct).toFixed(6).replace(/\.?0+$/, ""));
+    }
+  };
+
+  // Flip direction.
+  const flipDirection = () => {
+    setDirection((d) => (d === "CC_TO_TOKEN" ? "TOKEN_TO_CC" : "CC_TO_TOKEN"));
+    setAmount("");
+    setQuote(null);
+  };
 
   return (
     <div
@@ -182,7 +210,7 @@ export function SwapModal({
     >
       <button
         type="button"
-        className="fixed inset-0 bg-black/45 backdrop-blur-[2px]"
+        className="fixed inset-0 bg-black/60 backdrop-blur-[3px]"
         aria-label="Close dialog"
         onClick={onClose}
       />
@@ -190,191 +218,322 @@ export function SwapModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative z-10 my-auto w-full max-h-[min(90vh,90dvh)] max-w-md overflow-y-auto rounded-3xl border border-white/5 bg-[var(--card)] p-8 shadow-xl"
+        className="relative z-10 my-auto w-full max-h-[min(90vh,90dvh)] max-w-md overflow-y-auto rounded-3xl border border-white/10 bg-[#0a0b0d] p-5 shadow-2xl"
       >
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <ArrowLeftRight className="h-5 w-5 text-emerald-400" aria-hidden />
-            <h2 id={titleId} className="text-xl font-bold text-slate-100">
-              Swap
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className={iconButtonClass("h-9 w-9 shrink-0 text-[var(--foreground)]")}
-            aria-label="Close"
+        {/* Header */}
+        <div className="mb-5 flex items-center justify-between">
+          <h2
+            id={titleId}
+            className="text-lg font-bold text-white"
           >
-            <X className="h-4 w-4" />
-          </button>
+            Swap
+          </h2>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className={iconButtonClass(
+                "h-8 w-8 text-slate-400 hover:text-slate-200",
+              )}
+              aria-label="Settings"
+            >
+              <Settings className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className={iconButtonClass(
+                "h-8 w-8 text-slate-400 hover:text-slate-200",
+              )}
+              aria-label="Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
         {/* Status banner */}
         {!statusEnabled ? (
-          <div className="mt-6 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-300">
-            Swap is not available right now. {status}
+          <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-center text-xs text-amber-300">
+            {status ?? "Swap is not available right now."}
           </div>
-        ) : (
-          <div className="mt-4 space-y-5">
-            {/* Direction toggle */}
-            <div className="flex items-center gap-2 rounded-xl bg-black/20 p-1">
-              <button
-                type="button"
-                onClick={() => setDirection("CC_TO_TOKEN")}
-                className={cn(
-                  "flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition",
-                  direction === "CC_TO_TOKEN"
-                    ? "bg-emerald-500/20 text-emerald-300"
-                    : "text-slate-400 hover:text-slate-200",
-                )}
-              >
-                CC → Token
-              </button>
-              <button
-                type="button"
-                onClick={() => setDirection("TOKEN_TO_CC")}
-                className={cn(
-                  "flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition",
-                  direction === "TOKEN_TO_CC"
-                    ? "bg-emerald-500/20 text-emerald-300"
-                    : "text-slate-400 hover:text-slate-200",
-                )}
-              >
-                Token → CC
-              </button>
-            </div>
+        ) : null}
 
-            {/* Token selector */}
-            {tokensLoading ? (
-              <div className="flex items-center justify-center py-4">
-                <LoadingSpinner />
-              </div>
-            ) : tokensError ? (
-              <div className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
-                <AlertCircle className="h-4 w-4 shrink-0" />
-                <span>{tokensError}</span>
-              </div>
-            ) : tokens.length === 0 ? (
-              <p className="py-4 text-center text-sm text-slate-400">
-                No tokens available for swap yet.
-              </p>
-            ) : (
-              <>
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-slate-400">
-                    Token
-                  </label>
-                  <select
-                    value={
-                      selectedToken
-                        ? `${selectedToken.instrumentId}::${selectedToken.instrumentAdmin}`
-                        : ""
-                    }
-                    onChange={(e) => {
-                      const found = tokens.find(
-                        (t) =>
-                          `${t.instrumentId}::${t.instrumentAdmin}` ===
-                          e.target.value,
-                      );
-                      setSelectedToken(found ?? null);
-                    }}
-                    className="w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-slate-100 outline-none focus:border-emerald-500/50"
+        {/* Swap cards */}
+        <div className="relative space-y-2">
+          {/* ── YOU PAY ── */}
+          <SwapCard
+            label="You Pay"
+            amount={amount}
+            onAmountChange={setAmount}
+            isInput
+            balance={
+              direction === "CC_TO_TOKEN"
+                ? typeof balance === "number"
+                  ? balance.toFixed(4)
+                  : undefined
+                : undefined
+            }
+            onPercentClick={direction === "CC_TO_TOKEN" ? setPercent : undefined}
+            isLoading={tokensLoading}
+            error={tokensError}
+            tokens={tokens}
+            selectedToken={selectedToken}
+            onSelectToken={setSelectedToken}
+            tokenIsCC={direction === "CC_TO_TOKEN"}
+          />
+
+          {/* ── Direction button (circle, overlapping) ── */}
+          <div className="relative z-10 flex justify-center">
+            <button
+              type="button"
+              onClick={flipDirection}
+              className="flex h-10 w-10 items-center justify-center rounded-full border-4 border-[#0a0b0d] bg-[#1a1d23] text-amber-400 transition hover:rotate-180 hover:bg-[#252a32]"
+              aria-label="Flip swap direction"
+            >
+              <ArrowDown className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* ── YOU GET ── */}
+          <SwapCard
+            label="You Get (est.)"
+            amount={quote ? formatAmount(quote.outputAmount) : ""}
+            isInput={false}
+            isLoading={quoteLoading}
+            tokenIsCC={direction === "TOKEN_TO_CC"}
+            selectedToken={selectedToken}
+            estimated
+          />
+        </div>
+
+        {/* Insufficient balance */}
+        {insufficientBalance && (
+          <p className="mt-3 text-center text-sm font-medium text-red-400">
+            Insufficient CC balance
+          </p>
+        )}
+
+        {/* Quote details */}
+        {quoteError ? (
+          <div className="mt-3 flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>{quoteError}</span>
+          </div>
+        ) : quote ? (
+          <div className="mt-3 space-y-2 rounded-xl border border-white/5 bg-[#13151a] p-4 text-xs">
+            <DetailRow
+              label="Rate"
+              value={`1 ${inputSymbol} ≈ ${formatPrice(quote.prices.tradePrice)} ${outputSymbol}`}
+            />
+            <DetailRow
+              label="Price Impact"
+              value={`${formatPct(quote.prices.slippage)}%`}
+              valueClass={
+                parseFloat(quote.prices.slippage) > 3
+                  ? "text-red-400"
+                  : "text-emerald-400"
+              }
+            />
+            <DetailRow
+              label="Swap Fee"
+              value={`${formatAmount(quote.fees.adminFee)} ${quote.outputInstrument.id} (${formatPct(quote.fees.feePercentage)}%)`}
+            />
+            <DetailRow
+              label="Network Fee"
+              value={`${formatAmount(quote.fees.networkFee)} ${quote.outputInstrument.id}`}
+            />
+          </div>
+        ) : null}
+
+        {/* CTA button */}
+        <button
+          type="button"
+          disabled
+          className={cn(
+            buttonVariants({ size: "sm" }),
+            "mt-4 w-full cursor-not-allowed opacity-60",
+          )}
+        >
+          Swap Coming Soon
+        </button>
+        <p className="mt-2 text-center text-[11px] text-slate-500">
+          Quote preview is live. Execution enabled in next phase.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── Swap Card (input/output token slot) ─────────────────────────────────
+
+interface SwapCardProps {
+  label: string;
+  amount?: string;
+  onAmountChange?: (v: string) => void;
+  isInput: boolean;
+  balance?: string;
+  onPercentClick?: (pct: number) => void;
+  isLoading?: boolean;
+  error?: string | null;
+  tokens?: SwappableToken[];
+  selectedToken?: SwappableToken | null;
+  onSelectToken?: (t: SwappableToken) => void;
+  tokenIsCC: boolean;
+  estimated?: boolean;
+}
+
+function SwapCard({
+  label,
+  amount,
+  onAmountChange,
+  isInput,
+  balance,
+  onPercentClick,
+  isLoading,
+  error,
+  tokens,
+  selectedToken,
+  onSelectToken,
+  tokenIsCC,
+  estimated,
+}: SwapCardProps) {
+  // Native <select> styled to blend with custom token chip.
+  return (
+    <div className="rounded-2xl border border-white/5 bg-[#13151a] p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-xs font-medium text-slate-500">{label}</span>
+        {isInput && balance && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-slate-500">Bal: {balance}</span>
+            {onPercentClick && (
+              <div className="flex gap-1">
+                {[0.25, 0.5, 0.75].map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => onPercentClick(p)}
+                    className="rounded bg-[#252a32] px-1.5 py-0.5 text-[10px] font-semibold text-slate-300 hover:bg-[#323842] hover:text-white"
                   >
-                    {tokens.map((t) => (
-                      <option
-                        key={`${t.instrumentId}::${t.instrumentAdmin}`}
-                        value={`${t.instrumentId}::${t.instrumentAdmin}`}
-                        className="bg-[var(--card)]"
-                      >
-                        {t.instrumentId}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Amount input */}
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-slate-400">
-                    You pay ({inputSymbol})
-                  </label>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min="0"
-                    step="0.000001"
-                    placeholder="0.0"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    className="w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-lg font-semibold text-slate-100 outline-none focus:border-emerald-500/50"
-                  />
-                  {direction === "CC_TO_TOKEN" && typeof balance === "number" && (
-                    <p className="text-xs text-slate-500">
-                      Balance: {balance.toFixed(4)} CC
-                    </p>
-                  )}
-                </div>
-
-                {/* Direction indicator */}
-                <div className="flex justify-center">
-                  <div className="rounded-full border border-white/10 bg-black/30 p-2">
-                    <ArrowDown className="h-4 w-4 text-slate-400" aria-hidden />
-                  </div>
-                </div>
-
-                {/* Output estimate */}
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-slate-400">
-                    You receive (est. {outputSymbol})
-                  </label>
-                  <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-lg font-semibold text-emerald-300">
-                    {quoteLoading
-                      ? "…"
-                      : quote
-                        ? formatAmount(quote.outputAmount)
-                        : "0.0"}
-                  </div>
-                </div>
-
-                {/* Quote details */}
-                {quoteError ? (
-                  <div className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
-                    <AlertCircle className="h-4 w-4 shrink-0" />
-                    <span>{quoteError}</span>
-                  </div>
-                ) : quote ? (
-                  <div className="space-y-1.5 rounded-lg border border-white/5 bg-black/20 p-3 text-xs text-slate-400">
-                    <Row label="Price" value={`1 ${inputSymbol} ≈ ${formatPrice(quote.prices.tradePrice)} ${outputSymbol}`} />
-                    <Row label="Price impact" value={`${formatPct(quote.prices.slippage)}%`} />
-                    <Row label="Fee" value={`${formatAmount(quote.fees.adminFee)} ${quote.outputInstrument.id} + ${formatAmount(quote.fees.liquidityFee)}`} />
-                    <Row label="Network fee" value={`${formatAmount(quote.fees.networkFee)} ${quote.outputInstrument.id}`} />
-                  </div>
-                ) : null}
-
-                {insufficientBalance && (
-                  <p className="text-xs text-red-400">
-                    Insufficient CC balance.
-                  </p>
-                )}
-
-                {/* Phase 1: execution disabled */}
+                    {p === 0.25 ? "25" : p === 0.5 ? "50" : "75"}%
+                  </button>
+                ))}
                 <button
                   type="button"
-                  disabled
-                  className={cn(
-                    buttonVariants({ size: "sm" }),
-                    "w-full cursor-not-allowed opacity-60",
-                  )}
+                  onClick={() => onPercentClick(1)}
+                  className="rounded bg-[#252a32] px-1.5 py-0.5 text-[10px] font-semibold text-amber-400 hover:bg-[#323842]"
                 >
-                  Swap Coming Soon
+                  MAX
                 </button>
-                <p className="text-center text-[11px] text-slate-500">
-                  Quote preview is live. Swap execution will be enabled in the next phase.
-                </p>
-              </>
+              </div>
             )}
           </div>
         )}
       </div>
+      <div className="flex items-center gap-3">
+        {/* Amount */}
+        {isInput ? (
+          <input
+            type="number"
+            inputMode="decimal"
+            min="0"
+            step="0.000001"
+            placeholder="0.0"
+            value={amount ?? ""}
+            onChange={(e) => onAmountChange?.(e.target.value)}
+            className="w-full min-w-0 flex-1 bg-transparent text-2xl font-bold text-white outline-none placeholder:text-slate-600"
+          />
+        ) : (
+          <span
+            className={cn(
+              "w-full min-w-0 flex-1 text-2xl font-bold",
+              estimated ? "text-amber-300" : "text-white",
+            )}
+          >
+            {amount || "0.0"}
+          </span>
+        )}
+
+        {/* Token selector chip */}
+        {tokenIsCC ? (
+          <div className="flex shrink-0 items-center gap-2 rounded-full bg-[#252a32] px-3 py-2">
+            <TokenAvatar symbol={CC_SYMBOL} />
+            <span className="text-sm font-semibold text-white">{CC_SYMBOL}</span>
+          </div>
+        ) : isLoading ? (
+          <div className="flex shrink-0 items-center gap-2 rounded-full bg-[#252a32] px-3 py-2">
+            <LoadingSpinner className="h-4 w-4" />
+          </div>
+        ) : error ? (
+          <div className="shrink-0 rounded-full bg-red-500/20 px-3 py-2 text-xs text-red-400">
+            Error
+          </div>
+        ) : tokens && tokens.length > 0 ? (
+          <div className="relative shrink-0">
+            <select
+              value={
+                selectedToken
+                  ? `${selectedToken.instrumentId}::${selectedToken.instrumentAdmin}`
+                  : ""
+              }
+              onChange={(e) => {
+                const found = tokens.find(
+                  (t) =>
+                    `${t.instrumentId}::${t.instrumentAdmin}` === e.target.value,
+                );
+                if (found && onSelectToken) onSelectToken(found);
+              }}
+              className="cursor-pointer appearance-none rounded-full bg-[#252a32] py-2 pl-3 pr-8 text-sm font-semibold text-white outline-none hover:bg-[#323842]"
+            >
+              {tokens.map((t) => (
+                <option
+                  key={`${t.instrumentId}::${t.instrumentAdmin}`}
+                  value={`${t.instrumentId}::${t.instrumentAdmin}`}
+                  className="bg-[#13151a]"
+                >
+                  {t.instrumentId}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          </div>
+        ) : (
+          <div className="shrink-0 rounded-full bg-[#252a32] px-3 py-2 text-xs text-slate-500">
+            No tokens
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Token Avatar (circle with first letter) ─────────────────────────────
+
+function TokenAvatar({ symbol }: { symbol: string }) {
+  const letter = symbol.charAt(0).toUpperCase();
+  return (
+    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-[11px] font-bold text-black">
+      {letter}
+    </span>
+  );
+}
+
+// ── Detail Row ──────────────────────────────────────────────────────────
+
+function DetailRow({
+  label,
+  value,
+  valueClass,
+}: {
+  label: string;
+  value: string;
+  valueClass?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2 text-slate-400">
+      <span>{label}</span>
+      <span className={cn("font-medium text-slate-300", valueClass)}>
+        {value}
+      </span>
     </div>
   );
 }
@@ -400,15 +559,5 @@ function formatPrice(s: string): string {
 function formatPct(s: string): string {
   const n = parseFloat(s);
   if (!isFinite(n)) return "0";
-  // slippage bisa sudah dalam persen atau fraction — tampilkan sapa 2 desimal.
   return (n < 1 ? n * 100 : n).toFixed(2);
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-2">
-      <span>{label}</span>
-      <span className="font-medium text-slate-300">{value}</span>
-    </div>
-  );
 }
