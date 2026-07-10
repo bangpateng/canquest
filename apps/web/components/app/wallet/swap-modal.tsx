@@ -44,6 +44,8 @@ interface QuoteResponse {
     adminFee: string;
     liquidityFee: string;
     networkFee: string;
+    feeInstrument?: { id: string; admin: string };
+    networkFeeInstrument?: { id: string; admin: string };
   };
   prices: {
     slippage: string;
@@ -442,11 +444,11 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                   />
                   <DetailRow
                     label="Swap Fee"
-                    value={`${formatAmount(quote.fees.adminFee)} ${quote.outputInstrument.id} (${formatPct(quote.fees.feePercentage)}%)`}
+                    value={`${formatAmount(quote.fees.adminFee)} ${displayName(quote.fees.feeInstrument?.id ?? quote.outputInstrument.id)} (${formatPct(quote.fees.feePercentage)}%)`}
                   />
                   <DetailRow
                     label="Network Fee"
-                    value={`${formatAmount(quote.fees.networkFee)} ${quote.outputInstrument.id}`}
+                    value={`${formatAmount(quote.fees.networkFee)} ${displayName(quote.fees.networkFeeInstrument?.id ?? quote.outputInstrument.id)}`}
                   />
                 </div>
               ) : null)}

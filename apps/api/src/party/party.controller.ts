@@ -2763,13 +2763,14 @@ export class PartyController {
         // Estimasi output (yang dibeli user).
         outputAmount: quote.returned.amount.toString(),
         outputInstrument: quote.returned.instrument,
-        // Fee + price impact.
+        // Fee + price impact. Tiap fee pakai instrument aslinya dari Cantex.
         fees: {
           feePercentage: quote.fees.feePercentage.toString(),
           adminFee: quote.fees.amountAdmin.toString(),
           liquidityFee: quote.fees.amountLiquidity.toString(),
           networkFee: quote.fees.networkFee.amount.toString(),
           feeInstrument: quote.fees.instrument,
+          networkFeeInstrument: quote.fees.networkFee.instrument,
         },
         prices: {
           slippage: quote.prices.slippage.toString(),
