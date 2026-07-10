@@ -54,6 +54,9 @@ interface QuoteResponse {
   estimatedTimeSeconds: number;
 }
 
+/** Minimum swap amount (Cantex DEX requirement: minimum ticket size 10 CC). */
+const MIN_SWAP_AMOUNT = 10;
+
 interface SwapModalProps {
   open: boolean;
   onClose: () => void;
@@ -229,6 +232,8 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
     sellBalance > 0 && parseFloat(amount) > sellBalance;
   const sameToken =
     sellToken && buyToken && sellToken.instrumentId === buyToken.instrumentId;
+  const belowMinimum =
+    parseFloat(amount) > 0 && parseFloat(amount) < MIN_SWAP_AMOUNT;
 
   // Percent quick-select — works for ANY token (CC + non-CC).
   const setPercent = (pct: number) => {
@@ -505,7 +510,8 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                   !amount ||
                   !quote ||
                   Boolean(sameToken) ||
-                  insufficientBalance
+                  insufficientBalance ||
+                  belowMinimum
                 }
                 className={cn(
                   buttonVariants({ size: "sm" }),
@@ -518,9 +524,11 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                     ? "Insufficient Balance"
                     : sameToken
                       ? "Select Different Tokens"
-                      : !amount
-                        ? "Enter Amount"
-                        : `Swap ${displayName(sellToken?.instrumentId ?? "")} → ${displayName(buyToken?.instrumentId ?? "")}`}
+                      : belowMinimum
+                        ? `Minimum ${MIN_SWAP_AMOUNT} CC`
+                        : !amount
+                          ? "Enter Amount"
+                          : `Swap ${displayName(sellToken?.instrumentId ?? "")} → ${displayName(buyToken?.instrumentId ?? "")}`}
               </button>
             )}
           </>

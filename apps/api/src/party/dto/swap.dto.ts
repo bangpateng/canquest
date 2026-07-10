@@ -40,9 +40,9 @@ export class SwapDto {
   @MaxLength(256)
   buyInstrumentAdmin!: string;
 
-  /** Jumlah yang dijual (human decimal). */
+  /** Jumlah yang dijual (human decimal). Minimum 10 (Cantex DEX ticket size). */
   @IsNumber()
-  @Min(0.000001, { message: 'Amount must be greater than 0.' })
+  @Min(10, { message: 'Minimum swap amount is 10.' })
   @Max(1_000_000, { message: 'Amount exceeds swap ceiling.' })
   amount!: number;
 
