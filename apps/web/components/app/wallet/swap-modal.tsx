@@ -52,6 +52,17 @@ interface SwapModalProps {
   onBalanceRefresh?: () => void;
 }
 
+// ── Display name mapping (internal Cantex name → user-facing) ───────────
+// Amulet = nama internal Cantex untuk CC. Untuk user CanQuest, tampilkan "CC".
+const DISPLAY_NAMES: Record<string, string> = {
+  AMULET: "CC",
+};
+
+/** Convert internal instrument id → display name (Amulet → CC). */
+function displayName(id: string): string {
+  return DISPLAY_NAMES[id.toUpperCase()] ?? id;
+}
+
 // ── Color map for token logos (deterministic by symbol) ─────────────────
 
 const LOGO_COLORS: Record<string, string> = {
@@ -364,7 +375,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                 <div className="mt-3 space-y-2 rounded-xl border border-white/5 bg-[#13151a] p-4 text-xs">
                   <DetailRow
                     label="Rate"
-                    value={`1 ${sellToken?.instrumentId} ≈ ${formatPrice(quote.prices.tradePrice)} ${buyToken?.instrumentId}`}
+                    value={`1 ${displayName(sellToken?.instrumentId ?? "")} ≈ ${formatPrice(quote.prices.tradePrice)} ${displayName(buyToken?.instrumentId ?? "")}`}
                   />
                   <DetailRow
                     label="Price Impact"
@@ -491,7 +502,7 @@ function TokenPicker({
                 <TokenLogo symbol={t.instrumentId} />
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-white">
-                    {t.instrumentId}
+                    {displayName(t.instrumentId)}
                     {t.isCC && (
                       <span className="ml-1.5 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-400">
                         CC
@@ -614,7 +625,7 @@ function SwapCard({
               <>
                 <TokenLogo symbol={selectedToken.instrumentId} size="sm" />
                 <span className="text-sm font-semibold text-white">
-                  {selectedToken.instrumentId}
+                  {displayName(selectedToken.instrumentId)}
                 </span>
               </>
             ) : (
