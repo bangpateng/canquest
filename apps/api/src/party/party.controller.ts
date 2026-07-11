@@ -2771,6 +2771,11 @@ export class PartyController {
           networkFee: quote.fees.networkFee.amount.toString(),
           feeInstrument: quote.fees.instrument,
           networkFeeInstrument: quote.fees.networkFee.instrument,
+          platformFee: String(
+            Number(
+              this.config.get<string>('SWAP_PLATFORM_FEE_CC') ?? '0',
+            ),
+          ),
         },
         prices: {
           slippage: quote.prices.slippage.toString(),

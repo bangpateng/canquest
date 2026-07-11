@@ -147,12 +147,12 @@ export class SwapService {
     },
   ) {
     const cfg = getCantexConfig();
-    const feePct = Number(
-      this.config.get<string>('SWAP_PLATFORM_FEE_PCT') ?? '0',
+    // Platform fee: fixed CC amount (bukan persen). Default 0.
+    const platformFeeCc = Number(
+      this.config.get<string>('SWAP_PLATFORM_FEE_CC') ?? '0',
     );
-    const platformFeeCc = (params.amount * feePct) / 100;
 
-    // 1. Cek CC balance cukup.
+    // 1. Cek CC balance cukup (amount + platform fee).
     const ccBal = await this.prisma.ccBalance.findUnique({
       where: { userId },
       select: { balanceMicroCc: true },
@@ -393,15 +393,14 @@ export class SwapService {
       }
 
       // 6. Credit CcBalance off-chain (jika on-chain gagal).
-      //    Platform fee di-deduct dari CC yang diterima user.
-      const feePct = Number(
-        this.config.get<string>('SWAP_PLATFORM_FEE_PCT') ?? '0',
+      //    Platform fee: fixed CC amount, di-deduct dari CC yang diterima user.
+      const platformFeeCc = Number(
+        this.config.get<string>('SWAP_PLATFORM_FEE_CC') ?? '0',
       );
-      const platformFee = (outputCcNum * feePct) / 100;
-      const netCc = outputCcNum - platformFee;
+      const netCc = outputCcNum - platformFeeCc;
 
       if (!ccOnChain) {
-        // On-chain gagal → credit off-chain saja.
+        // On-chain gagal → credit off-chain saja (net of platform fee).
         const netCcMicro = BigInt(Math.round(netCc * 1_000_000));
         await this.prisma.ccBalance.upsert({
           where: { userId },
@@ -411,8 +410,8 @@ export class SwapService {
       } else {
         // On-chain berhasil → CC sudah di user party.
         // alignBalanceFromChain akan update CcBalance dari on-chain truth.
-        // Tapi tetap record platform fee off-chain.
-        if (platformFee > 0) {
+        // Tapi tetap kirim platform fee on-chain.
+        if (platformFeeCc > 0) {
           const feeRecipient =
             this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID') ?? '';
           if (feeRecipient) {
@@ -420,7 +419,7 @@ export class SwapService {
               await this.ledger.executeTransferFactoryTransfer({
                 senderPartyId: user.cantonPartyId,
                 receiverPartyId: feeRecipient,
-                amountCc: platformFee,
+                amountCc: platformFeeCc,
                 clientNonce: `${params.clientNonce}:fee`,
               });
             } catch {

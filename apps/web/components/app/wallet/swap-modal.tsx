@@ -46,6 +46,7 @@ interface QuoteResponse {
     networkFee: string;
     feeInstrument?: { id: string; admin: string };
     networkFeeInstrument?: { id: string; admin: string };
+    platformFee?: string;
   };
   prices: {
     slippage: string;
@@ -460,6 +461,12 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                     label="Network Fee"
                     value={`${formatAmount(quote.fees.networkFee)} ${displayName(quote.fees.networkFeeInstrument?.id ?? quote.outputInstrument.id)}`}
                   />
+                  {parseFloat(quote.fees.platformFee ?? '0') > 0 && (
+                    <DetailRow
+                      label="Platform Fee"
+                      value={`${formatAmount(quote.fees.platformFee ?? '0')} CC`}
+                    />
+                  )}
                 </div>
               ) : null)}
 
