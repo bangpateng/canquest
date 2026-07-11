@@ -752,6 +752,13 @@ interface RawTokenBalance {
   instrument_admin?: string;
   instrument_name?: string;
   instrument_symbol?: string;
+  /** Cantex nests balances under a `balances` object — mirror Python SDK
+   *  (`balances = data.get("balances", {})`). Top-level fields are NOT sent. */
+  balances?: {
+    unlocked_amount?: string;
+    locked_amount?: string;
+  };
+  /** Legacy/fallback (some responses flatten) — keep for safety. */
   unlocked_amount?: string;
   locked_amount?: string;
   pending_deposit_transfers?: { contract_id?: string }[];
@@ -811,12 +818,15 @@ function instr(
 }
 
 function parseTokenBalance(r: RawTokenBalance): TokenBalance {
+  // Cantex nests balance under r.balances.{unlocked,locked}_amount
+  // (mirror Python SDK). Fallback to top-level for safety.
+  const bal = r.balances ?? {};
   return {
     instrument: instr(r.instrument_id, r.instrument_admin),
     instrumentName: r.instrument_name ?? '',
     instrumentSymbol: r.instrument_symbol ?? '',
-    unlockedAmount: new Decimal(r.unlocked_amount ?? '0'),
-    lockedAmount: new Decimal(r.locked_amount ?? '0'),
+    unlockedAmount: new Decimal(bal.unlocked_amount ?? r.unlocked_amount ?? '0'),
+    lockedAmount: new Decimal(bal.locked_amount ?? r.locked_amount ?? '0'),
     pendingDepositTransferCids: (r.pending_deposit_transfers ?? []).map(
       (x) => x.contract_id ?? '',
     ),

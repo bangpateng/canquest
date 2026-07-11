@@ -165,14 +165,16 @@ async function authenticate() {
   let usdcxAdminFound = '';
   for (const t of tokens) {
     const sym = (t.instrument_id || t.instrumentId || '').toUpperCase();
-    const unlocked = t.unlocked_amount || t.unlockedAmount || '0';
-    const locked = t.locked_amount || t.lockedAmount || '0';
+    // FIX: API nests balance under t.balances.{unlocked,locked}_amount
+    const bal = t.balances || {};
+    const unlocked = bal.unlocked_amount || t.unlocked_amount || '0';
+    const locked = bal.locked_amount || t.locked_amount || '0';
     const pendDep = (t.pending_deposit_transfers || []).length || 0;
     const pendWd = (t.pending_withdraw_transfers || []).length || 0;
     const admin = (t.instrument_admin || t.instrumentAdmin || '').slice(0, 24);
     console.log(`  - ${sym}: unlocked=${unlocked} locked=${locked} pendDep=${pendDep} pendWd=${pendWd} admin=${admin}...`);
     if (sym === USDCX_ID.toUpperCase()) {
-      usdcxBalance = t.unlocked_amount || t.unlockedAmount || '0';
+      usdcxBalance = unlocked;
       usdcxAdminFound = t.instrument_admin || t.instrumentAdmin || '';
     }
   }
