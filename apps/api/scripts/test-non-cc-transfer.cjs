@@ -66,9 +66,9 @@ if (!RECEIVER) {
 // ── Ed25519 helpers (pakai crypto Node built-in, no external dep) ────────
 // node:crypto ed25519: sign + get public key dari raw 32-byte private key.
 
-function ed25519PublicKeyHex(privHex) {
-  // Buat KeyObject dari raw 32-byte private key.
-  const keyObj = crypto.createPrivateKey({
+/** Build PKCS8 DER KeyObject from raw 32-byte Ed25519 private key hex. */
+function ed25519KeyObject(privHex) {
+  return crypto.createPrivateKey({
     key: Buffer.concat([
       Buffer.from('302e020100300506032b657004220420', 'hex'), // PKCS8 Ed25519 prefix
       Buffer.from(privHex, 'hex'),
@@ -76,20 +76,18 @@ function ed25519PublicKeyHex(privHex) {
     format: 'der',
     type: 'pkcs8',
   });
-  const pub = keyObj.export({ type: 'spki', format: 'der' });
-  // SPKI der: 12-byte prefix + 32-byte raw pubkey.
-  return pub.subarray(pub.length - 32).toString('hex');
+}
+
+function ed25519PublicKeyHex(privHex) {
+  // Derive public KeyObject from private, then export raw 32 bytes.
+  const priv = ed25519KeyObject(privHex);
+  const pub = crypto.createPublicKey(priv);
+  const raw = pub.export({ type: 'raw', format: 'buffer' });
+  return raw.toString('hex');
 }
 
 function ed25519Sign(privHex, data) {
-  const keyObj = crypto.createPrivateKey({
-    key: Buffer.concat([
-      Buffer.from('302e020100300506032b657004220420', 'hex'),
-      Buffer.from(privHex, 'hex'),
-    ]),
-    format: 'der',
-    type: 'pkcs8',
-  });
+  const keyObj = ed25519KeyObject(privHex);
   return crypto.sign(null, data, keyObj); // null = Ed25519 pure
 }
 
