@@ -346,9 +346,9 @@ export class SwapService {
     // 1b. Pre-check: trading account on-chain holding cukup?
     // Cantex DEX swap terjadi di shared trading account. Kalau on-chain
     // holding kurang, swap akan ditolak "holding balance not enough".
-    // Pre-check ini memberi pesan error yang jelas ke user sebelum swap.
-    // Non-blocking: bila getAccountInfo gagal (network/API), lanjut ke swap
-    // dan biarkan Cantex yang memvalidasi.
+    // WARN-ONLY: kita log drift tapi TIDAK memblokir swap — biarkan Cantex
+    // yang membuat keputusan akhir. Memblokir di sini bisa false-positive
+    // bila ada lag antara settle on-chain dan getAccountInfo.
     try {
       const acct = await this.cantex.getAccountInfo();
       const instr = acct.tokens.find(
@@ -362,11 +362,9 @@ export class SwapService {
         ? parseFloat(instr.unlockedAmount.toString())
         : 0;
       if (onChain < params.amount) {
-        return {
-          success: false,
-          direction: 'TOKEN_TO_CC',
-          message: `Trading account has insufficient on-chain ${params.sellInstrumentId} for this swap. Available: ${onChain}, required: ${params.amount}. Please try again later or contact support if this persists.`,
-        };
+        this.logger.warn(
+          `DRIFT: TOKEN_TO_CC ${params.sellInstrumentId} — off-chain balance ${available}, on-chain trading account ${onChain}, required ${params.amount}. Swap akan tetap dicoba, Cantex akan validasi.`,
+        );
       }
     } catch (err) {
       this.logger.warn(
