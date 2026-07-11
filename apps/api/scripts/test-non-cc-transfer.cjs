@@ -79,11 +79,12 @@ function ed25519KeyObject(privHex) {
 }
 
 function ed25519PublicKeyHex(privHex) {
-  // Derive public KeyObject from private, then export raw 32 bytes.
+  // Derive public KeyObject from private, export as SPKI DER (12-byte prefix +
+  // 32-byte raw pubkey), then strip prefix to get raw pubkey hex.
   const priv = ed25519KeyObject(privHex);
   const pub = crypto.createPublicKey(priv);
-  const raw = pub.export({ type: 'raw', format: 'buffer' });
-  return raw.toString('hex');
+  const spki = pub.export({ type: 'spki', format: 'der' });
+  return spki.subarray(spki.length - 32).toString('hex');
 }
 
 function ed25519Sign(privHex, data) {
