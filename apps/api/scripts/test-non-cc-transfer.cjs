@@ -194,29 +194,56 @@ async function authenticate() {
     process.exit(1);
   }
 
-  // 3. Test transfer 0.001 USDCx.
-  console.log('\n--- Step 3: TEST transfer 0.001 USDCx via Cantex endpoint ---');
-  console.log('POST /v1/ledger/transaction/build/transfer');
-  console.log('  instrumentId:', USDCX_ID);
-  console.log('  instrumentAdmin:', effectiveAdmin.slice(0, 30) + '...');
-  console.log('  receiver:', RECEIVER.slice(0, 30) + '...');
-  console.log('  amount: 0.001');
+  // Helper: coba build transfer + log full diagnostics.
+  async function tryBuild(label, payload) {
+    console.log(`\n--- ${label} ---`);
+    console.log('  payload:', JSON.stringify({ ...payload, instrumentAdmin: payload.instrumentAdmin.slice(0, 40) + '...' }));
+    const res = await apiReq('POST', '/v1/ledger/transaction/build/transfer', { json: payload, apiKey });
+    console.log('  HTTP status:', res.status);
+    console.log('  Response body:', JSON.stringify(res.body ?? res.raw).slice(0, 600));
+    return res;
+  }
 
-  const buildPayload = {
+  // 3a. Baseline: transfer CC (yang kita tahu jalan via swap) — untuk konfirmasi
+  //     endpoint jalan untuk CC, lalu bandingkan error dengan USDCx.
+  // Ambil admin CC dari env (CANTEX_CC_INSTRUMENT_ADMIN) atau fallback DSO.
+  const ccAdmin = process.env.CANTEX_CC_INSTRUMENT_ADMIN || '';
+  const ccId = process.env.CANTEX_CC_INSTRUMENT_ID || 'Amulet';
+  if (ccAdmin) {
+    await tryBuild('BASELINE: build transfer CC (Amulet)', {
+      instrumentAdmin: ccAdmin,
+      instrumentId: ccId,
+      receiver: RECEIVER,
+      amount: '0.001',
+      memo: 'baseline-cc-test',
+    });
+  } else {
+    console.log('\n(skip baseline CC test — CANTEX_CC_INSTRUMENT_ADMIN kosong di env)');
+  }
+
+  // 3b. Test utama: transfer USDCx.
+  const usdcxRes = await tryBuild('TEST: build transfer USDCx', {
     instrumentAdmin: effectiveAdmin,
     instrumentId: USDCX_ID,
     receiver: RECEIVER,
     amount: '0.001',
     memo: 'test-non-cc-transfer',
-  };
-
-  const buildRes = await apiReq('POST', '/v1/ledger/transaction/build/transfer', {
-    json: buildPayload,
-    apiKey,
   });
 
+  // 3c. Variasi: coba amount lebih besar (0.01) — mungkin ada minimum.
+  if (usdcxRes.status >= 400) {
+    await tryBuild('VARIASI: USDCx amount 0.01 (mungkin ada minimum)', {
+      instrumentAdmin: effectiveAdmin,
+      instrumentId: USDCX_ID,
+      receiver: RECEIVER,
+      amount: '0.01',
+      memo: 'test-non-cc-transfer-2',
+    });
+  }
+
   console.log('\n--- HASIL VERIFIKASI ---');
-  console.log('Build HTTP status:', buildRes.status);
+  const buildRes = usdcxRes;
+  console.log('USDCx build HTTP status:', buildRes.status);
 
   if (buildRes.status >= 200 && buildRes.status < 300) {
     const buildId = buildRes.body?.id;
