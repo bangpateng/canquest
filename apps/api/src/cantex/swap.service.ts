@@ -356,16 +356,7 @@ export class SwapService {
       const outputCc = new Decimal(swapResult.outputAmount);
       const outputCcNum = parseFloat(swapResult.outputAmount);
 
-      // 4. Transfer CC: trading account → user party.
-      await this.cantex.transferCC({
-        receiver: user.cantonPartyId,
-        amount: swapResult.outputAmount,
-        instrumentId: cfg.ccInstrumentId,
-        instrumentAdmin: cfg.ccInstrumentAdmin,
-        memo: `Swap ${params.sellInstrumentId} → CC`,
-      });
-
-      // 5. Debit CantexTokenBalance off-chain.
+      // 4. Debit CantexTokenBalance off-chain (token yang dijual user).
       await this.prisma.cantexTokenBalance.update({
         where: {
           userId_instrumentId_instrumentAdmin: {
@@ -377,41 +368,32 @@ export class SwapService {
         data: { balance: { decrement: new Decimal(params.amount) } },
       });
 
-      // 6. Record SWAP_IN (CC credit).
+      // 5. Credit CcBalance off-chain (CC dari swap tetap di trading account
+      //    sebagai reserve — true custodial model, CC tidak di-transfer ke
+      //    user party, hanya di-credit off-chain).
+      const feePct = Number(
+        this.config.get<string>('SWAP_PLATFORM_FEE_PCT') ?? '0',
+      );
+      const platformFee = (outputCcNum * feePct) / 100;
+      const netCc = outputCcNum - platformFee;
+      const netCcMicro = BigInt(Math.round(netCc * 1_000_000));
+      await this.prisma.ccBalance.upsert({
+        where: { userId },
+        create: { userId, balanceMicroCc: netCcMicro },
+        update: { balanceMicroCc: { increment: netCcMicro } },
+      });
+
+      // 6. Record SWAP_IN (CC credit off-chain).
       await this.users.recordTransaction({
         userId,
-        amountCc: outputCcNum,
+        amountCc: netCc,
         type: 'SWAP_IN',
         description: `Swap ${params.sellInstrumentId} → CC`,
         ledgerTxId: `swap:${swapTx.id}:cc-in`,
         status: 'COMPLETED',
       });
 
-      // 7. Platform fee (non-blocking, dari CC yang diterima user).
-      const feePct = Number(
-        this.config.get<string>('SWAP_PLATFORM_FEE_PCT') ?? '0',
-      );
-      if (feePct > 0 && outputCcNum > 0) {
-        const feeAmount = (outputCcNum * feePct) / 100;
-        const feeRecipient =
-          this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID') ?? '';
-        if (feeRecipient && feeAmount > 0) {
-          try {
-            await this.ledger.executeTransferFactoryTransfer({
-              senderPartyId: user.cantonPartyId,
-              receiverPartyId: feeRecipient,
-              amountCc: feeAmount,
-              clientNonce: `${params.clientNonce}:fee`,
-            });
-          } catch (err) {
-            this.logger.warn(
-              `Platform fee collection failed (non-blocking): ${(err as Error).message}`,
-            );
-          }
-        }
-      }
-
-      // 8. Update SwapTransaction EXECUTED.
+      // 7. Update SwapTransaction EXECUTED.
       await this.prisma.swapTransaction.update({
         where: { id: swapTx.id },
         data: {
@@ -421,13 +403,10 @@ export class SwapService {
         },
       });
 
-      // 9. Reconcile CC balance.
-      void this.inboundSync.alignBalanceFromChain(userId, user.username);
-
-      // 10. Emit realtime.
+      // 8. Emit realtime.
       void this.realtime.push(userId, 'swap:completed', {
         direction: 'TOKEN_TO_CC',
-        outputAmount: swapResult.outputAmount,
+        outputAmount: String(netCc),
       });
 
       return {
