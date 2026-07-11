@@ -368,22 +368,69 @@ export class SwapService {
         data: { balance: { decrement: new Decimal(params.amount) } },
       });
 
-      // 5. Credit CcBalance off-chain (CC dari swap tetap di trading account
-      //    sebagai reserve — true custodial model, CC tidak di-transfer ke
-      //    user party, hanya di-credit off-chain).
+      // 5. Transfer CC: trading account → user party (on-chain via Canton ledger).
+      //    Non-blocking: kalau gagal, tetap credit off-chain (fund safety).
+      let ccOnChain = false;
+      try {
+        await this.cantex.transferCC({
+          receiver: user.cantonPartyId,
+          amount: swapResult.outputAmount,
+          instrumentId: cfg.ccInstrumentId,
+          instrumentAdmin: cfg.ccInstrumentAdmin,
+          memo: `Swap ${params.sellInstrumentId} → CC`,
+        });
+        ccOnChain = true;
+        // Reconcile on-chain balance (CC sampai di user party).
+        void this.inboundSync.alignBalanceFromChain(
+          userId,
+          user.username,
+          user.cantonPartyId,
+        );
+      } catch (err) {
+        this.logger.warn(
+          `transferCC failed, falling back to off-chain credit: ${(err as Error).message}`,
+        );
+      }
+
+      // 6. Credit CcBalance off-chain (jika on-chain gagal).
+      //    Platform fee di-deduct dari CC yang diterima user.
       const feePct = Number(
         this.config.get<string>('SWAP_PLATFORM_FEE_PCT') ?? '0',
       );
       const platformFee = (outputCcNum * feePct) / 100;
       const netCc = outputCcNum - platformFee;
-      const netCcMicro = BigInt(Math.round(netCc * 1_000_000));
-      await this.prisma.ccBalance.upsert({
-        where: { userId },
-        create: { userId, balanceMicroCc: netCcMicro },
-        update: { balanceMicroCc: { increment: netCcMicro } },
-      });
 
-      // 6. Record SWAP_IN (CC credit off-chain).
+      if (!ccOnChain) {
+        // On-chain gagal → credit off-chain saja.
+        const netCcMicro = BigInt(Math.round(netCc * 1_000_000));
+        await this.prisma.ccBalance.upsert({
+          where: { userId },
+          create: { userId, balanceMicroCc: netCcMicro },
+          update: { balanceMicroCc: { increment: netCcMicro } },
+        });
+      } else {
+        // On-chain berhasil → CC sudah di user party.
+        // alignBalanceFromChain akan update CcBalance dari on-chain truth.
+        // Tapi tetap record platform fee off-chain.
+        if (platformFee > 0) {
+          const feeRecipient =
+            this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID') ?? '';
+          if (feeRecipient) {
+            try {
+              await this.ledger.executeTransferFactoryTransfer({
+                senderPartyId: user.cantonPartyId,
+                receiverPartyId: feeRecipient,
+                amountCc: platformFee,
+                clientNonce: `${params.clientNonce}:fee`,
+              });
+            } catch {
+              /* non-blocking */
+            }
+          }
+        }
+      }
+
+      // 7. Record SWAP_IN (CC credit).
       await this.users.recordTransaction({
         userId,
         amountCc: netCc,
@@ -393,7 +440,7 @@ export class SwapService {
         status: 'COMPLETED',
       });
 
-      // 7. Update SwapTransaction EXECUTED.
+      // 8. Update SwapTransaction EXECUTED.
       await this.prisma.swapTransaction.update({
         where: { id: swapTx.id },
         data: {
