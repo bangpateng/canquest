@@ -64,6 +64,8 @@ async function ledgerEnd(t) {
 
 async function queryAcs(t, party, offset) {
   // WildcardFilter: dapatkan SEMUA contract milik party.
+  // Keycloak admin token (validator-app-backend) punya actAs luas,
+  // jadi bisa query party mana pun.
   const r = await fetch(`${LEDGER_URL}/v2/state/active-contracts`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
@@ -86,6 +88,30 @@ async function queryAcs(t, party, offset) {
   return Array.isArray(arr) ? arr : [];
 }
 
+/** Coba beberapa party untuk query ACS — trading party mungkin tidak punya
+ *  visibility penuh. Admin/validator party biasanya bisa actAs. */
+async function queryAcsMultiParty(t, parties, offset) {
+  const filtersByParty = {};
+  for (const p of parties) {
+    filtersByParty[p] = { cumulative: [{ identifierFilter: { WildcardFilter: { value: { includeCreatedEventBlob: false } } } }] };
+  }
+  const r = await fetch(`${LEDGER_URL}/v2/state/active-contracts`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      eventFormat: { filtersByParty, verbose: true },
+      activeAtOffset: offset,
+    }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!r.ok) {
+    const txt = await r.text();
+    throw new Error(`acs multi ${r.status}: ${txt.slice(0, 300)}`);
+  }
+  const arr = await r.json();
+  return Array.isArray(arr) ? arr : [];
+}
+
 const createdEvent = (entry) => {
   const wrapper = entry?.contractEntry;
   return wrapper?.JsActiveContract?.createdEvent || entry?.createdEvent || entry;
@@ -102,8 +128,22 @@ const createdEvent = (entry) => {
   console.log('✓ Ledger offset:', offset);
 
   console.log('\n--- Query ACS trading account (WildcardFilter) ---');
-  const contracts = await queryAcs(t, TRADING_PARTY, offset);
-  console.log('Total contracts:', contracts.length);
+  let contracts = await queryAcs(t, TRADING_PARTY, offset);
+  console.log('Total contracts (trading party only):', contracts.length);
+
+  // Kalau trading party sedikit/misal gak ada holding non-CC, coba multi-party
+  // (tambah validator/admin party yang punya read rights luas).
+  const validatorParty = process.env.CANTON_VALIDATOR_PARTY_ID || '';
+  if (contracts.length < 10 && validatorParty) {
+    console.log('\n--- Retry dengan multi-party (trading + validator) ---');
+    try {
+      const multi = await queryAcsMultiParty(t, [TRADING_PARTY, validatorParty], offset);
+      console.log('Total contracts (multi-party):', multi.length);
+      if (multi.length > contracts.length) contracts = multi;
+    } catch (err) {
+      console.log('Multi-party query failed:', err.message);
+    }
+  }
 
   // Kelompokkan by templateId.
   const byTemplate = new Map();
