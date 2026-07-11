@@ -165,7 +165,12 @@ async function authenticate() {
   let usdcxAdminFound = '';
   for (const t of tokens) {
     const sym = (t.instrument_id || t.instrumentId || '').toUpperCase();
-    console.log(`  - ${sym}: unlocked=${t.unlocked_amount || t.unlockedAmount || '0'}`);
+    const unlocked = t.unlocked_amount || t.unlockedAmount || '0';
+    const locked = t.locked_amount || t.lockedAmount || '0';
+    const pendDep = (t.pending_deposit_transfers || []).length || 0;
+    const pendWd = (t.pending_withdraw_transfers || []).length || 0;
+    const admin = (t.instrument_admin || t.instrumentAdmin || '').slice(0, 24);
+    console.log(`  - ${sym}: unlocked=${unlocked} locked=${locked} pendDep=${pendDep} pendWd=${pendWd} admin=${admin}...`);
     if (sym === USDCX_ID.toUpperCase()) {
       usdcxBalance = t.unlocked_amount || t.unlockedAmount || '0';
       usdcxAdminFound = t.instrument_admin || t.instrumentAdmin || '';
@@ -173,11 +178,13 @@ async function authenticate() {
   }
 
   if (!usdcxBalance || parseFloat(usdcxBalance) < 0.001) {
-    console.error(`\n✗ Trading account tidak punya cukup ${USDCx_ID} (perlu ≥ 0.001, punya ${usdcxBalance || '0'}).`);
+    console.error(`\n✗ Trading account tidak punya cukup ${USDCX_ID} (perlu ≥ 0.001, punya ${usdcxBalance || '0'}).`);
     console.error('  Lakukan swap CC → USDCx kecil dulu untuk mengisi balance, lalu jalan script ini.');
+    console.error('\n  Full account/info response untuk debugging:');
+    console.error(JSON.stringify(info.body, null, 2).slice(0, 2000));
     process.exit(1);
   }
-  console.log(`\n✓ ${USDCx_ID} balance: ${usdcxBalance} (admin: ${usdcxAdminFound.slice(0, 30)}...)`);
+  console.log(`\n✓ ${USDCX_ID} balance: ${usdcxBalance} (admin: ${usdcxAdminFound.slice(0, 30)}...)`);
 
   const effectiveAdmin = USDCX_ADMIN || usdcxAdminFound;
   if (!effectiveAdmin) {
