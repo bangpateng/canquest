@@ -232,8 +232,11 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
     sellBalance > 0 && parseFloat(amount) > sellBalance;
   const sameToken =
     sellToken && buyToken && sellToken.instrumentId === buyToken.instrumentId;
+  // Minimum 10 hanya saat JUAL CC (Cantex ticket size). Token→CC bebas.
   const belowMinimum =
-    parseFloat(amount) > 0 && parseFloat(amount) < MIN_SWAP_AMOUNT;
+    sellToken?.isCC &&
+    parseFloat(amount) > 0 &&
+    parseFloat(amount) < MIN_SWAP_AMOUNT;
 
   // Percent quick-select — works for ANY token (CC + non-CC).
   const setPercent = (pct: number) => {
@@ -525,7 +528,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                     : sameToken
                       ? "Select Different Tokens"
                       : belowMinimum
-                        ? `Minimum ${MIN_SWAP_AMOUNT} CC`
+                        ? `Min ${MIN_SWAP_AMOUNT} CC to swap`
                         : !amount
                           ? "Enter Amount"
                           : `Swap ${displayName(sellToken?.instrumentId ?? "")} → ${displayName(buyToken?.instrumentId ?? "")}`}
