@@ -159,6 +159,67 @@ export class SwapService {
     return { ok: true };
   }
 
+  /**
+   * Coba deliver token (non-CC) on-chain ke user party via Cantex transferCC
+   * (Wintip-style). Untuk CC/Amulet, skip — CC delivery pakai executeTransferFactoryTransfer.
+   *
+   * Status setelah return:
+   *   - ok:true → token terkirim on-chain, user pegang asli
+   *   - ok:false → delivery gagal (Cantex 400, receiver belum setup, dll).
+   *     Fallback ke off-chain credit oleh caller — user tetap dapat saldo maya.
+   *
+   * Non-blocking: error di-skip (log warn), supaya swap tetap sukses walau
+   * delivery on-chain belum support per-token.
+   */
+  private async tryDeliverTokenOnChain(params: {
+    swapTxId: string;
+    userId: string;
+    userPartyId: string;
+    tokenId: string;
+    tokenAdmin: string;
+    amount: string;
+  }): Promise<{ ok: boolean }> {
+    // CC/Amulet tidak perlu Cantex transfer (pakai Canton ledger CIP-56).
+    if (params.tokenId.toLowerCase() === 'amulet') {
+      return { ok: false }; // CC handled by other path
+    }
+    try {
+      const result = await this.cantex.transferCC({
+        receiver: params.userPartyId,
+        amount: params.amount,
+        instrumentId: params.tokenId,
+        instrumentAdmin: params.tokenAdmin,
+        memo: `canquest-swap|${params.userPartyId}|${params.tokenId}`,
+      });
+      this.logger.log(
+        `On-chain delivery OK: ${params.amount} ${params.tokenId} → user party (swap ${params.swapTxId})`,
+      );
+      // Record PendingDelivery COMPLETED untuk audit trail.
+      try {
+        await this.prisma.pendingDelivery.create({
+          data: {
+            userId: params.userId,
+            userPartyId: params.userPartyId,
+            tokenId: params.tokenId,
+            tokenAdmin: params.tokenAdmin,
+            amount: new Decimal(params.amount),
+            status: 'COMPLETED',
+            transferKind: 'direct',
+            deliveredAt: new Date(),
+          },
+        });
+      } catch {
+        /* audit-only, non-blocking */
+      }
+      return { ok: true };
+    } catch (err) {
+      this.logger.warn(
+        `On-chain delivery failed for ${params.tokenId} (swap ${params.swapTxId}), fallback to off-chain: ${(err as Error).message}`,
+      );
+      return { ok: false };
+    }
+  }
+
   async executeSwap(
     userId: string,
     params: {
@@ -350,10 +411,21 @@ export class SwapService {
         );
       }
 
-      // 5. Credit CantexTokenBalance off-chain.
-      //    Bila DB credit gagal, swap sudah on-chain (token ada di trading
-      //    account) → record PendingDelivery supaya bisa reconcile manual.
+      // 5. Deliver token: coba on-chain ke user party dulu (Wintip-style),
+      //    fallback ke off-chain credit kalau gagal.
+      //    On-chain: token ASLI dikirim ke user party via Cantex transferCC.
+      //    Off-chain: token tetap di trading account, DB catat kepunyaan.
       const outputAmount = new Decimal(swapResult.outputAmount);
+      const deliverOnChain = await this.tryDeliverTokenOnChain({
+        swapTxId: swapTx.id,
+        userId,
+        userPartyId: user.cantonPartyId,
+        tokenId: params.buyInstrumentId,
+        tokenAdmin: params.buyInstrumentAdmin,
+        amount: swapResult.outputAmount,
+      });
+      // Tetap credit off-chain untuk UI tracking (saldo user terlihat),
+      // terlepas dari on-chain delivery berhasil atau tidak.
       try {
         await this.prisma.cantexTokenBalance.upsert({
           where: {
