@@ -557,9 +557,14 @@ export class CantexClient {
                 unknown
               >;
               const errMsg =
-                typeof details['error'] === 'string'
+                typeof details['error'] === 'string' && details['error']
                   ? details['error']
                   : 'unknown';
+              // Log full payload untuk debugging — Cantex sering kirim error
+              // kosong, kita butuh lihat field mana yang berisi alasan asli.
+              this.logger.error(
+                `Pool.SwapFailed full payload: ${JSON.stringify(frame).slice(0, 1000)}`,
+              );
               reject(new CantexError(`Swap failed: ${errMsg}`));
             }
           };
