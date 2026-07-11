@@ -57,6 +57,7 @@ export class SwapService {
       walletPassword?: string;
       sellIsCC?: boolean;
       clientNonce: string;
+      maxNetworkFee?: string;
     },
   ): Promise<{
     success: boolean;
@@ -144,6 +145,7 @@ export class SwapService {
       buyInstrumentAdmin: string;
       amount: number;
       clientNonce: string;
+      maxNetworkFee?: string;
     },
   ) {
     const cfg = getCantexConfig();
@@ -203,7 +205,19 @@ export class SwapService {
         sellInstrumentAdmin: cfg.ccInstrumentAdmin,
         buyInstrumentId: params.buyInstrumentId,
         buyInstrumentAdmin: params.buyInstrumentAdmin,
+        maxNetworkFee: params.maxNetworkFee,
       });
+
+      // Defense-in-depth: verifikasi output instrument sesuai permintaan.
+      if (
+        swapResult.outputInstrumentId &&
+        swapResult.outputInstrumentId.toLowerCase() !==
+          params.buyInstrumentId.toLowerCase()
+      ) {
+        this.logger.error(
+          `Swap output instrument mismatch! Expected ${params.buyInstrumentId}, got ${swapResult.outputInstrumentId} (swap ${swapTx.id})`,
+        );
+      }
 
       // 5. Credit CantexTokenBalance off-chain.
       const outputAmount = new Decimal(swapResult.outputAmount);
@@ -305,6 +319,7 @@ export class SwapService {
       buyInstrumentAdmin: string;
       amount: number;
       clientNonce: string;
+      maxNetworkFee?: string;
     },
   ) {
     const cfg = getCantexConfig();
@@ -326,6 +341,37 @@ export class SwapService {
         direction: 'TOKEN_TO_CC',
         message: `Insufficient ${params.sellInstrumentId} balance. Need ${params.amount}, have ${available}.`,
       };
+    }
+
+    // 1b. Pre-check: trading account on-chain holding cukup?
+    // Cantex DEX swap terjadi di shared trading account. Kalau on-chain
+    // holding kurang, swap akan ditolak "holding balance not enough".
+    // Pre-check ini memberi pesan error yang jelas ke user sebelum swap.
+    // Non-blocking: bila getAccountInfo gagal (network/API), lanjut ke swap
+    // dan biarkan Cantex yang memvalidasi.
+    try {
+      const acct = await this.cantex.getAccountInfo();
+      const instr = acct.tokens.find(
+        (t) =>
+          t.instrument.id.toLowerCase() ===
+            params.sellInstrumentId.toLowerCase() &&
+          t.instrument.admin.toLowerCase() ===
+            params.sellInstrumentAdmin.toLowerCase(),
+      );
+      const onChain = instr
+        ? parseFloat(instr.unlockedAmount.toString())
+        : 0;
+      if (onChain < params.amount) {
+        return {
+          success: false,
+          direction: 'TOKEN_TO_CC',
+          message: `Trading account has insufficient on-chain ${params.sellInstrumentId} for this swap. Available: ${onChain}, required: ${params.amount}. Please try again later or contact support if this persists.`,
+        };
+      }
+    } catch (err) {
+      this.logger.warn(
+        `TOKEN_TO_CC pre-check getAccountInfo failed (non-blocking): ${(err as Error).message}`,
+      );
     }
 
     // 2. Record SwapTransaction PENDING.
@@ -351,7 +397,19 @@ export class SwapService {
         sellInstrumentAdmin: params.sellInstrumentAdmin,
         buyInstrumentId: cfg.ccInstrumentId,
         buyInstrumentAdmin: cfg.ccInstrumentAdmin,
+        maxNetworkFee: params.maxNetworkFee,
       });
+
+      // Defense-in-depth: verifikasi output instrument sesuai permintaan.
+      if (
+        swapResult.outputInstrumentId &&
+        swapResult.outputInstrumentId.toLowerCase() !==
+          cfg.ccInstrumentId.toLowerCase()
+      ) {
+        this.logger.error(
+          `Swap output instrument mismatch! Expected ${cfg.ccInstrumentId}, got ${swapResult.outputInstrumentId} (swap ${swapTx.id})`,
+        );
+      }
 
       const outputCc = new Decimal(swapResult.outputAmount);
       const outputCcNum = parseFloat(swapResult.outputAmount);

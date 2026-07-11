@@ -446,6 +446,7 @@ export class CantexClient {
       sellInstrumentAdmin: string;
       buyInstrumentId: string;
       buyInstrumentAdmin: string;
+      maxNetworkFee?: string;
     },
     timeoutMs = 60_000,
   ): Promise<SwapExecutedDetails> {
@@ -513,15 +514,31 @@ export class CantexClient {
                 unknown
               >;
               const tk = (data['ticker'] ?? {}) as Record<string, unknown>;
+              const inInst = (sd['input_instrument_id'] ?? {}) as Record<
+                string,
+                unknown
+              >;
+              const outInst = (sd['output_instrument_id'] ?? {}) as Record<
+                string,
+                unknown
+              >;
               resolve({
                 inputAmount:
                   typeof sd['input_amount'] === 'string'
                     ? sd['input_amount']
                     : '0',
+                inputInstrumentId:
+                  typeof inInst['id'] === 'string' ? inInst['id'] : '',
+                inputInstrumentAdmin:
+                  typeof inInst['admin'] === 'string' ? inInst['admin'] : '',
                 outputAmount:
                   typeof sd['output_amount'] === 'string'
                     ? sd['output_amount']
                     : '0',
+                outputInstrumentId:
+                  typeof outInst['id'] === 'string' ? outInst['id'] : '',
+                outputInstrumentAdmin:
+                  typeof outInst['admin'] === 'string' ? outInst['admin'] : '',
                 adminFeeAmount:
                   typeof sd['admin_fee_amount'] === 'string'
                     ? sd['admin_fee_amount']
@@ -869,7 +886,11 @@ function parseSwapQuote(r: RawSwapQuote): SwapQuote {
 /** Hasil SwapExecuted event dari WS — detail swap yang sudah on-chain. */
 export interface SwapExecutedDetails {
   inputAmount: string;
+  inputInstrumentId: string;
+  inputInstrumentAdmin: string;
   outputAmount: string;
+  outputInstrumentId: string;
+  outputInstrumentAdmin: string;
   adminFeeAmount: string;
   liquidityFeeAmount: string;
   price: string;

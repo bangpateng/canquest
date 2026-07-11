@@ -2827,6 +2827,7 @@ export class PartyController {
       walletPassword: body.walletPassword,
       sellIsCC: body.sellIsCC,
       clientNonce: body.clientNonce,
+      maxNetworkFee: body.maxNetworkFee,
     });
     if (!result.success) {
       throw new BadRequestException(

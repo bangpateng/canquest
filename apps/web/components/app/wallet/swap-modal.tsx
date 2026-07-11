@@ -263,6 +263,11 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
     setSwapMessage("");
     setSwapOutput("");
     try {
+      // maxNetworkFee: cap fee spike protection. Dihitung dari network fee
+      // di quote × 2 (DEX-standard tolerance). Bila tak ada quote, skip cap.
+      const quoteNetFee = parseFloat(quote?.fees?.networkFee ?? "0");
+      const maxNetworkFee =
+        quoteNetFee > 0 ? (quoteNetFee * 2).toString() : undefined;
       const res = await fetch("/api/party/swap", {
         method: "POST",
         credentials: "include",
@@ -278,6 +283,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
             typeof crypto !== "undefined" && crypto.randomUUID
               ? crypto.randomUUID()
               : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          ...(maxNetworkFee ? { maxNetworkFee } : {}),
         }),
       });
       const data = (await res.json()) as {

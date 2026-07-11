@@ -63,4 +63,11 @@ export class SwapDto {
   @MinLength(8, { message: 'Idempotency nonce is required.' })
   @MaxLength(64)
   clientNonce!: string;
+
+  /** Batas atas network fee (proteksi fee spike). Dihitung frontend dari
+   * quote networkFee × 2. Opsional: bila kosong, swap tanpa cap (legacy). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(256)
+  maxNetworkFee?: string;
 }
