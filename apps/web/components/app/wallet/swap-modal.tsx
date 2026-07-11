@@ -421,7 +421,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
             {/* Insufficient balance */}
             {insufficientBalance && (
               <p className="mt-3 text-center text-sm font-medium text-red-400">
-                Insufficient CC balance
+                Insufficient {displayName(sellToken?.instrumentId ?? "")} balance
               </p>
             )}
 
@@ -521,7 +521,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                 {swapState === "loading"
                   ? "Swapping..."
                   : insufficientBalance
-                    ? "Insufficient Balance"
+                    ? `Insufficient ${displayName(sellToken?.instrumentId ?? "")}`
                     : sameToken
                       ? "Select Different Tokens"
                       : belowMinimum
@@ -800,6 +800,7 @@ function formatAmount(s: string): string {
   if (!isFinite(n)) return "0";
   if (n === 0) return "0";
   if (n < 0.0001) return n.toExponential(2);
+  if (n >= 1) return n.toFixed(2);
   return n.toFixed(6);
 }
 
