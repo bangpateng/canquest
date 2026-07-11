@@ -27,6 +27,7 @@ import { UsersService } from '../users/users.service';
 import { WalletPasswordService } from '../users/wallet-password.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { CantexClient } from './cantex-client';
+import type { SwapExecutedDetails } from './cantex-client';
 import { getCantexConfig } from './cantex.config';
 import { CantexError } from './cantex.types';
 
@@ -45,6 +46,118 @@ export class SwapService {
     private readonly realtime: RealtimeService,
     private readonly config: ConfigService,
   ) {}
+
+  /** Promise-based sleep helper. */
+  private sleep(ms: number): Promise<void> {
+    return new Promise((r) => setTimeout(r, ms));
+  }
+
+  /**
+   * Swap dengan retry backoff untuk error "balance not enough" / "holding
+   * balance" / "insufficient" (mirror Wintip retry logic: 3 attempts, backoff
+   * 8s lalu 16s). Memberi waktu konsolidasi on-chain settle sebelum retry.
+   *
+   * Non-balance error (auth, network timeout, dll) langsung throw tanpa retry.
+   */
+  private async swapWithRetry(
+    params: {
+      sellAmount: string;
+      sellInstrumentId: string;
+      sellInstrumentAdmin: string;
+      buyInstrumentId: string;
+      buyInstrumentAdmin: string;
+      maxNetworkFee?: string;
+    },
+    maxRetries = 3,
+  ): Promise<SwapExecutedDetails> {
+    const delays = [0, 8_000, 16_000]; // 0s, 8s, 16s (mirror Wintip)
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        if (attempt > 0) {
+          this.logger.log(
+            `Swap retry attempt ${attempt + 1}/${maxRetries} after ${delays[attempt]}ms...`,
+          );
+          await this.sleep(delays[attempt]);
+        }
+        return await this.cantex.swapAndConfirm(params);
+      } catch (err) {
+        lastErr = err;
+        const msg = (err as Error).message.toLowerCase();
+        // Hanya retry bila balance/holding-related (kemungkinan lag settle).
+        const isBalanceErr =
+          msg.includes('balance') ||
+          msg.includes('holding') ||
+          msg.includes('insufficient');
+        if (isBalanceErr && attempt < maxRetries - 1) {
+          this.logger.warn(
+            `Swap failed (balance-related), will retry: ${(err as Error).message}`,
+          );
+          continue;
+        }
+        throw err; // non-balance error atau retry exhausted → throw
+      }
+    }
+    throw lastErr;
+  }
+
+  /**
+   * Slippage + minimum safety gate (pre-execution).
+   * Ambil fresh quote dari Cantex, tolak swap bila:
+   *   - Slippage > MAX_SLIPPAGE_PCT (default 15%) — proteksi user dari price impact ekstrim
+   *   - Sell amount < SAFE_MIN_SWAP_CC (default 1 CC) — minimum ticket size (CC_TO_TOKEN only)
+   *
+   * Mengembalikan { ok: true } bila lolos, { ok: false, message } bila ditolak.
+   * Non-blocking bila quote fetch gagal: izinkan swap (fail-open) supaya tidak
+   * menghalangi flow normal hanya karena API quote bermasalah.
+   */
+  private async checkSlippageGate(params: {
+    sellAmount: string;
+    sellInstrumentId: string;
+    sellInstrumentAdmin: string;
+    buyInstrumentId: string;
+    buyInstrumentAdmin: string;
+    minAmountCc?: number;
+  }): Promise<{ ok: boolean; message?: string }> {
+    const maxSlippage = Number(
+      this.config.get<string>('MAX_SLIPPAGE_PCT') ?? '15',
+    );
+    const safeMinCc = Number(
+      this.config.get<string>('SAFE_MIN_SWAP_CC') ?? '1',
+    );
+
+    // Minimum amount gate (CC_TO_TOKEN only).
+    if (params.minAmountCc !== undefined && params.minAmountCc < safeMinCc) {
+      return {
+        ok: false,
+        message: `Minimum swap amount is ${safeMinCc} CC.`,
+      };
+    }
+
+    // Slippage gate via fresh quote.
+    try {
+      const quote = await this.cantex.getQuote({
+        sellAmount: params.sellAmount,
+        sellInstrumentId: params.sellInstrumentId,
+        sellInstrumentAdmin: params.sellInstrumentAdmin,
+        buyInstrumentId: params.buyInstrumentId,
+        buyInstrumentAdmin: params.buyInstrumentAdmin,
+      });
+      const slippage = parseFloat(quote.prices.slippage.toString());
+      if (!isNaN(slippage) && slippage > maxSlippage) {
+        return {
+          ok: false,
+          message: `Price impact too high (${slippage.toFixed(1)}% > ${maxSlippage}% limit). Try a smaller amount or try again later.`,
+        };
+      }
+    } catch (err) {
+      // Fail-open: jangan blokir swap hanya karena quote API bermasalah.
+      this.logger.warn(
+        `Slippage gate skipped (quote fetch failed, non-blocking): ${(err as Error).message}`,
+      );
+    }
+    return { ok: true };
+  }
 
   async executeSwap(
     userId: string,
@@ -168,6 +281,24 @@ export class SwapService {
       };
     }
 
+    // 1a. Slippage + minimum safety gate (pre-execution).
+    // Ambil fresh quote, tolak bila slippage > threshold atau amount < minimum.
+    const gate = await this.checkSlippageGate({
+      sellAmount: String(params.amount),
+      sellInstrumentId: cfg.ccInstrumentId,
+      sellInstrumentAdmin: cfg.ccInstrumentAdmin,
+      buyInstrumentId: params.buyInstrumentId,
+      buyInstrumentAdmin: params.buyInstrumentAdmin,
+      minAmountCc: params.amount,
+    });
+    if (!gate.ok) {
+      return {
+        success: false,
+        direction: 'CC_TO_TOKEN',
+        message: gate.message,
+      };
+    }
+
     // 2. Record SwapTransaction PENDING.
     const swapTx = await this.prisma.swapTransaction.create({
       data: {
@@ -198,8 +329,8 @@ export class SwapService {
         );
       }
 
-      // 4. Cantex swap: sell CC → buy token.
-      const swapResult = await this.cantex.swapAndConfirm({
+      // 4. Cantex swap: sell CC → buy token (with retry backoff for balance errors).
+      const swapResult = await this.swapWithRetry({
         sellAmount: String(params.amount),
         sellInstrumentId: cfg.ccInstrumentId,
         sellInstrumentAdmin: cfg.ccInstrumentAdmin,
@@ -220,23 +351,49 @@ export class SwapService {
       }
 
       // 5. Credit CantexTokenBalance off-chain.
+      //    Bila DB credit gagal, swap sudah on-chain (token ada di trading
+      //    account) → record PendingDelivery supaya bisa reconcile manual.
       const outputAmount = new Decimal(swapResult.outputAmount);
-      await this.prisma.cantexTokenBalance.upsert({
-        where: {
-          userId_instrumentId_instrumentAdmin: {
+      try {
+        await this.prisma.cantexTokenBalance.upsert({
+          where: {
+            userId_instrumentId_instrumentAdmin: {
+              userId,
+              instrumentId: params.buyInstrumentId,
+              instrumentAdmin: params.buyInstrumentAdmin,
+            },
+          },
+          create: {
             userId,
             instrumentId: params.buyInstrumentId,
             instrumentAdmin: params.buyInstrumentAdmin,
+            balance: outputAmount,
           },
-        },
-        create: {
-          userId,
-          instrumentId: params.buyInstrumentId,
-          instrumentAdmin: params.buyInstrumentAdmin,
-          balance: outputAmount,
-        },
-        update: { balance: { increment: outputAmount } },
-      });
+          update: { balance: { increment: outputAmount } },
+        });
+      } catch (dbErr) {
+        this.logger.error(
+          `CantexTokenBalance credit failed for swap ${swapTx.id}: ${(dbErr as Error).message}. Recording PendingDelivery.`,
+        );
+        try {
+          await this.prisma.pendingDelivery.create({
+            data: {
+              userId,
+              swapTransactionId: swapTx.id,
+              userPartyId: user.cantonPartyId,
+              tokenId: params.buyInstrumentId,
+              tokenAdmin: params.buyInstrumentAdmin,
+              amount: outputAmount,
+              status: 'PENDING_APPROVAL',
+              errorMessage: `Off-chain credit failed: ${(dbErr as Error).message}`,
+            },
+          });
+        } catch (pdErr) {
+          this.logger.error(
+            `Failed to record PendingDelivery fallback for swap ${swapTx.id}: ${(pdErr as Error).message}`,
+          );
+        }
+      }
 
       // 6. Record SWAP_OUT (CC debit).
       await this.users.recordTransaction({
@@ -343,6 +500,22 @@ export class SwapService {
       };
     }
 
+    // 1a. Slippage safety gate (pre-execution).
+    const gate = await this.checkSlippageGate({
+      sellAmount: String(params.amount),
+      sellInstrumentId: params.sellInstrumentId,
+      sellInstrumentAdmin: params.sellInstrumentAdmin,
+      buyInstrumentId: cfg.ccInstrumentId,
+      buyInstrumentAdmin: cfg.ccInstrumentAdmin,
+    });
+    if (!gate.ok) {
+      return {
+        success: false,
+        direction: 'TOKEN_TO_CC',
+        message: gate.message,
+      };
+    }
+
     // 1b. Pre-check: trading account on-chain holding cukup?
     // Cantex DEX swap terjadi di shared trading account. Kalau on-chain
     // holding kurang, swap akan ditolak "holding balance not enough".
@@ -388,8 +561,8 @@ export class SwapService {
     });
 
     try {
-      // 3. Cantex swap: sell token → buy CC.
-      const swapResult = await this.cantex.swapAndConfirm({
+      // 3. Cantex swap: sell token → buy CC (with retry backoff for balance errors).
+      const swapResult = await this.swapWithRetry({
         sellAmount: String(params.amount),
         sellInstrumentId: params.sellInstrumentId,
         sellInstrumentAdmin: params.sellInstrumentAdmin,
@@ -456,13 +629,37 @@ export class SwapService {
       const netCc = outputCcNum - platformFeeCc;
 
       if (!ccOnChain) {
-        // On-chain gagal → credit off-chain saja (net of platform fee).
+        // On-chain delivery gagal → credit off-chain (UX: user dapat CC),
+        // TAPI record PendingDelivery untuk tracking + reconcile nanti.
+        // Ini menggantikan silent off-chain credit yang menyebabkan drift.
         const netCcMicro = BigInt(Math.round(netCc * 1_000_000));
         await this.prisma.ccBalance.upsert({
           where: { userId },
           create: { userId, balanceMicroCc: netCcMicro },
           update: { balanceMicroCc: { increment: netCcMicro } },
         });
+        try {
+          await this.prisma.pendingDelivery.create({
+            data: {
+              userId,
+              swapTransactionId: swapTx.id,
+              userPartyId: user.cantonPartyId,
+              tokenId: cfg.ccInstrumentId,
+              tokenAdmin: cfg.ccInstrumentAdmin,
+              amount: outputCc,
+              amountMicroCc: netCcMicro,
+              status: 'PENDING_APPROVAL',
+              errorMessage: 'transferCC on-chain failed; CC credited off-chain pending reconcile',
+            },
+          });
+          this.logger.warn(
+            `PendingDelivery created for swap ${swapTx.id}: CC ${netCc} credited off-chain, on-chain delivery pending.`,
+          );
+        } catch (dbErr) {
+          this.logger.error(
+            `Failed to record PendingDelivery for swap ${swapTx.id}: ${(dbErr as Error).message}`,
+          );
+        }
       } else {
         // On-chain berhasil → CC sudah di user party.
         // alignBalanceFromChain akan update CcBalance dari on-chain truth.

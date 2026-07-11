@@ -91,6 +91,8 @@ model User {
   cantexTokenBalances     CantexTokenBalance[]
   /// Riwayat swap CC ↔ token Cantex DEX.
   swapTransactions        SwapTransaction[]
+  /// Delivery token/CC tertunda dari swap yang gagal di-deliver on-chain.
+  pendingDeliveries       PendingDelivery[]
 }
 
 /// Catatan partisipasi user di campaign Earn — sekaligus sumber pengurang poin
@@ -294,6 +296,9 @@ model SwapTransaction {
   swapExecutedAt      DateTime?
   errorMessage        String?
   createdAt           DateTime @default(now())
+
+  /// Delivery tertunda bila token/CC gagal dikirim on-chain ke user.
+  pendingDeliveries   PendingDelivery[]
 
   @@index([userId, createdAt])
 }
@@ -539,4 +544,39 @@ model QuestCompletion {
   completedAt             DateTime @default(now())
 
   @@unique([userId, questId])
+}
+
+/// Pending delivery — token/CC yang swap-nya sukses tapi gagal dikirim
+/// on-chain ke user party (mis. transfer offer tak ter-accept, network error).
+/// User bisa accept/reject via UI, admin bisa refund/retry.
+/// Replaces the old "fallback off-chain credit" pattern (source of balance drift).
+model PendingDelivery {
+  id                      String   @id @default(cuid())
+  userId                  String
+  user                    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Link ke SwapTransaction asal (opsional — bisa juga dari path non-swap).
+  swapTransactionId       String?
+  swapTransaction         SwapTransaction? @relation(fields: [swapTransactionId], references: [id])
+  /// User Canton party (receiver untuk delivery).
+  userPartyId             String
+  /// Token yang harus di-deliver.
+  tokenId                 String
+  tokenAdmin              String
+  /// Amount token (Decimal, 38,18).
+  amount                  Decimal  @db.Decimal(38, 18)
+  /// Amount CC dalam micro-CC (1 CC = 1e6) bila token = CC/Amulet.
+  amountMicroCc           BigInt?
+  /// PENDING_APPROVAL (offer belum accept) | COMPLETED (sukses) | REJECTED (user reject) | REFUNDED (CC balik ke trading).
+  status                  String   @default("PENDING_APPROVAL")
+  /// 'direct' | 'offer' | 'unknown' — jenis transfer Cantex.
+  transferKind            String?
+  /// TransferInstruction contract id bila offer-kind (perlu accept/reject).
+  transferInstructionCid  String?
+  errorMessage            String?
+  deliveredAt             DateTime?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([userId, status])
+  @@index([status, createdAt])
 }
