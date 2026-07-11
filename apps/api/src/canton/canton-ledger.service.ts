@@ -469,6 +469,13 @@ export class CantonLedgerService {
      * akibat retry/double-click/multi-tab. Wajib untuk operasi user-initiated (sendCc).
      */
     clientNonce?: string;
+    /**
+     * Instrument id token (default 'Amulet' = CC). Untuk transfer non-CC
+     * (USDCx, CBTC, dll), set instrumentId + instrumentAdmin.
+     */
+    instrumentId?: string;
+    /** Admin party instrument (default CANTON_DSO_PARTY_ID = admin CC/Amulet). */
+    instrumentAdmin?: string;
   }): Promise<{
     ok: boolean;
     updateId: string | null;
@@ -483,24 +490,16 @@ export class CantonLedgerService {
       description,
       identity = 'admin',
       clientNonce,
+      instrumentId = 'Amulet',
     } = params;
 
-    // ── Step 1: Query sender's Amulet holdings for inputHoldingCids ──────
-    const holdings = await this.queryAmuletHoldings(senderPartyId);
-    if (holdings.length === 0) {
-      return {
-        ok: false,
-        updateId: null,
-        transferKind: 'unknown',
-        error: 'Sender has no Amulet holdings — cannot fund transfer',
-      };
-    }
-    const inputHoldingCids = holdings.map((h) => h.contractId);
-
-    // DSO party (instrumentId.admin) — from CANTON_DSO_PARTY_ID
+    // DSO party (admin CC/Amulet) — dari CANTON_DSO_PARTY_ID. Untuk non-CC,
+    // admin di-resolve dari Cantex getPools/getAccountInfo (instrumentAdmin param).
     const dsoParty =
       this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() || '';
-    if (!dsoParty) {
+    const effectiveAdmin = params.instrumentAdmin || dsoParty;
+    const isAmulet = instrumentId.toLowerCase() === 'amulet';
+    if (isAmulet && !dsoParty) {
       return {
         ok: false,
         updateId: null,
@@ -509,6 +508,34 @@ export class CantonLedgerService {
           'CANTON_DSO_PARTY_ID is not set — required for CIP-0056 transfer',
       };
     }
+    if (!effectiveAdmin) {
+      return {
+        ok: false,
+        updateId: null,
+        transferKind: 'unknown',
+        error: `instrumentAdmin required for ${instrumentId} transfer`,
+      };
+    }
+
+    // ── Step 1: Query sender's holdings for inputHoldingCids ───────────
+    // Dispatch: Amulet pakai queryAmuletHoldings (struktur khusus), non-CC
+    // pakai queryTokenHoldings generic (filter by instrument field).
+    const holdings = isAmulet
+      ? await this.queryAmuletHoldings(senderPartyId)
+      : await this.queryTokenHoldings(
+          senderPartyId,
+          instrumentId,
+          effectiveAdmin,
+        );
+    if (holdings.length === 0) {
+      return {
+        ok: false,
+        updateId: null,
+        transferKind: 'unknown',
+        error: `Sender has no ${instrumentId} holdings — cannot fund transfer`,
+      };
+    }
+    const inputHoldingCids = holdings.map((h) => h.contractId);
 
     const now = new Date();
     const amountNumeric = amountCc.toFixed(10);
@@ -516,14 +543,14 @@ export class CantonLedgerService {
     // ── Build choiceArguments per CIP-0056 spec ──────────────────────────
     // Reference: canton-network/splice/token-standard/cli/src/commands/transfer.ts
     const choiceArguments: Record<string, unknown> = {
-      expectedAdmin: dsoParty,
+      expectedAdmin: effectiveAdmin,
       transfer: {
         sender: senderPartyId,
         receiver: receiverPartyId,
         amount: amountNumeric,
         instrumentId: {
-          admin: dsoParty,
-          id: 'Amulet',
+          admin: effectiveAdmin,
+          id: instrumentId,
         },
         lock: null,
         requestedAt: now.toISOString(),
@@ -2090,6 +2117,134 @@ export class CantonLedgerService {
 
     this.logger.log(
       `Amulet ACS query (wildcard): party=${ownerPartyId.split('::')[0]} found ${holdings.length} holdings from ${allContracts.length} total contracts`,
+    );
+    return holdings;
+  }
+
+  /**
+   * Query holding generic untuk token APA PUN (CC/Amulet + non-CC: USDCx, CBTC, dll).
+   *
+   * Memakai WildcardFilter + client-side filter by createArgument.instrument.
+   * Token standard Canton (CIP-0056) expose holding via interface HoldingV1
+   * dengan field: owner, instrumentId {admin, id}, amount. Filter client-side
+   * cocokkan instrumentId + admin + owner.
+   *
+   * Untuk CC/Amulet, fallback ke queryAmuletHoldings (struktur field berbeda:
+   * Amulet punya amount.initialAmount, bukan flat amount).
+   *
+   * @param ownerPartyId - Canton party ID pemilik holding
+   * @param instrumentId - Instrument id token (mis. "USDCx")
+   * @param instrumentAdmin - Admin party instrument
+   * @param readAs - parties dengan read rights
+   * @returns Array of { contractId, amount }
+   */
+  async queryTokenHoldings(
+    ownerPartyId: string,
+    instrumentId: string,
+    instrumentAdmin: string,
+    readAs?: string[],
+  ): Promise<Array<{ contractId: string; amount: string }>> {
+    // Amulet/CC punya struktur khusus — pakai method existing yang proven.
+    if (instrumentId.toLowerCase() === 'amulet') {
+      return this.queryAmuletHoldings(ownerPartyId, readAs);
+    }
+
+    const effectiveReadAs = readAs ?? [ownerPartyId];
+
+    let offset: number | string = 0;
+    try {
+      const end = (await this.ledgerEnd()) as { offset?: number | string };
+      offset = end?.offset ?? 0;
+    } catch {
+      offset = 0;
+    }
+
+    const filtersByParty: Record<string, unknown> = {};
+    for (const party of effectiveReadAs) {
+      filtersByParty[party] = {
+        cumulative: [
+          {
+            identifierFilter: {
+              WildcardFilter: { value: { includeCreatedEventBlob: false } },
+            },
+          },
+        ],
+      };
+    }
+
+    let allContracts: unknown[] = [];
+    try {
+      const res = await fetch(`${this.baseUrl}/v2/state/active-contracts`, {
+        method: 'POST',
+        headers: await this.authHeaders(),
+        body: JSON.stringify({
+          eventFormat: { filtersByParty, verbose: true },
+          activeAtOffset: offset,
+        }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (res.ok) {
+        allContracts = (await res.json()) as unknown[];
+        if (!Array.isArray(allContracts)) allContracts = [];
+      } else {
+        const text = await res.text();
+        this.logger.warn(
+          `queryTokenHoldings wildcard ${res.status}: ${text.slice(0, 200)}`,
+        );
+      }
+    } catch (err) {
+      this.logger.warn(`queryTokenHoldings error: ${String(err)}`);
+    }
+
+    // Client-side filter: holding contracts dengan instrument + owner match.
+    const targetId = instrumentId.toLowerCase();
+    const targetAdmin = instrumentAdmin.toLowerCase();
+    const holdings: Array<{ contractId: string; amount: string }> = [];
+    for (const entry of allContracts) {
+      if (!entry || typeof entry !== 'object') continue;
+      const wrapper = entry as Record<string, unknown>;
+      const active = wrapper.contractEntry as
+        | Record<string, unknown>
+        | undefined;
+      const jsActive = active?.JsActiveContract as
+        | Record<string, unknown>
+        | undefined;
+      const ev = (jsActive?.createdEvent ?? wrapper) as Record<string, unknown>;
+      const cid = typeof ev.contractId === 'string' ? ev.contractId : null;
+      const args =
+        (ev.createArgument as Record<string, unknown> | undefined) ?? {};
+      if (!cid) continue;
+
+      // Match instrument: field bisa `instrument` (object) atau flat.
+      const inst = args.instrument as Record<string, unknown> | undefined;
+      const instId = (
+        typeof inst?.id === 'string' ? inst.id : ''
+      ).toLowerCase();
+      const instAdmin = (
+        typeof inst?.admin === 'string' ? inst.admin : ''
+      ).toLowerCase();
+      if (instId !== targetId || instAdmin !== targetAdmin) continue;
+
+      // Match owner.
+      const cOwner = typeof args.owner === 'string' ? args.owner : '';
+      if (cOwner && cOwner !== ownerPartyId) continue;
+
+      // Extract amount (beberapa format mungkin: flat string atau nested).
+      const amtRaw = args.amount as Record<string, unknown> | undefined;
+      const amountStr =
+        typeof amtRaw?.initialAmount === 'string'
+          ? amtRaw.initialAmount
+          : typeof amtRaw?.amount === 'string'
+            ? amtRaw.amount
+            : typeof args.amount === 'string'
+              ? args.amount
+              : '0';
+
+      holdings.push({ contractId: cid, amount: amountStr });
+    }
+
+    this.logger.log(
+      `Token ACS query: party=${ownerPartyId.split('::')[0]} instrument=${instrumentId} found ${holdings.length} holdings from ${allContracts.length} total contracts`,
     );
     return holdings;
   }
