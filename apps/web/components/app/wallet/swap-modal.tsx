@@ -102,6 +102,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
   >("idle");
   const [swapMessage, setSwapMessage] = useState("");
   const [swapOutput, setSwapOutput] = useState("");
+  const [swapReceivedToken, setSwapReceivedToken] = useState("");
 
   // Escape to close.
   useEffect(() => {
@@ -292,6 +293,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
       }
       setSwapState("success");
       setSwapOutput(data.outputAmount ?? "");
+      setSwapReceivedToken(buyToken?.instrumentId ?? "");
       // Refresh balances.
       void loadTokens();
     } catch {
@@ -470,7 +472,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                 {swapOutput && (
                   <p className="mt-1 text-xs text-slate-400">
                     Received {swapOutput}{" "}
-                    {displayName(buyToken?.instrumentId ?? "")}
+                    {displayName(swapReceivedToken || (buyToken?.instrumentId ?? ""))}
                   </p>
                 )}
                 <button
