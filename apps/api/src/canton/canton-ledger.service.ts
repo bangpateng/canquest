@@ -2443,6 +2443,79 @@ export class CantonLedgerService {
           instrumentId: instrId,
           instrumentAdmin: instrAdmin,
         });
+        continue;
+      }
+
+      // ── USDCx / registry-token TransferOffer ──────────────────────────
+      // Template: Utility.Registry.App.V0.Model.Transfer:TransferOffer
+      // Berbeda dari AmuletTransferInstruction — pakai nama template TransferOffer,
+      // field shape mungkin beda (sender/receiver/instrument langsung di root).
+      // Coba beberapa shape field yang umum (defensive parsing).
+      if (tplId.includes('TransferOffer')) {
+        // Skip if it's a factory/interface, not an actual offer.
+        if (
+          tplId.includes('Factory') ||
+          tplId.includes('Result') ||
+          tplId.includes('Preapproval')
+        )
+          continue;
+
+        // Defensive: coba beberapa field name conventions.
+        // Registry-app TransferOffer mungkin punya: sender, receiver, amount,
+        // instrumentAdmin, instrumentId (flat) ATAU nested di `transfer`.
+        const transfer = (args.transfer as Record<string, unknown>) || args;
+
+        const receiver =
+          typeof transfer.receiver === 'string' ? transfer.receiver : '';
+        // Only show offers where this party is the RECEIVER.
+        if (receiver !== partyId) continue;
+
+        const sender = typeof transfer.sender === 'string' ? transfer.sender : '';
+        const amount =
+          typeof transfer.amount === 'string'
+            ? transfer.amount
+            : typeof transfer.amount === 'number'
+              ? String(transfer.amount)
+              : '0';
+
+        // Instrument: bisa flat (instrumentAdmin/instrumentId) atau nested.
+        const instObj = (transfer.instrumentId ?? transfer.instrument) as
+          | { id?: string; admin?: string }
+          | string
+          | undefined;
+        const instrId =
+          typeof instObj === 'string'
+            ? instObj
+            : (instObj?.id ?? '');
+        const instrAdmin =
+          typeof instObj === 'object' ? instObj.admin ?? '' : '';
+
+        const meta = transfer.meta as
+          | Record<string, Record<string, string>>
+          | undefined;
+        const desc =
+          meta?.values?.['splice.lfdecentralizedtrust.org/reason'] ??
+          (typeof transfer.description === 'string' ? transfer.description : '');
+        const expiresAt =
+          typeof transfer.executeBefore === 'string'
+            ? transfer.executeBefore
+            : '';
+        const requestedAt =
+          typeof transfer.requestedAt === 'string' ? transfer.requestedAt : '';
+
+        offers.push({
+          type: 'transfer_instruction',
+          contractId: cid,
+          sender,
+          receiver,
+          amount,
+          description: desc,
+          expiresAt,
+          createdAt: requestedAt,
+          instrumentId: instrId || 'Unknown',
+          instrumentAdmin: instrAdmin,
+        });
+        continue;
       }
     }
 

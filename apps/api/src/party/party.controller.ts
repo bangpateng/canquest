@@ -3050,7 +3050,12 @@ export class PartyController {
    * GET /party/swap/balances — saldo user untuk SEMUA token swap-able.
    * Dipakai frontend untuk tombol percent (25/50/75/MAX) di setiap token,
    * bukan cuma CC. CC saldo dari CcBalance (on-chain mirror); token non-CC
-   * dari CantexTokenBalance (off-chain custody — Phase 2, sekarang 0).
+   * di-merge: on-chain holdings (sumber kebenaran) + DB custody (off-chain).
+   *
+   * FIX-1: sebelumnya saldo non-CC hanya dari DB (CantexTokenBalance), yang
+   * bisa drift (swap kredit DB walau on-chain gagal). Sekarang juga query
+   * on-chain holdings via queryTokenHoldings supaya saldo USDCx yang sudah
+   * mendarat on-chain tampil di UI.
    */
   @Get('swap/balances')
   @SkipThrottle()
@@ -3079,6 +3084,52 @@ export class PartyController {
     for (const t of tokenBals) {
       tokens[`${t.instrumentId}::${t.instrumentAdmin}`] = t.balance.toString();
     }
+
+    // ── FIX-1: merge on-chain holdings (sumber kebenaran) ──────────────
+    // Query on-chain untuk setiap token yang ada di pools. On-chain truth
+    // menang (kalau on-chain > DB, pakai on-chain — user benar-benar pegang).
+    if (user.cantonPartyId && !user.cantonPartyId.startsWith('canquest:')) {
+      try {
+        // Ambil daftar token yang dikenal dari Cantex pools.
+        const instruments = await this.cantex.getAllSwapInstruments();
+        // Query on-chain holdings untuk setiap token non-CC (parallel).
+        const onChainResults = await Promise.all(
+          instruments
+            .filter((inst) => inst.id.toLowerCase() !== 'amulet')
+            .map(async (inst) => {
+              const key = `${inst.id}::${inst.admin}`;
+              try {
+                const holdings = await this.ledger.queryTokenHoldings(
+                  user.cantonPartyId!,
+                  inst.id,
+                  inst.admin,
+                );
+                const sum = holdings.reduce(
+                  (acc, h) => acc + Number(h.amount || 0),
+                  0,
+                );
+                return { key, onChainAmount: sum };
+              } catch {
+                return { key, onChainAmount: null };
+              }
+            }),
+        );
+        // Merge: pakai max(DB, on-chain) supaya saldo tidak negatif drift.
+        for (const { key, onChainAmount } of onChainResults) {
+          if (onChainAmount === null) continue;
+          const dbAmount = parseFloat(tokens[key] ?? '0');
+          // On-chain menang kalau > DB (token asli mendarat, bukan off-chain).
+          if (onChainAmount > dbAmount) {
+            tokens[key] = onChainAmount.toFixed(10);
+          }
+        }
+      } catch (err) {
+        this.logger.warn(
+          `swapBalances on-chain merge failed: ${String(err)} — fallback DB only`,
+        );
+      }
+    }
+
     return {
       cc: ccAmount,
       tokens,
