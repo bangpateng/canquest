@@ -12,14 +12,28 @@ import { cn } from "@/lib/utils/utils";
 import { TransactionDetailModal } from "@/components/app/wallet/transaction-detail-modal";
 import { OffersModal, useOffers } from "@/components/app/wallet/offers-section";
 import { SwapModal } from "@/components/app/wallet/swap-modal";
-import { SendTokenSheet } from "@/components/app/wallet/send-token-sheet";
 import { WalletPasswordModal } from "@/components/app/wallet/wallet-password-modal";
 import { useWalletPassword } from "@/lib/hooks/use-wallet-password";
-import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight, X, AlertCircle, Inbox, Coins } from "lucide-react";
+import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  ArrowLeftRight,
+  X,
+  AlertCircle,
+  Inbox,
+  ChevronDown,
+  Search,
+} from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { useCallback, useEffect, useId, useState } from "react";
+import {
+  WalletToken,
+  BalancesResponse,
+  tokenBalanceKey,
+} from "@/lib/canton/token-types";
+import { TokenLogo, displayName } from "@/components/app/wallet/token-logo";
 
-type Sheet = null | "send" | "send-token" | "receive" | "offers" | "swap";
+type Sheet = null | "send" | "receive" | "offers" | "swap";
 type SendState = "idle" | "loading" | "success" | "error";
 
 interface WalletActionsProps {
@@ -50,6 +64,60 @@ export function WalletActions({
       .then((d: { feeCc?: number } | null) => { if (d?.feeCc !== undefined) setFeeCc(d.feeCc); })
       .catch(() => {});
   }, []);
+
+  // ── Token list untuk Send unified (CC + USDCx + token aktif lainnya) ──
+  // Satu UI Send untuk semua token. CC = route /send-cc (preapproval path),
+  // non-CC = route /send-token (CIP-0056 two-step). User tidak perlu sadar bedanya.
+  const [sendTokens, setSendTokens] = useState<WalletToken[]>([]);
+  const [sendBalances, setSendBalances] = useState<BalancesResponse>({ cc: 0, tokens: {} });
+  const [selectedSendToken, setSelectedSendToken] = useState<WalletToken | null>(null);
+  const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
+  const [tokenPickerQuery, setTokenPickerQuery] = useState("");
+
+  // Token aktif untuk Send (selain CC). Mirror swap allowlist supaya konsisten —
+  // hanya token yang benar-benar supported yang muncul di selector.
+  const ACTIVE_SEND_TOKENS = new Set(["USDCX"]);
+  function isSendActive(t: WalletToken): boolean {
+    if (t.isCC) return true; // CC selalu aktif
+    return ACTIVE_SEND_TOKENS.has(t.instrumentId.toUpperCase());
+  }
+
+  const loadSendTokens = useCallback(async () => {
+    try {
+      const [poolsRes, balRes] = await Promise.all([
+        fetch("/api/party/swap/pools", { credentials: "include" }),
+        fetch("/api/party/swap/balances", { credentials: "include" }),
+      ]);
+      const data = (await poolsRes.json()) as { tokens?: WalletToken[] };
+      const list = (data.tokens ?? []).filter(isSendActive);
+      setSendTokens(list);
+      // Default: CC (Amulet).
+      const cc = list.find((t) => t.isCC);
+      setSelectedSendToken(cc ?? list[0] ?? null);
+      if (balRes.ok) {
+        const bal = (await balRes.json()) as BalancesResponse;
+        setSendBalances(bal);
+      }
+    } catch {
+      /* non-blocking — CC default tetap jalan via prop balance */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    // Load token list saat pertama kali mount (untuk selector Send).
+    void loadSendTokens();
+  }, [loadSendTokens]);
+
+  // Balance untuk token yang sedang dipilih (CC dari prop, non-CC dari /swap/balances).
+  const selectedIsCC = Boolean(selectedSendToken?.isCC);
+  const selectedBalance = selectedSendToken
+    ? selectedIsCC
+      ? typeof balance === "number"
+        ? balance
+        : sendBalances.cc
+      : parseFloat(sendBalances.tokens[tokenBalanceKey(selectedSendToken)] ?? "0")
+    : 0;
 
   // Send form state
   const [recipientUsername, setRecipientUsername] = useState("");
@@ -91,6 +159,13 @@ export function WalletActions({
     setMemo("");
     setSendState("idle");
     setSendMessage("");
+    setTokenPickerOpen(false);
+    setTokenPickerQuery("");
+    // Default CC bila belum ada token terpilih.
+    if (!selectedSendToken) {
+      const cc = sendTokens.find((t) => t.isCC) ?? sendTokens[0] ?? null;
+      setSelectedSendToken(cc);
+    }
     setSheet("send");
   }
 
@@ -121,27 +196,38 @@ export function WalletActions({
     const recipient = normalizeSendRecipientInput(recipientUsername);
     const amount = parseFloat(ccAmount.trim());
     if (!recipient || !amount || amount <= 0) return;
+    if (!selectedSendToken) return;
 
     setSendState("loading");
     setSendMessage("");
 
+    // ── AUTO-ROUTE: CC → /send-cc, non-CC → /send-token ──────────────────
+    // User pilih token di selector, tidak sadar backend beda. CC pakai jalur
+    // lama (preapproval path, bisa direct). Non-CC pakai CIP-0056 two-step.
+    const isCC = Boolean(selectedSendToken.isCC);
+    const nonce =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const endpoint = isCC ? "/api/party/send-cc" : "/api/party/send-token";
+    const payload: Record<string, unknown> = {
+      recipientUsername: recipient,
+      amount,
+      memo: memo.trim() || undefined,
+      clientNonce: nonce,
+      ...(password ? { walletPassword: password } : {}),
+    };
+    if (!isCC) {
+      payload.instrumentId = selectedSendToken.instrumentId;
+      payload.instrumentAdmin = selectedSendToken.instrumentAdmin;
+    }
+
     try {
-      const res = await fetch("/api/party/send-cc", {
+      const res = await fetch(endpoint, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          recipientUsername: recipient,
-          amount,
-          memo: memo.trim() || undefined,
-          // Idempotency nonce: satu UUID per klik Send. Double-click / browser
-          // retry yang kirim nonce sama di-dedup backend + ledger jadi 1 transfer.
-          clientNonce:
-            typeof crypto !== "undefined" && crypto.randomUUID
-              ? crypto.randomUUID()
-              : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          ...(password ? { walletPassword: password } : {}),
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = (await res.json()) as {
@@ -155,6 +241,7 @@ export function WalletActions({
         accepted?: boolean;
         offerPending?: boolean;
         offerContractId?: string;
+        transferInstructionCid?: string;
         transactionId?: string;
         to?: string;
         transferMethod?: string;
@@ -181,28 +268,31 @@ export function WalletActions({
       setPwOpen(false);
       setSheet(null);
       setSendState("idle");
+      const tokenLabel = displayName(selectedSendToken.instrumentId);
       if (typeof data.transactionId === "string" && data.transactionId) {
         setSuccessTransactionId(data.transactionId);
       } else if (data.offerPending) {
-        // Offer berhasil dibuat tapi receiver harus accept manual (external party / different participant)
+        // Offer berhasil dibuat tapi receiver harus accept manual (two-step).
         setSendState("success");
         setSendMessage(
           data.message ??
-            `Transfer offer sent for ${amount} CC. The recipient must accept it from their wallet.`,
+            `Transfer offer sent for ${amount} ${tokenLabel}. The recipient must accept it from their wallet.`,
         );
         setSheet("send");
       } else {
         setSendState("success");
         setSendMessage(
           data.message ??
-            `Sent ${amount} CC` +
-              (data.feeCollected && data.fee
+            `Sent ${amount} ${tokenLabel}` +
+              (isCC && data.feeCollected && data.fee
                 ? ` (fee ${data.fee} CC, total ${data.totalDeducted ?? amount + data.fee} CC)`
                 : ""),
         );
         setSheet("send");
       }
       onBalanceRefresh?.();
+      // Refresh token balances supaya balance selector update (non-CC credit).
+      void loadSendTokens();
     } catch {
       setSendState("error");
       setSendMessage("Network error. Check your connection and try again.");
@@ -211,7 +301,7 @@ export function WalletActions({
 
   return (
     <>
-      <div className="grid w-full min-w-0 grid-cols-2 gap-3 sm:grid-cols-5 sm:gap-4">
+      <div className="grid w-full min-w-0 grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
         <button
           type="button"
           onClick={openSend}
@@ -219,17 +309,6 @@ export function WalletActions({
         >
           <ArrowUpRight className="h-5 w-5 shrink-0" aria-hidden />
           Send
-        </button>
-        <button
-          type="button"
-          onClick={() => setSheet("send-token")}
-          className={cn(
-            buttonVariants({ variant: "secondary", size: "sm" }),
-            "w-full justify-center gap-2",
-          )}
-        >
-          <Coins className="h-5 w-5 shrink-0" aria-hidden />
-          Send Token
         </button>
         <button
           type="button"
@@ -329,6 +408,98 @@ export function WalletActions({
               </div>
             ) : (
               <form onSubmit={submitSend} className="mt-8 space-y-6">
+                {/* ── TOKEN SELECTOR (CC + USDCx + token aktif lainnya) ── */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-400">Token</label>
+                  <button
+                    type="button"
+                    onClick={() => setTokenPickerOpen((v) => !v)}
+                    disabled={sendState === "loading"}
+                    className="flex w-full items-center justify-between rounded-2xl border border-white/5 bg-white/5 px-4 py-3 text-left disabled:opacity-50"
+                  >
+                    <span className="flex items-center gap-2">
+                      {selectedSendToken ? (
+                        <>
+                          <TokenLogo symbol={selectedSendToken.instrumentId} size="sm" />
+                          <span className="font-bold text-slate-100">
+                            {displayName(selectedSendToken.instrumentId)}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-slate-500">Select token</span>
+                      )}
+                    </span>
+                    <ChevronDown className="h-4 w-4 text-slate-400" />
+                  </button>
+
+                  {tokenPickerOpen && (
+                    <div className="relative z-20 mt-1 max-h-72 overflow-y-auto rounded-2xl border border-white/10 bg-[var(--card)] p-2 shadow-xl">
+                      <div className="mb-2 flex items-center gap-2 px-2">
+                        <Search className="h-4 w-4 text-slate-500" />
+                        <input
+                          autoFocus
+                          value={tokenPickerQuery}
+                          onChange={(e) => setTokenPickerQuery(e.target.value)}
+                          placeholder="Search token"
+                          className="w-full bg-transparent py-1 text-sm text-slate-100 outline-none placeholder:text-slate-500"
+                        />
+                      </div>
+                      {sendTokens
+                        .filter((t) =>
+                          t.instrumentId
+                            .toLowerCase()
+                            .includes(tokenPickerQuery.trim().toLowerCase()),
+                        )
+                        .map((t) => {
+                          const bal = t.isCC
+                            ? typeof balance === "number"
+                              ? balance
+                              : sendBalances.cc
+                            : parseFloat(
+                                sendBalances.tokens[tokenBalanceKey(t)] ?? "0",
+                              );
+                          return (
+                            <button
+                              key={tokenBalanceKey(t)}
+                              type="button"
+                              onClick={() => {
+                                setSelectedSendToken(t);
+                                setTokenPickerOpen(false);
+                                setTokenPickerQuery("");
+                                setCcAmount("");
+                              }}
+                              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left hover:bg-white/5"
+                            >
+                              <span className="flex items-center gap-2">
+                                <TokenLogo symbol={t.instrumentId} size="sm" />
+                                <span className="font-medium text-slate-100">
+                                  {displayName(t.instrumentId)}
+                                </span>
+                                {t.isCC && (
+                                  <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">
+                                    Instant
+                                  </span>
+                                )}
+                              </span>
+                              <span className="text-xs tabular-nums text-slate-400">
+                                {bal.toFixed(4)}
+                              </span>
+                            </button>
+                          );
+                        })}
+                    </div>
+                  )}
+                  {selectedSendToken && (
+                    <p className="text-xs text-slate-500">
+                      Balance:{" "}
+                      <span className="tabular-nums text-slate-300">
+                        {selectedBalance.toFixed(6)}{" "}
+                        {displayName(selectedSendToken.instrumentId)}
+                      </span>
+                    </p>
+                  )}
+                </div>
+
                 <div className="space-y-3">
                   <label
                     htmlFor="wallet-send-recipient"
@@ -361,12 +532,15 @@ export function WalletActions({
                     >
                       Amount
                     </label>
-                    {balance != null && balance > 0 && (
+                    {selectedBalance > 0 && (
                       <button
                         type="button"
                         onClick={() => {
-                          const max = Math.max(0, balance - feeCc);
-                          setCcAmount(max.toFixed(4));
+                          // CC: kurangi fee. Non-CC: full balance (fee in CC, terpisah).
+                          const max = selectedIsCC
+                            ? Math.max(0, selectedBalance - feeCc)
+                            : selectedBalance;
+                          setCcAmount(max.toFixed(6));
                         }}
                         disabled={sendState === "loading"}
                         className="text-xs font-semibold text-[var(--primary)] hover:underline disabled:opacity-40"
@@ -555,13 +729,6 @@ export function WalletActions({
         open={sheet === "swap"}
         onClose={() => setSheet(null)}
         balance={balance}
-        onBalanceRefresh={onBalanceRefresh}
-      />
-
-      <SendTokenSheet
-        open={sheet === "send-token"}
-        onClose={() => setSheet(null)}
-        ccBalance={balance}
         onBalanceRefresh={onBalanceRefresh}
       />
     </>
