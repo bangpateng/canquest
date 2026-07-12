@@ -78,9 +78,9 @@ export function PasskeyEnrollModal({ open, onClose, onEnrolled }: PasskeyEnrollM
         msg.includes("aborted") ||
         msg.includes("NotAllowed")
       ) {
-        setError("Pendaftaran dibatalkan. Coba lagi.");
+        setError("Registration cancelled. Try again.");
       } else {
-        setError(msg || "Pendaftaran passkey gagal.");
+        setError(msg || "Passkey registration failed.");
       }
       setStep("intro");
     }
@@ -118,7 +118,7 @@ export function PasskeyEnrollModal({ open, onClose, onEnrolled }: PasskeyEnrollM
           <div className="flex items-center gap-2">
             <Fingerprint className="h-5 w-5 text-emerald-400" aria-hidden />
             <h2 id={titleId} className="text-xl font-bold text-slate-100">
-              {step === "backup" ? "Simpan Backup Codes" : "Setup Passkey"}
+              {step === "backup" ? "Save Backup Codes" : "Setup Passkey"}
             </h2>
           </div>
           <button
@@ -138,17 +138,18 @@ export function PasskeyEnrollModal({ open, onClose, onEnrolled }: PasskeyEnrollM
         {step === "intro" && (
           <div className="mt-4 space-y-4">
             <p className="text-sm text-slate-400">
-              Passkey (Face ID / Touch ID / PIN) mengamankan setiap transaksi
-              Anda — kirim, swap, lock. Lebih aman dari password: tidak bisa
-              ditebak, tidak bisa dicuri phishing.
+              Passkey (Face ID / Touch ID / PIN) secures every transaction —
+              send, swap, lock. Safer than a password: can&rsquo;t be guessed,
+              can&rsquo;t be stolen via phishing.
             </p>
 
             {!supported ? (
               <div className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
                 <p className="text-sm font-medium text-amber-400">
-                  Browser/device Anda tidak mendukung passkey. Gunakan browser
-                  modern (Chrome/Safari/Edge terbaru) dengan authenticator.
+                  Your browser/device doesn&rsquo;t support passkey. Use a
+                  modern browser (Chrome/Safari/Edge latest) with an
+                  authenticator.
                 </p>
               </div>
             ) : null}
@@ -166,7 +167,7 @@ export function PasskeyEnrollModal({ open, onClose, onEnrolled }: PasskeyEnrollM
               disabled={!supported}
               className={cn(buttonVariants({ size: "sm" }), "w-full gap-2")}
             >
-              <Fingerprint className="h-4 w-4" /> Mulai Setup Passkey
+              <Fingerprint className="h-4 w-4" /> Start Passkey Setup
             </button>
             <button
               type="button"
@@ -176,7 +177,7 @@ export function PasskeyEnrollModal({ open, onClose, onEnrolled }: PasskeyEnrollM
                 "w-full",
               )}
             >
-              Nanti saja
+              Not now
             </button>
           </div>
         )}
@@ -186,10 +187,10 @@ export function PasskeyEnrollModal({ open, onClose, onEnrolled }: PasskeyEnrollM
           <div className="mt-6 flex flex-col items-center gap-4 py-8">
             <LoadingSpinner />
             <p className="text-sm font-medium text-slate-300">
-              Menunggu konfirmasi passkey di device Anda…
+              Waiting for passkey confirmation on your device…
             </p>
             <p className="text-xs text-slate-500">
-              Ikuti prompt browser (Face ID / Touch ID / PIN).
+              Follow your browser prompt (Face ID / Touch ID / PIN).
             </p>
           </div>
         )}
@@ -200,8 +201,8 @@ export function PasskeyEnrollModal({ open, onClose, onEnrolled }: PasskeyEnrollM
             <div className="flex items-start gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3">
               <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
               <p className="text-sm font-medium text-emerald-300">
-                Passkey berhasil didaftarkan! Simpan backup codes di bawah — ini
-                satu-satunya cara recover kalau semua device Anda hilang.
+                Passkey registered! Save the backup codes below — this is the
+                only way to recover if all your devices are lost.
               </p>
             </div>
 
@@ -246,9 +247,9 @@ export function PasskeyEnrollModal({ open, onClose, onEnrolled }: PasskeyEnrollM
                 className="mt-0.5 h-4 w-4 rounded border-white/20 bg-white/5"
               />
               <span>
-                Saya sudah menyimpan backup codes di tempat aman. Saya paham
-                kalau semua device hilang DAN backup codes hilang = akses wallet
-                hilang permanen.
+                I&rsquo;ve saved my backup codes in a safe place. I understand
+                that if all devices are lost AND backup codes are lost = wallet
+                access is permanently lost.
               </span>
             </label>
 
@@ -258,7 +259,7 @@ export function PasskeyEnrollModal({ open, onClose, onEnrolled }: PasskeyEnrollM
               disabled={!saved}
               className={cn(buttonVariants({ size: "sm" }), "w-full gap-2")}
             >
-              <ShieldCheck className="h-4 w-4" /> Selesai
+              <ShieldCheck className="h-4 w-4" /> Done
             </button>
           </div>
         )}

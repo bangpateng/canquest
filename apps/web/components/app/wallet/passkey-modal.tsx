@@ -82,9 +82,9 @@ export function PasskeyModal({
         msg.includes("aborted") ||
         msg.includes("NotAllowed")
       ) {
-        setLocalError("Verifikasi dibatalkan. Coba lagi.");
+        setLocalError("Verification cancelled. Try again.");
       } else {
-        setLocalError(msg || "Verifikasi passkey gagal.");
+        setLocalError(msg || "Passkey verification failed.");
       }
     } finally {
       setVerifying(false);
@@ -135,7 +135,7 @@ export function PasskeyModal({
         </div>
 
         <p className="mt-3 text-sm text-slate-400">
-          Verifikasi pakai passkey (Face ID / Touch ID / PIN) untuk konfirmasi{" "}
+          Verify with passkey (Face ID / Touch ID / PIN) to confirm{" "}
           {actionLabel.toLowerCase()}.
         </p>
 
@@ -143,9 +143,9 @@ export function PasskeyModal({
           <div className="mt-5 flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
             <p className="text-sm font-medium text-amber-400">
-              Browser/device Anda tidak mendukung passkey. Gunakan browser modern
-              (Chrome, Safari, Edge versi terbaru) dengan authenticator (sidik
-              jari, Face ID, atau PIN).
+              Your browser/device doesn&rsquo;t support passkey. Use a modern
+              browser (Chrome, Safari, Edge latest) with an authenticator
+              (fingerprint, Face ID, or PIN).
             </p>
           </div>
         ) : null}
@@ -168,7 +168,7 @@ export function PasskeyModal({
           >
             {verifying ? (
               <>
-                <LoadingSpinner size="sm" /> Menunggu verifikasi…
+                <LoadingSpinner size="sm" /> Waiting for verification…
               </>
             ) : (
               <>

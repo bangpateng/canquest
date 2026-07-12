@@ -76,7 +76,7 @@ export function SettingsPasskeyPanel() {
   };
 
   const handleRemove = async (credentialId: string) => {
-    if (!confirm("Remove this device? You will need passkey from another device to transact.")) {
+    if (!confirm("Remove this device? You'll need a passkey from another device to transact.")) {
       return;
     }
     setBusy(true);
@@ -113,8 +113,9 @@ export function SettingsPasskeyPanel() {
       </div>
 
       <p className="text-sm text-slate-400">
-        Passkey (Face ID / Touch ID / PIN) melindungi setiap transaksi. Wajib
-        untuk kirim, swap, lock. Tidak bisa ditebak, tidak bisa dicuri phishing.
+        Passkey (Face ID / Touch ID / PIN) protects every transaction. Required
+        for send, swap, lock. Can&rsquo;t be guessed, can&rsquo;t be stolen via
+        phishing.
       </p>
 
       {/* Device list */}
