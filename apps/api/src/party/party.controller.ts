@@ -47,7 +47,7 @@ import { SwapService } from '../cantex/swap.service';
 import { isCantexEnabled } from '../cantex/cantex.config';
 import { CantexError } from '../cantex/cantex.types';
 import { UsersService } from '../users/users.service';
-import { WalletPasswordService } from '../users/wallet-password.service';
+import { PasskeyService } from '../auth/passkey.service';
 import { feePartyLabels } from '../users/cc-transaction-visibility';
 import { WalletInviteCodeService } from './wallet-invite-code.service';
 import { AllocateWalletDto } from './dto/allocate-wallet.dto';
@@ -57,10 +57,6 @@ import { SendTokenDto } from './dto/send-token.dto';
 import { LockCcDto } from './dto/lock-cc.dto';
 import { UnlockCcDto } from './dto/unlock-cc.dto';
 import { SetUsernameDto } from './dto/set-username.dto';
-import {
-  SetWalletPasswordDto,
-  RemoveWalletPasswordDto,
-} from './dto/wallet-password.dto';
 import {
   ContractActionDto,
   OfferType,
@@ -131,7 +127,7 @@ export class PartyController {
     private readonly walletOnboarding: WalletOnboardingService,
     private readonly lockEligibility: LockEligibilityService,
     private readonly prisma: PrismaService,
-    private readonly walletPassword: WalletPasswordService,
+    private readonly walletPassword: PasskeyService,
     private readonly modo: ModoApiService,
     private readonly cantex: CantexClient,
     private readonly cantexPrices: CantexPriceFeedService,
@@ -644,7 +640,7 @@ export class PartyController {
     }
 
     // Gate kata sandi transaksi (opsional): wajib hanya bila user telah menetapkan satu.
-    await this.walletPassword.assertGate(sender.id, body.walletPassword);
+    await this.walletPassword.assertGate(sender.id, body.txVerification);
 
     // Per-user mutex (Fix fund-safety #2): cegah dua transfer konkuren dari user
     // yang sama (multi-tab / double-click cepat / scripted client dengan nonce
@@ -1324,7 +1320,7 @@ export class PartyController {
     }
 
     // Wallet password gate (opsional, mirror sendCc).
-    await this.walletPassword.assertGate(sender.id, body.walletPassword);
+    await this.walletPassword.assertGate(sender.id, body.txVerification);
 
     // Per-user mutex: cegah dua transfer konkuren dari user yang sama
     // (multi-tab / double-click / nonce beda). Reuse sendCcInFlight supaya user
@@ -2689,7 +2685,7 @@ export class PartyController {
       );
     }
     // Gate kata sandi transaksi (opsional): wajib hanya bila user telah menetapkan satu.
-    await this.walletPassword.assertGate(user.id, body.walletPassword);
+    await this.walletPassword.assertGate(user.id, body.txVerification);
     const ownerParty = user.cantonPartyId;
 
     const { map } = this.getLockTerms();
@@ -2786,7 +2782,7 @@ export class PartyController {
       );
     }
     // Gate kata sandi transaksi (opsional): wajib hanya bila user telah menetapkan satu.
-    await this.walletPassword.assertGate(user.id, body.walletPassword);
+    await this.walletPassword.assertGate(user.id, body.txVerification);
     const ownerParty = user.cantonPartyId;
 
     // Pilih lock: by lockId, else expired paling awal milik user.
@@ -2866,58 +2862,7 @@ export class PartyController {
     return { ok: true, lockId: lock.id };
   }
 
-  // ── Kata sandi transaksi (wallet password) — manajemen di Settings ────────
-
-  /** GET /party/wallet-password — apakah user telah menetapkan wallet password? */
-  @Throttle({ default: { limit: 20, ttl: 60_000 } })
-  @Get('wallet-password')
-  async getWalletPassword(@Req() req: AuthedReq) {
-    const hasPassword = await this.walletPassword.hasPassword(req.user.userId);
-    return { hasPassword };
-  }
-
-  /**
-   * POST /party/wallet-password — set atau ganti wallet password.
-   * - Bila belum punya: set baru (currentPassword diabaikan).
-   * - Bila sudah punya: wajib currentPassword benar.
-   */
-  @Throttle({ auth: { limit: 10, ttl: 60_000 } })
-  @Post('wallet-password')
-  async setWalletPassword(
-    @Req() req: AuthedReq,
-    @Body() body: SetWalletPasswordDto,
-  ) {
-    const has = await this.walletPassword.hasPassword(req.user.userId);
-    await this.walletPassword.changePassword(
-      req.user.userId,
-      body.newPassword,
-      body.currentPassword,
-    );
-    this.logger.log(
-      `wallet password ${has ? 'changed' : 'set'}: user=${req.user.userId.slice(0, 8)}`,
-    );
-    return { ok: true, hasPassword: true };
-  }
-
-  /**
-   * DELETE /party/wallet-password — hapus wallet password (menonaktifkan gate).
-   * Wajib verifikasi currentPassword terlebih dahulu.
-   */
-  @Throttle({ auth: { limit: 10, ttl: 60_000 } })
-  @Delete('wallet-password')
-  async removeWalletPassword(
-    @Req() req: AuthedReq,
-    @Body() body: RemoveWalletPasswordDto,
-  ) {
-    await this.walletPassword.clearPassword(
-      req.user.userId,
-      body.currentPassword,
-    );
-    this.logger.log(
-      `wallet password removed: user=${req.user.userId.slice(0, 8)}`,
-    );
-    return { ok: true, hasPassword: false };
-  }
+  // ── Passkey (WebAuthn) — ganti wallet password. Lihat PasskeyController. ──
 
   /**
    * GET /party/lock-terms — daftar pilihan term dari LOCK_TERM_OPTIONS.
@@ -3246,7 +3191,7 @@ export class PartyController {
       buyInstrumentId: body.buyInstrumentId,
       buyInstrumentAdmin: body.buyInstrumentAdmin,
       amount: body.amount,
-      walletPassword: body.walletPassword,
+      txVerification: body.txVerification,
       sellIsCC: body.sellIsCC,
       clientNonce: body.clientNonce,
       maxNetworkFee: body.maxNetworkFee,

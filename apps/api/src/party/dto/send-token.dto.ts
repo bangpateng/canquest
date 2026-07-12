@@ -75,7 +75,7 @@ export class SendTokenDto {
   @IsOptional()
   @IsString()
   @MaxLength(64)
-  walletPassword?: string;
+  txVerification?: string;
 
   /**
    * Idempotency nonce — UUID baru per klik Send. Dipakai untuk derive commandId

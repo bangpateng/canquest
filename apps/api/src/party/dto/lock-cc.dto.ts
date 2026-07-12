@@ -34,5 +34,5 @@ export class LockCcDto {
   @IsOptional()
   @IsString()
   @MaxLength(64)
-  walletPassword?: string;
+  txVerification?: string;
 }

@@ -65,12 +65,8 @@ model User {
   twitterConnectedAt      DateTime?
   /// Last time the user opened or dismissed in-app CC notifications (bell).
   notificationsLastSeenAt DateTime?
-  /// bcrypt hash kata sandi transaksi opsional (gate Send/Lock/Unlock). Null = tidak ada gate.
-  walletPasswordHash       String?
-  /// Penghitung percobaan verifikasi gagal — reset ke 0 saat berhasil / saat set password baru.
-  walletPasswordAttempts   Int                   @default(0)
-  /// Sampai kapan verifikasi dikunci karena terlalu banyak percobaan gagal (null = tidak terkunci).
-  walletPasswordLockedUntil DateTime?
+  /// Timestamp saat user pertama kali mendaftarkan passkey (forced enrollment check).
+  passkeyEnrolledAt        DateTime?
   createdAt               DateTime              @default(now())
   updatedAt               DateTime              @updatedAt
   refreshTokens           RefreshToken[]
@@ -95,6 +91,10 @@ model User {
   swapTransactions        SwapTransaction[]
   /// Delivery token/CC tertunda dari swap yang gagal di-deliver on-chain.
   pendingDeliveries       PendingDelivery[]
+  /// Passkey (WebAuthn) credentials terdaftar — multi-device support.
+  passkeyCredentials      PasskeyCredential[]
+  /// Backup codes untuk recovery (device hilang) — hash only, never plaintext.
+  backupCodes             BackupCode[]
 }
 
 /// Catatan partisipasi user di campaign Earn — sekaligus sumber pengurang poin
@@ -318,6 +318,46 @@ enum TokenTxType {
   TOKEN_OFFER_WITHDRAWN
   /// Fee CC keluar untuk P2P token transfer (fee in CC, reuse TRANSACTION_FEE_CC).
   TOKEN_FEE_OUT
+}
+
+/// Passkey (WebAuthn) credential — multi-device. Tie ke userId (bukan login password).
+/// Dipakai untuk gate transaksi (send/swap/lock/unlock) via short-lived verification token.
+/// Credential ID = base64url dari WebAuthn credentialId (primary key, global unique).
+model PasskeyCredential {
+  /// Credential ID (base64url) — WebAuthn identifier, global unique per RP.
+  id              String   @id
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// COSE public key (raw bytes) — untuk verify assertion signature.
+  publicKey       Bytes
+  /// Sign counter dari authenticator — clone-detection replay protection.
+  /// Setiap assertion bawa counter baru; kalau <= stored = kemungkinan clone.
+  counter         Int      @default(0)
+  /// Transport hints (internal/hybrid/usb/ble/nfc) — UX: browser pilih authenticator tepat.
+  transports      String[] @default([])
+  /// Label user-facing (mis. "iPhone 15", "MacBook Pro") — optional, untuk Settings list.
+  deviceLabel     String?
+  createdAt       DateTime @default(now())
+  /// Terakhir dipakai verify assertion (UX: "last used 2h ago").
+  lastUsedAt      DateTime?
+
+  @@index([userId])
+}
+
+/// Backup code untuk recovery kalau SEMUA device passkey hilang.
+/// Format: XXXX-XXXX-XXXX (cryptographically random). Stored bcrypt hash only.
+/// Generated 10 kode saat enrollment pertama (atau regenerate). Display sekali.
+model BackupCode {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// bcrypt hash backup code — JANGAN simpan plaintext.
+  codeHash  String
+  /// null = aktif (belum dipakai). Set timestamp = sudah dipakai (one-time use).
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }
 
 /// Audit trail lengkap untuk setiap swap CC ↔ token Cantex DEX (multi-leg).

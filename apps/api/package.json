@@ -48,6 +48,7 @@
     "@noble/hashes": "^1.8.0",
     "@noble/secp256k1": "^2.3.0",
     "@prisma/client": "^6.19.3",
+    "@simplewebauthn/server": "^10.0.1",
     "@supabase/supabase-js": "2.49.10",
     "@types/bull": "^3.15.9",
     "bcrypt": "^6.0.0",

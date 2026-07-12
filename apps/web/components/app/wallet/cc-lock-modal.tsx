@@ -5,8 +5,9 @@ import { AlertCircle, Lock, X } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { buttonVariants } from "@/components/ui/button";
 import { iconButtonClass } from "@/lib/ui/ui-button-styles";
-import { WalletPasswordModal } from "@/components/app/wallet/wallet-password-modal";
-import { useWalletPassword } from "@/lib/hooks/use-wallet-password";
+import { PasskeyModal } from "@/components/app/wallet/passkey-modal";
+import { PasskeyEnrollModal } from "@/components/app/wallet/passkey-enroll-modal";
+import { usePasskey } from "@/lib/hooks/use-passkey";
 import { cn } from "@/lib/utils/utils";
 import type { ActiveLock, LockStatus } from "@/lib/hooks/use-lock-status";
 
@@ -46,13 +47,14 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
   const [unlockingId, setUnlockingId] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
 
-  // Gate kata sandi transaksi (opsional). pendingAction diset saat user klik
-  // Lock/Unlock tetapi wallet password aktif — dijalankan setelah konfirmasi modal.
-  const { hasPassword: hasWalletPassword } = useWalletPassword();
+  // Gate transaksi via passkey (WebAuthn). pendingAction diset saat user klik
+  // Lock/Unlock — dijalankan setelah passkey verify sukses (atau setelah forced enroll).
+  const { hasPasskey, refresh: refreshPasskey } = usePasskey();
   const [pwOpen, setPwOpen] = useState(false);
   const [pwError, setPwError] = useState("");
+  const [enrollOpen, setEnrollOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<
-    ((password: string) => void) | null
+    ((txVerification: string) => void) | null
   >(null);
 
   // Fetch lock-terms sekali saat modal dibuka.
@@ -101,13 +103,18 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
     (status.availableCc == null || numericAmount <= status.availableCc);
 
   const submitLock = useCallback(
-    async (e: React.FormEvent, password?: string) => {
+    async (e: React.FormEvent, txVerification?: string) => {
       e.preventDefault();
       if (!selectedTerm || !amountValid) return;
-      // Gate: bila wallet password aktif dan belum ada input, tahan di modal.
-      if (hasWalletPassword && !password) {
+      // Gate passkey: belum enroll → forced; belum verify → modal.
+      if (!hasPasskey) {
+        setPendingAction(() => (tok: string) => void submitLock(e, tok));
+        setEnrollOpen(true);
+        return;
+      }
+      if (!txVerification) {
         setPwError("");
-        setPendingAction(() => (pw: string) => void submitLock(e, pw));
+        setPendingAction(() => (tok: string) => void submitLock(e, tok));
         setPwOpen(true);
         return;
       }
@@ -121,15 +128,27 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
           body: JSON.stringify({
             amountCc: numericAmount,
             termKey: selectedTerm,
-            ...(password ? { walletPassword: password } : {}),
+            txVerification,
           }),
         });
-        const data = (await res.json()) as { ok?: boolean; error?: string };
+        const data = (await res.json()) as {
+          ok?: boolean;
+          error?: string;
+          code?: string;
+        };
         if (!res.ok || data.ok === false) {
-          // 403 = wallet password salah — tetap di modal untuk coba lagi.
+          // 403 = passkey gate gagal.
           if (res.status === 403) {
+            if (data.code === "PASSKEY_NOT_ENROLLED") {
+              setPendingAction(() => (tok: string) =>
+                void submitLock(e, tok),
+              );
+              setEnrollOpen(true);
+              setLockState("idle");
+              return;
+            }
             setPwOpen(true);
-            setPwError(data.error ?? "Wrong wallet password.");
+            setPwError(data.error ?? "Passkey verification required.");
             setLockState("idle");
             return;
           }
@@ -148,15 +167,24 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
         setLockMessage("Network error. Check your connection.");
       }
     },
-    [selectedTerm, amountValid, numericAmount, onRefresh, hasWalletPassword],
+    [selectedTerm, amountValid, numericAmount, onRefresh, hasPasskey],
   );
 
   const submitUnlock = useCallback(
-    async (lockId: string, password?: string) => {
-      // Gate: bila wallet password aktif dan belum ada input, tahan di modal.
-      if (hasWalletPassword && !password) {
+    async (lockId: string, txVerification?: string) => {
+      // Gate passkey: belum enroll → forced; belum verify → modal.
+      if (!hasPasskey) {
+        setPendingAction(() => (tok: string) =>
+          void submitUnlock(lockId, tok),
+        );
+        setEnrollOpen(true);
+        return;
+      }
+      if (!txVerification) {
         setPwError("");
-        setPendingAction(() => (pw: string) => void submitUnlock(lockId, pw));
+        setPendingAction(() => (tok: string) =>
+          void submitUnlock(lockId, tok),
+        );
         setPwOpen(true);
         return;
       }
@@ -166,17 +194,24 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            lockId,
-            ...(password ? { walletPassword: password } : {}),
-          }),
+          body: JSON.stringify({ lockId, txVerification }),
         });
-        const data = (await res.json()) as { ok?: boolean; error?: string };
+        const data = (await res.json()) as {
+          ok?: boolean;
+          error?: string;
+          code?: string;
+        };
         if (!res.ok || data.ok === false) {
-          // 403 = wallet password salah — tetap di modal untuk coba lagi.
           if (res.status === 403) {
+            if (data.code === "PASSKEY_NOT_ENROLLED") {
+              setPendingAction(() => (tok: string) =>
+                void submitUnlock(lockId, tok),
+              );
+              setEnrollOpen(true);
+              return;
+            }
             setPwOpen(true);
-            setPwError(data.error ?? "Wrong wallet password.");
+            setPwError(data.error ?? "Passkey verification required.");
             return;
           }
           setLockState("error");
@@ -193,17 +228,29 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
         setUnlockingId(null);
       }
     },
-    [onRefresh, hasWalletPassword],
+    [onRefresh, hasPasskey],
   );
 
-  // Konfirmasi password dari modal → jalankan aksi tertunda (lock/unlock).
-  function confirmWalletPassword(password: string) {
+  // Passkey verify sukses dari modal → jalankan aksi tertunda (lock/unlock).
+  function onPasskeyVerified(txVerification: string) {
     setPwError("");
     const action = pendingAction;
-    if (action) action(password);
+    if (action) action(txVerification);
   }
 
-  function closePasswordModal() {
+  // Enrollment sukses (forced) → refresh + retry pending action.
+  function onEnrolled() {
+    setEnrollOpen(false);
+    void refreshPasskey();
+    const action = pendingAction;
+    if (action) {
+      setPendingAction(null);
+      // token kosong → submit akan re-trigger verify modal (sekarang hasPasskey true).
+      action("");
+    }
+  }
+
+  function closePasskeyModal() {
     setPwOpen(false);
     setPwError("");
     setPendingAction(null);
@@ -353,14 +400,25 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
         )}
       </div>
 
-      {/* ── WALLET PASSWORD GATE (Lock/Unlock) ── */}
-      <WalletPasswordModal
+      {/* ── PASSKEY GATE (Lock/Unlock) ── */}
+      <PasskeyModal
         open={pwOpen}
         actionLabel={pendingAction ? "Unlock" : "Lock"}
         error={pwError}
         busy={lockState === "loading" || unlockingId !== null}
-        onClose={closePasswordModal}
-        onConfirm={confirmWalletPassword}
+        onClose={closePasskeyModal}
+        onVerified={onPasskeyVerified}
+      />
+
+      {/* ── PASSKEY ENROLLMENT (forced saat first lock/unlock) ── */}
+      <PasskeyEnrollModal
+        open={enrollOpen}
+        onClose={() => {
+          setEnrollOpen(false);
+          setPendingAction(null);
+          setLockState("idle");
+        }}
+        onEnrolled={onEnrolled}
       />
     </div>
   );
