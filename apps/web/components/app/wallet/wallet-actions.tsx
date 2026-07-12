@@ -23,9 +23,11 @@ import {
   Inbox,
   ChevronDown,
   Search,
+  Activity as ActivityIcon,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { useCallback, useEffect, useId, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   WalletToken,
   BalancesResponse,
@@ -50,6 +52,7 @@ export function WalletActions({
   const displayPartyId = formatPartyIdForDisplay(partyId);
   const sendTitleId = useId();
   const receiveTitleId = useId();
+  const router = useRouter();
   const [sheet, setSheet] = useState<Sheet>(null);
   const [feeCc, setFeeCc] = useState(5);
 
@@ -301,7 +304,7 @@ export function WalletActions({
 
   return (
     <>
-      <div className="grid w-full min-w-0 grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+      <div className="grid w-full min-w-0 grid-cols-2 gap-3 sm:grid-cols-5 sm:gap-4">
         <button
           type="button"
           onClick={openSend}
@@ -354,9 +357,20 @@ export function WalletActions({
           <ArrowLeftRight className="h-5 w-5 shrink-0" aria-hidden />
           Swap
         </button>
+        <button
+          type="button"
+          onClick={() => router.push("/activity")}
+          className={cn(
+            buttonVariants({ variant: "secondary", size: "sm" }),
+            "w-full justify-center gap-2",
+          )}
+        >
+          <ActivityIcon className="h-5 w-5 shrink-0" aria-hidden />
+          Activity
+        </button>
       </div>
 
-      {/* ── LOCK MODAL (bottom-sheet) dimiliki oleh WalletDashboard ── */}
+      {/* Lock modal dimiliki oleh TokenList (/wallet utama), bukan di sini. */}
 
       {/* ── SEND DIALOG ── */}
       {sheet === "send" ? (

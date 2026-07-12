@@ -1,6 +1,5 @@
 "use client";
 
-import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils/utils";
 import { TokenLogo, displayName } from "./token-logo";
 
@@ -11,29 +10,20 @@ export interface TokenCardProps {
   balance: string;
   /** Optional fiat value (e.g. "$3.74"). */
   fiatValue?: string;
-  /** Click handler — navigate to detail view. */
-  onClick?: () => void;
 }
 
 /**
  * Kartu token individual — dipakai di main wallet view (TokenList).
- * Layout: [logo] [nama + saldo] [fiat] [chevron]. Klik → detail view.
+ * Display-only (non-clickable): logo + nama + saldo + fiat. Semua aksi token
+ * (Send/Swap/Lock) ada di WalletActions di atas, jadi kartu tidak perlu navigasi.
  */
-export function TokenCard({
-  symbol,
-  balance,
-  fiatValue,
-  onClick,
-}: TokenCardProps) {
+export function TokenCard({ symbol, balance, fiatValue }: TokenCardProps) {
   const display = displayName(symbol);
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <div
       className={cn(
-        "flex w-full items-center gap-3 rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 p-4 text-left transition-all duration-200",
-        "hover:border-white/15 hover:bg-[#0d1018]/90 active:scale-[0.99]",
+        "flex w-full items-center gap-3 rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 p-4 text-left",
       )}
     >
       <TokenLogo symbol={symbol} size="sm" />
@@ -52,7 +42,6 @@ export function TokenCard({
           </span>
         </div>
       </div>
-      <ChevronRight className="h-4 w-4 shrink-0 text-slate-600" aria-hidden />
-    </button>
+    </div>
   );
 }

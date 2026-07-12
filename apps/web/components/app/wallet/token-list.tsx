@@ -1,13 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useTokenPrices } from "@/lib/hooks/use-token-prices";
 import { isRealCantonPartyId } from "@/lib/auth/wallet-session-cache";
 import { formatPartyIdForDisplay } from "@/lib/canton/canton-party-id";
-import { ROUTES } from "@/lib/routing/app-routes";
 
 /**
  * Token yang SUDAH aktif untuk swap (selain CC).
@@ -22,6 +20,9 @@ function isTokenActive(symbol: string, isCC?: boolean): boolean {
 }
 import { WalletActions } from "./wallet-actions";
 import { TokenCard } from "./token-card";
+import { LockStatusBar } from "./lock-status-bar";
+import { CcLockModal } from "./cc-lock-modal";
+import { useLockStatus } from "@/lib/hooks/use-lock-status";
 
 interface TokenListProps {
   me: { username?: string | null; cantonPartyId?: string | null };
@@ -48,7 +49,6 @@ interface BalancesResponse {
  * Klik token card → detail view /wallet/<tokenId>.
  */
 export function TokenList({ me, onRefresh }: TokenListProps) {
-  const router = useRouter();
   const hasWallet = isRealCantonPartyId(me.cantonPartyId);
   const displayPartyId = formatPartyIdForDisplay(me.cantonPartyId);
 
@@ -62,6 +62,14 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
   );
   const [ccBalance, setCcBalance] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Lock CC — status bar + modal di /wallet utama (sebelumnya di /wallet/cc).
+  // Hook enabled hanya kalau user punya wallet (mirror pattern token-detail-view).
+  const {
+    status: lockStatus,
+    refreshWithRetries: refreshLock,
+  } = useLockStatus({ enabled: hasWallet, pollIntervalMs: 120_000 });
+  const [lockOpen, setLockOpen] = useState(false);
 
   // CC price: cari "Amulet::admin" di price map (setelah swapTokens load).
   const ccInstrumentKey = swapTokens.find((t) => t.isCC);
@@ -165,11 +173,27 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
         </div>
       </div>
 
+      {/* ── Lock status bar (CC) — tampil di /wallet utama ── */}
+      {hasWallet && lockStatus.hasWallet && (
+        <LockStatusBar status={lockStatus} onManage={() => setLockOpen(true)} />
+      )}
+
       {/* ── Actions ── */}
       <WalletActions
         partyId={displayPartyId}
         balance={ccBalance}
         onBalanceRefresh={handleRefresh}
+      />
+
+      {/* ── Lock modal (CC) — mount di /wallet utama ── */}
+      <CcLockModal
+        open={lockOpen}
+        onClose={() => setLockOpen(false)}
+        status={lockStatus}
+        onRefresh={() => {
+          refreshLock();
+          handleRefresh();
+        }}
       />
 
       {/* ── My Tokens ──────────────────────────────────────────────────── */}
@@ -183,17 +207,16 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
           )}
         </div>
         <div className="space-y-3">
-          {/* CC card (always first) */}
+          {/* CC card (always first) — display-only */}
           <TokenCard
             symbol="Amulet"
             balance={
               loading ? "—" : (ccBalance?.toFixed(4) ?? "0.0000")
             }
             fiatValue={ccValue > 0 ? `$${ccFiatStr}` : undefined}
-            onClick={() => router.push(ROUTES.walletToken("cc"))}
           />
 
-          {/* Non-CC tokens — only active ones (coming soon hidden) */}
+          {/* Non-CC tokens — only active ones (display-only, no nav) */}
           {swapTokens
             .filter(
               (t) => !t.isCC && isTokenActive(t.instrumentId, t.isCC),
@@ -215,15 +238,6 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
                   symbol={t.instrumentId}
                   balance={bal.toFixed(4)}
                   fiatValue={fiat}
-                  onClick={() =>
-                    router.push(
-                      ROUTES.walletToken(
-                        t.instrumentId
-                          .toLowerCase()
-                          .replace(/[^a-z0-9]/g, "-"),
-                      ),
-                    )
-                  }
                 />
               );
             })}

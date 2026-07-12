@@ -179,7 +179,7 @@ function NotificationRow({ item }: { item: NotificationItem }) {
   return (
     <li className="border-b border-[var(--border)] last:border-b-0">
       <Link
-        href={`/transactions/${tx.id}`}
+        href={`/activity/${tx.id}`}
         className="flex items-start gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--primary)]/8"
       >
         <span className={iconClass}>
