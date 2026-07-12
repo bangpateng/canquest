@@ -1,5 +1,4 @@
 import { Global, Module } from '@nestjs/common';
-import { AuthModule } from '../auth/auth.module';
 import { CantonModule } from '../canton/canton.module';
 import { UsersModule } from '../users/users.module';
 import { CantexClient } from './cantex-client';
@@ -13,14 +12,13 @@ import { SwapService } from './swap.service';
  * CantexPriceFeedService: real-time price feed via public WebSocket.
  * SwapService: orchestration untuk CC ↔ token swap (custodial).
  *
- * Import CantonModule + UsersModule + AuthModule supaya SwapService dapat inject:
+ * Import CantonModule + UsersModule supaya SwapService dapat inject:
  *   - CantonLedgerService, CcInboundSyncService (from CantonModule)
- *   - UsersService (from UsersModule)
- *   - PasskeyService (from AuthModule) — gate transaksi passkey
+ *   - UsersService, WalletPasswordService (from UsersModule)
  */
 @Global()
 @Module({
-  imports: [CantonModule, UsersModule, AuthModule],
+  imports: [CantonModule, UsersModule],
   providers: [CantexClient, CantexPriceFeedService, SwapService],
   exports: [CantexClient, CantexPriceFeedService, SwapService],
 })

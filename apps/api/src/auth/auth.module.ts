@@ -6,8 +6,6 @@ import { UsersModule } from '../users/users.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { ResendEmailService } from './resend-email.service';
-import { PasskeyService } from './passkey.service';
-import { PasskeyController } from './passkey.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
@@ -23,8 +21,8 @@ import { JwtStrategy } from './strategies/jwt.strategy';
       }),
     }),
   ],
-  controllers: [AuthController, PasskeyController],
-  providers: [AuthService, ResendEmailService, JwtStrategy, PasskeyService],
-  exports: [AuthService, JwtModule, PassportModule, JwtStrategy, PasskeyService],
+  controllers: [AuthController],
+  providers: [AuthService, ResendEmailService, JwtStrategy],
+  exports: [AuthService, JwtModule, PassportModule, JwtStrategy],
 })
 export class AuthModule {}

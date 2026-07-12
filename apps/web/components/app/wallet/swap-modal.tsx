@@ -72,9 +72,6 @@ import {
   TokenLogo,
   displayName,
 } from "@/components/app/wallet/token-logo";
-import { PasskeyModal } from "@/components/app/wallet/passkey-modal";
-import { PasskeyEnrollModal } from "@/components/app/wallet/passkey-enroll-modal";
-import { usePasskey } from "@/lib/hooks/use-passkey";
 
 // ── Component ───────────────────────────────────────────────────────────
 
@@ -110,15 +107,6 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
   const [swapMessage, setSwapMessage] = useState("");
   const [swapOutput, setSwapOutput] = useState("");
   const [swapReceivedToken, setSwapReceivedToken] = useState("");
-
-  // Gate passkey (sebelumnya GAP: swap tidak kirim walletPassword walau backend gate).
-  const { hasPasskey, refresh: refreshPasskey } = usePasskey();
-  const [pwOpen, setPwOpen] = useState(false);
-  const [pwError, setPwError] = useState("");
-  const [enrollOpen, setEnrollOpen] = useState(false);
-  const [pendingAfterEnroll, setPendingAfterEnroll] = useState<
-    (() => void) | null
-  >(null);
 
   // Escape to close.
   useEffect(() => {
@@ -270,21 +258,10 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
     setQuote(null);
   };
 
-  // Execute swap via POST /api/party/swap (gated by passkey).
-  const submitSwap = async (txVerification?: string) => {
+  // Execute swap via POST /api/party/swap.
+  const submitSwap = async () => {
     if (!sellToken || !buyToken || !amount || sameToken || insufficientBalance)
       return;
-    // Gate passkey: belum enroll → forced; belum verify → modal.
-    if (!hasPasskey) {
-      setPendingAfterEnroll(() => () => void submitSwap(txVerification));
-      setEnrollOpen(true);
-      return;
-    }
-    if (!txVerification) {
-      setPwError("");
-      setPwOpen(true);
-      return;
-    }
     setSwapState("loading");
     setSwapMessage("");
     setSwapOutput("");
@@ -305,7 +282,6 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
           buyInstrumentAdmin: buyToken.instrumentAdmin,
           amount: parseFloat(amount),
           sellIsCC: sellToken.isCC,
-          txVerification,
           clientNonce:
             typeof crypto !== "undefined" && crypto.randomUUID
               ? crypto.randomUUID()
@@ -317,22 +293,8 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
         success?: boolean;
         outputAmount?: string;
         message?: string;
-        code?: string;
       };
       if (!res.ok || !data.success) {
-        // 403 = passkey gate gagal.
-        if (res.status === 403) {
-          if (data.code === "PASSKEY_NOT_ENROLLED") {
-            setPendingAfterEnroll(() => () => void submitSwap(txVerification));
-            setEnrollOpen(true);
-            setSwapState("idle");
-            return;
-          }
-          setPwOpen(true);
-          setPwError(data.message ?? "Passkey verification required.");
-          setSwapState("idle");
-          return;
-        }
         setSwapState("error");
         setSwapMessage(
           data.message ?? "Swap failed. Please try again.",
@@ -342,7 +304,6 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
       setSwapState("success");
       setSwapOutput(data.outputAmount ?? "");
       setSwapReceivedToken(buyToken?.instrumentId ?? "");
-      setPwOpen(false);
       // Refresh balances.
       void loadTokens();
     } catch {
@@ -350,23 +311,6 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
       setSwapMessage("Network error. Check your connection.");
     }
   };
-
-  // Passkey verify sukses → jalankan swap dengan token.
-  function onPasskeyVerified(txToken: string) {
-    setPwError("");
-    void submitSwap(txToken);
-  }
-
-  // Enrollment sukses → refresh + retry swap.
-  function onEnrolled() {
-    setEnrollOpen(false);
-    void refreshPasskey();
-    if (pendingAfterEnroll) {
-      const action = pendingAfterEnroll;
-      setPendingAfterEnroll(null);
-      action();
-    }
-  }
 
   return (
     <div
@@ -581,7 +525,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
             ) : (
               <button
                 type="button"
-                onClick={() => void submitSwap()}
+                onClick={submitSwap}
                 disabled={
                   swapState === "loading" ||
                   !amount ||
@@ -611,31 +555,6 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
           </>
         )}
       </div>
-
-      {/* ── PASSKEY GATE (Swap) ── */}
-      <PasskeyModal
-        open={pwOpen}
-        actionLabel="Swap"
-        error={pwError}
-        busy={swapState === "loading"}
-        onClose={() => {
-          setPwOpen(false);
-          setPwError("");
-          setSwapState("idle");
-        }}
-        onVerified={onPasskeyVerified}
-      />
-
-      {/* ── PASSKEY ENROLLMENT (forced saat first swap) ── */}
-      <PasskeyEnrollModal
-        open={enrollOpen}
-        onClose={() => {
-          setEnrollOpen(false);
-          setPendingAfterEnroll(null);
-          setSwapState("idle");
-        }}
-        onEnrolled={onEnrolled}
-      />
     </div>
   );
 }

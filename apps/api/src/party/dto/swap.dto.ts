@@ -51,7 +51,7 @@ export class SwapDto {
   @IsOptional()
   @IsString()
   @MaxLength(64)
-  txVerification?: string;
+  walletPassword?: string;
 
   /** True bila sell = CC (untuk custody routing di Phase 2). */
   @IsOptional()

@@ -12,9 +12,8 @@ import { cn } from "@/lib/utils/utils";
 import { TransactionDetailModal } from "@/components/app/wallet/transaction-detail-modal";
 import { OffersModal, useOffers } from "@/components/app/wallet/offers-section";
 import { SwapModal } from "@/components/app/wallet/swap-modal";
-import { PasskeyModal } from "@/components/app/wallet/passkey-modal";
-import { PasskeyEnrollModal } from "@/components/app/wallet/passkey-enroll-modal";
-import { usePasskey } from "@/lib/hooks/use-passkey";
+import { WalletPasswordModal } from "@/components/app/wallet/wallet-password-modal";
+import { useWalletPassword } from "@/lib/hooks/use-wallet-password";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -138,15 +137,10 @@ export function WalletActions({
   const [sendMessage, setSendMessage] = useState("");
   const [successTransactionId, setSuccessTransactionId] = useState<string | null>(null);
 
-  // Gate transaksi via passkey (WebAuthn). Wajib — user harus enroll saat first send.
-  const { hasPasskey, refresh: refreshPasskey } = usePasskey();
+  // Gate kata sandi transaksi (opsional). Modal muncul hanya bila user menetapkan satu.
+  const { hasPassword: hasWalletPassword } = useWalletPassword();
   const [pwOpen, setPwOpen] = useState(false);
   const [pwError, setPwError] = useState("");
-  const [enrollOpen, setEnrollOpen] = useState(false);
-  // Pending action untuk retry setelah enrollment sukses.
-  const [pendingAfterEnroll, setPendingAfterEnroll] = useState<
-    (() => void) | null
-  >(null);
 
   const close = useCallback(() => {
     setSheet(null);
@@ -185,46 +179,26 @@ export function WalletActions({
     setSheet("send");
   }
 
-  // Passkey verify dari modal → lanjutkan send dengan verification token.
-  function onPasskeyVerified(txToken: string) {
+  // Konfirmasi password dari modal → lanjutkan send dengan password tersebut.
+  function confirmSendPassword(password: string) {
     setPwError("");
+    // submitSend butuh event; buat event sintetis agar e.preventDefault() aman.
     void submitSend(
       { preventDefault: () => {} } as React.FormEvent,
-      txToken,
+      password,
     );
   }
 
-  function closePasskeyModal() {
+  function closePasswordModal() {
     setPwOpen(false);
     setPwError("");
     setSendState("idle");
   }
 
-  // Enrollment sukses (forced) → refresh status + retry pending action.
-  function onEnrolled() {
-    setEnrollOpen(false);
-    void refreshPasskey();
-    if (pendingAfterEnroll) {
-      const action = pendingAfterEnroll;
-      setPendingAfterEnroll(null);
-      action();
-    }
-  }
-
-  async function submitSend(e: React.FormEvent, txVerification?: string) {
+  async function submitSend(e: React.FormEvent, password?: string) {
     e.preventDefault();
-    // Gate passkey: kalau belum enroll → forced enrollment; kalau belum verify → buka modal.
-    if (!hasPasskey) {
-      setPendingAfterEnroll(() => () =>
-        void submitSend(
-          { preventDefault: () => {} } as React.FormEvent,
-          txVerification,
-        ),
-      );
-      setEnrollOpen(true);
-      return;
-    }
-    if (!txVerification) {
+    // Gate: bila user menetapkan wallet password dan belum ada input, buka modal.
+    if (hasWalletPassword && !password) {
       setPwError("");
       setPwOpen(true);
       return;
@@ -251,7 +225,7 @@ export function WalletActions({
       amount,
       memo: memo.trim() || undefined,
       clientNonce: nonce,
-      txVerification,
+      ...(password ? { walletPassword: password } : {}),
     };
     if (!isCC) {
       payload.instrumentId = selectedSendToken.instrumentId;
@@ -286,31 +260,11 @@ export function WalletActions({
       // Error hanya jika HTTP error ATAU success=false
       // accepted=false + offerPending=true = offer berhasil dibuat, receiver perlu accept manual (BUKAN error)
       if (!res.ok || data.success === false) {
-        // 403 = passkey gate gagal. Bedakan: belum enroll vs verify expired.
+        // 403 = wallet password salah / terkunci — tahan di modal untuk coba lagi.
         if (res.status === 403) {
-          const errBody = (await res.clone().json().catch(() => null)) as {
-            code?: string;
-            message?: string;
-          } | null;
-          const code = errBody?.code;
-          if (code === "PASSKEY_NOT_ENROLLED") {
-            // Forced enrollment.
-            setPendingAfterEnroll(() => () =>
-              void submitSend(
-                { preventDefault: () => {} } as React.FormEvent,
-                txVerification,
-              ),
-            );
-            setEnrollOpen(true);
-            setSendState("idle");
-            return;
-          }
-          // PASSKEY_VERIFY_REQUIRED / PASSKEY_VERIFY_EXPIRED → buka modal verify ulang.
           setPwOpen(true);
           setPwError(
-            errBody?.message ??
-              data.message ??
-              "Passkey verification required.",
+            data.message ?? data.error ?? "Wrong wallet password.",
           );
           setSendState("idle");
           return;
@@ -320,7 +274,7 @@ export function WalletActions({
         return;
       }
 
-      // Sukses → tutup modal passkey (jika terbuka) dan reset gate.
+      // Sukses → tutup modal password (jika terbuka) dan reset gate.
       setPwOpen(false);
       setSheet(null);
       setSendState("idle");
@@ -673,7 +627,7 @@ export function WalletActions({
                 {/* Fee notice */}
                 <div className="flex justify-center px-6 py-4">
                   <p className="text-sm font-medium text-slate-400">
-                    <span className="font-semibold text-slate-100">Withdrawal Fee: {feeCc} CC</span>
+                    <span className="font-semibold text-slate-100">Fee Withdraw : {feeCc} CC</span>
                   </p>
                 </div>
 
@@ -715,25 +669,14 @@ export function WalletActions({
         </div>
       ) : null}
 
-      {/* ── PASSKEY GATE (Send) ── */}
-      <PasskeyModal
+      {/* ── WALLET PASSWORD GATE (Send) ── */}
+      <WalletPasswordModal
         open={pwOpen}
         actionLabel="Send"
         error={pwError}
         busy={sendState === "loading"}
-        onClose={closePasskeyModal}
-        onVerified={onPasskeyVerified}
-      />
-
-      {/* ── PASSKEY ENROLLMENT (forced saat first send) ── */}
-      <PasskeyEnrollModal
-        open={enrollOpen}
-        onClose={() => {
-          setEnrollOpen(false);
-          setPendingAfterEnroll(null);
-          setSendState("idle");
-        }}
-        onEnrolled={onEnrolled}
+        onClose={closePasswordModal}
+        onConfirm={confirmSendPassword}
       />
 
       <TransactionDetailModal

@@ -44,7 +44,7 @@ export class SendCcDto {
   @IsOptional()
   @IsString()
   @MaxLength(64)
-  txVerification?: string;
+  walletPassword?: string;
 
   /**
    * Idempotency nonce — UUID baru per klik Send. Dipakai untuk derive commandId

@@ -24,7 +24,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CantonLedgerService } from '../canton/canton-ledger.service';
 import { CcInboundSyncService } from '../canton/cc-inbound-sync.service';
 import { UsersService } from '../users/users.service';
-import { PasskeyService } from '../auth/passkey.service';
+import { WalletPasswordService } from "../users/wallet-password.service";
 import { RealtimeService } from '../realtime/realtime.service';
 import { CantexClient } from './cantex-client';
 import type { SwapExecutedDetails } from './cantex-client';
@@ -42,7 +42,7 @@ export class SwapService {
     private readonly ledger: CantonLedgerService,
     private readonly inboundSync: CcInboundSyncService,
     private readonly users: UsersService,
-    private readonly walletPassword: PasskeyService,
+    private readonly walletPassword: WalletPasswordService,
     private readonly realtime: RealtimeService,
     private readonly config: ConfigService,
   ) {}
@@ -228,7 +228,7 @@ export class SwapService {
       buyInstrumentId: string;
       buyInstrumentAdmin: string;
       amount: number;
-      txVerification?: string;
+      walletPassword?: string;
       sellIsCC?: boolean;
       clientNonce: string;
       maxNetworkFee?: string;
@@ -241,7 +241,7 @@ export class SwapService {
     message?: string;
   }> {
     // 1. Wallet gate.
-    await this.walletPassword.assertGate(userId, params.txVerification);
+    await this.walletPassword.assertGate(userId, params.walletPassword);
 
     // 2. Per-user mutex (mirror sendCcInFlight).
     if (this.swapInFlight.has(userId)) {
