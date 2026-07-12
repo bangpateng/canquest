@@ -198,8 +198,7 @@ const createdEvent = (entry) => {
     const ev = createdEvent(entry);
     const tplId = typeof ev.templateId === 'string' ? ev.templateId : '';
     const cid = typeof ev.contractId === 'string' ? ev.contractId : '';
-    const args =
-      (ev.createArgument as Record<string, unknown> | undefined) ?? {};
+    const args = ev.createArgument || {};
 
     if (!tplId) continue;
 
@@ -230,13 +229,10 @@ const createdEvent = (entry) => {
     console.log(`  ✅ DITEMUKAN ${credentials.length} credential contract(s):`);
     for (const c of credentials.slice(0, 10)) {
       const admin =
-        (c.args.instrumentAdmin as string | undefined) ??
-        (c.args.registrar as string | undefined) ??
-        '(no admin field)';
-      const instId =
-        (c.args.instrumentId as { id?: string } | string | undefined) ?? '';
+        c.args.instrumentAdmin ?? c.args.registrar ?? '(no admin field)';
+      const instIdRaw = c.args.instrumentId ?? '';
       const instStr =
-        typeof instId === 'string' ? instId : instId?.id ?? '';
+        typeof instIdRaw === 'string' ? instIdRaw : (instIdRaw && instIdRaw.id) ?? '';
       console.log(
         `     • ${c.tplId.slice(0, 60)}…`,
       );
@@ -267,10 +263,11 @@ const createdEvent = (entry) => {
       `  ✅ DITEMUKAN ${nonCcHoldings.length} non-CC holding(s):`,
     );
     for (const h of nonCcHoldings.slice(0, 10)) {
-      const amount = (h.args.amount as string | undefined) ?? '?';
-      const inst = h.args.instrument as { id?: string } | undefined;
+      const amount = h.args.amount ?? '?';
+      const inst = h.args.instrument;
+      const instId = inst && typeof inst === 'object' ? inst.id : '?';
       console.log(
-        `     • ${inst?.id ?? '?'}: amount=${amount} (tpl=${h.tplId.slice(0, 40)}…)`,
+        `     • ${instId}: amount=${amount} (tpl=${h.tplId.slice(0, 40)}…)`,
       );
     }
   }
@@ -286,9 +283,10 @@ const createdEvent = (entry) => {
       `  ✅ DITEMUKAN ${preapprovals.length} preapproval contract(s):`,
     );
     for (const p of preapprovals.slice(0, 5)) {
-      const admin = (p.args.instrumentAdmin as string | undefined) ?? '(none)';
+      const admin = p.args.instrumentAdmin ?? '(none)';
+      const adminStr = typeof admin === 'string' ? admin : JSON.stringify(admin);
       console.log(
-        `     • tpl=${p.tplId.slice(0, 50)}… cid=${p.cid.slice(0, 20)}… admin=${admin.slice(0, 24)}…`,
+        `     • tpl=${p.tplId.slice(0, 50)}… cid=${p.cid.slice(0, 20)}… admin=${adminStr.slice(0, 24)}…`,
       );
     }
   }
