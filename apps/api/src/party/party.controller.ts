@@ -3052,10 +3052,11 @@ export class PartyController {
    * bukan cuma CC. CC saldo dari CcBalance (on-chain mirror); token non-CC
    * di-merge: on-chain holdings (sumber kebenaran) + DB custody (off-chain).
    *
-   * FIX-1: sebelumnya saldo non-CC hanya dari DB (CantexTokenBalance), yang
-   * bisa drift (swap kredit DB walau on-chain gagal). Sekarang juga query
-   * on-chain holdings via queryTokenHoldings supaya saldo USDCx yang sudah
-   * mendarat on-chain tampil di UI.
+   * FIX-1b: saldo non-CC sekarang PURE on-chain (sumber kebenaran).
+   * Sebelumnya: merge max(DB, on-chain) — DB off-chain (CantexTokenBalance)
+   * tetap tampil walau bukan token asli (drift dari swap fallback). User minta
+   * hapus off-chain: pakai on-chain saja. DB CantexTokenBalance tetap dipakai
+   * untuk swap accounting internal, tapi TIDAK ditampilkan ke UI.
    */
   @Get('swap/balances')
   @SkipThrottle()
@@ -3064,30 +3065,17 @@ export class PartyController {
     if (!user) {
       throw new ForbiddenException('User not found.');
     }
-    // CC saldo (micro → decimal).
+    // CC saldo (micro → decimal) — dari DB (CcBalance = on-chain mirror, reliable).
     const ccBal = await this.prisma.ccBalance.findUnique({
       where: { userId: user.id },
       select: { balanceMicroCc: true },
     });
     const ccAmount = ccBal ? Number(ccBal.balanceMicroCc) / 1_000_000 : 0;
-    // Non-CC token saldo (off-chain custody).
-    const tokenBals = await this.prisma.cantexTokenBalance.findMany({
-      where: { userId: user.id },
-      select: {
-        instrumentId: true,
-        instrumentAdmin: true,
-        balance: true,
-      },
-    });
-    // Format: { "<instrumentId>::<admin>": "<decimal string>" }
-    const tokens: Record<string, string> = {};
-    for (const t of tokenBals) {
-      tokens[`${t.instrumentId}::${t.instrumentAdmin}`] = t.balance.toString();
-    }
 
-    // ── FIX-1: merge on-chain holdings (sumber kebenaran) ──────────────
-    // Query on-chain untuk setiap token yang ada di pools. On-chain truth
-    // menang (kalau on-chain > DB, pakai on-chain — user benar-benar pegang).
+    // Non-CC token saldo: PURE on-chain (sumber kebenaran).
+    // DB off-chain (CantexTokenBalance) TIDAK dipakai untuk display.
+    const tokens: Record<string, string> = {};
+
     if (user.cantonPartyId && !user.cantonPartyId.startsWith('canquest:')) {
       try {
         // Ambil daftar token yang dikenal dari Cantex pools.
@@ -3109,23 +3097,21 @@ export class PartyController {
                   0,
                 );
                 return { key, onChainAmount: sum };
-              } catch {
-                return { key, onChainAmount: null };
+              } catch (err) {
+                this.logger.warn(
+                  `queryTokenHoldings failed for ${inst.id}: ${String(err)}`,
+                );
+                return { key, onChainAmount: 0 };
               }
             }),
         );
-        // Merge: pakai max(DB, on-chain) supaya saldo tidak negatif drift.
         for (const { key, onChainAmount } of onChainResults) {
-          if (onChainAmount === null) continue;
-          const dbAmount = parseFloat(tokens[key] ?? '0');
-          // On-chain menang kalau > DB (token asli mendarat, bukan off-chain).
-          if (onChainAmount > dbAmount) {
-            tokens[key] = onChainAmount.toFixed(10);
-          }
+          // Pure on-chain: tampilkan apa adanya (0 kalau tidak pegang).
+          tokens[key] = onChainAmount.toFixed(10);
         }
       } catch (err) {
         this.logger.warn(
-          `swapBalances on-chain merge failed: ${String(err)} — fallback DB only`,
+          `swapBalances on-chain query failed: ${String(err)}`,
         );
       }
     }

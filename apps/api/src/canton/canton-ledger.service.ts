@@ -1365,9 +1365,26 @@ export class CantonLedgerService {
         disclosedContracts?: unknown[];
       };
 
-      this.logger.log(
-        `Choice context (${action}) OK: disclosed=${data.disclosedContracts?.length ?? 0}`,
+      // Log detail untuk diagnose "Missing context entry for transfer-rule".
+      const ctxKeys = data.choiceContextData
+        ? Object.keys(data.choiceContextData)
+        : [];
+      const hasTransferRule = ctxKeys.some((k) =>
+        k.toLowerCase().includes('transfer-rule') ||
+        k.toLowerCase().includes('transferrule'),
       );
+      this.logger.log(
+        `Choice context (${action}) OK: disclosed=${data.disclosedContracts?.length ?? 0} ` +
+          `contextKeys=[${ctxKeys.join(',')}] hasTransferRule=${hasTransferRule} ` +
+          `cid=${transferInstructionCid.slice(0, 16)}…`,
+      );
+      if (!hasTransferRule) {
+        this.logger.warn(
+          `Choice context (${action}) TIDAK ada transfer-rule entry! ` +
+            `Accept USDCx akan gagal dengan "Missing context entry for transfer-rule". ` +
+            `Kemungkinan: TransferRule contract belum ada di participant untuk instrument ini.`,
+        );
+      }
 
       return {
         choiceContextData: data.choiceContextData ?? { values: {} },
