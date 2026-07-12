@@ -221,10 +221,12 @@ const createdEvent = (entry) => {
   // ── [1] CREDENTIAL ─────────────────────────────────────────────────────
   console.log('\n── [1] CREDENTIAL (holderRequirements) ────────────────────');
   if (credentials.length === 0) {
-    console.log('  ❌ TIDAK ADA credential contract di party ini.');
-    console.log('     Ini BLOCKER: USDCx transfer akan DITOLAK di validation');
-    console.log('     layer, WALAU DAR loaded + 2-step code jalan.');
-    console.log('     FIX: setup credential via registrar USDCx (Circle xReserve).');
+    console.log('  ℹ️  TIDAK ADA contract dengan template mengandung "Credential".');
+    console.log('     PERHATIAN: bisa false negative. Lihat "Template lain" di');
+    console.log('     bawah — credential mungkin punya nama template yang tidak');
+    console.log('     literal "Credential" (mis. HolderCredential, WalletCredential).');
+    console.log('     Kalau USDCx holding ADA + transfer mendarat, kemungkinan');
+    console.log('     credential sebenarnya OK (tidak blocker).');
   } else {
     console.log(`  ✅ DITEMUKAN ${credentials.length} credential contract(s):`);
     for (const c of credentials.slice(0, 10)) {
@@ -233,11 +235,9 @@ const createdEvent = (entry) => {
       const instIdRaw = c.args.instrumentId ?? '';
       const instStr =
         typeof instIdRaw === 'string' ? instIdRaw : (instIdRaw && instIdRaw.id) ?? '';
+      console.log(`     • FULL templateId: ${c.tplId}`);
       console.log(
-        `     • ${c.tplId.slice(0, 60)}…`,
-      );
-      console.log(
-        `       cid=${c.cid.slice(0, 20)}… admin=${String(admin).slice(0, 24)}… inst=${instStr || '(none)'}`,
+        `       cid=${c.cid.slice(0, 24)}… admin=${String(admin).slice(0, 30)}… inst=${instStr || '(none)'}`,
       );
     }
   }
@@ -283,20 +283,32 @@ const createdEvent = (entry) => {
       `  ✅ DITEMUKAN ${preapprovals.length} preapproval contract(s):`,
     );
     for (const p of preapprovals.slice(0, 5)) {
-      const admin = p.args.instrumentAdmin ?? '(none)';
-      const adminStr = typeof admin === 'string' ? admin : JSON.stringify(admin);
-      console.log(
-        `     • tpl=${p.tplId.slice(0, 50)}… cid=${p.cid.slice(0, 20)}… admin=${adminStr.slice(0, 24)}…`,
-      );
+      console.log(`     • FULL templateId: ${p.tplId}`);
+      console.log(`       cid=${p.cid.slice(0, 24)}…`);
+      console.log(`       args=${JSON.stringify(p.args).slice(0, 200)}`);
     }
   }
 
   // ── Pending TransferInstructions (incoming offers) ───────────────────
-  if (transferInstructions.length > 0) {
-    console.log(
-      `\n── PENDING TransferInstructions: ${transferInstructions.length} ─`,
-    );
+  console.log(
+    `\n── PENDING TransferInstructions: ${transferInstructions.length} ─`,
+  );
+  if (transferInstructions.length === 0) {
+    console.log('  (tidak ada offer masuk yang pending)');
+  } else {
     console.log('  (offer masuk yang belum di-accept/reject)');
+    for (const ti of transferInstructions.slice(0, 5)) {
+      const transfer = ti.args.transfer || {};
+      const sender = transfer.sender || '(unknown)';
+      const amount = transfer.amount || '?';
+      const inst = transfer.instrumentId || {};
+      const instId = typeof inst === 'object' ? inst.id : inst;
+      console.log(`     • FULL templateId: ${ti.tplId}`);
+      console.log(`       cid=${ti.cid.slice(0, 24)}…`);
+      console.log(
+        `       sender=${String(sender).slice(0, 30)}… amount=${amount} inst=${instId || '?'}`,
+      );
+    }
   }
 
   // ── Semua template lain (debug) ───────────────────────────────────────
@@ -304,8 +316,8 @@ const createdEvent = (entry) => {
     console.log(
       `\n── Template lain di ACS (${otherTemplates.size} jenis) ──────`,
     );
-    for (const [tpl, count] of [...otherTemplates.entries()].slice(0, 20)) {
-      console.log(`     ${count}× ${tpl.slice(0, 70)}`);
+    for (const [tpl, count] of [...otherTemplates.entries()]) {
+      console.log(`     ${count}× ${tpl}`);
     }
   }
 
@@ -313,18 +325,26 @@ const createdEvent = (entry) => {
   console.log('\n── VERDICT ───────────────────────────────────────────────');
   const hasCredential = credentials.length > 0;
   const hasNonCcHolding = nonCcHoldings.length > 0;
-  if (hasCredential && hasNonCcHolding) {
-    console.log('  ✅ Credential OK + USDCx holding ada.');
-    console.log('     → LANJUT Tahap 2: test P2P 2-step (test-send-token-p2p.cjs).');
+  const hasPendingInstruction = transferInstructions.length > 0;
+  if (hasNonCcHolding) {
+    console.log('  ✅ USDCx HOLDING ADA on-chain (saldo > 0).');
+    console.log('     Bukti kuat: transfer USDCx ke party ini SUDAH BERHASIL');
+    console.log('     mendarat. Credential requirement kemungkinan terpenuhi');
+    console.log('     (walau nama template tidak literal "Credential").');
+    if (hasPendingInstruction) {
+      console.log('  ✅ Ada pending TransferInstruction (offer masuk).');
+      console.log('     → Coba ACCEPT via endpoint /party/offers/accept yang sudah');
+      console.log('       ada. Kalau sukses → 2-step USDCx jalan.');
+    }
+    console.log('  → LANJUT Tahap 2: test P2P 2-step.');
   } else if (hasCredential && !hasNonCcHolding) {
     console.log('  ⚠️  Credential OK, tapi USDCx holding belum ada.');
     console.log('     → Swap CC→USDCx dulu, atau transfer USDCx dari party lain.');
-    console.log('     → Setelah ada holding, lanjut Tahap 2.');
   } else {
-    console.log('  ❌ Credential MISSING.');
-    console.log('     → BLOCKER: USDCx transfer tidak akan jalan sampai');
-    console.log('       credential di-setup. Solve ini DULU sebelum Tahap 2/3.');
-    console.log('       Setup via registrar USDCx (Circle xReserve) — external flow.');
+    console.log('  ℹ️  Credential tidak terdeteksi (kemungkinan false negative).');
+    console.log('     Tidak ada USDCx holding → belum bisa konfirmasi transfer jalan.');
+    console.log('     Cek "Template lain" di atas — cari yang mengandung "Holder",');
+    console.log('     "Wallet", "Registry.App", dll. Itu kandidat credential sebenarnya.');
   }
   console.log('════════════════════════════════════════════════════════════');
 })().catch((e) => {
