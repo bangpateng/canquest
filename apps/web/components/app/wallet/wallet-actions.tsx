@@ -673,7 +673,7 @@ export function WalletActions({
                 {/* Fee notice */}
                 <div className="flex justify-center px-6 py-4">
                   <p className="text-sm font-medium text-slate-400">
-                    <span className="font-semibold text-slate-100">Fee Withdraw : {feeCc} CC</span>
+                    <span className="font-semibold text-slate-100">Withdrawal Fee: {feeCc} CC</span>
                   </p>
                 </div>
 

@@ -1,12 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Fingerprint, Plus, Trash2, RefreshCw, ShieldCheck } from "lucide-react";
+import { Fingerprint, Plus, Trash2, ShieldCheck } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
 import { usePasskey } from "@/lib/hooks/use-passkey";
 import { PasskeyEnrollModal } from "@/components/app/wallet/passkey-enroll-modal";
-import { PasskeyModal } from "@/components/app/wallet/passkey-modal";
 
 /**
  * Settings panel untuk passkey (menggantikan SettingsWalletPasswordPanel).
@@ -21,58 +20,13 @@ import { PasskeyModal } from "@/components/app/wallet/passkey-modal";
  * tidak bisa re-show (safety).
  */
 export function SettingsPasskeyPanel() {
-  const { hasPasskey, credentials, enrollPasskey, removeCredential, refresh } =
-    usePasskey();
+  const { hasPasskey, credentials, removeCredential, refresh } = usePasskey();
   const [enrollOpen, setEnrollOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [verifyOpen, setVerifyOpen] = useState(false);
-  const [verifyAction, setVerifyAction] = useState<
-    "regenerate" | null
-  >(null);
 
   const handleAddDevice = () => {
     setEnrollOpen(true);
-  };
-
-  const handleRegenerateClick = () => {
-    setVerifyAction("regenerate");
-    setVerifyOpen(true);
-  };
-
-  const handleVerified = async (txToken: string) => {
-    setVerifyOpen(false);
-    if (verifyAction === "regenerate") {
-      setBusy(true);
-      setMessage("");
-      try {
-        const res = await fetch("/api/party/passkey/backup/regenerate", {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ txVerification: txToken }),
-        });
-        const data = (await res.json()) as {
-          backupCodes?: string[];
-          message?: string;
-        };
-        if (!res.ok) {
-          setMessage(data.message ?? "Regenerate failed.");
-        } else {
-          // Copy ke clipboard + tampilkan.
-          const codes = data.backupCodes ?? [];
-          setMessage(
-            `New backup codes generated (${codes.length}). Copied to clipboard — save them now.`,
-          );
-          void navigator.clipboard.writeText(codes.join("\n"));
-        }
-      } catch {
-        setMessage("Network error. Try again.");
-      } finally {
-        setBusy(false);
-        setVerifyAction(null);
-      }
-    }
   };
 
   const handleRemove = async (credentialId: string) => {
@@ -167,16 +121,6 @@ export function SettingsPasskeyPanel() {
         >
           <Plus className="h-4 w-4" /> Add device
         </button>
-        {hasPasskey && (
-          <button
-            type="button"
-            onClick={handleRegenerateClick}
-            disabled={busy}
-            className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "gap-2")}
-          >
-            <RefreshCw className="h-4 w-4" /> Regenerate backup codes
-          </button>
-        )}
       </div>
 
       {message && (
@@ -209,16 +153,6 @@ export function SettingsPasskeyPanel() {
           void refresh();
           setMessage("Passkey added.");
         }}
-      />
-      <PasskeyModal
-        open={verifyOpen}
-        actionLabel="Regenerate Backup Codes"
-        busy={busy}
-        onClose={() => {
-          setVerifyOpen(false);
-          setVerifyAction(null);
-        }}
-        onVerified={(tok) => void handleVerified(tok)}
       />
     </section>
   );

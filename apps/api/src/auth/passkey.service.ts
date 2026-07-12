@@ -184,7 +184,7 @@ export class PasskeyService {
     userId: string,
     response: RegistrationResponseJSON,
     deviceLabel?: string,
-  ): Promise<{ credentialId: string; backupCodes: string[] | null }> {
+  ): Promise<{ credentialId: string }> {
     const entry = this.regChallenges.get(userId);
     if (!entry || entry.expiresAt < Date.now()) {
       throw new ForbiddenException(
@@ -245,18 +245,19 @@ export class PasskeyService {
         where: { id: userId },
         data: { passkeyEnrolledAt: new Date() },
       });
-      // Generate backup codes (plaintext return sekali saja).
-      const codes = await this.generateBackupCodesInternal(userId);
+      // Generate backup codes internal (TIDAK ditampilkan ke user — untuk
+      // admin recovery flow nanti). User experience: setup passkey → selesai.
+      await this.generateBackupCodesInternal(userId);
       this.logger.log(
-        `Passkey enrolled (first) for user ${userId.slice(0, 8)} — ${BACKUP_CODE_COUNT} backup codes generated`,
+        `Passkey enrolled (first) for user ${userId.slice(0, 8)} — ${BACKUP_CODE_COUNT} backup codes generated internally`,
       );
-      return { credentialId: info.credentialID, backupCodes: codes };
+      return { credentialId: info.credentialID };
     }
 
     this.logger.log(
       `Additional passkey enrolled for user ${userId.slice(0, 8)} (total now >1)`,
     );
-    return { credentialId: info.credentialID, backupCodes: null };
+    return { credentialId: info.credentialID };
   }
 
   /** Hapus credential (device) — user remove device di Settings. */
@@ -356,24 +357,25 @@ export class PasskeyService {
       throw new ForbiddenException('Authentication not verified.');
     }
 
-    // Clone-detection: counter harus strictly increasing.
+    // Counter handling: banyak platform authenticator (Face ID/Touch ID/Windows
+    // Hello) TIDAK increment counter (selalu 0). Jadi clone-detection via counter
+    // tidak reliable untuk mereka. Strategi aman: simpan max(stored, new). Kalau
+    // newCounter < stored, log warning (anomali) tapi JANGAN hapus credential —
+    // false positive akan lock user dari wallet mereka (bug serius).
     const newCounter = verification.authenticationInfo.newCounter;
-    if (newCounter <= cred.counter) {
-      this.logger.error(
-        `Passkey CLONE DETECTED for user ${userId.slice(0, 8)}! ` +
-          `stored counter=${cred.counter} new=${newCounter}. Revoke credential.`,
-      );
-      // Revoke: hapus credential (kemungkinan di-clone).
-      await this.prisma.passkeyCredential.delete({ where: { id: cred.id } });
-      throw new ForbiddenException(
-        'Security alert: credential may be cloned. Removed. Re-enroll device.',
+    if (newCounter !== cred.counter && newCounter < cred.counter) {
+      this.logger.warn(
+        `Passkey counter anomaly for user ${userId.slice(0, 8)}: ` +
+          `stored=${cred.counter} new=${newCounter}. Keeping credential ` +
+          `(platform authenticators may not increment counter).`,
       );
     }
+    const effectiveCounter = Math.max(cred.counter, newCounter);
 
     // Update counter + lastUsedAt.
     await this.prisma.passkeyCredential.update({
       where: { id: cred.id },
-      data: { counter: newCounter, lastUsedAt: new Date() },
+      data: { counter: effectiveCounter, lastUsedAt: new Date() },
     });
 
     // Issue verification token (short-lived JWT).

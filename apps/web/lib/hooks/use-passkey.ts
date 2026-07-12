@@ -76,10 +76,10 @@ export function usePasskey(options: { enabled?: boolean } = {}) {
   /**
    * Enroll passkey baru (registration ceremony).
    * @param deviceLabel - optional label (mis. "iPhone 15")
-   * @returns backup codes (10 kode) HANYA kalau first enrollment; null kalau add device.
+   * Backup codes generated internally (not returned to UI).
    */
   const enrollPasskey = useCallback(
-    async (deviceLabel?: string): Promise<string[] | null> => {
+    async (deviceLabel?: string): Promise<void> => {
       // 1. Get registration options (challenge).
       const optsRes = await fetch(
         "/api/party/passkey/registration/options",
@@ -104,7 +104,6 @@ export function usePasskey(options: { enabled?: boolean } = {}) {
         },
       );
       const result = (await verifyRes.json()) as {
-        backupCodes?: string[] | null;
         message?: string;
       };
       if (!verifyRes.ok) {
@@ -113,7 +112,6 @@ export function usePasskey(options: { enabled?: boolean } = {}) {
 
       // Refresh status (hasPasskey = true sekarang).
       void refresh();
-      return result.backupCodes ?? null;
     },
     [refresh],
   );
