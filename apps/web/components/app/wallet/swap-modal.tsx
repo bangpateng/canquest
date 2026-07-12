@@ -32,6 +32,9 @@ interface SwapToken {
 interface PoolsResponse {
   tokens: SwapToken[];
 }
+// NOTE: SwapToken/PoolsResponse juga didefinisikan di lib/canton/token-types.ts
+// sebagai WalletToken/PoolsResponse (shared). Dibiarkan lokal di sini untuk
+// minim churn di file besar; token-types.ts dipakai fitur baru (send-token).
 
 interface QuoteResponse {
   sellAmount: string;

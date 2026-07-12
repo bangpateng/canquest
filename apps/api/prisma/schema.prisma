@@ -89,6 +89,8 @@ model User {
   earnEntries             EarnEntry[]
   /// Off-chain custody: saldo token non-CC user di Cantex trading account shared.
   cantexTokenBalances     CantexTokenBalance[]
+  /// Riwayat P2P transfer token non-CC on-chain (CIP-0056 two-step).
+  tokenTransactions       TokenTransaction[]
   /// Riwayat swap CC ↔ token Cantex DEX.
   swapTransactions        SwapTransaction[]
   /// Delivery token/CC tertunda dari swap yang gagal di-deliver on-chain.
@@ -265,6 +267,57 @@ model CantexTokenBalance {
 
   @@unique([userId, instrumentId, instrumentAdmin])
   @@index([userId])
+}
+
+/// Riwayat P2P transfer token non-CC on-chain (CIP-0056 two-step).
+/// CcTransaction strictly CC (amountMicroCc, no instrument field) — menumpang
+/// amount token non-CC di situ akan corrupt audit trail & reconcile CC. Model
+/// ini instrument-aware: amount pakai Decimal(38,18) sesuai Cantex API.
+///
+/// Sumber kebenaran saldo token = ON-CHAIN (queryTokenHoldings). CantexTokenBalance
+/// (DB) jadi cache/UI-only — BUKAN dipakai untuk validate send-token.
+model TokenTransaction {
+  id                     String       @id @default(cuid())
+  userId                 String
+  user                   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Cantex instrument id, mis. "USDCX", "TokenX". "Amulet" jika dipakai untuk CC.
+  instrumentId           String
+  /// Cantex instrument admin party, mis. "DSO::1220...".
+  instrumentAdmin        String
+  /// Jumlah token (positive = credit masuk, negatif = debit keluar). Decimal-string compatible.
+  amount                 Decimal      @db.Decimal(38, 18)
+  type                   TokenTxType
+  description            String?
+  /// Reference (counterparty party id, contract id, dsb).
+  referenceId            String?
+  /// Offer / contract ID on Canton (TransferInstruction contract id).
+  ledgerTxId             String?
+  /// Ledger update ID dari submit-and-wait (CantonScan link).
+  cantonUpdateId         String?
+  transferInstructionCid String?
+  status                 String       @default("COMPLETED") // COMPLETED | PENDING | REJECTED
+  createdAt              DateTime     @default(now())
+
+  @@unique([userId, ledgerTxId])
+  @@index([cantonUpdateId])
+  @@index([transferInstructionCid])
+  @@index([userId, instrumentId, instrumentAdmin])
+}
+
+/// Tipe event TokenTransaction (P2P token transfer on-chain, CIP-0056).
+enum TokenTxType {
+  /// Sender mengirim token (offer dibuat di on-chain).
+  TOKEN_TRANSFER_OUT
+  /// Receiver menerima token setelah accept TransferInstruction.
+  TOKEN_TRANSFER_IN
+  /// Offer dibuat, menunggu accept (intermediate state, opional).
+  TOKEN_OFFER_PENDING
+  /// Receiver menolak TransferInstruction (token kembali ke sender).
+  TOKEN_OFFER_REJECTED
+  /// Sender menarik kembali TransferInstruction yang belum di-accept.
+  TOKEN_OFFER_WITHDRAWN
+  /// Fee CC keluar untuk P2P token transfer (fee in CC, reuse TRANSACTION_FEE_CC).
+  TOKEN_FEE_OUT
 }
 
 /// Audit trail lengkap untuk setiap swap CC ↔ token Cantex DEX (multi-leg).

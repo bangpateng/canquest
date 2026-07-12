@@ -53,6 +53,7 @@ import { WalletInviteCodeService } from './wallet-invite-code.service';
 import { AllocateWalletDto } from './dto/allocate-wallet.dto';
 import { CantonPartyBindingDto } from './dto/canton-party-binding.dto';
 import { SendCcDto } from './dto/send-cc.dto';
+import { SendTokenDto } from './dto/send-token.dto';
 import { LockCcDto } from './dto/lock-cc.dto';
 import { UnlockCcDto } from './dto/unlock-cc.dto';
 import { SetUsernameDto } from './dto/set-username.dto';
@@ -1137,18 +1138,51 @@ export class PartyController {
       );
     }
 
+    // Resolve instrument SEBELUM reject punya masalah (offer hilang setelah reject,
+    // tapi rejectTransferInstruction sudah terlanjur exercise di atas — lookup mungkin
+    // null, fallback default CC). Branch: non-CC → TokenTransaction, CC → CcTransaction.
+    let rejectInstrumentId = 'Amulet';
+    let rejectInstrumentAdmin = '';
+    try {
+      const detail = await this.ledger.lookupOfferDetail(
+        cid,
+        user.cantonPartyId,
+      );
+      if (detail) {
+        rejectInstrumentId = detail.instrumentId || 'Amulet';
+        rejectInstrumentAdmin = detail.instrumentAdmin || '';
+      }
+    } catch {
+      /* offer sudah hilang post-exercise — default CC */
+    }
+    const rejectIsNonCc = rejectInstrumentId.toLowerCase() !== 'amulet';
+
     // Catat history (tx id ASLI dari exercise). Non-fatal: onchain reject tetap
     // sukses walau pencatatan gagal — gap "terkirim tapi history gagal" dihindari.
     try {
-      await this.users.recordTransaction({
-        userId: user.id,
-        amountCc: 0,
-        type: 'OFFER_REJECTED',
-        description: 'Rejected incoming CC transfer',
-        referenceId: cid,
-        ledgerTxId: result.updateId ?? cid,
-        cantonUpdateId: result.updateId ?? undefined,
-      });
+      if (rejectIsNonCc) {
+        await this.users.recordTokenTransaction({
+          userId: user.id,
+          instrumentId: rejectInstrumentId,
+          instrumentAdmin: rejectInstrumentAdmin,
+          amount: 0,
+          type: 'TOKEN_OFFER_REJECTED',
+          description: `Rejected incoming ${rejectInstrumentId} transfer`,
+          referenceId: cid,
+          ledgerTxId: result.updateId ?? cid,
+          cantonUpdateId: result.updateId ?? undefined,
+        });
+      } else {
+        await this.users.recordTransaction({
+          userId: user.id,
+          amountCc: 0,
+          type: 'OFFER_REJECTED',
+          description: 'Rejected incoming CC transfer',
+          referenceId: cid,
+          ledgerTxId: result.updateId ?? cid,
+          cantonUpdateId: result.updateId ?? undefined,
+        });
+      }
     } catch (err) {
       this.logger.warn(
         `OFFER_REJECTED history record failed (cid=${cid.slice(0, 16)}): ${String(err)}`,
@@ -1158,7 +1192,9 @@ export class PartyController {
     return {
       ok: true,
       updateId: result.updateId,
-      message: 'Transfer rejected. CC returned to sender.',
+      message: rejectIsNonCc
+        ? `Transfer rejected. ${rejectInstrumentId} returned to sender.`
+        : 'Transfer rejected. CC returned to sender.',
     };
   }
 
@@ -1193,17 +1229,49 @@ export class PartyController {
       );
     }
 
+    // Resolve instrument (offer sudah hilang post-exercise — lookup mungkin null,
+    // fallback default CC). Branch: non-CC → TokenTransaction, CC → CcTransaction.
+    let withdrawInstrumentId = 'Amulet';
+    let withdrawInstrumentAdmin = '';
+    try {
+      const detail = await this.ledger.lookupOfferDetail(
+        cid,
+        user.cantonPartyId,
+      );
+      if (detail) {
+        withdrawInstrumentId = detail.instrumentId || 'Amulet';
+        withdrawInstrumentAdmin = detail.instrumentAdmin || '';
+      }
+    } catch {
+      /* offer sudah hilang post-exercise — default CC */
+    }
+    const withdrawIsNonCc = withdrawInstrumentId.toLowerCase() !== 'amulet';
+
     // Catat history (tx id ASLI dari exercise). Non-fatal.
     try {
-      await this.users.recordTransaction({
-        userId: user.id,
-        amountCc: 0,
-        type: 'OFFER_WITHDRAWN',
-        description: 'Cancelled outgoing CC transfer',
-        referenceId: cid,
-        ledgerTxId: result.updateId ?? cid,
-        cantonUpdateId: result.updateId ?? undefined,
-      });
+      if (withdrawIsNonCc) {
+        await this.users.recordTokenTransaction({
+          userId: user.id,
+          instrumentId: withdrawInstrumentId,
+          instrumentAdmin: withdrawInstrumentAdmin,
+          amount: 0,
+          type: 'TOKEN_OFFER_WITHDRAWN',
+          description: `Cancelled outgoing ${withdrawInstrumentId} transfer`,
+          referenceId: cid,
+          ledgerTxId: result.updateId ?? cid,
+          cantonUpdateId: result.updateId ?? undefined,
+        });
+      } else {
+        await this.users.recordTransaction({
+          userId: user.id,
+          amountCc: 0,
+          type: 'OFFER_WITHDRAWN',
+          description: 'Cancelled outgoing CC transfer',
+          referenceId: cid,
+          ledgerTxId: result.updateId ?? cid,
+          cantonUpdateId: result.updateId ?? undefined,
+        });
+      }
     } catch (err) {
       this.logger.warn(
         `OFFER_WITHDRAWN history record failed (cid=${cid.slice(0, 16)}): ${String(err)}`,
@@ -1217,8 +1285,330 @@ export class PartyController {
     return {
       ok: true,
       updateId: result.updateId,
-      message: 'Transfer cancelled. CC returned to your wallet.',
+      message: withdrawIsNonCc
+        ? `Transfer cancelled. ${withdrawInstrumentId} returned to your wallet.`
+        : 'Transfer cancelled. CC returned to your wallet.',
     };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // P2P Token Transfer (non-CC) — CIP-0056 on-chain two-step
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * POST /party/send-token — kirim token non-CC (USDCx, dll) ke user lain via
+   * CIP-0056 on-chain two-step. Token CC (Amulet) HARUS pakai /send-cc.
+   *
+   * Berbeda dari CC, token non-CC tidak ada TransferPreapproval → transferKind
+   * hampir pasti "offer": TransferInstruction UTXO dibuat, receiver harus klik
+   * Accept via /party/offers/accept. Holdings sender ON-CHAIN langsung ter-consume.
+   *
+   * Sumber kebenaran saldo = ON-CHAIN (queryTokenHoldings), BUKAN CantexTokenBalance
+   * (DB) yang bisa drift (swap selalu kredit DB walau on-chain gagal).
+   *
+   * Fee in CC (reuse TRANSACTION_FEE_CC) — non-blocking, mirror sendCc.
+   */
+  @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
+  @Post('send-token')
+  async sendToken(@Req() req: AuthedReq, @Body() body: SendTokenDto) {
+    const sender = await this.users.findById(req.user.userId);
+    if (!sender?.username || !sender.cantonPartyId) {
+      throw new BadRequestException(
+        'You need a wallet to send tokens. Create yours first.',
+      );
+    }
+    if (!hasRealWallet(sender.cantonPartyId)) {
+      throw new BadRequestException(
+        'No wallet found. Create your wallet first.',
+      );
+    }
+
+    // Wallet password gate (opsional, mirror sendCc).
+    await this.walletPassword.assertGate(sender.id, body.walletPassword);
+
+    // Per-user mutex: cegah dua transfer konkuren dari user yang sama
+    // (multi-tab / double-click / nonce beda). Reuse sendCcInFlight supaya user
+    // tidak bisa kirim CC + token konkuren sekaligus.
+    if (this.sendCcInFlight.has(sender.id)) {
+      throw new ConflictException(
+        'You have a transfer in progress. Please wait for it to complete.',
+      );
+    }
+    this.sendCcInFlight.add(sender.id);
+    try {
+      const amount = Number(body.amount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        throw new BadRequestException('Amount must be greater than 0.');
+      }
+
+      // CC tidak boleh lewat sini — CC pakai /send-cc (preapproval, fee path CC).
+      const instrumentId = body.instrumentId.trim();
+      const instrumentAdmin = body.instrumentAdmin.trim();
+      if (instrumentId.toLowerCase() === 'amulet') {
+        throw new BadRequestException(
+          'Use /send-cc for Canton Coin (CC) transfers.',
+        );
+      }
+      if (!instrumentId || !instrumentAdmin) {
+        throw new BadRequestException(
+          'instrumentId and instrumentAdmin are required for token transfer.',
+        );
+      }
+
+      // ── Resolve recipient (username atau party id) — mirror sendCc ────
+      const recipientInput = body.recipientUsername?.trim();
+      if (!recipientInput) {
+        throw new BadRequestException('Recipient is required.');
+      }
+
+      let recipientPartyId: string;
+      let recipientLabel: string;
+
+      if (looksLikeCantonPartyId(recipientInput)) {
+        const normalizedRecipient = normalizeCantonPartyId(recipientInput);
+        if (!normalizedRecipient) {
+          throw new BadRequestException('Invalid Party ID format.');
+        }
+        if (cantonPartyIdsEqual(normalizedRecipient, sender.cantonPartyId)) {
+          throw new BadRequestException('You cannot send tokens to yourself.');
+        }
+        if (this.isSystemPartyId(normalizedRecipient)) {
+          this.logger.warn(
+            `Blocked send-token to system party: user=${sender.id.slice(0, 8)} target=${normalizedRecipient.split('::')[0]} amount=${amount} ${instrumentId}`,
+          );
+          throw new BadRequestException(
+            'Transfers to platform wallets are not allowed.',
+          );
+        }
+        recipientPartyId = normalizedRecipient;
+        recipientLabel =
+          normalizedRecipient.split('::')[0] ?? normalizedRecipient;
+      } else {
+        const username = recipientInput.replace(/^@/, '').toLowerCase();
+        if (username === sender.username?.toLowerCase()) {
+          throw new BadRequestException('You cannot send tokens to yourself.');
+        }
+        const dbUser = await this.users.findByUsernameInsensitive(username);
+        const resolved =
+          dbUser?.cantonPartyId ?? (await this.splice.getUserPartyId(username));
+        if (!resolved) {
+          throw new BadRequestException(
+            `User "@${username}" not found or has no wallet.`,
+          );
+        }
+        recipientPartyId = normalizeCantonPartyId(resolved) ?? resolved;
+        if (this.isSystemPartyId(recipientPartyId)) {
+          this.logger.warn(
+            `Blocked send-token to system wallet via @${username}: user=${sender.id.slice(0, 8)} amount=${amount} ${instrumentId}`,
+          );
+          throw new BadRequestException(
+            'Transfers to platform wallets are not allowed.',
+          );
+        }
+        recipientLabel = `@${username}`;
+      }
+
+      const description =
+        body.memo?.trim() ||
+        `Sent ${amount} ${instrumentId} to ${recipientLabel}`;
+
+      // ── Balance pre-check ON-CHAIN (sumber kebenaran untuk token non-CC) ──
+      // CantexTokenBalance (DB) bisa drift (swap kredit DB walau on-chain gagal)
+      // → jangan dipakai untuk validate send-token. queryTokenHoldings membaca
+      // ACS on-chain: sum amount holdings sender untuk (instrumentId, admin).
+      let onChainBalance = 0;
+      try {
+        const holdings = await this.ledger.queryTokenHoldings(
+          sender.cantonPartyId,
+          instrumentId,
+          instrumentAdmin,
+        );
+        onChainBalance = holdings.reduce(
+          (sum, h) => sum + Number(h.amount || 0),
+          0,
+        );
+      } catch (err) {
+        this.logger.warn(
+          `queryTokenHoldings failed for send-token pre-check: ${String(err)} — proceeding (ledger akan reject bila dana kurang)`,
+        );
+      }
+
+      const feeCc = Number(
+        this.config.get<string>('TRANSACTION_FEE_CC') ?? '5',
+      );
+
+      if (onChainBalance > 0 && onChainBalance < amount) {
+        throw new BadRequestException(
+          `Insufficient on-chain ${instrumentId} balance. Need ${amount}, have ${onChainBalance.toFixed(6)}.`,
+        );
+      }
+
+      // CC fee pre-check (DB cache — fast path). Fee in CC, jadi sender butuh CC.
+      if (feeCc > 0) {
+        const dbCcBal = await this.prisma.ccBalance.findUnique({
+          where: { userId: sender.id },
+          select: { balanceMicroCc: true },
+        });
+        const cachedCc = dbCcBal
+          ? Number(dbCcBal.balanceMicroCc) / 1_000_000
+          : 0;
+        if (cachedCc < feeCc) {
+          throw new BadRequestException(
+            `Insufficient CC for fee. Need ${feeCc} CC (platform fee for token transfer).`,
+          );
+        }
+      }
+
+      // ── MAIN TRANSFER via CIP-0056 (on-chain, two-step) ───────────────
+      this.logger.log(
+        `send-token: ${sender.username} → ${recipientLabel} ${amount} ${instrumentId} ` +
+          `(admin=${instrumentAdmin.slice(0, 12)}...) nonce=${body.clientNonce.slice(0, 8)}`,
+      );
+
+      const cip56Result = await this.ledger.executeTransferFactoryTransfer({
+        senderPartyId: sender.cantonPartyId,
+        receiverPartyId: recipientPartyId,
+        amountCc: amount,
+        description,
+        clientNonce: body.clientNonce,
+        instrumentId,
+        instrumentAdmin,
+      });
+
+      if (!cip56Result.ok) {
+        throw new BadRequestException(
+          `Token transfer failed: ${cip56Result.error?.slice(0, 160) ?? 'unknown error'}`,
+        );
+      }
+
+      const ledgerTxId = cip56Result.updateId ?? undefined;
+      const transferInstructionCid =
+        cip56Result.transferInstructionCid ?? undefined;
+
+      // Untuk non-CC, transferKind hampir pasti "offer" (no preapproval).
+      // Offer dibuat = transfer utama SUDAH submitted on-chain → fee applicable.
+      const submitted =
+        cip56Result.transferKind === 'offer' ||
+        cip56Result.transferKind === 'direct';
+
+      this.logger.log(
+        `send-token OK: ${sender.username} → ${recipientLabel} ${amount} ${instrumentId} ` +
+          `kind=${cip56Result.transferKind}` +
+          (transferInstructionCid
+            ? ` instructionCid=${transferInstructionCid.slice(0, 16)}...`
+            : '') +
+          ` — recipient must accept via Offers menu`,
+      );
+
+      // ── Record history (TokenTransaction, instrument-aware) ───────────
+      let transactionId: string | undefined;
+      try {
+        const row = await this.users.recordTokenTransaction({
+          userId: sender.id,
+          instrumentId,
+          instrumentAdmin,
+          amount,
+          type: 'TOKEN_TRANSFER_OUT',
+          description,
+          referenceId: `to:${normalizeCantonPartyId(recipientPartyId) ?? recipientPartyId}`,
+          ledgerTxId: ledgerTxId ?? transferInstructionCid,
+          cantonUpdateId: ledgerTxId ?? undefined,
+          status: 'PENDING', // offer belum di-accept receiver
+          transferInstructionCid: transferInstructionCid ?? null,
+        });
+        transactionId = row.id;
+      } catch (err) {
+        this.logger.warn(
+          `TOKEN_TRANSFER_OUT history record failed: ${String(err)}`,
+        );
+      }
+
+      // ── FEE COLLECT (CC, non-blocking, mirror sendCc) ─────────────────
+      let feeCollected = false;
+      if (feeCc > 0 && submitted) {
+        const validatorPartyId =
+          this.config.get<string>('CANTON_VALIDATOR_PARTY_ID') ?? '';
+        const feeParty =
+          this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
+          validatorPartyId;
+        if (feeParty) {
+          try {
+            const feeResult = await this.ledger.executeTransferFactoryTransfer({
+              senderPartyId: sender.cantonPartyId,
+              receiverPartyId: feeParty,
+              amountCc: feeCc,
+              description: `Platform fee: ${recipientLabel} (${instrumentId})`,
+            });
+            if (feeResult.ok && feeResult.transferKind === 'direct') {
+              feeCollected = true;
+              await this.users.recordTransaction({
+                userId: sender.id,
+                amountCc: feeCc,
+                type: 'TRANSFER_OUT',
+                description: `Platform fee (token transfer to ${recipientLabel})`,
+                referenceId: `fee:${normalizeCantonPartyId(feeParty) ?? feeParty}`,
+                ledgerTxId: feeResult.updateId ?? undefined,
+                cantonUpdateId: feeResult.updateId ?? undefined,
+              });
+            } else if (
+              feeResult.ok &&
+              feeResult.transferKind === 'offer' &&
+              feeResult.transferInstructionCid
+            ) {
+              // Fee offer perlu di-accept oleh fee party (auto, mirror sendCc:836).
+              const acceptR = await this.ledger.acceptTransferInstruction(
+                feeResult.transferInstructionCid,
+                feeParty,
+              );
+              if (acceptR.ok) {
+                feeCollected = true;
+                await this.users.recordTransaction({
+                  userId: sender.id,
+                  amountCc: feeCc,
+                  type: 'TRANSFER_OUT',
+                  description: `Platform fee (token transfer to ${recipientLabel})`,
+                  referenceId: `fee:${normalizeCantonPartyId(feeParty) ?? feeParty}`,
+                  ledgerTxId:
+                    acceptR.updateId ?? feeResult.updateId ?? undefined,
+                  cantonUpdateId:
+                    acceptR.updateId ?? feeResult.updateId ?? undefined,
+                });
+              } else {
+                this.logger.warn(
+                  `Fee offer accept failed (token transfer): transfer proceeds without fee`,
+                );
+              }
+            }
+          } catch (feeErr) {
+            this.logger.warn(
+              `Fee collect error (token transfer, non-blocking): ${String(feeErr)}`,
+            );
+          }
+        }
+      }
+
+      return {
+        ok: true,
+        success: true,
+        instrumentId,
+        amount,
+        from: sender.username,
+        to: recipientLabel,
+        fee: feeCc,
+        feeCollected,
+        transferKind: cip56Result.transferKind,
+        transferInstructionCid,
+        offerPending: cip56Result.transferKind === 'offer',
+        transactionId,
+        message:
+          cip56Result.transferKind === 'offer'
+            ? `Sent ${amount} ${instrumentId} to ${recipientLabel}. Recipient must accept via Offers menu. Offer ID: ${transferInstructionCid?.slice(0, 20) ?? ledgerTxId?.slice(0, 20) ?? '?'}…`
+            : `Sent ${amount} ${instrumentId} to ${recipientLabel}.`,
+      };
+    } finally {
+      // Fund-safety: wajib release lock di SEMUA jalur keluar.
+      this.sendCcInFlight.delete(sender.id);
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1254,6 +1644,9 @@ export class PartyController {
           description: 'Incoming transfer (Splice Wallet)',
           expiresAt: '',
           createdAt: '',
+          // Splice fallback tidak expose instrument → default CC.
+          instrumentId: 'Amulet',
+          instrumentAdmin: '',
         }));
         this.logger.log(
           `Fallback Splice: ${offers.length} offers for @${user.username}`,
@@ -1312,9 +1705,11 @@ export class PartyController {
     );
 
     // Lookup detail offer SEBELUM accept — setelah accept, offer hilang dari ledger.
-    // amount + sender ini dipakai untuk catat TRANSFER_IN yang truthful di history.
+    // amount + sender + instrument ini dipakai untuk catat history yang truthful.
     let amountCc = 0;
     let senderLabel = '';
+    let offerInstrumentId = 'Amulet';
+    let offerInstrumentAdmin = '';
     try {
       const detail = await this.ledger.lookupOfferDetail(
         cid,
@@ -1323,10 +1718,13 @@ export class PartyController {
       if (detail) {
         amountCc = parseFloat(detail.amount) || 0;
         senderLabel = detail.sender?.split('::')[0] ?? detail.sender ?? '';
+        offerInstrumentId = detail.instrumentId || 'Amulet';
+        offerInstrumentAdmin = detail.instrumentAdmin || '';
       }
     } catch (err) {
       this.logger.warn(`lookupOfferDetail (accept) failed: ${String(err)}`);
     }
+    const isNonCcToken = offerInstrumentId.toLowerCase() !== 'amulet';
 
     let ok = false;
     let updateId: string | null = null;
@@ -1376,74 +1774,100 @@ export class PartyController {
       // TRANSFER_IN untuk penerima di bawah.
     }
 
-    // ── PENERIMA selalu dapat history TRANSFER_IN saat accept (Fix UX) ──
-    // Sebelumnya: recordTransaction TRANSFER_IN hanya jalan kalau
-    // settledOwnReward === 0. Tapi markTransferInstructionSettled match row
-    // PENDING global (milik SENDER, via transferInstructionCid) → return >0 →
-    // blok ini di-skip → PENERIMA tidak dapat history. Cegah double via unique
-    // constraint @@unique([userId, ledgerTxId]), bukan via settledOwnReward.
+    // ── PENERIMA selalu dapat history saat accept (Fix UX) ──────────────
+    // Branch: token non-CC → TokenTransaction (instrument-aware); CC → CcTransaction.
     {
-      // Bila lookupOfferDetail gagal (amountCc = 0), coba tebus nilai asli dari
-      // delta balance on-chain supaya history tidak menampilkan "Received 0 CC".
-      let resolvedAmount = amountCc;
-      if (resolvedAmount === 0) {
+      if (isNonCcToken) {
+        // Token non-CC: catat ke TokenTransaction. amount = amountCc (decimal,
+        // bukan micro). CC balance delta tidak relevan — lewati resolve-delta.
+        const kindLabel =
+          offerType === OfferType.TRANSFER_INSTRUCTION ? 'CIP-0056' : 'legacy';
         try {
-          const afterBal = await this.ledger.getLedgerBalance(
-            user.cantonPartyId,
-          );
-          if (afterBal != null) {
-            const beforeRow = await this.prisma.ccBalance.findUnique({
-              where: { userId: user.id },
-            });
-            const beforeCc = beforeRow
-              ? Number(beforeRow.balanceMicroCc) / 1_000_000
-              : 0;
-            resolvedAmount = Math.max(
-              0,
-              Math.round((afterBal - beforeCc) * 1e6) / 1e6,
-            );
-          }
+          await this.users.recordTokenTransaction({
+            userId: user.id,
+            instrumentId: offerInstrumentId,
+            instrumentAdmin: offerInstrumentAdmin,
+            amount: amountCc,
+            type: 'TOKEN_TRANSFER_IN',
+            description:
+              amountCc > 0
+                ? `Received ${amountCc} ${offerInstrumentId}${senderLabel ? ` from ${senderLabel}` : ''}`
+                : `Accepted incoming ${kindLabel} ${offerInstrumentId} transfer`,
+            referenceId: senderLabel || undefined,
+            ledgerTxId: updateId ?? cid,
+            cantonUpdateId: updateId ?? undefined,
+          });
         } catch (err) {
+          // P2002 = idempotent retry → OK. Error lain = audit loss (non-fatal).
           this.logger.warn(
-            `balance-delta amount resolve failed: ${String(err)}`,
+            `Recipient TOKEN_TRANSFER_IN on accept failed (cid=${cid.slice(0, 16)}…): ${String(err)}`,
           );
         }
-      }
+      } else {
+        // CC: jalur lama — resolve amount via delta balance on-chain kalau 0.
+        let resolvedAmount = amountCc;
+        if (resolvedAmount === 0) {
+          try {
+            const afterBal = await this.ledger.getLedgerBalance(
+              user.cantonPartyId,
+            );
+            if (afterBal != null) {
+              const beforeRow = await this.prisma.ccBalance.findUnique({
+                where: { userId: user.id },
+              });
+              const beforeCc = beforeRow
+                ? Number(beforeRow.balanceMicroCc) / 1_000_000
+                : 0;
+              resolvedAmount = Math.max(
+                0,
+                Math.round((afterBal - beforeCc) * 1e6) / 1e6,
+              );
+            }
+          } catch (err) {
+            this.logger.warn(
+              `balance-delta amount resolve failed: ${String(err)}`,
+            );
+          }
+        }
 
-      const kindLabel =
-        offerType === OfferType.TRANSFER_INSTRUCTION ? 'CIP-0056' : 'legacy';
-      try {
-        await this.users.recordTransaction({
-          userId: user.id,
-          amountCc: resolvedAmount,
-          type: 'TRANSFER_IN',
-          description:
-            resolvedAmount > 0
-              ? `Received ${resolvedAmount} CC${senderLabel ? ` from ${senderLabel}` : ''}`
-              : `Accepted incoming ${kindLabel} transfer`,
-          counterparty: senderLabel || undefined,
-          // Preferensi Canton update_id ("1220…") untuk link explorer; fallback
-          // contract_id (cid) bila ledger response tidak ter-parse.
-          ledgerTxId: updateId ?? cid,
-          cantonUpdateId: updateId ?? undefined,
-        });
-      } catch (err) {
-        // Unique constraint (P2002) = row sudah ada (idempotent retry) → OK.
-        // Error lain = audit-trail loss untuk penerima; balance self-heal via sync.
-        this.logger.warn(
-          `Recipient TRANSFER_IN on accept failed (cid=${cid.slice(0, 16)}…): ${String(err)}`,
-        );
+        const kindLabel =
+          offerType === OfferType.TRANSFER_INSTRUCTION ? 'CIP-0056' : 'legacy';
+        try {
+          await this.users.recordTransaction({
+            userId: user.id,
+            amountCc: resolvedAmount,
+            type: 'TRANSFER_IN',
+            description:
+              resolvedAmount > 0
+                ? `Received ${resolvedAmount} CC${senderLabel ? ` from ${senderLabel}` : ''}`
+                : `Accepted incoming ${kindLabel} transfer`,
+            counterparty: senderLabel || undefined,
+            // Preferensi Canton update_id ("1220…") untuk link explorer; fallback
+            // contract_id (cid) bila ledger response tidak ter-parse.
+            ledgerTxId: updateId ?? cid,
+            cantonUpdateId: updateId ?? undefined,
+          });
+        } catch (err) {
+          // Unique constraint (P2002) = row sudah ada (idempotent retry) → OK.
+          // Error lain = audit-trail loss untuk penerima; balance self-heal via sync.
+          this.logger.warn(
+            `Recipient TRANSFER_IN on accept failed (cid=${cid.slice(0, 16)}…): ${String(err)}`,
+          );
+        }
       }
     }
 
     if (user.username) {
+      // CC balance self-heal (token non-CC tidak terpengaruh — aman dipanggil).
       void this.inboundSync.alignBalanceFromChain(user.id, user.username);
     }
 
     return {
       ok: true,
       updateId,
-      message: 'Transfer accepted. CC will appear in your wallet shortly.',
+      message: isNonCcToken
+        ? `Transfer accepted. ${offerInstrumentId} will appear in your wallet shortly.`
+        : 'Transfer accepted. CC will appear in your wallet shortly.',
     };
   }
 
@@ -2772,9 +3196,7 @@ export class PartyController {
           feeInstrument: quote.fees.instrument,
           networkFeeInstrument: quote.fees.networkFee.instrument,
           platformFee: String(
-            Number(
-              this.config.get<string>('SWAP_PLATFORM_FEE_CC') ?? '0',
-            ),
+            Number(this.config.get<string>('SWAP_PLATFORM_FEE_CC') ?? '0'),
           ),
         },
         prices: {

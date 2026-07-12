@@ -8,6 +8,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { iconButtonClass } from "@/lib/ui/ui-button-styles";
 import { ArrowDownLeft, Check, X, Clock } from "lucide-react";
 import { queryKeys } from "@/lib/queries/query-keys";
+import { displayName } from "@/components/app/wallet/token-logo";
 
 export interface OfferItem {
   type: "transfer_offer" | "transfer_instruction";
@@ -19,6 +20,14 @@ export interface OfferItem {
   description: string;
   expiresAt?: string;
   createdAt?: string;
+  /**
+   * Instrument id offer ini (mis. "Amulet" untuk CC, "USDCX" untuk token non-CC).
+   * Default "Amulet" bila tidak ada (legacy). Dipakai render label token yang benar,
+   * bukan hardcoded "CC".
+   */
+  instrumentId?: string;
+  /** Admin party instrument (mis. "DSO::1220..."). Kosong untuk legacy. */
+  instrumentAdmin?: string;
   // legacy compat
   amountCc?: number;
   trackingId?: string;
@@ -171,7 +180,8 @@ export function OffersModal({
         if (res.ok && data.ok) {
           removeOfferLocally(setOffers, offer.contractId);
           setSuccessMsg(
-            data.message ?? "Transfer accepted — CC added to your wallet.",
+            data.message ??
+              `Transfer accepted — ${displayName(offer.instrumentId ?? "Amulet")} added to your wallet.`,
           );
           onRefresh?.();
         } else {
@@ -203,7 +213,9 @@ export function OffersModal({
         const data = (await res.json()) as { ok?: boolean; message?: string };
         if (res.ok && data.ok) {
           removeOfferLocally(setOffers, offer.contractId);
-          setSuccessMsg("Transfer rejected — CC returned to sender.");
+          setSuccessMsg(
+            `Transfer rejected — ${displayName(offer.instrumentId ?? "Amulet")} returned to sender.`,
+          );
           onRefresh?.();
         } else {
           alert(data.message ?? "Failed to reject offer.");
@@ -322,7 +334,8 @@ export function OffersModal({
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
                             <p className="truncate text-sm font-semibold text-white">
-                              {formatAmount(offer)} CC from{" "}
+                              {formatAmount(offer)}{" "}
+                              {displayName(offer.instrumentId ?? "Amulet")} from{" "}
                               {senderDisplay(offer)}
                             </p>
                             <span

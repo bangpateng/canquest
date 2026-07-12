@@ -8,8 +8,11 @@ import {
 import {
   CcTransactionType,
   RewardType,
+  TOKEN_TX_DEBIT_TYPES,
+  TokenTxType,
   normalizeRewardType,
 } from '../common/prisma-types';
+import { Decimal } from '@prisma/client/runtime/library';
 import { PointsService } from './points.service';
 import {
   CC_TRANSACTION_HISTORY_WHERE,
@@ -399,6 +402,61 @@ export class UsersService {
       this.realtime.push(params.userId, 'balance:changed', null);
     }
 
+    return tx;
+  }
+
+  /**
+   * Catat satu event P2P token transfer non-CC ke TokenTransaction.
+   *
+   * Paralel instrument-aware dari `recordTransaction` (yang strictly CC/micro-CC).
+   * `amount` disimpan signed: debit (TRANSFER_OUT, FEE_OUT) → negatif, kredit →
+   * positif. Decimal(38,18) match Cantex API decimal-string amounts.
+   *
+   * Dipakai oleh: POST /party/send-token (sender), accept/reject offer handler
+   * (receiver), withdraw handler (sender). Idempotency via @@unique([userId, ledgerTxId]).
+   */
+  async recordTokenTransaction(params: {
+    userId: string;
+    instrumentId: string;
+    instrumentAdmin: string;
+    /** Jumlah token (positive). Akan di-sign di sini sesuai type (debit/kredit). */
+    amount: Decimal | number | string;
+    type: TokenTxType;
+    description?: string;
+    referenceId?: string | null;
+    ledgerTxId?: string;
+    cantonUpdateId?: string;
+    status?: 'COMPLETED' | 'PENDING' | 'REJECTED';
+    transferInstructionCid?: string | null;
+  }) {
+    const absAmount = new Decimal(Math.abs(Number(params.amount)));
+    const signed = TOKEN_TX_DEBIT_TYPES.has(params.type)
+      ? absAmount.neg()
+      : absAmount;
+    const tx = await this.prisma.tokenTransaction.create({
+      data: {
+        userId: params.userId,
+        instrumentId: params.instrumentId,
+        instrumentAdmin: params.instrumentAdmin,
+        amount: signed,
+        type: params.type,
+        description: params.description ?? null,
+        referenceId: params.referenceId ?? null,
+        ledgerTxId: params.ledgerTxId ?? null,
+        cantonUpdateId: params.cantonUpdateId ?? null,
+        status: params.status ?? 'COMPLETED',
+        transferInstructionCid: params.transferInstructionCid ?? null,
+      },
+    });
+
+    // Realtime push (mirror recordTransaction). Hanya COMPLETED relevan untuk UI.
+    if (tx.status === 'COMPLETED') {
+      this.realtime.push(params.userId, 'transaction:new', {
+        id: tx.id,
+        type: tx.type,
+      });
+      this.realtime.push(params.userId, 'balance:changed', null);
+    }
     return tx;
   }
 

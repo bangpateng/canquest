@@ -119,6 +119,28 @@ export type CcTransactionType =
   /// CC masuk dari Cantex trading account (swap token → CC).
   | 'SWAP_IN';
 
+/**
+ * Tipe event P2P token transfer non-CC on-chain (CIP-0056 two-step).
+ * Harus match enum `TokenTxType` di prisma/schema.prisma persis.
+ */
+export type TokenTxType =
+  /// Sender mengirim token (offer dibuat di on-chain).
+  | 'TOKEN_TRANSFER_OUT'
+  /// Receiver menerima token setelah accept TransferInstruction.
+  | 'TOKEN_TRANSFER_IN'
+  /// Offer dibuat, menunggu accept (intermediate state, opsional).
+  | 'TOKEN_OFFER_PENDING'
+  /// Receiver menolak TransferInstruction (token kembali ke sender).
+  | 'TOKEN_OFFER_REJECTED'
+  /// Sender menarik kembali TransferInstruction yang belum di-accept.
+  | 'TOKEN_OFFER_WITHDRAWN'
+  /// Fee CC keluar untuk P2P token transfer (fee in CC, reuse TRANSACTION_FEE_CC).
+  | 'TOKEN_FEE_OUT';
+
+/** TokenTxType yang merepresentasikan keluarnya token/CC dari user (debit). */
+export const TOKEN_TX_DEBIT_TYPES: ReadonlySet<TokenTxType> =
+  new Set<TokenTxType>(['TOKEN_TRANSFER_OUT', 'TOKEN_FEE_OUT']);
+
 export type UserStatus = 'ACTIVE' | 'SUSPENDED' | 'BANNED';
 export const UserStatus = {
   ACTIVE: 'ACTIVE' as UserStatus,

@@ -12,13 +12,14 @@ import { cn } from "@/lib/utils/utils";
 import { TransactionDetailModal } from "@/components/app/wallet/transaction-detail-modal";
 import { OffersModal, useOffers } from "@/components/app/wallet/offers-section";
 import { SwapModal } from "@/components/app/wallet/swap-modal";
+import { SendTokenSheet } from "@/components/app/wallet/send-token-sheet";
 import { WalletPasswordModal } from "@/components/app/wallet/wallet-password-modal";
 import { useWalletPassword } from "@/lib/hooks/use-wallet-password";
-import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight, X, AlertCircle, Inbox } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight, X, AlertCircle, Inbox, Coins } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { useCallback, useEffect, useId, useState } from "react";
 
-type Sheet = null | "send" | "receive" | "offers" | "swap";
+type Sheet = null | "send" | "send-token" | "receive" | "offers" | "swap";
 type SendState = "idle" | "loading" | "success" | "error";
 
 interface WalletActionsProps {
@@ -210,7 +211,7 @@ export function WalletActions({
 
   return (
     <>
-      <div className="grid w-full min-w-0 grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+      <div className="grid w-full min-w-0 grid-cols-2 gap-3 sm:grid-cols-5 sm:gap-4">
         <button
           type="button"
           onClick={openSend}
@@ -218,6 +219,17 @@ export function WalletActions({
         >
           <ArrowUpRight className="h-5 w-5 shrink-0" aria-hidden />
           Send
+        </button>
+        <button
+          type="button"
+          onClick={() => setSheet("send-token")}
+          className={cn(
+            buttonVariants({ variant: "secondary", size: "sm" }),
+            "w-full justify-center gap-2",
+          )}
+        >
+          <Coins className="h-5 w-5 shrink-0" aria-hidden />
+          Send Token
         </button>
         <button
           type="button"
@@ -543,6 +555,13 @@ export function WalletActions({
         open={sheet === "swap"}
         onClose={() => setSheet(null)}
         balance={balance}
+        onBalanceRefresh={onBalanceRefresh}
+      />
+
+      <SendTokenSheet
+        open={sheet === "send-token"}
+        onClose={() => setSheet(null)}
+        ccBalance={balance}
         onBalanceRefresh={onBalanceRefresh}
       />
     </>

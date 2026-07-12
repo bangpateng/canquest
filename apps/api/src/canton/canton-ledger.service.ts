@@ -2272,6 +2272,15 @@ export class CantonLedgerService {
       description: string;
       expiresAt: string;
       createdAt: string;
+      /**
+       * Instrument id offer ini (mis. "Amulet" untuk CC, "USDCX" untuk token
+       * non-CC). Default "Amulet" untuk backward-compat (legacy CC offers +
+       * TransferOffer lama yang tidak punya field instrument). Dipakai UI untuk
+       * tampilkan label token yang benar, bukan hardcoded "CC".
+       */
+      instrumentId: string;
+      /** Admin party instrument (mis. "DSO::1220..."). Kosong untuk legacy. */
+      instrumentAdmin: string;
     }>
   > {
     let offset: number | string = 0;
@@ -2325,6 +2334,8 @@ export class CantonLedgerService {
       description: string;
       expiresAt: string;
       createdAt: string;
+      instrumentId: string;
+      instrumentAdmin: string;
     }> = [];
 
     for (const entry of allContracts) {
@@ -2368,6 +2379,9 @@ export class CantonLedgerService {
           description: desc || trackingId,
           expiresAt,
           createdAt: '',
+          // Legacy TransferOffer tidak punya field instrument → default CC.
+          instrumentId: 'Amulet',
+          instrumentAdmin: '',
         });
         continue;
       }
@@ -2404,6 +2418,19 @@ export class CantonLedgerService {
         const requestedAt =
           typeof transfer.requestedAt === 'string' ? transfer.requestedAt : '';
 
+        // Instrument id + admin dari payload transfer (CIP-0056 choiceArguments).
+        // Default "Amulet" kalau field tidak ada (backward-compat CC offers lama).
+        const instrument = transfer.instrumentId as
+          | { id?: string; admin?: string }
+          | string
+          | undefined;
+        const instrId =
+          typeof instrument === 'string'
+            ? instrument
+            : (instrument?.id ?? 'Amulet');
+        const instrAdmin =
+          typeof instrument === 'object' ? (instrument.admin ?? '') : '';
+
         offers.push({
           type: 'transfer_instruction',
           contractId: cid,
@@ -2413,6 +2440,8 @@ export class CantonLedgerService {
           description: desc,
           expiresAt: executeBefore,
           createdAt: requestedAt,
+          instrumentId: instrId,
+          instrumentAdmin: instrAdmin,
         });
       }
     }
@@ -2446,6 +2475,8 @@ export class CantonLedgerService {
     receiver: string;
     amount: string;
     description: string;
+    instrumentId: string;
+    instrumentAdmin: string;
   } | null> {
     try {
       const offers = await this.queryPendingOffers(partyId);
