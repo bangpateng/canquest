@@ -1338,62 +1338,87 @@ export class CantonLedgerService {
     const hostHeader =
       this.config.get<string>('CANTON_VALIDATOR_HOST_HEADER') ?? '';
     const scanBase = `${validatorUrl}/api/validator/v0/scan-proxy`;
+
+    const headers = await this.authHeaders();
+    if (hostHeader) headers['Host'] = hostHeader;
+
+    // Coba 2 varian URL: encoded + raw (beberapa registry endpoint tidak suka
+    // double-encoding untuk CID yang sudah berbentuk hex base64).
     const encodedCid = encodeURIComponent(transferInstructionCid);
-    const url = `${scanBase}/registry/transfer-instruction/v1/${encodedCid}/choice-contexts/${action}`;
+    const urlVariants = [
+      `${scanBase}/registry/transfer-instruction/v1/${encodedCid}/choice-contexts/${action}`,
+      `${scanBase}/registry/transfer-instruction/v1/${transferInstructionCid}/choice-contexts/${action}`,
+    ];
 
-    try {
-      const headers = await this.authHeaders();
-      if (hostHeader) headers['Host'] = hostHeader;
-
-      const res = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ excludeDebugFields: true }),
-        signal: AbortSignal.timeout(15_000),
-      });
-
-      if (!res.ok) {
-        const text = await res.text();
-        this.logger.warn(
-          `Choice context (${action}) ${res.status}: ${text.slice(0, 200)}`,
+    for (let i = 0; i < urlVariants.length; i++) {
+      const url = urlVariants[i];
+      try {
+        this.logger.debug(
+          `Choice context (${action}) try ${i + 1}/${urlVariants.length}: ${url.slice(0, 100)}…`,
         );
-        return null;
-      }
+        const res = await fetch(url, {
+          method: 'POST',
+          headers,
+          // Dokumentasi minta body kosong {} — excludeDebugFields opsional.
+          body: JSON.stringify({}),
+          signal: AbortSignal.timeout(15_000),
+        });
 
-      const data = (await res.json()) as {
-        choiceContextData?: Record<string, unknown>;
-        disclosedContracts?: unknown[];
-      };
+        if (!res.ok) {
+          const text = await res.text();
+          this.logger.warn(
+            `Choice context (${action}) try ${i + 1} ${res.status}: ${text.slice(0, 200)}\n` +
+              `  URL: ${url}`,
+          );
+          continue; // coba varian berikutnya
+        }
 
-      // Log detail untuk diagnose "Missing context entry for transfer-rule".
-      const ctxKeys = data.choiceContextData
-        ? Object.keys(data.choiceContextData)
-        : [];
-      const hasTransferRule = ctxKeys.some((k) =>
-        k.toLowerCase().includes('transfer-rule') ||
-        k.toLowerCase().includes('transferrule'),
-      );
-      this.logger.log(
-        `Choice context (${action}) OK: disclosed=${data.disclosedContracts?.length ?? 0} ` +
-          `contextKeys=[${ctxKeys.join(',')}] hasTransferRule=${hasTransferRule} ` +
-          `cid=${transferInstructionCid.slice(0, 16)}…`,
-      );
-      if (!hasTransferRule) {
+        const data = (await res.json()) as {
+          choiceContextData?: Record<string, unknown>;
+          disclosedContracts?: unknown[];
+        };
+
+        // Log detail untuk diagnose "Missing context entry for transfer-rule".
+        const ctxKeys = data.choiceContextData
+          ? Object.keys(data.choiceContextData)
+          : [];
+        const hasTransferRule = ctxKeys.some(
+          (k) =>
+            k.toLowerCase().includes('transfer-rule') ||
+            k.toLowerCase().includes('transferrule'),
+        );
+        this.logger.log(
+          `Choice context (${action}) OK: disclosed=${data.disclosedContracts?.length ?? 0} ` +
+            `contextKeys=[${ctxKeys.join(',')}] hasTransferRule=${hasTransferRule} ` +
+            `cid=${transferInstructionCid.slice(0, 16)}… (variant ${i + 1})`,
+        );
+        if (!hasTransferRule) {
+          this.logger.warn(
+            `Choice context (${action}) TIDAK ada transfer-rule entry! ` +
+              `Accept USDCx kemungkinan gagal dengan "Missing context entry for transfer-rule".`,
+          );
+        }
+
+        return {
+          choiceContextData: data.choiceContextData ?? { values: {} },
+          disclosedContracts: data.disclosedContracts ?? [],
+        };
+      } catch (err) {
         this.logger.warn(
-          `Choice context (${action}) TIDAK ada transfer-rule entry! ` +
-            `Accept USDCx akan gagal dengan "Missing context entry for transfer-rule". ` +
-            `Kemungkinan: TransferRule contract belum ada di participant untuk instrument ini.`,
+          `Choice context (${action}) try ${i + 1} error: ${String(err)}`,
         );
       }
-
-      return {
-        choiceContextData: data.choiceContextData ?? { values: {} },
-        disclosedContracts: data.disclosedContracts ?? [],
-      };
-    } catch (err) {
-      this.logger.warn(`Choice context (${action}) error: ${String(err)}`);
-      return null;
     }
+
+    // Semua varian gagal.
+    this.logger.error(
+      `Choice context (${action}) SEMUA varian URL gagal (404/error). ` +
+        `CID=${transferInstructionCid.slice(0, 24)}…\n` +
+        `Accept akan gagal tanpa TransferRule disclosed contract.\n` +
+        `Kemungkinan: registry Splice CC-only (tidak support USDCx registry-app), ` +
+        `atau CID expired/salah.`,
+    );
+    return null;
   }
 
   /**
@@ -1423,15 +1448,29 @@ export class CantonLedgerService {
       `TransferInstruction_Accept: receiver=${receiverPartyId.split('::')[0]} cid=${transferInstructionCid.slice(0, 16)}...`,
     );
 
-    // Get choiceContext from registry (required for disclosedContracts)
+    // Get choiceContext from registry (required for disclosedContracts).
+    // Kalau null = registry endpoint 404/error. Accept akan gagal pasti tanpa
+    // TransferRule disclosed contract → fail loudly dengan pesan jelas, bukan
+    // error DAML confusing "Missing context entry for transfer-rule".
     const choiceCtx = await this.getInstructionChoiceContext(
       transferInstructionCid,
       'accept',
     );
+    if (!choiceCtx) {
+      return {
+        ok: false,
+        updateId: null,
+        error:
+          'Failed to fetch choice context from registry (404/error). ' +
+          'Accept requires TransferRule disclosed contract. ' +
+          'Likely: registry does not support this token type (CC-only), ' +
+          'or contract CID is invalid/expired.',
+      };
+    }
 
     const choiceArgument = {
       extraArgs: {
-        context: choiceCtx?.choiceContextData ?? { values: {} },
+        context: choiceCtx.choiceContextData,
         meta: { values: {} },
       },
     };
