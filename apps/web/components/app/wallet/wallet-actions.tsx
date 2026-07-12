@@ -45,6 +45,8 @@ interface WalletActionsProps {
   onBalanceRefresh?: () => void;
   /** Buka CcLockModal (modal dimiliki TokenList parent). */
   onLockClick?: () => void;
+  /** Jumlah CC yang sedang terkunci (untuk badge di tombol Lock). 0 = tidak ada. */
+  lockedCc?: number;
 }
 
 export function WalletActions({
@@ -52,6 +54,7 @@ export function WalletActions({
   balance,
   onBalanceRefresh,
   onLockClick,
+  lockedCc = 0,
 }: WalletActionsProps) {
   const displayPartyId = formatPartyIdForDisplay(partyId);
   const sendTitleId = useId();
@@ -364,13 +367,24 @@ export function WalletActions({
         <button
           type="button"
           onClick={() => onLockClick?.()}
+          aria-label={lockedCc > 0 ? `Lock — ${lockedCc} CC locked` : "Lock"}
           className={cn(
             buttonVariants({ variant: "secondary", size: "sm" }),
-            "w-full justify-center gap-2",
+            "relative w-full justify-center gap-2",
+            lockedCc > 0 &&
+              "border-emerald-500/40 text-emerald-400 hover:border-emerald-500/60 hover:bg-emerald-500/10",
           )}
         >
           <Lock className="h-5 w-5 shrink-0" aria-hidden />
           Lock
+          {lockedCc > 0 && (
+            <span
+              className="absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-500 px-1.5 text-[10px] font-bold text-white shadow ring-2 ring-[var(--card)]"
+              aria-hidden
+            >
+              {lockedCc > 999 ? "999+" : lockedCc}
+            </span>
+          )}
         </button>
         <button
           type="button"

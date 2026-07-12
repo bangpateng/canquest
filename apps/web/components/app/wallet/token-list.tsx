@@ -20,7 +20,6 @@ function isTokenActive(symbol: string, isCC?: boolean): boolean {
 }
 import { WalletActions } from "./wallet-actions";
 import { TokenCard } from "./token-card";
-import { LockStatusBar } from "./lock-status-bar";
 import { CcLockModal } from "./cc-lock-modal";
 import { useLockStatus } from "@/lib/hooks/use-lock-status";
 
@@ -173,17 +172,13 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
         </div>
       </div>
 
-      {/* ── Lock status bar (CC) — tampil di /wallet utama ── */}
-      {hasWallet && lockStatus.hasWallet && (
-        <LockStatusBar status={lockStatus} onManage={() => setLockOpen(true)} />
-      )}
-
       {/* ── Actions ── */}
       <WalletActions
         partyId={displayPartyId}
         balance={ccBalance}
         onBalanceRefresh={handleRefresh}
         onLockClick={() => setLockOpen(true)}
+        lockedCc={lockStatus.lockedCc}
       />
 
       {/* ── Lock modal (CC) — mount di /wallet utama ── */}
