@@ -183,6 +183,7 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
         partyId={displayPartyId}
         balance={ccBalance}
         onBalanceRefresh={handleRefresh}
+        onLockClick={() => setLockOpen(true)}
       />
 
       {/* ── Lock modal (CC) — mount di /wallet utama ── */}

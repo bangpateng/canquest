@@ -24,6 +24,7 @@ import {
   ChevronDown,
   Search,
   Activity as ActivityIcon,
+  Lock,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { useCallback, useEffect, useId, useState } from "react";
@@ -42,12 +43,15 @@ interface WalletActionsProps {
   partyId: string;
   balance?: number | null;
   onBalanceRefresh?: () => void;
+  /** Buka CcLockModal (modal dimiliki TokenList parent). */
+  onLockClick?: () => void;
 }
 
 export function WalletActions({
   partyId,
   balance,
   onBalanceRefresh,
+  onLockClick,
 }: WalletActionsProps) {
   const displayPartyId = formatPartyIdForDisplay(partyId);
   const sendTitleId = useId();
@@ -304,7 +308,7 @@ export function WalletActions({
 
   return (
     <>
-      <div className="grid w-full min-w-0 grid-cols-2 gap-3 sm:grid-cols-5 sm:gap-4">
+      <div className="grid w-full min-w-0 grid-cols-2 gap-3 sm:grid-cols-6 sm:gap-4">
         <button
           type="button"
           onClick={openSend}
@@ -367,6 +371,17 @@ export function WalletActions({
         >
           <ActivityIcon className="h-5 w-5 shrink-0" aria-hidden />
           Activity
+        </button>
+        <button
+          type="button"
+          onClick={() => onLockClick?.()}
+          className={cn(
+            buttonVariants({ variant: "secondary", size: "sm" }),
+            "w-full justify-center gap-2",
+          )}
+        >
+          <Lock className="h-5 w-5 shrink-0" aria-hidden />
+          Lock
         </button>
       </div>
 
