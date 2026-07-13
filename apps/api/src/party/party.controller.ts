@@ -3096,6 +3096,9 @@ export class PartyController {
                   (acc, h) => acc + Number(h.amount || 0),
                   0,
                 );
+                this.logger.debug(
+                  `swapBalances on-chain: ${inst.id} → ${holdings.length} holdings, sum=${sum}`,
+                );
                 return { key, onChainAmount: sum };
               } catch (err) {
                 this.logger.warn(

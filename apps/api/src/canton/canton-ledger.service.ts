@@ -2345,9 +2345,15 @@ export class CantonLedgerService {
     }
 
     // Client-side filter: holding contracts dengan instrument + owner match.
+    // Defensive parsing: holding USDCx (utility-registry-holding) mungkin punya
+    // field shape beda dari CC (Amulet). Coba beberapa conventions:
+    //   - nested: args.instrument = { id, admin }
+    //   - flat: args.instrumentId = { id, admin }  ATAU  args.instrumentAdmin + args.instrumentId
+    //   - registry-app: args.instrument = { admin, id } atau args.transfer.instrumentId
     const targetId = instrumentId.toLowerCase();
     const targetAdmin = instrumentAdmin.toLowerCase();
     const holdings: Array<{ contractId: string; amount: string }> = [];
+    let skippedForDebug = 0;
     for (const entry of allContracts) {
       if (!entry || typeof entry !== 'object') continue;
       const wrapper = entry as Record<string, unknown>;
@@ -2363,21 +2369,69 @@ export class CantonLedgerService {
         (ev.createArgument as Record<string, unknown> | undefined) ?? {};
       if (!cid) continue;
 
-      // Match instrument: field bisa `instrument` (object) atau flat.
-      const inst = args.instrument as Record<string, unknown> | undefined;
-      const instId = (
-        typeof inst?.id === 'string' ? inst.id : ''
-      ).toLowerCase();
-      const instAdmin = (
-        typeof inst?.admin === 'string' ? inst.admin : ''
-      ).toLowerCase();
-      if (instId !== targetId || instAdmin !== targetAdmin) continue;
+      // Coba extract instrument id + admin dari beberapa field shapes.
+      let instId = '';
+      let instAdmin = '';
 
-      // Match owner.
-      const cOwner = typeof args.owner === 'string' ? args.owner : '';
+      // Shape 1: nested args.instrument = { id, admin }
+      const instNested = args.instrument as
+        | { id?: string; admin?: string }
+        | undefined;
+      if (instNested?.id) {
+        instId = instNested.id.toLowerCase();
+        instAdmin = (instNested.admin ?? '').toLowerCase();
+      }
+
+      // Shape 2: args.instrumentId = { id, admin } (registry-app style)
+      if (!instId) {
+        const instIdField = args.instrumentId as
+          | { id?: string; admin?: string }
+          | string
+          | undefined;
+        if (typeof instIdField === 'object' && instIdField?.id) {
+          instId = instIdField.id.toLowerCase();
+          instAdmin = (instIdField.admin ?? '').toLowerCase();
+        } else if (typeof instIdField === 'string') {
+          instId = instIdField.toLowerCase();
+        }
+      }
+
+      // Shape 3: flat args.instrumentAdmin + args.instrumentId (string)
+      if (!instId && typeof args.instrumentAdmin === 'string') {
+        instAdmin = (args.instrumentAdmin as string).toLowerCase();
+        if (typeof args.instrumentId === 'string') {
+          instId = (args.instrumentId as string).toLowerCase();
+        }
+      }
+
+      // Shape 4: nested di args.transfer.instrumentId (beberapa TransferOffer shape)
+      if (!instId) {
+        const transfer = args.transfer as
+          | { instrumentId?: { id?: string; admin?: string } }
+          | undefined;
+        const tInst = transfer?.instrumentId;
+        if (tInst?.id) {
+          instId = tInst.id.toLowerCase();
+          instAdmin = (tInst.admin ?? '').toLowerCase();
+        }
+      }
+
+      // Match instrument (case-insensitive). Kalau tidak match, skip.
+      if (instId !== targetId || instAdmin !== targetAdmin) {
+        skippedForDebug++;
+        continue;
+      }
+
+      // Match owner (beberapa field name: owner, receiver, holder).
+      const cOwner =
+        typeof args.owner === 'string'
+          ? args.owner
+          : typeof args.receiver === 'string'
+            ? args.receiver
+            : '';
       if (cOwner && cOwner !== ownerPartyId) continue;
 
-      // Extract amount (beberapa format mungkin: flat string atau nested).
+      // Extract amount (defensive: flat string, nested initialAmount, atau amount object).
       const amtRaw = args.amount as Record<string, unknown> | undefined;
       const amountStr =
         typeof amtRaw?.initialAmount === 'string'
@@ -2386,9 +2440,19 @@ export class CantonLedgerService {
             ? amtRaw.amount
             : typeof args.amount === 'string'
               ? args.amount
-              : '0';
+              : typeof args.balance === 'string'
+                ? args.balance
+                : '0';
 
       holdings.push({ contractId: cid, amount: amountStr });
+    }
+
+    if (holdings.length === 0 && skippedForDebug > 0) {
+      this.logger.warn(
+        `queryTokenHoldings: 0 holdings matched instrument=${instrumentId} ` +
+          `admin=${instrumentAdmin.slice(0, 24)}… (${skippedForDebug} contracts skipped). ` +
+          `Field shape holding USDCx mungkin berbeda — perlu dump createArgument untuk debug.`,
+      );
     }
 
     this.logger.log(
