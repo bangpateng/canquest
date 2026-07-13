@@ -1396,6 +1396,15 @@ export class PartyController {
             `User "@${username}" not found or has no wallet.`,
           );
         }
+        // VALIDATE: recipient must have a REAL Canton wallet (not placeholder).
+        // Placeholder party (canquest::...) tidak terdaftar di Canton Network
+        // synchronizer → transfer akan gagal dengan UNKNOWN_INFORMEES.
+        if (!hasRealWallet(resolved)) {
+          throw new BadRequestException(
+            `User "@${username}" has no Canton wallet yet. ` +
+              'They need to create a wallet first to receive tokens.',
+          );
+        }
         recipientPartyId = normalizeCantonPartyId(resolved) ?? resolved;
         if (this.isSystemPartyId(recipientPartyId)) {
           this.logger.warn(
