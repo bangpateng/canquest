@@ -2384,7 +2384,7 @@ export class CantonLedgerService {
         this.logger.warn(
           `HOLDING DUMP [${instrumentId}] tplId=${evTplId.slice(0, 60)}… ` +
             `args keys=[${Object.keys(args).join(',')}] ` +
-            `args=${JSON.stringify(args).slice(0, 500)}`,
+            `args=${JSON.stringify(args).slice(0, 1000)}`,
         );
       }
 
@@ -2392,24 +2392,38 @@ export class CantonLedgerService {
       let instId = '';
       let instAdmin = '';
 
-      // Shape 1: nested args.instrument = { id, admin }
+      // Shape 1: nested args.instrument = { id, admin } (CC/Amulet style)
       const instNested = args.instrument as
-        | { id?: string; admin?: string }
+        | { id?: string; admin?: string; source?: string; token?: string; urn?: string }
         | undefined;
-      if (instNested?.id) {
-        instId = instNested.id.toLowerCase();
-        instAdmin = (instNested.admin ?? '').toLowerCase();
+      if (instNested) {
+        // USDCx holding: instrument.source = admin party, instrument.id or instrument.urn = id
+        if (instNested.id) instId = instNested.id.toLowerCase();
+        if (instNested.admin) instAdmin = instNested.admin.toLowerCase();
+        if (!instAdmin && instNested.source)
+          instAdmin = instNested.source.toLowerCase(); // USDCx uses "source" for admin
+        if (!instId && instNested.token)
+          instId = instNested.token.toLowerCase();
+        if (!instId && instNested.urn) {
+          // URN format: "utility::USDCx::decentralized-usdc-interchain-rep::..."
+          const urnParts = instNested.urn.split('::');
+          if (urnParts.length >= 2) instId = urnParts[1].toLowerCase();
+        }
       }
 
-      // Shape 2: args.instrumentId = { id, admin } (registry-app style)
+      // Shape 2: args.instrumentId = { id, admin, source } (registry-app style)
       if (!instId) {
         const instIdField = args.instrumentId as
-          | { id?: string; admin?: string }
+          | { id?: string; admin?: string; source?: string }
           | string
           | undefined;
         if (typeof instIdField === 'object' && instIdField?.id) {
           instId = instIdField.id.toLowerCase();
-          instAdmin = (instIdField.admin ?? '').toLowerCase();
+          instAdmin = (
+            instIdField.admin ??
+            instIdField.source ??
+            ''
+          ).toLowerCase();
         } else if (typeof instIdField === 'string') {
           instId = instIdField.toLowerCase();
         }
@@ -2423,15 +2437,28 @@ export class CantonLedgerService {
         }
       }
 
-      // Shape 4: nested di args.transfer.instrumentId (beberapa TransferOffer shape)
+      // Shape 4: nested di args.transfer.instrumentId (TransferOffer shape)
       if (!instId) {
         const transfer = args.transfer as
-          | { instrumentId?: { id?: string; admin?: string } }
+          | {
+              instrumentId?: { id?: string; admin?: string; source?: string };
+              sender?: string;
+            }
           | undefined;
         const tInst = transfer?.instrumentId;
         if (tInst?.id) {
           instId = tInst.id.toLowerCase();
-          instAdmin = (tInst.admin ?? '').toLowerCase();
+          instAdmin = (tInst.admin ?? tInst.source ?? '').toLowerCase();
+        }
+      }
+
+      // Shape 5: USDCx holding — args.registrar = admin party
+      // (dari dump: registrar = decentralized-usdc-interchain-rep::...)
+      if (!instAdmin && typeof args.registrar === 'string') {
+        instAdmin = (args.registrar as string).toLowerCase();
+        // instId mungkin masih kosong — label field atau instrument.id
+        if (!instId && typeof args.label === 'string') {
+          instId = (args.label as string).toLowerCase();
         }
       }
 
