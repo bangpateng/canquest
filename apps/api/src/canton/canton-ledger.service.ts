@@ -1325,42 +1325,99 @@ export class CantonLedgerService {
    * Get choiceContext from registry for accept/reject/withdraw on a TransferInstruction.
    * Calls: POST /registry/transfer-instruction/v1/{id}/choice-contexts/{action}
    */
+  /**
+   * Detect apakah instrument adalah CC (Amulet) berdasarkan instrumentAdmin.
+   * CC path pakai Scan-proxy Splice (built-in). Non-CC pakai Utility Registry API.
+   * Branching: CC = admin DSO/Amulet; non-CC = registrar lain (Circle, BitSafe, dll).
+   */
+  private isCcInstrumentAdmin(instrumentAdmin: string): boolean {
+    if (!instrumentAdmin) return true; // default CC (backward compat offers lama)
+    const a = instrumentAdmin.toLowerCase();
+    return a.startsWith('dso::') || a.includes('amulet') || a.includes('splice');
+  }
+
+  /**
+   * Build URL untuk choice-context berdasarkan jenis instrument:
+   *   CC (Amulet)        → Scan-proxy Splice (existing path, unchanged)
+   *   Non-CC (USDCx dll) → Utility Registry API (registrar-specific URL)
+   *
+   * Non-CC URL format (per dokumentasi CIP-0056 + Utility Registry):
+   *   ${UTILITY_REGISTRY_BASE_URL}/api/token-standard/v0/registrars/${registrarPartyId}/registry/transfer-instruction/v1/${cid}/choice-contexts/${action}
+   *
+   * registrarPartyId = instrumentAdmin dari kontrak (Circle's party untuk USDCx).
+   * UTILITY_REGISTRY_BASE_URL configurable via env (MainNet: api.utilities.digitalasset.com).
+   */
+  private buildChoiceContextUrls(
+    transferInstructionCid: string,
+    action: 'accept' | 'reject' | 'withdraw',
+    instrumentAdmin: string,
+  ): string[] {
+    const encodedCid = encodeURIComponent(transferInstructionCid);
+
+    if (this.isCcInstrumentAdmin(instrumentAdmin)) {
+      // CC path: Scan-proxy Splice (existing, unchanged).
+      const validatorUrl = (
+        this.config.get<string>('CANTON_VALIDATOR_URL') ??
+        'http://127.0.0.1:8080'
+      ).replace(/\/$/, '');
+      const scanBase = `${validatorUrl}/api/validator/v0/scan-proxy`;
+      return [
+        `${scanBase}/registry/transfer-instruction/v1/${encodedCid}/choice-contexts/${action}`,
+        `${scanBase}/registry/transfer-instruction/v1/${transferInstructionCid}/choice-contexts/${action}`,
+      ];
+    }
+
+    // Non-CC path: Utility Registry API.
+    // registrarPartyId = instrumentAdmin (Circle's party untuk USDCx).
+    const registryBase = (
+      this.config.get<string>('UTILITY_REGISTRY_BASE_URL') ??
+      'https://api.utilities.digitalasset.com'
+    ).replace(/\/$/, '');
+    const registrarPartyId = encodeURIComponent(instrumentAdmin);
+    return [
+      `${registryBase}/api/token-standard/v0/registrars/${registrarPartyId}/registry/transfer-instruction/v1/${encodedCid}/choice-contexts/${action}`,
+      `${registryBase}/api/token-standard/v0/registrars/${registrarPartyId}/registry/transfer-instruction/v1/${transferInstructionCid}/choice-contexts/${action}`,
+    ];
+  }
+
   private async getInstructionChoiceContext(
     transferInstructionCid: string,
     action: 'accept' | 'reject' | 'withdraw',
+    instrumentAdmin: string,
   ): Promise<{
     choiceContextData: Record<string, unknown>;
     disclosedContracts: unknown[];
   } | null> {
-    const validatorUrl = (
-      this.config.get<string>('CANTON_VALIDATOR_URL') ?? 'http://127.0.0.1:8080'
-    ).replace(/\/$/, '');
+    const isCc = this.isCcInstrumentAdmin(instrumentAdmin);
     const hostHeader =
       this.config.get<string>('CANTON_VALIDATOR_HOST_HEADER') ?? '';
-    const scanBase = `${validatorUrl}/api/validator/v0/scan-proxy`;
 
+    const urlVariants = this.buildChoiceContextUrls(
+      transferInstructionCid,
+      action,
+      instrumentAdmin,
+    );
+
+    this.logger.log(
+      `Choice context (${action}) ${isCc ? 'CC path (Scan-proxy)' : 'Registry token path (Utility Registry API)'} ` +
+        `admin=${instrumentAdmin.slice(0, 24)}… cid=${transferInstructionCid.slice(0, 16)}…`,
+    );
+
+    // Headers: CC path butuh Host header + Keycloak token.
+    // Registry API butuh Authorization Bearer (Keycloak token OK cross-domain).
     const headers = await this.authHeaders();
-    if (hostHeader) headers['Host'] = hostHeader;
-
-    // Coba 2 varian URL: encoded + raw (beberapa registry endpoint tidak suka
-    // double-encoding untuk CID yang sudah berbentuk hex base64).
-    const encodedCid = encodeURIComponent(transferInstructionCid);
-    const urlVariants = [
-      `${scanBase}/registry/transfer-instruction/v1/${encodedCid}/choice-contexts/${action}`,
-      `${scanBase}/registry/transfer-instruction/v1/${transferInstructionCid}/choice-contexts/${action}`,
-    ];
+    if (isCc && hostHeader) headers['Host'] = hostHeader;
 
     for (let i = 0; i < urlVariants.length; i++) {
       const url = urlVariants[i];
       try {
         this.logger.debug(
-          `Choice context (${action}) try ${i + 1}/${urlVariants.length}: ${url.slice(0, 100)}…`,
+          `Choice context (${action}) try ${i + 1}/${urlVariants.length}: ${url.slice(0, 120)}…`,
         );
         const res = await fetch(url, {
           method: 'POST',
           headers,
-          // Dokumentasi minta body kosong {} — excludeDebugFields opsional.
-          body: JSON.stringify({}),
+          body: JSON.stringify({ meta: {}, excludeDebugFields: false }),
           signal: AbortSignal.timeout(15_000),
         });
 
@@ -1395,7 +1452,7 @@ export class CantonLedgerService {
         if (!hasTransferRule) {
           this.logger.warn(
             `Choice context (${action}) TIDAK ada transfer-rule entry! ` +
-              `Accept USDCx kemungkinan gagal dengan "Missing context entry for transfer-rule".`,
+              `Accept kemungkinan gagal dengan "Missing context entry for transfer-rule".`,
           );
         }
 
@@ -1412,11 +1469,12 @@ export class CantonLedgerService {
 
     // Semua varian gagal.
     this.logger.error(
-      `Choice context (${action}) SEMUA varian URL gagal (404/error). ` +
-        `CID=${transferInstructionCid.slice(0, 24)}…\n` +
-        `Accept akan gagal tanpa TransferRule disclosed contract.\n` +
-        `Kemungkinan: registry Splice CC-only (tidak support USDCx registry-app), ` +
-        `atau CID expired/salah.`,
+      `Choice context (${action}) SEMUA varian URL gagal. ` +
+        `CID=${transferInstructionCid.slice(0, 24)}… admin=${instrumentAdmin.slice(0, 24)}…\n` +
+        `Path: ${isCc ? 'CC (Scan-proxy)' : 'Registry token (Utility Registry API)'}\n` +
+        `Saran: kalau registry token, cek UTILITY_REGISTRY_BASE_URL + ` +
+        `registrarPartyId (${instrumentAdmin.slice(0, 30)}…) cocok dengan ` +
+        `instrumentId.admin di kontrak.`,
     );
     return null;
   }
@@ -1448,13 +1506,34 @@ export class CantonLedgerService {
       `TransferInstruction_Accept: receiver=${receiverPartyId.split('::')[0]} cid=${transferInstructionCid.slice(0, 16)}...`,
     );
 
-    // Get choiceContext from registry (required for disclosedContracts).
-    // Kalau null = registry endpoint 404/error. Accept akan gagal pasti tanpa
-    // TransferRule disclosed contract → fail loudly dengan pesan jelas, bukan
-    // error DAML confusing "Missing context entry for transfer-rule".
+    // Lookup offer detail untuk dapat instrumentAdmin (branch CC vs registry token).
+    // Default CC (admin kosong) kalau lookup gagal.
+    let instrumentAdmin = '';
+    try {
+      const detail = await this.lookupOfferDetail(
+        transferInstructionCid,
+        receiverPartyId,
+      );
+      if (detail?.instrumentAdmin) {
+        instrumentAdmin = detail.instrumentAdmin;
+        this.logger.log(
+          `Accept instrumentAdmin detected: ${instrumentAdmin.slice(0, 30)}… ` +
+            `(${this.isCcInstrumentAdmin(instrumentAdmin) ? 'CC' : 'registry token'})`,
+        );
+      }
+    } catch (err) {
+      this.logger.warn(
+        `lookupOfferDetail failed saat accept: ${String(err)} — fallback CC path`,
+      );
+    }
+
+    // Get choiceContext dari registry (required for disclosedContracts).
+    // CC: Scan-proxy Splice. Non-CC: Utility Registry API.
+    // Kalau null = registry endpoint 404/error → fail loudly.
     const choiceCtx = await this.getInstructionChoiceContext(
       transferInstructionCid,
       'accept',
+      instrumentAdmin,
     );
     if (!choiceCtx) {
       return {
@@ -1463,8 +1542,8 @@ export class CantonLedgerService {
         error:
           'Failed to fetch choice context from registry (404/error). ' +
           'Accept requires TransferRule disclosed contract. ' +
-          'Likely: registry does not support this token type (CC-only), ' +
-          'or contract CID is invalid/expired.',
+          `InstrumentAdmin: ${instrumentAdmin || '(empty=CC)'}. ` +
+          'Kalau registry token, cek UTILITY_REGISTRY_BASE_URL + registrarPartyId.',
       };
     }
 
@@ -1531,9 +1610,22 @@ export class CantonLedgerService {
       `TransferInstruction_Reject: receiver=${receiverPartyId.split('::')[0]} cid=${transferInstructionCid.slice(0, 16)}...`,
     );
 
+    // Lookup offer detail untuk dapat instrumentAdmin (branch CC vs registry token).
+    let instrumentAdmin = '';
+    try {
+      const detail = await this.lookupOfferDetail(
+        transferInstructionCid,
+        receiverPartyId,
+      );
+      if (detail?.instrumentAdmin) instrumentAdmin = detail.instrumentAdmin;
+    } catch {
+      /* fallback CC path */
+    }
+
     const choiceCtx = await this.getInstructionChoiceContext(
       transferInstructionCid,
       'reject',
+      instrumentAdmin,
     );
 
     const { ok, status, text } = await this.exerciseChoice(
