@@ -1,9 +1,10 @@
 "use client";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { formatApiError } from "@/lib/api/format-api-error";
-import { Zap, ZapOff, Lock } from "lucide-react";
+import { Lock } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/utils/utils";
+import { TokenLogo, displayName } from "@/components/app/wallet/token-logo";
 
 type PreapprovalStatus = {
   active?: boolean;
@@ -180,6 +181,13 @@ export function SettingsPreapprovalPanel() {
   );
 }
 
+/** Map toggle token symbol → internal instrument ID (for TokenLogo + displayName). */
+const TOKEN_INSTRUMENT_ID: Record<TokenSymbol, string> = {
+  CC: "Amulet",
+  USDCx: "USDCX",
+  CBTC: "CBTC",
+};
+
 /** Row untuk satu token toggle. */
 function TokenToggleRow({
   token,
@@ -196,22 +204,24 @@ function TokenToggleRow({
   expiresAt: string | null;
   onToggle?: () => void;
 }) {
+  const instrumentId = TOKEN_INSTRUMENT_ID[token];
   return (
     <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-white/[0.04] bg-white/[0.01] px-4 py-3">
       <div className="flex items-center gap-3 min-w-0">
+        <TokenLogo symbol={instrumentId} size="sm" />
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <p
               className={cn(
-                "text-xs font-semibold uppercase tracking-wider",
+                "text-sm font-semibold",
                 enabled
                   ? active
                     ? "text-emerald-300/80"
-                    : "text-slate-400"
-                  : "text-slate-600",
+                    : "text-slate-200"
+                  : "text-slate-500",
               )}
             >
-              {token}
+              {displayName(instrumentId)}
             </p>
             {!enabled && (
               <span className="rounded-full bg-slate-700/50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500">
@@ -219,7 +229,7 @@ function TokenToggleRow({
               </span>
             )}
           </div>
-          <p className="mt-0.5 text-sm font-medium text-slate-400">
+          <p className="mt-0.5 text-xs text-slate-500">
             {enabled
               ? active
                 ? `Incoming ${token} arrives directly`
