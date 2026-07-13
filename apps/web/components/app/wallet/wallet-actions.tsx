@@ -86,7 +86,7 @@ export function WalletActions({
 
   // Token aktif untuk Send (selain CC). Mirror swap allowlist supaya konsisten —
   // hanya token yang benar-benar supported yang muncul di selector.
-  const ACTIVE_SEND_TOKENS = new Set(["USDCX"]);
+  const ACTIVE_SEND_TOKENS = new Set(["USDCX", "CBTC"]);
   function isSendActive(t: WalletToken): boolean {
     if (t.isCC) return true; // CC selalu aktif
     return ACTIVE_SEND_TOKENS.has(t.instrumentId.toUpperCase());

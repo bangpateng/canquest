@@ -2354,7 +2354,6 @@ export class CantonLedgerService {
     const targetAdmin = instrumentAdmin.toLowerCase();
     const holdings: Array<{ contractId: string; amount: string }> = [];
     let skippedForDebug = 0;
-    let dumpedShapes = 0;
     for (const entry of allContracts) {
       if (!entry || typeof entry !== 'object') continue;
       const wrapper = entry as Record<string, unknown>;
@@ -2370,23 +2369,7 @@ export class CantonLedgerService {
         (ev.createArgument as Record<string, unknown> | undefined) ?? {};
       if (!cid) continue;
 
-      // DEBUG: dump createArgument shape untuk contract dengan template
-      // mengandung 'Holding' (bukan Amulet). Maksimal 2 dump supaya log tidak
-      // banjir. Tujuan: lihat field apa yang pegang instrument id + admin.
-      const evTplId = typeof ev.templateId === 'string' ? ev.templateId : '';
-      const tplIdLower = evTplId.toLowerCase();
-      if (
-        dumpedShapes < 2 &&
-        tplIdLower.includes('holding') &&
-        !tplIdLower.includes('amulet')
-      ) {
-        dumpedShapes++;
-        this.logger.warn(
-          `HOLDING DUMP [${instrumentId}] tplId=${evTplId.slice(0, 60)}… ` +
-            `args keys=[${Object.keys(args).join(',')}] ` +
-            `args=${JSON.stringify(args).slice(0, 1000)}`,
-        );
-      }
+      // (Debug dump dihapus — field shape sudah diketahui: instrument.{id,source})
 
       // Coba extract instrument id + admin dari beberapa field shapes.
       let instId = '';
@@ -2462,8 +2445,30 @@ export class CantonLedgerService {
         }
       }
 
-      // Match instrument (case-insensitive). Kalau tidak match, skip.
-      if (instId !== targetId || instAdmin !== targetAdmin) {
+      // Match instrument id (case-insensitive, exact match).
+      // Match admin (case-insensitive, PREFIX-tolerant: party IDs panjang,
+      // bisa beda suffix antara sumber pool vs sumber contract. Cukup match
+      // prefix 30 char pertama — unik enough untuk distinguish registrar).
+      if (instId !== targetId) {
+        skippedForDebug++;
+        continue;
+      }
+      // Admin match: exact OR prefix-match (first 30 chars).
+      const adminPrefixLen = 30;
+      const adminMatch =
+        instAdmin === targetAdmin ||
+        (instAdmin.length >= adminPrefixLen &&
+          targetAdmin.length >= adminPrefixLen &&
+          instAdmin.slice(0, adminPrefixLen) ===
+            targetAdmin.slice(0, adminPrefixLen));
+      if (!adminMatch) {
+        // Log mismatch sekali untuk debug (first mismatch only).
+        if (skippedForDebug === 0) {
+          this.logger.warn(
+            `queryTokenHoldings admin mismatch: contract admin=${instAdmin.slice(0, 30)}… ` +
+              `vs target admin=${targetAdmin.slice(0, 30)}… (instrument=${instrumentId})`,
+          );
+        }
         skippedForDebug++;
         continue;
       }

@@ -11,7 +11,7 @@ import { formatPartyIdForDisplay } from "@/lib/canton/canton-party-id";
  * Token yang SUDAH aktif untuk swap (selain CC).
  * Token lain tampil "Coming Soon" sampai di-enable bertahap.
  */
-const ACTIVE_SWAP_TOKENS = new Set(["USDCX"]);
+const ACTIVE_SWAP_TOKENS = new Set(["USDCX", "CBTC"]);
 
 /** Cek apakah token ini aktif untuk swap/detail. CC selalu aktif. */
 function isTokenActive(symbol: string, isCC?: boolean): boolean {

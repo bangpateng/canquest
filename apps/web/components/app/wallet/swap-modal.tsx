@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 
 /** Token aktif untuk swap (selain CC). Lainnya = Coming Soon. */
-const ACTIVE_SWAP_TOKENS = new Set(["USDCX"]);
+const ACTIVE_SWAP_TOKENS = new Set(["USDCX", "CBTC"]);
 function isSwapActive(symbol: string, isCC?: boolean): boolean {
   if (isCC) return true;
   return ACTIVE_SWAP_TOKENS.has(symbol.toUpperCase());
