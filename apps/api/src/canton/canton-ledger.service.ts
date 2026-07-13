@@ -333,47 +333,56 @@ export class CantonLedgerService {
   /**
    * Call the Transfer Factory Registry (CIP-0056) to get factoryId + choiceContext.
    *
-   * The registry is served by the Scan API. It returns:
+   * Branching:
+   *   CC (Amulet/DSO) → Scan-proxy Splice (existing, unchanged)
+   *   Non-CC (USDCx etc) → Utility Registry API (registrar-specific URL)
+   *
+   * Returns:
    *   - factoryId: contract ID of the TransferFactory to exercise
    *   - choiceContext.choiceContextData: goes into extraArgs.context
    *   - choiceContext.disclosedContracts: must be passed to submitCommand
    *   - transferKind: "direct" (preapproval) or "offer" (2-step)
-   *
-   * Reference: https://github.com/canton-network/splice/blob/main/token-standard/cli/src/commands/transfer.ts
-   * CIP-0056: https://github.com/global-synchronizer-foundation/cips/blob/main/cip-0056/cip-0056.md
    */
-  async callTransferFactoryRegistry(choiceArguments: unknown): Promise<{
+  async callTransferFactoryRegistry(
+    choiceArguments: unknown,
+    instrumentAdmin: string,
+  ): Promise<{
     factoryId: string;
     choiceContextData: Record<string, unknown>;
     disclosedContracts: unknown[];
     transferKind: string;
   } | null> {
-    if (!this.scanUrl) {
-      this.logger.error(
-        'CANTON_SCAN_URL is not set — cannot call Transfer Factory Registry. ' +
-          'Set it to your Scan API URL (e.g. https://scan.sv-1.test.global.canton.network.sync.global)',
-      );
-      return null;
-    }
-
-    // Build URL: prefer scan-proxy on validator (uses same auth + Host as wallet API)
-    const validatorUrl = (
-      this.config.get<string>('CANTON_VALIDATOR_URL') ?? 'http://127.0.0.1:8080'
-    ).replace(/\/$/, '');
+    const isCc = this.isCcInstrumentAdmin(instrumentAdmin);
     const hostHeader =
       this.config.get<string>('CANTON_VALIDATOR_HOST_HEADER') ?? '';
 
-    // Always use validator's scan-proxy — proven to work on MainNet
-    // Scan-proxy is at: ${validatorUrl}/api/validator/v0/scan-proxy
-    const scanBase = `${validatorUrl}/api/validator/v0/scan-proxy`;
-    const url = `${scanBase}/registry/transfer-instruction/v1/transfer-factory`;
+    let url: string;
+    if (isCc) {
+      // CC path: Scan-proxy Splice.
+      const validatorUrl = (
+        this.config.get<string>('CANTON_VALIDATOR_URL') ??
+        'http://127.0.0.1:8080'
+      ).replace(/\/$/, '');
+      const scanBase = `${validatorUrl}/api/validator/v0/scan-proxy`;
+      url = `${scanBase}/registry/transfer-instruction/v1/transfer-factory`;
+    } else {
+      // Non-CC path: Utility Registry API.
+      const registryBase = (
+        this.config.get<string>('UTILITY_REGISTRY_BASE_URL') ??
+        'https://api.utilities.digitalasset.com'
+      ).replace(/\/$/, '');
+      const registrarPartyId = encodeURIComponent(instrumentAdmin);
+      url = `${registryBase}/api/token-standard/v0/registrars/${registrarPartyId}/registry/transfer-instruction/v1/transfer-factory`;
+    }
 
-    this.logger.log(`Registry call: ${url} Host=${hostHeader || '(none)'}`);
+    this.logger.log(
+      `Registry call: ${isCc ? 'CC (Scan-proxy)' : 'Registry token (Utility Registry API)'} ` +
+        `admin=${instrumentAdmin.slice(0, 24)}… url=${url.slice(0, 100)}…`,
+    );
 
     try {
       const headers = await this.authHeaders();
-      // MUST send Host header when going through nginx on validator
-      if (hostHeader) headers['Host'] = hostHeader;
+      if (isCc && hostHeader) headers['Host'] = hostHeader;
 
       const res = await fetch(url, {
         method: 'POST',
@@ -571,7 +580,10 @@ export class CantonLedgerService {
     };
 
     // ── Step 2: Call Transfer Factory Registry ───────────────────────────
-    const registry = await this.callTransferFactoryRegistry(choiceArguments);
+    const registry = await this.callTransferFactoryRegistry(
+      choiceArguments,
+      effectiveAdmin,
+    );
     if (!registry) {
       return {
         ok: false,
@@ -602,7 +614,7 @@ export class CantonLedgerService {
 
     this.logger.log(
       `TransferFactory_Transfer (CIP-0056): sender=${senderPartyId.split('::')[0]} → ` +
-        `receiver=${receiverPartyId.split('::')[0]} amount=${amountCc} CC ` +
+        `receiver=${receiverPartyId.split('::')[0]} amount=${amountCc} ${instrumentId} ` +
         `kind=${registry.transferKind} factory=${registry.factoryId.slice(0, 16)}... ` +
         `disclosed=${registry.disclosedContracts.length} identity=${identity}`,
     );
