@@ -1,8 +1,9 @@
 "use client";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { formatApiError } from "@/lib/api/format-api-error";
-import { Zap, ZapOff } from "lucide-react";
+import { Zap, ZapOff, Lock } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { cn } from "@/lib/utils/utils";
 
 type PreapprovalStatus = {
   active?: boolean;
@@ -10,20 +11,34 @@ type PreapprovalStatus = {
   message?: string;
 };
 
+// Token list untuk preapproval toggle. CC selalu fungsional. Non-CC tampil
+// sebagai "Coming soon" kecuali di-enable via env PREAPPROVAL_ENABLED_TOKENS.
+const ALL_TOKENS = ["CC", "USDCx", "CBTC"] as const;
+type TokenSymbol = (typeof ALL_TOKENS)[number];
+
 export function SettingsPreapprovalPanel() {
-  const [active, setActive] = useState(false);
-  const [expiresAt, setExpiresAt] = useState<string | null>(null);
+  // CC status (dari preapproval endpoint existing).
+  const [ccActive, setCcActive] = useState(false);
+  const [ccExpiresAt, setCcExpiresAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  // Token mana yang toggle-nya ENABLED (fungsional). CC selalu ada.
+  // Di-fetch dari /api/party/fee-config → preapprovalTokens.
+  const [enabledTokens, setEnabledTokens] = useState<string[]>(["CC"]);
+
+  const loadCcStatus = useCallback(async () => {
     setLoading(true);
     try {
-      let res = await fetch("/api/party/preapproval", { credentials: "include" });
+      let res = await fetch("/api/party/preapproval", {
+        credentials: "include",
+      });
       if (!res.ok) {
-        res = await fetch("/api/party/preapproval-status", { credentials: "include" });
+        res = await fetch("/api/party/preapproval-status", {
+          credentials: "include",
+        });
       }
       if (res.ok) {
         const data = (await res.json()) as PreapprovalStatus & {
@@ -31,29 +46,51 @@ export function SettingsPreapprovalPanel() {
         };
         const isActive =
           data.active === true || data.preapproval?.active === true;
-        setActive(isActive);
-        setExpiresAt(data.expiresAt ?? data.preapproval?.expiresAt ?? null);
+        setCcActive(isActive);
+        setCcExpiresAt(
+          data.expiresAt ?? data.preapproval?.expiresAt ?? null,
+        );
       }
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const loadConfig = useCallback(async () => {
+    try {
+      const res = await fetch("/api/party/fee-config", {
+        credentials: "include",
+      });
+      if (res.ok) {
+        const data = (await res.json()) as {
+          preapprovalTokens?: string[];
+        };
+        if (data.preapprovalTokens) {
+          setEnabledTokens(
+            data.preapprovalTokens.map((t) => t.toUpperCase()),
+          );
+        }
+      }
+    } catch {
+      /* non-fatal — default CC only */
+    }
+  }, []);
 
-  async function toggle() {
+  useEffect(() => {
+    void Promise.all([loadCcStatus(), loadConfig()]);
+  }, [loadCcStatus, loadConfig]);
+
+  async function toggleCc() {
     setBusy(true);
     setError(null);
     setSuccess(null);
-    const action = active ? "disable" : "enable";
+    const action = ccActive ? "disable" : "enable";
     try {
       let res = await fetch(`/api/party/preapproval/${action}`, {
         method: "POST",
         credentials: "include",
       });
-      if (res.status === 404 && !active) {
+      if (res.status === 404 && !ccActive) {
         res = await fetch("/api/party/ensure-preapproval", {
           method: "POST",
           credentials: "include",
@@ -65,19 +102,15 @@ export function SettingsPreapprovalPanel() {
       > | null;
       if (!res.ok) {
         setError(formatApiError(raw));
-        // Re-fetch authoritative status — the on-chain toggle may not have
-        // taken effect, so do not trust the optimistic state.
-        await load();
+        await loadCcStatus();
         return;
       }
       setSuccess(
         action === "disable"
-          ? "One step transfer disabled — incoming CC will appear as offers."
-          : "One step transfer enabled — incoming CC arrives directly.",
+          ? "CC one-step transfer disabled."
+          : "CC one-step transfer enabled.",
       );
-      // Load authoritative on-chain status rather than flipping optimistically.
-      // The backend re-verifies the cancel succeeded; load() reflects that.
-      await load();
+      await loadCcStatus();
     } catch {
       setError("Network error — try again.");
     } finally {
@@ -97,90 +130,147 @@ export function SettingsPreapprovalPanel() {
             One Step Transfer
           </span>
           <p className="mt-1 text-xs text-slate-500">
-            Auto-accept incoming CC without manual approval
+            Auto-accept incoming transfers without manual approval
           </p>
         </div>
       </div>
 
-      <div className="p-5 sm:p-6 md:p-8">
+      <div className="p-5 sm:p-6 md:p-8 space-y-4">
         {loading ? (
           <div className="flex items-center gap-3 text-sm text-slate-400">
             <LoadingSpinner size="sm" tone="muted" />
             Checking status…
           </div>
         ) : (
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="min-w-0">
-                <p
-                  className={`text-xs font-semibold uppercase tracking-wider ${
-                    active ? "text-emerald-300/80" : "text-slate-500"
-                  }`}
-                >
-                  {active ? "Enabled" : "Disabled"}
-                </p>
-                <p className="mt-0.5 text-sm font-medium text-slate-300">
-                  {active
-                    ? "Incoming CC arrives directly in your wallet"
-                    : "Incoming CC requires manual accept from offers"}
-                </p>
-              </div>
-            </div>
+          ALL_TOKENS.map((token) => {
+            const isEnabled = enabledTokens.includes(token.toUpperCase());
+            const isActive = token === "CC" ? ccActive : false;
+            const isBusy = token === "CC" ? busy : false;
 
-            {/* Toggle switch */}
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void toggle()}
-              role="switch"
-              aria-checked={active}
-              aria-label="Toggle one step transfer"
-              className="relative shrink-0"
-            >
-              {busy ? (
-                <div className="flex h-7 w-12 items-center justify-center rounded-full bg-slate-700">
-                  <LoadingSpinner size="sm" />
-                </div>
-              ) : (
-                <div
-                  className={`h-7 w-12 rounded-full transition-colors duration-200 ${
-                    active ? "bg-emerald-600" : "bg-slate-700"
-                  }`}
-                >
-                  <div
-                    className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-                      active ? "translate-x-[22px]" : "translate-x-0.5"
-                    }`}
-                  />
-                </div>
-              )}
-            </button>
-          </div>
-        )}
-
-        {/* Expiry info */}
-        {active && expiresAt && !loading && (
-          <p className="mt-4 text-xs text-slate-600">
-            Expires: {new Date(expiresAt).toLocaleDateString()} · Auto-renewed
-            by validator
-          </p>
+            return (
+              <TokenToggleRow
+                key={token}
+                token={token}
+                enabled={isEnabled}
+                active={isActive}
+                busy={isBusy}
+                expiresAt={token === "CC" ? ccExpiresAt : null}
+                onToggle={token === "CC" ? () => void toggleCc() : undefined}
+              />
+            );
+          })
         )}
 
         {/* Error */}
         {error ? (
-          <p className="mt-5 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm font-medium text-red-300 sm:mt-6 sm:px-5 sm:py-4">
+          <p className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm font-medium text-red-300">
             {error}
           </p>
         ) : null}
 
         {/* Success */}
         {success ? (
-          <p className="mt-4 text-sm font-semibold text-emerald-400 flex items-center gap-1.5">
+          <p className="text-sm font-semibold text-emerald-400 flex items-center gap-1.5">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
             {success}
           </p>
         ) : null}
       </div>
     </section>
+  );
+}
+
+/** Row untuk satu token toggle. */
+function TokenToggleRow({
+  token,
+  enabled,
+  active,
+  busy,
+  expiresAt,
+  onToggle,
+}: {
+  token: TokenSymbol;
+  enabled: boolean;
+  active: boolean;
+  busy: boolean;
+  expiresAt: string | null;
+  onToggle?: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-white/[0.04] bg-white/[0.01] px-4 py-3">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <p
+              className={cn(
+                "text-xs font-semibold uppercase tracking-wider",
+                enabled
+                  ? active
+                    ? "text-emerald-300/80"
+                    : "text-slate-400"
+                  : "text-slate-600",
+              )}
+            >
+              {token}
+            </p>
+            {!enabled && (
+              <span className="rounded-full bg-slate-700/50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500">
+                Coming soon
+              </span>
+            )}
+          </div>
+          <p className="mt-0.5 text-sm font-medium text-slate-400">
+            {enabled
+              ? active
+                ? `Incoming ${token} arrives directly`
+                : `Incoming ${token} requires manual accept`
+              : `${token} auto-accept — not yet available`}
+          </p>
+          {enabled && active && expiresAt && (
+            <p className="mt-1 text-xs text-slate-600">
+              Expires {new Date(expiresAt).toLocaleDateString()}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Toggle switch */}
+      {enabled ? (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onToggle}
+          role="switch"
+          aria-checked={active}
+          aria-label={`Toggle one step transfer ${token}`}
+          className="relative shrink-0"
+        >
+          {busy ? (
+            <div className="flex h-7 w-12 items-center justify-center rounded-full bg-slate-700">
+              <LoadingSpinner size="sm" />
+            </div>
+          ) : (
+            <div
+              className={cn(
+                "h-7 w-12 rounded-full transition-colors duration-200",
+                active ? "bg-emerald-600" : "bg-slate-700",
+              )}
+            >
+              <div
+                className={cn(
+                  "absolute top-0.5 h-6 w-6 rounded-full bg-white shadow-sm transition-transform duration-200",
+                  active ? "translate-x-[22px]" : "translate-x-0.5",
+                )}
+              />
+            </div>
+          )}
+        </button>
+      ) : (
+        // Disabled placeholder — lock icon, tidak bisa diklik.
+        <div className="flex h-7 w-12 items-center justify-center rounded-full bg-slate-800/50">
+          <Lock className="h-3.5 w-3.5 text-slate-600" />
+        </div>
+      )}
+    </div>
   );
 }

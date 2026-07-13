@@ -2439,9 +2439,20 @@ export class PartyController {
   @SkipThrottle()
   @Get('fee-config')
   getFeeConfig() {
+    // Token non-CC yang toggle preapproval-nya ENABLED di Settings (fungsional).
+    // CC selalu enabled. Token di list ini = toggle bisa diklik. Token lain =
+    // tampil tapi "Coming soon" (disabled).
+    const enabledTokensStr =
+      this.config.get<string>('PREAPPROVAL_ENABLED_TOKENS') ?? '';
+    const preapprovalEnabledTokens = enabledTokensStr
+      .split(',')
+      .map((t) => t.trim().toUpperCase())
+      .filter(Boolean);
     return {
       feeCc: Number(this.config.get<string>('TRANSACTION_FEE_CC') ?? '5'),
       ccUsdPrice: Number(this.config.get<string>('CC_USD_PRICE') ?? '0'),
+      // CC always enabled; non-CC dari env.
+      preapprovalTokens: ['CC', ...preapprovalEnabledTokens],
     };
   }
 
