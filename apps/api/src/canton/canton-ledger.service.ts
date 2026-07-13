@@ -2373,7 +2373,8 @@ export class CantonLedgerService {
       // DEBUG: dump createArgument shape untuk contract dengan template
       // mengandung 'Holding' (bukan Amulet). Maksimal 2 dump supaya log tidak
       // banjir. Tujuan: lihat field apa yang pegang instrument id + admin.
-      const tplIdLower = tplId.toLowerCase();
+      const evTplId = typeof ev.templateId === 'string' ? ev.templateId : '';
+      const tplIdLower = evTplId.toLowerCase();
       if (
         dumpedShapes < 2 &&
         tplIdLower.includes('holding') &&
@@ -2381,7 +2382,7 @@ export class CantonLedgerService {
       ) {
         dumpedShapes++;
         this.logger.warn(
-          `HOLDING DUMP [${instrumentId}] tplId=${tplId.slice(0, 60)}… ` +
+          `HOLDING DUMP [${instrumentId}] tplId=${evTplId.slice(0, 60)}… ` +
             `args keys=[${Object.keys(args).join(',')}] ` +
             `args=${JSON.stringify(args).slice(0, 500)}`,
         );
