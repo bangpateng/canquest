@@ -2354,6 +2354,7 @@ export class CantonLedgerService {
     const targetAdmin = instrumentAdmin.toLowerCase();
     const holdings: Array<{ contractId: string; amount: string }> = [];
     let skippedForDebug = 0;
+    let dumpedShapes = 0;
     for (const entry of allContracts) {
       if (!entry || typeof entry !== 'object') continue;
       const wrapper = entry as Record<string, unknown>;
@@ -2368,6 +2369,23 @@ export class CantonLedgerService {
       const args =
         (ev.createArgument as Record<string, unknown> | undefined) ?? {};
       if (!cid) continue;
+
+      // DEBUG: dump createArgument shape untuk contract dengan template
+      // mengandung 'Holding' (bukan Amulet). Maksimal 2 dump supaya log tidak
+      // banjir. Tujuan: lihat field apa yang pegang instrument id + admin.
+      const tplIdLower = tplId.toLowerCase();
+      if (
+        dumpedShapes < 2 &&
+        tplIdLower.includes('holding') &&
+        !tplIdLower.includes('amulet')
+      ) {
+        dumpedShapes++;
+        this.logger.warn(
+          `HOLDING DUMP [${instrumentId}] tplId=${tplId.slice(0, 60)}… ` +
+            `args keys=[${Object.keys(args).join(',')}] ` +
+            `args=${JSON.stringify(args).slice(0, 500)}`,
+        );
+      }
 
       // Coba extract instrument id + admin dari beberapa field shapes.
       let instId = '';
