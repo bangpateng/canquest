@@ -19,6 +19,8 @@ export function displayName(id: string): string {
 const LOGO_COLORS: Record<string, string> = {
   CC: "from-amber-400 to-amber-600",
   AMULET: "from-amber-400 to-amber-600",
+  USDCX: "from-blue-400 to-blue-600",
+  CBTC: "from-orange-400 to-orange-600",
 };
 const FALLBACK_GRADIENTS = [
   "from-blue-400 to-blue-600",

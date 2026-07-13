@@ -1,7 +1,7 @@
 "use client";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { formatApiError } from "@/lib/api/format-api-error";
-import { Lock } from "lucide-react";
+import { Lock, ChevronDown } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/utils/utils";
 import { TokenLogo, displayName } from "@/components/app/wallet/token-logo";
@@ -29,6 +29,7 @@ export function SettingsPreapprovalPanel() {
   // Token mana yang toggle-nya ENABLED (fungsional). CC selalu ada.
   // Di-fetch dari /api/party/fee-config → preapprovalTokens.
   const [enabledTokens, setEnabledTokens] = useState<string[]>(["CC"]);
+  const [collapsed, setCollapsed] = useState(false);
 
   const loadCcStatus = useCallback(async () => {
     setLoading(true);
@@ -124,9 +125,13 @@ export function SettingsPreapprovalPanel() {
       id="preapproval"
       className="scroll-mt-8 overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50"
     >
-      {/* Section Header */}
-      <div className="border-b border-white/[0.06] bg-white/[0.01] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
-        <div>
+      {/* Section Header — clickable to collapse/expand */}
+      <button
+        type="button"
+        onClick={() => setCollapsed((c) => !c)}
+        className="flex w-full items-center justify-between border-b border-white/[0.06] bg-white/[0.01] px-5 py-4 sm:px-6 sm:py-5 md:px-8 transition hover:bg-white/[0.02]"
+      >
+        <div className="text-left">
           <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
             One Step Transfer
           </span>
@@ -134,9 +139,20 @@ export function SettingsPreapprovalPanel() {
             Auto-accept incoming transfers without manual approval
           </p>
         </div>
-      </div>
+        <ChevronDown
+          className={cn(
+            "h-5 w-5 shrink-0 text-slate-500 transition-transform duration-200",
+            collapsed ? "" : "rotate-180",
+          )}
+        />
+      </button>
 
-      <div className="p-5 sm:p-6 md:p-8 space-y-4">
+      <div
+        className={cn(
+          "p-5 sm:p-6 md:p-8 space-y-4",
+          collapsed && "hidden",
+        )}
+      >
         {loading ? (
           <div className="flex items-center gap-3 text-sm text-slate-400">
             <LoadingSpinner size="sm" tone="muted" />
