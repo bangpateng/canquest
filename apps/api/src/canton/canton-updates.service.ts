@@ -46,6 +46,7 @@ import { ConfigService } from '@nestjs/config';
 import { Subject } from 'rxjs';
 
 import { KeycloakTokenService } from '../auth/keycloak-token.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { CantonLedgerService } from './canton-ledger.service';
 import { CcInboundSyncService } from './cc-inbound-sync.service';
 import { OfferReconcilerService } from './offer-reconciler.service';
@@ -119,6 +120,7 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     private readonly config: ConfigService,
     private readonly keycloak: KeycloakTokenService,
     private readonly ledger: CantonLedgerService,
+    private readonly prisma: PrismaService,
     private readonly inboundSync: CcInboundSyncService,
     private readonly offerReconciler: OfferReconcilerService,
   ) {
@@ -208,6 +210,10 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
   /**
    * Start streaming subscription. Idempoten — aman dipanggil berkali-kali
    * (reconnect). Ambil offset terakhir (atau dari ledgerEnd kalau belum ada).
+   *
+   * Filter: WAJIB pakai filtersByParty dengan list party eksplisit (dari DB).
+   * filtersForAnyParty butuh permission CanReadAsAnyParty yang admin token
+   * TIDAK punya → HTTP 403 (verified). filter kosong → HTTP 400 (verified).
    */
   private async startStream(): Promise<void> {
     this.closedByUser = false;
@@ -224,9 +230,13 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       try {
         beginExclusive = await this.fetchLedgerEnd();
         this.lastOffset = beginExclusive ?? null;
-        this.logger.log(`CantonUpdates: starting from ledgerEnd offset=${beginExclusive}`);
+        this.logger.log(
+          `CantonUpdates: starting from ledgerEnd offset=${beginExclusive}`,
+        );
       } catch (err) {
-        this.logger.warn(`CantonUpdates: ledgerEnd failed, will retry: ${String(err)}`);
+        this.logger.warn(
+          `CantonUpdates: ledgerEnd failed, will retry: ${String(err)}`,
+        );
         this.scheduleReconnect(err as Error);
         return;
       }
@@ -234,27 +244,49 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       beginExclusive = this.lastOffset;
     }
 
-    this.streamController = new AbortController();
-    const body = {
-      // Offset format: flat { beginExclusive: <offset> } sesuai Canton JSON API.
-      // fetchTransactionUpdates pakai shape sama (beginExclusive number) — proven.
-      offset: { beginExclusive: beginExclusive },
-      filter: {
-        // filtersForAnyParty = semua event visible ke admin (admin punya
-        // CanReadAs semua party). Filter kosong akan 400 (verified curl test),
-        // jadi pakai WildcardFilter di level "any party".
-        filtersForAnyParty: {
-          cumulative: [
-            {
-              identifierFilter: {
-                WildcardFilter: { value: { includeCreatedEventBlob: false } },
+    // Load list party user dari DB (refresh tiap connect supaya user baru
+    // langsung masuk). Skip placeholder (canquest:...) dan party kosong.
+    const partyIds = await this.loadUserParties();
+    if (partyIds.length === 0) {
+      // Tidak ada user dengan wallet real → tidak ada yang dimonitor. Retry
+      // 60s (bukan exponential — kondisi ini bisa berubah saat user register).
+      this.logger.log(
+        'CantonUpdates: no user parties yet, retrying in 60s...',
+      );
+      setTimeout(() => {
+        if (!this.closedByUser) void this.startStream();
+      }, 60_000);
+      return;
+    }
+
+    // Build filtersByParty map: { partyId: { cumulative: [WildcardFilter] } }
+    // WildcardFilter per-party = semua template event untuk party itu.
+    const filtersByParty: Record<string, { cumulative: unknown[] }> = {};
+    for (const p of partyIds) {
+      filtersByParty[p] = {
+        cumulative: [
+          {
+            identifierFilter: {
+              WildcardFilter: {
+                value: { includeCreatedEventBlob: false },
               },
             },
-          ],
-        },
-      },
+          },
+        ],
+      };
+    }
+
+    this.streamController = new AbortController();
+    const body = {
+      // Offset flat di top-level (match fetchTransactionUpdates shape line 3253).
+      beginExclusive,
+      filter: { filtersByParty },
       verbose: true,
     };
+
+    this.logger.log(
+      `CantonUpdates: subscribing for ${partyIds.length} party(ies) from offset=${beginExclusive}`,
+    );
 
     try {
       const res = await fetch(`${this.baseUrl}/v2/updates`, {
@@ -383,6 +415,30 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     } catch (err) {
       this.logger.error(`CantonUpdates: token fetch failed: ${String(err)}`);
       return null;
+    }
+  }
+
+  /**
+   * Ambil semua partyId user yang punya wallet real dari DB.
+   * Skip placeholder (canquest:...) dan party kosong.
+   * Dipakai untuk build filtersByParty map — refresh tiap connect supaya
+   * user baru langsung ter-monitor.
+   */
+  private async loadUserParties(): Promise<string[]> {
+    try {
+      const users = await this.prisma.user.findMany({
+        where: { cantonPartyId: { not: null } },
+        select: { cantonPartyId: true },
+      });
+      return users
+        .map((u) => u.cantonPartyId)
+        .filter(
+          (p): p is string =>
+            !!p && !p.startsWith('canquest:') && p.includes('::'),
+        );
+    } catch (err) {
+      this.logger.warn(`CantonUpdates: loadUserParties failed: ${String(err)}`);
+      return [];
     }
   }
 
