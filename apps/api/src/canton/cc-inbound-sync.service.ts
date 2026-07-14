@@ -24,7 +24,16 @@ import { CantonLedgerService } from './canton-ledger.service';
 @Injectable()
 export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(CcInboundSyncService.name);
-  private readonly enabled: boolean;
+  /**
+   * Flag untuk POLLER BACKGROUND (loop semua user setiap 30s). Pisah dari
+   * on-demand methods (alignBalanceFromChain, syncUser) yang dipanggil
+   * controller setelah send/swap/reward (14 call site) — itu tetap aktif
+   * terlepas dari flag ini.
+   *
+   * Default true supaya backward-compat. Set 'false' kalau CantonUpdatesService
+   * (event-driven /v2/updates stream) sudah jalan — hilangkan double-work.
+   */
+  private readonly pollEnabled: boolean;
   private readonly pollIntervalMs: number;
   private timer: NodeJS.Timeout | null = null;
   private running = false;
@@ -36,17 +45,26 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
     private readonly ledger: CantonLedgerService,
     private readonly realtime: RealtimeService,
   ) {
-    const flag = this.config.get<string>('CC_INBOUND_SYNC_ENABLED');
-    this.enabled = flag === undefined || flag === '' || flag === 'true';
+    // CC_INBOUND_SYNC_ENABLED (legacy) tetap dipakai supaya existing env tidak
+    // break. CC_INBOUND_SYNC_POLL_ENABLED (baru) lebih spesifik: kalau diset
+    // false, poller off tapi on-demand methods tetap jalan.
+    const legacyFlag = this.config.get<string>('CC_INBOUND_SYNC_ENABLED');
+    const legacyEnabled =
+      legacyFlag === undefined || legacyFlag === '' || legacyFlag === 'true';
+    const pollFlag = this.config.get<string>('CC_INBOUND_SYNC_POLL_ENABLED');
+    this.pollEnabled =
+      pollFlag !== undefined && pollFlag !== ''
+        ? pollFlag === 'true'
+        : legacyEnabled;
     this.pollIntervalMs = Number(
       this.config.get<string>('CC_INBOUND_SYNC_POLL_MS') ?? '30000',
     );
   }
 
   onModuleInit() {
-    if (!this.enabled) {
+    if (!this.pollEnabled) {
       this.logger.log(
-        'CC inbound sync disabled (CC_INBOUND_SYNC_ENABLED=false)',
+        'CC inbound sync POLLER disabled (CC_INBOUND_SYNC_POLL_ENABLED=false). On-demand methods still active.',
       );
       return;
     }
@@ -91,13 +109,17 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** Sync one user (call before balance / transaction list). */
+  /**
+   * Sync one user on-demand (dipanggil controller sebelum balance / transaction
+   * list). TIDAK gated by pollEnabled — on-demand method ini independen dari
+   * background poller, supaya send/swap/reward tetap sync walau poller off.
+   */
   async syncUser(
     userId: string,
     username: string,
     cantonPartyId?: string | null,
   ): Promise<void> {
-    if (!this.enabled || !this.splice.isConfigured) return;
+    if (!this.splice.isConfigured) return;
     if (!username || cantonPartyId?.startsWith('canquest:')) return;
     try {
       await this.syncUserBalance(userId, username, cantonPartyId);
