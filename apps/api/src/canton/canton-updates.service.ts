@@ -46,6 +46,7 @@ import { ConfigService } from '@nestjs/config';
 import { Subject } from 'rxjs';
 
 import { KeycloakTokenService } from '../auth/keycloak-token.service';
+import { CantonLedgerService } from './canton-ledger.service';
 import { CcInboundSyncService } from './cc-inbound-sync.service';
 import { OfferReconcilerService } from './offer-reconciler.service';
 
@@ -117,6 +118,7 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly config: ConfigService,
     private readonly keycloak: KeycloakTokenService,
+    private readonly ledger: CantonLedgerService,
     private readonly inboundSync: CcInboundSyncService,
     private readonly offerReconciler: OfferReconcilerService,
   ) {
@@ -234,14 +236,13 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
 
     this.streamController = new AbortController();
     const body = {
-      // Filter kosong akan 400 (verified). Tapi filter WildcardFilter per-party
-      // tidak feasible untuk semua user. Canton support "filtersForAnyParty"
-      // kosong juga tidak. Solusi: subscribe tanpa filter party = semua event
-      // yang visible ke admin (admin punya readAs semua party). Tapi Canton
-      // butuh minimal satu filter. Pakai "verbose" mode + AnyFilter via
-      // filtersForAnyParty wildcard supaya dapat semua.
-      offset: { beginExclusive: { absolute: beginExclusive } },
+      // Offset format: flat { beginExclusive: <offset> } sesuai Canton JSON API.
+      // fetchTransactionUpdates pakai shape sama (beginExclusive number) — proven.
+      offset: { beginExclusive: beginExclusive },
       filter: {
+        // filtersForAnyParty = semua event visible ke admin (admin punya
+        // CanReadAs semua party). Filter kosong akan 400 (verified curl test),
+        // jadi pakai WildcardFilter di level "any party".
         filtersForAnyParty: {
           cumulative: [
             {
@@ -256,7 +257,7 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     };
 
     try {
-      const res = await fetch(`${this.baseUrl}/v2/updates/stream`, {
+      const res = await fetch(`${this.baseUrl}/v2/updates`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -385,21 +386,22 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** Ambil offset ledger terbaru (untuk start awal — hindari replay penuh). */
+  /**
+   * Ambil offset ledger terbaru (untuk start awal — hindari replay penuh).
+   * Reuse CantonLedgerService.ledgerEnd() yang sudah proven + pakai auth yang
+   * sama (Keycloak admin token via authHeaders()).
+   *
+   * Response shape: { offset: <string|number> } (flat, BUKAN nested .absolute).
+   */
   private async fetchLedgerEnd(): Promise<string | undefined> {
     try {
-      const token = await this.keycloak.getAdminLedgerToken();
-      const res = await fetch(`${this.baseUrl}/v2/state/ledger-end`, {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${token}` },
-        signal: AbortSignal.timeout(10_000),
-      });
-      if (!res.ok) return undefined;
-      const data = (await res.json()) as { offset?: string | { absolute?: string } };
-      return typeof data.offset === 'string'
-        ? data.offset
-        : data.offset?.absolute;
-    } catch {
+      const end = (await this.ledger.ledgerEnd()) as {
+        offset?: string | number;
+      };
+      const off = end?.offset;
+      return off !== undefined && off !== null ? String(off) : undefined;
+    } catch (err) {
+      this.logger.warn(`CantonUpdates: ledgerEnd failed: ${String(err)}`);
       return undefined;
     }
   }
