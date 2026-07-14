@@ -1,6 +1,6 @@
 {
   "framework": "nextjs",
-  "regions": ["fra1"],
+  "regions": ["sin1"],
   "installCommand": "cd ../.. && npm install --ignore-scripts && cd apps/web && npm install --ignore-scripts",
   "crons": [
     {
