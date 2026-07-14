@@ -68,6 +68,20 @@ export const BADGE_UNREAD_TX_TYPES: CcTransactionType[] = [
 
 /** @deprecated Use FEED_TX_TYPES (feed) / BADGE_UNREAD_TX_TYPES (badge). */
 export const NOTIFICATION_TX_TYPES: CcTransactionType[] = FEED_TX_TYPES;
+
+/**
+ * TokenTransaction types yang tampil di notification bell (feed) dan memicu
+ * badge unread. Paralel dengan FEED_TX_TYPES / BADGE_UNREAD_TX_TYPES untuk CC.
+ * TOKEN_FEE_OUT TIDAK termasuk (audit-only, disembunyikan).
+ */
+export const FEED_TOKEN_TX_TYPES: TokenTxType[] = [
+  'TOKEN_TRANSFER_IN',
+  'TOKEN_TRANSFER_OUT',
+  'TOKEN_OFFER_REJECTED',
+  'TOKEN_OFFER_WITHDRAWN',
+];
+export const BADGE_UNREAD_TOKEN_TX_TYPES: TokenTxType[] =
+  FEED_TOKEN_TX_TYPES;
 import {
   looksLikeCantonPartyId,
   normalizeCantonPartyId,
@@ -577,22 +591,51 @@ export class UsersService {
     const feedWhere = this.notificationFeedWhere(userId);
     const take = Math.min(30, Math.max(1, limit));
 
-    const [feedRows, badgeRows, drawAlerts, codeClaimAlerts] =
-      await Promise.all([
-        this.prisma.ccTransaction.findMany({
-          where: feedWhere,
-          orderBy: { createdAt: 'desc' },
-          take,
-        }),
-        // Ambil baris badge (id + referenceId + type) untuk post-filter fee, lalu hitung.
-        this.prisma.ccTransaction.findMany({
-          where: this.notificationBadgeWhere(userId, lastSeenAt),
-          orderBy: { createdAt: 'desc' },
-          select: { id: true, referenceId: true, type: true, createdAt: true },
-        }),
-        this.getDrawAlerts(userId, lastSeenAt),
-        this.getCodeClaimAlerts(userId, lastSeenAt),
-      ]);
+    // Token feed + badge where-clauses (paralel CC, instrument-aware).
+    const tokenFeedWhere = {
+      userId,
+      type: { in: FEED_TOKEN_TX_TYPES },
+    } satisfies Prisma.TokenTransactionWhereInput;
+    const tokenBadgeWhere: Prisma.TokenTransactionWhereInput = {
+      userId,
+      type: { in: BADGE_UNREAD_TOKEN_TX_TYPES },
+      ...(lastSeenAt ? { createdAt: { gt: lastSeenAt } } : {}),
+    };
+
+    const [
+      feedRows,
+      badgeRows,
+      tokenFeedRows,
+      tokenBadgeRows,
+      drawAlerts,
+      codeClaimAlerts,
+    ] = await Promise.all([
+      this.prisma.ccTransaction.findMany({
+        where: feedWhere,
+        orderBy: { createdAt: 'desc' },
+        take,
+      }),
+      // Ambil baris badge (id + referenceId + type) untuk post-filter fee, lalu hitung.
+      this.prisma.ccTransaction.findMany({
+        where: this.notificationBadgeWhere(userId, lastSeenAt),
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, referenceId: true, type: true, createdAt: true },
+      }),
+      // Token feed (non-CC, mis. USDCx transfer).
+      this.prisma.tokenTransaction.findMany({
+        where: tokenFeedWhere,
+        orderBy: { createdAt: 'desc' },
+        take,
+      }),
+      // Token badge (unread count).
+      this.prisma.tokenTransaction.findMany({
+        where: tokenBadgeWhere,
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, type: true, createdAt: true },
+      }),
+      this.getDrawAlerts(userId, lastSeenAt),
+      this.getCodeClaimAlerts(userId, lastSeenAt),
+    ]);
 
     // Post-filter fee dari FEED (buang penerima = party fee).
     const feeFilteredFeed: typeof feedRows = [];
@@ -616,9 +659,11 @@ export class UsersService {
       const resolved = await this.resolveTransferCounterparty(row.referenceId);
       if (!isFeePartyRecipient(row.referenceId, resolved)) unreadTxCount++;
     }
+    // Token badge: TOKEN_FEE_OUT sudah di-exclude via where-clause, sisanya unread.
+    unreadTxCount += tokenBadgeRows.length;
 
     const enriched = await this.enrichQuestRewardDescriptions(feeFilteredFeed);
-    const serializedTx = await Promise.all(
+    const serializedCcTx = await Promise.all(
       enriched.map(async (tx) => {
         const counterparty =
           tx.type === 'TRANSFER_IN' || tx.type === 'TRANSFER_OUT'
@@ -626,18 +671,39 @@ export class UsersService {
             : null;
         return {
           kind: 'transaction' as const,
-          id: tx.id,
+          id: `cc-${tx.id}`,
           type: tx.type,
           description: tx.description,
           amountMicroCc: tx.amountMicroCc.toString(),
           referenceId: tx.referenceId,
           counterparty,
           createdAt: tx.createdAt.toISOString(),
+          // Token-aware fields (kosong untuk CC murni).
+          instrumentId: null,
+          amountDecimal: null,
         };
       }),
     );
+    // Serialize token rows — amount pakai decimal asli, instrumentId terisi.
+    const serializedTokenTx = tokenFeedRows.map((tx) => ({
+      kind: 'transaction' as const,
+      id: `tok-${tx.id}`,
+      type: tx.type,
+      description: tx.description ?? '',
+      amountMicroCc: '0',
+      referenceId: tx.referenceId,
+      counterparty: tx.referenceId,
+      createdAt: tx.createdAt.toISOString(),
+      instrumentId: tx.instrumentId,
+      amountDecimal: tx.amount.toString(),
+    }));
 
-    const merged = [...serializedTx, ...drawAlerts, ...codeClaimAlerts]
+    const merged = [
+      ...serializedCcTx,
+      ...serializedTokenTx,
+      ...drawAlerts,
+      ...codeClaimAlerts,
+    ]
       .sort(
         (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
@@ -1167,17 +1233,28 @@ export class UsersService {
   ): Promise<number> {
     // Ambil dulu row PENDING yang cocok supaya bisa bersihkan suffix deskripsi
     // "[pending — recipient must accept offer]" saat offer selesai (accept/reject).
-    const pendingRows = await this.prisma.ccTransaction.findMany({
-      where: { transferInstructionCid, status: 'PENDING' },
-      select: { id: true, userId: true, description: true },
-    });
-    if (pendingRows.length === 0) return 0;
+    // Query KEDUA tabel: CcTransaction (CC) + TokenTransaction (token non-CC).
+    // Sebelumnya hanya CcTransaction → baris TOKEN_TRANSFER_OUT sender macet
+    // di PENDING walau sudah di-accept lawan.
+    const [pendingCcRows, pendingTokenRows] = await Promise.all([
+      this.prisma.ccTransaction.findMany({
+        where: { transferInstructionCid, status: 'PENDING' },
+        select: { id: true, userId: true, description: true },
+      }),
+      this.prisma.tokenTransaction.findMany({
+        where: { transferInstructionCid, status: 'PENDING' },
+        select: { id: true, userId: true, description: true },
+      }),
+    ]);
+    if (pendingCcRows.length === 0 && pendingTokenRows.length === 0) return 0;
 
     const settledAt = status === 'COMPLETED' ? new Date() : null;
     // Kumpulkan userId pemilik row unik untuk realtime push di akhir (Fix:
     // sebelumnya sender tidak diberi tahu saat offer-nya di-accept/reject).
     const ownerIds = new Set<string>();
-    for (const row of pendingRows) {
+
+    // ── CcTransaction (CC) ──────────────────────────────────────────────────
+    for (const row of pendingCcRows) {
       const cleanDesc = row.description
         .replace(/\s*\[pending[^\]]*\]\s*/i, '')
         .trim();
@@ -1193,8 +1270,26 @@ export class UsersService {
       ownerIds.add(row.userId);
     }
 
+    // ── TokenTransaction (token non-CC, mis. USDCx) ─────────────────────────
+    for (const row of pendingTokenRows) {
+      const cleanDesc = (row.description ?? '')
+        .replace(/\s*\[pending[^\]]*\]\s*/i, '')
+        .trim();
+      await this.prisma.tokenTransaction.update({
+        where: { id: row.id },
+        data: {
+          status,
+          ...(cantonUpdateId ? { cantonUpdateId } : {}),
+          ...(cleanDesc !== (row.description ?? '')
+            ? { description: cleanDesc }
+            : {}),
+        },
+      });
+      ownerIds.add(row.userId);
+    }
+
     // Notifikasi langsung ke pemilik row (biasanya SENDER offer): row PENDING
-    // mereka kini COMPLETED (CC diterima lawan) atau REJECTED (CC kembali).
+    // mereka kini COMPLETED (CC/token diterima lawan) atau REJECTED (kembali).
     // recordTransaction() hanya push untuk tx COMPLETED baru; flip status PENDING
     // → COMPLETED lewat sini, jadi push eksplisit agar UI sender update live.
     // Untuk COMPLETED juga invalidate cache balance (CC keluar dari escrow).
@@ -1205,7 +1300,7 @@ export class UsersService {
       }
     }
 
-    return pendingRows.length;
+    return pendingCcRows.length + pendingTokenRows.length;
   }
 
   /** Catat waktu toggle preapproval (enable/disable) untuk cooldown anti-spam 7 hari. */

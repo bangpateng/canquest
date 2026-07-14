@@ -7,6 +7,7 @@ import {
   ArrowUpRight,
   Ban,
   Bell,
+  Coins,
   Gift,
   Lock,
   LockOpen,
@@ -64,10 +65,18 @@ function txLabel(
       return t("transactions.offerRejected");
     case "OFFER_WITHDRAWN":
       return t("transactions.offerWithdrawn");
+    case "TOKEN_OFFER_REJECTED":
+      return t("transactions.tokenOfferRejected");
+    case "TOKEN_OFFER_WITHDRAWN":
+      return t("transactions.tokenOfferWithdrawn");
     case "PREAPPROVAL_ENABLED":
       return t("transactions.preapprovalEnabled");
     case "PREAPPROVAL_DISABLED":
       return t("transactions.preapprovalDisabled");
+    case "TOKEN_TRANSFER_IN":
+      return t("transactions.tokenReceived");
+    case "TOKEN_TRANSFER_OUT":
+      return t("transactions.tokenSent");
     default:
       return tx.description;
   }
@@ -139,22 +148,32 @@ function NotificationRow({ item }: { item: NotificationItem }) {
   }
 
   const tx = item;
+  const isToken =
+    tx.instrumentId != null &&
+    tx.instrumentId !== "Amulet" &&
+    tx.amountDecimal != null;
   const ccAmt = Math.abs(Number(tx.amountMicroCc)) / 1_000_000;
+  const tokenAmt = isToken ? Math.abs(Number(tx.amountDecimal)) : 0;
   const title = tx.description?.trim() || txLabel(tx, t);
-  // Toggle onchain (amount 0) — netral, tanpa amount sign.
+  // Toggle onchain (amount 0) — netral, tanpa amount sign. Termasuk token toggle.
   const isToggle =
     tx.type === "OFFER_REJECTED" ||
     tx.type === "OFFER_WITHDRAWN" ||
+    tx.type === "TOKEN_OFFER_REJECTED" ||
+    tx.type === "TOKEN_OFFER_WITHDRAWN" ||
     tx.type === "PREAPPROVAL_ENABLED" ||
     tx.type === "PREAPPROVAL_DISABLED";
-  // Arah: TRANSFER_OUT & CC_LOCK = keluar (−), sisanya = masuk (+).
-  const isDebit = tx.type === "TRANSFER_OUT" || tx.type === "CC_LOCK";
+  // Arah keluar (debit): TRANSFER_OUT, TOKEN_TRANSFER_OUT & CC_LOCK.
+  const isDebit =
+    tx.type === "TRANSFER_OUT" ||
+    tx.type === "TOKEN_TRANSFER_OUT" ||
+    tx.type === "CC_LOCK";
 
   const iconClass = cn(
     "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
-    tx.type === "TRANSFER_IN"
+    tx.type === "TRANSFER_IN" || tx.type === "TOKEN_TRANSFER_IN"
       ? "bg-green-500/10 text-green-600 dark:text-green-400"
-      : tx.type === "TRANSFER_OUT"
+      : tx.type === "TRANSFER_OUT" || tx.type === "TOKEN_TRANSFER_OUT"
         ? "bg-red-500/10 text-red-600 dark:text-red-400"
         : tx.type === "CC_LOCK"
           ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
@@ -185,15 +204,19 @@ function NotificationRow({ item }: { item: NotificationItem }) {
         <span className={iconClass}>
           {tx.type === "TRANSFER_IN" ? (
             <ArrowDownLeft className="h-4 w-4" aria-hidden />
-          ) : tx.type === "TRANSFER_OUT" ? (
+          ) : tx.type === "TOKEN_TRANSFER_IN" ? (
+            <Coins className="h-4 w-4" aria-hidden />
+          ) : tx.type === "TRANSFER_OUT" || tx.type === "TOKEN_TRANSFER_OUT" ? (
             <ArrowUpRight className="h-4 w-4" aria-hidden />
           ) : tx.type === "CC_LOCK" ? (
             <Lock className="h-4 w-4" aria-hidden />
           ) : tx.type === "CC_UNLOCK" ? (
             <LockOpen className="h-4 w-4" aria-hidden />
-          ) : tx.type === "OFFER_REJECTED" ? (
+          ) : tx.type === "OFFER_REJECTED" ||
+            tx.type === "TOKEN_OFFER_REJECTED" ? (
             <Ban className="h-4 w-4" aria-hidden />
-          ) : tx.type === "OFFER_WITHDRAWN" ? (
+          ) : tx.type === "OFFER_WITHDRAWN" ||
+            tx.type === "TOKEN_OFFER_WITHDRAWN" ? (
             <Undo2 className="h-4 w-4" aria-hidden />
           ) : tx.type === "PREAPPROVAL_ENABLED" ? (
             <ShieldCheck className="h-4 w-4" aria-hidden />
@@ -213,6 +236,12 @@ function NotificationRow({ item }: { item: NotificationItem }) {
         </span>
         {isToggle ? (
           <span className={amountClass}>—</span>
+        ) : isToken ? (
+          <span className={amountClass}>
+            {isDebit ? "\u2212" : "+"}
+            {tokenAmt.toLocaleString(undefined, { maximumFractionDigits: 6 })}{" "}
+            {tx.instrumentId}
+          </span>
         ) : (
           <span className={amountClass}>
             {isDebit ? "\u2212" : "+"}
@@ -303,14 +332,19 @@ export function TransactionNotifications() {
     }
     switch (toast.txType) {
       case "TRANSFER_OUT":
+      case "TOKEN_TRANSFER_OUT":
         return <ArrowUpRight className="mt-0.5 h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />;
+      case "TOKEN_TRANSFER_IN":
+        return <Coins className="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />;
       case "CC_LOCK":
         return <Lock className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />;
       case "CC_UNLOCK":
         return <LockOpen className="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />;
       case "OFFER_REJECTED":
+      case "TOKEN_OFFER_REJECTED":
         return <Ban className="mt-0.5 h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" />;
       case "OFFER_WITHDRAWN":
+      case "TOKEN_OFFER_WITHDRAWN":
         return <Undo2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" />;
       case "PREAPPROVAL_ENABLED":
         return <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />;
@@ -334,6 +368,7 @@ export function TransactionNotifications() {
       case "SPIN_REWARD":
         return t("notifications.toastEarn", { amount });
       case "TRANSFER_OUT":
+      case "TOKEN_TRANSFER_OUT":
         return t("notifications.toastSent", { amount });
       case "CC_LOCK":
         return t("notifications.toastLocked", { amount });
@@ -341,13 +376,18 @@ export function TransactionNotifications() {
         return t("notifications.toastUnlocked", { amount });
       case "OFFER_REJECTED":
         return t("transactions.offerRejected");
+      case "TOKEN_OFFER_REJECTED":
+        return t("transactions.tokenOfferRejected");
       case "OFFER_WITHDRAWN":
         return t("transactions.offerWithdrawn");
+      case "TOKEN_OFFER_WITHDRAWN":
+        return t("transactions.tokenOfferWithdrawn");
       case "PREAPPROVAL_ENABLED":
         return t("transactions.preapprovalEnabled");
       case "PREAPPROVAL_DISABLED":
         return t("transactions.preapprovalDisabled");
       case "TRANSFER_IN":
+      case "TOKEN_TRANSFER_IN":
       default:
         return t("notifications.toastReceived", { amount });
     }

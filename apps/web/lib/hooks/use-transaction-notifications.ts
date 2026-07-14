@@ -18,12 +18,21 @@ export type NotificationTx = {
     | "OFFER_REJECTED"
     | "OFFER_WITHDRAWN"
     | "PREAPPROVAL_ENABLED"
-    | "PREAPPROVAL_DISABLED";
+    | "PREAPPROVAL_DISABLED"
+    // Token non-CC (CIP-0056 P2P transfer, mis. USDCx).
+    | "TOKEN_TRANSFER_IN"
+    | "TOKEN_TRANSFER_OUT"
+    | "TOKEN_OFFER_REJECTED"
+    | "TOKEN_OFFER_WITHDRAWN";
   description: string;
   amountMicroCc: string;
   referenceId: string | null;
   counterparty?: string | null;
   createdAt: string;
+  /** Instrument id untuk token non-CC (mis. "USDCx"). null untuk CC. */
+  instrumentId?: string | null;
+  /** Amount token dalam unit asli (Decimal string). null untuk CC. */
+  amountDecimal?: string | null;
 };
 
 export type NotificationDraw = {
@@ -130,11 +139,19 @@ export function useTransactionNotifications(
             description: `${item.questTitle}: ${item.code}`,
           });
         } else {
+          // Token non-CC: amount dari amountDecimal (unit asli). CC: microCC → CC.
+          const isToken =
+            item.instrumentId != null &&
+            item.instrumentId !== "Amulet" &&
+            item.amountDecimal != null;
+          const amountCc = isToken
+            ? Math.abs(Number(item.amountDecimal))
+            : Math.abs(Number(item.amountMicroCc)) / 1_000_000;
           fresh.push({
             id: item.id,
             kind: "transaction",
             txType: item.type,
-            amountCc: Math.abs(Number(item.amountMicroCc)) / 1_000_000,
+            amountCc,
             description: item.description,
           });
         }
