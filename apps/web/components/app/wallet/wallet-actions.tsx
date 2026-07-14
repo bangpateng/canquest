@@ -10,7 +10,7 @@ import {
 } from "@/lib/canton/canton-party-id";
 import { cn } from "@/lib/utils/utils";
 import { TransactionDetailModal } from "@/components/app/wallet/transaction-detail-modal";
-import { OffersModal, useOffers } from "@/components/app/wallet/offers-section";
+import { OffersModal, useOffers, useSentOffers } from "@/components/app/wallet/offers-section";
 import { SwapModal } from "@/components/app/wallet/swap-modal";
 import { WalletPasswordModal } from "@/components/app/wallet/wallet-password-modal";
 import { useWalletPassword } from "@/lib/hooks/use-wallet-password";
@@ -65,7 +65,16 @@ export function WalletActions({
 
   // Pending incoming offers — badge count + modal content.
   const { offers, loading: offersLoading, error: offersError, setOffers, refresh: refreshOffers } = useOffers();
-  const offersCount = offers.length;
+  // Pending outgoing (sent) offers — tab Sent di modal (Withdraw).
+  const {
+    sentOffers,
+    loading: sentOffersLoading,
+    error: sentOffersError,
+    setOffers: setSentOffers,
+    refresh: refreshSentOffers,
+  } = useSentOffers();
+  // Badge total: incoming + outgoing supaya user tahu ada aksi pending.
+  const offersCount = offers.length + sentOffers.length;
 
   // Fetch fee config from backend env so UI stays in sync with .env
   useEffect(() => {
@@ -784,6 +793,14 @@ export function WalletActions({
         setOffers={setOffers}
         onRefresh={() => {
           void refreshOffers();
+          onBalanceRefresh?.();
+        }}
+        sentOffers={sentOffers}
+        sentLoading={sentOffersLoading}
+        sentError={sentOffersError}
+        setSentOffers={setSentOffers}
+        onSentRefresh={() => {
+          void refreshSentOffers();
           onBalanceRefresh?.();
         }}
       />

@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils/utils";
 import { buttonVariants } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { iconButtonClass } from "@/lib/ui/ui-button-styles";
-import { ArrowDownLeft, Check, X, Clock } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Check, X, Clock, Undo2 } from "lucide-react";
 import { queryKeys } from "@/lib/queries/query-keys";
 import { displayName } from "@/components/app/wallet/token-logo";
 
@@ -16,6 +16,8 @@ export interface OfferItem {
   sender: string;
   senderLabel?: string;
   receiver: string;
+  /** Label penerima (di-resolve jadi @username oleh backend). Dipakai tab Sent. */
+  receiverLabel?: string;
   amount: string;
   description: string;
   expiresAt?: string;
@@ -60,6 +62,16 @@ export function senderDisplay(offer: OfferItem): string {
   if (offer.senderLabel) return offer.senderLabel;
   if (offer.sender?.includes("::")) return offer.sender.split("::")[0]!;
   return offer.sender || "unknown";
+}
+
+/**
+ * Label penerima untuk tab Sent (outgoing offers). Mirror dari senderDisplay:
+ * pakai receiverLabel (di-resolve backend), fallback ke party hint.
+ */
+export function receiverDisplay(offer: OfferItem): string {
+  if (offer.receiverLabel) return offer.receiverLabel;
+  if (offer.receiver?.includes("::")) return offer.receiver.split("::")[0]!;
+  return offer.receiver || "unknown";
 }
 
 /**
@@ -126,7 +138,74 @@ export function useOffers() {
 }
 
 /**
- * Remove satu offer dari list lokal (setelah accept/reject sukses).
+ * Hook: fetch & re-fetch OUTGOING (sent) pending offers — dipakai tab Sent
+ * di modal Offers (tombol Withdraw). Mirror useOffers tapi query key terpisah
+ * (queryKeys.party.sentOffers) + fetch ?direction=outgoing.
+ */
+export function useSentOffers() {
+  const queryClient = useQueryClient();
+
+  const query = useQuery({
+    queryKey: queryKeys.party.sentOffers,
+    queryFn: async (): Promise<{ items: OfferItem[]; error: string | null }> => {
+      try {
+        const res = await fetch("/api/party/offers?direction=outgoing", {
+          credentials: "include",
+        });
+        const data = (await res.json()) as OffersResponse;
+        if (!res.ok) {
+          return {
+            items: [],
+            error: data.message ?? `Server error (HTTP ${res.status}).`,
+          };
+        }
+        return { items: data.offers ?? [], error: null };
+      } catch {
+        return { items: [], error: "Network error. Check your connection." };
+      }
+    },
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+    retry: 2,
+  });
+
+  const data = query.data;
+  const sentOffers = data?.items ?? [];
+  const sentError = data?.error ?? null;
+
+  const setSentOffers = useCallback(
+    (updater: (prev: OfferItem[]) => OfferItem[]) => {
+      queryClient.setQueryData<{ items: OfferItem[]; error: string | null } | undefined>(
+        queryKeys.party.sentOffers,
+        (prev) => {
+          const items = prev?.items ?? [];
+          return { items: updater(items), error: null };
+        },
+      );
+    },
+    [queryClient],
+  );
+
+  const refreshSentOffers = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: queryKeys.party.sentOffers });
+    const latest = queryClient.getQueryData<{ items: OfferItem[] } | undefined>(
+      queryKeys.party.sentOffers,
+    );
+    return latest?.items.length ?? 0;
+  }, [queryClient]);
+
+  return {
+    sentOffers,
+    loading: query.isPending,
+    error: sentError,
+    refresh: refreshSentOffers,
+    setOffers: setSentOffers,
+  };
+}
+
+/**
+ * Remove satu offer dari list lokal (setelah accept/reject/withdraw sukses).
  */
 export function removeOfferLocally(
   setOffers: (updater: (prev: OfferItem[]) => OfferItem[]) => void,
@@ -145,6 +224,12 @@ export interface OffersModalProps {
   error: string | null;
   setOffers: (updater: (prev: OfferItem[]) => OfferItem[]) => void;
   onRefresh?: () => void;
+  /** Outgoing (sent) pending offers — tab Sent + tombol Withdraw. */
+  sentOffers: OfferItem[];
+  sentLoading: boolean;
+  sentError: string | null;
+  setSentOffers: (updater: (prev: OfferItem[]) => OfferItem[]) => void;
+  onSentRefresh?: () => void;
 }
 
 export function OffersModal({
@@ -155,10 +240,16 @@ export function OffersModal({
   error,
   setOffers,
   onRefresh,
+  sentOffers,
+  sentLoading,
+  sentError,
+  setSentOffers,
+  onSentRefresh,
 }: OffersModalProps) {
+  const [activeTab, setActiveTab] = useState<"incoming" | "sent">("incoming");
   const [processingAction, setProcessingAction] = useState<{
     id: string;
-    action: "accept" | "reject";
+    action: "accept" | "reject" | "withdraw";
   } | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -229,6 +320,42 @@ export function OffersModal({
     [setOffers, onRefresh],
   );
 
+  // Withdraw (cancel) outgoing offer — hanya sender yang boleh. Mirror
+  // handleReject tapi kirim ke /transfer-instruction/withdraw + optimistic
+  // remove di list Sent (setSentOffers), bukan list Incoming.
+  const handleWithdraw = useCallback(
+    async (offer: OfferItem) => {
+      setProcessingAction({ id: offer.contractId, action: "withdraw" });
+      setSuccessMsg(null);
+      try {
+        const res = await fetch("/api/party/transfer-instruction/withdraw", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            transferInstructionCid: offer.contractId,
+          }),
+        });
+        const data = (await res.json()) as { ok?: boolean; message?: string };
+        if (res.ok && data.ok) {
+          removeOfferLocally(setSentOffers, offer.contractId);
+          setSuccessMsg(
+            data.message ??
+              `Transfer cancelled — ${displayName(offer.instrumentId ?? "Amulet")} returned to your wallet.`,
+          );
+          onSentRefresh?.();
+        } else {
+          alert(data.message ?? "Failed to withdraw transfer.");
+        }
+      } catch {
+        alert("Network error. Check your connection and try again.");
+      } finally {
+        setProcessingAction(null);
+      }
+    },
+    [setSentOffers, onSentRefresh],
+  );
+
   // Esc to close.
   useEffect(() => {
     if (!open) return;
@@ -239,10 +366,10 @@ export function OffersModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  // Reset success message saat modal ditutup.
+  // Reset success message saat modal ditutup atau ganti tab.
   useEffect(() => {
     if (!open) setSuccessMsg(null);
-  }, [open]);
+  }, [open, activeTab]);
 
   if (!open) return null;
 
@@ -260,20 +387,56 @@ export function OffersModal({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Incoming offers"
+        aria-label="Transfer offers"
         className="relative z-10 my-auto w-full max-h-[min(90vh,90dvh)] max-w-md overflow-y-auto rounded-3xl border border-white/5 bg-[var(--card)] p-6 sm:p-8 shadow-xl"
       >
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <ArrowDownLeft className="h-5 w-5 text-emerald-400" aria-hidden />
-            <h2 className="text-xl font-bold text-slate-100">
-              Offers
+        <div className="flex items-center justify-between gap-2">
+          {/* Segmented tab control: Incoming | Sent */}
+          <div
+            role="tablist"
+            aria-label="Offer direction"
+            className="flex items-center gap-1 rounded-xl bg-white/[0.03] p-1"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "incoming"}
+              onClick={() => setActiveTab("incoming")}
+              className={cn(
+                "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
+                activeTab === "incoming"
+                  ? "bg-emerald-500/15 text-emerald-400"
+                  : "text-slate-400 hover:text-slate-200",
+              )}
+            >
+              <ArrowDownLeft className="h-3.5 w-3.5" />
+              Incoming
               {offers.length > 0 && (
-                <span className="ml-2 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-emerald-500/15 px-2 text-xs font-bold text-emerald-400">
+                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500/20 px-1 text-[10px] font-bold text-emerald-400">
                   {offers.length}
                 </span>
               )}
-            </h2>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "sent"}
+              onClick={() => setActiveTab("sent")}
+              className={cn(
+                "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
+                activeTab === "sent"
+                  ? "bg-amber-500/15 text-amber-400"
+                  : "text-slate-400 hover:text-slate-200",
+              )}
+            >
+              <ArrowUpRight className="h-3.5 w-3.5" />
+              Sent
+              {sentOffers.length > 0 && (
+                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500/20 px-1 text-[10px] font-bold text-amber-400">
+                  {sentOffers.length}
+                </span>
+              )}
+            </button>
           </div>
           <button
             type="button"
@@ -293,33 +456,147 @@ export function OffersModal({
             </div>
           )}
 
-          {loading ? (
+          {activeTab === "incoming" ? (
+            loading ? (
+              <div className="flex items-center justify-center py-6">
+                <LoadingSpinner size="sm" tone="muted" />
+              </div>
+            ) : error ? (
+              <div className="rounded-2xl border border-red-500/20 bg-red-500/5 px-5 py-4 text-sm font-medium text-red-400">
+                {error}
+              </div>
+            ) : offers.length === 0 ? (
+              <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-5 py-8 text-center">
+                <p className="text-sm font-medium text-slate-400">
+                  No pending offers
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Incoming transfer requests will appear here.
+                </p>
+              </div>
+            ) : (
+              <ul className="space-y-3">
+                {offers.map((offer) => {
+                  const isAccepting =
+                    processingAction?.id === offer.contractId &&
+                    processingAction?.action === "accept";
+                  const isRejecting =
+                    processingAction?.id === offer.contractId &&
+                    processingAction?.action === "reject";
+                  const isBusy = isAccepting || isRejecting;
+
+                  return (
+                    <li
+                      key={offer.contractId}
+                      className="flex flex-col gap-3 rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl px-5 py-4"
+                    >
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <div className="flex items-center gap-2.5">
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-green-500/10 text-green-500">
+                            <ArrowDownLeft className="h-4 w-4" />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="truncate text-sm font-semibold text-white">
+                                {formatAmount(offer)}{" "}
+                                {displayName(offer.instrumentId ?? "Amulet")}{" "}
+                                from {senderDisplay(offer)}
+                              </p>
+                              <span
+                                className={cn(
+                                  "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
+                                  offer.type === "transfer_instruction"
+                                    ? "bg-blue-500/15 text-blue-400"
+                                    : "bg-slate-500/15 text-slate-500",
+                                )}
+                              >
+                                {offer.type === "transfer_instruction"
+                                  ? "CIP-56"
+                                  : "Legacy"}
+                              </span>
+                            </div>
+                            {offer.description ? (
+                              <p className="truncate text-xs font-medium text-slate-400">
+                                {offer.description}
+                              </p>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <p className="font-mono text-[10px] font-medium text-slate-500 truncate">
+                            ID: {offer.contractId.slice(0, 24)}…
+                          </p>
+                          {offer.expiresAt && (
+                            <span className="flex shrink-0 items-center gap-1 text-[10px] text-slate-600">
+                              <Clock className="h-3 w-3" />
+                              Expires{" "}
+                              {new Date(offer.expiresAt).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={isBusy}
+                          onClick={() => handleAccept(offer)}
+                          className={cn(
+                            buttonVariants({ variant: "secondary", size: "sm" }),
+                            "flex-1 justify-center gap-1.5 text-green-400 hover:text-green-300 border-green-500/20 hover:border-green-500/40",
+                          )}
+                        >
+                          {isAccepting ? (
+                            <LoadingSpinner size="sm" />
+                          ) : (
+                            <Check className="h-4 w-4" />
+                          )}
+                          Accept
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isBusy}
+                          onClick={() => handleReject(offer)}
+                          className={cn(
+                            buttonVariants({ variant: "secondary", size: "sm" }),
+                            "flex-1 justify-center gap-1.5 text-red-400 hover:text-red-300 border-red-500/20 hover:border-red-500/40",
+                          )}
+                        >
+                          {isRejecting ? (
+                            <LoadingSpinner size="sm" />
+                          ) : (
+                            <X className="h-4 w-4" />
+                          )}
+                          Reject
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )
+          ) : sentLoading ? (
             <div className="flex items-center justify-center py-6">
               <LoadingSpinner size="sm" tone="muted" />
             </div>
-          ) : error ? (
+          ) : sentError ? (
             <div className="rounded-2xl border border-red-500/20 bg-red-500/5 px-5 py-4 text-sm font-medium text-red-400">
-              {error}
+              {sentError}
             </div>
-          ) : offers.length === 0 ? (
+          ) : sentOffers.length === 0 ? (
             <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-5 py-8 text-center">
               <p className="text-sm font-medium text-slate-400">
-                No pending offers
+                No outgoing transfers
               </p>
               <p className="mt-1 text-xs text-slate-500">
-                Incoming CC transfer requests will appear here.
+                Pending transfers you&apos;ve sent can be cancelled here.
               </p>
             </div>
           ) : (
             <ul className="space-y-3">
-              {offers.map((offer) => {
-                const isAccepting =
+              {sentOffers.map((offer) => {
+                const isWithdrawing =
                   processingAction?.id === offer.contractId &&
-                  processingAction?.action === "accept";
-                const isRejecting =
-                  processingAction?.id === offer.contractId &&
-                  processingAction?.action === "reject";
-                const isBusy = isAccepting || isRejecting;
+                  processingAction?.action === "withdraw";
 
                 return (
                   <li
@@ -328,15 +605,15 @@ export function OffersModal({
                   >
                     <div className="min-w-0 flex-1 space-y-1.5">
                       <div className="flex items-center gap-2.5">
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-green-500/10 text-green-500">
-                          <ArrowDownLeft className="h-4 w-4" />
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-500">
+                          <ArrowUpRight className="h-4 w-4" />
                         </span>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
                             <p className="truncate text-sm font-semibold text-white">
                               {formatAmount(offer)}{" "}
-                              {displayName(offer.instrumentId ?? "Amulet")} from{" "}
-                              {senderDisplay(offer)}
+                              {displayName(offer.instrumentId ?? "Amulet")} →{" "}
+                              {receiverDisplay(offer)}
                             </p>
                             <span
                               className={cn(
@@ -374,35 +651,19 @@ export function OffersModal({
                     <div className="flex shrink-0 items-center gap-2">
                       <button
                         type="button"
-                        disabled={isBusy}
-                        onClick={() => handleAccept(offer)}
-                        className={cn(
-                          buttonVariants({ variant: "secondary", size: "sm" }),
-                          "flex-1 justify-center gap-1.5 text-green-400 hover:text-green-300 border-green-500/20 hover:border-green-500/40",
-                        )}
-                      >
-                        {isAccepting ? (
-                          <LoadingSpinner size="sm" />
-                        ) : (
-                          <Check className="h-4 w-4" />
-                        )}
-                        Accept
-                      </button>
-                      <button
-                        type="button"
-                        disabled={isBusy}
-                        onClick={() => handleReject(offer)}
+                        disabled={isWithdrawing}
+                        onClick={() => handleWithdraw(offer)}
                         className={cn(
                           buttonVariants({ variant: "secondary", size: "sm" }),
                           "flex-1 justify-center gap-1.5 text-red-400 hover:text-red-300 border-red-500/20 hover:border-red-500/40",
                         )}
                       >
-                        {isRejecting ? (
+                        {isWithdrawing ? (
                           <LoadingSpinner size="sm" />
                         ) : (
-                          <X className="h-4 w-4" />
+                          <Undo2 className="h-4 w-4" />
                         )}
-                        Reject
+                        Withdraw
                       </button>
                     </div>
                   </li>

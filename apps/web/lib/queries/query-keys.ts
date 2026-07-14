@@ -18,6 +18,8 @@ export const queryKeys = {
     ccPrice: ["party", "cc-price"] as const,
     tokenPrices: ["party", "token-prices"] as const,
     offers: ["party", "offers"] as const,
+    /** Outgoing (sent) pending offers — dipakai tab Sent di modal Offers (Withdraw). */
+    sentOffers: ["party", "offers", "sent"] as const,
     notifications: ["party", "notifications"] as const,
     transactions: {
       all: ["party", "transactions"] as const,

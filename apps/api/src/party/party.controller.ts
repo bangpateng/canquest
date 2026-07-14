@@ -1218,6 +1218,45 @@ export class PartyController {
       `TransferInstruction_Withdraw: user=@${user.username} cid=${cid.slice(0, 20)}...`,
     );
 
+    // Lookup detail BEFORE exercise (offer hilang post-exercise). Pakai
+    // both-directions supaya outgoing offer (sender = user) juga ketemu —
+    // lookupOfferDetail lama hanya filter receiver → null untuk outgoing.
+    let withdrawInstrumentId = 'Amulet';
+    let withdrawInstrumentAdmin = '';
+    let withdrawDetail: {
+      sender: string;
+      receiver: string;
+      instrumentId: string;
+      instrumentAdmin: string;
+    } | null = null;
+    try {
+      const detail = await this.ledger.lookupOfferDetailBothDirections(
+        cid,
+        user.cantonPartyId,
+      );
+      if (detail) {
+        withdrawDetail = detail;
+        withdrawInstrumentId = detail.instrumentId || 'Amulet';
+        withdrawInstrumentAdmin = detail.instrumentAdmin || '';
+      }
+    } catch {
+      /* detail tidak ketemu — fallback CC, Canton choice controller backstop */
+    }
+
+    // Defense-in-depth sender gate: hanya pemilik (sender) yang boleh withdraw.
+    // Canton choice controller (TransferInstruction_Withdraw controller = sender)
+    // tetap jadi backstop terakhir, tapi cek di app-level memberi pesan error
+    // yang jelas sebelum operasi ledger dijalankan.
+    if (
+      withdrawDetail &&
+      withdrawDetail.sender &&
+      withdrawDetail.sender !== user.cantonPartyId
+    ) {
+      throw new BadRequestException(
+        'You can only withdraw your own outgoing transfers.',
+      );
+    }
+
     const result = await this.ledger.withdrawTransferInstruction(
       cid,
       user.cantonPartyId,
@@ -1229,22 +1268,6 @@ export class PartyController {
       );
     }
 
-    // Resolve instrument (offer sudah hilang post-exercise — lookup mungkin null,
-    // fallback default CC). Branch: non-CC → TokenTransaction, CC → CcTransaction.
-    let withdrawInstrumentId = 'Amulet';
-    let withdrawInstrumentAdmin = '';
-    try {
-      const detail = await this.ledger.lookupOfferDetail(
-        cid,
-        user.cantonPartyId,
-      );
-      if (detail) {
-        withdrawInstrumentId = detail.instrumentId || 'Amulet';
-        withdrawInstrumentAdmin = detail.instrumentAdmin || '';
-      }
-    } catch {
-      /* offer sudah hilang post-exercise — default CC */
-    }
     const withdrawIsNonCc = withdrawInstrumentId.toLowerCase() !== 'amulet';
 
     // Catat history (tx id ASLI dari exercise). Non-fatal.
@@ -1625,12 +1648,20 @@ export class PartyController {
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * List all pending incoming transfer offers for the current user.
+   * List all pending transfer offers for the current user.
+   *
+   * Direction:
+   *  - default / 'incoming' → offers where user is RECEIVER (Accept/Reject)
+   *  - 'outgoing'           → offers where user is SENDER (Withdraw)
+   *
    * Returns both legacy Splice TransferOffers and CIP-0056 TransferInstructions.
    */
   @SkipThrottle()
   @Get('offers')
-  async listOffers(@Req() req: AuthedReq) {
+  async listOffers(
+    @Req() req: AuthedReq,
+    @Query('direction') direction?: string,
+  ) {
     const user = await this.users.findById(req.user.userId);
     if (!user?.cantonPartyId || !hasRealWallet(user.cantonPartyId)) {
       throw new BadRequestException(
@@ -1638,7 +1669,13 @@ export class PartyController {
       );
     }
 
-    let offers = await this.ledger.queryPendingOffers(user.cantonPartyId);
+    const dir: 'incoming' | 'outgoing' =
+      direction === 'outgoing' ? 'outgoing' : 'incoming';
+
+    let offers = await this.ledger.queryPendingOffers(
+      user.cantonPartyId,
+      dir,
+    );
 
     // Fallback: kalau ACS kosong, coba Splice Wallet API langsung
     if (offers.length === 0 && user.username) {
@@ -1663,23 +1700,34 @@ export class PartyController {
       }
     }
 
-    // Resolve sender labels from DB where possible
+    // Resolve labels from DB where possible.
+    // - Incoming: enrich senderLabel (untuk UI "from @ali")
+    // - Outgoing: enrich receiverLabel (untuk UI "→ @budi")
     const enriched = await Promise.all(
       offers.map(async (offer) => {
         let senderLabel = offer.sender.split('::')[0] ?? offer.sender;
+        let receiverLabel = offer.receiver.split('::')[0] ?? offer.receiver;
         try {
           const senderUser = await this.users.findByPartyId(offer.sender);
           if (senderUser?.username) senderLabel = `@${senderUser.username}`;
         } catch {
           /* keep party hint */
         }
-        return { ...offer, senderLabel };
+        try {
+          const receiverUser = await this.users.findByPartyId(offer.receiver);
+          if (receiverUser?.username)
+            receiverLabel = `@${receiverUser.username}`;
+        } catch {
+          /* keep party hint */
+        }
+        return { ...offer, senderLabel, receiverLabel };
       }),
     );
 
     return {
       offers: enriched,
       total: enriched.length,
+      direction: dir,
       legacyCount: enriched.filter((o) => o.type === 'transfer_offer').length,
       cip56Count: enriched.filter((o) => o.type === 'transfer_instruction')
         .length,

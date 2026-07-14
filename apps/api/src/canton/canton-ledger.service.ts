@@ -2537,7 +2537,19 @@ export class CantonLedgerService {
    * @param partyId - Canton party ID to query offers for
    * @returns Array of pending offers with type, contractId, sender, receiver, amount, description
    */
-  async queryPendingOffers(partyId: string): Promise<
+  async queryPendingOffers(
+    partyId: string,
+    /**
+     * Direction filter:
+     *  - 'incoming' (default) → offers where this party is the RECEIVER (Accept/Reject)
+     *  - 'outgoing'            → offers where this party is the SENDER (Withdraw)
+     *
+     * Default 'incoming' = perilaku lama (backward-compat). Filter dipilih di
+     * tiap branch parser: incoming → skip bila receiver !== partyId;
+     * outgoing → skip bila sender !== partyId.
+     */
+    direction: 'incoming' | 'outgoing' = 'incoming',
+  ): Promise<
     Array<{
       type: 'transfer_offer' | 'transfer_instruction';
       contractId: string;
@@ -2558,6 +2570,7 @@ export class CantonLedgerService {
       instrumentAdmin: string;
     }>
   > {
+    const isOutgoing = direction === 'outgoing';
     let offset: number | string = 0;
     try {
       const end = (await this.ledgerEnd()) as { offset?: number | string };
@@ -2633,10 +2646,9 @@ export class CantonLedgerService {
       // Legacy: Splice.Wallet.TransferOffer:TransferOffer
       if (tplId.includes('Splice.Wallet.TransferOffer:TransferOffer')) {
         const receiver = typeof args.receiver === 'string' ? args.receiver : '';
-        // Only show offers where this party is the RECEIVER
-        if (receiver !== partyId) continue;
-
         const sender = typeof args.sender === 'string' ? args.sender : '';
+        // Direction filter: incoming → must be receiver; outgoing → must be sender.
+        if (isOutgoing ? sender !== partyId : receiver !== partyId) continue;
         const ccAmount = typeof args.amount === 'string' ? args.amount : '0';
         const desc =
           typeof args.description === 'string' ? args.description : '';
@@ -2674,11 +2686,11 @@ export class CantonLedgerService {
 
         const receiver =
           typeof transfer.receiver === 'string' ? transfer.receiver : '';
-        // Only show instructions where this party is the RECEIVER
-        if (receiver !== partyId) continue;
-
         const sender =
           typeof transfer.sender === 'string' ? transfer.sender : '';
+        // Direction filter: incoming → must be receiver; outgoing → must be sender.
+        if (isOutgoing ? sender !== partyId : receiver !== partyId) continue;
+
         const amount =
           typeof transfer.amount === 'string' ? transfer.amount : '0';
         const meta = transfer.meta as
@@ -2742,10 +2754,10 @@ export class CantonLedgerService {
 
         const receiver =
           typeof transfer.receiver === 'string' ? transfer.receiver : '';
-        // Only show offers where this party is the RECEIVER.
-        if (receiver !== partyId) continue;
-
-        const sender = typeof transfer.sender === 'string' ? transfer.sender : '';
+        const sender =
+          typeof transfer.sender === 'string' ? transfer.sender : '';
+        // Direction filter: incoming → must be receiver; outgoing → must be sender.
+        if (isOutgoing ? sender !== partyId : receiver !== partyId) continue;
         const amount =
           typeof transfer.amount === 'string'
             ? transfer.amount
@@ -2831,6 +2843,43 @@ export class CantonLedgerService {
       return offers.find((o) => o.contractId === cid) ?? null;
     } catch (err) {
       this.logger.warn(`lookupOfferDetail error: ${String(err)}`);
+      return null;
+    }
+  }
+
+  /**
+   * Lookup SATU pending offer by contract ID — cek KEDUA arah (incoming &
+   * outgoing). Dipakai endpoint withdraw supaya resolve instrumentId/admin
+   * benar untuk outgoing offer (lookupOfferDetail lama hanya filter receiver
+   * → return null untuk offer milik sender).
+   *
+   * Urutan: incoming dulu (kasus umum), lalu outgoing. Return null kalau cid
+   * tidak ditemukan di kedua arah (sudah settled/expired/typo).
+   */
+  async lookupOfferDetailBothDirections(
+    cid: string,
+    partyId: string,
+  ): Promise<{
+    type: 'transfer_offer' | 'transfer_instruction';
+    contractId: string;
+    sender: string;
+    receiver: string;
+    amount: string;
+    description: string;
+    instrumentId: string;
+    instrumentAdmin: string;
+  } | null> {
+    try {
+      const incoming = await this.queryPendingOffers(partyId, 'incoming');
+      const found = incoming.find((o) => o.contractId === cid);
+      if (found) return found;
+      // Bukan incoming → cek outgoing (party = sender).
+      const outgoing = await this.queryPendingOffers(partyId, 'outgoing');
+      return outgoing.find((o) => o.contractId === cid) ?? null;
+    } catch (err) {
+      this.logger.warn(
+        `lookupOfferDetailBothDirections error: ${String(err)}`,
+      );
       return null;
     }
   }
