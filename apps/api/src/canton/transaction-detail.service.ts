@@ -42,6 +42,10 @@ export type TransactionDetailResponse = {
   isInternalMarker?: boolean;
   /** Status row: COMPLETED | PENDING | REJECTED (offer pending → PENDING). */
   status?: string | null;
+  /** Instrument id untuk token non-CC (mis. "USDCx"). null untuk CC murni. */
+  instrumentId?: string | null;
+  /** Amount token dalam unit asli (Decimal string). null untuk CC. */
+  amountDecimal?: string | null;
 };
 
 /**
@@ -120,6 +124,90 @@ export class TransactionDetailService {
   }
 
   async getDetailForUser(
+    userId: string,
+    transactionId: string,
+  ): Promise<TransactionDetailResponse> {
+    // Unified Activity feed meng-prefix id: "cc-" (CcTransaction) atau "tok-"
+    // (TokenTransaction) untuk mencegah collision cuid antar dua tabel. Lama
+    // (tanpa prefix) → backward-compat, anggap CC.
+    const raw = transactionId.trim();
+    if (raw.startsWith('tok-')) {
+      return this.getTokenDetailForUser(userId, raw.slice(4));
+    }
+    const ccId = raw.startsWith('cc-') ? raw.slice(3) : raw;
+    return this.getCcDetailForUser(userId, ccId);
+  }
+
+  /** Detail untuk transaksi token non-CC (TokenTransaction). */
+  private async getTokenDetailForUser(
+    userId: string,
+    tokenTransactionId: string,
+  ): Promise<TransactionDetailResponse> {
+    const [tx, user] = await Promise.all([
+      this.prisma.tokenTransaction.findFirst({
+        where: { id: tokenTransactionId, userId },
+      }),
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { cantonPartyId: true },
+      }),
+    ]);
+
+    if (!tx) {
+      throw new NotFoundException('Transaction not found');
+    }
+
+    const cantonUpdateId = tx.cantonUpdateId;
+    let ledgerEvents: LedgerEventSummary[] = [];
+    let ledgerFetchError: string | null = null;
+
+    if (cantonUpdateId && user?.cantonPartyId) {
+      const onChain = await this.ledger.fetchTransactionByUpdateId(
+        cantonUpdateId,
+        user.cantonPartyId,
+      );
+      if (onChain) {
+        ledgerEvents = summarizeLedgerEvents(onChain.events);
+      } else {
+        ledgerFetchError = '';
+      }
+    }
+
+    // Event/update id untuk link explorer Modo.
+    const rawId = tx.ledgerTxId ?? cantonUpdateId ?? null;
+    const internalMarker = isInternalTxMarker(rawId);
+    const eventId = internalMarker
+      ? null
+      : await this.resolveExplorerId(user?.cantonPartyId ?? '', rawId);
+
+    return {
+      id: `tok-${tx.id}`,
+      type: tx.type,
+      // CC placeholder (backward-compat field lama). Token pakai amountDecimal.
+      amountMicroCc: '0',
+      description: tx.description ?? '',
+      referenceId: tx.referenceId,
+      counterparty: tx.referenceId,
+      ledgerContractId: tx.ledgerTxId,
+      cantonUpdateId,
+      settledAt: null,
+      createdAt: tx.createdAt.toISOString(),
+      cantonPartyId: user?.cantonPartyId ?? null,
+      cantonScanUrl: internalMarker ? null : this.explorerUrl(eventId),
+      onChainSettled: Boolean(cantonUpdateId),
+      ledgerEvents,
+      ledgerFetchError,
+      eventId,
+      isInternalMarker: internalMarker,
+      status: tx.status,
+      // Token-aware fields.
+      instrumentId: tx.instrumentId,
+      amountDecimal: tx.amount.toString(),
+    };
+  }
+
+  /** Detail untuk transaksi CC (CcTransaction) — path asli. */
+  private async getCcDetailForUser(
     userId: string,
     ccTransactionId: string,
   ): Promise<TransactionDetailResponse> {

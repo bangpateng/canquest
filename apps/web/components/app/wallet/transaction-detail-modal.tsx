@@ -54,6 +54,9 @@ function buildDetailFromTxItem(tx: TxItem): TransactionDetail {
     eventId,
     isInternalMarker: tx.isInternalMarker ?? false,
     status: tx.status ?? "COMPLETED",
+    // Token-aware fields (pass-through dari TxItem; null untuk CC murni).
+    instrumentId: tx.instrumentId ?? null,
+    amountDecimal: tx.amountDecimal ?? null,
   };
 }
 
@@ -82,8 +85,10 @@ export function TransactionDetailModal({
   const error = onchainTx ? null : fetchError;
 
   // Decide direction from the detail. Defaults to "sent" until detail loads
-  // (most modal openers are post-send), but flips to "received" for TRANSFER_IN.
-  const isIn = detail?.type === "TRANSFER_IN";
+  // (most modal openers are post-send), but flips to "received" for TRANSFER_IN / TOKEN_TRANSFER_IN.
+  const isIn =
+    detail?.type === "TRANSFER_IN" ||
+    detail?.type === "TOKEN_TRANSFER_IN";
 
   const headerTitle = title ?? (isIn ? "Transfer received" : "Transfer sent");
   const headerSubtitle =

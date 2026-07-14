@@ -29,7 +29,6 @@ import { CcBalanceService } from '../canton/cc-balance.service';
 import { TransactionDetailService } from '../canton/transaction-detail.service';
 import { QuestLedgerService } from '../canton/quest-ledger.service';
 import { LockEligibilityService } from '../canton/lock-eligibility.service';
-import { ModoApiService } from '../canton/modo-api.service';
 import { parseLockTerms } from '../canton/lock-terms';
 import {
   cantonPartyIdsEqual,
@@ -48,7 +47,6 @@ import { isCantexEnabled } from '../cantex/cantex.config';
 import { CantexError } from '../cantex/cantex.types';
 import { UsersService } from '../users/users.service';
 import { WalletPasswordService } from "../users/wallet-password.service";
-import { feePartyLabels } from '../users/cc-transaction-visibility';
 import { WalletInviteCodeService } from './wallet-invite-code.service';
 import { AllocateWalletDto } from './dto/allocate-wallet.dto';
 import { CantonPartyBindingDto } from './dto/canton-party-binding.dto';
@@ -132,7 +130,6 @@ export class PartyController {
     private readonly lockEligibility: LockEligibilityService,
     private readonly prisma: PrismaService,
     private readonly walletPassword: WalletPasswordService,
-    private readonly modo: ModoApiService,
     private readonly cantex: CantexClient,
     private readonly cantexPrices: CantexPriceFeedService,
     private readonly swapService: SwapService,
@@ -2202,126 +2199,9 @@ export class PartyController {
     // Cap 200 (sebelumnya 20) — history list fetch pageSize=200 untuk dapat semua
     // row user. Cap lama 20 membuat row di luar 20 terbaru tidak pernah muncul.
     const ps = Math.min(200, Math.max(1, parseInt(pageSize ?? '5', 10) || 5));
-    return this.users.getTransactions(user.id, p, ps);
-  }
-
-  /**
-   * Onchain transactions from the Modo Transfer API for the user's party.
-   *
-   * NOTE: Must be declared BEFORE `@Get('transactions/:id')` so NestJS matches
-   * the static `onchain` segment instead of treating it as the `:id` param.
-   */
-  @SkipThrottle()
-  @Get('transactions/onchain')
-  async getOnchainTransactions(
-    @Req() req: AuthedReq,
-    @Query('limit') limit?: string,
-    @Query('cursor') cursor?: string,
-  ) {
-    const user = await this.users.findById(req.user.userId);
-    const partyId = user?.cantonPartyId;
-
-    // No real wallet → nothing to show onchain.
-    if (!partyId || partyId.startsWith('canquest:')) {
-      return { transactions: [], pagination: null };
-    }
-
-    // Fail-soft: kalau Modo belum dikonfigurasi (MODO_API_KEY hilang), jangan
-    // throw — kembalikan list kosong supaya UI wallet tetap render.
-    if (!this.modo.isConfigured()) {
-      this.logger.warn(
-        'Modo onchain fetch skipped — MODO_API_URL/MODO_API_KEY not set',
-      );
-      return { transactions: [], pagination: null };
-    }
-
-    const size = Math.min(100, Math.max(1, parseInt(limit ?? '15', 10) || 15));
-
-    try {
-      const result = await this.modo.getTransfersByParty(partyId, {
-        size,
-        role: 'ANY',
-        sortBy: 'AGE',
-        cursor: cursor || undefined,
-      });
-      if (!result) {
-        this.logger.warn(
-          'Modo onchain fetch returned no result (upstream error)',
-        );
-        return { transactions: [], pagination: null };
-      }
-
-      // Network fee fallback (CC) — dipakai HANYA bila item.fee tidak ada di
-      // response Modo. Sourced from TRANSACTION_FEE_CC env (default 0.2 CC).
-      const fallbackFeeCc = Number(
-        this.config.get<string>('TRANSACTION_FEE_CC') ?? '0.2',
-      );
-      const fallbackFeeMicroCc = String(
-        Math.round(Math.abs(fallbackFeeCc) * 1_000_000),
-      );
-
-      // Fee party short labels — transfer ke party ini (canquest-fee/validator)
-      // disembunyikan dari history on-chain agar konsisten dengan filter DB
-      // (CC_TRANSACTION_HISTORY_WHERE).
-      const feeLabels = feePartyLabels();
-      const isFeeParty = (party: string | null | undefined): boolean => {
-        if (!party || feeLabels.length === 0) return false;
-        const v = party.trim();
-        if (!v) return false;
-        return feeLabels.some(
-          (label) => v === label || v.startsWith(`${label}::`),
-        );
-      };
-
-      const transactions = result.transfers
-        .filter((tx) => {
-          // Buang transfer yang SEMUA sender/receiver-nya party fee/validator.
-          const senders = tx.senders ?? [];
-          const receivers = tx.receivers ?? [];
-          const senderParties = senders.map((s) => s.partyId);
-          const receiverParties = receivers.map((r) => r.partyId);
-          const allParties = [...senderParties, ...receiverParties];
-          if (allParties.length === 0) return true;
-          return !allParties.every((p) => isFeeParty(p));
-        })
-        .map((tx) => {
-          const sender = tx.senders?.[0];
-          const receiver = tx.receivers?.[0];
-          const counterparty =
-            sender?.partyId === partyId
-              ? receiver?.accountName
-              : sender?.accountName;
-          return {
-            id: tx.eventId,
-            event_id: tx.eventId,
-            kind: tx.transferType ?? null,
-            sender_address: sender?.partyId ?? null,
-            receiver_address: receiver?.partyId ?? null,
-            counterparty: counterparty ?? null,
-            amount: String(tx.amount ?? 0),
-            created_at: new Date(Number(tx.createdAt)).toISOString(),
-            network_fee:
-              tx.fee != null
-                ? String(Math.round(Math.abs(tx.fee) * 1_000_000))
-                : fallbackFeeMicroCc,
-            contract_id: null,
-            update_id: null,
-            round: null,
-            scan_url: this.modo.explorerUrl(tx.eventId),
-          };
-        });
-
-      return {
-        transactions,
-        pagination: {
-          has_next: result.hasNextPage,
-          next_cursor: result.nextCursor,
-        },
-      };
-    } catch (err) {
-      this.logger.warn(`Modo onchain fetch error: ${String(err)}`);
-      return { transactions: [], pagination: null };
-    }
+    // Unified feed: CcTransaction + TokenTransaction digabung. Sebelumnya hanya
+    // baca CcTransaction, sehingga transfer token non-CC (USDCx) tak pernah tampil.
+    return this.users.getUnifiedActivity(user.id, p, ps);
   }
 
   @SkipThrottle()

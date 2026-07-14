@@ -965,6 +965,185 @@ export class UsersService {
     };
   }
 
+  /**
+   * Unified Activity feed — menggabungkan CcTransaction + TokenTransaction jadi
+   * satu timeline terurut. Sebelumnya getTransactions() hanya baca CcTransaction,
+   * sehingga transfer token non-CC (USDCx dll) — yang sudah direkam via
+   * recordTokenTransaction — tidak pernah tampil di Activity. Method ini menutup
+   * gap tersebut.
+   *
+   * Output backward-compatible dengan getTransactions(): setiap item CcTransaction
+   * tetap punya field lama (amountMicroCc, type CcTransactionType, dst). Item
+   * TokenTransaction menambah field opsional: instrumentId, amountDecimal, plus
+   * amountMicroCc="0" sebagai placeholder agar frontend lama tidak crash.
+   *
+   * Prefix id "cc-" / "tok-" mencegah collision cuid antar dua tabel (keduanya
+   * pakai cuid default).
+   *
+   * Fee-filter: CcTransaction pakai CC_TRANSACTION_HISTORY_WHERE +
+   * isFeePartyRecipient (sama getTransactions). TokenTransaction skip type
+   * TOKEN_FEE_OUT (fee CC untuk P2P token transfer, audit-only).
+   */
+  async getUnifiedActivity(userId: string, page: number, pageSize: number) {
+    const tokenWhere = {
+      userId,
+      NOT: { type: 'TOKEN_FEE_OUT' as TokenTxType },
+    };
+
+    // Ambil proyeksi ringan kedua tabel (bounded — frontend minta pageSize=200).
+    const [ccRows, tokenRows] = await Promise.all([
+      this.prisma.ccTransaction.findMany({
+        where: { userId, ...CC_TRANSACTION_HISTORY_WHERE },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, referenceId: true, type: true, createdAt: true },
+      }),
+      this.prisma.tokenTransaction.findMany({
+        where: tokenWhere,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          referenceId: true,
+          type: true,
+          instrumentId: true,
+          createdAt: true,
+        },
+      }),
+    ]);
+
+    // Post-filter fee-party recipient untuk CC (butuh resolve counterparty).
+    type UnifiedRow = {
+      kind: 'cc' | 'tok';
+      id: string;
+      referenceId: string | null;
+      type: string;
+      createdAt: Date;
+      instrumentId?: string;
+    };
+    const merged: UnifiedRow[] = [];
+
+    for (const row of ccRows) {
+      const ccType = row.type as CcTransactionType;
+      if (ccType === 'TRANSFER_IN' || ccType === 'TRANSFER_OUT') {
+        const resolved = await this.resolveTransferCounterparty(
+          row.referenceId,
+        );
+        if (isFeePartyRecipient(row.referenceId, resolved)) continue;
+      }
+      merged.push({
+        kind: 'cc',
+        id: `cc-${row.id}`,
+        referenceId: row.referenceId,
+        type: row.type,
+        createdAt: row.createdAt,
+      });
+    }
+    for (const row of tokenRows) {
+      merged.push({
+        kind: 'tok',
+        id: `tok-${row.id}`,
+        referenceId: row.referenceId,
+        type: row.type,
+        createdAt: row.createdAt,
+        instrumentId: row.instrumentId,
+      });
+    }
+
+    // Sort global by createdAt desc, lalu paginate.
+    merged.sort(
+      (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+    );
+
+    const total = merged.length;
+    const skip = (page - 1) * pageSize;
+    const pageRows = merged.slice(skip, skip + pageSize);
+
+    // Hydrate baris penuh untuk halaman ini.
+    const ccIds = pageRows
+      .filter((r) => r.kind === 'cc')
+      .map((r) => r.id.slice(3)); // strip "cc-"
+    const tokIds = pageRows
+      .filter((r) => r.kind === 'tok')
+      .map((r) => r.id.slice(4)); // strip "tok-"
+
+    const [ccFull, tokFull] = await Promise.all([
+      ccIds.length
+        ? this.prisma.ccTransaction.findMany({
+            where: { id: { in: ccIds } },
+            orderBy: { createdAt: 'desc' },
+          })
+        : [],
+      tokIds.length
+        ? this.prisma.tokenTransaction.findMany({
+            where: { id: { in: tokIds } },
+            orderBy: { createdAt: 'desc' },
+          })
+        : [],
+    ]);
+
+    const ccById = new Map(ccFull.map((t) => [t.id, t]));
+    const tokById = new Map(tokFull.map((t) => [t.id, t]));
+
+    const enrichedCc = await this.enrichQuestRewardDescriptions(ccFull);
+
+    // Map enriched by id (enrichedCc might reorder/dedupe — index by id).
+    const enrichedCcById = new Map(enrichedCc.map((t) => [t.id, t]));
+
+    // Build unified items PRESERVING merged order (createdAt desc global).
+    const items = await Promise.all(
+      pageRows.map(async (row): Promise<Record<string, unknown>> => {
+        if (row.kind === 'cc') {
+          const rawId = row.id.slice(3);
+          const tx = enrichedCcById.get(rawId) ?? ccById.get(rawId);
+          if (!tx) return null as unknown as Record<string, unknown>;
+          const counterparty =
+            (tx.type === 'TRANSFER_IN' || tx.type === 'TRANSFER_OUT') as boolean
+              ? await this.resolveTransferCounterparty(tx.referenceId)
+              : null;
+          return {
+            ...tx,
+            id: row.id,
+            amountMicroCc: tx.amountMicroCc.toString(),
+            // Token-aware fields (kosong untuk CC murni).
+            instrumentId: null,
+            amountDecimal: null,
+            counterparty,
+          };
+        }
+        // token row
+        const rawId = row.id.slice(4);
+        const tx = tokById.get(rawId);
+        if (!tx) return null as unknown as Record<string, unknown>;
+        return {
+          // Backward-compat field CcTransaction (placeholder untuk frontend lama).
+          id: row.id,
+          amountMicroCc: '0',
+          type: tx.type,
+          description: tx.description ?? '',
+          referenceId: tx.referenceId,
+          ledgerTxId: tx.ledgerTxId,
+          cantonUpdateId: tx.cantonUpdateId,
+          settledAt: null,
+          createdAt: tx.createdAt,
+          status: tx.status,
+          transferInstructionCid: tx.transferInstructionCid,
+          counterparty: tx.referenceId,
+          // Token-aware fields.
+          instrumentId: tx.instrumentId,
+          instrumentAdmin: tx.instrumentAdmin,
+          amountDecimal: tx.amount.toString(),
+        };
+      }),
+    );
+
+    return {
+      items: items.filter(Boolean),
+      total,
+      page,
+      pageSize,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    };
+  }
+
   /** Lifetime points from Quest menu, Earn hub, campaign tasks, completion bonuses, referral. */
   async creditEarnPoints(userId: string, amount: number): Promise<void> {
     if (!Number.isFinite(amount) || amount <= 0) return;

@@ -45,6 +45,10 @@ export type TransactionDetail = {
   isInternalMarker?: boolean;
   /** Status row: COMPLETED | PENDING | REJECTED (offer pending → PENDING). */
   status?: string | null;
+  /** Instrument id untuk token non-CC (mis. "USDCx"). null untuk CC murni. */
+  instrumentId?: string | null;
+  /** Amount token dalam unit asli (Decimal string). null untuk CC. */
+  amountDecimal?: string | null;
 };
 
 

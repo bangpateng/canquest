@@ -272,6 +272,10 @@ export const tr: PlatformMessages = {
     preapprovalDisabled: "Ön onay devre dışı bırakıldı",
     swapOut: "Takas (CC çıkış)",
     swapIn: "Takas (CC giriş)",
+    tokenReceived: "Token alındı",
+    tokenSent: "Token gönderildi",
+    tokenOfferRejected: "Token teklifi reddedildi",
+    tokenOfferWithdrawn: "Token transferi iptal edildi",
   },
   settings: {
     signingOut: "Çıkış yapılıyor…",

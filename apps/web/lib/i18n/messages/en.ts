@@ -271,6 +271,10 @@ export const en: PlatformMessages = {
     preapprovalDisabled: "Preapproval disabled",
     swapOut: "Swap (CC out)",
     swapIn: "Swap (CC in)",
+    tokenReceived: "Token received",
+    tokenSent: "Token sent",
+    tokenOfferRejected: "Token offer rejected",
+    tokenOfferWithdrawn: "Token transfer cancelled",
   },
   settings: {
     signingOut: "Signing out…",

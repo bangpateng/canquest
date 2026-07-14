@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils/utils";
 import { ListPagination } from "@/components/app/list/list-pagination";
-import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Ban, Gift, Lock, LockOpen, RefreshCw, ShieldCheck, ShieldOff, Undo2, Zap } from "lucide-react";
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Ban, Coins, Gift, Lock, LockOpen, RefreshCw, ShieldCheck, ShieldOff, Undo2, Zap } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { TransactionDetailModal } from "@/components/app/wallet/transaction-detail-modal";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
@@ -33,8 +33,19 @@ export interface TxItem {
     | "PREAPPROVAL_ENABLED"
     | "PREAPPROVAL_DISABLED"
     | "SWAP_OUT"
-    | "SWAP_IN";
+    | "SWAP_IN"
+    // Token non-CC (CIP-0056 P2P transfer, mis. USDCx).
+    | "TOKEN_TRANSFER_IN"
+    | "TOKEN_TRANSFER_OUT"
+    | "TOKEN_OFFER_REJECTED"
+    | "TOKEN_OFFER_WITHDRAWN";
   description: string;
+  /** Instrument id untuk token non-CC (mis. "USDCx"). null untuk CC murni. */
+  instrumentId?: string | null;
+  /** Amount token dalam unit asli (Decimal string). null untuk CC (pakai amountMicroCc). */
+  amountDecimal?: string | null;
+  /** Admin party untuk token non-CC (mis. "DSO::1220..."). */
+  instrumentAdmin?: string | null;
   referenceId: string | null;
   counterparty?: string | null;
   ledgerTxId: string | null;
@@ -90,6 +101,10 @@ const TX_TYPE_KEYS: Record<TxItem["type"], string> = {
   PREAPPROVAL_DISABLED: "transactions.preapprovalDisabled",
   SWAP_OUT: "transactions.swapOut",
   SWAP_IN: "transactions.swapIn",
+  TOKEN_TRANSFER_IN: "transactions.tokenReceived",
+  TOKEN_TRANSFER_OUT: "transactions.tokenSent",
+  TOKEN_OFFER_REJECTED: "transactions.tokenOfferRejected",
+  TOKEN_OFFER_WITHDRAWN: "transactions.tokenOfferWithdrawn",
 };
 
 /** Type toggle onchain (reject/withdraw/preapproval) — amount 0, tampil netral. */
@@ -98,7 +113,26 @@ const TOGGLE_TX_TYPES: ReadonlySet<TxItem["type"]> = new Set([
   "OFFER_WITHDRAWN",
   "PREAPPROVAL_ENABLED",
   "PREAPPROVAL_DISABLED",
+  "TOKEN_OFFER_REJECTED",
+  "TOKEN_OFFER_WITHDRAWN",
 ]);
+
+/** Semua type token non-CC (CIP-0056). */
+const TOKEN_TX_TYPES: ReadonlySet<TxItem["type"]> = new Set([
+  "TOKEN_TRANSFER_IN",
+  "TOKEN_TRANSFER_OUT",
+  "TOKEN_OFFER_REJECTED",
+  "TOKEN_OFFER_WITHDRAWN",
+]);
+
+/** True jika tx adalah token non-CC dengan amount (bukan toggle). */
+function isTokenAmountTx(tx: TxItem): boolean {
+  return (
+    (tx.type === "TOKEN_TRANSFER_IN" || tx.type === "TOKEN_TRANSFER_OUT") &&
+    tx.instrumentId != null &&
+    tx.instrumentId !== "Amulet"
+  );
+}
 
 function TxStatusBadge({ status }: { status?: TxItem["status"] }) {
   if (!status || status === "COMPLETED") return null;
@@ -126,8 +160,10 @@ function TxTypeIcon({ type }: { type: TxItem["type"] }) {
     case "CC_UNLOCK":
       return <LockOpen className="h-4 w-4" />;
     case "OFFER_REJECTED":
+    case "TOKEN_OFFER_REJECTED":
       return <Ban className="h-4 w-4" />;
     case "OFFER_WITHDRAWN":
+    case "TOKEN_OFFER_WITHDRAWN":
       return <Undo2 className="h-4 w-4" />;
     case "PREAPPROVAL_ENABLED":
       return <ShieldCheck className="h-4 w-4" />;
@@ -140,6 +176,10 @@ function TxTypeIcon({ type }: { type: TxItem["type"] }) {
     case "SWAP_OUT":
     case "SWAP_IN":
       return <ArrowLeftRight className="h-4 w-4" />;
+    case "TOKEN_TRANSFER_OUT":
+      return <ArrowUpRight className="h-4 w-4" />;
+    case "TOKEN_TRANSFER_IN":
+      return <Coins className="h-4 w-4" />;
     default:
       return <Zap className="h-4 w-4" />;
   }
@@ -148,8 +188,10 @@ function TxTypeIcon({ type }: { type: TxItem["type"] }) {
 function txIconBg(type: TxItem["type"]): string {
   switch (type) {
     case "TRANSFER_OUT":
+    case "TOKEN_TRANSFER_OUT":
       return "bg-red-500/10 text-red-500";
     case "TRANSFER_IN":
+    case "TOKEN_TRANSFER_IN":
       return "bg-green-500/10 text-green-500";
     case "CC_LOCK":
       // Netral/amber — BUKAN merah transfer (dana dikunci, bukan keluar).
@@ -158,6 +200,8 @@ function txIconBg(type: TxItem["type"]): string {
       return "bg-green-500/10 text-green-500";
     case "OFFER_REJECTED":
     case "OFFER_WITHDRAWN":
+    case "TOKEN_OFFER_REJECTED":
+    case "TOKEN_OFFER_WITHDRAWN":
     case "PREAPPROVAL_DISABLED":
       // Aksi toggle netral — slate, bukan merah (tidak ada pergerakan CC).
       return "bg-slate-500/10 text-slate-400";
@@ -184,20 +228,42 @@ function amountColor(type: TxItem["type"]): string {
   if (TOGGLE_TX_TYPES.has(type)) return "text-slate-400";
   // CC_LOCK = debit (amber, netral — bukan merah transfer).
   if (type === "CC_LOCK") return "text-amber-500";
-  return type === "TRANSFER_OUT" ? "text-red-500" : "text-green-500";
+  // Debit (keluar): TRANSFER_OUT, TOKEN_TRANSFER_OUT.
+  if (type === "TRANSFER_OUT" || type === "TOKEN_TRANSFER_OUT")
+    return "text-red-500";
+  return "text-green-500";
 }
 
 function amountSign(type: TxItem["type"]): string {
   // Toggle → tanpa tanda (amount 0).
   if (TOGGLE_TX_TYPES.has(type)) return "";
-  // CC_LOCK = tanda − (dana dikunci / arah keluar untuk display).
-  return type === "TRANSFER_OUT" || type === "CC_LOCK" ? "\u2212" : "+";
+  // Debit (keluar): TRANSFER_OUT, TOKEN_TRANSFER_OUT, CC_LOCK.
+  if (
+    type === "TRANSFER_OUT" ||
+    type === "TOKEN_TRANSFER_OUT" ||
+    type === "CC_LOCK"
+  )
+    return "\u2212";
+  return "+";
 }
 
-/** Render amount cell: toggle (amount 0) → "—" netral, bukan "+0.0000 CC". */
+/** Render amount cell.
+ *  - toggle (amount 0) → "—" netral
+ *  - token non-CC (amountDecimal + instrumentId) → "+5.0000 USDCx"
+ *  - CC (default) → "+0.2000 CC" (microCC → CC) */
 function AmountText({ tx }: { tx: TxItem }) {
   if (TOGGLE_TX_TYPES.has(tx.type)) {
     return <span className="text-slate-500">\u2014</span>;
+  }
+  // Token non-CC: amount sudah dalam unit asli (decimal), bukan microCC.
+  if (isTokenAmountTx(tx)) {
+    const tokenAmt = Math.abs(Number(tx.amountDecimal ?? "0"));
+    return (
+      <>
+        {amountSign(tx.type)}
+        {tokenAmt.toFixed(4)} {tx.instrumentId}
+      </>
+    );
   }
   const ccAmt = Math.abs(Number(tx.amountMicroCc)) / 1_000_000;
   return (
@@ -245,6 +311,9 @@ export function TransactionsView({
     if (type === "CC_LOCK") return t(TX_TYPE_KEYS.CC_LOCK);
     if (type === "CC_UNLOCK") return t(TX_TYPE_KEYS.CC_UNLOCK);
     if (TOGGLE_TX_TYPES.has(type)) return t(TX_TYPE_KEYS[type]);
+    // Token non-CC map ke Sent/Received (sama arah dengan CC transfer).
+    if (type === "TOKEN_TRANSFER_OUT") return "Sent";
+    if (type === "TOKEN_TRANSFER_IN") return "Received";
     return type === "TRANSFER_OUT" ? "Sent" : "Received";
   };
   const [currentPage, setCurrentPage] = useState(1);

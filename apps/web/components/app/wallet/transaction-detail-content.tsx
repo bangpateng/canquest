@@ -152,25 +152,43 @@ export function TransactionDetailContent({
   const isIn = detail.type === "TRANSFER_IN";
   const isLock = detail.type === "CC_LOCK";
   const isUnlock = detail.type === "CC_UNLOCK";
-  const isTransfer = isOut || isIn;
-  // Toggle onchain (reject/withdraw/preapproval) — amount 0, tampil netral.
+  // Token non-CC (CIP-0056 P2P transfer, mis. USDCx).
+  const isTokenOut = detail.type === "TOKEN_TRANSFER_OUT";
+  const isTokenIn = detail.type === "TOKEN_TRANSFER_IN";
+  const isTokenTransfer = isTokenOut || isTokenIn;
+  const isTransfer = isOut || isIn || isTokenTransfer;
+  // Toggle onchain (reject/withdraw/preapproval, CC maupun token) — amount 0, netral.
   const isToggle =
     detail.type === "OFFER_REJECTED" ||
     detail.type === "OFFER_WITHDRAWN" ||
+    detail.type === "TOKEN_OFFER_REJECTED" ||
+    detail.type === "TOKEN_OFFER_WITHDRAWN" ||
     detail.type === "PREAPPROVAL_ENABLED" ||
     detail.type === "PREAPPROVAL_DISABLED";
-  // Debit (negatif): TRANSFER_OUT & CC_LOCK. Kredit (positif): sisanya termasuk CC_UNLOCK.
-  const isDebit = isOut || isLock;
+  // Debit (negatif): TRANSFER_OUT, TOKEN_TRANSFER_OUT & CC_LOCK.
+  const isDebit = isOut || isTokenOut || isLock;
+  // Token non-CC: amount sudah unit asli (amountDecimal), suffix = instrumentId.
+  const isTokenAmountTx =
+    isTokenTransfer &&
+    detail.instrumentId != null &&
+    detail.instrumentId !== "Amulet" &&
+    detail.amountDecimal != null;
+  const tokenAmt = isTokenAmountTx ? Math.abs(Number(detail.amountDecimal)) : 0;
 
   // User's own wallet address — prefer the detail's stored party, fall back to prop.
   const ownAddress = detail.cantonPartyId ?? partyId ?? null;
 
   // From / To use the REAL sender/receiver addresses. We only tag the one that
   // matches the user's party as "(You)" — never default both to the user.
+  // Token transfer juga diperlakukan seperti CC transfer (direction sama).
   const fromAddress =
-    detail.senderAddress ?? (isOut ? ownAddress : detail.counterparty) ?? null;
+    detail.senderAddress ??
+    (isOut || isTokenOut ? ownAddress : detail.counterparty) ??
+    null;
   const toAddress =
-    detail.receiverAddress ?? (isIn ? ownAddress : detail.counterparty) ?? null;
+    detail.receiverAddress ??
+    (isIn || isTokenIn ? ownAddress : detail.counterparty) ??
+    null;
 
   // Tx ID untuk copy/explorer — HANYA id on-chain real (event/update/contract id).
   // JANGAN fallback ke detail.id (DB cuid) — itu menyesatkan user. Marker internal
@@ -219,7 +237,7 @@ export function TransactionDetailContent({
                 ? "bg-slate-500/15 text-slate-400"
                 : isLock
                   ? "bg-amber-500/15 text-amber-500"
-                  : isUnlock || isIn
+                  : isUnlock || isIn || isTokenIn
                     ? "bg-green-500/15 text-green-500"
                     : "bg-red-500/15 text-red-500",
             )}
@@ -229,9 +247,9 @@ export function TransactionDetailContent({
               <Lock className="h-5 w-5" />
             ) : isUnlock ? (
               <LockOpen className="h-5 w-5" />
-            ) : isIn ? (
+            ) : isIn || isTokenIn ? (
               <ArrowDownLeft className="h-5 w-5" />
-            ) : isOut ? (
+            ) : isOut || isTokenOut ? (
               <ArrowUpRight className="h-5 w-5" />
             ) : (
               <Zap className="h-5 w-5" />
@@ -251,7 +269,11 @@ export function TransactionDetailContent({
             )}
           >
             {isToggle ? "" : isDebit ? "\u2212" : "+"}
-            {isToggle ? "—" : `${ccAmt.toFixed(4)} CC`}
+            {isToggle
+              ? "—"
+              : isTokenAmountTx
+                ? `${tokenAmt.toFixed(4)} ${detail.instrumentId}`
+                : `${ccAmt.toFixed(4)} CC`}
           </p>
           {usdDisplay != null ? (
             <p className="mt-0.5 text-sm font-medium text-slate-400 tabular-nums">

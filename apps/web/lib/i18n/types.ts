@@ -267,6 +267,10 @@ export type PlatformMessages = {
     preapprovalDisabled: string;
     swapOut: string;
     swapIn: string;
+    tokenReceived: string;
+    tokenSent: string;
+    tokenOfferRejected: string;
+    tokenOfferWithdrawn: string;
   };
   settings: {
     signingOut: string;
