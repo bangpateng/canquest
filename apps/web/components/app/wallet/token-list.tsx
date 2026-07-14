@@ -13,10 +13,10 @@ import { formatPartyIdForDisplay } from "@/lib/canton/canton-party-id";
  * dari UI wallet sampai diaktifkan secara eksplisit di sini.
  *
  * CC selalu muncul (di-render terpisah di atas, hard-coded Amulet).
- * USDCx + CBTC aktif penuh.
+ * USDCx aktif penuh. CBTC tampil tapi "Coming soon" (belum bisa swap/send).
  */
 const VISIBLE_TOKENS = new Set(["USDCX", "CBTC"]);
-const ACTIVE_SWAP_TOKENS = new Set(["USDCX", "CBTC"]);
+const ACTIVE_SWAP_TOKENS = new Set(["USDCX"]);
 
 /** Cek apakah token ini aktif untuk swap/detail. CC selalu aktif. */
 function isTokenActive(symbol: string, isCC?: boolean): boolean {
