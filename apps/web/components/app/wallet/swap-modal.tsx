@@ -8,7 +8,6 @@ import { iconButtonClass } from "@/lib/ui/ui-button-styles";
 import {
   ArrowDown,
   ChevronDown,
-  Settings,
   X,
   AlertCircle,
   Search,
@@ -340,15 +339,6 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              className={iconButtonClass(
-                "h-8 w-8 text-slate-400 hover:text-slate-200",
-              )}
-              aria-label="Settings"
-            >
-              <Settings className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
               onClick={onClose}
               className={iconButtonClass(
                 "h-8 w-8 text-slate-400 hover:text-slate-200",
@@ -557,6 +547,10 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
             )}
           </>
         )}
+
+        <p className="mt-4 text-center text-[11px] font-medium text-slate-600">
+          powered by cantex
+        </p>
       </div>
     </div>
   );
