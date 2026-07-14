@@ -42,7 +42,7 @@
  */
 
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import type { ConfigService } from '@nestjs/config';
+import { ConfigService } from '@nestjs/config';
 import { Subject } from 'rxjs';
 
 import { KeycloakTokenService } from '../auth/keycloak-token.service';
