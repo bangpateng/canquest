@@ -208,9 +208,9 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
       {/* ── My Tokens ──────────────────────────────────────────────────── */}
       <div>
         <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500">
+          <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
             My Tokens
-          </h2>
+          </span>
           {loading && (
             <LoadingSpinner size="sm" tone="muted" />
           )}
