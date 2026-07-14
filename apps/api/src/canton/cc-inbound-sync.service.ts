@@ -96,17 +96,27 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
     cantonPartyId?: string | null,
   ): Promise<void> {
     if (!this.splice.isConfigured) return;
-    const onChain =
-      cantonPartyId && !cantonPartyId.startsWith('canquest:')
-        ? await this.ledger.getLedgerBalance(cantonPartyId)
-        : await this.splice.getUserBalance(username);
-    if (onChain === null) return;
-    const onChainMicro = BigInt(Math.round(onChain * 1_000_000));
-    await this.prisma.ccBalance.upsert({
-      where: { userId },
-      create: { userId, balanceMicroCc: onChainMicro },
-      update: { balanceMicroCc: onChainMicro },
-    });
+    try {
+      const onChain =
+        cantonPartyId && !cantonPartyId.startsWith('canquest:')
+          ? await this.ledger.getLedgerBalance(cantonPartyId)
+          : await this.splice.getUserBalance(username);
+      if (onChain === null) return;
+      const onChainMicro = BigInt(Math.round(onChain * 1_000_000));
+      await this.prisma.ccBalance.upsert({
+        where: { userId },
+        create: { userId, balanceMicroCc: onChainMicro },
+        update: { balanceMicroCc: onChainMicro },
+      });
+    } catch (err) {
+      // Ledger/Splice error → JANGAN overwrite balance DB. Sebelumnya
+      // getLedgerBalance return 0 saat error (bukan throw), lalu 0 ini
+      // ditulis ke DB → balance user ilang sesaat. Sekarang error di-swallow
+      // di sini, balance lama dipertahankan. (Fix "data ilang".)
+      this.logger.warn(
+        `alignBalanceFromChain failed (balance DB dipertahankan): ${String(err)}`,
+      );
+    }
   }
 
   /**

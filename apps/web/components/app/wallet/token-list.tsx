@@ -66,6 +66,10 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
   );
   const [ccBalance, setCcBalance] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  // initialLoad = true hanya saat fetch pertama (belum ada data sama sekali).
+  // Background refresh TIDAK flip ini → hero pertahankan nilai lama, bukan "—".
+  // (Fix "data ilang": sebelumnya loading=true di setiap refresh → hero flash "—".)
+  const [initialLoad, setInitialLoad] = useState(true);
 
   // Lock CC — status bar + modal di /wallet utama (sebelumnya di /wallet/cc).
   // Hook enabled hanya kalau user punya wallet (mirror pattern token-detail-view).
@@ -83,7 +87,10 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
   const ccUsd = ccKey ? tokenPrices[ccKey] ?? 0 : 0;
 
   const loadTokens = useCallback(async () => {
-    setLoading(true);
+    // Hanya tampilkan loading state saat initial load (belum ada data).
+    // Background refresh: pertahankan data lama, JANGAN flip loading=true.
+    const isFirstLoad = swapTokens.length === 0 && ccBalance === null;
+    if (isFirstLoad) setLoading(true);
     try {
       const [poolsRes, balRes] = await Promise.all([
         fetch("/api/party/swap/pools", { credentials: "include" }),
@@ -99,11 +106,12 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
         setCcBalance(bal.cc ?? 0);
       }
     } catch {
-      /* non-fatal — token cards tetap render pakai saldo 0 */
+      /* non-fatal — token cards tetap render pakai saldo lama */
     } finally {
       setLoading(false);
+      setInitialLoad(false);
     }
-  }, []);
+  }, [swapTokens.length, ccBalance]);
 
   useEffect(() => {
     if (hasWallet) void loadTokens();
@@ -163,7 +171,7 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
 
         <div className="relative">
           <p className="relative text-3xl font-extrabold tabular-nums leading-none tracking-tight text-white sm:text-4xl md:text-5xl glow-text">
-            {loading ? (
+            {initialLoad ? (
               <span className="text-slate-500">—</span>
             ) : (
               <>
@@ -212,7 +220,7 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
           <TokenCard
             symbol="Amulet"
             balance={
-              loading ? "—" : (ccBalance?.toFixed(4) ?? "0.0000")
+              initialLoad ? "—" : (ccBalance?.toFixed(4) ?? "0.0000")
             }
             fiatValue={ccValue > 0 ? `$${ccFiatStr}` : undefined}
           />

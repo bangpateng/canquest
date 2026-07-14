@@ -332,12 +332,19 @@ export function TransactionsView({
       if (!partyId) {
         return { items: [], total: 0, page: currentPage, pageSize, totalPages: 0 };
       }
+      // THROW saat fetch gagal — jangan return []. Sebelumnya error di-swalllow
+      // (catch → null → items []), lalu TanStack menganggap [] sebagai data baru
+      // → list flash ke "No transactions". Dengan throw, TanStack mempertahankan
+      // data terakhir yang berhasil selama background refetch. (Fix "data ilang".)
       const dbRes = await fetch(
         `${DB_TRANSACTIONS_PROXY}?page=1&pageSize=200`,
         { credentials: "include", cache: "no-store" },
-      ).catch(() => null);
-      const dbData = dbRes?.ok ? ((await dbRes.json()) as { items?: TxItem[] }) : null;
-      const dbItems: TxItem[] = (dbData?.items ?? []).map((tx) => ({
+      );
+      if (!dbRes.ok) {
+        throw new Error(`transactions ${dbRes.status}`);
+      }
+      const dbData = (await dbRes.json()) as { items?: TxItem[] };
+      const dbItems: TxItem[] = (dbData.items ?? []).map((tx) => ({
         ...tx,
         source: "db" as const,
       }));

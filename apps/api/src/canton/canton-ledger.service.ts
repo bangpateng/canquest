@@ -2037,18 +2037,21 @@ export class CantonLedgerService {
         }),
         signal: AbortSignal.timeout(20_000),
       });
-      if (res.ok) {
-        allContracts = (await res.json()) as unknown[];
-        if (!Array.isArray(allContracts)) allContracts = [];
-      } else {
+      if (!res.ok) {
+        // THROW, bukan return [] — sebelumnya error di sini menyebabkan
+        // getLedgerBalance() return 0, lalu alignBalanceFromChain OVERWRITE
+        // balance DB jadi 0. Dengan throw, caller's try/catch aktif dan
+        // balance lama di DB dipertahankan. (Fix "data ilang".)
         const text = await res.text();
-        this.logger.warn(
+        throw new Error(
           `queryAmuletHoldingsRaw ${res.status}: ${text.slice(0, 200)}`,
         );
       }
+      allContracts = (await res.json()) as unknown[];
+      if (!Array.isArray(allContracts)) allContracts = [];
     } catch (err) {
       this.logger.warn(`queryAmuletHoldingsRaw error: ${String(err)}`);
-      return [];
+      throw err;
     }
 
     const results: Array<{
