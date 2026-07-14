@@ -8,15 +8,14 @@ import { isRealCantonPartyId } from "@/lib/auth/wallet-session-cache";
 import { formatPartyIdForDisplay } from "@/lib/canton/canton-party-id";
 
 /**
- * Token yang ditampilkan di wallet. Hanya CC + USDCx + CBTC — token lain
- * (cETH, HANDL, MOD, EDELx, HECTO, FRXUSD, USDC.B, dll) disembunyikan dari UI
- * wallet sampai diaktifkan secara eksplisit di sini.
+ * Token yang ditampilkan di wallet. Hanya CC + USDCx — semua token lain
+ * (CBTC, cETH, HANDL, MOD, EDELx, HECTO, FRXUSD, USDC.B, dll) disembunyikan
+ * dari UI wallet sampai diaktifkan secara eksplisit di sini.
  *
  * CC selalu muncul (di-render terpisah di atas, hard-coded Amulet).
- * CBTC tetap "Coming soon" (disabled) sampai backend enable.
- * USDCX aktif penuh.
+ * USDCx aktif penuh.
  */
-const VISIBLE_TOKENS = new Set(["USDCX", "CBTC"]);
+const VISIBLE_TOKENS = new Set(["USDCX"]);
 const ACTIVE_SWAP_TOKENS = new Set(["USDCX"]);
 
 /** Cek apakah token ini aktif untuk swap/detail. CC selalu aktif. */
