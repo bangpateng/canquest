@@ -2650,10 +2650,22 @@ export class PartyController {
       try {
         // Ambil daftar token yang dikenal dari Cantex pools.
         const instruments = await this.cantex.getAllSwapInstruments();
-        // Query on-chain holdings untuk setiap token non-CC (parallel).
+        // WHITELIST: hanya token yang ditampilkan/dipakai di dapp. Sebelumnya
+        // query SEMUA token dari pools (9 instrumen) → 9 ACS calls ke ledger
+        // per refresh, padahal frontend hanya tampilkan USDCx. Filter di sini
+        // turunkan beban ledger dari 9 → 2 query (USDCx + CBTC).
+        const SWAP_BALANCE_WHITELIST = new Set([
+          'USDCX',
+          'CBTC',
+        ]);
+        // Query on-chain holdings hanya untuk token whitelist (parallel).
         const onChainResults = await Promise.all(
           instruments
-            .filter((inst) => inst.id.toLowerCase() !== 'amulet')
+            .filter(
+              (inst) =>
+                inst.id.toLowerCase() !== 'amulet' &&
+                SWAP_BALANCE_WHITELIST.has(inst.id.toUpperCase()),
+            )
             .map(async (inst) => {
               const key = `${inst.id}::${inst.admin}`;
               try {
