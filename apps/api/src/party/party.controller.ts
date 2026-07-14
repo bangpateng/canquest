@@ -2617,7 +2617,7 @@ export class PartyController {
   }
 
   /**
-   * GET /party/swap/balances — saldo user untuk SEMUA token swap-able.
+   * GET /party/balances — saldo user untuk SEMUA token (CC + non-CC).
    * Dipakai frontend untuk tombol percent (25/50/75/MAX) di setiap token,
    * bukan cuma CC. CC saldo dari CcBalance (on-chain mirror); token non-CC
    * di-merge: on-chain holdings (sumber kebenaran) + DB custody (off-chain).
@@ -2628,7 +2628,7 @@ export class PartyController {
    * hapus off-chain: pakai on-chain saja. DB CantexTokenBalance tetap dipakai
    * untuk swap accounting internal, tapi TIDAK ditampilkan ke UI.
    */
-  @Get('swap/balances')
+  @Get('balances')
   @SkipThrottle()
   async swapBalances(@Req() req: AuthedReq) {
     const user = await this.users.findById(req.user.userId);
@@ -2708,11 +2708,11 @@ export class PartyController {
   }
 
   /**
-   * GET /party/swap/prices — harga USD semua token dari Cantex DEX
+   * GET /party/prices — harga USD semua token dari Cantex DEX
    * (rate token→USDCx, USDCx = $1 anchor). Cache 30s di CantexClient.
    * Dipakai frontend untuk total balance USD + per-token fiat value.
    */
-  @Get('swap/prices')
+  @Get('prices')
   @SkipThrottle()
   async swapPrices() {
     if (!isCantexEnabled()) {
@@ -2723,7 +2723,7 @@ export class PartyController {
       return { prices, source: 'cantex_ws_live' };
     } catch (err) {
       this.logger.error(
-        `swap/prices failed: ${(err as Error).message}`,
+        `prices failed: ${(err as Error).message}`,
         (err as Error).stack,
       );
       throw new ServiceUnavailableException(
@@ -2733,11 +2733,11 @@ export class PartyController {
   }
 
   /**
-   * GET /party/swap/pools — daftar SEMUA token yang bisa di-swap (termasuk
+   * GET /party/pools — daftar SEMUA token yang tersedia (dari AMM pools,
    * Amulet/CC). User bisa pilih token mana pun di slot atas ATAU bawah.
    * Live dari Cantex DEX (read-only, no risk).
    */
-  @Get('swap/pools')
+  @Get('pools')
   @SkipThrottle()
   async swapPools(@Req() req: AuthedReq) {
     if (!isCantexEnabled()) {
@@ -2765,7 +2765,7 @@ export class PartyController {
       };
     } catch (err) {
       this.logger.error(
-        `swap/pools failed: ${(err as Error).message}`,
+        `pools failed: ${(err as Error).message}`,
         (err as Error).stack,
       );
       throw new ServiceUnavailableException(

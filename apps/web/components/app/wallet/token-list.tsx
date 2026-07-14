@@ -59,7 +59,7 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
   // Harga semua token dari Cantex DEX (rate vs USDCx = USD anchor).
   const { prices: tokenPrices } = useTokenPrices();
 
-  // Token list + SEMUA saldo (CC + non-CC) dari satu endpoint swap/balances.
+  // Token list + SEMUA saldo (CC + non-CC) dari satu endpoint /balances.
   const [swapTokens, setSwapTokens] = useState<SwapToken[]>([]);
   const [tokenBalances, setTokenBalances] = useState<Record<string, string>>(
     {},
@@ -93,8 +93,8 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
     if (isFirstLoad) setLoading(true);
     try {
       const [poolsRes, balRes] = await Promise.all([
-        fetch("/api/party/swap/pools", { credentials: "include" }),
-        fetch("/api/party/swap/balances", { credentials: "include" }),
+        fetch("/api/party/pools", { credentials: "include" }),
+        fetch("/api/party/balances", { credentials: "include" }),
       ]);
       if (poolsRes.ok) {
         const data = (await poolsRes.json()) as { tokens?: SwapToken[] };

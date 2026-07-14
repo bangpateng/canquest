@@ -20,7 +20,7 @@ export function useTokenPrices() {
   const query = useQuery({
     queryKey: queryKeys.party.tokenPrices,
     queryFn: async (): Promise<Record<string, number>> => {
-      const res = await fetch("/api/party/swap/prices", {
+      const res = await fetch("/api/party/prices", {
         credentials: "include",
       });
       const data = (await res.json()) as PricesResponse;

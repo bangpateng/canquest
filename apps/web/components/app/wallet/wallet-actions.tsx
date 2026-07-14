@@ -104,8 +104,8 @@ export function WalletActions({
   const loadSendTokens = useCallback(async () => {
     try {
       const [poolsRes, balRes] = await Promise.all([
-        fetch("/api/party/swap/pools", { credentials: "include" }),
-        fetch("/api/party/swap/balances", { credentials: "include" }),
+        fetch("/api/party/pools", { credentials: "include" }),
+        fetch("/api/party/balances", { credentials: "include" }),
       ]);
       const data = (await poolsRes.json()) as { tokens?: WalletToken[] };
       // Tampilkan SEMUA token: CC selalu aktif. Non-CC aktif + coming soon.
@@ -135,7 +135,7 @@ export function WalletActions({
     void loadSendTokens();
   }, [loadSendTokens]);
 
-  // Balance untuk token yang sedang dipilih (CC dari prop, non-CC dari /swap/balances).
+  // Balance untuk token yang sedang dipilih (CC dari prop, non-CC dari /balances).
   const selectedIsCC = Boolean(selectedSendToken?.isCC);
   const selectedBalance = selectedSendToken
     ? selectedIsCC

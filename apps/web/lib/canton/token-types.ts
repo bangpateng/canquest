@@ -17,7 +17,7 @@ export interface WalletToken {
 }
 
 /**
- * Shape response GET /api/party/swap/pools.
+ * Shape response GET /api/party/pools.
  * `tokens` = daftar instrument yang tersedia (dari AMM pools).
  */
 export interface PoolsResponse {
@@ -25,7 +25,7 @@ export interface PoolsResponse {
 }
 
 /**
- * Shape response GET /api/party/swap/balances.
+ * Shape response GET /api/party/balances.
  * `tokens` = map balance keyed by "<instrumentId>::<instrumentAdmin>" → decimal string.
  * Konvensi key composite `id::admin` dipakai konsisten di backend + frontend.
  */
@@ -36,7 +36,7 @@ export interface BalancesResponse {
 
 /**
  * Build key map balance untuk lookup balance suatu token.
- * Konsisten dengan party.controller GET swap/balances (composite `id::admin`).
+ * Konsisten dengan party.controller GET /balances (composite `id::admin`).
  */
 export function tokenBalanceKey(t: Pick<WalletToken, 'instrumentId' | 'instrumentAdmin'>): string {
   return `${t.instrumentId}::${t.instrumentAdmin}`;
