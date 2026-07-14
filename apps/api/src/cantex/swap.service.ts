@@ -118,6 +118,10 @@ export class SwapService {
     buyInstrumentId: string;
     buyInstrumentAdmin: string;
     minAmountCc?: number;
+    /** Minimum amount untuk TOKEN_TO_CC (mis. 2.5 USDCx). */
+    minAmountToken?: number;
+    /** Instrument id token yang dijual (untuk pesan error yang informatif). */
+    minAmountTokenSymbol?: string;
   }): Promise<{ ok: boolean; message?: string }> {
     const maxSlippage = Number(
       this.config.get<string>('MAX_SLIPPAGE_PCT') ?? '15',
@@ -125,12 +129,27 @@ export class SwapService {
     const safeMinCc = Number(
       this.config.get<string>('SAFE_MIN_SWAP_CC') ?? '1',
     );
+    const safeMinToken = Number(
+      this.config.get<string>('SAFE_MIN_SWAP_TOKEN') ?? '2.5',
+    );
 
     // Minimum amount gate (CC_TO_TOKEN only).
     if (params.minAmountCc !== undefined && params.minAmountCc < safeMinCc) {
       return {
         ok: false,
         message: `Minimum swap amount is ${safeMinCc} CC.`,
+      };
+    }
+
+    // Minimum amount gate (TOKEN_TO_CC only).
+    if (
+      params.minAmountToken !== undefined &&
+      params.minAmountToken < safeMinToken
+    ) {
+      const symbol = params.minAmountTokenSymbol ?? 'token';
+      return {
+        ok: false,
+        message: `Minimum swap amount is ${safeMinToken} ${symbol}.`,
       };
     }
 
@@ -572,13 +591,16 @@ export class SwapService {
       };
     }
 
-    // 1a. Slippage safety gate (pre-execution).
+    // 1a. Slippage + minimum safety gate (pre-execution).
+    // Minimum ticket size untuk token→CC (default 2.5, via SAFE_MIN_SWAP_TOKEN).
     const gate = await this.checkSlippageGate({
       sellAmount: String(params.amount),
       sellInstrumentId: params.sellInstrumentId,
       sellInstrumentAdmin: params.sellInstrumentAdmin,
       buyInstrumentId: cfg.ccInstrumentId,
       buyInstrumentAdmin: cfg.ccInstrumentAdmin,
+      minAmountToken: params.amount,
+      minAmountTokenSymbol: params.sellInstrumentId,
     });
     if (!gate.ok) {
       return {

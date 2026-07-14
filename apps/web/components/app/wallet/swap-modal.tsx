@@ -58,8 +58,11 @@ interface QuoteResponse {
   estimatedTimeSeconds: number;
 }
 
-/** Minimum swap amount (Cantex DEX requirement: minimum ticket size 10 CC). */
-const MIN_SWAP_AMOUNT = 10;
+/** Minimum swap amount.
+ *  - CC→token: 10 CC (Cantex DEX ticket size)
+ *  - token→CC: 2.5 token (mis. 2.5 USDCx) — SAFE_MIN_SWAP_TOKEN di backend */
+const MIN_SWAP_AMOUNT_CC = 10;
+const MIN_SWAP_AMOUNT_TOKEN = 2.5;
 
 interface SwapModalProps {
   open: boolean;
@@ -237,11 +240,11 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
     sellBalance > 0 && parseFloat(amount) > sellBalance;
   const sameToken =
     sellToken && buyToken && sellToken.instrumentId === buyToken.instrumentId;
-  // Minimum 10 hanya saat JUAL CC (Cantex ticket size). Token→CC bebas.
+  // Minimum amount gate: CC→token butuh ≥10 CC, token→CC butuh ≥2.5 token.
+  const minAmount = sellToken?.isCC ? MIN_SWAP_AMOUNT_CC : MIN_SWAP_AMOUNT_TOKEN;
   const belowMinimum =
-    sellToken?.isCC &&
     parseFloat(amount) > 0 &&
-    parseFloat(amount) < MIN_SWAP_AMOUNT;
+    parseFloat(amount) < minAmount;
 
   // Percent quick-select — works for ANY token (CC + non-CC).
   const setPercent = (pct: number) => {
@@ -546,7 +549,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                     : sameToken
                       ? "Select Different Tokens"
                       : belowMinimum
-                        ? `Min ${MIN_SWAP_AMOUNT} CC to swap`
+                        ? `Min ${minAmount} ${sellToken?.isCC ? "CC" : (sellToken?.instrumentId ?? "token")} to swap`
                         : !amount
                           ? "Enter Amount"
                           : `Swap ${displayName(sellToken?.instrumentId ?? "")} → ${displayName(buyToken?.instrumentId ?? "")}`}
