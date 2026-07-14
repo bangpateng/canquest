@@ -16,10 +16,7 @@ export default function ActivityListPage() {
 
   return (
     <PlatformPage>
-      <PlatformPageIntro
-        title="Activity"
-        description="All your on-chain activity in one place"
-      />
+      <PlatformPageIntro title="Activity" />
       <TransactionsView partyId={partyId} />
     </PlatformPage>
   );

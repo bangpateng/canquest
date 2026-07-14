@@ -195,7 +195,6 @@ export function TransactionDetailContent({
     detail.eventId ?? detail.cantonUpdateId ?? detail.ledgerContractId ?? null;
   const txId = isInternal ? null : rawTxId;
 
-  const feeCc = microCcToCc(detail.networkFeeMicroCc);
   const platformFeeCc = microCcToCc(detail.platformFeeMicroCc);
   const roundDisplay =
     detail.round != null && detail.round !== "" ? String(detail.round) : null;
@@ -288,15 +287,11 @@ export function TransactionDetailContent({
             </ReceiptField>
           ) : null}
 
-          <ReceiptField label="Network fee">
-            <span className="tabular-nums">{feeCc.toFixed(4)} CC</span>
+          {/* Platform fee — selalu tampil. Sumber: send (TRANSACTION_FEE_CC)
+              atau swap (SWAP_PLATFORM_FEE_CC). 0 kalau tidak ada fee. */}
+          <ReceiptField label="Platform fee">
+            <span className="tabular-nums text-amber-400">{platformFeeCc.toFixed(4)} CC</span>
           </ReceiptField>
-
-          {isTransfer && platformFeeCc > 0 ? (
-            <ReceiptField label="Platform fee">
-              <span className="tabular-nums text-amber-400">{platformFeeCc.toFixed(4)} CC</span>
-            </ReceiptField>
-          ) : null}
 
           {roundDisplay ? (
             <ReceiptField label="Round">

@@ -250,7 +250,7 @@ export const tr: PlatformMessages = {
     reconnecting: "Bağlanıyor…",
   },
   transactions: {
-    title: "İşlem geçmişi",
+    title: "Aktivite",
     type: "Tür",
     amount: "Miktar",
     description: "Açıklama",

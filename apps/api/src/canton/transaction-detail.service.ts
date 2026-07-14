@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import {
@@ -79,6 +80,7 @@ export class TransactionDetailService {
     private readonly ledger: CantonLedgerService,
     private readonly users: UsersService,
     private readonly modo: ModoApiService,
+    private readonly config: ConfigService,
   ) {}
 
   /** Explorer link via Modo (cc.modo.link/mainnet/event/{id}:0). */
@@ -260,15 +262,32 @@ export class TransactionDetailService {
         ? await this.users.resolveTransferCounterparty(tx.referenceId)
         : null;
 
-    // Platform fee (CC withdraw fee) yang dipotong saat transfer keluar ini.
-    // Baris fee dicatat terpisah dengan referenceId "fee:..." dan disembunyikan
-    // dari history list, tapi TETAP ditampilkan di modal detail. Di-link via
-    // rentang waktu (fee selalu dibuat bersama transfer dalam satu request send-cc).
+    // Platform fee — ditampilkan di modal detail. Sumber nilai:
+    //   1. Transfer (TRANSFER_OUT): cari fee row terkait via findLinkedPlatformFee.
+    //      Kalau tidak ketemu, fallback ke env TRANSACTION_FEE_CC.
+    //   2. Swap (SWAP_OUT/SWAP_IN): swap tidak catat fee row ke CcTransaction,
+    //      jadi pakai env SWAP_PLATFORM_FEE_CC langsung.
+    //   3. Lainnya: null (tidak ada platform fee).
     let platformFeeMicroCc: string | null = null;
     if (tx.type === 'TRANSFER_OUT') {
       const feeRow = await this.findLinkedPlatformFee(tx.userId, tx.createdAt);
       if (feeRow) {
         platformFeeMicroCc = feeRow.amountMicroCc.toString();
+      } else {
+        // Fallback: env default (mis. 5 CC).
+        const feeCc = Number(
+          this.config.get<string>('TRANSACTION_FEE_CC') ?? '0',
+        );
+        if (feeCc > 0) {
+          platformFeeMicroCc = String(Math.round(feeCc * 1_000_000));
+        }
+      }
+    } else if (tx.type === 'SWAP_OUT' || tx.type === 'SWAP_IN') {
+      const swapFeeCc = Number(
+        this.config.get<string>('SWAP_PLATFORM_FEE_CC') ?? '0',
+      );
+      if (swapFeeCc > 0) {
+        platformFeeMicroCc = String(Math.round(swapFeeCc * 1_000_000));
       }
     }
 

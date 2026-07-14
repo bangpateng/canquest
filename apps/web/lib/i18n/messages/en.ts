@@ -249,7 +249,7 @@ export const en: PlatformMessages = {
     reconnecting: "Connecting…",
   },
   transactions: {
-    title: "Transaction history",
+    title: "Activity",
     type: "Type",
     amount: "Amount",
     description: "Description",
