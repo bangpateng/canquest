@@ -99,7 +99,13 @@ export interface CantonUpdateEvent {
 
 const MAX_RECONNECTS = 10;
 const RECONNECT_BASE_DELAY_MS = 1_000;
-const MAX_STREAM_IDLE_MS = 120_000; // reconnect kalau 2 menit no data
+/**
+ * HTTP POST /v2/updates BUKAN long-lived stream — ini one-shot request yang
+ * return semua update yang ada lalu EOF. Untuk polling real-time, tunggu
+ * interval ini sebelum re-request (long-poll pattern). Default 10s supaya
+ * near-realtime tanpa overload ledger API.
+ */
+const POLL_INTERVAL_MS = 10_000;
 
 @Injectable()
 export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
@@ -111,7 +117,8 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
   private closedByUser = false;
   private reconnectAttempts = 0;
   private streamController: AbortController | null = null;
-  private idleTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Timer untuk long-poll re-request (POLL_INTERVAL_MS setelah EOF). */
+  private pollTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** Stream of parsed update events. Handler subscribe di onModuleInit. */
   readonly updates$ = new Subject<CantonUpdateEvent>();
@@ -202,7 +209,10 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
 
   onModuleDestroy(): void {
     this.closedByUser = true;
-    this.stopIdleTimer();
+    if (this.pollTimer) {
+      clearTimeout(this.pollTimer);
+      this.pollTimer = null;
+    }
     this.streamController?.abort();
     this.updates$.complete();
   }
@@ -327,13 +337,10 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     const decoder = new TextDecoder();
     let buffer = '';
 
-    this.resetIdleTimer();
-
     try {
       while (!this.closedByUser) {
         const { done, value } = await reader.read();
         if (done) break;
-        this.resetIdleTimer();
 
         buffer += decoder.decode(value, { stream: true });
         // Canton stream = NDJSON (newline-delimited JSON objects).
@@ -346,13 +353,14 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
         }
       }
     } finally {
-      this.stopIdleTimer();
       reader.releaseLock();
-      // Stream ended normally → reconnect untuk resume (server mungkin tutup
-      // koneksi idle). Bukan error.
+      // HTTP /v2/updates = one-shot request (bukan long-lived stream). Response
+      // EOF setelah return semua update yang ada. Tunggu POLL_INTERVAL_MS lalu
+      // re-request (long-poll pattern) — BUKAN reconnect instan (akan hot loop).
       if (!this.closedByUser) {
-        this.logger.warn('CantonUpdates: stream ended, reconnecting to resume...');
-        void this.startStream();
+        this.pollTimer = setTimeout(() => {
+          if (!this.closedByUser) void this.startStream();
+        }, POLL_INTERVAL_MS);
       }
     }
   }
@@ -482,23 +490,5 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     }, delay);
   }
 
-  /** Reset idle watchdog — reconnect kalau 2 menit no data (server stuck). */
-  private resetIdleTimer(): void {
-    this.stopIdleTimer();
-    this.idleTimer = setTimeout(() => {
-      if (!this.closedByUser) {
-        this.logger.warn(
-          `CantonUpdates: no data for ${MAX_STREAM_IDLE_MS}ms, forcing reconnect.`,
-        );
-        this.streamController?.abort();
-      }
-    }, MAX_STREAM_IDLE_MS);
-  }
 
-  private stopIdleTimer(): void {
-    if (this.idleTimer) {
-      clearTimeout(this.idleTimer);
-      this.idleTimer = null;
-    }
-  }
 }
