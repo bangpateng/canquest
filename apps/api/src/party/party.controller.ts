@@ -1260,6 +1260,7 @@ export class PartyController {
     const result = await this.ledger.withdrawTransferInstruction(
       cid,
       user.cantonPartyId,
+      withdrawInstrumentAdmin,
     );
 
     if (!result.ok) {

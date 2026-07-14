@@ -1680,18 +1680,25 @@ export class CantonLedgerService {
    *
    * Interface: Splice.Api.Token.TransferInstructionV1:TransferInstruction
    * Choice:    TransferInstruction_Withdraw
-   * Argument:  { extraArgs: { values: {} } }
    *
    * Sender membatalkan transfer sebelum receiver accept/reject.
    * Holding CC dikembalikan ke sender.
    *
+   * CIP-0056 mengharuskan withdraw membawa extraArgs { context, meta } +
+   * disclosedContracts dari registry choice-contexts API (sama seperti accept/
+   * reject). Sebelumnya withdraw hanya kirim { values: {} } → Canton reject
+   * dengan COMMAND_PREPROCESSING_FAILED "Missing non-optional fields: Set(context, meta)".
+   *
    * @param transferInstructionCid - ContractId dari TransferInstruction (dari Step 1)
    * @param senderPartyId - Canton party ID pengirim (controller choice ini)
+   * @param instrumentAdmin - Admin party instrument (untuk branch CC vs registry token
+   *   saat ambil choice-context). Kosong = default CC path.
    * @returns { ok, updateId, error }
    */
   async withdrawTransferInstruction(
     transferInstructionCid: string,
     senderPartyId: string,
+    instrumentAdmin = '',
   ): Promise<{ ok: boolean; updateId: string | null; error?: string }> {
     const interfaceId =
       '#splice-api-token-transfer-instruction-v1:Splice.Api.Token.TransferInstructionV1:TransferInstruction';
@@ -1702,13 +1709,29 @@ export class CantonLedgerService {
       `TransferInstruction_Withdraw: sender=${senderPartyId.split('::')[0]} cid=${transferInstructionCid.slice(0, 16)}...`,
     );
 
+    // Ambil choice-context dari registry (sama seperti accept/reject). CIP-0056
+    // mewajibkan extraArgs { context, meta } + disclosedContracts — tanpa ini
+    // Canton reject: "Missing non-optional fields: Set(context, meta)".
+    const choiceCtx = await this.getInstructionChoiceContext(
+      transferInstructionCid,
+      'withdraw',
+      instrumentAdmin,
+    );
+
     const { ok, status, text } = await this.exerciseChoice(
       transferInstructionCid,
       interfaceId,
       'TransferInstruction_Withdraw',
-      { extraArgs: { values: {} } },
+      {
+        extraArgs: {
+          context: choiceCtx?.choiceContextData ?? { values: {} },
+          meta: { values: {} },
+        },
+      },
       [senderPartyId],
       commandId,
+      undefined,
+      choiceCtx?.disclosedContracts,
     );
 
     if (ok) {
