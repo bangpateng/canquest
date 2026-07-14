@@ -8,15 +8,15 @@ import { isRealCantonPartyId } from "@/lib/auth/wallet-session-cache";
 import { formatPartyIdForDisplay } from "@/lib/canton/canton-party-id";
 
 /**
- * Token yang ditampilkan di wallet. Hanya CC + USDCx — semua token lain
- * (CBTC, cETH, HANDL, MOD, EDELx, HECTO, FRXUSD, USDC.B, dll) disembunyikan
+ * Token yang ditampilkan di wallet. Hanya CC + USDCx + CBTC — semua token
+ * lain (cETH, HANDL, MOD, EDELx, HECTO, FRXUSD, USDC.B, dll) disembunyikan
  * dari UI wallet sampai diaktifkan secara eksplisit di sini.
  *
  * CC selalu muncul (di-render terpisah di atas, hard-coded Amulet).
- * USDCx aktif penuh.
+ * USDCx + CBTC aktif penuh.
  */
-const VISIBLE_TOKENS = new Set(["USDCX"]);
-const ACTIVE_SWAP_TOKENS = new Set(["USDCX"]);
+const VISIBLE_TOKENS = new Set(["USDCX", "CBTC"]);
+const ACTIVE_SWAP_TOKENS = new Set(["USDCX", "CBTC"]);
 
 /** Cek apakah token ini aktif untuk swap/detail. CC selalu aktif. */
 function isTokenActive(symbol: string, isCC?: boolean): boolean {
@@ -225,8 +225,9 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
             fiatValue={ccValue > 0 ? `$${ccFiatStr}` : undefined}
           />
 
-          {/* Non-CC tokens — hanya yang whitelist (USDCx, CBTC). Token lain
-              (cETH, HANDL, MOD, EDELx, dll) disembunyikan dari UI wallet. */}
+          {/* Non-CC tokens — hanya yang whitelist (USDCx + CBTC). Token lain
+              (cETH, HANDL, MOD, EDELx, HECTO, FRXUSD, USDC.B, dll)
+              disembunyikan dari UI wallet. */}
           {swapTokens
             .filter(
               (t) => !t.isCC && VISIBLE_TOKENS.has(t.instrumentId.toUpperCase()),

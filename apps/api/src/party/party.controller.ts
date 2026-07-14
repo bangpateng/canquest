@@ -69,6 +69,21 @@ import { SwapDto } from './dto/swap.dto';
 
 type AuthedReq = Request & { user: { userId: string; email: string } };
 
+/**
+ * Whitelist token yang ditampilkan & dipakai di dapp. Hanya CC (Amulet) +
+ * USDCx + CBTC. Token lain dari Cantex pools (HANDL, MOD, HECTO, FRXUSD.B,
+ * cETH, EDELx, USDC.B) disembunyikan — tidak di-query, tidak ditampilkan.
+ * Dipakai di /balances, /pools, /prices supaya konsisten.
+ */
+const VISIBLE_INSTRUMENTS = new Set([
+  'AMULET', // CC / Canton Coin
+  'USDCX',
+  'CBTC',
+]);
+function isVisibleInstrument(id: string): boolean {
+  return VISIBLE_INSTRUMENTS.has(id.toUpperCase());
+}
+
 @Controller('party')
 @UseGuards(AuthGuard('jwt'))
 export class PartyController {
@@ -2650,21 +2665,15 @@ export class PartyController {
       try {
         // Ambil daftar token yang dikenal dari Cantex pools.
         const instruments = await this.cantex.getAllSwapInstruments();
-        // WHITELIST: hanya token yang ditampilkan/dipakai di dapp. Sebelumnya
-        // query SEMUA token dari pools (9 instrumen) → 9 ACS calls ke ledger
-        // per refresh, padahal frontend hanya tampilkan USDCx. Filter di sini
-        // turunkan beban ledger dari 9 → 2 query (USDCx + CBTC).
-        const SWAP_BALANCE_WHITELIST = new Set([
-          'USDCX',
-          'CBTC',
-        ]);
-        // Query on-chain holdings hanya untuk token whitelist (parallel).
+        // Filter: hanya token whitelist (CC + USDCx + CBTC) yang di-query
+        // on-chain. Sebelumnya query SEMUA 9 token → 9 ACS calls ke ledger
+        // per refresh. Sekarang cukup USDCx + CBTC (CC dari DB).
         const onChainResults = await Promise.all(
           instruments
             .filter(
               (inst) =>
                 inst.id.toLowerCase() !== 'amulet' &&
-                SWAP_BALANCE_WHITELIST.has(inst.id.toUpperCase()),
+                isVisibleInstrument(inst.id),
             )
             .map(async (inst) => {
               const key = `${inst.id}::${inst.admin}`;
@@ -2720,7 +2729,16 @@ export class PartyController {
     }
     try {
       const prices = await this.cantexPrices.getTokenPrices();
-      return { prices, source: 'cantex_ws_live' };
+      // Filter: hanya harga token whitelist (CC + USDCx + CBTC).
+      const filtered: Record<string, number> = {};
+      for (const [key, price] of Object.entries(prices)) {
+        // key format: "<instrumentId>::<admin>::..."
+        const instrumentId = key.split('::')[0];
+        if (isVisibleInstrument(instrumentId)) {
+          filtered[key] = price;
+        }
+      }
+      return { prices: filtered, source: 'cantex_ws_live' };
     } catch (err) {
       this.logger.error(
         `prices failed: ${(err as Error).message}`,
@@ -2757,11 +2775,14 @@ export class PartyController {
         process.env.CANTEX_CC_INSTRUMENT_ID ?? 'Amulet'
       ).toLowerCase();
       return {
-        tokens: instruments.map((t) => ({
-          instrumentId: t.id,
-          instrumentAdmin: t.admin,
-          isCC: t.id.toLowerCase() === ccId,
-        })),
+        // Filter: hanya token whitelist (CC + USDCx + CBTC).
+        tokens: instruments
+          .filter((t) => isVisibleInstrument(t.id))
+          .map((t) => ({
+            instrumentId: t.id,
+            instrumentAdmin: t.admin,
+            isCC: t.id.toLowerCase() === ccId,
+          })),
       };
     } catch (err) {
       this.logger.error(
