@@ -3,7 +3,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, Check, Copy, ExternalLink, Lock, LockOpen, ShieldCheck, Zap } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Check, Copy, Lock, LockOpen, ShieldCheck, Zap } from "lucide-react";
 
 import type { TransactionDetail } from "@/components/app/wallet/transaction-detail-view";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
@@ -115,11 +115,6 @@ type TransactionDetailContentProps = {
   compact?: boolean;
 };
 
-// Modo explorer: event page (/event/{id}:0) — menampilkan detail aksi utama
-// (sender/receiver/amount) yang user butuhkan saat klik "View on Modo". Root
-// event node ":0" = exercise choice utama, konsisten untuk semua jenis tx.
-const MODO_TX_BASE = "https://cc.modo.link/mainnet/event";
-
 export function TransactionDetailContent({
   detail,
   loading,
@@ -190,22 +185,15 @@ export function TransactionDetailContent({
     (isIn || isTokenIn ? ownAddress : detail.counterparty) ??
     null;
 
-  // Tx ID untuk copy/explorer — HANYA id on-chain real (event/update/contract id).
+  // Tx ID untuk copy — HANYA id on-chain real (event/update/contract id).
   // JANGAN fallback ke detail.id (DB cuid) — itu menyesatkan user. Marker internal
   // (fee/inbound-sync/unlock/preapproval/reward-) disembunyikan (bukan on-chain tx).
+  // Tx ID ditampilkan sebagai teks biasa + tombol copy (tanpa link explorer) —
+  // user bisa cek sendiri ke explorer pilihannya.
   const isInternal = detail.isInternalMarker === true;
   const rawTxId =
     detail.eventId ?? detail.cantonUpdateId ?? detail.ledgerContractId ?? null;
   const txId = isInternal ? null : rawTxId;
-  // Explorer link: PREFERENSI backend cantonScanUrl (sudah pakai event page
-  // cc.modo.link). Fallback: bangun dari eventId (strip suffix ":N" lalu tambah
-  // ":0" untuk root event, encode ":" jadi %3A) bila backend tidak kasih URL.
-  const explorerUrl = isInternal
-    ? null
-    : (detail.cantonScanUrl ??
-      (detail.eventId
-        ? `${MODO_TX_BASE}/${encodeURIComponent(detail.eventId.replace(/:[0-9]+$/, ""))}%3A0`
-        : null));
 
   const feeCc = microCcToCc(detail.networkFeeMicroCc);
   const platformFeeCc = microCcToCc(detail.platformFeeMicroCc);
@@ -340,35 +328,12 @@ export function TransactionDetailContent({
           {txId ? (
             <ReceiptField label="Tx ID" mono>
               <span className="inline-flex items-center justify-end gap-1.5">
-                {explorerUrl ? (
-                  <a
-                    href={explorerUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[var(--primary)] underline-offset-2 hover:underline"
-                  >
-                    {truncateMiddle(txId)}
-                  </a>
-                ) : (
-                  <span>{truncateMiddle(txId)}</span>
-                )}
+                <span>{truncateMiddle(txId)}</span>
                 <InlineCopyButton value={txId} label="Copy transaction ID" />
               </span>
             </ReceiptField>
           ) : null}
         </dl>
-
-        {detail.cantonScanUrl ? (
-          <a
-            href={detail.cantonScanUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-white/5 bg-[var(--muted)]/40 px-5 py-2.5 text-sm font-semibold text-slate-100 transition-colors hover:bg-[var(--muted)]"
-          >
-            View on Modo
-            <ExternalLink className="h-4 w-4" />
-          </a>
-        ) : null}
       </div>
 
       {showLedgerEvents ? (
