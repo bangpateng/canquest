@@ -39,7 +39,6 @@ interface OffersResponse {
   offers: OfferItem[];
   total?: number;
   legacyCount?: number;
-  cip56Count?: number;
   // legacy compat
   count?: number;
   message?: string;
@@ -502,18 +501,6 @@ export function OffersModal({
                                 {displayName(offer.instrumentId ?? "Amulet")}{" "}
                                 from {senderDisplay(offer)}
                               </p>
-                              <span
-                                className={cn(
-                                  "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
-                                  offer.type === "transfer_instruction"
-                                    ? "bg-blue-500/15 text-blue-400"
-                                    : "bg-slate-500/15 text-slate-500",
-                                )}
-                              >
-                                {offer.type === "transfer_instruction"
-                                  ? "CIP-56"
-                                  : "Legacy"}
-                              </span>
                             </div>
                             {offer.description ? (
                               <p className="truncate text-xs font-medium text-slate-400">
@@ -615,18 +602,6 @@ export function OffersModal({
                               {displayName(offer.instrumentId ?? "Amulet")} →{" "}
                               {receiverDisplay(offer)}
                             </p>
-                            <span
-                              className={cn(
-                                "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
-                                offer.type === "transfer_instruction"
-                                  ? "bg-blue-500/15 text-blue-400"
-                                  : "bg-slate-500/15 text-slate-500",
-                              )}
-                            >
-                              {offer.type === "transfer_instruction"
-                                ? "CIP-56"
-                                : "Legacy"}
-                            </span>
                           </div>
                           {offer.description ? (
                             <p className="truncate text-xs font-medium text-slate-400">
