@@ -15,6 +15,7 @@ import { QuestLedgerService } from './quest-ledger.service';
 import { LockEligibilityService } from './lock-eligibility.service';
 import { ModoApiService } from './modo-api.service';
 import { OfferReconcilerService } from './offer-reconciler.service';
+import { CantonUpdatesService } from './canton-updates.service';
 
 /**
  * CantonModule wires together:
@@ -42,6 +43,7 @@ import { OfferReconcilerService } from './offer-reconciler.service';
     LockEligibilityService,
     ModoApiService,
     OfferReconcilerService,
+    CantonUpdatesService,
   ],
   exports: [
     CantonLedgerService,
@@ -55,6 +57,7 @@ import { OfferReconcilerService } from './offer-reconciler.service';
     LockEligibilityService,
     ModoApiService,
     OfferReconcilerService,
+    CantonUpdatesService,
   ],
 })
 export class CantonModule {}

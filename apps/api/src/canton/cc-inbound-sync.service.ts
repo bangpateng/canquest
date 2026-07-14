@@ -106,6 +106,33 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * Event-driven reconcile untuk SATU party (dipanggil CantonUpdatesService saat
+   * stream ledger mendeteksi perubahan balance/holding untuk party ini).
+   *
+   * Lebih murah dari syncAllUsers() (loop semua user) — hanya resolve party ini
+   * → user, lalu syncUserBalance. Idempoten + non-fatal.
+   *
+   * Tidak gated by CC_INBOUND_SYNC_ENABLED: event-driven path ini INDEPENDEN
+   * dari poller background. Tujuannya justru replace poller secara gradual.
+   */
+  async reconcileParty(partyId: string): Promise<void> {
+    if (!partyId || partyId.startsWith('canquest:')) return;
+    try {
+      const user = await this.prisma.user.findFirst({
+        where: { cantonPartyId: partyId },
+        select: { id: true, username: true, cantonPartyId: true },
+      });
+      if (!user?.username) return; // party tidak punya user (system wallet)
+      // syncUserBalance sudah handle realtime push + dedup heuristic.
+      await this.syncUserBalance(user.id, user.username, user.cantonPartyId);
+    } catch (err) {
+      this.logger.warn(
+        `reconcileParty(${partyId.slice(0, 12)}…) failed: ${String(err)}`,
+      );
+    }
+  }
+
   private async syncAllUsers(): Promise<void> {
     if (this.running) return;
     this.running = true;

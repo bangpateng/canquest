@@ -126,6 +126,64 @@ export class OfferReconcilerService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Event-driven reconcile untuk SATU party (dipanggil CantonUpdatesService saat
+   * stream mendeteksi perubahan). Lebih murah dari runOnce() — hanya proses user
+   * yang punya partyId ini, skip scan seluruh DB.
+   *
+   * Idempoten + non-fatal: aman dipanggil berkali-kali, error tidak crash caller.
+   * Returns true kalau ada offer yang di-settle (untuk monitoring).
+   */
+  async reconcileParty(partyId: string): Promise<boolean> {
+    if (!partyId || partyId.startsWith('canquest:')) return false;
+    try {
+      // Resolve party → user.
+      const user = await this.prisma.user.findFirst({
+        where: { cantonPartyId: partyId },
+        select: { id: true },
+      });
+      if (!user) return false; // party tidak punya user (mis. system wallet)
+
+      const pendingRowsRaw = await this.prisma.ccTransaction.findMany({
+        where: {
+          userId: user.id,
+          status: 'PENDING',
+          transferInstructionCid: { not: null },
+        },
+        select: {
+          id: true,
+          userId: true,
+          transferInstructionCid: true,
+          ledgerTxId: true,
+          amountMicroCc: true,
+          description: true,
+        },
+      });
+      const pendingRows = pendingRowsRaw.filter(
+        (r): r is typeof r & { transferInstructionCid: string } =>
+          !!r.transferInstructionCid,
+      );
+      if (pendingRows.length === 0) return false;
+
+      const countBefore = pendingRows.length;
+      await this.reconcileUser(user.id, pendingRows);
+      // Re-check untuk lihat apakah ada yang berubah status.
+      const afterSettle = await this.prisma.ccTransaction.count({
+        where: {
+          userId: user.id,
+          status: 'PENDING',
+          transferInstructionCid: { not: null },
+        },
+      });
+      return afterSettle < countBefore;
+    } catch (err) {
+      this.logger.warn(
+        `Offer reconciler: reconcileParty(${partyId.slice(0, 12)}…) failed: ${String(err)}`,
+      );
+      return false;
+    }
+  }
+
+  /**
    * Reconcile semua offer PENDING milik satu user.
    * Query on-chain 1x untuk sender party, lalu cek cid setiap row.
    */
