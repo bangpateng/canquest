@@ -86,7 +86,7 @@ export function WalletActions({
 
   // Token aktif untuk Send (selain CC). Mirror swap allowlist supaya konsisten —
   // hanya token yang benar-benar supported yang muncul di selector.
-  const ACTIVE_SEND_TOKENS = new Set(["USDCX", "CBTC"]);
+  const ACTIVE_SEND_TOKENS = new Set(["USDCX"]);
   function isSendActive(t: WalletToken): boolean {
     if (t.isCC) return true; // CC selalu aktif
     return ACTIVE_SEND_TOKENS.has(t.instrumentId.toUpperCase());
@@ -99,7 +99,14 @@ export function WalletActions({
         fetch("/api/party/swap/balances", { credentials: "include" }),
       ]);
       const data = (await poolsRes.json()) as { tokens?: WalletToken[] };
-      const list = (data.tokens ?? []).filter(isSendActive);
+      // Tampilkan SEMUA token: CC selalu aktif. Non-CC aktif + coming soon.
+      const allList = data.tokens ?? [];
+      // Filter: CC + token aktif + token coming soon yang ada di allowlist known.
+      // (Hanya tampilkan token yang dikenal — bukan semua token Cantex random).
+      const KNOWN_TOKENS = new Set(["USDCX", "CBTC"]);
+      const list = allList.filter(
+        (t) => t.isCC || KNOWN_TOKENS.has(t.instrumentId.toUpperCase()),
+      );
       setSendTokens(list);
       // Default: CC (Amulet).
       const cc = list.find((t) => t.isCC);
@@ -501,17 +508,25 @@ export function WalletActions({
                             : parseFloat(
                                 sendBalances.tokens[tokenBalanceKey(t)] ?? "0",
                               );
+                          const tokenActive = t.isCC || isSendActive(t);
                           return (
                             <button
                               key={tokenBalanceKey(t)}
                               type="button"
+                              disabled={!tokenActive}
                               onClick={() => {
+                                if (!tokenActive) return;
                                 setSelectedSendToken(t);
                                 setTokenPickerOpen(false);
                                 setTokenPickerQuery("");
                                 setCcAmount("");
                               }}
-                              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left hover:bg-white/5"
+                              className={cn(
+                                "flex w-full items-center justify-between rounded-xl px-3 py-2 text-left",
+                                tokenActive
+                                  ? "hover:bg-white/5"
+                                  : "cursor-not-allowed opacity-50",
+                              )}
                             >
                               <span className="flex items-center gap-2">
                                 <TokenLogo symbol={t.instrumentId} size="sm" />
@@ -523,9 +538,14 @@ export function WalletActions({
                                     Instant
                                   </span>
                                 )}
+                                {!tokenActive && (
+                                  <span className="rounded bg-slate-700/50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                                    Coming soon
+                                  </span>
+                                )}
                               </span>
                               <span className="text-xs tabular-nums text-slate-400">
-                                {bal.toFixed(4)}
+                                {tokenActive ? bal.toFixed(4) : "—"}
                               </span>
                             </button>
                           );

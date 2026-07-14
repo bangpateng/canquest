@@ -8,10 +8,9 @@ import { isRealCantonPartyId } from "@/lib/auth/wallet-session-cache";
 import { formatPartyIdForDisplay } from "@/lib/canton/canton-party-id";
 
 /**
- * Token yang SUDAH aktif untuk swap (selain CC).
- * Token lain tampil "Coming Soon" sampai di-enable bertahap.
+ * Token yang SUDAH aktif (bisa dipakai). Token lain tampil "Coming Soon".
  */
-const ACTIVE_SWAP_TOKENS = new Set(["USDCX", "CBTC"]);
+const ACTIVE_SWAP_TOKENS = new Set(["USDCX"]);
 
 /** Cek apakah token ini aktif untuk swap/detail. CC selalu aktif. */
 function isTokenActive(symbol: string, isCC?: boolean): boolean {
@@ -212,13 +211,12 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
             fiatValue={ccValue > 0 ? `$${ccFiatStr}` : undefined}
           />
 
-          {/* Non-CC tokens — only active ones (display-only, no nav) */}
+          {/* Non-CC tokens — active + coming soon (all visible, display-only) */}
           {swapTokens
-            .filter(
-              (t) => !t.isCC && isTokenActive(t.instrumentId, t.isCC),
-            )
+            .filter((t) => !t.isCC)
             .map((t) => {
               const key = `${t.instrumentId}::${t.instrumentAdmin}`;
+              const active = isTokenActive(t.instrumentId, t.isCC);
               const bal = parseFloat(tokenBalances[key] ?? "0");
               const price = tokenPrices[key];
               const fiat =
@@ -232,8 +230,9 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
                 <TokenCard
                   key={key}
                   symbol={t.instrumentId}
-                  balance={bal.toFixed(4)}
-                  fiatValue={fiat}
+                  balance={active ? bal.toFixed(4) : "—"}
+                  fiatValue={active ? fiat : undefined}
+                  comingSoon={!active}
                 />
               );
             })}
