@@ -1218,6 +1218,8 @@ export class CantonLedgerService {
     templateId: string;
     blob: string;
     round?: number;
+    /** Harga CC (Amulet) dalam USD — dari OpenMiningRound.payload.amuletPrice. */
+    amuletPrice?: number;
   } | null> {
     const base = this.scanProxyBase();
     if (!base) {
@@ -1250,6 +1252,7 @@ export class CantonLedgerService {
         blob: string;
         round?: number;
         opensAt?: string;
+        amuletPrice?: number;
       }> = [];
       const walk = (n: unknown, seen = new Set<unknown>()): void => {
         if (!n || typeof n !== 'object' || seen.has(n)) return;
@@ -1272,6 +1275,12 @@ export class CantonLedgerService {
             opensAt:
               typeof payload?.opensAt === 'string'
                 ? payload.opensAt
+                : undefined,
+            // Harga CC (Amulet) USD — dari OpenMiningRound.payload.amuletPrice.
+            // Bisa berupa string numeric atau number; parse aman.
+            amuletPrice:
+              payload?.amuletPrice != null
+                ? Number(payload.amuletPrice)
                 : undefined,
           });
         }
@@ -1308,6 +1317,28 @@ export class CantonLedgerService {
       this.logger.warn(`scan-proxy /${seg} error: ${String(err)}`);
       return null;
     }
+  }
+
+  /**
+   * Harga CC (Amulet) dalam USD dari scan-proxy OpenMiningRound.
+   *
+   * Sumber resmi Canton (scan-proxy/open-and-issuing-mining-rounds →
+   * payload.amuletPrice). Bila gagal / field tidak ada → return null
+   * (caller wajib handle: pakai cache lama atau skip harga CC).
+   *
+   * Dipakai CantonPriceService untuk /party/prices.
+   */
+  async getAmuletPrice(): Promise<number | null> {
+    const round = await this.fetchScanProxyContract(
+      'open-and-issuing-mining-rounds',
+    );
+    if (!round || round.amuletPrice == null || !Number.isFinite(round.amuletPrice)) {
+      this.logger.warn(
+        'getAmuletPrice: amuletPrice tidak ditemukan di OpenMiningRound payload',
+      );
+      return null;
+    }
+    return round.amuletPrice;
   }
 
   /** Best-effort: parse a JSON response and return the first string value for `key`. */

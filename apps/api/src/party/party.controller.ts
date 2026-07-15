@@ -41,13 +41,14 @@ import {
 } from '../common/canton-party-id';
 import { hasRealWallet } from '../common/wallet-policy';
 import { CantexClient } from '../cantex/cantex-client';
-import { CantexPriceFeedService } from '../cantex/cantex-price-feed.service';
+import { CantonPriceService } from '../canton/canton-price.service';
 import { SwapService } from '../cantex/swap.service';
 import { isCantexEnabled } from '../cantex/cantex.config';
 import { CantexError } from '../cantex/cantex.types';
 import { UsersService } from '../users/users.service';
 import { WalletPasswordService } from "../users/wallet-password.service";
 import { WalletInviteCodeService } from './wallet-invite-code.service';
+import { isVisibleInstrument } from './visible-instruments';
 import { AllocateWalletDto } from './dto/allocate-wallet.dto';
 import { CantonPartyBindingDto } from './dto/canton-party-binding.dto';
 import { SendCcDto } from './dto/send-cc.dto';
@@ -68,21 +69,6 @@ import { SwapQuoteDto } from './dto/swap-quote.dto';
 import { SwapDto } from './dto/swap.dto';
 
 type AuthedReq = Request & { user: { userId: string; email: string } };
-
-/**
- * Whitelist token yang ditampilkan & dipakai di dapp. Hanya CC (Amulet) +
- * USDCx + CBTC. Token lain dari Cantex pools (HANDL, MOD, HECTO, FRXUSD.B,
- * cETH, EDELx, USDC.B) disembunyikan — tidak di-query, tidak ditampilkan.
- * Dipakai di /balances, /pools, /prices supaya konsisten.
- */
-const VISIBLE_INSTRUMENTS = new Set([
-  'AMULET', // CC / Canton Coin
-  'USDCX',
-  'CBTC',
-]);
-function isVisibleInstrument(id: string): boolean {
-  return VISIBLE_INSTRUMENTS.has(id.toUpperCase());
-}
 
 @Controller('party')
 @UseGuards(AuthGuard('jwt'))
@@ -146,7 +132,7 @@ export class PartyController {
     private readonly prisma: PrismaService,
     private readonly walletPassword: WalletPasswordService,
     private readonly cantex: CantexClient,
-    private readonly cantexPrices: CantexPriceFeedService,
+    private readonly cantonPrices: CantonPriceService,
     private readonly swapService: SwapService,
   ) {}
 
@@ -2717,18 +2703,20 @@ export class PartyController {
   }
 
   /**
-   * GET /party/prices — harga USD semua token dari Cantex DEX
-   * (rate token→USDCx, USDCx = $1 anchor). Cache 30s di CantexClient.
+   * GET /party/prices — harga USD semua token dari sumber Canton.
+   * CC (Amulet) dari scan-proxy open-and-issuing-mining-rounds (amuletPrice),
+   * USDCx = $1 anchor (hardcode). Cache 30s di CantonPriceService.
    * Dipakai frontend untuk total balance USD + per-token fiat value.
+   *
+   * Tidak bergantung pada Cantex (enabled flag) — scan-proxy selalu available
+   * selama validator up. Cantex hanya dipakai untuk ambil admin token
+   * (key matching dengan /party/pools).
    */
   @Get('prices')
   @SkipThrottle()
   async swapPrices() {
-    if (!isCantexEnabled()) {
-      throw new ServiceUnavailableException('Swap is not enabled.');
-    }
     try {
-      const prices = await this.cantexPrices.getTokenPrices();
+      const prices = await this.cantonPrices.getTokenPrices();
       // Filter: hanya harga token whitelist (CC + USDCx + CBTC).
       const filtered: Record<string, number> = {};
       for (const [key, price] of Object.entries(prices)) {
@@ -2738,7 +2726,7 @@ export class PartyController {
           filtered[key] = price;
         }
       }
-      return { prices: filtered, source: 'cantex_ws_live' };
+      return { prices: filtered, source: 'canton_scan_proxy' };
     } catch (err) {
       this.logger.error(
         `prices failed: ${(err as Error).message}`,
