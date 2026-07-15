@@ -32,12 +32,9 @@ export class AuthController {
   /**
    * Register — ketat: 10 req/menit (auth tier).
    *
-   * Endpoint ini adalah ORKESTRATOR registrasi (validasi email anti-sybil,
-   * referral, displayName, buat row User). Password storage & session ada di
-   * Supabase Auth (saat SUPABASE_AUTH_ENABLED=true) atau hash lokal (legacy).
-   *
-   * Mode Supabase: frontend bertanggung jawab mendapatkan session setelah ini.
-   * Mode legacy: Nest issue token (accessToken/refreshToken) yang BFF set ke cookie.
+   * Orkestrasi registrasi: validasi email anti-sybil, referral, displayName,
+   * buat row User + bcrypt password hash. OTP verifikasi via Resend email.
+   * Nest issue token (accessToken/refreshToken) yang BFF set ke cookie cq_*.
    */
   @Post('register')
   @Throttle({ auth: { limit: 10, ttl: 60_000 } })
@@ -45,22 +42,14 @@ export class AuthController {
     return this.auth.register(body);
   }
 
-  /**
-   * OTP verify — ketat sama seperti register.
-   * Mode Supabase: endpoint ini deprecated (frontend pakai supabase.auth.verifyOtp),
-   * tapi tetap ada untuk path legacy (rollback).
-   */
+  /** OTP verify — ketat sama seperti register. */
   @Post('verify-otp')
   @Throttle({ auth: { limit: 10, ttl: 60_000 } })
   verifyOtp(@Body() body: VerifyOtpDto) {
     return this.auth.verifyOtp(body.userId, body.code);
   }
 
-  /**
-   * Login — ketat: 10 req/menit per IP, cegah brute-force.
-   * Mode Supabase: login di-handle frontend via supabase.auth.signInWithPassword;
-   * endpoint ini hanya dipakai mode legacy (rollback).
-   */
+  /** Login — ketat: 10 req/menit per IP, cegah brute-force. */
   @Post('login')
   @Throttle({ auth: { limit: 10, ttl: 60_000 } })
   login(@Body() body: LoginDto) {
@@ -68,9 +57,7 @@ export class AuthController {
   }
 
   /**
-   * Refresh token (LEGACY path).
-   * Mode Supabase: refresh di-handle @supabase/ssr di middleware (auto), endpoint
-   * ini tidak dipanggil. Tetap ada untuk rollback.
+   * Refresh token.
    *
    * SECURITY (M2): 30/min — cap abuse tanpa menghambat pemakaian normal
    * (token expire tiap 15 menit → normal refresh ~4×/jam).
@@ -81,14 +68,14 @@ export class AuthController {
     return this.auth.refresh(body.refreshToken);
   }
 
-  /** Forgot password — generik (anti-enumerasi), 10 req/menit. (LEGACY path) */
+  /** Forgot password — generik (anti-enumerasi), 10 req/menit. */
   @Post('forgot-password')
   @Throttle({ auth: { limit: 10, ttl: 60_000 } })
   forgotPassword(@Body() body: ForgotPasswordDto) {
     return this.auth.forgotPassword(body.email);
   }
 
-  /** Reset password — verifikasi kode + ganti password, 10 req/menit. (LEGACY) */
+  /** Reset password — verifikasi kode + ganti password, 10 req/menit. */
   @Post('reset-password')
   @Throttle({ auth: { limit: 10, ttl: 60_000 } })
   resetPassword(@Body() body: ResetPasswordDto) {

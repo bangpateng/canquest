@@ -1,8 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { CQ_ACCESS_COOKIE } from '@/lib/auth/auth-cookies';
-import { isSupabaseAuthEnabled } from '@/lib/supabase/config';
-import { updateSession } from '@/lib/supabase/middleware';
 
 /** Routes that require session cookie (JWT verified in platform layout). */
 const PROTECTED_PATTERN =
@@ -43,17 +41,8 @@ async function isMaintenanceOn(request: NextRequest): Promise<boolean> {
   return on;
 }
 
-/** True bila user memiliki session aktif (Supabase sb-* cookie ATAU legacy cq_access). */
+/** True bila user memiliki session aktif (cq_access cookie). */
 function hasSession(request: NextRequest): boolean {
-  if (isSupabaseAuthEnabled()) {
-    // @supabase/ssr menyimpan session di cookie `sb-<ref>-auth-token`
-    // (bisa ter-chunk jadi sb-...-auth-token.0/.1/...). Cek prefix sb- + auth-token.
-    const hasSupabase = request.cookies
-      .getAll()
-      .some((c) => c.name.startsWith('sb-') && c.name.includes('auth-token'));
-    // Legacy fallback selama transisi (user yang belum re-login).
-    return hasSupabase || request.cookies.has(CQ_ACCESS_COOKIE);
-  }
   return request.cookies.has(CQ_ACCESS_COOKIE);
 }
 
@@ -71,19 +60,6 @@ export async function middleware(request: NextRequest) {
     /\.[^/]+$/.test(pathname) // file statis (favicon.ico, robots.txt, dll.)
   ) {
     return NextResponse.next();
-  }
-
-  // ── Refresh Supabase session (kalau aktif) ───────────────────────────────
-  // updateSession menulis cookie refreshed ke response. Kita simpan response-nya
-  // untuk di-return di akhir supaya cookie benar-benar ter-set.
-  let sessionResponse: NextResponse | null = null;
-  let supabaseUser: { id: string } | null = null;
-  if (isSupabaseAuthEnabled()) {
-    const result = await updateSession(request);
-    if (result) {
-      sessionResponse = result.response;
-      supabaseUser = result.user;
-    }
   }
 
   // ── Maintenance gate (paling awal) ──────────────────────────────────────
@@ -114,23 +90,21 @@ export async function middleware(request: NextRequest) {
 
   // Protected platform routes
   if (!PROTECTED_PATTERN.test(pathname)) {
-    return sessionResponse ?? NextResponse.next();
+    return NextResponse.next();
   }
   if (PUBLIC_EARN_DETAIL_PATTERN.test(pathname)) {
-    return sessionResponse ?? NextResponse.next();
+    return NextResponse.next();
   }
 
-  // Cek session: Supabase (user resolved dari updateSession) atau legacy cookie.
-  const loggedIn = supabaseUser !== null || hasSession(request);
-  if (!loggedIn) {
+  // Cek session: cq_access cookie.
+  if (!hasSession(request)) {
     const home = new URL('/', request.url);
     home.searchParams.set('auth', 'login');
     if (pathname !== '/') home.searchParams.set('next', pathname);
     return NextResponse.redirect(home);
   }
 
-  // Return response yang membawa cookie Supabase yang sudah di-refresh.
-  return sessionResponse ?? NextResponse.next();
+  return NextResponse.next();
 }
 
 export const config = {

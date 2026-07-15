@@ -6,7 +6,6 @@ import {
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import {
@@ -17,7 +16,6 @@ import {
   timingSafeEqual,
 } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
-import { SupabaseService } from '../supabase/supabase.service';
 import { ReferralService } from '../users/referral.service';
 import { UsersService } from '../users/users.service';
 import { resolvePublicAvatarUrl } from '../users/user-avatar-url';
@@ -39,17 +37,6 @@ const RESET_TTL_MS = 15 * 60 * 1000;
 const RESET_RESEND_COOLDOWN_MS = 2 * 60 * 1000;
 const MAX_RESET_ATTEMPTS = 5;
 
-/**
- * Sentinel hash untuk register via Supabase Auth.
- *
- * Setelah migrasi, password hash sebenarnya disimpan di auth.users Supabase,
- * BUKAN di kolom passwordHash lokal. Kolom passwordHash lokal (legacy, akan
- * di-drop di Phase 6) NOT NULL → kita isi placeholder agar Prisma create tidak
- * gagal. Nilai ini tidak pernah dipakai untuk verifikasi (verify ada di
- * Supabase), dan tidak mungkin collide dengan hash bcrypt asli.
- */
-const SUPABASE_MANAGED_PASSWORD_SENTINEL = '!supabase-managed:no-local-hash';
-
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -60,14 +47,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly resend: ResendEmailService,
-    private readonly supabase: SupabaseService,
-    private readonly config: ConfigService,
   ) {}
-
-  /** Feature flag: true = pakai Supabase Auth; false = HS256 legacy (rollback). */
-  private get supabaseAuthEnabled(): boolean {
-    return this.config.get<string>('SUPABASE_AUTH_ENABLED') === 'true';
-  }
 
   async register(dto: {
     email: string;
@@ -97,133 +77,7 @@ export class AuthService {
     );
     const skipOtp = process.env.AUTH_REGISTER_SKIP_OTP === 'true';
 
-    if (this.supabaseAuthEnabled) {
-      return this.registerViaSupabase({
-        email,
-        password: dto.password,
-        referredById,
-        existing,
-        skipOtp,
-      });
-    }
-
-    return this.registerLegacy({
-      email,
-      password: dto.password,
-      referredById,
-      existing,
-      skipOtp,
-    });
-  }
-
-  // ── Register path: Supabase Auth ──────────────────────────────────────────
-
-  /**
-   * Register via Supabase Auth:
-   *  1. Buat user di auth.users Supabase via admin API (email_confirm sesuai skipOtp).
-   *  2. Buat row User lokal (cuid) dengan authUserId = UUID Supabase.
-   *  3. Selesaikan referral kalau skipOtp (email sudah confirmed).
-   *
-   * Frontend bertanggung jawab mendapatkan session Supabase (signInWithPassword
-   * atau lanjut OTP flow Supabase). Endpoint ini HANYA orkestrasi data bisnis.
-   */
-  private async registerViaSupabase(args: {
-    email: string;
-    password: string;
-    referredById: string | null;
-    existing: Awaited<ReturnType<UsersService['findByEmail']>>;
-    skipOtp: boolean;
-  }) {
-    const { email, password, referredById, existing, skipOtp } = args;
-
-    const { data, error } = await this.supabase.client.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: skipOtp, // true = langsung confirmed (skip OTP), false = kirim OTP Supabase
-    });
-    if (error || !data.user) {
-      // Email sudah dipakai di Supabase tapi belum di User lokal → treat as conflict.
-      if (error?.message?.toLowerCase().includes('already been registered')) {
-        throw new ConflictException('Email already registered');
-      }
-      this.logger.error(
-        `Supabase createUser failed for ${email}: ${error?.message ?? 'unknown'}`,
-      );
-      throw new BadRequestException(
-        'Registration failed. Please try again.',
-      );
-    }
-    const authUserId = data.user.id;
-
-    const referralCode = await this.referral.generateUniqueReferralCode();
-    const localPart = email.split('@')[0] ?? 'User';
-    const displayName =
-      localPart.charAt(0).toUpperCase() +
-      localPart.slice(1, 80).replace(/[.+]/g, ' ');
-
-    if (existing && !existing.emailVerified) {
-      // Lanjutkan registrasi yang dulu gagal verifikasi: update row existing,
-      // link ke authUserId baru. Bersihkan refresh token lama.
-      await this.prisma.refreshToken.deleteMany({
-        where: { userId: existing.id },
-      });
-      await this.prisma.user.update({
-        where: { id: existing.id },
-        data: {
-          authUserId,
-          referredById: referredById ?? existing.referredById,
-          // passwordHash lokal diisi sentinel — sumber kebenaran ada di Supabase.
-          passwordHash: SUPABASE_MANAGED_PASSWORD_SENTINEL,
-          emailVerified: skipOtp,
-        },
-      });
-      if (skipOtp) {
-        await this.referral.completeReferralForUser(existing.id);
-      }
-      return {
-        authUserId,
-        emailConfirmed: skipOtp,
-        message: skipOtp
-          ? 'Registration complete. Please sign in.'
-          : 'Verification code sent. Check your email to confirm.',
-      };
-    }
-
-    const user = await this.users.create({
-      email,
-      // Sentinel: hash asli ada di Supabase. Field ini legacy, di-drop Phase 6.
-      passwordHash: SUPABASE_MANAGED_PASSWORD_SENTINEL,
-      authUserId,
-      referredById,
-      referralCode,
-      displayName,
-      emailVerified: skipOtp,
-    });
-
-    if (skipOtp) {
-      await this.referral.completeReferralForUser(user.id);
-    }
-
-    return {
-      authUserId,
-      emailConfirmed: skipOtp,
-      message: skipOtp
-        ? 'Registration complete. Please sign in.'
-        : 'Verification code sent. Check your email to confirm.',
-    };
-  }
-
-  // ── Register path: legacy HS256 (rollback) ────────────────────────────────
-
-  private async registerLegacy(args: {
-    email: string;
-    password: string;
-    referredById: string | null;
-    existing: Awaited<ReturnType<UsersService['findByEmail']>>;
-    skipOtp: boolean;
-  }) {
-    const { email, password, referredById, existing, skipOtp } = args;
-    const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+    const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
 
     if (existing && !existing.emailVerified) {
       await this.prisma.refreshToken.deleteMany({
@@ -277,13 +131,10 @@ export class AuthService {
     };
   }
 
-  // ── Login: legacy only (Supabase mode → frontend calls Supabase directly) ─
+  // ── Login ────────────────────────────────────────────────────────────────
 
   /**
-   * Login via password lokal. Hanya relevan di mode legacy (HS256).
-   * Di mode Supabase, login di-handle frontend via supabase.auth.signInWithPassword;
-   * endpoint /auth/login dihapus dari controller (lihat auth.controller.ts).
-   * Method ini dipertahankan untuk rollback + e2e test lama.
+   * Login via password lokal (bcrypt + JWT HS256).
    */
   async login(dto: { email: string; password: string }) {
     const email = dto.email.trim().toLowerCase();
@@ -422,17 +273,16 @@ export class AuthService {
    *
    * Token ini dipakai frontend untuk connect ke /api/realtime/stream?token=...
    * Kenapa ephemeral terpisah, bukan pakai access token utama?
-   *  - Access token utama (mode Supabase: JWT RS256; mode legacy: HS256 15 menit)
-   *    di httpOnly cookie → tidak bisa dibaca JS client → tidak bisa dikirim via
-   *    EventSource biasa.
+   *  - Access token utama (HS256 15 menit) di httpOnly cookie → tidak bisa dibaca
+   *    JS client → tidak bisa dikirim via EventSource biasa.
    *  - Token SSE di-query-param bisa muncul di log → dibuat pendek (60s) + ditandai
    *    `kind: 'sse'` supaya guard SSE hanya terima token jenis ini.
    *
    * Dipanggil dari controller yang sudah dilindungi AuthGuard('jwt') → userId
-   * sudah terverifikasi (dari access token Supabase/legacy).
+   * sudah terverifikasi.
    *
-   * Token SSE TETAP pakai HS256 + JWT_ACCESS_SECRET (secret terpisah dari Supabase),
-   * karena token ini di-mint & di-verify internal Nest (tidak keluar ke Supabase).
+   * Token SSE TETAP pakai HS256 + JWT_ACCESS_SECRET, karena token ini di-mint &
+   * di-verify internal Nest (tidak keluar ke client selain via query param SSE).
    */
   async issueSseToken(userId: string): Promise<{ token: string; expiresIn: number }> {
     const expiresIn = 60; // detik
@@ -462,9 +312,7 @@ export class AuthService {
   }
 
   /* ────────────────────────────────────────────────────────
-     PASSWORD RESET (6-digit code) — LEGACY path only.
-     Di mode Supabase, reset password via supabase.auth.resetPasswordForEmail()
-     dari frontend. Method ini dipertahankan untuk rollback.
+     PASSWORD RESET (6-digit code).
      - Anti-enumeration: forgot-password ALWAYS replies { ok: true }.
      - reset-password replies generic on any wrong input.
      ──────────────────────────────────────────────────────── */
@@ -641,11 +489,7 @@ export class AuthService {
     };
   }
 
-  /**
-   * Issue access + refresh token (LEGACY HS256 path).
-   * Dipakai hanya saat SUPABASE_AUTH_ENABLED=false. Di mode Supabase, session
-   * di-issue Supabase langsung — method ini tidak dipanggil dari register baru.
-   */
+  /** Issue access + refresh token (HS256). Dipakai register/login/refresh. */
   private async issueTokens(userId: string, email: string) {
     const accessToken = await this.jwt.signAsync({ sub: userId, email });
     const rawRefresh = randomBytes(48).toString('hex');

@@ -10,7 +10,6 @@ import { CantonModule } from './canton/canton.module';
 import { CantexModule } from './cantex/cantex.module';
 import { PartyModule } from './party/party.module';
 import { PrismaModule } from './prisma/prisma.module';
-import { SupabaseModule } from './supabase/supabase.module';
 import { QuestsModule } from './quests/quests.module';
 import { AdminModule } from './admin/admin.module';
 import { LedgerIndexerModule } from './ledger-indexer/ledger-indexer.module';
@@ -42,7 +41,6 @@ const resolveApiEnvPaths = (): string[] => [
     ThrottlerModule.forRoot(throttlerConfig),
     // ── Core modules ─────────────────────────────────────────────
     PrismaModule,
-    SupabaseModule, // @Global: SupabaseService (service_role client) untuk Auth
     AuthModule,
     CantonModule,
     CantexModule, // @Global: CantexClient (DEX swap — Phase 1: read-only pools/quote)
