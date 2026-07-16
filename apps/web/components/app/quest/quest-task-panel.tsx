@@ -20,6 +20,9 @@ import {
   isEarnHubRepeatableTask,
   isEarnHubSocialType,
   isSendTransactionTask,
+  isSendTokenTask,
+  isDailySwapTask,
+  isLockCcTask,
   parseQuizChoices,
 } from "@/lib/quest/quest-types";
 import { CampaignFcfsClaimSection } from "@/components/app/campaign/campaign-fcfs-claim";
@@ -310,18 +313,20 @@ export function QuestTaskPanel({
   // Agar progress "3/5 sends" update otomatis saat CC benar-benar diterima di
   // chain (inbound sync / polling tx-history). Polling 10s, pause saat tab
   // hidden, refetch instan pada event 'cc:new-tx' (bell/transaksi baru).
-  // Hanya aktif bila quest punya task send_transaction yang belum selesai.
-  const hasUnresolvedSendTx = useMemo(
+  // Poll progress bila quest punya task countable-wallet (send/swap) yang belum selesai.
+  const hasUnresolvedCountableWalletTask = useMemo(
     () =>
       visibleTasks.some(
         (t) =>
-          isSendTransactionTask(t.type) &&
+          (isSendTransactionTask(t.type) ||
+            isSendTokenTask(t.type) ||
+            isDailySwapTask(t.type)) &&
           submissions[t.id]?.status !== "VERIFIED",
       ),
     [visibleTasks, submissions],
   );
   useEffect(() => {
-    if (!hasUnresolvedSendTx) return;
+    if (!hasUnresolvedCountableWalletTask) return;
     const POLL_MS = 10_000;
     let intervalId: ReturnType<typeof setInterval> | null = null;
     const startPoll = () => {
@@ -356,7 +361,7 @@ export function QuestTaskPanel({
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("cc:new-tx", onNewTx);
     };
-  }, [hasUnresolvedSendTx, loadProgress]);
+  }, [hasUnresolvedCountableWalletTask, loadProgress]);
 
   const verifiedCount = useMemo(
     () => visibleTasks.filter((t) => submissions[t.id]?.status === "VERIFIED").length,
@@ -702,6 +707,12 @@ function TaskRow({
   const isQuizYesNo = taskType === "quiz_yes_no";
   const isDailyCheckIn = taskType === "daily_check_in";
   const isSendTx = isSendTransactionTask(taskType);
+  const isSendToken = isSendTokenTask(taskType);
+  const isDailySwap = isDailySwapTask(taskType);
+  const isLockCc = isLockCcTask(taskType);
+  // Countable wallet tasks share the same flow: wallet-required → auto-submit
+  // → backend re-counts real on-chain activity in the last 24h.
+  const isCountableWalletTask = isSendTx || isSendToken || isDailySwap;
   const quizChoices = isQuizChoice ? parseQuizChoices(task.target) : [];
 
   const [proof, setProof] = useState(
@@ -737,9 +748,9 @@ function TaskRow({
     taskType === "telegram_group" ||
     taskType === "discord_join";
 
-  /** Quest hub (/quest): wallet only for party-ID + send-transaction tasks. Partner campaigns (/earn): wallet required. */
+  /** Quest hub (/quest): wallet only for party-ID + countable wallet tasks (send/swap/lock). Partner campaigns (/earn): wallet required. */
   const needsWallet = earnHubLayout
-    ? (isPartyTask || isSendTx) && !hasRealWallet(partyId)
+    ? (isPartyTask || isCountableWalletTask || isLockCc) && !hasRealWallet(partyId)
     : !hasRealWallet(partyId);
 
   function requireWallet(): boolean {
@@ -785,7 +796,7 @@ function TaskRow({
   }, [countdown]);
 
   const canComplete =
-    isQuiz || isDailyCheckIn || isSendTx
+    isQuiz || isDailyCheckIn || isCountableWalletTask || isLockCc
       ? Boolean(proof.trim())
       : countdown === 0 &&
         started &&
@@ -797,10 +808,20 @@ function TaskRow({
     if (requireWallet()) return;
     if (requireTwitter()) return;
     if (isPartyTask && !partyId) return;
-    if (isDailyCheckIn || isSendTx) {
+    if (isDailyCheckIn || isCountableWalletTask || isLockCc) {
       if (onRepeatCooldown) return;
       autoSubmitFired.current = false;
-      setProof(isSendTx ? "sent_tx" : "checked_in");
+      setProof(
+        isSendTx
+          ? "sent_tx"
+          : isSendToken
+            ? "sent_token"
+            : isDailySwap
+              ? "swapped"
+              : isLockCc
+                ? "locked_cc"
+                : "checked_in",
+      );
       setStarted(true);
       setCountdown(0);
       setError(null);
@@ -910,7 +931,7 @@ function TaskRow({
   }
 
   useEffect(() => {
-    if (isQuiz || isDailyCheckIn || isSendTx) return;
+    if (isQuiz || isDailyCheckIn || isCountableWalletTask || isLockCc) return;
     if (
       !isVerified &&
       started &&
@@ -922,18 +943,37 @@ function TaskRow({
       autoSubmitFired.current = true;
       void handleSubmit();
     }
-  }, [countdown, started, isVerified, loading, canComplete, isQuiz, isDailyCheckIn, isSendTx]);
+  }, [countdown, started, isVerified, loading, canComplete, isQuiz, isDailyCheckIn, isCountableWalletTask, isLockCc]);
 
   useEffect(() => {
-    if ((!isDailyCheckIn && !isSendTx) || loading || onRepeatCooldown) return;
+    if (
+      (!isDailyCheckIn && !isCountableWalletTask && !isLockCc) ||
+      loading ||
+      onRepeatCooldown
+    )
+      return;
     if (isVerified && !canRepeatNow) return;
     if (started && countdown === 0 && proof && !autoSubmitFired.current) {
       autoSubmitFired.current = true;
-      void handleSubmit(isSendTx ? "sent_tx" : "checked_in");
+      void handleSubmit(
+        isSendTx
+          ? "sent_tx"
+          : isSendToken
+            ? "sent_token"
+            : isDailySwap
+              ? "swapped"
+              : isLockCc
+                ? "locked_cc"
+                : "checked_in",
+      );
     }
   }, [
     isDailyCheckIn,
+    isCountableWalletTask,
+    isLockCc,
     isSendTx,
+    isSendToken,
+    isDailySwap,
     started,
     countdown,
     proof,
@@ -1020,7 +1060,7 @@ function TaskRow({
               </span>
             ) : isVerified ? (
               <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500 px-4 text-xs font-bold text-[var(--primary-foreground)]">
-                Complete
+                Completed
               </span>
             ) : countdown !== null && countdown > 0 ? (
               <span
@@ -1219,9 +1259,9 @@ function TaskRow({
             {/* Baris status meta ringkas (cooldown / ready / quiz ended / send progress). */}
             {onRepeatCooldown ? (
               <p className="mt-0.5 truncate text-xs font-medium text-emerald-400/80">
-                {isSendTx ? "Verified" : "Checked in"} — ready in {formatEarnHubCooldown(repeatCooldownMs)}
+                {isCountableWalletTask || isLockCc ? "Verified" : "Checked in"} — ready in {formatEarnHubCooldown(repeatCooldownMs)}
               </p>
-            ) : canRepeatNow && isSendTx ? (
+            ) : canRepeatNow && (isCountableWalletTask) ? (
               <p className="mt-0.5 truncate text-xs font-medium text-canton">
                 Ready — verify for +{task.points} pts
               </p>
@@ -1234,9 +1274,9 @@ function TaskRow({
                 Quiz ended
               </p>
             ) : null}
-            {isSendTx && sendProgress ? (
+            {isCountableWalletTask && sendProgress ? (
               <p className="mt-0.5 truncate text-xs font-medium text-slate-400">
-                {sendProgress.today}/{sendProgress.required} sends in the last 24h
+                {sendProgress.today}/{sendProgress.required} {isDailySwap ? "swaps" : "sends"} in the last 24h
               </p>
             ) : null}
           </div>
@@ -1252,7 +1292,7 @@ function TaskRow({
                 </span>
               ) : (isOneTimeComplete || onRepeatCooldown) && !canRepeatNow ? (
                 <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500 px-4 text-xs font-bold text-[var(--primary-foreground)]">
-                  Complete
+                  Completed
                 </span>
               ) : countdown !== null && countdown > 0 ? (
                 <span

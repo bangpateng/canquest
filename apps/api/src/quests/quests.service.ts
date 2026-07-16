@@ -1082,18 +1082,49 @@ export class QuestsService {
       where: { id: questId },
       select: { tasks: { select: { id: true, type: true, target: true } } },
     });
-    const sendTasks = (quest?.tasks ?? []).filter(
-      (t) => this.normalizeTaskType(t.type) === 'send_transaction',
-    );
-    if (sendTasks.length === 0) return {};
+    const all = quest?.tasks ?? [];
     const windowStart = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const today = await this.countRecentUserSends(userId, windowStart);
+
+    // Group countable wallet tasks by type so we run at most one query per type.
+    const byType: Record<string, typeof all> = {};
+    for (const t of all) {
+      const nt = this.normalizeTaskType(t.type);
+      if (
+        nt === 'send_transaction' ||
+        nt === 'send_token' ||
+        nt === 'daily_swap'
+      ) {
+        (byType[nt] ??= []).push(t);
+      }
+    }
+    if (Object.keys(byType).length === 0) return {};
+
+    const [ccSends, tokenSends, swaps] = await Promise.all([
+      byType['send_transaction']?.length
+        ? this.countRecentUserSends(userId, windowStart)
+        : Promise.resolve(0),
+      byType['send_token']?.length
+        ? this.countRecentUserTokenSends(userId, windowStart)
+        : Promise.resolve(0),
+      byType['daily_swap']?.length
+        ? this.countRecentUserSwaps(userId, windowStart)
+        : Promise.resolve(0),
+    ]);
+
+    const counts: Record<string, number> = {
+      send_transaction: ccSends,
+      send_token: tokenSends,
+      daily_swap: swaps,
+    };
+
     const result: Record<string, { required: number; today: number }> = {};
-    for (const t of sendTasks) {
-      result[t.id] = {
-        required: this.parseSendTransactionRequired(t.target),
-        today,
-      };
+    for (const [nt, tasks] of Object.entries(byType)) {
+      for (const t of tasks) {
+        result[t.id] = {
+          required: this.parseSendTransactionRequired(t.target),
+          today: counts[nt] ?? 0,
+        };
+      }
     }
     return result;
   }
@@ -1309,9 +1340,15 @@ export class QuestsService {
 
     const taskType = this.normalizeTaskType(task.type);
     const isSendTxTask = taskType === 'send_transaction';
+    const isSendTokenTask = taskType === 'send_token';
+    const isDailySwapTask = taskType === 'daily_swap';
+    const isLockCcTask = taskType === 'lock_cc';
     const repeatable24h =
       quest.questKind === QuestKind.EARN_HUB &&
-      (taskType === 'daily_check_in' || isSendTxTask);
+      (taskType === 'daily_check_in' ||
+        isSendTxTask ||
+        isSendTokenTask ||
+        isDailySwapTask);
 
     // Gate akses Earn: per-campaign, first participation. CAMPAIGN saja (bukan EARN_HUB).
     if (quest.questKind === QuestKind.CAMPAIGN) {
@@ -1349,11 +1386,43 @@ export class QuestsService {
             }
           }
 
+          // Send-token: require a real wallet + enough real USDCx sends in the last 24h.
+          if (isSendTokenTask) {
+            const result = await this.verifySendTokenTask({
+              userId,
+              userPartyId,
+              requiredCount: this.parseSendTransactionRequired(task.target),
+            });
+            if (!result.ok) {
+              throw new BadRequestException(result.message);
+            }
+          }
+
+          // Daily-swap: require a real wallet + enough real swaps in the last 24h.
+          if (isDailySwapTask) {
+            const result = await this.verifyDailySwapTask({
+              userId,
+              userPartyId,
+              requiredCount: this.parseSendTransactionRequired(task.target),
+            });
+            if (!result.ok) {
+              throw new BadRequestException(result.message);
+            }
+          }
+
           const now = new Date();
           await this.prisma.questSubmission.update({
             where: { id: existing.id },
             data: {
-              proof: proof?.trim() || (isSendTxTask ? 'sent_tx' : 'checked_in'),
+              proof:
+                proof?.trim() ||
+                (isSendTxTask
+                  ? 'sent_tx'
+                  : isSendTokenTask
+                    ? 'sent_token'
+                    : isDailySwapTask
+                      ? 'swapped'
+                      : 'checked_in'),
               verifiedAt: now,
               submittedAt: now,
             },
@@ -1422,6 +1491,51 @@ export class QuestsService {
         throw new BadRequestException(result.message);
       }
       proof = 'sent_tx';
+    }
+
+    // Send-token (first-time): require wallet + enough real USDCx sends in 24h.
+    if (isSendTokenTask) {
+      const result = await this.verifySendTokenTask({
+        userId,
+        userPartyId,
+        requiredCount: this.parseSendTransactionRequired(task.target),
+      });
+      if (!result.ok) {
+        throw new BadRequestException(result.message);
+      }
+      proof = 'sent_token';
+    }
+
+    // Daily-swap (first-time): require wallet + enough real swaps in 24h.
+    if (isDailySwapTask) {
+      const result = await this.verifyDailySwapTask({
+        userId,
+        userPartyId,
+        requiredCount: this.parseSendTransactionRequired(task.target),
+      });
+      if (!result.ok) {
+        throw new BadRequestException(result.message);
+      }
+      proof = 'swapped';
+    }
+
+    // Lock-CC (first-time): require wallet + a qualifying lock; cascade lower tiers.
+    // The current task's submission is created by the generic path below with
+    // proof 'locked_cc'; cascaded siblings get their own VERIFIED rows + points
+    // inside verifyLockCcTask().
+    if (isLockCcTask) {
+      const result = await this.verifyLockCcTask({
+        userId,
+        userPartyId,
+        questId,
+        taskId,
+        target: task.target,
+        points: task.points,
+      });
+      if (!result.ok) {
+        throw new BadRequestException(result.message);
+      }
+      proof = 'locked_cc';
     }
 
     // Auto-verify logic by task type
@@ -3907,6 +4021,195 @@ export class QuestsService {
       };
     }
     return { ok: true };
+  }
+
+  /**
+   * Lock-CC tier thresholds (seconds). A lock qualifies for tier T when its
+   * lockSeconds >= the tier's threshold. Cascade: completing a higher tier
+   * auto-completes every lower tier in the same quest.
+   */
+  private static readonly LOCK_CC_TIER_SECONDS: Record<string, number> = {
+    '3d': 3 * 24 * 60 * 60, // 259200
+    '7d': 7 * 24 * 60 * 60, // 604800
+    '15d': 15 * 24 * 60 * 60, // 1296000
+  };
+
+  /** Resolve a lock-cc task target (termKey "3d"/"7d"/"15d") to its second threshold. */
+  private lockCcTierSeconds(target: string | null | undefined): number {
+    const key = (target ?? '').trim().toLowerCase();
+    return QuestsService.LOCK_CC_TIER_SECONDS[key] ?? 3 * 24 * 60 * 60;
+  }
+
+  /**
+   * Count a user's REAL outgoing non-CC token sends (default USDCx) since `since`.
+   *   - type = TOKEN_TRANSFER_OUT
+   *   - status = COMPLETED (offer-only sends are PENDING until recipient accepts)
+   *
+   * One real send = 1 count. Swap never uses TokenTransaction, so it cannot leak.
+   */
+  private async countRecentUserTokenSends(
+    userId: string,
+    since: Date,
+  ): Promise<number> {
+    return this.prisma.tokenTransaction.count({
+      where: {
+        userId,
+        type: 'TOKEN_TRANSFER_OUT',
+        status: 'COMPLETED',
+        createdAt: { gte: since },
+      },
+    });
+  }
+
+  /**
+   * Verify a send-token task: wallet required + the user made at least
+   * `requiredCount` real USDCx sends in the last 24 hours. Returns ok=false with
+   * an English message when not met (no points, no submission row created).
+   */
+  private async verifySendTokenTask(params: {
+    userId: string;
+    userPartyId: string;
+    requiredCount: number;
+  }): Promise<{ ok: boolean; message?: string }> {
+    if (!this.hasRealWallet(params.userPartyId)) {
+      return {
+        ok: false,
+        message: 'Create your Canton wallet first to complete this task.',
+      };
+    }
+    const windowStart = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const today = await this.countRecentUserTokenSends(params.userId, windowStart);
+    if (today < params.requiredCount) {
+      return {
+        ok: false,
+        message: `You have sent ${today}/${params.requiredCount} USDCx transaction(s) in the last 24 hours. Send more USDCx to complete this task.`,
+      };
+    }
+    return { ok: true };
+  }
+
+  /**
+   * Count a user's REAL swaps since `since`. Counts either direction
+   * (CC→USDCx = SWAP_OUT, USDCx→CC = SWAP_IN), COMPLETED only.
+   */
+  private async countRecentUserSwaps(
+    userId: string,
+    since: Date,
+  ): Promise<number> {
+    return this.prisma.ccTransaction.count({
+      where: {
+        userId,
+        type: { in: ['SWAP_OUT', 'SWAP_IN'] },
+        status: 'COMPLETED',
+        createdAt: { gte: since },
+      },
+    });
+  }
+
+  /**
+   * Verify a daily-swap task: wallet required + the user made at least
+   * `requiredCount` real swaps in the last 24 hours. Returns ok=false with an
+   * English message when not met (no points, no submission row created).
+   */
+  private async verifyDailySwapTask(params: {
+    userId: string;
+    userPartyId: string;
+    requiredCount: number;
+  }): Promise<{ ok: boolean; message?: string }> {
+    if (!this.hasRealWallet(params.userPartyId)) {
+      return {
+        ok: false,
+        message: 'Create your Canton wallet first to complete this task.',
+      };
+    }
+    const windowStart = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const today = await this.countRecentUserSwaps(params.userId, windowStart);
+    if (today < params.requiredCount) {
+      return {
+        ok: false,
+        message: `You have made ${today}/${params.requiredCount} swap(s) in the last 24 hours. Swap CC ↔ USDCx to complete this task.`,
+      };
+    }
+    return { ok: true };
+  }
+
+  /**
+   * Verify a lock-cc task: wallet required + the user holds (or has held) a
+   * LOCKED CcLock whose lockSeconds is >= the tier threshold.
+   *
+   * CASCADE: when this tier verifies, every sibling lock-cc task in the same
+   * quest whose threshold is LOWER and is not yet VERIFIED is auto-completed
+   * (submission VERIFIED + points credited). e.g. verifying 15d auto-completes
+   * 7d and 3d, yielding 150+60+20 = 230 points total for the 15d lock.
+   */
+  private async verifyLockCcTask(params: {
+    userId: string;
+    userPartyId: string;
+    questId: string;
+    taskId: string;
+    target: string | null | undefined;
+    points: number;
+  }): Promise<{ ok: boolean; message?: string; cascaded: string[] }> {
+    if (!this.hasRealWallet(params.userPartyId)) {
+      return {
+        ok: false,
+        message: 'Create your Canton wallet first to complete this task.',
+        cascaded: [],
+      };
+    }
+    const tierSeconds = this.lockCcTierSeconds(params.target);
+    const qualifying = await this.prisma.ccLock.findFirst({
+      where: { userId: params.userId, lockSeconds: { gte: tierSeconds } },
+      select: { id: true },
+    });
+    if (!qualifying) {
+      const days = Math.round(tierSeconds / (24 * 60 * 60));
+      return {
+        ok: false,
+        message: `Lock CC for at least ${days} day(s) to complete this task.`,
+        cascaded: [],
+      };
+    }
+
+    // Cascade: auto-complete lower-tier sibling lock-cc tasks in the same quest.
+    const cascaded: string[] = [];
+    const siblings = await this.prisma.questTask.findMany({
+      where: { questId: params.questId, type: 'lock_cc', id: { not: params.taskId } },
+      select: { id: true, target: true, points: true },
+    });
+    const now = new Date();
+    for (const sib of siblings) {
+      const sibSeconds = this.lockCcTierSeconds(sib.target);
+      if (sibSeconds >= tierSeconds) continue; // only lower tiers cascade
+      const existing = await this.prisma.questSubmission.findUnique({
+        where: { userId_taskId: { userId: params.userId, taskId: sib.id } },
+      });
+      if (existing?.status === SubmissionStatus.VERIFIED) continue;
+      if (existing) {
+        await this.prisma.questSubmission.update({
+          where: { id: existing.id },
+          data: { proof: 'lock_cascade', status: SubmissionStatus.VERIFIED, verifiedAt: now, submittedAt: now },
+        });
+      } else {
+        await this.prisma.questSubmission.create({
+          data: {
+            userId: params.userId,
+            questId: params.questId,
+            taskId: sib.id,
+            proof: 'lock_cascade',
+            status: SubmissionStatus.VERIFIED,
+            verifiedAt: now,
+            submittedAt: now,
+          },
+        });
+      }
+      await this.users.creditEarnPoints(params.userId, sib.points);
+      cascaded.push(sib.id);
+      this.logger.log(
+        `Lock cascade: user=${params.userId.slice(0, 8)} tier=${tierSeconds}s auto-completed sibling=${sib.id.slice(0, 8)} (${sibSeconds}s) +${sib.points}pts`,
+      );
+    }
+    return { ok: true, cascaded };
   }
 
   private canAutoVerify(

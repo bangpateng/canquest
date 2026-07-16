@@ -187,6 +187,21 @@ export const EARN_HUB_TASK_TYPE_OPTIONS: { value: string; label: string; hint?: 
     label: "Send transaction (custom count)",
     hint: "Wallet required · resets every 24 hours · set any count (1×, 3×, 5×, …) · counts only real completed CC sends (fees & pending offers excluded)",
   },
+  {
+    value: "send_token",
+    label: "Send token — USDCx (custom count)",
+    hint: "Wallet required · resets every 24 hours · counts only real completed USDCx sends (one-step transfer or offer accepted) · set any count",
+  },
+  {
+    value: "daily_swap",
+    label: "Daily Swap CC ↔ USDCx (custom count)",
+    hint: "Wallet required · resets every 24 hours · counts only real completed swaps (CC→USDCx or USDCx→CC) · set any count",
+  },
+  {
+    value: "lock_cc",
+    label: "Lock CC — tier (3d / 7d / 15d)",
+    hint: "Wallet required · one-time per tier · set target = tier termKey (3d, 7d, or 15d) · higher tier auto-completes lower tiers (cascade)",
+  },
   { value: "twitter_follow", label: "Follow Twitter CanQuest", hint: "X profile URL" },
   { value: "twitter_retweet", label: "Retweet post CanQuest", hint: "Post URL to retweet" },
   { value: "telegram_channel", label: "Join Telegram channel CanQuest", hint: "t.me/… channel link" },
@@ -303,9 +318,15 @@ export const EARN_HUB_NEW_LABEL_TTL_MS = 24 * 60 * 60 * 1000;
 /** Cooldown before repeatable tasks (daily check-in, etc.) can earn points again. */
 export const EARN_HUB_REPEAT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
-/** Only daily check-in and send-transaction repeat every 24h; other tasks stay on Quest when done but are one-time. */
+/** Only daily check-in, send-transaction, send-token, and daily-swap repeat every 24h;
+ *  other tasks stay on Quest when done but are one-time (lock-cc is one-time per tier). */
 export function isEarnHubRepeatableTask(task: { type: string }): boolean {
-  return task.type === "daily_check_in" || task.type === "send_transaction";
+  return (
+    task.type === "daily_check_in" ||
+    task.type === "send_transaction" ||
+    task.type === "send_token" ||
+    task.type === "daily_swap"
+  );
 }
 
 /** Send-transaction tasks: require the user to make N real CC sends within 24h. */
@@ -322,6 +343,56 @@ export function getSendTransactionRequiredCount(target: string | null | undefine
 /** Human title for a send-transaction task ("Send 3 transaction(s)"). */
 export function sendTransactionTitle(requiredCount: number): string {
   return `Send ${requiredCount} transaction${requiredCount === 1 ? "" : "s"}`;
+}
+
+/** Send-token tasks: require the user to make N real USDCx sends within 24h. */
+export function isSendTokenTask(type: string): boolean {
+  return type === "send_token";
+}
+
+/** Required number of token sends (stored in task.target). Min 1. */
+export function getSendTokenRequiredCount(target: string | null | undefined): number {
+  const n = parseInt((target ?? "").trim(), 10);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+/** Human title for a send-token task ("Send 3 USDCx"). */
+export function sendTokenTitle(requiredCount: number, instrumentId = "USDCx"): string {
+  return `Send ${requiredCount} ${instrumentId}`;
+}
+
+/** Daily-swap tasks: require the user to make N real swaps within 24h. */
+export function isDailySwapTask(type: string): boolean {
+  return type === "daily_swap";
+}
+
+/** Required number of swaps (stored in task.target). Min 1. */
+export function getDailySwapRequiredCount(target: string | null | undefined): number {
+  const n = parseInt((target ?? "").trim(), 10);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+/** Human title for a daily-swap task ("Daily Swap 3×"). */
+export function dailySwapTitle(requiredCount: number): string {
+  return `Daily Swap ${requiredCount}×`;
+}
+
+/** Lock-CC tasks: one-time per tier. Tier encoded in task.target as termKey. */
+export function isLockCcTask(type: string): boolean {
+  return type === "lock_cc";
+}
+
+/** Lock termKey (3d / 7d / 15d) for a lock-cc task, stored in task.target. */
+export function getLockCcTermFromTarget(target: string | null | undefined): string {
+  const t = (target ?? "").trim().toLowerCase();
+  if (t === "3d" || t === "7d" || t === "15d") return t;
+  return "3d";
+}
+
+/** Human title for a lock-cc task ("Lock CC — 3 Days"). */
+export function lockCcTitle(termKey: string): string {
+  const days = termKey.replace(/[^0-9]/g, "");
+  return `Lock CC${days ? ` — ${days} Days` : ""}`;
 }
 
 export function getEarnHubRepeatCooldownMs(
@@ -827,6 +898,9 @@ export function formatQuestDeadlineDisplay(
 export const TASK_ACTION_BUTTON_LABEL: Record<string, string> = {
   daily_check_in: "Check in",
   send_transaction: "Verify",
+  send_token: "Verify",
+  daily_swap: "Verify",
+  lock_cc: "Verify",
   quiz_yes_no: "Answer",
   quiz_choice: "Answer",
   twitter_follow: "Twitter",
