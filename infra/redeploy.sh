@@ -14,14 +14,14 @@ API_DIR="${APP_DIR}/apps/api"
 cd "${APP_DIR}"
 
 # ───────────────────────────────────────────────────────────────
-echo "==> [1/6] Pull latest code from git"
+echo "==> [1/7] Pull latest code from git"
 git stash --include-untracked 2>/dev/null || true
 git fetch origin
 git reset --hard origin/master
 echo "    ✓ $(git log -1 --format='%h %s')"
 
 # ───────────────────────────────────────────────────────────────
-echo "==> [2/6] Install dependencies"
+echo "==> [2/7] Install dependencies"
 cd "${APP_DIR}"
 
 # Hapus node_modules lama
@@ -39,7 +39,7 @@ echo "    ✓ API node_modules installed"
 cd "${APP_DIR}"
 
 # ───────────────────────────────────────────────────────────────
-echo "==> [3/6] Prisma generate + apply migrations"
+echo "==> [3/7] Prisma generate + apply migrations"
 cd "${API_DIR}"
 npx prisma generate
 
@@ -63,14 +63,14 @@ echo "    ✓ Database migrations applied"
 cd "${APP_DIR}"
 
 # ───────────────────────────────────────────────────────────────
-echo "==> [4/6] Build NestJS API"
+echo "==> [4/7] Build NestJS API"
 cd "${API_DIR}"
 npm run build
 echo "    ✓ API build complete: $(ls dist/main.js)"
 cd "${APP_DIR}"
 
 # ───────────────────────────────────────────────────────────────
-echo "==> [5/6] Check Redis (required for BullMQ queue)"
+echo "==> [5/7] Check Redis (required for BullMQ queue)"
 if redis-cli ping 2>/dev/null | grep -q PONG; then
   echo "    ✓ Redis is running"
 else
@@ -81,7 +81,32 @@ else
 fi
 
 # ───────────────────────────────────────────────────────────────
-echo "==> [6/6] Start / Restart PM2 (API only)"
+# ───────────────────────────────────────────────────────────────
+echo "==> [6/7] Configure firewall (UFW) — admin-only access"
+# Defense-in-depth bersama nginx allowlist (infra/nginx/canquest.conf):
+# blokir port 3000 (web) & 3001 (api) dari internet publik, supaya tidak bisa
+# diakses langsung dan menypass nginx. Dipadukan dengan app.listen('127.0.0.1')
+# di apps/api/src/main.ts, panel admin hanya tercapai via SSH tunnel.
+#
+# FAIL-SAFE (CRITICAL): `ufw allow 22/tcp` DIEKSEKUSI PERTAMA, sebelum `enable`.
+# JANGAN pernah reorder — kalau enable jalan sebelum allow 22, kita terkunci
+# keluar dari SSH di VPS ini.
+if ! command -v ufw >/dev/null 2>&1; then
+  echo "    ⚠  ufw belum terinstall — skip hardening firewall."
+  echo "       Install dulu: apt install ufw && ufw allow 22/tcp"
+else
+  sudo ufw allow 22/tcp
+  sudo ufw allow 80/tcp
+  sudo ufw allow 443/tcp
+  sudo ufw deny 3000/tcp
+  sudo ufw deny 3001/tcp
+  sudo ufw --force enable
+  sudo ufw status verbose | sed 's/^/    /'
+  echo "    ✓ Firewall aktif (SSH/http/https terbuka; 3000 & 3001 diblokir)"
+fi
+
+# ───────────────────────────────────────────────────────────────
+echo "==> [7/7] Start / Restart PM2 (API only)"
 if pm2 describe canquest-api > /dev/null 2>&1; then
   echo "    Process found in PM2 — restarting..."
   pm2 restart canquest-api --update-env

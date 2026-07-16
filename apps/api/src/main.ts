@@ -76,8 +76,14 @@ async function bootstrap() {
   });
 
   const port = Number(process.env.PORT ?? 3001);
-  await app.listen(port);
-  logger.log(`API running on port ${port}`);
+  // Defense-in-depth (security): bind ke loopback only, BUKAN default 0.0.0.0.
+  // Walaupun UFW memblokir port 3001 dari publik, binding eksplisit ke 127.0.0.1
+  // memastikan API tidak bisa diakses langsung dari luar VPS meski firewall
+  // sempat mati (mis. human error saat restart). Semua traffic publik HARUS
+  // lewat nginx proxy — yang membatasi /admin + /api/admin ke 127.0.0.1/::1
+  // (hanya tercapai via SSH tunnel). Lihat infra/nginx/canquest.conf & infra/redeploy.sh.
+  await app.listen(port, '127.0.0.1');
+  logger.log(`API running on http://127.0.0.1:${port} (loopback only)`);
   logger.log(`Environment: ${process.env.NODE_ENV ?? 'development'}`);
 }
 bootstrap();
