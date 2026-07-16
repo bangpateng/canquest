@@ -47,6 +47,12 @@ export type TransactionDetailResponse = {
   instrumentId?: string | null;
   /** Amount token dalam unit asli (Decimal string). null untuk CC. */
   amountDecimal?: string | null;
+  /** Jumlah CC asli yang dibatalkan/ditolak (OFFER_WITHDRAWN / OFFER_REJECTED). */
+  cancelledAmountCc?: string | null;
+  /** Jumlah token asli yang dibatalkan (TOKEN_OFFER_WITHDRAWN / REJECTED). */
+  cancelledAmount?: string | null;
+  /** Instrument id token yang dibatalkan (mis. "USDCx"). */
+  cancelledInstrumentId?: string | null;
 };
 
 /**
@@ -205,6 +211,11 @@ export class TransactionDetailService {
       // Token-aware fields.
       instrumentId: tx.instrumentId,
       amountDecimal: tx.amount.toString(),
+      // Cancelled-amount (TOKEN_OFFER_WITHDRAWN / REJECTED).
+      cancelledAmount: tx.cancelledAmount
+        ? tx.cancelledAmount.toString()
+        : null,
+      cancelledInstrumentId: tx.instrumentId,
     };
   }
 
@@ -323,6 +334,11 @@ export class TransactionDetailService {
       eventId,
       isInternalMarker: internalMarker,
       status: tx.status,
+      // Cancelled-amount (OFFER_WITHDRAWN / OFFER_REJECTED).
+      cancelledAmountCc: tx.cancelledAmountCc
+        ? tx.cancelledAmountCc.toString()
+        : null,
+      cancelledInstrumentId: tx.cancelledInstrumentId,
     };
   }
 

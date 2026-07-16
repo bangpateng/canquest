@@ -33,6 +33,12 @@ export type NotificationTx = {
   instrumentId?: string | null;
   /** Amount token dalam unit asli (Decimal string). null untuk CC. */
   amountDecimal?: string | null;
+  /** Jumlah CC asli yang dibatalkan (OFFER_WITHDRAWN / OFFER_REJECTED). */
+  cancelledAmountCc?: string | null;
+  /** Jumlah token asli yang dibatalkan (TOKEN_OFFER_WITHDRAWN / REJECTED). */
+  cancelledAmount?: string | null;
+  /** Instrument id token yang dibatalkan (mis. "USDCx"). */
+  cancelledInstrumentId?: string | null;
 };
 
 export type NotificationDraw = {
@@ -73,6 +79,7 @@ type ToastPayload = {
   txType?: NotificationTx["type"];
   amountCc: number;
   description: string;
+  counterparty?: string | null;
 };
 
 type UseTransactionNotificationsOptions = {
@@ -153,6 +160,7 @@ export function useTransactionNotifications(
             txType: item.type,
             amountCc,
             description: item.description,
+            counterparty: item.counterparty,
           });
         }
       }

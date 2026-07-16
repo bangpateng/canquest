@@ -44,19 +44,33 @@ function timeAgo(
   return t("time.daysAgo", { n: days });
 }
 
+/** Display-safe counterparty name: keep system labels/@username as-is, shorten
+ *  raw Canton party ids ("xxx::1220…") to their short label before "::". */
+function counterpartyLabel(raw: string | null | undefined): string | null {
+  const v = raw?.trim();
+  if (!v) return null;
+  if (v.includes("::")) return v.split("::")[0];
+  return v;
+}
+
 function txLabel(
   tx: NotificationTx,
-  t: (key: string) => string,
+  t: (key: string, params?: Record<string, string | number>) => string,
 ): string {
+  const cp = counterpartyLabel(tx.counterparty);
   switch (tx.type) {
     case "QUEST_REWARD":
       return t("transactions.questReward");
     case "SPIN_REWARD":
       return t("transactions.spinReward");
     case "TRANSFER_IN":
-      return t("transactions.receivedCc");
+      return cp
+        ? t("transactions.receivedFrom", { counterparty: cp })
+        : t("transactions.receivedCc");
     case "TRANSFER_OUT":
-      return t("transactions.sentCc");
+      return cp
+        ? t("transactions.sentTo", { counterparty: cp })
+        : t("transactions.sentCc");
     case "CC_LOCK":
       return t("transactions.ccLocked");
     case "CC_UNLOCK":
@@ -74,9 +88,13 @@ function txLabel(
     case "PREAPPROVAL_DISABLED":
       return t("transactions.preapprovalDisabled");
     case "TOKEN_TRANSFER_IN":
-      return t("transactions.tokenReceived");
+      return cp
+        ? t("transactions.receivedFrom", { counterparty: cp })
+        : t("transactions.tokenReceived");
     case "TOKEN_TRANSFER_OUT":
-      return t("transactions.tokenSent");
+      return cp
+        ? t("transactions.sentTo", { counterparty: cp })
+        : t("transactions.tokenSent");
     default:
       return tx.description;
   }
@@ -163,6 +181,28 @@ function NotificationRow({ item }: { item: NotificationItem }) {
     tx.type === "TOKEN_OFFER_WITHDRAWN" ||
     tx.type === "PREAPPROVAL_ENABLED" ||
     tx.type === "PREAPPROVAL_DISABLED";
+  // Cancelled offer (reject/withdraw) yang MEMILIKI amount orisinal → tampilkan
+  // "−X CC/USDCx". PREAPPROVAL tetap netral.
+  const isCancelledTx =
+    tx.type === "OFFER_REJECTED" ||
+    tx.type === "OFFER_WITHDRAWN" ||
+    tx.type === "TOKEN_OFFER_REJECTED" ||
+    tx.type === "TOKEN_OFFER_WITHDRAWN";
+  const isCancelledToken =
+    tx.type === "TOKEN_OFFER_REJECTED" ||
+    tx.type === "TOKEN_OFFER_WITHDRAWN";
+  const cancelledRaw = isCancelledToken
+    ? tx.cancelledAmount
+    : tx.cancelledAmountCc;
+  const cancelledAmt = Number(cancelledRaw ?? "0");
+  const hasCancelledAmount =
+    isCancelledTx &&
+    cancelledRaw != null &&
+    Number.isFinite(cancelledAmt) &&
+    cancelledAmt > 0;
+  const cancelledLabel = isCancelledToken
+    ? tx.cancelledInstrumentId ?? tx.instrumentId ?? "token"
+    : "CC";
   // Arah keluar (debit): TRANSFER_OUT, TOKEN_TRANSFER_OUT & CC_LOCK.
   const isDebit =
     tx.type === "TRANSFER_OUT" ||
@@ -234,7 +274,15 @@ function NotificationRow({ item }: { item: NotificationItem }) {
             {txLabel(tx, t)} · {timeAgo(tx.createdAt, t)}
           </span>
         </span>
-        {isToggle ? (
+        {hasCancelledAmount ? (
+          <span className={amountClass}>
+            {"\u2212"}
+            {cancelledAmt.toLocaleString(undefined, {
+              maximumFractionDigits: 6,
+            })}{" "}
+            {cancelledLabel}
+          </span>
+        ) : isToggle ? (
           <span className={amountClass}>—</span>
         ) : isToken ? (
           <span className={amountClass}>
@@ -362,6 +410,7 @@ export function TransactionNotifications() {
     const amount = toast.amountCc.toLocaleString(undefined, {
       maximumFractionDigits: 6,
     });
+    const cp = counterpartyLabel(toast.counterparty);
     switch (toast.txType) {
       case "QUEST_REWARD":
         return t("notifications.toastEarn", { amount });
@@ -369,7 +418,9 @@ export function TransactionNotifications() {
         return t("notifications.toastEarn", { amount });
       case "TRANSFER_OUT":
       case "TOKEN_TRANSFER_OUT":
-        return t("notifications.toastSent", { amount });
+        return cp
+          ? t("notifications.toastSentTo", { amount, counterparty: cp })
+          : t("notifications.toastSent", { amount });
       case "CC_LOCK":
         return t("notifications.toastLocked", { amount });
       case "CC_UNLOCK":
@@ -389,7 +440,9 @@ export function TransactionNotifications() {
       case "TRANSFER_IN":
       case "TOKEN_TRANSFER_IN":
       default:
-        return t("notifications.toastReceived", { amount });
+        return cp
+          ? t("notifications.toastReceivedFrom", { amount, counterparty: cp })
+          : t("notifications.toastReceived", { amount });
     }
   }
 

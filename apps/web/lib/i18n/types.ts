@@ -41,6 +41,8 @@ export type PlatformMessages = {
     toastEarn: string;
     toastReceived: string;
     toastSent: string;
+    toastSentTo: string;
+    toastReceivedFrom: string;
     toastLocked: string;
     toastUnlocked: string;
   };
@@ -258,6 +260,8 @@ export type PlatformMessages = {
     spinReward: string;
     receivedCc: string;
     sentCc: string;
+    sentTo: string;
+    receivedFrom: string;
     airdrop: string;
     ccLocked: string;
     ccUnlocked: string;

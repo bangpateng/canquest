@@ -160,6 +160,25 @@ export function TransactionDetailContent({
     detail.type === "TOKEN_OFFER_WITHDRAWN" ||
     detail.type === "PREAPPROVAL_ENABLED" ||
     detail.type === "PREAPPROVAL_DISABLED";
+  // Cancelled offer (reject/withdraw) yang MEMILIKI amount orisinal — tampilkan
+  // "−X CC/USDCx" (cancelled). PREAPPROVAL tetap netral (tidak punya amount).
+  const isCancelled =
+    detail.type === "OFFER_REJECTED" ||
+    detail.type === "OFFER_WITHDRAWN" ||
+    detail.type === "TOKEN_OFFER_REJECTED" ||
+    detail.type === "TOKEN_OFFER_WITHDRAWN";
+  const isCancelledToken =
+    detail.type === "TOKEN_OFFER_REJECTED" ||
+    detail.type === "TOKEN_OFFER_WITHDRAWN";
+  const cancelledRaw = isCancelledToken
+    ? detail.cancelledAmount
+    : detail.cancelledAmountCc;
+  const cancelledAmt = Number(cancelledRaw ?? "0");
+  const hasCancelledAmount =
+    isCancelled && cancelledRaw != null && Number.isFinite(cancelledAmt) && cancelledAmt > 0;
+  const cancelledLabel = isCancelledToken
+    ? detail.cancelledInstrumentId ?? detail.instrumentId ?? "token"
+    : "CC";
   // Debit (negatif): TRANSFER_OUT, TOKEN_TRANSFER_OUT & CC_LOCK.
   const isDebit = isOut || isTokenOut || isLock;
   // Token non-CC: amount sudah unit asli (amountDecimal), suffix = instrumentId.
@@ -255,12 +274,18 @@ export function TransactionDetailContent({
                     : "text-green-500",
             )}
           >
-            {isToggle ? "" : isDebit ? "\u2212" : "+"}
-            {isToggle
+            {isToggle && !hasCancelledAmount
+              ? ""
+              : isDebit || hasCancelledAmount
+                ? "\u2212"
+                : "+"}
+            {isToggle && !hasCancelledAmount
               ? "—"
-              : isTokenAmountTx
-                ? `${tokenAmt.toFixed(4)} ${detail.instrumentId}`
-                : `${ccAmt.toFixed(4)} CC`}
+              : hasCancelledAmount
+                ? `${cancelledAmt.toFixed(4)} ${cancelledLabel}`
+                : isTokenAmountTx
+                  ? `${tokenAmt.toFixed(4)} ${detail.instrumentId}`
+                  : `${ccAmt.toFixed(4)} CC`}
           </p>
           {usdDisplay != null ? (
             <p className="mt-0.5 text-sm font-medium text-slate-400 tabular-nums">

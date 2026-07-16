@@ -1071,6 +1071,7 @@ export class PartyController {
       receiver: string;
       instrumentId: string;
       instrumentAdmin: string;
+      amount: string;
     } | null = null;
     try {
       const detail = await this.ledger.lookupOfferDetailBothDirections(
@@ -1115,6 +1116,11 @@ export class PartyController {
     const withdrawIsNonCc = withdrawInstrumentId.toLowerCase() !== 'amulet';
 
     // Catat history (tx id ASLI dari exercise). Non-fatal.
+    // cancelledAmount/cancelledAmountCc = jumlah ASLI offer yang ditarik (saldo
+    // tidak bergerak → amount=0, tapi disimpan untuk display "cancelled X").
+    const withdrawCancelledAmount = withdrawDetail?.amount
+      ? Number(withdrawDetail.amount)
+      : 0;
     try {
       if (withdrawIsNonCc) {
         await this.users.recordTokenTransaction({
@@ -1127,6 +1133,7 @@ export class PartyController {
           referenceId: cid,
           ledgerTxId: result.updateId ?? cid,
           cantonUpdateId: result.updateId ?? undefined,
+          cancelledAmount: withdrawCancelledAmount,
         });
       } else {
         await this.users.recordTransaction({
@@ -1137,6 +1144,7 @@ export class PartyController {
           referenceId: cid,
           ledgerTxId: result.updateId ?? cid,
           cantonUpdateId: result.updateId ?? undefined,
+          cancelledAmountCc: withdrawCancelledAmount,
         });
       }
     } catch (err) {
@@ -1853,6 +1861,8 @@ export class PartyController {
             (amountCc > 0 ? ` (${amountCc} CC)` : ''),
           ledgerTxId: result.updateId ?? cid,
           cantonUpdateId: result.updateId ?? undefined,
+          // Jumlah ASLI offer yang ditolak — disimpan untuk display "cancelled X CC".
+          cancelledAmountCc: amountCc,
         });
       } catch (err) {
         this.logger.warn(
@@ -1921,6 +1931,8 @@ export class PartyController {
             (amountCc > 0 ? ` (${amountCc} CC)` : ''),
           ledgerTxId: result.updateId ?? cid,
           cantonUpdateId: result.updateId ?? undefined,
+          // Jumlah ASLI offer yang ditolak — disimpan untuk display "cancelled X CC".
+          cancelledAmountCc: amountCc,
         });
       } catch (err) {
         this.logger.warn(

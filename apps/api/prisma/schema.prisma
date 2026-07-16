@@ -217,6 +217,13 @@ model CcTransaction {
   settledAt              DateTime?
   createdAt              DateTime          @default(now())
 
+  /// Jumlah asli (CC) yang dibatalkan/ditolak — hanya diisi untuk OFFER_WITHDRAWN /
+  /// OFFER_REJECTED. Saldo tidak bergerak (amountMicroCc=0), tapi amount asli
+  /// offer disimpan di sini agar Activity & badge bisa menampilkan "cancelled 5 CC".
+  cancelledAmountCc      Decimal?          @db.Decimal(20, 10)
+  /// Instrument id token (mis. "USDCx") bila offer yang dibatalkan adalah token.
+  cancelledInstrumentId  String?
+
   @@unique([userId, ledgerTxId])
   @@index([cantonUpdateId])
   @@index([transferInstructionCid])
@@ -293,6 +300,12 @@ model TokenTransaction {
   transferInstructionCid String?
   status                 String       @default("COMPLETED") // COMPLETED | PENDING | REJECTED
   createdAt              DateTime     @default(now())
+
+  /// Jumlah asli (token) yang dibatalkan/ditarik — hanya diisi untuk
+  /// TOKEN_OFFER_WITHDRAWN / TOKEN_OFFER_REJECTED. Saldo tidak bergerak (amount=0),
+  /// tapi amount asli offer disimpan di sini agar Activity & badge bisa menampilkan
+  /// "cancelled 5 USDCx".
+  cancelledAmount        Decimal?     @db.Decimal(38, 18)
 
   @@unique([userId, ledgerTxId])
   @@index([cantonUpdateId])

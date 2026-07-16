@@ -76,6 +76,13 @@ export interface TxItem {
   round?: number | string | null;
   /** Estimated USD value of the amount, if known. */
   usdEstimate?: number | null;
+  /** Jumlah CC asli yang dibatalkan/ditolak (OFFER_WITHDRAWN / OFFER_REJECTED).
+   *  Saldo tidak bergerak (amountMicroCc=0); ini untuk display "cancelled X CC". */
+  cancelledAmountCc?: string | null;
+  /** Jumlah token asli yang dibatalkan (TOKEN_OFFER_WITHDRAWN / REJECTED). */
+  cancelledAmount?: string | null;
+  /** Instrument id token yang dibatalkan (mis. "USDCx"). */
+  cancelledInstrumentId?: string | null;
 }
 
 
@@ -113,6 +120,15 @@ const TOGGLE_TX_TYPES: ReadonlySet<TxItem["type"]> = new Set([
   "OFFER_WITHDRAWN",
   "PREAPPROVAL_ENABLED",
   "PREAPPROVAL_DISABLED",
+  "TOKEN_OFFER_REJECTED",
+  "TOKEN_OFFER_WITHDRAWN",
+]);
+
+/** Cancelled types (reject/withdraw) yang MEMILIKI amount orisinal offer — bisa
+ *  menampilkan "cancelled X CC/USDCx". Berbeda dari PREAPPROVAL (toggle murni). */
+const CANCELLED_TX_TYPES: ReadonlySet<TxItem["type"]> = new Set([
+  "OFFER_REJECTED",
+  "OFFER_WITHDRAWN",
   "TOKEN_OFFER_REJECTED",
   "TOKEN_OFFER_WITHDRAWN",
 ]);
@@ -248,10 +264,33 @@ function amountSign(type: TxItem["type"]): string {
 }
 
 /** Render amount cell.
- *  - toggle (amount 0) → "—" netral
+ *  - cancelled (reject/withdraw) dengan amount orisinal → "−5.0000 CC" (cancelled)
+ *  - toggle (amount 0, no cancelled amount, e.g. preapproval) → "—" netral
  *  - token non-CC (amountDecimal + instrumentId) → "+5.0000 USDCx"
  *  - CC (default) → "+0.2000 CC" (microCC → CC) */
 function AmountText({ tx }: { tx: TxItem }) {
+  // Cancelled offer (reject/withdraw) — tampilkan amount ASLI yang dibatalkan.
+  // Saldo tidak bergerak (amount=0), jadi pakai cancelledAmountCc/cancelledAmount.
+  if (CANCELLED_TX_TYPES.has(tx.type)) {
+    const tokenCancelled =
+      tx.type === "TOKEN_OFFER_REJECTED" ||
+      tx.type === "TOKEN_OFFER_WITHDRAWN";
+    const rawAmt = tokenCancelled ? tx.cancelledAmount : tx.cancelledAmountCc;
+    const amt = Number(rawAmt ?? "0");
+    if (!rawAmt || !Number.isFinite(amt) || amt <= 0) {
+      // Data lama (sebelum kolom cancelled ada) → tetap netral.
+      return <span className="text-slate-500">\u2014</span>;
+    }
+    const label = tokenCancelled
+      ? tx.cancelledInstrumentId ?? tx.instrumentId ?? "token"
+      : "CC";
+    return (
+      <>
+        {"\u2212"}
+        {amt.toFixed(4)} {label}
+      </>
+    );
+  }
   if (TOGGLE_TX_TYPES.has(tx.type)) {
     return <span className="text-slate-500">\u2014</span>;
   }

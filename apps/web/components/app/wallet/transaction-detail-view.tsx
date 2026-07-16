@@ -49,6 +49,12 @@ export type TransactionDetail = {
   instrumentId?: string | null;
   /** Amount token dalam unit asli (Decimal string). null untuk CC. */
   amountDecimal?: string | null;
+  /** Jumlah CC asli yang dibatalkan/ditolak (OFFER_WITHDRAWN / OFFER_REJECTED). */
+  cancelledAmountCc?: string | null;
+  /** Jumlah token asli yang dibatalkan (TOKEN_OFFER_WITHDRAWN / REJECTED). */
+  cancelledAmount?: string | null;
+  /** Instrument id token yang dibatalkan (mis. "USDCx"). */
+  cancelledInstrumentId?: string | null;
 };
 
 

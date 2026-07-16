@@ -352,6 +352,11 @@ export class UsersService {
     status?: 'COMPLETED' | 'PENDING' | 'REJECTED';
     /** cid AmuletTransferInstruction untuk reward yang masih pending. */
     transferInstructionCid?: string | null;
+    /** Jumlah CC asli yang dibatalkan/ditolak (OFFER_WITHDRAWN / OFFER_REJECTED).
+     *  Saldo tidak bergerak (amountCc=0); ini hanya untuk display "cancelled X CC". */
+    cancelledAmountCc?: number | null;
+    /** Instrument id (mis. "USDCx") bila offer yang dibatalkan adalah token non-CC. */
+    cancelledInstrumentId?: string | null;
   }) {
     const amountMicroCc = BigInt(
       Math.round(Math.abs(params.amountCc) * 1_000_000),
@@ -379,6 +384,11 @@ export class UsersService {
         status: params.status ?? 'COMPLETED',
         transferInstructionCid: params.transferInstructionCid ?? null,
         settledAt: params.status === 'PENDING' ? null : new Date(),
+        cancelledAmountCc:
+          params.cancelledAmountCc != null
+            ? new Decimal(Math.abs(Number(params.cancelledAmountCc)))
+            : null,
+        cancelledInstrumentId: params.cancelledInstrumentId ?? null,
       },
     });
 
@@ -420,6 +430,9 @@ export class UsersService {
     cantonUpdateId?: string;
     status?: 'COMPLETED' | 'PENDING' | 'REJECTED';
     transferInstructionCid?: string | null;
+    /** Jumlah token asli yang dibatalkan/ditarik (TOKEN_OFFER_WITHDRAWN / REJECTED).
+     *  Saldo tidak bergerak (amount=0); ini hanya untuk display "cancelled X token". */
+    cancelledAmount?: Decimal | number | string | null;
   }) {
     const absAmount = new Decimal(Math.abs(Number(params.amount)));
     const signed = TOKEN_TX_DEBIT_TYPES.has(params.type)
@@ -438,6 +451,10 @@ export class UsersService {
         cantonUpdateId: params.cantonUpdateId ?? null,
         status: params.status ?? 'COMPLETED',
         transferInstructionCid: params.transferInstructionCid ?? null,
+        cancelledAmount:
+          params.cancelledAmount != null
+            ? new Decimal(Math.abs(Number(params.cancelledAmount)))
+            : null,
       },
     });
 
@@ -659,6 +676,11 @@ export class UsersService {
           // Token-aware fields (kosong untuk CC murni).
           instrumentId: null,
           amountDecimal: null,
+          // Cancelled-amount field (OFFER_WITHDRAWN / OFFER_REJECTED).
+          cancelledAmountCc: tx.cancelledAmountCc
+            ? tx.cancelledAmountCc.toString()
+            : null,
+          cancelledInstrumentId: tx.cancelledInstrumentId,
         };
       }),
     );
@@ -674,6 +696,9 @@ export class UsersService {
       createdAt: tx.createdAt.toISOString(),
       instrumentId: tx.instrumentId,
       amountDecimal: tx.amount.toString(),
+      // Cancelled-amount field (TOKEN_OFFER_WITHDRAWN / REJECTED).
+      cancelledAmount: tx.cancelledAmount ? tx.cancelledAmount.toString() : null,
+      cancelledInstrumentId: tx.instrumentId,
     }));
 
     const merged = [
@@ -1151,6 +1176,11 @@ export class UsersService {
             instrumentId: null,
             amountDecimal: null,
             counterparty,
+            // Cancelled-amount field (hanya terisi untuk OFFER_WITHDRAWN /
+            // OFFER_REJECTED). Serialize Decimal → string untuk JSON-safety.
+            cancelledAmountCc: tx.cancelledAmountCc
+              ? tx.cancelledAmountCc.toString()
+              : null,
           };
         }
         // token row
@@ -1175,6 +1205,12 @@ export class UsersService {
           instrumentId: tx.instrumentId,
           instrumentAdmin: tx.instrumentAdmin,
           amountDecimal: tx.amount.toString(),
+          // Cancelled-amount field (hanya terisi untuk TOKEN_OFFER_WITHDRAWN /
+          // TOKEN_OFFER_REJECTED). Saldo tidak bergerak (amount=0), ini untuk display.
+          cancelledAmount: tx.cancelledAmount
+            ? tx.cancelledAmount.toString()
+            : null,
+          cancelledInstrumentId: tx.instrumentId,
         };
       }),
     );
