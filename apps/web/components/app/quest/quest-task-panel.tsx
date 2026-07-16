@@ -58,6 +58,7 @@ import {
   Users,
 } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { useMe } from "@/lib/hooks/use-me";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -287,22 +288,23 @@ export function QuestTaskPanel({
     setTwitterUsername(viewerTwitterUsername);
   }, [viewerTwitterUsername]);
 
+  // Profil user (GET /api/me) via cache global `useMe`. Request ter-dedup
+  // dengan konsumen lain (dashboard, settings, earn-hub, dll) — sebelumnya
+  // panel ini mem-fetch `/api/me` sendiri tiap mount (duplikat dengan parent
+  // earn-hub yang sudah pass props).
+  const { me: meProfile } = useMe();
+  useEffect(() => {
+    if (viewerPartyId == null && hasRealWallet(meProfile?.cantonPartyId)) {
+      setPartyId(meProfile!.cantonPartyId!.trim());
+    }
+    if (viewerTwitterUsername == null) {
+      setTwitterUsername(meProfile?.twitterUsername?.trim() || null);
+    }
+  }, [meProfile, viewerPartyId, viewerTwitterUsername]);
+
   useEffect(() => {
     loadProgress();
-    fetch("/api/me", { credentials: "include", cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then(
-        (me: { cantonPartyId?: string | null; twitterUsername?: string | null } | null) => {
-          if (viewerPartyId == null && hasRealWallet(me?.cantonPartyId)) {
-            setPartyId(me!.cantonPartyId!.trim());
-          }
-          if (viewerTwitterUsername == null) {
-            setTwitterUsername(me?.twitterUsername?.trim() || null);
-          }
-        },
-      )
-      .catch(() => {});
-  }, [loadProgress, viewerPartyId, viewerTwitterUsername]);
+  }, [loadProgress]);
 
   // ── Realtime progress for send-transaction tasks ──────────────────────────
   // Agar progress "3/5 sends" update otomatis saat CC benar-benar diterima di

@@ -7,6 +7,10 @@ export interface Me {
   username?: string | null;
   cantonPartyId?: string | null;
   avatarUrl?: string | null;
+  /** Handle X/Twitter yang di-link user (dikembalikan backend, opsional). */
+  twitterUsername?: string | null;
+  /** Saldo earn-points (dikembalikan backend, opsional). */
+  earnPoints?: number;
 }
 
 export function login(email: string, password: string, turnstileToken: string) {

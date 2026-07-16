@@ -34,6 +34,11 @@ import {
   BalancesResponse,
   tokenBalanceKey,
 } from "@/lib/canton/token-types";
+import {
+  usePools,
+  useBalances,
+  useInvalidateWalletTokens,
+} from "@/lib/hooks/use-wallet-tokens";
 import { TokenLogo, displayName } from "@/components/app/wallet/token-logo";
 
 type Sheet = null | "send" | "receive" | "offers" | "swap";
@@ -87,8 +92,14 @@ export function WalletActions({
   // ── Token list untuk Send unified (CC + USDCx + token aktif lainnya) ──
   // Satu UI Send untuk semua token. CC = route /send-cc (preapproval path),
   // non-CC = route /send-token (CIP-0056 two-step). User tidak perlu sadar bedanya.
-  const [sendTokens, setSendTokens] = useState<WalletToken[]>([]);
-  const [sendBalances, setSendBalances] = useState<BalancesResponse>({ cc: 0, tokens: {} });
+  //
+  // Pools & balances lewat react-query dengan query key dishared dengan
+  // TokenList (parent). Karena parent sudah mount hook ini, request ter-dedup
+  // — sebelumnya WalletActions fetch pools+balances sendiri (duplikat 2x).
+  const poolsQuery = usePools({ enabled: true });
+  const balancesQuery = useBalances({ enabled: true });
+  const invalidateWalletTokens = useInvalidateWalletTokens();
+
   const [selectedSendToken, setSelectedSendToken] = useState<WalletToken | null>(null);
   const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
   const [tokenPickerQuery, setTokenPickerQuery] = useState("");
@@ -101,39 +112,22 @@ export function WalletActions({
     return ACTIVE_SEND_TOKENS.has(t.instrumentId.toUpperCase());
   }
 
-  const loadSendTokens = useCallback(async () => {
-    try {
-      const [poolsRes, balRes] = await Promise.all([
-        fetch("/api/party/pools", { credentials: "include" }),
-        fetch("/api/party/balances", { credentials: "include" }),
-      ]);
-      const data = (await poolsRes.json()) as { tokens?: WalletToken[] };
-      // Tampilkan SEMUA token: CC selalu aktif. Non-CC aktif + coming soon.
-      const allList = data.tokens ?? [];
-      // Filter: CC + token aktif + token coming soon yang ada di allowlist known.
-      // (Hanya tampilkan token yang dikenal — bukan semua token Cantex random).
-      const KNOWN_TOKENS = new Set(["USDCX", "CBTC"]);
-      const list = allList.filter(
-        (t) => t.isCC || KNOWN_TOKENS.has(t.instrumentId.toUpperCase()),
-      );
-      setSendTokens(list);
-      // Default: CC (Amulet).
-      const cc = list.find((t) => t.isCC);
-      setSelectedSendToken(cc ?? list[0] ?? null);
-      if (balRes.ok) {
-        const bal = (await balRes.json()) as BalancesResponse;
-        setSendBalances(bal);
-      }
-    } catch {
-      /* non-blocking — CC default tetap jalan via prop balance */
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Turunkan list token untuk selector Send (filter KNOWN_TOKENS, default CC).
+  // Tampilkan SEMUA token: CC selalu aktif. Non-CC aktif + coming soon.
+  // (Hanya tampilkan token yang dikenal — bukan semua token Cantex random).
+  const KNOWN_TOKENS = new Set(["USDCX", "CBTC"]);
+  const sendTokens = (poolsQuery.data?.tokens ?? []).filter(
+    (t) => t.isCC || KNOWN_TOKENS.has(t.instrumentId.toUpperCase()),
+  );
+  const sendBalances: BalancesResponse = balancesQuery.data ?? { cc: 0, tokens: {} };
 
+  // Default: CC (Amulet) — set sekali saat data pools tersedia.
   useEffect(() => {
-    // Load token list saat pertama kali mount (untuk selector Send).
-    void loadSendTokens();
-  }, [loadSendTokens]);
+    if (selectedSendToken || sendTokens.length === 0) return;
+    const cc = sendTokens.find((t) => t.isCC);
+    setSelectedSendToken(cc ?? sendTokens[0] ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sendTokens.length]);
 
   // Balance untuk token yang sedang dipilih (CC dari prop, non-CC dari /balances).
   const selectedIsCC = Boolean(selectedSendToken?.isCC);
@@ -318,7 +312,7 @@ export function WalletActions({
       }
       onBalanceRefresh?.();
       // Refresh token balances supaya balance selector update (non-CC credit).
-      void loadSendTokens();
+      void invalidateWalletTokens();
     } catch {
       setSendState("error");
       setSendMessage("Network error. Check your connection and try again.");

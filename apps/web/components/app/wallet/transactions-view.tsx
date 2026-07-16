@@ -336,32 +336,40 @@ export function TransactionsView({
       // (catch → null → items []), lalu TanStack menganggap [] sebagai data baru
       // → list flash ke "No transactions". Dengan throw, TanStack mempertahankan
       // data terakhir yang berhasil selama background refetch. (Fix "data ilang".)
+      //
+      // Server-side pagination: minta hanya halaman aktif (pageSize kecil),
+      // bukan fetch 200 lalu slice client-side (over-fetch berat).
       const dbRes = await fetch(
-        `${DB_TRANSACTIONS_PROXY}?page=1&pageSize=200`,
+        `${DB_TRANSACTIONS_PROXY}?page=${currentPage}&pageSize=${pageSize}`,
         { credentials: "include", cache: "no-store" },
       );
       if (!dbRes.ok) {
         throw new Error(`transactions ${dbRes.status}`);
       }
-      const dbData = (await dbRes.json()) as { items?: TxItem[] };
-      const dbItems: TxItem[] = (dbData.items ?? []).map((tx) => ({
+      const dbData = (await dbRes.json()) as {
+        items?: TxItem[];
+        total?: number;
+        page?: number;
+        pageSize?: number;
+        totalPages?: number;
+      };
+      const items: TxItem[] = (dbData.items ?? []).map((tx) => ({
         ...tx,
         source: "db" as const,
       }));
+      const total = typeof dbData.total === "number" ? dbData.total : items.length;
+      // Fallback defensif bila backend tidak kirim totalPages.
+      const totalPages =
+        typeof dbData.totalPages === "number"
+          ? dbData.totalPages
+          : Math.max(1, Math.ceil(total / pageSize));
 
-      const all = [...dbItems];
-      all.sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-      );
-
-      const start = (currentPage - 1) * pageSize;
-      const paged = all.slice(start, start + pageSize);
       return {
-        items: paged,
-        total: all.length,
-        page: currentPage,
+        items,
+        total,
+        page: typeof dbData.page === "number" ? dbData.page : currentPage,
         pageSize,
-        totalPages: Math.max(1, Math.ceil(all.length / pageSize)),
+        totalPages,
       };
     },
     enabled: Boolean(partyId),

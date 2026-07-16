@@ -1,41 +1,35 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
 import { hasRealWallet } from "@/lib/auth/wallet-access";
+import { useMe } from "@/lib/hooks/use-me";
 
 type MeWallet = {
   cantonPartyId?: string | null;
 };
 
+/**
+ * Apakah user sudah punya wallet Canton (partyId real, bukan placeholder
+ * `canquest:`). Dipasang global di PlatformShell → cache `useMe` ter-warm
+ * di semua halaman platform (lihat `lib/hooks/use-me.ts`).
+ *
+ * Sebelumnya memfetch `/api/me` manual; sekarang re-use `useMe()` sehingga
+ * request ter-dedup dengan konsumen `/api/me` lain.
+ */
 export function useWalletAccess() {
-  const [partyId, setPartyId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { me, isLoading, refetch } = useMe();
+  const partyId = me?.cantonPartyId?.trim() || null;
 
   const refresh = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/me", { credentials: "include", cache: "no-store" });
-      if (!res.ok) {
-        setPartyId(null);
-        return;
-      }
-      const me = (await res.json()) as MeWallet;
-      setPartyId(me.cantonPartyId?.trim() || null);
-    } catch {
-      setPartyId(null);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    await refetch();
+  }, [refetch]);
 
   return {
-    loading,
+    loading: isLoading,
     partyId,
     hasWallet: hasRealWallet(partyId),
     refresh,
   };
 }
+
+export type { MeWallet };

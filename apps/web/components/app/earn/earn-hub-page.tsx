@@ -5,6 +5,7 @@ import { QuestReferralCard } from "@/components/app/quest/quest-referral-card";
 import { QuestTaskPanel } from "@/components/app/quest/quest-task-panel";
 import { ROUTES } from "@/lib/routing/app-routes";
 import { hasRealWallet } from "@/lib/auth/wallet-access";
+import { useMe } from "@/lib/hooks/use-me";
 import type { Quest } from "@/lib/quest/quest-types";
 import { cn } from "@/lib/utils/utils";
 import { Gift, Sparkles, Trophy, TrendingUp, Zap } from "lucide-react";
@@ -17,14 +18,23 @@ export function EarnHubPage() {
   const [hub, setHub] = useState<Quest | null>(null);
   const [hubLoading, setHubLoading] = useState(true);
   const [hubError, setHubError] = useState<string | null>(null);
-  const [meLoading, setMeLoading] = useState(true);
+
+  // Profil user via cache global `useMe` — ter-dedup lintas halaman.
+  // Sebelumnya `/api/me` di-fetch manual di dalam Promise.all (duplikat dengan
+  // QuestTaskPanel child yang juga fetch /api/me).
+  const { me, isLoading: meLoading } = useMe();
+  useEffect(() => {
+    setPartyId(
+      hasRealWallet(me?.cantonPartyId) ? me!.cantonPartyId!.trim() : null,
+    );
+    setTwitterUsername(me?.twitterUsername?.trim() || null);
+  }, [me]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
       setHubLoading(true);
-      setMeLoading(true);
       setHubError(null);
 
       try {
@@ -33,27 +43,11 @@ export function EarnHubPage() {
           cache: "no-store" as const,
           signal: AbortSignal.timeout(12_000),
         };
-        const [hubRes, meRes, pointsRes] = await Promise.all([
+        // `/api/me` ditangani useMe() di atas — di sini hanya hub + points.
+        const [hubRes, pointsRes] = await Promise.all([
           fetch("/api/quests/earn-hub", fetchOpts),
-          fetch("/api/me", fetchOpts),
           fetch("/api/points", fetchOpts),
         ]);
-
-        if (!cancelled) {
-          if (meRes.ok) {
-            const me = (await meRes.json()) as {
-              cantonPartyId?: string | null;
-              twitterUsername?: string | null;
-            };
-            setPartyId(
-              hasRealWallet(me.cantonPartyId) ? me.cantonPartyId!.trim() : null,
-            );
-            setTwitterUsername(me.twitterUsername?.trim() || null);
-          } else {
-            setPartyId(null);
-          }
-          setMeLoading(false);
-        }
 
         if (!cancelled) {
           if (pointsRes.ok) {
@@ -87,7 +81,6 @@ export function EarnHubPage() {
         if (!cancelled) {
           setHubError("Network error — refresh the page.");
           setHubLoading(false);
-          setMeLoading(false);
         }
       }
     }

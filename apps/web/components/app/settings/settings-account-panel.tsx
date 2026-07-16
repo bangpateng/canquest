@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import { formatPartyIdForDisplay, formatUsernameForDisplay } from "@/lib/canton/canton-party-id";
 import { formatApiError } from "@/lib/api/format-api-error";
+import { useMe } from "@/lib/hooks/use-me";
 import { User, Mail, AtSign, Shield, Key } from "lucide-react";
 
 type Me = {
@@ -54,26 +54,11 @@ function SettingsField({
 }
 
 export function SettingsAccountPanel() {
-  const [me, setMe] = useState<Me | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const refresh = useCallback(async () => {
-    setError(null);
-    const res = await fetch("/api/me", { credentials: "include", cache: "no-store" });
-    const raw: unknown = await res.json().catch(() => null);
-    if (!res.ok) {
-      setError(formatApiError(raw));
-      setMe(null);
-    } else {
-      setMe(raw as Me);
-    }
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  // Profil via cache global `useMe` — request ter-dedup lintas halaman.
+  // Sebelumnya fetch `/api/me` manual di sini (duplikat dengan dashboard/wallet).
+  const { me: meData, isLoading: loading, isError, error } = useMe();
+  const me = (meData as Me | undefined) ?? null;
+  const errorMsg = isError ? formatApiError(error) : null;
 
   return (
     <section className="w-full max-w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50">
@@ -165,12 +150,12 @@ export function SettingsAccountPanel() {
           </div>
         </div>
 
-        {error ? (
+        {errorMsg ? (
           <p
             className="mt-5 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm font-medium text-red-300 sm:mt-6 sm:px-5 sm:py-4"
             role="alert"
           >
-            {error}
+            {errorMsg}
           </p>
         ) : null}
       </div>

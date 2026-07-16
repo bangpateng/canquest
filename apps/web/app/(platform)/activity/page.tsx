@@ -1,18 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { TransactionsView } from "@/components/app/wallet/transactions-view";
 import { PlatformPage } from "@/components/platform/platform-page";
-import { getMe } from "@/lib/services/api";
+import { useMe } from "@/lib/hooks/use-me";
 
 export default function ActivityListPage() {
-  const [partyId, setPartyId] = useState<string | null>(null);
-
-  useEffect(() => {
-    getMe()
-      .then((me) => setPartyId(me.cantonPartyId ?? null))
-      .catch(() => setPartyId(null));
-  }, []);
+  // partyId via cache global `useMe` — tidak mengeblok render. TransactionsView
+  // punya gate `enabled: Boolean(partyId)`; saat cache hangat (di-warm platform-
+  // shell), transaksi langsung fetch tanpa waterfall `/api/me` → transaksi.
+  const { me } = useMe();
+  const partyId = me?.cantonPartyId ?? null;
 
   return (
     <PlatformPage>

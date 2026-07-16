@@ -13,10 +13,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
           queries: {
             // Cache dianggap segar 60s — refetch dalam jendela ini no-op.
             staleTime: 60_000,
-            // Perilaku dApp: data otomatis refresh saat user kembali ke tab
-            // atau saat koneksi pulih. Background & SILENT (tidak ada spinner).
-            refetchOnWindowFocus: true,
-            refetchOnReconnect: true,
+            // Nonaktifkan auto-refetch saat tab focus / reconnect. Sebelumnya
+            // true → setiap kali user balik ke tab, 5+ query fire bersamaan
+            // (prices, offers, lock-status, notifications, transactions) = burst
+            // request ke VPS 2. SSE sudah jadi sumber update real-time; polling
+            // refetchInterval per-hook tetap jalan sebagai safety-net.
+            refetchOnWindowFocus: false,
+            refetchOnReconnect: false,
             // 2x retry sudah cukup; 3x (default) terlalu lama untuk error server.
             retry: 2,
           },

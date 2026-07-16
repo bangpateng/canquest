@@ -11,9 +11,15 @@
  */
 
 export const queryKeys = {
+  auth: {
+    /** Profil user (GET /api/me) — dishared lintas halaman supaya ter-dedup. */
+    me: ["auth", "me"] as const,
+  },
   party: {
     all: ["party"] as const,
     balance: ["party", "balance"] as const,
+    balances: ["party", "balances"] as const,
+    pools: ["party", "pools"] as const,
     lockStatus: ["party", "lock-status"] as const,
     ccPrice: ["party", "cc-price"] as const,
     tokenPrices: ["party", "token-prices"] as const,

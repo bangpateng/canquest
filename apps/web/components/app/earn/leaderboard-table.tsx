@@ -1,5 +1,6 @@
 "use client";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { useMe } from "@/lib/hooks/use-me";
 
 import { ListPagination } from "@/components/app/list/list-pagination";
 import { filterTabClass } from "@/lib/ui/ui-button-styles";
@@ -142,12 +143,12 @@ export function LeaderboardTable() {
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
+  // Profil user via cache global `useMe` (request ter-dedup lintas halaman).
+  // Sebelumnya fetch `/api/me` manual hanya untuk membaca `id`.
+  const { me: meProfile } = useMe();
   useEffect(() => {
-    fetch("/api/me", { credentials: "include", signal: AbortSignal.timeout(12_000) })
-      .then((r) => r.ok ? r.json() : null)
-      .then((d: { id?: string } | null) => { if (d?.id) setCurrentUserId(d.id); })
-      .catch(() => {});
-  }, []);
+    if (meProfile?.id) setCurrentUserId(meProfile.id);
+  }, [meProfile]);
 
   const fetchLeaderboard = useCallback(
     async (p: number, per: typeof period) => {

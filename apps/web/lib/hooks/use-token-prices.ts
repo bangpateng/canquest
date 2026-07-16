@@ -5,7 +5,7 @@ import { queryKeys } from "@/lib/queries/query-keys";
 
 /**
  * Harga USD semua token dari Cantex DEX — REAL-TIME via backend WebSocket.
- * Backend maintains WS ticker connection; frontend polls endpoint tiap 10s
+ * Backend maintains WS ticker connection; frontend polls endpoint tiap 30s
  * untuk dapat latest live prices (push-based di backend, pull di frontend).
  *
  * Key format: "<instrumentId>::<instrumentAdmin>" → USD price (number).
@@ -27,9 +27,8 @@ export function useTokenPrices() {
       if (!res.ok) return {};
       return data.prices ?? {};
     },
-    staleTime: 10_000,
-    refetchInterval: 10_000,
-    refetchOnWindowFocus: true,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
     retry: 1,
   });
 

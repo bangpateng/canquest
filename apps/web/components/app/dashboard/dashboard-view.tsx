@@ -8,6 +8,7 @@ import {
   readLastWalletUserId,
 } from "@/lib/auth/wallet-session-cache";
 import { createRefetchThrottle } from "@/lib/utils/refetch-throttle";
+import { useMe } from "@/lib/hooks/use-me";
 
 import { CcHoldingsCard } from "./cc-holdings-card";
 import { ProfileCard } from "./profile-card";
@@ -21,17 +22,6 @@ import {
 
 const FOCUS_REFETCH_MIN_MS = 60_000;
 const throttleFocusRefetch = createRefetchThrottle(FOCUS_REFETCH_MIN_MS);
-
-interface Me {
-  id?: string;
-  email?: string;
-  displayName?: string | null;
-  username?: string | null;
-  cantonPartyId?: string | null;
-  twitterUsername?: string | null;
-  avatarUrl?: string | null;
-  earnPoints?: number;
-}
 
 interface DashboardStats {
   totalPoints: number;
@@ -76,31 +66,38 @@ const EMPTY_STATS: DashboardStats = {
 };
 
 export function DashboardView() {
-  const [me, setMe] = useState<Me | null>(null);
+  // Profil user via cache global `useMe` — ter-dedup lintas halaman.
+  // Sebelumnya `me` di-fetch manual di dalam Promise.all (bersama stats & points).
+  const { me, isError: meError } = useMe();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [pointsBalance, setPointsBalance] = useState<PointsBalance | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  // Sinkronkan cache wallet (sessionStorage) tiap kali `me` berubah.
+  // Fallback cache dipertahankan: saat /api/me gagal, pakai data tersimpan.
+  useEffect(() => {
+    if (me) {
+      cacheWalletMe(me);
+    } else if (meError) {
+      const cached = readCachedWalletMe(readLastWalletUserId());
+      // Tidak ada setter state (me dari hook); cache hanya untuk konsumen lain.
+      void cached;
+    }
+  }, [me, meError]);
+
   const fetchAll = useCallback(async (opts?: { background?: boolean }) => {
     if (!opts?.background) setLoading(true);
     setLoadError(null);
     try {
-      const [meResult, statsResult, pointsResult] = await Promise.all([
-        fetchJson<Me>("/api/me"),
+      // `/api/me` sudah ditangani useMe() di atas — di sini hanya stats + points.
+      const [statsResult, pointsResult] = await Promise.all([
         fetchJson<DashboardStats>("/api/quests/dashboard-stats"),
         getPointsBalance().then(
           (data) => ({ ok: true, data }) as { ok: true; data: PointsBalance },
         ).catch(() => ({ ok: false, data: null }) as { ok: false; data: null }),
       ]);
 
-      if (meResult.ok && meResult.data) {
-        setMe(meResult.data);
-        cacheWalletMe(meResult.data);
-      } else {
-        const cached = readCachedWalletMe(readLastWalletUserId());
-        if (cached) setMe((prev) => prev ?? cached);
-      }
       if (statsResult.ok && statsResult.data) {
         setStats(statsResult.data);
       } else {
@@ -110,7 +107,7 @@ export function DashboardView() {
         setPointsBalance(pointsResult.data);
       }
 
-      if (!meResult.ok && !statsResult.ok) {
+      if (!statsResult.ok) {
         setLoadError(
           "Could not load dashboard",
         );

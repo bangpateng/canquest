@@ -5,7 +5,9 @@ import { WalletSetup } from "@/components/app/wallet/wallet-setup";
 import { WalletDashboard } from "@/components/app/wallet/wallet-dashboard";
 import { WalletReconnect } from "@/components/app/wallet/wallet-reconnect";
 import { PlatformPage } from "@/components/platform/platform-page";
-import { getMe, getLedgerStatus, type LedgerStatus } from "@/lib/services/api";
+import { getLedgerStatus, type LedgerStatus } from "@/lib/services/api";
+import { useMe } from "@/lib/hooks/use-me";
+import { useInvalidateWalletTokens } from "@/lib/hooks/use-wallet-tokens";
 import {
   cacheWalletMe,
   hasUsableWalletCache,
@@ -25,29 +27,24 @@ type Me = {
 
 export default function WalletPage() {
   const t = usePlatformT();
+  // Profil via cache global `useMe` — tidak mengeblok render: shell/skeleton
+  // tampil saat data masih loading. Sebelumnya `await getMe()` (timeout 8s)
+  // memblok seluruh subtree wallet.
+  const { me: meData, isLoading: meLoading, isError: meError, refetch } = useMe();
   const [me, setMe] = useState<Me | null>(null);
-  const [loading, setLoading] = useState(true);
   const [profileStale, setProfileStale] = useState(false);
   const [ledgerStatus, setLedgerStatus] = useState<LedgerStatus | null>(null);
+  const invalidateWalletTokens = useInvalidateWalletTokens();
 
-  const refresh = useCallback(async () => {
-    const lastUserId = me?.id ?? readLastWalletUserId();
-    const canShowWalletWithoutWait =
-      isRealCantonPartyId(me?.cantonPartyId) || hasUsableWalletCache(lastUserId);
-    if (!canShowWalletWithoutWait) setLoading(true);
-
-    void getLedgerStatus()
-      .then(setLedgerStatus)
-      .catch(() => {
-        /* node check is advisory — never block wallet UI */
-      });
-
-    try {
-      const meData = await getMe();
+  // Sinkronkan data hook → state lokal (mirip implementasi lama, agar logika
+  // cache/profileStale tetap utuh).
+  useEffect(() => {
+    if (meData) {
       setMe(meData);
       cacheWalletMe(meData);
       setProfileStale(false);
-    } catch {
+    } else if (meError) {
+      const lastUserId = readLastWalletUserId();
       const cached = readCachedWalletMe(lastUserId);
       setMe((prev) => {
         if (prev?.id && prev.id === cached?.userId) return prev;
@@ -56,19 +53,36 @@ export default function WalletPage() {
         return null;
       });
       if (hasUsableWalletCache(lastUserId)) setProfileStale(true);
-    } finally {
-      setLoading(false);
     }
-  }, [me?.id, me?.cantonPartyId]);
+  }, [meData, meError]);
+
+  const refresh = useCallback(async () => {
+    // Refresh paralel: profil (useMe) + ledger + token pools/balances.
+    void getLedgerStatus()
+      .then(setLedgerStatus)
+      .catch(() => {
+        /* node check is advisory — never block wallet UI */
+      });
+    void invalidateWalletTokens();
+    await refetch();
+  }, [refetch, invalidateWalletTokens]);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    // Ledger check di-fire sekali saat mount (advisory, non-blocking).
+    void getLedgerStatus()
+      .then(setLedgerStatus)
+      .catch(() => {
+        /* node check is advisory — never block wallet UI */
+      });
+  }, []);
 
-  if (loading && !me) {
-    return (
-      <PageLoading minHeight="min-h-[60vh]" />
-    );
+  // Skeleton awal hanya saat first-load (belum ada data sama sekali).
+  // Bila cache sessionStorage tersedia, tampilkan wallet tanpa nunggu.
+  const showInitialSkeleton =
+    meLoading && !me && !hasUsableWalletCache(readLastWalletUserId());
+
+  if (showInitialSkeleton) {
+    return <PageLoading minHeight="min-h-[60vh]" />;
   }
 
   const partyId = me?.cantonPartyId;

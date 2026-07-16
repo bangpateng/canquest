@@ -1,11 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useTokenPrices } from "@/lib/hooks/use-token-prices";
-import { isRealCantonPartyId } from "@/lib/auth/wallet-session-cache";
+import {
+  usePools,
+  useBalances,
+  useInvalidateWalletTokens,
+} from "@/lib/hooks/use-wallet-tokens";
+import {
+  isRealCantonPartyId,
+} from "@/lib/auth/wallet-session-cache";
 import { formatPartyIdForDisplay } from "@/lib/canton/canton-party-id";
+import type { WalletToken } from "@/lib/canton/token-types";
 
 /**
  * Token yang ditampilkan di wallet. Hanya CC + USDCx + CBTC — semua token
@@ -33,16 +41,8 @@ interface TokenListProps {
   onRefresh?: () => void;
 }
 
-interface SwapToken {
-  instrumentId: string;
-  instrumentAdmin: string;
-  isCC?: boolean;
-}
-
-interface BalancesResponse {
-  cc: number;
-  tokens: Record<string, string>;
-}
+/** Alias lokal — shape identik dengan WalletToken (lib/canton/token-types). */
+type SwapToken = WalletToken;
 
 /**
  * Main wallet view — Wintip-style layout:
@@ -59,17 +59,27 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
   // Harga semua token dari Cantex DEX (rate vs USDCx = USD anchor).
   const { prices: tokenPrices } = useTokenPrices();
 
-  // Token list + SEMUA saldo (CC + non-CC) dari satu endpoint /balances.
-  const [swapTokens, setSwapTokens] = useState<SwapToken[]>([]);
-  const [tokenBalances, setTokenBalances] = useState<Record<string, string>>(
-    {},
+  // Token list + SEMUA saldo dari endpoint terpisah, TAPI lewat react-query
+  // dengan query key dishared → ter-dedup dengan WalletActions (sebelumnya
+  // TokenList & WalletActions masing-masing fetch pools+balances sendiri = 4x
+  // request duplikat saat mount /wallet).
+  const poolsQuery = usePools({ enabled: hasWallet });
+  const balancesQuery = useBalances({ enabled: hasWallet });
+  const invalidateWalletTokens = useInvalidateWalletTokens();
+
+  const swapTokens: SwapToken[] = useMemo(
+    () => poolsQuery.data?.tokens ?? [],
+    [poolsQuery.data],
   );
-  const [ccBalance, setCcBalance] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
+  const tokenBalances = balancesQuery.data?.tokens ?? {};
+  const ccBalance = balancesQuery.data ? balancesQuery.data.cc : null;
+
   // initialLoad = true hanya saat fetch pertama (belum ada data sama sekali).
   // Background refresh TIDAK flip ini → hero pertahankan nilai lama, bukan "—".
-  // (Fix "data ilang": sebelumnya loading=true di setiap refresh → hero flash "—".)
-  const [initialLoad, setInitialLoad] = useState(true);
+  const initialLoad = poolsQuery.isPending || balancesQuery.isPending;
+  // loading dipakai tombol Refresh — true saat ada fetch berjalan (bukan hanya
+  // first-load) supaya tombol beri feedback spinner.
+  const loading = poolsQuery.isFetching || balancesQuery.isFetching;
 
   // Lock CC — status bar + modal di /wallet utama (sebelumnya di /wallet/cc).
   // Hook enabled hanya kalau user punya wallet (mirror pattern token-detail-view).
@@ -80,47 +90,19 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
   const [lockOpen, setLockOpen] = useState(false);
 
   // CC price: cari "Amulet::admin" di price map (setelah swapTokens load).
-  const ccInstrumentKey = swapTokens.find((t) => t.isCC);
+  const ccInstrumentKey = useMemo(
+    () => swapTokens.find((t) => t.isCC),
+    [swapTokens],
+  );
   const ccKey = ccInstrumentKey
     ? `${ccInstrumentKey.instrumentId}::${ccInstrumentKey.instrumentAdmin}`
     : null;
   const ccUsd = ccKey ? tokenPrices[ccKey] ?? 0 : 0;
 
-  const loadTokens = useCallback(async () => {
-    // Hanya tampilkan loading state saat initial load (belum ada data).
-    // Background refresh: pertahankan data lama, JANGAN flip loading=true.
-    const isFirstLoad = swapTokens.length === 0 && ccBalance === null;
-    if (isFirstLoad) setLoading(true);
-    try {
-      const [poolsRes, balRes] = await Promise.all([
-        fetch("/api/party/pools", { credentials: "include" }),
-        fetch("/api/party/balances", { credentials: "include" }),
-      ]);
-      if (poolsRes.ok) {
-        const data = (await poolsRes.json()) as { tokens?: SwapToken[] };
-        setSwapTokens(data.tokens ?? []);
-      }
-      if (balRes.ok) {
-        const bal = (await balRes.json()) as BalancesResponse;
-        setTokenBalances(bal.tokens ?? {});
-        setCcBalance(bal.cc ?? 0);
-      }
-    } catch {
-      /* non-fatal — token cards tetap render pakai saldo lama */
-    } finally {
-      setLoading(false);
-      setInitialLoad(false);
-    }
-  }, [swapTokens.length, ccBalance]);
-
-  useEffect(() => {
-    if (hasWallet) void loadTokens();
-  }, [hasWallet, loadTokens]);
-
   const handleRefresh = useCallback(() => {
-    void loadTokens();
+    void invalidateWalletTokens();
     onRefresh?.();
-  }, [loadTokens, onRefresh]);
+  }, [invalidateWalletTokens, onRefresh]);
 
   // Total USD value = CC value + semua token non-CC value (Cantex prices).
   const ccValue = ccUsd > 0 && ccBalance !== null ? ccBalance * ccUsd : 0;
