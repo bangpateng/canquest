@@ -369,13 +369,13 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     this.teardownConnection();
 
     try {
-      // Subprotocol `daml.ws.auth` WAJIB agar participant menegosiasikan WS
-      // dengan mode auth. Tapi token TIDAK dilewat via subprotocol — reverse
-      // proxy (Cloudflare/nginx) sering hanya meneruskan nilai pertama
-      // Sec-WebSocket-Protocol, menjatuhkan `jwt.token.<jwt>` → participant
-      // tidak pernah menerima token → UNAUTHENTICATED (grpcCodeValue:16).
-      // Token dikirim sebagai WS message pertama (frame WS tidak disentuh proxy).
-      this.ws = new WebSocket(wsUrl, 'daml.ws.auth');
+      // Auth via subprotocol: `Sec-WebSocket-Protocol: daml.ws.auth, jwt.token.<jwt>`.
+      // Ini satu-satunya metode auth yang didukung participant (message-based
+      // auth → "Cannot decode frame" error; participant expect JSON, bukan token).
+      // WAJIB: nginx upstream harus forward header ini
+      // (proxy_set_header Sec-WebSocket-Protocol $http_sec_websocket_protocol),
+      // kalau tidak → token di-strip → UNAUTHENTICATED.
+      this.ws = new WebSocket(wsUrl, ['daml.ws.auth', `jwt.token.${token}`]);
     } catch (err) {
       if (this.closedByUser) return;
       this.scheduleReconnect(err as Error);
@@ -400,13 +400,9 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       }
       if (this.closedByUser || this.ws !== ws) return;
 
-      // Auth via WS message (bukan subprotocol) — frame WS tidak disentuh
-      // reverse proxy (Cloudflare/nginx hanya meneruskan nilai pertama
-      // Sec-WebSocket-Protocol). Format: `jwt.token.<jwt>`.
-      ws.send(`jwt.token.${token}`);
-
-      // Kirim subscription request SETELAH auth: beginExclusive (integer) +
-      // filter + verbose. Tiap update akan datang sebagai WS message terpisah.
+      // Auth sudah di handshake (subprotocol). Kirim subscription request:
+      // beginExclusive (integer) + filter + verbose. Tiap update datang sebagai
+      // WS message terpisah.
       const requestBody = {
         beginExclusive,
         filter: { filtersByParty },
