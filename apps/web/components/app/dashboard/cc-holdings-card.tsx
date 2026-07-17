@@ -24,7 +24,7 @@ export interface CcHoldingsCardProps {
 
 export function CcHoldingsCard({ hasWallet }: CcHoldingsCardProps) {
   const t = usePlatformT();
-  const { status, loading } = useLockStatus({ enabled: hasWallet });
+  const { status, loading } = useLockStatus({ enabled: hasWallet, pollIntervalMs: 90_000 });
   const { price } = useCcPrice();
 
   if (!hasWallet) {

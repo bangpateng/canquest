@@ -44,13 +44,9 @@ type UseLockStatusOptions = {
  *
  * Di-back TanStack Query: background poll via refetchInterval (SILENT),
  * `loading` hanya true saat first-load. Refetch saat tab focus / reconnect.
- *
- * NOTE: Lock status dihitung backend dari ledger secara indirect (bukan event
- * langsung), jadi tidak ada invalidasi via SSE Canton. Poll 5 menit sebagai
- * safety-net (sebelumnya 45s, terlalu agresif).
  */
 export function useLockStatus(options: UseLockStatusOptions = {}) {
-  const { enabled = true, pollIntervalMs = 300_000 } = options;
+  const { enabled = true, pollIntervalMs = 45_000 } = options;
   const queryClient = useQueryClient();
 
   const fetchStatus = useCallback(async (): Promise<LockStatus> => {

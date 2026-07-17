@@ -5,12 +5,8 @@ import { queryKeys } from "@/lib/queries/query-keys";
 
 /**
  * Harga USD semua token dari Cantex DEX — REAL-TIME via backend WebSocket.
- * Backend maintains WS ticker connection; frontend polls endpoint tiap 5 menit
- * sebagai safety-net (push-based di backend, pull di frontend).
- *
- * NOTE: Data ini dari Cantex DEX, BUKAN dari Canton ledger — jadi tidak
- * ter-trigger oleh SSE Canton. Polling 5 menit dipertahankan sebagai refresh
- * periodik agar prices tidak stale terlalu lama.
+ * Backend maintains WS ticker connection; frontend polls endpoint tiap 30s
+ * untuk dapat latest live prices (push-based di backend, pull di frontend).
  *
  * Key format: "<instrumentId>::<instrumentAdmin>" → USD price (number).
  */
@@ -31,10 +27,8 @@ export function useTokenPrices() {
       if (!res.ok) return {};
       return data.prices ?? {};
     },
-    // Bukan event Canton → tidak ada invalidasi via SSE. Poll 5 menit sebagai
-    // safety-net (sebelumnya 30s, terlalu agresif untuk data non-Canton).
-    staleTime: 300_000,
-    refetchInterval: 300_000,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
     retry: 1,
   });
 

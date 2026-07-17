@@ -92,18 +92,6 @@ export function useRealtime(): void {
         });
       });
 
-      // Offer baru masuk (incoming) atau status offer berubah (external
-      // accept/reject). Invalidate kedua list offers supaya UI segar tanpa
-      // polling. Emitted by CantonUpdatesService saat CreatedEvent ledger.
-      es.addEventListener("offer:new", () => {
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.party.offers,
-        });
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.party.sentOffers,
-        });
-      });
-
       es.addEventListener("quest:progress", () => {
         void queryClient.invalidateQueries({ queryKey: queryKeys.quests.all });
       });

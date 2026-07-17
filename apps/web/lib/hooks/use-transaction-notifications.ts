@@ -109,9 +109,8 @@ export function useTransactionNotifications(
   const query = useQuery({
     queryKey: queryKeys.party.notifications,
     queryFn: fetchFeed,
-    // refetchInterval dihapus: real-time via SSE `transaction:new` (lihat
-    // use-realtime.ts). staleTime sebagai safety-net jika SSE sempat putus.
     staleTime: pollIntervalMs,
+    refetchInterval: pollIntervalMs,
     refetchOnWindowFocus: true,
     retry: 2,
   });
