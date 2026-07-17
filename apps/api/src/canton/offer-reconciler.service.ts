@@ -322,8 +322,18 @@ export class OfferReconcilerService implements OnModuleInit, OnModuleDestroy {
     }
 
     // Query offer aktif on-chain milik sender (1 call untuk semua cid, CC+token).
-    const activeOffers = await this.ledger.queryPendingOffers(user.cantonPartyId);
+    // Direction HARUS 'outgoing' — kita lacak offer yang SENDER buat (menunggu
+    // receiver accept/reject). Default 'incoming' akan return offer di mana sender
+    // adalah RECEIVER (biasanya kosong) → semua cid salah dianggap hilang.
+    const activeOffers = await this.ledger.queryPendingOffers(
+      user.cantonPartyId,
+      'outgoing',
+    );
     const activeCids = new Set(activeOffers.map((o) => o.contractId));
+    this.logger.debug(
+      `Offer reconciler @${user.username}: ${rows.length} pending row(s) vs ` +
+        `${activeOffers.length} active outgoing offer(s) on-chain`,
+    );
 
     const ccRows = rows.filter((r) => r.table === 'cc');
     const tokenRows = rows.filter((r) => r.table === 'token');
