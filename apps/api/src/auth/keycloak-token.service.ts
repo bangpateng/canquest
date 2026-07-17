@@ -49,10 +49,10 @@ export class KeycloakTokenService {
 
   /** Token untuk operasi ledger sebagai admin/operator (validator-app-backend). */
   async getAdminLedgerToken(): Promise<string> {
-    this.logger.debug(
-      `getAdminLedgerToken: client_id=${this.req('LEDGER_CLIENT_ID')} ` +
-        `url=${this.tokenUrl} scope=${this.scope}`,
-    );
+    // Catatan: jangan log di sini — fungsi ini dipanggil oleh SETIAP operasi
+    // ledger (balance, holdings, stream reconnect, dll), walau token diambil
+    // dari cache. Logging di sini = log noise tiap request. Log aktual (saat
+    // token benar-benar di-fetch dari Keycloak) ada di fetchToken() line ~129.
     return this.getToken(
       this.req('LEDGER_CLIENT_ID'),
       this.req('LEDGER_CLIENT_SECRET'),
