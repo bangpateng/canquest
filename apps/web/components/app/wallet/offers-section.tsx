@@ -78,8 +78,8 @@ export function receiverDisplay(offer: OfferItem): string {
  * Dipakai oleh badge tombol "Offers" (count) dan modal Offers.
  *
  * Di-back TanStack Query: real-time via SSE `offer:new` (lihat use-realtime.ts),
- * refetch saat tab focus/reconnect, cache global di-dedup. Tidak ada polling —
- * SSE dari CantonUpdatesService (WebSocket native) yang trigger invalidate.
+ * plus poll 120s safety-net (agar tetap segar walau WS Canton belum aktif).
+ * Refetch saat tab focus/reconnect, cache global di-dedup.
  *
  * refresh() mengembalikan jumlah offer setelah fetch — berguna untuk
  * pemilik tombol (wallet-actions) agar tahu apakah perlu menampilkan badge.
@@ -102,9 +102,11 @@ export function useOffers() {
         return { items: [], error: "Network error. Check your connection." };
       }
     },
-    // refetchInterval dihapus: real-time via SSE `offer:new` (lihat use-realtime.ts).
-    // staleTime 30s sebagai safety-net jika SSE sempat putus.
-    staleTime: 30_000,
+    // Real-time via SSE `offer:new` (lihat use-realtime.ts). Poll 120s sebagai
+    // safety-net agar offers tetap segar walau WS Canton belum aktif/di VPS
+    // (sebelumnya 30s — terlalu agresif; SSE jadi sumber utama).
+    staleTime: 120_000,
+    refetchInterval: 120_000,
     refetchOnWindowFocus: true,
     retry: 2,
   });
@@ -165,9 +167,10 @@ export function useSentOffers() {
         return { items: [], error: "Network error. Check your connection." };
       }
     },
-    // refetchInterval dihapus: real-time via SSE `offer:new` (lihat use-realtime.ts).
-    // staleTime 30s sebagai safety-net jika SSE sempat putus.
-    staleTime: 30_000,
+    // Real-time via SSE `offer:new` (lihat use-realtime.ts). Poll 120s sebagai
+    // safety-net agar offers tetap segar walau WS Canton belum aktif/di VPS.
+    staleTime: 120_000,
+    refetchInterval: 120_000,
     refetchOnWindowFocus: true,
     retry: 2,
   });

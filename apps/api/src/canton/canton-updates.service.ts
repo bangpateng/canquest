@@ -366,9 +366,11 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     this.teardownConnection();
 
     try {
-      // Subprotocol `daml.ws.auth` adalah handshake auth DAML/Canton standard.
-      // Token payload dikirim sebagai message pertama setelah open.
-      this.ws = new WebSocket(wsUrl, 'daml.ws.auth');
+      // Auth: AsyncAPI spec JSON Ledger API memakai `httpApiKeyAuth` dengan
+      // `name: Sec-WebSocket-Protocol` → JWT dikirim sebagai NILAI subprotocol
+      // kedua (BUKAN sebagai WS message). Library `ws` menerimanya sebagai array,
+      // dan akan set header `Sec-WebSocket-Protocol: daml.ws.auth, jwt.token.<jwt>`.
+      this.ws = new WebSocket(wsUrl, ['daml.ws.auth', `jwt.token.${token}`]);
     } catch (err) {
       if (this.closedByUser) return;
       this.scheduleReconnect(err as Error);
@@ -393,10 +395,9 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       }
       if (this.closedByUser || this.ws !== ws) return;
 
-      // 1) Auth payload — standard DAML WS auth: kirim token sebagai message
-      //    pertama, format `jwt.token.<jwt>`.
-      ws.send(`jwt.token.${token}`);
-      // 2) Subscription request — beginExclusive + filter + verbose.
+      // Auth sudah di handshake (subprotocol). Kirim subscription request:
+      // beginExclusive + filter + verbose. Tiap update akan datang sebagai
+      // WS message terpisah.
       ws.send(
         JSON.stringify({
           beginExclusive,
@@ -449,7 +450,27 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
         clearTimeout(this.connectTimer);
         this.connectTimer = null;
       }
-      this.logger.error(`CantonUpdates: WS error: ${err.message}`);
+      // Ekstrak HTTP status code dari error message `ws` library:
+      // "Unexpected server response: <code>". Code 404/401/403 = masalah routing/
+      // auth di reverse proxy ledger, BUKAN bug aplikasi. Log URL + hint agar
+      // mudah diagnosa infrastruktur (nginx/Canton participant config).
+      const statusMatch = err.message.match(/response:\s*(\d{3})/);
+      const httpStatus = statusMatch ? statusMatch[1] : null;
+      if (httpStatus === '404') {
+        this.logger.error(
+          `CantonUpdates: WS 404 — endpoint tidak ada di ${wsUrl}. ` +
+            `Kemungkinan: (1) reverse proxy ${this.baseUrl} tidak forward WS Upgrade, ` +
+            `(2) endpoint WS /v2/updates ada di host/port berbeda dari REST, ` +
+            `(3) Canton participant node tidak enable WS. ` +
+            `Akan OFF setelah ${MAX_RECONNECTS} attempts; poller existing jadi fallback.`,
+        );
+      } else if (httpStatus === '401' || httpStatus === '403') {
+        this.logger.error(
+          `CantonUpdates: WS ${httpStatus} — auth ditolak. Cek LEDGER_CLIENT_ID/SECRET & token scope daml_ledger_api.`,
+        );
+      } else {
+        this.logger.error(`CantonUpdates: WS error: ${err.message}`);
+      }
       // close handler akan trigger reconnect; kalau error terjadi pre-open tanpa
       // close event, force reconnect di sini sebagai safety net.
       if (
