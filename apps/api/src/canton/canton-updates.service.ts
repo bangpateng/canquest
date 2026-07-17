@@ -369,11 +369,13 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     this.teardownConnection();
 
     try {
-      // Auth: AsyncAPI spec JSON Ledger API memakai `httpApiKeyAuth` dengan
-      // `name: Sec-WebSocket-Protocol` → JWT dikirim sebagai NILAI subprotocol
-      // kedua (BUKAN sebagai WS message). Library `ws` menerimanya sebagai array,
-      // dan akan set header `Sec-WebSocket-Protocol: daml.ws.auth, jwt.token.<jwt>`.
-      this.ws = new WebSocket(wsUrl, ['daml.ws.auth', `jwt.token.${token}`]);
+      // Subprotocol `daml.ws.auth` WAJIB agar participant menegosiasikan WS
+      // dengan mode auth. Tapi token TIDAK dilewat via subprotocol — reverse
+      // proxy (Cloudflare/nginx) sering hanya meneruskan nilai pertama
+      // Sec-WebSocket-Protocol, menjatuhkan `jwt.token.<jwt>` → participant
+      // tidak pernah menerima token → UNAUTHENTICATED (grpcCodeValue:16).
+      // Token dikirim sebagai WS message pertama (frame WS tidak disentuh proxy).
+      this.ws = new WebSocket(wsUrl, 'daml.ws.auth');
     } catch (err) {
       if (this.closedByUser) return;
       this.scheduleReconnect(err as Error);
@@ -398,16 +400,19 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       }
       if (this.closedByUser || this.ws !== ws) return;
 
-      // Auth sudah di handshake (subprotocol). Kirim subscription request:
-      // beginExclusive + filter + verbose. Tiap update akan datang sebagai
-      // WS message terpisah.
+      // Auth via WS message (bukan subprotocol) — frame WS tidak disentuh
+      // reverse proxy (Cloudflare/nginx hanya meneruskan nilai pertama
+      // Sec-WebSocket-Protocol). Format: `jwt.token.<jwt>`.
+      ws.send(`jwt.token.${token}`);
+
+      // Kirim subscription request SETELAH auth: beginExclusive (integer) +
+      // filter + verbose. Tiap update akan datang sebagai WS message terpisah.
       const requestBody = {
         beginExclusive,
         filter: { filtersByParty },
         verbose: true,
       };
-      // DIAGNOSTIK: log payload persis yang dikirim (sebelum close 1000
-      // terjadi lagi). Lepas ini bisa dihapus setelah root cause ketemu.
+      // DIAGNOSTIK: log payload persis yang dikirim. Lepas setelah stabil.
       this.logger.log(
         `CantonUpdates: WS sending subscription request: ${JSON.stringify(requestBody)}`,
       );
