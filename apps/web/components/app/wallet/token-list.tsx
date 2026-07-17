@@ -86,7 +86,7 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
   const {
     status: lockStatus,
     refreshWithRetries: refreshLock,
-  } = useLockStatus({ enabled: hasWallet, pollIntervalMs: 120_000 });
+  } = useLockStatus({ enabled: hasWallet });
   const [lockOpen, setLockOpen] = useState(false);
 
   // CC price: cari "Amulet::admin" di price map (setelah swapTokens load).

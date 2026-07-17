@@ -1,6 +1,6 @@
 /**
  * CantonUpdatesService — realtime consumer untuk Canton JSON Ledger API
- * `/v2/updates` stream.
+ * `/v2/updates` stream via WebSocket native.
  *
  * INSTEAD OF polling semua user setiap 30s (CcInboundSyncService) atau offer
  * setiap 60s (OfferReconcilerService), service ini subscribe ke stream ledger
@@ -8,22 +8,22 @@
  * perubahan ke handler yang sesuai.
  *
  * ── Transport ────────────────────────────────────────────────────────────────
- * Canton `/v2/updates` BUKAN classic WebSocket upgrade. Ini HTTP/2 server-
- * streaming: satu POST request, server kirim multiple JSON object di response
- * body seiring ledger event terjadi. Kita baca body sebagai stream (reader)
- * dan parse setiap line/chunk.
+ * Canton `/v2/updates` adalah WebSocket native (bukan HTTP long-poll). Klien
+ * konek ke `wss://ledger.../v2/updates` dengan subprotocol `daml.ws.auth`,
+ * lalu kirim auth payload (`jwt.token.<token>`) sebagai message pertama,
+ * diikuti subscription request JSON (beginExclusive + filter). Server stream
+ * tiap update sebagai satu pesan JSON.
  *
- * Diverifikasi support: Canton participant node v3.5.6 di
- * api-ledger-canquest.nodelab.my.id (curl test return 400 INVALID_ARGUMENT
- * untuk filter kosong = endpoint ADA & memproses request).
+ * Diverifikasi: Canton participant node v3.5.6 mendukung WS native di
+ * `/v2/updates` (lihat asyncapi reference json-api-asyncapi-reference).
  *
  * ── Auth ─────────────────────────────────────────────────────────────────────
  * Single admin token via KeycloakTokenService.getAdminLedgerToken(). Token ini
  * punya CanReadAs untuk SEMUA party (di-grant saat allocateParty). Jadi 1 stream
  * cukup untuk pantau semua user. Tidak perlu token per-user.
  *
- * Token expire ~5 menit → refresh otomatis tiap reconnect (KeycloakTokenService
- * cache + pre-emptive refresh 60s sebelum expiry).
+ * Token expire ~5 menit → KeycloakTokenService cache + pre-emptive refresh 60s
+ * sebelum expiry. Saat reconnect, token baru otomatis di-fetch (selalu segar).
  *
  * ── Resilience ───────────────────────────────────────────────────────────────
  * - Reconnect exponential backoff (1s, 2s, 4s, 8s, 16s, max 10 attempts)
@@ -37,6 +37,7 @@
  * Setiap update event di-dispatch via rxjs Subject ke handler:
  *   - CreatedEvent Amulet/transfer → balance change → CcInboundSyncService
  *   - Archive TransferInstruction → offer settlement → OfferReconcilerService
+ *   - CreatedEvent untuk party receiver → push SSE `offer:new` ke frontend
  * Handler WAJIB idempoten (bisa dipanggil berkali-kali untuk event sama tanpa
  * double-effect) karena stream bisa re-deliver saat reconnect dari checkpoint.
  */
@@ -44,9 +45,11 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Subject } from 'rxjs';
+import WebSocket from 'ws';
 
 import { KeycloakTokenService } from '../auth/keycloak-token.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { CantonLedgerService } from './canton-ledger.service';
 import { CcInboundSyncService } from './cc-inbound-sync.service';
 import { OfferReconcilerService } from './offer-reconciler.service';
@@ -55,8 +58,8 @@ import { OfferReconcilerService } from './offer-reconciler.service';
  * Canton `/v2/updates` event shape (subset of fields kita pakai).
  * Lihat: https://docs.canton.network/reference/canton/json-api/ledger-endpoints
  *
- * Tiap "update" = satu top-level object yang server kirim di stream body.
- * Berisi array of "events" (CreatedEvent | ArchivedEvent).
+ * Tiap "update" = satu top-level object yang server kirim sebagai satu WS
+ * message. Berisi array of "events" (CreatedEvent | ArchivedEvent).
  */
 interface CantonUpdate {
   /** Ledger offset string/number untuk checkpoint. */
@@ -99,13 +102,6 @@ export interface CantonUpdateEvent {
 
 const MAX_RECONNECTS = 10;
 const RECONNECT_BASE_DELAY_MS = 1_000;
-/**
- * HTTP POST /v2/updates BUKAN long-lived stream — ini one-shot request yang
- * return semua update yang ada lalu EOF. Untuk polling real-time, tunggu
- * interval ini sebelum re-request (long-poll pattern). Default 10s supaya
- * near-realtime tanpa overload ledger API.
- */
-const POLL_INTERVAL_MS = 10_000;
 
 @Injectable()
 export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
@@ -116,9 +112,13 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
   private lastOffset: string | null = null;
   private closedByUser = false;
   private reconnectAttempts = 0;
-  private streamController: AbortController | null = null;
-  /** Timer untuk long-poll re-request (POLL_INTERVAL_MS setelah EOF). */
-  private pollTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Active WebSocket connection to Canton /v2/updates. */
+  private ws: WebSocket | null = null;
+  /** Inflight timer to detect connect timeout (stuck handshake). */
+  private connectTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Track party yang punya created event sejak flush reconcile terakhir —
+   *  dipakai untuk emit SSE `offer:new` ke potential receiver (idempoten). */
+  private readonly partyHadCreated = new Set<string>();
 
   /** Stream of parsed update events. Handler subscribe di onModuleInit. */
   readonly updates$ = new Subject<CantonUpdateEvent>();
@@ -128,6 +128,7 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     private readonly keycloak: KeycloakTokenService,
     private readonly ledger: CantonLedgerService,
     private readonly prisma: PrismaService,
+    private readonly realtime: RealtimeService,
     private readonly inboundSync: CcInboundSyncService,
     private readonly offerReconciler: OfferReconcilerService,
   ) {
@@ -158,7 +159,7 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
 
     // Non-blocking: jangan block app startup kalau ledger lambat connect.
     void this.startStream();
-    this.logger.log('CantonUpdatesService ENABLED — subscribing to /v2/updates.');
+    this.logger.log('CantonUpdatesService ENABLED — connecting WS to /v2/updates.');
   }
 
   /** Debounce timers per party — coalesce burst jadi 1 reconcile call. */
@@ -168,10 +169,13 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
   /**
    * Dispatch satu update event: untuk tiap party yang visible, schedule
    * reconcile (balance + offer) dengan debounce. Non-blocking, error-tolerant.
+   * Catat party yang punya created event untuk emit SSE `offer:new`.
    */
   private dispatchUpdate(ev: CantonUpdateEvent): void {
+    const hasCreated = ev.created.length > 0;
     for (const partyId of ev.parties) {
       if (!partyId || partyId.startsWith('canquest:')) continue;
+      if (hasCreated) this.partyHadCreated.add(partyId);
       this.schedulePartyReconcile(partyId);
     }
   }
@@ -187,8 +191,14 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     this.partyDebounce.set(partyId, timer);
   }
 
-  /** Reconcile satu party: balance sync + offer settlement. Non-fatal. */
+  /**
+   * Reconcile satu party: balance sync + offer settlement, lalu emit SSE
+   * `offer:new` kalau ada created event sejak flush terakhir. Non-fatal.
+   */
   private async reconcileParty(partyId: string): Promise<void> {
+    const hadCreated = this.partyHadCreated.has(partyId);
+    this.partyHadCreated.delete(partyId);
+
     try {
       // Balance sync (mirror CcInboundSyncService.syncUser logic).
       await this.inboundSync.reconcileParty(partyId);
@@ -205,25 +215,79 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
         `CantonUpdates: offer reconcile failed for ${partyId.slice(0, 12)}…: ${String(err)}`,
       );
     }
+
+    // Push SSE `offer:new` ke user (potential receiver) supaya frontend
+    // invalidate list offer. Idempoten — frontend refetch & filter, tidak
+    // duplikat. Hanya kirim kalau ada created event untuk party ini.
+    if (hadCreated) {
+      try {
+        const user = await this.prisma.user.findFirst({
+          where: { cantonPartyId: partyId },
+          select: { id: true },
+        });
+        if (user) {
+          this.realtime.push(user.id, 'offer:new', null);
+        }
+      } catch (err) {
+        this.logger.warn(
+          `CantonUpdates: offer:new push failed for ${partyId.slice(0, 12)}…: ${String(err)}`,
+        );
+      }
+    }
   }
 
   onModuleDestroy(): void {
     this.closedByUser = true;
-    if (this.pollTimer) {
-      clearTimeout(this.pollTimer);
-      this.pollTimer = null;
-    }
-    this.streamController?.abort();
+    this.teardownConnection();
+    // Bersihkan debounce timers.
+    for (const t of this.partyDebounce.values()) clearTimeout(t);
+    this.partyDebounce.clear();
     this.updates$.complete();
   }
 
+  /** Tutup WS aktif + clear connect timer. Aman dipanggil berulang. */
+  private teardownConnection(): void {
+    if (this.connectTimer) {
+      clearTimeout(this.connectTimer);
+      this.connectTimer = null;
+    }
+    if (this.ws) {
+      // Lepas listener dulu supaya close() tidak trigger reconnect.
+      this.ws.removeAllListeners();
+      try {
+        if (
+          this.ws.readyState === WebSocket.OPEN ||
+          this.ws.readyState === WebSocket.CONNECTING
+        ) {
+          this.ws.close(1000, 'shutdown');
+        }
+      } catch {
+        /* ignore */
+      }
+      this.ws = null;
+    }
+  }
+
   /**
-   * Start streaming subscription. Idempoten — aman dipanggil berkali-kali
+   * Build WS URL dari LEDGER_API_URL: https:// → wss://, http:// → ws://,
+   * trailing slash sudah di-strip di constructor. Append `/v2/updates`.
+   */
+  private buildWsUrl(): string {
+    let url = this.baseUrl;
+    if (url.startsWith('https://')) url = 'wss://' + url.slice('https://'.length);
+    else if (url.startsWith('http://')) url = 'ws://' + url.slice('http://'.length);
+    return `${url}/v2/updates`;
+  }
+
+  /**
+   * Start WebSocket subscription. Idempoten — aman dipanggil berkali-kali
    * (reconnect). Ambil offset terakhir (atau dari ledgerEnd kalau belum ada).
    *
    * Filter: WAJIB pakai filtersByParty dengan list party eksplisit (dari DB).
    * filtersForAnyParty butuh permission CanReadAsAnyParty yang admin token
    * TIDAK punya → HTTP 403 (verified). filter kosong → HTTP 400 (verified).
+   *
+   * Auth: subprotocol `daml.ws.auth`, lalu message pertama `jwt.token.<jwt>`.
    */
   private async startStream(): Promise<void> {
     this.closedByUser = false;
@@ -286,109 +350,124 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       };
     }
 
-    this.streamController = new AbortController();
-    const body = {
-      // Offset flat di top-level (match fetchTransactionUpdates shape line 3253).
-      beginExclusive,
-      filter: { filtersByParty },
-      verbose: true,
-    };
-
-    // `/v2/updates` POST adalah long-poll: response EOF lalu kita re-request
-    // tiap POLL_INTERVAL_MS (10s). Jadi startStream() dipanggil tiap 10s walau
-    // tidak ada event. Bedakan reconnect-after-error (layak log) dari poll
-    // normal (verbose saja) supaya log tidak misleading tiap 10 detik.
     const wasReconnecting = this.reconnectAttempts > 0;
+    const wsUrl = this.buildWsUrl();
     if (wasReconnecting) {
       this.logger.log(
-        `CantonUpdates: RECONNECT — subscribing for ${partyIds.length} party(ies) from offset=${beginExclusive}`,
+        `CantonUpdates: RECONNECT — WS ${wsUrl} for ${partyIds.length} party(ies) from offset=${beginExclusive}`,
       );
     } else {
       this.logger.verbose(
-        `CantonUpdates: poll — subscribing for ${partyIds.length} party(ies) from offset=${beginExclusive}`,
+        `CantonUpdates: connecting WS ${wsUrl} for ${partyIds.length} party(ies) from offset=${beginExclusive}`,
       );
     }
 
+    // Tutup koneksi lama (defensive — tidak boleh ada 2 WS bersamaan).
+    this.teardownConnection();
+
     try {
-      const res = await fetch(`${this.baseUrl}/v2/updates`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify(body),
-        signal: this.streamController.signal,
-      });
-
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`);
-      }
-      if (!res.body) {
-        throw new Error('No response body stream');
-      }
-
-      this.reconnectAttempts = 0;
-      // Hanya log "connected" level info saat reconnect setelah error; poll
-      // normal tiap 10s pakai verbose (misleading kalau muncul tiap 10s).
-      if (wasReconnecting) {
-        this.logger.log('CantonUpdates: stream connected (recovered).');
-      } else {
-        this.logger.verbose('CantonUpdates: stream connected (poll).');
-      }
-      await this.consumeStream(res.body);
+      // Subprotocol `daml.ws.auth` adalah handshake auth DAML/Canton standard.
+      // Token payload dikirim sebagai message pertama setelah open.
+      this.ws = new WebSocket(wsUrl, 'daml.ws.auth');
     } catch (err) {
       if (this.closedByUser) return;
       this.scheduleReconnect(err as Error);
+      return;
     }
+
+    // Connect timeout: kalau handshake hang (network black-hole), abort lalu
+    // reconnect. 15s cukup untuk handshake TLS+WS.
+    this.connectTimer = setTimeout(() => {
+      if (this.ws && this.ws.readyState !== WebSocket.OPEN) {
+        this.logger.warn('CantonUpdates: WS connect timeout (15s) — reconnecting.');
+        this.ws.emit('error', new Error('connect timeout'));
+      }
+    }, 15_000);
+
+    const ws = this.ws;
+
+    ws.on('open', () => {
+      if (this.connectTimer) {
+        clearTimeout(this.connectTimer);
+        this.connectTimer = null;
+      }
+      if (this.closedByUser || this.ws !== ws) return;
+
+      // 1) Auth payload — standard DAML WS auth: kirim token sebagai message
+      //    pertama, format `jwt.token.<jwt>`.
+      ws.send(`jwt.token.${token}`);
+      // 2) Subscription request — beginExclusive + filter + verbose.
+      ws.send(
+        JSON.stringify({
+          beginExclusive,
+          filter: { filtersByParty },
+          verbose: true,
+        }),
+      );
+
+      this.reconnectAttempts = 0;
+      if (wasReconnecting) {
+        this.logger.log('CantonUpdates: WS connected (recovered).');
+      } else {
+        this.logger.log('CantonUpdates: WS connected.');
+      }
+    });
+
+    // Tiap WS message = satu JSON object update. Parse langsung (tidak perlu
+    // split newline seperti pada HTTP long-poll NDJSON).
+    ws.on('message', (data: unknown) => {
+      if (this.closedByUser || this.ws !== ws) return;
+      const text =
+        typeof data === 'string'
+          ? data
+          : Array.isArray(data)
+            ? Buffer.concat(data as Buffer[]).toString('utf8')
+            : (data as Buffer).toString('utf8');
+      this.handleStreamLine(text);
+    });
+
+    ws.on('close', (code: number, reason: Buffer) => {
+      if (this.closedByUser) return;
+      if (this.ws !== ws) return; // old socket, ignore
+      if (this.connectTimer) {
+        clearTimeout(this.connectTimer);
+        this.connectTimer = null;
+      }
+      const reasonText = reason?.toString('utf8').slice(0, 200) ?? '';
+      this.logger.warn(
+        `CantonUpdates: WS closed code=${code} reason=${reasonText}`,
+      );
+      // 1008 = policy violation (sering: token expired/auth rejected). Reconnect
+      // akan fetch token baru dari KeycloakTokenService.
+      this.scheduleReconnect(new Error(`WS close code=${code}`));
+    });
+
+    ws.on('error', (err: Error) => {
+      if (this.closedByUser) return;
+      if (this.ws !== ws) return; // old socket, ignore
+      if (this.connectTimer) {
+        clearTimeout(this.connectTimer);
+        this.connectTimer = null;
+      }
+      this.logger.error(`CantonUpdates: WS error: ${err.message}`);
+      // close handler akan trigger reconnect; kalau error terjadi pre-open tanpa
+      // close event, force reconnect di sini sebagai safety net.
+      if (
+        ws.readyState === WebSocket.CLOSED ||
+        ws.readyState === WebSocket.CLOSING
+      ) {
+        this.scheduleReconnect(err);
+      }
+    });
   }
 
-  /**
-   * Baca response body sebagai stream chunk-by-chunk, parse JSON object per
-   * baris (newline-delimited). Canton `/v2/updates/stream` mengirim object
-   * JSON terpisah oleh newline.
-   */
-  private async consumeStream(body: ReadableStream<Uint8Array>): Promise<void> {
-    const reader = body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    try {
-      while (!this.closedByUser) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        // Canton stream = NDJSON (newline-delimited JSON objects).
-        let newlineIdx: number;
-        while ((newlineIdx = buffer.indexOf('\n')) >= 0) {
-          const line = buffer.slice(0, newlineIdx).trim();
-          buffer = buffer.slice(newlineIdx + 1);
-          if (!line) continue;
-          this.handleStreamLine(line);
-        }
-      }
-    } finally {
-      reader.releaseLock();
-      // HTTP /v2/updates = one-shot request (bukan long-lived stream). Response
-      // EOF setelah return semua update yang ada. Tunggu POLL_INTERVAL_MS lalu
-      // re-request (long-poll pattern) — BUKAN reconnect instan (akan hot loop).
-      if (!this.closedByUser) {
-        this.pollTimer = setTimeout(() => {
-          if (!this.closedByUser) void this.startStream();
-        }, POLL_INTERVAL_MS);
-      }
-    }
-  }
-
-  /** Parse satu JSON line dari stream, update offset, dispatch event. */
+  /** Parse satu JSON message dari WS, update offset, dispatch event. */
   private handleStreamLine(line: string): void {
     let update: CantonUpdate;
     try {
       update = JSON.parse(line) as CantonUpdate;
     } catch {
-      this.logger.debug(`CantonUpdates: skip non-JSON line (${line.length} bytes)`);
+      this.logger.debug(`CantonUpdates: skip non-JSON message (${line.length} bytes)`);
       return;
     }
 
@@ -506,6 +585,4 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       if (!this.closedByUser) void this.startStream();
     }, delay);
   }
-
-
 }

@@ -77,8 +77,9 @@ export function receiverDisplay(offer: OfferItem): string {
  * Hook: fetch & re-fetch pending incoming offers.
  * Dipakai oleh badge tombol "Offers" (count) dan modal Offers.
  *
- * Di-back TanStack Query: poll 30s via refetchInterval (silent, no flicker),
- * refetch saat tab focus/reconnect, cache global di-dedup.
+ * Di-back TanStack Query: real-time via SSE `offer:new` (lihat use-realtime.ts),
+ * refetch saat tab focus/reconnect, cache global di-dedup. Tidak ada polling —
+ * SSE dari CantonUpdatesService (WebSocket native) yang trigger invalidate.
  *
  * refresh() mengembalikan jumlah offer setelah fetch — berguna untuk
  * pemilik tombol (wallet-actions) agar tahu apakah perlu menampilkan badge.
@@ -101,8 +102,9 @@ export function useOffers() {
         return { items: [], error: "Network error. Check your connection." };
       }
     },
+    // refetchInterval dihapus: real-time via SSE `offer:new` (lihat use-realtime.ts).
+    // staleTime 30s sebagai safety-net jika SSE sempat putus.
     staleTime: 30_000,
-    refetchInterval: 30_000,
     refetchOnWindowFocus: true,
     retry: 2,
   });
@@ -163,8 +165,9 @@ export function useSentOffers() {
         return { items: [], error: "Network error. Check your connection." };
       }
     },
+    // refetchInterval dihapus: real-time via SSE `offer:new` (lihat use-realtime.ts).
+    // staleTime 30s sebagai safety-net jika SSE sempat putus.
     staleTime: 30_000,
-    refetchInterval: 30_000,
     refetchOnWindowFocus: true,
     retry: 2,
   });
