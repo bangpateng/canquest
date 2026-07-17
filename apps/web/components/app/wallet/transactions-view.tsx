@@ -325,6 +325,19 @@ function txDisplayTitle(tx: TxItem, fallback: string): string {
   return fallback;
 }
 
+/** Label description untuk Activity. Description user/memo diprioritaskan;
+ *  bila kosong, fallback ke label generik per-tipe (mis. "Sent CC" / "Sent USDCx").
+ *  Dipakai supaya kolom description tidak kosong saat sender tidak isi memo. */
+function txDisplayDescription(
+  tx: TxItem,
+  fallback: string,
+): string {
+  const d = tx.description?.trim() ?? "";
+  if (d) return d;
+  // Memo kosong → label generik (bukan party-id mentah).
+  return fallback;
+}
+
 type TransactionsViewProps = {
   variant?: "page" | "embedded";
   pageSize?: number;
@@ -539,7 +552,7 @@ export function TransactionsView({
                           <AmountText tx={tx} />
                         </td>
                         <td className="max-w-[12rem] truncate px-5 py-3.5 sm:px-6 sm:py-4 text-sm font-medium text-slate-400">
-                           {tx.description}
+                           {txDisplayDescription(tx, t(TX_TYPE_KEYS[tx.type]))}
                          </td>
                          <td className="px-5 py-3.5 sm:px-6 sm:py-4">
                           {(() => {
@@ -601,7 +614,7 @@ export function TransactionsView({
                            <TxStatusBadge status={tx.status} />
                          </p>
                          <p className="mt-0.5 truncate text-xs font-medium text-slate-400">
-                           {tx.description}
+                           {txDisplayDescription(tx, t(TX_TYPE_KEYS[tx.type]))}
                          </p>
                          <p className="mt-0.5 text-xs font-medium text-slate-500">{date}</p>
                        </div>

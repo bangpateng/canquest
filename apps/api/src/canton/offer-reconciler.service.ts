@@ -5,6 +5,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { CantonLedgerService } from './canton-ledger.service';
@@ -19,14 +20,34 @@ import { CantonLedgerService } from './canton-ledger.service';
  *   backend CanQuest TIDAK tahu → row sender tetap PENDING forever.
  *
  * SOLUTION:
- *   Background poll (default 60s) cek row CcTransaction dengan status=PENDING +
- *   transferInstructionCid. Kalau cid sudah hilang dari on-chain (offer consumed):
- *     - Cek delta balance sender: turun = ACCEPT (CC pergi) → COMPLETED
- *     - Cek delta balance sender: naik/kembali = REJECT (CC kembali) → REJECTED
+ *   Background poll (default 60s) cek row PENDING + transferInstructionCid di
+ *   KEDUA tabel (CcTransaction untuk CC, TokenTransaction untuk USDCx/dll).
+ *   Kalau cid sudah hilang dari on-chain (offer consumed):
+ *     - Cek delta balance sender: turun = ACCEPT (asset pergi) → COMPLETED
+ *     - Cek delta balance sender: naik/kembali = REJECT (asset kembali) → REJECTED
  *   Flip status + push realtime notif ke sender.
+ *
+ *   CC delta pakai getLedgerBalance (saldo Amulet).
+ *   Token delta pakai queryTokenHoldings (saldo per-instrument).
  *
  * Idempoten: hanya proses row PENDING. Row sudah COMPLETED/REJECTED di-skip.
  */
+
+/** Row PENDING generik — meng-cover CcTransaction + TokenTransaction. */
+type ReconcileRow = {
+  table: 'cc' | 'token';
+  id: string;
+  userId: string;
+  transferInstructionCid: string;
+  // CC-only (null untuk token):
+  amountMicroCc: bigint | null;
+  // Token-only (null untuk CC):
+  amount: Decimal | null;
+  instrumentId: string | null;
+  instrumentAdmin: string | null;
+  description: string;
+};
+
 @Injectable()
 export class OfferReconcilerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(OfferReconcilerService.name);
@@ -69,34 +90,79 @@ export class OfferReconcilerService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Satu cycle reconcile. Cari semua row PENDING + cid, cek on-chain, flip kalau perlu.
-   * Idempoten — aman dipanggil berulang. Non-fatal: error satu row tidak crash app.
+   * Satu cycle reconcile. Cari semua row PENDING + cid (CC & token), cek on-chain,
+   * flip kalau perlu. Idempoten — aman dipanggil berulang. Non-fatal: error satu
+   * row tidak crash app.
    */
   private async runOnce(): Promise<void> {
     if (this.running) return;
     this.running = true;
     try {
-      // Cari semua row PENDING dengan transferInstructionCid (offer yang belum settled).
-      const pendingRowsRaw = await this.prisma.ccTransaction.findMany({
-        where: {
-          status: 'PENDING',
-          transferInstructionCid: { not: null },
-        },
-        select: {
-          id: true,
-          userId: true,
-          transferInstructionCid: true,
-          ledgerTxId: true,
-          amountMicroCc: true,
-          description: true,
-        },
-        take: 50, // cap per cycle supaya tidak overload ledger API
-      });
-      // Filter null di runtime (TS tidak narrow otomatis walau where not: null).
-      const pendingRows = pendingRowsRaw.filter(
-        (r): r is typeof r & { transferInstructionCid: string } =>
-          !!r.transferInstructionCid,
-      );
+      // Scan KEDUA tabel PENDING dengan cid (offer yang belum settled).
+      const [pendingCc, pendingToken] = await Promise.all([
+        this.prisma.ccTransaction.findMany({
+          where: {
+            status: 'PENDING',
+            transferInstructionCid: { not: null },
+          },
+          select: {
+            id: true,
+            userId: true,
+            transferInstructionCid: true,
+            amountMicroCc: true,
+            description: true,
+          },
+          take: 50, // cap per cycle supaya tidak overload ledger API
+        }),
+        this.prisma.tokenTransaction.findMany({
+          where: {
+            status: 'PENDING',
+            transferInstructionCid: { not: null },
+          },
+          select: {
+            id: true,
+            userId: true,
+            transferInstructionCid: true,
+            amount: true,
+            instrumentId: true,
+            instrumentAdmin: true,
+            description: true,
+          },
+          take: 50,
+        }),
+      ]);
+
+      // Merge jadi union ReconcileRow (filter null cid di runtime — TS tidak narrow
+      // otomatis walau where not: null).
+      const pendingRows: ReconcileRow[] = [];
+      for (const r of pendingCc) {
+        if (!r.transferInstructionCid) continue;
+        pendingRows.push({
+          table: 'cc',
+          id: r.id,
+          userId: r.userId,
+          transferInstructionCid: r.transferInstructionCid,
+          amountMicroCc: r.amountMicroCc,
+          amount: null,
+          instrumentId: null,
+          instrumentAdmin: null,
+          description: r.description,
+        });
+      }
+      for (const r of pendingToken) {
+        if (!r.transferInstructionCid) continue;
+        pendingRows.push({
+          table: 'token',
+          id: r.id,
+          userId: r.userId,
+          transferInstructionCid: r.transferInstructionCid,
+          amountMicroCc: null,
+          amount: r.amount,
+          instrumentId: r.instrumentId,
+          instrumentAdmin: r.instrumentAdmin,
+          description: r.description ?? '',
+        });
+      }
 
       if (pendingRows.length === 0) return;
       this.logger.debug(
@@ -104,7 +170,7 @@ export class OfferReconcilerService implements OnModuleInit, OnModuleDestroy {
       );
 
       // Group by userId supaya efisien (1 query on-chain per user, bukan per row).
-      const byUser = new Map<string, typeof pendingRows>();
+      const byUser = new Map<string, ReconcileRow[]>();
       for (const row of pendingRows) {
         const arr = byUser.get(row.userId) ?? [];
         arr.push(row);
@@ -143,38 +209,90 @@ export class OfferReconcilerService implements OnModuleInit, OnModuleDestroy {
       });
       if (!user) return false; // party tidak punya user (mis. system wallet)
 
-      const pendingRowsRaw = await this.prisma.ccTransaction.findMany({
-        where: {
-          userId: user.id,
-          status: 'PENDING',
-          transferInstructionCid: { not: null },
-        },
-        select: {
-          id: true,
-          userId: true,
-          transferInstructionCid: true,
-          ledgerTxId: true,
-          amountMicroCc: true,
-          description: true,
-        },
-      });
-      const pendingRows = pendingRowsRaw.filter(
-        (r): r is typeof r & { transferInstructionCid: string } =>
-          !!r.transferInstructionCid,
-      );
+      const [pendingCcRaw, pendingTokenRaw] = await Promise.all([
+        this.prisma.ccTransaction.findMany({
+          where: {
+            userId: user.id,
+            status: 'PENDING',
+            transferInstructionCid: { not: null },
+          },
+          select: {
+            id: true,
+            userId: true,
+            transferInstructionCid: true,
+            amountMicroCc: true,
+            description: true,
+          },
+        }),
+        this.prisma.tokenTransaction.findMany({
+          where: {
+            userId: user.id,
+            status: 'PENDING',
+            transferInstructionCid: { not: null },
+          },
+          select: {
+            id: true,
+            userId: true,
+            transferInstructionCid: true,
+            amount: true,
+            instrumentId: true,
+            instrumentAdmin: true,
+            description: true,
+          },
+        }),
+      ]);
+
+      const pendingRows: ReconcileRow[] = [];
+      for (const r of pendingCcRaw) {
+        if (!r.transferInstructionCid) continue;
+        pendingRows.push({
+          table: 'cc',
+          id: r.id,
+          userId: r.userId,
+          transferInstructionCid: r.transferInstructionCid,
+          amountMicroCc: r.amountMicroCc,
+          amount: null,
+          instrumentId: null,
+          instrumentAdmin: null,
+          description: r.description,
+        });
+      }
+      for (const r of pendingTokenRaw) {
+        if (!r.transferInstructionCid) continue;
+        pendingRows.push({
+          table: 'token',
+          id: r.id,
+          userId: r.userId,
+          transferInstructionCid: r.transferInstructionCid,
+          amountMicroCc: null,
+          amount: r.amount,
+          instrumentId: r.instrumentId,
+          instrumentAdmin: r.instrumentAdmin,
+          description: r.description ?? '',
+        });
+      }
       if (pendingRows.length === 0) return false;
 
       const countBefore = pendingRows.length;
       await this.reconcileUser(user.id, pendingRows);
-      // Re-check untuk lihat apakah ada yang berubah status.
-      const afterSettle = await this.prisma.ccTransaction.count({
-        where: {
-          userId: user.id,
-          status: 'PENDING',
-          transferInstructionCid: { not: null },
-        },
-      });
-      return afterSettle < countBefore;
+      // Re-check untuk lihat apakah ada yang berubah status (CC + token).
+      const [afterCc, afterToken] = await Promise.all([
+        this.prisma.ccTransaction.count({
+          where: {
+            userId: user.id,
+            status: 'PENDING',
+            transferInstructionCid: { not: null },
+          },
+        }),
+        this.prisma.tokenTransaction.count({
+          where: {
+            userId: user.id,
+            status: 'PENDING',
+            transferInstructionCid: { not: null },
+          },
+        }),
+      ]);
+      return afterCc + afterToken < countBefore;
     } catch (err) {
       this.logger.warn(
         `Offer reconciler: reconcileParty(${partyId.slice(0, 12)}…) failed: ${String(err)}`,
@@ -184,12 +302,15 @@ export class OfferReconcilerService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Reconcile semua offer PENDING milik satu user.
-   * Query on-chain 1x untuk sender party, lalu cek cid setiap row.
+   * Reconcile semua offer PENDING milik satu user (CC + token).
+   * Query offer aktif on-chain 1x untuk sender party (mencakup CC & token),
+   * lalu cek cid setiap row. Delta-detection berbeda per tabel:
+   *   - CC: getLedgerBalance (saldo Amulet)
+   *   - token: queryTokenHoldings per distinct instrumentId
    */
   private async reconcileUser(
     userId: string,
-    rows: { id: string; userId: string; transferInstructionCid: string; ledgerTxId: string | null; amountMicroCc: bigint; description: string }[],
+    rows: ReconcileRow[],
   ): Promise<void> {
     // Ambil partyId sender dari user.
     const user = await this.prisma.user.findUnique({
@@ -200,97 +321,287 @@ export class OfferReconcilerService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    // Query offer aktif on-chain milik sender (1 call untuk semua cid).
+    // Query offer aktif on-chain milik sender (1 call untuk semua cid, CC+token).
     const activeOffers = await this.ledger.queryPendingOffers(user.cantonPartyId);
     const activeCids = new Set(activeOffers.map((o) => o.contractId));
 
-    // Cek db balance SEBELUM reconcile — untuk deteksi delta (accept vs reject).
-    const balanceBefore = await this.prisma.ccBalance.findUnique({
-      where: { userId },
-      select: { balanceMicroCc: true },
-    });
+    const ccRows = rows.filter((r) => r.table === 'cc');
+    const tokenRows = rows.filter((r) => r.table === 'token');
 
-    // Refresh on-chain balance supaya kita tau posisi terkini (post accept/reject).
-    let onChainBalance: number | null = null;
-    try {
-      onChainBalance = await this.ledger.getLedgerBalance(user.cantonPartyId);
-    } catch (err) {
+    // ── CC path (existing logic) ──────────────────────────────────────────
+    if (ccRows.length > 0) {
+      // Cek db balance SEBELUM reconcile — untuk deteksi delta (accept vs reject).
+      const balanceBefore = await this.prisma.ccBalance.findUnique({
+        where: { userId },
+        select: { balanceMicroCc: true },
+      });
+
+      // Refresh on-chain balance supaya kita tau posisi terkini (post accept/reject).
+      let onChainBalance: number | null = null;
+      try {
+        onChainBalance = await this.ledger.getLedgerBalance(user.cantonPartyId);
+      } catch (err) {
+        this.logger.warn(
+          `Offer reconciler: getLedgerBalance failed for @${user.username}: ${String(err)}`,
+        );
+      }
+
+      for (const row of ccRows) {
+        if (activeCids.has(row.transferInstructionCid)) continue; // belum settled
+        await this.flipCcRow({
+          row,
+          username: user.username ?? '',
+          balanceBefore,
+          onChainBalance,
+          userId,
+        });
+        // Balance berubah setelah row pertama di-flip → refresh agar row
+        // berikutnya tidak pakai delta baseline yang basi.
+        if (onChainBalance !== null) {
+          try {
+            onChainBalance = await this.ledger.getLedgerBalance(user.cantonPartyId);
+          } catch {
+            /* keep last known */
+          }
+        }
+      }
+    }
+
+    // ── Token path (BARU) ─────────────────────────────────────────────────
+    if (tokenRows.length > 0) {
+      // Group by instrumentId+admin supaya 1 query on-chain per distinct token.
+      const byInstrument = new Map<string, ReconcileRow[]>();
+      for (const row of tokenRows) {
+        const key = `${row.instrumentId ?? ''}::${row.instrumentAdmin ?? ''}`;
+        const arr = byInstrument.get(key) ?? [];
+        arr.push(row);
+        byInstrument.set(key, arr);
+      }
+
+      for (const [, instrRows] of byInstrument) {
+        const instrumentId = instrRows[0].instrumentId;
+        const instrumentAdmin = instrRows[0].instrumentAdmin;
+        if (!instrumentId || !instrumentAdmin) continue;
+
+        // Snapshot before dari CantexTokenBalance (per userId+instrument).
+        const balanceBefore = await this.prisma.cantexTokenBalance.findUnique({
+          where: {
+            userId_instrumentId_instrumentAdmin: {
+              userId,
+              instrumentId,
+              instrumentAdmin,
+            },
+          },
+          select: { balance: true },
+        });
+
+        // Refresh on-chain token holdings (posisi terkini post accept/reject).
+        let onChainHoldings: number | null = null;
+        try {
+          const holdings = await this.ledger.queryTokenHoldings(
+            user.cantonPartyId,
+            instrumentId,
+            instrumentAdmin,
+          );
+          onChainHoldings = holdings.reduce(
+            (sum, h) => sum + Number(h.amount ?? '0'),
+            0,
+          );
+        } catch (err) {
+          this.logger.warn(
+            `Offer reconciler: queryTokenHoldings failed for @${user.username} ${instrumentId}: ${String(err)}`,
+          );
+        }
+
+        for (const row of instrRows) {
+          if (activeCids.has(row.transferInstructionCid)) continue; // belum settled
+          await this.flipTokenRow({
+            row,
+            username: user.username ?? '',
+            instrumentId,
+            instrumentAdmin,
+            balanceBefore: balanceBefore?.balance ?? null,
+            onChainHoldings,
+            userId,
+          });
+          // Refresh holdings supaya row berikutnya pakai baseline segar.
+          if (onChainHoldings !== null) {
+            try {
+              const holdings = await this.ledger.queryTokenHoldings(
+                user.cantonPartyId,
+                instrumentId,
+                instrumentAdmin,
+              );
+              onChainHoldings = holdings.reduce(
+                (sum, h) => sum + Number(h.amount ?? '0'),
+                0,
+              );
+            } catch {
+              /* keep last known */
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /** Flip satu CC row PENDING → COMPLETED/REJECTED via delta saldo Amulet. */
+  private async flipCcRow(params: {
+    row: ReconcileRow;
+    username: string;
+    balanceBefore: { balanceMicroCc: bigint } | null;
+    onChainBalance: number | null;
+    userId: string;
+  }): Promise<void> {
+    const { row, username, balanceBefore, onChainBalance, userId } = params;
+    const cid = row.transferInstructionCid;
+    const amountMicro = row.amountMicroCc ?? 0n;
+    const amountCc = Number(amountMicro) / 1_000_000;
+
+    // Bedakan via delta balance:
+    //   - balance sender TURUN dari snapshot = ACCEPT (CC pergi ke receiver)
+    //   - balance sender NAIK / tetap = REJECT (CC kembali / memang belum keluar)
+    let newStatus: 'COMPLETED' | 'REJECTED';
+    if (onChainBalance !== null && balanceBefore) {
+      const beforeCc = Number(balanceBefore.balanceMicroCc) / 1_000_000;
+      if (onChainBalance < beforeCc - amountCc * 0.5) {
+        newStatus = 'COMPLETED';
+      } else {
+        newStatus = 'REJECTED';
+      }
+    } else {
+      // Fallback kalau balance tidak bisa dibaca: asumsikan COMPLETED (lebih
+      // umum). Sender bisa manual correct kalau salah via support.
+      newStatus = 'COMPLETED';
       this.logger.warn(
-        `Offer reconciler: getLedgerBalance failed for @${user.username}: ${String(err)}`,
+        `Offer reconciler: balance unavailable for @${username} cid=${cid.slice(0, 16)}… — assuming COMPLETED (fallback)`,
       );
     }
 
-    for (const row of rows) {
-      const cid = row.transferInstructionCid;
-      // Kalau cid MASIH ada di on-chain → offer belum settled → skip.
-      if (activeCids.has(cid)) continue;
+    try {
+      const settledAt = newStatus === 'COMPLETED' ? new Date() : null;
+      await this.prisma.ccTransaction.update({
+        where: { id: row.id },
+        data: {
+          status: newStatus,
+          settledAt,
+          description: row.description.replace(/\s*\[pending[^\]]*\]\s*/i, ''),
+        },
+      });
+      this.logger.log(
+        `Offer reconciler: cid=${cid.slice(0, 16)}… @${username} ` +
+          `${amountCc} CC → ${newStatus} (settled externally)`,
+      );
 
-      // cid hilang → offer sudah consumed (accept atau reject di external wallet).
-      // Bedakan via delta balance:
-      //   - balance sender TURUN dari snapshot = ACCEPT (CC pergi ke receiver)
-      //   - balance sender NAIK / tetap = REJECT (CC kembali / memang belum keluar)
-      const amountCc = Number(row.amountMicroCc) / 1_000_000;
-      const amountMicroAbs =
-        row.amountMicroCc < 0n ? -row.amountMicroCc : row.amountMicroCc;
-      let newStatus: 'COMPLETED' | 'REJECTED';
-
-      if (onChainBalance !== null && balanceBefore) {
-        const beforeCc = Number(balanceBefore.balanceMicroCc) / 1_000_000;
-        // Hitung expected balance setelah accept = before - amount.
-        // Kalau on-chain < before → CC keluar → accept.
-        // Kalau on-chain >= before → CC kembali / tidak bergerak → reject.
-        if (onChainBalance < beforeCc - amountCc * 0.5) {
-          newStatus = 'COMPLETED';
-        } else {
-          newStatus = 'REJECTED';
-        }
-      } else {
-        // Fallback kalau balance tidak bisa dibaca: asumsikan COMPLETED (lebih
-        // umum). Sender bisa manual correct kalau salah via support.
-        newStatus = 'COMPLETED';
-        this.logger.warn(
-          `Offer reconciler: balance unavailable for @${user.username} cid=${cid.slice(0, 16)}… — assuming COMPLETED (fallback)`,
-        );
-      }
-
-      try {
-        const settledAt = newStatus === 'COMPLETED' ? new Date() : null;
-        await this.prisma.ccTransaction.update({
-          where: { id: row.id },
-          data: {
-            status: newStatus,
-            settledAt,
-            description: row.description.replace(
-              /\s*\[pending[^\]]*\]\s*/i,
-              '',
-            ),
-          },
-        });
-        this.logger.log(
-          `Offer reconciler: cid=${cid.slice(0, 16)}… @${user.username} ` +
-            `${amountCc} CC → ${newStatus} (settled externally)`,
-        );
-
-        // Update balance snapshot supaya konsisten.
-        if (onChainBalance !== null) {
-          const onChainMicro = BigInt(Math.round(onChainBalance * 1_000_000));
-          await this.prisma.ccBalance.upsert({
+      // Update balance snapshot supaya konsisten.
+      if (onChainBalance !== null) {
+        const onChainMicro = BigInt(Math.round(onChainBalance * 1_000_000));
+        await this.prisma.ccBalance
+          .upsert({
             where: { userId },
             create: { userId, balanceMicroCc: onChainMicro },
             update: { balanceMicroCc: onChainMicro },
-          }).catch(() => {});
-        }
-
-        // Push notif real-time ke sender supaya UI update live.
-        this.realtime.push(userId, 'transaction:new', { status: newStatus });
-        if (newStatus === 'COMPLETED') {
-          this.realtime.push(userId, 'balance:changed', null);
-        }
-      } catch (err) {
-        this.logger.warn(
-          `Offer reconciler: flip failed for cid=${cid.slice(0, 16)}… : ${String(err)}`,
-        );
+          })
+          .catch(() => {});
       }
+
+      // Push notif real-time ke sender supaya UI update live.
+      this.realtime.push(userId, 'transaction:new', { status: newStatus });
+      if (newStatus === 'COMPLETED') {
+        this.realtime.push(userId, 'balance:changed', null);
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Offer reconciler: flip failed for cid=${cid.slice(0, 16)}… : ${String(err)}`,
+      );
+    }
+  }
+
+  /** Flip satu token row PENDING → COMPLETED/REJECTED via delta saldo token. */
+  private async flipTokenRow(params: {
+    row: ReconcileRow;
+    username: string;
+    instrumentId: string;
+    instrumentAdmin: string;
+    balanceBefore: Decimal | null;
+    onChainHoldings: number | null;
+    userId: string;
+  }): Promise<void> {
+    const {
+      row,
+      username,
+      instrumentId,
+      instrumentAdmin,
+      balanceBefore,
+      onChainHoldings,
+      userId,
+    } = params;
+    const cid = row.transferInstructionCid;
+    const amountToken = row.amount ? Math.abs(Number(row.amount)) : 0;
+
+    // Bedakan via delta holdings (mirror CC path):
+    //   - holdings TURUN = ACCEPT (token pergi ke receiver) → COMPLETED
+    //   - holdings NAIK / tetap = REJECT (token kembali) → REJECTED
+    let newStatus: 'COMPLETED' | 'REJECTED';
+    if (onChainHoldings !== null && balanceBefore) {
+      const before = Number(balanceBefore);
+      if (onChainHoldings < before - amountToken * 0.5) {
+        newStatus = 'COMPLETED';
+      } else {
+        newStatus = 'REJECTED';
+      }
+    } else {
+      newStatus = 'COMPLETED';
+      this.logger.warn(
+        `Offer reconciler: token balance unavailable for @${username} ${instrumentId} cid=${cid.slice(0, 16)}… — assuming COMPLETED (fallback)`,
+      );
+    }
+
+    try {
+      const settledAt = newStatus === 'COMPLETED' ? new Date() : null;
+      await this.prisma.tokenTransaction.update({
+        where: { id: row.id },
+        data: {
+          status: newStatus,
+          // TokenTransaction tidak punya kolom settledAt — status saja.
+        },
+      });
+      this.logger.log(
+        `Offer reconciler: cid=${cid.slice(0, 16)}… @${username} ` +
+          `${amountToken} ${instrumentId} → ${newStatus} (settled externally)`,
+      );
+
+      // Update CantexTokenBalance snapshot supaya konsisten.
+      if (onChainHoldings !== null && Number.isFinite(onChainHoldings)) {
+        await this.prisma.cantexTokenBalance
+          .upsert({
+            where: {
+              userId_instrumentId_instrumentAdmin: {
+                userId,
+                instrumentId,
+                instrumentAdmin,
+              },
+            },
+            create: {
+              userId,
+              instrumentId,
+              instrumentAdmin,
+              balance: onChainHoldings,
+            },
+            update: { balance: onChainHoldings },
+          })
+          .catch(() => {});
+      }
+
+      // Push notif real-time ke sender supaya UI update live.
+      this.realtime.push(userId, 'transaction:new', { status: newStatus });
+      if (newStatus === 'COMPLETED') {
+        this.realtime.push(userId, 'balance:changed', null);
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Offer reconciler: flip failed for cid=${cid.slice(0, 16)}… : ${String(err)}`,
+      );
     }
   }
 }

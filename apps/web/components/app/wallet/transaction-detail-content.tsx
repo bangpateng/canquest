@@ -337,7 +337,7 @@ export function TransactionDetailContent({
               ) : detail.onChainSettled ? (
                 <>
                   <ShieldCheck className="h-4 w-4 shrink-0 text-green-500" />
-                  <span className="font-semibold">Settled</span>
+                  <span className="font-semibold">Completed</span>
                 </>
               ) : (
                 <span className="font-medium text-slate-400">Pending</span>

@@ -713,7 +713,10 @@ export class PartyController {
         recipientUsername = dbUser?.username?.toLowerCase() ?? username;
       }
 
-      const description = body.memo?.trim() || `Sent to ${recipientLabel}`;
+      // Description kosong kecuali user isi memo. UI Activity/notif fallback ke
+      // label generik ("Sent CC" / "Sent to {counterparty}") bila description
+      // kosong — jangan tampilkan party-id mentah ("Sent to c9f5172c…").
+      const description = body.memo?.trim() || '';
       const recipientDbUser = recipientUsername
         ? await this.users.findByUsernameInsensitive(recipientUsername)
         : null;
@@ -1292,9 +1295,8 @@ export class PartyController {
         recipientLabel = `@${username}`;
       }
 
-      const description =
-        body.memo?.trim() ||
-        `Sent ${amount} ${instrumentId} to ${recipientLabel}`;
+      // Description kosong kecuali user isi memo. UI fallback ke label generik.
+      const description = body.memo?.trim() || '';
 
       // ── Balance pre-check ON-CHAIN (sumber kebenaran untuk token non-CC) ──
       // CantexTokenBalance (DB) bisa drift (swap kredit DB walau on-chain gagal)
