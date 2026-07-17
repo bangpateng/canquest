@@ -2146,7 +2146,9 @@ export class CantonLedgerService {
       );
       total += effective;
     }
-    this.logger.debug(
+    // Hot path: getLedgerBalance dipanggil tiap poll sync (30s) & per-request
+    // balance. Turunkan ke verbose supaya tidak spam.
+    this.logger.verbose(
       `Balance Ledger: party=${partyId.split('::')[0]} = ${total} CC (${holdings.length} Amulets, round ${currentRound})`,
     );
     return total;
@@ -2332,7 +2334,9 @@ export class CantonLedgerService {
       holdings.push({ contractId: cid, amount: amountStr });
     }
 
-    this.logger.log(
+    // Hot path: queryTokenHoldings dipanggil per-request balance & per-poll sync.
+    // Log di level verbose supaya tidak spam di produksi (level info default).
+    this.logger.verbose(
       `Amulet ACS query (wildcard): party=${ownerPartyId.split('::')[0]} found ${holdings.length} holdings from ${allContracts.length} total contracts`,
     );
     return holdings;
@@ -2575,7 +2579,9 @@ export class CantonLedgerService {
       );
     }
 
-    this.logger.log(
+    // Hot path: queryTokenHoldings dipanggil per-request balance & per-poll sync.
+    // Log di level verbose supaya tidak spam di produksi (level info default).
+    this.logger.verbose(
       `Token ACS query: party=${ownerPartyId.split('::')[0]} instrument=${instrumentId} found ${holdings.length} holdings from ${allContracts.length} total contracts`,
     );
     return holdings;

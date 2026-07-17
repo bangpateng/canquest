@@ -294,9 +294,20 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       verbose: true,
     };
 
-    this.logger.log(
-      `CantonUpdates: subscribing for ${partyIds.length} party(ies) from offset=${beginExclusive}`,
-    );
+    // `/v2/updates` POST adalah long-poll: response EOF lalu kita re-request
+    // tiap POLL_INTERVAL_MS (10s). Jadi startStream() dipanggil tiap 10s walau
+    // tidak ada event. Bedakan reconnect-after-error (layak log) dari poll
+    // normal (verbose saja) supaya log tidak misleading tiap 10 detik.
+    const wasReconnecting = this.reconnectAttempts > 0;
+    if (wasReconnecting) {
+      this.logger.log(
+        `CantonUpdates: RECONNECT — subscribing for ${partyIds.length} party(ies) from offset=${beginExclusive}`,
+      );
+    } else {
+      this.logger.verbose(
+        `CantonUpdates: poll — subscribing for ${partyIds.length} party(ies) from offset=${beginExclusive}`,
+      );
+    }
 
     try {
       const res = await fetch(`${this.baseUrl}/v2/updates`, {
@@ -319,7 +330,13 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       }
 
       this.reconnectAttempts = 0;
-      this.logger.log('CantonUpdates: stream connected.');
+      // Hanya log "connected" level info saat reconnect setelah error; poll
+      // normal tiap 10s pakai verbose (misleading kalau muncul tiap 10s).
+      if (wasReconnecting) {
+        this.logger.log('CantonUpdates: stream connected (recovered).');
+      } else {
+        this.logger.verbose('CantonUpdates: stream connected (poll).');
+      }
       await this.consumeStream(res.body);
     } catch (err) {
       if (this.closedByUser) return;

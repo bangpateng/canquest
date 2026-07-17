@@ -2687,7 +2687,9 @@ export class PartyController {
                   (acc, h) => acc + Number(h.amount || 0),
                   0,
                 );
-                this.logger.debug(
+                // Hot path: dipanggil per-token per refresh wallet. Turunkan ke
+                // verbose supaya tidak spam di GET /party/balances.
+                this.logger.verbose(
                   `swapBalances on-chain: ${inst.id} → ${holdings.length} holdings, sum=${sum}`,
                 );
                 return { key, onChainAmount: sum };
