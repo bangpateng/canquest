@@ -401,15 +401,22 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       // Auth sudah di handshake (subprotocol). Kirim subscription request:
       // beginExclusive + filter + verbose. Tiap update akan datang sebagai
       // WS message terpisah.
-      ws.send(
-        JSON.stringify({
-          beginExclusive,
-          filter: { filtersByParty },
-          verbose: true,
-        }),
+      const requestBody = {
+        beginExclusive,
+        filter: { filtersByParty },
+        verbose: true,
+      };
+      // DIAGNOSTIK: log payload persis yang dikirim (sebelum close 1000
+      // terjadi lagi). Lepas ini bisa dihapus setelah root cause ketemu.
+      this.logger.log(
+        `CantonUpdates: WS sending subscription request: ${JSON.stringify(requestBody)}`,
       );
+      ws.send(JSON.stringify(requestBody));
 
-      this.reconnectAttempts = 0;
+      // Catatan: reconnectAttempts TIDAK di-reset di sini. Reset pindah ke
+      // handleStreamLine() saat event valid pertama masuk (tanda subscription
+      // benar-benar sukses). Kalau di-reset di open, close-1000 loop tidak
+      // pernah capai MAX_RECONNECTS → infinite reconnect.
       if (wasReconnecting) {
         this.logger.log('CantonUpdates: WS connected (recovered).');
       } else {
@@ -427,6 +434,11 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
           : Array.isArray(data)
             ? Buffer.concat(data as Buffer[]).toString('utf8')
             : (data as Buffer).toString('utf8');
+      // DIAGNOSTIK: log raw message (sebelum parse) supaya terlihat kalau
+      // server kirim error JSON sebelum close. Lepas ini bisa dihapus.
+      this.logger.log(
+        `CantonUpdates: WS message received (${text.length} bytes): ${text.slice(0, 500)}`,
+      );
       this.handleStreamLine(text);
     });
 
@@ -537,6 +549,10 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     }
 
     if (created.length === 0 && archived.length === 0) return;
+
+    // Event valid masuk = subscription sukses. Reset counter reconnect di sini
+    // (BUKAN di ws.on('open')) supaya close-1000 loop bisa capai MAX & berhenti.
+    this.reconnectAttempts = 0;
 
     this.updates$.next({
       offset: offset ?? this.lastOffset ?? 0,
