@@ -91,8 +91,9 @@ interface ArchivedEventShape {
 
 /** Event dispatch: satu unit kerja untuk handler konsumen. */
 export interface CantonUpdateEvent {
-  /** Ledger offset (string) — untuk checkpoint & resume. */
-  offset: string;
+  /** Ledger offset (number) — untuk checkpoint & resume.
+   *  Tipe number: AsyncAPI spec /v2/updates menolak string beginExclusive. */
+  offset: number;
   updateId?: string;
   /** Party yang visible event ini (readAs). */
   parties: string[];
@@ -108,8 +109,9 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(CantonUpdatesService.name);
   private readonly baseUrl: string;
   private readonly enabled: boolean;
-  /** Offset terakhir yang sukses diproses — resume dari sini saat reconnect. */
-  private lastOffset: string | null = null;
+  /** Offset terakhir yang sukses diproses — resume dari sini saat reconnect.
+   *  Tipe number: per AsyncAPI spec /v2/updates, beginExclusive WAJIB integer. */
+  private lastOffset: number | null = null;
   private closedByUser = false;
   private reconnectAttempts = 0;
   /** Active WebSocket connection to Canton /v2/updates. */
@@ -299,7 +301,8 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
 
     // Offset awal: kalau belum punya checkpoint, ambil dari ledgerEnd (offset
     // terbaru) supaya tidak replay seluruh history ledger (bisa jutaan event).
-    let beginExclusive: string | undefined;
+    // Tipe WAJIB number — AsyncAPI spec /v2/updates menolak string (close 1000).
+    let beginExclusive: number | undefined;
     if (!this.lastOffset) {
       try {
         beginExclusive = await this.fetchLedgerEnd();
@@ -435,8 +438,15 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
         this.connectTimer = null;
       }
       const reasonText = reason?.toString('utf8').slice(0, 200) ?? '';
+      // 1000 = normal closure. Kalau muncul tepat setelah connect (belum ada
+      // event masuk), tandanya participant menolak format subscription request.
+      // Cek: beginExclusive harus integer (bukan string), filter valid.
+      const suspectFormat = code === 1000 && this.reconnectAttempts === 0;
       this.logger.warn(
-        `CantonUpdates: WS closed code=${code} reason=${reasonText}`,
+        `CantonUpdates: WS closed code=${code} reason=${reasonText}` +
+          (suspectFormat
+            ? ` [SUSPECT: subscription request ditolak — cek format beginExclusive (wajib integer) & filter]`
+            : ''),
       );
       // 1008 = policy violation (sering: token expired/auth rejected). Reconnect
       // akan fetch token baru dari KeycloakTokenService.
@@ -494,11 +504,16 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
 
     // Update checkpoint SEBELUMLAH dispatch, supaya kalau crash mid-handle,
     // reconnect mulai dari offset yang sama (idempotensi di sisi handler).
-    const offset =
+    // Parse ke number — AsyncAPI spec /v2/updates menolak string beginExclusive.
+    const offsetRaw =
       typeof update.offset === 'string'
         ? update.offset
         : update.offset?.absolute;
-    if (offset) this.lastOffset = offset;
+    if (offsetRaw !== undefined && offsetRaw !== null) {
+      const offsetNum = Number(offsetRaw);
+      if (Number.isFinite(offsetNum)) this.lastOffset = offsetNum;
+    }
+    const offset = this.lastOffset;
 
     const created: CreatedEventShape[] = [];
     const archived: ArchivedEventShape[] = [];
@@ -524,7 +539,7 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     if (created.length === 0 && archived.length === 0) return;
 
     this.updates$.next({
-      offset: offset ?? this.lastOffset ?? '',
+      offset: offset ?? this.lastOffset ?? 0,
       updateId: update.updateId,
       parties: [...parties],
       created,
@@ -573,14 +588,18 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
    * sama (Keycloak admin token via authHeaders()).
    *
    * Response shape: { offset: <string|number> } (flat, BUKAN nested .absolute).
+   * Return number — per AsyncAPI spec /v2/updates, `beginExclusive` WAJIB
+   * integer (bukan string). Kirim string → server close WS code 1000.
    */
-  private async fetchLedgerEnd(): Promise<string | undefined> {
+  private async fetchLedgerEnd(): Promise<number | undefined> {
     try {
       const end = (await this.ledger.ledgerEnd()) as {
         offset?: string | number;
       };
       const off = end?.offset;
-      return off !== undefined && off !== null ? String(off) : undefined;
+      if (off === undefined || off === null) return undefined;
+      const num = typeof off === 'number' ? off : Number(off);
+      return Number.isFinite(num) ? num : undefined;
     } catch (err) {
       this.logger.warn(`CantonUpdates: ledgerEnd failed: ${String(err)}`);
       return undefined;
