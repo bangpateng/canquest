@@ -85,8 +85,8 @@ export function SettingsTwitterPanel({
       const desc = searchParams.get("error_desc");
       setError(
         desc
-          ? `X OAuth gagal: ${desc}`
-          : "X OAuth gagal atau dibatalkan. Coba lagi.",
+          ? `X OAuth failed: ${desc}`
+          : "X OAuth failed or was cancelled. Please try again.",
       );
       // Bersihkan query param.
       router.replace("/settings#twitter");
@@ -110,7 +110,7 @@ export function SettingsTwitterPanel({
     const supabase = getBrowserSupabase();
     if (!supabase) {
       setError(
-        "X OAuth belum dikonfigurasi (NEXT_PUBLIC_SUPABASE_URL / ANON_KEY). Hubungi admin.",
+        "X OAuth is not configured (NEXT_PUBLIC_SUPABASE_URL / ANON_KEY). Please contact support.",
       );
       return;
     }
@@ -127,7 +127,7 @@ export function SettingsTwitterPanel({
       });
       if (oauthErr) {
         setAwaitingOAuth(false);
-        setError(oauthErr.message || "Gagal memulai X OAuth.");
+        setError(oauthErr.message || "Failed to start X OAuth.");
       }
       // Kalau sukses, browser akan redirect ke Twitter → kembali ke callback.
       // State akan di-recover oleh useEffect [searchParams].
@@ -136,7 +136,7 @@ export function SettingsTwitterPanel({
       setError(
         err instanceof Error
           ? err.message
-          : "Network error saat start OAuth.",
+          : "Network error while starting OAuth.",
       );
     }
   }
@@ -176,13 +176,13 @@ export function SettingsTwitterPanel({
       }));
       setSuccess(
         migrated
-          ? `Re-verified @${name} via OAuth — migrasi sukses!`
+          ? `Re-verified @${name} via OAuth — migration successful!`
           : `Connected as @${name}`,
       );
       onConnected?.(name);
       void refresh();
     } catch {
-      setError("Network error — coba lagi.");
+      setError("Network error — please try again.");
     } finally {
       setBusy(false);
     }
@@ -216,14 +216,14 @@ export function SettingsTwitterPanel({
         {/* Status: API belum dikonfigurasi */}
         {status.apiConfigured === false ? (
           <p className="mb-4 rounded-xl border border-orange-500/20 bg-orange-500/5 px-5 py-4 text-sm font-medium text-orange-200">
-            Twitter verification (twitterapi.io) belum dikonfigurasi di server.
+            Twitter verification (twitterapi.io) is not configured on the server.
           </p>
         ) : null}
 
         {/* Status: OAuth belum dikonfigurasi di frontend */}
         {oauthConfigured === false ? (
           <p className="mb-4 rounded-xl border border-orange-500/20 bg-orange-500/5 px-5 py-4 text-sm font-medium text-orange-200">
-            X OAuth belum dikonfigurasi di frontend (NEXT_PUBLIC_SUPABASE_URL / ANON_KEY). Hubungi admin.
+            X OAuth is not configured on the frontend (NEXT_PUBLIC_SUPABASE_URL / ANON_KEY). Please contact support.
           </p>
         ) : null}
 
@@ -231,8 +231,8 @@ export function SettingsTwitterPanel({
         {!status.connected ? (
           <div className="space-y-4">
             <p className="text-sm text-slate-400">
-              Klik tombol di bawah untuk otorisasi CanQuest mengakses akun X Anda.
-              Anda akan diarahkan ke Twitter, lalu kembali otomatis ke sini.
+              Click the button below to authorize CanQuest to access your X account.
+              You will be redirected to Twitter, then returned here automatically.
             </p>
             <button
               type="button"
@@ -272,10 +272,10 @@ export function SettingsTwitterPanel({
                   @{status.username}
                 </p>
                 <p className="mt-2 text-sm text-amber-100/80">
-                  Akun X Anda terhubung sebelum kami mewajibkan OAuth resmi.
+                  Your X account was linked before we required official OAuth.
                   {deadlineStr
-                    ? ` Re-verify sebelum ${deadlineStr} agar tetap bisa menyelesaikan task X (follow/retweet).`
-                    : " Re-verify via OAuth sekarang untuk konfirmasi kepemilikan."}
+                    ? ` Re-verify before ${deadlineStr} to keep completing X tasks (follow/retweet).`
+                    : " Re-verify via OAuth now to confirm ownership."}
                 </p>
                 <button
                   type="button"
@@ -309,8 +309,8 @@ export function SettingsTwitterPanel({
                   @{status.username}
                 </p>
                 <p className="mt-2 text-sm text-red-100/80">
-                  Task X (follow/retweet) di-block sampai Anda re-verify via
-                  OAuth. Points & referral Anda tetap aman.
+                  X tasks (follow/retweet) are blocked until you re-verify via
+                  OAuth. Your points and referrals remain safe.
                 </p>
                 <button
                   type="button"

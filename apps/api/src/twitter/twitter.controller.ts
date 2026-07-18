@@ -190,7 +190,7 @@ export class TwitterController {
           `User ${req.user.userId} tried to re-verify as @${oauthHandle} but is registered as @${existingHandle}.`,
         );
         throw new ConflictException(
-          `Akun X yang Anda otorisasi (@${oauthHandle}) tidak cocok dengan username yang terdaftar sebelumnya (@${existingHandle}). Hubungi support jika butuh bantuan.`,
+          `The X account you authorized (@${oauthHandle}) does not match the username previously registered (@${existingHandle}). Please contact support if you need help.`,
         );
       }
     }

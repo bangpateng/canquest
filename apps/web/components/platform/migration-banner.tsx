@@ -35,9 +35,9 @@ export function MigrationBanner() {
             Action required: re-verify your X account
           </p>
           <p className="mt-1 text-amber-100/80">
-            Akun X Anda (@{me.twitterUsername}) terhubung sebelum kami
-            mewajibkan OAuth resmi. Re-verify via X untuk konfirmasi kepemilikan
-            dan hindari block pada task X (follow/retweet).
+            Your X account (@{me.twitterUsername}) was linked before we required
+            official OAuth. Re-verify via X to confirm ownership and avoid being
+            blocked from X tasks (follow/retweet).
           </p>
           <Link
             href="/settings#twitter"
