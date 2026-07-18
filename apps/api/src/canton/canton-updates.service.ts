@@ -9,9 +9,10 @@
  *
  * ── Transport ────────────────────────────────────────────────────────────────
  * Canton `/v2/updates` adalah WebSocket native (bukan HTTP long-poll). Klien
- * konek ke `wss://ledger.../v2/updates` dengan subprotocol `daml.ws.auth`, lalu
- * kirim subscription request JSON (beginExclusive + updateFormat). Server stream
- * tiap update sebagai satu pesan JSON.
+ * konek ke `wss://ledger.../v2/updates` dengan subprotocol `daml.ws.auth`
+ * (single-value penanda), kirim token via header `Authorization: Bearer <jwt>`,
+ * lalu kirim subscription request JSON (beginExclusive + updateFormat). Server
+ * stream tiap update sebagai satu pesan JSON.
  *
  * Diverifikasi: Canton participant node 3.5.6 (Splice docker image
  * canton-participant:0.6.10) mendukung WS native di `/v2/updates` (lihat
@@ -21,6 +22,15 @@
  * Service-account token via KeycloakTokenService.getAdminLedgerToken() —
  * client_credentials grant dengan client_id `validator-app-backend`
  * (UUID: fc334391-0f6a-456f-bb95-098b269e62b6).
+ *
+ * METHOD: Token via header `Authorization: Bearer <jwt>` (BUKAN subprotocol).
+ * Awalnya kami pakai `Sec-WebSocket-Protocol: daml.ws.auth, jwt.token.<jwt>`
+ * (2 nilai), tapi JWT Keycloak ~1000+ karakter di subprotocol bikin request
+ * di-strip/drop di salah satu layer proxy → participant log "missing JWT token"
+ * → UNAUTHENTICATED 16. Solusi: token pindah ke Authorization header (nginx
+ * forward via `proxy_set_header Authorization $http_authorization`), tetap
+ * kirim `daml.ws.auth` sebagai penanda subprotocol single-value. Terverifikasi
+ * via wscat test end-to-end (event OffsetCheckpoint masuk).
  *
  * RIGHTS: Service-account WAJIB punya `CanReadAsAnyParty` (super-reader, single
  * grant) — bukan `CanReadAs(p)` per-party. Tanpa ini, subscription gagal
@@ -320,8 +330,9 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
    * Filter: pakai filtersForAnyParty (wildcard) — baca semua party. Service-account
    * wajib punya CanReadAsAnyParty (grant via /v2/users/{uuid}/rights).
    *
-   * Auth: subprotocol `daml.ws.auth, jwt.token.<jwt>` (header Sec-WebSocket-Protocol).
-   * Token lifetime 300s → schedule proactive reconnect T-60s sebelum expiry.
+   * Auth: subprotocol `daml.ws.auth` (single-value) + header
+   * `Authorization: Bearer <jwt>`. Token lifetime 300s → schedule proactive
+   * reconnect T-60s sebelum expiry.
    */
   private async startStream(): Promise<void> {
     this.closedByUser = false;
@@ -374,13 +385,16 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     this.teardownConnection();
 
     try {
-      // Auth via subprotocol: `Sec-WebSocket-Protocol: daml.ws.auth, jwt.token.<jwt>`.
-      // Ini satu-satunya metode auth yang didukung participant (message-based
-      // auth → "Cannot decode frame" error; participant expect JSON, bukan token).
-      // WAJIB: nginx upstream harus forward header ini
-      // (proxy_set_header Sec-WebSocket-Protocol $http_sec_websocket_protocol),
-      // kalau tidak → token di-strip → UNAUTHENTICATED.
-      this.ws = new WebSocket(wsUrl, ['daml.ws.auth', `jwt.token.${token}`]);
+      // Auth via Authorization header (bukan subprotocol JWT). Awalnya kami pakai
+      // `Sec-WebSocket-Protocol: daml.ws.auth, jwt.token.<jwt>` (2 nilai), tapi
+      // JWT Keycloak ~1000+ karakter di subprotocol bikin request di-strip/drop
+      // di salah satu layer proxy (pekko-http / nginx / Cloudflare) → participant
+      // log "missing JWT token". Token via header Authorization (nginx forward
+      // via `proxy_set_header Authorization $http_authorization`) jalan terverifikasi.
+      // `daml.ws.auth` tetap wajib sebagai penanda subprotocol single-value.
+      this.ws = new WebSocket(wsUrl, ['daml.ws.auth'], {
+        headers: { Authorization: `Bearer ${token}` },
+      });
     } catch (err) {
       if (this.closedByUser) return;
       this.scheduleReconnect(err as Error);
@@ -405,9 +419,11 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       }
       if (this.closedByUser || this.ws !== ws) return;
 
-      // Auth sudah di handshake (subprotocol). Kirim subscription request:
+      // Auth sudah di handshake (header Authorization). Kirim subscription request:
       // updateFormat dengan filtersForAnyParty (wildcard — baca semua party).
       // Service-account wajib punya CanReadAsAnyParty (lihat header file).
+      // Enum transactionShape: TRANSACTION_SHAPE_LEDGER_EFFECTS (terverifikasi via
+      // wscat test — Canton error decode explicit daftar enum valid).
       const requestBody = {
         beginExclusive,
         updateFormat: {
@@ -420,7 +436,7 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
               },
               verbose: true,
             },
-            transactionShape: 'TRANSACTION_SHAPE_ACS_DELTA',
+            transactionShape: 'TRANSACTION_SHAPE_LEDGER_EFFECTS',
           },
         },
       };
