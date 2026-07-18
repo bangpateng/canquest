@@ -179,6 +179,18 @@ export class TwitterOAuthService {
   /**
    * Tukar authorization code dengan access token (PKCE).
    * Return access_token string.
+   *
+   * SPESIFIKASI TWITTER OAUTH 2.0 (Confidential Client):
+   *   - WAJIB kirim Basic Auth header: base64(client_id:client_secret).
+   *   - JANGAN masukkan client_id / client_secret di body (akan trigger 403
+   *     "Client Forbidden" karena dianggap conflicting auth).
+   *   - Body hanya: grant_type, code, redirect_uri, code_verifier.
+   *   - redirect_uri HARUS identik (huruf demi huruf) dengan yang dikirim
+   *     saat tahap authorize.
+   *   - Content-Type: application/x-www-form-urlencoded.
+   *
+   * Docs:
+   *   https://developer.twitter.com/en/docs/authentication/oauth-2-0/user-access-token
    */
   async exchangeCodeForToken(
     code: string,
@@ -190,15 +202,18 @@ export class TwitterOAuthService {
       );
     }
 
+    // Body — HANYA 4 field ini. client_id & client_secret di header.
+    const redirectUri = this.callbackUrl();
     const body = new URLSearchParams({
-      code,
       grant_type: 'authorization_code',
-      client_id: this.clientId(),
-      redirect_uri: this.callbackUrl(),
+      code,
+      redirect_uri: redirectUri,
       code_verifier: codeVerifier,
     });
 
-    // Twitter OAuth 2.0 butuh Basic Auth: client_id:client_secret base64.
+    // Basic Auth header: base64("client_id:client_secret").
+    // WAJIB untuk Confidential Client (server-side dengan secret). Twitter
+    // akan return 403 Client Forbidden kalau ini tidak dikirim dengan benar.
     const basicAuth = Buffer.from(
       `${this.clientId()}:${this.clientSecret()}`,
     ).toString('base64');
@@ -207,21 +222,38 @@ export class TwitterOAuthService {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
         Authorization: `Basic ${basicAuth}`,
       },
       body: body.toString(),
       signal: AbortSignal.timeout(20_000),
     });
 
-    const data = (await res.json().catch(() => ({}))) as TwitterTokenResponse &
-      { error?: string; error_description?: string };
+    const rawText = await res.text().catch(() => '');
+    let data: TwitterTokenResponse & {
+      error?: string;
+      error_description?: string;
+    } = {};
+    try {
+      data = rawText ? JSON.parse(rawText) : {};
+    } catch {
+      // JSON corrupt → biarkan kosong, pesan rawText dipakai untuk log.
+    }
 
     if (!res.ok || !data.access_token) {
+      const errCode = data.error?.trim() || '';
+      const errDesc = data.error_description?.trim() || '';
       const msg =
-        data.error_description?.trim() ||
-        data.error?.trim() ||
+        errDesc ||
+        errCode ||
+        rawText.slice(0, 200) ||
         `Twitter token exchange failed (HTTP ${res.status})`;
-      this.logger.warn(`Twitter token exchange failed: ${msg}`);
+      // Log verbose supaya debugging 403 / redirect_uri mismatch mudah.
+      this.logger.warn(
+        `Twitter token exchange failed: HTTP ${res.status} | ` +
+          `error=${errCode || '(none)'} | redirect_uri=${redirectUri} | ` +
+          `body=${rawText.slice(0, 300)}`,
+      );
       throw new UnauthorizedException(
         `Could not complete X authorization: ${msg}`,
       );
@@ -232,7 +264,10 @@ export class TwitterOAuthService {
 
   /**
    * Ambil profil user X (id, name, username) dengan access token.
-   * Tidak minta email — sesuai scope yang kita request.
+   * Tidak minta email — sesuai scope yang kita request di getAuthorizationUrl.
+   *
+   * Pakai Bearer access token dari exchangeCodeForToken (user-context, bukan
+   * App-only Bearer Token dari dashboard).
    */
   async getTwitterUser(accessToken: string): Promise<VerifiedXAccount> {
     const params = new URLSearchParams({
@@ -242,24 +277,35 @@ export class TwitterOAuthService {
     const res = await fetch(`${this.meUrl}?${params.toString()}`, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
       },
       signal: AbortSignal.timeout(20_000),
     });
 
-    const data = (await res.json().catch(() => ({}))) as TwitterMeResponse & {
+    const rawText = await res.text().catch(() => '');
+    let data: TwitterMeResponse & {
       error?: string;
       'error_description'?: string;
       detail?: string;
       title?: string;
-    };
+      type?: string;
+    } = {};
+    try {
+      data = rawText ? JSON.parse(rawText) : {};
+    } catch {
+      // JSON corrupt → biarkan kosong.
+    }
 
     if (!res.ok || !data.data) {
       const msg =
         data.title?.trim() ||
         data.detail?.trim() ||
         data.error?.trim() ||
+        rawText.slice(0, 200) ||
         `Twitter /users/me failed (HTTP ${res.status})`;
-      this.logger.warn(`Twitter get user failed: ${msg}`);
+      this.logger.warn(
+        `Twitter get user failed: HTTP ${res.status} | title=${data.title || '(none)'} | body=${rawText.slice(0, 300)}`,
+      );
       throw new UnauthorizedException(
         `Could not retrieve your X profile: ${msg}`,
       );
