@@ -21,11 +21,16 @@ export interface VerifiedXAccount {
 /**
  * Service untuk verifikasi token OAuth Twitter yang diterbitkan Supabase Auth.
  *
- * Supabase Auth Twitter provider: user klik "Connect X" di frontend →
- * `supabase.auth.signInWithOAuth({ provider: 'twitter' })` → user authorize di
+ * Supabase Auth Twitter/X provider: user klik "Connect X" di frontend →
+ * `supabase.auth.signInWithOAuth({ provider: 'x' })` → user authorize di
  * Twitter → Supabase buat session & minta access_token → frontend kirim token
  * itu ke backend → service ini verify via `supabase.auth.getUser(token)` untuk
  * dapat user identity yang sudah diverifikasi pemiliknya.
+ *
+ * Note: Supabase sekarang punya DUA provider Twitter terpisah:
+ *   - 'twitter' (OAuth 1.0a, deprecated)
+ *   - 'x'       (OAuth 2.0, recommended — yang kita pakai)
+ * Service ini accept keduanya untuk safety.
  *
  * Ini menggantikan alur input teks manual (di mana user bisa masukin username
  * siapapun selama belum dipakai user lain).
@@ -89,7 +94,8 @@ export class TwitterOAuthService {
     const appMeta = (user.app_metadata ?? {}) as Record<string, unknown>;
     const userMeta = (user.user_metadata ?? {}) as Record<string, unknown>;
 
-    // Pastikan provider = twitter atau x (Supabase bisa "twitter"; "x" sebagai alias future-proof).
+    // Pastikan provider = twitter atau x.
+    // 'twitter' = OAuth 1.0a legacy, 'x' = OAuth 2.0 baru (recommended).
     const provider = toMetaString(appMeta.provider);
     if (provider !== 'twitter' && provider !== 'x') {
       throw new UnauthorizedException(

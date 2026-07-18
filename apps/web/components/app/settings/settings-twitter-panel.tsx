@@ -118,8 +118,11 @@ export function SettingsTwitterPanel({
     try {
       const origin = window.location.origin;
       const redirectTo = `${origin}/api/twitter/oauth/callback`;
+      // Provider id: 'x' = new OAuth 2.0 provider (recommended).
+      // 'twitter' = legacy OAuth 1.0a (deprecated). Supabase dashboard sekarang
+      // menampilkan dua-duanya terpisah — gunakan 'x' untuk yang baru.
       const { error: oauthErr } = await supabase.auth.signInWithOAuth({
-        provider: "twitter",
+        provider: "x",
         options: {
           redirectTo,
           // PKCE flow (default di supabase-js v2) → exchange code di callback route.
