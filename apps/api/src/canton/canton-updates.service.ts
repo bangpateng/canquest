@@ -4,29 +4,44 @@
  *
  * INSTEAD OF polling semua user setiap 30s (CcInboundSyncService) atau offer
  * setiap 60s (OfferReconcilerService), service ini subscribe ke stream ledger
- * SATU kali dengan token admin (CanReadAs semua party) lalu dispatch event
+ * SATU kali dengan token admin (CanReadAsAnyParty) lalu dispatch event
  * perubahan ke handler yang sesuai.
  *
  * ── Transport ────────────────────────────────────────────────────────────────
  * Canton `/v2/updates` adalah WebSocket native (bukan HTTP long-poll). Klien
- * konek ke `wss://ledger.../v2/updates` dengan subprotocol `daml.ws.auth`,
- * lalu kirim auth payload (`jwt.token.<token>`) sebagai message pertama,
- * diikuti subscription request JSON (beginExclusive + filter). Server stream
+ * konek ke `wss://ledger.../v2/updates` dengan subprotocol `daml.ws.auth`, lalu
+ * kirim subscription request JSON (beginExclusive + updateFormat). Server stream
  * tiap update sebagai satu pesan JSON.
  *
- * Diverifikasi: Canton participant node v3.5.6 mendukung WS native di
- * `/v2/updates` (lihat asyncapi reference json-api-asyncapi-reference).
+ * Diverifikasi: Canton participant node 3.5.6 (Splice docker image
+ * canton-participant:0.6.10) mendukung WS native di `/v2/updates` (lihat
+ * AsyncAPI reference json-api-asyncapi-reference).
  *
  * ── Auth ─────────────────────────────────────────────────────────────────────
- * Single admin token via KeycloakTokenService.getAdminLedgerToken(). Token ini
- * punya CanReadAs untuk SEMUA party (di-grant saat allocateParty). Jadi 1 stream
- * cukup untuk pantau semua user. Tidak perlu token per-user.
+ * Service-account token via KeycloakTokenService.getAdminLedgerToken() —
+ * client_credentials grant dengan client_id `validator-app-backend`
+ * (UUID: fc334391-0f6a-456f-bb95-098b269e62b6).
  *
- * Token expire ~5 menit → KeycloakTokenService cache + pre-emptive refresh 60s
- * sebelum expiry. Saat reconnect, token baru otomatis di-fetch (selalu segar).
+ * RIGHTS: Service-account WAJIB punya `CanReadAsAnyParty` (super-reader, single
+ * grant) — bukan `CanReadAs(p)` per-party. Tanpa ini, subscription gagal
+ * `PERMISSION_DENIED`. Grant via POST /v2/users/{uuid}/rights. Note: ParticipantAdmin
+ * TIDAK implisit CanReadAsAnyParty (orthogonal rights, terverifikasi via docs).
+ *
+ * Token expire ~5 menit (Keycloak default 300s). Canton validate token per-RPC
+ * di stream → tanpa proactive reconnect, semua request gagal ACCESS_TOKEN_EXPIRED.
+ * Service ini schedule reconnect timer pada T-60s sebelum token expiry (decode
+ * `exp` JWT sendiri, self-contained — tidak modifikasi KeycloakTokenService).
+ *
+ * ── Subscription ─────────────────────────────────────────────────────────────
+ * Pakai `filtersForAnyParty` (wildcard) — tidak perlu tahu party ID user di
+ * subscribe time. User party baru otomatis ter-monitor tanpa re-subscribe.
+ * Routing per-event dilakukan di handleStreamLine() via field `witnessParties`
+ * (pre-compute Canton) → lookup user di DB → dispatch SSE.
  *
  * ── Resilience ───────────────────────────────────────────────────────────────
- * - Reconnect exponential backoff (1s, 2s, 4s, 8s, 16s, max 10 attempts)
+ * - Proactive reconnect (scheduled timer, ~240s cycle = 300s token - 60s lead)
+ * - Reactive reconnect exponential backoff (1s, 2s, 4s, 8s, 16s, max 10 attempts)
+ *   untuk kasus network drop / close 1008.
  * - Offset tracking: simpan offset terakhir, resume dari situ saat reconnect
  *   (event tidak hilang, tidak duplikat — offset bersifat exclusive begin)
  * - Feature flag CANTON_UPDATES_WS_ENABLED (default false — harus di-enable
@@ -80,6 +95,9 @@ interface CreatedEventShape {
   createArgument: Record<string, unknown>;
   signatories?: string[];
   observers?: string[];
+  /** Parties yang visible event ini (pre-compute Canton). Prioritas utama
+   *  untuk routing dispatch — fallback ke signatories/observers bila kosong. */
+  witnessParties?: string[];
 }
 
 interface ArchivedEventShape {
@@ -103,6 +121,11 @@ export interface CantonUpdateEvent {
 
 const MAX_RECONNECTS = 10;
 const RECONNECT_BASE_DELAY_MS = 1_000;
+/** Buffer waktu sebelum token expire untuk trigger proactive reconnect.
+ *  Token Keycloak lifetime 300s → reconnect scheduled pada T-60s. */
+const TOKEN_REFRESH_LEAD_MS = 60_000;
+/** Fallback reconnect delay bila exp claim JWT tidak terbaca (240s = 300s - 60s). */
+const DEFAULT_RECONNECT_DELAY_MS = 240_000;
 
 @Injectable()
 export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
@@ -118,6 +141,10 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
   private ws: WebSocket | null = null;
   /** Inflight timer to detect connect timeout (stuck handshake). */
   private connectTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Timer proactive reconnect sebelum token expiry. Canton validate token
+   *  per-RPC di stream WS — tanpa reconnect, semua request gagal ACCESS_TOKEN_EXPIRED
+   *  setelah token mati. Timer ini tutup + buka ulang WS dengan token baru. */
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   /** Track party yang punya created event sejak flush reconcile terakhir —
    *  dipakai untuk emit SSE `offer:new` ke potential receiver (idempoten). */
   private readonly partyHadCreated = new Set<string>();
@@ -247,11 +274,16 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     this.updates$.complete();
   }
 
-  /** Tutup WS aktif + clear connect timer. Aman dipanggil berulang. */
+  /** Tutup WS aktif + clear connect timer + clear reconnect timer. Aman
+   *  dipanggil berulang. */
   private teardownConnection(): void {
     if (this.connectTimer) {
       clearTimeout(this.connectTimer);
       this.connectTimer = null;
+    }
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
     }
     if (this.ws) {
       // Lepas listener dulu supaya close() tidak trigger reconnect.
@@ -285,11 +317,11 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
    * Start WebSocket subscription. Idempoten — aman dipanggil berkali-kali
    * (reconnect). Ambil offset terakhir (atau dari ledgerEnd kalau belum ada).
    *
-   * Filter: WAJIB pakai filtersByParty dengan list party eksplisit (dari DB).
-   * filtersForAnyParty butuh permission CanReadAsAnyParty yang admin token
-   * TIDAK punya → HTTP 403 (verified). filter kosong → HTTP 400 (verified).
+   * Filter: pakai filtersForAnyParty (wildcard) — baca semua party. Service-account
+   * wajib punya CanReadAsAnyParty (grant via /v2/users/{uuid}/rights).
    *
-   * Auth: subprotocol `daml.ws.auth`, lalu message pertama `jwt.token.<jwt>`.
+   * Auth: subprotocol `daml.ws.auth, jwt.token.<jwt>` (header Sec-WebSocket-Protocol).
+   * Token lifetime 300s → schedule proactive reconnect T-60s sebelum expiry.
    */
   private async startStream(): Promise<void> {
     this.closedByUser = false;
@@ -321,47 +353,20 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       beginExclusive = this.lastOffset;
     }
 
-    // Load list party user dari DB (refresh tiap connect supaya user baru
-    // langsung masuk). Skip placeholder (canquest:...) dan party kosong.
-    const partyIds = await this.loadUserParties();
-    if (partyIds.length === 0) {
-      // Tidak ada user dengan wallet real → tidak ada yang dimonitor. Retry
-      // 60s (bukan exponential — kondisi ini bisa berubah saat user register).
-      this.logger.log(
-        'CantonUpdates: no user parties yet, retrying in 60s...',
-      );
-      setTimeout(() => {
-        if (!this.closedByUser) void this.startStream();
-      }, 60_000);
-      return;
-    }
-
-    // Build filtersByParty map: { partyId: { cumulative: [WildcardFilter] } }
-    // WildcardFilter per-party = semua template event untuk party itu.
-    const filtersByParty: Record<string, { cumulative: unknown[] }> = {};
-    for (const p of partyIds) {
-      filtersByParty[p] = {
-        cumulative: [
-          {
-            identifierFilter: {
-              WildcardFilter: {
-                value: { includeCreatedEventBlob: false },
-              },
-            },
-          },
-        ],
-      };
-    }
-
+    // Subscription pakai filtersForAnyParty (wildcard) — tidak perlu enumerate
+    // party ID di subscribe time. Service-account wajib punya CanReadAsAnyParty
+    // (grant sekali ke UUID validator-app-backend). User party baru otomatis
+    // ter-monitor tanpa re-subscribe. Party routing per-event dilakukan di
+    // handleStreamLine() via witnessParties field + lookup DB.
     const wasReconnecting = this.reconnectAttempts > 0;
     const wsUrl = this.buildWsUrl();
     if (wasReconnecting) {
       this.logger.log(
-        `CantonUpdates: RECONNECT — WS ${wsUrl} for ${partyIds.length} party(ies) from offset=${beginExclusive}`,
+        `CantonUpdates: RECONNECT — WS ${wsUrl} (filtersForAnyParty) from offset=${beginExclusive}`,
       );
     } else {
       this.logger.verbose(
-        `CantonUpdates: connecting WS ${wsUrl} for ${partyIds.length} party(ies) from offset=${beginExclusive}`,
+        `CantonUpdates: connecting WS ${wsUrl} (filtersForAnyParty) from offset=${beginExclusive}`,
       );
     }
 
@@ -401,18 +406,35 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       if (this.closedByUser || this.ws !== ws) return;
 
       // Auth sudah di handshake (subprotocol). Kirim subscription request:
-      // beginExclusive (integer) + filter + verbose. Tiap update datang sebagai
-      // WS message terpisah.
+      // updateFormat dengan filtersForAnyParty (wildcard — baca semua party).
+      // Service-account wajib punya CanReadAsAnyParty (lihat header file).
       const requestBody = {
         beginExclusive,
-        filter: { filtersByParty },
-        verbose: true,
+        updateFormat: {
+          includeTransactions: {
+            eventFormat: {
+              filtersForAnyParty: {
+                cumulative: [
+                  { identifierFilter: { WildcardFilter: { value: {} } } },
+                ],
+              },
+              verbose: true,
+            },
+            transactionShape: 'TRANSACTION_SHAPE_ACS_DELTA',
+          },
+        },
       };
       // DIAGNOSTIK: log payload persis yang dikirim. Lepas setelah stabil.
       this.logger.log(
         `CantonUpdates: WS sending subscription request: ${JSON.stringify(requestBody)}`,
       );
       ws.send(JSON.stringify(requestBody));
+
+      // Schedule proactive reconnect sebelum token expiry. Token Keycloak
+      // lifetime 300s, Canton validate token per-RPC di stream → tanpa reconnect
+      // semua request gagal ACCESS_TOKEN_EXPIRED setelah token mati. Timer ini
+      // tutup + buka ulang WS dengan token baru pada T-60s sebelum expiry.
+      this.scheduleProactiveReconnect(token);
 
       // Catatan: reconnectAttempts TIDAK di-reset di sini. Reset pindah ke
       // handleStreamLine() saat event valid pertama masuk (tanda subscription
@@ -535,18 +557,23 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       else if ('archived' in ev && ev.archived) archived.push(ev.archived);
     }
 
-    // Kumpulkan party yang visible event ini (dari eventsByIds mapping bila ada,
-    // fallback ke signatories/observers/witnessParties).
+    // Kumpulkan party yang visible event ini untuk routing dispatch.
+    // Prioritas: witnessParties (pre-compute Canton, paling efisien & akurat
+    // untuk TRANSACTION_SHAPE_ACS_DELTA), fallback eventsByIds mapping,
+    // fallback terakhir signatories/observers.
     const parties = new Set<string>();
-    for (const ev of update.eventsByIds ?? []) {
-      if (ev?.party) parties.add(ev.party);
+    for (const c of created) c.witnessParties?.forEach((p) => parties.add(p));
+    for (const a of archived) a.witnessParties?.forEach((p) => parties.add(p));
+    if (parties.size === 0) {
+      for (const ev of update.eventsByIds ?? []) {
+        if (ev?.party) parties.add(ev.party);
+      }
     }
     if (parties.size === 0) {
       for (const c of created) {
         c.signatories?.forEach((p) => parties.add(p));
         c.observers?.forEach((p) => parties.add(p));
       }
-      for (const a of archived) a.witnessParties?.forEach((p) => parties.add(p));
     }
 
     if (created.length === 0 && archived.length === 0) return;
@@ -572,30 +599,6 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     } catch (err) {
       this.logger.error(`CantonUpdates: token fetch failed: ${String(err)}`);
       return null;
-    }
-  }
-
-  /**
-   * Ambil semua partyId user yang punya wallet real dari DB.
-   * Skip placeholder (canquest:...) dan party kosong.
-   * Dipakai untuk build filtersByParty map — refresh tiap connect supaya
-   * user baru langsung ter-monitor.
-   */
-  private async loadUserParties(): Promise<string[]> {
-    try {
-      const users = await this.prisma.user.findMany({
-        where: { cantonPartyId: { not: null } },
-        select: { cantonPartyId: true },
-      });
-      return users
-        .map((u) => u.cantonPartyId)
-        .filter(
-          (p): p is string =>
-            !!p && !p.startsWith('canquest:') && p.includes('::'),
-        );
-    } catch (err) {
-      this.logger.warn(`CantonUpdates: loadUserParties failed: ${String(err)}`);
-      return [];
     }
   }
 
@@ -640,6 +643,58 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     );
     setTimeout(() => {
       if (!this.closedByUser) void this.startStream();
+    }, delay);
+  }
+
+  /**
+   * Decode `exp` claim dari JWT (base64url payload). Tidak verify signature —
+   * signature sudah diverifikasi participant saat WS handshake. Return epoch ms
+   * atau null kalau gagal parse (JWT rusak / format tidak dikenal).
+   *
+   * Dipakai untuk schedule proactive reconnect: tanpa reconnect, Canton reject
+   * semua request di stream WS dengan ACCESS_TOKEN_EXPIRED setelah token mati.
+   */
+  private decodeJwtExpMs(jwt: string): number | null {
+    try {
+      const payload = jwt.split('.')[1];
+      if (!payload) return null;
+      const padded = payload + '='.repeat((4 - (payload.length % 4)) % 4);
+      const decoded = JSON.parse(
+        Buffer.from(padded.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'),
+      ) as { exp?: unknown };
+      return typeof decoded.exp === 'number' ? decoded.exp * 1000 : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Schedule proactive reconnect berdasarkan `exp` JWT. Canton validate token
+   * per-RPC di stream WS → reconnect wajib sebelum token expire.
+   *
+   * Delay = exp - now - TOKEN_REFRESH_LEAD_MS (default 60s buffer).
+   * Kalau exp tidak terbaca (JWT rusak), fallback ke DEFAULT_RECONNECT_DELAY_MS
+   * (240s = 300s lifetime - 60s lead). Minimum 30s supaya tidak reconnect storm.
+   */
+  private scheduleProactiveReconnect(token: string): void {
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    const expMs = this.decodeJwtExpMs(token);
+    const now = Date.now();
+    const delay = expMs
+      ? Math.max(expMs - now - TOKEN_REFRESH_LEAD_MS, 30_000)
+      : DEFAULT_RECONNECT_DELAY_MS;
+    this.logger.verbose(
+      `CantonUpdates: proactive reconnect scheduled in ${Math.round(delay / 1000)}s ` +
+        `(token exp ${expMs ? new Date(expMs).toISOString() : 'unknown'}).`,
+    );
+    this.reconnectTimer = setTimeout(() => {
+      if (this.closedByUser) return;
+      this.logger.log('CantonUpdates: proactive reconnect (token nearing expiry).');
+      // Tutup koneksi lama secara graceful → trigger reconnect dengan token baru.
+      // reconnectAttempts TIDAK di-increment di sini (ini planned reconnect,
+      // bukan failure). startStream() akan fetch token fresh dari Keycloak.
+      this.teardownConnection();
+      void this.startStream();
     }, delay);
   }
 }
