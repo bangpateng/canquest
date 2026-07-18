@@ -1,12 +1,11 @@
 import {
   BadRequestException,
-  Body,
   ConflictException,
   Controller,
-  Delete,
   Get,
   Logger,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -15,8 +14,10 @@ import type { Request } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import { PrismaService } from '../prisma/prisma.service';
 import { TwitterApiService } from './twitter-api.service';
-import { TwitterOAuthService } from './twitter-oauth.service';
-import { ConnectTwitterOAuthDto } from './dto/connect-twitter-oauth.dto';
+import {
+  TwitterOAuthService,
+  type VerifiedXAccount,
+} from './twitter-oauth.service';
 import { normalizeTwitterUsername } from './twitter-target.util';
 import { ReferralService } from '../users/referral.service';
 
@@ -66,7 +67,9 @@ export class TwitterController {
 
   /** Deadline migrasi (ISO date). Setelah ini, task X di-block untuk user !oauthVerified. */
   private migrationDeadline(): Date | null {
-    const raw = this.config.get<string>('TWITTER_OAUTH_MIGRATION_DEADLINE')?.trim();
+    const raw = this.config
+      .get<string>('TWITTER_OAUTH_MIGRATION_DEADLINE')
+      ?.trim();
     if (!raw) return null;
     const d = new Date(raw);
     return isNaN(d.getTime()) ? null : d;
@@ -100,7 +103,7 @@ export class TwitterController {
       connectedAt: user?.twitterConnectedAt?.toISOString() ?? null,
       avatarUrl: twitterAvatarUrl,
       apiConfigured: this.twitterApi.isConfigured(),
-      // BARU — info OAuth untuk UI.
+      // OAuth info untuk UI.
       oauthVerified: Boolean(user?.twitterOAuthVerified),
       oauthConfigured: this.twitterOAuth.isConfigured(),
       oauthMigrationDeadline: deadline ? deadline.toISOString() : null,
@@ -108,27 +111,50 @@ export class TwitterController {
   }
 
   /**
-   * Connect X via OAuth (Supabase Auth Twitter provider).
+   * Mulai OAuth flow — return URL otorisasi Twitter.
    *
-   * Body: { oauthAccessToken: string }  (BUKAN { username } lagi)
-   * Token ditarik dari session Supabase yang dibuat setelah user authorize di X.
-   *
-   * 3 mode (tergantung state user):
-   *   A. User BARU (twitterUsername NULL): link fresh, langsung verified.
-   *   B. User LAMA belum OAuth (twitterUsername set, oauthVerified=false):
-   *      - cocok handle → migrasi sukses (oauthVerified=true).
-   *      - tidak cocok → tolak (anti-swapping).
-   *   C. User LAMA sudah OAuth (oauthVerified=true): permanent lock.
+   * Frontend call ini saat user klik "Connect X", lalu redirect browser ke
+   * URL yang dikembalikan. State + codeVerifier disimpan di Redis oleh service.
    */
-  @Post('connect')
-  async connect(
+  @Get('auth-url')
+  async getAuthUrl(@Req() req: AuthedReq) {
+    if (!this.twitterOAuth.isConfigured()) {
+      throw new BadRequestException(
+        'Twitter OAuth is not configured on this server. Set TWITTER_CLIENT_ID, TWITTER_CLIENT_SECRET, and TWITTER_CALLBACK_URL.',
+      );
+    }
+    const result = await this.twitterOAuth.getAuthorizationUrl(req.user.userId);
+    return {
+      ok: true,
+      authorizationUrl: result.authorizationUrl,
+      state: result.state,
+    };
+  }
+
+  /**
+   * Callback OAuth — diterima dari Twitter setelah user authorize.
+   *
+   * Query: ?code=...&state=...
+   *
+   * Flow:
+   *   1. Consume state dari Redis → dapat { userId, codeVerifier }.
+   *      Kalau state invalid/expired → tolak (anti CSRF).
+   *   2. Exchange code + codeVerifier → access_token (PKCE).
+   *   3. GET /2/users/me dengan access_token → profil X terverifikasi.
+   *   4. Anti-sybil: cek twitterUserId unik di DB.
+   *   5. Permanent lock logic (user baru / migrasi cocok / migrasi beda).
+   *   6. Anti-bot umur akun via twitterapi.io.
+   *   7. Persist ke DB + complete referral.
+   */
+  @Get('callback')
+  async handleCallback(
     @Req() req: AuthedReq,
-    @Body() body: ConnectTwitterOAuthDto,
+    @Query('code') code: string | undefined,
+    @Query('state') state: string | undefined,
   ) {
     if (!this.twitterOAuth.isConfigured()) {
       throw new BadRequestException(
-        'Twitter OAuth (Supabase) is not configured on this server. ' +
-          'Set SUPABASE_URL and SUPABASE_ANON_KEY.',
+        'Twitter OAuth is not configured on this server.',
       );
     }
     if (!this.twitterApi.isConfigured()) {
@@ -136,11 +162,50 @@ export class TwitterController {
         'Twitter verification (twitterapi.io) is not configured on this server.',
       );
     }
+    if (!code || !state) {
+      throw new BadRequestException(
+        'Missing authorization code or state from Twitter.',
+      );
+    }
 
-    // STEP 1: Verifikasi token OAuth dari Supabase → identitas X terverifikasi pemiliknya.
-    const verified = await this.twitterOAuth.verifyOAuthToken(
-      body.oauthAccessToken,
+    // STEP 1: Consume state (one-shot). HARUS match userId yang login.
+    const statePayload = await this.twitterOAuth.consumeState(state);
+    if (!statePayload) {
+      throw new BadRequestException(
+        'OAuth state is invalid or expired. Please retry Connect X from Settings.',
+      );
+    }
+    // Defense-in-depth: state harus dimulai oleh user yang sama yang login.
+    // (Cegah user A mulai flow, lalu callback di-resolve ke sesi user B.)
+    if (statePayload.userId !== req.user.userId) {
+      this.logger.warn(
+        `OAuth state user mismatch: state.userId=${statePayload.userId} but req.user.userId=${req.user.userId}.`,
+      );
+      throw new BadRequestException(
+        'OAuth session mismatch. Please retry Connect X from Settings.',
+      );
+    }
+
+    // STEP 2: Exchange code → access_token.
+    const accessToken = await this.twitterOAuth.exchangeCodeForToken(
+      code,
+      statePayload.codeVerifier,
     );
+
+    // STEP 3: Get verified profile.
+    const verified = await this.twitterOAuth.getTwitterUser(accessToken);
+
+    return this.persistVerifiedXAccount(req.user.userId, verified);
+  }
+
+  /**
+   * Core logic persist — shared antar flow (sekarang cuma callback, tapi
+   * dipisah supaya mudah dites / dipakai ulang kalau ada flow lain).
+   */
+  private async persistVerifiedXAccount(
+    userId: string,
+    verified: VerifiedXAccount,
+  ) {
     const oauthHandle = normalizeTwitterUsername(verified.twitterUsername);
     if (!oauthHandle) {
       throw new BadRequestException(
@@ -148,11 +213,11 @@ export class TwitterController {
       );
     }
 
-    // STEP 2 (anti-sybil): pastikan twitterUserId dari OAuth belum dipakai user lain.
+    // ANTI-SYBIL: twitterUserId dari OAuth tidak boleh dipakai user lain.
     const existingByUserId = await this.prisma.user.findFirst({
       where: {
         twitterUserId: verified.twitterUserId,
-        NOT: { id: req.user.userId },
+        NOT: { id: userId },
       },
       select: { id: true },
     });
@@ -164,14 +229,14 @@ export class TwitterController {
 
     // Ambil user saat ini untuk evaluasi mode (baru / lama / lama-sudah-OAuth).
     const currentUser = await this.prisma.user.findUnique({
-      where: { id: req.user.userId },
+      where: { id: userId },
       select: {
         twitterUsername: true,
         twitterOAuthVerified: true,
       },
     });
 
-    // MODE C: User sudah verified → permanent lock (tidak bisa gonta-ganti).
+    // MODE C: User sudah verified → permanent lock.
     if (currentUser?.twitterOAuthVerified) {
       throw new ConflictException(
         'This account is permanently linked to an X handle and cannot be changed. Contact support if you need help.',
@@ -180,14 +245,14 @@ export class TwitterController {
 
     const isMigrationMode = Boolean(currentUser?.twitterUsername);
 
-    // MODE B: User lama (text-input) — handle OAuth HARUS cocok dengan handle existing.
+    // MODE B: User lama (text-input) — handle OAuth HARUS cocok.
     if (isMigrationMode) {
       const existingHandle = normalizeTwitterUsername(
         currentUser!.twitterUsername ?? '',
       );
       if (existingHandle !== oauthHandle) {
         this.logger.warn(
-          `User ${req.user.userId} tried to re-verify as @${oauthHandle} but is registered as @${existingHandle}.`,
+          `User ${userId} tried to re-verify as @${oauthHandle} but is registered as @${existingHandle}.`,
         );
         throw new ConflictException(
           `The X account you authorized (@${oauthHandle}) does not match the username previously registered (@${existingHandle}). Please contact support if you need help.`,
@@ -195,12 +260,11 @@ export class TwitterController {
       }
     }
 
-    // STEP 3 (anti-bot umur akun): fetch created_at via twitterapi.io.
+    // ANTI-BOT umur akun via twitterapi.io (fail-open kalau API error).
     let accountCreatedAt: Date | null = null;
     try {
       accountCreatedAt = await this.twitterApi.fetchAccountCreatedAt(oauthHandle);
     } catch (err) {
-      // Fail-open kalau twitterapi.io error (token dibakar, API down). Log & lanjut.
       this.logger.warn(
         `fetchAccountCreatedAt failed for @${oauthHandle}: ${(err as Error).message}. Skipping age check.`,
       );
@@ -217,69 +281,42 @@ export class TwitterController {
       }
     }
 
-    // STEP 4: fetch profile (avatar / displayName) supaya leaderboard tetap hydrated.
+    // Fetch profile via twitterapi.io (avatar / displayName).
     const profile = await this.twitterApi.fetchUserProfile(oauthHandle);
 
     const now = new Date();
     await this.prisma.user.update({
-      where: { id: req.user.userId },
+      where: { id: userId },
       data: {
         twitterUsername: oauthHandle,
         twitterUserId: verified.twitterUserId,
-        twitterAvatarUrl: profile.profileImageUrl ?? verified.avatarUrl,
+        twitterAvatarUrl: profile.profileImageUrl,
         twitterConnectedAt: now,
         twitterOAuthVerified: true,
         twitterOAuthVerifiedAt: now,
         ...(accountCreatedAt
           ? { twitterAccountCreatedAt: accountCreatedAt }
           : {}),
-        ...(profile.displayName || verified.displayName
-          ? { displayName: profile.displayName ?? verified.displayName }
+        ...(profile.displayName
+          ? { displayName: profile.displayName }
           : {}),
       },
     });
 
-    // Referral completion gate — idempotent. Connect X adalah salah satu syarat.
-    await this.referral.completeReferralForUser(req.user.userId);
+    // Referral completion gate — idempotent.
+    await this.referral.completeReferralForUser(userId);
 
     this.logger.log(
-      `User ${req.user.userId} ${isMigrationMode ? 'migrated' : 'linked'} X as @${oauthHandle} (id=${verified.twitterUserId}).`,
+      `User ${userId} ${isMigrationMode ? 'migrated' : 'linked'} X as @${oauthHandle} (id=${verified.twitterUserId}).`,
     );
 
     return {
       ok: true,
       username: oauthHandle,
-      avatarUrl: profile.profileImageUrl ?? verified.avatarUrl,
+      avatarUrl: profile.profileImageUrl,
       connectedAt: now.toISOString(),
       oauthVerified: true,
       migrated: isMigrationMode,
     };
-  }
-
-  @Delete('disconnect')
-  async disconnect(@Req() req: AuthedReq) {
-    // LOCK PERMANEN: akun yang sudah terhubung tidak boleh dilepas.
-    const user = await this.prisma.user.findUnique({
-      where: { id: req.user.userId },
-      select: { twitterUsername: true },
-    });
-    if (user?.twitterUsername) {
-      throw new BadRequestException(
-        'Once an X account is linked, it cannot be disconnected. Contact support if you need help.',
-      );
-    }
-    await this.prisma.user.update({
-      where: { id: req.user.userId },
-      data: {
-        twitterUsername: null,
-        twitterUserId: null,
-        twitterAvatarUrl: null,
-        twitterConnectedAt: null,
-        twitterOAuthVerified: false,
-        twitterOAuthVerifiedAt: null,
-        twitterAccountCreatedAt: null,
-      },
-    });
-    return { ok: true };
   }
 }

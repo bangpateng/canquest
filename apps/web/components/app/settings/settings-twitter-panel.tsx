@@ -5,7 +5,6 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { buttonVariants } from "@/components/ui/button";
 import { formatApiError } from "@/lib/api/format-api-error";
 import { cn } from "@/lib/utils/utils";
-import { getBrowserSupabase, isSupabaseOAuthConfigured } from "@/lib/supabase/client";
 import { useSearchParams, useRouter } from "next/navigation";
 import { AlertCircle, CheckCircle2, Lock } from "lucide-react";
 
@@ -17,7 +16,7 @@ type TwitterStatus = {
   apiConfigured?: boolean;
   /** True jika X sudah diverifikasi via OAuth (bukan input teks lama). */
   oauthVerified?: boolean;
-  /** True jika Supabase OAuth sudah dikonfigurasi di backend. */
+  /** True jika Twitter OAuth sudah dikonfigurasi di backend. */
   oauthConfigured?: boolean;
   /** ISO date untuk deadline migrasi user lama (null kalau belum diset). */
   oauthMigrationDeadline?: string | null;
@@ -57,7 +56,7 @@ export function SettingsTwitterPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  // Flag true kalau kita lagi nunggu balik dari OAuth flow (redirect Twitter).
+  // True kalau lagi nunggu balik dari Twitter (browser redirect).
   const [awaitingOAuth, setAwaitingOAuth] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -76,66 +75,67 @@ export function SettingsTwitterPanel({
     void refresh();
   }, [refresh]);
 
-  // Detect balikan dari /api/twitter/oauth/callback (?twitter_oauth=pending
-  // atau ?oauth_error=...). Auto-trigger connect dengan token dari cookie/session.
+  // Detect balikan dari /api/twitter/oauth/callback:
+  //   ?twitter_oauth=success&username=...
+  //   ?twitter_oauth=error&error=...
   useEffect(() => {
-    const pending = searchParams.get("twitter_oauth");
-    const oauthErr = searchParams.get("oauth_error");
-    if (oauthErr) {
-      const desc = searchParams.get("error_desc");
-      setError(
-        desc
-          ? `X OAuth failed: ${desc}`
-          : "X OAuth failed or was cancelled. Please try again.",
+    const result = searchParams.get("twitter_oauth");
+    const usernameParam = searchParams.get("username");
+    const errorParam = searchParams.get("error");
+    const errorDesc = searchParams.get("error_desc");
+
+    if (result === "success") {
+      setSuccess(
+        usernameParam
+          ? `Connected as @${usernameParam}`
+          : "Your X account is now linked.",
       );
-      // Bersihkan query param.
+      setAwaitingOAuth(false);
+      void refresh();
       router.replace("/settings#twitter");
-      return;
-    }
-    if (pending === "pending") {
-      // Token sudah disimpan di cookie cq_x_oauth_temp oleh callback route.
-      void finalizeConnectFromCookie();
+    } else if (result === "error") {
+      const msg = errorDesc || errorParam || "OAuth failed. Please try again.";
+      setError(`X OAuth failed: ${msg}`);
+      setAwaitingOAuth(false);
       router.replace("/settings#twitter");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, router]);
 
   /**
-   * Trigger OAuth flow: pakai Supabase client untuk redirect user ke Twitter.
-   * Supabase akan kembali ke /api/twitter/oauth/callback (yang set cookie + redirect ke sini).
+   * Start OAuth flow:
+   *   1. GET /api/twitter/auth-url → dapat authorization URL dari backend.
+   *   2. Redirect browser ke URL itu → user login & authorize di Twitter.
+   *   3. Twitter redirect ke /api/twitter/oauth/callback → BFF forward ke backend.
+   *   4. Backend exchange code, persist, redirect ke /settings?twitter_oauth=success.
    */
   async function handleConnectOAuth() {
     setError(null);
     setSuccess(null);
-    const supabase = getBrowserSupabase();
-    if (!supabase) {
-      setError(
-        "X OAuth is not configured (NEXT_PUBLIC_SUPABASE_URL / ANON_KEY). Please contact support.",
-      );
-      return;
-    }
-    setAwaitingOAuth(true);
+    setBusy(true);
     try {
-      const origin = window.location.origin;
-      const redirectTo = `${origin}/api/twitter/oauth/callback`;
-      // Provider id: 'x' = new OAuth 2.0 provider (recommended).
-      // 'twitter' = legacy OAuth 1.0a (deprecated). Supabase dashboard sekarang
-      // menampilkan dua-duanya terpisah — gunakan 'x' untuk yang baru.
-      const { error: oauthErr } = await supabase.auth.signInWithOAuth({
-        provider: "x",
-        options: {
-          redirectTo,
-          // PKCE flow (default di supabase-js v2) → exchange code di callback route.
-        },
+      const res = await fetch("/api/twitter/auth-url", {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
       });
-      if (oauthErr) {
-        setAwaitingOAuth(false);
-        setError(oauthErr.message || "Failed to start X OAuth.");
+      const data = (await res.json().catch(() => null)) as {
+        authorizationUrl?: string;
+        message?: string;
+      } | null;
+      if (!res.ok || !data?.authorizationUrl) {
+        setBusy(false);
+        setError(
+          formatApiError(data) ||
+            "Could not start X OAuth. Please try again.",
+        );
+        return;
       }
-      // Kalau sukses, browser akan redirect ke Twitter → kembali ke callback.
-      // State akan di-recover oleh useEffect [searchParams].
+      setAwaitingOAuth(true);
+      // Redirect browser ke twitter.com authorize page.
+      window.location.href = data.authorizationUrl;
     } catch (err) {
-      setAwaitingOAuth(false);
+      setBusy(false);
       setError(
         err instanceof Error
           ? err.message
@@ -144,59 +144,10 @@ export function SettingsTwitterPanel({
     }
   }
 
-  /**
-   * Setelah balik dari OAuth callback, cookie cq_x_oauth_temp berisi access token.
-   * POST ke /api/twitter/connect (body kosong → BFF baca cookie).
-   */
-  async function finalizeConnectFromCookie() {
-    setBusy(true);
-    setError(null);
-    setSuccess(null);
-    try {
-      const res = await fetch("/api/twitter/connect", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const data = (await res.json().catch(() => null)) as {
-        ok?: boolean;
-        username?: string;
-        migrated?: boolean;
-        message?: string;
-      } | null;
-      if (!res.ok) {
-        setError(formatApiError(data));
-        return;
-      }
-      const name = data?.username ?? "";
-      const migrated = data?.migrated === true;
-      setStatus((s) => ({
-        ...s,
-        connected: true,
-        username: name,
-        oauthVerified: true,
-      }));
-      setSuccess(
-        migrated
-          ? `Re-verified @${name} via OAuth — migration successful!`
-          : `Connected as @${name}`,
-      );
-      onConnected?.(name);
-      void refresh();
-    } catch {
-      setError("Network error — please try again.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const oauthConfigured = isSupabaseOAuthConfigured();
   const deadlineStr = formatDate(status.oauthMigrationDeadline);
   const pastDeadline = isPastDeadline(status.oauthMigrationDeadline);
   const needsReverify =
-    status.connected &&
-    status.oauthVerified === false; // user lama yang belum OAuth-verify
+    status.connected && status.oauthVerified === false;
 
   return (
     <section
@@ -223,10 +174,11 @@ export function SettingsTwitterPanel({
           </p>
         ) : null}
 
-        {/* Status: OAuth belum dikonfigurasi di frontend */}
-        {oauthConfigured === false ? (
+        {/* Status: OAuth belum dikonfigurasi di backend */}
+        {status.oauthConfigured === false ? (
           <p className="mb-4 rounded-xl border border-orange-500/20 bg-orange-500/5 px-5 py-4 text-sm font-medium text-orange-200">
-            X OAuth is not configured on the frontend (NEXT_PUBLIC_SUPABASE_URL / ANON_KEY). Please contact support.
+            X OAuth is not configured on the server (TWITTER_CLIENT_ID / SECRET /
+            CALLBACK_URL). Please contact support.
           </p>
         ) : null}
 
@@ -234,13 +186,14 @@ export function SettingsTwitterPanel({
         {!status.connected ? (
           <div className="space-y-4">
             <p className="text-sm text-slate-400">
-              Click the button below to authorize CanQuest to access your X account.
-              You will be redirected to Twitter, then returned here automatically.
+              Click the button below to authorize CanQuest to access your X
+              account. You will be redirected to Twitter, then returned here
+              automatically.
             </p>
             <button
               type="button"
               onClick={() => void handleConnectOAuth()}
-              disabled={busy || awaitingOAuth || !oauthConfigured}
+              disabled={busy || awaitingOAuth || !status.oauthConfigured}
               className={cn(
                 buttonVariants({ size: "default" }),
                 "gap-2 rounded-xl w-full sm:w-auto",
@@ -283,7 +236,7 @@ export function SettingsTwitterPanel({
                 <button
                   type="button"
                   onClick={() => void handleConnectOAuth()}
-                  disabled={busy || awaitingOAuth || !oauthConfigured}
+                  disabled={busy || awaitingOAuth || !status.oauthConfigured}
                   className={cn(
                     buttonVariants({ size: "sm", variant: "secondary" }),
                     "mt-3 gap-2 rounded-xl",
@@ -318,7 +271,7 @@ export function SettingsTwitterPanel({
                 <button
                   type="button"
                   onClick={() => void handleConnectOAuth()}
-                  disabled={busy || awaitingOAuth || !oauthConfigured}
+                  disabled={busy || awaitingOAuth || !status.oauthConfigured}
                   className={cn(
                     buttonVariants({ size: "sm" }),
                     "mt-3 gap-2 rounded-xl",

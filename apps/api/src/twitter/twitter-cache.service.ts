@@ -232,6 +232,54 @@ export class TwitterCacheService implements OnModuleDestroy {
     }
   }
 
+  // ── OAuth state (Twitter OAuth 2.0 PKCE flow) ────────────────
+  /**
+   * Simpan mapping state → { userId, codeVerifier } untuk PKCE flow.
+   * TTL 10 menit (lebih panjang dari follow-through user normal).
+   * Return true bila berhasil disimpan.
+   */
+  async setOAuthState(
+    state: string,
+    payload: { userId: string; codeVerifier: string },
+    ttlSec = 600,
+  ): Promise<boolean> {
+    if (!this.available()) return false;
+    try {
+      await this.redis!.set(
+        this.oauthStateKey(state),
+        JSON.stringify(payload),
+        'EX',
+        ttlSec,
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Ambil & hapus payload OAuth state (one-shot consume — PKCE state tidak
+   * boleh dipakai ulang). Return null bila state tidak ada / Redis down.
+   */
+  async consumeOAuthState(state: string): Promise<{
+    userId: string;
+    codeVerifier: string;
+  } | null> {
+    if (!this.available()) return null;
+    const key = this.oauthStateKey(state);
+    try {
+      const raw = await this.redis!.getdel(key);
+      if (!raw) return null;
+      return JSON.parse(raw) as { userId: string; codeVerifier: string };
+    } catch {
+      return null;
+    }
+  }
+
+  oauthStateKey(state: string): string {
+    return `${this.prefix}:oauth-state:${state}`;
+  }
+
   onModuleDestroy(): void {
     try {
       this.redis?.disconnect();

@@ -1,19 +1,10 @@
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 export const CQ_ACCESS_COOKIE = 'cq_access';
 export const CQ_REFRESH_COOKIE = 'cq_refresh';
 
 /** Separate session for `/admin` (env-backed email + password — not app users). */
 export const CQ_ADMIN_ACCESS_COOKIE = 'cq_admin_access';
-
-/**
- * Cookie sementara untuk transaksi OAuth Twitter (Supabase).
- * Di-set oleh /api/twitter/oauth/callback setelah user balik dari Twitter,
- * lalu di-baca oleh /api/twitter/connect untuk forward token ke NestJS.
- * TTL pendek (5 menit) supaya token gak bertahan lama di browser.
- */
-export const CQ_X_OAUTH_TEMP_COOKIE = 'cq_x_oauth_temp';
-const X_OAUTH_TEMP_MAX_AGE = 5 * 60;
 
 const COOKIE_OPTS = {
   httpOnly: true as const,
@@ -36,32 +27,6 @@ export function setAdminAccessCookie(response: NextResponse, accessToken: string
 
 export function clearAdminAccessCookie(response: NextResponse): void {
   response.cookies.set(CQ_ADMIN_ACCESS_COOKIE, '', { ...COOKIE_OPTS, maxAge: 0 });
-}
-
-/** Set cookie sementara yang menampung OAuth access token Twitter dari Supabase. */
-export function setXOAuthTempCookie(
-  response: NextResponse,
-  accessToken: string,
-): void {
-  response.cookies.set(CQ_X_OAUTH_TEMP_COOKIE, accessToken, {
-    ...COOKIE_OPTS,
-    maxAge: X_OAUTH_TEMP_MAX_AGE,
-  });
-}
-
-/** Baca OAuth access token sementara (route handlers). */
-export function readXOAuthTempCookie(
-  req: NextRequest,
-): string | null {
-  return req.cookies.get(CQ_X_OAUTH_TEMP_COOKIE)?.value ?? null;
-}
-
-/** Clear cookie sementara setelah connect selesai (sukses maupun gagal). */
-export function clearXOAuthTempCookie(response: NextResponse): void {
-  response.cookies.set(CQ_X_OAUTH_TEMP_COOKIE, '', {
-    ...COOKIE_OPTS,
-    maxAge: 0,
-  });
 }
 export function setAuthCookies(
   response: NextResponse,
