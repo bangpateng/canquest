@@ -59,6 +59,13 @@ model User {
   /// High-res X avatar URL (pbs.twimg.com, _400x400) — not stored on VPS disk.
   twitterAvatarUrl        String?
   twitterConnectedAt      DateTime?
+  /// True jika X linked via OAuth resmi (Supabase Auth Twitter provider).
+  /// False untuk user lama yang masih pakai input teks manual — wajib re-verify sebelum TWITTER_OAUTH_MIGRATION_DEADLINE.
+  twitterOAuthVerified       Boolean   @default(false)
+  /// Timestamp saat OAuth verification terakhir berhasil dilakukan.
+  twitterOAuthVerifiedAt     DateTime?
+  /// Akun X created_at (fetched via twitterapi.io saat OAuth connect) untuk anti-bot umur-akun check.
+  twitterAccountCreatedAt    DateTime?
   /// Last time the user opened or dismissed in-app CC notifications (bell).
   notificationsLastSeenAt DateTime?
   /// bcrypt hash kata sandi transaksi opsional (gate Send/Lock/Unlock). Null = tidak ada gate.

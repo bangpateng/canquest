@@ -261,6 +261,7 @@ export class AuthService {
         normalizeCantonPartyId(user.cantonPartyId) ?? user.cantonPartyId,
       twitterUsername: user.twitterUsername,
       twitterConnectedAt: user.twitterConnectedAt?.toISOString() ?? null,
+      twitterOAuthVerified: user.twitterOAuthVerified,
       earnPoints,
       emailVerified: user.emailVerified,
       createdAt: user.createdAt,
