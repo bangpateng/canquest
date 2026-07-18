@@ -110,7 +110,9 @@ export function useTransactionNotifications(
     queryKey: queryKeys.party.notifications,
     queryFn: fetchFeed,
     staleTime: pollIntervalMs,
-    refetchInterval: pollIntervalMs,
+    // Real-time via SSE `transaction:new` (lihat use-realtime.ts). Safety-net
+    // polling 5 menit kalau SSE putus.
+    refetchInterval: 300_000,
     refetchOnWindowFocus: true,
     retry: 2,
   });
