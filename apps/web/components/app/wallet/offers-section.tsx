@@ -77,8 +77,9 @@ export function receiverDisplay(offer: OfferItem): string {
  * Hook: fetch & re-fetch pending incoming offers.
  * Dipakai oleh badge tombol "Offers" (count) dan modal Offers.
  *
- * Di-back TanStack Query: poll 30s via refetchInterval (silent, no flicker),
- * refetch saat tab focus/reconnect, cache global di-dedup.
+ * Di-back TanStack Query: real-time via SSE `offer:new` (lihat use-realtime.ts),
+ * refetch saat tab focus/reconnect, cache global di-dedup. Safety-net polling
+ * 5 menit kalau SSE putus.
  *
  * refresh() mengembalikan jumlah offer setelah fetch — berguna untuk
  * pemilik tombol (wallet-actions) agar tahu apakah perlu menampilkan badge.
@@ -102,7 +103,9 @@ export function useOffers() {
       }
     },
     staleTime: 30_000,
-    refetchInterval: 30_000,
+    // Real-time via SSE `offer:new` (lihat use-realtime.ts). Safety-net polling
+    // 5 menit kalau SSE putus (network glitch, browser sleep).
+    refetchInterval: 300_000,
     refetchOnWindowFocus: true,
     retry: 2,
   });
@@ -164,7 +167,9 @@ export function useSentOffers() {
       }
     },
     staleTime: 30_000,
-    refetchInterval: 30_000,
+    // Real-time via SSE `offer:new` (lihat use-realtime.ts). Safety-net polling
+    // 5 menit kalau SSE putus (network glitch, browser sleep).
+    refetchInterval: 300_000,
     refetchOnWindowFocus: true,
     retry: 2,
   });
