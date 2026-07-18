@@ -242,6 +242,34 @@ export class TwitterApiService {
     return retweeted;
   }
 
+  /**
+   * Fetch account creation date via twitterapi.io untuk anti-bot umur-akun check.
+   * Endpoint sama dengan fetchUserProfile (/twitter/user/info), tapi extract field
+   * `created_at` (ISO 8601 string dari X API, e.g. "2020-05-12T08:30:00.000Z").
+   * Return null kalau field tidak ada atau format tidak valid (fail-open).
+   */
+  async fetchAccountCreatedAt(username: string): Promise<Date | null> {
+    const name = normalizeTwitterUsername(username);
+    if (!name || !/^[a-z0-9_]{1,15}$/i.test(name)) return null;
+
+    const payload = await this.getJson<Record<string, unknown>>(
+      '/twitter/user/info',
+      { userName: name },
+    );
+    const envelope = payload as TwitterApiEnvelope<Record<string, unknown>>;
+    const data = envelope.data ?? payload;
+    const nested =
+      data.user && typeof data.user === 'object'
+        ? (data.user as Record<string, unknown>)
+        : data;
+    const raw = nested.created_at ?? data.created_at;
+    if (raw == null) return null;
+    const rawStr = toSafeString(raw).trim();
+    if (!rawStr) return null;
+    const d = new Date(rawStr);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
   async verifyFollowTask(
     userUsername: string,
     taskTarget: string | null,

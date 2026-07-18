@@ -9,6 +9,8 @@ export interface Me {
   avatarUrl?: string | null;
   /** Handle X/Twitter yang di-link user (dikembalikan backend, opsional). */
   twitterUsername?: string | null;
+  /** True jika X sudah diverifikasi via OAuth resmi (false = user lama yang perlu re-verify). */
+  twitterOAuthVerified?: boolean;
   /** Saldo earn-points (dikembalikan backend, opsional). */
   earnPoints?: number;
 }

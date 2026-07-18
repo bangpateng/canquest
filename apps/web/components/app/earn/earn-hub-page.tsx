@@ -3,6 +3,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import Link from "next/link";
 import { QuestReferralCard } from "@/components/app/quest/quest-referral-card";
 import { QuestTaskPanel } from "@/components/app/quest/quest-task-panel";
+import { MigrationBanner } from "@/components/platform/migration-banner";
 import { ROUTES } from "@/lib/routing/app-routes";
 import { hasRealWallet } from "@/lib/auth/wallet-access";
 import { useMe } from "@/lib/hooks/use-me";
@@ -95,6 +96,9 @@ export function EarnHubPage() {
 
   return (
     <div className="w-full max-w-full min-w-0 overflow-x-hidden space-y-5 md:space-y-6 font-sans">
+
+      {/* ── Migration Banner (X OAuth re-verify) ─────────────────────────── */}
+      <MigrationBanner />
 
       {/* ── Hero Card — Split Layout: Left (Points) + Right (Profile) ────── */}
       <section

@@ -4272,13 +4272,32 @@ export class QuestsService {
 
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { twitterUsername: true },
+      select: { twitterUsername: true, twitterOAuthVerified: true },
     });
     if (!user?.twitterUsername?.trim()) {
       throw new BadRequestException(
         'Connect your X (Twitter) account in Settings before completing this task.',
       );
     }
+
+    // POST-DEADLINE ENFORCEMENT: setelah TWITTER_OAUTH_MIGRATION_DEADLINE,
+    // user dengan twitterOAuthVerified=false tidak bisa verify task X sampai
+    // mereka re-verify via OAuth di Settings. Points & referral tetap aman
+    // (tidak di-reset); hanya gate task twitter_follow/twitter_retweet.
+    const deadlineRaw = this.config
+      .get<string>('TWITTER_OAUTH_MIGRATION_DEADLINE')
+      ?.trim();
+    if (deadlineRaw) {
+      const deadline = new Date(deadlineRaw);
+      if (!isNaN(deadline.getTime()) && new Date() > deadline) {
+        if (!user.twitterOAuthVerified) {
+          throw new BadRequestException(
+            'Re-verify your X account via OAuth in Settings to continue completing X tasks.',
+          );
+        }
+      }
+    }
+
     if (!this.twitterApi.isConfigured()) {
       throw new BadRequestException(
         'Twitter verification is not configured on this server.',
