@@ -168,6 +168,127 @@ export class ResendEmailService {
   }
 
   /**
+   * OTP 6-digit untuk konfirmasi pembuatan wallet (Fase 1.5.2).
+   *
+   * Berbeda dari sendOtpEmail (OTP registrasi) — pakai subject & wording khusus
+   * wallet creation supaya user tidak bingung. Tetap TTL 15 menit, 6 digit.
+   */
+  async sendWalletCreationOtp(to: string, code: string): Promise<void> {
+    const apiKey = this.config.get<string>('RESEND_API_KEY')?.trim();
+    if (!apiKey) {
+      if (process.env.NODE_ENV === 'production') {
+        throw new ServiceUnavailableException(
+          'Email verification is not configured (RESEND_API_KEY).',
+        );
+      }
+      this.logger.warn(
+        `[dev] Wallet-creation OTP for ${to}: ${code} (RESEND_API_KEY not set)`,
+      );
+      return;
+    }
+
+    const from =
+      this.config.get<string>('RESEND_FROM_EMAIL')?.trim() || DEFAULT_FROM;
+
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from,
+        to: [to],
+        subject: 'Your CanQuest wallet verification code',
+        html: `
+          <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;padding:24px">
+            <h2 style="margin:0 0 12px">Confirm your wallet</h2>
+            <p style="color:#555;margin:0 0 20px">Use this code to confirm your wallet creation. It expires in 15 minutes.</p>
+            <p style="font-size:32px;font-weight:700;letter-spacing:0.25em;margin:0">${code}</p>
+            <p style="color:#888;font-size:12px;margin-top:24px">If you didn't request this, you can safely ignore this email.</p>
+          </div>
+        `.trim(),
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      this.logger.error(
+        `Wallet-creation OTP failed (${res.status}): ${errText.slice(0, 200)}`,
+      );
+      throw new ServiceUnavailableException(
+        'Could not send wallet verification email. Try again later.',
+      );
+    }
+  }
+
+  /**
+   * Konfirmasi sukses pembuatan wallet (Fase 1.5.2). Best-effort, never throws
+   * — supaya email gagal tidak roll-back onboarding yang sudah sukses.
+   */
+  async sendWalletCreatedEmail(
+    to: string,
+    ctx: { username: string; partyId: string; displayName?: string | null },
+  ): Promise<void> {
+    const apiKey = this.config.get<string>('RESEND_API_KEY')?.trim();
+    if (!apiKey) {
+      this.logger.warn(
+        `[dev] Wallet-created notice for ${to} (RESEND_API_KEY not set)`,
+      );
+      return;
+    }
+
+    const from =
+      this.config.get<string>('RESEND_FROM_EMAIL')?.trim() || DEFAULT_FROM;
+
+    const esc = (s: string) =>
+      s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const name = ctx.displayName?.trim() || `@${ctx.username}`;
+    // Wallet address partyId bisa panjang + mengandung :: → potong untuk display.
+    const partyShort = ctx.partyId.split('::')[0] ?? ctx.partyId;
+
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from,
+          to: [to],
+          subject: `Your CanQuest wallet is ready, ${name}!`,
+          html: `
+            <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;padding:24px">
+              <h2 style="margin:0 0 12px">Your wallet is ready 🎉</h2>
+              <p style="color:#555;margin:0">Hi ${esc(name)},</p>
+              <p style="color:#555;margin:12px 0 0">Your CanQuest wallet has been created successfully.</p>
+              <ul style="color:#555;margin:16px 0;padding-left:20px">
+                <li><strong>Username:</strong> @${esc(ctx.username)}</li>
+                <li><strong>Wallet address:</strong> ${esc(partyShort)}…</li>
+              </ul>
+              <p style="color:#555;margin:0">Keep this email for your records. You can now earn CC, swap tokens, and send assets on CanQuest.</p>
+              <p style="color:#888;font-size:12px;margin-top:24px">If you didn't create this wallet, please contact <strong>support@canquest.cc</strong> immediately.</p>
+            </div>
+          `.trim(),
+        }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        this.logger.warn(
+          `Wallet-created email failed (${res.status}): ${errText.slice(0, 200)}`,
+        );
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Wallet-created email error for ${to}: ${String(err)}`,
+      );
+    }
+  }
+
+  /**
    * Cooperation / partnership form submission → forwarded to the team inbox.
    *
    * Throws in production when email is not configured so the controller surfaces a

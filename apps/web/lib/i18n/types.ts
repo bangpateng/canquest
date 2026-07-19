@@ -245,6 +245,25 @@ export type PlatformMessages = {
     reconnectHint: string;
     reconnectBtn: string;
     reconnecting: string;
+    // ── Fase 1.5 — multi-step form + OTP + names
+    emailLabel: string;
+    emailVerified: string;
+    usernameLabel: string;
+    usernameHint: string;
+    firstNameLabel: string;
+    lastNameLabel: string;
+    nameOptionalHint: string;
+    sendOtpButton: string;
+    sendingCode: string;
+    otpTitle: string;
+    otpSubtitle: string;
+    otpExpiresIn: string;
+    verifyAndCreate: string;
+    backToForm: string;
+    resendCode: string;
+    resendIn: string;
+    successTitle: string;
+    successSubtitle: string;
   };
   transactions: {
     title: string;

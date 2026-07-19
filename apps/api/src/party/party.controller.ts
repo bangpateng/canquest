@@ -56,6 +56,10 @@ import { SendTokenDto } from './dto/send-token.dto';
 import { LockCcDto } from './dto/lock-cc.dto';
 import { UnlockCcDto } from './dto/unlock-cc.dto';
 import { SetUsernameDto } from './dto/set-username.dto';
+import { SendWalletOtpDto } from './dto/send-wallet-otp.dto';
+import { VerifyWalletOtpDto } from './dto/verify-wallet-otp.dto';
+import { AuthService } from '../auth/auth.service';
+import { ResendEmailService } from '../auth/resend-email.service';
 import {
   SetWalletPasswordDto,
   RemoveWalletPasswordDto,
@@ -134,6 +138,8 @@ export class PartyController {
     private readonly cantex: CantexClient,
     private readonly cantonPrices: CantonPriceService,
     private readonly swapService: SwapService,
+    private readonly auth: AuthService,
+    private readonly resend: ResendEmailService,
   ) {}
 
   private assertPartyOnValidatorParticipant(partyId: string): void {
@@ -228,6 +234,8 @@ export class PartyController {
         await this.walletOnboarding.onboardWalletForUser({
           username,
           email: existing.email,
+          firstName: body.firstName,
+          lastName: body.lastName,
         });
       cantonPartyId = normalizeCantonPartyId(partyId) ?? partyId;
 
@@ -326,6 +334,262 @@ export class PartyController {
           req.user.userId,
           inviteCode,
         );
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Fase 1.5.2 — Issue OTP 6 digit untuk konfirmasi pembuatan wallet.
+   *
+   * Flow: form valid → assertCanCreateWallet → issue OTP (HMAC 'wallet') →
+   * kirim via ResendEmailService.sendWalletCreationOtp. TIDAK execute onboarding
+   * di sini — onboarding dijalankan setelah user verify OTP.
+   *
+   * Frontend state machine: form → (submit /wallet/otp/send) → otp screen →
+   * (input code + submit /wallet/otp/verify) → success.
+   */
+  @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
+  @Post('wallet/otp/send')
+  async sendWalletOtp(
+    @Req() req: AuthedReq,
+    @Body() body: SendWalletOtpDto,
+  ): Promise<{
+    message: string;
+    expiresAt: string;
+    devOtp?: string;
+  }> {
+    const username = normalizeWalletUsername(body.username) ?? '';
+    if (username.length < 3) {
+      throw new BadRequestException('Username must be at least 3 characters.');
+    }
+
+    const user = await this.users.findById(req.user.userId);
+    if (!user) throw new BadRequestException('User not found');
+    if (hasRealWallet(user.cantonPartyId)) {
+      throw new ConflictException(
+        'You already have a wallet. Only one wallet is allowed per account.',
+      );
+    }
+
+    const taken = await this.users.findByUsernameInsensitive(username);
+    if (taken && taken.id !== req.user.userId) {
+      throw new ConflictException('Party ID Already Taken');
+    }
+
+    // Pre-flight invite check — reserve slot (idempotent kalau user sudah redeem).
+    // Tidak redeem di sini; redeem di /wallet/otp/verify setelah OTP valid.
+    await this.walletInvites.assertCanCreateWallet(
+      req.user.userId,
+      body.walletInviteCode,
+    );
+
+    // Issue OTP purpose='wallet' (terpisah dari OTP register).
+    const { devOtp } = await this.auth.issueWalletCreationOtp(
+      req.user.userId,
+      user.email,
+    );
+
+    // Beri tahu client kapan OTP akan expired (untuk countdown timer UI).
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+
+    return {
+      message: 'Verification code sent to your email.',
+      expiresAt,
+      devOtp,
+    };
+  }
+
+  /**
+   * Fase 1.5.2 — Verify OTP + execute onboarding wallet atomik.
+   *
+   * Flow: verify OTP (timingSafeEqual, max 5 attempts) → execute onboarding
+   * (sama seperti setUsername, tapi dipanggil setelah OTP valid) → simpan Prisma
+   * → redeem invite → kirim confirmation email.
+   *
+   * Onboarding logic di-refactor ke `executeWalletOnboarding` private method
+   * supaya bisa dipakai oleh setUsername (legacy) DAN endpoint ini (Fase 1.5).
+   */
+  @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
+  @Post('wallet/otp/verify')
+  async verifyWalletOtp(
+    @Req() req: AuthedReq,
+    @Body() body: VerifyWalletOtpDto,
+  ): Promise<{
+    username: string;
+    cantonPartyId: string;
+    isPlaceholder: boolean;
+    spliceOnboarded: boolean;
+    preapproval: { active: boolean };
+    message: string;
+  }> {
+    // 1. Verify OTP (auth service throw kalau invalid / expired / lockout).
+    await this.auth.verifyWalletCreationOtp(req.user.userId, body.code);
+
+    // 2. Execute onboarding (logic sama seperti setUsername).
+    const result = await this.executeWalletOnboarding(req.user.userId, {
+      username: body.username,
+      firstName: body.firstName,
+      lastName: body.lastName,
+      walletInviteCode: body.walletInviteCode,
+    });
+
+    // 3. Kirim confirmation email (best-effort, never throws).
+    void this.resend
+      .sendWalletCreatedEmail(req.user.email, {
+        username: result.username,
+        partyId: result.cantonPartyId,
+        displayName: undefined, // bisa di-enhance: baca displayName dari User
+      })
+      .catch((err: unknown) => {
+        this.logger.warn(
+          `Wallet-created email failed for ${req.user.email}: ${String(err)}`,
+        );
+      });
+
+    return result;
+  }
+
+  /**
+   * Onboarding wallet lengkap — di-refactor dari setUsername supaya bisa dipanggil
+   * ulang oleh /wallet/otp/verify. Logic identik dengan setUsername versi lama,
+   * hanya diekstrak ke method privat.
+   */
+  private async executeWalletOnboarding(
+    userId: string,
+    params: {
+      username: string;
+      firstName?: string;
+      lastName?: string;
+      walletInviteCode?: string;
+    },
+  ): Promise<{
+    username: string;
+    cantonPartyId: string;
+    isPlaceholder: boolean;
+    spliceOnboarded: boolean;
+    preapproval: { active: boolean };
+    message: string;
+  }> {
+    const username = normalizeWalletUsername(params.username) ?? '';
+    if (username.length < 3) {
+      throw new BadRequestException('Username must be at least 3 characters.');
+    }
+
+    const existing = await this.users.findById(userId);
+    if (!existing) throw new BadRequestException('User not found');
+    if (hasRealWallet(existing.cantonPartyId)) {
+      throw new ConflictException(
+        'You already have a wallet. Only one wallet is allowed per account.',
+      );
+    }
+
+    const taken = await this.users.findByUsernameInsensitive(username);
+    if (taken && taken.id !== userId) {
+      throw new ConflictException('Party ID Already Taken');
+    }
+
+    const needsInviteFlow = !hasRealWallet(existing.cantonPartyId);
+    const inviteCode = params.walletInviteCode;
+
+    if (needsInviteFlow) {
+      await this.walletInvites.assertCanCreateWallet(userId, inviteCode);
+    }
+
+    let cantonPartyId: string;
+    try {
+      const { keycloakId, partyId } =
+        await this.walletOnboarding.onboardWalletForUser({
+          username,
+          email: existing.email,
+          firstName: params.firstName,
+          lastName: params.lastName,
+        });
+      cantonPartyId = normalizeCantonPartyId(partyId) ?? partyId;
+
+      const partyOwner = await this.users.findByPartyId(cantonPartyId);
+      if (partyOwner && partyOwner.id !== userId) {
+        throw new ConflictException('Party ID Already Taken');
+      }
+
+      this.assertPartyOnValidatorParticipant(cantonPartyId);
+
+      try {
+        await this.users.setCantonIdentity(userId, {
+          partyId: cantonPartyId,
+          keycloakId,
+          username,
+        });
+      } catch (err: unknown) {
+        if (
+          err &&
+          typeof err === 'object' &&
+          'code' in err &&
+          (err as { code: string }).code === 'P2002'
+        ) {
+          throw new ConflictException('Party ID Already Taken');
+        }
+        throw err;
+      }
+
+      if (needsInviteFlow) {
+        await this.walletInvites.redeemAfterWalletCreated(userId, inviteCode);
+        await this.walletInvites.recordAllocation({
+          userId,
+          username,
+          partyId: cantonPartyId,
+        });
+      }
+
+      void this.featuredActivity
+        .recordActivity(
+          'wallet_created',
+          cantonPartyId,
+          `Wallet created for @${username}`,
+        )
+        .catch(() => {
+          /* non-critical */
+        });
+
+      // TransferPreapproval: DEFAULT OFF (sama seperti setUsername).
+      let preapprovalActive = false;
+      const existingPreapproval =
+        await this.splice.hasTransferPreapproval(cantonPartyId);
+      if (existingPreapproval) {
+        preapprovalActive = true;
+      }
+
+      if (needsInviteFlow) {
+        void this.questLedger
+          .recordPartyRegistration({
+            userPartyId: cantonPartyId,
+            username,
+            inviteCode: inviteCode ?? '',
+            spliceOnboarded: true,
+            preapprovalActive,
+          })
+          .catch((err: unknown) => {
+            this.logger.warn(
+              `PartyRegistration ledger record failed: ${String(err)}`,
+            );
+          });
+      }
+
+      const message = preapprovalActive
+        ? 'Wallet created — Party ID registered. Direct CC transfers enabled (CIP-56 compliant).'
+        : 'Wallet created — Party ID registered. CC transfers work via offer/accept flow.';
+
+      return {
+        username,
+        cantonPartyId,
+        isPlaceholder: false,
+        spliceOnboarded: true,
+        preapproval: { active: preapprovalActive },
+        message,
+      };
+    } catch (err) {
+      if (needsInviteFlow) {
+        await this.walletInvites.releaseReservation(userId, inviteCode);
       }
       throw err;
     }

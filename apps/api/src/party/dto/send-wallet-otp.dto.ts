@@ -8,7 +8,17 @@ import {
 } from 'class-validator';
 import { normalizeWalletUsername } from '../../common/canton-party-id';
 
-export class SetUsernameDto {
+/**
+ * Body untuk `POST /party/wallet/otp/send`.
+ *
+ * Frontend submit form create wallet → backend validasi username + invite code
+ * (pre-flight, NO onboard) → issue OTP 6 digit → simpan ke User.otpCodeHash +
+ * otpExpiresAt → kirim via ResendEmailService.sendWalletCreationOtp.
+ *
+ * Field sama seperti SetUsernameDto (firstName/lastName ikut supaya user tidak
+ * perlu re-input saat verify).
+ */
+export class SendWalletOtpDto {
   @IsString()
   @Transform(({ value }) =>
     typeof value === 'string'
@@ -28,12 +38,6 @@ export class SetUsernameDto {
   @MaxLength(64)
   walletInviteCode?: string;
 
-  /**
-   * Optional first/last name — diteruskan ke Keycloak user (KeycloakAdminService
-   * createUserAndGetId). Disimpan HANYA di Keycloak, bukan di Prisma (sesuai
-   * MASTER_PLAN Fase 1.5.1). Bila kosong, WalletOnboardingService fallback
-   * ke username + 'canquest' (lihat wallet-onboarding.service.ts).
-   */
   @IsOptional()
   @IsString()
   @MaxLength(50)

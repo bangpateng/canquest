@@ -298,14 +298,19 @@ export class AuthService {
     }
 
     const trimmed = code.trim();
-    const candidate = this.hashOtp(userId, trimmed);
-    // Fallback: legacy hash format (sha256, no salt) for OTPs issued before this
-    // change and still in flight at deploy time. OTPs only live ~15 min, so this
-    // can be removed after one full deploy cycle.
-    // TODO: remove legacy fallback after one deploy cycle.
+    const candidate = this.hashOtp(userId, trimmed, 'register');
+    // Fallback 1: pre-purpose hash format (no prefix) for OTPs issued before
+    // Fase 1.5 deploy. OTPs only live ~15 min, so this can be removed after one
+    // full deploy cycle.
+    // Fallback 2: legacy sha256 (no salt) — even older format, same window.
+    // TODO: remove both fallbacks after one deploy cycle.
+    const prePurpose = createHmac('sha256', this.otpSecret())
+      .update(`${userId}:${trimmed}`)
+      .digest('hex');
     const legacy = createHash('sha256').update(trimmed).digest('hex');
     const matched =
       this.safeHexEqual(candidate, user.otpCodeHash) ||
+      this.safeHexEqual(prePurpose, user.otpCodeHash) ||
       this.safeHexEqual(legacy, user.otpCodeHash);
 
     if (!matched) {
@@ -319,6 +324,91 @@ export class AuthService {
     const fresh = await this.users.findById(userId);
     if (!fresh) throw new UnauthorizedException();
     return this.issueTokens(fresh.id, fresh.email);
+  }
+
+  // ── Wallet creation OTP (Fase 1.5.2) ─────────────────────────────────────
+  //
+  // Reuse field User.otpCodeHash/otpExpiresAt/otpAttempts yang sama seperti OTP
+  // register, tapi dengan purpose='wallet' di HMAC prefix supaya OTP register
+  // tidak bisa diverifikasi di flow wallet (dan sebaliknya).
+  //
+  // Karena user pasti sudah login (JWT) saat create wallet, OTP register dan
+  // OTP wallet TIDAK pernah jalan paralel — aman reuse field yang sama.
+
+  /**
+   * Issue OTP 6 digit untuk konfirmasi pembuatan wallet. OTP dikirim via
+   * ResendEmailService.sendWalletCreationOtp. TTL 15 menit, max 5 attempts
+   * (sama seperti OTP register). Resend cooldown 2 menit.
+   */
+  async issueWalletCreationOtp(
+    userId: string,
+    email: string,
+  ): Promise<{ otp: string; devOtp?: string }> {
+    const user = await this.users.findById(userId);
+    if (user?.otpExpiresAt) {
+      const issuedAt = user.otpExpiresAt.getTime() - OTP_TTL_MS;
+      if (Date.now() - issuedAt < OTP_RESEND_COOLDOWN_MS) {
+        throw new BadRequestException(
+          'Please wait 2 minutes before requesting another code.',
+        );
+      }
+    }
+
+    const otp = randomInt(100000, 1000000).toString();
+    const otpCodeHash = this.hashOtp(userId, otp, 'wallet');
+    const otpExpiresAt = new Date(Date.now() + OTP_TTL_MS);
+    await this.users.setOtpPending(userId, otpCodeHash, otpExpiresAt);
+
+    try {
+      await this.resend.sendWalletCreationOtp(email, otp);
+    } catch (err) {
+      this.logger.error(
+        `Wallet-creation OTP email failed for ${email}: ${String(err)}`,
+      );
+      throw err;
+    }
+
+    return {
+      otp,
+      devOtp: process.env.NODE_ENV !== 'production' ? otp : undefined,
+    };
+  }
+
+  /**
+   * Verify OTP wallet creation (TANPA execute onboarding — controller yang
+   * eksekusi onboarding setelah verify sukses, supaya auth.service tetap
+   * single-responsibility). Throw kalau OTP invalid/expired/attempt-exhausted.
+   *
+   * @returns `{ ok: true }` kalau OTP valid. Field User.otpCodeHash di-clear.
+   */
+  async verifyWalletCreationOtp(
+    userId: string,
+    code: string,
+  ): Promise<{ ok: true }> {
+    const user = await this.users.findById(userId);
+    if (!user?.otpCodeHash || !user.otpExpiresAt) {
+      throw new UnauthorizedException('No pending wallet verification');
+    }
+    if (user.otpExpiresAt < new Date()) {
+      throw new UnauthorizedException('OTP expired');
+    }
+    if ((user.otpAttempts ?? 0) >= MAX_OTP_ATTEMPTS) {
+      await this.users.clearOtp(userId);
+      throw new UnauthorizedException(
+        'Too many incorrect attempts. Please request a new code.',
+      );
+    }
+
+    const candidate = this.hashOtp(userId, code.trim(), 'wallet');
+    if (!this.safeHexEqual(candidate, user.otpCodeHash)) {
+      await this.users.incrementOtpAttempts(userId);
+      throw new UnauthorizedException('Invalid OTP');
+    }
+
+    // Sukses — clear OTP field. EmailVerified TIDAK di-toggle (sudah true dari
+    // Google register atau OTP register awal). Onboarding di-handle controller.
+    await this.users.clearOtp(userId);
+    return { ok: true };
   }
 
   async refresh(rawRefreshToken: string) {
@@ -555,10 +645,10 @@ export class AuthService {
     );
   }
 
-  /** Hash a pending OTP: HMAC-SHA256(secret, `${userId}:${code}`). */
-  private hashOtp(userId: string, code: string): string {
+  /** Hash a pending OTP: HMAC-SHA256(secret, `${purpose}:${userId}:${code}`). */
+  private hashOtp(userId: string, code: string, purpose = 'register'): string {
     return createHmac('sha256', this.otpSecret())
-      .update(`${userId}:${code}`)
+      .update(`${purpose}:${userId}:${code}`)
       .digest('hex');
   }
 
