@@ -8,7 +8,7 @@ import { TurnstileField, useTurnstileRequired } from "@/components/platform/turn
 import { buttonVariants } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
 import { formatApiError } from "@/lib/api/format-api-error";
-import { login, verifyOtp, forgotPassword, resetPassword } from "@/lib/services/api/auth";
+import { verifyOtp, forgotPassword, resetPassword } from "@/lib/services/api/auth";
 import { clearReferralRef, getReferralRef } from "@/lib/routing/referral-ref";
 import { clearCachedWalletMe } from "@/lib/auth/wallet-session-cache";
 import { inputClass } from "@/lib/ui/ui-tokens";
@@ -17,20 +17,8 @@ import { GoogleSignInButton } from "@/components/platform/google-sign-in-button"
 
 type PendingOtp = { userId: string; devOtp?: string };
 
-function Divider() {
-  return (
-    <div className="relative py-1">
-      <div className="absolute inset-0 flex items-center" aria-hidden="true">
-        <div className="w-full border-t border-[var(--border)]" />
-      </div>
-      <div className="relative flex justify-center">
-        <span className="bg-[var(--card)] px-2 text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
-          or with email
-        </span>
-      </div>
-    </div>
-  );
-}
+// Divider component dihapus (Fase 2 — email/password form tidak lagi ditampilkan
+// di login/register modal, jadi separator "or with email" tidak terpakai).
 
 function Field({
   label,
@@ -61,12 +49,6 @@ export function AuthModal() {
   const [turnstileKey, setTurnstileKey] = useState(0);
   const turnstileRequired = useTurnstileRequired();
   /**
-   * Toggle untuk show/hide form email+password di mode login.
-   * Default: hidden (Google prominent). User klik link untuk expand.
-   * Safety net untuk admin / existing user yang mau pakai password.
-   */
-  const [showEmailForm, setShowEmailForm] = useState(false);
-  /**
    * Input referral manual di mode register. Dipassing ke GoogleSignInButton
    * via referralOverride supaya ikut dikirim saat user klik Google.
    */
@@ -77,7 +59,6 @@ export function AuthModal() {
       setError(null);
       setPendingOtp(null);
       setTurnstileToken(null);
-      setShowEmailForm(false);
       setManualReferral("");
     } else {
       setReferralDefault(getReferralRef());
@@ -114,39 +95,9 @@ export function AuthModal() {
     return true;
   }
 
-  async function onLogin(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError(null);
-    if (!requireTurnstile()) return;
-    const fd = new FormData(e.currentTarget);
-    setBusy(true);
-    try {
-      const payload = await login(
-        String(fd.get("email") ?? ""),
-        String(fd.get("password") ?? ""),
-        turnstileToken ?? "",
-      );
-      if (payload.needsVerification === true) {
-        const userId = typeof payload.userId === "string" ? payload.userId : null;
-        if (userId) {
-          const rawOtp = payload.devOtp;
-          const devOtp =
-            typeof rawOtp === "string" && /^[0-9]{6}$/.test(rawOtp) ? rawOtp : undefined;
-          setPendingOtp({ userId, devOtp });
-          return;
-        }
-      }
-      clearCachedWalletMe();
-      closeAuth();
-      redirectAfterAuth();
-    } catch (err) {
-      setError(formatApiError(err, "Sign in failed. Check your email and password."));
-      setTurnstileKey((k) => k + 1);
-      setTurnstileToken(null);
-    } finally {
-      setBusy(false);
-    }
-  }
+  // onLogin dihapus dari UI (Fase 2 — login via Google saja).
+  // Backend endpoint /auth/login TETAP ADA (defense in depth) untuk admin /
+  // testing via curl, tapi tidak lagi reachable dari modal auth.
 
   // onRegister dihapus dari UI (Fase 2 — register via Google saja).
   // Backend endpoint /auth/register TETAP ada (defense in depth) tapi tidak
@@ -415,7 +366,9 @@ export function AuthModal() {
             </form>
           ) : mode === "login" ? (
             <div className="space-y-4">
-              {/* Google prominent di atas */}
+              {/* Google-only (Fase 2). Form email/password + toggle DIHAPUS dari UI.
+                  Backend endpoint /auth/login tetap jalan (defense in depth),
+                  tapi tidak lagi reachable dari modal auth. */}
               <GoogleSignInButton
                 onSuccess={() => {
                   clearCachedWalletMe();
@@ -424,68 +377,6 @@ export function AuthModal() {
                 }}
                 onError={(msg) => setError(msg)}
               />
-
-              {/* Link toggle untuk show/hide form email+password (safety net). */}
-              <div className="pt-2 text-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowEmailForm((v) => !v);
-                    setError(null);
-                  }}
-                  className="text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:underline"
-                >
-                  {showEmailForm
-                    ? "← Use Google instead"
-                    : "Sign in with email instead"}
-                </button>
-              </div>
-
-              {/* Form email/password di-collapse (default hidden). */}
-              {showEmailForm ? (
-                <form onSubmit={onLogin} className="space-y-4 pt-2">
-                  <Divider />
-                  <Field label="Email">
-                    <input
-                      name="email"
-                      type="email"
-                      required
-                      autoComplete="email"
-                      placeholder="you@example.com"
-                      className={inputClass}
-                    />
-                  </Field>
-                  <PasswordInput
-                    id="auth-login-password"
-                    label="Password"
-                    autoComplete="current-password"
-                    placeholder="Your password"
-                    inputClassName="bg-[var(--muted)]/80"
-                  />
-                  <div className="flex justify-end">
-                    <button
-                      type="button"
-                      className="text-xs font-medium text-canton hover:underline"
-                      onClick={() => {
-                        setResetEmail("");
-                        openAuth("forgot", nextPath);
-                        setError(null);
-                      }}
-                    >
-                      Forgot password?
-                    </button>
-                  </div>
-                  <TurnstileField resetKey={turnstileKey} onToken={setTurnstileToken} />
-                  <button
-                    type="submit"
-                    disabled={busy}
-                    className={cn(buttonVariants({ size: "block" }), "mt-2 gap-2")}
-                  >
-                    {busy ? <LoadingSpinner size="md" /> : null}
-                    Sign In
-                  </button>
-                </form>
-              ) : null}
 
               <p className="text-center text-sm text-[var(--muted-foreground)]">
                 No account?{" "}
