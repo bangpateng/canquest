@@ -3,12 +3,15 @@ generator client {
   engineType = "binary"
 }
 
-// PostgreSQL for both local dev and production.
+// PostgreSQL (Supabase Postgres cloud).
 // Local dev: install PostgreSQL locally or run `docker compose up db` from /infra.
-// Production (VPS 2): DATABASE_URL=postgresql://canquest:PASSWORD@localhost:5432/canquest_app
+// Production: Supabase cloud — runtime pakai pooler PgBouncer port 6543
+//   (DATABASE_URL), migration pakai direct connection port 5432 (DIRECT_URL)
+//   supaya tidak kena error P1001/P2024 saat prisma migrate.
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 /// Application state: auth, quests, earn entries, etc.
@@ -91,6 +94,27 @@ model User {
   swapTransactions        SwapTransaction[]
   /// Delivery token/CC tertunda dari swap yang gagal di-deliver on-chain.
   pendingDeliveries       PendingDelivery[]
+  /// OAuth / external identity links (Google, dst). 1 user bisa banyak provider.
+  accounts                Account[]
+}
+
+/// OAuth account link — binds a User to an external identity provider.
+/// providerAccountId = provider's stable, immutable subject (e.g. Google `sub`),
+/// BUKAN email. Email cuma snapshot untuk audit.
+model Account {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// "google" | "apple" | dst.
+  provider          String
+  /// Stable immutable subject from provider (Google sub, Apple sub).
+  providerAccountId String
+  /// Snapshot email saat link (audit only — identity source-of-truth = sub).
+  email             String
+  linkedAt          DateTime @default(now())
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
 }
 
 /// Catatan partisipasi user di campaign Earn — sekaligus sumber pengurang poin

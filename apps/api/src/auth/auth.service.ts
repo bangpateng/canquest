@@ -25,6 +25,7 @@ import {
 } from '../common/canton-party-id';
 import { validateRegistrationEmail } from '../common/disposable-email';
 import { ResendEmailService } from './resend-email.service';
+import { OAuth2Client } from 'google-auth-library';
 
 const BCRYPT_ROUNDS = 12;
 const OTP_TTL_MS = 15 * 60 * 1000;
@@ -47,7 +48,15 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly resend: ResendEmailService,
-  ) {}
+    /**
+     * Lazy-init supaya dev lokal tanpa GOOGLE_CLIENT_ID tetap boot.
+     * Di production, GOOGLE_CLIENT_ID wajib diset sebelum /auth/google dipanggil.
+     */
+  ) {
+    this.googleClient = new OAuth2Client();
+  }
+
+  private readonly googleClient: OAuth2Client;
 
   async register(dto: {
     email: string;
@@ -173,6 +182,102 @@ export class AuthService {
         devOtp,
       };
     }
+
+    return this.issueTokens(user.id, user.email);
+  }
+
+  // ── Google Login ─────────────────────────────────────────────────────────
+
+  /**
+   * Login / register via Google ID Token (One Tap / GIS).
+   *
+   * FLOW:
+   *   1. Verify Google ID Token (signature + audience match GOOGLE_CLIENT_ID).
+   *   2. Wajib `email_verified=true` di payload Google (anti spoof).
+   *   3. Cari existing User by email:
+   *        - KETEMU (ACTIVE) → link Account(provider='google', sub=google_sub), issue JWT.
+   *        - KETEMU (BANNED/SUSPENDED) → tolak.
+   *        - TIDAK KETEMU → buat User baru (Google-only, passwordHash='') + link Account.
+   *
+   * KEAMANAN:
+   *   - Auto-link by email AMAN untuk Gmail (Google enforce uniqueness + phone verify).
+   *   - `providerAccountId` = Google sub (stable, immutable) bukan email — supaya
+   *     user ganti email Google pun link tetap valid next login.
+   *   - Gmail existing yang sudah set password: Account di-link, password tetap utuh
+   *     (fallback tetap jalan).
+   *   - Google-only users (passwordHash='') TIDAK bisa login via password
+   *     (bcrypt.compare('', storedHash) → false).
+   */
+  async loginWithGoogle(idToken: string) {
+    if (!process.env.GOOGLE_CLIENT_ID) {
+      throw new UnauthorizedException('Google login is not configured');
+    }
+
+    let payload;
+    try {
+      const ticket = await this.googleClient.verifyIdToken({
+        idToken,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+      payload = ticket.getPayload();
+    } catch (err) {
+      this.logger.warn(`Google token verify failed: ${String(err)}`);
+      throw new UnauthorizedException('Invalid Google token');
+    }
+
+    if (!payload?.email_verified || !payload.email || !payload.sub) {
+      throw new UnauthorizedException('Invalid Google token payload');
+    }
+
+    const email = payload.email.toLowerCase();
+    const googleSub = payload.sub;
+
+    // Cari existing user by email.
+    let user = await this.users.findByEmail(email);
+    if (!user) {
+      // Register baru (Google-only). passwordHash wajib non-null di schema → ''.
+      // Login password akan bcrypt.compare('', '') → false → password fallback blocked.
+      const referralCode = await this.referral.generateUniqueReferralCode();
+      const localPart = email.split('@')[0] ?? 'User';
+      const displayName =
+        payload.name ??
+        localPart.charAt(0).toUpperCase() +
+          localPart.slice(1, 80).replace(/[.+]/g, ' ');
+
+      user = await this.users.create({
+        email,
+        passwordHash: '',
+        referralCode,
+        displayName,
+        // Google sudah verifikasi email — skip OTP register.
+        emailVerified: true,
+      });
+      // Referral reward berlaku setelah user terdaftar (no referrer pada Google login).
+      await this.referral.completeReferralForUser(user.id);
+    } else if (user.status !== 'ACTIVE') {
+      throw new ForbiddenException(
+        user.status === 'BANNED'
+          ? 'This account has been banned.'
+          : 'This account is suspended.',
+      );
+    }
+
+    // Link Google Account (idempotent — kalau sudah link, no-op).
+    await this.prisma.account.upsert({
+      where: {
+        provider_providerAccountId: {
+          provider: 'google',
+          providerAccountId: googleSub,
+        },
+      },
+      create: {
+        userId: user.id,
+        provider: 'google',
+        providerAccountId: googleSub,
+        email,
+      },
+      update: {},
+    });
 
     return this.issueTokens(user.id, user.email);
   }

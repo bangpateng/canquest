@@ -12,6 +12,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { GoogleLoginDto } from './dto/google-login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
@@ -54,6 +55,17 @@ export class AuthController {
   @Throttle({ auth: { limit: 10, ttl: 60_000 } })
   login(@Body() body: LoginDto) {
     return this.auth.login(body);
+  }
+
+  /**
+   * Google Login — verify Google ID Token, link/ register User + Account,
+   * issue JWT CanQuest. BFF set cookie cq_access/cq_refresh sama seperti login.
+   * Throttle ketat: 10 req/menit per IP (sejajar login password).
+   */
+  @Post('google')
+  @Throttle({ auth: { limit: 10, ttl: 60_000 } })
+  loginWithGoogle(@Body() body: GoogleLoginDto) {
+    return this.auth.loginWithGoogle(body.idToken);
   }
 
   /**
