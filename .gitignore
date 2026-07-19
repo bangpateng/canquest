@@ -99,6 +99,8 @@ Thumbs.db
 *.swp
 *.swo
 nul
+# Windows shell artefacts (Git Bash redirect `> nul`, Cygwin/MSYS crash dumps)
+*.stackdump
 
 # ─── Internal / infra docs (host IPs, deploy runbooks, investigation notes) ──
 # Keep these LOCAL only — repo is public. They leak infrastructure topology.
