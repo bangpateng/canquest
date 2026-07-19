@@ -8,7 +8,7 @@ import { TurnstileField, useTurnstileRequired } from "@/components/platform/turn
 import { buttonVariants } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
 import { formatApiError } from "@/lib/api/format-api-error";
-import { login, register, verifyOtp, forgotPassword, resetPassword } from "@/lib/services/api/auth";
+import { login, verifyOtp, forgotPassword, resetPassword } from "@/lib/services/api/auth";
 import { clearReferralRef, getReferralRef } from "@/lib/routing/referral-ref";
 import { clearCachedWalletMe } from "@/lib/auth/wallet-session-cache";
 import { inputClass } from "@/lib/ui/ui-tokens";
@@ -60,12 +60,25 @@ export function AuthModal() {
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileKey, setTurnstileKey] = useState(0);
   const turnstileRequired = useTurnstileRequired();
+  /**
+   * Toggle untuk show/hide form email+password di mode login.
+   * Default: hidden (Google prominent). User klik link untuk expand.
+   * Safety net untuk admin / existing user yang mau pakai password.
+   */
+  const [showEmailForm, setShowEmailForm] = useState(false);
+  /**
+   * Input referral manual di mode register. Dipassing ke GoogleSignInButton
+   * via referralOverride supaya ikut dikirim saat user klik Google.
+   */
+  const [manualReferral, setManualReferral] = useState("");
 
   useEffect(() => {
     if (!open) {
       setError(null);
       setPendingOtp(null);
       setTurnstileToken(null);
+      setShowEmailForm(false);
+      setManualReferral("");
     } else {
       setReferralDefault(getReferralRef());
       setTurnstileKey((k) => k + 1);
@@ -135,45 +148,9 @@ export function AuthModal() {
     }
   }
 
-  async function onRegister(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError(null);
-    if (!requireTurnstile()) return;
-    const fd = new FormData(e.currentTarget);
-    setBusy(true);
-    try {
-      const referralRaw =
-        String(fd.get("referralCode") ?? "").trim() || getReferralRef() || undefined;
-      const payload = await register({
-        email: String(fd.get("email") ?? ""),
-        password: String(fd.get("password") ?? ""),
-        referralCode: referralRaw,
-        turnstileToken: turnstileToken ?? "",
-      });
-      if (payload.ok === true) {
-        clearReferralRef();
-        clearCachedWalletMe();
-        closeAuth();
-        redirectAfterAuth();
-        return;
-      }
-      const userId = typeof payload.userId === "string" ? payload.userId : null;
-      if (userId) {
-        const rawOtp = payload.devOtp;
-        const devOtp =
-          typeof rawOtp === "string" && /^[0-9]{6}$/.test(rawOtp) ? rawOtp : undefined;
-        setPendingOtp({ userId, devOtp });
-        return;
-      }
-      setError("Unexpected response. Please try again.");
-    } catch (err) {
-      setError(formatApiError(err, "Registration failed."));
-      setTurnstileKey((k) => k + 1);
-      setTurnstileToken(null);
-    } finally {
-      setBusy(false);
-    }
-  }
+  // onRegister dihapus dari UI (Fase 2 — register via Google saja).
+  // Backend endpoint /auth/register TETAP ada (defense in depth) tapi tidak
+  // lagi dipanggil dari modal. Kalau perlu re-enable, restore function ini.
 
   async function onVerifyOtp(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -252,10 +229,9 @@ export function AuthModal() {
     }
   }
 
-  const tabs: { id: AuthModalMode; label: string }[] = [
-    { id: "login", label: "Sign In" },
-    { id: "register", label: "Register" },
-  ];
+  // Tabs Sign In/Register dihapus — register sekarang via Google saja.
+  // Login password tetap ada (collapsed), sebagai safety net.
+  // Switch antar mode via link di dalam form (lihat body).
 
   const title = pendingOtp
     ? "Verify email"
@@ -304,28 +280,7 @@ export function AuthModal() {
             ) : null}
           </div>
 
-          {!pendingOtp && mode !== "forgot" && mode !== "reset" && (
-            <div className="mt-5 flex gap-1 rounded-full bg-[var(--muted)] p-1">
-              {tabs.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => {
-                    openAuth(t.id, nextPath);
-                    setError(null);
-                  }}
-                  className={cn(
-                    "flex-1 rounded-full py-2.5 text-sm font-semibold transition-all",
-                    mode === t.id
-                      ? "bg-emerald-500 text-white"
-                      : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
-                  )}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-          )}
+          {/* Tabs Sign In/Register dihapus (Fase 2). Switch via link di body. */}
         </div>
 
         <div className="relative border-t border-[var(--border)] px-6 py-6">
@@ -459,7 +414,8 @@ export function AuthModal() {
               </p>
             </form>
           ) : mode === "login" ? (
-            <form onSubmit={onLogin} className="space-y-4">
+            <div className="space-y-4">
+              {/* Google prominent di atas */}
               <GoogleSignInButton
                 onSuccess={() => {
                   clearCachedWalletMe();
@@ -468,46 +424,69 @@ export function AuthModal() {
                 }}
                 onError={(msg) => setError(msg)}
               />
-              <Divider />
-              <Field label="Email">
-                <input
-                  name="email"
-                  type="email"
-                  required
-                  autoComplete="email"
-                  placeholder="you@example.com"
-                  className={inputClass}
-                />
-              </Field>
-              <PasswordInput
-                id="auth-login-password"
-                label="Password"
-                autoComplete="current-password"
-                placeholder="Your password"
-                inputClassName="bg-[var(--muted)]/80"
-              />
-              <div className="flex justify-end">
+
+              {/* Link toggle untuk show/hide form email+password (safety net). */}
+              <div className="pt-2 text-center">
                 <button
                   type="button"
-                  className="text-xs font-medium text-canton hover:underline"
                   onClick={() => {
-                    setResetEmail("");
-                    openAuth("forgot", nextPath);
+                    setShowEmailForm((v) => !v);
                     setError(null);
                   }}
+                  className="text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:underline"
                 >
-                  Forgot password?
+                  {showEmailForm
+                    ? "← Use Google instead"
+                    : "Sign in with email instead"}
                 </button>
               </div>
-              <TurnstileField resetKey={turnstileKey} onToken={setTurnstileToken} />
-              <button
-                type="submit"
-                disabled={busy}
-                className={cn(buttonVariants({ size: "block" }), "mt-2 gap-2")}
-              >
-                {busy ? <LoadingSpinner size="md" /> : null}
-                Sign In
-              </button>
+
+              {/* Form email/password di-collapse (default hidden). */}
+              {showEmailForm ? (
+                <form onSubmit={onLogin} className="space-y-4 pt-2">
+                  <Divider />
+                  <Field label="Email">
+                    <input
+                      name="email"
+                      type="email"
+                      required
+                      autoComplete="email"
+                      placeholder="you@example.com"
+                      className={inputClass}
+                    />
+                  </Field>
+                  <PasswordInput
+                    id="auth-login-password"
+                    label="Password"
+                    autoComplete="current-password"
+                    placeholder="Your password"
+                    inputClassName="bg-[var(--muted)]/80"
+                  />
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-canton hover:underline"
+                      onClick={() => {
+                        setResetEmail("");
+                        openAuth("forgot", nextPath);
+                        setError(null);
+                      }}
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                  <TurnstileField resetKey={turnstileKey} onToken={setTurnstileToken} />
+                  <button
+                    type="submit"
+                    disabled={busy}
+                    className={cn(buttonVariants({ size: "block" }), "mt-2 gap-2")}
+                  >
+                    {busy ? <LoadingSpinner size="md" /> : null}
+                    Sign In
+                  </button>
+                </form>
+              ) : null}
+
               <p className="text-center text-sm text-[var(--muted-foreground)]">
                 No account?{" "}
                 <button
@@ -518,12 +497,15 @@ export function AuthModal() {
                     setError(null);
                   }}
                 >
-                  Register
+                  Create one with Google
                 </button>
               </p>
-            </form>
+            </div>
           ) : (
-            <form onSubmit={onRegister} className="space-y-4">
+            <div className="space-y-4">
+              {/* Mode register — form email/password DIHAPUS (Fase 2).
+                  User baru wajib pakai Google. Referral tetap bisa diinput
+                  manual di sini, di-pass ke Google flow via referralOverride. */}
               <GoogleSignInButton
                 onSuccess={() => {
                   clearCachedWalletMe();
@@ -531,44 +513,29 @@ export function AuthModal() {
                   redirectAfterAuth();
                 }}
                 onError={(msg) => setError(msg)}
+                referralOverride={manualReferral}
               />
-              <Divider />
-              <Field label="Email">
+
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3 text-xs text-[var(--muted-foreground)]">
+                Email registration disabled. Use Google to create an account.
+                Gmail users get instant access with their existing account.
+              </div>
+
+              {/* Referral input manual — ikut dikirim saat klik Google. */}
+              <Field
+                label="Referral code (optional)"
+                hint="Auto-applied when you continue with Google."
+              >
                 <input
-                  name="email"
-                  type="email"
-                  required
-                  autoComplete="email"
-                  placeholder="you@example.com"
-                  className={inputClass}
-                />
-              </Field>
-              <PasswordInput
-                id="auth-register-password"
-                label="Password"
-                autoComplete="new-password"
-                placeholder="At least 8 characters"
-                minLength={8}
-                inputClassName="bg-[var(--muted)]/80"
-              />
-              <Field label="Referral code (optional)">
-                <input
-                  name="referralCode"
+                  type="text"
+                  value={manualReferral || referralDefault}
+                  onChange={(e) => setManualReferral(e.target.value.trim().toUpperCase())}
                   autoComplete="off"
                   placeholder="e.g. CQ8X4K2M"
                   className={inputClass}
-                  defaultValue={referralDefault}
                 />
               </Field>
-              <TurnstileField resetKey={turnstileKey} onToken={setTurnstileToken} />
-              <button
-                type="submit"
-                disabled={busy}
-                className={cn(buttonVariants({ size: "block" }), "mt-2 gap-2")}
-              >
-                {busy ? <LoadingSpinner size="md" /> : null}
-                {busy ? "Sending code…" : "Create account"}
-              </button>
+
               <p className="text-center text-sm text-[var(--muted-foreground)]">
                 Already have an account?{" "}
                 <button
@@ -582,7 +549,7 @@ export function AuthModal() {
                   Sign In
                 </button>
               </p>
-            </form>
+            </div>
           )}
         </div>
       </div>
