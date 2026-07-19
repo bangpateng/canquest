@@ -516,16 +516,8 @@ export function AuthModal() {
                 referralOverride={manualReferral}
               />
 
-              <div className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3 text-xs text-[var(--muted-foreground)]">
-                Email registration disabled. Use Google to create an account.
-                Gmail users get instant access with their existing account.
-              </div>
-
               {/* Referral input manual — ikut dikirim saat klik Google. */}
-              <Field
-                label="Referral code (optional)"
-                hint="Auto-applied when you continue with Google."
-              >
+              <Field label="Referral code (optional)">
                 <input
                   type="text"
                   value={manualReferral || referralDefault}
