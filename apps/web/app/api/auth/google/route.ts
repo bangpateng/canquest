@@ -8,9 +8,12 @@ import { NextResponse } from "next/server";
  *
  * Tidak butuh Turnstile (Google verify signature sendiri). Throttle backend
  * sudah handle 10 req/menit per IP.
+ *
+ * Body: { idToken, referralCode? } — referralCode opsional. Frontend kirim
+ * dari sessionStorage `canquest_referral_ref` (link ?ref= atau input manual).
  */
 export async function POST(req: Request) {
-  let body: { idToken?: string };
+  let body: { idToken?: string; referralCode?: string };
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -22,9 +25,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Missing Google ID token" }, { status: 400 });
   }
 
+  const referralCode = body.referralCode?.trim() || undefined;
+
   const { res, data } = await postJsonParse<Record<string, unknown>>(
     "/auth/google",
-    { idToken },
+    referralCode ? { idToken, referralCode } : { idToken },
   );
   if (!res.ok) {
     return NextResponse.json(data, { status: res.status });

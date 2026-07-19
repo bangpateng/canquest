@@ -6,6 +6,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { formatApiError } from "@/lib/api/format-api-error";
 import { loginWithGoogle } from "@/lib/services/api/auth";
 import { clearCachedWalletMe } from "@/lib/auth/wallet-session-cache";
+import { getReferralRef, clearReferralRef } from "@/lib/routing/referral-ref";
 import { cn } from "@/lib/utils/utils";
 
 /**
@@ -18,6 +19,12 @@ import { cn } from "@/lib/utils/utils";
  * On success → dapat `credential` (Google ID Token) → POST BFF /api/auth/google
  * → backend verifyIdToken + issue JWT CanQuest → setAuthCookies.
  *
+ * REFERRAL (Fase 1 patch):
+ *   - Baca `getReferralRef()` dari sessionStorage (link ?ref= atau input manual).
+ *   - Kirim ke backend sebagai `referralCode` opsional. Backend hanya apply
+ *     untuk user BARU; existing user → diabaikan.
+ *   - Setelah sukses login, `clearReferralRef()` supaya sessionStorage bersih.
+ *
  * Catatan: kita TIDAK pakai useGoogleLogin (itu OAuth flow, return access_token
  * / auth code, BUKAN id_token). Backend auth.service.loginWithGoogle verify
  * ID Token (signature + audience) — bukan OAuth code exchange.
@@ -25,9 +32,12 @@ import { cn } from "@/lib/utils/utils";
 export function GoogleSignInButton({
   onSuccess,
   onError,
+  /** Override referral code (mis. dari input manual di form register). */
+  referralOverride,
 }: {
   onSuccess: () => void;
   onError: (message: string) => void;
+  referralOverride?: string;
 }) {
   if (!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID) {
     // Fallback: kalau Google Client ID belum di-set, tombol disabled + pesan.
@@ -55,9 +65,13 @@ export function GoogleSignInButton({
             onError("Google sign-in failed: no credential returned.");
             return;
           }
+          // Referral priority: override (input manual) > sessionStorage (?ref=).
+          const referralCode =
+            referralOverride?.trim() || getReferralRef() || undefined;
           try {
-            await loginWithGoogle(idToken);
+            await loginWithGoogle(idToken, referralCode);
             clearCachedWalletMe();
+            clearReferralRef();
             onSuccess();
           } catch (err) {
             onError(

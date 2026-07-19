@@ -27,11 +27,15 @@ export function login(email: string, password: string, turnstileToken: string) {
 /**
  * Google Login — kirim Google ID Token (dari GIS / One Tap) ke BFF.
  * BFF verify+forward ke Nest, set cookie cq_access/cq_refresh.
+ *
+ * referralCode opsional — diambil dari sessionStorage `canquest_referral_ref`
+ * (link ?ref=) atau input manual di form register. Hanya dipakai untuk user
+ * baru; existing user → referralCode diabaikan backend.
  */
-export function loginWithGoogle(idToken: string) {
+export function loginWithGoogle(idToken: string, referralCode?: string) {
   return apiFetch<Record<string, unknown>>('/api/auth/google', {
     method: 'POST',
-    json: { idToken },
+    json: referralCode ? { idToken, referralCode } : { idToken },
   });
 }
 

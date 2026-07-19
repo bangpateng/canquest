@@ -61,11 +61,14 @@ export class AuthController {
    * Google Login — verify Google ID Token, link/ register User + Account,
    * issue JWT CanQuest. BFF set cookie cq_access/cq_refresh sama seperti login.
    * Throttle ketat: 10 req/menit per IP (sejajar login password).
+   *
+   * Body: { idToken, referralCode? } — referralCode opsional, hanya dipakai
+   * saat user BARU (referrer tidak bisa berubah post-signup).
    */
   @Post('google')
   @Throttle({ auth: { limit: 10, ttl: 60_000 } })
   loginWithGoogle(@Body() body: GoogleLoginDto) {
-    return this.auth.loginWithGoogle(body.idToken);
+    return this.auth.loginWithGoogle(body.idToken, body.referralCode);
   }
 
   /**

@@ -207,8 +207,15 @@ export class AuthService {
    *     (fallback tetap jalan).
    *   - Google-only users (passwordHash='') TIDAK bisa login via password
    *     (bcrypt.compare('', storedHash) → false).
+   *
+   * REFERRAL (Fase 1 patch):
+   *   - referralCode hanya dipakai saat user BARU (belum terdaftar).
+   *   - Existing user login Google → referral diabaikan (referrer tidak boleh
+   *     berubah post-signup).
+   *   - resolveReferralForEmail throw kalau code invalid (anti brute-force
+   *     enumeration); user tetap dibuat tapi tanpa referrer.
    */
-  async loginWithGoogle(idToken: string) {
+  async loginWithGoogle(idToken: string, referralCode?: string) {
     if (!process.env.GOOGLE_CLIENT_ID) {
       throw new UnauthorizedException('Google login is not configured');
     }
@@ -237,22 +244,37 @@ export class AuthService {
     if (!user) {
       // Register baru (Google-only). passwordHash wajib non-null di schema → ''.
       // Login password akan bcrypt.compare('', '') → false → password fallback blocked.
-      const referralCode = await this.referral.generateUniqueReferralCode();
+      const ownReferralCode = await this.referral.generateUniqueReferralCode();
       const localPart = email.split('@')[0] ?? 'User';
       const displayName =
         payload.name ??
         localPart.charAt(0).toUpperCase() +
           localPart.slice(1, 80).replace(/[.+]/g, ' ');
 
+      // Resolve referrer (kalau ada referralCode). Try/catch supaya referral
+      // invalid TIDAK block signup Google — user tetap dibuat tanpa referrer.
+      let referredById: string | null = null;
+      try {
+        referredById = await this.resolveReferralForEmail(
+          email,
+          referralCode,
+        );
+      } catch (err) {
+        this.logger.warn(
+          `Google signup referral resolve failed for ${email}: ${String(err)}`,
+        );
+      }
+
       user = await this.users.create({
         email,
         passwordHash: '',
-        referralCode,
+        referralCode: ownReferralCode,
         displayName,
+        referredById,
         // Google sudah verifikasi email — skip OTP register.
         emailVerified: true,
       });
-      // Referral reward berlaku setelah user terdaftar (no referrer pada Google login).
+      // Referral reward berlaku setelah user terdaftar (kalau ada referrer).
       await this.referral.completeReferralForUser(user.id);
     } else if (user.status !== 'ACTIVE') {
       throw new ForbiddenException(
