@@ -24,6 +24,17 @@ export function login(email: string, password: string, turnstileToken: string) {
   });
 }
 
+/**
+ * Google Login — kirim Google ID Token (dari GIS / One Tap) ke BFF.
+ * BFF verify+forward ke Nest, set cookie cq_access/cq_refresh.
+ */
+export function loginWithGoogle(idToken: string) {
+  return apiFetch<Record<string, unknown>>('/api/auth/google', {
+    method: 'POST',
+    json: { idToken },
+  });
+}
+
 export function register(params: {
   email: string;
   password: string;

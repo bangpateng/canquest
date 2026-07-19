@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
+import { GoogleOAuthProvider } from "@react-oauth/google";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { MaintenanceGate } from "@/components/providers/maintenance-gate";
 
@@ -27,7 +28,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
       }),
   );
 
-  return (
+  // Google Identity Services provider. Kalau GOOGLE_CLIENT_ID tidak diset
+  // (mis. dev env tanpa Google setup), provider tetap render tapi GIS script
+  // tidak load — tombol Google akan tampilkan error informatif saat di-klik.
+  const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+
+  const tree = (
     <ThemeProvider>
       <QueryClientProvider client={client}>
         {children}
@@ -35,5 +41,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <MaintenanceGate />
       </QueryClientProvider>
     </ThemeProvider>
+  );
+
+  if (!googleClientId) return tree;
+
+  return (
+    <GoogleOAuthProvider clientId={googleClientId}>{tree}</GoogleOAuthProvider>
   );
 }

@@ -13,8 +13,24 @@ import { clearReferralRef, getReferralRef } from "@/lib/routing/referral-ref";
 import { clearCachedWalletMe } from "@/lib/auth/wallet-session-cache";
 import { inputClass } from "@/lib/ui/ui-tokens";
 import { cn } from "@/lib/utils/utils";
+import { GoogleSignInButton } from "@/components/platform/google-sign-in-button";
 
 type PendingOtp = { userId: string; devOtp?: string };
+
+function Divider() {
+  return (
+    <div className="relative py-1">
+      <div className="absolute inset-0 flex items-center" aria-hidden="true">
+        <div className="w-full border-t border-[var(--border)]" />
+      </div>
+      <div className="relative flex justify-center">
+        <span className="bg-[var(--card)] px-2 text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
+          or with email
+        </span>
+      </div>
+    </div>
+  );
+}
 
 function Field({
   label,
@@ -444,6 +460,15 @@ export function AuthModal() {
             </form>
           ) : mode === "login" ? (
             <form onSubmit={onLogin} className="space-y-4">
+              <GoogleSignInButton
+                onSuccess={() => {
+                  clearCachedWalletMe();
+                  closeAuth();
+                  redirectAfterAuth();
+                }}
+                onError={(msg) => setError(msg)}
+              />
+              <Divider />
               <Field label="Email">
                 <input
                   name="email"
@@ -499,6 +524,15 @@ export function AuthModal() {
             </form>
           ) : (
             <form onSubmit={onRegister} className="space-y-4">
+              <GoogleSignInButton
+                onSuccess={() => {
+                  clearCachedWalletMe();
+                  closeAuth();
+                  redirectAfterAuth();
+                }}
+                onError={(msg) => setError(msg)}
+              />
+              <Divider />
               <Field label="Email">
                 <input
                   name="email"
