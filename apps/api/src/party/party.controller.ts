@@ -3030,59 +3030,47 @@ export class PartyController {
     });
     const ccAmount = ccBal ? Number(ccBal.balanceMicroCc) / 1_000_000 : 0;
 
-    // Non-CC token saldo: PURE on-chain (sumber kebenaran).
-    // DB off-chain (CantexTokenBalance) TIDAK dipakai untuk display.
+    // WAVE 6: Non-CC token saldo dari DB (CantexTokenBalance), BUKAN on-chain.
+    // Sebelumnya pakai queryTokenHoldings on-chain — tapi REST ACS di participant
+    // kami return [] (visibility issue), jadi selalu 0. DB di-update real-time
+    // oleh BalanceEventHandler via WSS event stream (Wave 6 Phase 2).
+    //
+    // Strategi:
+    //   1. Ambil semua CantexTokenBalance user dari DB (key = instrumentId::admin)
+    //   2. Filter whitelist (USDCx, CBTC) supaya UI konsisten
+    //   3. Tampilkan apa adanya dari DB
     const tokens: Record<string, string> = {};
 
-    if (user.cantonPartyId && !user.cantonPartyId.startsWith('canquest:')) {
-      try {
-        // Ambil daftar token yang dikenal dari Cantex pools.
-        const instruments = await this.cantex.getAllSwapInstruments();
-        // Filter: hanya token whitelist (CC + USDCx + CBTC) yang di-query
-        // on-chain. Sebelumnya query SEMUA 9 token → 9 ACS calls ke ledger
-        // per refresh. Sekarang cukup USDCx + CBTC (CC dari DB).
-        const onChainResults = await Promise.all(
-          instruments
-            .filter(
-              (inst) =>
-                inst.id.toLowerCase() !== 'amulet' &&
-                isVisibleInstrument(inst.id),
-            )
-            .map(async (inst) => {
-              const key = `${inst.id}::${inst.admin}`;
-              try {
-                const holdings = await this.ledger.queryTokenHoldings(
-                  user.cantonPartyId!,
-                  inst.id,
-                  inst.admin,
-                );
-                const sum = holdings.reduce(
-                  (acc, h) => acc + Number(h.amount || 0),
-                  0,
-                );
-                // Hot path: dipanggil per-token per refresh wallet. Turunkan ke
-                // verbose supaya tidak spam di GET /party/balances.
-                this.logger.verbose(
-                  `swapBalances on-chain: ${inst.id} → ${holdings.length} holdings, sum=${sum}`,
-                );
-                return { key, onChainAmount: sum };
-              } catch (err) {
-                this.logger.warn(
-                  `queryTokenHoldings failed for ${inst.id}: ${String(err)}`,
-                );
-                return { key, onChainAmount: 0 };
-              }
-            }),
-        );
-        for (const { key, onChainAmount } of onChainResults) {
-          // Pure on-chain: tampilkan apa adanya (0 kalau tidak pegang).
-          tokens[key] = onChainAmount.toFixed(10);
-        }
-      } catch (err) {
-        this.logger.warn(
-          `swapBalances on-chain query failed: ${String(err)}`,
-        );
+    try {
+      // Ambil daftar token whitelist dari Cantex pools (untuk DAPATKAN key
+      // lengkap walaupun user belum punya saldo — supaya UI bisa tampilkan 0).
+      const instruments = await this.cantex.getAllSwapInstruments();
+      const visibleNonCc = instruments.filter(
+        (inst) =>
+          inst.id.toLowerCase() !== 'amulet' && isVisibleInstrument(inst.id),
+      );
+
+      // Ambil semua row CantexTokenBalance user (1 query, bukan N queries).
+      const dbBalances = await this.prisma.cantexTokenBalance.findMany({
+        where: { userId: user.id },
+        select: { instrumentId: true, instrumentAdmin: true, balance: true },
+      });
+      const dbMap = new Map(
+        dbBalances.map((b) => [
+          `${b.instrumentId}::${b.instrumentAdmin}`,
+          Number(b.balance),
+        ]),
+      );
+
+      for (const inst of visibleNonCc) {
+        const key = `${inst.id}::${inst.admin}`;
+        const amount = dbMap.get(key) ?? 0;
+        tokens[key] = amount.toFixed(10);
       }
+    } catch (err) {
+      this.logger.warn(
+        `swapBalances DB query failed: ${String(err)}`,
+      );
     }
 
     return {

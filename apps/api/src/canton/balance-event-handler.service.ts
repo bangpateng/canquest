@@ -486,23 +486,60 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * Resolve owner party → user via DB. Cache 5 menit supaya tidak query tiap
-   * event untuk party yg sama.
+   * Resolve owner party / keycloak sub → user via DB. Cache 5 menit.
+   *
+   * Owner di event bisa datang dalam beberapa bentuk:
+   *   1. Canton party ID penuh: "karel::12209fe74271728c..."
+   *   2. Keycloak sub (format auth0): "auth0_007c6643538f2eadd3e573dd05b9"
+   *   3. Username prefix: "karel" (jarang, tapi mungkin)
+   *
+   * Strategi: coba match di 3 field berurutan:
+   *   1. cantonPartyId (case-insensitive exact match)
+   *   2. keycloakId (case-insensitive exact match)
+   *   3. cantonPartyId startsWith (mis. party "karel::xxx" → match username "karel")
+   *
+   * Owner bisa juga system wallet (DSO, validator, fee, Cantex trading account,
+   * Bridge-Operator) → return null (skip diam-diam, bukan error).
    */
   private async resolveUserByParty(
     partyId: string,
   ): Promise<{ userId: string; username: string | null } | null> {
+    if (!partyId || partyId.startsWith('canquest:')) return null;
+
     // Check cache.
     const cached = this.ownerCache.get(partyId);
     if (cached && Date.now() - cached.cachedAt < OWNER_CACHE_TTL_MS) {
       return cached.userId ? cached : null;
     }
 
-    // Lookup DB. Party ID case-insensitive (Canton normalize).
-    const user = await this.prisma.user.findFirst({
-      where: { cantonPartyId: { equals: partyId, mode: 'insensitive' } },
+    // Extract username prefix dari party ID (sebelum "::") untuk fallback match.
+    // Mis. "karel::1220..." → "karel". "auth0_007c..." → null (no ::).
+    const usernameHint = partyId.includes('::')
+      ? partyId.split('::')[0]
+      : null;
+
+    // Cari user — coba cantonPartyId exact, lalu keycloakId exact, lalu username.
+    let user = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { cantonPartyId: { equals: partyId, mode: 'insensitive' } },
+          { keycloakId: { equals: partyId, mode: 'insensitive' } },
+          ...(usernameHint
+            ? [{ username: { equals: usernameHint, mode: 'insensitive' as const } }]
+            : []),
+        ],
+      },
       select: { id: true, username: true },
     });
+
+    // Fallback terakhir: kalau masih tidak ketemu dan partyId diawali "auth0_",
+    // coba match keycloakId dengan startWith (kadang ada prefix/suffix beda).
+    if (!user && partyId.startsWith('auth0_')) {
+      user = await this.prisma.user.findFirst({
+        where: { keycloakId: { contains: partyId, mode: 'insensitive' } },
+        select: { id: true, username: true },
+      });
+    }
 
     const entry: OwnerCacheEntry = {
       userId: user?.id ?? '',
