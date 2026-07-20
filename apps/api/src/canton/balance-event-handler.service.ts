@@ -151,8 +151,16 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
       return;
     }
 
-    // Token non-CC (Holding burn-mint V1) — extract instrument + amount + owner.
-    if (template.includes(':Splice.Api.Token.HoldingV1:Holding')) {
+    // Token non-CC. Mainnet Canton pakai DUA template standard:
+    //   - "Splice.Api.Token.HoldingV1:Holding" (spec baru, splice-api-token)
+    //   - "Utility.Registry.Holding.V0.Holding:Holding" (registry token USDCx/CBTC)
+    // Keduanya handle sama — extract instrument + amount + owner dari
+    // createArgument. Field name bisa beda, jadi handler pakai banyak fallback.
+    if (
+      template.includes(':HoldingV1:Holding') ||
+      template.includes(':Holding.V0.Holding:Holding') ||
+      template.includes(':Holding:Holding')
+    ) {
       await this.handleTokenHoldingCreated(c, updateId);
       return;
     }
@@ -254,38 +262,79 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
   /**
    * Token holding (non-CC) baru tercipta → token masuk ke owner.
    * Update CantexTokenBalance supaya swapBalances endpoint (yang baca DB) reflect.
+   *
+   * WAVE 6: di mainnet Canton, template token holding punya beberapa varian:
+   *   - "Splice.Api.Token.HoldingV1:Holding" (spec baru)
+   *   - "Utility.Registry.Holding.V0.Holding:Holding" (USDCx/CBTC registry)
+   * Field name di createArgument bisa beda antar template. Handler ini pakai
+   * banyak fallback + DEBUG LOG kalau gagal extract (supaya kita bisa lihat
+   * shape asli dari produksi tanpa perlu iterate kode).
    */
   private async handleTokenHoldingCreated(
     c: { contractId: string; templateId: string; createArgument: Record<string, unknown>; witnessParties?: string[] },
     updateId: string,
   ): Promise<void> {
     const args = c.createArgument ?? {};
-    const ownerPartyId = typeof args.owner === 'string' ? args.owner : null;
-    if (!ownerPartyId) return;
 
-    // Extract instrument + amount.
-    const instrumentObj = args.instrument as Record<string, unknown> | undefined;
+    // Extract owner. Beberapa template pakai "owner", beberapa pakai "account".
+    const ownerPartyId =
+      typeof args.owner === 'string'
+        ? args.owner
+        : typeof args.account === 'string'
+          ? args.account
+          : typeof (args.owner as Record<string, unknown> | undefined)?.party === 'string'
+            ? ((args.owner as Record<string, unknown>).party as string)
+            : null;
+
+    // Extract instrument. Bentuk: {id, admin} object, atau flat fields.
+    const instrumentObj = (args.instrument ?? args.token ?? {}) as Record<string, unknown>;
     const instrumentId =
-      typeof instrumentObj?.id === 'string'
+      typeof instrumentObj.id === 'string'
         ? instrumentObj.id
         : typeof args.instrumentId === 'string'
           ? args.instrumentId
-          : null;
+          : typeof args.instrumentId === 'object'
+            ? ((args.instrumentId as Record<string, unknown>).id as string | undefined)
+            : null;
     const instrumentAdmin =
-      typeof instrumentObj?.admin === 'string'
+      typeof instrumentObj.admin === 'string'
         ? instrumentObj.admin
         : typeof args.instrumentAdmin === 'string'
           ? args.instrumentAdmin
-          : null;
-    if (!instrumentId || !instrumentAdmin) return;
+          : typeof args.instrumentAdmin === 'object'
+            ? ((args.instrumentAdmin as Record<string, unknown>).admin as string | undefined)
+            : null;
 
+    // Extract amount. Bisa flat string, nested {amount, ...}, atau {quantity: ...}.
+    const amtObj = args.amount as Record<string, unknown> | undefined;
     const amountStr =
       typeof args.amount === 'string'
         ? args.amount
-        : typeof (args.amount as Record<string, unknown> | undefined)?.amount === 'string'
-          ? ((args.amount as Record<string, unknown>).amount as string)
-          : null;
-    if (!amountStr) return;
+        : typeof amtObj?.amount === 'string'
+          ? (amtObj.amount as string)
+          : typeof amtObj?.initialAmount === 'string'
+            ? (amtObj.initialAmount as string)
+            : typeof args.quantity === 'string'
+              ? args.quantity
+              : typeof args.quantity === 'number'
+                ? String(args.quantity)
+                : null;
+
+    // DEBUG: kalau owner/instrument/amount gagal extract, dump top-level keys
+    // supaya kita lihat shape asli dari produksi (gak perlu iterate kode).
+    if (!ownerPartyId || !instrumentId || !instrumentAdmin || !amountStr) {
+      this.logger.warn(
+        `BalanceEventHandler: token holding created tapi field extraction gagal. ` +
+          `template=${c.templateId.split(':').slice(-2).join(':')} ` +
+          `owner=${ownerPartyId ? 'OK' : 'MISSING'} ` +
+          `instrument=${instrumentId ?? 'MISSING'}/${instrumentAdmin ?? 'MISSING'} ` +
+          `amount=${amountStr ?? 'MISSING'} ` +
+          `topKeys=${Object.keys(args).join(',')} ` +
+          `updateId=${updateId.slice(0, 16)}…`,
+      );
+      return;
+    }
+
     const amount = parseFloat(amountStr);
     if (!Number.isFinite(amount) || amount <= 0) return;
 
@@ -293,7 +342,11 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
     if (instrumentId.toLowerCase() === 'amulet') return;
 
     const user = await this.resolveUserByParty(ownerPartyId);
-    if (!user) return;
+    if (!user) {
+      // Owner bukan user Canquest (mis. Cantex trading account, Bridge-Operator).
+      // Ini normal — skip diam-diam, bukan error.
+      return;
+    }
 
     try {
       await this.prisma.cantexTokenBalance.upsert({
@@ -319,7 +372,7 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
       this.realtime.push(user.userId, 'balance:changed', null);
     } catch (err) {
       this.logger.warn(
-        `BalanceEventHandler: CantexTokenBalance increment failed: ${String(err)}`,
+        `BalanceEventHandler: CantexTokenBalance increment failed for ${instrumentId}: ${String(err)}`,
       );
     }
   }
