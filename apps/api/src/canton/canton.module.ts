@@ -17,6 +17,7 @@ import { LockEligibilityService } from './lock-eligibility.service';
 import { ModoApiService } from './modo-api.service';
 import { OfferReconcilerService } from './offer-reconciler.service';
 import { CantonUpdatesService } from './canton-updates.service';
+import { BalanceEventHandlerService } from './balance-event-handler.service';
 
 /**
  * CantonModule wires together:
@@ -46,6 +47,7 @@ import { CantonUpdatesService } from './canton-updates.service';
     ModoApiService,
     OfferReconcilerService,
     CantonUpdatesService,
+    BalanceEventHandlerService,
   ],
   exports: [
     CantonLedgerService,
@@ -61,6 +63,7 @@ import { CantonUpdatesService } from './canton-updates.service';
     ModoApiService,
     OfferReconcilerService,
     CantonUpdatesService,
+    BalanceEventHandlerService,
   ],
 })
 export class CantonModule {}

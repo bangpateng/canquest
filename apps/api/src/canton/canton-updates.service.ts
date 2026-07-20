@@ -78,6 +78,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { CantonLedgerService } from './canton-ledger.service';
 import { CcInboundSyncService } from './cc-inbound-sync.service';
 import { OfferReconcilerService } from './offer-reconciler.service';
+import { BalanceEventHandlerService } from './balance-event-handler.service';
 
 /**
  * Canton `/v2/updates` event shape (subset of fields kita pakai).
@@ -248,6 +249,7 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     private readonly realtime: RealtimeService,
     private readonly inboundSync: CcInboundSyncService,
     private readonly offerReconciler: OfferReconcilerService,
+    private readonly balanceHandler: BalanceEventHandlerService,
   ) {
     const ledgerUrl =
       config.get<string>('LEDGER_API_URL') ||
@@ -273,6 +275,23 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       error: (err) =>
         this.logger.error(`CantonUpdates: stream subject error: ${String(err)}`),
     });
+
+    // WAVE 6 Phase 2: BalanceEventHandler juga subscribe ke stream yg sama.
+    // Berbeda dari dispatchUpdate (yang debounce per-party + re-query ACS),
+    // handler ini langsung proses event payload untuk update DB balance +
+    // history. Idempotent via @@unique([userId, ledgerTxId=updateId]).
+    // fire-and-forget (void) supaya tidak block dispatchUpdate.
+    const balanceSub = this.updates$.subscribe({
+      next: (ev) => {
+        // void promise: jangan block dispatch path; handler punya try/catch internal.
+        void this.balanceHandler.processEvent(ev);
+      },
+      error: (err) =>
+        this.logger.error(
+          `CantonUpdates: balance handler stream error: ${String(err)}`,
+        ),
+    });
+    this.balanceHandler.attachSubscription(balanceSub);
 
     // Non-blocking: jangan block app startup kalau ledger lambat connect.
     void this.startStream();
