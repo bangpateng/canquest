@@ -697,8 +697,9 @@ export class SwapService {
         amountCc: params.amount,
         type: 'SWAP_OUT',
         description:
-          `Swap ${params.amount} CC → ${params.buyInstrumentId} ` +
-          `(network fee ${networkFeeCc} CC, platform fee ${platformFeeCc} CC)`,
+          `Swap ${params.amount} CC → ${swapResult.outputAmount} ${params.buyInstrumentId} ` +
+          `(Cantex fee ${swapResult.adminFeeAmount}+${swapResult.liquidityFeeAmount}, ` +
+          `WD fee ~${networkFeeCc} CC, platform fee ${platformFeeCc} CC)`,
         ledgerTxId: `swap:${swapTx.id}:cc-out`,
         status: 'COMPLETED',
       });
@@ -1172,7 +1173,8 @@ export class SwapService {
         type: 'SWAP_IN',
         description:
           `Swap ${params.amount} ${params.sellInstrumentId} → ${netCc.toFixed(6)} CC ` +
-          `(network fee ${networkFeeCc} CC, platform fee ${platformFeeCc} CC)`,
+          `(Cantex fee ${swapResult.adminFeeAmount}+${swapResult.liquidityFeeAmount}, ` +
+          `WD fee ~${networkFeeCc} CC, platform fee ${platformFeeCc} CC)`,
         ledgerTxId: `swap:${swapTx.id}:cc-in`,
         status: 'COMPLETED',
       });
