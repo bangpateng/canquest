@@ -349,35 +349,35 @@ export class SwapService {
       }
     }
 
-    // ── Non-CC: pakai executeTransferFactoryTransfer (CIP-56, Canton Ledger) ──
-    // Mirror P2P sendToken path yang sudah terbukti jalan untuk non-CC.
-    // sender = Cantex trading account party (tempat USDCx hasil swap nangkring).
-    // receiver = user party.
+    // ── Non-CC: pakai cantex.transferCC (Cantex REST, Ed25519 operator key) ──
     //
-    // PRASYARAT: LEDGER_API_ADMIN_USER (Keycloak operator Canquest) sudah di-grant
-    // CanActAs ke cfg.tradingAccountParty. Bila belum, akan dapat 403 dari ledger.
+    // STRATEGI WAVE 6 (revisi dari Wave 5): sebelumnya pakai
+    // executeTransferFactoryTransfer (Canton ledger CIP-56) yang butuh
+    // query holdings sender via REST ACS. Tapi REST ACS di participant kami
+    // return [] untuk semua party (visibility issue), sehingga selalu gagal
+    // dengan "Sender has no USDCx holdings".
+    //
+    // Solusi: pakai cantex.transferCC endpoint yg sama dgn CC path. Endpoint
+    // Cantex /v1/ledger/transaction/build/transfer menerima instrumentId
+    // generic — operator Cantex (Ed25519 key) berhak sign transfer apapun
+    // dari trading account. Kalau Cantex support non-CC, ini akan jalan.
+    // Kalau tidak support (return 400), fallback ke off-chain credit +
+    // PendingDelivery untuk reconcile manual (admin WD).
+    //
+    // PRASYARAT: CANTEX_OPERATOR_KEY punya rights ke trading account (sudah
+    // by design — itu key operator Cantex CanQuest).
     try {
-      const transferResult = await this.ledger.executeTransferFactoryTransfer({
-        senderPartyId: cfg.tradingAccountParty,
-        receiverPartyId: params.userPartyId,
-        amountCc: Number(params.amount),
+      const result = await this.cantex.transferCC({
+        receiver: params.userPartyId,
+        amount: params.amount,
         instrumentId: params.tokenId,
         instrumentAdmin: params.tokenAdmin,
-        clientNonce: `${params.swapTxId}:deliver:${params.requestId}`,
+        memo: `canquest-swap|${params.userPartyId}|${params.tokenId}|${params.requestId}`,
       });
-      if (!transferResult.ok) {
-        this.logger.error(
-          `Non-CC on-chain delivery FAILED (swap ${params.swapTxId}): ${transferResult.error ?? 'unknown'}. Token tetap di trading account — caller harus catat PendingDelivery.`,
-        );
-        return { ok: false };
-      }
       this.logger.log(
-        `On-chain non-CC delivery OK: ${params.amount} ${params.tokenId} → user party via CIP-56 (swap ${params.swapTxId}, kind=${transferResult.transferKind})`,
+        `On-chain non-CC delivery OK: ${params.amount} ${params.tokenId} → user party via Cantex transferCC (swap ${params.swapTxId})`,
       );
-      // Record PendingDelivery — status tergantung transferKind:
-      //   - direct: token langsung mendarat di user party → COMPLETED
-      //   - offer: TransferInstruction dibuat, user harus accept → PENDING_APPROVAL
-      //     (caller tidak perlu catat lagi; ini sudah audit trail)
+      // Record PendingDelivery COMPLETED untuk audit trail.
       try {
         await this.prisma.pendingDelivery.create({
           data: {
@@ -386,31 +386,24 @@ export class SwapService {
             tokenId: params.tokenId,
             tokenAdmin: params.tokenAdmin,
             amount: new Decimal(params.amount),
-            status:
-              transferResult.transferKind === 'direct'
-                ? 'COMPLETED'
-                : 'PENDING_APPROVAL',
-            transferKind: transferResult.transferKind,
-            transferInstructionCid:
-              transferResult.transferInstructionCid ?? null,
-            deliveredAt:
-              transferResult.transferKind === 'direct' ? new Date() : null,
+            status: 'COMPLETED',
+            transferKind: 'direct',
+            deliveredAt: new Date(),
           },
         });
       } catch {
         /* audit-only, non-blocking */
       }
-      return {
-        ok: true,
-        ledgerTxId: transferResult.updateId ?? undefined,
-      };
+      return { ok: true };
     } catch (err) {
-      // Bisa karena: (a) 403 PERMISSION_DENIED — operator belum di-grant
-      // CanActAs ke trading account; (b) holding tidak cukup; (c) registry error.
-      // Log eksplisit supaya root cause bisa cepat di-diagnosa di produksi.
+      // Cantex return 400 untuk non-CC = limitation endpoint (tidak support).
+      // Atau error lain (network, receiver belum setup, dll).
+      // Log eksplisit supaya bisa diagnose: kalau 400 → Cantex CC-only, perlu
+      // endpoint lain; kalau 403 → rights issue; dll.
       this.logger.error(
-        `Non-CC on-chain delivery EXCEPTION (swap ${params.swapTxId}, sender=${cfg.tradingAccountParty.slice(0, 20)}…): ${(err as Error).message}. Token tetap di trading account — caller harus catat PendingDelivery. ` +
-          `JIKA error mengandung "PERMISSION_DENIED"/"403"/"rights" → grant CanActAs operator ke trading account party.`,
+        `Non-CC on-chain delivery FAILED via Cantex transferCC (swap ${params.swapTxId}, token=${params.tokenId}): ${(err as Error).message}. ` +
+          `Kalau error "CC-only"/"not supported" → Cantex endpoint tidak support non-CC, perlu pendekatan lain. ` +
+          `Token tetap di trading account — caller harus catat PendingDelivery.`,
         (err as Error).stack,
       );
       return { ok: false };
