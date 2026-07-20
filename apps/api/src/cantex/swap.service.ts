@@ -594,10 +594,15 @@ export class SwapService {
 
     try {
       // 3. Transfer CC: user → trading account.
+      //    Network fee (networkFeeCc) DIKENAKAN KE USER — kirim buffer (amount + networkFee)
+      //    ke trading account. Cantex akan konsumsi network fee untuk swap execution
+      //    + withdrawal token. Network fee STAY di trading account (BUKAN ke canquest::fee).
+      //    Hanya platform fee yang masuk canquest::fee (di step 7, terpisah).
+      const ccLegAmount = params.amount + networkFeeCc;
       const transferResult = await this.ledger.executeTransferFactoryTransfer({
         senderPartyId: user.cantonPartyId,
         receiverPartyId: cfg.tradingAccountParty,
-        amountCc: params.amount,
+        amountCc: ccLegAmount,
         clientNonce: `${params.clientNonce}:cc-leg`,
       });
       if (!transferResult.ok) {
@@ -704,11 +709,12 @@ export class SwapService {
       // kegagalan dicatat ke PendingDelivery status FEE_PENDING supaya bisa
       // di-reconcile admin. Sebelumnya non-blocking warn-only → fee bocor
       // diam-diam tanpa jejak DB.
-      if (totalFeeCc > 0) {
-        // Network fee + platform fee — DITANGGUNG USER.
-        // Network fee mencakup: ~1 CC swap execution Cantex + ~1 CC withdrawal
-        // token ke user party. Platform fee = revenue dapp Canquest.
-        // Total dipotong dari user ke fee recipient (CANTON_FEE_RECIPIENT_PARTY_ID).
+      if (platformFeeCc > 0) {
+        // Platform fee — revenue dapp Canquest → masuk canquest::fee.
+        // Network fee (networkFeeCc) TIDAK dikirim ke sini — sudah dikirim ke
+        // trading account di CC leg (step 3) dan dikonsumsi Cantex untuk
+        // swap execution + withdrawal token. Hanya platform fee yang masuk
+        // canquest::fee.
         const feeRecipient =
           this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID') ?? '';
         if (feeRecipient) {
@@ -716,7 +722,7 @@ export class SwapService {
             await this.ledger.executeTransferFactoryTransfer({
               senderPartyId: user.cantonPartyId,
               receiverPartyId: feeRecipient,
-              amountCc: totalFeeCc,
+              amountCc: platformFeeCc,
               clientNonce: `${params.clientNonce}:fee`,
             });
           } catch (err) {
@@ -724,23 +730,21 @@ export class SwapService {
               swapTxId: swapTx.id,
               userId,
               userPartyId: user.cantonPartyId,
-              feeAmountCc: totalFeeCc,
+              feeAmountCc: platformFeeCc,
               feeRecipientPartyId: feeRecipient,
               clientNonceSuffix: ':fee',
               errorMessage: (err as Error).message,
             });
           }
         } else {
-          // Recipient belum dikonfigurasi — fee tidak akan pernah dipotong.
-          // Catat supaya admin sadar config hilang, bukan silent skip.
           this.logger.error(
-            `Total fee=${totalFeeCc} (network ${networkFeeCc} + platform ${platformFeeCc}) tapi CANTON_FEE_RECIPIENT_PARTY_ID kosong. Fee tidak dipotong untuk swap ${swapTx.id}.`,
+            `Platform fee=${platformFeeCc} tapi CANTON_FEE_RECIPIENT_PARTY_ID kosong. Fee tidak dipotong untuk swap ${swapTx.id}.`,
           );
           await this.recordFeePending({
             swapTxId: swapTx.id,
             userId,
             userPartyId: user.cantonPartyId,
-            feeAmountCc: totalFeeCc,
+            feeAmountCc: platformFeeCc,
             feeRecipientPartyId: '(not configured)',
             clientNonceSuffix: ':fee',
             errorMessage: 'CANTON_FEE_RECIPIENT_PARTY_ID not configured',
@@ -881,7 +885,6 @@ export class SwapService {
     const platformFeeCc = Number(
       this.config.get<string>('SWAP_PLATFORM_FEE_CC') ?? '0',
     );
-    const totalFeeCc = networkFeeCc + platformFeeCc;
 
     // 1. Cek token balance cukup (DB). WAVE 6: lookup case-insensitive supaya
     //    robust terhadap perbedaan case antara Cantex pools (frontend source)
@@ -1077,10 +1080,11 @@ export class SwapService {
         );
       }
 
-      // 6. Credit CcBalance off-chain (jika on-chain gagal).
-      //    Fee (network + platform) di-deduct dari CC yang diterima user.
-      //    networkFeeCc + platformFeeCc sudah dideklarasi di scope method.
-      const netCc = outputCcNum - totalFeeCc;
+      // 6. Network fee di-deduct dari output CC swap.
+      //    Network fee (Cantex WD CC ke user) dipotong dari output swap.
+      //    Platform fee ditangani terpisah di step fee leg (user → canquest::fee).
+      //    Network fee TIDAK masuk canquest::fee — dikonsumsi Cantex saat WD.
+      const netCc = outputCcNum - networkFeeCc;
 
       if (!ccOnChain) {
         // On-chain delivery gagal → credit off-chain (UX: user dapat CC),
@@ -1117,12 +1121,12 @@ export class SwapService {
       } else {
         // On-chain berhasil → CC sudah di user party.
         // alignBalanceFromChain akan update CcBalance dari on-chain truth.
-        // Tapi tetap kirim network fee + platform fee on-chain.
+        // Platform fee ditransfer terpisah ke canquest::fee (revenue dapp).
+        // Network fee TIDAK ditransfer — sudah dikonsumsi Cantex saat WD
+        // (output CC swap - networkFeeCc = netCc yang user terima).
         // BUG-K.2 fix: bila fee transfer gagal, catat ke PendingDelivery
-        // status FEE_PENDING supaya bisa di-reconcile admin (bukan silent
-        // skip). Swap tetap sukses dari sisi user.
-        // Fee DITANGGUNG USER: network fee (Cantex swap + WD) + platform fee.
-        if (totalFeeCc > 0) {
+        // status FEE_PENDING supaya bisa di-reconcile admin (bukan silent skip).
+        if (platformFeeCc > 0) {
           const feeRecipient =
             this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID') ?? '';
           if (feeRecipient) {
@@ -1130,7 +1134,7 @@ export class SwapService {
               await this.ledger.executeTransferFactoryTransfer({
                 senderPartyId: user.cantonPartyId,
                 receiverPartyId: feeRecipient,
-                amountCc: totalFeeCc,
+                amountCc: platformFeeCc,
                 clientNonce: `${params.clientNonce}:fee`,
               });
             } catch (err) {
@@ -1138,7 +1142,7 @@ export class SwapService {
                 swapTxId: swapTx.id,
                 userId,
                 userPartyId: user.cantonPartyId,
-                feeAmountCc: totalFeeCc,
+                feeAmountCc: platformFeeCc,
                 feeRecipientPartyId: feeRecipient,
                 clientNonceSuffix: ':fee',
                 errorMessage: (err as Error).message,
@@ -1146,13 +1150,13 @@ export class SwapService {
             }
           } else {
             this.logger.error(
-              `Total fee=${totalFeeCc} (network ${networkFeeCc} + platform ${platformFeeCc}) tapi CANTON_FEE_RECIPIENT_PARTY_ID kosong. Fee tidak dipotong untuk swap ${swapTx.id}.`,
+              `Platform fee=${platformFeeCc} tapi CANTON_FEE_RECIPIENT_PARTY_ID kosong. Fee tidak dipotong untuk swap ${swapTx.id}.`,
             );
             await this.recordFeePending({
               swapTxId: swapTx.id,
               userId,
               userPartyId: user.cantonPartyId,
-              feeAmountCc: totalFeeCc,
+              feeAmountCc: platformFeeCc,
               feeRecipientPartyId: '(not configured)',
               clientNonceSuffix: ':fee',
               errorMessage: 'CANTON_FEE_RECIPIENT_PARTY_ID not configured',
