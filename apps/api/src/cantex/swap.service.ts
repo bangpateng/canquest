@@ -934,6 +934,37 @@ export class SwapService {
     });
 
     try {
+      // WAVE 6 FIX: Transfer USDCx dari party user → Cantex trading account
+      // SEBELUM swap. Ini "token leg" equivalent dari CC leg di swapCCToToken.
+      //
+      // SEBELUMNYA (bug): kode langsung swapWithRetry padahal USDCx masih di
+      // party user, bukan di trading account. Cantex tidak bisa akses USDCx
+      // di party user → return 404 "holding balance not found".
+      //
+      // FIX: kirim USDCx dari party user → trading account via CIP-56
+      // (executeTransferFactoryTransfer). Sender = party user (operator sudah
+      // punya CanActAs rights ke party user, tidak seperti trading account).
+      // Receiver = cfg.tradingAccountParty.
+      this.logger.log(
+        `Token leg: transfer ${params.amount} ${params.sellInstrumentId} dari @${user.username} → Cantex trading account (swap ${swapTx.id})`,
+      );
+      const tokenLegResult = await this.ledger.executeTransferFactoryTransfer({
+        senderPartyId: user.cantonPartyId,
+        receiverPartyId: cfg.tradingAccountParty,
+        amountCc: params.amount,
+        instrumentId: params.sellInstrumentId,
+        instrumentAdmin: params.sellInstrumentAdmin,
+        clientNonce: `${params.clientNonce}:token-leg`,
+      });
+      if (!tokenLegResult.ok) {
+        throw new CantexError(
+          `Token leg transfer failed: ${tokenLegResult.error ?? 'unknown'}`,
+        );
+      }
+      this.logger.log(
+        `Token leg OK: ${params.amount} ${params.sellInstrumentId} → trading account (kind=${tokenLegResult.transferKind}, swap ${swapTx.id})`,
+      );
+
       // 3. Cantex swap: sell token → buy CC (with retry backoff for balance errors).
       const swapResult = await this.swapWithRetry({
         sellAmount: String(params.amount),
