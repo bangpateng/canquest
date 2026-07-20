@@ -84,22 +84,57 @@ import { OfferReconcilerService } from './offer-reconciler.service';
  * Lihat: https://docs.canton.network/reference/canton/json-api/ledger-endpoints
  *
  * Tiap "update" = satu top-level object yang server kirim sebagai satu WS
- * message. Berisi array of "events" (CreatedEvent | ArchivedEvent).
+ * message. Berisi array of "events" yang bisa berupa:
+ *   - { created: CreatedEventShape }          (CreatedEvent flat)
+ *   - { archived: ArchivedEventShape }         (ArchivedEvent flat)
+ *   - { exercised: ExercisedEventShape }       (ExercisedEvent — choice exercise)
+ *   - { ExercisedEvent: {...} }                (PascalCase wrapper di tree mode)
+ *
+ * Untuk transaction tree (saat transactionShape=TRANSACTION_SHAPE_LEDGER_UPDATE
+ * atau tree di-embed di event), child events ada di flat map `eventsById`
+ * (keyed by nodeId), dan ExercisedEvent punya `childNodeIds` untuk traversal.
  */
 interface CantonUpdate {
   /** Ledger offset string/number untuk checkpoint. */
   offset?: string | { absolute?: string };
   updateId?: string;
-  events?: Array<
-    | { created: CreatedEventShape }
-    | { archived: ArchivedEventShape }
-  >;
-  /** Mapping partyId → list of event indices untuk filter cepat. */
+  commandId?: string;
+  /** Top-level flat events (TRANSACTION_SHAPE_LEDGER_EFFECTS). */
+  events?: Array<RawLedgerEvent>;
+  /** Mapping nodeId → TreeEvent (CreatedTreeEvent | ArchivedTreeEvent | ExercisedTreeEvent)
+   *  untuk transaction tree traversal (TRANSACTION_SHAPE_LEDGER_UPDATE). */
+  eventsById?: Record<string, RawTreeEvent>;
+  /** Legacy format: mapping partyId → list of event indices (TRANSACTION_SHAPE_ACS_DELTA). */
   eventsByIds?: Array<{ party: string; events: string[] }>;
 }
 
+/**
+ * Raw ledger event variants (top-level events array).
+ * Canton menggunakan lowercase key untuk flat projection (LEDGER_EFFECTS),
+ * dan PascalCase wrapper untuk nested tree events.
+ */
+type RawLedgerEvent =
+  | { created: CreatedEventShape }
+  | { archived: ArchivedEventShape }
+  | { exercised: ExercisedEventShape }
+  // PascalCase wrappers (kadang muncul di response transaction tree)
+  | { CreatedEvent: CreatedEventShape }
+  | { ArchivedEvent: ArchivedEventShape }
+  | { ExercisedEvent: ExercisedEventShape };
+
+/**
+ * Raw tree event variants (eventsById map values).
+ * Key = nodeId (number-as-string), value = wrapper object.
+ */
+type RawTreeEvent =
+  | { CreatedEvent: CreatedEventShape }
+  | { ArchivedEvent: ArchivedEventShape }
+  | { ExercisedEvent: ExercisedEventShape };
+
 interface CreatedEventShape {
-  eventType: 'created';
+  eventType?: 'created';
+  /** Node ID dalam transaction tree (untuk ExercisedEvent.childNodeIds traversal). */
+  nodeId?: number;
   contractId: string;
   templateId: string;
   createArgument: Record<string, unknown>;
@@ -111,10 +146,50 @@ interface CreatedEventShape {
 }
 
 interface ArchivedEventShape {
-  eventType: 'archived';
+  eventType?: 'archived';
+  nodeId?: number;
   contractId: string;
   templateId: string;
+  /** Contract yang di-archive (untuk match dengan created sebelumnya). */
   witnessParties?: string[];
+  signatories?: string[];
+  observers?: string[];
+}
+
+/**
+ * ExercisedEvent: hasil exercise sebuah DAML choice.
+ *
+ * Contoh: `TransferInstruction_Accept` (user accept offer), `TransferFactory_Transfer`
+ * (direct transfer via preapproval), `LockedAmulet_OwnerExpireLockV2` (unlock).
+ *
+ * Field penting:
+ *   - `choice`: nama choice DAML (mis. "TransferInstruction_Accept", "TransferFactory_Transfer")
+ *   - `actingParties`: party yang exercise choice (si actor)
+ *   - `childNodeIds`: node IDs child events (CreatedEvent Amulet baru utk receiver, ArchivedEvent offer)
+ *   - `templateId` + `contractId`: contract tempat choice di-exercise
+ *   - `choiceArgument`: argumen choice (mis. untuk Withdraw: receiver address)
+ */
+interface ExercisedEventShape {
+  eventType?: 'exercised';
+  nodeId?: number;
+  contractId: string;
+  templateId: string;
+  /** Nama choice DAML yang di-exercise. */
+  choice: string;
+  /** Argumen choice (payload dari caller). */
+  choiceArgument: Record<string, unknown>;
+  /** Hasil exercise choice (return value DAML choice). */
+  exerciseResult?: unknown;
+  /** Party yang exercise choice (the actor). */
+  actingParties?: string[];
+  /** Parties yang visible event ini. */
+  witnessParties?: string[];
+  signatories?: string[];
+  observers?: string[];
+  /** Apakah exercise ini consuming (meng-archive contract target). */
+  consuming?: boolean;
+  /** Node IDs child events dalam transaction tree. */
+  childNodeIds?: number[];
 }
 
 /** Event dispatch: satu unit kerja untuk handler konsumen. */
@@ -123,10 +198,13 @@ export interface CantonUpdateEvent {
    *  Tipe number: AsyncAPI spec /v2/updates menolak string beginExclusive. */
   offset: number;
   updateId?: string;
-  /** Party yang visible event ini (readAs). */
+  commandId?: string;
+  /** Party yang visible event ini (readAs + actingParties + witnesses). */
   parties: string[];
   created: CreatedEventShape[];
   archived: ArchivedEventShape[];
+  /** ExercisedEvent (choice exercises) — WAVE 6: untuk deteksi TransferInstruction_Accept dll. */
+  exercised: ExercisedEventShape[];
 }
 
 const MAX_RECONNECTS = 10;
@@ -212,9 +290,12 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
    */
   private dispatchUpdate(ev: CantonUpdateEvent): void {
     const hasCreated = ev.created.length > 0;
+    // WAVE 6: exercised events juga potentially create (lewat child tree),
+    // jadi treat sama dengan hasCreated untuk flag offer:new.
+    const hasPotentialCreate = hasCreated || ev.exercised.length > 0;
     for (const partyId of ev.parties) {
       if (!partyId || partyId.startsWith('canquest:')) continue;
-      if (hasCreated) this.partyHadCreated.add(partyId);
+      if (hasPotentialCreate) this.partyHadCreated.add(partyId);
       this.schedulePartyReconcile(partyId);
     }
   }
@@ -545,11 +626,26 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
 
   /** Parse satu JSON message dari WS, update offset, dispatch event. */
   private handleStreamLine(line: string): void {
-    let update: CantonUpdate;
+    let raw: unknown;
     try {
-      update = JSON.parse(line) as CantonUpdate;
+      raw = JSON.parse(line);
     } catch {
       this.logger.debug(`CantonUpdates: skip non-JSON message (${line.length} bytes)`);
+      return;
+    }
+
+    // WAVE 6: Unwrap envelope. Canton /v2/updates pakai 3 shape berbeda
+    // tergantung transactionShape + protocol version:
+    //   (1) Flat: { offset, updateId, events:[{created}|{archived}] }
+    //   (2) Nested: { update: { Transaction: { value: { updateId, commandId, events:[...] } } } }
+    //   (3) OffsetCheckpoint: { update: { OffsetCheckpoint: { value: { offset, ... } } } }
+    // Parser lama cuma handle shape (1) → silent drop (2) dan (3).
+    // Di produksi kami, accept-instruction event datang sebagai shape (2) dengan
+    // events berisi { ExercisedEvent: {...} } → parser lama tidak extract apa2.
+    const update = this.unwrapUpdateEnvelope(raw as Record<string, unknown>);
+    if (!update) {
+      // Bukan transaction update (mis. OffsetCheckpoint saja) — coba extract offset.
+      this.tryExtractOffsetFromAnyShape(raw as Record<string, unknown>);
       return;
     }
 
@@ -566,20 +662,54 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     }
     const offset = this.lastOffset;
 
+    // WAVE 6: Parse SEMUA event types (created/archived/exercised) dari top-level events.
     const created: CreatedEventShape[] = [];
     const archived: ArchivedEventShape[] = [];
+    const exercised: ExercisedEventShape[] = [];
     for (const ev of update.events ?? []) {
-      if ('created' in ev && ev.created) created.push(ev.created);
-      else if ('archived' in ev && ev.archived) archived.push(ev.archived);
+      const variant = ev as { [key: string]: unknown };
+      if ('created' in ev && ev.created) {
+        created.push(ev.created);
+      } else if ('archived' in ev && ev.archived) {
+        archived.push(ev.archived);
+      } else if ('exercised' in ev && ev.exercised) {
+        exercised.push(ev.exercised);
+      } else if ('CreatedEvent' in ev && ev.CreatedEvent) {
+        created.push(ev.CreatedEvent);
+      } else if ('ArchivedEvent' in ev && ev.ArchivedEvent) {
+        archived.push(ev.ArchivedEvent);
+      } else if ('ExercisedEvent' in ev && ev.ExercisedEvent) {
+        exercised.push(ev.ExercisedEvent);
+      } else if (variant['eventType'] === 'created') {
+        created.push(ev as unknown as CreatedEventShape);
+      } else if (variant['eventType'] === 'archived') {
+        archived.push(ev as unknown as ArchivedEventShape);
+      } else if (variant['eventType'] === 'exercised') {
+        exercised.push(ev as unknown as ExercisedEventShape);
+      }
+    }
+
+    // WAVE 6: Traverse eventsById tree (kalau ada) untuk extract child events.
+    // ExercisedEvent punya childNodeIds pointing ke nodes di eventsById map.
+    // Ini penting: created/archived Amulet yang nyata sering ada di child tree,
+    // BUKAN di top-level events. Tanpa traversal ini, receiver balance tidak
+    // ke-detect dari accept-instruction event.
+    if (update.eventsById && typeof update.eventsById === 'object') {
+      this.flattenTreeChildren(update.eventsById, created, archived, exercised);
     }
 
     // Kumpulkan party yang visible event ini untuk routing dispatch.
     // Prioritas: witnessParties (pre-compute Canton, paling efisien & akurat
     // untuk TRANSACTION_SHAPE_ACS_DELTA), fallback eventsByIds mapping,
-    // fallback terakhir signatories/observers.
+    // fallback terakhir signatories/observers/actingParties.
     const parties = new Set<string>();
     for (const c of created) c.witnessParties?.forEach((p) => parties.add(p));
     for (const a of archived) a.witnessParties?.forEach((p) => parties.add(p));
+    // WAVE 6: ExercisedEvent pakai actingParties + witnessParties.
+    for (const e of exercised) {
+      e.actingParties?.forEach((p) => parties.add(p));
+      e.witnessParties?.forEach((p) => parties.add(p));
+    }
     if (parties.size === 0) {
       for (const ev of update.eventsByIds ?? []) {
         if (ev?.party) parties.add(ev.party);
@@ -590,21 +720,182 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
         c.signatories?.forEach((p) => parties.add(p));
         c.observers?.forEach((p) => parties.add(p));
       }
+      for (const e of exercised) {
+        e.signatories?.forEach((p) => parties.add(p));
+        e.observers?.forEach((p) => parties.add(p));
+      }
     }
 
-    if (created.length === 0 && archived.length === 0) return;
+    if (created.length === 0 && archived.length === 0 && exercised.length === 0) return;
 
     // Event valid masuk = subscription sukses. Reset counter reconnect di sini
     // (BUKAN di ws.on('open')) supaya close-1000 loop bisa capai MAX & berhenti.
     this.reconnectAttempts = 0;
 
+    // WAVE 6 DEBUG: log structured event untuk verify parser benar di produksi.
+    // Lepas setelah parser terverifikasi stabil.
+    const partySample = [...parties].slice(0, 3).map((p) => p.split('::')[0]);
+    const exercisedSummary = exercised.map((e) => ({
+      choice: e.choice,
+      template: e.templateId?.split(':').slice(-2).join(':'),
+      childCount: e.childNodeIds?.length ?? 0,
+    }));
+    this.logger.log(
+      `CantonUpdates: PARSED event offset=${offset} parties=[${partySample.join(',')}] ` +
+        `created=${created.length} archived=${archived.length} exercised=${exercised.length}` +
+        (exercisedSummary.length > 0
+          ? ` choices=${JSON.stringify(exercisedSummary)}`
+          : '') +
+        ` updateId=${update.updateId?.slice(0, 20) ?? '?'}…`,
+    );
+
     this.updates$.next({
       offset: offset ?? this.lastOffset ?? 0,
       updateId: update.updateId,
+      commandId: update.commandId,
       parties: [...parties],
       created,
       archived,
+      exercised,
     });
+  }
+
+  /**
+   * WAVE 6: Unwrap Canton /v2/updates envelope yang bisa berbentuk:
+   *   (1) Flat: { offset, updateId, events:[...] }  ← legacy LEDGER_EFFECTS
+   *   (2) Nested: { update: { Transaction: { value: {...} } } }  ← LEDGER_UPDATE
+   *   (3) OffsetCheckpoint: { update: { OffsetCheckpoint: { value: {...} } } }
+   *
+   * Return CantonUpdate shape (dengan events, eventsById, offset, updateId)
+   * atau null bila bukan transaction update (mis. OffsetCheckpoint murni).
+   */
+  private unwrapUpdateEnvelope(
+    raw: Record<string, unknown>,
+  ): CantonUpdate | null {
+    // Shape (1): flat langsung.
+    if (
+      typeof raw.events === 'object' ||
+      typeof raw.offset !== 'undefined' ||
+      typeof raw.updateId === 'string'
+    ) {
+      return raw as unknown as CantonUpdate;
+    }
+
+    // Shape (2) & (3): nested di dalam `update.Transaction.value` atau `update.OffsetCheckpoint.value`.
+    const updateWrapper = raw.update as Record<string, unknown> | undefined;
+    if (!updateWrapper || typeof updateWrapper !== 'object') return null;
+
+    // OffsetCheckpoint: extract offset saja, return null (bukan transaction update).
+    const checkpoint = updateWrapper.OffsetCheckpoint as
+      | { value?: { offset?: number | string } }
+      | undefined;
+    if (checkpoint?.value?.offset !== undefined) {
+      const offsetNum = Number(checkpoint.value.offset);
+      if (Number.isFinite(offsetNum)) this.lastOffset = offsetNum;
+      return null;
+    }
+
+    // Transaction: unwrap value berisi events + updateId + commandId + eventsById.
+    const transaction = updateWrapper.Transaction as
+      | { value?: CantonUpdate }
+      | undefined;
+    if (transaction?.value) {
+      return transaction.value;
+    }
+
+    // Fallback: mungkin key "value" di root level (varian lain).
+    const directValue = raw.value as CantonUpdate | undefined;
+    if (directValue && typeof directValue === 'object') {
+      return directValue;
+    }
+
+    return null;
+  }
+
+  /**
+   * WAVE 6: Coba extract offset dari shape apapun (untuk checkpoint tracking).
+   * Dipanggil saat unwrapUpdateEnvelope return null (mis. shape lain yg tidak
+   * dikenali, atau OffsetCheckpoint yg sudah di-handle di unwrap).
+   */
+  private tryExtractOffsetFromAnyShape(raw: Record<string, unknown>): void {
+    // Cek berbagai path offset yang mungkin.
+    const candidates = [
+      raw.offset,
+      (raw as { value?: { offset?: unknown } }).value?.offset,
+      (raw as { update?: { OffsetCheckpoint?: { value?: { offset?: unknown } } } })
+        .update?.OffsetCheckpoint?.value?.offset,
+      (raw as { update?: { Transaction?: { value?: { offset?: unknown } } } })
+        .update?.Transaction?.value?.offset,
+    ];
+    for (const c of candidates) {
+      if (c === undefined || c === null) continue;
+      const num = Number(
+        typeof c === 'object'
+          ? (c as { absolute?: unknown }).absolute
+          : c,
+      );
+      if (Number.isFinite(num)) {
+        this.lastOffset = num;
+        return;
+      }
+    }
+  }
+
+  /**
+   * WAVE 6: Traverse flat eventsById tree map untuk extract child events.
+   *
+   * Transaction tree di Canton Ledger API v2 di-encode sebagai flat map:
+   *   eventsById: { "0": {CreatedEvent:{...}}, "1": {ExercisedEvent:{...}}, "2": {ArchivedEvent:{...}} }
+   * Setiap ExercisedEvent punya childNodeIds: [2, 3, ...] pointing ke node lain.
+   *
+   * Karena kita butuh SEMUA created/archived child events untuk balance tracking
+   * (Amulet receiver sering ada di child tree), kita flatten semua node di map.
+   * Tidak perlu recursive traversal — semua node ada di flat map ini.
+   *
+   * Idempotent: kalau event sudah ada di created/archived/exercised (dari top-level),
+   * kita skip duplicate (matching by contractId+templateId).
+   */
+  private flattenTreeChildren(
+    eventsById: Record<string, RawTreeEvent>,
+    createdAcc: CreatedEventShape[],
+    archivedAcc: ArchivedEventShape[],
+    exercisedAcc: ExercisedEventShape[],
+  ): void {
+    // Build set contractId+templateId yang sudah ada untuk dedup.
+    const seenCreated = new Set(
+      createdAcc.map((c) => `${c.contractId}:${c.templateId}`),
+    );
+    const seenArchived = new Set(
+      archivedAcc.map((a) => `${a.contractId}:${a.templateId}`),
+    );
+    const seenExercised = new Set(
+      exercisedAcc.map((e) => `${e.contractId}:${e.templateId}:${e.choice}`),
+    );
+
+    for (const node of Object.values(eventsById)) {
+      if ('CreatedEvent' in node && node.CreatedEvent) {
+        const ev = node.CreatedEvent;
+        const key = `${ev.contractId}:${ev.templateId}`;
+        if (!seenCreated.has(key)) {
+          createdAcc.push(ev);
+          seenCreated.add(key);
+        }
+      } else if ('ArchivedEvent' in node && node.ArchivedEvent) {
+        const ev = node.ArchivedEvent;
+        const key = `${ev.contractId}:${ev.templateId}`;
+        if (!seenArchived.has(key)) {
+          archivedAcc.push(ev);
+          seenArchived.add(key);
+        }
+      } else if ('ExercisedEvent' in node && node.ExercisedEvent) {
+        const ev = node.ExercisedEvent;
+        const key = `${ev.contractId}:${ev.templateId}:${ev.choice}`;
+        if (!seenExercised.has(key)) {
+          exercisedAcc.push(ev);
+          seenExercised.add(key);
+        }
+      }
+    }
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────
