@@ -846,13 +846,18 @@ export class SwapService {
     // Cantex (transfer CC balik ke user) + log + DB.
     const requestId = this.generateSwapRequestId();
 
-    // 1. Cek token balance cukup (off-chain).
-    const tokenBal = await this.prisma.cantexTokenBalance.findUnique({
+    // 1. Cek token balance cukup (DB). WAVE 6: lookup case-insensitive supaya
+    //    robust terhadap perbedaan case antara Cantex pools (frontend source)
+    //    vs on-chain event payload (handler write source). Sebelumnya pakai
+    //    findUnique composite key (case-sensitive Postgres default) → bisa miss
+    //    kalau "USDCx" vs "USDCX" beda entry → swap salah bilang "insufficient".
+    const tokenBal = await this.prisma.cantexTokenBalance.findFirst({
       where: {
-        userId_instrumentId_instrumentAdmin: {
-          userId,
-          instrumentId: params.sellInstrumentId,
-          instrumentAdmin: params.sellInstrumentAdmin,
+        userId,
+        instrumentId: { equals: params.sellInstrumentId, mode: 'insensitive' },
+        instrumentAdmin: {
+          equals: params.sellInstrumentAdmin,
+          mode: 'insensitive',
         },
       },
     });
@@ -954,14 +959,27 @@ export class SwapService {
       const outputCcNum = parseFloat(swapResult.outputAmount);
 
       // 4. Debit CantexTokenBalance off-chain (token yang dijual user).
-      await this.prisma.cantexTokenBalance.update({
+      //    WAVE 6: case-insensitive lookup (sama dengan balance check di atas)
+      //    supaya konsisten — cari dulu by case-insensitive, lalu update by id.
+      const debitRow = await this.prisma.cantexTokenBalance.findFirst({
         where: {
-          userId_instrumentId_instrumentAdmin: {
-            userId,
-            instrumentId: params.sellInstrumentId,
-            instrumentAdmin: params.sellInstrumentAdmin,
+          userId,
+          instrumentId: { equals: params.sellInstrumentId, mode: 'insensitive' },
+          instrumentAdmin: {
+            equals: params.sellInstrumentAdmin,
+            mode: 'insensitive',
           },
         },
+        select: { id: true },
+      });
+      if (!debitRow) {
+        // Shouldn't happen — sudah lolos balance check di atas.
+        throw new CantexError(
+          `Token balance row not found for ${params.sellInstrumentId} (case-insensitive lookup)`,
+        );
+      }
+      await this.prisma.cantexTokenBalance.update({
+        where: { id: debitRow.id },
         data: { balance: { decrement: new Decimal(params.amount) } },
       });
 

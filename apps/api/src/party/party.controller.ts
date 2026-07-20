@@ -3055,16 +3055,19 @@ export class PartyController {
         where: { userId: user.id },
         select: { instrumentId: true, instrumentAdmin: true, balance: true },
       });
+      // WAVE 6: key Map pakai lowercase supaya match case-insensitive
+      // (event on-chain mungkin "USDCX", Cantex pools mungkin "USDCx").
       const dbMap = new Map(
         dbBalances.map((b) => [
-          `${b.instrumentId}::${b.instrumentAdmin}`,
+          `${b.instrumentId.toLowerCase()}::${b.instrumentAdmin.toLowerCase()}`,
           Number(b.balance),
         ]),
       );
 
       for (const inst of visibleNonCc) {
         const key = `${inst.id}::${inst.admin}`;
-        const amount = dbMap.get(key) ?? 0;
+        const lookupKey = `${inst.id.toLowerCase()}::${inst.admin.toLowerCase()}`;
+        const amount = dbMap.get(lookupKey) ?? 0;
         tokens[key] = amount.toFixed(10);
       }
     } catch (err) {
