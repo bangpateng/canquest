@@ -480,12 +480,15 @@ export class OfferReconcilerService implements OnModuleInit, OnModuleDestroy {
         newStatus = 'REJECTED';
       }
     } else {
-      // Fallback kalau balance tidak bisa dibaca: asumsikan COMPLETED (lebih
-      // umum). Sender bisa manual correct kalau salah via support.
-      newStatus = 'COMPLETED';
+      // BUG-H fix: FAIL-CLOSED. Sebelumnya fallback assume COMPLETED — berbahaya
+      // karena bisa menandai offer yang sebenarnya di-reject sebagai COMPLETED
+      // lalu push notif palsu "transaction:new {status:COMPLETED}" ke sender.
+      // Sekarang: JANGAN flip. Biarkan PENDING, cycle reconciler berikutnya
+      // akan retry bila saldo sudah bisa dibaca lagi.
       this.logger.warn(
-        `Offer reconciler: balance unavailable for @${username} cid=${cid.slice(0, 16)}… — assuming COMPLETED (fallback)`,
+        `Offer reconciler: balance unavailable for @${username} cid=${cid.slice(0, 16)}… — leaving PENDING (will retry next cycle)`,
       );
+      return;
     }
 
     try {
@@ -561,10 +564,13 @@ export class OfferReconcilerService implements OnModuleInit, OnModuleDestroy {
         newStatus = 'REJECTED';
       }
     } else {
-      newStatus = 'COMPLETED';
+      // BUG-H fix: FAIL-CLOSED (mirror CC path). Sebelumnya fallback assume
+      // COMPLETED → bisa menandai offer yang sebenarnya di-reject sebagai
+      // COMPLETED + push notif palsu. Sekarang biarkan PENDING, retry next cycle.
       this.logger.warn(
-        `Offer reconciler: token balance unavailable for @${username} ${instrumentId} cid=${cid.slice(0, 16)}… — assuming COMPLETED (fallback)`,
+        `Offer reconciler: token balance unavailable for @${username} ${instrumentId} cid=${cid.slice(0, 16)}… — leaving PENDING (will retry next cycle)`,
       );
+      return;
     }
 
     try {

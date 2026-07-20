@@ -87,8 +87,30 @@ export function useRealtime(): void {
       });
 
       es.addEventListener("balance:changed", () => {
+        // BUG-A fix: sebelumnya invalidasi key ["party","balance"] (singular)
+        // yang dipakai endpoint /api/party/balance (CC-only). Wallet hero
+        // baca dari ["party","balances"] (plural) → /api/party/balances
+        // (CC + multi-token). Tanpa fix ini, saldo wallet tidak refresh
+        // real-time setelah swap/send/transfer-in.
         void queryClient.invalidateQueries({
-          queryKey: queryKeys.party.balance,
+          queryKey: queryKeys.party.balances,
+        });
+        // Activity list juga bisa berubah (row TRANSFER_IN baru) → invalidate.
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.party.transactions.all,
+        });
+      });
+
+      // BUG-B fix: swap sukses — refresh saldo (CC + token), pools (kalau ada
+      // perubahan harga pool), dan activity list. Sebelumnya event ini
+      // di-fire backend (swap.service.ts:534,800) tapi TIDAK ada listener →
+      // dead event. Token hasil swap tidak muncul instan di UI.
+      es.addEventListener("swap:completed", () => {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.party.balances,
+        });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.party.transactions.all,
         });
       });
 

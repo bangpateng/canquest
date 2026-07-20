@@ -19,6 +19,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeService } from '../realtime/realtime.service';
 
 import { CantonLedgerService } from '../canton/canton-ledger.service';
 import { SpliceValidatorService } from '../canton/splice-validator.service';
@@ -89,6 +90,23 @@ export class PartyController {
    */
   private readonly sendCcInFlight = new Set<string>();
 
+  /**
+   * BUG-E fix: in-memory mutex per-CID untuk accept/reject offer. Mencegah
+   * double-submit paralel (mis. user buka 2 tab dan klik Accept bersamaan, atau
+   * Accept + Reject pada cid yang sama hampir bersamaan).
+   *
+   * Sebelumnya tidak ada mutex — kedua request lolos wallet check, dua-duanya
+   * panggil choice DAML (`TransferInstruction_Accept`/`_Reject`). Canton sendiri
+   * backstop (contract ter-archive setelah choice pertama, choice kedua gagal),
+   * tapi error ke user membingungkan + race pada insert row history.
+   *
+   * Set dipakai BERSAMA untuk accept & reject (cid sama tidak boleh di-exercise
+   * dua choice berbeda secara paralel). Key = cid penuh.
+   * NOTE: scoped per-process — cukup untuk single-instance API. Multi-instance
+   * butuh Redis SET NX.
+   */
+  private readonly offerActionInFlight = new Set<string>();
+
   /** Cooldown toggle preapproval: 1× per 7 hari (tiap re-enable burn ~1.5 CC). */
   private static readonly PREAPPROVAL_TOGGLE_COOLDOWN_MS =
     7 * 24 * 60 * 60 * 1000;
@@ -140,6 +158,7 @@ export class PartyController {
     private readonly swapService: SwapService,
     private readonly auth: AuthService,
     private readonly resend: ResendEmailService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   private assertPartyOnValidatorParticipant(partyId: string): void {
@@ -1242,6 +1261,17 @@ export class PartyController {
           );
         }
         void this.inboundSync.alignBalanceFromChain(sender.id, sender.username);
+
+        // BUG-F (P2.1) fix: push notifikasi instan ke receiver kalau dia user
+        // CanQuest internal. Sebelumnya receiver hanya tau offer masuk via poll
+        // /party/offers 30-60s (atau WSS Canton yang default OFF). Dengan push
+        // SSE offer:new, frontend (yg sudah punya listener dari Wave 1) akan
+        // refresh list offer + badge notif instan.
+        // Receiver eksternal (bukan user CanQuest) tidak punya userId → skip.
+        if (recipientDbUser) {
+          this.realtime.push(recipientDbUser.id, 'offer:new', null);
+        }
+
         return {
           success: true,
           from: sender.username,
@@ -1737,6 +1767,26 @@ export class PartyController {
         }
       }
 
+      // BUG-F (P2.1) fix: push notifikasi instan ke receiver kalau dia user
+      // CanQuest internal DAN offer dibuat (offerPending). Sebelumnya receiver
+      // hanya tau offer masuk via poll /party/offers 30-60s (atau WSS Canton
+      // yang default OFF). Dengan push SSE offer:new, frontend refresh list
+      // offer + badge notif instan. Receiver eksternal (bukan user CanQuest)
+      // tidak punya userId → skip.
+      if (cip56Result.transferKind === 'offer') {
+        try {
+          const receiver = await this.users.findByPartyId(recipientPartyId);
+          if (receiver) {
+            this.realtime.push(receiver.id, 'offer:new', null);
+          }
+        } catch (err) {
+          // Non-fatal: notif gagal tidak boleh gagalkan transfer (sudah sukses).
+          this.logger.warn(
+            `offer:new push to receiver failed (transfer tetap sukses): ${String(err)}`,
+          );
+        }
+      }
+
       return {
         ok: true,
         success: true,
@@ -1874,6 +1924,36 @@ export class PartyController {
     const cid = body.contractId?.trim();
     if (!cid) throw new BadRequestException('contractId is required.');
 
+    // BUG-E: mutex per-CID — cegah double-submit paralel (Accept dari 2 tab,
+    // atau Accept+Reject hampir bersamaan pada cid yang sama). Set BERSAMA
+    // dengan reject (cid tidak boleh di-exercise 2 choice paralel).
+    if (this.offerActionInFlight.has(cid)) {
+      throw new ConflictException(
+        'This transfer is already being processed. Please wait a moment and refresh.',
+      );
+    }
+    this.offerActionInFlight.add(cid);
+    try {
+      return await this.doAcceptOfferInbox(user, body, cid);
+    } finally {
+      this.offerActionInFlight.delete(cid);
+    }
+  }
+
+  private async doAcceptOfferInbox(
+    user: { id: string; username: string | null; cantonPartyId: string | null },
+    body: ContractActionDto,
+    cid: string,
+  ) {
+    // Narrow tipe ke non-null (sudah di-guard oleh caller acceptOfferInbox:
+    // `if (!user?.cantonPartyId || !user.username || !hasRealWallet(...))`).
+    // Assertion di sini supaya TypeScript narrow di body helper.
+    if (!user.cantonPartyId || !user.username) {
+      throw new BadRequestException(
+        'No wallet found. Create your wallet first.',
+      );
+    }
+    const partyId = user.cantonPartyId;
     const offerType = body.type ?? OfferType.TRANSFER_OFFER;
     this.logger.log(
       `Accept offer: user=@${user.username} type=${offerType} cid=${cid.slice(0, 20)}...`,
@@ -1888,7 +1968,7 @@ export class PartyController {
     try {
       const detail = await this.ledger.lookupOfferDetail(
         cid,
-        user.cantonPartyId,
+        partyId,
       );
       if (detail) {
         amountCc = parseFloat(detail.amount) || 0;
@@ -1908,7 +1988,7 @@ export class PartyController {
       // CIP-0056 TransferInstruction
       const result = await this.ledger.acceptTransferInstruction(
         cid,
-        user.cantonPartyId,
+        partyId,
       );
       ok = result.ok;
       updateId = result.updateId;
@@ -1921,7 +2001,7 @@ export class PartyController {
       // Legacy Splice TransferOffer — accept via Canton Ledger API.
       const result = await this.ledger.acceptTransferOffer(
         cid,
-        user.cantonPartyId,
+        partyId,
       );
       ok = result.accepted;
       updateId = result.updateId;
@@ -1984,7 +2064,7 @@ export class PartyController {
         if (resolvedAmount === 0) {
           try {
             const afterBal = await this.ledger.getLedgerBalance(
-              user.cantonPartyId,
+              partyId,
             );
             if (afterBal != null) {
               const beforeRow = await this.prisma.ccBalance.findUnique({
@@ -2064,6 +2144,34 @@ export class PartyController {
     const cid = body.contractId?.trim();
     if (!cid) throw new BadRequestException('contractId is required.');
 
+    // BUG-E: mutex per-CID (shared dengan accept). Cegah Reject paralel dengan
+    // Accept atau Reject lain pada cid yang sama.
+    if (this.offerActionInFlight.has(cid)) {
+      throw new ConflictException(
+        'This transfer is already being processed. Please wait a moment and refresh.',
+      );
+    }
+    this.offerActionInFlight.add(cid);
+    try {
+      return await this.doRejectOfferInbox(user, body, cid);
+    } finally {
+      this.offerActionInFlight.delete(cid);
+    }
+  }
+
+  private async doRejectOfferInbox(
+    user: { id: string; username: string | null; cantonPartyId: string | null },
+    body: ContractActionDto,
+    cid: string,
+  ) {
+    // Narrow tipe ke non-null (sudah di-guard oleh caller rejectOfferInbox:
+    // `if (!user?.cantonPartyId || !hasRealWallet(...))`).
+    if (!user.cantonPartyId) {
+      throw new BadRequestException(
+        'No wallet found. Create your wallet first.',
+      );
+    }
+    const partyId = user.cantonPartyId;
     const offerType = body.type ?? OfferType.TRANSFER_OFFER;
     this.logger.log(
       `Reject offer: user=@${user.username} type=${offerType} cid=${cid.slice(0, 20)}...`,
@@ -2076,7 +2184,7 @@ export class PartyController {
       try {
         const detail = await this.ledger.lookupOfferDetail(
           cid,
-          user.cantonPartyId,
+          partyId,
         );
         if (detail) {
           amountCc = parseFloat(detail.amount) || 0;
@@ -2088,7 +2196,7 @@ export class PartyController {
 
       const result = await this.ledger.rejectTransferInstruction(
         cid,
-        user.cantonPartyId,
+        partyId,
       );
       if (!result.ok) {
         throw new BadRequestException(
@@ -2147,7 +2255,7 @@ export class PartyController {
       try {
         const detail = await this.ledger.lookupOfferDetail(
           cid,
-          user.cantonPartyId,
+          partyId,
         );
         if (detail) {
           amountCc = parseFloat(detail.amount) || 0;
@@ -2161,7 +2269,7 @@ export class PartyController {
 
       const result = await this.ledger.rejectTransferOffer(
         cid,
-        user.cantonPartyId,
+        partyId,
       );
       if (!result.rejected) {
         throw new BadRequestException('Failed to reject transfer offer.');
@@ -2885,13 +2993,14 @@ export class PartyController {
   @SkipThrottle()
   async swapStatus() {
     const enabled = isCantexEnabled();
+    // BUG-D.5 fix: sebelumnya return executionReady:false, phase:'quote'
+    // padahal POST /party/swap sudah fully live. Flag berbohong → UI yang
+    // gate pada executionReady akan blok swap yang sebenarnya jalan.
     return {
       enabled,
-      phase: 'quote', // 'quote' (Phase 1) | 'execution' (Phase 2)
-      executionReady: false,
-      message: enabled
-        ? 'Swap quote live. Execution coming soon.'
-        : 'Swap not enabled.',
+      phase: 'execution',
+      executionReady: enabled,
+      message: enabled ? 'Swap is live.' : 'Swap not enabled.',
     };
   }
 

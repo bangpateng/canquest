@@ -38,6 +38,23 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
 
+  /**
+   * BUG-I fix: lock per-user in-memory. Mencegah syncUser / alignBalanceFromChain
+   * / reconcileParty / syncAllUsers berjalan konkuren untuk userId yang sama.
+   *
+   * Sebelumnya, dua call paralel (mis. poller 30s + controller on-demand saat
+   * user klik Refresh, atau WSS event + poller) bisa dua-duanya observasi delta
+   * saldo yang sama lalu insert row TRANSFER_IN dobel (ledgerTxId pakai
+   * Date.now() → tidak deterministik, tidak ada unique constraint).
+   *
+   * Cara kerja: tiap entry point cek `syncingUsers.has(userId)` → skip (return
+   * early) bila sedang in-flight. Set di-add di awal, di-delete di `finally`.
+   *
+   * NOTE: scoped per-process — cukup untuk single-instance API. Kalau API
+   * di-scale multi-instance, ganti ke Redis SET NX.
+   */
+  private readonly syncingUsers = new Set<string>();
+
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
@@ -96,6 +113,9 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
     cantonPartyId?: string | null,
   ): Promise<void> {
     if (!this.splice.isConfigured) return;
+    // BUG-I: skip bila sync user ini sedang in-flight (paralel dari path lain).
+    if (this.syncingUsers.has(userId)) return;
+    this.syncingUsers.add(userId);
     try {
       const onChain =
         cantonPartyId && !cantonPartyId.startsWith('canquest:')
@@ -116,6 +136,8 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
       this.logger.warn(
         `alignBalanceFromChain failed (balance DB dipertahankan): ${String(err)}`,
       );
+    } finally {
+      this.syncingUsers.delete(userId);
     }
   }
 
@@ -254,90 +276,101 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
     username: string,
     cantonPartyId?: string | null,
   ): Promise<void> {
-    // Pakai Ledger API (admin Keycloak token) jika ada partyId real
-    const onChain =
-      cantonPartyId && !cantonPartyId.startsWith('canquest:')
-        ? await this.ledger.getLedgerBalance(cantonPartyId)
-        : await this.splice.getUserBalance(username);
-    if (onChain === null) return;
+    // BUG-I: guard per-user di level paling dalam — mencakup SEMUA caller:
+    // syncUser, reconcileParty, syncAllUsers. Dua call paralel untuk userId sama
+    // (mis. poller + on-demand, atau WSS event + poller) bisa dua-duanya baca
+    // delta saldo sama → insert TRANSFER_IN dobel (Date.now() tidak deterministik).
+    // Skip call kedua; cycle berikutnya akan ambil alih kalau ada perubahan baru.
+    if (this.syncingUsers.has(userId)) return;
+    this.syncingUsers.add(userId);
+    try {
+      // Pakai Ledger API (admin Keycloak token) jika ada partyId real
+      const onChain =
+        cantonPartyId && !cantonPartyId.startsWith('canquest:')
+          ? await this.ledger.getLedgerBalance(cantonPartyId)
+          : await this.splice.getUserBalance(username);
+      if (onChain === null) return;
 
-    const onChainMicro = BigInt(Math.round(onChain * 1_000_000));
-    const existing = await this.prisma.ccBalance.findUnique({
-      where: { userId },
-    });
-
-    if (!existing) {
-      await this.prisma.ccBalance.create({
-        data: { userId, balanceMicroCc: onChainMicro },
+      const onChainMicro = BigInt(Math.round(onChain * 1_000_000));
+      const existing = await this.prisma.ccBalance.findUnique({
+        where: { userId },
       });
-      return;
-    }
 
-    if (onChainMicro > existing.balanceMicroCc) {
-      const deltaMicro = onChainMicro - existing.balanceMicroCc;
-      const deltaCc = Number(deltaMicro) / 1_000_000;
-      if (await this.isExplainedByRecentAppActivity(userId, deltaMicro)) {
-        await this.prisma.ccBalance.update({
-          where: { userId },
-          data: { balanceMicroCc: onChainMicro },
+      if (!existing) {
+        await this.prisma.ccBalance.create({
+          data: { userId, balanceMicroCc: onChainMicro },
         });
         return;
       }
 
-      // Transfer masuk asli terdeteksi (balance naik BUKAN dari aktivitas app).
-      // FE sudah memakai DB sebagai single source of truth (merge on-chain
-      // dihapus), jadi kita WAJIB catat baris TRANSFER_IN supaya received CC
-      // muncul di history + notifikasi.
-      //
-      // Sumber balance API hanya memberi delta jumlah, BUKAN sender/CID asli.
-      // Pakai ledgerTxId ter-marker "inbound-sync:{partyId}:{ts}" supaya jelas
-      // ini row hasil sync (bukan tx explorer). cc-transaction-visibility.ts
-      // sudah eksplisit TIDAK menyembunyikan baris inbound-sync.
-      this.logger.log(
-        `Balance +${deltaCc} CC for @${username} synced from chain → recording TRANSFER_IN`,
-      );
+      if (onChainMicro > existing.balanceMicroCc) {
+        const deltaMicro = onChainMicro - existing.balanceMicroCc;
+        const deltaCc = Number(deltaMicro) / 1_000_000;
+        if (await this.isExplainedByRecentAppActivity(userId, deltaMicro)) {
+          await this.prisma.ccBalance.update({
+            where: { userId },
+            data: { balanceMicroCc: onChainMicro },
+          });
+          return;
+        }
 
-      await this.prisma.ccBalance.update({
-        where: { userId },
-        data: { balanceMicroCc: onChainMicro },
-      });
-
-      try {
-        await this.prisma.ccTransaction.create({
-          data: {
-            userId,
-            amountMicroCc: deltaMicro,
-            type: 'TRANSFER_IN',
-            description: `Received ${deltaCc} CC (on-chain)`,
-            // referenceId = party pemilik (counterparty tidak diketahui dari balance API).
-            referenceId: cantonPartyId ?? username,
-            ledgerTxId: `inbound-sync:${cantonPartyId ?? username}:${Date.now()}`,
-            status: 'COMPLETED',
-            settledAt: new Date(),
-          },
-        });
-      } catch (err) {
-        // Jangan gagalkan sync hanya karena insert row bermasalah (mis. race
-        // duplikat). Balance sudah ter-update; history row opsional.
-        this.logger.warn(
-          `Failed to record inbound TRANSFER_IN for @${username}: ${String(err)}`,
+        // Transfer masuk asli terdeteksi (balance naik BUKAN dari aktivitas app).
+        // FE sudah memakai DB sebagai single source of truth (merge on-chain
+        // dihapus), jadi kita WAJIB catat baris TRANSFER_IN supaya received CC
+        // muncul di history + notifikasi.
+        //
+        // Sumber balance API hanya memberi delta jumlah, BUKAN sender/CID asli.
+        // Pakai ledgerTxId ter-marker "inbound-sync:{partyId}:{ts}" supaya jelas
+        // ini row hasil sync (bukan tx explorer). cc-transaction-visibility.ts
+        // sudah eksplisit TIDAK menyembunyikan baris inbound-sync.
+        this.logger.log(
+          `Balance +${deltaCc} CC for @${username} synced from chain → recording TRANSFER_IN`,
         );
+
+        await this.prisma.ccBalance.update({
+          where: { userId },
+          data: { balanceMicroCc: onChainMicro },
+        });
+
+        try {
+          await this.prisma.ccTransaction.create({
+            data: {
+              userId,
+              amountMicroCc: deltaMicro,
+              type: 'TRANSFER_IN',
+              description: `Received ${deltaCc} CC (on-chain)`,
+              // referenceId = party pemilik (counterparty tidak diketahui dari balance API).
+              referenceId: cantonPartyId ?? username,
+              ledgerTxId: `inbound-sync:${cantonPartyId ?? username}:${Date.now()}`,
+              status: 'COMPLETED',
+              settledAt: new Date(),
+            },
+          });
+        } catch (err) {
+          // Jangan gagalkan sync hanya karena insert row bermasalah (mis. race
+          // duplikat). Balance sudah ter-update; history row opsional.
+          this.logger.warn(
+            `Failed to record inbound TRANSFER_IN for @${username}: ${String(err)}`,
+          );
+        }
+
+        // Push realtime: balance naik + tx baru → FE refresh list & notifikasi.
+        this.realtime.push(userId, 'balance:changed', null);
+        this.realtime.push(userId, 'transaction:new', {
+          type: 'TRANSFER_IN',
+          source: 'onchain',
+        });
+        return;
       }
 
-      // Push realtime: balance naik + tx baru → FE refresh list & notifikasi.
-      this.realtime.push(userId, 'balance:changed', null);
-      this.realtime.push(userId, 'transaction:new', {
-        type: 'TRANSFER_IN',
-        source: 'onchain',
-      });
-      return;
-    }
-
-    if (onChainMicro < existing.balanceMicroCc) {
-      await this.prisma.ccBalance.update({
-        where: { userId },
-        data: { balanceMicroCc: onChainMicro },
-      });
+      if (onChainMicro < existing.balanceMicroCc) {
+        await this.prisma.ccBalance.update({
+          where: { userId },
+          data: { balanceMicroCc: onChainMicro },
+        });
+      }
+    } finally {
+      this.syncingUsers.delete(userId);
     }
   }
 }
