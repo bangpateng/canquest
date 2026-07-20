@@ -95,6 +95,17 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
   /**
    * Proses satu CantonUpdateEvent: parse created/archived/exercised events
    * untuk update balance + history user. Non-fatal.
+   *
+   * WAVE 6 DEDUP FIX: Canton sering split 1 transfer jadi multiple Amulet
+   * UTXO (output + change). Setiap UTXO = created event terpisah. Kalau
+   * handler proses masing-masing event individual → saldo over-counted +
+   * notifikasi badge berlipat (mis. +4.22, +49.98, +54.20 padahal
+   * seharusnya hanya +54.20 saja).
+   *
+   * FIX: aggregate SEMUA created Amulet dalam 1 transaksi (1 updateId),
+   * group by owner party, lalu apply 1 increment + 1 notifikasi per user.
+   * Dedup via @@unique([userId, ledgerTxId]) + skip kalau transaksi ini
+   * sudah dicatat controller (swap/sendCc) — cek CcTransaction ledgerTxId.
    */
   async processEvent(ev: CantonUpdateEvent): Promise<void> {
     if (!ev.updateId) {
@@ -109,17 +120,104 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
     this.markProcessed(ev.updateId);
 
     try {
-      // ── 1. Created events: holding baru = balance NAIK ───────────────────
+      // ── 1. AGGREGATE created Amulet events per owner ─────────────────────
+      // Sum semua initialAmount Amulet yang owner-nya sama dalam 1 updateId.
+      // Lalu apply 1x increment per user (bukan per event).
+      const ccByOwner = new Map<string, number>(); // partyId → totalAmount
+      const tokenByOwnerKey = new Map<string, {
+        userId: string;
+        username: string | null;
+        instrumentId: string;
+        instrumentAdmin: string;
+        amount: number;
+      }>();
+
       for (const c of ev.created) {
-        await this.handleCreatedEvent(c, ev.updateId);
+        const template = c.templateId || '';
+        if (template.includes(':Splice.Amulet:Amulet')) {
+          const args = c.createArgument ?? {};
+          const ownerPartyId = typeof args.owner === 'string' ? args.owner : null;
+          if (!ownerPartyId) continue;
+          const amtObj = args.amount as Record<string, unknown> | undefined;
+          const amountStr =
+            typeof amtObj?.initialAmount === 'string'
+              ? amtObj.initialAmount
+              : typeof amtObj?.amount === 'string'
+                ? amtObj.amount
+                : typeof args.amount === 'string'
+                  ? args.amount
+                  : null;
+          if (!amountStr) continue;
+          const amount = parseFloat(amountStr);
+          if (!Number.isFinite(amount) || amount <= 0) continue;
+          ccByOwner.set(ownerPartyId, (ccByOwner.get(ownerPartyId) ?? 0) + amount);
+        } else if (
+          template.includes(':HoldingV1:Holding') ||
+          template.includes(':Holding.V0.Holding:Holding') ||
+          template.includes(':Holding:Holding')
+        ) {
+          // Token non-CC — aggregate by owner+instrument.
+          const args = c.createArgument ?? {};
+          const ownerPartyId =
+            typeof args.owner === 'string' ? args.owner
+            : typeof args.account === 'string' ? args.account
+            : null;
+          if (!ownerPartyId) continue;
+          const instrumentObj = (args.instrument ?? args.token ?? {}) as Record<string, unknown>;
+          const instrumentId =
+            typeof instrumentObj.id === 'string' ? instrumentObj.id
+            : typeof args.instrumentId === 'string' ? args.instrumentId : null;
+          const instrumentAdmin =
+            typeof instrumentObj.admin === 'string' ? instrumentObj.admin
+            : typeof args.instrumentAdmin === 'string' ? args.instrumentAdmin : null;
+          if (!instrumentId || !instrumentAdmin) continue;
+          if (instrumentId.toLowerCase() === 'amulet') continue;
+          const amtObj = args.amount as Record<string, unknown> | undefined;
+          const amountStr =
+            typeof args.amount === 'string' ? args.amount
+            : typeof amtObj?.amount === 'string' ? (amtObj.amount as string)
+            : typeof amtObj?.initialAmount === 'string' ? (amtObj.initialAmount as string)
+            : typeof args.quantity === 'string' ? args.quantity
+            : null;
+          if (!amountStr) continue;
+          const amount = parseFloat(amountStr);
+          if (!Number.isFinite(amount) || amount <= 0) continue;
+          const user = await this.resolveUserByParty(ownerPartyId);
+          if (!user) continue;
+          const key = `${user.userId}|${instrumentId.toLowerCase()}|${instrumentAdmin.toLowerCase()}`;
+          const existing = tokenByOwnerKey.get(key);
+          if (existing) {
+            existing.amount += amount;
+          } else {
+            tokenByOwnerKey.set(key, {
+              userId: user.userId,
+              username: user.username,
+              instrumentId,
+              instrumentAdmin,
+              amount,
+            });
+          }
+        }
       }
 
-      // ── 2. Archived events: holding di-archive = balance TURUN ───────────
+      // ── 2. Apply CC increment per owner (1x per user per updateId) ───────
+      for (const [ownerPartyId, totalAmount] of ccByOwner) {
+        await this.applyCcIncrement(ownerPartyId, totalAmount, ev.updateId);
+      }
+
+      // ── 3. Apply token increment per owner+instrument ────────────────────
+      for (const tk of tokenByOwnerKey.values()) {
+        await this.applyTokenIncrement(tk, ev.updateId);
+      }
+
+      // ── 4. Archived events: holding di-archive = balance TURUN ───────────
+      // Archive event cuma push realtime (outflow tracking via controller-side
+      // recordTransaction di sendCc/swap/lock). Tidak decrement DB optimistic.
       for (const a of ev.archived) {
-        await this.handleArchivedEvent(a, ev.updateId);
+        await this.handleArchivedEvent(a);
       }
 
-      // ── 3. Exercised events: choice exercises (accept/reject offer, dll.) ──
+      // ── 5. Exercised events: choice exercises (accept/reject offer) ──────
       for (const ex of ev.exercised) {
         await this.handleExercisedEvent(ex, ev);
       }
@@ -131,87 +229,54 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Created event handlers (balance increase)
-  // ═══════════════════════════════════════════════════════════════════════════
-
   /**
-   * Handle CreatedEvent: kalau Amulet baru, increment owner CcBalance.
-   * Kalau token non-CC (Holding burn-mint), increment CantexTokenBalance.
+   * Apply aggregated CC increment untuk 1 owner di 1 transaksi.
+   * Anti double-count: cek apakah controller sudah catat tx ini (swap/sendCc
+   * pakai ledgerTxId = Canton updateId juga). Kalau sudah, skip biar tidak
+   * dobel (mis. swap USDCx→CC → SWAP_IN dari controller + TRANSFER_IN dari
+   * handler = dobel).
    */
-  private async handleCreatedEvent(
-    c: { contractId: string; templateId: string; createArgument: Record<string, unknown>; witnessParties?: string[] },
+  private async applyCcIncrement(
+    ownerPartyId: string,
+    totalAmount: number,
     updateId: string,
   ): Promise<void> {
-    const template = c.templateId || '';
-
-    // Amulet (CC) — extract amount + owner dari createArgument.
-    if (template.includes(':Splice.Amulet:Amulet')) {
-      await this.handleAmuletCreated(c, updateId);
-      return;
-    }
-
-    // Token non-CC. Mainnet Canton pakai DUA template standard:
-    //   - "Splice.Api.Token.HoldingV1:Holding" (spec baru, splice-api-token)
-    //   - "Utility.Registry.Holding.V0.Holding:Holding" (registry token USDCx/CBTC)
-    // Keduanya handle sama — extract instrument + amount + owner dari
-    // createArgument. Field name bisa beda, jadi handler pakai banyak fallback.
-    if (
-      template.includes(':HoldingV1:Holding') ||
-      template.includes(':Holding.V0.Holding:Holding') ||
-      template.includes(':Holding:Holding')
-    ) {
-      await this.handleTokenHoldingCreated(c, updateId);
-      return;
-    }
-
-    // Template lain (TransferInstruction, LockedAmulet, TransferPreapproval,
-    // AmuletRules, dll.) — tidak affect balance langsung. Skip.
-  }
-
-  /**
-   * Amulet baru tercipta → CC masuk ke owner. Increment CcBalance + record
-   * TRANSFER_IN row (idempotent via @@unique([userId, ledgerTxId])).
-   */
-  private async handleAmuletCreated(
-    c: { contractId: string; templateId: string; createArgument: Record<string, unknown>; witnessParties?: string[] },
-    updateId: string,
-  ): Promise<void> {
-    const args = c.createArgument ?? {};
-    const ownerPartyId = typeof args.owner === 'string' ? args.owner : null;
-    if (!ownerPartyId) {
-      return; // Tidak ada owner — skip (bukan user holding).
-    }
-
-    // Extract amount (mirror queryAmuletHoldings logic, canton-ledger.service.ts:2323-2332).
-    const amtObj = args.amount as Record<string, unknown> | undefined;
-    const initialAmountStr =
-      typeof amtObj?.initialAmount === 'string'
-        ? amtObj.initialAmount
-        : typeof amtObj?.amount === 'string'
-          ? amtObj.amount
-          : typeof args.amount === 'string'
-            ? args.amount
-            : null;
-    if (!initialAmountStr) {
-      return; // Tidak ada amount — skip.
-    }
-    const initialAmount = parseFloat(initialAmountStr);
-    if (!Number.isFinite(initialAmount) || initialAmount <= 0) {
-      return;
-    }
-
-    // Resolve owner → user.
     const user = await this.resolveUserByParty(ownerPartyId);
     if (!user) {
-      // Owner bukan user Canquest (mis. system wallet: DSO, validator, fee).
+      // Owner bukan user Canquest (DSO, validator, fee, Cantex trading account).
       return;
     }
 
-    const deltaMicroCc = BigInt(Math.round(initialAmount * 1_000_000));
+    // ANTI DOUBLE-COUNT: cek apakah tx ini sudah dicatat controller.
+    // Controller (sendCc, swap, lock) pakai ledgerTxId = Canton updateId
+    // (format "1220..."). Handler pakai "wss:1220...". Keduanya menyimpan
+    // updateId di cantonUpdateId field — cek itu supaya dedup cross-source.
+    const existing = await this.prisma.ccTransaction.findFirst({
+      where: {
+        userId: user.userId,
+        OR: [
+          { ledgerTxId: updateId },
+          { ledgerTxId: `wss:${updateId}` },
+          { cantonUpdateId: updateId },
+        ],
+      },
+      select: { id: true, type: true },
+    });
+    if (existing) {
+      // Tx sudah dicatat controller (SWAP_IN / TRANSFER_IN / dll).
+      // Skip insert + skip push notif (anti double-count). Tetap update
+      // CcBalance increment kalau existing row belum update balance (mis.
+      // controller catat row tapi belum increment CcBalance karena bug edge).
+      // Sebenarnya controller sudah handle increment via recordTransaction —
+      // kita skip increment juga supaya aman.
+      this.logger.debug(
+        `BalanceEventHandler: skip CC +${totalAmount} untuk @${user.username ?? user.userId.slice(0, 8)} (tx sudah dicatat sebagai ${existing.type}, updateId=${updateId.slice(0, 16)}…)`,
+      );
+      return;
+    }
 
+    const deltaMicroCc = BigInt(Math.round(totalAmount * 1_000_000));
     try {
-      // Increment CcBalance (atomic upsert).
       await this.prisma.ccBalance.upsert({
         where: { userId: user.userId },
         create: { userId: user.userId, balanceMicroCc: deltaMicroCc },
@@ -219,39 +284,36 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
       });
     } catch (err) {
       this.logger.warn(
-        `BalanceEventHandler: CcBalance increment failed for user=${user.userId.slice(0, 8)}… amount=${initialAmount} CC: ${String(err)}`,
+        `BalanceEventHandler: CcBalance increment failed for user=${user.userId.slice(0, 8)}… amount=${totalAmount} CC: ${String(err)}`,
       );
       return;
     }
 
     // Record TRANSFER_IN row — idempotent via @@unique([userId, ledgerTxId]).
-    // ledgerTxId = updateId supaya reconnect/re-deliver tidak bikin duplikat.
     try {
       await this.users.recordTransaction({
         userId: user.userId,
-        amountCc: initialAmount,
+        amountCc: totalAmount,
         type: 'TRANSFER_IN',
-        description: `Received ${initialAmount.toFixed(6)} CC (on-chain)`,
+        description: `Received ${totalAmount.toFixed(6)} CC (on-chain)`,
         referenceId: ownerPartyId,
         ledgerTxId: `wss:${updateId}`,
         cantonUpdateId: updateId,
         status: 'COMPLETED',
       });
       this.logger.log(
-        `BalanceEventHandler: +${initialAmount} CC → @${user.username ?? user.userId.slice(0, 8)} (updateId=${updateId.slice(0, 16)}…)`,
+        `BalanceEventHandler: +${totalAmount.toFixed(6)} CC → @${user.username ?? user.userId.slice(0, 8)} (updateId=${updateId.slice(0, 16)}…)`,
       );
     } catch (err) {
-      // P2002 (unique constraint) = row sudah ada (idempotent re-deliver) → OK.
-      // Error lain = audit-trail loss, balance sudah update — log warn, lanjut.
       const errMsg = String(err);
       if (!errMsg.includes('P2002') && !errMsg.includes('Unique constraint')) {
         this.logger.warn(
-          `BalanceEventHandler: TRANSFER_IN record failed for user=${user.userId.slice(0, 8)}… (balance already updated): ${errMsg}`,
+          `BalanceEventHandler: TRANSFER_IN record failed (balance already updated): ${errMsg}`,
         );
       }
     }
 
-    // Push realtime ke user supaya frontend refresh wallet + activity.
+    // 1x push notif per user per transaksi (BUKAN per event).
     this.realtime.push(user.userId, 'balance:changed', null);
     this.realtime.push(user.userId, 'transaction:new', {
       type: 'TRANSFER_IN',
@@ -260,122 +322,83 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
   }
 
   /**
-   * Token holding (non-CC) baru tercipta → token masuk ke owner.
-   * Update CantexTokenBalance supaya swapBalances endpoint (yang baca DB) reflect.
-   *
-   * WAVE 6: di mainnet Canton, template token holding punya beberapa varian:
-   *   - "Splice.Api.Token.HoldingV1:Holding" (spec baru)
-   *   - "Utility.Registry.Holding.V0.Holding:Holding" (USDCx/CBTC registry)
-   * Field name di createArgument bisa beda antar template. Handler ini pakai
-   * banyak fallback + DEBUG LOG kalau gagal extract (supaya kita bisa lihat
-   * shape asli dari produksi tanpa perlu iterate kode).
+   * Apply aggregated token increment untuk 1 owner+instrument di 1 transaksi.
    */
-  private async handleTokenHoldingCreated(
-    c: { contractId: string; templateId: string; createArgument: Record<string, unknown>; witnessParties?: string[] },
+  private async applyTokenIncrement(
+    tk: {
+      userId: string;
+      username: string | null;
+      instrumentId: string;
+      instrumentAdmin: string;
+      amount: number;
+    },
     updateId: string,
   ): Promise<void> {
-    const args = c.createArgument ?? {};
-
-    // Extract owner. Beberapa template pakai "owner", beberapa pakai "account".
-    const ownerPartyId =
-      typeof args.owner === 'string'
-        ? args.owner
-        : typeof args.account === 'string'
-          ? args.account
-          : typeof (args.owner as Record<string, unknown> | undefined)?.party === 'string'
-            ? ((args.owner as Record<string, unknown>).party as string)
-            : null;
-
-    // Extract instrument. Bentuk: {id, admin} object, atau flat fields.
-    const instrumentObj = (args.instrument ?? args.token ?? {}) as Record<string, unknown>;
-    const instrumentId =
-      typeof instrumentObj.id === 'string'
-        ? instrumentObj.id
-        : typeof args.instrumentId === 'string'
-          ? args.instrumentId
-          : typeof args.instrumentId === 'object'
-            ? ((args.instrumentId as Record<string, unknown>).id as string | undefined)
-            : null;
-    const instrumentAdmin =
-      typeof instrumentObj.admin === 'string'
-        ? instrumentObj.admin
-        : typeof args.instrumentAdmin === 'string'
-          ? args.instrumentAdmin
-          : typeof args.instrumentAdmin === 'object'
-            ? ((args.instrumentAdmin as Record<string, unknown>).admin as string | undefined)
-            : null;
-
-    // Extract amount. Bisa flat string, nested {amount, ...}, atau {quantity: ...}.
-    const amtObj = args.amount as Record<string, unknown> | undefined;
-    const amountStr =
-      typeof args.amount === 'string'
-        ? args.amount
-        : typeof amtObj?.amount === 'string'
-          ? (amtObj.amount as string)
-          : typeof amtObj?.initialAmount === 'string'
-            ? (amtObj.initialAmount as string)
-            : typeof args.quantity === 'string'
-              ? args.quantity
-              : typeof args.quantity === 'number'
-                ? String(args.quantity)
-                : null;
-
-    // DEBUG: kalau owner/instrument/amount gagal extract, dump top-level keys
-    // supaya kita lihat shape asli dari produksi (gak perlu iterate kode).
-    if (!ownerPartyId || !instrumentId || !instrumentAdmin || !amountStr) {
-      this.logger.warn(
-        `BalanceEventHandler: token holding created tapi field extraction gagal. ` +
-          `template=${c.templateId.split(':').slice(-2).join(':')} ` +
-          `owner=${ownerPartyId ? 'OK' : 'MISSING'} ` +
-          `instrument=${instrumentId ?? 'MISSING'}/${instrumentAdmin ?? 'MISSING'} ` +
-          `amount=${amountStr ?? 'MISSING'} ` +
-          `topKeys=${Object.keys(args).join(',')} ` +
-          `updateId=${updateId.slice(0, 16)}…`,
+    // ANTI DOUBLE-COUNT: cek apakah tx sudah dicatat controller.
+    const existing = await this.prisma.tokenTransaction.findFirst({
+      where: {
+        userId: tk.userId,
+        OR: [
+          { ledgerTxId: updateId },
+          { ledgerTxId: `wss:${updateId}` },
+          { cantonUpdateId: updateId },
+        ],
+      },
+      select: { id: true, type: true },
+    });
+    if (existing) {
+      this.logger.debug(
+        `BalanceEventHandler: skip ${tk.instrumentId} +${tk.amount} untuk @${tk.username ?? tk.userId.slice(0, 8)} (tx sudah dicatat sebagai ${existing.type}, updateId=${updateId.slice(0, 16)}…)`,
       );
-      return;
-    }
-
-    const amount = parseFloat(amountStr);
-    if (!Number.isFinite(amount) || amount <= 0) return;
-
-    // Skip CC via token standard (CC pakai Splice.Amulet:Amulet, bukan Holding).
-    if (instrumentId.toLowerCase() === 'amulet') return;
-
-    const user = await this.resolveUserByParty(ownerPartyId);
-    if (!user) {
-      // Owner bukan user Canquest (mis. Cantex trading account, Bridge-Operator).
-      // Ini normal — skip diam-diam, bukan error.
       return;
     }
 
     try {
-      await this.prisma.cantexTokenBalance.upsert({
+      // Case-insensitive lookup (sudah fix Phase 3).
+      const row = await this.prisma.cantexTokenBalance.findFirst({
         where: {
-          userId_instrumentId_instrumentAdmin: {
-            userId: user.userId,
-            instrumentId,
-            instrumentAdmin,
-          },
+          userId: tk.userId,
+          instrumentId: { equals: tk.instrumentId, mode: 'insensitive' },
+          instrumentAdmin: { equals: tk.instrumentAdmin, mode: 'insensitive' },
         },
-        create: {
-          userId: user.userId,
-          instrumentId,
-          instrumentAdmin,
-          balance: new Decimal(amount),
-        },
-        update: { balance: { increment: new Decimal(amount) } },
+        select: { id: true },
       });
+      if (row) {
+        await this.prisma.cantexTokenBalance.update({
+          where: { id: row.id },
+          data: { balance: { increment: new Decimal(tk.amount) } },
+        });
+      } else {
+        await this.prisma.cantexTokenBalance.create({
+          data: {
+            userId: tk.userId,
+            instrumentId: tk.instrumentId,
+            instrumentAdmin: tk.instrumentAdmin,
+            balance: new Decimal(tk.amount),
+          },
+        });
+      }
       this.logger.log(
-        `BalanceEventHandler: +${amount} ${instrumentId} → @${user.username ?? user.userId.slice(0, 8)}… (updateId=${updateId.slice(0, 16)}…)`,
+        `BalanceEventHandler: +${tk.amount} ${tk.instrumentId} → @${tk.username ?? tk.userId.slice(0, 8)}… (updateId=${updateId.slice(0, 16)}…)`,
       );
-      // Push realtime supaya frontend refresh wallet.
-      this.realtime.push(user.userId, 'balance:changed', null);
+      // 1x push notif per user per transaksi.
+      this.realtime.push(tk.userId, 'balance:changed', null);
     } catch (err) {
       this.logger.warn(
-        `BalanceEventHandler: CantexTokenBalance increment failed for ${instrumentId}: ${String(err)}`,
+        `BalanceEventHandler: CantexTokenBalance increment failed for ${tk.instrumentId}: ${String(err)}`,
       );
     }
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Created event handlers (balance increase)
+  // ═══════════════════════════════════════════════════════════════════════════
+  // NOTE: handleCreatedEvent / handleAmuletCreated / handleTokenHoldingCreated
+  // sudah dihapus — logic aggregate + apply di processEvent di atas supaya
+  // 1 transaksi (1 updateId) = 1 increment + 1 notifikasi per user. Mencegah
+  // over-count + duplikat notif badge saat Canton split 1 transfer jadi
+  // multiple Amulet UTXO (output + change).
+
 
   // ═══════════════════════════════════════════════════════════════════════════
   // Archived event handlers (balance decrease)
@@ -396,7 +419,6 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
    */
   private async handleArchivedEvent(
     a: { contractId: string; templateId: string; witnessParties?: string[] },
-    updateId: string,
   ): Promise<void> {
     const template = a.templateId || '';
     if (!template.includes(':Splice.Amulet:Amulet') && !template.includes(':Splice.Api.Token.HoldingV1:Holding')) {
