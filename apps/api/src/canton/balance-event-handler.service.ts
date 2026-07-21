@@ -231,10 +231,14 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
 
   /**
    * Apply aggregated CC increment untuk 1 owner di 1 transaksi.
-   * Anti double-count: cek apakah controller sudah catat tx ini (swap/sendCc
-   * pakai ledgerTxId = Canton updateId juga). Kalau sudah, skip biar tidak
-   * dobel (mis. swap USDCx→CC → SWAP_IN dari controller + TRANSFER_IN dari
-   * handler = dobel).
+   *
+   * Anti double-count HANYA untuk HISTORY ROW + NOTIFIKASI (BUKAN balance):
+   * - Controller (sendCc, swap, lock, acceptOffer) catat history row + push notif.
+   * - Controller TIDAK selalu increment CcBalance (mis. acceptOffer CC, atau
+   *   transfer dari external wallet yg controller tidak aware).
+   * - Handler WAJIB increment CcBalance setiap event (single source of truth
+   *   saldo = WSS event). Hanya insert history + push notif yang skip kalau
+   *   controller sudah catat (cegah duplikat row + duplikat badge).
    */
   private async applyCcIncrement(
     ownerPartyId: string,
@@ -247,10 +251,32 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
       return;
     }
 
-    // ANTI DOUBLE-COUNT: cek apakah tx ini sudah dicatat controller.
-    // Controller (sendCc, swap, lock) pakai ledgerTxId = Canton updateId
-    // (format "1220..."). Handler pakai "wss:1220...". Keduanya menyimpan
-    // updateId di cantonUpdateId field — cek itu supaya dedup cross-source.
+    // STEP 1: SELALU increment CcBalance (single source of truth = WSS event).
+    // Controller TIDAK reliable update CcBalance — handler WAJIB lakukan ini
+    // supaya saldo user real-time akurat (mis. transfer dari external wallet,
+    // swap delivery, accept offer USDCx — semua butuh increment dari handler).
+    const deltaMicroCc = BigInt(Math.round(totalAmount * 1_000_000));
+    try {
+      await this.prisma.ccBalance.upsert({
+        where: { userId: user.userId },
+        create: { userId: user.userId, balanceMicroCc: deltaMicroCc },
+        update: { balanceMicroCc: { increment: deltaMicroCc } },
+      });
+      this.logger.log(
+        `BalanceEventHandler: CcBalance +${totalAmount.toFixed(6)} CC → @${user.username ?? user.userId.slice(0, 8)} (updateId=${updateId.slice(0, 16)}…)`,
+      );
+      // Push realtime balance:changed (UI refresh wallet).
+      this.realtime.push(user.userId, 'balance:changed', null);
+    } catch (err) {
+      this.logger.warn(
+        `BalanceEventHandler: CcBalance increment failed for user=${user.userId.slice(0, 8)}… amount=${totalAmount} CC: ${String(err)}`,
+      );
+      return;
+    }
+
+    // STEP 2: Cek apakah controller sudah catat history row (anti duplikat row).
+    // Skip insert + skip push transaction:new (anti duplikat badge notif).
+    // TETAP push balance:changed di atas (sudah dilakukan di STEP 1).
     const existing = await this.prisma.ccTransaction.findFirst({
       where: {
         userId: user.userId,
@@ -263,33 +289,17 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
       select: { id: true, type: true },
     });
     if (existing) {
-      // Tx sudah dicatat controller (SWAP_IN / TRANSFER_IN / dll).
-      // Skip insert + skip push notif (anti double-count). Tetap update
-      // CcBalance increment kalau existing row belum update balance (mis.
-      // controller catat row tapi belum increment CcBalance karena bug edge).
-      // Sebenarnya controller sudah handle increment via recordTransaction —
-      // kita skip increment juga supaya aman.
+      // Controller sudah catat (SWAP_IN / TRANSFER_IN / TOKEN_TRANSFER_IN).
+      // Skip insert history + skip push transaction:new (anti duplikat badge).
+      // Balance increment di STEP 1 tetap jalan (itu wajib).
       this.logger.debug(
-        `BalanceEventHandler: skip CC +${totalAmount} untuk @${user.username ?? user.userId.slice(0, 8)} (tx sudah dicatat sebagai ${existing.type}, updateId=${updateId.slice(0, 16)}…)`,
+        `BalanceEventHandler: skip history insert CC +${totalAmount} untuk @${user.username ?? user.userId.slice(0, 8)} (tx sudah dicatat sebagai ${existing.type}, updateId=${updateId.slice(0, 16)}…)`,
       );
       return;
     }
 
-    const deltaMicroCc = BigInt(Math.round(totalAmount * 1_000_000));
-    try {
-      await this.prisma.ccBalance.upsert({
-        where: { userId: user.userId },
-        create: { userId: user.userId, balanceMicroCc: deltaMicroCc },
-        update: { balanceMicroCc: { increment: deltaMicroCc } },
-      });
-    } catch (err) {
-      this.logger.warn(
-        `BalanceEventHandler: CcBalance increment failed for user=${user.userId.slice(0, 8)}… amount=${totalAmount} CC: ${String(err)}`,
-      );
-      return;
-    }
-
-    // Record TRANSFER_IN row — idempotent via @@unique([userId, ledgerTxId]).
+    // STEP 3: Insert history row TRANSFER_IN (kalau controller belum catat).
+    // Idempotent via @@unique([userId, ledgerTxId]).
     try {
       await this.users.recordTransaction({
         userId: user.userId,
@@ -334,25 +344,10 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
     },
     updateId: string,
   ): Promise<void> {
-    // ANTI DOUBLE-COUNT: cek apakah tx sudah dicatat controller.
-    const existing = await this.prisma.tokenTransaction.findFirst({
-      where: {
-        userId: tk.userId,
-        OR: [
-          { ledgerTxId: updateId },
-          { ledgerTxId: `wss:${updateId}` },
-          { cantonUpdateId: updateId },
-        ],
-      },
-      select: { id: true, type: true },
-    });
-    if (existing) {
-      this.logger.debug(
-        `BalanceEventHandler: skip ${tk.instrumentId} +${tk.amount} untuk @${tk.username ?? tk.userId.slice(0, 8)} (tx sudah dicatat sebagai ${existing.type}, updateId=${updateId.slice(0, 16)}…)`,
-      );
-      return;
-    }
-
+    // STEP 1: SELALU increment CantexTokenBalance (single source of truth = WSS event).
+    // Controller (acceptOffer, sendToken) catat history row TAPI tidak increment
+    // CantexTokenBalance → handler WAJIB lakukan ini supaya saldo token user
+    // real-time akurat (kasus: accept offer USDCx → badge naik tapi saldo 0).
     try {
       // Case-insensitive lookup (sudah fix Phase 3).
       const row = await this.prisma.cantexTokenBalance.findFirst({
@@ -379,15 +374,45 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
         });
       }
       this.logger.log(
-        `BalanceEventHandler: +${tk.amount} ${tk.instrumentId} → @${tk.username ?? tk.userId.slice(0, 8)}… (updateId=${updateId.slice(0, 16)}…)`,
+        `BalanceEventHandler: CantexTokenBalance +${tk.amount} ${tk.instrumentId} → @${tk.username ?? tk.userId.slice(0, 8)}… (updateId=${updateId.slice(0, 16)}…)`,
       );
-      // 1x push notif per user per transaksi.
+      // Push realtime balance:changed (UI refresh wallet).
       this.realtime.push(tk.userId, 'balance:changed', null);
     } catch (err) {
       this.logger.warn(
         `BalanceEventHandler: CantexTokenBalance increment failed for ${tk.instrumentId}: ${String(err)}`,
       );
+      return;
     }
+
+    // STEP 2: Cek apakah controller sudah catat history row (anti duplikat badge).
+    // Skip push transaction:new (anti duplikat badge notif) — controller sudah push.
+    // Balance increment di STEP 1 tetap jalan (wajib).
+    const existing = await this.prisma.tokenTransaction.findFirst({
+      where: {
+        userId: tk.userId,
+        OR: [
+          { ledgerTxId: updateId },
+          { ledgerTxId: `wss:${updateId}` },
+          { cantonUpdateId: updateId },
+        ],
+      },
+      select: { id: true, type: true },
+    });
+    if (existing) {
+      this.logger.debug(
+        `BalanceEventHandler: skip history insert ${tk.instrumentId} +${tk.amount} untuk @${tk.username ?? tk.userId.slice(0, 8)} (tx sudah dicatat sebagai ${existing.type}, updateId=${updateId.slice(0, 16)}…)`,
+      );
+      return;
+    }
+
+    // STEP 3: Kalau controller belum catat, skip history insert untuk token
+    // (TokenTransaction di-handle controller via recordTokenTransaction).
+    // Token history row tidak di-insert oleh handler untuk hindari kompleksitas
+    // cross-table dedup — controller (acceptOffer/sendToken) sudah reliable.
+    this.logger.debug(
+      `BalanceEventHandler: token history untuk ${tk.instrumentId} +${tk.amount} tidak di-insert handler (controller akan handle)`,
+    );
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
