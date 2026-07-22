@@ -70,6 +70,32 @@ export class SwapService {
   }
 
   /**
+   * Hitung platform fee Wintip style: max(amount * rate, minimum).
+   *
+   * Wintip pattern: `max(amount * PLATFORM_FEE_RATE, PLATFORM_FEE_CC)`.
+   * Persentase supaya adil untuk amount besar/kecil + floor minimum supaya
+   * micro-swap tidak gratis. Network fee (SWAP_NETWORK_FEE_CC) TETAP fix
+   * buffer untuk Cantex (swap + WD), terpisah dari platform fee ini.
+   *
+   * Env:
+   *   SWAP_PLATFORM_FEE_RATE_PCT (default 0) — persen, mis. 1 = 1%.
+   *   SWAP_PLATFORM_FEE_CC      (default 0) — floor minimum, dalam CC.
+   *
+   * CC_TO_TOKEN: rate base = CC input (params.amount).
+   * TOKEN_TO_CC: rate base = CC output (ccOutNum).
+   */
+  private calculatePlatformFee(baseAmount: number): number {
+    const ratePct = Number(
+      this.config.get<string>('SWAP_PLATFORM_FEE_RATE_PCT') ?? '0',
+    );
+    const minCc = Number(
+      this.config.get<string>('SWAP_PLATFORM_FEE_CC') ?? '0',
+    );
+    const feeFromRate = (baseAmount * ratePct) / 100;
+    return Math.max(feeFromRate, minCc);
+  }
+
+  /**
    * BUG-K.2 fix: catat kegagalan pemotongan fee platform ke PendingDelivery
    * dengan status khusus `FEE_PENDING` supaya bisa di-reconcile oleh admin
    * (cron-job fee collection atau manual intervention).
@@ -127,6 +153,96 @@ export class SwapService {
           `Fee ${params.feeAmountCc} CC lost without DB trace. PendingDelivery error: ${(pdErr as Error).message}. ` +
           `Original fee error: ${params.errorMessage}`,
       );
+    }
+  }
+
+  /**
+   * Wintip-style auto-refund: kirim input kembali ke user saat swap gagal
+   * SETELAH CC/token leg terkirim (atau slippage output check fail).
+   *
+   * Pakai cantex.transferCC (endpoint REST yg sudah terbukti jalan untuk CC
+   * + non-CC per Wave 6). Sender implicit = Cantex operator (Ed25519 key),
+   * receiver = user party.
+   *
+   * Status PendingDelivery:
+   *   - 'REFUNDED' → refund sukses, user dapat balik dana
+   *   - 'STUCK'    → refund juga gagal, butuh admin manual recovery
+   *
+   * Non-fatal: refund gagal tidak throw (swap sudah gagal, jangan stack error).
+   */
+  private async refundToUser(params: {
+    userId: string;
+    userPartyId: string;
+    amount: string;
+    instrumentId: string;
+    instrumentAdmin: string;
+    swapTxId: string;
+    requestId: string;
+    reason: string;
+  }): Promise<{ ok: boolean; txId?: string }> {
+    const memo = `canquest-refund|${params.userPartyId}|${params.instrumentId}|${params.requestId}`;
+    this.logger.log(
+      `Refund swap ${params.swapTxId}: ${params.amount} ${params.instrumentId} → user party. Reason: ${params.reason}`,
+    );
+    try {
+      const result = await this.cantex.transferCC({
+        receiver: params.userPartyId,
+        amount: params.amount,
+        instrumentId: params.instrumentId,
+        instrumentAdmin: params.instrumentAdmin,
+        memo,
+      });
+      this.logger.log(
+        `Refund OK swap ${params.swapTxId}: ${params.amount} ${params.instrumentId} → user party`,
+      );
+      // Catat PendingDelivery REFUNDED untuk audit trail.
+      try {
+        await this.prisma.pendingDelivery.create({
+          data: {
+            userId: params.userId,
+            swapTransactionId: params.swapTxId,
+            userPartyId: params.userPartyId,
+            tokenId: params.instrumentId,
+            tokenAdmin: params.instrumentAdmin,
+            amount: new Decimal(params.amount),
+            status: 'REFUNDED',
+            transferKind: 'direct',
+            deliveredAt: new Date(),
+            errorMessage: `Refunded: ${params.reason}`,
+          },
+        });
+      } catch {
+        /* audit-only */
+      }
+      return { ok: true };
+    } catch (err) {
+      this.logger.error(
+        `CRITICAL: refund GAGAL swap ${params.swapTxId}: ${params.amount} ${params.instrumentId} tetap di trading account. Reason: ${params.reason}. Refund error: ${(err as Error).message}`,
+        (err as Error).stack,
+      );
+      try {
+        await this.prisma.pendingDelivery.create({
+          data: {
+            userId: params.userId,
+            swapTransactionId: params.swapTxId,
+            userPartyId: params.userPartyId,
+            tokenId: params.instrumentId,
+            tokenAdmin: params.instrumentAdmin,
+            amount: new Decimal(params.amount),
+            status: 'STUCK',
+            transferKind: 'unknown',
+            errorMessage:
+              `STUCK — refund failed. Reason swap gagal: ${params.reason}. ` +
+              `Refund error: ${(err as Error).message}. ` +
+              `Admin manual recovery needed.`,
+          },
+        });
+      } catch (pdErr) {
+        this.logger.error(
+          `CRITICAL: refund failed AND PendingDelivery record failed swap ${params.swapTxId}. ${(pdErr as Error).message}`,
+        );
+      }
+      return { ok: false };
     }
   }
 
@@ -535,9 +651,7 @@ export class SwapService {
     const networkFeeCc = Number(
       this.config.get<string>('SWAP_NETWORK_FEE_CC') ?? '2',
     );
-    const platformFeeCc = Number(
-      this.config.get<string>('SWAP_PLATFORM_FEE_CC') ?? '0',
-    );
+    const platformFeeCc = this.calculatePlatformFee(params.amount);
     const totalFeeCc = networkFeeCc + platformFeeCc;
 
     // 1. Cek CC balance cukup (amount + total fee).
@@ -792,71 +906,73 @@ export class SwapService {
       // dan return message informatif ke user (bukan error mentah).
       if (err instanceof CantexTimeoutError) {
         this.logger.error(
-          `Swap TIMEOUT after CC leg sent (swap ${swapTx.id}): CC ${params.amount} stuck in trading account. Needs reconcile/refund. Original: ${(err as Error).message}`,
+          `Swap TIMEOUT after CC leg sent (swap ${swapTx.id}): CC ${params.amount} stuck in trading account. Attempting auto-refund. Original: ${(err as Error).message}`,
           (err as Error).stack,
         );
+        // Wintip pattern: AUTO-REFUND input ke user saat swap gagal setelah leg sukses.
+        // CC leg sudah kirim (amount + networkFeeCc) ke trading account. Refund
+        // param.amount CC kembali ke user (network fee ~1 CC tetap di trading
+        // account untuk fee deposit Cantex — best-effort, bukan exact accounting).
+        const refund = await this.refundToUser({
+          userId,
+          userPartyId: user.cantonPartyId,
+          amount: String(params.amount),
+          instrumentId: cfg.ccInstrumentId,
+          instrumentAdmin: cfg.ccInstrumentAdmin,
+          swapTxId: swapTx.id,
+          requestId,
+          reason: `swap timeout: ${(err as Error).message}`,
+        });
         await this.prisma.swapTransaction.update({
           where: { id: swapTx.id },
           data: {
-            status: 'TIMEOUT_PENDING_DELIVERY',
-            errorMessage: `Swap timeout after CC leg sent: ${(err as Error).message}`,
+            status: refund.ok ? 'REFUNDED' : 'TIMEOUT_PENDING_DELIVERY',
+            errorMessage: `Swap timeout: ${(err as Error).message}. Refund ${refund.ok ? 'OK' : 'FAILED'}.`,
           },
         });
-        // Catat PendingDelivery supaya cron refund / admin bisa pick up.
-        // Token = CC (yang stuck), amount = amount CC yang user kirim.
-        try {
-          await this.prisma.pendingDelivery.create({
-            data: {
-              userId,
-              swapTransactionId: swapTx.id,
-              userPartyId: user.cantonPartyId,
-              tokenId: cfg.ccInstrumentId,
-              tokenAdmin: cfg.ccInstrumentAdmin,
-              amount: new Decimal(params.amount),
-              amountMicroCc: BigInt(Math.round(params.amount * 1_000_000)),
-              status: 'PENDING_APPROVAL',
-              transferKind: 'unknown',
-              errorMessage:
-                `Swap timed out after CC leg sent. CC ${params.amount} may be stuck in trading account. ` +
-                `Action needed: (a) check Cantex if swap eventually succeeded → deliver token to user; ` +
-                `(b) if swap failed → refund CC to user party ${user.cantonPartyId}. ` +
-                `Original timeout: ${(err as Error).message}`,
-            },
-          });
-        } catch (pdErr) {
-          this.logger.error(
-            `CRITICAL: swap timeout AND PendingDelivery record failed for swap ${swapTx.id}. ` +
-              `CC ${params.amount} may be lost without DB trace. PendingDelivery error: ${(pdErr as Error).message}`,
-          );
-        }
-        // Jangan throw — return informative message supaya user dapat
-        // feedback yang jelas, bukan error generik. User instructed to wait.
         return {
           success: false,
           direction: 'CC_TO_TOKEN',
           swapId: swapTx.id,
-          message:
-            'Swap timed out. Your CC is safe — if the swap does not complete, it will be refunded automatically. Please check your Activity in a few minutes.',
+          message: refund.ok
+            ? 'Swap timed out. Your CC has been refunded automatically. Please check your Activity.'
+            : 'Swap timed out. Your CC is being refunded automatically — please check your Activity in a few minutes.',
         };
       }
 
-      // Error non-timeout (CantexError biasa, network, dll) → behavior lama:
-      // mark FAILED + throw. Kalau ini terjadi SETELAH CC leg sukses (line 400),
-      // CC juga stuck tapi error-nya non-timeout — tetap catat ke log error
-      // supaya admin bisa reconcile manual.
+      // Error non-timeout (CantexError biasa, network, dll).
+      // CC leg kemungkinan sudah terkirim → auto-refund input ke user.
       const afterCcLeg = err instanceof CantexError || err instanceof Error;
       this.logger.error(
         `Swap FAILED after CC leg (swap ${swapTx.id}, afterCcLeg=${afterCcLeg}): ${(err as Error).message}`,
         (err as Error).stack,
       );
+      // Wintip pattern: auto-refund bila CC leg sudah kirim dana ke trading account.
+      const refund = await this.refundToUser({
+        userId,
+        userPartyId: user.cantonPartyId,
+        amount: String(params.amount),
+        instrumentId: cfg.ccInstrumentId,
+        instrumentAdmin: cfg.ccInstrumentAdmin,
+        swapTxId: swapTx.id,
+        requestId,
+        reason: `swap failed: ${(err as Error).message}`,
+      });
       await this.prisma.swapTransaction.update({
         where: { id: swapTx.id },
         data: {
-          status: 'FAILED',
-          errorMessage: (err as Error).message,
+          status: refund.ok ? 'REFUNDED' : 'FAILED',
+          errorMessage: `${(err as Error).message}. Refund ${refund.ok ? 'OK' : 'FAILED'}.`,
         },
       });
-      throw err;
+      return {
+        success: false,
+        direction: 'CC_TO_TOKEN',
+        swapId: swapTx.id,
+        message: refund.ok
+          ? 'Swap failed but your CC has been refunded automatically.'
+          : `Swap failed. ${(err as Error).message}. Your CC is being refunded automatically — please check your Activity.`,
+      };
     }
   }
 
@@ -879,12 +995,11 @@ export class SwapService {
     // BUG P3.1: Request ID unik per swap, untuk korrelasi end-to-end di memo
     // Cantex (transfer CC balik ke user) + log + DB.
     const requestId = this.generateSwapRequestId();
-    // Network fee + platform fee — DITANGGUNG USER (potong dari CC hasil swap).
+    // Network fee — DITANGGUNG USER (potong dari CC hasil swap).
+    // Platform fee Wintip style dihitung SETELAH swap dari CC output
+    // (calculatePlatformFee(outputCcNum)) — di-assign di step "netCc".
     const networkFeeCc = Number(
       this.config.get<string>('SWAP_NETWORK_FEE_CC') ?? '2',
-    );
-    const platformFeeCc = Number(
-      this.config.get<string>('SWAP_PLATFORM_FEE_CC') ?? '0',
     );
 
     // 1. Cek token balance cukup (DB). WAVE 6: lookup case-insensitive supaya
@@ -1081,11 +1196,13 @@ export class SwapService {
         );
       }
 
-      // 6. Network fee di-deduct dari output CC swap.
+      // 6. Fee di-deduct dari output CC swap.
       //    Network fee (Cantex WD CC ke user) dipotong dari output swap.
-      //    Platform fee ditangani terpisah di step fee leg (user → canquest::fee).
+      //    Platform fee (Wintip style: max(outputCc*rate, min)) — revenue dapp,
+      //    di-transfer terpisah di step fee leg (user → canquest::fee).
       //    Network fee TIDAK masuk canquest::fee — dikonsumsi Cantex saat WD.
-      const netCc = outputCcNum - networkFeeCc;
+      const platformFeeCc = this.calculatePlatformFee(outputCcNum);
+      const netCc = outputCcNum - networkFeeCc - platformFeeCc;
 
       if (!ccOnChain) {
         // On-chain delivery gagal → credit off-chain (UX: user dapat CC),
@@ -1202,60 +1319,38 @@ export class SwapService {
         swapId: swapTx.id,
       };
     } catch (err) {
-      // BUG-D.4 fix: untuk TOKEN_TO_CC, swap Cantex dipanggil duluan SEBELUM
-      // debit CantexTokenBalance. Jadi bila timeout di swap Cantex, token
-      // user off-chain belum di-debit → tidak ada dana stuck user-side.
-      // TAPI swap mungkin sukses terlambat di Cantex (client-side timeout ≠
-      // Cantex gagal) → CC bisa masuk ke trading account tanpa kita catat.
-      //
-      // Set status khusus TIMEOUT_PENDING_DELIVERY supaya cron/admin bisa
-      // check Cantex dan: (a) kalau swap sukses → credit CC ke user + debit
-      // token off-chain; (b) kalau gagal → no-op (token user aman).
+      // WAVE 6 + Wintip pattern: untuk TOKEN_TO_CC, token leg dikirim duluan
+      // ke trading account SEBELUM swap. Jadi bila swap gagal/timeout, token
+      // user SUDAH di trading account → WAJIB auto-refund token ke user party.
       if (err instanceof CantexTimeoutError) {
         this.logger.error(
-          `Swap TIMEOUT during Cantex swap (swap ${swapTx.id}, TOKEN_TO_CC). Token off-chain NOT debited. Needs reconcile. Original: ${(err as Error).message}`,
+          `Swap TIMEOUT during TOKEN_TO_CC (swap ${swapTx.id}). Token leg already sent. Attempting auto-refund. Original: ${(err as Error).message}`,
           (err as Error).stack,
         );
+        const refund = await this.refundToUser({
+          userId,
+          userPartyId: user.cantonPartyId,
+          amount: String(params.amount),
+          instrumentId: params.sellInstrumentId,
+          instrumentAdmin: params.sellInstrumentAdmin,
+          swapTxId: swapTx.id,
+          requestId,
+          reason: `swap timeout: ${(err as Error).message}`,
+        });
         await this.prisma.swapTransaction.update({
           where: { id: swapTx.id },
           data: {
-            status: 'TIMEOUT_PENDING_DELIVERY',
-            errorMessage: `Swap timeout during Cantex swap (token not debited): ${(err as Error).message}`,
+            status: refund.ok ? 'REFUNDED' : 'TIMEOUT_PENDING_DELIVERY',
+            errorMessage: `Swap timeout: ${(err as Error).message}. Refund ${refund.ok ? 'OK' : 'FAILED'}.`,
           },
         });
-        // Catat PendingDelivery untuk tracking reconcile (CC yang mungkin
-        // perlu di-credit ke user kalau swap ternyata sukses).
-        try {
-          await this.prisma.pendingDelivery.create({
-            data: {
-              userId,
-              swapTransactionId: swapTx.id,
-              userPartyId: user.cantonPartyId,
-              tokenId: cfg.ccInstrumentId,
-              tokenAdmin: cfg.ccInstrumentAdmin,
-              // Estimasi CC output tidak diketahui (swap belum konfirmasi) →
-              // pakai sellAmount sebagai placeholder. Cron reconcile akan
-              // update nilai asli setelah cek Cantex.
-              amount: new Decimal(params.amount),
-              status: 'PENDING_APPROVAL',
-              transferKind: 'unknown',
-              errorMessage:
-                `TOKEN_TO_CC swap timed out during Cantex swap. Off-chain token (${params.amount} ${params.sellInstrumentId}) NOT debited. ` +
-                `Action needed: (a) check Cantex if swap succeeded → credit CC to user + debit token off-chain; ` +
-                `(b) if swap failed → no-op (token safe). Original timeout: ${(err as Error).message}`,
-            },
-          });
-        } catch (pdErr) {
-          this.logger.error(
-            `CRITICAL: swap timeout AND PendingDelivery record failed for swap ${swapTx.id} (TOKEN_TO_CC). PendingDelivery error: ${(pdErr as Error).message}`,
-          );
-        }
         return {
           success: false,
           direction: 'TOKEN_TO_CC',
           swapId: swapTx.id,
-          message:
-            'Swap timed out. Your tokens are safe — the swap is being verified. Please check your Activity in a few minutes.',
+          message: refund.ok
+            ? 'Swap timed out. Your tokens have been refunded automatically. Please check your Activity.'
+            : 'Swap timed out. Your tokens are being refunded automatically — please check your Activity in a few minutes.',
         };
       }
 
@@ -1263,14 +1358,32 @@ export class SwapService {
         `Swap FAILED (swap ${swapTx.id}, TOKEN_TO_CC): ${(err as Error).message}`,
         (err as Error).stack,
       );
+      // Token leg kemungkinan sudah terkirim → auto-refund token ke user.
+      const refund = await this.refundToUser({
+        userId,
+        userPartyId: user.cantonPartyId,
+        amount: String(params.amount),
+        instrumentId: params.sellInstrumentId,
+        instrumentAdmin: params.sellInstrumentAdmin,
+        swapTxId: swapTx.id,
+        requestId,
+        reason: `swap failed: ${(err as Error).message}`,
+      });
       await this.prisma.swapTransaction.update({
         where: { id: swapTx.id },
         data: {
-          status: 'FAILED',
-          errorMessage: (err as Error).message,
+          status: refund.ok ? 'REFUNDED' : 'FAILED',
+          errorMessage: `${(err as Error).message}. Refund ${refund.ok ? 'OK' : 'FAILED'}.`,
         },
       });
-      throw err;
+      return {
+        success: false,
+        direction: 'TOKEN_TO_CC',
+        swapId: swapTx.id,
+        message: refund.ok
+          ? 'Swap failed but your tokens have been refunded automatically.'
+          : `Swap failed. ${(err as Error).message}. Your tokens are being refunded automatically — please check your Activity.`,
+      };
     }
   }
 }

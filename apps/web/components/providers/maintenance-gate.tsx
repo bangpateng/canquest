@@ -164,7 +164,7 @@ function MaintenanceOverlay({ status }: { status: MaintenanceStatus }) {
         {endValid && (
           <p className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--card)]/60 px-4 py-3 text-sm text-[var(--foreground)]">
             <span className="text-[var(--muted-foreground)]">
-              Estimasi selesai:{" "}
+              Estimasi:{" "}
             </span>
             <span className="font-semibold">
               {end.toLocaleString(undefined, {

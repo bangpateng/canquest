@@ -74,11 +74,21 @@ import {
   TokenLogo,
   displayName,
 } from "@/components/app/wallet/token-logo";
+import {
+  useBalances,
+  useInvalidateWalletTokens,
+} from "@/lib/hooks/use-wallet-tokens";
 
 // ── Component ───────────────────────────────────────────────────────────
 
 export function SwapModal({ open, onClose, balance }: SwapModalProps) {
   const titleId = useId();
+
+  // WAVE 6 real-time: saldo dari TanStack Query (auto-refresh saat SSE
+  // balance:changed masuk). Override prop `balance` (CC) supaya modal
+  // selalu tampilkan saldo terbaru tanpa perlu tutup/buka modal.
+  const invalidateWalletTokens = useInvalidateWalletTokens();
+  const { data: balancesData } = useBalances({ enabled: open });
 
   const [tokens, setTokens] = useState<SwapToken[]>([]);
   const [tokensLoading, setTokensLoading] = useState(false);
@@ -223,14 +233,20 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
   if (!open) return null;
 
   const sellIsCC = Boolean(sellToken?.isCC);
-  // Saldo token yang dijual (CC dari prop, non-CC dari balances.tokens).
+  // WAVE 6 real-time: saldo prioritas dari useBalances hook (auto-refresh SSE).
+  // Fallback ke prop `balance` (CC) + state local (initial load) untuk robustness.
+  const ccBalanceEffective =
+    typeof balancesData?.cc === "number"
+      ? balancesData.cc
+      : typeof balance === "number"
+        ? balance
+        : balances.cc;
+  const tokensMap = balancesData?.tokens ?? balances.tokens;
   const sellBalance = sellToken
     ? sellIsCC
-      ? typeof balance === "number"
-        ? balance
-        : balances.cc
+      ? ccBalanceEffective
       : parseFloat(
-          balances.tokens[
+          tokensMap[
             `${sellToken.instrumentId}::${sellToken.instrumentAdmin}`
           ] ?? "0",
         )
@@ -306,8 +322,9 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
       setSwapState("success");
       setSwapOutput(data.outputAmount ?? "");
       setSwapReceivedToken(buyToken?.instrumentId ?? "");
-      // Refresh balances.
-      void loadTokens();
+      // WAVE 6 real-time: invalidate react-query supaya saldo refresh otomatis
+      // (useBalances hook background refetch). Lebih cepat dari loadTokens manual.
+      void invalidateWalletTokens();
     } catch {
       setSwapState("error");
       setSwapMessage("Network error. Check your connection.");

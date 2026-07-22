@@ -136,3 +136,7 @@ infra/env/api.env.testnet.example
 scripts/tunnel-testnet.ps1
 scripts/vps2-deploy-from-windows.ps1
 .zcode/
+
+# ─── Internal working docs (NEVER publish) ─────────────────────────────────
+HANDOFF_CONTEXT.md
+MASTER_PLAN.md
