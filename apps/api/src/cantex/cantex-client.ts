@@ -303,6 +303,14 @@ export class CantexClient {
   /** GET /v1/account/info → balances trading account. */
   async getAccountInfo(): Promise<AccountInfo> {
     const raw = await this.request<RawAccountInfo>('GET', '/v1/account/info');
+    // DIAGNOSTIC: dump raw response to /tmp untuk lihat semua field (cari
+    // holding cids yang dibutuhkan endpoint transfer). Lepas setelah fix.
+    try {
+      const fs = await import('fs');
+      fs.writeFileSync('/tmp/cantex-account-info.json', JSON.stringify(raw, null, 2));
+    } catch {
+      /* ignore */
+    }
     return parseAccountInfo(raw);
   }
 
