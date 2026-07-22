@@ -40,6 +40,7 @@ import {
   useInvalidateWalletTokens,
 } from "@/lib/hooks/use-wallet-tokens";
 import { TokenLogo, displayName } from "@/components/app/wallet/token-logo";
+import { canAccessSwapBeta } from "@/lib/canton/token-types";
 
 type Sheet = null | "send" | "receive" | "offers" | "swap";
 type SendState = "idle" | "loading" | "success" | "error";
@@ -52,6 +53,8 @@ interface WalletActionsProps {
   onLockClick?: () => void;
   /** Jumlah CC yang sedang terkunci (untuk badge di tombol Lock). 0 = tidak ada. */
   lockedCc?: number;
+  /** Username user saat ini — dipakai gate swap beta (whitelist). */
+  username?: string | null;
 }
 
 export function WalletActions({
@@ -60,6 +63,7 @@ export function WalletActions({
   onBalanceRefresh,
   onLockClick,
   lockedCc = 0,
+  username,
 }: WalletActionsProps) {
   const displayPartyId = formatPartyIdForDisplay(partyId);
   const sendTitleId = useId();
@@ -366,13 +370,20 @@ export function WalletActions({
         <button
           type="button"
           onClick={() => setSheet("swap")}
+          disabled={!canAccessSwapBeta(username)}
+          title={
+            canAccessSwapBeta(username)
+              ? "Swap"
+              : "Swap is coming soon. Stay tuned!"
+          }
           className={cn(
             buttonVariants({ variant: "secondary", size: "sm" }),
             "w-full justify-center gap-2",
+            !canAccessSwapBeta(username) && "cursor-not-allowed opacity-50",
           )}
         >
           <ArrowLeftRight className="h-5 w-5 shrink-0" aria-hidden />
-          Swap
+          {canAccessSwapBeta(username) ? "Swap" : "Soon"}
         </button>
         <button
           type="button"

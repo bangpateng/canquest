@@ -38,6 +38,19 @@ export function isTokenActive(instrumentId: string, isCC?: boolean): boolean {
   return ACTIVE_SWAP_TOKENS.has(instrumentId.toUpperCase());
 }
 
+// ── Swap beta whitelist (frontend gate) ───────────────────────────────────
+// Fitur swap dalam beta — hanya username tertentu yang bisa akses tombol Swap.
+// User lain lihat tombol "Coming soon" (disabled). Backend juga enforce via
+// env SWAP_ENABLED_USERNAMES (server-side source of truth, anti bypass).
+// Saat swap stabil, hapus whitelist ini + set SWAP_ENABLED_USERNAMES=* di VPS.
+const SWAP_BETA_WHITELIST = new Set(["karel"]);
+
+/** Apakah user ini boleh akses swap beta? (frontend gate) */
+export function canAccessSwapBeta(username?: string | null): boolean {
+  if (!username) return false;
+  return SWAP_BETA_WHITELIST.has(username.toLowerCase());
+}
+
 /**
  * Shape response GET /api/party/pools.
  * `tokens` = daftar instrument yang tersedia (dari AMM pools).
