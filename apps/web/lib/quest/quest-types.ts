@@ -170,6 +170,17 @@ export const QUEST_BANNER_TAG_PILL =
 
 /** Task types supported in admin + user UI */
 export type QuestTaskType =
+  | "daily_check_in"
+  | "send_transaction"
+  | "send_token"
+  | "daily_swap"
+  | "send_any_daily"
+  | "send_to_user_daily"
+  | "receive_external_daily"
+  | "receive_internal_daily"
+  | "lock_cc"
+  | "quiz_yes_no"
+  | "quiz_choice"
   | "twitter_follow"
   | "twitter_retweet"
   | "telegram_channel"
@@ -181,21 +192,31 @@ export type QuestTaskType =
 
 /** CanQuest Earn hub (user menu Quest) — admin adds these only */
 export const EARN_HUB_TASK_TYPE_OPTIONS: { value: string; label: string; hint?: string }[] = [
-  { value: "daily_check_in", label: "Daily check-in", hint: "Once per day (streak coming soon)" },
+  { value: "daily_check_in", label: "Daily check-in", hint: "Once per day · resets at 00:00 UTC" },
   {
     value: "send_transaction",
     label: "Send transaction (custom count)",
     hint: "Wallet required · resets every 24 hours · set any count (1×, 3×, 5×, …) · counts only real completed CC sends (fees & pending offers excluded)",
   },
   {
-    value: "send_token",
-    label: "Send token — USDCx (custom count)",
-    hint: "Wallet required · resets every 24 hours · counts only real completed USDCx sends (one-step transfer or offer accepted) · set any count",
+    value: "send_any_daily",
+    label: "Send CC or USDCx — daily",
+    hint: "Wallet required · resets at 00:00 UTC · counts real completed outgoing CC + USDCx sends (combined) · set any count",
   },
   {
-    value: "daily_swap",
-    label: "Daily Swap CC ↔ USDCx (custom count)",
-    hint: "Wallet required · resets every 24 hours · counts only real completed swaps (CC→USDCx or USDCx→CC) · set any count",
+    value: "send_to_user_daily",
+    label: "Send to a CanQuest user — daily",
+    hint: "Wallet required · resets at 00:00 UTC · counts only sends whose recipient is a registered CanQuest user (CC + USDCx) · set any count",
+  },
+  {
+    value: "receive_external_daily",
+    label: "Receive from external wallet — daily",
+    hint: "Wallet required · resets at 00:00 UTC · counts inbound CC/USDCx transfers from a non-CanQuest (external) wallet · requires the ledger indexer extension · set any count",
+  },
+  {
+    value: "receive_internal_daily",
+    label: "Receive from a CanQuest user — daily",
+    hint: "Wallet required · resets at 00:00 UTC · counts inbound CC/USDCx transfers from a registered CanQuest user · set any count",
   },
   {
     value: "lock_cc",
@@ -315,17 +336,43 @@ function normTaskText(s: string): string {
 /** Earn-hub quiz window: NEW label + points only within this period after publish. */
 export const EARN_HUB_NEW_LABEL_TTL_MS = 24 * 60 * 60 * 1000;
 
-/** Cooldown before repeatable tasks (daily check-in, etc.) can earn points again. */
+/**
+ * Daily tasks reset at 00:00 UTC (for WIB users that is 07:00 local time).
+ * Mirrors apps/api/src/common/time-utils.ts — keep both in sync.
+ */
+export function startOfTodayUtc(now: Date = new Date()): Date {
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  );
+}
+
+/** Milliseconds remaining until the next 00:00 UTC boundary. */
+export function msUntilNextUtcDay(now: Date = new Date()): number {
+  const next = startOfTodayUtc(now);
+  next.setUTCDate(next.getUTCDate() + 1);
+  return Math.max(0, next.getTime() - now.getTime());
+}
+
+/**
+ * Cooldown remaining for repeatable daily tasks = time until the next 00:00 UTC.
+ * (Replaces the old rolling-24h-from-last-verify window.)
+ */
 export const EARN_HUB_REPEAT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
-/** Only daily check-in, send-transaction, send-token, and daily-swap repeat every 24h;
- *  other tasks stay on Quest when done but are one-time (lock-cc is one-time per tier). */
+/**
+ * Tasks that repeat once per UTC day (reset at 00:00 UTC). Other tasks stay on
+ * Quest when done but are one-time (lock-cc is one-time per tier).
+ */
 export function isEarnHubRepeatableTask(task: { type: string }): boolean {
   return (
     task.type === "daily_check_in" ||
     task.type === "send_transaction" ||
     task.type === "send_token" ||
-    task.type === "daily_swap"
+    task.type === "daily_swap" ||
+    task.type === "send_any_daily" ||
+    task.type === "send_to_user_daily" ||
+    task.type === "receive_external_daily" ||
+    task.type === "receive_internal_daily"
   );
 }
 
@@ -366,6 +413,38 @@ export function isDailySwapTask(type: string): boolean {
   return type === "daily_swap";
 }
 
+/**
+ * New count-based daily tasks (send/receive CC+USDCx variants). Like
+ * send_transaction, these store a required count in `target` and need the count
+ * picker UI in the admin form.
+ */
+export function isCountBasedDailyTask(type: string): boolean {
+  return (
+    type === "send_any_daily" ||
+    type === "send_to_user_daily" ||
+    type === "receive_external_daily" ||
+    type === "receive_internal_daily"
+  );
+}
+
+/** Required count for a count-based daily task (stored in task.target). Min 1. */
+export function getCountBasedDailyRequired(target: string | null | undefined): number {
+  const n = parseInt((target ?? "").trim(), 10);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+/** Default title for a count-based daily task based on its type + count. */
+export function countBasedDailyTitle(type: string, requiredCount: number): string {
+  const base: Record<string, string> = {
+    send_any_daily: "Send CC or USDCx",
+    send_to_user_daily: "Send to a CanQuest user",
+    receive_external_daily: "Receive from an external wallet",
+    receive_internal_daily: "Receive from a CanQuest user",
+  };
+  const label = base[type] ?? "Daily task";
+  return `${label} ${requiredCount}×`;
+}
+
 /** Required number of swaps (stored in task.target). Min 1. */
 export function getDailySwapRequiredCount(target: string | null | undefined): number {
   const n = parseInt((target ?? "").trim(), 10);
@@ -395,6 +474,13 @@ export function lockCcTitle(termKey: string): string {
   return `Lock CC${days ? ` — ${days} Days` : ""}`;
 }
 
+/**
+ * Time until a repeatable task can be claimed again. Anchor = next 00:00 UTC
+ * boundary (daily reset), regardless of when the user last verified.
+ *
+ * If the user has NOT yet verified today, returns 0 (claimable now). If they
+ * already verified today, returns time-to-midnight-UTC.
+ */
 export function getEarnHubRepeatCooldownMs(
   submission: { verifiedAt?: string | null; submittedAt?: string } | null | undefined,
   now: number = Date.now(),
@@ -404,7 +490,11 @@ export function getEarnHubRepeatCooldownMs(
   if (!raw) return 0;
   const last = new Date(raw).getTime();
   if (Number.isNaN(last)) return 0;
-  return Math.max(0, EARN_HUB_REPEAT_COOLDOWN_MS - (now - last));
+  const todayStart = startOfTodayUtc(new Date(now)).getTime();
+  // Verified before today's UTC midnight → free to claim again now.
+  if (last < todayStart) return 0;
+  // Verified today → must wait until next 00:00 UTC.
+  return msUntilNextUtcDay(new Date(now));
 }
 
 export function formatEarnHubCooldown(ms: number): string {
@@ -527,8 +617,7 @@ export function earnHubTaskToDraft(task: {
     choiceC: choices[2] ?? "",
     choiceD: choices[3] ?? "",
     showNewBadge: Boolean(task.showNewBadge),
-    repeatEvery24h:
-      task.type === "daily_check_in" || task.type === "send_transaction",
+    repeatEvery24h: isEarnHubRepeatableTask({ type: task.type }),
   };
 }
 
@@ -614,8 +703,7 @@ export function buildEarnHubTaskPayload(input: {
   const points = Math.max(0, input.points);
 
   const showNewBadge = Boolean(input.showNewBadge);
-  const repeatEvery24h =
-    input.type === "daily_check_in" || input.type === "send_transaction";
+  const repeatEvery24h = isEarnHubRepeatableTask({ type: input.type });
 
   if (input.type === "send_transaction") {
     const required = getSendTransactionRequiredCount(input.target);
@@ -626,6 +714,23 @@ export function buildEarnHubTaskPayload(input: {
       description: null,
       points,
       // required send count is stored in target
+      target: String(required),
+      correctAnswer: null,
+      showNewBadge,
+      repeatEvery24h: true,
+    };
+  }
+
+  // New count-based daily tasks (send/receive variants): store required count
+  // in target, same shape as send_transaction.
+  if (isCountBasedDailyTask(input.type)) {
+    const required = getCountBasedDailyRequired(input.target);
+    const customTitle = input.title?.trim();
+    return {
+      type: input.type,
+      title: customTitle || countBasedDailyTitle(input.type, required),
+      description: null,
+      points,
       target: String(required),
       correctAnswer: null,
       showNewBadge,
@@ -900,6 +1005,10 @@ export const TASK_ACTION_BUTTON_LABEL: Record<string, string> = {
   send_transaction: "Verify",
   send_token: "Verify",
   daily_swap: "Verify",
+  send_any_daily: "Verify",
+  send_to_user_daily: "Verify",
+  receive_external_daily: "Verify",
+  receive_internal_daily: "Verify",
   lock_cc: "Verify",
   quiz_yes_no: "Answer",
   quiz_choice: "Answer",

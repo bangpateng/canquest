@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { ModoApiService, type ModoTransfer } from '../canton/modo-api.service';
+import { cantonPartyIdsEqual } from '../common/canton-party-id';
 
 /**
  * LedgerIndexerService — poll Canton ledger transaction updates & sync to DB.
@@ -173,7 +174,7 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
           hitBoundary = true;
           break;
         }
-        await this.processTransfer(tx);
+        await this.processTransfer(tx, partyId);
       }
 
       // Remember the newest eventId (list is DESC by AGE) as next cycle's stop.
@@ -187,12 +188,29 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
   /**
    * Process one Modo transfer.
    *
-   * A CC transfer settlement is identified by transferType ∈
-   * { Transfer, Instruction, Mergesplit }. We derive the updateId (eventId
-   * minus the ":N" suffix) and settle the matching CcTransaction by either
-   * cantonUpdateId or ledgerTxId.
+   * Two responsibilities:
+   *
+   * 1. CC settlement: a CC transfer is identified by transferType ∈
+   *    { Transfer, Instruction, Mergesplit }. We derive the updateId (eventId
+   *    minus the ":N" suffix) and settle any matching pending CcTransaction by
+   *    either cantonUpdateId or ledgerTxId.
+   *
+   * 2. Incoming-from-external capture: for a transfer where the watched party
+   *    is in `tx.receivers` but NOT in `tx.senders`, and no pending row matches
+   *    (i.e. the app did not initiate it), we CREATE a TRANSFER_IN row carrying
+   *    the REAL sender partyId in `referenceId` (the legacy cc-inbound-sync path
+   *    stores the receiver's own partyId there because the balance API does not
+   *    reveal the sender). This unlocks the "receive from external wallet"
+   *    quest task and a richer transaction history.
+   *
+   * Idempotency: the create relies on `@@unique([userId, ledgerTxId])` — a real
+   *    on-chain updateId is unique per transfer, so a second poll cycle re-hits
+   *    P2002 and is safely swallowed.
    */
-  private async processTransfer(tx: ModoTransfer): Promise<void> {
+  private async processTransfer(
+    tx: ModoTransfer,
+    watchedPartyId: string,
+  ): Promise<void> {
     const isCcTransfer =
       !!tx.transferType &&
       LedgerIndexerService.CC_TRANSFER_TYPES.has(tx.transferType);
@@ -203,6 +221,7 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
     const settledAt = new Date(Number(tx.createdAt));
 
     try {
+      // 1. Settle any pending row created by the app's send/accept paths.
       await this.prisma.ccTransaction.updateMany({
         where: {
           settledAt: null,
@@ -214,9 +233,80 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
         },
       });
 
+      // 2. Capture incoming transfer from a real sender (enables "receive from
+      //    external/internal" quest tasks). Only when the watched party is a
+      //    receiver and NOT a sender, and the transfer carries an amount + sender.
+      const isReceiver = (tx.receivers ?? []).some((r) =>
+        cantonPartyIdsEqual(r.partyId, watchedPartyId),
+      );
+      const isSender = (tx.senders ?? []).some((s) =>
+        cantonPartyIdsEqual(s.partyId, watchedPartyId),
+      );
+      const senderPartyId = tx.senders?.[0]?.partyId;
+      if (isReceiver && !isSender && senderPartyId && typeof tx.amount === 'number' && tx.amount > 0) {
+        await this.captureInboundTransfer({
+          watchedPartyId,
+          senderPartyId,
+          updateId,
+          amount: tx.amount,
+          settledAt,
+        });
+      }
+
       this.logger.debug(`Indexed CC transfer: ${updateId.slice(0, 16)}…`);
     } catch (err) {
       this.logger.warn(`processTransfer error: ${String(err)}`);
+    }
+  }
+
+  /**
+   * Persist a TRANSFER_IN row with the REAL sender partyId. No-op if the user
+   * is unknown to CanQuest or if the row already exists (dedup via unique
+   * [userId, ledgerTxId]). The legacy cc-inbound-sync row (if any) is left
+   * untouched — it stays hidden from history and the two never collide because
+   * their ledgerTxId formats differ ("inbound-sync:…" vs the real updateId).
+   */
+  private async captureInboundTransfer(params: {
+    watchedPartyId: string;
+    senderPartyId: string;
+    updateId: string;
+    amount: number;
+    settledAt: Date;
+  }): Promise<void> {
+    const user = await this.prisma.user.findFirst({
+      where: {
+        cantonPartyId: { equals: params.watchedPartyId, mode: 'insensitive' },
+      },
+      select: { id: true },
+    });
+    if (!user) return; // not a CanQuest user — nothing to credit
+
+    const amountMicroCc = BigInt(Math.round(params.amount * 1_000_000));
+    if (amountMicroCc <= 0n) return;
+
+    try {
+      await this.prisma.ccTransaction.create({
+        data: {
+          userId: user.id,
+          amountMicroCc,
+          type: 'TRANSFER_IN',
+          description: `Received ${params.amount} CC from on-chain`,
+          referenceId: params.senderPartyId, // ← real sender (legacy stored self)
+          ledgerTxId: params.updateId, // ← real on-chain id (dedup key)
+          cantonUpdateId: params.updateId,
+          status: 'COMPLETED',
+          settledAt: params.settledAt,
+        },
+      });
+      this.logger.debug(
+        `Captured inbound CC: user=${user.id.slice(0, 8)} from=${params.senderPartyId.slice(0, 16)}… amount=${params.amount}`,
+      );
+    } catch (err) {
+      // P2002 = unique constraint hit (already captured) — safe to swallow.
+      const msg = String(err);
+      if (!msg.includes('P2002')) {
+        this.logger.warn(`captureInboundTransfer error: ${msg}`);
+      }
     }
   }
 

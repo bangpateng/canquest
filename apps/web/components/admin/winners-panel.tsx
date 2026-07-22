@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, CheckCircle2, Clock, Send, Shuffle, Ticket, UserCheck, Plus, Trash2 } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -45,6 +46,7 @@ interface InviteCode {
 type Tab = "participants" | "winners" | "codes";
 
 export function WinnersPanel({ questId }: { questId: string }) {
+  const router = useRouter();
   const [tab, setTab] = useState<Tab>("participants");
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [winners, setWinners] = useState<Winner[]>([]);
@@ -72,7 +74,13 @@ export function WinnersPanel({ questId }: { questId: string }) {
       fetch(`/api/admin/quests/${questId}/winners`).then((r) => r.json()),
       fetch(`/api/admin/quests/${questId}/invite-codes`).then((r) => r.json()),
     ])
-      .then(([quest, p, w, c]: [{ title: string; rewardType?: string }, Participant[], Winner[], InviteCode[]]) => {
+      .then(([quest, p, w, c]: [{ title: string; rewardType?: string; questKind?: string }, Participant[], Winner[], InviteCode[]]) => {
+        // Winners/distribute/invite-codes are CAMPAIGN-only — bounce the Quest
+        // hub (EARN_HUB) back to its own panel.
+        if (quest?.questKind === "EARN_HUB") {
+          router.replace("/admin/quests");
+          return;
+        }
         setQuestTitle(quest.title ?? "");
         setQuestRewardType(quest.rewardType ?? "");
         setParticipants(Array.isArray(p) ? p : []);

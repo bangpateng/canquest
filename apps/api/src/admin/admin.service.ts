@@ -114,6 +114,23 @@ export class AdminService {
     private readonly points: PointsService,
   ) {}
 
+  /**
+   * Guard: campaign-only operations (draw winners, distribute rewards, invite
+   * codes, participants, CSV export) make no sense for the EARN_HUB quest and
+   * must be rejected explicitly. The frontend also redirects away, but this
+   * hard-blocks direct API hits / misuse.
+   */
+  private assertCampaignQuest(
+    quest: { questKind: QuestKind } | null,
+  ): void {
+    if (!quest) return; // callers handle "not found" separately
+    if (quest.questKind === QuestKind.EARN_HUB) {
+      throw new BadRequestException(
+        'This action is only available for Earn campaigns, not the Quest hub.',
+      );
+    }
+  }
+
   /** Drop replaced/removed banner & logo from R2 when not referenced by another quest. */
   private async cleanupQuestMediaUrls(
     questId: string,
@@ -228,7 +245,7 @@ export class AdminService {
         org: 'CanQuest',
         orgSlug: 'CQ',
         description:
-          'Daily check-in, social tasks, and quizzes. Collect points and redeem for CC and other rewards.',
+          'Complete daily tasks to earn points. Check in, follow, lock CC, and transact on-chain.',
         banner:
           'linear-gradient(135deg,rgba(90,217,138,0.35) 0%,rgba(17,24,39,0.9) 100%)',
         rewardCc: 0,
@@ -240,34 +257,80 @@ export class AdminService {
         tags: JSON.stringify(['earn', 'daily']),
         tasks: {
           create: [
+            // 1. Daily check-in (resets at 00:00 UTC).
             {
               type: 'daily_check_in',
               title: 'Daily check-in',
               points: 10,
               order: 0,
             },
-            // Send-transaction daily tasks (1× / 3× / 5×) — wallet required, resets every 24h.
-            // Required count stored in `target`; repeatEvery24h derived from type.
+            // 2. Follow on X — target must be edited to the brand X profile URL.
             {
-              type: 'send_transaction',
-              title: 'Send 1 transaction',
-              points: 10,
-              target: '1',
+              type: 'twitter_follow',
+              title: 'Follow on X',
+              points: 15,
+              target: 'https://x.com/canquest',
               order: 1,
             },
+            // 3. Join Telegram — target must be edited to the real channel link.
             {
-              type: 'send_transaction',
-              title: 'Send 3 transactions',
-              points: 20,
-              target: '3',
+              type: 'telegram_channel',
+              title: 'Join Telegram',
+              points: 15,
+              target: 'https://t.me/canquest',
               order: 2,
             },
+            // 4–6. Lock CC tiers (one-time per tier; higher tier cascades lower).
             {
-              type: 'send_transaction',
-              title: 'Send 5 transactions',
-              points: 30,
-              target: '5',
+              type: 'lock_cc',
+              title: 'Lock CC — 3 Days',
+              points: 20,
+              target: '3d',
               order: 3,
+            },
+            {
+              type: 'lock_cc',
+              title: 'Lock CC — 7 Days',
+              points: 60,
+              target: '7d',
+              order: 4,
+            },
+            {
+              type: 'lock_cc',
+              title: 'Lock CC — 15 Days',
+              points: 150,
+              target: '15d',
+              order: 5,
+            },
+            // 7–10. Daily send/receive tasks (CC + USDCx, resets at 00:00 UTC).
+            // Required count stored in `target`.
+            {
+              type: 'send_any_daily',
+              title: 'Send CC or USDCx 1×',
+              points: 15,
+              target: '1',
+              order: 6,
+            },
+            {
+              type: 'send_to_user_daily',
+              title: 'Send to a CanQuest user 1×',
+              points: 20,
+              target: '1',
+              order: 7,
+            },
+            {
+              type: 'receive_external_daily',
+              title: 'Receive from an external wallet 1×',
+              points: 20,
+              target: '1',
+              order: 8,
+            },
+            {
+              type: 'receive_internal_daily',
+              title: 'Receive from a CanQuest user 1×',
+              points: 20,
+              target: '1',
+              order: 9,
             },
           ],
         },
@@ -771,6 +834,7 @@ export class AdminService {
       include: { tasks: { orderBy: { order: 'asc' } } },
     });
     if (!quest) throw new NotFoundException('Quest not found');
+    this.assertCampaignQuest(quest);
 
     const rewardType = normalizeRewardType(quest.rewardType);
 
@@ -968,6 +1032,7 @@ export class AdminService {
       include: { tasks: true },
     });
     if (!quest) throw new NotFoundException('Quest not found');
+    this.assertCampaignQuest(quest);
 
     const completions = await this.prisma.questCompletion.findMany({
       where: { questId },
@@ -1016,6 +1081,7 @@ export class AdminService {
       where: { id: questId },
     });
     if (!quest) throw new NotFoundException('Quest not found');
+    this.assertCampaignQuest(quest);
 
     const rewardType = normalizeRewardType(quest.rewardType);
     if (
@@ -1206,9 +1272,11 @@ export class AdminService {
   async distributeRewards(questId: string, drawIds?: string[]) {
     const quest = await this.prisma.quest.findUnique({
       where: { id: questId },
-      select: { rewardType: true, title: true },
+      select: { rewardType: true, title: true, questKind: true },
     });
-    if (quest) {
+    if (!quest) throw new NotFoundException('Quest not found');
+    this.assertCampaignQuest(quest);
+    {
       const rt = normalizeRewardType(quest.rewardType);
       if (
         rt === RewardType.CC_MANUAL ||
@@ -1429,6 +1497,13 @@ export class AdminService {
   }
 
   async getInviteCodes(questId: string) {
+    const quest = await this.prisma.quest.findUnique({
+      where: { id: questId },
+      select: { questKind: true },
+    });
+    if (!quest) throw new NotFoundException('Quest not found');
+    this.assertCampaignQuest(quest);
+
     const codes = await this.prisma.inviteCodePool.findMany({
       where: { questId },
       include: {

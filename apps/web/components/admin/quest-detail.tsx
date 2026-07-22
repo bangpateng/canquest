@@ -10,7 +10,6 @@ import { underlineTabClass } from "@/lib/ui/ui-button-styles";
 import { cn } from "@/lib/utils/utils";
 import { QuestForm } from "./quest-form";
 import {
-  EARN_HUB_TASK_TYPE_OPTIONS,
   QUEST_TASK_TYPE_OPTIONS,
   REWARD_TYPE_OPTIONS,
   buildQuestTaskTitle,
@@ -127,8 +126,9 @@ export function QuestDetail({ questId }: { questId: string }) {
         alert(data.message ?? "Delete failed. Try again.");
         return;
       }
-      // Redirect back to the correct list page
-      router.push(isEarnHub ? "/admin/quests" : "/admin/earn");
+      // Redirect back to the campaign list (this page is CAMPAIGN-only —
+      // EARN_HUB redirects away at the top of the effect above).
+      router.push("/admin/earn");
     } finally {
       setDeleting(false);
     }
@@ -185,14 +185,13 @@ export function QuestDetail({ questId }: { questId: string }) {
   const inputCls =
     "w-full rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 text-sm outline-none ring-[var(--ring)] focus-visible:ring-2";
 
-  const isEarnHub = quest.questKind === "EARN_HUB";
-  const taskTypeOptions = isEarnHub
-    ? EARN_HUB_TASK_TYPE_OPTIONS
-    : QUEST_TASK_TYPE_OPTIONS;
+  // This detail page is CAMPAIGN-only — EARN_HUB quests redirect away at the
+  // top of the fetch effect. Task options are always the campaign set here.
+  const taskTypeOptions = QUEST_TASK_TYPE_OPTIONS;
   const projectNameForTasks = quest
     ? resolveQuestProjectName(quest)
     : "";
-  const adminBackHref = isEarnHub ? "/admin/quests" : "/admin/earn";
+  const adminBackHref = "/admin/earn";
 
   return (
     <div className="space-y-6">

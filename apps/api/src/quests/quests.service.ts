@@ -45,6 +45,14 @@ import { R2StorageService } from '../storage/r2-storage.service';
 import { withQuestMediaUrls } from '../storage/quest-media.util';
 import { parseQuestSocialLinks } from './quest-social-links.util';
 import { isFeeTransactionRow } from '../users/cc-transaction-visibility';
+import {
+  startOfTodayUtc,
+  msUntilNextUtcDay,
+} from '../common/time-utils';
+import {
+  normalizeCantonPartyId,
+  cantonPartyIdsEqual,
+} from '../common/canton-party-id';
 
 export interface LeaderboardRow {
   rank: number;
@@ -1056,6 +1064,14 @@ export class QuestsService {
       userId,
       questId,
     );
+    // Per-day progress for daily (repeatable) tasks: taskIds whose submission
+    // was verified during the current UTC day. The frontend uses this to render
+    // an accurate "today's progress" bar that resets at 00:00 UTC, instead of
+    // the all-time VERIFIED status (which stays true forever and was misleading).
+    const todayStart = startOfTodayUtc();
+    const todayVerifiedTaskIds = submissions
+      .filter((s) => s.verifiedAt && s.verifiedAt >= todayStart)
+      .map((s) => s.taskId);
     return {
       completed,
       allTasksVerified,
@@ -1066,12 +1082,13 @@ export class QuestsService {
       ledger: completion ? this.ledgerFromCompletion(completion) : null,
       campaignMeta,
       sendProgress,
+      todayVerifiedTaskIds,
     };
   }
 
   /**
-   * Live progress for send-transaction tasks: { [taskId]: { required, today } }.
-   * `today` counts real CC sends (TRANSFER_OUT, fees excluded) in the last 24h.
+   * Live progress for send/receive tasks: { [taskId]: { required, today } }.
+   * `today` counts real on-chain activity since 00:00 UTC (daily reset).
    * Used by the Quest UI to show "3/5 sends".
    */
   private async buildSendTransactionProgress(
@@ -1083,7 +1100,7 @@ export class QuestsService {
       select: { tasks: { select: { id: true, type: true, target: true } } },
     });
     const all = quest?.tasks ?? [];
-    const windowStart = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const windowStart = startOfTodayUtc();
 
     // Group countable wallet tasks by type so we run at most one query per type.
     const byType: Record<string, typeof all> = {};
@@ -1092,14 +1109,26 @@ export class QuestsService {
       if (
         nt === 'send_transaction' ||
         nt === 'send_token' ||
-        nt === 'daily_swap'
+        nt === 'daily_swap' ||
+        nt === 'send_any_daily' ||
+        nt === 'send_to_user_daily' ||
+        nt === 'receive_external_daily' ||
+        nt === 'receive_internal_daily'
       ) {
         (byType[nt] ??= []).push(t);
       }
     }
     if (Object.keys(byType).length === 0) return {};
 
-    const [ccSends, tokenSends, swaps] = await Promise.all([
+    const [
+      ccSends,
+      tokenSends,
+      swaps,
+      sendAny,
+      sendToUser,
+      receiveExternal,
+      receiveInternal,
+    ] = await Promise.all([
       byType['send_transaction']?.length
         ? this.countRecentUserSends(userId, windowStart)
         : Promise.resolve(0),
@@ -1109,12 +1138,28 @@ export class QuestsService {
       byType['daily_swap']?.length
         ? this.countRecentUserSwaps(userId, windowStart)
         : Promise.resolve(0),
+      byType['send_any_daily']?.length
+        ? this.countSendAnyToday(userId, windowStart)
+        : Promise.resolve(0),
+      byType['send_to_user_daily']?.length
+        ? this.countSendToUserToday(userId, windowStart)
+        : Promise.resolve(0),
+      byType['receive_external_daily']?.length
+        ? this.countReceiveExternalToday(userId, windowStart, undefined)
+        : Promise.resolve(0),
+      byType['receive_internal_daily']?.length
+        ? this.countReceiveInternalToday(userId, windowStart)
+        : Promise.resolve(0),
     ]);
 
     const counts: Record<string, number> = {
       send_transaction: ccSends,
       send_token: tokenSends,
       daily_swap: swaps,
+      send_any_daily: sendAny,
+      send_to_user_daily: sendToUser,
+      receive_external_daily: receiveExternal,
+      receive_internal_daily: receiveInternal,
     };
 
     const result: Record<string, { required: number; today: number }> = {};
@@ -1343,12 +1388,21 @@ export class QuestsService {
     const isSendTokenTask = taskType === 'send_token';
     const isDailySwapTask = taskType === 'daily_swap';
     const isLockCcTask = taskType === 'lock_cc';
+    // Daily tasks that repeat once per UTC day (reset at 00:00 UTC).
+    const isSendAnyDailyTask = taskType === 'send_any_daily';
+    const isSendToUserDailyTask = taskType === 'send_to_user_daily';
+    const isReceiveExternalDailyTask = taskType === 'receive_external_daily';
+    const isReceiveInternalDailyTask = taskType === 'receive_internal_daily';
     const repeatable24h =
       quest.questKind === QuestKind.EARN_HUB &&
       (taskType === 'daily_check_in' ||
         isSendTxTask ||
         isSendTokenTask ||
-        isDailySwapTask);
+        isDailySwapTask ||
+        isSendAnyDailyTask ||
+        isSendToUserDailyTask ||
+        isReceiveExternalDailyTask ||
+        isReceiveInternalDailyTask);
 
     // Gate akses Earn: per-campaign, first participation. CAMPAIGN saja (bukan EARN_HUB).
     if (quest.questKind === QuestKind.CAMPAIGN) {
@@ -1361,20 +1415,22 @@ export class QuestsService {
     if (existing) {
       if (existing.status === SubmissionStatus.VERIFIED) {
         if (repeatable24h) {
+          // Daily reset anchored to 00:00 UTC. A repeat is allowed once the
+          // user's last verification falls before today's UTC midnight.
           const lastAt = existing.verifiedAt ?? existing.submittedAt;
-          const elapsed = Date.now() - lastAt.getTime();
-          const cooldownMs = 24 * 60 * 60 * 1000;
-          if (elapsed < cooldownMs) {
+          const todayStart = startOfTodayUtc();
+          if (lastAt && lastAt >= todayStart) {
+            const msLeft = msUntilNextUtcDay();
             const hoursLeft = Math.max(
               1,
-              Math.ceil((cooldownMs - elapsed) / (60 * 60 * 1000)),
+              Math.ceil(msLeft / (60 * 60 * 1000)),
             );
             throw new BadRequestException(
-              `Come back in ~${hoursLeft} hour(s) to earn points again.`,
+              `Already completed today — resets in ~${hoursLeft}h at 00:00 UTC.`,
             );
           }
 
-          // Send-transaction: require a real wallet + enough real CC sends in the last 24h.
+          // Send-transaction: require a real wallet + enough real CC sends today.
           if (isSendTxTask) {
             const result = await this.verifySendTransactionTask({
               userId,
@@ -1386,7 +1442,7 @@ export class QuestsService {
             }
           }
 
-          // Send-token: require a real wallet + enough real USDCx sends in the last 24h.
+          // Send-token: require a real wallet + enough real USDCx sends today.
           if (isSendTokenTask) {
             const result = await this.verifySendTokenTask({
               userId,
@@ -1398,9 +1454,51 @@ export class QuestsService {
             }
           }
 
-          // Daily-swap: require a real wallet + enough real swaps in the last 24h.
+          // Daily-swap: require a real wallet + enough real swaps today.
           if (isDailySwapTask) {
             const result = await this.verifyDailySwapTask({
+              userId,
+              userPartyId,
+              requiredCount: this.parseSendTransactionRequired(task.target),
+            });
+            if (!result.ok) {
+              throw new BadRequestException(result.message);
+            }
+          }
+
+          // New daily send/receive variants (CC + USDCx, internal vs external).
+          if (isSendAnyDailyTask) {
+            const result = await this.verifySendAnyDaily({
+              userId,
+              userPartyId,
+              requiredCount: this.parseSendTransactionRequired(task.target),
+            });
+            if (!result.ok) {
+              throw new BadRequestException(result.message);
+            }
+          }
+          if (isSendToUserDailyTask) {
+            const result = await this.verifySendToUserDaily({
+              userId,
+              userPartyId,
+              requiredCount: this.parseSendTransactionRequired(task.target),
+            });
+            if (!result.ok) {
+              throw new BadRequestException(result.message);
+            }
+          }
+          if (isReceiveExternalDailyTask) {
+            const result = await this.verifyReceiveExternalDaily({
+              userId,
+              userPartyId,
+              requiredCount: this.parseSendTransactionRequired(task.target),
+            });
+            if (!result.ok) {
+              throw new BadRequestException(result.message);
+            }
+          }
+          if (isReceiveInternalDailyTask) {
+            const result = await this.verifyReceiveInternalDaily({
               userId,
               userPartyId,
               requiredCount: this.parseSendTransactionRequired(task.target),
@@ -1422,16 +1520,24 @@ export class QuestsService {
                     ? 'sent_token'
                     : isDailySwapTask
                       ? 'swapped'
-                      : 'checked_in'),
+                      : isSendAnyDailyTask
+                        ? 'sent_any'
+                        : isSendToUserDailyTask
+                          ? 'sent_to_user'
+                          : isReceiveExternalDailyTask
+                            ? 'received_external'
+                            : isReceiveInternalDailyTask
+                              ? 'received_internal'
+                              : 'checked_in'),
               verifiedAt: now,
               submittedAt: now,
             },
           });
           await this.users.creditEarnPoints(userId, task.points);
           // canquest-v21: daily check-in sepenuhnya off-chain (Postgres QuestSubmission
-          // unik + cooldown 24h). Template DailyCheckIn dihapus dari DAML (redundan).
+          // unik + reset 00:00 UTC). Template DailyCheckIn dihapus dari DAML (redundan).
           this.logger.log(
-            `Task re-submitted (24h repeat): user=${userId.slice(0, 8)} task=${taskId}`,
+            `Task re-submitted (daily repeat): user=${userId.slice(0, 8)} task=${taskId}`,
           );
           return { status: SubmissionStatus.VERIFIED, alreadyDone: false };
         }
@@ -1536,6 +1642,53 @@ export class QuestsService {
         throw new BadRequestException(result.message);
       }
       proof = 'locked_cc';
+    }
+
+    // New daily send/receive variants (first-time): same verification as the
+    // repeat path — count real on-chain activity since 00:00 UTC.
+    if (isSendAnyDailyTask) {
+      const result = await this.verifySendAnyDaily({
+        userId,
+        userPartyId,
+        requiredCount: this.parseSendTransactionRequired(task.target),
+      });
+      if (!result.ok) {
+        throw new BadRequestException(result.message);
+      }
+      proof = 'sent_any';
+    }
+    if (isSendToUserDailyTask) {
+      const result = await this.verifySendToUserDaily({
+        userId,
+        userPartyId,
+        requiredCount: this.parseSendTransactionRequired(task.target),
+      });
+      if (!result.ok) {
+        throw new BadRequestException(result.message);
+      }
+      proof = 'sent_to_user';
+    }
+    if (isReceiveExternalDailyTask) {
+      const result = await this.verifyReceiveExternalDaily({
+        userId,
+        userPartyId,
+        requiredCount: this.parseSendTransactionRequired(task.target),
+      });
+      if (!result.ok) {
+        throw new BadRequestException(result.message);
+      }
+      proof = 'received_external';
+    }
+    if (isReceiveInternalDailyTask) {
+      const result = await this.verifyReceiveInternalDaily({
+        userId,
+        userPartyId,
+        requiredCount: this.parseSendTransactionRequired(task.target),
+      });
+      if (!result.ok) {
+        throw new BadRequestException(result.message);
+      }
+      proof = 'received_internal';
     }
 
     // Auto-verify logic by task type
@@ -4012,12 +4165,12 @@ export class QuestsService {
         message: 'Create your Canton wallet first to complete this task.',
       };
     }
-    const windowStart = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const windowStart = startOfTodayUtc();
     const today = await this.countRecentUserSends(params.userId, windowStart);
     if (today < params.requiredCount) {
       return {
         ok: false,
-        message: `You have sent ${today}/${params.requiredCount} transaction(s) in the last 24 hours. Send more CC to complete this task.`,
+        message: `You have sent ${today}/${params.requiredCount} transaction(s) today. Send more CC to complete this task.`,
       };
     }
     return { ok: true };
@@ -4077,12 +4230,12 @@ export class QuestsService {
         message: 'Create your Canton wallet first to complete this task.',
       };
     }
-    const windowStart = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const windowStart = startOfTodayUtc();
     const today = await this.countRecentUserTokenSends(params.userId, windowStart);
     if (today < params.requiredCount) {
       return {
         ok: false,
-        message: `You have sent ${today}/${params.requiredCount} USDCx transaction(s) in the last 24 hours. Send more USDCx to complete this task.`,
+        message: `You have sent ${today}/${params.requiredCount} USDCx transaction(s) today. Send more USDCx to complete this task.`,
       };
     }
     return { ok: true };
@@ -4122,12 +4275,308 @@ export class QuestsService {
         message: 'Create your Canton wallet first to complete this task.',
       };
     }
-    const windowStart = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const windowStart = startOfTodayUtc();
     const today = await this.countRecentUserSwaps(params.userId, windowStart);
     if (today < params.requiredCount) {
       return {
         ok: false,
-        message: `You have made ${today}/${params.requiredCount} swap(s) in the last 24 hours. Swap CC ↔ USDCx to complete this task.`,
+        message: `You have made ${today}/${params.requiredCount} swap(s) today. Swap CC ↔ USDCx to complete this task.`,
+      };
+    }
+    return { ok: true };
+  }
+
+  /* ─── New daily send/receive variants (CC + USDCx, internal vs external) ─── */
+
+  /**
+   * Resolve a set of candidate counterparty partyIds against the User table
+   * (batched, case-insensitive) and return the normalized partyIds that match a
+   * known CanQuest user. Reused by the send-to-user and receive-internal filters.
+   */
+  private async resolveCanQuestCounterparties(
+    candidates: Iterable<string>,
+  ): Promise<{ isCq: Set<string>; notCq: Set<string> }> {
+    const normalized = new Set<string>();
+    for (const raw of candidates) {
+      const n = normalizeCantonPartyId(raw);
+      if (n) normalized.add(n);
+    }
+    if (normalized.size === 0) return { isCq: new Set(), notCq: new Set() };
+    const matches = await this.prisma.user.findMany({
+      where: { cantonPartyId: { in: [...normalized], mode: 'insensitive' } },
+      select: { cantonPartyId: true },
+    });
+    const isCq = new Set<string>();
+    for (const m of matches) {
+      const n = normalizeCantonPartyId(m.cantonPartyId);
+      if (n) isCq.add(n);
+    }
+    const notCq = new Set<string>();
+    for (const n of normalized) if (!isCq.has(n)) notCq.add(n);
+    return { isCq, notCq };
+  }
+
+  /** Count today's outgoing CC + token sends (combined) — for send_any_daily. */
+  private async countSendAnyToday(userId: string, since: Date): Promise<number> {
+    const [cc, token] = await Promise.all([
+      this.countRecentUserSends(userId, since),
+      this.countRecentUserTokenSends(userId, since),
+    ]);
+    return cc + token;
+  }
+
+  /** Verify send_any_daily: wallet + ≥ requiredCount outgoing CC/USDCx sends today. */
+  private async verifySendAnyDaily(params: {
+    userId: string;
+    userPartyId: string;
+    requiredCount: number;
+  }): Promise<{ ok: boolean; message?: string }> {
+    if (!this.hasRealWallet(params.userPartyId)) {
+      return {
+        ok: false,
+        message: 'Create your Canton wallet first to complete this task.',
+      };
+    }
+    const since = startOfTodayUtc();
+    const total = await this.countSendAnyToday(params.userId, since);
+    if (total < params.requiredCount) {
+      return {
+        ok: false,
+        message: `You have sent ${total}/${params.requiredCount} CC/USDCx transaction(s) today. Send more to complete this task.`,
+      };
+    }
+    return { ok: true };
+  }
+
+  /**
+   * Collect today's outgoing counterparties (CC + token). For CC TRANSFER_OUT the
+   * counterparty is stored in `referenceId` directly; for token TOKEN_TRANSFER_OUT
+   * it is stored as `to:{partyId}` (strip the `to:` prefix). Fees are excluded.
+   */
+  private async collectTodayOutgoingCounterparties(
+    userId: string,
+    since: Date,
+  ): Promise<string[]> {
+    const [ccRows, tokenRows] = await Promise.all([
+      this.prisma.ccTransaction.findMany({
+        where: {
+          userId,
+          type: 'TRANSFER_OUT',
+          status: 'COMPLETED',
+          createdAt: { gte: since },
+        },
+        select: { referenceId: true, description: true },
+      }),
+      this.prisma.tokenTransaction.findMany({
+        where: {
+          userId,
+          type: 'TOKEN_TRANSFER_OUT',
+          status: 'COMPLETED',
+          createdAt: { gte: since },
+        },
+        select: { referenceId: true },
+      }),
+    ]);
+    const out: string[] = [];
+    for (const r of ccRows) {
+      if (isFeeTransactionRow(r.referenceId, r.description)) continue;
+      if (r.referenceId) out.push(r.referenceId);
+    }
+    for (const r of tokenRows) {
+      const ref = r.referenceId;
+      if (!ref) continue;
+      const pid = ref.startsWith('to:') ? ref.slice(3) : ref;
+      if (pid) out.push(pid);
+    }
+    return out;
+  }
+
+  /**
+   * Count today's outgoing sends whose recipient is a registered CanQuest user.
+   * Uses a single batched lookup to avoid N+1. For send_to_user_daily progress.
+   */
+  private async countSendToUserToday(
+    userId: string,
+    since: Date,
+  ): Promise<number> {
+    const candidates = await this.collectTodayOutgoingCounterparties(userId, since);
+    if (candidates.length === 0) return 0;
+    const { isCq } = await this.resolveCanQuestCounterparties(candidates);
+    let count = 0;
+    for (const raw of candidates) {
+      const n = normalizeCantonPartyId(raw);
+      if (n && isCq.has(n)) count++;
+    }
+    return count;
+  }
+
+  /** Verify send_to_user_daily: wallet + ≥ requiredCount sends to a CQ user today. */
+  private async verifySendToUserDaily(params: {
+    userId: string;
+    userPartyId: string;
+    requiredCount: number;
+  }): Promise<{ ok: boolean; message?: string }> {
+    if (!this.hasRealWallet(params.userPartyId)) {
+      return {
+        ok: false,
+        message: 'Create your Canton wallet first to complete this task.',
+      };
+    }
+    const since = startOfTodayUtc();
+    const count = await this.countSendToUserToday(params.userId, since);
+    if (count < params.requiredCount) {
+      return {
+        ok: false,
+        message: `You have sent ${count}/${params.requiredCount} transaction(s) to a CanQuest user today. Send to a CanQuest user to complete this task.`,
+      };
+    }
+    return { ok: true };
+  }
+
+  /**
+   * Collect today's incoming CC TRANSFER_IN rows. `withSender` distinguishes the
+   * two sources of inbound rows:
+   *   - rows whose ledgerTxId starts with "inbound-sync:" have NO real sender
+   *     (referenceId = self); exclude unless the new indexer extension rewrote
+   *     them with a real updateId + sender.
+   *   - rows created by the app's send/accept paths carry the real counterparty
+   *     in referenceId.
+   * External sender = referenceId is a real partyId but not a CanQuest user.
+   */
+  private async collectTodayIncomingCounterparties(
+    userId: string,
+    since: Date,
+  ): Promise<{ ccRows: { referenceId: string | null; ledgerTxId: string | null }[] }> {
+    const ccRows = await this.prisma.ccTransaction.findMany({
+      where: {
+        userId,
+        type: 'TRANSFER_IN',
+        status: 'COMPLETED',
+        createdAt: { gte: since },
+      },
+      select: { referenceId: true, ledgerTxId: true },
+    });
+    return { ccRows };
+  }
+
+  /**
+   * Count today's inbound transfers from a NON-CanQuest sender. Requires the
+   * indexer extension (Phase 1.5) to persist the real sender partyId in
+   * referenceId with a real updateId in ledgerTxId. Legacy `inbound-sync:` rows
+   * (referenceId = self, ledgerTxId = "inbound-sync:…") are skipped — they have
+   * no sender identity.
+   *
+   * Optional `ownPartyId` excludes the user's own partyId (legacy self-ref rows).
+   */
+  private async countReceiveExternalToday(
+    userId: string,
+    since: Date,
+    ownPartyId: string | null | undefined,
+  ): Promise<number> {
+    const { ccRows } = await this.collectTodayIncomingCounterparties(userId, since);
+    const candidates: string[] = [];
+    for (const r of ccRows) {
+      // Skip legacy balance-sync rows with no sender identity.
+      if (r.ledgerTxId?.startsWith('inbound-sync:')) continue;
+      if (!r.referenceId) continue;
+      // Skip self-referential rows (legacy inbound-sync fallback).
+      if (ownPartyId && cantonPartyIdsEqual(r.referenceId, ownPartyId)) continue;
+      candidates.push(r.referenceId);
+    }
+    if (candidates.length === 0) return 0;
+    const { notCq } = await this.resolveCanQuestCounterparties(candidates);
+    let count = 0;
+    for (const raw of candidates) {
+      const n = normalizeCantonPartyId(raw);
+      if (n && notCq.has(n)) count++;
+    }
+    return count;
+  }
+
+  /** Verify receive_external_daily: ≥ requiredCount inbound from external wallet today. */
+  private async verifyReceiveExternalDaily(params: {
+    userId: string;
+    userPartyId: string;
+    requiredCount: number;
+  }): Promise<{ ok: boolean; message?: string }> {
+    if (!this.hasRealWallet(params.userPartyId)) {
+      return {
+        ok: false,
+        message: 'Create your Canton wallet first to complete this task.',
+      };
+    }
+    const since = startOfTodayUtc();
+    const count = await this.countReceiveExternalToday(
+      params.userId,
+      since,
+      params.userPartyId,
+    );
+    if (count < params.requiredCount) {
+      return {
+        ok: false,
+        message: `You have received ${count}/${params.requiredCount} transaction(s) from an external wallet today. Receive CC/USDCx from an external wallet to complete this task.`,
+      };
+    }
+    return { ok: true };
+  }
+
+  /**
+   * Count today's inbound transfers from a registered CanQuest user. Includes:
+   *   - CC TRANSFER_IN rows whose referenceId resolves to a CQ user (from the app
+   *     send/accept path) AND whose ledgerTxId is NOT the legacy "inbound-sync:".
+   *   - Token TOKEN_TRANSFER_IN rows (only created on internal accept).
+   */
+  private async countReceiveInternalToday(
+    userId: string,
+    since: Date,
+  ): Promise<number> {
+    const [ccCount, tokenCount] = await Promise.all([
+      (async () => {
+        const { ccRows } = await this.collectTodayIncomingCounterparties(userId, since);
+        const candidates: string[] = [];
+        for (const r of ccRows) {
+          if (r.ledgerTxId?.startsWith('inbound-sync:')) continue;
+          if (r.referenceId) candidates.push(r.referenceId);
+        }
+        if (candidates.length === 0) return 0;
+        const { isCq } = await this.resolveCanQuestCounterparties(candidates);
+        let count = 0;
+        for (const raw of candidates) {
+          const n = normalizeCantonPartyId(raw);
+          if (n && isCq.has(n)) count++;
+        }
+        return count;
+      })(),
+      this.prisma.tokenTransaction.count({
+        where: {
+          userId,
+          type: 'TOKEN_TRANSFER_IN',
+          status: 'COMPLETED',
+          createdAt: { gte: since },
+        },
+      }),
+    ]);
+    return ccCount + tokenCount;
+  }
+
+  /** Verify receive_internal_daily: ≥ requiredCount inbound from a CQ user today. */
+  private async verifyReceiveInternalDaily(params: {
+    userId: string;
+    userPartyId: string;
+    requiredCount: number;
+  }): Promise<{ ok: boolean; message?: string }> {
+    if (!this.hasRealWallet(params.userPartyId)) {
+      return {
+        ok: false,
+        message: 'Create your Canton wallet first to complete this task.',
+      };
+    }
+    const since = startOfTodayUtc();
+    const count = await this.countReceiveInternalToday(params.userId, since);
+    if (count < params.requiredCount) {
+      return {
+        ok: false,
+        message: `You have received ${count}/${params.requiredCount} transaction(s) from a CanQuest user today. Receive CC/USDCx from a CanQuest user to complete this task.`,
       };
     }
     return { ok: true };
@@ -4219,8 +4668,6 @@ export class QuestsService {
   ): boolean {
     const t = this.normalizeTaskType(type);
     switch (t) {
-      case 'visit_website':
-        return true;
       case 'quiz_yes_no':
         if (!correctAnswer || !proof) return false;
         return (

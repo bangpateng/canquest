@@ -411,6 +411,12 @@ model CcLock {
 }
 
 /// Quest campaign dibuat oleh admin/operator.
+///
+/// SINGLETON: paling banyak satu quest dengan questKind = 'EARN_HUB'. Prisma
+/// tidak mengekspress partial unique index, jadi constraint dipegang DB-level
+/// oleh partial unique index "quest_earn_hub_singleton" (lihat migration
+/// 20260722120000_earn_hub_singleton_unique). App-layer findFirst guard di
+/// admin.service tetap sebagai defense-in-depth.
 model Quest {
   id               String            @id @default(cuid())
   title            String

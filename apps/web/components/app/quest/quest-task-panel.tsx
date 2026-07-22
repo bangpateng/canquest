@@ -22,6 +22,7 @@ import {
   isSendTransactionTask,
   isSendTokenTask,
   isDailySwapTask,
+  isCountBasedDailyTask,
   isLockCcTask,
   parseQuizChoices,
 } from "@/lib/quest/quest-types";
@@ -168,6 +169,9 @@ export function QuestTaskPanel({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [ledgerProof, setLedgerProof] = useState<QuestLedgerProof | null>(null);
   const [cantonLedgerConfigured, setCantonLedgerConfigured] = useState(false);
+  // TaskIds verified during the current UTC day — drives the accurate per-day
+  // progress bar (resets at 00:00 UTC) instead of the all-time VERIFIED status.
+  const [todayVerified, setTodayVerified] = useState<Set<string>>(new Set());
   const [partyId, setPartyId] = useState<string | null>(viewerPartyId);
   const [twitterUsername, setTwitterUsername] = useState<string | null>(
     viewerTwitterUsername,
@@ -240,6 +244,7 @@ export function QuestTaskPanel({
             ledger?: QuestLedgerProof | null;
             campaignMeta?: CampaignMeta;
             sendProgress?: Record<string, { required: number; today: number }>;
+            todayVerifiedTaskIds?: string[];
             message?: string;
           };
           if (!r.ok) {
@@ -248,6 +253,7 @@ export function QuestTaskPanel({
           setQuestCompleted(Boolean(data.completed));
           setAllTasksVerified(data.allTasksVerified ?? false);
           setCantonLedgerConfigured(Boolean(data.cantonLedgerConfigured));
+          setTodayVerified(new Set(data.todayVerifiedTaskIds ?? []));
           if (data.rewardStatus) setRewardStatus(data.rewardStatus);
           if (data.campaignMeta) setCampaignMeta(data.campaignMeta);
           if (data.sendProgress) setSendProgress(data.sendProgress);
@@ -367,6 +373,13 @@ export function QuestTaskPanel({
     () => visibleTasks.filter((t) => submissions[t.id]?.status === "VERIFIED").length,
     [visibleTasks, submissions],
   );
+  // Daily progress: tasks verified during the current UTC day. Resets at
+  // 00:00 UTC. The all-time `verifiedCount`/`allDone` are kept for CAMPAIGN,
+  // but EARN_HUB uses the per-day variant for accurate "today's progress".
+  const verifiedTodayCount = useMemo(
+    () => visibleTasks.filter((t) => todayVerified.has(t.id)).length,
+    [visibleTasks, todayVerified],
+  );
   const totalPoints = useMemo(
     () => visibleTasks.reduce((s, t) => s + t.points, 0),
     [visibleTasks],
@@ -374,15 +387,19 @@ export function QuestTaskPanel({
   const earnedPoints = useMemo(
     () =>
       visibleTasks.reduce(
-        (s, t) => s + (submissions[t.id]?.status === "VERIFIED" ? t.points : 0),
+        (s, t) => s + (todayVerified.has(t.id) ? t.points : 0),
         0,
       ),
-    [visibleTasks, submissions],
+    [visibleTasks, todayVerified],
   );
   const pct = visibleTasks.length
-    ? Math.round((verifiedCount / visibleTasks.length) * 100)
+    ? Math.round(
+        ((isEarnHub ? verifiedTodayCount : verifiedCount) / visibleTasks.length) * 100,
+      )
     : 0;
-  const allDone = verifiedCount === visibleTasks.length && visibleTasks.length > 0;
+  const allDone = isEarnHub
+    ? verifiedTodayCount === visibleTasks.length && visibleTasks.length > 0
+    : verifiedCount === visibleTasks.length && visibleTasks.length > 0;
   const campaignEnded = !isEarnHub && isCampaignEnded(quest, campaignMeta);
   const fcfsSlotsFull =
     !isEarnHub &&
@@ -434,6 +451,15 @@ export function QuestTaskPanel({
       setAllTasksVerified(count === visibleTasks.length && visibleTasks.length > 0);
       return next;
     });
+    // Mirror the per-day progress: a fresh verification always belongs to today.
+    if (sub.status === "VERIFIED") {
+      setTodayVerified((prev) => {
+        if (prev.has(taskId)) return prev;
+        const next = new Set(prev);
+        next.add(taskId);
+        return next;
+      });
+    }
   }
 
   async function handleSubmitQuest() {
@@ -709,10 +735,11 @@ function TaskRow({
   const isSendTx = isSendTransactionTask(taskType);
   const isSendToken = isSendTokenTask(taskType);
   const isDailySwap = isDailySwapTask(taskType);
+  const isCountDaily = isCountBasedDailyTask(taskType);
   const isLockCc = isLockCcTask(taskType);
   // Countable wallet tasks share the same flow: wallet-required → auto-submit
-  // → backend re-counts real on-chain activity in the last 24h.
-  const isCountableWalletTask = isSendTx || isSendToken || isDailySwap;
+  // → backend re-counts real on-chain activity since 00:00 UTC.
+  const isCountableWalletTask = isSendTx || isSendToken || isDailySwap || isCountDaily;
   const quizChoices = isQuizChoice ? parseQuizChoices(task.target) : [];
 
   const [proof, setProof] = useState(
@@ -911,7 +938,7 @@ function TaskRow({
       setCooldownNow(Date.now());
       setSuccessMsg(
         isDailyCheckIn || isRepeatable
-          ? `+${task.points} pts! Come back in 24 hours for more.`
+          ? `+${task.points} pts! Come back after 00:00 UTC for more.`
           : "Correct! Points awarded.",
       );
       setStarted(false);
@@ -1276,7 +1303,8 @@ function TaskRow({
             ) : null}
             {isCountableWalletTask && sendProgress ? (
               <p className="mt-0.5 truncate text-xs font-medium text-slate-400">
-                {sendProgress.today}/{sendProgress.required} {isDailySwap ? "swaps" : "sends"} in the last 24h
+                {sendProgress.today}/{sendProgress.required}{" "}
+                {isDailySwap ? "swaps" : isCountDaily ? "transactions" : "sends"} today
               </p>
             ) : null}
           </div>
