@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils/utils";
 import { ListPagination } from "@/components/app/list/list-pagination";
@@ -341,7 +341,6 @@ function txDisplayDescription(
 type TransactionsViewProps = {
   variant?: "page" | "embedded";
   pageSize?: number;
-  refreshKey?: number;
   className?: string;
   /** Canton party ID for on-chain lookup (via Modo). If empty, skip on-chain. */
   partyId?: string | null;
@@ -351,7 +350,6 @@ type TransactionsViewProps = {
 export function TransactionsView({
   variant = "page",
   pageSize = TRANSACTIONS_PAGE_SIZE,
-  refreshKey = 0,
   className,
   partyId,
 }: TransactionsViewProps) {
@@ -437,12 +435,6 @@ export function TransactionsView({
   // First-load spinner (isPending), BUKAN isFetching → poll background silent.
   const loading = query.isPending;
 
-  // refreshKey bump dari parent (wallet-dashboard) → invalidate semua halaman tx.
-  useEffect(() => {
-    if (refreshKey === 0) return;
-    void queryClient.invalidateQueries({ queryKey: queryKeys.party.transactions.all });
-  }, [refreshKey, queryClient]);
-
   function changePage(p: number) {
     setCurrentPage(p);
   }
@@ -453,10 +445,6 @@ export function TransactionsView({
 
   return (
     <div className={cn(embedded ? "" : "space-y-8", className)}>
-      {!embedded ? (
-        <h2 className="text-2xl font-bold text-slate-100"></h2>
-      ) : null}
-
       <div
         className={cn(
           "w-full min-w-0 overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl",

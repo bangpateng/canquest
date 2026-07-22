@@ -1475,7 +1475,7 @@ export class PartyController {
    * hampir pasti "offer": TransferInstruction UTXO dibuat, receiver harus klik
    * Accept via /party/offers/accept. Holdings sender ON-CHAIN langsung ter-consume.
    *
-   * Sumber kebenaran saldo = ON-CHAIN (queryTokenHoldings), BUKAN CantexTokenBalance
+   * Sumber kebenaran saldo = ON-CHAIN (getTokenBalanceOnChain / queryTokenHoldingsByInterface), BUKAN CantexTokenBalance
    * (DB) yang bisa drift (swap selalu kredit DB walau on-chain gagal).
    *
    * Fee in CC (reuse TRANSACTION_FEE_CC) — non-blocking, mirror sendCc.
@@ -1594,22 +1594,18 @@ export class PartyController {
 
       // ── Balance pre-check ON-CHAIN (sumber kebenaran untuk token non-CC) ──
       // CantexTokenBalance (DB) bisa drift (swap kredit DB walau on-chain gagal)
-      // → jangan dipakai untuk validate send-token. queryTokenHoldings membaca
-      // ACS on-chain: sum amount holdings sender untuk (instrumentId, admin).
+      // → jangan dipakai untuk validate send-token. getTokenBalanceOnChain baca
+      // ACS on-chain via InterfaceFilter (bukan WildcardFilter yang return [] untuk
+      // interface-only contract seperti USDCx).
       let onChainBalance = 0;
       try {
-        const holdings = await this.ledger.queryTokenHoldings(
+        onChainBalance = await this.ledger.getTokenBalanceOnChain(
           sender.cantonPartyId,
           instrumentId,
-          instrumentAdmin,
-        );
-        onChainBalance = holdings.reduce(
-          (sum, h) => sum + Number(h.amount || 0),
-          0,
         );
       } catch (err) {
         this.logger.warn(
-          `queryTokenHoldings failed for send-token pre-check: ${String(err)} — proceeding (ledger akan reject bila dana kurang)`,
+          `getTokenBalanceOnChain failed for send-token pre-check: ${String(err)} — proceeding (ledger akan reject bila dana kurang)`,
         );
       }
 
@@ -3130,13 +3126,18 @@ export class PartyController {
   async swapPrices() {
     try {
       const prices = await this.cantonPrices.getTokenPrices();
-      // Filter: hanya harga token whitelist (CC + USDCx + CBTC).
+      // Filter + normalize key ke instrumentId lowercase (KONSISTEN dengan
+      // /balances yang key-nya instrumentId lowercase doang).
+      // Sebelumnya key = "<id>::<admin>" → frontend harus prefix-scan untuk
+      // match. Sekarang key = "<id>" (lowercase) → lookup langsung.
       const filtered: Record<string, number> = {};
       for (const [key, price] of Object.entries(prices)) {
-        // key format: "<instrumentId>::<admin>::..."
-        const instrumentId = key.split('::')[0];
-        if (isVisibleInstrument(instrumentId)) {
-          filtered[key] = price;
+        const instrumentId = key.split('::')[0].toLowerCase();
+        if (!isVisibleInstrument(instrumentId)) continue;
+        // Kalau 2 admin variant (mis. USDCx dari 2 registrar), ambil harga
+        // pertama (harga token sama untuk semua admin variant).
+        if (!(instrumentId in filtered)) {
+          filtered[instrumentId] = price;
         }
       }
       return { prices: filtered, source: 'canton_scan_proxy' };

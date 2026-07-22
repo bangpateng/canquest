@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queries/query-keys";
 
 /**
@@ -43,11 +43,4 @@ export function useTokenPrices() {
     loading: query.isPending,
     error: query.error,
   };
-}
-
-/** Refresh helper untuk invalidate cache prices (mis. setelah swap). */
-export function useRefreshTokenPrices() {
-  const queryClient = useQueryClient();
-  return () =>
-    queryClient.invalidateQueries({ queryKey: queryKeys.party.tokenPrices });
 }

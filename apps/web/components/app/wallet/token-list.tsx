@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useTokenPrices } from "@/lib/hooks/use-token-prices";
@@ -13,24 +13,11 @@ import {
   isRealCantonPartyId,
 } from "@/lib/auth/wallet-session-cache";
 import { formatPartyIdForDisplay } from "@/lib/canton/canton-party-id";
-import type { WalletToken } from "@/lib/canton/token-types";
+import {
+  VISIBLE_TOKENS,
+  isTokenActive,
+} from "@/lib/canton/token-types";
 
-/**
- * Token yang ditampilkan di wallet. Hanya CC + USDCx + CBTC — semua token
- * lain (cETH, HANDL, MOD, EDELx, HECTO, FRXUSD, USDC.B, dll) disembunyikan
- * dari UI wallet sampai diaktifkan secara eksplisit di sini.
- *
- * CC selalu muncul (di-render terpisah di atas, hard-coded Amulet).
- * USDCx aktif penuh. CBTC tampil tapi "Coming soon" (belum bisa swap/send).
- */
-const VISIBLE_TOKENS = new Set(["USDCX", "CBTC"]);
-const ACTIVE_SWAP_TOKENS = new Set(["USDCX"]);
-
-/** Cek apakah token ini aktif untuk swap/detail. CC selalu aktif. */
-function isTokenActive(symbol: string, isCC?: boolean): boolean {
-  if (isCC) return true;
-  return ACTIVE_SWAP_TOKENS.has(symbol.toUpperCase());
-}
 import { WalletActions } from "./wallet-actions";
 import { TokenCard } from "./token-card";
 import { CcLockModal } from "./cc-lock-modal";
@@ -40,9 +27,6 @@ interface TokenListProps {
   me: { username?: string | null; cantonPartyId?: string | null };
   onRefresh?: () => void;
 }
-
-/** Alias lokal — shape identik dengan WalletToken (lib/canton/token-types). */
-type SwapToken = WalletToken;
 
 /**
  * Main wallet view — Wintip-style layout:
@@ -67,10 +51,6 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
   const balancesQuery = useBalances({ enabled: hasWallet });
   const invalidateWalletTokens = useInvalidateWalletTokens();
 
-  const swapTokens: SwapToken[] = useMemo(
-    () => poolsQuery.data?.tokens ?? [],
-    [poolsQuery.data],
-  );
   const tokenBalances = balancesQuery.data?.tokens ?? {};
   const ccBalance = balancesQuery.data ? balancesQuery.data.cc : null;
 
@@ -89,32 +69,18 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
   } = useLockStatus({ enabled: hasWallet });
   const [lockOpen, setLockOpen] = useState(false);
 
-  // CC price: cari "Amulet::admin" di price map (setelah swapTokens load).
-  const ccInstrumentKey = useMemo(
-    () => swapTokens.find((t) => t.isCC),
-    [swapTokens],
-  );
-  const ccKey = ccInstrumentKey
-    ? `${ccInstrumentKey.instrumentId}::${ccInstrumentKey.instrumentAdmin}`
-    : null;
-  const ccUsd = ccKey ? tokenPrices[ccKey] ?? 0 : 0;
+  // Price map sekarang di-key instrumentId lowercase (KONSISTEN dengan balances).
+  // Lookup langsung: tokenPrices[id] — gak perlu prefix scan lagi.
+  const ccUsd = tokenPrices["amulet"] ?? 0;
 
   const handleRefresh = useCallback(() => {
     void invalidateWalletTokens();
     onRefresh?.();
   }, [invalidateWalletTokens, onRefresh]);
 
-  // Lookup harga USD untuk instrumentId (price map di-key `${id}::${admin}`).
-  // Cari key yang diawali `${instrumentId}::` — price sama untuk semua admin
-  // variant token tsb (mis. USDCx apapun registrarnya → $1).
+  // Lookup harga USD untuk instrumentId (price map di-key instrumentId lowercase).
   const priceForInstrument = useCallback(
-    (instrumentId: string): number => {
-      const prefix = `${instrumentId.toLowerCase()}::`;
-      for (const k in tokenPrices) {
-        if (k.toLowerCase().startsWith(prefix)) return tokenPrices[k] ?? 0;
-      }
-      return 0;
-    },
+    (instrumentId: string): number => tokenPrices[instrumentId.toLowerCase()] ?? 0,
     [tokenPrices],
   );
 

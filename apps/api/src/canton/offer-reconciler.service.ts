@@ -28,7 +28,7 @@ import { CantonLedgerService } from './canton-ledger.service';
  *   Flip status + push realtime notif ke sender.
  *
  *   CC delta pakai getLedgerBalance (saldo Amulet).
- *   Token delta pakai queryTokenHoldings (saldo per-instrument).
+ *   Token delta pakai getTokenBalanceOnChain (saldo per-instrument).
  *
  * Idempoten: hanya proses row PENDING. Row sudah COMPLETED/REJECTED di-skip.
  */
@@ -306,7 +306,7 @@ export class OfferReconcilerService implements OnModuleInit, OnModuleDestroy {
    * Query offer aktif on-chain 1x untuk sender party (mencakup CC & token),
    * lalu cek cid setiap row. Delta-detection berbeda per tabel:
    *   - CC: getLedgerBalance (saldo Amulet)
-   *   - token: queryTokenHoldings per distinct instrumentId
+   *   - token: getTokenBalanceOnChain per distinct instrumentId
    */
   private async reconcileUser(
     userId: string,
@@ -406,20 +406,17 @@ export class OfferReconcilerService implements OnModuleInit, OnModuleDestroy {
         });
 
         // Refresh on-chain token holdings (posisi terkini post accept/reject).
+        // Pakai getTokenBalanceOnChain (InterfaceFilter) — bukan queryTokenHoldings
+        // (WildcardFilter) yang return [] untuk interface-only contract seperti USDCx.
         let onChainHoldings: number | null = null;
         try {
-          const holdings = await this.ledger.queryTokenHoldings(
+          onChainHoldings = await this.ledger.getTokenBalanceOnChain(
             user.cantonPartyId,
             instrumentId,
-            instrumentAdmin,
-          );
-          onChainHoldings = holdings.reduce(
-            (sum, h) => sum + Number(h.amount ?? '0'),
-            0,
           );
         } catch (err) {
           this.logger.warn(
-            `Offer reconciler: queryTokenHoldings failed for @${user.username} ${instrumentId}: ${String(err)}`,
+            `Offer reconciler: getTokenBalanceOnChain failed for @${user.username} ${instrumentId}: ${String(err)}`,
           );
         }
 
@@ -437,14 +434,9 @@ export class OfferReconcilerService implements OnModuleInit, OnModuleDestroy {
           // Refresh holdings supaya row berikutnya pakai baseline segar.
           if (onChainHoldings !== null) {
             try {
-              const holdings = await this.ledger.queryTokenHoldings(
+              onChainHoldings = await this.ledger.getTokenBalanceOnChain(
                 user.cantonPartyId,
                 instrumentId,
-                instrumentAdmin,
-              );
-              onChainHoldings = holdings.reduce(
-                (sum, h) => sum + Number(h.amount ?? '0'),
-                0,
               );
             } catch {
               /* keep last known */

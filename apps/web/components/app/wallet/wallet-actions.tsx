@@ -803,7 +803,6 @@ export function WalletActions({
         open={sheet === "swap"}
         onClose={() => setSheet(null)}
         balance={balance}
-        onBalanceRefresh={onBalanceRefresh}
       />
     </>
   );

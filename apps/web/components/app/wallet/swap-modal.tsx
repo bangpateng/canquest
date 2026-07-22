@@ -13,27 +13,13 @@ import {
   Search,
 } from "lucide-react";
 
-/** Token aktif untuk swap (selain CC). Lainnya = Coming Soon. */
-const ACTIVE_SWAP_TOKENS = new Set(["USDCX"]);
-function isSwapActive(symbol: string, isCC?: boolean): boolean {
-  if (isCC) return true;
-  return ACTIVE_SWAP_TOKENS.has(symbol.toUpperCase());
-}
+/** Token aktif untuk swap (selain CC). Lainnya = Coming Soon.
+ *  Reuse dari shared token-types (single source of truth). */
+import { isTokenActive as isSwapActive } from "@/lib/canton/token-types";
 
 // ── Types ───────────────────────────────────────────────────────────────
-
-interface SwapToken {
-  instrumentId: string;
-  instrumentAdmin: string;
-  isCC?: boolean;
-}
-
-interface PoolsResponse {
-  tokens: SwapToken[];
-}
-// NOTE: SwapToken/PoolsResponse juga didefinisikan di lib/canton/token-types.ts
-// sebagai WalletToken/PoolsResponse (shared). Dibiarkan lokal di sini untuk
-// minim churn di file besar; token-types.ts dipakai fitur baru (send-token).
+// Reuse WalletToken/PoolsResponse dari shared token-types (tidak duplikasi).
+import type { WalletToken as SwapToken, PoolsResponse } from "@/lib/canton/token-types";
 
 interface QuoteResponse {
   sellAmount: string;
@@ -67,7 +53,6 @@ interface SwapModalProps {
   open: boolean;
   onClose: () => void;
   balance?: number | null;
-  onBalanceRefresh?: () => void;
 }
 
 import {

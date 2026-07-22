@@ -16,6 +16,28 @@ export interface WalletToken {
   isCC?: boolean;
 }
 
+// ── Token allowlist (single source of truth) ──────────────────────────────
+// Sebelumnya USDCX/CBTC + active set di-duplicate di token-list.tsx,
+// swap-modal.tsx, wallet-actions.tsx (3 tempat). Konsolidasi ke sini supaya
+// token baru cuma tambah di 1 file.
+
+/** Token yang TAMPIL di wallet (selain CC yang selalu tampil). */
+export const VISIBLE_TOKENS = new Set(["USDCX", "CBTC"]);
+
+/** Token yang AKTIF untuk swap/send (CC selalu aktif). CBTC = coming soon. */
+export const ACTIVE_SWAP_TOKENS = new Set(["USDCX"]);
+
+/** Cek apakah token tampil di wallet (instrumentId case-insensitive). */
+export function isVisibleToken(instrumentId: string): boolean {
+  return VISIBLE_TOKENS.has(instrumentId.toUpperCase());
+}
+
+/** Cek apakah token aktif untuk swap/send. CC selalu aktif. */
+export function isTokenActive(instrumentId: string, isCC?: boolean): boolean {
+  if (isCC) return true;
+  return ACTIVE_SWAP_TOKENS.has(instrumentId.toUpperCase());
+}
+
 /**
  * Shape response GET /api/party/pools.
  * `tokens` = daftar instrument yang tersedia (dari AMM pools).

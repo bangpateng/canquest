@@ -2725,6 +2725,26 @@ export class CantonLedgerService {
   }
 
   /**
+   * Get saldo on-chain untuk 1 instrument tertentu (mis. USDCx) milik party.
+   *
+   * Wrapper ringan atas queryTokenHoldingsByInterface — ambil map lalu baca
+   * key instrumentId. Dipakai untuk pre-check saldo sebelum send-token dan
+   * offer reconciler baseline.
+   *
+   * Menggantikan queryTokenHoldings (WildcardFilter) yang rusak untuk token
+   * non-CC — method itu return [] untuk interface-only contract seperti USDCx.
+   *
+   * @returns total amount (number), atau 0 kalau party tidak pegang instrument tsb.
+   */
+  async getTokenBalanceOnChain(
+    partyId: string,
+    instrumentId: string,
+  ): Promise<number> {
+    const holdings = await this.queryTokenHoldingsByInterface(partyId);
+    return holdings[instrumentId.toLowerCase()] ?? 0;
+  }
+
+  /**
    * Query the ACS for pending transfer offers visible to a party.
    *
    * Returns both:
