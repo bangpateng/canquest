@@ -30,6 +30,13 @@ from reportlab.platypus import (
     SimpleDocTemplate,
     Spacer,
 )
+from reportlab.graphics.shapes import (
+    Drawing,
+    Line,
+    Polygon,
+    Rect,
+    String,
+)
 
 # ─── Paths ───────────────────────────────────────────────────────────────────
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -143,6 +150,150 @@ styles = {
         textColor=TEXT_MUTED,
         alignment=TA_CENTER,
     ),
+    "caption": ParagraphStyle(
+        "Caption",
+        fontName=BODY_FONT,
+        fontSize=8.5,
+        leading=12,
+        textColor=TEXT_MUTED,
+        alignment=TA_CENTER,
+        spaceBefore=4,
+        spaceAfter=10,
+    ),
+}
+
+
+# ─── Vector workflow diagrams (native reportlab.graphics) ───────────────────
+# Available content width for a Drawing placed as a Flowable.
+_CONTENT_W = 446  # ~ A4 minus left/right margins (150 - 14*2 ≈ 446pt usable)
+
+_BOX_FILL = colors.HexColor("#F1F7F6")
+_BOX_EDGE = colors.HexColor("#5AD98A")
+_BOX_TEXT = colors.HexColor("#0F172A")
+_BOX_SUB = colors.HexColor("#64748B")
+
+
+def _box(d, x, y, w, h, title, sub=""):
+    """Rounded box node with a title + optional sub-line."""
+    d.add(Rect(x, y, w, h, fillColor=_BOX_FILL, strokeColor=_BOX_EDGE,
+               strokeWidth=0.9, rx=6, ry=6))
+    d.add(String(x + w / 2, y + h - 20, title, fontName="TNR-Bold",
+                 fontSize=9.5, fillColor=_BOX_TEXT, textAnchor="middle"))
+    if sub:
+        d.add(String(x + w / 2, y + 12, sub, fontName="TNR",
+                     fontSize=7.5, fillColor=_BOX_SUB, textAnchor="middle"))
+
+
+def _arrow_h(d, x1, y, x2, color=_BOX_EDGE, head=6):
+    d.add(Line(x1, y, x2 - head, y, strokeWidth=1.3, strokeColor=color))
+    d.add(Polygon([x2, y, x2 - head, y + head / 1.6, x2 - head, y - head / 1.6],
+                  fillColor=color, strokeColor=None))
+
+
+def _arrow_v(d, x, y1, y2, color=_BOX_EDGE, head=6):
+    d.add(Line(x, y1, x, y2 + head, strokeWidth=1.3, strokeColor=color))
+    d.add(Polygon([x, y2, x - head / 1.6, y2 + head, x + head / 1.6, y2 + head],
+                  fillColor=color, strokeColor=None))
+
+
+def _curve_loop(d, x1, y1, x2, y2, color=_BOX_EDGE):
+    """A dashed return-arrow via two Line segments + arrowhead (simple loop)."""
+    d.add(Line(x1, y1, x1, y2, strokeWidth=1.0, strokeColor=color,
+               strokeDashArray=[3, 3]))
+    d.add(Line(x1, y2, x2, y2, strokeWidth=1.0, strokeColor=color,
+               strokeDashArray=[3, 3]))
+    d.add(Polygon([x2, y2, x2 - 6, y2 + 4, x2 - 6, y2 - 4],
+                  fillColor=color, strokeColor=None))
+
+
+def fig_enduser_workflow():
+    """Figure 1 — end-user workflow with retention loop.
+
+    Horizontal flow: Sign up → Wallet → Lock CC/Points → Quests & campaigns
+    → On-chain reward. A dashed return-loop from Reward back to Quests shows
+    the retention loop (points feed back into campaign entry).
+    """
+    W, H = _CONTENT_W, 230
+    d = Drawing(W, H, hAlign="CENTER")
+    nodes = ["Sign up", "Create wallet", "Lock CC / points", "Quests & campaigns", "Reward on-chain"]
+    subs = ["Google", "invite + OTP", "Full access", "verified tasks", "CC + codes"]
+    n = len(nodes)
+    bw = 76
+    gap = (W - bw * n) / (n - 1)
+    by = 110
+    centers = []
+    for i, (t, s) in enumerate(zip(nodes, subs)):
+        x = i * (bw + gap)
+        _box(d, x, by, bw, 54, t, s)
+        centers.append((x + bw / 2, x + bw, x))
+        if i < n - 1:
+            _arrow_h(d, x + bw, by + 27, x + bw + gap)
+
+    # Retention loop: dashed line from last node top → up → across → down to 4th node
+    last_x = centers[-1][0]
+    fourth_x = centers[-2][0]
+    loop_y = by + 54 + 26
+    d.add(Line(last_x, by + 54, last_x, loop_y, strokeWidth=1.0,
+               strokeColor=ACCENT_DARK, strokeDashArray=[3, 3]))
+    d.add(Line(last_x, loop_y, fourth_x, loop_y, strokeWidth=1.0,
+               strokeColor=ACCENT_DARK, strokeDashArray=[3, 3]))
+    d.add(Polygon([fourth_x, by + 54, fourth_x - 5, by + 54 + 8, fourth_x + 5, by + 54 + 8],
+                  fillColor=ACCENT_DARK, strokeColor=None))
+    d.add(String((last_x + fourth_x) / 2, loop_y + 4, "retention loop",
+                 fontName="TNR-Italic", fontSize=8, fillColor=ACCENT_DARK,
+                 textAnchor="middle"))
+    return d
+
+
+def fig_campaign_revenue():
+    """Figure 2 — partner campaign stages with Canton revenue streams.
+
+    Top row: 4 campaign stages left→right (Create → Configure → Launch → Reward).
+    Below each stage (except first), a small downward arrow to a "CC revenue" node,
+    showing on-chain revenue generated at each step.
+    """
+    W, H = _CONTENT_W, 250
+    d = Drawing(W, H, hAlign="CENTER")
+    stages = ["Create campaign", "Configure tasks", "Launch & join", "Reward & claim"]
+    n = len(stages)
+    sw = 92
+    gap = (W - sw * n) / (n - 1)
+    sy = 170
+    rev_nodes = ["CC entry cost", "CC claim", "CC transfer"]  # revenue at stages 2,3,4
+    for i, t in enumerate(stages):
+        x = i * (sw + gap)
+        # stage box
+        d.add(Rect(x, sy, sw, 44, fillColor=_BOX_FILL, strokeColor=_BOX_EDGE,
+                   strokeWidth=0.9, rx=6, ry=6))
+        d.add(String(x + sw / 2, sy + 16, t, fontName="TNR-Bold",
+                     fontSize=9, fillColor=_BOX_TEXT, textAnchor="middle"))
+        if i < n - 1:
+            _arrow_h(d, x + sw, sy + 22, x + sw + gap)
+        # revenue node below (for stages 2,3,4 → indices 1,2,3)
+        if i >= 1:
+            ry = 70
+            rx = x + sw / 2
+            d.add(Rect(rx - 38, ry, 76, 34, fillColor=colors.HexColor("#E7F8EE"),
+                       strokeColor=ACCENT_DARK, strokeWidth=0.8, rx=5, ry=5))
+            d.add(String(rx, ry + 16, rev_nodes[i - 1], fontName="TNR",
+                         fontSize=8, fillColor=ACCENT_DARK, textAnchor="middle"))
+            d.add(String(rx, ry + 5, "on Canton", fontName="TNR",
+                         fontSize=7, fillColor=_BOX_SUB, textAnchor="middle"))
+            # down-arrow stage → revenue
+            _arrow_v(d, rx, sy - 2, ry + 34, color=ACCENT_DARK, head=5)
+    # label row
+    d.add(String(W / 2, 30, "Each stage moves CC on-chain — network revenue at every step",
+                 fontName="TNR-Italic", fontSize=8.5, fillColor=TEXT_MUTED,
+                 textAnchor="middle"))
+    return d
+
+
+# Map marker → (drawing_fn, caption_text)
+_FIGURES = {
+    "workflow": (fig_enduser_workflow,
+                 "Figure 1 — CanQuest end-user workflow, from onboarding to on-chain reward and the retention loop."),
+    "campaign": (fig_campaign_revenue,
+                 "Figure 2 — Partner campaign workflow and the Canton network revenue streams generated at each stage."),
 }
 
 
@@ -215,6 +366,18 @@ def md_to_story(md_text: str):
             continue
 
         if not line.strip():
+            i += 1
+            continue
+
+        # Figure marker: <!--FIG:key--> → insert vector diagram + caption
+        fig_m = re.match(r"^\s*<!--\s*FIG\s*:\s*([a-zA-Z0-9_-]+)\s*-->\s*$", line)
+        if fig_m:
+            key = fig_m.group(1).lower()
+            if key in _FIGURES:
+                draw_fn, caption = _FIGURES[key]
+                story.append(Spacer(1, 6))
+                story.append(draw_fn())
+                story.append(Paragraph(_inline(caption), styles["caption"]))
             i += 1
             continue
 
