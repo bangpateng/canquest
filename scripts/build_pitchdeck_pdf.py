@@ -1,22 +1,19 @@
 """
-Build CanQuest investor pitch deck (16:9 landscape PDF).
+Build CanQuest investor pitch deck (16:9 landscape, dark theme).
 
 Usage (from repo root):
     py -3 scripts/build_pitchdeck_pdf.py
 
-Output: docs/CANQUEST_PITCH_DECK.pdf
+Output: docs/CANQUEST_PITCH_DECK.pdf  (overwrites the old light-theme deck)
 
-Design:
-- Landscape 16:9 (1280x720 pt). One slide per page.
-- Canton brand green (#00A393) accent, dark text on near-white.
-- English, investor-facing. No emoji (ReportLab limitation).
-- Slide taxonomy: title, section, bullets, stat, two-col, closing.
-- Consistent with the public docs (no fee amounts in the deck).
+Design principles (anti-AI):
+- Dark theme, brand-accurate Canton green (#5AD98A, from globals.css).
+- Each slide carries ONE visual intent (diagram / flow / grid), not stacked text cards.
+- Native ReportLab vector diagrams (Drawing/Rect/Line/Polygon) — crisp, no browser needed.
+- No emoji. No fee amounts. 10 slides, no repetition.
 
-Fee policy: business model and revenue SOURCES are described (investors must
-know where money comes from), but NO specific fee numbers/amounts are shown —
-mirroring the user docs. Claim/transfer/holding/swap fees are referenced by
-NAME only, not by CC amount.
+Fee policy (matches user docs): revenue SOURCES are named for investors,
+but NO CC amounts are shown.
 """
 
 import os
@@ -30,34 +27,57 @@ from reportlab.pdfbase.pdfmetrics import registerFontFamily
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (
     Frame,
-    KeepInFrame,
+    Image,
     PageBreak,
     Paragraph,
+    SimpleDocTemplate,
+    Spacer,
     Table,
     TableStyle,
 )
 
+# reportlab.graphics — native vector diagrams
+from reportlab.graphics.shapes import (
+    Drawing,
+    Group,
+    Line,
+    Polygon,
+    Rect,
+    String,
+)
+from reportlab.lib.utils import ImageReader
+
 # ─── Paths ───────────────────────────────────────────────────────────────────
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_PATH = os.path.join(REPO_ROOT, "docs", "CANQUEST_PITCH_DECK.pdf")
+BADGE_PNG = os.path.join(
+    REPO_ROOT, "apps", "web", "public", "brand-kit", "canquest-black-bulet.png"
+)
 
-# ─── Page: 16:9 landscape, 1280x720 pt ───────────────────────────────────────
+# ─── Page: 16:9 landscape ────────────────────────────────────────────────────
 PAGE_W, PAGE_H = 1280, 720
 PAGESIZE = (PAGE_W, PAGE_H)
 
-# ─── Colors ──────────────────────────────────────────────────────────────────
-ACCENT = colors.HexColor("#00A393")       # Canton / CanQuest brand green
-ACCENT_DARK = colors.HexColor("#00766B")
-INK = colors.HexColor("#0F172A")          # near-black headings
-BODY = colors.HexColor("#334155")         # slate body text
-MUTED = colors.HexColor("#64748B")
-RULE = colors.HexColor("#E2E8F0")
-TINT = colors.HexColor("#F1F7F6")         # very light brand tint
-WHITE = colors.white
-COVER_BG = colors.HexColor("#06231F")     # deep green-black for cover
-CARD_BG = colors.HexColor("#F8FAFC")
+# ─── Brand-accurate colors (from app globals.css dark theme) ─────────────────
+# NOTE: the previous deck used #00A393 which is NOT the product green.
+# Product green = #5AD98A (dark theme primary). Fixing this is core to the
+# deck looking on-brand rather than generic.
+ACCENT = colors.HexColor("#5AD98A")        # Canton green (primary)
+ACCENT_DARK = colors.HexColor("#38B478")   # deeper green (light-theme primary)
+CYAN = colors.HexColor("#20D3C3")          # from mark.svg gradient
+LIME = colors.HexColor("#8AE878")          # from mark.svg gradient
+INK_MUTED = colors.HexColor("#8AE8B4")     # soft green-tint for cover subtext
 
-# ─── Fonts (Windows TNR family) ──────────────────────────────────────────────
+# Dark theme surface tokens
+BG = colors.HexColor("#07080D")            # app background (globals.css)
+SURFACE = colors.HexColor("#10131C")       # elevated card bg
+SURFACE_2 = colors.HexColor("#161A26")     # nested card
+BORDER = colors.HexColor("#1F2632")
+TEXT = colors.HexColor("#EDEEF2")          # foreground
+TEXT_MUTED = colors.HexColor("#8B92A3")    # muted-foreground (slightly lifted from app for slide legibility)
+TEXT_DIM = colors.HexColor("#5C6478")
+
+# ─── Fonts (Windows Times New Roman family) ──────────────────────────────────
 FONTS = {
     "TNR": "C:/Windows/Fonts/times.ttf",
     "TNR-Bold": "C:/Windows/Fonts/timesbd.ttf",
@@ -77,10 +97,8 @@ F = "TNR"
 
 # ─── Geometry ────────────────────────────────────────────────────────────────
 MARGIN_X = 80
-MARGIN_TOP = 70
-MARGIN_BOT = 60
-
-# Usable area
+MARGIN_TOP = 64
+MARGIN_BOT = 56
 UX0 = MARGIN_X
 UY0 = MARGIN_BOT
 UX1 = PAGE_W - MARGIN_X
@@ -91,110 +109,111 @@ UH = UY1 - UY0
 
 # ─── Styles ──────────────────────────────────────────────────────────────────
 def S(**kw):
-    base = dict(fontName=F, fontSize=14, leading=20, textColor=BODY)
+    base = dict(fontName=F, fontSize=14, leading=20, textColor=TEXT_MUTED)
     base.update(kw)
     return ParagraphStyle("s", **base)
 
 
-eyebrow = S(fontSize=12, textColor=ACCENT_DARK, leading=16)
-slide_title = S(fontSize=30, leading=36, textColor=INK)
-slide_title_lg = S(fontSize=38, leading=44, textColor=INK)
-subtitle = S(fontSize=16, leading=24, textColor=MUTED)
-body = S(fontSize=15, leading=23, textColor=BODY)
-body_sm = S(fontSize=13, leading=19, textColor=BODY)
-bullet = S(fontSize=15, leading=22, textColor=BODY, leftIndent=18, bulletIndent=2)
-card_title = S(fontSize=16, leading=21, textColor=INK)
-card_body = S(fontSize=12.5, leading=18, textColor=BODY)
-stat_big = S(fontSize=46, leading=50, textColor=ACCENT_DARK, alignment=TA_CENTER)
-stat_lbl = S(fontSize=13, leading=17, textColor=MUTED, alignment=TA_CENTER)
-footer = S(fontSize=9.5, leading=12, textColor=MUTED)
-cover_eyebrow = S(fontSize=14, leading=18, textColor=ACCENT)
-cover_title = S(fontSize=58, leading=64, textColor=WHITE)
-cover_sub = S(fontSize=20, leading=28, textColor=colors.HexColor("#A7F3D0"))
-cover_meta = S(fontSize=13, leading=18, textColor=colors.HexColor("#5EEAD4"))
+eyebrow = S(fontSize=11.5, leading=15, textColor=ACCENT)
+slide_title = S(fontSize=32, leading=38, textColor=TEXT)
+subtitle = S(fontSize=15, leading=22, textColor=TEXT_MUTED)
+body = S(fontSize=14, leading=21, textColor=TEXT_MUTED)
+body_lg = S(fontSize=17, leading=25, textColor=TEXT)
+bullet = S(fontSize=14, leading=22, textColor=TEXT_MUTED, leftIndent=16, bulletIndent=0)
+card_title = S(fontSize=14.5, leading=18, textColor=TEXT)
+card_body = S(fontSize=12, leading=17, textColor=TEXT_MUTED)
+stat_big = S(fontSize=44, leading=48, textColor=ACCENT, alignment=TA_CENTER)
+stat_lbl = S(fontSize=12, leading=16, textColor=TEXT_MUTED, alignment=TA_CENTER)
+footer_style = S(fontSize=9, leading=12, textColor=TEXT_DIM)
+
+# Cover-specific (on dark bg)
+cover_eyebrow = S(fontSize=13, leading=17, textColor=ACCENT)
+cover_title = S(fontSize=56, leading=62, textColor=TEXT)
+cover_sub = S(fontSize=18, leading=26, textColor=INK_MUTED)
+cover_meta = S(fontSize=12.5, leading=18, textColor=ACCENT_DARK)
+cta_line = S(fontSize=19, leading=26, textColor=ACCENT)
 
 
-# ─── Slide rendering helpers ─────────────────────────────────────────────────
-def _slide_chrome(canvas, slide_no, total, is_cover=False):
-    """Draw accent band, footer, page number. Called for every page."""
-    canvas.saveState()
-    if is_cover:
-        canvas.setFillColor(COVER_BG)
-        canvas.rect(0, 0, PAGE_W, PAGE_H, fill=1, stroke=0)
-        # accent rule top
-        canvas.setFillColor(ACCENT)
-        canvas.rect(0, PAGE_H - 6, PAGE_W, 6, fill=1, stroke=0)
-        # thin vertical accent on left
-        canvas.setFillColor(ACCENT)
-        canvas.rect(0, 0, 6, PAGE_H, fill=1, stroke=0)
-        canvas.restoreState()
-        return
+# ─── Slide chrome ────────────────────────────────────────────────────────────
+def _slide_chrome(canvas, slide_no, total, kind="content"):
+    """Paint the per-slide background. kind: 'cover' | 'section' | 'content'."""
+    c = canvas
+    c.saveState()
+    # Always dark base
+    c.setFillColor(BG)
+    c.rect(0, 0, PAGE_W, PAGE_H, fill=1, stroke=0)
 
-    # White bg body slides
-    canvas.setFillColor(WHITE)
-    canvas.rect(0, 0, PAGE_W, PAGE_H, fill=1, stroke=0)
-    # left accent strip
-    canvas.setFillColor(ACCENT)
-    canvas.rect(0, 0, 6, PAGE_H, fill=1, stroke=0)
-    # top hairline rule
-    canvas.setStrokeColor(RULE)
-    canvas.setLineWidth(0.6)
-    canvas.line(MARGIN_X, PAGE_H - MARGIN_TOP + 28, PAGE_W - MARGIN_X, PAGE_H - MARGIN_TOP + 28)
-    # footer text + page no
-    canvas.setFont(F, 9.5)
-    canvas.setFillColor(MUTED)
-    canvas.drawString(MARGIN_X, 30, "CanQuest  ·  Canton-native growth platform")
-    canvas.drawRightString(PAGE_W - MARGIN_X, 30, f"{slide_no} / {total}")
-    canvas.restoreState()
+    if kind == "cover":
+        # top + bottom accent hairlines
+        c.setFillColor(ACCENT)
+        c.rect(0, PAGE_H - 4, PAGE_W, 4, fill=1, stroke=0)
+        c.setFillColor(ACCENT)
+        c.rect(0, 0, PAGE_W, 4, fill=1, stroke=0)
+        # subtle left vertical accent
+        c.setFillColor(ACCENT)
+        c.rect(0, 0, 4, PAGE_H, fill=1, stroke=0)
+    else:
+        # thin top rule under header zone
+        c.setStrokeColor(BORDER)
+        c.setLineWidth(0.6)
+        c.line(MARGIN_X, PAGE_H - MARGIN_TOP + 26, PAGE_W - MARGIN_X, PAGE_H - MARGIN_TOP + 26)
+        # footer
+        c.setFont(F, 9)
+        c.setFillColor(TEXT_DIM)
+        c.drawString(MARGIN_X, 30, "CanQuest  ·  Canton-native growth platform")
+        c.drawRightString(PAGE_W - MARGIN_X, 30, f"{slide_no} / {total}")
+    c.restoreState()
 
 
-def _frame(story_items):
-    """Place story items in the usable frame region (centered content)."""
-    f = Frame(UX0, UY0, UW, UH, leftPadding=0, rightPadding=0,
-              topPadding=0, bottomPadding=0, showBoundary=0)
-    f.addFromList(list(story_items), _DUMMY_CANVAS_HOLD[0])
+# Holder so Frame.addFromList gets a canvas reference during build.
+_DUMMY = [None]
 
 
-# We need a canvas reference for Frame.addFromList; SimpleDocTemplate provides it
-# via the build callback. Use a holder to pass the canvas in.
-_DUMMY_CANVAS_HOLD = [None]
+def _spacer(h):
+    return Spacer(1, h)
 
 
-def _bullets(items):
-    """Build a list of Paragraph bullets."""
+def _bullets(items, style=bullet):
     out = []
     for it in items:
-        # it may be (label, text) or plain text
         if isinstance(it, tuple):
             label, text = it
-            out.append(
-                Paragraph(f"<b>{label}</b> &nbsp;{text}", bullet, bulletText="•")
-            )
+            out.append(Paragraph(f"<b>{label}</b> &nbsp;{text}", style, bulletText="•"))
         else:
-            out.append(Paragraph(it, bullet, bulletText="•"))
+            out.append(Paragraph(it, style, bulletText="•"))
     return out
 
 
-def _cards_row(cards, col_count=3, gap=18, card_h=150):
-    """Render N cards in a row as a Table grid."""
-    # pad to fill rows evenly
+def _header(story, eyebrow_text, title_text, desc_text=""):
+    story.append(Paragraph(eyebrow_text.upper(), eyebrow))
+    story.append(_spacer(6))
+    story.append(Paragraph(title_text, slide_title))
+    if desc_text:
+        story.append(_spacer(8))
+        story.append(Paragraph(desc_text, subtitle))
+
+
+# ─── Card grid helper (dark theme) ───────────────────────────────────────────
+def _card_grid(cards, col_count=3, gap=16, card_h=120):
+    """cards: list of (title, desc) or (title, desc, iconchar)."""
     while len(cards) % col_count != 0:
-        cards.append(("", "", ""))
+        cards.append(None)
     rows = []
-    cell_style = S(fontSize=12.5, leading=18, textColor=BODY)
-    title_style = S(fontSize=14, leading=18, textColor=INK)
     for i in range(0, len(cards), col_count):
         chunk = cards[i:i + col_count]
         row = []
         for c in chunk:
-            if c == ("", "", ""):
+            if c is None:
                 row.append("")
                 continue
             title, desc = c[0], c[1]
             icon = c[2] if len(c) > 2 else "·"
             cell = [
-                Paragraph(f"<font color='#00A393'><b>{icon}</b></font> &nbsp;<b>{title}</b>", title_style),
-                Paragraph(desc, cell_style),
+                Paragraph(
+                    f"<font color='#5AD98A'><b>{icon}</b></font> &nbsp;<b>{title}</b>",
+                    card_title,
+                ),
+                Paragraph(desc, card_body),
             ]
             row.append(cell)
         rows.append(row)
@@ -202,313 +221,401 @@ def _cards_row(cards, col_count=3, gap=18, card_h=150):
     t = Table(rows, colWidths=[col_w] * col_count, rowHeights=[card_h] * len(rows))
     t.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("BACKGROUND", (0, 0), (-1, -1), CARD_BG),
-        ("BOX", (0, 0), (-1, -1), 0.6, RULE),
-        ("INNERGRID", (0, 0), (-1, -1), gap, WHITE),
+        ("BACKGROUND", (0, 0), (-1, -1), SURFACE),
+        ("BOX", (0, 0), (-1, -1), 0.6, BORDER),
+        ("LINEABOVE", (0, 0), (-1, 0), 1.5, ACCENT),   # top accent edge
+        ("INNERGRID", (0, 0), (-1, -1), gap, BG),
         ("LEFTPADDING", (0, 0), (-1, -1), 14),
         ("RIGHTPADDING", (0, 0), (-1, -1), 14),
-        ("TOPPADDING", (0, 0), (-1, -1), 14),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 14),
+        ("TOPPADDING", (0, 0), (-1, -1), 12),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
     ]))
     return t
 
 
-def _stat_grid(stats, col_count=4, gap=16, card_h=130):
-    """Render a row of big-number stat cards."""
-    rows = []
-    cell_style = S(fontSize=12.5, leading=17, textColor=MUTED, alignment=TA_CENTER)
-    big_style = S(fontSize=40, leading=44, textColor=ACCENT_DARK, alignment=TA_CENTER)
-    for i in range(0, len(stats), col_count):
-        chunk = stats[i:i + col_count]
-        row = []
-        for s in chunk:
-            row.append([
-                Paragraph(s[0], big_style),
-                Paragraph(s[1], cell_style),
-            ])
-        rows.append(row)
-    col_w = (UW - gap * (col_count - 1)) / col_count
-    t = Table(rows, colWidths=[col_w] * col_count, rowHeights=[card_h] * len(rows))
-    t.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("BACKGROUND", (0, 0), (-1, -1), TINT),
-        ("BOX", (0, 0), (-1, -1), 0.6, ACCENT),
-        ("INNERGRID", (0, 0), (-1, -1), gap, WHITE),
-        ("LEFTPADDING", (0, 0), (-1, -1), 10),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
-        ("TOPPADDING", (0, 0), (-1, -1), 14),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 14),
-    ]))
-    return t
+# ═════════════════════════════════════════════════════════════════════════════
+# DIAGRAMS — native ReportLab vector drawings
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _node(d, x, y, w, h, title, sub="", fill=SURFACE, edge=BORDER, title_color=TEXT):
+    """Draw a rounded box node with a title + optional sub-line."""
+    d.add(Rect(x, y, w, h, fillColor=fill, strokeColor=edge, strokeWidth=0.8, rx=8, ry=8))
+    # title
+    d.add(String(x + w / 2, y + h - 26, title,
+                 fontName=F, fontSize=12.5, fillColor=title_color, textAnchor="middle"))
+    if sub:
+        d.add(String(x + w / 2, y + 20, sub,
+                     fontName=F, fontSize=9.5, fillColor=TEXT_MUTED, textAnchor="middle"))
 
 
-# ─── The deck ────────────────────────────────────────────────────────────────
-# Each entry: ("chrome_type", content_callable)
-# chrome_type: "cover" | "section" | "content"
-# content_callable(story) appends flowables for that slide.
+def _arrow_h(d, x1, y, x2, color=ACCENT, head=7):
+    """Horizontal arrow from (x1,y) to (x2,y)."""
+    d.add(Line(x1, y, x2 - head, y, strokeColor=color, strokeWidth=1.6))
+    d.add(Polygon([x2, y, x2 - head, y + head / 1.6, x2 - head, y - head / 1.6],
+                  fillColor=color, strokeColor=None))
 
 
+def _arrow_v(d, x, y1, y2, color=ACCENT, head=7):
+    """Vertical arrow from (x,y1) down to (x,y2)."""
+    d.add(Line(x, y1, x, y2 + head, strokeWidth=1.6, strokeColor=color))
+    d.add(Polygon([x, y2, x - head / 1.6, y2 + head, x + head / 1.6, y2 + head],
+                  fillColor=color, strokeColor=None))
+
+
+def diagram_user_journey():
+    """Slide 3 — horizontal 5-node user journey with arrows."""
+    W, H = UW, 200
+    d = Drawing(W, H, hAlign="CENTER")
+    n = 5
+    node_w = 168
+    gap = (W - node_w * n) / (n - 1)
+    y = 60
+    labels = [
+        ("Sign up", "Google"),
+        ("Create wallet", "invite + OTP"),
+        ("Lock 30 CC", "or earn points"),
+        ("Quests &", "campaigns"),
+        ("Rewards", "on-chain"),
+    ]
+    for i, (t1, t2) in enumerate(labels):
+        x = i * (node_w + gap)
+        # alternate accent tint for visual rhythm
+        fill = SURFACE_2 if i % 2 == 0 else SURFACE
+        edge = ACCENT if i == n - 1 else BORDER
+        tc = ACCENT if i == n - 1 else TEXT
+        _node(d, x, y, node_w, 80, t1, t2, fill=fill, edge=edge, title_color=tc)
+        if i < n - 1:
+            _arrow_h(d, x + node_w, y + 40, x + node_w + gap)
+    return d
+
+
+def diagram_revenue_flow():
+    """Slide 8 — revenue flow: user actions → CC fee → splits to Network + CanQuest."""
+    W, H = UW, 240
+    d = Drawing(W, H, hAlign="CENTER")
+    # Left cluster: 4 user actions stacked
+    actions = ["Lock CC", "Claim reward", "Send CC", "Swap"]
+    ax = 40
+    boxw, boxh = 150, 44
+    total_h = boxh * len(actions) + 12 * (len(actions) - 1)
+    start_y = (H - total_h) / 2
+    for i, a in enumerate(actions):
+        y = start_y + (len(actions) - 1 - i) * (boxh + 12)
+        d.add(Rect(ax, y, boxw, boxh, fillColor=SURFACE, strokeColor=BORDER, strokeWidth=0.8, rx=6, ry=6))
+        d.add(String(ax + boxw / 2, y + 16, a, fontName=F, fontSize=12, fillColor=TEXT, textAnchor="middle"))
+
+    # Middle: CC fee funnel node
+    mx = ax + boxw + 110
+    my = H / 2 - 50
+    mw, mh = 150, 100
+    d.add(Rect(mx, my, mw, mh, fillColor=SURFACE_2, strokeColor=ACCENT, strokeWidth=1.4, rx=10, ry=10))
+    d.add(String(mx + mw / 2, my + mh - 30, "CC settled", fontName=F, fontSize=13, fillColor=ACCENT, textAnchor="middle"))
+    d.add(String(mx + mw / 2, my + 24, "on-ledger", fontName=F, fontSize=10, fillColor=TEXT_MUTED, textAnchor="middle"))
+
+    # arrows from each action → funnel
+    for i in range(len(actions)):
+        y = start_y + (len(actions) - 1 - i) * (boxh + 12) + boxh / 2
+        _arrow_h(d, ax + boxw, y, mx)
+
+    # Right: two destination nodes
+    rx = mx + mw + 120
+    dests = [("Canton Network", "protocol revenue"), ("CanQuest", "platform revenue")]
+    dy = H / 2 + 20
+    dw, dh = 170, 56
+    for i, (t1, t2) in enumerate(dests):
+        y = dy - i * (dh + 24) - dh
+        edge = ACCENT_DARK if i == 0 else CYAN
+        tc = ACCENT_DARK if i == 0 else CYAN
+        d.add(Rect(rx, y, dw, dh, fillColor=SURFACE, strokeColor=edge, strokeWidth=1.2, rx=8, ry=8))
+        d.add(String(rx + dw / 2, y + dh - 22, t1, fontName=F, fontSize=12.5, fillColor=tc, textAnchor="middle"))
+        d.add(String(rx + dw / 2, y + 12, t2, fontName=F, fontSize=9.5, fillColor=TEXT_MUTED, textAnchor="middle"))
+        # arrow funnel → dest
+        _arrow_h(d, mx + mw, y + dh / 2, rx, color=edge)
+
+    return d
+
+
+def diagram_antisybil_waterfall():
+    """Slide 7 — vertical filter waterfall: 5 layers, each narrows the funnel."""
+    W, H = UW, 320
+    d = Drawing(W, H, hAlign="CENTER")
+    layers = [
+        ("Google sign-up", "real identity at entry"),
+        ("Email OTP", "verified mailbox"),
+        ("One party ID / human", "invite-gated wallet"),
+        ("CC commitment", "lock real CC to unlock"),
+        ("Server-verified tasks", "audited draws & points"),
+    ]
+    n = len(layers)
+    bar_h = 46
+    gap = 10
+    total = bar_h * n + gap * (n - 1)
+    start_y = H - (H - total) / 2 - bar_h
+    max_w = 720
+    min_w = 360
+    cx = W / 2
+    for i, (t1, t2) in enumerate(layers):
+        # width narrows progressively (waterfall effect)
+        frac = i / (n - 1)
+        w = max_w - (max_w - min_w) * frac
+        y = start_y - i * (bar_h + gap)
+        x = cx - w / 2
+        edge = ACCENT if i == n - 1 else BORDER
+        tc = ACCENT if i == n - 1 else TEXT
+        d.add(Rect(x, y, w, bar_h, fillColor=SURFACE, strokeColor=edge, strokeWidth=0.9, rx=6, ry=6))
+        d.add(String(cx, y + bar_h / 2 + 1, t1, fontName=F, fontSize=13, fillColor=tc, textAnchor="middle"))
+        d.add(String(cx, y - 13, t2, fontName=F, fontSize=9.5, fillColor=TEXT_MUTED, textAnchor="middle"))
+        if i < n - 1:
+            # small down-arrow between layers
+            _arrow_v(d, cx, y - 2, y - gap + 2, color=ACCENT_DARK, head=6)
+    return d
+
+
+def diagram_architecture():
+    """Slide 9 — system architecture: App stack (VPS2) ←WireGuard→ Canton core (VPS1)."""
+    W, H = UW, 300
+    d = Drawing(W, H, hAlign="CENTER")
+
+    # Left cluster: App stack
+    lx, ly = 40, 40
+    lw, lh = 300, 230
+    d.add(Rect(lx, ly, lw, lh, fillColor=SURFACE, strokeColor=BORDER, strokeWidth=1, rx=12, ry=12))
+    d.add(String(lx + lw / 2, ly + lh - 28, "Application stack", fontName=F, fontSize=13, fillColor=ACCENT, textAnchor="middle"))
+    d.add(String(lx + lw / 2, ly + lh - 46, "VPS 2  ·  canquest.cc", fontName=F, fontSize=9.5, fillColor=TEXT_DIM, textAnchor="middle"))
+    app_items = ["Next.js web  :3000", "NestJS API  :3001", "PostgreSQL (Supabase)", "Redis (queue + cache)"]
+    for i, it in enumerate(app_items):
+        iy = ly + lh - 90 - i * 36
+        d.add(Rect(lx + 24, iy, lw - 48, 28, fillColor=SURFACE_2, strokeColor=BORDER, strokeWidth=0.6, rx=5, ry=5))
+        d.add(String(lx + lw / 2, iy + 9, it, fontName=F, fontSize=11, fillColor=TEXT, textAnchor="middle"))
+
+    # Right cluster: Canton core
+    rx_, ry = W - 40 - 300, 40
+    rw, rh = 300, 230
+    d.add(Rect(rx_, ry, rw, rh, fillColor=SURFACE, strokeColor=ACCENT_DARK, strokeWidth=1, rx=12, ry=12))
+    d.add(String(rx_ + rw / 2, ry + rh - 28, "Canton core", fontName=F, fontSize=13, fillColor=ACCENT_DARK, textAnchor="middle"))
+    d.add(String(rx_ + rw / 2, ry + rh - 46, "Validator VPS", fontName=F, fontSize=9.5, fillColor=TEXT_DIM, textAnchor="middle"))
+    core_items = ["Canton participant  :7575", "Splice Validator API", "DAML ledger", "Canton Coin (CC)"]
+    for i, it in enumerate(core_items):
+        iy = ry + rh - 90 - i * 36
+        d.add(Rect(rx_ + 24, iy, rw - 48, 28, fillColor=SURFACE_2, strokeColor=BORDER, strokeWidth=0.6, rx=5, ry=5))
+        d.add(String(rx_ + rw / 2, iy + 9, it, fontName=F, fontSize=11, fillColor=TEXT, textAnchor="middle"))
+
+    # Connector: WireGuard tunnel between the two clusters
+    mid_y = ly + lh / 2
+    line_x1 = lx + lw
+    line_x2 = rx_
+    # tunnel band
+    d.add(Rect(line_x1, mid_y - 16, line_x2 - line_x1, 32, fillColor=SURFACE_2, strokeColor=ACCENT, strokeWidth=0.8, rx=6, ry=6))
+    d.add(String((line_x1 + line_x2) / 2, mid_y + 2, "WireGuard tunnel", fontName=F, fontSize=10.5, fillColor=ACCENT, textAnchor="middle"))
+    d.add(String((line_x1 + line_x2) / 2, mid_y - 12, "private network", fontName=F, fontSize=8.5, fillColor=TEXT_DIM, textAnchor="middle"))
+
+    return d
+
+
+# ─── Logo badge as flowable ──────────────────────────────────────────────────
+def _badge(size=72):
+    """Return an Image flowable for the CanQuest badge, or None if missing."""
+    if not os.path.exists(BADGE_PNG):
+        return None
+    img = Image(BADGE_PNG)
+    img.drawWidth = size
+    img.drawHeight = size
+    return img
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# STORY
+# ═════════════════════════════════════════════════════════════════════════════
 def build_story():
     story = []
 
-    # ── SLIDE 1 — COVER ─────────────────────────────────────────────────
+    # ── SLIDE 1 — COVER ────────────────────────────────────────────────
+    badge = _badge(80)
+    if badge:
+        # center the badge using a 1-col table
+        t = Table([[badge]], colWidths=[UW])
+        t.setStyle(TableStyle([("ALIGN", (0, 0), (-1, -1), "CENTER")]))
+        story.append(t)
+        story.append(_spacer(18))
     story.append(Paragraph("CANQUEST  ·  CANTON NETWORK", cover_eyebrow))
-    story.append(_spacer(10))
+    story.append(_spacer(8))
     story.append(Paragraph("The growth layer for the<br/>Canton ecosystem", cover_title))
     story.append(_spacer(14))
     story.append(Paragraph(
-        "A Canton-native quest &amp; wallet platform — verified users, real on-chain activity,<br/>"
-        "and recurring network revenue.",
+        "A Canton-native quest &amp; wallet platform — verified users,<br/>"
+        "real on-chain activity, and recurring network revenue.",
         cover_sub,
     ))
     story.append(_spacer(40))
-    story.append(Paragraph(
-        "Investor pitch  ·  July 2026  ·  canquest.cc",
-        cover_meta,
-    ))
+    story.append(Paragraph("Investor pitch  ·  July 2026  ·  canquest.cc", cover_meta))
     story.append(PageBreak())
 
-    # ── SLIDE 2 — PROBLEM ───────────────────────────────────────────────
-    _header(story, "The problem", "Canton has the rails. It still lacks real users.",
-            "Institutional infrastructure exists, but ecosystem projects still can't reach genuine "
+    # ── SLIDE 2 — PROBLEM ──────────────────────────────────────────────
+    _header(story, "The problem",
+            "Canton has the rails. It still lacks real users.",
+            "Institutional infrastructure is live — but ecosystem projects can't reach genuine "
             "participants without being drained by bots and farms.")
-    story.append(_spacer(16))
-    story.extend(_bullets([
-        ("Generic quest platforms are farm-prone — rewards leak to bots, not real users.",
-         ""),
-        ("Heuristic anti-bot checks are weak — sybils replicate wallets cheaply.",
-         ""),
-        ("Institutional Canton infra doesn't create everyday CC usage or retail participation.",
-         ""),
-        ("Projects launching on Canton need a practical, verified growth channel.",
-         ""),
-    ]))
+    story.append(_spacer(20))
+    story.append(_card_grid([
+        ("Farm-prone quests", "Generic platforms leak rewards to bots, not real users.", "1"),
+        ("Weak anti-sybil", "Heuristic checks are gamed; sybils replicate wallets cheaply.", "2"),
+        ("No retail surface", "Institutional infra doesn't create everyday CC usage.", "3"),
+    ], col_count=3, card_h=140))
     story.append(PageBreak())
 
-    # ── SLIDE 3 — SOLUTION ──────────────────────────────────────────────
-    _header(story, "The solution", "CanQuest: structural verification, not heuristics.",
-            "One verified human = one Canton wallet. Real activity — locking CC, transacting, "
-            "swapping — is the Sybil signal itself.")
-    story.append(_spacer(18))
-    story.append(_cards_row([
-        ("Verified identity", "Google sign-up, one wallet per human via invite-gated party ID, email OTP.", "1"),
-        ("On-chain commitment", "Lock CC non-custodially to reach Full access and unlock partner campaigns.", "2"),
-        ("Real activity loop", "Quests, on-chain sends/swaps, and campaigns that move CC for a real reason.", "3"),
-    ], col_count=3, card_h=170))
+    # ── SLIDE 3 — SOLUTION (user journey diagram) ──────────────────────
+    _header(story, "How it works",
+            "Verification is structural, not heuristic.",
+            "One verified human = one Canton wallet. Real on-chain activity is the anti-sybil "
+            "signal itself.")
+    story.append(_spacer(28))
+    story.append(diagram_user_journey())
     story.append(PageBreak())
 
-    # ── SLIDE 4 — PRODUCT (6 menus) ─────────────────────────────────────
-    _header(story, "What the product does", "Six menus, one verified account.",
-            "A complete Canton-native dapp — wallet, quests, partner campaigns, leaderboard, and swap — "
-            "all in production today.")
+    # ── SLIDE 4 — PRODUCT (6 menus, one grid) ──────────────────────────
+    _header(story, "The product",
+            "Six menus, one verified account.",
+            "A complete Canton-native dapp in production today.")
     story.append(_spacer(16))
-    story.append(_cards_row([
-        ("Overview", "Dashboard: profile, CC holdings, net points, activity stats.", "·"),
-        ("Earn", "Partner campaigns with CC, invite codes, waitlist slots.", "·"),
-        ("Quests", "Daily & on-chain tasks (send, swap, lock) that earn points.", "·"),
-        ("Wallet", "Canton party ID: send, receive, swap, lock, offers.", "·"),
-        ("Leaderboard", "Weekly / monthly / all-time ranking by net points.", "·"),
-        ("Settings", "Wallet password, one-step transfer, X connection.", "·"),
-    ], col_count=3, card_h=120))
+    story.append(_card_grid([
+        ("Overview", "Profile, CC holdings, net points, activity.", "01"),
+        ("Earn", "Partner campaigns: CC, codes, waitlist.", "02"),
+        ("Quests", "Daily & on-chain tasks → points.", "03"),
+        ("Wallet", "Send, receive, swap, lock CC.", "04"),
+        ("Leaderboard", "Rank by net points.", "05"),
+        ("Settings", "Wallet password, one-step transfer, X.", "06"),
+    ], col_count=3, card_h=96))
     story.append(PageBreak())
 
-    # ── SLIDE 5 — WALLET & SWAP ─────────────────────────────────────────
-    _header(story, "Canton-native wallet", "Where CC moves — for a reason.",
-            "A real Canton party ID per user, with full send / receive / swap / lock flows settling on-ledger.")
-    story.append(_spacer(16))
+    # ── SLIDE 5 — WALLET & SWAP ────────────────────────────────────────
+    _header(story, "Wallet & swap",
+            "Where CC moves — for a reason.",
+            "A real Canton party ID per user, with full send / receive / swap / lock flows "
+            "settling on-ledger.")
+    story.append(_spacer(14))
     two_col = Table([[
-        [Paragraph("<b>Wallet capabilities</b>", card_title),
-         _spacer(6),
+        [Paragraph("<b>Wallet</b>", card_title),
+         _spacer(4),
          *_bullets([
-            "Send CC or tokens by @username or Canton party ID.",
-            "Receive via QR code; accept/reject incoming offers; cancel outgoing.",
-            "Lock 30 CC (non-custodial) to reach Full access.",
-            "Full transaction history with Canton explorer links.",
+            "Send CC or tokens by @username or party ID.",
+            "Receive via QR; accept/reject offers; cancel outgoing.",
+            "Lock 30 CC (non-custodial) → Full access.",
+            "Full history with Canton explorer links.",
          ])],
         [Paragraph("<b>Swap (Cantex)</b>", card_title),
-         _spacer(6),
+         _spacer(4),
          *_bullets([
-            "Swap CC ↔ USDCX through the Cantex DEX, on-network.",
-            "Live quote: rate, price impact, applicable network cost.",
-            "Auto-refund on timeout; failed deliveries tracked.",
-            "More pairs (CBTC and others) coming soon.",
+            "Swap CC ↔ USDCX through the Cantex DEX.",
+            "Live quote: rate, price impact, network cost.",
+            "Auto-refund on timeout; deliveries tracked.",
+            "More pairs (CBTC + others) coming soon.",
          ])],
     ]], colWidths=[(UW - 24) / 2, (UW - 24) / 2])
     two_col.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("BACKGROUND", (0, 0), (-1, -1), CARD_BG),
-        ("BOX", (0, 0), (-1, -1), 0.6, RULE),
-        ("LINEBETWEEN", (0, 0), (-1, -1), 24, WHITE),
-        ("LEFTPADDING", (0, 0), (-1, -1), 20),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 20),
-        ("TOPPADDING", (0, 0), (-1, -1), 18),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 18),
+        ("BACKGROUND", (0, 0), (-1, -1), SURFACE),
+        ("BOX", (0, 0), (-1, -1), 0.6, BORDER),
+        ("LINEABOVE", (0, 0), (-1, 0), 1.5, ACCENT),
+        ("LINEBETWEEN", (0, 0), (-1, -1), 24, BG),
+        ("LEFTPADDING", (0, 0), (-1, -1), 18),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 18),
+        ("TOPPADDING", (0, 0), (-1, -1), 16),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 16),
     ]))
     story.append(two_col)
     story.append(PageBreak())
 
-    # ── SLIDE 6 — CAMPAIGNS / EARN ──────────────────────────────────────
-    _header(story, "Partner campaigns", "Verified growth for Canton projects.",
-            "Projects launch campaigns; CanQuest delivers verified, active early users — and rewards settle on-chain.")
+    # ── SLIDE 6 — CAMPAIGNS (6 reward types) ───────────────────────────
+    _header(story, "Partner campaigns",
+            "Verified growth for Canton projects.",
+            "Projects launch campaigns; CanQuest delivers verified early users. Rewards settle on-chain.")
     story.append(_spacer(16))
-    story.append(_cards_row([
-        ("CC rewards", "First-come or raffle-drawn CC payouts, settled to the user's wallet.", "·"),
-        ("Invite / access codes", "Early entry to partner apps, testnets, or whitelists.", "·"),
-        ("Waitlist spots", "Raffle or FCFS slots for launches and drops.", "·"),
-        ("CC + code combos", "Combined CC and code rewards in a single draw.", "·"),
-    ], col_count=4, card_h=140))
+    story.append(_card_grid([
+        ("CC FCFS", "First-come CC payouts.", "·"),
+        ("CC Raffle", "Drawn CC winners.", "·"),
+        ("Waitlist FCFS", "First-come invite/access codes.", "·"),
+        ("Waitlist Raffle", "Drawn codes.", "·"),
+        ("Waitlist Email", "Email raffle entry.", "·"),
+        ("CC + Code", "Combined CC & code draw.", "·"),
+    ], col_count=3, card_h=80))
     story.append(_spacer(12))
     story.append(Paragraph(
-        "Each campaign sets its own access gate — free, a CC lock, points, or either. "
-        "Tasks are social (follow, join) and server-verified; draws use secure randomness.",
-        body_sm,
-    ))
-    story.append(PageBreak())
-
-    # ── SLIDE 7 — ANTI-SYBIL ────────────────────────────────────────────
-    _header(story, "Why it can't be farmed", "Verification is structural, not heuristic.",
-            "Farming becomes economically irrational — the cost of faking a participant exceeds the reward.")
-    story.append(_spacer(18))
-    story.extend(_bullets([
-        ("One party ID per human", "— invite-gated wallet creation under a daily quota."),
-        ("Google sign-up + email OTP", "— real identity signals at account creation."),
-        ("CC commitment", "— Full access requires locking real CC, returned in full."),
-        ("Server-verified tasks", "— points and draws decided on the server with audit trails."),
-        ("Referral anti-farm", "— rewards require verified email + connected X; self-referrals and alias farming blocked."),
-    ]))
-    story.append(PageBreak())
-
-    # ── SLIDE 8 — BUSINESS MODEL (no fee amounts) ───────────────────────
-    _header(story, "Business model", "Usage-based revenue, all on-chain.",
-            "Revenue scales with real transaction volume — every lock, claim, send, and swap moves CC on-network.")
-    story.append(_spacer(16))
-    story.append(_cards_row([
-        ("Campaign claim fees",
-         "Reward claims carry a CC cost settled on-chain — tied to genuine campaign activity.", "1"),
-        ("Transfer fees",
-         "A platform cost on CC and token sends — recurring revenue from everyday wallet use.", "2"),
-        ("Swap fees",
-         "A network cost (to the Cantex trading account) plus an optional platform cost per swap.", "3"),
-        ("Holding fee",
-         "A network cost while CC is locked — recurring revenue throughout the lock term.", "4"),
-    ], col_count=2, card_h=110))
-    story.append(_spacer(10))
-    story.append(Paragraph(
-        "All revenue is denominated in CC, settled on-ledger, and auditable. Specific amounts are "
-        "configurable and not published publicly.",
-        body_sm,
-    ))
-    story.append(PageBreak())
-
-    # ── SLIDE 9 — TRACTION / STATUS ─────────────────────────────────────
-    _header(story, "Status", "Mainnet-deployed and internally validated.",
-            "The full product flow runs on Canton mainnet with real CC and real party identities.")
-    story.append(_spacer(18))
-    story.append(_stat_grid([
-        ("6", "dapp menus, all live"),
-        ("4", "reward claim types implemented"),
-        ("1", "DEX swap pair live (CC↔USDCX)"),
-        ("6", "anti-sybil layers enforced"),
-    ], col_count=4, card_h=130))
-    story.append(_spacer(16))
-    story.extend(_bullets([
-        "Mainnet deployment (not a testnet) — wallet, quests, campaigns, swap, leaderboard.",
-        "Full flow exercised by the core team with real CC and real Canton party identities.",
-        "On-chain audit trails and CantonScan explorer links on every transaction.",
-        "Now preparing the first public user cohort and initial partner campaigns.",
-    ]))
-    story.append(PageBreak())
-
-    # ── SLIDE 10 — GO-TO-MARKET ─────────────────────────────────────────
-    _header(story, "Go-to-market", "Indonesia &amp; Southeast Asia first.",
-            "A Canton-native growth platform can become the practical entry point for a high crypto-participation region.")
-    story.append(_spacer(16))
-    story.append(_cards_row([
-        ("Phase 1 — Activate",
-         "Onboard first CC holders; run initial partner campaigns; validate unit economics on mainnet.", "1"),
-        ("Phase 2 — Expand",
-         "Scale community acquisition across SEA; broaden the partner campaign pipeline; localize onboarding.", "2"),
-        ("Phase 3 — Distribution layer",
-         "Self-serve partner tooling and ecosystem integrations — the default growth layer for Canton.", "3"),
-    ], col_count=3, card_h=150))
-    story.append(PageBreak())
-
-    # ── SLIDE 11 — WHY NOW / CLOSING ────────────────────────────────────
-    _header(story, "Why CanQuest, why now", "A monetized Canton growth engine.",
-            "Canton needs user-facing products. CanQuest turns real activity into network revenue — and "
-            "helps every other Canton project grow.")
-    story.append(_spacer(20))
-    story.extend(_bullets([
-        ("Turns external users into active Canton participants.", ""),
-        ("Turns quests and rewards into verified on-chain activity.", ""),
-        ("Turns CC locks into recurring fee revenue for the network.", ""),
-        ("Turns every partner campaign into ecosystem growth.", ""),
-    ]))
-    story.append(_spacer(30))
-    story.append(Paragraph(
-        "Let&apos;s build the growth layer for Canton together.",
-        S(fontSize=20, leading=26, textColor=ACCENT_DARK),
-    ))
-    story.append(PageBreak())
-
-    # ── SLIDE 12 — CONTACT ──────────────────────────────────────────────
-    _header(story, "Get in touch", "", is_closing=True)
-    story.append(_spacer(50))
-    story.append(Paragraph(
-        "CanQuest  ·  canquest.cc",
-        S(fontSize=34, leading=40, textColor=INK),
-    ))
-    story.append(_spacer(10))
-    story.append(Paragraph(
-        "Canton-native growth platform for verified, active users.",
-        S(fontSize=16, leading=22, textColor=MUTED),
-    ))
-    story.append(_spacer(30))
-    story.append(Paragraph(
-        "Partner / investment inquiries: use the partnership form at canquest.cc/cooperation, "
-        "or reply to this conversation.",
+        "Access gates are set per campaign — free, a CC lock, points, or either. "
+        "Tasks are social and server-verified; draws use secure randomness.",
         body,
+    ))
+    story.append(PageBreak())
+
+    # ── SLIDE 7 — ANTI-SYBIL (waterfall diagram) ───────────────────────
+    _header(story, "Why it can't be farmed",
+            "Each layer narrows the funnel.",
+            "Farming becomes economically irrational — faking a participant costs more than the reward.")
+    story.append(_spacer(20))
+    story.append(diagram_antisybil_waterfall())
+    story.append(PageBreak())
+
+    # ── SLIDE 8 — BUSINESS MODEL (revenue flow diagram) ────────────────
+    _header(story, "Business model",
+            "Usage-based revenue, all on-chain.",
+            "Every lock, claim, send, and swap moves CC on-network. Revenue scales with real volume.")
+    story.append(_spacer(20))
+    story.append(diagram_revenue_flow())
+    story.append(_spacer(12))
+    story.append(Paragraph(
+        "All revenue is denominated in CC, settled on-ledger, and auditable. "
+        "Specific amounts are configurable and not published publicly.",
+        body,
+    ))
+    story.append(PageBreak())
+
+    # ── SLIDE 9 — STATUS (architecture diagram + stats) ────────────────
+    _header(story, "Status",
+            "Mainnet-deployed and internally validated.",
+            "Full product flow runs on Canton mainnet with real CC and real party identities.")
+    story.append(_spacer(10))
+    story.append(diagram_architecture())
+    story.append(PageBreak())
+
+    # ── SLIDE 10 — CTA / CONTACT ───────────────────────────────────────
+    badge2 = _badge(64)
+    if badge2:
+        t = Table([[badge2]], colWidths=[UW])
+        t.setStyle(TableStyle([("ALIGN", (0, 0), (-1, -1), "CENTER")]))
+        story.append(t)
+        story.append(_spacer(18))
+    story.append(Paragraph("Let's build the growth layer for Canton together.", cta_line))
+    story.append(_spacer(18))
+    center = S(fontSize=14, leading=20, textColor=TEXT_MUTED, alignment=TA_CENTER)
+    story.append(Paragraph("CanQuest  ·  canquest.cc", S(fontSize=24, leading=30, textColor=TEXT, alignment=TA_CENTER)))
+    story.append(_spacer(8))
+    story.append(Paragraph(
+        "Partner &amp; investment inquiries: partnership form at canquest.cc/cooperation, "
+        "or reply to this conversation.",
+        center,
     ))
 
     return story
 
 
-def _spacer(h):
-    """A vertical spacer flowable."""
-    from reportlab.platypus import Spacer
-    return Spacer(1, h)
-
-
-def _header(story, eyebrow_text, title_text, desc_text="", is_closing=False):
-    """Add the standard slide header (eyebrow + title + optional description)."""
-    story.append(Paragraph(eyebrow_text.upper(), eyebrow))
-    story.append(_spacer(6))
-    story.append(Paragraph(title_text, slide_title if not is_closing else slide_title_lg))
-    if desc_text:
-        story.append(_spacer(8))
-        story.append(Paragraph(desc_text, subtitle))
-
-
-# ─── Build with per-page chrome ──────────────────────────────────────────────
+# ─── Build ───────────────────────────────────────────────────────────────────
 def _make_on_page(total):
     def on_page(canvas, doc):
         page_no = canvas.getPageNumber()
-        _DUMMY_CANVAS_HOLD[0] = canvas
-        is_cover = (page_no == 1)
-        _slide_chrome(canvas, page_no, total, is_cover=is_cover)
+        _DUMMY[0] = canvas
+        kind = "cover" if page_no == 1 else "content"
+        if page_no == total:
+            kind = "cover"  # CTA slide gets the clean dark look too
+        _slide_chrome(canvas, page_no, total, kind=kind)
     return on_page
 
 
 def main():
-    from reportlab.platypus import SimpleDocTemplate
-
     if os.path.exists(OUT_PATH):
         os.remove(OUT_PATH)
 
-    # Build story once to count pages, then build for real with correct total.
-    tmp_story = build_story()
-    # Count page breaks + 1
-    total = 1 + sum(1 for el in tmp_story if isinstance(el, PageBreak))
+    # count pages for footer total
+    tmp = build_story()
+    total = 1 + sum(1 for el in tmp if isinstance(el, PageBreak))
 
     doc = SimpleDocTemplate(
         OUT_PATH,
