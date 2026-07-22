@@ -474,33 +474,31 @@ export class SwapService {
       }
     }
 
-    // ── Non-CC: pakai cantex.transferCC (Cantex REST, Ed25519 operator key) ──
+    // ── Non-CC: pakai CIP-0056 executeTransferFactoryTransfer langsung ──
     //
-    // STRATEGI WAVE 6 (revisi dari Wave 5): sebelumnya pakai
-    // executeTransferFactoryTransfer (Canton ledger CIP-56) yang butuh
-    // query holdings sender via REST ACS. Tapi REST ACS di participant kami
-    // return [] untuk semua party (visibility issue), sehingga selalu gagal
-    // dengan "Sender has no USDCx holdings".
+    // Per konfirmasi Canton AI: endpoint Cantex transferCC CC-only (return 400
+    // untuk non-CC). Cara benar untuk transfer token standard (USDCx) dari
+    // trading account → user party adalah via Canton Ledger API CIP-0056
+    // (TransferFactory_Transfer). Sender = trading account (milik validator
+    // kami, non-external), operator punya CanActAs → cukup.
     //
-    // Solusi: pakai cantex.transferCC endpoint yg sama dgn CC path. Endpoint
-    // Cantex /v1/ledger/transaction/build/transfer menerima instrumentId
-    // generic — operator Cantex (Ed25519 key) berhak sign transfer apapun
-    // dari trading account. Kalau Cantex support non-CC, ini akan jalan.
-    // Kalau tidak support (return 400), fallback ke off-chain credit +
-    // PendingDelivery untuk reconcile manual (admin WD).
-    //
-    // PRASYARAT: CANTEX_OPERATOR_KEY punya rights ke trading account (sudah
-    // by design — itu key operator Cantex CanQuest).
+    // executeTransferFactoryTransfer sudah handle: query inputHoldingCids
+    // (sekarang via InterfaceFilter, fix root cause), call registry, submit.
     try {
-      const result = await this.cantex.transferCC({
-        receiver: params.userPartyId,
-        amount: params.amount,
+      const result = await this.ledger.executeTransferFactoryTransfer({
+        senderPartyId: cfg.tradingAccountParty,
+        receiverPartyId: params.userPartyId,
+        amountCc: parseFloat(params.amount),
         instrumentId: params.tokenId,
         instrumentAdmin: params.tokenAdmin,
-        memo: `canquest-swap|${params.userPartyId}|${params.tokenId}|${params.requestId}`,
+        description: `canquest-swap|${params.tokenId}|${params.requestId}`,
+        clientNonce: `${params.swapTxId}:token-delivery`,
       });
+      if (!result.ok) {
+        throw new Error(result.error ?? 'CIP-0056 transfer failed');
+      }
       this.logger.log(
-        `On-chain non-CC delivery OK: ${params.amount} ${params.tokenId} → user party via Cantex transferCC (swap ${params.swapTxId})`,
+        `On-chain non-CC delivery OK: ${params.amount} ${params.tokenId} → user party via CIP-0056 (kind=${result.transferKind}, swap ${params.swapTxId})`,
       );
       // Record PendingDelivery COMPLETED untuk audit trail.
       try {
@@ -512,7 +510,7 @@ export class SwapService {
             tokenAdmin: params.tokenAdmin,
             amount: new Decimal(params.amount),
             status: 'COMPLETED',
-            transferKind: 'direct',
+            transferKind: result.transferKind,
             deliveredAt: new Date(),
           },
         });
@@ -521,13 +519,8 @@ export class SwapService {
       }
       return { ok: true };
     } catch (err) {
-      // Cantex return 400 untuk non-CC = limitation endpoint (tidak support).
-      // Atau error lain (network, receiver belum setup, dll).
-      // Log eksplisit supaya bisa diagnose: kalau 400 → Cantex CC-only, perlu
-      // endpoint lain; kalau 403 → rights issue; dll.
       this.logger.error(
-        `Non-CC on-chain delivery FAILED via Cantex transferCC (swap ${params.swapTxId}, token=${params.tokenId}): ${(err as Error).message}. ` +
-          `Kalau error "CC-only"/"not supported" → Cantex endpoint tidak support non-CC, perlu pendekatan lain. ` +
+        `Non-CC on-chain delivery FAILED via CIP-0056 (swap ${params.swapTxId}, token=${params.tokenId}): ${(err as Error).message}. ` +
           `Token tetap di trading account — caller harus catat PendingDelivery.`,
         (err as Error).stack,
       );
@@ -1002,22 +995,32 @@ export class SwapService {
       this.config.get<string>('SWAP_NETWORK_FEE_CC') ?? '2',
     );
 
-    // 1. Cek token balance cukup (DB). WAVE 6: lookup case-insensitive supaya
-    //    robust terhadap perbedaan case antara Cantex pools (frontend source)
-    //    vs on-chain event payload (handler write source). Sebelumnya pakai
-    //    findUnique composite key (case-sensitive Postgres default) → bisa miss
-    //    kalau "USDCx" vs "USDCX" beda entry → swap salah bilang "insufficient".
-    const tokenBal = await this.prisma.cantexTokenBalance.findFirst({
-      where: {
-        userId,
-        instrumentId: { equals: params.sellInstrumentId, mode: 'insensitive' },
-        instrumentAdmin: {
-          equals: params.sellInstrumentAdmin,
-          mode: 'insensitive',
+    // 1. Cek token balance cukup ON-CHAIN (source of truth). Sebelumnya pakai
+    //    CantexTokenBalance DB yang bisa drift → user lolos check padahal
+    //    on-chain gak cukup → token leg gagal di ledger. Sekarang konsisten
+    //    dengan /send-token dan /balance: pakai getTokenBalanceOnChain.
+    let available = 0;
+    try {
+      available = await this.ledger.getTokenBalanceOnChain(
+        user.cantonPartyId,
+        params.sellInstrumentId,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `TOKEN_TO_CC pre-check on-chain balance failed, fallback to DB: ${(err as Error).message}`,
+      );
+      const tokenBal = await this.prisma.cantexTokenBalance.findFirst({
+        where: {
+          userId,
+          instrumentId: { equals: params.sellInstrumentId, mode: 'insensitive' },
+          instrumentAdmin: {
+            equals: params.sellInstrumentAdmin,
+            mode: 'insensitive',
+          },
         },
-      },
-    });
-    const available = tokenBal ? parseFloat(tokenBal.balance.toString()) : 0;
+      });
+      available = tokenBal ? parseFloat(tokenBal.balance.toString()) : 0;
+    }
     if (available < params.amount) {
       return {
         success: false,
@@ -1205,15 +1208,11 @@ export class SwapService {
       const netCc = outputCcNum - networkFeeCc - platformFeeCc;
 
       if (!ccOnChain) {
-        // On-chain delivery gagal → credit off-chain (UX: user dapat CC),
-        // TAPI record PendingDelivery untuk tracking + reconcile nanti.
-        // Ini menggantikan silent off-chain credit yang menyebabkan drift.
+        // On-chain delivery gagal → JANGAN credit off-chain (bikin DB drift dari
+        // chain, sama persis bug yang sudah kita fix di /balance dan /send-token).
+        // Konsisten dengan CC→Token direction: on-chain only + PendingDelivery.
+        // CC tetap di trading account sampai admin reconcile / retry delivery.
         const netCcMicro = BigInt(Math.round(netCc * 1_000_000));
-        await this.prisma.ccBalance.upsert({
-          where: { userId },
-          create: { userId, balanceMicroCc: netCcMicro },
-          update: { balanceMicroCc: { increment: netCcMicro } },
-        });
         try {
           await this.prisma.pendingDelivery.create({
             data: {
@@ -1225,11 +1224,11 @@ export class SwapService {
               amount: outputCc,
               amountMicroCc: netCcMicro,
               status: 'PENDING_APPROVAL',
-              errorMessage: 'transferCC on-chain failed; CC credited off-chain pending reconcile',
+              errorMessage: 'transferCC on-chain failed; CC held in trading account pending reconcile',
             },
           });
           this.logger.warn(
-            `PendingDelivery created for swap ${swapTx.id}: CC ${netCc} credited off-chain, on-chain delivery pending.`,
+            `PendingDelivery created for swap ${swapTx.id}: CC ${netCc} held in trading account (on-chain delivery pending, NO off-chain credit to avoid drift).`,
           );
         } catch (dbErr) {
           this.logger.error(

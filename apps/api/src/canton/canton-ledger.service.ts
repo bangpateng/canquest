@@ -527,15 +527,13 @@ export class CantonLedgerService {
     }
 
     // ── Step 1: Query sender's holdings for inputHoldingCids ───────────
-    // Dispatch: Amulet pakai queryAmuletHoldings (struktur khusus), non-CC
-    // pakai queryTokenHoldings generic (filter by instrument field).
+    // Dispatch: Amulet pakai queryAmuletHoldings (struktur khusus). Non-CC
+    // (USDCx dll) WAJIB pakai getTokenHoldingCids (InterfaceFilter) — bukan
+    // queryTokenHoldings (WildcardFilter) yang return [] untuk interface-only
+    // contract. Itu root cause swap CC→USDCx delivery gagal selama ini.
     const holdings = isAmulet
       ? await this.queryAmuletHoldings(senderPartyId)
-      : await this.queryTokenHoldings(
-          senderPartyId,
-          instrumentId,
-          effectiveAdmin,
-        );
+      : await this.getTokenHoldingCids(senderPartyId, instrumentId);
     if (holdings.length === 0) {
       return {
         ok: false,
@@ -2742,6 +2740,135 @@ export class CantonLedgerService {
   ): Promise<number> {
     const holdings = await this.queryTokenHoldingsByInterface(partyId);
     return holdings[instrumentId.toLowerCase()] ?? 0;
+  }
+
+  /**
+   * Get daftar holding contract IDs untuk 1 instrument tertentu milik party.
+   *
+   * Dipakai executeTransferFactoryTransfer (CIP-0056) untuk dapat inputHoldingCids
+   * — daftar contract yang akan dikonsumsi saat transfer. Tanpa ini, transfer
+   * gagal "Sender has no holdings".
+   *
+   * Pakai InterfaceFilter (bukan WildcardFilter yang return [] untuk USDCx).
+   * Return contractId + amount per holding supaya caller bisa sum/filter.
+   *
+   * @returns array { contractId, amount }, kosong kalau party tidak pegang.
+   */
+  async getTokenHoldingCids(
+    partyId: string,
+    instrumentId: string,
+  ): Promise<Array<{ contractId: string; amount: string }>> {
+    const holdings = await this.queryTokenHoldingsByInterfaceCids(partyId);
+    return holdings[instrumentId.toLowerCase()] ?? [];
+  }
+
+  /**
+   * Query token holdings via InterfaceFilter — return contractId + amount
+   * (variant dari queryTokenHoldingsByInterface yang return sum per instrument).
+   *
+   * Dipakai getTokenHoldingCids untuk dapat inputHoldingCids CIP-0056.
+   */
+  private async queryTokenHoldingsByInterfaceCids(
+    partyId: string,
+  ): Promise<Record<string, Array<{ contractId: string; amount: string }>>> {
+    if (!partyId) return {};
+
+    let offset: number | string = 0;
+    try {
+      const end = (await this.ledgerEnd()) as { offset?: number | string };
+      offset = end?.offset ?? 0;
+    } catch {
+      offset = 0;
+    }
+
+    const filtersByParty: Record<string, unknown> = {
+      [partyId]: {
+        cumulative: [
+          {
+            identifierFilter: {
+              InterfaceFilter: {
+                value: {
+                  interfaceId:
+                    '#splice-api-token-holding-v1:Splice.Api.Token.HoldingV1:Holding',
+                  includeInterfaceView: true,
+                  includeCreatedEventBlob: false,
+                },
+              },
+            },
+          },
+        ],
+      },
+    };
+
+    let allContracts: unknown[] = [];
+    try {
+      const res = await fetch(`${this.baseUrl}/v2/state/active-contracts`, {
+        method: 'POST',
+        headers: await this.authHeaders(),
+        body: JSON.stringify({
+          eventFormat: { filtersByParty, verbose: true },
+          activeAtOffset: offset,
+        }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (res.ok) {
+        allContracts = (await res.json()) as unknown[];
+        if (!Array.isArray(allContracts)) allContracts = [];
+      } else {
+        return {};
+      }
+    } catch {
+      return {};
+    }
+
+    const result: Record<
+      string,
+      Array<{ contractId: string; amount: string }>
+    > = {};
+    for (const entry of allContracts) {
+      if (!entry || typeof entry !== 'object') continue;
+      const wrapper = entry as Record<string, unknown>;
+      const active = wrapper.contractEntry as
+        | Record<string, unknown>
+        | undefined;
+      const jsActive = active?.JsActiveContract as
+        | Record<string, unknown>
+        | undefined;
+      const ev = (jsActive?.createdEvent ?? wrapper) as Record<
+        string,
+        unknown
+      >;
+      const cid = typeof ev.contractId === 'string' ? ev.contractId : null;
+      if (!cid) continue;
+      const args =
+        (ev.createArgument as Record<string, unknown> | undefined) ?? {};
+
+      const instNested = args.instrument as { id?: string } | undefined;
+      const instId =
+        (instNested?.id as string | undefined) ??
+        (typeof args.instrumentId === 'string'
+          ? (args.instrumentId as string)
+          : null);
+      if (!instId || instId.toLowerCase() === 'amulet') continue;
+
+      const amtObj = args.amount as Record<string, unknown> | undefined;
+      const amountStr =
+        typeof args.amount === 'string'
+          ? (args.amount as string)
+          : typeof amtObj?.initialAmount === 'string'
+            ? (amtObj.initialAmount as string)
+            : typeof amtObj?.amount === 'string'
+              ? (amtObj.amount as string)
+              : typeof args.balance === 'string'
+                ? (args.balance as string)
+                : null;
+      if (!amountStr) continue;
+
+      const id = instId.toLowerCase();
+      if (!result[id]) result[id] = [];
+      result[id].push({ contractId: cid, amount: amountStr });
+    }
+    return result;
   }
 
   /**
