@@ -14,6 +14,5 @@ export const DOCS_NAV: DocsNavItem[] = [
   { id: "quests", title: "Quests & points" },
   { id: "leaderboard", title: "Leaderboard" },
   { id: "settings", title: "Settings" },
-  { id: "fees", title: "Fees & rewards" },
   { id: "coming-soon", title: "Coming soon" },
 ];

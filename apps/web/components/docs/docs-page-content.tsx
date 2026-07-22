@@ -142,7 +142,7 @@ export function DocsPageContent() {
                 <li>Lock <strong className="font-medium text-[var(--foreground)]">30 CC</strong> from your own wallet. Your CC never leaves your wallet.</li>
                 <li>Your account is promoted to <strong className="font-medium text-[var(--foreground)]">Full access</strong> on-chain instantly — no manual approval.</li>
                 <li>Pick a lock term (e.g. 7, 15, or 30 days — options come from the server).</li>
-                <li>When the term ends, unlock and your <strong className="font-medium text-[var(--foreground)]">CC returns in full</strong>. A small network holding fee applies while locked.</li>
+                <li>When the term ends, unlock and your <strong className="font-medium text-[var(--foreground)]">CC returns in full</strong>. A small network cost applies while locked.</li>
               </UL>
               <p>
                 You manage locks from the <PathLink href="/wallet">Wallet</PathLink> menu. Some
@@ -167,7 +167,7 @@ export function DocsPageContent() {
               <UL>
                 <li>Pick a token, enter an amount (a <em>MAX</em> button fills it), and an optional memo.</li>
                 <li>Recipient can be an <strong className="font-medium text-[var(--foreground)]">@username</strong> or a raw Canton party ID (<code className="rounded bg-[var(--muted)] px-1">alice::1220…</code>).</li>
-                <li>CC sends settle instantly (preapproval path); token sends create an offer the recipient must accept. A platform fee is shown before you confirm.</li>
+                <li>CC sends settle instantly (preapproval path); token sends create an offer the recipient must accept. You see any applicable network cost before you confirm.</li>
               </UL>
 
               <p><strong className="font-medium text-[var(--foreground)]">Receive</strong></p>
@@ -177,7 +177,7 @@ export function DocsPageContent() {
 
               <p><strong className="font-medium text-[var(--foreground)]">Swap</strong></p>
               <UL>
-                <li>Swap <strong className="font-medium text-[var(--foreground)]">CC ↔ USDCX</strong> through the Cantex exchange, with a live quote showing the rate, price impact, and fees before you confirm. More pairs are coming.</li>
+                <li>Swap <strong className="font-medium text-[var(--foreground)]">CC ↔ USDCX</strong> through the Cantex exchange, with a live quote showing the rate and price impact before you confirm. More pairs are coming.</li>
               </UL>
 
               <p><strong className="font-medium text-[var(--foreground)]">Lock</strong></p>
@@ -204,14 +204,14 @@ export function DocsPageContent() {
                 then complete the social tasks and claim your reward.
               </p>
               <p><strong className="font-medium text-[var(--foreground)]">Tasks</strong> — social only: follow on X, retweet, join Telegram or Discord. Tasks unlock one at a time.</p>
-              <p><strong className="font-medium text-[var(--foreground)]">Six reward types</strong> (the reward type and its claim fee are set per campaign):</p>
+              <p><strong className="font-medium text-[var(--foreground)]">Six reward types</strong> (set per campaign):</p>
               <UL>
-                <li><strong className="font-medium text-[var(--foreground)]">CC FCFS</strong> — first-come-first-served CC. Pay a 3 CC claim fee, receive CC from the pool.</li>
-                <li><strong className="font-medium text-[var(--foreground)]">CC Raffle</strong> — admin-drawn winners claim CC. 3 CC fee.</li>
-                <li><strong className="font-medium text-[var(--foreground)]">Waitlist FCFS</strong> — first-come invite/access codes. 2 CC fee to reveal.</li>
-                <li><strong className="font-medium text-[var(--foreground)]">Waitlist Raffle</strong> — drawn invite/access codes. 2 CC fee to reveal.</li>
-                <li><strong className="font-medium text-[var(--foreground)]">Waitlist Email</strong> — submit your email for a raffle spot. Free to enter.</li>
-                <li><strong className="font-medium text-[var(--foreground)]">CC + Code Raffle</strong> — drawn winners get CC and a code together. 5 CC fee.</li>
+                <li><strong className="font-medium text-[var(--foreground)]">CC FCFS</strong> — first-come-first-served CC from the pool.</li>
+                <li><strong className="font-medium text-[var(--foreground)]">CC Raffle</strong> — admin-drawn winners receive CC.</li>
+                <li><strong className="font-medium text-[var(--foreground)]">Waitlist FCFS</strong> — first-come invite or access codes.</li>
+                <li><strong className="font-medium text-[var(--foreground)]">Waitlist Raffle</strong> — drawn invite or access codes.</li>
+                <li><strong className="font-medium text-[var(--foreground)]">Waitlist Email</strong> — submit your email for a raffle spot.</li>
+                <li><strong className="font-medium text-[var(--foreground)]">CC + Code Raffle</strong> — drawn winners get CC and a code together.</li>
               </UL>
               <p><strong className="font-medium text-[var(--foreground)]">Joining a campaign</strong> — each campaign sets its own gate: free, a CC lock, points, or either a CC lock or points.</p>
             </DocsSection>
@@ -262,23 +262,6 @@ export function DocsPageContent() {
               <p><strong className="font-medium text-[var(--foreground)]">One-step transfer</strong> — toggle CC preapproval (CIP-56) so incoming CC arrives instantly instead of as an offer you must accept. Per-token; CC is live, USDCx/CBTC coming soon.</p>
               <p><strong className="font-medium text-[var(--foreground)]">X (Twitter)</strong> — connect your handle for quest and campaign verification. Once linked, it is permanent.</p>
               <p><strong className="font-medium text-[var(--foreground)]">Sign out</strong> at the bottom.</p>
-            </DocsSection>
-
-            <DocsSection id="fees" title="Fees & rewards">
-              <p>
-                Fees are denominated in CC and settled on-chain. They keep the network and platform
-                running, and they make farming irrational.
-              </p>
-              <UL>
-                <li><strong className="font-medium text-[var(--foreground)]">Transfer fee</strong> — a small CC fee on each CC or token send, paid to the CanQuest fee account.</li>
-                <li><strong className="font-medium text-[var(--foreground)]">Claim fees</strong> — CC campaigns charge a claim fee (3 CC for CC rewards, 2 CC for code reveals, 5 CC for combined CC+code; waitlist-email is free).</li>
-                <li><strong className="font-medium text-[var(--foreground)]">Holding fee</strong> — a small network fee while your CC is locked.</li>
-                <li><strong className="font-medium text-[var(--foreground)]">Swap fees</strong> — a network fee (to the Cantex trading account) and an optional platform fee on each swap, shown in the quote before you confirm.</li>
-              </UL>
-              <p>
-                All fees and rewards are recorded on-chain and visible in your activity history with
-                explorer links.
-              </p>
             </DocsSection>
 
             <DocsSection id="coming-soon" title="Coming soon" className="border-b-0">
