@@ -1175,8 +1175,9 @@ export class SwapService {
         data: { balance: { decrement: new Decimal(params.amount) } },
       });
 
-      // 5. Transfer CC: trading account → user party (on-chain via Canton ledger).
-      //    Non-blocking: kalau gagal, tetap credit off-chain (fund safety).
+      // 5. Transfer CC: trading account → user party (via Cantex transferCC).
+      //    Cantex handle transfer on-chain. Kalau gagal, CC tetap di trading
+      //    account + PendingDelivery (on-chain only, no off-chain drift).
       let ccOnChain = false;
       try {
         await this.cantex.transferCC({
@@ -1184,8 +1185,6 @@ export class SwapService {
           amount: swapResult.outputAmount,
           instrumentId: cfg.ccInstrumentId,
           instrumentAdmin: cfg.ccInstrumentAdmin,
-          // BUG P3.1: memo 4 segmen dengan Request ID unik per swap, konsisten
-          // dengan format CC→Token delivery.
           memo: `canquest-swap|${user.cantonPartyId}|${cfg.ccInstrumentId}|${requestId}`,
         });
         ccOnChain = true;
@@ -1196,8 +1195,11 @@ export class SwapService {
           user.cantonPartyId,
         );
       } catch (err) {
-        this.logger.warn(
-          `transferCC failed, falling back to off-chain credit: ${(err as Error).message}`,
+        const errMsg = (err as Error).message;
+        this.logger.error(
+          `TOKEN_TO_CC transferCC FAILED for swap ${swapTx.id}: ${errMsg}. ` +
+            `CC ${swapResult.outputAmount} held in trading account. ` +
+            `Detail error Cantex penting untuk diagnose — paste ke chat.`,
         );
       }
 
