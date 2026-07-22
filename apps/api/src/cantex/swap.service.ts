@@ -474,31 +474,31 @@ export class SwapService {
       }
     }
 
-    // ── Non-CC: pakai CIP-0056 executeTransferFactoryTransfer langsung ──
+    // ── Non-CC: pakai cantex.transferCC (Cantex handle transfer on-chain) ──
     //
-    // Per konfirmasi Canton AI: endpoint Cantex transferCC CC-only (return 400
-    // untuk non-CC). Cara benar untuk transfer token standard (USDCx) dari
-    // trading account → user party adalah via Canton Ledger API CIP-0056
-    // (TransferFactory_Transfer). Sender = trading account (milik validator
-    // kami, non-external), operator punya CanActAs → cukup.
+    // Cantex DEX menyimpan token di trading account sebagai STATE INTERNAL POOL
+    // (AMM), BUKAN sebagai standard HoldingV1 di Canton ledger. Itu sebabnya
+    // query ACS Canton via InterfaceFilter return [NONE] untuk trading account —
+    // holding-nya gak ada di ledger Canton, ada di state internal Cantex.
     //
-    // executeTransferFactoryTransfer sudah handle: query inputHoldingCids
-    // (sekarang via InterfaceFilter, fix root cause), call registry, submit.
+    // Cara benar: biarkan Cantex handle transfer (via endpoint build/transfer +
+    // operator key sign). Cantex tahu cara move token dari pool-nya ke party
+    // user on-chain. Endpoint ini TERIMA instrumentId generic — walau namanya
+    // 'transferCC', Cantex support instrument apa pun yang ada di pool.
+    //
+    // Sebelumnya (commit CIP-0056) saya salah asumsi: kira-kira holding ada di
+    // ledger Canton. Fix sekarang: balik ke cantex.transferCC + log error
+    // spesifik supaya kalau ada masalah, jelas apa error Cantex-nya.
     try {
-      const result = await this.ledger.executeTransferFactoryTransfer({
-        senderPartyId: cfg.tradingAccountParty,
-        receiverPartyId: params.userPartyId,
-        amountCc: parseFloat(params.amount),
+      await this.cantex.transferCC({
+        receiver: params.userPartyId,
+        amount: params.amount,
         instrumentId: params.tokenId,
         instrumentAdmin: params.tokenAdmin,
-        description: `canquest-swap|${params.tokenId}|${params.requestId}`,
-        clientNonce: `${params.swapTxId}:token-delivery`,
+        memo: `canquest-swap|${params.tokenId}|${params.requestId}`,
       });
-      if (!result.ok) {
-        throw new Error(result.error ?? 'CIP-0056 transfer failed');
-      }
       this.logger.log(
-        `On-chain non-CC delivery OK: ${params.amount} ${params.tokenId} → user party via CIP-0056 (kind=${result.transferKind}, swap ${params.swapTxId})`,
+        `On-chain non-CC delivery OK: ${params.amount} ${params.tokenId} → user party via Cantex transfer (swap ${params.swapTxId})`,
       );
       // Record PendingDelivery COMPLETED untuk audit trail.
       try {
@@ -510,7 +510,7 @@ export class SwapService {
             tokenAdmin: params.tokenAdmin,
             amount: new Decimal(params.amount),
             status: 'COMPLETED',
-            transferKind: result.transferKind,
+            transferKind: 'direct',
             deliveredAt: new Date(),
           },
         });
@@ -519,8 +519,9 @@ export class SwapService {
       }
       return { ok: true };
     } catch (err) {
+      const errMsg = (err as Error).message;
       this.logger.error(
-        `Non-CC on-chain delivery FAILED via CIP-0056 (swap ${params.swapTxId}, token=${params.tokenId}): ${(err as Error).message}. ` +
+        `Non-CC delivery FAILED via Cantex transfer (swap ${params.swapTxId}, token=${params.tokenId}): ${errMsg}. ` +
           `Token tetap di trading account — caller harus catat PendingDelivery.`,
         (err as Error).stack,
       );
@@ -809,6 +810,7 @@ export class SwapService {
           `WD fee ~${networkFeeCc} CC, platform fee ${platformFeeCc} CC)`,
         ledgerTxId: `swap:${swapTx.id}:cc-out`,
         status: 'COMPLETED',
+        silent: true, // notif badge di-handle WSS handler (anti duplikat)
       });
 
       // 7. Platform fee.
@@ -1293,6 +1295,7 @@ export class SwapService {
           `WD fee ~${networkFeeCc} CC, platform fee ${platformFeeCc} CC)`,
         ledgerTxId: `swap:${swapTx.id}:cc-in`,
         status: 'COMPLETED',
+        silent: true, // notif badge di-handle WSS handler (anti duplikat)
       });
 
       // 8. Update SwapTransaction EXECUTED.

@@ -357,6 +357,12 @@ export class UsersService {
     cancelledAmountCc?: number | null;
     /** Instrument id (mis. "USDCx") bila offer yang dibatalkan adalah token non-CC. */
     cancelledInstrumentId?: string | null;
+    /** SILENT: catat history TAPI jangan push transaction:new (anti duplikat
+     *  notif badge). Dipakai swap flow — notif swap sudah di-handle WSS handler
+     *  (yang lihat delivery on-chain sebagai TRANSFER_IN). Tanpa flag ini, user
+     *  dapat 2-3 notif untuk 1 swap (SWAP_IN dari controller + TRANSFER_IN dari
+     *  handler + fee transfer). */
+    silent?: boolean;
   }) {
     const amountMicroCc = BigInt(
       Math.round(Math.abs(params.amountCc) * 1_000_000),
@@ -396,11 +402,19 @@ export class UsersService {
     // Setiap tx baru = event untuk pemiliknya. Hanya COMPLETED yang dipush
     // (PENDING/REJECTED tidak relevan untuk update UI realtime). Balance juga
     // berubah untuk tx COMPLETED → invalidasi cache balance di frontend.
+    //
+    // SILENT mode (swap flow): skip transaction:new supaya gak duplikat notif
+    // badge. Swap flow record SWAP_IN/SWAP_OUT untuk history, TAPI notif real-
+    // time di-handle WSS handler (yang lihat delivery on-chain). Tanpa silent,
+    // user dapat 2-3 notif untuk 1 swap. balance:changed tetap dipush (refresh
+    // saldo tetap perlu).
     if (tx.status === 'COMPLETED') {
-      this.realtime.push(params.userId, 'transaction:new', {
-        id: tx.id,
-        type: tx.type,
-      });
+      if (!params.silent) {
+        this.realtime.push(params.userId, 'transaction:new', {
+          id: tx.id,
+          type: tx.type,
+        });
+      }
       this.realtime.push(params.userId, 'balance:changed', null);
     }
 
