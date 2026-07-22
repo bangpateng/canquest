@@ -63,6 +63,29 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
   private static readonly PROCESSED_MAX = 10_000;
   /** Cache owner party → userId supaya tidak query DB tiap event. */
   private readonly ownerCache = new Map<string, OwnerCacheEntry>();
+  /**
+   * Cache holding yang sudah di-create → dipakai saat archived event untuk
+   * decrement balance sender. Key = contractId (unik per holding contract).
+   *
+   * Tanpa cache ini, archived event tidak tahu owner/amount/instrument (ArchivedEvent
+   * cuma bawa contractId + templateId). CC punya reconciler poll fallback, TAPI
+   * token (USDCx) TIDAK punya reconciler → cache ini WAJIB supaya sender balance
+   * turun saat holding dikonsumsi (transfer/swap).
+   *
+   * Cache miss (handler restart antara create & archive) → push realtime refetch
+   * aja (frontend refetch balance dari ledger via REST endpoint).
+   */
+  private readonly holdingCache = new Map<
+    string,
+    {
+      userId: string;
+      instrumentId: string;
+      instrumentAdmin: string;
+      amount: number;
+      cachedAt: number;
+    }
+  >();
+  private static readonly HOLDING_CACHE_MAX = 5_000;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -130,6 +153,8 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
         instrumentId: string;
         instrumentAdmin: string;
         amount: number;
+        /** Contract IDs yang menyumbang ke agregat ini (untuk isi holding cache). */
+        contractIds: string[];
       }>();
 
       for (const c of ev.created) {
@@ -151,100 +176,17 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
           const amount = parseFloat(amountStr);
           if (!Number.isFinite(amount) || amount <= 0) continue;
           ccByOwner.set(ownerPartyId, (ccByOwner.get(ownerPartyId) ?? 0) + amount);
-        } else if (
-          template.includes(':HoldingV1:Holding') ||
-          template.includes(':Holding.V0.Holding:Holding') ||
-          template.includes(':Holding:Holding')
-        ) {
-          // Token non-CC — aggregate by owner+instrument.
-          const args = c.createArgument ?? {};
-          // DEBUG DUMP: log full createArgument JSON (warn level supaya pasti
-          // muncul di pm2 logs). Ini kunci untuk lihat field name asli mainnet.
-          this.logger.warn(
-            `BalanceEventHandler: Holding create ARGUMENTS = ${JSON.stringify(args).slice(0, 500)}`,
-          );
-          // Owner extraction: coba banyak field name.
-          const ownerPartyId =
-            typeof args.owner === 'string' ? args.owner
-            : typeof args.holder === 'string' ? args.holder
-            : typeof args.account === 'string' ? args.account
-            : typeof args.party === 'string' ? args.party
-            : null;
-
-          // FALLBACK: kalau owner tidak ketemu di createArgument, pakai party
-          // dari ev.parties[] yang resolve ke user Canquest.
-          let resolvedOwnerPartyId = ownerPartyId;
-          if (!resolvedOwnerPartyId) {
-            for (const p of ev.parties) {
-              if (!p || p.startsWith('canquest:')) continue;
-              // Skip system party (DSO, validator, Cantex, Bridge-Operator).
-              if (
-                p.startsWith('DSO') ||
-                p.startsWith('canquest-validator') ||
-                p.startsWith('Cantex') ||
-                p.startsWith('Bridge-Operator') ||
-                p.startsWith('auth0_')
-              ) {
-                continue;
-              }
-              const userCheck = await this.resolveUserByParty(p);
-              if (userCheck) {
-                resolvedOwnerPartyId = p;
-                break;
-              }
-            }
-          }
-          if (!resolvedOwnerPartyId) {
-            this.logger.warn(
-              `BalanceEventHandler: Holding created tapi owner tidak ketemu. ` +
-                `createKeys=[${Object.keys(args).join(',')}] ` +
-                `eventParties=[${ev.parties.slice(0, 4).map((p) => p.split('::')[0]).join(',')}]`,
-            );
-            continue;
-          }
-
-          const instrumentObj = (args.instrument ?? args.token ?? {}) as Record<string, unknown>;
-          const instrumentId =
-            typeof instrumentObj.id === 'string' ? instrumentObj.id
-            : typeof args.instrumentId === 'string' ? args.instrumentId : null;
-          const instrumentAdmin =
-            typeof instrumentObj.admin === 'string' ? instrumentObj.admin
-            : typeof args.instrumentAdmin === 'string' ? args.instrumentAdmin : null;
-          // FALLBACK: kalau instrument tidak ketemu, pakai token known dari env
-          // (mis. USDCx dari Cantex pools). Skip kalau tetap tidak ada.
-          if (!instrumentId || !instrumentAdmin) {
-            this.logger.warn(
-              `BalanceEventHandler: Holding created tapi instrument tidak ketemu. ` +
-                `createKeys=[${Object.keys(args).join(',')}]`,
-            );
-            continue;
-          }
-          if (instrumentId.toLowerCase() === 'amulet') continue;
-          const amtObj = args.amount as Record<string, unknown> | undefined;
-          const amountStr =
-            typeof args.amount === 'string' ? args.amount
-            : typeof amtObj?.amount === 'string' ? (amtObj.amount as string)
-            : typeof amtObj?.initialAmount === 'string' ? (amtObj.initialAmount as string)
-            : typeof args.quantity === 'string' ? args.quantity
-            : null;
-          if (!amountStr) continue;
-          const amount = parseFloat(amountStr);
-          if (!Number.isFinite(amount) || amount <= 0) continue;
-          const user = await this.resolveUserByParty(resolvedOwnerPartyId);
-          if (!user) continue;
-          const key = `${user.userId}|${instrumentId.toLowerCase()}|${instrumentAdmin.toLowerCase()}`;
-          const existing = tokenByOwnerKey.get(key);
-          if (existing) {
-            existing.amount += amount;
-          } else {
-            tokenByOwnerKey.set(key, {
-              userId: user.userId,
-              username: user.username,
-              instrumentId,
-              instrumentAdmin,
-              amount,
-            });
-          }
+        } else if (this.isTokenHoldingTemplate(template)) {
+          // Token non-CC (mis. USDCx = `Utility.Registry.Holding.V0.Holding:Holding`)
+          // — aggregate by owner+instrument.
+          //
+          // BUG SEBELUMNYA: match pakai `includes(':HoldingV1:Holding')` dll. Mainnet
+          // pakai format `Utility.Registry.Holding.V0.Holding:Holding` — char pemisah
+          // sebelum "Holding:Holding" adalah TITIK (.), bukan titik dua (:). Itu
+          // sebabnya ketiga kondisi includes() LAMA gagal → USDCx holding event masuk
+          // WSS tapi branch token tidak pernah dieksekusi → balance stuck di 0.
+          // Fix: pakai isTokenHoldingTemplate() (endsWith `:Holding:Holding`).
+          await this.handleTokenHoldingCreated(c, ev, tokenByOwnerKey);
         }
       }
 
@@ -381,6 +323,10 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
 
   /**
    * Apply aggregated token increment untuk 1 owner+instrument di 1 transaksi.
+   *
+   * Juga isi holdingCache untuk setiap contractId, supaya saat archived event
+   * nanti kita bisa decrement balance sender (CC ada reconciler fallback,
+   * tapi token TIDAK — cache ini satu-satunya sumber info untuk decrement).
    */
   private async applyTokenIncrement(
     tk: {
@@ -389,6 +335,7 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
       instrumentId: string;
       instrumentAdmin: string;
       amount: number;
+      contractIds: string[];
     },
     updateId: string,
   ): Promise<void> {
@@ -426,6 +373,18 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
       );
       // Push realtime balance:changed (UI refresh wallet).
       this.realtime.push(tk.userId, 'balance:changed', null);
+
+      // Isi holdingCache untuk setiap contractId. Saat holding ini di-archive
+      // nanti (transfer keluar / swap / burn), kita bisa decrement balance
+      // user dengan info owner+instrument+amount yang sama persis.
+      for (const cid of tk.contractIds) {
+        this.putHoldingCache(cid, {
+          userId: tk.userId,
+          instrumentId: tk.instrumentId,
+          instrumentAdmin: tk.instrumentAdmin,
+          amount: tk.amount,
+        });
+      }
     } catch (err) {
       this.logger.warn(
         `BalanceEventHandler: CantexTokenBalance increment failed for ${tk.instrumentId}: ${String(err)}`,
@@ -464,13 +423,289 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // Created event handlers (balance increase)
+  // Token Holding helpers (USDCx & non-CC tokens)
   // ═══════════════════════════════════════════════════════════════════════════
-  // NOTE: handleCreatedEvent / handleAmuletCreated / handleTokenHoldingCreated
-  // sudah dihapus — logic aggregate + apply di processEvent di atas supaya
-  // 1 transaksi (1 updateId) = 1 increment + 1 notifikasi per user. Mencegah
-  // over-count + duplikat notif badge saat Canton split 1 transfer jadi
-  // multiple Amulet UTXO (output + change).
+
+  /**
+   * Cek apakah templateId = token Holding (bukan CC/Amulet).
+   *
+   * Mainnet Splice utility-registry holding: `…Utility.Registry.Holding.V0.Holding:Holding`
+   * (terverifikasi dari WSS log produksi). Cabang match LAMA pakai
+   * `includes(':HoldingV1:Holding')` dll. GAGAL karena:
+   *   - mainnet pakai `Holding.V0` (titik) bukan `HoldingV1`
+   *   - separator sebelum `Holding:Holding` di mainnet adalah TITIK (`...Holding:Holding`),
+   *     bukan titik dua (`:Holding:Holding`)
+   *
+   * Match strategy: `endsWith(':Holding:Holding')`. Ini robust terhadap prefix
+   * hash package apapun (mis. `#splice-api-token-holding-v1:...`) dan semua
+   * varian versi (V0/V1/V2). CC/Amulet tidak diakhiri string ini → aman.
+   */
+  private isTokenHoldingTemplate(templateId: string): boolean {
+    const t = templateId || '';
+    // Mainnet utility-registry holding (USDCx): `…Utility.Registry.Holding.V0.Holding:Holding`
+    if (t.endsWith(':Holding:Holding')) return true;
+    // Varian lama / alternatif (defensive).
+    if (t.includes(':HoldingV1:Holding') || t.includes(':HoldingV0:Holding')) return true;
+    return false;
+  }
+
+  /**
+   * Proses satu created token-Holding event: extract owner + instrument + amount
+   * pakai field shape yang SAMA dengan `CantonLedgerService.queryTokenHoldings`
+   * (yang sudah proven baca USDCx dari REST ACS). Lalu aggregate ke tokenByOwnerKey.
+   *
+   * Owner resolution (multi-source, urut dari paling akurat):
+   *   1. createArgument.owner / .receiver / .holder / .account / .party
+   *   2. c.signatories (signatory[0] biasanya owner)
+   *   3. c.witnessParties
+   *   4. ev.parties[] (top-level routing parties)
+   *
+   * BUG LAMA: fallback ev.parties[] skip party yg diawali `auth0_`. Tapi
+   * `auth0_<keycloakSub>` JUSTRU format keycloakSub user Canquest → resolve gagal.
+   * Fix: coba resolve SEMUA party non-system, jangan skip auth0_.
+   */
+  private async handleTokenHoldingCreated(
+    c: { contractId: string; templateId: string; createArgument?: Record<string, unknown>; signatories?: string[]; witnessParties?: string[] },
+    ev: CantonUpdateEvent,
+    tokenByOwnerKey: Map<string, {
+      userId: string;
+      username: string | null;
+      instrumentId: string;
+      instrumentAdmin: string;
+      amount: number;
+      contractIds: string[];
+    }>,
+  ): Promise<void> {
+    const args = c.createArgument ?? {};
+    const cid = c.contractId;
+
+    // ── Owner resolution (multi-source) ───────────────────────────────────
+    const ownerFromArgs = this.extractTokenOwnerParty(args);
+    let resolvedUser: { userId: string; username: string | null } | null = null;
+    let resolvedParty: string | null = ownerFromArgs;
+
+    if (resolvedParty) {
+      resolvedUser = await this.resolveUserByParty(resolvedParty);
+    }
+    // Fallback: signatories → witnessParties → ev.parties[].
+    if (!resolvedUser) {
+      const candidates = [
+        ...(c.signatories ?? []),
+        ...(c.witnessParties ?? []),
+        ...ev.parties,
+      ];
+      for (const p of candidates) {
+        if (!p || this.isSystemParty(p)) continue;
+        const u = await this.resolveUserByParty(p);
+        if (u) {
+          resolvedUser = u;
+          resolvedParty = p;
+          break;
+        }
+      }
+    }
+    if (!resolvedUser) {
+      const ownerField = ownerFromArgs ?? '(none)';
+      this.logger.warn(
+        `BalanceEventHandler: Holding created tapi owner tidak resolve ke user Canquest. ` +
+          `ownerField=${ownerField.split('::')[0]} createKeys=[${Object.keys(args).join(',')}] ` +
+          `signatories=[${(c.signatories ?? []).slice(0, 2).map((p) => p.split('::')[0]).join(',')}] ` +
+          `eventParties=[${ev.parties.slice(0, 4).map((p) => p.split('::')[0]).join(',')}]`,
+      );
+      return;
+    }
+
+    // ── Instrument resolution (mirror REST queryTokenHoldings field shapes) ──
+    const { instrumentId, instrumentAdmin } = this.extractTokenInstrument(args);
+    if (!instrumentId || !instrumentAdmin) {
+      this.logger.warn(
+        `BalanceEventHandler: Holding created tapi instrument tidak ketemu. ` +
+          `owner=${(resolvedParty ?? '').split('::')[0]} createKeys=[${Object.keys(args).join(',')}]`,
+      );
+      return;
+    }
+    if (instrumentId.toLowerCase() === 'amulet') return; // CC, bukan token
+
+    // ── Amount resolution ─────────────────────────────────────────────────
+    const amountStr = this.extractTokenAmount(args);
+    if (!amountStr) {
+      this.logger.warn(
+        `BalanceEventHandler: Holding created tapi amount tidak ketemu. ` +
+          `owner=${(resolvedParty ?? '').split('::')[0]} instrument=${instrumentId} createKeys=[${Object.keys(args).join(',')}]`,
+      );
+      return;
+    }
+    const amount = parseFloat(amountStr);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+
+    // ── Aggregate by owner+instrument ─────────────────────────────────────
+    const key = `${resolvedUser.userId}|${instrumentId.toLowerCase()}|${instrumentAdmin.toLowerCase()}`;
+    const existing = tokenByOwnerKey.get(key);
+    if (existing) {
+      existing.amount += amount;
+      existing.contractIds.push(cid);
+    } else {
+      tokenByOwnerKey.set(key, {
+        userId: resolvedUser.userId,
+        username: resolvedUser.username,
+        instrumentId,
+        instrumentAdmin,
+        amount,
+        contractIds: [cid],
+      });
+    }
+  }
+
+  /**
+   * Extract owner party dari createArgument token Holding. Coba urutan field:
+   *   owner → receiver → holder → account → party → transfer.receiver → transfer.sender
+   */
+  private extractTokenOwnerParty(args: Record<string, unknown>): string | null {
+    if (typeof args.owner === 'string') return args.owner;
+    if (typeof args.receiver === 'string') return args.receiver;
+    if (typeof args.holder === 'string') return args.holder;
+    if (typeof args.account === 'string') return args.account;
+    if (typeof args.party === 'string') return args.party;
+    // TransferOffer shape: nested di args.transfer.{sender,receiver}.
+    const transfer = args.transfer as
+      | { receiver?: string; sender?: string }
+      | undefined;
+    if (transfer) {
+      if (typeof transfer.receiver === 'string') return transfer.receiver;
+      if (typeof transfer.sender === 'string') return transfer.sender;
+    }
+    return null;
+  }
+
+  /**
+   * Extract instrument { id, admin } dari createArgument token Holding.
+   *
+   * Field shape mirror `CantonLedgerService.queryTokenHoldings` (sudah proven
+   * baca USDCx dari REST ACS di produksi). Beberapa varian:
+   *   - args.instrument = { id, admin }           (CC/Amulet style)
+   *   - args.instrument = { id, source }          (USDCx: source = admin party)
+   *   - args.instrument = { urn }                 (URN parse → id)
+   *   - args.instrumentId = { id, admin }         (registry-app style)
+   *   - args.instrumentId = "..." + args.registrar = "..."  (USDCx registrar)
+   */
+  private extractTokenInstrument(
+    args: Record<string, unknown>,
+  ): { instrumentId: string; instrumentAdmin: string } {
+    let instId = '';
+    let instAdmin = '';
+
+    // Shape 1: nested args.instrument = { id, admin, source, urn, token }
+    const instNested = args.instrument as
+      | { id?: string; admin?: string; source?: string; urn?: string; token?: string }
+      | undefined;
+    if (instNested) {
+      if (instNested.id) instId = instNested.id;
+      if (instNested.admin) instAdmin = instNested.admin;
+      if (!instAdmin && instNested.source) instAdmin = instNested.source;
+      if (!instId && instNested.token) instId = instNested.token;
+      if (!instId && instNested.urn) {
+        const parts = instNested.urn.split('::');
+        if (parts.length >= 2) instId = parts[1];
+      }
+    }
+
+    // Shape 2: args.instrumentId = { id, admin, source } atau string.
+    if (!instId) {
+      const instIdField = args.instrumentId as
+        | { id?: string; admin?: string; source?: string }
+        | string
+        | undefined;
+      if (typeof instIdField === 'object' && instIdField?.id) {
+        instId = instIdField.id;
+        instAdmin = instAdmin || instIdField.admin || instIdField.source || '';
+      } else if (typeof instIdField === 'string') {
+        instId = instIdField;
+      }
+    }
+
+    // Shape 3: flat args.instrumentAdmin + args.instrumentId (string).
+    if (!instId && typeof args.instrumentAdmin === 'string') {
+      instAdmin = instAdmin || (args.instrumentAdmin as string);
+      if (typeof args.instrumentId === 'string') {
+        instId = args.instrumentId as string;
+      }
+    }
+
+    // Shape 4: nested di args.transfer.instrumentId (TransferOffer shape).
+    if (!instId) {
+      const transfer = args.transfer as
+        | { instrumentId?: { id?: string; admin?: string; source?: string } }
+        | undefined;
+      const tInst = transfer?.instrumentId;
+      if (tInst?.id) {
+        instId = tInst.id;
+        instAdmin = instAdmin || tInst.admin || tInst.source || '';
+      }
+    }
+
+    // Shape 5: USDCx holding — args.registrar = admin party + args.label = id.
+    if (!instAdmin && typeof args.registrar === 'string') {
+      instAdmin = args.registrar as string;
+      if (!instId && typeof args.label === 'string') {
+        instId = args.label as string;
+      }
+    }
+
+    return { instrumentId: instId, instrumentAdmin: instAdmin };
+  }
+
+  /**
+   * Extract amount string dari createArgument token Holding. Coba field:
+   *   args.amount (string) → amount.initialAmount → amount.amount →
+   *   args.balance → args.quantity
+   */
+  private extractTokenAmount(args: Record<string, unknown>): string | null {
+    const amtObj = args.amount as Record<string, unknown> | undefined;
+    if (typeof args.amount === 'string') return args.amount;
+    if (typeof amtObj?.initialAmount === 'string') return amtObj.initialAmount;
+    if (typeof amtObj?.amount === 'string') return amtObj.amount;
+    if (typeof args.balance === 'string') return args.balance;
+    if (typeof args.quantity === 'string') return args.quantity;
+    return null;
+  }
+
+  /**
+   * Cek apakah party = system wallet (bukan user Canquest). System party TIDAK
+   * perlu di-resolve ke user → skip diam-diam (cegah DB lookup sia-sia + log noise).
+   *
+   * System party dikenali via prefix: `DSO`, `canquest-validator`, `Cantex`,
+   * `Bridge-Operator`, `validator-app`. User party format: `<username>::<hash>`
+   * (mis. `karel::1220...`) atau `auth0_<keycloakSub>` (mis. `auth0_007c...`).
+   *
+   * PENTING: `auth0_` BUKAN system party — itu format keycloakSub user Canquest!
+   */
+  private isSystemParty(partyId: string): boolean {
+    if (!partyId) return true;
+    if (partyId.startsWith('canquest:')) return true; // app-internal party
+    return (
+      partyId.startsWith('DSO') ||
+      partyId.startsWith('canquest-validator') ||
+      partyId.startsWith('Cantex') ||
+      partyId.startsWith('cantex::') ||
+      partyId.startsWith('Bridge-Operator') ||
+      partyId.startsWith('validator-app')
+    );
+  }
+
+  /** Simpan info holding ke cache (untuk decrement saat archived). */
+  private putHoldingCache(
+    contractId: string,
+    data: { userId: string; instrumentId: string; instrumentAdmin: string; amount: number },
+  ): void {
+    // Evict oldest kalau mendekati max.
+    if (this.holdingCache.size >= BalanceEventHandlerService.HOLDING_CACHE_MAX) {
+      const oldest = [...this.holdingCache.entries()].sort(
+        (a, b) => a[1].cachedAt - b[1].cachedAt,
+      )[0];
+      if (oldest) this.holdingCache.delete(oldest[0]);
+    }
+    this.holdingCache.set(contractId, { ...data, cachedAt: Date.now() });
+  }
 
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -479,27 +714,67 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
 
   /**
    * Handle ArchivedEvent: holding di-archive (consumed by transfer/lock/swap).
-   * Untuk Amulet → decrement owner CcBalance (outflow detected).
    *
-   * Catatan: kita tidak punya info amount + owner dari ArchivedEvent (cuma
-   * contractId + templateId). Untuk dapat amount, kita perlu lookup contract
-   * data yang sudah di-cache saat created. Karena kompleks, versi awal ini
-   * HANYA push realtime `balance:changed` (frontend refetch), tanpa decrement
-   * DB optimistic. Outflow akan ke-detect via 2 jalur:
-   *   1. recordTransaction dari controller (sendCc/swap/lock) yang sudah jalan
-   *   2. CcInboundSyncService polling (kalau enabled) yang baca ledger delta
-   * Karena WSS-only (poller OFF), kita andalkan #1 untuk outflow tracking.
+   * Untuk token (Registry Holding): **decrement balance owner** supaya saldo
+   * sender turun real-time (CC punya reconciler poll fallback, TAPI token TIDAK
+   * — satu-satunya sumber decrement token = handler ini baca holdingCache).
+   *
+   * Untuk Amulet (CC): hanya push realtime (frontend refetch), outflow tracking
+   * via CcInboundSyncService polling (CC punya reconciler sendiri).
    */
   private async handleArchivedEvent(
     a: { contractId: string; templateId: string; witnessParties?: string[] },
   ): Promise<void> {
     const template = a.templateId || '';
-    if (!template.includes(':Splice.Amulet:Amulet') && !template.includes(':Splice.Api.Token.HoldingV1:Holding')) {
-      return;
+    const isAmulet = template.includes(':Splice.Amulet:Amulet');
+    const isToken = this.isTokenHoldingTemplate(template);
+    if (!isAmulet && !isToken) return;
+
+    // ── Token: decrement balance via holdingCache ────────────────────────
+    // Saat holding USDCx di-archive (transfer keluar / swap / burn), kurangi
+    // CantexTokenBalance owner. Tanpa ini, sender balance tidak pernah turun
+    // untuk token (CC aman via reconciler poll, token TIDAK punya reconciler).
+    if (isToken) {
+      const cached = this.holdingCache.get(a.contractId);
+      if (cached) {
+        try {
+          const row = await this.prisma.cantexTokenBalance.findFirst({
+            where: {
+              userId: cached.userId,
+              instrumentId: { equals: cached.instrumentId, mode: 'insensitive' },
+              instrumentAdmin: { equals: cached.instrumentAdmin, mode: 'insensitive' },
+            },
+            select: { id: true, balance: true },
+          });
+          if (row) {
+            // Decrement, TAPI jangan di bawah 0 (safety: cached amount bisa beda
+            // dari actual kalau ada reconciliation gap).
+            const newBalance = row.balance.minus(new Decimal(cached.amount));
+            await this.prisma.cantexTokenBalance.update({
+              where: { id: row.id },
+              data: { balance: newBalance.lt(0) ? new Decimal(0) : newBalance },
+            });
+            this.logger.log(
+              `BalanceEventHandler: CantexTokenBalance -${cached.amount} ${cached.instrumentId} ` +
+                `(archive cid=${a.contractId.slice(0, 12)}…) → user=${cached.userId.slice(0, 8)}…`,
+            );
+            this.realtime.push(cached.userId, 'balance:changed', null);
+          }
+        } catch (err) {
+          this.logger.warn(
+            `BalanceEventHandler: token decrement failed cid=${a.contractId.slice(0, 12)}…: ${String(err)}`,
+          );
+        }
+        this.holdingCache.delete(a.contractId);
+        return; // sudah di-handle, skip generic witness push di bawah.
+      }
+      // Cache miss (handler restart antara create & archive, atau create dari
+      // offset lama sebelum handler start) → tidak tahu amount/owner. Fallback:
+      // push realtime ke witnessParties supaya frontend refetch balance dari
+      // REST ledger endpoint.
     }
 
-    // Witness parties = parties yang affected by archive. Push realtime ke
-    // mereka supaya frontend refetch balance.
+    // ── Generic: push realtime balance:changed ke witnessParties ─────────
     const parties = a.witnessParties ?? [];
     for (const partyId of parties) {
       if (partyId.startsWith('canquest:')) continue;
