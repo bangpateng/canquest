@@ -4,17 +4,17 @@ import { PrismaClient } from '@prisma/client';
 /**
  * Batas koneksi Prisma yang eksplisit & konsisten.
  *
- * Default Prisma = ceil(2 × numCPU + 1). Di VPS 6-core → 13 koneksi. Itu
- * terlalu banyak saat pooler Supabase (PgBouncer) punya limit ketat, dan
- * ditambah Vercel serverless yang juga connect ke DB yang sama → rebutan →
- * error P2024 (pool exhausted) → login 504.
+ * Default Prisma = ceil(2 × numCPU + 1). Di VPS 6-core → 13 koneksi. Tapi tanpa
+ * limit eksplisit, Prisma kadang pakai default CPU. Supaya konsisten, inject
+ * `connection_limit` ke DATABASE_URL saat module-load (sebelum PrismaClient
+ * construct). 10 = match dengan param di .env + aman (DB Supabase 60 slot,
+ * dipakai ~16 → masih longgar).
  *
- * Solusi: inject query param `connection_limit` ke process.env.DATABASE_URL
- * saat module-load (SEBELUM PrismaClient di-instantiate). Prisma baca URL dari
- * process.env saat runtime, jadi modifikasi ini JAMINAN limit = 5, terlepas
- * dari berapa core CPU atau apakah .env punya param ini.
+ * JANGAN terlalu kecil (mis. 5) — app punya banyak operasi concurrent
+ * (maintenance + login + WSS handler + background services) → pool habis
+ * lebih cepat dari 13 default. 10 = sweet spot.
  */
-const PRISMA_CONNECTION_LIMIT = 5;
+const PRISMA_CONNECTION_LIMIT = 10;
 
 // Mutate process.env.DATABASE_URL sekali saat module load — sebelum class
 // PrismaClient di-construct (dia baca env saat instantiation).

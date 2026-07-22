@@ -87,17 +87,17 @@ export class MaintenanceService {
       return value;
     } catch (err) {
       this.logger.warn(
-        `Gagal membaca status maintenance dari DB (pakai cache lama/fail-open): ${
+        `Gagal membaca status maintenance dari DB (cached fail-open): ${
           err instanceof Error ? err.message : String(err)
         }`,
       );
-      // JANGAN hapus cache kalau DB error. Pakai cache lama bila masih ada —
-      // ini cegah siklus "query gagal 10s → cache 5s → query gagal lagi" yang
-      // membebani pool dan memperparah login 504. Kalau belum ada cache → OFF.
-      if (this.cache) {
-        return this.cache.value;
-      }
-      return this.disabledStatus();
+      // WAJIB cache hasil fail-open supaya TIDAK retry tiap request.
+      // Bug sebelumnya: saat query gagal, cache tidak ter-set → setiap request
+      // retry query yang sama yang gagal → death spiral (pool exhaustion).
+      // Fix: cache hasil fail-open (OFF) untuk TTL durasi, baru retry setelah itu.
+      const value = this.cache?.value ?? this.disabledStatus();
+      this.cache = { value, expiresAt: now + this.ttlMs };
+      return value;
     }
   }
 
