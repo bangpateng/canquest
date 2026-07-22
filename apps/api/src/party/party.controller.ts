@@ -848,6 +848,23 @@ export class PartyController {
     }
   }
 
+  /**
+   * Alias /create-wallet → /allocate.
+   *
+   * Endpoint create-wallet yang lebih jelas namanya (semantik REST-friendly).
+   * Logic identik dengan allocateCantonParty — pakai method yang sama supaya
+   * tidak duplikasi fungsi. Frontend bisa pakai salah satu; /create-wallet
+   * lebih deskriptif untuk integrasi eksternal / dokumentasi API.
+   */
+  @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
+  @Post('create-wallet')
+  async createWalletAlias(
+    @Req() req: AuthedReq,
+    @Body() body: AllocateWalletDto,
+  ) {
+    return this.allocateCantonParty(req, body);
+  }
+
   @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
   @Post('canton-binding')
   async bindCantonParty(

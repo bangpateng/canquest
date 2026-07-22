@@ -76,12 +76,16 @@ export default function WalletPage() {
       });
   }, []);
 
-  // Skeleton awal hanya saat first-load (belum ada data sama sekali).
-  // Bila cache sessionStorage tersedia, tampilkan wallet tanpa nunggu.
-  const showInitialSkeleton =
-    meLoading && !me && !hasUsableWalletCache(readLastWalletUserId());
-
-  if (showInitialSkeleton) {
+  // FIX bug flash: saat profil masih loading (useMe belum resolve), JANGAN
+  // fallback ke <WalletSetup> (form buat-wallet). Tampilkan skeleton sampai
+  // data resolve. Sebelumnya, user yang sudah punya wallet melihat flash form
+  // buat-wallet selama ~200-500ms saat refresh → UX confusing + bisa trigger
+  // double-create.
+  //
+  // Cache sessionStorage dipakai HANYA untuk skip skeleton kalau user benar2
+  // sudah punya wallet (instant render). Tanpa cache → tunggu /api/me resolve.
+  const cachedUsable = hasUsableWalletCache(readLastWalletUserId());
+  if (meLoading && !cachedUsable && !me) {
     return <PageLoading minHeight="min-h-[60vh]" />;
   }
 
@@ -120,10 +124,17 @@ export default function WalletPage() {
         </div>
       ) : null}
 
-      {!hasUsername ? (
-        <WalletSetup onCreated={refresh} />
+      {/* Render branch: hanya ke WalletSetup kalau profil SUDAH resolve tapi
+          user emang belum punya wallet. Loading = skeleton (di atas), bukan form. */}
+      {!hasUsername || !me ? (
+        me ? (
+          <WalletSetup onCreated={refresh} />
+        ) : (
+          <PageLoading minHeight="min-h-[60vh]" />
+        )
       ) : isPlaceholder ? (
-        <WalletReconnect username={me!.username!} onConnected={refresh} />
+        // isPlaceholder implies username exists (set during onboarding step).
+        <WalletReconnect username={me.username!} onConnected={refresh} />
       ) : hasRealParty && me ? (
         <WalletDashboard me={me} onRefresh={refresh} />
       ) : (
