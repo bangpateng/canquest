@@ -2588,6 +2588,143 @@ export class CantonLedgerService {
   }
 
   /**
+   * Query token holdings via InterfaceFilter — AUTHORITATIVE on-chain read.
+   *
+   * Ini method utama untuk baca saldo token (USDCx, CBTC, dll) langsung dari
+   * ledger sesuai state on-chain TERKINI, BUKAN dari DB off-chain.
+   *
+   * KENAPA BUTUH INI:
+   *   `queryTokenHoldings()` di atas pakai WildcardFilter — tapi per konfirmasi
+   *   Canton docs, WildcardFilter TIDAK match contract yang hanya visible via
+   *   interface. Token standard (USDCx = `Utility.Registry.Holding.V0:Holding`)
+   *   terekspos via interface `HoldingV1`, BUKAN template langsung. Itu sebabnya
+   *   WildcardFilter return [] padahal holding itu ADA (dibuktikan WSS stream
+   *   lihat created/archived event untuk party tsb).
+   *
+   *   FIX: pakai InterfaceFilter dengan interface ID
+   *   `#splice-api-token-holding-v1:Splice.Api.Token.HoldingV1:Holding`.
+   *   Format `#package-name:Module:Entity` (package name reference) aman dari
+   *   masalah full-hash mainnet (tidak perlu tahu hash package).
+   *
+   * @param partyId - Canton party ID pemilik (WAJIB — filtersByParty scope per party)
+   * @returns Map instrumentId(lowercase) → total amount (sum across holdings).
+   *          Kosong {} kalau party tidak pegang token apa pun (bukan error).
+   */
+  async queryTokenHoldingsByInterface(
+    partyId: string,
+  ): Promise<Record<string, number>> {
+    if (!partyId) return {};
+
+    let offset: number | string = 0;
+    try {
+      const end = (await this.ledgerEnd()) as { offset?: number | string };
+      offset = end?.offset ?? 0;
+    } catch {
+      offset = 0;
+    }
+
+    // InterfaceFilter per Canton docs (jawaban AI Canton):
+    //   interfaceId pakai package-name reference (#splice-api-token-holding-v1)
+    //   supaya gak kena masalah full-hash mainnet.
+    const filtersByParty: Record<string, unknown> = {
+      [partyId]: {
+        cumulative: [
+          {
+            identifierFilter: {
+              InterfaceFilter: {
+                value: {
+                  interfaceId:
+                    '#splice-api-token-holding-v1:Splice.Api.Token.HoldingV1:Holding',
+                  includeInterfaceView: true,
+                  includeCreatedEventBlob: false,
+                },
+              },
+            },
+          },
+        ],
+      },
+    };
+
+    let allContracts: unknown[] = [];
+    try {
+      const res = await fetch(`${this.baseUrl}/v2/state/active-contracts`, {
+        method: 'POST',
+        headers: await this.authHeaders(),
+        body: JSON.stringify({
+          eventFormat: { filtersByParty, verbose: true },
+          activeAtOffset: offset,
+        }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (res.ok) {
+        allContracts = (await res.json()) as unknown[];
+        if (!Array.isArray(allContracts)) allContracts = [];
+      } else {
+        const text = await res.text();
+        this.logger.warn(
+          `queryTokenHoldingsByInterface ${res.status}: ${text.slice(0, 200)}`,
+        );
+        return {};
+      }
+    } catch (err) {
+      this.logger.warn(
+        `queryTokenHoldingsByInterface error: ${String(err)}`,
+      );
+      return {};
+    }
+
+    // Parse hasil: aggregate per instrumentId (case-insensitive, sum amount).
+    const result: Record<string, number> = {};
+    for (const entry of allContracts) {
+      if (!entry || typeof entry !== 'object') continue;
+      const wrapper = entry as Record<string, unknown>;
+      const active = wrapper.contractEntry as Record<string, unknown> | undefined;
+      const jsActive = active?.JsActiveContract as
+        | Record<string, unknown>
+        | undefined;
+      const ev = (jsActive?.createdEvent ?? wrapper) as Record<string, unknown>;
+      const args =
+        (ev.createArgument as Record<string, unknown> | undefined) ?? {};
+
+      // Instrument id: coba nested {id} atau flat string.
+      const instNested = args.instrument as { id?: string } | undefined;
+      const instId =
+        (instNested?.id as string | undefined) ??
+        (typeof args.instrumentId === 'string'
+          ? (args.instrumentId as string)
+          : null);
+      if (!instId) continue;
+      if (instId.toLowerCase() === 'amulet') continue; // CC, skip
+
+      // Amount: coba nested {initialAmount|amount} atau flat string.
+      const amtObj = args.amount as Record<string, unknown> | undefined;
+      const amountStr =
+        typeof args.amount === 'string'
+          ? (args.amount as string)
+          : typeof amtObj?.initialAmount === 'string'
+            ? (amtObj.initialAmount as string)
+            : typeof amtObj?.amount === 'string'
+              ? (amtObj.amount as string)
+              : typeof args.balance === 'string'
+                ? (args.balance as string)
+                : null;
+      if (!amountStr) continue;
+      const amount = parseFloat(amountStr);
+      if (!Number.isFinite(amount) || amount <= 0) continue;
+
+      const id = instId.toLowerCase();
+      result[id] = (result[id] ?? 0) + amount;
+    }
+
+    this.logger.verbose(
+      `Token InterfaceFilter query: party=${partyId.split('::')[0]} ` +
+        `found ${allContracts.length} holding contracts, ` +
+        `${Object.keys(result).length} instruments`,
+    );
+    return result;
+  }
+
+  /**
    * Query the ACS for pending transfer offers visible to a party.
    *
    * Returns both:

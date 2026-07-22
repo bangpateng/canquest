@@ -47,12 +47,32 @@ export class MaintenanceService {
   private cache: { value: MaintenanceStatus; expiresAt: number } | null = null;
   private readonly ttlMs = 5_000;
 
-  constructor(private readonly prisma: PrismaService) {}
+  /** Bypass lokal (development) — paksa status OFF walau DB bilang ON.
+   *  Dipakai saat API lokal berbagi DATABASE_URL dengan production: kita ingin
+   *  production tetap maintenance (untuk user), tapi local dev tetap jalan. */
+  private readonly localBypass =
+    process.env.MAINTENANCE_LOCAL_BYPASS === 'true' ||
+    process.env.MAINTENANCE_LOCAL_BYPASS === '1';
+
+  constructor(private readonly prisma: PrismaService) {
+    if (this.localBypass) {
+      this.logger.warn(
+        'MAINTENANCE_LOCAL_BYPASS aktif — status maintenance selalu OFF di ' +
+          'instance ini walau DB (production) mengatakan ON. Jangan aktifkan di VPS!',
+      );
+    }
+  }
 
   /**
    * Baca status maintenance (dari cache bila masih segar, atau DB).
+   *
+   * Chokepoint tunggal: guard, /public/maintenance, dan frontend SEMUA lewat
+   * sini. Jadi bypass lokal di method ini menonaktifkan SEMUA layer sekaligus.
    */
   async getStatus(): Promise<MaintenanceStatus> {
+    // Local dev bypass: paksa OFF supaya lokal tidak ikut maintenance production.
+    if (this.localBypass) return this.disabledStatus();
+
     const now = Date.now();
     if (this.cache && this.cache.expiresAt > now) {
       return this.cache.value;
