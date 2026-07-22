@@ -2752,14 +2752,49 @@ export class CantonLedgerService {
    * Pakai InterfaceFilter (bukan WildcardFilter yang return [] untuk USDCx).
    * Return contractId + amount per holding supaya caller bisa sum/filter.
    *
+   * RETRY: kasus swap CC->USDCx, delivery attempt bisa terjadi sebelum swap
+   * output settle di ACS (lag offset). Retry 3x dengan delay 3s supaya
+   * holding yang baru saja di-swap ke trading account sempat visible.
+   *
    * @returns array { contractId, amount }, kosong kalau party tidak pegang.
    */
   async getTokenHoldingCids(
     partyId: string,
     instrumentId: string,
   ): Promise<Array<{ contractId: string; amount: string }>> {
-    const holdings = await this.queryTokenHoldingsByInterfaceCids(partyId);
-    return holdings[instrumentId.toLowerCase()] ?? [];
+    const maxRetries = 3;
+    const retryDelayMs = 3_000;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const holdings = await this.queryTokenHoldingsByInterfaceCids(partyId);
+      const result = holdings[instrumentId.toLowerCase()] ?? [];
+      if (result.length > 0) {
+        if (attempt > 1) {
+          this.logger.log(
+            `getTokenHoldingCids: ${instrumentId} found ${result.length} holdings for ${partyId.split('::')[0]} on attempt ${attempt}/${maxRetries}`,
+          );
+        }
+        return result;
+      }
+      // Empty — kalau bukan attempt terakhir, tunggu lalu retry (timing/offset lag).
+      if (attempt < maxRetries) {
+        this.logger.verbose(
+          `getTokenHoldingCids: ${instrumentId} not found for ${partyId.split('::')[0]} (attempt ${attempt}/${maxRetries}), retry in ${retryDelayMs}ms...`,
+        );
+        await new Promise((r) => setTimeout(r, retryDelayMs));
+      }
+    }
+    // Final attempt tetap kosong — log WARN supaya keliatan di produksi.
+    // Bisa berarti: (a) party emang gak pegang, (b) service account gak punya
+    // read rights ke party tsb, (c) InterfaceFilter gak match untuk party tsb.
+    const allKeys = await this.queryTokenHoldingsByInterfaceCids(partyId).then(
+      (h) => Object.keys(h),
+    );
+    this.logger.warn(
+      `getTokenHoldingCids: ${instrumentId} NOT FOUND for party=${partyId.split('::')[0]} after ${maxRetries} attempts. ` +
+        `All instruments visible to this party: [${allKeys.join(',') || 'NONE'}]. ` +
+        `Kalau party pegang token tapi kosong → cek CanReadAsAnyParty rights / CanActAs trading account.`,
+    );
+    return [];
   }
 
   /**
