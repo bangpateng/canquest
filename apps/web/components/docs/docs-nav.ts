@@ -6,21 +6,14 @@ export type DocsNavItem = {
 
 export const DOCS_NAV: DocsNavItem[] = [
   { id: "introduction", title: "Introduction" },
-  { id: "integrity", title: "Anti-sybil & verification" },
-  { id: "cc-lock", title: "CC Lock & Earn access" },
   { id: "getting-started", title: "Getting started" },
-  { id: "landing-page", title: "Landing page" },
-  { id: "app-menus", title: "App menus" },
-  {
-    id: "what-you-can-do",
-    title: "What you can do",
-    children: [
-      { id: "reward-types", title: "Reward types" },
-      { id: "partner-campaigns", title: "Partner campaigns" },
-      { id: "daily-hub", title: "Daily hub" },
-      { id: "wallet-cc", title: "Wallet & CC" },
-      { id: "compete-customize", title: "Compete & customize" },
-      { id: "coming-soon", title: "Coming soon" },
-    ],
-  },
+  { id: "verification", title: "Verification & anti-sybil" },
+  { id: "cc-lock", title: "CC Lock & Earn access" },
+  { id: "wallet", title: "Wallet" },
+  { id: "earn", title: "Earn (partner campaigns)" },
+  { id: "quests", title: "Quests & points" },
+  { id: "leaderboard", title: "Leaderboard" },
+  { id: "settings", title: "Settings" },
+  { id: "fees", title: "Fees & rewards" },
+  { id: "coming-soon", title: "Coming soon" },
 ];
