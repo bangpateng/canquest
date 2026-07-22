@@ -14,9 +14,13 @@ const LEGACY_REDIRECTS: Record<string, string> = {
 };
 
 // ── Maintenance mode (server-side rewrite to /maintenance) ───────────────────
-// Cache modul-level TTL 5 detik supaya fetch tidak dibombard tiap request.
+// Cache modul-level TTL 60 detik supaya fetch tidak dibombard tiap request.
+// Maintenance status jarang berubah (toggle manual admin) → TTL panjang aman.
 let maintenanceCache: { on: boolean; expiresAt: number } | null = null;
-const MAINTENANCE_TTL_MS = 5_000;
+const MAINTENANCE_TTL_MS = 60_000;
+/** Timeout fetch maintenance — jika backend lambat, fail-open (OFF) cepat.
+ *  Ini cegah Vercel middleware hang → 504 GATEWAY_TIMEOUT saat VPS sibuk. */
+const MAINTENANCE_FETCH_TIMEOUT_MS = 3_000;
 
 async function isMaintenanceOn(request: NextRequest): Promise<boolean> {
   const now = Date.now();
@@ -26,16 +30,24 @@ async function isMaintenanceOn(request: NextRequest): Promise<boolean> {
   let on = false;
   try {
     // Origin sendiri — route /api/* di-exclude dari matcher jadi tidak rekursif.
+    // Timeout pendek + fail-open: kalau backend lambat (VPS pool penuh), jangan
+    // block login. Maintenance OFF lebih aman daripada 504 yang nge-lock semua user.
+    const controller = new AbortController();
+    const timeout = setTimeout(
+      () => controller.abort(),
+      MAINTENANCE_FETCH_TIMEOUT_MS,
+    );
     const res = await fetch(
       new URL('/api/public/maintenance', request.nextUrl.origin),
-      { cache: 'no-store' },
+      { cache: 'no-store', signal: controller.signal },
     );
+    clearTimeout(timeout);
     if (res.ok) {
       const data = (await res.json()) as { enabled?: boolean };
       on = Boolean(data.enabled);
     }
   } catch {
-    on = false; // fail-open
+    on = false; // fail-open — timeout/network error = tidak maintenance
   }
   maintenanceCache = { on, expiresAt: now + MAINTENANCE_TTL_MS };
   return on;
