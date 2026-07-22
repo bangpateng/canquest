@@ -34,18 +34,21 @@ const DEFAULT_MESSAGE =
 /**
  * Sumber kebenaran tunggal untuk status maintenance.
  *
- * Cache in-memory TTL 5 detik supaya guard (yang jalan di setiap request) tidak
- * membombardir DB. TTL pendek cukup karena toggle hanya dilakukan admin manual.
+ * Cache in-memory TTL 60 detik supaya guard (yang jalan di setiap request) tidak
+ * membombardir DB. Maintenance status jarang berubah (toggle manual admin) →
+ * TTL panjang aman + hemat koneksi DB.
  *
- * FAIL-OPEN: bila DB error saat membaca → anggap OFF, supaya admin tetap bisa
- * login & memperbaiki situasi (tidak pernah terkunci keluar dari panel).
+ * FAIL-OPEN: bila DB error saat membaca → pakai cache lama bila ada (jangan
+ * hapus cache), supaya saat DB sibuk/timeout kita tidak terus-terusan retry
+ * query yang gagal (itulah yang bikin pool makin penuh → login 504). Kalau
+ * belum ada cache sama sekali → anggap OFF (fail-open).
  */
 @Injectable()
 export class MaintenanceService {
   private readonly logger = new Logger(MaintenanceService.name);
   /** Cache snapshot + timestamp kadaluarsa (ms). */
   private cache: { value: MaintenanceStatus; expiresAt: number } | null = null;
-  private readonly ttlMs = 5_000;
+  private readonly ttlMs = 60_000;
 
   /** Bypass lokal (development) — paksa status OFF walau DB bilang ON.
    *  Dipakai saat API lokal berbagi DATABASE_URL dengan production: kita ingin
@@ -78,18 +81,24 @@ export class MaintenanceService {
       return this.cache.value;
     }
 
-    const value = await this.readFromDb().catch((err) => {
-      this.logger.error(
-        `Gagal membaca status maintenance dari DB (fail-open = OFF): ${
+    try {
+      const value = await this.readFromDb();
+      this.cache = { value, expiresAt: now + this.ttlMs };
+      return value;
+    } catch (err) {
+      this.logger.warn(
+        `Gagal membaca status maintenance dari DB (pakai cache lama/fail-open): ${
           err instanceof Error ? err.message : String(err)
         }`,
       );
-      // Fail-open: anggap OFF.
+      // JANGAN hapus cache kalau DB error. Pakai cache lama bila masih ada —
+      // ini cegah siklus "query gagal 10s → cache 5s → query gagal lagi" yang
+      // membebani pool dan memperparah login 504. Kalau belum ada cache → OFF.
+      if (this.cache) {
+        return this.cache.value;
+      }
       return this.disabledStatus();
-    });
-
-    this.cache = { value, expiresAt: now + this.ttlMs };
-    return value;
+    }
   }
 
   /**
