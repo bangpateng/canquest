@@ -158,11 +158,56 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
         ) {
           // Token non-CC — aggregate by owner+instrument.
           const args = c.createArgument ?? {};
+          // DEBUG DUMP: log top-level keys createArgument untuk template
+          // Holding.V0 supaya kelihatan field name asli mainnet (mis. owner
+          // vs holder vs party). Lewat setelah field mapping verified.
+          this.logger.debug(
+            `BalanceEventHandler: Holding create keys=[${Object.keys(args).join(',')}]`,
+          );
+          // Owner extraction: coba banyak field name (mainnet bisa beda dari spec).
+          // Utility.Registry.Holding.V0 kemungkinan pakai "owner" atau "holder".
           const ownerPartyId =
             typeof args.owner === 'string' ? args.owner
+            : typeof args.holder === 'string' ? args.holder
             : typeof args.account === 'string' ? args.account
+            : typeof args.party === 'string' ? args.party
             : null;
-          if (!ownerPartyId) continue;
+
+          // FALLBACK: kalau owner tidak ketemu di createArgument, pakai party
+          // dari ev.parties[] yang resolve ke user Canquest (mis. canquests::).
+          // Ini cover skenario createArgument field name beda sama specc cc.
+          let resolvedOwnerPartyId = ownerPartyId;
+          if (!resolvedOwnerPartyId) {
+            for (const p of ev.parties) {
+              if (!p || p.startsWith('canquest:')) continue;
+              // Skip system party (DSO, validator, Cantex, Bridge-Operator).
+              // User party format = "<username>::1220..." (bukan DSO::).
+              if (
+                p.startsWith('DSO') ||
+                p.startsWith('canquest-validator') ||
+                p.startsWith('Cantex') ||
+                p.startsWith('Bridge-Operator') ||
+                p.startsWith('auth0_') // sub Keycloak, resolve via resolveUserByParty
+              ) {
+                continue;
+              }
+              const userCheck = await this.resolveUserByParty(p);
+              if (userCheck) {
+                resolvedOwnerPartyId = p;
+                break;
+              }
+            }
+          }
+          if (!resolvedOwnerPartyId) {
+            this.logger.warn(
+              `BalanceEventHandler: Holding created tapi owner tidak ketemu. ` +
+                `template=${template.split(':').slice(-2).join(':')} ` +
+                `createKeys=[${Object.keys(args).join(',')}] ` +
+                `eventParties=[${ev.parties.slice(0, 4).map((p) => p.split('::')[0]).join(',')}]`,
+            );
+            continue;
+          }
+
           const instrumentObj = (args.instrument ?? args.token ?? {}) as Record<string, unknown>;
           const instrumentId =
             typeof instrumentObj.id === 'string' ? instrumentObj.id
@@ -170,7 +215,15 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
           const instrumentAdmin =
             typeof instrumentObj.admin === 'string' ? instrumentObj.admin
             : typeof args.instrumentAdmin === 'string' ? args.instrumentAdmin : null;
-          if (!instrumentId || !instrumentAdmin) continue;
+          // FALLBACK: kalau instrument tidak ketemu, pakai token known dari env
+          // (mis. USDCx dari Cantex pools). Skip kalau tetap tidak ada.
+          if (!instrumentId || !instrumentAdmin) {
+            this.logger.warn(
+              `BalanceEventHandler: Holding created tapi instrument tidak ketemu. ` +
+                `createKeys=[${Object.keys(args).join(',')}]`,
+            );
+            continue;
+          }
           if (instrumentId.toLowerCase() === 'amulet') continue;
           const amtObj = args.amount as Record<string, unknown> | undefined;
           const amountStr =
@@ -182,7 +235,7 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
           if (!amountStr) continue;
           const amount = parseFloat(amountStr);
           if (!Number.isFinite(amount) || amount <= 0) continue;
-          const user = await this.resolveUserByParty(ownerPartyId);
+          const user = await this.resolveUserByParty(resolvedOwnerPartyId);
           if (!user) continue;
           const key = `${user.userId}|${instrumentId.toLowerCase()}|${instrumentAdmin.toLowerCase()}`;
           const existing = tokenByOwnerKey.get(key);
