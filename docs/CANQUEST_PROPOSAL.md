@@ -64,6 +64,7 @@ Core capabilities:
 - Daily quest hub with server-verified tasks (social, quizzes, check-ins, on-chain transaction detection)
 - Partner campaign engine (on-chain CC payouts, invite/access codes, waitlist slots, FCFS and raffle draws)
 - Canton wallet (balance, send/receive/lock/unlock, invite-gated creation)
+- **Cantex swap** — swap CC for supported tokens (e.g. USDCX) directly via the Cantex decentralized exchange, on-network and non-custodial
 - Dashboard, transaction history with CantonScan integrity, leaderboard, and referrals
 - Partner toolchain for campaign creation, reward inventory, winner draws, and on-chain distribution
 
@@ -99,14 +100,20 @@ A measurable, usage-tied contribution to ecosystem growth. CanQuest's revenue sc
 CanQuest has a durable, usage-based revenue model — all denominated in CC, all on-chain, all auditable.
 
 ### Claim Fees
-Every reward claim carries a small CC fee, settled on-chain via Canton's transfer standard.
+Every reward claim carries a small CC fee, settled on-chain via Canton's transfer standard and recorded to the CanQuest fee account.
 - Transaction revenue is tied to real campaign activity, not speculation.
 - Fee logic is attached to genuine utility.
 
 ### Transfer Fees
-A platform fee on standard CC transfers between wallets.
+A platform fee on standard CC transfers between wallets, settled on-chain to the CanQuest fee account.
 - Revenue from everyday wallet usage.
 - A simple recurring revenue layer.
+
+### Swap Fees
+Swaps routed through the Cantex DEX carry a two-part fee:
+- A **network fee** covers Cantex execution and token withdrawal, settled to the Cantex trading account.
+- A **platform fee** on each swap is settled on-chain to the CanQuest fee account.
+- Revenue scales with genuine trading volume on the Canton network.
 
 ### Featured App Rewards
 CanQuest participates in Canton's validator-side App Reward mechanism, earning CC proportional to genuine on-chain activity.
@@ -124,6 +131,9 @@ CanQuest's technical value is not the quest UI. The real differentiation is the 
 
 ### Non-Custodial CC Locking
 Participation is gated by Canton's native `LockedAmulet` primitive. The user's CC never leaves their wallet, yet the network earns a holding fee while it is locked. This turns commitment into both a Sybil-resistant signal and a network revenue source.
+
+### Cantex DEX Integration
+Swaps settle against the Cantex decentralized exchange using Canton transfer primitives, with quote preview, holding-fee-aware execution, automatic refund on timeout, and PendingDelivery tracking for any failed token delivery. Every swap moves CC on-network for a genuine reason and feeds directly into the fee model above.
 
 ### DAML-Enforced Reward Settlement
 Campaign state, fee collection, reward delivery, and audit trails are enforced on-ledger via DAML smart contracts — not calculated on a front-end. Reward rules cannot be bypassed from the client.
@@ -205,6 +215,7 @@ Current readiness includes:
 - full product flow exercised by the core team with real CC and real party identities;
 - wallet creation, CC locking, daily quests, on-chain reward claims, and DAML audit trails;
 - partner campaign creation and reward distribution;
+- Cantex DEX swap (CC ↔ USDCX) live, with more pairs rolling out progressively;
 - transaction history with CantonScan integrity;
 - multiple internal security reviews completed.
 
@@ -320,4 +331,4 @@ The objective is to make CanQuest one of the practical user-growth gateways into
 
 ---
 
-*Prepared June 2026.*
+*Prepared June 2026. Revised July 2026.*
