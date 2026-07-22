@@ -43,9 +43,11 @@ const DEFAULT_MESSAGE =
 @Injectable()
 export class MaintenanceService {
   private readonly logger = new Logger(MaintenanceService.name);
-  /** Cache snapshot + timestamp kadaluarsa (ms). */
+  /** Cache snapshot + timestamp kadaluarsa (ms).
+   *  60 detik: maintenance status jarang berubah (toggle manual admin). TTL
+   *  panjang kurangi query DB 12x vs TTL 5s — kurangi beban Prisma pool. */
   private cache: { value: MaintenanceStatus; expiresAt: number } | null = null;
-  private readonly ttlMs = 5_000;
+  private readonly ttlMs = 60_000;
 
   /** Bypass lokal (development) — paksa status OFF walau DB bilang ON.
    *  Dipakai saat API lokal berbagi DATABASE_URL dengan production: kita ingin
