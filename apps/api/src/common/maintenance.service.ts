@@ -34,21 +34,18 @@ const DEFAULT_MESSAGE =
 /**
  * Sumber kebenaran tunggal untuk status maintenance.
  *
- * Cache in-memory TTL 60 detik supaya guard (yang jalan di setiap request) tidak
- * membombardir DB. Maintenance status jarang berubah (toggle manual admin) →
- * TTL panjang aman + hemat koneksi DB.
+ * Cache in-memory TTL 5 detik supaya guard (yang jalan di setiap request) tidak
+ * membombardir DB. TTL pendek cukup karena toggle hanya dilakukan admin manual.
  *
- * FAIL-OPEN: bila DB error saat membaca → pakai cache lama bila ada (jangan
- * hapus cache), supaya saat DB sibuk/timeout kita tidak terus-terusan retry
- * query yang gagal (itulah yang bikin pool makin penuh → login 504). Kalau
- * belum ada cache sama sekali → anggap OFF (fail-open).
+ * FAIL-OPEN: bila DB error saat membaca → anggap OFF, supaya admin tetap bisa
+ * login & memperbaiki situasi (tidak pernah terkunci keluar dari panel).
  */
 @Injectable()
 export class MaintenanceService {
   private readonly logger = new Logger(MaintenanceService.name);
   /** Cache snapshot + timestamp kadaluarsa (ms). */
   private cache: { value: MaintenanceStatus; expiresAt: number } | null = null;
-  private readonly ttlMs = 60_000;
+  private readonly ttlMs = 5_000;
 
   /** Bypass lokal (development) — paksa status OFF walau DB bilang ON.
    *  Dipakai saat API lokal berbagi DATABASE_URL dengan production: kita ingin
@@ -81,24 +78,18 @@ export class MaintenanceService {
       return this.cache.value;
     }
 
-    try {
-      const value = await this.readFromDb();
-      this.cache = { value, expiresAt: now + this.ttlMs };
-      return value;
-    } catch (err) {
-      this.logger.warn(
-        `Gagal membaca status maintenance dari DB (cached fail-open): ${
+    const value = await this.readFromDb().catch((err) => {
+      this.logger.error(
+        `Gagal membaca status maintenance dari DB (fail-open = OFF): ${
           err instanceof Error ? err.message : String(err)
         }`,
       );
-      // WAJIB cache hasil fail-open supaya TIDAK retry tiap request.
-      // Bug sebelumnya: saat query gagal, cache tidak ter-set → setiap request
-      // retry query yang sama yang gagal → death spiral (pool exhaustion).
-      // Fix: cache hasil fail-open (OFF) untuk TTL durasi, baru retry setelah itu.
-      const value = this.cache?.value ?? this.disabledStatus();
-      this.cache = { value, expiresAt: now + this.ttlMs };
-      return value;
-    }
+      // Fail-open: anggap OFF.
+      return this.disabledStatus();
+    });
+
+    this.cache = { value, expiresAt: now + this.ttlMs };
+    return value;
   }
 
   /**
