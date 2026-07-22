@@ -4,7 +4,6 @@ import { ArrowDownLeft, ArrowUpRight, CheckCircle2, X } from "lucide-react";
 
 import { TransactionDetailContent } from "@/components/app/wallet/transaction-detail-content";
 import type { TransactionDetail } from "@/components/app/wallet/transaction-detail-view";
-import type { TxItem } from "@/components/app/wallet/transactions-view";
 import { iconButtonClass } from "@/lib/ui/ui-button-styles";
 import { cn } from "@/lib/utils/utils";
 import { useTransactionDetail } from "@/lib/hooks/use-transaction-detail";
@@ -16,73 +15,24 @@ type TransactionDetailModalProps = {
   subtitle?: string;
   /** Caller's Canton party ID — used to decide which address is "You" and IN vs OUT. */
   partyId?: string | null;
-  /**
-   * On-chain item. When provided, the receipt is built directly from this item
-   * and the DB is NOT queried — on-chain ids do not exist in the database and
-   * would otherwise 404 ("Transaction not found").
-   */
-  onchainTx?: TxItem | null;
   onClose: () => void;
 };
 
-/** Build a TransactionDetail straight from an on-chain TxItem (no DB round-trip). */
-function buildDetailFromTxItem(tx: TxItem): TransactionDetail {
-  // Event id untuk link explorer: preferensi eventId (Modo), fallback
-  // cantonUpdateId / ledgerTxId.
-  const eventId = tx.eventId ?? tx.cantonUpdateId ?? tx.ledgerTxId ?? null;
-  return {
-    id: tx.id,
-    type: tx.type,
-    amountMicroCc: tx.amountMicroCc,
-    description: tx.description,
-    referenceId: tx.referenceId,
-    counterparty: tx.counterparty ?? null,
-    ledgerContractId: tx.ledgerTxId,
-    cantonUpdateId: tx.cantonUpdateId ?? null,
-    settledAt: tx.settledAt,
-    createdAt: tx.createdAt,
-    cantonPartyId: tx.partyId ?? null,
-    cantonScanUrl: tx.cantonScanUrl ?? null,
-    onChainSettled: tx.source === "onchain" || Boolean(tx.settledAt),
-    ledgerEvents: [],
-    ledgerFetchError: null,
-    networkFeeMicroCc: tx.networkFeeMicroCc ?? null,
-    round: tx.round ?? null,
-    usdEstimate: tx.usdEstimate ?? null,
-    senderAddress: tx.senderAddress ?? null,
-    receiverAddress: tx.receiverAddress ?? null,
-    eventId,
-    isInternalMarker: tx.isInternalMarker ?? false,
-    status: tx.status ?? "COMPLETED",
-    // Token-aware fields (pass-through dari TxItem; null untuk CC murni).
-    instrumentId: tx.instrumentId ?? null,
-    amountDecimal: tx.amountDecimal ?? null,
-  };
-}
-
-
-/** Same explorer UI as /transactions/[id], in a dialog (e.g. after Send CC). */
+/** Same explorer UI as /transactions/[id], in a dialog (e.g. after Send CC).
+ *  Detail selalu di-fetch dari DB by transactionId (list is DB-only). */
 export function TransactionDetailModal({
   open,
   transactionId,
   title,
   subtitle,
   partyId = null,
-  onchainTx = null,
   onClose,
 }: TransactionDetailModalProps) {
-  // Only fetch from the DB when we don't already have an on-chain item to render.
-  const shouldFetch = open && !onchainTx;
-  const { detail: fetchedDetail, loading: fetchLoading, error: fetchError } =
-    useTransactionDetail(shouldFetch ? transactionId : null);
+  const { detail, loading, error } = useTransactionDetail(
+    open ? transactionId : null,
+  );
 
   if (!open) return null;
-
-  const detail: TransactionDetail | null = onchainTx
-    ? buildDetailFromTxItem(onchainTx)
-    : fetchedDetail;
-  const loading = onchainTx ? false : fetchLoading;
-  const error = onchainTx ? null : fetchError;
 
   // Decide direction from the detail. Defaults to "sent" until detail loads
   // (most modal openers are post-send), but flips to "received" for TRANSFER_IN / TOKEN_TRANSFER_IN.
@@ -91,11 +41,7 @@ export function TransactionDetailModal({
     detail?.type === "TOKEN_TRANSFER_IN";
 
   const headerTitle = title ?? (isIn ? "Transfer received" : "Transfer sent");
-  const headerSubtitle =
-    subtitle ??
-    (isIn
-      ? ""
-      : "");
+  const headerSubtitle = subtitle ?? "";
 
   return (
     <div

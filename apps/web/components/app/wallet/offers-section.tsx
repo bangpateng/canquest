@@ -85,73 +85,24 @@ export function receiverDisplay(offer: OfferItem): string {
  * pemilik tombol (wallet-actions) agar tahu apakah perlu menampilkan badge.
  * setOffers tetap disediakan untuk optimistic remove lokal (accept/reject).
  */
-export function useOffers() {
-  const queryClient = useQueryClient();
-
-  const query = useQuery({
-    queryKey: queryKeys.party.offers,
-    queryFn: async (): Promise<{ items: OfferItem[]; error: string | null }> => {
-      try {
-        const res = await fetch("/api/party/offers", { credentials: "include" });
-        const data = (await res.json()) as OffersResponse;
-        if (!res.ok) {
-          return { items: [], error: data.message ?? `Server error (HTTP ${res.status}).` };
-        }
-        return { items: data.offers ?? [], error: null };
-      } catch {
-        return { items: [], error: "Network error. Check your connection." };
-      }
-    },
-    staleTime: 30_000,
-    // Real-time via SSE `offer:new` (lihat use-realtime.ts). Safety-net polling
-    // 5 menit kalau SSE putus (network glitch, browser sleep).
-    refetchInterval: 300_000,
-    refetchOnWindowFocus: true,
-    retry: 2,
-  });
-
-  const data = query.data;
-  const offers = data?.items ?? [];
-  const error = data?.error ?? null;
-
-  /** Optimistic remove lokal (accept/reject) — update cache react-query. */
-  const setOffers = useCallback(
-    (updater: (prev: OfferItem[]) => OfferItem[]) => {
-      queryClient.setQueryData<{ items: OfferItem[]; error: string | null } | undefined>(
-        queryKeys.party.offers,
-        (prev) => {
-          const items = prev?.items ?? [];
-          return { items: updater(items), error: null };
-        },
-      );
-    },
-    [queryClient],
-  );
-
-  const refresh = useCallback(async () => {
-    await queryClient.invalidateQueries({ queryKey: queryKeys.party.offers });
-    const latest = queryClient.getQueryData<{ items: OfferItem[] } | undefined>(
-      queryKeys.party.offers,
-    );
-    return latest?.items.length ?? 0;
-  }, [queryClient]);
-
-  return { offers, loading: query.isPending, error, refresh, setOffers };
-}
-
 /**
- * Hook: fetch & re-fetch OUTGOING (sent) pending offers — dipakai tab Sent
- * di modal Offers (tombol Withdraw). Mirror useOffers tapi query key terpisah
- * (queryKeys.party.sentOffers) + fetch ?direction=outgoing.
+ * Internal hook parameterized — dipakai useOffers (incoming) + useSentOffers
+ * (outgoing). Sebelumnya 2 hook nyaris identik (~120 barang duplikat).
+ * Sekarang 1 implementasi, 2 thin wrapper dengan return shape yang sama
+ * persis (caller gak perlu diubah).
  */
-export function useSentOffers() {
+function useOffersList(options: {
+  queryKey: readonly unknown[];
+  /** Query param untuk direction: '' (incoming/default) atau '?direction=outgoing'. */
+  directionParam: string;
+}) {
   const queryClient = useQueryClient();
 
   const query = useQuery({
-    queryKey: queryKeys.party.sentOffers,
+    queryKey: options.queryKey,
     queryFn: async (): Promise<{ items: OfferItem[]; error: string | null }> => {
       try {
-        const res = await fetch("/api/party/offers?direction=outgoing", {
+        const res = await fetch(`/api/party/offers${options.directionParam}`, {
           credentials: "include",
         });
         const data = (await res.json()) as OffersResponse;
@@ -175,36 +126,58 @@ export function useSentOffers() {
   });
 
   const data = query.data;
-  const sentOffers = data?.items ?? [];
-  const sentError = data?.error ?? null;
+  const items = data?.items ?? [];
+  const error = data?.error ?? null;
 
-  const setSentOffers = useCallback(
+  /** Optimistic remove lokal (accept/reject) — update cache react-query. */
+  const setOffers = useCallback(
     (updater: (prev: OfferItem[]) => OfferItem[]) => {
       queryClient.setQueryData<{ items: OfferItem[]; error: string | null } | undefined>(
-        queryKeys.party.sentOffers,
+        options.queryKey,
         (prev) => {
           const items = prev?.items ?? [];
           return { items: updater(items), error: null };
         },
       );
     },
-    [queryClient],
+    [queryClient, options.queryKey],
   );
 
-  const refreshSentOffers = useCallback(async () => {
-    await queryClient.invalidateQueries({ queryKey: queryKeys.party.sentOffers });
+  const refresh = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: options.queryKey });
     const latest = queryClient.getQueryData<{ items: OfferItem[] } | undefined>(
-      queryKeys.party.sentOffers,
+      options.queryKey,
     );
     return latest?.items.length ?? 0;
-  }, [queryClient]);
+  }, [queryClient, options.queryKey]);
 
+  return { items, loading: query.isPending, error, refresh, setOffers };
+}
+
+export function useOffers() {
+  const { items, loading, error, refresh, setOffers } = useOffersList({
+    queryKey: queryKeys.party.offers,
+    directionParam: "",
+  });
+  return { offers: items, loading, error, refresh, setOffers };
+}
+
+/**
+ * Hook: fetch & re-fetch OUTGOING (sent) pending offers — dipakai tab Sent
+ * di modal Offers (tombol Withdraw). Mirror useOffers tapi query key terpisah
+ * (queryKeys.party.sentOffers) + fetch ?direction=outgoing.
+ */
+export function useSentOffers() {
+  const { items, loading, error, refresh, setOffers } = useOffersList({
+    queryKey: queryKeys.party.sentOffers,
+    directionParam: "?direction=outgoing",
+  });
   return {
-    sentOffers,
-    loading: query.isPending,
-    error: sentError,
-    refresh: refreshSentOffers,
-    setOffers: setSentOffers,
+    sentOffers: items,
+    loading,
+    error,
+    refresh,
+    setOffers,
   };
 }
 

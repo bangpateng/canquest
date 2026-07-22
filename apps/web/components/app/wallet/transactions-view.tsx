@@ -636,14 +636,11 @@ export function TransactionsView({
         )}
       </div>
 
-      {/* Transaction Detail Modal.
-          List is DB-only, so onchainTx is always null here. The prop is kept
-          for the component contract; DB items fetch detail as before. */}
+      {/* Transaction Detail Modal — list is DB-only, modal fetches detail by id. */}
       <TransactionDetailModal
         open={modalTx !== null}
         transactionId={modalTx?.id ?? null}
         partyId={partyId ?? null}
-        onchainTx={modalTx?.source === "onchain" ? modalTx : null}
         onClose={() => setModalTx(null)}
       />
 
