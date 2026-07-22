@@ -3,6 +3,7 @@ import { CantonSection } from "@/components/landing/canton-section";
 import { FeaturesSection } from "@/components/landing/features-section";
 import { LandingHero } from "@/components/landing/hero";
 import { LockSection } from "@/components/landing/lock-section";
+import { SwapCantexSection } from "@/components/landing/swap-cantex-section";
 
 export default function MarketingHomePage() {
   return (
@@ -11,6 +12,7 @@ export default function MarketingHomePage() {
       <LockSection />
       <CantonSection />
       <AppOverviewSection />
+      <SwapCantexSection />
       <FeaturesSection />
     </>
   );

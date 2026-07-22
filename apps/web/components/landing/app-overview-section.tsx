@@ -14,7 +14,7 @@ const menus: { icon: LucideIcon; title: string; description: string }[] = [
   { icon: LayoutGrid, title: "Overview", description: "Dashboard, balance & activity" },
   { icon: Sparkles, title: "Earn", description: "Early access to partner projects" },
   { icon: Gift, title: "Quests", description: "Daily verified tasks" },
-  { icon: Wallet, title: "Wallet", description: "Canton party ID & lock CC" },
+  { icon: Wallet, title: "Wallet", description: "Send, swap & lock CC" },
   { icon: Trophy, title: "Leaderboard", description: "Rank among real users" },
   { icon: Settings, title: "Settings", description: "Account & referral link" },
 ];

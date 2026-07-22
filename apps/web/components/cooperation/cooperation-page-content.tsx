@@ -1,9 +1,11 @@
 import {
+  ArrowLeftRight,
   CalendarDays,
   Gift,
   Rocket,
   Sparkles,
   Ticket,
+  Trophy,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -37,10 +39,22 @@ const OFFERINGS: { icon: LucideIcon; title: string; description: string }[] = [
       "CC payouts, invite codes, access codes, waitlist slots, raffles, and FCFS claims — configured per campaign.",
   },
   {
+    icon: ArrowLeftRight,
+    title: "Built-in on-chain swap",
+    description:
+      "CC you distribute is immediately usable — users can swap it for tokens like USDCx through the Cantex exchange without leaving CanQuest.",
+  },
+  {
+    icon: Trophy,
+    title: "Leaderboard reach",
+    description:
+      "Your campaign activity feeds the weekly, monthly, and all-time leaderboards — giving top participants extra visibility and a reason to engage deeper.",
+  },
+  {
     icon: Users,
     title: "High-intent, committed audience",
     description:
-      "Reach users who have already locked CC on-chain to earn Full access — real participants who put skin in the game, not free-riders or bots.",
+      "Reach users who have locked CC on-chain or spent earned points to reach Full access — real participants who put skin in the game, not free-riders or bots.",
   },
 ];
 
@@ -207,7 +221,7 @@ export function CooperationPageContent() {
                   <ul className="list-disc space-y-1 pl-5">
                     <li>
                       <strong className="font-medium text-[var(--foreground)]">CC (Canton Coin)</strong>{" "}
-                      — on-chain delivery to the user&apos;s Canton wallet
+                      — on-chain delivery to the user&apos;s Canton wallet, swappable for USDCx in-app
                     </li>
                     <li>
                       <strong className="font-medium text-[var(--foreground)]">Invite codes</strong>{" "}
@@ -220,8 +234,8 @@ export function CooperationPageContent() {
                     <li>Lottery entries, waitlist slots, and first-come-first-served claims</li>
                   </ul>
                   <p>
-                    Helping users arrive early is a core value — codes and limited slots reward
-                    participants who complete quests quickly.
+                    Joining a campaign can be free, require a CC lock, or cost earned points — you
+                    choose the signal strength per event.
                   </p>
                 </CooperationSubsection>
               </div>

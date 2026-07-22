@@ -31,21 +31,22 @@ const APP_MENUS: MenuItem[] = [
     path: "/overview",
     summary: "Your home dashboard after sign-in.",
     details: [
-      "See your CC balance and total quest points at a glance.",
-      "Track weekly rank and recent activity.",
-      "Jump quickly to Earn campaigns or Quest tasks.",
+      "Profile card with your display name, username, and weekly rank.",
+      "CC holdings, spendable (net) points, and total earned.",
+      "Activity stats: tasks completed, campaigns completed, and on-chain transactions.",
     ],
   },
   {
     icon: Sparkles,
     title: "Earn",
     path: ROUTES.campaignQuests,
-    summary: "Partner campaigns with CC, invite codes, and early-access rewards.",
+    summary: "Partner campaigns with CC, codes, and early-access rewards.",
     details: [
-      "Browse live partner missions and open a campaign to see its tasks.",
-      "Complete required steps (social follows, quizzes, forms, and more).",
-      "Claim CC payouts, invite codes, or access codes for Canton ecosystem projects.",
-      "Get waitlist spots, raffle entries, or FCFS slots — arrive before the wider public.",
+      "Browse active, upcoming, and ended partner campaigns; open one to see its tasks.",
+      "Complete social tasks (follow, retweet, join), then claim your reward.",
+      "Reward types: FCFS CC, raffle/draw CC, invite codes, and CC + code combos.",
+      "CC claims settle on-chain with a small claim fee; codes are revealed in-app.",
+      "Joining may require a CC lock, points, or be free — set per campaign.",
     ],
     note: "Requires a Canton wallet before you can participate.",
   },
@@ -53,46 +54,50 @@ const APP_MENUS: MenuItem[] = [
     icon: Gift,
     title: "Quests",
     path: ROUTES.earnHub,
-    summary: "CanQuest daily hub — earn points from recurring tasks.",
+    summary: "Daily hub — earn points from recurring verified tasks.",
     details: [
-      "Daily check-in with streak milestones for bonus points.",
-      "Social tasks (Twitter, Telegram, Discord) and quizzes.",
-      "Redeem earned points for CC, invite codes, access codes, or other catalog rewards.",
-      "Invite friends with your referral link to earn points per verified signup.",
+      "Daily check-in and social tasks (Twitter, Telegram, Discord) plus quizzes.",
+      "On-chain tasks: send CC, send tokens, swap, or lock CC for points.",
+      "Tasks unlock one at a time; some reset every 24h to farm more points.",
+      "Share your referral link — earn points for each friend who verifies and connects X.",
     ],
-    note: "Requires a Canton wallet to submit tasks and redeem rewards.",
+    note: "Requires a Canton wallet to submit and complete on-chain tasks.",
   },
   {
     icon: Wallet,
     title: "Wallet",
     path: "/wallet",
-    summary: "Your Canton party ID and on-chain CC balance.",
+    summary: "Your Canton party ID — CC and tokens, in one place.",
     details: [
-      "Create a wallet with a team invite code (daily creation quota applies).",
-      "View your party ID, balance, and transaction history.",
-      "Send and receive CC to other users.",
-      "Enable CIP-56 preapproval for faster campaign claims.",
+      "Create a wallet with a team invite code and email OTP (one wallet per account).",
+      "Hold CC, USDCx, and CBTC balances with live USD totals; view full history in /activity.",
+      "Send CC or tokens to anyone by @username or Canton party ID; receive via QR code.",
+      "Swap CC \u2194 USDCx through the Cantex exchange, with a live quote before you confirm.",
+      "Lock 30 CC (7/15/30 days) to reach Full access and unlock partner campaigns.",
+      "Accept or reject incoming transfers in the Offers inbox; cancel outgoing ones.",
     ],
   },
   {
     icon: Trophy,
     title: "Leaderboard",
     path: ROUTES.leaderboard,
-    summary: "See how you rank against other players.",
+    summary: "See how you rank against other verified users.",
     details: [
       "Compare weekly, monthly, and all-time standings.",
-      "Rankings are based on quest activity and points earned on the platform.",
+      "Ranking is by net points (earned minus points spent on campaign entries).",
+      "Top three get crown and medal badges; your own row is highlighted.",
     ],
   },
   {
     icon: Settings,
     title: "Settings",
     path: "/setting",
-    summary: "Manage your account and connected services.",
+    summary: "Manage your account, wallet password, and connections.",
     details: [
-      "View account details and connect or disconnect Twitter.",
-      "Copy your referral invite link.",
-      "Sign out when you are done.",
+      "View your account details: email, display name, Canton username, and party ID.",
+      "Connect your X (Twitter) handle — this is permanent once linked.",
+      "Set or change a wallet password that secures send, swap, lock, and unlock.",
+      "Toggle one-step transfers (CIP-56 preapproval) so incoming CC arrives instantly.",
     ],
   },
 ];
@@ -302,9 +307,10 @@ export function DocsPageContent() {
           <ol className="list-decimal space-y-3 pl-5">
             <li>
               <strong className="font-medium text-[var(--foreground)]">Create an account</strong> —
-              click <em>Launch App</em> on the landing page or header, then register with email and
-              password. Verify your email with the OTP code sent to your inbox. You can optionally
-              enter a friend&apos;s referral code during sign-up.
+              click <em>Launch App</em> on the landing page or header, then{" "}
+              <strong className="font-medium text-[var(--foreground)]">sign up with Google</strong>.
+              You can optionally enter a friend&apos;s referral code during sign-up. (Existing
+              email-and-password accounts can still sign in and reset their password.)
             </li>
             <li>
               <strong className="font-medium text-[var(--foreground)]">Open the platform</strong> —
@@ -413,81 +419,22 @@ export function DocsPageContent() {
             })}
           </ul>
           <p>
-            The platform header also includes theme toggle (light/dark), language picker, and
-            notifications for rewards such as CC received from Earn or quests.
+            The platform toolbar also surfaces a notifications bell for rewards such as CC received
+            from Earn or quests.
           </p>
         </DocsSection>
 
-        <DocsSection id="what-you-can-do" title="What you can do on CanQuest" className="border-b-0">
-          <div className="space-y-8">
-            <DocsSubsection id="reward-types" title="Reward types">
-              <p>
-                Prizes are not limited to CC. Depending on the campaign or redeem catalog, you may
-                receive:
-              </p>
-              <ul className="list-disc space-y-1 pl-5">
-                <li>
-                  <strong className="font-medium text-[var(--foreground)]">CC (Canton Coin)</strong>{" "}
-                  — sent to your on-chain wallet.
-                </li>
-                <li>
-                  <strong className="font-medium text-[var(--foreground)]">Invite codes</strong> —
-                  early entry to a partner app, testnet, or community.
-                </li>
-                <li>
-                  <strong className="font-medium text-[var(--foreground)]">Access codes</strong> —
-                  unlock beta, whitelist, or ecosystem project perks on Canton before general release.
-                </li>
-                <li>Lottery entries, waitlist slots, and first-come-first-served claims.</li>
-              </ul>
-              <p>
-                Finishing quests early helps you secure codes and spots while supply lasts — so you
-                can show up ahead of the crowd.
-              </p>
-            </DocsSubsection>
+        <DocsSection id="what-you-can-do" title="Rewards & support" className="border-b-0">
+          <DocsSubsection id="reward-types" title="Reward types">
+            <p>
+              Prizes are not limited to CC. Depending on the campaign or redeem catalog, you may
+              receive CC (sent to your wallet), invite codes, access codes, lottery entries,
+              waitlist slots, or first-come-first-served claims. Finishing quests early secures codes
+              and spots while supply lasts.
+            </p>
+          </DocsSubsection>
 
-            <DocsSubsection id="partner-campaigns" title="Partner campaigns (Earn)">
-              <ul className="list-disc space-y-1 pl-5">
-                <li>Browse live and completed partner missions.</li>
-                <li>
-                  Open a campaign to read rules, tasks, and reward type (CC, invite/access code,
-                  lottery, FCFS).
-                </li>
-                <li>Complete all required tasks, then claim your reward when eligible.</li>
-                <li>CC goes to your Canton wallet; codes are shown in-app for you to copy and use.</li>
-              </ul>
-            </DocsSubsection>
-
-            <DocsSubsection id="daily-hub" title="Daily hub (Quests)">
-              <ul className="list-disc space-y-1 pl-5">
-                <li>Check in daily and build a streak for milestone bonus points.</li>
-                <li>Complete verified social tasks (follow, retweet, join channels).</li>
-                <li>Answer quiz tasks for points.</li>
-                <li>
-                  Redeem accumulated points for CC, invite codes, access codes, or other rewards.
-                </li>
-                <li>Share your referral link — earn points when friends verify their account.</li>
-              </ul>
-            </DocsSubsection>
-
-            <DocsSubsection id="wallet-cc" title="Wallet & CC">
-              <ul className="list-disc space-y-1 pl-5">
-                <li>Hold CC from campaign claims and quest redemptions.</li>
-                <li>View balance and transaction history in one place.</li>
-                <li>Send CC to other users when you are ready.</li>
-              </ul>
-            </DocsSubsection>
-
-            <DocsSubsection id="compete-customize" title="Compete & customize">
-              <ul className="list-disc space-y-1 pl-5">
-                <li>Check your rank on the Leaderboard (weekly, monthly, all-time).</li>
-                <li>Connect Twitter in Settings for tasks that require it.</li>
-                <li>Switch UI language and color theme from the platform toolbar.</li>
-              </ul>
-            </DocsSubsection>
-          </div>
-
-          <p className="pt-6 text-xs">
+          <p className="pt-4 text-xs">
             Questions or partnership inquiries? Use the{" "}
             <Link href="/cooperation#partner-form" className="text-canton underline-offset-2 hover:underline">
               partnership form
