@@ -3030,45 +3030,42 @@ export class PartyController {
     });
     const ccAmount = ccBal ? Number(ccBal.balanceMicroCc) / 1_000_000 : 0;
 
-    // WAVE 6: Non-CC token saldo dari DB (CantexTokenBalance), BUKAN on-chain.
-    // Sebelumnya pakai queryTokenHoldings on-chain — tapi REST ACS di participant
-    // kami return [] (visibility issue), jadi selalu 0. DB di-update real-time
-    // oleh BalanceEventHandler via WSS event stream (Wave 6 Phase 2).
+    // DB-DRIVEN token saldo (sesuai prinsip: Cantex = swap-only, bukan sumber saldo).
     //
-    // Strategi:
-    //   1. Ambil semua CantexTokenBalance user dari DB (key = instrumentId::admin)
-    //   2. Filter whitelist (USDCx, CBTC) supaya UI konsisten
-    //   3. Tampilkan apa adanya dari DB
+    // Sebelumnya saldo token di-build dengan loop Cantex pools (/v2/pools/info)
+    // lalu lookup DB pakai composite key `${instrumentId}::${instrumentAdmin}`.
+    // BUG: instrumentAdmin dari WSS event (registrar on-chain) bisa BEDA dari
+    // admin yang Cantex pools laporkan → lookup `undefined` → saldo tampil 0
+    // walau row DB ada (badge notif masuk tapi saldo stuck). CC tidak terdampak
+    // karena CC baca CcBalance langsung (tanpa Cantex).
+    //
+    // FIX: baca CantexTokenBalance langsung dari DB per user. Aggregate by
+    // instrumentId (sum across admin variants — 1 token bisa datang dari
+    // multiple registrar, saldo total = jumlah semua). Key = instrumentId
+    // lowercase (whitelist USDCX/CBTC unik per instrumentId). Tidak ada
+    // dependency Cantex di jalur saldo — persis seperti CC.
     const tokens: Record<string, string> = {};
-
     try {
-      // Ambil daftar token whitelist dari Cantex pools (untuk DAPATKAN key
-      // lengkap walaupun user belum punya saldo — supaya UI bisa tampilkan 0).
-      const instruments = await this.cantex.getAllSwapInstruments();
-      const visibleNonCc = instruments.filter(
-        (inst) =>
-          inst.id.toLowerCase() !== 'amulet' && isVisibleInstrument(inst.id),
-      );
-
-      // Ambil semua row CantexTokenBalance user (1 query, bukan N queries).
       const dbBalances = await this.prisma.cantexTokenBalance.findMany({
         where: { userId: user.id },
-        select: { instrumentId: true, instrumentAdmin: true, balance: true },
+        select: { instrumentId: true, balance: true },
       });
-      // WAVE 6: key Map pakai lowercase supaya match case-insensitive
-      // (event on-chain mungkin "USDCX", Cantex pools mungkin "USDCx").
-      const dbMap = new Map(
-        dbBalances.map((b) => [
-          `${b.instrumentId.toLowerCase()}::${b.instrumentAdmin.toLowerCase()}`,
-          Number(b.balance),
-        ]),
-      );
-
-      for (const inst of visibleNonCc) {
-        const key = `${inst.id}::${inst.admin}`;
-        const lookupKey = `${inst.id.toLowerCase()}::${inst.admin.toLowerCase()}`;
-        const amount = dbMap.get(lookupKey) ?? 0;
-        tokens[key] = amount.toFixed(10);
+      // Aggregate by instrumentId (case-insensitive, sum balance across admins).
+      const byInst = new Map<string, number>();
+      for (const b of dbBalances) {
+        if (!isVisibleInstrument(b.instrumentId)) continue; // whitelist filter
+        if (b.instrumentId.toLowerCase() === 'amulet') continue; // CC, skip
+        const id = b.instrumentId.toLowerCase();
+        byInst.set(id, (byInst.get(id) ?? 0) + Number(b.balance));
+      }
+      for (const [id, amount] of byInst) {
+        tokens[id] = amount.toFixed(10);
+      }
+      // Ensure whitelist token selalu ada entri (balance 0 kalau user belum pegang)
+      // supaya UI bisa render baris USDCx/CBTC walau saldo 0.
+      for (const sym of ['USDCX', 'CBTC']) {
+        const id = sym.toLowerCase();
+        if (!(id in tokens)) tokens[id] = '0';
       }
     } catch (err) {
       this.logger.warn(

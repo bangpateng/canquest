@@ -242,14 +242,11 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
         ? balance
         : balances.cc;
   const tokensMap = balancesData?.tokens ?? balances.tokens;
+  // DB-DRIVEN: balance key = instrumentId (lowercase), bukan composite id::admin.
   const sellBalance = sellToken
     ? sellIsCC
       ? ccBalanceEffective
-      : parseFloat(
-          tokensMap[
-            `${sellToken.instrumentId}::${sellToken.instrumentAdmin}`
-          ] ?? "0",
-        )
+      : parseFloat(tokensMap[sellToken.instrumentId.toLowerCase()] ?? "0")
     : 0;
   const insufficientBalance =
     sellBalance > 0 && parseFloat(amount) > sellBalance;

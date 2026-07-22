@@ -26,8 +26,12 @@ export interface PoolsResponse {
 
 /**
  * Shape response GET /api/party/balances.
- * `tokens` = map balance keyed by "<instrumentId>::<instrumentAdmin>" → decimal string.
- * Konvensi key composite `id::admin` dipakai konsisten di backend + frontend.
+ * `tokens` = map balance keyed by instrumentId (lowercase) → decimal string.
+ *
+ * DB-DRIVEN: backend aggregate CantexTokenBalance per instrumentId, key cuma
+ * instrumentId (BUKAN composite id::admin). Cantex tidak ikut campur di jalur
+ * saldo — sesuai prinsip "Cantex = swap-only". CC baca CcBalance, token baca
+ * CantexTokenBalance, keduanya per userId dari DB.
  */
 export interface BalancesResponse {
   cc: number;
@@ -36,8 +40,10 @@ export interface BalancesResponse {
 
 /**
  * Build key map balance untuk lookup balance suatu token.
- * Konsisten dengan party.controller GET /balances (composite `id::admin`).
+ * Konsisten dengan party.controller GET /balances (key = instrumentId lowercase).
  */
-export function tokenBalanceKey(t: Pick<WalletToken, 'instrumentId' | 'instrumentAdmin'>): string {
-  return `${t.instrumentId}::${t.instrumentAdmin}`;
+export function tokenBalanceKey(
+  t: Pick<WalletToken, 'instrumentId'>,
+): string {
+  return t.instrumentId.toLowerCase();
 }

@@ -104,15 +104,29 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
     onRefresh?.();
   }, [invalidateWalletTokens, onRefresh]);
 
-  // Total USD value = CC value + semua token non-CC value (Cantex prices).
+  // Lookup harga USD untuk instrumentId (price map di-key `${id}::${admin}`).
+  // Cari key yang diawali `${instrumentId}::` — price sama untuk semua admin
+  // variant token tsb (mis. USDCx apapun registrarnya → $1).
+  const priceForInstrument = useCallback(
+    (instrumentId: string): number => {
+      const prefix = `${instrumentId.toLowerCase()}::`;
+      for (const k in tokenPrices) {
+        if (k.toLowerCase().startsWith(prefix)) return tokenPrices[k] ?? 0;
+      }
+      return 0;
+    },
+    [tokenPrices],
+  );
+
+  // Total USD value = CC value + semua token non-CC value.
+  // DB-DRIVEN: iterasi saldo dari balances.tokens (bukan swapTokens/Cantex).
   const ccValue = ccUsd > 0 && ccBalance !== null ? ccBalance * ccUsd : 0;
   let tokenNonCcValue = 0;
-  for (const t of swapTokens) {
-    if (t.isCC) continue;
-    const key = `${t.instrumentId}::${t.instrumentAdmin}`;
-    const price = tokenPrices[key];
-    const bal = parseFloat(tokenBalances[key] ?? "0");
-    if (price && bal > 0) tokenNonCcValue += bal * price;
+  for (const id in tokenBalances) {
+    const bal = parseFloat(tokenBalances[id] ?? "0");
+    if (bal <= 0) continue;
+    const price = priceForInstrument(id);
+    if (price) tokenNonCcValue += bal * price;
   }
   const totalUsd = ccValue + tokenNonCcValue;
   const totalUsdStr = totalUsd.toLocaleString("en-US", {
@@ -207,18 +221,15 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
             fiatValue={ccValue > 0 ? `$${ccFiatStr}` : undefined}
           />
 
-          {/* Non-CC tokens — hanya yang whitelist (USDCx + CBTC). Token lain
-              (cETH, HANDL, MOD, EDELx, HECTO, FRXUSD, USDC.B, dll)
-              disembunyikan dari UI wallet. */}
-          {swapTokens
-            .filter(
-              (t) => !t.isCC && VISIBLE_TOKENS.has(t.instrumentId.toUpperCase()),
-            )
-            .map((t) => {
-              const key = `${t.instrumentId}::${t.instrumentAdmin}`;
-              const active = isTokenActive(t.instrumentId, t.isCC);
-              const bal = parseFloat(tokenBalances[key] ?? "0");
-              const price = tokenPrices[key];
+          {/* Non-CC tokens — DB-DRIVEN. Sumber daftar = saldo dari DB
+              (CantexTokenBalance), bukan Cantex pools. Sesuai prinsip
+              "Cantex = swap-only". Whitelist filter (USDCx + CBTC). */}
+          {Object.keys(tokenBalances)
+            .filter((id) => VISIBLE_TOKENS.has(id.toUpperCase()))
+            .map((id) => {
+              const bal = parseFloat(tokenBalances[id] ?? "0");
+              const active = isTokenActive(id);
+              const price = priceForInstrument(id);
               const fiat =
                 price && bal > 0
                   ? `$${(bal * price).toLocaleString("en-US", {
@@ -228,8 +239,8 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
                   : undefined;
               return (
                 <TokenCard
-                  key={key}
-                  symbol={t.instrumentId}
+                  key={id}
+                  symbol={id.toUpperCase()}
                   balance={active ? bal.toFixed(4) : "—"}
                   fiatValue={active ? fiat : undefined}
                   comingSoon={!active}
