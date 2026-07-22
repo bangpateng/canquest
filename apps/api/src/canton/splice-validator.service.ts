@@ -28,7 +28,7 @@ import { CantonLedgerService } from './canton-ledger.service';
  * Setup — PROD (recommended, no SSH tunnel):
  *
  *   # apps/api/.env:
- *   CANTON_VALIDATOR_URL=https://api-canquest.nodelab.my.id
+ *   CANTON_VALIDATOR_URL=https://validator.canquestlabs.com
  *   CANTON_VALIDATOR_HOST_HEADER=                 # KOSONG — gateway route via SNI/Host domain
  *
  * Setup — DEV (SSH tunnel from VPS 2 to VPS 1):
@@ -79,7 +79,7 @@ export class SpliceValidatorService {
   ) {
     const raw = config.get<string>('CANTON_VALIDATOR_URL');
     this.baseUrl = raw ? raw.replace(/\/$/, '') : null;
-    // Host header kosong secara default di prod: gateway publik (api-canquest.nodelab.my.id)
+    // Host header kosong secara default di prod: gateway publik (validator.canquestlabs.com)
     // route via SNI/Host domain, bukan wallet.localhost nginx. Dev SSH-tunnel masih bisa
     // override via CANTON_VALIDATOR_HOST_HEADER=wallet.localhost.
     this.hostHeader = config.get<string>('CANTON_VALIDATOR_HOST_HEADER') ?? '';

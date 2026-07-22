@@ -20,11 +20,11 @@ import {
  *   https://docs.canton.network/appdev/modules/m4-backend-dev
  *   https://docs.canton.network/appdev/modules/m7-error-handling
  *
- * PROD setup (recommended — no SSH tunnel):
- *   LEDGER_API_URL=https://api-ledger-canquest.nodelab.my.id
+ * PROD setup (URL di-set via env var LEDGER_API_URL):
+ *   LEDGER_API_URL=https://ledger.canquestlabs.com
  *   LEDGER_AUTH_MODE=keycloak
  *   LEDGER_API_ADMIN_USER=<UUID admin Keycloak>  (userId for submit / grant rights)
- *   Verify: curl https://api-ledger-canquest.nodelab.my.id/livez  → HTTP 200
+ *   Verify: curl https://ledger.canquestlabs.com/livez  → HTTP 200
  *
  * DEV setup (SSH tunnel to participant node):
  *   1. Get participant Docker IP on VPS 1:
@@ -50,7 +50,7 @@ import {
  * Error handling follows Module 7 patterns:
  *   - FAILED_PRECONDITION / ABORTED → contention → retry with backoff
  *   - NOT_FOUND                     → stale contract ID → re-query
- *   - INVALID_ARGUMENT              → bug in payload → do not retry
+ *   - INVALID_ARGUMENT              → bug in request payload → do not retry
  *   - PERMISSION_DENIED             → missing rights → check party grants
  */
 @Injectable()
@@ -69,7 +69,7 @@ export class CantonLedgerService {
     private readonly config: ConfigService,
     @Optional() private readonly keycloak: KeycloakTokenService,
   ) {
-    // LEDGER_API_URL wajib di prod (gateway publik api-ledger-canquest.nodelab.my.id).
+    // LEDGER_API_URL wajib di prod (gateway publik ledger.canquestlabs.com).
     // Fallback ke CANTON_JSON_API_URL hanya untuk dev (SSH tunnel localhost:7575).
     // JANGAN pernah fallback ke localhost di produksi — itu menyembunyikan misconfig.
     const ledgerUrl =
@@ -78,7 +78,7 @@ export class CantonLedgerService {
     if (!ledgerUrl) {
       throw new Error(
         'LEDGER_API_URL (atau CANTON_JSON_API_URL) belum diset — ' +
-          'prod: https://api-ledger-canquest.nodelab.my.id',
+          'prod: https://ledger.canquestlabs.com',
       );
     }
     this.baseUrl = ledgerUrl.replace(/\/$/, '');
