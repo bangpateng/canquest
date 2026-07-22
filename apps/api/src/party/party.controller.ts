@@ -3030,47 +3030,83 @@ export class PartyController {
     });
     const ccAmount = ccBal ? Number(ccBal.balanceMicroCc) / 1_000_000 : 0;
 
-    // DB-DRIVEN token saldo (sesuai prinsip: Cantex = swap-only, bukan sumber saldo).
+    // ON-CHAIN AUTHORITATIVE token saldo (source of truth = ledger, BUKAN DB).
     //
-    // Sebelumnya saldo token di-build dengan loop Cantex pools (/v2/pools/info)
-    // lalu lookup DB pakai composite key `${instrumentId}::${instrumentAdmin}`.
-    // BUG: instrumentAdmin dari WSS event (registrar on-chain) bisa BEDA dari
-    // admin yang Cantex pools laporkan → lookup `undefined` → saldo tampil 0
-    // walau row DB ada (badge notif masuk tapi saldo stuck). CC tidak terdampak
-    // karena CC baca CcBalance langsung (tanpa Cantex).
+    // Sebelumnya saldo token di-build dari DB off-chain. Tapi DB bisa stale/
+    // salah kalau handler miss event (restart, gap create-archive). User report
+    // "saya sudah swap + WD tapi USDCx 0" — karena DB tidak reflect state ledger
+    // sebenarnya. Solusi benar: query on-chain langsung tiap buka wallet.
     //
-    // FIX: baca CantexTokenBalance langsung dari DB per user. Aggregate by
-    // instrumentId (sum across admin variants — 1 token bisa datang dari
-    // multiple registrar, saldo total = jumlah semua). Key = instrumentId
-    // lowercase (whitelist USDCX/CBTC unik per instrumentId). Tidak ada
-    // dependency Cantex di jalur saldo — persis seperti CC.
+    // FIX (per konfirmasi Canton AI): pakai InterfaceFilter dengan interface ID
+    // `#splice-api-token-holding-v1:Splice.Api.Token.HoldingV1:Holding`.
+    // WildcardFilter (lama) return [] karena token holding hanya visible via
+    // interface, bukan template langsung. InterfaceFilter lihat holding dengan
+    // benar untuk party tsb (filtersByParty scope per-party).
+    //
+    // Strategi:
+    //   1. ON-CHAIN: queryTokenHoldingsByInterface(user.partyId) → authoritative
+    //   2. FALLBACK: kalau on-chain return {} (ledger unreachable / timeout),
+    //      gunakan DB (CantexTokenBalance) supaya wallet tidak blank total.
+    //   3. Whitelist filter (USDCx, CBTC) + ensure entri 0 untuk UI.
     const tokens: Record<string, string> = {};
-    try {
-      const dbBalances = await this.prisma.cantexTokenBalance.findMany({
-        where: { userId: user.id },
-        select: { instrumentId: true, balance: true },
-      });
-      // Aggregate by instrumentId (case-insensitive, sum balance across admins).
-      const byInst = new Map<string, number>();
-      for (const b of dbBalances) {
-        if (!isVisibleInstrument(b.instrumentId)) continue; // whitelist filter
-        if (b.instrumentId.toLowerCase() === 'amulet') continue; // CC, skip
-        const id = b.instrumentId.toLowerCase();
-        byInst.set(id, (byInst.get(id) ?? 0) + Number(b.balance));
+    const partyId = user.cantonPartyId;
+    let usedFallback = false;
+
+    // ── 1. ON-CHAIN (authoritative) ────────────────────────────────────────
+    if (partyId) {
+      try {
+        const onChain = await this.ledger.queryTokenHoldingsByInterface(partyId);
+        if (Object.keys(onChain).length > 0) {
+          for (const [id, amount] of Object.entries(onChain)) {
+            if (!isVisibleInstrument(id)) continue; // whitelist
+            tokens[id] = amount.toFixed(10);
+          }
+        } else {
+          // On-chain return {} — bisa berarti user emang gak pegang token,
+          // ATAU ledger query gagal (timeout/unreachable). Cek DB sebagai
+          // fallback supaya kalau ledger bermasalah, saldo lama tetap tampil.
+          usedFallback = true;
+        }
+      } catch (err) {
+        this.logger.warn(
+          `swapBalances on-chain query failed (fallback to DB): ${String(err)}`,
+        );
+        usedFallback = true;
       }
-      for (const [id, amount] of byInst) {
-        tokens[id] = amount.toFixed(10);
+    } else {
+      // User belum bind party → gak bisa query on-chain. Pakai DB aja.
+      usedFallback = true;
+    }
+
+    // ── 2. FALLBACK: DB off-chain (kalau on-chain gagal/kosong) ─────────────
+    if (usedFallback) {
+      try {
+        const dbBalances = await this.prisma.cantexTokenBalance.findMany({
+          where: { userId: user.id },
+          select: { instrumentId: true, balance: true },
+        });
+        const byInst = new Map<string, number>();
+        for (const b of dbBalances) {
+          if (!isVisibleInstrument(b.instrumentId)) continue;
+          if (b.instrumentId.toLowerCase() === 'amulet') continue;
+          const id = b.instrumentId.toLowerCase();
+          byInst.set(id, (byInst.get(id) ?? 0) + Number(b.balance));
+        }
+        for (const [id, amount] of byInst) {
+          tokens[id] = amount.toFixed(10);
+        }
+      } catch (err) {
+        this.logger.warn(
+          `swapBalances DB fallback query failed: ${String(err)}`,
+        );
       }
-      // Ensure whitelist token selalu ada entri (balance 0 kalau user belum pegang)
-      // supaya UI bisa render baris USDCx/CBTC walau saldo 0.
-      for (const sym of ['USDCX', 'CBTC']) {
-        const id = sym.toLowerCase();
-        if (!(id in tokens)) tokens[id] = '0';
-      }
-    } catch (err) {
-      this.logger.warn(
-        `swapBalances DB query failed: ${String(err)}`,
-      );
+    }
+
+    // ── 3. Ensure whitelist token selalu ada entri (balance 0 kalau belum pegang)
+    // supaya UI bisa render baris USDCx/CBTC walau saldo 0.
+    for (const sym of ['USDCX', 'CBTC']) {
+      const id = sym.toLowerCase();
+      if (!(id in tokens)) tokens[id] = '0';
     }
 
     return {
