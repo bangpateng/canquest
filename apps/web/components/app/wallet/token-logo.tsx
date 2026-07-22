@@ -59,11 +59,21 @@ export function apiOrigin(): string {
   );
 }
 
-/** Sanitize symbol ke nama file — PRESERVE CASE (match R2 upload as-is).
- * EDELx → EDELx, cETH → cETH, CC → CC. Hanya strip special chars. */
+/** Nama file PERSIS di R2 (case-sensitive), di-key by symbol UPPERCASE.
+ * Backend R2 case-sensitive. Admin upload pakai case kanonik (mis. "USDCx" —
+ * 'x' kecil), padahal caller bisa kirim UPPERCASE/lowercase/mixed. Map ini
+ * normalisasi semua input ke nama file persis di R2 supaya match.
+ * CC & CBTC kebetulan semua-uppercase → cocok tanpa map. */
+const LOGO_FILE: Record<string, string> = {
+  USDCX: "USDCx",
+};
+
+/** Sanitize symbol ke nama file R2 — normalize ke case kanonik.
+ * CC → CC, USDCx/USDCX/usdcx → "USDCx" (match file R2). Strip special chars. */
 export function logoFileName(symbol: string): string {
   const display = displayName(symbol);
-  return display.replace(/[^a-zA-Z0-9]/g, "-");
+  const upper = display.toUpperCase();
+  return LOGO_FILE[upper] ?? display.replace(/[^a-zA-Z0-9]/g, "-");
 }
 
 // ── Token Logo component ────────────────────────────────────────────────

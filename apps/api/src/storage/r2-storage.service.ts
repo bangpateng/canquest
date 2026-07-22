@@ -12,6 +12,7 @@ import {
   GetObjectCommand,
   HeadBucketCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
   S3ServiceException,
@@ -21,6 +22,8 @@ import path from 'path';
 import type { Readable } from 'stream';
 
 export const QUEST_ASSET_KEY_PREFIX = 'quests/';
+
+const LOGO_PREFS = ['webp', 'png', 'jpg', 'jpeg', 'gif'];
 
 const QUEST_MEDIA_FILENAME = /^[0-9a-f-]{36}\.(jpe?g|png|webp|gif)$/i;
 
@@ -207,6 +210,106 @@ export class R2StorageService implements OnModuleInit {
       }
       throw err;
     }
+  }
+
+  /**
+   * Case-insensitive token logo lookup di R2 prefix `tokens/`.
+   *
+   * R2 case-sensitive. Admin biasanya upload pakai case kanonik (mis.
+   * `USDCx.webp` — 'x' kecil), padahal frontend selalu kirim UPPERCASE.
+   * Daripada hardcode tiap token, kita list prefix `tokens/` lalu match
+   * basename secara case-insensitive → fix untuk SEMUA token (USDCx, EDELx,
+   * cETH, dst). Hasil listing di-cache (TTL 60s) supaya tidak list berkali-kali
+   * untuk request beruntun (cache miss di-load sekali).
+   *
+   * @param symbol Symbol yang diminta (akan di-upper() + strip non-alnum).
+   * @returns Stream logo atau null bila tidak ketemu / R2 nonaktif.
+   */
+  private tokensCache: { keys: string[]; ts: number } | null = null;
+  private static readonly TOKENS_CACHE_TTL_MS = 60_000;
+
+  private async listTokenKeys(): Promise<string[]> {
+    if (!this.isR2Enabled()) return [];
+    const now = Date.now();
+    if (
+      this.tokensCache &&
+      now - this.tokensCache.ts < R2StorageService.TOKENS_CACHE_TTL_MS
+    ) {
+      return this.tokensCache.keys;
+    }
+    try {
+      const keys: string[] = [];
+      let token: string | undefined;
+      do {
+        const out = await this.client!.send(
+          new ListObjectsV2Command({
+            Bucket: this.bucket!,
+            Prefix: 'tokens/',
+            MaxKeys: 200,
+            ContinuationToken: token,
+          }),
+        );
+        for (const obj of out.Contents ?? []) {
+          if (obj.Key) keys.push(obj.Key);
+        }
+        token = out.IsTruncated ? out.NextContinuationToken : undefined;
+      } while (token);
+      this.tokensCache = { keys, ts: now };
+      return keys;
+    } catch (err) {
+      this.logger.warn(
+        `listTokenKeys failed — falling back to direct probe: ${this.formatS3Error(err)}`,
+      );
+      return [];
+    }
+  }
+
+  async getTokenLogoStream(
+    symbol: string,
+  ): Promise<{ stream: Readable; contentType: string } | null> {
+    if (!this.isR2Enabled()) return null;
+    const base = symbol.replace(/[^a-zA-Z0-9-]/g, '').toLowerCase();
+    if (!base) return null;
+
+    // 1) Case-insensitive match via listing (robust untuk mixed-case: USDCx).
+    const keys = await this.listTokenKeys();
+    let matchKey: string | null = null;
+    let matchPref = LOGO_PREFS.length;
+    for (const key of keys) {
+      const slashIdx = key.lastIndexOf('/');
+      const file = slashIdx >= 0 ? key.slice(slashIdx + 1) : key;
+      const dotIdx = file.lastIndexOf('.');
+      if (dotIdx <= 0) continue;
+      const name = file.slice(0, dotIdx).toLowerCase();
+      const ext = file.slice(dotIdx + 1).toLowerCase();
+      if (name !== base) continue;
+      const pref = LOGO_PREFS.indexOf(ext);
+      if (pref < 0) continue; // ext tidak dikenali
+      // Pilih file dengan ext prioritas tertinggi (webp > png > jpg ...).
+      if (pref < matchPref) {
+        matchKey = key;
+        matchPref = pref;
+        if (pref === 0) break; // webp = prioritas tertinggi, stop.
+      }
+    }
+    if (matchKey) {
+      return this.getQuestAssetStream(matchKey);
+    }
+
+    // 2) Fallback: probe langsung case UPPERCASE/lowercase (listing kosong /
+    //    gagal). Sama dengan logika lama, mencegah regresi kalau listing error.
+    const probes = [
+      `tokens/${symbol.replace(/[^a-zA-Z0-9-]/g, '')}.webp`,
+      `tokens/${base.toUpperCase()}.webp`,
+      `tokens/${base}.webp`,
+      `tokens/${base.toUpperCase()}.png`,
+      `tokens/${base}.png`,
+    ];
+    for (const key of probes) {
+      const asset = await this.getQuestAssetStream(key);
+      if (asset) return asset;
+    }
+    return null;
   }
 
   async onModuleInit(): Promise<void> {

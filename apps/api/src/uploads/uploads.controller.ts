@@ -8,7 +8,6 @@ import {
 } from '@nestjs/common';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
-import type { Readable } from 'stream';
 import { createReadStream, existsSync } from 'fs';
 import path from 'path';
 import { ConfigService } from '@nestjs/config';
@@ -71,9 +70,9 @@ export class UploadsController {
 
   /**
    * Token logo untuk Swap modal — stream dari R2 key `tokens/<symbol>.<ext>`.
-   * Coba beberapa case (CC, cc) + format (webp, png, jpg) berurutan.
-   * R2 case-sensitive → kita coba beberapa variant supaya match file apa pun
-   * yang di-upload admin (CC.webp, cc.webp, dll).
+   * Case-insensitive via ListObjectsV2 prefix `tokens/` + match basename.
+   * Fix untuk token mixed-case (mis. `USDCx.webp` — 'x' kecil) yang di-upload
+   * admin tapi diminta frontend sebagai UPPERCASE. Listing di-cache 60s.
    * 404 kalau tidak ada satupun → FE fallback ke gradient circle.
    */
   @Get('token-logo/:symbol')
@@ -87,17 +86,7 @@ export class UploadsController {
     if (!base || base.length > 64) {
       throw new NotFoundException();
     }
-    // Case variants untuk dicoba (R2 case-sensitive).
-    // CC → ['CC', 'cc'], TokenX → ['TokenX', 'tokenx']
-    const cases = [base, base.toUpperCase(), base.toLowerCase()];
-    const exts = ['webp', 'png', 'jpg', 'jpeg', 'gif'];
-    let asset: { stream: Readable; contentType: string } | null = null;
-    outer: for (const c of cases) {
-      for (const ext of exts) {
-        asset = await this.storage.getQuestAssetStream(`tokens/${c}.${ext}`);
-        if (asset) break outer;
-      }
-    }
+    const asset = await this.storage.getTokenLogoStream(base);
     if (!asset) {
       throw new NotFoundException();
     }
