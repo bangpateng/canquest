@@ -6,10 +6,6 @@ export interface LedgerStatus {
   message: string;
 }
 
-export function getBalance() {
-  return apiFetch<{ balance: number; unit: string }>('/api/party/balance');
-}
-
 export function getLedgerStatus() {
   return apiFetch<LedgerStatus>('/api/party/ledger-status', {
     signal: AbortSignal.timeout(5_000),

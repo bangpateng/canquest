@@ -9,7 +9,6 @@ import { WalletOnboardingService } from './wallet-onboarding.service';
 import { SpliceValidatorService } from './splice-validator.service';
 import { FeaturedAppActivityService } from './featured-app-activity.service';
 import { CcInboundSyncService } from './cc-inbound-sync.service';
-import { CcBalanceService } from './cc-balance.service';
 import { CantonPriceService } from './canton-price.service';
 import { TransactionDetailService } from './transaction-detail.service';
 import { QuestLedgerService } from './quest-ledger.service';
@@ -38,7 +37,6 @@ import { BalanceEventHandlerService } from './balance-event-handler.service';
     SpliceValidatorService,
     FeaturedAppActivityService,
     CcInboundSyncService,
-    CcBalanceService,
     CantonPriceService,
     TransactionDetailService,
     QuestLedgerService,
@@ -54,7 +52,6 @@ import { BalanceEventHandlerService } from './balance-event-handler.service';
     SpliceValidatorService,
     FeaturedAppActivityService,
     CcInboundSyncService,
-    CcBalanceService,
     CantonPriceService,
     TransactionDetailService,
     QuestLedgerService,

@@ -136,7 +136,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
     try {
       const [poolsRes, balRes] = await Promise.all([
         fetch("/api/party/pools", { credentials: "include" }),
-        fetch("/api/party/balances", { credentials: "include" }),
+        fetch("/api/party/balance", { credentials: "include" }),
       ]);
       const data = (await poolsRes.json()) as PoolsResponse & {
         message?: string;

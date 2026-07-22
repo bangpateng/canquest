@@ -26,7 +26,6 @@ import { SpliceValidatorService } from '../canton/splice-validator.service';
 import { WalletOnboardingService } from '../canton/wallet-onboarding.service';
 import { FeaturedAppActivityService } from '../canton/featured-app-activity.service';
 import { CcInboundSyncService } from '../canton/cc-inbound-sync.service';
-import { CcBalanceService } from '../canton/cc-balance.service';
 import { TransactionDetailService } from '../canton/transaction-detail.service';
 import { QuestLedgerService } from '../canton/quest-ledger.service';
 import { LockEligibilityService } from '../canton/lock-eligibility.service';
@@ -144,7 +143,6 @@ export class PartyController {
     private readonly splice: SpliceValidatorService,
     private readonly featuredActivity: FeaturedAppActivityService,
     private readonly inboundSync: CcInboundSyncService,
-    private readonly ccBalance: CcBalanceService,
     private readonly txDetail: TransactionDetailService,
     private readonly config: ConfigService,
     private readonly walletInvites: WalletInviteCodeService,
@@ -864,31 +862,6 @@ export class PartyController {
       isPlaceholder: false,
       message:
         'Canton Party ID saved manually. No ledger validation was performed.',
-    };
-  }
-
-  @SkipThrottle()
-  @Get('balance')
-  async getBalance(@Req() req: AuthedReq) {
-    const user = await this.users.findById(req.user.userId);
-    if (!user?.username) {
-      return {
-        balance: null,
-        message: 'No wallet found. Create your wallet first.',
-      };
-    }
-    const display = await this.ccBalance.getDisplayBalance(
-      user.id,
-      user.username,
-      user.cantonPartyId,
-    );
-    return {
-      username: user.username,
-      balance: display.balance,
-      unit: 'CC',
-      source: display.source,
-      stale: display.stale,
-      updatedAt: display.updatedAt?.toISOString() ?? null,
     };
   }
 
@@ -3012,7 +2985,7 @@ export class PartyController {
    * hapus off-chain: pakai on-chain saja. DB CantexTokenBalance tetap dipakai
    * untuk swap accounting internal, tapi TIDAK ditampilkan ke UI.
    */
-  @Get('balances')
+  @Get('balance')
   @SkipThrottle()
   async swapBalances(@Req() req: AuthedReq) {
     const user = await this.users.findById(req.user.userId);

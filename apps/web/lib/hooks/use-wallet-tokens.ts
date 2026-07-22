@@ -44,7 +44,7 @@ export function useBalances(opts?: {
   return useQuery<BalancesResponse>({
     queryKey: queryKeys.party.balances,
     queryFn: async (): Promise<BalancesResponse> => {
-      const res = await fetch("/api/party/balances", { credentials: "include" });
+      const res = await fetch("/api/party/balance", { credentials: "include" });
       if (!res.ok) throw new Error(`balances ${res.status}`);
       const data = (await res.json()) as Partial<BalancesResponse>;
       return {
