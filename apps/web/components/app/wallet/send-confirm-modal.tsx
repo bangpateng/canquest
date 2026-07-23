@@ -6,7 +6,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { buttonVariants } from "@/components/ui/button";
 import { iconButtonClass } from "@/lib/ui/ui-button-styles";
 import { cn } from "@/lib/utils/utils";
-import { TokenLogo, displayName } from "@/components/app/wallet/token-logo";
+import { displayName } from "@/components/app/wallet/token-logo";
 import type { WalletToken } from "@/lib/canton/token-types";
 
 /**
@@ -73,7 +73,7 @@ export function SendConfirmModal({
   if (!open) return null;
 
   const tokenName = token ? displayName(token.instrumentId) : "Token";
-  const memoDisplay = memo.trim() ? memo.trim() : "—";
+  const memoDisplay = memo.trim();
 
   return (
     <div
@@ -111,22 +111,18 @@ export function SendConfirmModal({
           </button>
         </div>
 
-        {/* ── Block amount besar di tengah ── */}
-        <div className="mt-6 flex flex-col items-center gap-2 rounded-2xl border border-white/5 bg-white/5 px-6 py-7 text-center">
-          {token && (
-            <TokenLogo symbol={token.instrumentId} size="lg" />
-          )}
-          <p className="mt-1 text-3xl font-bold tabular-nums text-slate-100">
-            {amount || "0"}
+        {/* ── Block amount besar di tengah (tanpa logo) ── */}
+        <div className="mt-6 flex flex-col items-center justify-center rounded-2xl border border-white/5 bg-white/5 px-6 py-7 text-center">
+          <p className="text-3xl font-bold tabular-nums text-slate-100">
+            {amount || "0"} {tokenName}
           </p>
-          <p className="text-sm font-medium text-slate-400">{tokenName}</p>
         </div>
 
         {/* ── Baris detail ── */}
         <dl className="mt-5 divide-y divide-slate-800/60">
-          <DetailRow label="Recipient">{recipientDisplay || "—"}</DetailRow>
+          <DetailRow label="Recipient">{recipientDisplay || ""}</DetailRow>
           <DetailRow label="Memo">{memoDisplay}</DetailRow>
-          <DetailRow label="Network">Canton Network</DetailRow>
+          <DetailRow label="Network">Canton</DetailRow>
           <DetailRow label="Platform fee">
             <span className="tabular-nums text-amber-400">{feeCc} CC</span>
           </DetailRow>
