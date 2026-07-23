@@ -1412,6 +1412,8 @@ export class PartyController {
           ledgerTxId: result.updateId ?? cid,
           cantonUpdateId: result.updateId ?? undefined,
           cancelledAmount: withdrawCancelledAmount,
+          // SILENT: row tetap di history, tidak push notif duplikat.
+          silent: true,
         });
       } else {
         await this.users.recordTransaction({
@@ -1423,6 +1425,8 @@ export class PartyController {
           ledgerTxId: result.updateId ?? cid,
           cantonUpdateId: result.updateId ?? undefined,
           cancelledAmountCc: withdrawCancelledAmount,
+          // SILENT: row tetap di history, tidak push notif duplikat.
+          silent: true,
         });
       }
     } catch (err) {
@@ -2013,6 +2017,9 @@ export class PartyController {
             referenceId: senderLabel || undefined,
             ledgerTxId: updateId ?? cid,
             cantonUpdateId: updateId ?? undefined,
+            // Receiver dapat 1 notif dari sini. Token non-CC TIDAK dipantau WSS
+            // handler → tidak akan double. CC dipantau WSS tapi handler punya
+            // dedup cantonUpdateId → bila controller catat duluan, WSS skip push.
           });
         } catch (err) {
           // P2002 = idempotent retry → OK. Error lain = audit loss (non-fatal).
@@ -2061,6 +2068,8 @@ export class PartyController {
             // contract_id (cid) bila ledger response tidak ter-parse.
             ledgerTxId: updateId ?? cid,
             cantonUpdateId: updateId ?? undefined,
+            // Receiver dapat 1 notif dari sini. WSS handler punya dedup
+            // cantonUpdateId → bila controller catat duluan, WSS skip push-nya.
           });
         } catch (err) {
           // Unique constraint (P2002) = row sudah ada (idempotent retry) → OK.
@@ -2191,6 +2200,9 @@ export class PartyController {
           cantonUpdateId: result.updateId ?? undefined,
           // Jumlah ASLI offer yang ditolak — disimpan untuk display "cancelled X CC".
           cancelledAmountCc: amountCc,
+          // SILENT: row tetap di history, tapi tidak push notif duplikat
+          // (sender sudah dapat notif dari markTransferInstructionSettled).
+          silent: true,
         });
       } catch (err) {
         this.logger.warn(
@@ -2255,6 +2267,9 @@ export class PartyController {
           cantonUpdateId: result.updateId ?? undefined,
           // Jumlah ASLI offer yang ditolak — disimpan untuk display "cancelled X CC".
           cancelledAmountCc: amountCc,
+          // SILENT: row tetap di history, tapi tidak push notif duplikat
+          // (sender sudah dapat notif dari markTransferInstructionSettled).
+          silent: true,
         });
       } catch (err) {
         this.logger.warn(

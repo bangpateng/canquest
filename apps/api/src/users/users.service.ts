@@ -447,6 +447,10 @@ export class UsersService {
     /** Jumlah token asli yang dibatalkan/ditarik (TOKEN_OFFER_WITHDRAWN / REJECTED).
      *  Saldo tidak bergerak (amount=0); ini hanya untuk display "cancelled X token". */
     cancelledAmount?: Decimal | number | string | null;
+    /** SILENT: catat history TAPI jangan push transaction:new (anti duplikat
+     *  notifikasi). Dipakai saat aksi juga dipantau WSS handler (accept/reject/
+     *  withdraw offer) supaya user tidak dapat 2x notif untuk 1 aksi. */
+    silent?: boolean;
   }) {
     const absAmount = new Decimal(Math.abs(Number(params.amount)));
     const signed = TOKEN_TX_DEBIT_TYPES.has(params.type)
@@ -473,11 +477,16 @@ export class UsersService {
     });
 
     // Realtime push (mirror recordTransaction). Hanya COMPLETED relevan untuk UI.
+    // SILENT mode (accept/reject/withdraw offer): skip transaction:new supaya
+    // tidak duplikat notif dengan WSS handler (yang lihat delivery on-chain).
+    // balance:changed tetap dipush (UI wallet tetap refresh saldo).
     if (tx.status === 'COMPLETED') {
-      this.realtime.push(params.userId, 'transaction:new', {
-        id: tx.id,
-        type: tx.type,
-      });
+      if (!params.silent) {
+        this.realtime.push(params.userId, 'transaction:new', {
+          id: tx.id,
+          type: tx.type,
+        });
+      }
       this.realtime.push(params.userId, 'balance:changed', null);
     }
     return tx;
