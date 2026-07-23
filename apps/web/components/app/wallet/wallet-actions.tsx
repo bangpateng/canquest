@@ -552,18 +552,20 @@ export function WalletActions({
                 </div>
 
                 <div className="space-y-2">
-                  <label
-                    htmlFor="wallet-send-amount"
-                    className="text-sm font-medium text-slate-400"
-                  >
-                    Amount
-                  </label>
-                  {selectedSendToken && (
-                    <p className="tabular-nums text-xs text-slate-400">
-                      {selectedBalance.toFixed(6)}{" "}
-                      {displayName(selectedSendToken.instrumentId)}
-                    </p>
-                  )}
+                  <div className="flex items-center justify-between">
+                    <label
+                      htmlFor="wallet-send-amount"
+                      className="text-sm font-medium text-slate-400"
+                    >
+                      Amount
+                    </label>
+                    {selectedSendToken && (
+                      <p className="tabular-nums text-xs text-slate-400">
+                        {selectedBalance.toFixed(6)}{" "}
+                        {displayName(selectedSendToken.instrumentId)}
+                      </p>
+                    )}
+                  </div>
                   <div className="relative">
                     <input
                       id="wallet-send-amount"
