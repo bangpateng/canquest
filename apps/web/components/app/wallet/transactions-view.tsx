@@ -9,6 +9,10 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { TransactionDetailModal } from "@/components/app/wallet/transaction-detail-modal";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { queryKeys } from "@/lib/queries/query-keys";
+import {
+  TX_TYPE_KEYS as TX_TYPE_KEYS_SHARED,
+  type TxType,
+} from "@/lib/canton/tx-labels";
 
 export const TRANSACTIONS_PAGE_SIZE = 5;
 /** Server-side proxy to DB transactions — SINGLE source of truth.
@@ -94,25 +98,7 @@ interface TxPage {
   totalPages: number;
 }
 
-const TX_TYPE_KEYS: Record<TxItem["type"], string> = {
-  QUEST_REWARD: "transactions.questReward",
-  SPIN_REWARD: "transactions.spinReward",
-  TRANSFER_IN: "transactions.receivedCc",
-  TRANSFER_OUT: "transactions.sentCc",
-  AIRDROP: "transactions.airdrop",
-  CC_LOCK: "transactions.ccLocked",
-  CC_UNLOCK: "transactions.ccUnlocked",
-  OFFER_REJECTED: "transactions.offerRejected",
-  OFFER_WITHDRAWN: "transactions.offerWithdrawn",
-  PREAPPROVAL_ENABLED: "transactions.preapprovalEnabled",
-  PREAPPROVAL_DISABLED: "transactions.preapprovalDisabled",
-  SWAP_OUT: "transactions.swapOut",
-  SWAP_IN: "transactions.swapIn",
-  TOKEN_TRANSFER_IN: "transactions.tokenReceived",
-  TOKEN_TRANSFER_OUT: "transactions.tokenSent",
-  TOKEN_OFFER_REJECTED: "transactions.tokenOfferRejected",
-  TOKEN_OFFER_WITHDRAWN: "transactions.tokenOfferWithdrawn",
-};
+const TX_TYPE_KEYS = TX_TYPE_KEYS_SHARED;
 
 /** Type toggle onchain (reject/withdraw/preapproval) — amount 0, tampil netral. */
 const TOGGLE_TX_TYPES: ReadonlySet<TxItem["type"]> = new Set([

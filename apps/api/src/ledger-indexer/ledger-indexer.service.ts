@@ -284,6 +284,29 @@ export class LedgerIndexerService implements OnModuleInit, OnModuleDestroy {
     const amountMicroCc = BigInt(Math.round(params.amount * 1_000_000));
     if (amountMicroCc <= 0n) return;
 
+    // Dedup: cek apakah baris sudah dicatat oleh WSS handler (ledgerTxId `wss:…`)
+    // atau controller sebelum insert. Tanpa ini, satu transfer inbound bisa muncul
+    // sebagai DUA baris (wss:1234 dari WSS handler + 1234 dari indexer) karena format
+    // ledgerTxId berbeda sehingga @@unique([userId, ledgerTxId]) tidak mencegahnya.
+    // Akibatnya: double history + double badge notif.
+    const existing = await this.prisma.ccTransaction.findFirst({
+      where: {
+        userId: user.id,
+        OR: [
+          { ledgerTxId: params.updateId },
+          { ledgerTxId: `wss:${params.updateId}` },
+          { cantonUpdateId: params.updateId },
+        ],
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      this.logger.debug(
+        `captureInboundTransfer: skip duplikat (sudah ada row untuk updateId=${params.updateId.slice(0, 16)}…)`,
+      );
+      return;
+    }
+
     try {
       await this.prisma.ccTransaction.create({
         data: {

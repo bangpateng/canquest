@@ -3,10 +3,11 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, Check, Copy, Lock, LockOpen, ShieldCheck, Zap } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Ban, Check, Copy, Lock, LockOpen, Zap } from "lucide-react";
 
 import type { TransactionDetail } from "@/components/app/wallet/transaction-detail-view";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
+import { txTypeLabel } from "@/lib/canton/tx-labels";
 import { iconButtonClass } from "@/lib/ui/ui-button-styles";
 import { cn } from "@/lib/utils/utils";
 
@@ -295,15 +296,29 @@ export function TransactionDetailContent({
         </div>
 
         <dl className="mt-4 divide-y divide-slate-800/60">
-          <ReceiptField label="Type">{detail.type.replace(/_/g, " ")}</ReceiptField>
+          <ReceiptField label="Type">{txTypeLabel(detail.type, t)}</ReceiptField>
 
           {isTransfer ? (
             <>
               <ReceiptField label="From" mono>
-                <AddressValue address={fromAddress} partyId={ownAddress} />
+                {fromAddress ? (
+                  <span className="inline-flex items-center justify-end gap-1.5">
+                    <AddressValue address={fromAddress} partyId={ownAddress} />
+                    <InlineCopyButton value={fromAddress} label="Copy sender address" />
+                  </span>
+                ) : (
+                  <AddressValue address={fromAddress} partyId={ownAddress} />
+                )}
               </ReceiptField>
               <ReceiptField label="To" mono>
-                <AddressValue address={toAddress} partyId={ownAddress} />
+                {toAddress ? (
+                  <span className="inline-flex items-center justify-end gap-1.5">
+                    <AddressValue address={toAddress} partyId={ownAddress} />
+                    <InlineCopyButton value={toAddress} label="Copy recipient address" />
+                  </span>
+                ) : (
+                  <AddressValue address={toAddress} partyId={ownAddress} />
+                )}
               </ReceiptField>
             </>
           ) : detail.counterparty ? (
@@ -329,20 +344,33 @@ export function TransactionDetailContent({
           </ReceiptField>
 
           <ReceiptField label="Status">
-            <span className="inline-flex items-center gap-1.5">
-              {detail.status === "PENDING" ? (
-                <span className="font-medium text-amber-400">Pending</span>
-              ) : detail.status === "REJECTED" ? (
-                <span className="font-medium text-red-400">Rejected</span>
-              ) : detail.onChainSettled ? (
-                <>
-                  <ShieldCheck className="h-4 w-4 shrink-0 text-green-500" />
-                  <span className="font-semibold">Completed</span>
-                </>
-              ) : (
-                <span className="font-medium text-slate-400">Pending</span>
-              )}
-            </span>
+            {(() => {
+              // Badge pill untuk status: Completed (hijau), Pending (amber), Rejected (merah).
+              const pill =
+                detail.status === "PENDING"
+                  ? "inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-400"
+                  : detail.status === "REJECTED"
+                    ? "inline-flex items-center gap-1 rounded-full bg-red-500/15 px-2.5 py-0.5 text-xs font-semibold text-red-400"
+                    : detail.onChainSettled
+                      ? "inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2.5 py-0.5 text-xs font-semibold text-green-500"
+                      : "inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-400";
+              return (
+                <span className={pill}>
+                  {detail.status === "REJECTED" ? (
+                    <Ban className="h-3 w-3 shrink-0" />
+                  ) : (
+                    <Check className="h-3 w-3 shrink-0" />
+                  )}
+                  {detail.status === "PENDING"
+                    ? "Pending"
+                    : detail.status === "REJECTED"
+                      ? "Rejected"
+                      : detail.onChainSettled
+                        ? "Completed"
+                        : "Pending"}
+                </span>
+              );
+            })()}
           </ReceiptField>
 
           {txId ? (
