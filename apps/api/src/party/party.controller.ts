@@ -46,7 +46,6 @@ import { SwapService } from '../cantex/swap.service';
 import { isCantexEnabled } from '../cantex/cantex.config';
 import { CantexError } from '../cantex/cantex.types';
 import { UsersService } from '../users/users.service';
-import { WalletPasswordService } from "../users/wallet-password.service";
 import { WalletInviteCodeService } from './wallet-invite-code.service';
 import { isVisibleInstrument } from './visible-instruments';
 import { AllocateWalletDto } from './dto/allocate-wallet.dto';
@@ -60,10 +59,6 @@ import { SendWalletOtpDto } from './dto/send-wallet-otp.dto';
 import { VerifyWalletOtpDto } from './dto/verify-wallet-otp.dto';
 import { AuthService } from '../auth/auth.service';
 import { ResendEmailService } from '../auth/resend-email.service';
-import {
-  SetWalletPasswordDto,
-  RemoveWalletPasswordDto,
-} from './dto/wallet-password.dto';
 import {
   ContractActionDto,
   OfferType,
@@ -150,7 +145,6 @@ export class PartyController {
     private readonly walletOnboarding: WalletOnboardingService,
     private readonly lockEligibility: LockEligibilityService,
     private readonly prisma: PrismaService,
-    private readonly walletPassword: WalletPasswordService,
     private readonly cantex: CantexClient,
     private readonly cantonPrices: CantonPriceService,
     private readonly swapService: SwapService,
@@ -901,9 +895,6 @@ export class PartyController {
       );
     }
 
-    // Gate kata sandi transaksi (opsional): wajib hanya bila user telah menetapkan satu.
-    await this.walletPassword.assertGate(sender.id, body.walletPassword);
-
     // Per-user mutex (Fix fund-safety #2): cegah dua transfer konkuren dari user
     // yang sama (multi-tab / double-click cepat / scripted client dengan nonce
     // beda). Tanpa ini, dua request bisa lewati balance check bersamaan lalu
@@ -1485,9 +1476,6 @@ export class PartyController {
       );
     }
 
-    // Wallet password gate (opsional, mirror sendCc).
-    await this.walletPassword.assertGate(sender.id, body.walletPassword);
-
     // Per-user mutex: cegah dua transfer konkuren dari user yang sama
     // (multi-tab / double-click / nonce beda). Reuse sendCcInFlight supaya user
     // tidak bisa kirim CC + token konkuren sekaligus.
@@ -1826,10 +1814,7 @@ export class PartyController {
     const dir: 'incoming' | 'outgoing' =
       direction === 'outgoing' ? 'outgoing' : 'incoming';
 
-    let offers = await this.ledger.queryPendingOffers(
-      user.cantonPartyId,
-      dir,
-    );
+    let offers = await this.ledger.queryPendingOffers(user.cantonPartyId, dir);
 
     // Fallback: kalau ACS kosong, coba Splice Wallet API langsung
     if (offers.length === 0 && user.username) {
@@ -1952,10 +1937,7 @@ export class PartyController {
     let offerInstrumentId = 'Amulet';
     let offerInstrumentAdmin = '';
     try {
-      const detail = await this.ledger.lookupOfferDetail(
-        cid,
-        partyId,
-      );
+      const detail = await this.ledger.lookupOfferDetail(cid, partyId);
       if (detail) {
         amountCc = parseFloat(detail.amount) || 0;
         senderLabel = detail.sender?.split('::')[0] ?? detail.sender ?? '';
@@ -1972,10 +1954,7 @@ export class PartyController {
 
     if (offerType === OfferType.TRANSFER_INSTRUCTION) {
       // CIP-0056 TransferInstruction
-      const result = await this.ledger.acceptTransferInstruction(
-        cid,
-        partyId,
-      );
+      const result = await this.ledger.acceptTransferInstruction(cid, partyId);
       ok = result.ok;
       updateId = result.updateId;
       if (!ok) {
@@ -1985,10 +1964,7 @@ export class PartyController {
       }
     } else {
       // Legacy Splice TransferOffer — accept via Canton Ledger API.
-      const result = await this.ledger.acceptTransferOffer(
-        cid,
-        partyId,
-      );
+      const result = await this.ledger.acceptTransferOffer(cid, partyId);
       ok = result.accepted;
       updateId = result.updateId;
       if (!ok) {
@@ -2049,9 +2025,7 @@ export class PartyController {
         let resolvedAmount = amountCc;
         if (resolvedAmount === 0) {
           try {
-            const afterBal = await this.ledger.getLedgerBalance(
-              partyId,
-            );
+            const afterBal = await this.ledger.getLedgerBalance(partyId);
             if (afterBal != null) {
               const beforeRow = await this.prisma.ccBalance.findUnique({
                 where: { userId: user.id },
@@ -2168,10 +2142,7 @@ export class PartyController {
       let amountCc = 0;
       let senderLabel = '';
       try {
-        const detail = await this.ledger.lookupOfferDetail(
-          cid,
-          partyId,
-        );
+        const detail = await this.ledger.lookupOfferDetail(cid, partyId);
         if (detail) {
           amountCc = parseFloat(detail.amount) || 0;
           senderLabel = detail.sender?.split('::')[0] ?? detail.sender ?? '';
@@ -2180,10 +2151,7 @@ export class PartyController {
         this.logger.warn(`lookupOfferDetail (reject) failed: ${String(err)}`);
       }
 
-      const result = await this.ledger.rejectTransferInstruction(
-        cid,
-        partyId,
-      );
+      const result = await this.ledger.rejectTransferInstruction(cid, partyId);
       if (!result.ok) {
         throw new BadRequestException(
           `Failed to reject: ${result.error ?? 'unknown'}`,
@@ -2239,10 +2207,7 @@ export class PartyController {
       let amountCc = 0;
       let senderLabel = '';
       try {
-        const detail = await this.ledger.lookupOfferDetail(
-          cid,
-          partyId,
-        );
+        const detail = await this.ledger.lookupOfferDetail(cid, partyId);
         if (detail) {
           amountCc = parseFloat(detail.amount) || 0;
           senderLabel = detail.sender?.split('::')[0] ?? detail.sender ?? '';
@@ -2253,10 +2218,7 @@ export class PartyController {
         );
       }
 
-      const result = await this.ledger.rejectTransferOffer(
-        cid,
-        partyId,
-      );
+      const result = await this.ledger.rejectTransferOffer(cid, partyId);
       if (!result.rejected) {
         throw new BadRequestException('Failed to reject transfer offer.');
       }
@@ -2631,8 +2593,6 @@ export class PartyController {
         'No wallet found. Create your wallet first.',
       );
     }
-    // Gate kata sandi transaksi (opsional): wajib hanya bila user telah menetapkan satu.
-    await this.walletPassword.assertGate(user.id, body.walletPassword);
     const ownerParty = user.cantonPartyId;
 
     const { map } = this.getLockTerms();
@@ -2728,8 +2688,6 @@ export class PartyController {
         'No wallet found. Create your wallet first.',
       );
     }
-    // Gate kata sandi transaksi (opsional): wajib hanya bila user telah menetapkan satu.
-    await this.walletPassword.assertGate(user.id, body.walletPassword);
     const ownerParty = user.cantonPartyId;
 
     // Pilih lock: by lockId, else expired paling awal milik user.
@@ -2807,59 +2765,6 @@ export class PartyController {
     }
 
     return { ok: true, lockId: lock.id };
-  }
-
-  // ── Kata sandi transaksi (wallet password) — manajemen di Settings ────────
-
-  /** GET /party/wallet-password — apakah user telah menetapkan wallet password? */
-  @Throttle({ default: { limit: 20, ttl: 60_000 } })
-  @Get('wallet-password')
-  async getWalletPassword(@Req() req: AuthedReq) {
-    const hasPassword = await this.walletPassword.hasPassword(req.user.userId);
-    return { hasPassword };
-  }
-
-  /**
-   * POST /party/wallet-password — set atau ganti wallet password.
-   * - Bila belum punya: set baru (currentPassword diabaikan).
-   * - Bila sudah punya: wajib currentPassword benar.
-   */
-  @Throttle({ auth: { limit: 10, ttl: 60_000 } })
-  @Post('wallet-password')
-  async setWalletPassword(
-    @Req() req: AuthedReq,
-    @Body() body: SetWalletPasswordDto,
-  ) {
-    const has = await this.walletPassword.hasPassword(req.user.userId);
-    await this.walletPassword.changePassword(
-      req.user.userId,
-      body.newPassword,
-      body.currentPassword,
-    );
-    this.logger.log(
-      `wallet password ${has ? 'changed' : 'set'}: user=${req.user.userId.slice(0, 8)}`,
-    );
-    return { ok: true, hasPassword: true };
-  }
-
-  /**
-   * DELETE /party/wallet-password — hapus wallet password (menonaktifkan gate).
-   * Wajib verifikasi currentPassword terlebih dahulu.
-   */
-  @Throttle({ auth: { limit: 10, ttl: 60_000 } })
-  @Delete('wallet-password')
-  async removeWalletPassword(
-    @Req() req: AuthedReq,
-    @Body() body: RemoveWalletPasswordDto,
-  ) {
-    await this.walletPassword.clearPassword(
-      req.user.userId,
-      body.currentPassword,
-    );
-    this.logger.log(
-      `wallet password removed: user=${req.user.userId.slice(0, 8)}`,
-    );
-    return { ok: true, hasPassword: false };
   }
 
   /**
@@ -3041,7 +2946,8 @@ export class PartyController {
     // ── 1. ON-CHAIN (authoritative) ────────────────────────────────────────
     if (partyId) {
       try {
-        const onChain = await this.ledger.queryTokenHoldingsByInterface(partyId);
+        const onChain =
+          await this.ledger.queryTokenHoldingsByInterface(partyId);
         if (Object.keys(onChain).length > 0) {
           for (const [id, amount] of Object.entries(onChain)) {
             if (!isVisibleInstrument(id)) continue; // whitelist
@@ -3289,9 +3195,7 @@ export class PartyController {
       user.username &&
       !swapWhitelist.includes(user.username.toLowerCase())
     ) {
-      throw new ServiceUnavailableException(
-        'Swap is coming soon. Stay tuned!',
-      );
+      throw new ServiceUnavailableException('Swap is coming soon. Stay tuned!');
     }
     const result = await this.swapService.executeSwap(req.user.userId, {
       sellInstrumentId: body.sellInstrumentId,
@@ -3299,7 +3203,6 @@ export class PartyController {
       buyInstrumentId: body.buyInstrumentId,
       buyInstrumentAdmin: body.buyInstrumentAdmin,
       amount: body.amount,
-      walletPassword: body.walletPassword,
       sellIsCC: body.sellIsCC,
       clientNonce: body.clientNonce,
       maxNetworkFee: body.maxNetworkFee,

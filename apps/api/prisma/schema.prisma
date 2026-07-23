@@ -63,12 +63,6 @@ model User {
   twitterConnectedAt      DateTime?
   /// Last time the user opened or dismissed in-app CC notifications (bell).
   notificationsLastSeenAt DateTime?
-  /// bcrypt hash kata sandi transaksi opsional (gate Send/Lock/Unlock). Null = tidak ada gate.
-  walletPasswordHash       String?
-  /// Penghitung percobaan verifikasi gagal — reset ke 0 saat berhasil / saat set password baru.
-  walletPasswordAttempts   Int                   @default(0)
-  /// Sampai kapan verifikasi dikunci karena terlalu banyak percobaan gagal (null = tidak terkunci).
-  walletPasswordLockedUntil DateTime?
   createdAt               DateTime              @default(now())
   updatedAt               DateTime              @updatedAt
   refreshTokens           RefreshToken[]

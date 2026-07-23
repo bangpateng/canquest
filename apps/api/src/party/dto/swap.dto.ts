@@ -47,12 +47,6 @@ export class SwapDto {
   @Max(1_000_000, { message: 'Amount exceeds swap ceiling.' })
   amount!: number;
 
-  /** Kata sandi transaksi opsional (wallet password). */
-  @IsOptional()
-  @IsString()
-  @MaxLength(64)
-  walletPassword?: string;
-
   /** True bila sell = CC (untuk custody routing di Phase 2). */
   @IsOptional()
   @IsBoolean()

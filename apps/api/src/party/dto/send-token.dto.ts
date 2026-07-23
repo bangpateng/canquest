@@ -69,15 +69,6 @@ export class SendTokenDto {
   memo?: string;
 
   /**
-   * Kata sandi transaksi opsional (wallet password). Wajib hanya bila user telah
-   * menetapkan satu di Settings — diverifikasi di awal handler sebelum eksekusi.
-   */
-  @IsOptional()
-  @IsString()
-  @MaxLength(64)
-  walletPassword?: string;
-
-  /**
    * Idempotency nonce — UUID baru per klik Send. Dipakai untuk derive commandId
    * ledger yang DETERMINISTIK sehingga double-click / retry / multi-tab yang kirim
    * nonce sama di-dedup oleh Canton menjadi SATU transfer (bukan dua). Frontend

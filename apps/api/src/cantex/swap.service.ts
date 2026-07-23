@@ -25,7 +25,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CantonLedgerService } from '../canton/canton-ledger.service';
 import { CcInboundSyncService } from '../canton/cc-inbound-sync.service';
 import { UsersService } from '../users/users.service';
-import { WalletPasswordService } from "../users/wallet-password.service";
 import { RealtimeService } from '../realtime/realtime.service';
 import { CantexClient } from './cantex-client';
 import type { SwapExecutedDetails } from './cantex-client';
@@ -43,7 +42,6 @@ export class SwapService {
     private readonly ledger: CantonLedgerService,
     private readonly inboundSync: CcInboundSyncService,
     private readonly users: UsersService,
-    private readonly walletPassword: WalletPasswordService,
     private readonly realtime: RealtimeService,
     private readonly config: ConfigService,
   ) {}
@@ -537,7 +535,6 @@ export class SwapService {
       buyInstrumentId: string;
       buyInstrumentAdmin: string;
       amount: number;
-      walletPassword?: string;
       sellIsCC?: boolean;
       clientNonce: string;
       maxNetworkFee?: string;
@@ -549,10 +546,7 @@ export class SwapService {
     swapId?: string;
     message?: string;
   }> {
-    // 1. Wallet gate.
-    await this.walletPassword.assertGate(userId, params.walletPassword);
-
-    // 2. Per-user mutex (mirror sendCcInFlight).
+    // 1. Per-user mutex (mirror sendCcInFlight).
     if (this.swapInFlight.has(userId)) {
       return {
         success: false,
@@ -1014,7 +1008,10 @@ export class SwapService {
       const tokenBal = await this.prisma.cantexTokenBalance.findFirst({
         where: {
           userId,
-          instrumentId: { equals: params.sellInstrumentId, mode: 'insensitive' },
+          instrumentId: {
+            equals: params.sellInstrumentId,
+            mode: 'insensitive',
+          },
           instrumentAdmin: {
             equals: params.sellInstrumentAdmin,
             mode: 'insensitive',
@@ -1065,9 +1062,7 @@ export class SwapService {
           t.instrument.admin.toLowerCase() ===
             params.sellInstrumentAdmin.toLowerCase(),
       );
-      const onChain = instr
-        ? parseFloat(instr.unlockedAmount.toString())
-        : 0;
+      const onChain = instr ? parseFloat(instr.unlockedAmount.toString()) : 0;
       if (onChain < params.amount) {
         this.logger.warn(
           `DRIFT: TOKEN_TO_CC ${params.sellInstrumentId} — off-chain balance ${available}, on-chain trading account ${onChain}, required ${params.amount}. Swap akan tetap dicoba, Cantex akan validasi.`,
@@ -1156,7 +1151,10 @@ export class SwapService {
       const debitRow = await this.prisma.cantexTokenBalance.findFirst({
         where: {
           userId,
-          instrumentId: { equals: params.sellInstrumentId, mode: 'insensitive' },
+          instrumentId: {
+            equals: params.sellInstrumentId,
+            mode: 'insensitive',
+          },
           instrumentAdmin: {
             equals: params.sellInstrumentAdmin,
             mode: 'insensitive',
@@ -1228,7 +1226,8 @@ export class SwapService {
               amount: outputCc,
               amountMicroCc: netCcMicro,
               status: 'PENDING_APPROVAL',
-              errorMessage: 'transferCC on-chain failed; CC held in trading account pending reconcile',
+              errorMessage:
+                'transferCC on-chain failed; CC held in trading account pending reconcile',
             },
           });
           this.logger.warn(

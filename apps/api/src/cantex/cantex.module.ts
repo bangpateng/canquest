@@ -15,7 +15,7 @@ import { SwapService } from './swap.service';
  *
  * Import CantonModule + UsersModule supaya SwapService dapat inject:
  *   - CantonLedgerService, CcInboundSyncService (from CantonModule)
- *   - UsersService, WalletPasswordService (from UsersModule)
+ *   - UsersService (from UsersModule)
  */
 @Global()
 @Module({

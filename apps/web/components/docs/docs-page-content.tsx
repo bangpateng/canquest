@@ -83,7 +83,7 @@ export function DocsPageContent() {
                 <li><strong className="font-medium text-[var(--foreground)]">Quests</strong> — daily and on-chain tasks that earn points.</li>
                 <li><strong className="font-medium text-[var(--foreground)]">Wallet</strong> — your Canton party ID: balances, send, receive, swap, lock.</li>
                 <li><strong className="font-medium text-[var(--foreground)]">Leaderboard</strong> — rank by points.</li>
-                <li><strong className="font-medium text-[var(--foreground)]">Settings</strong> — profile, wallet password, one-step transfer, X connection.</li>
+                <li><strong className="font-medium text-[var(--foreground)]">Settings</strong> — profile, one-step transfer, X connection.</li>
               </UL>
             </DocsSection>
 
@@ -255,10 +255,9 @@ export function DocsPageContent() {
 
             <DocsSection id="settings" title="Settings">
               <p>
-                <PathLink href="/settings">Settings</PathLink> has four panels plus sign-out.
+                <PathLink href="/settings">Settings</PathLink> has three panels plus sign-out.
               </p>
               <p><strong className="font-medium text-[var(--foreground)]">Profile</strong> — read-only: email, display name, X handle, Canton username, and party ID.</p>
-              <p><strong className="font-medium text-[var(--foreground)]">Wallet password</strong> — an optional extra password that protects Send, Swap, Lock, and Unlock. Set, change, or remove it here.</p>
               <p><strong className="font-medium text-[var(--foreground)]">One-step transfer</strong> — toggle CC preapproval (CIP-56) so incoming CC arrives instantly instead of as an offer you must accept. Per-token; CC is live, USDCx/CBTC coming soon.</p>
               <p><strong className="font-medium text-[var(--foreground)]">X (Twitter)</strong> — connect your handle for quest and campaign verification. Once linked, it is permanent.</p>
               <p><strong className="font-medium text-[var(--foreground)]">Sign out</strong> at the bottom.</p>

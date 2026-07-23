@@ -12,8 +12,7 @@ import { cn } from "@/lib/utils/utils";
 import { TransactionDetailModal } from "@/components/app/wallet/transaction-detail-modal";
 import { OffersModal, useOffers, useSentOffers } from "@/components/app/wallet/offers-section";
 import { SwapModal } from "@/components/app/wallet/swap-modal";
-import { WalletPasswordModal } from "@/components/app/wallet/wallet-password-modal";
-import { useWalletPassword } from "@/lib/hooks/use-wallet-password";
+import { SendConfirmModal } from "@/components/app/wallet/send-confirm-modal";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -151,10 +150,9 @@ export function WalletActions({
   const [sendMessage, setSendMessage] = useState("");
   const [successTransactionId, setSuccessTransactionId] = useState<string | null>(null);
 
-  // Gate kata sandi transaksi (opsional). Modal muncul hanya bila user menetapkan satu.
-  const { hasPassword: hasWalletPassword } = useWalletPassword();
-  const [pwOpen, setPwOpen] = useState(false);
-  const [pwError, setPwError] = useState("");
+  // ── Alur 2-langkah: form Send → modal "Confirm transaction" → eksekusi.
+  // confirmOpen membuka modal review. Pada Confirm, modal panggil submitSend.
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const close = useCallback(() => {
     setSheet(null);
@@ -193,30 +191,28 @@ export function WalletActions({
     setSheet("send");
   }
 
-  // Konfirmasi password dari modal → lanjutkan send dengan password tersebut.
-  function confirmSendPassword(password: string) {
-    setPwError("");
-    // submitSend butuh event; buat event sintetis agar e.preventDefault() aman.
-    void submitSend(
-      { preventDefault: () => {} } as React.FormEvent,
-      password,
-    );
-  }
-
-  function closePasswordModal() {
-    setPwOpen(false);
-    setPwError("");
-    setSendState("idle");
-  }
-
-  async function submitSend(e: React.FormEvent, password?: string) {
+  // Submit dari FORM Send: validasi dasar, lalu buka modal konfirmasi (2-langkah).
+  // Eksekusi sebenarnya (fetch) baru jalan saat user klik "Confirm".
+  function onSendSubmit(e: React.FormEvent) {
     e.preventDefault();
-    // Gate: bila user menetapkan wallet password dan belum ada input, buka modal.
-    if (hasWalletPassword && !password) {
-      setPwError("");
-      setPwOpen(true);
-      return;
-    }
+    const recipient = normalizeSendRecipientInput(recipientUsername);
+    const amount = parseFloat(ccAmount.trim());
+    if (!recipient || !amount || amount <= 0) return;
+    if (!selectedSendToken) return;
+    setSendState("idle");
+    setSendMessage("");
+    setConfirmOpen(true);
+  }
+
+  // Tutup modal konfirmasi (Cancel / backdrop). Reset state tanpa eksekusi.
+  function closeConfirm() {
+    setConfirmOpen(false);
+    setSendState("idle");
+    setSendMessage("");
+  }
+
+  async function submitSend(e: React.FormEvent) {
+    e.preventDefault();
     const recipient = normalizeSendRecipientInput(recipientUsername);
     const amount = parseFloat(ccAmount.trim());
     if (!recipient || !amount || amount <= 0) return;
@@ -239,7 +235,6 @@ export function WalletActions({
       amount,
       memo: memo.trim() || undefined,
       clientNonce: nonce,
-      ...(password ? { walletPassword: password } : {}),
     };
     if (!isCC) {
       payload.instrumentId = selectedSendToken.instrumentId;
@@ -274,22 +269,14 @@ export function WalletActions({
       // Error hanya jika HTTP error ATAU success=false
       // accepted=false + offerPending=true = offer berhasil dibuat, receiver perlu accept manual (BUKAN error)
       if (!res.ok || data.success === false) {
-        // 403 = wallet password salah / terkunci — tahan di modal untuk coba lagi.
-        if (res.status === 403) {
-          setPwOpen(true);
-          setPwError(
-            data.message ?? data.error ?? "Wrong wallet password.",
-          );
-          setSendState("idle");
-          return;
-        }
         setSendState("error");
         setSendMessage(data.message ?? data.error ?? "Transfer failed. Please try again.");
+        setConfirmOpen(false);
         return;
       }
 
-      // Sukses → tutup modal password (jika terbuka) dan reset gate.
-      setPwOpen(false);
+      // Sukses → tutup modal konfirmasi & form.
+      setConfirmOpen(false);
       setSheet(null);
       setSendState("idle");
       const tokenLabel = displayName(selectedSendToken.instrumentId);
@@ -320,6 +307,7 @@ export function WalletActions({
     } catch {
       setSendState("error");
       setSendMessage("Network error. Check your connection and try again.");
+      setConfirmOpen(false);
     }
   }
 
@@ -471,7 +459,7 @@ export function WalletActions({
                 </button>
               </div>
             ) : (
-              <form onSubmit={submitSend} className="mt-8 space-y-6">
+              <form onSubmit={onSendSubmit} className="mt-8 space-y-6">
                 {/* ── TOKEN SELECTOR (CC + USDCx + token aktif lainnya) ── */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-400">Token</label>
@@ -566,18 +554,9 @@ export function WalletActions({
                         })}
                     </div>
                   )}
-                  {selectedSendToken && (
-                    <p className="text-xs text-slate-500">
-                      Balance:{" "}
-                      <span className="tabular-nums text-slate-300">
-                        {selectedBalance.toFixed(6)}{" "}
-                        {displayName(selectedSendToken.instrumentId)}
-                      </span>
-                    </p>
-                  )}
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-2">
                   <label
                     htmlFor="wallet-send-recipient"
                     className="text-sm font-medium text-slate-400"
@@ -595,13 +574,13 @@ export function WalletActions({
                       const n = normalizeSendRecipientInput(recipientUsername);
                       if (n && n !== recipientUsername.trim()) setRecipientUsername(n);
                     }}
-                    placeholder="@alice or alice::1220…"
+                    placeholder="Recipient wallet address"
                     disabled={sendState === "loading"}
                     className="w-full resize-none rounded-2xl border border-white/5 bg-white/5 px-4 py-3 font-mono text-sm font-medium text-slate-100 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
                   />
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label
                       htmlFor="wallet-send-amount"
@@ -633,13 +612,22 @@ export function WalletActions({
                     autoComplete="off"
                     value={ccAmount}
                     onChange={(e) => setCcAmount(e.target.value)}
-                    placeholder="e.g. 10"
+                    placeholder="0.00"
                     disabled={sendState === "loading"}
                     className="w-full rounded-2xl border border-white/5 bg-white/5 px-4 py-3 text-base font-bold tabular-nums text-slate-100 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
                   />
+                  {selectedSendToken && (
+                    <p className="text-xs text-slate-500">
+                      Balance:{" "}
+                      <span className="tabular-nums text-slate-300">
+                        {selectedBalance.toFixed(6)}{" "}
+                        {displayName(selectedSendToken.instrumentId)}
+                      </span>
+                    </p>
+                  )}
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-2">
                   <label
                     htmlFor="wallet-send-memo"
                     className="text-sm font-medium text-slate-400"
@@ -652,65 +640,67 @@ export function WalletActions({
                     autoComplete="off"
                     value={memo}
                     onChange={(e) => setMemo(e.target.value)}
-                    placeholder=""
+                    placeholder="Add a note"
                     disabled={sendState === "loading"}
                     className="w-full rounded-2xl border border-white/5 bg-white/5 px-4 py-3 text-base font-medium text-slate-100 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
                   />
                 </div>
 
-                {/* Fee notice */}
-                <div className="flex justify-center px-6 py-4">
-                  <p className="text-sm font-medium text-slate-400">
-                    <span className="font-semibold text-slate-100">Platform Fee : {feeCc} CC</span>
-                  </p>
-                </div>
-
                 {sendState === "error" && (
-                  <div className="flex items-start gap-3 rounded-3xl border border-red-500/30 bg-red-500/10 p-4">
+                  <div className="flex items-start gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-4">
                     <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
                     <p className="text-sm font-medium text-red-400">{sendMessage}</p>
                   </div>
                 )}
 
-                <button
-                  type="submit"
-                  disabled={sendState === "loading"}
-                  className={cn(buttonVariants({ size: "sm" }), "mt-8 w-full sm:w-auto gap-2")}
-                >
-                  {sendState === "loading" ? (
-                    <>
-                      <LoadingSpinner size="sm" />
-                      Sending…
-                    </>
-                  ) : (
-                    "Send"
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={close}
-                  disabled={sendState === "loading"}
-                  className={cn(
-                    buttonVariants({ variant: "secondary", size: "sm" }),
-                    "w-full sm:w-auto",
-                  )}
-                >
-                  Cancel
-                </button>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={close}
+                    disabled={sendState === "loading"}
+                    className={cn(
+                      buttonVariants({ variant: "secondary", size: "sm" }),
+                      "flex-1",
+                    )}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={sendState === "loading"}
+                    className={cn(buttonVariants({ size: "sm" }), "flex-1 gap-2")}
+                  >
+                    {sendState === "loading" ? (
+                      <>
+                        <LoadingSpinner size="sm" />
+                        Sending…
+                      </>
+                    ) : (
+                      "Send"
+                    )}
+                  </button>
+                </div>
               </form>
             )}
           </div>
         </div>
       ) : null}
 
-      {/* ── WALLET PASSWORD GATE (Send) ── */}
-      <WalletPasswordModal
-        open={pwOpen}
-        actionLabel="Send"
-        error={pwError}
+      {/* ── CONFIRM TRANSACTION MODAL (langkah 2) ── */}
+      <SendConfirmModal
+        open={confirmOpen}
         busy={sendState === "loading"}
-        onClose={closePasswordModal}
-        onConfirm={confirmSendPassword}
+        token={selectedSendToken}
+        amount={ccAmount}
+        recipientDisplay={formatPartyIdForDisplay(
+          normalizeSendRecipientInput(recipientUsername),
+        )}
+        memo={memo}
+        feeCc={feeCc}
+        onClose={closeConfirm}
+        onConfirm={() =>
+          void submitSend({ preventDefault: () => {} } as React.FormEvent)
+        }
       />
 
       <TransactionDetailModal
