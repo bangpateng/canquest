@@ -552,13 +552,30 @@ export function WalletActions({
                 </div>
 
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label
-                      htmlFor="wallet-send-amount"
-                      className="text-sm font-medium text-slate-400"
-                    >
-                      Amount
-                    </label>
+                  <label
+                    htmlFor="wallet-send-amount"
+                    className="text-sm font-medium text-slate-400"
+                  >
+                    Amount
+                  </label>
+                  {selectedSendToken && (
+                    <p className="tabular-nums text-xs text-slate-400">
+                      {selectedBalance.toFixed(6)}{" "}
+                      {displayName(selectedSendToken.instrumentId)}
+                    </p>
+                  )}
+                  <div className="relative">
+                    <input
+                      id="wallet-send-amount"
+                      required
+                      inputMode="decimal"
+                      autoComplete="off"
+                      value={ccAmount}
+                      onChange={(e) => setCcAmount(e.target.value)}
+                      placeholder="0.00"
+                      disabled={sendState === "loading"}
+                      className="w-full rounded-2xl border border-white/5 bg-white/5 py-3 pl-4 pr-16 text-base font-bold tabular-nums text-slate-100 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
+                    />
                     {selectedBalance > 0 && (
                       <button
                         type="button"
@@ -570,32 +587,12 @@ export function WalletActions({
                           setCcAmount(max.toFixed(6));
                         }}
                         disabled={sendState === "loading"}
-                        className="text-xs font-semibold text-[var(--primary)] hover:underline disabled:opacity-40"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg px-2.5 py-1 text-xs font-semibold text-[var(--primary)] hover:bg-white/5 disabled:opacity-40"
                       >
                         MAX
                       </button>
                     )}
                   </div>
-                  <input
-                    id="wallet-send-amount"
-                    required
-                    inputMode="decimal"
-                    autoComplete="off"
-                    value={ccAmount}
-                    onChange={(e) => setCcAmount(e.target.value)}
-                    placeholder="0.00"
-                    disabled={sendState === "loading"}
-                    className="w-full rounded-2xl border border-white/5 bg-white/5 px-4 py-3 text-base font-bold tabular-nums text-slate-100 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
-                  />
-                  {selectedSendToken && (
-                    <p className="text-xs text-slate-500">
-                      Balance:{" "}
-                      <span className="tabular-nums text-slate-300">
-                        {selectedBalance.toFixed(6)}{" "}
-                        {displayName(selectedSendToken.instrumentId)}
-                      </span>
-                    </p>
-                  )}
                 </div>
 
                 <div className="space-y-2">
