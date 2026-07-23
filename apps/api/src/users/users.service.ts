@@ -44,20 +44,64 @@ function dedupKey(row: {
 }
 
 /**
- * Collapse baris duplikat (key sama) jadi satu. Keep baris PERTAMA (paling baru
- * karena array sudah sorted desc). Dipakai untuk feed notifikasi & badge count
- * supaya satu transfer on-chain = maksimal 1 baris.
+ * Skor kualitas baris untuk tie-break saat dedup. Baris dengan info paling
+ * lengkap (pengirim/penerima asli, bukan self-reference) harus menang atas
+ * baris WSS/indexer yang set referenceId = party sendiri.
+ *
+ * Kriteria (semakin tinggi semakin dipertahankan):
+ *  - ledgerTxId BUKAN prefix wss:/inbound-sync: → baris dari controller/indexer
+ *    (punya identitas on-chain asli + counterparty biasanya benar).
+ *  - referenceId != null → punya info counterparty (bukan self placeholder).
  */
-function dedupByKey<T extends { id: string; ledgerTxId?: string | null; cantonUpdateId?: string | null }>(
-  rows: T[],
-): T[] {
+function rowQualityScore(row: {
+  ledgerTxId?: string | null;
+  referenceId?: string | null;
+}): number {
+  let score = 0;
+  const ledgerId = row.ledgerTxId?.trim();
+  if (ledgerId && !ledgerId.startsWith('wss:') && !ledgerId.startsWith('inbound-sync:')) {
+    score += 2; // baris controller/indexer (identitas asli, bukan self-ref)
+  }
+  if (row.referenceId && row.referenceId.trim()) {
+    score += 1; // punya info counterparty
+  }
+  return score;
+}
+
+/**
+ * Collapse baris duplikat (key sama) jadi satu. Keep baris dengan SKOR KUALITAS
+ * tertinggi (counterparty asli > self-reference); tie-break ke yang paling baru.
+ * Dipakai untuk feed notifikasi, badge count & Activity list supaya satu
+ * transfer on-chain = maksimal 1 baris DAN menampilkan counterparty yang benar.
+ */
+function dedupByKey<T extends {
+  id: string;
+  ledgerTxId?: string | null;
+  cantonUpdateId?: string | null;
+  referenceId?: string | null;
+}>(rows: T[]): T[] {
+  // Group by key, keep winner (quality tertinggi; tie → pertama = paling baru).
+  const winners = new Map<string, T>();
+  for (const row of rows) {
+    const key = dedupKey(row);
+    const prev = winners.get(key);
+    if (!prev) {
+      winners.set(key, row);
+      continue;
+    }
+    // Ganti bila kualitas baris baru lebih tinggi dari pemenang saat ini.
+    if (rowQualityScore(row) > rowQualityScore(prev)) {
+      winners.set(key, row);
+    }
+  }
+  // Preserve urutan asli (sorted desc) untuk output.
   const seen = new Set<string>();
   const out: T[] = [];
   for (const row of rows) {
     const key = dedupKey(row);
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push(row);
+    out.push(winners.get(key)!);
   }
   return out;
 }
@@ -696,7 +740,7 @@ export class UsersService {
         orderBy: { createdAt: 'desc' },
         take,
       }),
-      // Token badge (unread count). ledgerTxId/cantonUpdateId untuk dedup.
+      // Token badge (unread count). ledgerTxId/cantonUpdateId/referenceId untuk dedup.
       this.prisma.tokenTransaction.findMany({
         where: tokenBadgeWhere,
         orderBy: { createdAt: 'desc' },
@@ -706,6 +750,7 @@ export class UsersService {
           createdAt: true,
           ledgerTxId: true,
           cantonUpdateId: true,
+          referenceId: true,
         },
       }),
       this.getDrawAlerts(userId, lastSeenAt),
