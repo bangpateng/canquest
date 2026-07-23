@@ -3,7 +3,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, Ban, Check, Copy, Lock, LockOpen, Zap } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Ban, Check, Copy, ExternalLink, Lock, LockOpen, Zap } from "lucide-react";
 
 import type { TransactionDetail } from "@/components/app/wallet/transaction-detail-view";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
@@ -373,14 +373,48 @@ export function TransactionDetailContent({
             })()}
           </ReceiptField>
 
-          {txId ? (
-            <ReceiptField label="Tx ID" mono>
-              <span className="inline-flex items-center justify-end gap-1.5">
-                <span>{truncateMiddle(txId)}</span>
-                <InlineCopyButton value={txId} label="Copy transaction ID" />
-              </span>
-            </ReceiptField>
-          ) : null}
+          {txId ? (() => {
+            // Link explorer ccview.io/updates/{id}/ — pakai cantonUpdateId (update id
+            // on-chain) sebagai prioritas, fallback ke txId. Strip suffix :N kalau ada
+            // (eventId bisa bawa suffix round). id null → tdk ada link (internal marker).
+            const rawForUrl = detail.cantonUpdateId ?? txId;
+            const urlId = rawForUrl ? rawForUrl.replace(/:[0-9]+$/, "") : null;
+            const explorerUrl = urlId
+              ? `https://ccview.io/updates/${encodeURIComponent(urlId)}/`
+              : null;
+            return (
+              <ReceiptField label="Tx ID" mono>
+                <span className="inline-flex items-center justify-end gap-1.5">
+                  {explorerUrl ? (
+                    <a
+                      href={explorerUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="truncate text-[var(--primary)] underline-offset-2 hover:underline"
+                      title={txId}
+                    >
+                      {truncateMiddle(txId)}
+                    </a>
+                  ) : (
+                    <span>{truncateMiddle(txId)}</span>
+                  )}
+                  <InlineCopyButton value={txId} label="Copy transaction ID" />
+                  {explorerUrl ? (
+                    <a
+                      href={explorerUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={iconButtonClass("h-7 w-7 shrink-0 text-[var(--primary)]")}
+                      aria-label="View on ccview.io"
+                      title="View on ccview.io"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </a>
+                  ) : null}
+                </span>
+              </ReceiptField>
+            );
+          })() : null}
         </dl>
       </div>
 
