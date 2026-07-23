@@ -215,7 +215,6 @@ export function TransactionDetailContent({
     detail.eventId ?? detail.cantonUpdateId ?? detail.ledgerContractId ?? null;
   const txId = isInternal ? null : rawTxId;
 
-  const platformFeeCc = microCcToCc(detail.platformFeeMicroCc);
   const roundDisplay =
     detail.round != null && detail.round !== "" ? String(detail.round) : null;
   const usdDisplay =
@@ -326,12 +325,6 @@ export function TransactionDetailContent({
               {detail.counterparty}
             </ReceiptField>
           ) : null}
-
-          {/* Platform fee — selalu tampil. Sumber: send (TRANSACTION_FEE_CC)
-              atau swap (SWAP_PLATFORM_FEE_CC). 0 kalau tidak ada fee. */}
-          <ReceiptField label="Platform fee">
-            <span className="tabular-nums text-amber-400">{platformFeeCc.toFixed(4)} CC</span>
-          </ReceiptField>
 
           {roundDisplay ? (
             <ReceiptField label="Round">
