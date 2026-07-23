@@ -461,7 +461,7 @@ export function WalletActions({
             ) : (
               <form onSubmit={onSendSubmit} className="mt-8 space-y-6">
                 {/* ── TOKEN SELECTOR (CC + USDCx + token aktif lainnya) ── */}
-                <div className="space-y-2">
+                <div className="relative space-y-2">
                   <label className="text-sm font-medium text-slate-400">Token</label>
                   <button
                     type="button"
@@ -485,7 +485,7 @@ export function WalletActions({
                   </button>
 
                   {tokenPickerOpen && (
-                    <div className="relative z-20 mt-1 max-h-72 overflow-y-auto rounded-2xl border border-white/10 bg-[var(--card)] p-2 shadow-xl">
+                    <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-y-auto rounded-2xl border border-white/10 bg-[var(--card)] p-2 shadow-xl">
                       <div className="mb-2 flex items-center gap-2 px-2">
                         <Search className="h-4 w-4 text-slate-500" />
                         <input
@@ -535,11 +535,6 @@ export function WalletActions({
                                 <span className="font-medium text-slate-100">
                                   {displayName(t.instrumentId)}
                                 </span>
-                                {t.isCC && (
-                                  <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">
-                                    Instant
-                                  </span>
-                                )}
                                 {!tokenActive && (
                                   <span className="rounded bg-slate-700/50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                                     Coming soon
