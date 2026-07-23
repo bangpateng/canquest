@@ -557,30 +557,6 @@ export function WalletActions({
                 </div>
 
                 <div className="space-y-2">
-                  <label
-                    htmlFor="wallet-send-recipient"
-                    className="text-sm font-medium text-slate-400"
-                  >
-                    Recipient
-                  </label>
-                  <textarea
-                    id="wallet-send-recipient"
-                    required
-                    rows={2}
-                    autoComplete="off"
-                    value={recipientUsername}
-                    onChange={(e) => setRecipientUsername(e.target.value)}
-                    onBlur={() => {
-                      const n = normalizeSendRecipientInput(recipientUsername);
-                      if (n && n !== recipientUsername.trim()) setRecipientUsername(n);
-                    }}
-                    placeholder="Recipient wallet address"
-                    disabled={sendState === "loading"}
-                    className="w-full resize-none rounded-2xl border border-white/5 bg-white/5 px-4 py-3 font-mono text-sm font-medium text-slate-100 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
-                  />
-                </div>
-
-                <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label
                       htmlFor="wallet-send-amount"
@@ -625,6 +601,30 @@ export function WalletActions({
                       </span>
                     </p>
                   )}
+                </div>
+
+                <div className="space-y-2">
+                  <label
+                    htmlFor="wallet-send-recipient"
+                    className="text-sm font-medium text-slate-400"
+                  >
+                    Recipient
+                  </label>
+                  <textarea
+                    id="wallet-send-recipient"
+                    required
+                    rows={2}
+                    autoComplete="off"
+                    value={recipientUsername}
+                    onChange={(e) => setRecipientUsername(e.target.value)}
+                    onBlur={() => {
+                      const n = normalizeSendRecipientInput(recipientUsername);
+                      if (n && n !== recipientUsername.trim()) setRecipientUsername(n);
+                    }}
+                    placeholder="Recipient wallet address"
+                    disabled={sendState === "loading"}
+                    className="w-full resize-none rounded-2xl border border-white/5 bg-white/5 px-4 py-3 font-mono text-sm font-medium text-slate-100 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
+                  />
                 </div>
 
                 <div className="space-y-2">
