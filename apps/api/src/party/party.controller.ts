@@ -1668,7 +1668,9 @@ export class PartyController {
           amount,
           type: 'TOKEN_TRANSFER_OUT',
           description,
-          referenceId: `to:${normalizeCantonPartyId(recipientPartyId) ?? recipientPartyId}`,
+          // referenceId = partyId penerima (TANPA prefix "to:"). Prefix lama bikin
+          // resolveTransferCounterparty gagal match → counterparty tampil "to:karel…".
+          referenceId: normalizeCantonPartyId(recipientPartyId) ?? recipientPartyId,
           ledgerTxId: ledgerTxId ?? transferInstructionCid,
           cantonUpdateId: ledgerTxId ?? undefined,
           status: 'PENDING', // offer belum di-accept receiver

@@ -220,7 +220,10 @@ export class UsersService {
     referenceId: string | null,
   ): Promise<string | null> {
     if (!referenceId?.trim()) return null;
-    const ref = referenceId.trim();
+    // Strip legacy prefix "to:" (send-token lama simpan referenceId sebagai
+    // "to:partyId…"). Tanpa strip, looksLikeCantonPartyId gagal match →
+    // counterparty tampil mentah "to:karel::…" yang jelek.
+    const ref = referenceId.trim().replace(/^to:/, '');
 
     if (looksLikeCantonPartyId(ref)) {
       return normalizeCantonPartyId(ref);
