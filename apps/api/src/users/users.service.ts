@@ -21,6 +21,48 @@ import {
 import type { Prisma } from '@prisma/client';
 
 /**
+ * Dedup key untuk satu transaksi on-chain. Beberapa service (WSS handler,
+ * ledger indexer, cc-inbound-sync) bisa insert baris terpisah untuk transfer
+ * yang SAMA dengan format ledgerTxId berbeda (`wss:1234` vs `1234`). Key ini
+ * menormalisasi keduanya jadi satu identitas (cantonUpdateId preferensi, fallback
+ * ledgerTxId tanpa prefix `wss:`) supaya feed/badge/list bisa collapse duplikat.
+ *
+ * Baris tanpa identitas on-chain (reward, lock, preapproval) → fallback ke id DB
+ * sendiri (selalu unik, tidak di-collapse).
+ */
+function dedupKey(row: {
+  id: string;
+  ledgerTxId?: string | null;
+  cantonUpdateId?: string | null;
+}): string {
+  const updateId = row.cantonUpdateId?.trim();
+  if (updateId) return updateId;
+  const ledgerId = row.ledgerTxId?.trim();
+  if (!ledgerId) return `id:${row.id}`; // tidak punya identitas on-chain → unik
+  // Strip prefix "wss:" / "inbound-sync:" supaya `wss:1234` == `1234`.
+  return ledgerId.replace(/^(wss:|inbound-sync:)[^:]+:/, '').replace(/^wss:/, '');
+}
+
+/**
+ * Collapse baris duplikat (key sama) jadi satu. Keep baris PERTAMA (paling baru
+ * karena array sudah sorted desc). Dipakai untuk feed notifikasi & badge count
+ * supaya satu transfer on-chain = maksimal 1 baris.
+ */
+function dedupByKey<T extends { id: string; ledgerTxId?: string | null; cantonUpdateId?: string | null }>(
+  rows: T[],
+): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const row of rows) {
+    const key = dedupKey(row);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+  }
+  return out;
+}
+
+/**
  * CC event types surfaced in the platform notification bell (SPEC-TX-HISTORY-NOTIF B1).
  *
  * Two distinct concepts — kept separate so feed visibility ≠ badge triggers:
@@ -633,11 +675,20 @@ export class UsersService {
         orderBy: { createdAt: 'desc' },
         take,
       }),
-      // Ambil baris badge (id + referenceId + type) untuk post-filter fee, lalu hitung.
+      // Ambil baris badge (id + referenceId + type + dedup keys) untuk post-filter
+      // fee, lalu hitung. ledgerTxId/cantonUpdateId dipakai dedupByKey supaya
+      // baris wss:1234 dan 1234 (transfer sama dari service berbeda) collapse jadi 1.
       this.prisma.ccTransaction.findMany({
         where: this.notificationBadgeWhere(userId, lastSeenAt),
         orderBy: { createdAt: 'desc' },
-        select: { id: true, referenceId: true, type: true, createdAt: true },
+        select: {
+          id: true,
+          referenceId: true,
+          type: true,
+          createdAt: true,
+          ledgerTxId: true,
+          cantonUpdateId: true,
+        },
       }),
       // Token feed (non-CC, mis. USDCx transfer).
       this.prisma.tokenTransaction.findMany({
@@ -645,19 +696,26 @@ export class UsersService {
         orderBy: { createdAt: 'desc' },
         take,
       }),
-      // Token badge (unread count).
+      // Token badge (unread count). ledgerTxId/cantonUpdateId untuk dedup.
       this.prisma.tokenTransaction.findMany({
         where: tokenBadgeWhere,
         orderBy: { createdAt: 'desc' },
-        select: { id: true, type: true, createdAt: true },
+        select: {
+          id: true,
+          type: true,
+          createdAt: true,
+          ledgerTxId: true,
+          cantonUpdateId: true,
+        },
       }),
       this.getDrawAlerts(userId, lastSeenAt),
       this.getCodeClaimAlerts(userId, lastSeenAt),
     ]);
 
-    // Post-filter fee dari FEED (buang penerima = party fee).
+    // Post-filter fee dari FEED (buang penerima = party fee). Dedup dulu supaya
+    // duplikat on-chain (wss: + indexer untuk transfer yang sama) collapse jadi 1.
     const feeFilteredFeed: typeof feedRows = [];
-    for (const tx of feedRows) {
+    for (const tx of dedupByKey(feedRows)) {
       if (tx.type !== 'TRANSFER_IN' && tx.type !== 'TRANSFER_OUT') {
         feeFilteredFeed.push(tx);
         continue;
@@ -667,9 +725,10 @@ export class UsersService {
         feeFilteredFeed.push(tx);
     }
 
-    // Post-filter fee dari BADGE unread count.
+    // Post-filter fee dari BADGE unread count. Dedup dulu supaya duplikat on-chain
+    // (wss: + indexer) tidak menambah count ganda.
     let unreadTxCount = 0;
-    for (const row of badgeRows) {
+    for (const row of dedupByKey(badgeRows)) {
       if (row.type !== 'TRANSFER_IN' && row.type !== 'TRANSFER_OUT') {
         unreadTxCount++;
         continue;
@@ -678,7 +737,9 @@ export class UsersService {
       if (!isFeePartyRecipient(row.referenceId, resolved)) unreadTxCount++;
     }
     // Token badge: TOKEN_FEE_OUT sudah di-exclude via where-clause, sisanya unread.
-    unreadTxCount += tokenBadgeRows.length;
+    // Token badge: TOKEN_FEE_OUT sudah di-exclude via where-clause. Dedup sisanya
+    // supaya duplikat on-chain tidak menambah count ganda.
+    unreadTxCount += dedupByKey(tokenBadgeRows).length;
 
     const enriched = await this.enrichQuestRewardDescriptions(feeFilteredFeed);
     const serializedCcTx = await Promise.all(
@@ -1083,11 +1144,19 @@ export class UsersService {
     };
 
     // Ambil proyeksi ringan kedua tabel (bounded — frontend minta pageSize=200).
+    // ledgerTxId/cantonUpdateId untuk dedup on-chain duplikat (wss: vs indexer).
     const [ccRows, tokenRows] = await Promise.all([
       this.prisma.ccTransaction.findMany({
         where: { userId, ...CC_TRANSACTION_HISTORY_WHERE },
         orderBy: { createdAt: 'desc' },
-        select: { id: true, referenceId: true, type: true, createdAt: true },
+        select: {
+          id: true,
+          referenceId: true,
+          type: true,
+          createdAt: true,
+          ledgerTxId: true,
+          cantonUpdateId: true,
+        },
       }),
       this.prisma.tokenTransaction.findMany({
         where: tokenWhere,
@@ -1098,6 +1167,8 @@ export class UsersService {
           type: true,
           instrumentId: true,
           createdAt: true,
+          ledgerTxId: true,
+          cantonUpdateId: true,
         },
       }),
     ]);
@@ -1110,6 +1181,8 @@ export class UsersService {
       type: string;
       createdAt: Date;
       instrumentId?: string;
+      ledgerTxId?: string | null;
+      cantonUpdateId?: string | null;
     };
     const merged: UnifiedRow[] = [];
 
@@ -1140,14 +1213,16 @@ export class UsersService {
       });
     }
 
-    // Sort global by createdAt desc, lalu paginate.
+    // Sort global by createdAt desc, lalu dedup on-chain duplikat (wss:1234 vs
+    // 1234 dari service berbeda untuk transfer yang sama), lalu paginate.
     merged.sort(
       (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
     );
+    const deduped = dedupByKey(merged);
 
-    const total = merged.length;
+    const total = deduped.length;
     const skip = (page - 1) * pageSize;
-    const pageRows = merged.slice(skip, skip + pageSize);
+    const pageRows = deduped.slice(skip, skip + pageSize);
 
     // Hydrate baris penuh untuk halaman ini.
     const ccIds = pageRows
