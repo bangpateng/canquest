@@ -6,6 +6,31 @@ export function isPlatformFeeTransaction(description: string): boolean {
 import type { Prisma } from '@prisma/client';
 
 /**
+ * True bila baris ini adalah artefak WSS handler yang TIDAK punya info pengirim
+ * asli — ditandai ledgerTxId berprefix "wss:" DAN referenceId = party sendiri.
+ * Baris seperti ini tampil sebagai "(You) → (You)" yang membingungkan.
+ *
+ * Transfer antar user CanQuest & transfer external yang sudah dicatat controller
+ * TIDAK terkena (mereka punya ledgerTxId non-wss + referenceId counterparty asli).
+ * Hanya baris WSS yang menang/tidak punya kembaran controller yang di-hide.
+ *
+ * Dipakai post-query (butuh partyId owner — tidak bisa di Prisma where).
+ */
+export function isSelfReferenceWssRow(
+  referenceId: string | null | undefined,
+  ledgerTxId: string | null | undefined,
+  ownerPartyId: string | null | undefined,
+): boolean {
+  const ledger = ledgerTxId?.trim();
+  if (!ledger || !ledger.startsWith('wss:')) return false;
+  const ref = referenceId?.trim();
+  if (!ref || !ownerPartyId) return false;
+  // Match short label (sebelum "::") ATAU party id penuh.
+  const ownerShort = ownerPartyId.split('::')[0];
+  return ref === ownerPartyId || ref === ownerShort;
+}
+
+/**
  * Filter terpusat — dipakai getTransactions & feed notifikasi (FEED_TX_TYPES / badge).
  *
  * HANYA menyembunyikan baris fee (audit-only), BUKAN transfer normal. Fee ditandai tiga cara:

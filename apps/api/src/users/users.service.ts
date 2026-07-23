@@ -17,6 +17,7 @@ import { PointsService } from './points.service';
 import {
   CC_TRANSACTION_HISTORY_WHERE,
   isFeePartyRecipient,
+  isSelfReferenceWssRow,
 } from './cc-transaction-visibility';
 import type { Prisma } from '@prisma/client';
 
@@ -689,9 +690,10 @@ export class UsersService {
   async getNotifications(userId: string, limit = 12) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { notificationsLastSeenAt: true },
+      select: { notificationsLastSeenAt: true, cantonPartyId: true },
     });
     const lastSeenAt = user?.notificationsLastSeenAt ?? null;
+    const ownerPartyId = user?.cantonPartyId ?? null;
     const feedWhere = this.notificationFeedWhere(userId);
     const take = Math.min(30, Math.max(1, limit));
 
@@ -765,6 +767,11 @@ export class UsersService {
         feeFilteredFeed.push(tx);
         continue;
       }
+      // Skip artefak WSS self-reference ("(You) → (You)").
+      if (
+        isSelfReferenceWssRow(tx.referenceId, tx.ledgerTxId, ownerPartyId)
+      )
+        continue;
       const resolved = await this.resolveTransferCounterparty(tx.referenceId);
       if (!isFeePartyRecipient(tx.referenceId, resolved))
         feeFilteredFeed.push(tx);
@@ -778,6 +785,11 @@ export class UsersService {
         unreadTxCount++;
         continue;
       }
+      // Skip artefak WSS self-reference ("(You) → (You)").
+      if (
+        isSelfReferenceWssRow(row.referenceId, row.ledgerTxId, ownerPartyId)
+      )
+        continue;
       const resolved = await this.resolveTransferCounterparty(row.referenceId);
       if (!isFeePartyRecipient(row.referenceId, resolved)) unreadTxCount++;
     }
@@ -1189,6 +1201,13 @@ export class UsersService {
       NOT: { type: 'TOKEN_FEE_OUT' as TokenTxType },
     };
 
+    // Resolve owner party id untuk filter self-reference WSS (baris "(You) → (You)").
+    const owner = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { cantonPartyId: true },
+    });
+    const ownerPartyId = owner?.cantonPartyId ?? null;
+
     // Ambil proyeksi ringan kedua tabel (bounded — frontend minta pageSize=200).
     // ledgerTxId/cantonUpdateId untuk dedup on-chain duplikat (wss: vs indexer).
     const [ccRows, tokenRows] = await Promise.all([
@@ -1240,6 +1259,11 @@ export class UsersService {
         );
         if (isFeePartyRecipient(row.referenceId, resolved)) continue;
       }
+      // Skip artefak WSS self-reference ("(You) → (You)" tanpa pengirim asli).
+      if (
+        isSelfReferenceWssRow(row.referenceId, row.ledgerTxId, ownerPartyId)
+      )
+        continue;
       merged.push({
         kind: 'cc',
         id: `cc-${row.id}`,
