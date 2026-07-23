@@ -1777,7 +1777,10 @@ export class PartyController {
         transferKind: cip56Result.transferKind,
         transferInstructionCid,
         offerPending: cip56Result.transferKind === 'offer',
-        transactionId,
+        // Prefix "tok-" wajib: detail endpoint /transactions/:id pakai prefix untuk
+        // bedakan TokenTransaction vs CcTransaction. Tanpa prefix, dicari di tabel CC
+        // → "Transaction not found" saat modal receipt dibuka langsung.
+        transactionId: transactionId ? `tok-${transactionId}` : undefined,
         message:
           cip56Result.transferKind === 'offer'
             ? `Sent ${amount} ${instrumentId} to ${recipientLabel}. Recipient must accept via Offers menu. Offer ID: ${transferInstructionCid?.slice(0, 20) ?? ledgerTxId?.slice(0, 20) ?? '?'}…`
