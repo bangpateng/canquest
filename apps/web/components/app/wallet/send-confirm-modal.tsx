@@ -120,6 +120,7 @@ export function SendConfirmModal({
 
         {/* ── Baris detail ── */}
         <dl className="mt-5 divide-y divide-slate-800/60">
+          <DetailRow label="Recipient">{recipientDisplay || ""}</DetailRow>
           <DetailRow label="Memo">{memoDisplay}</DetailRow>
           <DetailRow label="Network">Canton</DetailRow>
           <DetailRow label="Platform fee">
