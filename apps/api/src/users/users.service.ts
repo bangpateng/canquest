@@ -814,7 +814,8 @@ export class UsersService {
       }),
     );
     // Serialize token rows — amount pakai decimal asli, instrumentId terisi.
-    const serializedTokenTx = tokenFeedRows.map((tx) => ({
+    // Dedup supaya duplikat on-chain (sama seperti CC) collapse jadi 1 baris.
+    const serializedTokenTx = dedupByKey(tokenFeedRows).map((tx) => ({
       kind: 'transaction' as const,
       id: `tok-${tx.id}`,
       type: tx.type,
