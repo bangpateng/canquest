@@ -1245,6 +1245,8 @@ export class UsersService {
         referenceId: row.referenceId,
         type: row.type,
         createdAt: row.createdAt,
+        ledgerTxId: row.ledgerTxId,
+        cantonUpdateId: row.cantonUpdateId,
       });
     }
     for (const row of tokenRows) {
@@ -1255,6 +1257,8 @@ export class UsersService {
         type: row.type,
         createdAt: row.createdAt,
         instrumentId: row.instrumentId,
+        ledgerTxId: row.ledgerTxId,
+        cantonUpdateId: row.cantonUpdateId,
       });
     }
 
