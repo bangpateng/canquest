@@ -1372,10 +1372,12 @@ export class PartyController {
     // Canton choice controller (TransferInstruction_Withdraw controller = sender)
     // tetap jadi backstop terakhir, tapi cek di app-level memberi pesan error
     // yang jelas sebelum operasi ledger dijalankan.
+    // Case-insensitive: withdrawDetail.sender datang dari on-chain (casing asli
+    // saat registrasi) sedangkan user.cantonPartyId disimpan lowercase di DB.
     if (
       withdrawDetail &&
       withdrawDetail.sender &&
-      withdrawDetail.sender !== user.cantonPartyId
+      !cantonPartyIdsEqual(withdrawDetail.sender, user.cantonPartyId)
     ) {
       throw new BadRequestException(
         'You can only withdraw your own outgoing transfers.',

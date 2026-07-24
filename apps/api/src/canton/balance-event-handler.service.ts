@@ -682,13 +682,15 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
   private isSystemParty(partyId: string): boolean {
     if (!partyId) return true;
     if (partyId.startsWith('canquest:')) return true; // app-internal party
+    // Case-insensitive: party hint (prefix sebelum "::") bisa beda casing
+    // (mis. Cantex vs cantex) → lowercase dulu sebelum cek prefix.
+    const lower = partyId.toLowerCase();
     return (
-      partyId.startsWith('DSO') ||
-      partyId.startsWith('canquest-validator') ||
-      partyId.startsWith('Cantex') ||
-      partyId.startsWith('cantex::') ||
-      partyId.startsWith('Bridge-Operator') ||
-      partyId.startsWith('validator-app')
+      lower.startsWith('dso') ||
+      lower.startsWith('canquest-validator') ||
+      lower.startsWith('cantex') ||
+      lower.startsWith('bridge-operator') ||
+      lower.startsWith('validator-app')
     );
   }
 

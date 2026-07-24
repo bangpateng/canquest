@@ -2111,7 +2111,7 @@ export class CantonLedgerService {
       const args =
         (ev.createArgument as Record<string, unknown> | undefined) ?? {};
       const owner = typeof args.owner === 'string' ? args.owner : '';
-      if (owner !== partyId) continue;
+      if (!cantonPartyIdsEqual(owner, partyId)) continue;
       if (!cid) continue;
       const amt = args.amount as Record<string, unknown> | undefined;
       if (!amt) continue;
@@ -2557,13 +2557,14 @@ export class CantonLedgerService {
       }
 
       // Match owner (beberapa field name: owner, receiver, holder).
+      // Case-insensitive: on-chain casing bisa beda vs ownerPartyId (DB lowercase).
       const cOwner =
         typeof args.owner === 'string'
           ? args.owner
           : typeof args.receiver === 'string'
             ? args.receiver
             : '';
-      if (cOwner && cOwner !== ownerPartyId) continue;
+      if (cOwner && !cantonPartyIdsEqual(cOwner, ownerPartyId)) continue;
 
       // Extract amount (defensive: flat string, nested initialAmount, atau amount object).
       const amtRaw = args.amount as Record<string, unknown> | undefined;
@@ -3035,7 +3036,10 @@ export class CantonLedgerService {
         const receiver = typeof args.receiver === 'string' ? args.receiver : '';
         const sender = typeof args.sender === 'string' ? args.sender : '';
         // Direction filter: incoming → must be receiver; outgoing → must be sender.
-        if (isOutgoing ? sender !== partyId : receiver !== partyId) continue;
+        // Case-insensitive: on-chain party ID bisa beda casing (Cantex vs cantex)
+        // vs DB yang selalu lowercase → pakai cantonPartyIdsEqual, bukan ===.
+        if (isOutgoing ? !cantonPartyIdsEqual(sender, partyId) : !cantonPartyIdsEqual(receiver, partyId))
+          continue;
         const ccAmount = typeof args.amount === 'string' ? args.amount : '0';
         const desc =
           typeof args.description === 'string' ? args.description : '';
@@ -3076,7 +3080,9 @@ export class CantonLedgerService {
         const sender =
           typeof transfer.sender === 'string' ? transfer.sender : '';
         // Direction filter: incoming → must be receiver; outgoing → must be sender.
-        if (isOutgoing ? sender !== partyId : receiver !== partyId) continue;
+        // Case-insensitive: on-chain party ID bisa beda casing vs DB lowercase.
+        if (isOutgoing ? !cantonPartyIdsEqual(sender, partyId) : !cantonPartyIdsEqual(receiver, partyId))
+          continue;
 
         const amount =
           typeof transfer.amount === 'string' ? transfer.amount : '0';
@@ -3144,7 +3150,9 @@ export class CantonLedgerService {
         const sender =
           typeof transfer.sender === 'string' ? transfer.sender : '';
         // Direction filter: incoming → must be receiver; outgoing → must be sender.
-        if (isOutgoing ? sender !== partyId : receiver !== partyId) continue;
+        // Case-insensitive: on-chain party ID bisa beda casing vs DB lowercase.
+        if (isOutgoing ? !cantonPartyIdsEqual(sender, partyId) : !cantonPartyIdsEqual(receiver, partyId))
+          continue;
         const amount =
           typeof transfer.amount === 'string'
             ? transfer.amount
