@@ -1007,6 +1007,16 @@ export class PartyController {
       }
       // Kalau null → ledger akan menolak jika dana kurang
 
+      // ── Resolve casing asli on-chain (Canton case-sensitive) ──────────
+      // DB simpan cantonPartyId lowercase, tapi Canton butuh casing asli
+      // (mis. Cantex::… bukan cantex::…) untuk SUBMIT transfer — selain itu
+      // ditolak UNKNOWN_INFORMEES. Matching/validation di atas tetap pakai
+      // lowercase; resolve ini hanya untuk argumen submit ke ledger.
+      const [senderPartyIdOnChain, receiverPartyIdOnChain] = await Promise.all([
+        this.splice.resolveOnChainPartyId(sender.cantonPartyId),
+        this.splice.resolveOnChainPartyId(recipientPartyId),
+      ]);
+
       // ── MAIN TRANSFER via CIP-0056 (satu-satunya jalur) ─────────────
       let accepted = false;
       let ledgerTxId: string | undefined;
@@ -1014,8 +1024,8 @@ export class PartyController {
         'offer_accept';
 
       const cip56Result = await this.ledger.executeTransferFactoryTransfer({
-        senderPartyId: sender.cantonPartyId,
-        receiverPartyId: recipientPartyId,
+        senderPartyId: senderPartyIdOnChain,
+        receiverPartyId: receiverPartyIdOnChain,
         amountCc: amount,
         description,
         clientNonce: body.clientNonce, // dedup ledger — double-click jadi 1 transfer
@@ -1056,33 +1066,38 @@ export class PartyController {
       let feeTreasuryPartyId: string | undefined;
 
       if (effectiveFeeCc > 0 && sender.cantonPartyId && accepted) {
-        const feeParty =
+        const feePartyRaw =
           this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
           validatorPartyId;
-        if (feeParty) {
+        if (feePartyRaw) {
+          // Resolve casing asli fee/treasury party (env bisa lowercase) sekali,
+          // dipakai untuk submit fee transfer + accept. Sender pakai versi
+          // on-chain yang sudah di-resolve di atas.
+          const feePartyOnChain =
+            await this.splice.resolveOnChainPartyId(feePartyRaw);
           try {
             const feeResult = await this.ledger.executeTransferFactoryTransfer({
-              senderPartyId: sender.cantonPartyId,
-              receiverPartyId: feeParty,
+              senderPartyId: senderPartyIdOnChain,
+              receiverPartyId: feePartyOnChain,
               amountCc: effectiveFeeCc,
               description: `Platform fee: ${recipientLabel}`,
             });
             if (feeResult.ok && feeResult.transferKind === 'direct') {
               feeCollected = true;
               feeLedgerTxId = feeResult.updateId ?? undefined;
-              feeTreasuryPartyId = feeParty;
+              feeTreasuryPartyId = feePartyOnChain;
               await this.users.recordTransaction({
                 userId: sender.id,
                 amountCc: effectiveFeeCc,
                 type: 'TRANSFER_OUT',
                 description: `Platform fee (transfer to ${recipientLabel})`,
                 // Penanda "fee:" → filter visibility A3 sembunyikan baris ini dari history user.
-                referenceId: `fee:${normalizeCantonPartyId(feeParty) ?? feeParty}`,
+                referenceId: `fee:${normalizeCantonPartyId(feePartyRaw) ?? feePartyRaw}`,
                 ledgerTxId: feeLedgerTxId,
                 cantonUpdateId: feeLedgerTxId,
               });
               this.logger.log(
-                `Fee collected: ${sender.username} → ${feeParty.split('::')[0]} ${effectiveFeeCc} CC (direct)`,
+                `Fee collected: ${sender.username} → ${feePartyRaw.split('::')[0]} ${effectiveFeeCc} CC (direct)`,
               );
             } else if (
               feeResult.ok &&
@@ -1091,25 +1106,25 @@ export class PartyController {
             ) {
               const acceptR = await this.ledger.acceptTransferInstruction(
                 feeResult.transferInstructionCid,
-                feeParty,
+                feePartyOnChain,
               );
               if (acceptR.ok) {
                 feeCollected = true;
                 feeLedgerTxId =
                   acceptR.updateId ?? feeResult.updateId ?? undefined;
-                feeTreasuryPartyId = feeParty;
+                feeTreasuryPartyId = feePartyOnChain;
                 await this.users.recordTransaction({
                   userId: sender.id,
                   amountCc: effectiveFeeCc,
                   type: 'TRANSFER_OUT',
                   description: `Platform fee (transfer to ${recipientLabel})`,
                   // Penanda "fee:" → filter visibility A3 sembunyikan baris ini dari history user.
-                  referenceId: `fee:${normalizeCantonPartyId(feeParty) ?? feeParty}`,
+                  referenceId: `fee:${normalizeCantonPartyId(feePartyRaw) ?? feePartyRaw}`,
                   ledgerTxId: feeLedgerTxId,
                   cantonUpdateId: feeLedgerTxId,
                 });
                 this.logger.log(
-                  `Fee collected: ${sender.username} → ${feeParty.split('::')[0]} ${effectiveFeeCc} CC (offer-accept)`,
+                  `Fee collected: ${sender.username} → ${feePartyRaw.split('::')[0]} ${effectiveFeeCc} CC (offer-accept)`,
                 );
               } else {
                 this.logger.warn(
@@ -1628,9 +1643,17 @@ export class PartyController {
           `(admin=${instrumentAdmin.slice(0, 12)}...) nonce=${body.clientNonce.slice(0, 8)}`,
       );
 
+      // ── Resolve casing asli on-chain (Canton case-sensitive) ──────────
+      // DB simpan cantonPartyId lowercase, Canton butuh casing asli (mis.
+      // Cantex::…) untuk SUBMIT — selain itu UNKNOWN_INFORMEES.
+      const [senderPartyIdOnChain, receiverPartyIdOnChain] = await Promise.all([
+        this.splice.resolveOnChainPartyId(sender.cantonPartyId),
+        this.splice.resolveOnChainPartyId(recipientPartyId),
+      ]);
+
       const cip56Result = await this.ledger.executeTransferFactoryTransfer({
-        senderPartyId: sender.cantonPartyId,
-        receiverPartyId: recipientPartyId,
+        senderPartyId: senderPartyIdOnChain,
+        receiverPartyId: receiverPartyIdOnChain,
         amountCc: amount,
         description,
         clientNonce: body.clientNonce,
@@ -1694,14 +1717,18 @@ export class PartyController {
       if (feeCc > 0 && submitted) {
         const validatorPartyId =
           this.config.get<string>('CANTON_VALIDATOR_PARTY_ID') ?? '';
-        const feeParty =
+        const feePartyRaw =
           this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
           validatorPartyId;
-        if (feeParty) {
+        if (feePartyRaw) {
+          // Resolve casing asli fee/treasury party (env bisa lowercase); sender
+          // pakai versi on-chain yang sudah di-resolve di atas.
+          const feePartyOnChain =
+            await this.splice.resolveOnChainPartyId(feePartyRaw);
           try {
             const feeResult = await this.ledger.executeTransferFactoryTransfer({
-              senderPartyId: sender.cantonPartyId,
-              receiverPartyId: feeParty,
+              senderPartyId: senderPartyIdOnChain,
+              receiverPartyId: feePartyOnChain,
               amountCc: feeCc,
               description: `Platform fee: ${recipientLabel} (${instrumentId})`,
             });
@@ -1712,7 +1739,7 @@ export class PartyController {
                 amountCc: feeCc,
                 type: 'TRANSFER_OUT',
                 description: `Platform fee (token transfer to ${recipientLabel})`,
-                referenceId: `fee:${normalizeCantonPartyId(feeParty) ?? feeParty}`,
+                referenceId: `fee:${normalizeCantonPartyId(feePartyRaw) ?? feePartyRaw}`,
                 ledgerTxId: feeResult.updateId ?? undefined,
                 cantonUpdateId: feeResult.updateId ?? undefined,
               });
@@ -1724,7 +1751,7 @@ export class PartyController {
               // Fee offer perlu di-accept oleh fee party (auto, mirror sendCc:836).
               const acceptR = await this.ledger.acceptTransferInstruction(
                 feeResult.transferInstructionCid,
-                feeParty,
+                feePartyOnChain,
               );
               if (acceptR.ok) {
                 feeCollected = true;
@@ -1733,7 +1760,7 @@ export class PartyController {
                   amountCc: feeCc,
                   type: 'TRANSFER_OUT',
                   description: `Platform fee (token transfer to ${recipientLabel})`,
-                  referenceId: `fee:${normalizeCantonPartyId(feeParty) ?? feeParty}`,
+                  referenceId: `fee:${normalizeCantonPartyId(feePartyRaw) ?? feePartyRaw}`,
                   ledgerTxId:
                     acceptR.updateId ?? feeResult.updateId ?? undefined,
                   cantonUpdateId:

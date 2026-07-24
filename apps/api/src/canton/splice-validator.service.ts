@@ -72,6 +72,15 @@ export class SpliceValidatorService {
    */
   private readonly hostHeader: string | null;
 
+  /**
+   * Cache untuk resolveOnChainPartyId(): map lowercase party id → casing
+   * on-chain asli (mis. `cantex::…` → `Cantex::…`). Canton case-sensitive
+   * untuk submit, tapi DB simpan lowercase → resolve ke node tiap transfer
+   * mahal; cache TTL 5 menit cukup karena casing party tidak berubah.
+   */
+  private readonly onChainPartyCache = new Map<string, { onChain: string; expiresAt: number }>();
+  private static readonly ON_CHAIN_CACHE_TTL_MS = 5 * 60 * 1000;
+
   constructor(
     private readonly config: ConfigService,
     @Optional() private readonly keycloak: KeycloakTokenService,
@@ -404,6 +413,64 @@ export class SpliceValidatorService {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Resolve a (lowercase) party id ke CASING ASLI on-chain yang dipakai Canton.
+   *
+   * Mengapa ini perlu: DB menyimpan `User.cantonPartyId` dalam lowercase
+   * (`cantex::1220…`) untuk lookup/display yang konsisten. Tapi Canton itu
+   * CASE-SENSITIVE — party yang benar-benar ada di ledger adalah `Cantex::1220…`
+   * (casing saat registrasi). Submit transfer pakai lowercase ditolak dengan
+   * `UNKNOWN_INFORMEES`. Untuk *baca/match* offer & holdings lowercase sudah
+   * benar; tapi untuk *submit* (transfer.sender/receiver, actAs) WAJIB casing
+   * asli.
+   *
+   * Strategi: derive hint (prefix `::`) → getUserPartyId(hint) ke node Splice
+   * → dapat `party_id` casing asli. Di-cache TTL 5 menit (casing party stabil).
+   *
+   * Fallback aman: kalau node tidak dikonfigurasi / hint tidak ter-derive /
+   * resolve gagal / hasil resolve party beda (bukan sekadar beda casing),
+   * kembalikan input apa adanya. Maka transfer mungkin tetap gagal seperti
+   * status quo — tidak ada regression, tidak ada data corruption.
+   */
+  async resolveOnChainPartyId(partyId: string | null | undefined): Promise<string> {
+    const input = partyId?.trim();
+    if (!input) return input ?? '';
+
+    // Tanpa node Splice → tidak bisa resolve, kembalikan apa adanya.
+    if (!this.isConfigured) return input;
+
+    // Hint prefix (mis. "cantex") — kunci cache & parameter lookup Splice.
+    const hint = spliceWalletUsernameFromParty(input);
+    if (!hint) return input;
+
+    const cacheKey = normalizeCantonPartyId(input) ?? input.toLowerCase();
+    const cached = this.onChainPartyCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.onChain;
+    }
+
+    let onChain: string | null = null;
+    try {
+      onChain = await this.getUserPartyId(hint);
+    } catch {
+      onChain = null;
+    }
+
+    // Hanya simpan & pakai hasil resolve jika itu party yang SAMA (cuma beda
+    // casing) dengan input. Cegah resolve ke party lain akibat hint ambigu.
+    if (onChain && cantonPartyIdsEqual(onChain, input)) {
+      this.onChainPartyCache.set(cacheKey, {
+        onChain,
+        expiresAt: Date.now() + SpliceValidatorService.ON_CHAIN_CACHE_TTL_MS,
+      });
+      return onChain;
+    }
+
+    // Fallback: pakai input mentah. (Tetap lowercase → kemungkinan gagal, tapi
+    // tidak lebih buruk dari sebelum fix ini.)
+    return input;
   }
 
   /**
