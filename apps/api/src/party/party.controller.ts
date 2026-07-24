@@ -43,7 +43,7 @@ import { hasRealWallet } from '../common/wallet-policy';
 import { OneSwapClient } from '../oneswap/oneswap-client';
 import { CantonPriceService } from '../canton/canton-price.service';
 import { SwapService } from '../oneswap/swap.service';
-import { isOneSwapEnabled } from '../oneswap/oneswap.config';
+import { isOneSwapEnabled, getOneSwapConfig } from '../oneswap/oneswap.config';
 import {
   OneSwapError,
   NoDirectPoolError,
@@ -2904,16 +2904,23 @@ export class PartyController {
   // balik ke party user. Token non-CC saldo dari on-chain (ledger).
   // ═══════════════════════════════════════════════════════════════════════
 
-  /** GET /party/swap/status — apakah fitur swap aktif (ONESWAP_API_KEY diset). */
+  /** GET /party/swap/status — apakah fitur swap aktif (ONESWAP_API_KEY diset).
+   *  Juga kirim minimum swap dari env supaya frontend tidak hardcode (user bisa
+   *  set ONESWAP_MIN_AMOUNT_CC / ONESWAP_MIN_AMOUNT_TOKEN tanpa rebuild FE). */
   @Get('swap/status')
   @SkipThrottle()
   async swapStatus() {
     const enabled = isOneSwapEnabled();
+    const cfg = getOneSwapConfig();
     return {
       enabled,
       phase: 'execution',
       executionReady: enabled,
       message: enabled ? 'Swap is live.' : 'Swap not enabled.',
+      // Minimum swap dari env (ONESWAP_MIN_AMOUNT_CC / _TOKEN). FE pakai ini
+      // untuk gate tombol swap + pesan "Min X to swap".
+      minAmountCc: cfg.minAmountCc,
+      minAmountToken: cfg.minAmountToken,
     };
   }
 

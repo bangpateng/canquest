@@ -53,11 +53,11 @@ interface QuoteResponse {
   inSym: string;
 }
 
-/** Minimum swap amount.
- *  - CC→token: 10 CC (ticket size)
- *  - token→CC: 2.5 token (mis. 2.5 USDCx) */
-const MIN_SWAP_AMOUNT_CC = 10;
-const MIN_SWAP_AMOUNT_TOKEN = 2.5;
+/** Minimum swap amount — DEFAULT fallback kalau backend tidak kirim nilai.
+ *  Nilai aktual dari env backend (ONESWAP_MIN_AMOUNT_CC / _TOKEN) via
+ *  GET /swap/status → state minAmountCc / minAmountToken. */
+const MIN_SWAP_AMOUNT_CC_FALLBACK = 10;
+const MIN_SWAP_AMOUNT_TOKEN_FALLBACK = 2.5;
 
 interface SwapModalProps {
   open: boolean;
@@ -106,6 +106,12 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
 
   const [status, setStatus] = useState<string | null>(null);
   const [statusEnabled, setStatusEnabled] = useState(true);
+  // Minimum swap dari backend (env ONESWAP_MIN_AMOUNT_*). Fallback ke konstanta
+  // kalau status response tidak kirim nilai (mis. backend lama / fetch gagal).
+  const [minAmountCc, setMinAmountCc] = useState(MIN_SWAP_AMOUNT_CC_FALLBACK);
+  const [minAmountToken, setMinAmountToken] = useState(
+    MIN_SWAP_AMOUNT_TOKEN_FALLBACK,
+  );
 
   // Swap execution state.
   const [swapState, setSwapState] = useState<
@@ -125,15 +131,23 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  // Check swap status on open.
+  // Check swap status on open. Juga ambil min amount dari env backend.
   useEffect(() => {
     if (!open) return;
     fetch("/api/party/swap/status", { credentials: "include" })
       .then((r) => r.json())
       .then(
-        (d: { enabled?: boolean; message?: string }) => {
+        (d: {
+          enabled?: boolean;
+          message?: string;
+          minAmountCc?: number;
+          minAmountToken?: number;
+        }) => {
           setStatusEnabled(Boolean(d.enabled));
           setStatus(d.message ?? null);
+          if (typeof d.minAmountCc === "number") setMinAmountCc(d.minAmountCc);
+          if (typeof d.minAmountToken === "number")
+            setMinAmountToken(d.minAmountToken);
         },
       )
       .catch(() => setStatus(null));
@@ -244,8 +258,8 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
     sellBalance > 0 && parseFloat(amount) > sellBalance;
   const sameToken =
     sellToken && buyToken && sellToken.instrumentId === buyToken.instrumentId;
-  // Minimum amount gate: CC→token butuh ≥10 CC, token→CC butuh ≥2.5 token.
-  const minAmount = sellToken?.isCC ? MIN_SWAP_AMOUNT_CC : MIN_SWAP_AMOUNT_TOKEN;
+  // Minimum amount gate — dinamis dari env backend (ONESWAP_MIN_AMOUNT_*).
+  const minAmount = sellToken?.isCC ? minAmountCc : minAmountToken;
   const belowMinimum =
     parseFloat(amount) > 0 &&
     parseFloat(amount) < minAmount;
