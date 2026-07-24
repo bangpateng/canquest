@@ -4,14 +4,15 @@ import { queryKeys } from "@/lib/queries/query-keys";
 import { useTokenPrices } from "@/lib/hooks/use-token-prices";
 
 /**
- * Shared CC/USD price hook — Cantex DEX real-time (WS live feed).
+ * Shared CC/USD price hook — Canton scan-proxy + OneSwap token list.
  *
- * Sebelumnya: Bybit CCUSDT spot ticker.
- * Sekarang: Cantex DEX rate (Amulet→USDCx via public WS price feed).
+ * Sebelumnya: Bybit CCUSDT spot ticker, lalu Cantex DEX rate.
+ * Sekarang: CantonPriceService (CC dari scan-proxy amuletPrice; token list
+ * dari OneSwap). Baca via useTokenPrices() → /api/party/prices.
  *
  * Mengembalikan:
- *  - price: harga CC dari Cantex DEX (number) atau null.
- *  - change24hPct: null (Cantex tidak punya history API — dihilangkan).
+ *  - price: harga CC (number) atau null.
+ *  - change24hPct: null (tidak ada history API — dihilangkan).
  *
  * Tetap export { price, change24hPct } supaya semua consumer lama (cards,
  * sidebar, detail view) tidak perlu berubah. change24hPct selalu null

@@ -41,7 +41,9 @@ function dedupKey(row: {
   const ledgerId = row.ledgerTxId?.trim();
   if (!ledgerId) return `id:${row.id}`; // tidak punya identitas on-chain → unik
   // Strip prefix "wss:" / "inbound-sync:" supaya `wss:1234` == `1234`.
-  return ledgerId.replace(/^(wss:|inbound-sync:)[^:]+:/, '').replace(/^wss:/, '');
+  return ledgerId
+    .replace(/^(wss:|inbound-sync:)[^:]+:/, '')
+    .replace(/^wss:/, '');
 }
 
 /**
@@ -60,7 +62,11 @@ function rowQualityScore(row: {
 }): number {
   let score = 0;
   const ledgerId = row.ledgerTxId?.trim();
-  if (ledgerId && !ledgerId.startsWith('wss:') && !ledgerId.startsWith('inbound-sync:')) {
+  if (
+    ledgerId &&
+    !ledgerId.startsWith('wss:') &&
+    !ledgerId.startsWith('inbound-sync:')
+  ) {
     score += 2; // baris controller/indexer (identitas asli, bukan self-ref)
   }
   if (row.referenceId && row.referenceId.trim()) {
@@ -75,12 +81,14 @@ function rowQualityScore(row: {
  * Dipakai untuk feed notifikasi, badge count & Activity list supaya satu
  * transfer on-chain = maksimal 1 baris DAN menampilkan counterparty yang benar.
  */
-function dedupByKey<T extends {
-  id: string;
-  ledgerTxId?: string | null;
-  cantonUpdateId?: string | null;
-  referenceId?: string | null;
-}>(rows: T[]): T[] {
+function dedupByKey<
+  T extends {
+    id: string;
+    ledgerTxId?: string | null;
+    cantonUpdateId?: string | null;
+    referenceId?: string | null;
+  },
+>(rows: T[]): T[] {
   // Group by key, keep winner (quality tertinggi; tie → pertama = paling baru).
   const winners = new Map<string, T>();
   for (const row of rows) {
@@ -167,8 +175,7 @@ export const FEED_TOKEN_TX_TYPES: TokenTxType[] = [
   'TOKEN_OFFER_REJECTED',
   'TOKEN_OFFER_WITHDRAWN',
 ];
-export const BADGE_UNREAD_TOKEN_TX_TYPES: TokenTxType[] =
-  FEED_TOKEN_TX_TYPES;
+export const BADGE_UNREAD_TOKEN_TX_TYPES: TokenTxType[] = FEED_TOKEN_TX_TYPES;
 import {
   looksLikeCantonPartyId,
   normalizeCantonPartyId,
@@ -516,7 +523,7 @@ export class UsersService {
    *
    * Paralel instrument-aware dari `recordTransaction` (yang strictly CC/micro-CC).
    * `amount` disimpan signed: debit (TRANSFER_OUT, FEE_OUT) → negatif, kredit →
-   * positif. Decimal(38,18) match Cantex API decimal-string amounts.
+   * positif. Decimal(38,18) match OneSwap API decimal-string amounts.
    *
    * Dipakai oleh: POST /party/send-token (sender), accept/reject offer handler
    * (receiver), withdraw handler (sender). Idempotency via @@unique([userId, ledgerTxId]).
@@ -771,9 +778,7 @@ export class UsersService {
         continue;
       }
       // Skip artefak WSS self-reference ("(You) → (You)").
-      if (
-        isSelfReferenceWssRow(tx.referenceId, tx.ledgerTxId, ownerPartyId)
-      )
+      if (isSelfReferenceWssRow(tx.referenceId, tx.ledgerTxId, ownerPartyId))
         continue;
       const resolved = await this.resolveTransferCounterparty(tx.referenceId);
       if (!isFeePartyRecipient(tx.referenceId, resolved))
@@ -789,9 +794,7 @@ export class UsersService {
         continue;
       }
       // Skip artefak WSS self-reference ("(You) → (You)").
-      if (
-        isSelfReferenceWssRow(row.referenceId, row.ledgerTxId, ownerPartyId)
-      )
+      if (isSelfReferenceWssRow(row.referenceId, row.ledgerTxId, ownerPartyId))
         continue;
       const resolved = await this.resolveTransferCounterparty(row.referenceId);
       if (!isFeePartyRecipient(row.referenceId, resolved)) unreadTxCount++;
@@ -842,7 +845,9 @@ export class UsersService {
       instrumentId: tx.instrumentId,
       amountDecimal: tx.amount.toString(),
       // Cancelled-amount field (TOKEN_OFFER_WITHDRAWN / REJECTED).
-      cancelledAmount: tx.cancelledAmount ? tx.cancelledAmount.toString() : null,
+      cancelledAmount: tx.cancelledAmount
+        ? tx.cancelledAmount.toString()
+        : null,
       cancelledInstrumentId: tx.instrumentId,
     }));
 
@@ -1255,7 +1260,7 @@ export class UsersService {
     const merged: UnifiedRow[] = [];
 
     for (const row of ccRows) {
-      const ccType = row.type as CcTransactionType;
+      const ccType = row.type;
       if (ccType === 'TRANSFER_IN' || ccType === 'TRANSFER_OUT') {
         const resolved = await this.resolveTransferCounterparty(
           row.referenceId,
@@ -1263,9 +1268,7 @@ export class UsersService {
         if (isFeePartyRecipient(row.referenceId, resolved)) continue;
       }
       // Skip artefak WSS self-reference ("(You) → (You)" tanpa pengirim asli).
-      if (
-        isSelfReferenceWssRow(row.referenceId, row.ledgerTxId, ownerPartyId)
-      )
+      if (isSelfReferenceWssRow(row.referenceId, row.ledgerTxId, ownerPartyId))
         continue;
       merged.push({
         kind: 'cc',
@@ -1292,9 +1295,7 @@ export class UsersService {
 
     // Sort global by createdAt desc, lalu dedup on-chain duplikat (wss:1234 vs
     // 1234 dari service berbeda untuk transfer yang sama), lalu paginate.
-    merged.sort(
-      (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
-    );
+    merged.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     const deduped = dedupByKey(merged);
 
     const total = deduped.length;
@@ -1340,7 +1341,7 @@ export class UsersService {
           const tx = enrichedCcById.get(rawId) ?? ccById.get(rawId);
           if (!tx) return null as unknown as Record<string, unknown>;
           const counterparty =
-            (tx.type === 'TRANSFER_IN' || tx.type === 'TRANSFER_OUT') as boolean
+            tx.type === 'TRANSFER_IN' || tx.type === 'TRANSFER_OUT'
               ? await this.resolveTransferCounterparty(tx.referenceId)
               : null;
           return {

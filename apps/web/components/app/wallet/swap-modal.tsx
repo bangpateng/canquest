@@ -21,31 +21,33 @@ import { isTokenActive as isSwapActive } from "@/lib/canton/token-types";
 // Reuse WalletToken/PoolsResponse dari shared token-types (tidak duplikasi).
 import type { WalletToken as SwapToken, PoolsResponse } from "@/lib/canton/token-types";
 
+/** Quote response dari POST /api/party/swap/quote — shape OneSwap native.
+ *  Field numeric. Fee breakdown:
+ *  networkFeeIn (gasless, dari input) + platformFee + lpFee (dari pool fee). */
 interface QuoteResponse {
-  sellAmount: string;
-  sellInstrument: { id: string; admin: string };
-  buyInstrument: { id: string; admin: string };
-  outputAmount: string;
-  outputInstrument: { id: string; admin: string };
-  fees: {
-    feePercentage: string;
-    adminFee: string;
-    liquidityFee: string;
-    networkFee: string;
-    feeInstrument?: { id: string; admin: string };
-    networkFeeInstrument?: { id: string; admin: string };
-    platformFee?: string;
-  };
-  prices: {
-    slippage: string;
-    tradePrice: string;
-  };
-  estimatedTimeSeconds: number;
+  /** Estimasi output (token yang dibeli). */
+  amountOut: number;
+  /** Price impact trade ini (persen). */
+  priceImpactPct: number;
+  /** Network fee dari input (gasless — user tidak butuh CC untuk gas). */
+  networkFeeIn: number;
+  /** Potongan platform dari pool fee (di input token). */
+  platformFee: number;
+  /** Potongan LP dari pool fee (di input token). */
+  lpFee: number;
+  /** Fee pool total (basis points), sebelum diskon. */
+  swapFeeBps: number;
+  /** Fee efektif (basis points) setelah diskon. */
+  effFeeBps: number;
+  /** Pool yang dipakai (transparansi). */
+  poolId: string;
+  /** Symbol input. */
+  inSym: string;
 }
 
 /** Minimum swap amount.
- *  - CC→token: 10 CC (Cantex DEX ticket size)
- *  - token→CC: 2.5 token (mis. 2.5 USDCx) — SAFE_MIN_SWAP_TOKEN di backend */
+ *  - CC→token: 10 CC (ticket size)
+ *  - token→CC: 2.5 token (mis. 2.5 USDCx) */
 const MIN_SWAP_AMOUNT_CC = 10;
 const MIN_SWAP_AMOUNT_TOKEN = 2.5;
 
@@ -188,12 +190,9 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
           credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            sellInstrumentId: sellToken.instrumentId,
-            sellInstrumentAdmin: sellToken.instrumentAdmin,
-            buyInstrumentId: buyToken.instrumentId,
-            buyInstrumentAdmin: buyToken.instrumentAdmin,
+            from: sellToken.symbol ?? (sellToken.isCC ? "CC" : sellToken.instrumentId),
+            to: buyToken.symbol ?? (buyToken.isCC ? "CC" : buyToken.instrumentId),
             amount: amt,
-            sellIsCC: sellToken.isCC,
           }),
         });
         const data = (await res.json()) as QuoteResponse & {
@@ -266,27 +265,18 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
     setSwapMessage("");
     setSwapOutput("");
     try {
-      // maxNetworkFee: cap fee spike protection. Dihitung dari network fee
-      // di quote × 2 (DEX-standard tolerance). Bila tak ada quote, skip cap.
-      const quoteNetFee = parseFloat(quote?.fees?.networkFee ?? "0");
-      const maxNetworkFee =
-        quoteNetFee > 0 ? (quoteNetFee * 2).toString() : undefined;
       const res = await fetch("/api/party/swap", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          sellInstrumentId: sellToken.instrumentId,
-          sellInstrumentAdmin: sellToken.instrumentAdmin,
-          buyInstrumentId: buyToken.instrumentId,
-          buyInstrumentAdmin: buyToken.instrumentAdmin,
+          from: sellToken.symbol ?? (sellToken.isCC ? "CC" : sellToken.instrumentId),
+          to: buyToken.symbol ?? (buyToken.isCC ? "CC" : buyToken.instrumentId),
           amount: parseFloat(amount),
-          sellIsCC: sellToken.isCC,
           clientNonce:
             typeof crypto !== "undefined" && crypto.randomUUID
               ? crypto.randomUUID()
               : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          ...(maxNetworkFee ? { maxNetworkFee } : {}),
         }),
       });
       const data = (await res.json()) as {
@@ -407,7 +397,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
               {/* ── SLOT BAWAH (buy) ── */}
               <SwapCard
                 label="You Get (est.)"
-                amount={quote ? formatAmount(quote.outputAmount) : ""}
+                amount={quote ? formatAmountNum(quote.amountOut) : ""}
                 isInput={false}
                 isLoading={quoteLoading}
                 tokens={tokens}
@@ -443,31 +433,25 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                 <div className="mt-3 space-y-2 rounded-xl border border-white/5 bg-[#13151a] p-4 text-xs">
                   <DetailRow
                     label="Rate"
-                    value={`1 ${displayName(sellToken?.instrumentId ?? "")} ≈ ${formatPrice(quote.prices.tradePrice)} ${displayName(buyToken?.instrumentId ?? "")}`}
+                    value={`1 ${displayName(sellToken?.instrumentId ?? "")} ≈ ${formatPriceNum(quote.amountOut / (parseFloat(amount) || 1))} ${displayName(buyToken?.instrumentId ?? "")}`}
                   />
                   <DetailRow
                     label="Price Impact"
-                    value={`${formatPct(quote.prices.slippage)}%`}
+                    value={`${quote.priceImpactPct.toFixed(2)}%`}
                     valueClass={
-                      parseFloat(quote.prices.slippage) > 3
+                      quote.priceImpactPct > 3
                         ? "text-red-400"
                         : "text-emerald-400"
                     }
                   />
                   <DetailRow
                     label="Swap Fee"
-                    value={`${formatAmount(quote.fees.adminFee)} ${displayName(quote.fees.feeInstrument?.id ?? quote.outputInstrument.id)} (${formatPct(quote.fees.feePercentage)}%)`}
+                    value={`${formatAmountNum(quote.lpFee + quote.platformFee)} ${displayName(sellToken?.instrumentId ?? "")} (${(quote.effFeeBps / 100).toFixed(2)}%)`}
                   />
                   <DetailRow
                     label="Network Fee"
-                    value={`${formatAmount(quote.fees.networkFee)} ${displayName(quote.fees.networkFeeInstrument?.id ?? quote.outputInstrument.id)}`}
+                    value={`${formatAmountNum(quote.networkFeeIn)} ${displayName(sellToken?.instrumentId ?? "")}`}
                   />
-                  {parseFloat(quote.fees.platformFee ?? '0') > 0 && (
-                    <DetailRow
-                      label="Platform Fee"
-                      value={`${formatAmount(quote.fees.platformFee ?? '0')} CC`}
-                    />
-                  )}
                 </div>
               ) : null)}
 
@@ -548,7 +532,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
         )}
 
         <p className="mt-4 text-center text-[11px] font-medium text-slate-600">
-          powered by cantex
+          powered by OneSwap
         </p>
       </div>
     </div>
@@ -811,9 +795,10 @@ function DetailRow({
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────
+// OneSwap quote fields are numeric — these take numbers directly.
 
-function formatAmount(s: string): string {
-  const n = parseFloat(s);
+/** Format a token amount for display. */
+function formatAmountNum(n: number): string {
   if (!isFinite(n)) return "0";
   if (n === 0) return "0";
   if (n < 0.0001) return n.toExponential(2);
@@ -821,16 +806,10 @@ function formatAmount(s: string): string {
   return n.toFixed(6);
 }
 
-function formatPrice(s: string): string {
-  const n = parseFloat(s);
+/** Format a price/exchange-rate for display. */
+function formatPriceNum(n: number): string {
   if (!isFinite(n)) return "0";
   if (n === 0) return "0";
   if (n >= 1) return n.toFixed(4);
   return n.toPrecision(4);
-}
-
-function formatPct(s: string): string {
-  const n = parseFloat(s);
-  if (!isFinite(n)) return "0";
-  return (n < 1 ? n * 100 : n).toFixed(2);
 }

@@ -2,7 +2,7 @@ import { ArrowLeftRight } from "lucide-react";
 import { LandingSection } from "@/components/landing/landing-section";
 import { SectionHeader } from "@/components/landing/section-header";
 
-/** Swap / Cantex highlight section.
+/** Swap / OneSwap highlight section.
  * Swap is live for CC ↔ USDCX; more pairs rolling out. Marked "Beta" to avoid
  * over-promising on pair breadth. Mirrors the glass-card / canton-subtle
  * idioms used by lock-section.tsx. */
@@ -10,10 +10,10 @@ export function SwapCantexSection() {
   return (
     <LandingSection id="swap" variant="muted">
       <SectionHeader
-        eyebrow="Cantex"
+        eyebrow="OneSwap"
         title="Swap CC for tokens, on-network"
         align="center"
-        description="Trade CC for supported tokens directly through the Cantex decentralized exchange — without leaving CanQuest. More CC movement, more on-chain activity."
+        description="Trade CC for supported tokens directly through the OneSwap decentralized exchange — without leaving CanQuest. More CC movement, more on-chain activity."
         className="mb-8 md:mb-10"
       />
 

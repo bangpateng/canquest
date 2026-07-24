@@ -4,20 +4,19 @@ import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queries/query-keys";
 
 /**
- * Harga USD semua token dari Cantex DEX — REAL-TIME via backend WebSocket.
- * Backend maintains WS ticker connection; frontend polls endpoint tiap 5 menit
- * sebagai safety-net (push-based di backend, pull di frontend).
+ * Harga USD semua token dari CantonPriceService (backend).
+ * Sumber: CC dari Canton scan-proxy (amuletPrice); USDCx = $1 anchor; token
+ * list (id+admin) dari OneSwap listTokens(). Cache 30s di backend.
  *
- * NOTE: Data ini dari Cantex DEX, BUKAN dari Canton ledger — jadi tidak
- * ter-trigger oleh SSE Canton. Polling 5 menit dipertahankan sebagai refresh
- * periodik agar prices tidak stale terlalu lama.
+ * NOTE: Bukan dari Canton ledger event — tidak ter-trigger SSE Canton. Polling
+ * 5 menit dipertahankan sebagai refresh periodik agar prices tidak stale.
  *
  * Key format: "<instrumentId>::<instrumentAdmin>" → USD price (number).
  */
 
 interface PricesResponse {
   prices: Record<string, number>;
-  source: string; // 'cantex_ws_live' | 'cantex_dex' (fallback)
+  source: string; // 'canton_scan_proxy'
 }
 
 export function useTokenPrices() {

@@ -117,7 +117,7 @@ export function WalletActions({
 
   // Turunkan list token untuk selector Send (filter KNOWN_TOKENS, default CC).
   // Tampilkan SEMUA token: CC selalu aktif. Non-CC aktif + coming soon.
-  // (Hanya tampilkan token yang dikenal — bukan semua token Cantex random).
+  // (Hanya tampilkan token yang dikenal — bukan semua token OneSwap random).
   const KNOWN_TOKENS = new Set(["USDCX", "CBTC"]);
   const sendTokens = (poolsQuery.data?.tokens ?? []).filter(
     (t) => t.isCC || KNOWN_TOKENS.has(t.instrumentId.toUpperCase()),

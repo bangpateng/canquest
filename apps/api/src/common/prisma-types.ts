@@ -114,9 +114,9 @@ export type CcTransactionType =
   | 'PREAPPROVAL_ENABLED'
   /// User menonaktifkan TransferPreapproval (onchain archive).
   | 'PREAPPROVAL_DISABLED'
-  /// CC keluar ke Cantex trading account (swap CC → token).
+  /// CC keluar ke OneSwap depositParty (swap CC → token).
   | 'SWAP_OUT'
-  /// CC masuk dari Cantex trading account (swap token → CC).
+  /// CC masuk dari OneSwap (output swap token → CC balik ke user).
   | 'SWAP_IN';
 
 /**

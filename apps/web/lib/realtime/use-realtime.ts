@@ -101,10 +101,10 @@ export function useRealtime(): void {
         });
       });
 
-      // BUG-B fix: swap sukses — refresh saldo (CC + token), pools (kalau ada
-      // perubahan harga pool), dan activity list. Sebelumnya event ini
-      // di-fire backend (swap.service.ts:534,800) tapi TIDAK ada listener →
-      // dead event. Token hasil swap tidak muncul instan di UI.
+      // swap sukses (OneSwap returned) — refresh saldo (CC + token) + activity
+      // list. Backend SwapService (oneswap/swap.service.ts) emit event ini saat
+      // output swap balik ke party user. Tanpa listener ini, hasil swap tidak
+      // muncul instan di UI.
       es.addEventListener("swap:completed", () => {
         void queryClient.invalidateQueries({
           queryKey: queryKeys.party.balances,

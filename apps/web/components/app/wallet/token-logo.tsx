@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils/utils";
 
-// ── Display name mapping (internal Cantex name → user-facing) ───────────
-// Amulet = nama internal Cantex untuk CC. Untuk user CanQuest, tampilkan "CC".
+// ── Display name mapping (internal OneSwap name → user-facing) ───────────
+// Amulet = nama internal OneSwap untuk CC. Untuk user CanQuest, tampilkan "CC".
 const DISPLAY_NAMES: Record<string, string> = {
   AMULET: "CC",
 };

@@ -263,8 +263,7 @@ export class TransactionDetailService {
       if (onChain) {
         ledgerEvents = summarizeLedgerEvents(onChain.events);
       } else {
-        ledgerFetchError =
-          '';
+        ledgerFetchError = '';
       }
     }
 
@@ -276,9 +275,9 @@ export class TransactionDetailService {
     // Platform fee — ditampilkan di modal detail. Sumber nilai:
     //   1. Transfer (TRANSFER_OUT): cari fee row terkait via findLinkedPlatformFee.
     //      Kalau tidak ketemu, fallback ke env TRANSACTION_FEE_CC.
-    //   2. Swap (SWAP_OUT/SWAP_IN): swap tidak catat fee row ke CcTransaction,
-    //      jadi pakai env SWAP_PLATFORM_FEE_CC langsung.
-    //   3. Lainnya: null (tidak ada platform fee).
+    //   2. Lainnya (termasuk Swap): null. Swap OneSwap tidak punya platform fee
+    //      dapp terpisah — fee OneSwap native (networkFeeIn/platformFee/lpFee)
+    //      sudah terbungkus di amount, tidak ditampilkan sebagai platform fee.
     let platformFeeMicroCc: string | null = null;
     if (tx.type === 'TRANSFER_OUT') {
       const feeRow = await this.findLinkedPlatformFee(tx.userId, tx.createdAt);
@@ -292,13 +291,6 @@ export class TransactionDetailService {
         if (feeCc > 0) {
           platformFeeMicroCc = String(Math.round(feeCc * 1_000_000));
         }
-      }
-    } else if (tx.type === 'SWAP_OUT' || tx.type === 'SWAP_IN') {
-      const swapFeeCc = Number(
-        this.config.get<string>('SWAP_PLATFORM_FEE_CC') ?? '0',
-      );
-      if (swapFeeCc > 0) {
-        platformFeeMicroCc = String(Math.round(swapFeeCc * 1_000_000));
       }
     }
 

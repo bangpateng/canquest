@@ -7,7 +7,7 @@ import { resolve } from 'path';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
 import { CantonModule } from './canton/canton.module';
-import { CantexModule } from './cantex/cantex.module';
+import { OneSwapModule } from './oneswap/oneswap.module';
 import { PartyModule } from './party/party.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { QuestsModule } from './quests/quests.module';
@@ -43,7 +43,7 @@ const resolveApiEnvPaths = (): string[] => [
     PrismaModule,
     AuthModule,
     CantonModule,
-    CantexModule, // @Global: CantexClient (DEX swap — Phase 1: read-only pools/quote)
+    OneSwapModule, // @Global: OneSwapClient (DEX swap + token list for pricing)
     PartyModule,
     QuestsModule,
     EarnModule,

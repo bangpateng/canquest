@@ -1,7 +1,5 @@
 import {
-  IsBoolean,
   IsNumber,
-  IsOptional,
   IsString,
   Max,
   MaxLength,
@@ -10,58 +8,62 @@ import {
 } from 'class-validator';
 
 /**
- * Request body for POST /api/party/swap — execute swap (pair FLEKSIBEL).
+ * Swap DTOs — symbol-based (OneSwap model).
  *
- * Phase 1: endpoint return 503 (swap execution coming soon).
- * Phase 2: full execution.
+ * OneSwap identifikasi token via display symbol ('CC', 'USDCX', 'CBTC'),
+ * BUKAN instrumentId+admin ganda seperti Cantex lama. InstrumentId+admin
+ * di-resolve backend via OneSwap listTokens() saat transfer ledger.
  *
- * clientNonce wajib — idempotency key frontend (crypto.randomUUID()).
+ * Amulet = CC (display symbol 'CC' memetakan ke instrument id 'Amulet').
  */
+
+/** Ceiling defensif untuk amount swap (human-decimal). */
+export const MAX_SWAP_AMOUNT = 1_000_000;
+
+/** Request body POST /api/party/swap — execute swap. */
 export class SwapDto {
-  /** Instrumen yang dijual (slot atas). */
+  /** Symbol token yang dijual (slot atas), mis. 'CC' atau 'USDCX'. */
   @IsString()
-  @MinLength(1)
-  @MaxLength(128)
-  sellInstrumentId!: string;
+  @MinLength(1, { message: 'from token is required.' })
+  @MaxLength(32)
+  from!: string;
 
+  /** Symbol token yang dibeli (slot bawah). */
   @IsString()
-  @MinLength(1)
-  @MaxLength(256)
-  sellInstrumentAdmin!: string;
+  @MinLength(1, { message: 'to token is required.' })
+  @MaxLength(32)
+  to!: string;
 
-  /** Instrumen yang dibeli (slot bawah). */
-  @IsString()
-  @MinLength(1)
-  @MaxLength(128)
-  buyInstrumentId!: string;
-
-  @IsString()
-  @MinLength(1)
-  @MaxLength(256)
-  buyInstrumentAdmin!: string;
-
-  /** Jumlah yang dijual (human decimal).
-   * Minimum 10 CC hanya saat jual CC (Cantex ticket size). Token→CC bebas. */
+  /** Jumlah `from` yang dijual (human-decimal, mis. 10 untuk 10 CC). */
   @IsNumber()
   @Min(0.000001, { message: 'Amount must be greater than 0.' })
-  @Max(1_000_000, { message: 'Amount exceeds swap ceiling.' })
+  @Max(MAX_SWAP_AMOUNT, { message: 'Amount exceeds swap ceiling.' })
   amount!: number;
 
-  /** True bila sell = CC (untuk custody routing di Phase 2). */
-  @IsOptional()
-  @IsBoolean()
-  sellIsCC?: boolean;
-
-  /** Idempotency nonce — UUID baru per klik Swap. */
+  /** Idempotency nonce — UUID baru per klik Swap (anti double-submit). */
   @IsString()
   @MinLength(8, { message: 'Idempotency nonce is required.' })
   @MaxLength(64)
   clientNonce!: string;
+}
 
-  /** Batas atas network fee (proteksi fee spike). Dihitung frontend dari
-   * quote networkFee × 2. Opsional: bila kosong, swap tanpa cap (legacy). */
-  @IsOptional()
+/** Request body POST /api/party/swap/quote — live quote preview. */
+export class SwapQuoteDto {
+  /** Symbol token yang dijual. */
   @IsString()
-  @MaxLength(256)
-  maxNetworkFee?: string;
+  @MinLength(1, { message: 'from token is required.' })
+  @MaxLength(32)
+  from!: string;
+
+  /** Symbol token yang dibeli. */
+  @IsString()
+  @MinLength(1, { message: 'to token is required.' })
+  @MaxLength(32)
+  to!: string;
+
+  /** Jumlah `from` (human-decimal). */
+  @IsNumber()
+  @Min(0.000001, { message: 'Amount must be greater than 0.' })
+  @Max(MAX_SWAP_AMOUNT, { message: 'Amount exceeds swap ceiling.' })
+  amount!: number;
 }

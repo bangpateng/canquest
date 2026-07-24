@@ -503,7 +503,7 @@ export class CantonLedgerService {
     } = params;
 
     // DSO party (admin CC/Amulet) — dari CANTON_DSO_PARTY_ID. Untuk non-CC,
-    // admin di-resolve dari Cantex getPools/getAccountInfo (instrumentAdmin param).
+    // admin di-resolve dari OneSwap listTokens() (instrumentAdmin param).
     const dsoParty =
       this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() || '';
     const effectiveAdmin = params.instrumentAdmin || dsoParty;
@@ -1330,7 +1330,11 @@ export class CantonLedgerService {
     const round = await this.fetchScanProxyContract(
       'open-and-issuing-mining-rounds',
     );
-    if (!round || round.amuletPrice == null || !Number.isFinite(round.amuletPrice)) {
+    if (
+      !round ||
+      round.amuletPrice == null ||
+      !Number.isFinite(round.amuletPrice)
+    ) {
       this.logger.warn(
         'getAmuletPrice: amuletPrice tidak ditemukan di OpenMiningRound payload',
       );
@@ -1374,7 +1378,9 @@ export class CantonLedgerService {
   private isCcInstrumentAdmin(instrumentAdmin: string): boolean {
     if (!instrumentAdmin) return true; // default CC (backward compat offers lama)
     const a = instrumentAdmin.toLowerCase();
-    return a.startsWith('dso::') || a.includes('amulet') || a.includes('splice');
+    return (
+      a.startsWith('dso::') || a.includes('amulet') || a.includes('splice')
+    );
   }
 
   /**
@@ -2448,7 +2454,13 @@ export class CantonLedgerService {
 
       // Shape 1: nested args.instrument = { id, admin } (CC/Amulet style)
       const instNested = args.instrument as
-        | { id?: string; admin?: string; source?: string; token?: string; urn?: string }
+        | {
+            id?: string;
+            admin?: string;
+            source?: string;
+            token?: string;
+            urn?: string;
+          }
         | undefined;
       if (instNested) {
         // USDCx holding: instrument.source = admin party, instrument.id or instrument.urn = id
@@ -2485,9 +2497,9 @@ export class CantonLedgerService {
 
       // Shape 3: flat args.instrumentAdmin + args.instrumentId (string)
       if (!instId && typeof args.instrumentAdmin === 'string') {
-        instAdmin = (args.instrumentAdmin as string).toLowerCase();
+        instAdmin = args.instrumentAdmin.toLowerCase();
         if (typeof args.instrumentId === 'string') {
-          instId = (args.instrumentId as string).toLowerCase();
+          instId = args.instrumentId.toLowerCase();
         }
       }
 
@@ -2509,10 +2521,10 @@ export class CantonLedgerService {
       // Shape 5: USDCx holding — args.registrar = admin party
       // (dari dump: registrar = decentralized-usdc-interchain-rep::...)
       if (!instAdmin && typeof args.registrar === 'string') {
-        instAdmin = (args.registrar as string).toLowerCase();
+        instAdmin = args.registrar.toLowerCase();
         // instId mungkin masih kosong — label field atau instrument.id
         if (!instId && typeof args.label === 'string') {
-          instId = (args.label as string).toLowerCase();
+          instId = args.label.toLowerCase();
         }
       }
 
@@ -2665,9 +2677,7 @@ export class CantonLedgerService {
         return {};
       }
     } catch (err) {
-      this.logger.warn(
-        `queryTokenHoldingsByInterface error: ${String(err)}`,
-      );
+      this.logger.warn(`queryTokenHoldingsByInterface error: ${String(err)}`);
       return {};
     }
 
@@ -2676,7 +2686,9 @@ export class CantonLedgerService {
     for (const entry of allContracts) {
       if (!entry || typeof entry !== 'object') continue;
       const wrapper = entry as Record<string, unknown>;
-      const active = wrapper.contractEntry as Record<string, unknown> | undefined;
+      const active = wrapper.contractEntry as
+        | Record<string, unknown>
+        | undefined;
       const jsActive = active?.JsActiveContract as
         | Record<string, unknown>
         | undefined;
@@ -2687,10 +2699,8 @@ export class CantonLedgerService {
       // Instrument id: coba nested {id} atau flat string.
       const instNested = args.instrument as { id?: string } | undefined;
       const instId =
-        (instNested?.id as string | undefined) ??
-        (typeof args.instrumentId === 'string'
-          ? (args.instrumentId as string)
-          : null);
+        instNested?.id ??
+        (typeof args.instrumentId === 'string' ? args.instrumentId : null);
       if (!instId) continue;
       if (instId.toLowerCase() === 'amulet') continue; // CC, skip
 
@@ -2698,13 +2708,13 @@ export class CantonLedgerService {
       const amtObj = args.amount as Record<string, unknown> | undefined;
       const amountStr =
         typeof args.amount === 'string'
-          ? (args.amount as string)
+          ? args.amount
           : typeof amtObj?.initialAmount === 'string'
-            ? (amtObj.initialAmount as string)
+            ? amtObj.initialAmount
             : typeof amtObj?.amount === 'string'
-              ? (amtObj.amount as string)
+              ? amtObj.amount
               : typeof args.balance === 'string'
-                ? (args.balance as string)
+                ? args.balance
                 : null;
       if (!amountStr) continue;
       const amount = parseFloat(amountStr);
@@ -2869,10 +2879,7 @@ export class CantonLedgerService {
       const jsActive = active?.JsActiveContract as
         | Record<string, unknown>
         | undefined;
-      const ev = (jsActive?.createdEvent ?? wrapper) as Record<
-        string,
-        unknown
-      >;
+      const ev = (jsActive?.createdEvent ?? wrapper) as Record<string, unknown>;
       const cid = typeof ev.contractId === 'string' ? ev.contractId : null;
       if (!cid) continue;
       const args =
@@ -2880,22 +2887,20 @@ export class CantonLedgerService {
 
       const instNested = args.instrument as { id?: string } | undefined;
       const instId =
-        (instNested?.id as string | undefined) ??
-        (typeof args.instrumentId === 'string'
-          ? (args.instrumentId as string)
-          : null);
+        instNested?.id ??
+        (typeof args.instrumentId === 'string' ? args.instrumentId : null);
       if (!instId || instId.toLowerCase() === 'amulet') continue;
 
       const amtObj = args.amount as Record<string, unknown> | undefined;
       const amountStr =
         typeof args.amount === 'string'
-          ? (args.amount as string)
+          ? args.amount
           : typeof amtObj?.initialAmount === 'string'
-            ? (amtObj.initialAmount as string)
+            ? amtObj.initialAmount
             : typeof amtObj?.amount === 'string'
-              ? (amtObj.amount as string)
+              ? amtObj.amount
               : typeof args.balance === 'string'
-                ? (args.balance as string)
+                ? args.balance
                 : null;
       if (!amountStr) continue;
 
@@ -3153,18 +3158,18 @@ export class CantonLedgerService {
           | string
           | undefined;
         const instrId =
-          typeof instObj === 'string'
-            ? instObj
-            : (instObj?.id ?? '');
+          typeof instObj === 'string' ? instObj : (instObj?.id ?? '');
         const instrAdmin =
-          typeof instObj === 'object' ? instObj.admin ?? '' : '';
+          typeof instObj === 'object' ? (instObj.admin ?? '') : '';
 
         const meta = transfer.meta as
           | Record<string, Record<string, string>>
           | undefined;
         const desc =
           meta?.values?.['splice.lfdecentralizedtrust.org/reason'] ??
-          (typeof transfer.description === 'string' ? transfer.description : '');
+          (typeof transfer.description === 'string'
+            ? transfer.description
+            : '');
         const expiresAt =
           typeof transfer.executeBefore === 'string'
             ? transfer.executeBefore
@@ -3259,9 +3264,7 @@ export class CantonLedgerService {
       const outgoing = await this.queryPendingOffers(partyId, 'outgoing');
       return outgoing.find((o) => o.contractId === cid) ?? null;
     } catch (err) {
-      this.logger.warn(
-        `lookupOfferDetailBothDirections error: ${String(err)}`,
-      );
+      this.logger.warn(`lookupOfferDetailBothDirections error: ${String(err)}`);
       return null;
     }
   }

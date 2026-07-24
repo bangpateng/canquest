@@ -177,7 +177,7 @@ export function DocsPageContent() {
 
               <p><strong className="font-medium text-[var(--foreground)]">Swap</strong></p>
               <UL>
-                <li>Swap <strong className="font-medium text-[var(--foreground)]">CC ↔ USDCX</strong> through the Cantex exchange, with a live quote showing the rate and price impact before you confirm. More pairs are coming.</li>
+                <li>Swap <strong className="font-medium text-[var(--foreground)]">CC ↔ USDCX</strong> through the OneSwap exchange, with a live quote showing the rate and price impact before you confirm. More pairs are coming.</li>
               </UL>
 
               <p><strong className="font-medium text-[var(--foreground)]">Lock</strong></p>

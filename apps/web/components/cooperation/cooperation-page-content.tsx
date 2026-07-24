@@ -42,7 +42,7 @@ const OFFERINGS: { icon: LucideIcon; title: string; description: string }[] = [
     icon: ArrowLeftRight,
     title: "Built-in on-chain swap",
     description:
-      "CC you distribute is immediately usable — users can swap it for tokens like USDCx through the Cantex exchange without leaving CanQuest.",
+      "CC you distribute is immediately usable — users can swap it for tokens like USDCx through the OneSwap exchange without leaving CanQuest.",
   },
   {
     icon: Trophy,

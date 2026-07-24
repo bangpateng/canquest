@@ -40,11 +40,15 @@ import {
   spliceWalletUsernameFromParty,
 } from '../common/canton-party-id';
 import { hasRealWallet } from '../common/wallet-policy';
-import { CantexClient } from '../cantex/cantex-client';
+import { OneSwapClient } from '../oneswap/oneswap-client';
 import { CantonPriceService } from '../canton/canton-price.service';
-import { SwapService } from '../cantex/swap.service';
-import { isCantexEnabled } from '../cantex/cantex.config';
-import { CantexError } from '../cantex/cantex.types';
+import { SwapService } from '../oneswap/swap.service';
+import { isOneSwapEnabled } from '../oneswap/oneswap.config';
+import {
+  OneSwapError,
+  NoDirectPoolError,
+  AmbiguousPoolPairError,
+} from '../oneswap/oneswap.types';
 import { UsersService } from '../users/users.service';
 import { WalletInviteCodeService } from './wallet-invite-code.service';
 import { isVisibleInstrument } from './visible-instruments';
@@ -64,8 +68,7 @@ import {
   OfferType,
   TransferInstructionActionDto,
 } from './dto/contract-action.dto';
-import { SwapQuoteDto } from './dto/swap-quote.dto';
-import { SwapDto } from './dto/swap.dto';
+import { SwapQuoteDto, SwapDto } from './dto/swap.dto';
 
 type AuthedReq = Request & { user: { userId: string; email: string } };
 
@@ -145,7 +148,7 @@ export class PartyController {
     private readonly walletOnboarding: WalletOnboardingService,
     private readonly lockEligibility: LockEligibilityService,
     private readonly prisma: PrismaService,
-    private readonly cantex: CantexClient,
+    private readonly oneswap: OneSwapClient,
     private readonly cantonPrices: CantonPriceService,
     private readonly swapService: SwapService,
     private readonly auth: AuthService,
@@ -1670,7 +1673,8 @@ export class PartyController {
           description,
           // referenceId = partyId penerima (TANPA prefix "to:"). Prefix lama bikin
           // resolveTransferCounterparty gagal match → counterparty tampil "to:karel…".
-          referenceId: normalizeCantonPartyId(recipientPartyId) ?? recipientPartyId,
+          referenceId:
+            normalizeCantonPartyId(recipientPartyId) ?? recipientPartyId,
           ledgerTxId: ledgerTxId ?? transferInstructionCid,
           cantonUpdateId: ledgerTxId ?? undefined,
           status: 'PENDING', // offer belum di-accept receiver
@@ -2895,18 +2899,16 @@ export class PartyController {
   }
 
   // ═══════════════════════════════════════════════════════════════════════
-  // SWAP — Cantex DEX integration (CC ↔ semua token Cantex)
-  // Custodial Wintip-style: token non-CC di off-chain CantexTokenBalance.
+  // SWAP — OneSwap DEX integration (CC ↔ semua token via OneSwap).
+  // Custodial: backend transfer input user → OneSwap depositParty → output
+  // balik ke party user. Token non-CC saldo dari on-chain (ledger).
   // ═══════════════════════════════════════════════════════════════════════
 
-  /** GET /party/swap/status — apakah fitur swap aktif (CANTEX_ENABLED). */
+  /** GET /party/swap/status — apakah fitur swap aktif (ONESWAP_API_KEY diset). */
   @Get('swap/status')
   @SkipThrottle()
   async swapStatus() {
-    const enabled = isCantexEnabled();
-    // BUG-D.5 fix: sebelumnya return executionReady:false, phase:'quote'
-    // padahal POST /party/swap sudah fully live. Flag berbohong → UI yang
-    // gate pada executionReady akan blok swap yang sebenarnya jalan.
+    const enabled = isOneSwapEnabled();
     return {
       enabled,
       phase: 'execution',
@@ -3033,8 +3035,8 @@ export class PartyController {
    * USDCx = $1 anchor (hardcode). Cache 30s di CantonPriceService.
    * Dipakai frontend untuk total balance USD + per-token fiat value.
    *
-   * Tidak bergantung pada Cantex (enabled flag) — scan-proxy selalu available
-   * selama validator up. Cantex hanya dipakai untuk ambil admin token
+   * Tidak bergantung pada OneSwap enabled flag — scan-proxy selalu available
+   * selama validator up. OneSwap hanya dipakai untuk ambil admin token
    * (key matching dengan /party/pools).
    */
   @Get('prices')
@@ -3069,14 +3071,14 @@ export class PartyController {
   }
 
   /**
-   * GET /party/pools — daftar SEMUA token yang tersedia (dari AMM pools,
-   * Amulet/CC). User bisa pilih token mana pun di slot atas ATAU bawah.
-   * Live dari Cantex DEX (read-only, no risk).
+   * GET /party/pools — daftar token yang tersedia untuk swap (dari OneSwap).
+   * User bisa pilih token mana pun di slot atas ATAU bawah.
+   * Live dari OneSwap (read-only, no risk).
    */
   @Get('pools')
   @SkipThrottle()
   async swapPools(@Req() req: AuthedReq) {
-    if (!isCantexEnabled()) {
+    if (!isOneSwapEnabled()) {
       throw new ServiceUnavailableException('Swap is not enabled.');
     }
     // Wallet gate — swap butuh wallet (CC ada di party user).
@@ -3087,16 +3089,16 @@ export class PartyController {
       );
     }
     try {
-      const instruments = await this.cantex.getAllSwapInstruments();
-      // Tandai mana yang CC/Amulet (untuk logo + label FE).
-      const ccId = (
-        process.env.CANTEX_CC_INSTRUMENT_ID ?? 'Amulet'
-      ).toLowerCase();
+      const tokens = await this.oneswap.listTokens();
+      // Token CC = Amulet (instrument id). symbol 'CC' dipakai di UI swap.
+      const ccId = 'amulet';
       return {
         // Filter: hanya token whitelist (CC + USDCx + CBTC).
-        tokens: instruments
+        tokens: tokens
           .filter((t) => isVisibleInstrument(t.id))
           .map((t) => ({
+            // Display symbol untuk swap picker OneSwap ('CC', 'USDCX').
+            symbol: t.id.toLowerCase() === ccId ? 'CC' : t.symbol,
             instrumentId: t.id,
             instrumentAdmin: t.admin,
             isCC: t.id.toLowerCase() === ccId,
@@ -3108,70 +3110,62 @@ export class PartyController {
         (err as Error).stack,
       );
       throw new ServiceUnavailableException(
-        'Could not reach Cantex DEX. Try again later.',
+        'Could not reach OneSwap. Try again later.',
       );
     }
   }
 
   /**
    * POST /party/swap/quote — live swap quote (preview sebelum konfirmasi).
-   * Tampilkan: output estimate, price impact, fees.
-   * Live dari Cantex DEX (read-only, no risk).
+   * Tampilkan: output estimate, price impact, fee breakdown (OneSwap native).
+   * Live dari OneSwap (read-only, no risk).
    */
   @Post('swap/quote')
   @SkipThrottle()
   async swapQuote(@Req() req: AuthedReq, @Body() body: SwapQuoteDto) {
-    if (!isCantexEnabled()) {
+    if (!isOneSwapEnabled()) {
       throw new ServiceUnavailableException('Swap is not enabled.');
     }
-    // Validasi: sell != buy (tidak bisa swap token ke dirinya sendiri).
-    if (
-      body.sellInstrumentId === body.buyInstrumentId &&
-      body.sellInstrumentAdmin === body.buyInstrumentAdmin
-    ) {
+    // Validasi: from != to (tidak bisa swap token ke dirinya sendiri).
+    if (body.from === body.to) {
       throw new BadRequestException(
         'Cannot swap a token to itself. Select different tokens.',
       );
     }
     try {
-      const quote = await this.cantex.getQuote({
-        sellAmount: String(body.amount),
-        sellInstrumentId: body.sellInstrumentId,
-        sellInstrumentAdmin: body.sellInstrumentAdmin,
-        buyInstrumentId: body.buyInstrumentId,
-        buyInstrumentAdmin: body.buyInstrumentAdmin,
+      const quote = await this.oneswap.getQuote({
+        from: body.from,
+        to: body.to,
+        amount: body.amount,
       });
+      // Shape OneSwap native — FE render breakdown fee dari field ini.
+      // (feeModel tidak di-export SDK type; OneSwap settlement selalu 'deposit'
+      // untuk SDK-keyed quotes — networkFeeIn diambil dari input.)
       return {
-        sellAmount: quote.sellAmount.toString(),
-        sellInstrument: quote.sellInstrument,
-        buyInstrument: quote.buyInstrument,
-        // Estimasi output (yang dibeli user).
-        outputAmount: quote.returned.amount.toString(),
-        outputInstrument: quote.returned.instrument,
-        // Fee + price impact. Tiap fee pakai instrument aslinya dari Cantex.
-        fees: {
-          feePercentage: quote.fees.feePercentage.toString(),
-          adminFee: quote.fees.amountAdmin.toString(),
-          liquidityFee: quote.fees.amountLiquidity.toString(),
-          networkFee: quote.fees.networkFee.amount.toString(),
-          feeInstrument: quote.fees.instrument,
-          networkFeeInstrument: quote.fees.networkFee.instrument,
-          platformFee: String(
-            Number(this.config.get<string>('SWAP_PLATFORM_FEE_CC') ?? '0'),
-          ),
-        },
-        prices: {
-          slippage: quote.prices.slippage.toString(),
-          tradePrice: quote.prices.trade.toString(),
-          tradePriceNoFees: quote.prices.tradeNoFees.toString(),
-          poolPriceBefore: quote.prices.poolBefore.toString(),
-          poolPriceAfter: quote.prices.poolAfter.toString(),
-        },
-        estimatedTimeSeconds: quote.estimatedTimeSeconds,
+        amountOut: quote.amountOut,
+        priceImpactPct: quote.priceImpactPct,
+        networkFeeIn: quote.networkFeeIn,
+        platformFee: quote.platformFee,
+        lpFee: quote.lpFee,
+        swapFeeBps: quote.swapFeeBps,
+        effFeeBps: quote.effFeeBps,
+        poolId: quote.poolId,
+        inSym: quote.inSym ?? body.from,
       };
     } catch (err) {
-      if (err instanceof CantexError) {
-        this.logger.warn(`swap/quote Cantex error: ${err.message}`);
+      // NoDirectPoolError / AmbiguousPoolPairError = error user-facing jelas.
+      if (err instanceof NoDirectPoolError) {
+        throw new BadRequestException(
+          `No direct pool for ${body.from}↔${body.to}. Try a different pair.`,
+        );
+      }
+      if (err instanceof AmbiguousPoolPairError) {
+        throw new BadRequestException(
+          `Multiple pools exist for ${body.from}↔${body.to}. Pair selection is required.`,
+        );
+      }
+      if (err instanceof OneSwapError) {
+        this.logger.warn(`swap/quote OneSwap error: ${err.message}`);
         throw new BadRequestException(`Could not get quote: ${err.message}`);
       }
       this.logger.error(
@@ -3179,20 +3173,21 @@ export class PartyController {
         (err as Error).stack,
       );
       throw new ServiceUnavailableException(
-        'Could not reach Cantex DEX. Try again later.',
+        'Could not reach OneSwap. Try again later.',
       );
     }
   }
 
   /**
-   * POST /party/swap — execute swap CC ↔ token (live, custodial Wintip-style).
-   * SwapService handles the full flow: CC transfer + Cantex swap + WS confirm +
-   * off-chain balance update + platform fee.
+   * POST /party/swap — execute swap via OneSwap (live, custodial).
+   * SwapService orchestrate: transfer input user → OneSwap depositParty →
+   * tunggu output balik ke party user → record transaksi + emit SSE.
+   * Fee OneSwap native (networkFeeIn + platformFee + lpFee dari input).
    */
   @Throttle({ ledger: { limit: 5, ttl: 60_000 } })
   @Post('swap')
   async swap(@Req() req: AuthedReq, @Body() body: SwapDto) {
-    if (!isCantexEnabled()) {
+    if (!isOneSwapEnabled()) {
       throw new ServiceUnavailableException('Swap is not enabled.');
     }
     const user = await this.users.findById(req.user.userId);
@@ -3202,8 +3197,8 @@ export class PartyController {
       );
     }
     // SWAP WHITELIST: fitur swap dalam beta — hanya username di whitelist
-    // (env SWAP_ENABLED_USERNAMES=karel,admin) yang bisa swap. User lain
-    // dapat 423 "Coming soon". Set '*' atau hapus env untuk enable semua.
+    // (env SWAP_ENABLED_USERNAMES) yang bisa swap. Set '*' atau hapus env
+    // untuk enable semua.
     const swapWhitelist = this.config
       .get<string>('SWAP_ENABLED_USERNAMES')
       ?.split(',')
@@ -3218,14 +3213,10 @@ export class PartyController {
       throw new ServiceUnavailableException('Swap is coming soon. Stay tuned!');
     }
     const result = await this.swapService.executeSwap(req.user.userId, {
-      sellInstrumentId: body.sellInstrumentId,
-      sellInstrumentAdmin: body.sellInstrumentAdmin,
-      buyInstrumentId: body.buyInstrumentId,
-      buyInstrumentAdmin: body.buyInstrumentAdmin,
+      from: body.from,
+      to: body.to,
       amount: body.amount,
-      sellIsCC: body.sellIsCC,
       clientNonce: body.clientNonce,
-      maxNetworkFee: body.maxNetworkFee,
     });
     if (!result.success) {
       throw new BadRequestException(
@@ -3238,77 +3229,5 @@ export class PartyController {
       outputAmount: result.outputAmount,
       swapId: result.swapId,
     };
-  }
-
-  /**
-   * GET /party/swap/account-status — cek apakah Cantex trading account sudah
-   * provisioned (pool trading account + intent account). Dipakai untuk
-   * debugging/provisioning check.
-   */
-  @Get('swap/account-status')
-  @SkipThrottle()
-  async swapAccountStatus() {
-    if (!isCantexEnabled()) {
-      throw new ServiceUnavailableException('Swap is not enabled.');
-    }
-    try {
-      const admin = await this.cantex.getAccountAdmin();
-      return {
-        address: admin.address,
-        hasIntentAccount: admin.hasIntentAccount,
-        hasTradingAccount: admin.hasTradingAccount,
-        intentAccountContractId: admin.intentAccountContractId,
-        tradingAccountContractId: admin.tradingAccountContractId,
-        ready: admin.hasIntentAccount && admin.hasTradingAccount,
-      };
-    } catch (err) {
-      this.logger.error(
-        `swap/account-status failed: ${(err as Error).message}`,
-      );
-      throw new ServiceUnavailableException(
-        'Could not check Cantex account status.',
-      );
-    }
-  }
-
-  /**
-   * POST /party/swap/provision — create Cantex pool trading account (one-off).
-   * Dipanggil sekali untuk provisioning. Idempotent: kalau sudah ada, return OK.
-   */
-  @Throttle({ default: { limit: 2, ttl: 60_000 } })
-  @Post('swap/provision')
-  async swapProvision() {
-    if (!isCantexEnabled()) {
-      throw new ServiceUnavailableException('Swap is not enabled.');
-    }
-    try {
-      const admin = await this.cantex.getAccountAdmin();
-      if (admin.hasTradingAccount) {
-        return {
-          success: true,
-          message: 'Trading account already exists.',
-          tradingAccountContractId: admin.tradingAccountContractId,
-        };
-      }
-      // Create pool trading account.
-      await this.cantex.createTradingAccount();
-      // Verify.
-      const after = await this.cantex.getAccountAdmin();
-      return {
-        success: after.hasTradingAccount,
-        message: after.hasTradingAccount
-          ? 'Trading account created successfully.'
-          : 'Provisioning submitted but not confirmed yet. Try again in 30s.',
-        tradingAccountContractId: after.tradingAccountContractId,
-      };
-    } catch (err) {
-      this.logger.error(
-        `swap/provision failed: ${(err as Error).message}`,
-        (err as Error).stack,
-      );
-      throw new BadRequestException(
-        `Provisioning failed: ${(err as Error).message}`,
-      );
-    }
   }
 }

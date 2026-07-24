@@ -8,9 +8,11 @@
 
 /** Satu token di wallet (CC atau token non-CC seperti USDCx). */
 export interface WalletToken {
-  /** Cantex instrument id, mis. "Amulet" (CC) / "USDCX". */
+  /** OneSwap display symbol, mis. "CC" / "USDCX" (dipakai swap picker OneSwap). */
+  symbol?: string;
+  /** Instrument id on-ledger, mis. "Amulet" (CC) / "USDCX". */
   instrumentId: string;
-  /** Cantex instrument admin party, mis. "DSO::1220...". */
+  /** Instrument admin party, mis. "DSO::1220...". */
   instrumentAdmin: string;
   /** True kalau ini CC/Amulet (leg khusus, pakai /send-cc, bukan /send-token). */
   isCC?: boolean;
@@ -63,10 +65,8 @@ export interface PoolsResponse {
  * Shape response GET /api/party/balances.
  * `tokens` = map balance keyed by instrumentId (lowercase) → decimal string.
  *
- * DB-DRIVEN: backend aggregate CantexTokenBalance per instrumentId, key cuma
- * instrumentId (BUKAN composite id::admin). Cantex tidak ikut campur di jalur
- * saldo — sesuai prinsip "Cantex = swap-only". CC baca CcBalance, token baca
- * CantexTokenBalance, keduanya per userId dari DB.
+ * Authoritative: saldo token di-read on-chain (ledger). CC baca CcBalance.
+ * OneSwap dipakai untuk swap + token list (pools), BUKAN jalur saldo.
  */
 export interface BalancesResponse {
   cc: number;

@@ -32,7 +32,7 @@ interface TokenListProps {
  * Main wallet view — Wintip-style layout:
  *   1. Balance hero (total CC value)
  *   2. Actions (Send / Receive / Offers / Swap)
- *   3. My Tokens list (CC + all Cantex tokens)
+ *   3. My Tokens list (CC + all OneSwap tokens)
  *
  * Klik token card → detail view /wallet/<tokenId>.
  */
@@ -40,7 +40,7 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
   const hasWallet = isRealCantonPartyId(me.cantonPartyId);
   const displayPartyId = formatPartyIdForDisplay(me.cantonPartyId);
 
-  // Harga semua token dari Cantex DEX (rate vs USDCx = USD anchor).
+  // Harga semua token dari OneSwap DEX (rate vs USDCx = USD anchor).
   const { prices: tokenPrices } = useTokenPrices();
 
   // Token list + SEMUA saldo dari endpoint terpisah, TAPI lewat react-query
@@ -85,7 +85,7 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
   );
 
   // Total USD value = CC value + semua token non-CC value.
-  // DB-DRIVEN: iterasi saldo dari balances.tokens (bukan swapTokens/Cantex).
+  // DB-DRIVEN: iterasi saldo dari balances.tokens (bukan swapTokens/OneSwap).
   const ccValue = ccUsd > 0 && ccBalance !== null ? ccBalance * ccUsd : 0;
   let tokenNonCcValue = 0;
   for (const id in tokenBalances) {
@@ -189,8 +189,8 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
           />
 
           {/* Non-CC tokens — DB-DRIVEN. Sumber daftar = saldo dari DB
-              (CantexTokenBalance), bukan Cantex pools. Sesuai prinsip
-              "Cantex = swap-only". Whitelist filter (USDCx + CBTC). */}
+              (CantexTokenBalance), bukan OneSwap pools. Sesuai prinsip
+              "OneSwap = swap-only". Whitelist filter (USDCx + CBTC). */}
           {Object.keys(tokenBalances)
             .filter((id) => VISIBLE_TOKENS.has(id.toUpperCase()))
             .map((id) => {
