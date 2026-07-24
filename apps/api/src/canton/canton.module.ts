@@ -13,7 +13,6 @@ import { CantonPriceService } from './canton-price.service';
 import { TransactionDetailService } from './transaction-detail.service';
 import { QuestLedgerService } from './quest-ledger.service';
 import { LockEligibilityService } from './lock-eligibility.service';
-import { ModoApiService } from './modo-api.service';
 import { OfferReconcilerService } from './offer-reconciler.service';
 import { CantonUpdatesService } from './canton-updates.service';
 import { BalanceEventHandlerService } from './balance-event-handler.service';
@@ -42,7 +41,6 @@ import { BalanceEventHandlerService } from './balance-event-handler.service';
     QuestLedgerService,
     WalletOnboardingService,
     LockEligibilityService,
-    ModoApiService,
     OfferReconcilerService,
     CantonUpdatesService,
     BalanceEventHandlerService,
@@ -57,7 +55,6 @@ import { BalanceEventHandlerService } from './balance-event-handler.service';
     QuestLedgerService,
     WalletOnboardingService,
     LockEligibilityService,
-    ModoApiService,
     OfferReconcilerService,
     CantonUpdatesService,
     BalanceEventHandlerService,

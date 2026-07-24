@@ -7,7 +7,6 @@ import {
   type LedgerStreamEvent,
 } from './canton-ledger.service';
 import { isPlatformFeeTransaction } from '../users/cc-transaction-visibility';
-import { ModoApiService } from './modo-api.service';
 
 export type LedgerEventSummary = {
   kind: 'created' | 'archived';
@@ -85,28 +84,57 @@ export class TransactionDetailService {
     private readonly prisma: PrismaService,
     private readonly ledger: CantonLedgerService,
     private readonly users: UsersService,
-    private readonly modo: ModoApiService,
     private readonly config: ConfigService,
   ) {}
 
-  /** Explorer link via Modo (cc.modo.link/mainnet/event/{id}:0). */
+  /**
+   * Build a Modo explorer link for an update id (cc.modo.link/mainnet/event/{id}:0).
+   * Pure string formatting — tidak ada network call. Null untuk input kosong.
+   */
   explorerUrl(eventId: string | null | undefined): string | null {
-    return this.modo.explorerUrl(eventId);
+    if (!eventId?.trim()) return null;
+    const id = eventId.trim().replace(/:[0-9]+$/, '');
+    return `https://cc.modo.link/mainnet/event/${encodeURIComponent(id)}%3A0`;
   }
 
   /**
-   * Resolve explorer update_id dari Canton update_id / contract id / event_id.
-   * Delegated to ModoApiService (pure string parsing + optional /contracts
-   * fallback).
+   * Resolve explorer update_id ("1220…") dari update_id / event_id / contract id.
+   *
+   * Strategy (pure string logic, optional Canton ledger fallback):
+   *   1. Empty / internal marker (fee:, claim:, namespace: tan "::") → null.
+   *   2. Starts with "1220" → sudah update id, return apa adanya.
+   *   3. Trailing ":N" (event_id) → strip suffix.
+   *   4. Contract id panjang (>16 chars) → resolve via Canton ledger
+   *      (findUpdateIdForContract) — pengganti Modo /contracts API yang
+   *      sudah dihapus.
+   *   5. Otherwise null.
    *
    * Non-fatal: input kosong / marker internal → null (link explorer tidak
    * tampil, tapi data transaksi tetap muncul).
    */
-  resolveExplorerId(
+  async resolveExplorerId(
     partyId: string,
     updateIdOrContractId: string | null | undefined,
   ): Promise<string | null> {
-    return this.modo.resolveEventId(partyId, updateIdOrContractId);
+    const id = updateIdOrContractId?.trim();
+    if (!id) return null;
+    if (this.isInternalMarker(id)) return null;
+    if (id.startsWith('1220')) return id;
+    if (/:[0-9]+$/.test(id)) return id.replace(/:[0-9]+$/, '');
+    // Contract id panjang → resolve creatingUpdate via Canton ledger langsung.
+    if (id.length > 16 && partyId) {
+      const updateId = await this.ledger.findUpdateIdForContract(id, partyId);
+      return updateId && updateId.startsWith('1220') ? updateId : null;
+    }
+    return null;
+  }
+
+  /** Reject placeholder / internal markers yang tidak resolve ke update real. */
+  private isInternalMarker(id: string): boolean {
+    if (id.startsWith('1220')) return false;
+    if (/^[a-z][a-z0-9-]*:/i.test(id) && !id.includes('::')) return true;
+    if (/^(inbound-sync|fee|claim|manual|placeholder):/i.test(id)) return true;
+    return false;
   }
 
   /** Resolve ledger updateId for a contract and persist on CcTransaction. */
