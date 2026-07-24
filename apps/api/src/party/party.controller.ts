@@ -3207,22 +3207,6 @@ export class PartyController {
         'You need a Canton wallet to use swap. Create yours first.',
       );
     }
-    // SWAP WHITELIST: fitur swap dalam beta — hanya username di whitelist
-    // (env SWAP_ENABLED_USERNAMES) yang bisa swap. Set '*' atau hapus env
-    // untuk enable semua.
-    const swapWhitelist = this.config
-      .get<string>('SWAP_ENABLED_USERNAMES')
-      ?.split(',')
-      .map((s) => s.trim().toLowerCase())
-      .filter(Boolean);
-    if (
-      swapWhitelist &&
-      swapWhitelist[0] !== '*' &&
-      user.username &&
-      !swapWhitelist.includes(user.username.toLowerCase())
-    ) {
-      throw new ServiceUnavailableException('Swap is coming soon. Stay tuned!');
-    }
     const result = await this.swapService.executeSwap(req.user.userId, {
       from: body.from,
       to: body.to,

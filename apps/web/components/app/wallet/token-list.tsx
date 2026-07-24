@@ -154,7 +154,6 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
         onBalanceRefresh={handleRefresh}
         onLockClick={() => setLockOpen(true)}
         lockedCc={lockStatus.lockedCc}
-        username={me.username}
       />
 
       {/* ── Lock modal (CC) — mount di /wallet utama ── */}
