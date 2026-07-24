@@ -32,7 +32,11 @@ export function normalizeSendRecipientInput(raw: string): string {
   const trimmed = raw.trim().replace(/^@/, "");
   if (!trimmed) return "";
   if (trimmed.includes("::")) {
-    return normalizeCantonPartyId(trimmed) ?? trimmed.toLowerCase();
+    // Canton party ID (mis. Cantex::1220…). Canton CASE-SENSITIVE: prefix
+    // (hint, mis. "Cantex") HARUS dipertahankan apa adanya — jika dikecilkan,
+    // submit ditolak UNKNOWN_INFORMEES. Jangan normalizeCantonPartyId di sini.
+    // Hanya trim + strip @; casing biarkan user/input yang menentukan.
+    return trimmed;
   }
   return trimmed.toLowerCase();
 }

@@ -948,7 +948,11 @@ export class PartyController {
             'Transfers to platform wallets are not allowed.',
           );
         }
-        recipientPartyId = normalizedRecipient;
+        // PENTING: Canton CASE-SENSITIVE untuk submit. Pakai input CASING ASLI
+        // (recipientInput, mis. Cantex::…) — bukan versi lowercase
+        // (normalizedRecipient). normalizedRecipient hanya untuk matching/
+        // validation di atas. Kalau lowercase dipakai submit → UNKNOWN_INFORMEES.
+        recipientPartyId = recipientInput;
         recipientLabel =
           normalizedRecipient.split('::')[0] ?? normalizedRecipient;
         const found = await this.users.findByPartyId(normalizedRecipient);
@@ -1554,7 +1558,10 @@ export class PartyController {
             'Transfers to platform wallets are not allowed.',
           );
         }
-        recipientPartyId = normalizedRecipient;
+        // PENTING: Canton CASE-SENSITIVE untuk submit. Pakai input CASING ASLI
+        // (recipientInput, mis. Cantex::…) — bukan lowercase (normalizedRecipient)
+        // yang hanya untuk matching/validation di atas.
+        recipientPartyId = recipientInput;
         recipientLabel =
           normalizedRecipient.split('::')[0] ?? normalizedRecipient;
       } else {
