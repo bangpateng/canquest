@@ -51,7 +51,7 @@ import {
 } from '../oneswap/oneswap.types';
 import { UsersService } from '../users/users.service';
 import { WalletInviteCodeService } from './wallet-invite-code.service';
-import { isVisibleInstrument } from './visible-instruments';
+import { isVisibleInstrument, isSwapInstrument } from './visible-instruments';
 import { AllocateWalletDto } from './dto/allocate-wallet.dto';
 import { CantonPartyBindingDto } from './dto/canton-party-binding.dto';
 import { SendCcDto } from './dto/send-cc.dto';
@@ -3093,9 +3093,9 @@ export class PartyController {
       // Token CC = Amulet (instrument id). symbol 'CC' dipakai di UI swap.
       const ccId = 'amulet';
       return {
-        // Filter: hanya token whitelist (CC + USDCx + CBTC).
+        // Filter: hanya token yang bisa di-swap (CC + USDCx). CBTC Coming soon.
         tokens: tokens
-          .filter((t) => isVisibleInstrument(t.id))
+          .filter((t) => isSwapInstrument(t.id))
           .map((t) => ({
             // Display symbol untuk swap picker OneSwap ('CC', 'USDCX').
             symbol: t.id.toLowerCase() === ccId ? 'CC' : t.symbol,
@@ -3138,12 +3138,16 @@ export class PartyController {
         to: body.to,
         amount: body.amount,
       });
-      // Shape OneSwap native — FE render breakdown fee dari field ini.
-      // (feeModel tidak di-export SDK type; OneSwap settlement selalu 'deposit'
-      // untuk SDK-keyed quotes — networkFeeIn diambil dari input.)
+      // Shape OneSwap native sesuai dokumentasi Quote type. Field:
+      //  - amountOut        : output yang dibeli user
+      //  - effInput         : input aktual di-swap SETELAH networkFeeIn dipotong
+      //  - networkFeeIn     : biaya Canton network (dipotong dari input, gasless)
+      //  - lpFee/platformFee: dekomposisi pool fee (swapFeeBps). effFeeBps = setelah diskon
+      //  - priceImpactPct   : impact ke harga pool
       return {
         amountOut: quote.amountOut,
         priceImpactPct: quote.priceImpactPct,
+        effInput: quote.effInput,
         networkFeeIn: quote.networkFeeIn,
         platformFee: quote.platformFee,
         lpFee: quote.lpFee,

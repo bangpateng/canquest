@@ -21,15 +21,23 @@ import { isTokenActive as isSwapActive } from "@/lib/canton/token-types";
 // Reuse WalletToken/PoolsResponse dari shared token-types (tidak duplikasi).
 import type { WalletToken as SwapToken, PoolsResponse } from "@/lib/canton/token-types";
 
-/** Quote response dari POST /api/party/swap/quote — shape OneSwap native.
- *  Field numeric. Fee breakdown:
- *  networkFeeIn (gasless, dari input) + platformFee + lpFee (dari pool fee). */
+/** Quote response dari POST /api/party/swap/quote — shape OneSwap native
+ *  sesuai dokumentasi Quote type. Semua field numeric.
+ *
+ *  Alur fee (input token):
+ *    amount (input user)
+ *      − networkFeeIn   (biaya Canton network, dipotong dari input — gasless)
+ *      = effInput       (input aktual yang di-swap ke pool)
+ *      − lpFee+platformFee (dekomposisi pool fee = swapFeeBps)
+ *      → dikonversi ke amountOut (output yang dibeli user) */
 interface QuoteResponse {
   /** Estimasi output (token yang dibeli). */
   amountOut: number;
   /** Price impact trade ini (persen). */
   priceImpactPct: number;
-  /** Network fee dari input (gasless — user tidak butuh CC untuk gas). */
+  /** Input aktual di-swap SETELAH networkFeeIn dipotong. */
+  effInput: number;
+  /** Biaya Canton network (dipotong dari input — user tidak butuh gas CC). */
   networkFeeIn: number;
   /** Potongan platform dari pool fee (di input token). */
   platformFee: number;
@@ -433,7 +441,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                 <div className="mt-3 space-y-2 rounded-xl border border-white/5 bg-[#13151a] p-4 text-xs">
                   <DetailRow
                     label="Rate"
-                    value={`1 ${displayName(sellToken?.instrumentId ?? "")} ≈ ${formatPriceNum(quote.amountOut / (parseFloat(amount) || 1))} ${displayName(buyToken?.instrumentId ?? "")}`}
+                    value={`1 ${displayName(sellToken?.instrumentId ?? "")} ≈ ${formatPriceNum(quote.amountOut / (quote.effInput || parseFloat(amount) || 1))} ${displayName(buyToken?.instrumentId ?? "")}`}
                   />
                   <DetailRow
                     label="Price Impact"
@@ -445,12 +453,16 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                     }
                   />
                   <DetailRow
-                    label="Swap Fee"
-                    value={`${formatAmountNum(quote.lpFee + quote.platformFee)} ${displayName(sellToken?.instrumentId ?? "")} (${(quote.effFeeBps / 100).toFixed(2)}%)`}
+                    label="Pool Fee"
+                    value={`${(quote.effFeeBps / 100).toFixed(2)}% (${formatAmountNum(quote.lpFee + quote.platformFee)} ${displayName(sellToken?.instrumentId ?? "")})`}
                   />
                   <DetailRow
                     label="Network Fee"
                     value={`${formatAmountNum(quote.networkFeeIn)} ${displayName(sellToken?.instrumentId ?? "")}`}
+                  />
+                  <DetailRow
+                    label="You Swap"
+                    value={`${formatAmountNum(quote.effInput)} ${displayName(sellToken?.instrumentId ?? "")}`}
                   />
                 </div>
               ) : null)}
