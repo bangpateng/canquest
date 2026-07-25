@@ -15,6 +15,30 @@ export type RewardType =
   | "CC_AND_CODE_RAFFLE";
 
 /**
+ * Token reward — dimensi terpisah dari RewardType (jenis alur klaim).
+ * Menentukan token apa yang dipakai utk reward (bukan fee; fee tetap CC).
+ * "CC" = Amulet (default, behavior lama). "USDCx" = utility-registry token.
+ */
+export type RewardTokenSymbol = "CC" | "USDCx";
+
+/** Coerce sembarang string (dari API/DB) → RewardTokenSymbol aman (default CC). */
+export function normalizeRewardToken(
+  value: string | null | undefined,
+): RewardTokenSymbol {
+  return value?.trim().toUpperCase() === "USDCX" ? "USDCx" : "CC";
+}
+
+/** Label singkat token utk display ("CC" / "USDCx"). */
+export function rewardTokenLabel(token: RewardTokenSymbol | string | null | undefined): string {
+  return normalizeRewardToken(token);
+}
+
+/** Ambil token reward dari object Quest (default CC kalau null/undefined). */
+export function questRewardToken(quest: { rewardToken?: string | null } | null | undefined): RewardTokenSymbol {
+  return normalizeRewardToken(quest?.rewardToken);
+}
+
+/**
  * Mode gate akses Earn per-campaign (di-set admin per-event).
  * CC_OR_POINTS = lock CC ATAU spend points (default).
  * CC_ONLY = hanya lock CC. POINTS_ONLY = hanya spend points. NONE = tanpa gate (gratis).
@@ -69,6 +93,8 @@ export interface Quest {
   bannerImageUrl?: string | null;
   logoUrl?: string | null;
   rewardCc: number;
+  /** Token reward: "CC" (Amulet, default) atau "USDCx". Null/undefined = CC. */
+  rewardToken?: RewardTokenSymbol;
   rewardPool: string;
   rewardType?: RewardType;
   maxWinners?: number | null;

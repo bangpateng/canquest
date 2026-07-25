@@ -18,7 +18,9 @@ import {
   questExportLabel,
   questTaskTypeLabel,
   resolveQuestTaskDisplayTitle,
+  normalizeRewardToken,
 } from "@/lib/quest/quest-types";
+import { formatRewardAmount } from "@/lib/canton/campaign-reward";
 import type { QuestSocialLink } from "@/lib/quest/quest-social-links";
 
 interface Task {
@@ -43,6 +45,8 @@ interface QuestData {
   bannerImageUrl?: string | null;
   logoUrl?: string | null;
   rewardCc: number;
+  /** Token reward: "CC" (default) atau "USDCx". */
+  rewardToken?: string;
   rewardPool: string;
   deadline: string | null;
   status: string;
@@ -251,7 +255,7 @@ export function QuestDetail({ questId }: { questId: string }) {
         {[
           { label: "Completions", value: quest._count.completions, icon: Users },
           { label: "Winners drawn", value: quest._count.winnerDraws, icon: Trophy },
-          { label: "CC reward", value: `${quest.rewardCc} CC`, icon: null },
+          { label: "Reward", value: formatRewardAmount(quest.rewardCc, normalizeRewardToken(quest.rewardToken)), icon: null },
           { label: "Max winners", value: quest.maxWinners ?? "∞", icon: null },
         ].map((s) => (
           <div key={s.label} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-3">

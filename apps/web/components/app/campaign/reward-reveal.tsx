@@ -8,6 +8,8 @@ import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { RewardHowToUse } from "@/components/app/campaign/reward-how-to-use";
 import { CcRewardLogo } from "@/components/app/campaign/cc-reward-logo";
 import { getRewardConfig } from "@/lib/quest/quest-engine";
+import { formatRewardAmount } from "@/lib/canton/campaign-reward";
+import { normalizeRewardToken } from "@/lib/quest/quest-types";
 
 /**
  * Satu card reveal hadiah setelah claim berhasil — konsisten untuk semua tipe
@@ -18,6 +20,7 @@ export function RewardReveal({
   inviteCode,
   rewardCc,
   rewardType,
+  rewardToken,
   redeemUrl,
   redeemInstructions,
   className,
@@ -28,6 +31,8 @@ export function RewardReveal({
   rewardCc?: number | null;
   /** Tipe reward — menentukan icon header (Code/Waitlist = Ticket, CC = CC logo). */
   rewardType?: string | null;
+  /** Token reward: "CC" (default) atau "USDCx". */
+  rewardToken?: string | null;
   /** Link register/landing proyek (shown in "How to use" section). */
   redeemUrl?: string | null;
   /** Instruksi custom redeem; kosong = pakai template 3-step default. */
@@ -101,7 +106,7 @@ export function RewardReveal({
         {rewardCc ? (
           <div className="flex items-baseline justify-between gap-3">
             <p className="font-mono text-lg font-bold tabular-nums text-canton">
-              +{rewardCc} CC
+              +{formatRewardAmount(rewardCc, normalizeRewardToken(rewardToken))}
             </p>
             <span className="text-xs font-medium text-[var(--muted-foreground)]">
               {t("earnCampaigns.ccSentToWallet")}

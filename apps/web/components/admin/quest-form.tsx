@@ -81,6 +81,8 @@ interface QuestFormProps {
     bannerImageUrl?: string | null;
     logoUrl?: string | null;
     rewardCc: number;
+    /** Token reward: "CC" (default) atau "USDCx". */
+    rewardToken?: string;
     rewardPool: string;
     deadline: string | null;
     status: string;
@@ -125,6 +127,7 @@ export function QuestForm({
     bannerImageUrl: initialData?.bannerImageUrl ?? "",
     logoUrl: initialData?.logoUrl ?? "",
     rewardCc: String(initialData?.rewardCc ?? "0"),
+    rewardToken: initialData?.rewardToken === "USDCx" ? "USDCx" : "CC",
     rewardPool: initialData?.rewardPool ?? "",
     startsAt: initialData?.startsAt
       ? new Date(initialData.startsAt).toISOString().slice(0, 16)
@@ -223,10 +226,13 @@ export function QuestForm({
     const config = getRewardConfig(value);
     const noCc = !config.needsCcAmount;
     const claimFee = config.defaultClaimFee;
+    // CC_MANUAL = admin bulk distribute (CC-only flow) → force rewardToken CC.
+    const forceCcToken = config.code === "CC_MANUAL";
     setForm((prev) => ({
       ...prev,
       rewardType: config.code,
       rewardCc: noCc ? "0" : prev.rewardCc,
+      rewardToken: forceCcToken ? "CC" : prev.rewardToken,
       claimFeeCc: claimFee != null ? String(claimFee) : prev.claimFeeCc,
     }));
   }
@@ -319,11 +325,12 @@ export function QuestForm({
           ? initialData.orgSlug
           : form.org.trim().split(/\s+/).map((w) => w[0] ?? "").join("").toUpperCase().slice(0, 4)) || form.org.slice(0, 3).toUpperCase();
 
-      // Auto-generate reward pool label from reward type
+      // Auto-generate reward pool label from reward type + token
+      const t = form.rewardToken; // "CC" / "USDCx"
       const autoPoolLabel = (() => {
-        if (rewardConfig.isCcToken && cc > 0 && maxW && maxW > 0) return `${cc * maxW} CC pool`;
-        if (rewardConfig.isCcToken && cc > 0) return `${cc} CC`;
-        if (rewardConfig.isDual && cc > 0) return `${cc} CC + Code`;
+        if (rewardConfig.isCcToken && cc > 0 && maxW && maxW > 0) return `${cc * maxW} ${t} pool`;
+        if (rewardConfig.isCcToken && cc > 0) return `${cc} ${t}`;
+        if (rewardConfig.isDual && cc > 0) return `${cc} ${t} + Code`;
         if (maxW && maxW > 0) return `${maxW} ${rewardConfig.code === "WAITLIST_EMAIL" ? "spots" : "codes"}`;
         return "TBD";
       })();
@@ -340,6 +347,7 @@ export function QuestForm({
         bannerImageUrl: form.bannerImageUrl.trim() || null,
         logoUrl: form.logoUrl.trim() || null,
         rewardCc: rewardCcPayload,
+        rewardToken: form.rewardToken,
         rewardPool: form.rewardPool.trim() || autoPoolLabel,
         deadline: form.endsAt
           ? formatQuestDeadlineDisplay(new Date(form.endsAt).toISOString())
@@ -635,8 +643,8 @@ export function QuestForm({
           </div>
           <div className={cn("grid gap-4", showCcField ? "sm:grid-cols-2" : "sm:grid-cols-1 sm:max-w-xs")}>
             {showCcField && (
-              <div>
-                <label className="mb-1.5 block text-sm font-medium">CC / Winners</label>
+              <div className="space-y-2">
+                <label className="mb-0.5 block text-sm font-medium">{form.rewardToken} / Winners</label>
                 <input
                   type="number"
                   min="1"
@@ -647,6 +655,39 @@ export function QuestForm({
                   placeholder="e.g. 100"
                   className={inputCls}
                 />
+                {/* Token selector — reward token (fee tetap CC). */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-[var(--muted-foreground)]">Reward token:</span>
+                  {(["CC", "USDCx"] as const).map((tok) => {
+                    // CC_MANUAL = admin bulk distribute (CC-only flow) → USDCx tidak didukung.
+                    const blocked = tok === "USDCx" && rewardConfig.code === "CC_MANUAL";
+                    const selected = form.rewardToken === tok;
+                    return (
+                      <button
+                        key={tok}
+                        type="button"
+                        disabled={blocked}
+                        title={blocked ? "USDCx tidak tersedia untuk CC Manual (admin bulk distribute CC-only)" : undefined}
+                        onClick={() => updateField("rewardToken", tok)}
+                        className={cn(
+                          "rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
+                          selected
+                            ? "border-[var(--primary)] bg-[var(--primary)]/15 text-[var(--primary)]"
+                            : "border-[var(--border)] bg-[var(--muted)]/30 text-[var(--muted-foreground)] hover:border-[var(--foreground)]/40",
+                          blocked && "cursor-not-allowed opacity-40",
+                        )}
+                      >
+                        {tok}
+                      </button>
+                    );
+                  })}
+                </div>
+                {form.rewardToken === "USDCx" && (
+                  <p className="text-xs text-amber-500">
+                    Reward wallet (CANTON_REWARD_PARTY_ID) harus di-fund USDCx sebelum campaign live.
+                    Fee claim tetap dibayar dalam CC.
+                  </p>
+                )}
               </div>
             )}
             {needsMaxWinners && (
@@ -767,9 +808,10 @@ export function QuestForm({
               {(() => {
                 const cc = Number(form.rewardCc) || 0;
                 const maxW = form.maxWinners.trim() === "" ? null : Number(form.maxWinners);
-                if (rewardConfig.isCcToken && cc > 0 && maxW && maxW > 0) return `${cc * maxW} CC pool`;
-                if (rewardConfig.isCcToken && cc > 0) return `${cc} CC`;
-                if (rewardConfig.isDual && cc > 0) return `${cc} CC + Code`;
+                const tt = form.rewardToken;
+                if (rewardConfig.isCcToken && cc > 0 && maxW && maxW > 0) return `${cc * maxW} ${tt} pool`;
+                if (rewardConfig.isCcToken && cc > 0) return `${cc} ${tt}`;
+                if (rewardConfig.isDual && cc > 0) return `${cc} ${tt} + Code`;
                 if (maxW && maxW > 0) return `${maxW} ${rewardConfig.code === "WAITLIST_EMAIL" ? "spots" : "codes"}`;
                 return "TBD";
               })()}

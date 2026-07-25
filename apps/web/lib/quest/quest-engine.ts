@@ -18,6 +18,7 @@ import type {
   RewardType,
   UserProgress,
 } from "@/lib/quest/quest-types";
+import { questRewardToken } from "@/lib/quest/quest-types";
 import type { QuestCampaignSummary } from "@/lib/canton/campaign-reward";
 import {
   fcfsSlotsTaken,
@@ -399,6 +400,7 @@ export function getQuestMeta(
   const poolLabel = formatPoolTotalLabel(
     summary?.poolTotalCc ?? null,
     quest.rewardPool,
+    questRewardToken(quest),
   );
 
   let primaryText: string;
@@ -496,6 +498,7 @@ function buildMetrics(
   const poolLabel = formatPoolTotalLabel(
     summary?.poolTotalCc ?? null,
     quest.rewardPool,
+    questRewardToken(quest),
   );
   const showPool = poolLabel !== "—" || (summary?.poolTotalCc ?? 0) > 0;
 

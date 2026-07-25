@@ -1,25 +1,29 @@
 "use client";
 
 import type { CampaignMeta } from "@/lib/canton/campaign-reward";
-import { formatFcfsClaimFeeHint } from "@/lib/canton/campaign-reward";
+import { formatFcfsClaimFeeHint, formatRewardAmount } from "@/lib/canton/campaign-reward";
 import { CampaignFcfsRewardCard } from "@/components/app/campaign/campaign-fcfs-reward-card";
 import { launchClaimConfetti } from "@/components/ui/confetti-effect";
 import { CLAIM_FAIL_MSG } from "@/lib/campaign/claim-messages";
+import { normalizeRewardToken, type RewardTokenSymbol } from "@/lib/quest/quest-types";
 import { useState } from "react";
 
 export function CampaignDrawCcClaimSection({
   questId,
   partyId,
   rewardCc,
+  rewardToken,
   campaignMeta,
   onClaimed,
 }: {
   questId: string;
   partyId: string | null;
   rewardCc: number;
+  rewardToken?: RewardTokenSymbol | string | null;
   campaignMeta: CampaignMeta;
   onClaimed: () => void;
 }) {
+  const token: RewardTokenSymbol = normalizeRewardToken(rewardToken);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -50,7 +54,7 @@ export function CampaignDrawCcClaimSection({
         );
         return;
       }
-      setSuccess(data.message ?? `${rewardCc} CC sent to your wallet.`);
+      setSuccess(data.message ?? `${formatRewardAmount(rewardCc, token)} sent to your wallet.`);
       launchClaimConfetti();
       onClaimed();
     } catch {
@@ -64,7 +68,7 @@ export function CampaignDrawCcClaimSection({
     <CampaignFcfsRewardCard
       mode="claim"
       sectionLabel="Raffle reward"
-      slotsLabel={`You won · ${rewardCc} CC`}
+      slotsLabel={`You won · ${formatRewardAmount(rewardCc, token)}`}
       description={feeHint}
       rewardCc={rewardCc}
       rewardType="CC_MANUAL"

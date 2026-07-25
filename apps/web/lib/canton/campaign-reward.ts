@@ -3,8 +3,10 @@ import type {
   QuestRewardState,
   QuestRewardStatus,
   RewardType,
+  RewardTokenSymbol,
   UserProgress,
 } from "@/lib/quest/quest-types";
+import { questRewardToken } from "@/lib/quest/quest-types";
 
 export type CampaignMeta = {
   ended: boolean;
@@ -38,15 +40,31 @@ export type QuestCampaignSummary = {
   codesRemaining: number | null;
 };
 
-export function formatPoolTotalLabel(poolTotalCc: number | null, rewardPool: string): string {
-  if (poolTotalCc != null && poolTotalCc > 0) return `${poolTotalCc} CC`;
+/** Format jumlah reward dgn token label, mis. "10 CC" / "10 USDCx". */
+export function formatRewardAmount(
+  amount: number,
+  token: RewardTokenSymbol | string | null | undefined = "CC",
+): string {
+  const t = token === "USDCx" ? "USDCx" : "CC";
+  return `${amount} ${t}`;
+}
+
+export function formatPoolTotalLabel(
+  poolTotalCc: number | null,
+  rewardPool: string,
+  token: RewardTokenSymbol | string | null | undefined = "CC",
+): string {
+  if (poolTotalCc != null && poolTotalCc > 0) return formatRewardAmount(poolTotalCc, token);
   return rewardPool.trim() || "—";
 }
 
-/** e.g. `10 CC / Winners` — campaign reward line under pool total. */
-export function formatCcPerWinners(rewardCc: number): string {
+/** e.g. `10 CC / Winners` — campaign reward line under pool total. Token-aware. */
+export function formatCcPerWinners(
+  rewardCc: number,
+  token: RewardTokenSymbol | string | null | undefined = "CC",
+): string {
   if (rewardCc <= 0) return "";
-  return `${rewardCc} CC · Winners`;
+  return `${formatRewardAmount(rewardCc, token)} · Winners`;
 }
 
 /** e.g. `1 Code / Winners` — campaign reward line for invite/code reward types. */
@@ -82,15 +100,18 @@ export function isLikelyPointsPoolLabel(
  * Campaign reward hero — CC for winners, not quest points (points stay on tasks + leaderboard).
  */
 export function getCampaignRewardHeadline(
-  quest: Pick<Quest, "rewardCc" | "rewardPool" | "tasks" | "rewardType">,
+  quest: Pick<Quest, "rewardCc" | "rewardPool" | "rewardToken" | "tasks" | "rewardType">,
   poolTotalCc: number | null | undefined,
 ): { primary: string; secondary: string | null } {
   const ptsSum = sumQuestTaskPoints(quest.tasks);
+  const token = questRewardToken(quest);
 
   if (quest.rewardCc > 0) {
-    const perWinner = formatCcPerWinners(quest.rewardCc);
+    const perWinner = formatCcPerWinners(quest.rewardCc, token);
     const pool =
-      poolTotalCc != null && poolTotalCc > 0 ? `${poolTotalCc} CC Reward Pool` : null;
+      poolTotalCc != null && poolTotalCc > 0
+        ? `${formatRewardAmount(poolTotalCc, token)} Reward Pool`
+        : null;
     return { primary: perWinner, secondary: pool };
   }
 
@@ -101,7 +122,7 @@ export function getCampaignRewardHeadline(
     };
   }
 
-  const label = formatPoolTotalLabel(poolTotalCc ?? null, quest.rewardPool);
+  const label = formatPoolTotalLabel(poolTotalCc ?? null, quest.rewardPool, token);
   return { primary: label, secondary: null };
 }
 
@@ -190,8 +211,12 @@ export function hasParticipatedInQuest(
   return progress.submissions.some((s) => taskIds.has(s.taskId));
 }
 
-export function formatFcfsClaimFeeHint(feeCc: number, rewardCc: number): string {
-  return `Pay ${feeCc} CC claim fee on-chain to receive ${rewardCc} CC from the pool`;
+export function formatFcfsClaimFeeHint(
+  feeCc: number,
+  rewardCc: number,
+  token: RewardTokenSymbol | string | null | undefined = "CC",
+): string {
+  return `Pay ${feeCc} CC claim fee on-chain to receive ${formatRewardAmount(rewardCc, token)} from the pool`;
 }
 
 export function campaignTypeDisplayValue(

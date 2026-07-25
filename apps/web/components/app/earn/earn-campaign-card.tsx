@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { getQuestMeta, type RewardIconKind } from "@/lib/quest/quest-engine";
-import { formatPoolTotalLabel } from "@/lib/canton/campaign-reward";
+import { formatPoolTotalLabel, formatRewardAmount } from "@/lib/canton/campaign-reward";
+import { questRewardToken } from "@/lib/quest/quest-types";
 import { ROUTES } from "@/lib/routing/app-routes";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { QUEST_STATUS_BADGE, type Quest, type UserProgress } from "@/lib/quest/quest-types";
@@ -128,7 +129,8 @@ export function EarnCampaignCard({
     config.code === "INVITE_CODE_RANDOM";
 
   // Pool display — enrich code-only pools with label
-  const poolLabel = formatPoolTotalLabel(summary?.poolTotalCc ?? null, quest.rewardPool);
+  const token = questRewardToken(quest);
+  const poolLabel = formatPoolTotalLabel(summary?.poolTotalCc ?? null, quest.rewardPool, token);
   const poolDisplay = isCodeReward && /^\d+(\.\d+)?$/.test(poolLabel.trim())
     ? `${poolLabel.trim()} ${t("earnCampaigns.codeLabel")}`
     : poolLabel;
@@ -139,9 +141,9 @@ export function EarnCampaignCard({
   // Reward pill text
   let rewardPillText: string;
   if (config.isDual) {
-    rewardPillText = quest.rewardCc > 0 ? `${quest.rewardCc} CC + 1 Code` : "CC + 1 Code";
+    rewardPillText = quest.rewardCc > 0 ? `${formatRewardAmount(quest.rewardCc, token)} + 1 Code` : `${token} + 1 Code`;
   } else if (config.isCcToken && quest.rewardCc > 0) {
-    rewardPillText = `${quest.rewardCc} CC · winner`;
+    rewardPillText = `${formatRewardAmount(quest.rewardCc, token)} · winner`;
   } else if (isCodeReward) {
     rewardPillText = t("earnCampaigns.cardRewardPerUserCode");
   } else if (config.code === "WAITLIST_EMAIL") {

@@ -2,22 +2,25 @@
 
 import { useState } from "react";
 import type { CampaignMeta } from "@/lib/canton/campaign-reward";
+import { formatRewardAmount } from "@/lib/canton/campaign-reward";
 import { CampaignFcfsRewardCard } from "@/components/app/campaign/campaign-fcfs-reward-card";
 import { RewardReveal } from "@/components/app/campaign/reward-reveal";
 import { launchClaimConfetti } from "@/components/ui/confetti-effect";
 import { CLAIM_FAIL_MSG } from "@/lib/campaign/claim-messages";
+import { normalizeRewardToken, type RewardTokenSymbol } from "@/lib/quest/quest-types";
 
 /**
  * CC + Code Combined Raffle Claim Section
  *
  * Shown when rewardType === "CC_AND_CODE_RAFFLE" and user is a raffle winner.
- * Winner pays 5 CC claim fee → receives CC reward + invite code in one transaction.
+ * Winner pays 5 CC claim fee → receives reward (CC or USDCx) + invite code in one transaction.
  */
 export function CampaignCcAndCodeRaffleClaimSection({
   questId,
   partyId,
   rewardCc,
   rewardVariant,
+  rewardToken,
   campaignMeta,
   onClaimed,
 }: {
@@ -25,9 +28,11 @@ export function CampaignCcAndCodeRaffleClaimSection({
   partyId: string | null;
   rewardCc: number;
   rewardVariant: "CODE" | "CC" | null;
+  rewardToken?: RewardTokenSymbol | string | null;
   campaignMeta: CampaignMeta;
   onClaimed: () => void;
 }) {
+  const token: RewardTokenSymbol = normalizeRewardToken(rewardToken);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -65,8 +70,8 @@ export function CampaignCcAndCodeRaffleClaimSection({
       setSuccess(
         data.message ??
           (code
-            ? `${rewardCc} CC sent to your wallet! Your code: ${code}`
-            : `${rewardCc} CC sent to your wallet.`),
+            ? `${formatRewardAmount(rewardCc, token)} sent to your wallet! Your code: ${code}`
+            : `${formatRewardAmount(rewardCc, token)} sent to your wallet.`),
       );
       launchClaimConfetti();
       onClaimed();
@@ -83,24 +88,24 @@ export function CampaignCcAndCodeRaffleClaimSection({
   const wonLabel = isCodeOnly
     ? "You won · Code"
     : isCcOnly
-      ? `You won · ${rewardCc} CC`
-      : `You won · ${rewardCc} CC + Code`;
+      ? `You won · ${formatRewardAmount(rewardCc, token)}`
+      : `You won · ${formatRewardAmount(rewardCc, token)} + Code`;
   const claimLabel = isCodeOnly
     ? "Claim your Code"
     : isCcOnly
-      ? `Claim ${rewardCc} CC`
-      : `Claim ${rewardCc} CC + Code`;
+      ? `Claim ${formatRewardAmount(rewardCc, token)}`
+      : `Claim ${formatRewardAmount(rewardCc, token)} + Code`;
   const description = isCodeOnly
     ? fee > 0
       ? `Pay ${fee} CC claim fee on-chain to reveal your invite code`
       : "Claim your invite code"
     : isCcOnly
       ? fee > 0
-        ? `Pay ${fee} CC claim fee on-chain to receive ${rewardCc} CC`
-        : `Claim your ${rewardCc} CC reward`
+        ? `Pay ${fee} CC claim fee on-chain to receive ${formatRewardAmount(rewardCc, token)}`
+        : `Claim your ${formatRewardAmount(rewardCc, token)} reward`
       : fee > 0
-        ? `Pay ${fee} CC claim fee on-chain to receive ${rewardCc} CC + your invite code`
-        : `Claim your ${rewardCc} CC reward and invite code`;
+        ? `Pay ${fee} CC claim fee on-chain to receive ${formatRewardAmount(rewardCc, token)} + your invite code`
+        : `Claim your ${formatRewardAmount(rewardCc, token)} reward and invite code`;
 
   return (
     <div className="space-y-3">
@@ -124,6 +129,7 @@ export function CampaignCcAndCodeRaffleClaimSection({
           inviteCode={claimedCode}
           rewardCc={rewardVariant === "CC" ? 0 : rewardCc}
           rewardType="CC_AND_CODE_RAFFLE"
+          rewardToken={token}
           redeemUrl={campaignMeta.redeemUrl}
           redeemInstructions={campaignMeta.redeemInstructions}
         />

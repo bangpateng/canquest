@@ -1,7 +1,8 @@
 import { CcRewardLogo } from "@/components/app/campaign/cc-reward-logo";
 import { CcUsdValue } from "@/components/app/earn/cc-usd-value";
 import { getQuestMeta } from "@/lib/quest/quest-engine";
-import { formatCodePerWinners, formatCodePoolLabel } from "@/lib/canton/campaign-reward";
+import { formatCodePerWinners, formatCodePoolLabel, formatRewardAmount } from "@/lib/canton/campaign-reward";
+import { questRewardToken } from "@/lib/quest/quest-types";
 import type { Quest } from "@/lib/quest/quest-types";
 import { cn } from "@/lib/utils/utils";
 import {
@@ -33,6 +34,7 @@ function formatEnd(quest: Quest): string {
  * Type label lives in the page hero badge (no duplication here).
  */
 export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
+  const token = questRewardToken(quest);
   const meta = getQuestMeta(quest);
   const { config, rewardDisplay, slots, metrics } = meta;
   const summary = quest.campaignSummary;
@@ -46,7 +48,7 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
       <div className="flex flex-wrap items-center gap-1.5">
         <div className="flex items-center gap-1.5">
           <CcRewardLogo size={18} />
-          <span className={VALUE_CLS}>{quest.rewardCc > 0 ? `${quest.rewardCc} CC` : "CC"}</span>
+          <span className={VALUE_CLS}>{quest.rewardCc > 0 ? formatRewardAmount(quest.rewardCc, token) : token}</span>
         </div>
         <span className="text-sm font-semibold text-slate-500">+</span>
         <div className="flex items-center gap-1.5">
@@ -60,7 +62,7 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
       <div className="flex items-center gap-1.5">
         <CcRewardLogo size={18} />
         <span className={VALUE_CLS}>
-          {quest.rewardCc > 0 ? `${quest.rewardCc} CC` : rewardDisplay.primaryText}
+          {quest.rewardCc > 0 ? formatRewardAmount(quest.rewardCc, token) : rewardDisplay.primaryText}
         </span>
       </div>
     );

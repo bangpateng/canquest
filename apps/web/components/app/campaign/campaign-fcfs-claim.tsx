@@ -7,6 +7,7 @@ import {
   formatFcfsSlotsRemaining,
 } from "@/lib/canton/campaign-reward";
 import { CampaignFcfsRewardCard } from "@/components/app/campaign/campaign-fcfs-reward-card";
+import { normalizeRewardToken, type RewardTokenSymbol } from "@/lib/quest/quest-types";
 import { useState } from "react";
 import { launchClaimConfetti } from "@/components/ui/confetti-effect";
 import { FCFS_CLAIM_FAIL_MSG } from "@/lib/campaign/claim-messages";
@@ -15,15 +16,18 @@ export function CampaignFcfsClaimSection({
   questId,
   partyId,
   rewardCc,
+  rewardToken,
   campaignMeta,
   onClaimed,
 }: {
   questId: string;
   partyId: string | null;
   rewardCc: number;
+  rewardToken?: RewardTokenSymbol | string | null;
   campaignMeta: CampaignMeta;
   onClaimed: () => void;
 }) {
+  const token: RewardTokenSymbol = normalizeRewardToken(rewardToken);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -36,7 +40,7 @@ export function CampaignFcfsClaimSection({
     remaining > 0
       ? formatFcfsSlotsRemaining(remaining, maxWinners)
       : formatFcfsSlotsFilled(remaining, maxWinners, "Full Claimed");
-  const feeHint = canClaim ? formatFcfsClaimFeeHint(fee, rewardCc) : null;
+  const feeHint = canClaim ? formatFcfsClaimFeeHint(fee, rewardCc, token) : null;
 
   async function handleFCFSClaim() {
     if (isSubmitting) return;
@@ -65,7 +69,7 @@ export function CampaignFcfsClaimSection({
       const afterRemaining =
         data.remainingSlots ?? Math.max(0, remaining - 1);
       setSuccess(
-        `${formatFcfsSlotsRemaining(afterRemaining, maxWinners)}\n${formatFcfsClaimFeeHint(fee, rewardCc)}`,
+        `${formatFcfsSlotsRemaining(afterRemaining, maxWinners)}\n${formatFcfsClaimFeeHint(fee, rewardCc, token)}`,
       );
       launchClaimConfetti();
       onClaimed();

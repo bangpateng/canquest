@@ -608,6 +608,7 @@ export function QuestTaskPanel({
           questId={quest.id}
           partyId={partyId}
           rewardCc={quest.rewardCc}
+          rewardToken={quest.rewardToken}
           campaignMeta={campaignMeta!}
           onClaimed={() => loadProgress()}
         />
@@ -628,6 +629,7 @@ export function QuestTaskPanel({
           questId={quest.id}
           partyId={partyId}
           rewardCc={quest.rewardCc}
+          rewardToken={quest.rewardToken}
           campaignMeta={campaignMeta}
           onClaimed={() => loadProgress()}
         />
@@ -639,6 +641,7 @@ export function QuestTaskPanel({
           partyId={partyId}
           rewardCc={quest.rewardCc}
           rewardVariant={rewardStatus?.rewardVariant ?? null}
+          rewardToken={quest.rewardToken}
           campaignMeta={campaignMeta}
           onClaimed={() => loadProgress()}
         />

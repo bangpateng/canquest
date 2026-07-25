@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useState } from "react";
 import { Trash2, Pencil, Trophy, AlertCircle, CheckCircle2, Clock, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils/utils";
+import { formatRewardAmount } from "@/lib/canton/campaign-reward";
+import { normalizeRewardToken } from "@/lib/quest/quest-types";
 
 export interface AdminQuestRow {
   id: string;
@@ -12,6 +14,8 @@ export interface AdminQuestRow {
   org: string;
   status: string;
   rewardCc: number;
+  /** Token reward: "CC" (default) atau "USDCx". */
+  rewardToken?: string;
   rewardType: string;
   maxWinners: number | null;
   codesRemaining?: number;
@@ -153,7 +157,7 @@ export function AdminQuestTable({
                   <StatusBadge status={q.status} />
                 </td>
                 <td className="px-4 py-3 tabular-nums">
-                  <span className="font-medium">{q.rewardCc} CC</span>
+                  <span className="font-medium">{formatRewardAmount(q.rewardCc, normalizeRewardToken(q.rewardToken))}</span>
                   {q.rewardType !== "CC_ONLY" && (
                     <span className="ml-1 text-xs text-[var(--muted-foreground)]">+ codes</span>
                   )}
