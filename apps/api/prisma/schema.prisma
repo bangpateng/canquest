@@ -344,6 +344,9 @@ enum TokenTxType {
   TOKEN_OFFER_WITHDRAWN
   /// Fee CC keluar untuk P2P token transfer (fee in CC, reuse TRANSACTION_FEE_CC).
   TOKEN_FEE_OUT
+  /// Reward token (mis. USDCx) masuk dari reward wallet quest/campaign (user-side, kredit).
+  /// Paralel dgn CcTransactionType.QUEST_REWARD untuk token non-CC.
+  QUEST_REWARD
 }
 
 /// Audit trail lengkap untuk setiap swap CC ↔ token Cantex DEX (multi-leg).
@@ -425,6 +428,9 @@ model Quest {
   /// Square project logo; falls back to org initials when absent.
   logoUrl          String?
   rewardCc         Float             @default(0)
+  /// Token reward campaign ini. "CC" = Amulet (default); "USDCx" = utility-registry.
+  /// Fee claim tetap CC (lihat claimFeeCc). rewardToken hanya menentukan token REWARD-nya.
+  rewardToken      String            @default("CC")
   rewardPool       String            @default("0 CC")
   deadline         String?
   /// Optional ISO timeline — quest hidden before startsAt / after endsAt when set.
@@ -506,6 +512,8 @@ model WinnerDraw {
   user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// CC amount that was (or will be) sent to this winner
   ccAmount               Float     @default(0)
+  /// Token reward untuk winner ini. "CC" (default) atau "USDCx". Mirror Quest.rewardToken saat slot di-reserve.
+  rewardToken            String    @default("CC")
   /// Invite code assigned (if applicable)
   inviteCode             String?
   /// CC_AND_CODE_RAFFLE: varian reward pemenang — 'CODE' atau 'CC'. Null = varian lama (keduanya) untuk kompatibilitas.
@@ -622,6 +630,11 @@ model QuestCompletion {
   quest                   Quest    @relation(fields: [questId], references: [id], onDelete: Cascade)
   /// CC reward in micro-CC already credited from this completion.
   rewardMicroCc           BigInt   @default(0)
+  /// Token reward untuk completion ini. "CC" (default) atau "USDCx".
+  rewardToken             String   @default("CC")
+  /// Jumlah token non-CC (mis. USDCx) yang sudah dikredit. Null = reward CC (pakai rewardMicroCc).
+  /// Presisi Decimal(38,18) — berbeda dgn micro-CC. Dipakai hanya saat rewardToken = "USDCx".
+  rewardTokenAmount       Decimal? @db.Decimal(38, 18)
   /// Canton ledger TX ID dari CC reward = bukti on-chain
   ledgerTxId              String?
   /// DAML QuestParticipation contract id (if recorded on ledger)

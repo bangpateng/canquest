@@ -34,6 +34,11 @@ import { CantonLedgerService } from '../canton/canton-ledger.service';
 import { CcInboundSyncService } from '../canton/cc-inbound-sync.service';
 import { SpliceValidatorService } from '../canton/splice-validator.service';
 import { LockEligibilityService } from '../canton/lock-eligibility.service';
+import {
+  TokenInstrumentHelper,
+  normalizeRewardToken,
+  type RewardTokenSymbol,
+} from '../canton/token-instrument.helper';
 import { ProfileAvatarService } from '../users/profile-avatar.service';
 import { resolvePublicAvatarUrl } from '../users/user-avatar-url';
 import { PointsService } from '../users/points.service';
@@ -113,6 +118,7 @@ export class QuestsService {
     private readonly config: ConfigService,
     private readonly storage: R2StorageService,
     private readonly lockEligibility: LockEligibilityService,
+    private readonly tokenInstrument: TokenInstrumentHelper,
   ) {}
 
   /** Default biaya poin ikut Earn (jalur method='points'). Bisa di-override via AppSetting/env. */
@@ -688,13 +694,41 @@ export class QuestsService {
     );
   }
 
-  /** Ensure reward wallet (canquest-reward) can cover the payout before sending. */
-  private async assertRewardPool(rewardCc: number): Promise<void> {
-    const rewardUsername = this.rewardSenderUsername;
-    const balance = await this.splice.getUserBalance(rewardUsername);
-    if (balance !== null && balance < rewardCc) {
+  /**
+   * Ensure reward wallet (canquest-reward) can cover the payout before sending.
+   * CC: cek via splice.getUserBalance (cache Splice). USDCx: cek via on-chain
+   * balance (getTokenBalanceOnChain) karena Splice cache hanya CC.
+   */
+  private async assertRewardPool(
+    amount: number,
+    token: RewardTokenSymbol = 'CC',
+  ): Promise<void> {
+    if (amount <= 0) return; // tidak ada reward di-reserve — skip cek.
+    const rewardPartyId = this.rewardPartyId;
+    if (!rewardPartyId) {
+      throw new Error('CANTON_REWARD_PARTY_ID not configured');
+    }
+
+    if (token === 'CC') {
+      const rewardUsername = this.rewardSenderUsername;
+      const balance = await this.splice.getUserBalance(rewardUsername);
+      if (balance !== null && balance < amount) {
+        throw new Error(
+          `Reward wallet too low (@${rewardUsername} has ${balance.toFixed(2)} CC, need ${amount} CC)`,
+        );
+      }
+      return;
+    }
+
+    // USDCx (dan token non-CC lain): baca on-chain via instrument id.
+    const { instrumentId } = await this.tokenInstrument.resolveInstrument(token);
+    const balance = await this.cantonLedger.getTokenBalanceOnChain(
+      rewardPartyId,
+      instrumentId,
+    );
+    if (balance < amount) {
       throw new Error(
-        `Reward wallet too low (@${rewardUsername} has ${balance.toFixed(2)} CC, need ${rewardCc} CC)`,
+        `Reward wallet too low for ${token} (${rewardPartyId.split('::')[0]} has ${balance.toFixed(2)} ${token}, need ${amount} ${token}). Top-up reward wallet first.`,
       );
     }
   }
@@ -752,6 +786,192 @@ export class QuestsService {
         isNewReservation: true,
       };
     });
+  }
+
+  /**
+   * Kirim reward (CC atau USDCx) dari reward wallet → user, persist distributed,
+   * record history, dan upsert QuestCompletion. Token-aware.
+   *
+   * Dipakai oleh semua claim flow (FCFS / Draw / Invite / Raffle) supaya logic
+   * security C1 (anti double-payout) + history konsisten di satu tempat.
+   *
+   * Behavior:
+   * - CC (default): sendReward Amulet + recordTransaction (CcTransaction) + rewardMicroCc.
+   * - USDCx: resolve instrument → sendReward dgn instrumentId/Admin + recordTokenTransaction
+   *   (TokenTransaction) + rewardTokenAmount. DAML receipt tetap CC-only (fee CC).
+   *
+   * Realtime: direct kalau user punya TransferPreapproval; offer (pending) kalau tidak.
+   * Token sudah keluar reward wallet di kedua kasus → distributed=true selalu di-set
+   * (irreversible on-chain).
+   *
+   * @returns { rewardTxId, pending } — pending=true artinya user harus accept offer di wallet.
+   */
+  private async sendQuestRewardAndRecord(params: {
+    drawId: string;
+    userId: string;
+    questId: string;
+    questTitle: string;
+    cantonPartyId: string;
+    username: string | null;
+    rewardCc: number;
+    rewardToken: RewardTokenSymbol;
+    /** DAML claimSessionId untuk atomicFeeAndReward receipt (opsional, CC-only). */
+    claimSessionId?: string | null;
+    /** DAML fee txId untuk atomicFeeAndReward receipt. */
+    feeTxId: string;
+    /** Label utk log/description (mis. 'FCFS reward', 'Raffle reward'). */
+    rewardLabel: string;
+  }): Promise<{ rewardTxId: string; pending: boolean }> {
+    const {
+      drawId,
+      userId,
+      questId,
+      questTitle,
+      cantonPartyId,
+      username,
+      rewardCc,
+      rewardToken,
+      claimSessionId,
+      feeTxId,
+      rewardLabel,
+    } = params;
+
+    const rewardPartyId = this.rewardPartyId;
+    if (!rewardPartyId) {
+      throw new Error('CANTON_REWARD_PARTY_ID not configured');
+    }
+
+    // Resolve instrument ref untuk USDCx (CC tidak perlu — default Amulet di sendReward).
+    let instrumentId: string | undefined;
+    let instrumentAdmin: string | undefined;
+    if (rewardToken === 'USDCx') {
+      const ref = await this.tokenInstrument.resolveInstrument('USDCx');
+      instrumentId = ref.instrumentId;
+      instrumentAdmin = ref.instrumentAdmin;
+    }
+
+    this.logger.log(
+      `${rewardLabel}: ${rewardPartyId.split('::')[0]} → ${cantonPartyId.split('::')[0]} ` +
+        `(@${username}, ${rewardCc} ${rewardToken}${instrumentId ? ` [${instrumentId}]` : ''})`,
+    );
+
+    // ── Kirim reward on-chain (CIP-56 TransferFactory) ──────────────────────
+    const rewardResult = await this.cantonLedger.sendReward({
+      senderPartyId: rewardPartyId,
+      receiverPartyId: cantonPartyId,
+      amountCc: rewardCc,
+      description: `${rewardLabel} — ${questTitle}`,
+      instrumentId,
+      instrumentAdmin,
+    });
+    if (!rewardResult.ok) {
+      throw new Error(rewardResult.error ?? 'reward transfer failed');
+    }
+    const rewardTxId =
+      rewardResult.rewardTxId ?? `reward-${Date.now()}-${userId.slice(0, 8)}`;
+    const rewardPending = rewardResult.pending;
+    this.logger.log(
+      `${rewardLabel} ${rewardCc} ${rewardToken} → ${cantonPartyId.split('::')[0]} ` +
+        `(${rewardPending ? 'PENDING — user accepts in wallet' : 'direct'})`,
+    );
+
+    // ⚠️ SECURITY (C1): Persist distributed=true + ledgerTxId IMMEDIATELY after
+    // sendReward succeeds. Token (CC atau USDCx) sudah keluar reward wallet
+    // on-chain (irreversible). Jika step di bawah throw, retry short-circuit di
+    // distributed=true check, BUKAN kirim reward lagi (double payout).
+    await this.prisma.winnerDraw.updateMany({
+      where: { id: drawId, distributed: false },
+      data: {
+        distributed: true,
+        ledgerTxId: rewardTxId,
+        distributedAt: new Date(),
+        rewardToken,
+      },
+    });
+
+    // DAML atomic receipt — CC-only (fee CC + reward proof). Non-blocking.
+    // Untuk USDCx, receipt tetap mencatat fee CC; bukti USDCx ada di Postgres (TokenTransaction).
+    if (claimSessionId) {
+      const atomicResult = await this.questLedger.atomicFeeAndReward({
+        claimContractId: claimSessionId,
+        feeTxId,
+        rewardTxId,
+      });
+      if (!atomicResult.ok) {
+        this.logger.warn(
+          `DAML_AUDIT_TRAIL_FAIL ${rewardLabel} quest=${questId.slice(0, 8)} user=@${username} (non-blocking): ${atomicResult.errors.join(' | ')}`,
+        );
+      }
+    }
+
+    // ── Record history (NON-FATAL — token sudah berpindah on-chain) ─────────
+    try {
+      if (rewardToken === 'CC') {
+        await this.users.recordTransaction({
+          userId,
+          amountCc: rewardCc,
+          type: 'QUEST_REWARD',
+          description: `Received ${rewardCc} CC reward`,
+          referenceId: questId,
+          counterparty: rewardPartyId.split('::')[0],
+          ledgerTxId: rewardTxId,
+          status: rewardPending ? 'PENDING' : 'COMPLETED',
+          transferInstructionCid: rewardResult.transferInstructionCid ?? null,
+        });
+      } else {
+        // USDCx → TokenTransaction (instrument-aware), BUKAN CcTransaction.
+        const { instrumentId: instId, instrumentAdmin: instAdmin } =
+          await this.tokenInstrument.resolveInstrument(rewardToken);
+        await this.users.recordTokenTransaction({
+          userId,
+          instrumentId: instId,
+          instrumentAdmin: instAdmin,
+          amount: rewardCc,
+          type: 'QUEST_REWARD',
+          description: `Received ${rewardCc} ${rewardToken} reward`,
+          referenceId: questId,
+          ledgerTxId: rewardTxId,
+          status: rewardPending ? 'PENDING' : 'COMPLETED',
+          transferInstructionCid: rewardResult.transferInstructionCid ?? null,
+        });
+      }
+    } catch (recordErr) {
+      this.logger.error(
+        `CLAIM_HISTORY_FAIL ${rewardLabel} quest=${questId.slice(0, 8)} user=@${username}: reward sent (txId=${rewardTxId}) but history record threw: ${recordErr instanceof Error ? recordErr.message : String(recordErr)}`,
+      );
+    }
+
+    // Async balance sync (non-blocking) — CC saja (USDCx balance via ACS event handler).
+    if (rewardToken === 'CC' && username) {
+      void this.inboundSync
+        .alignBalanceFromChain(userId, username)
+        .catch((err) =>
+          this.logger.warn(`Balance sync failed (non-blocking): ${String(err)}`),
+        );
+    }
+
+    // ── Upsert QuestCompletion dgn token fields ─────────────────────────────
+    if (rewardToken === 'CC') {
+      const rewardMicroCc = BigInt(Math.round(rewardCc * 1_000_000));
+      await this.prisma.questCompletion.upsert({
+        where: { userId_questId: { userId, questId } },
+        create: { userId, questId, rewardMicroCc, rewardToken: 'CC' },
+        update: { rewardMicroCc, rewardToken: 'CC' },
+      });
+    } else {
+      await this.prisma.questCompletion.upsert({
+        where: { userId_questId: { userId, questId } },
+        create: {
+          userId,
+          questId,
+          rewardToken: 'USDCx',
+          rewardTokenAmount: rewardCc,
+        },
+        update: { rewardToken: 'USDCx', rewardTokenAmount: rewardCc },
+      });
+    }
+
+    return { rewardTxId, pending: rewardPending };
   }
 
   /**
@@ -2386,6 +2606,7 @@ export class QuestsService {
 
     const feeCc = resolveClaimFeeCc(quest) ?? 3;
     const rewardCc = quest.rewardCc;
+    const rewardToken = normalizeRewardToken(quest.rewardToken);
     const maxWinners = quest.maxWinners ?? 0;
 
     const validatorPartyId = this.config
@@ -2585,118 +2806,35 @@ export class QuestsService {
       // Step 2: reward wallet (canquest-reward) sends reward → same user party (only after fee is collected).
       // Re-check pool setelah fee terkumpul (defense against race condition:
       // pool bisa berkurang antara pre-check dan eksekusi sebenarnya).
-      await this.assertRewardPool(rewardCc);
-      const rewardPartyId = this.rewardPartyId;
-      if (!rewardPartyId) {
-        throw new Error('CANTON_REWARD_PARTY_ID not configured');
-      }
-      this.logger.log(
-        `Claim fee step 2: ${rewardPartyId.split('::')[0]} → ${cantonPartyId.split('::')[0]} (@${username}, ${rewardCc} CC)`,
-      );
+      await this.assertRewardPool(rewardCc, rewardToken);
 
-      const rewardResult = await this.cantonLedger.sendReward({
-        senderPartyId: rewardPartyId,
-        receiverPartyId: cantonPartyId,
-        amountCc: rewardCc,
-        description: `FCFS reward — ${quest.title}`,
+      // Kirim reward (CC atau USDCx) + persist distributed + history + completion.
+      // Helper menangani security C1 (anti double-payout) + token-aware recording.
+      const { rewardTxId } = await this.sendQuestRewardAndRecord({
+        drawId: reservedDrawId,
+        userId,
+        questId,
+        questTitle: quest.title,
+        cantonPartyId,
+        username,
+        rewardCc,
+        rewardToken,
+        claimSessionId,
+        feeTxId,
+        rewardLabel: 'FCFS reward',
       });
-      if (!rewardResult.ok) {
-        throw new Error(rewardResult.error ?? 'reward transfer failed');
-      }
-      const rewardTxId =
-        rewardResult.rewardTxId ?? `reward-${Date.now()}-${userId.slice(0, 8)}`;
-      const rewardPending = rewardResult.pending;
-      this.logger.log(
-        `FCFS reward ${rewardCc} CC → ${cantonPartyId.split('::')[0]} ` +
-          `(${rewardPending ? 'PENDING — user accepts in wallet' : 'direct'})`,
-      );
 
-      // ⚠️ SECURITY (C1): Persist distributed=true + ledgerTxId IMMEDIATELY after
-      // sendReward succeeds, with a conditional updateMany. CC has now left the
-      // reward wallet on-chain (irreversible). If recordTransaction / the
-      // completion upsert below throws, the draw is already marked distributed
-      // so a retry short-circuits at the top-of-function `draw.distributed`
-      // check instead of sending the reward AGAIN (double payout).
-      await this.prisma.winnerDraw.updateMany({
-        where: { id: reservedDrawId, distributed: false },
+      // Update draw row tambahan: ccAmount (mirror reward amount) + claimSessionContractId.
+      // distributed + ledgerTxId + rewardToken sudah di-persist di helper.
+      await this.prisma.winnerDraw.update({
+        where: { id: reservedDrawId },
         data: {
-          distributed: true,
-          ledgerTxId: rewardTxId,
-          distributedAt: new Date(),
+          ccAmount: rewardCc,
+          ...(claimSessionId
+            ? { claimSessionContractId: claimSessionId }
+            : {}),
         },
       });
-
-      // canquest-v21: Atomic DAML choice — fee + reward receipt dalam SATU transaksi.
-      // Jika salah satu gagal, Canton rollback seluruhnya. Tidak ada partial commit.
-      // (CC movement asli tetap via CIP-56; choice ini hanya menulis receipt.)
-      if (claimSessionId) {
-        const atomicResult = await this.questLedger.atomicFeeAndReward({
-          claimContractId: claimSessionId,
-          feeTxId,
-          rewardTxId: rewardTxId,
-        });
-        if (!atomicResult.ok) {
-          this.logger.warn(
-            `DAML_AUDIT_TRAIL_FAIL AtomicFeeAndReward FCFS quest=${questId.slice(0, 8)} user=@${username} (non-blocking): ${atomicResult.errors.join(' | ')}`,
-          );
-        }
-      }
-
-      // ⚠️ SECURITY (C1): recordTransaction is NON-FATAL. CC already moved
-      // on-chain and distributed is already persisted true above. A throw here
-      // must NOT cause a re-send on the next request.
-      try {
-        await this.users.recordTransaction({
-          userId,
-          amountCc: rewardCc,
-          type: 'QUEST_REWARD',
-          description: `Received ${rewardCc} CC reward`,
-          referenceId: questId,
-          counterparty: rewardPartyId.split('::')[0],
-          ledgerTxId: rewardTxId,
-          status: rewardPending ? 'PENDING' : 'COMPLETED',
-          transferInstructionCid: rewardResult.transferInstructionCid ?? null,
-        });
-      } catch (recordErr) {
-        this.logger.error(
-          `CLAIM_HISTORY_FAIL FCFS quest=${questId.slice(0, 8)} user=@${username}: reward sent (txId=${rewardTxId}) but history record threw: ${recordErr instanceof Error ? recordErr.message : String(recordErr)}`,
-        );
-      }
-
-      // Asynchronous State Pattern — non-blocking balance sync
-      if (username) {
-        void this.inboundSync
-          .alignBalanceFromChain(userId, username)
-          .catch((err) =>
-            this.logger.warn(
-              `Balance sync failed (non-blocking): ${String(err)}`,
-            ),
-          );
-      }
-
-      const rewardMicroCc = BigInt(Math.round(rewardCc * 1_000_000));
-      await this.prisma.$transaction([
-        this.prisma.winnerDraw.update({
-          where: { id: reservedDrawId },
-          data: {
-            ccAmount: rewardCc,
-            claimFeeLedgerTxId: feeTxId,
-            // distributed + ledgerTxId already persisted above; keep them.
-            ...(claimSessionId
-              ? { claimSessionContractId: claimSessionId }
-              : {}),
-          },
-        }),
-        this.prisma.questCompletion.upsert({
-          where: { userId_questId: { userId, questId } },
-          create: {
-            userId,
-            questId,
-            rewardMicroCc,
-          },
-          update: { rewardMicroCc },
-        }),
-      ]);
 
       if (cantonPartyId) {
         void this.syncCampaignLedgerAfterPayout({
@@ -2925,7 +3063,7 @@ export class QuestsService {
       }
 
       // Re-check pool setelah fee terkumpul (race defense).
-      await this.assertRewardPool(rewardCc);
+      await this.assertRewardPool(rewardCc, normalizeRewardToken(quest.rewardToken));
 
       // ⚠️ SECURITY (C1): Re-check distributed under the lock RIGHT BEFORE
       // sendReward. If a previous attempt sent the reward on-chain but failed
@@ -2948,110 +3086,37 @@ export class QuestsService {
         };
       }
 
-      const rewardResult = await this.cantonLedger.sendReward({
-        receiverPartyId: cantonPartyId,
-        amountCc: rewardCc,
-        description: `Raffle reward — ${quest.title}`,
-      });
-      if (!rewardResult.ok) {
-        throw new Error(rewardResult.error ?? 'reward transfer failed');
-      }
-      // pertahankan nama var lama supaya downstream (atomic/record) tetap jalan
-      const rewardOfferId = rewardResult.rewardTxId ?? `reward-${Date.now()}`;
-      const rewardPending = rewardResult.pending;
-      this.logger.log(
-        `Draw reward ${rewardCc} CC → ${cantonPartyId.split('::')[0]} ` +
-          `(${rewardPending ? 'PENDING — user accepts in wallet' : 'direct'})`,
-      );
-
-      // ⚠️ SECURITY (C1): Persist distributed=true + ledgerTxId IMMEDIATELY after
-      // sendReward succeeds, with a conditional updateMany. CC has now left the
-      // reward wallet on-chain (irreversible). If anything after this throws,
-      // the draw is already marked distributed=true so a retry short-circuits
-      // instead of sending the reward again. We do NOT wait for recordTransaction
-      // (history) here — that is moved after this guard and is non-fatal.
-      await this.prisma.winnerDraw.updateMany({
-        where: { id: draw.id, distributed: false },
-        data: {
-          distributed: true,
-          ledgerTxId: rewardOfferId,
-          distributedAt: new Date(),
-        },
+      // Kirim reward (CC atau USDCx) + persist distributed + history + completion.
+      // Helper menangani security C1 (anti double-payout) + token-aware recording.
+      const { rewardTxId: drawRewardTxId } = await this.sendQuestRewardAndRecord({
+        drawId: draw.id,
+        userId,
+        questId,
+        questTitle: quest.title,
+        cantonPartyId,
+        username,
+        rewardCc,
+        rewardToken: normalizeRewardToken(quest.rewardToken),
+        claimSessionId,
+        feeTxId,
+        rewardLabel: 'Raffle reward',
       });
 
-      // canquest-v11.1: Atomic DAML choice — fee + reward + audit trail dalam SATU transaksi.
-      // v11.1 fix: hapus branch earnClaimSessionId legacy (deprecated stub selalu null).
-      // Sekarang claimSessionId dari drawRaffleWinner di atas — selalu ada jika
-      // ledger aktif & ledgerCampaignId tersedia.
-      if (claimSessionId) {
-        const atomicResult = await this.questLedger.atomicFeeAndReward({
-          claimContractId: claimSessionId,
-          feeTxId,
-          rewardTxId: rewardOfferId,
-        });
-        if (!atomicResult.ok) {
-          this.logger.warn(
-            `DAML_AUDIT_TRAIL_FAIL AtomicFeeAndReward DrawCC quest=${questId.slice(0, 8)} user=@${username} (non-blocking): ${atomicResult.errors.join(' | ')}`,
-          );
-        }
-      }
-
-      // ⚠️ SECURITY (C1): recordTransaction is now NON-FATAL. CC already moved
-      // on-chain and distributed is already persisted true above. If this throws
-      // we must NOT re-send the reward on the next request — and we won't,
-      // because distributed=true is already committed.
-      try {
-        await this.users.recordTransaction({
-          userId,
-          amountCc: rewardCc,
-          type: 'QUEST_REWARD',
-          description: `Received ${rewardCc} CC raffle reward`,
-          referenceId: questId,
-          counterparty: validatorPartyId.split('::')[0],
-          ledgerTxId: rewardOfferId,
-          status: rewardPending ? 'PENDING' : 'COMPLETED',
-          transferInstructionCid: rewardResult.transferInstructionCid ?? null,
-        });
-      } catch (recordErr) {
-        this.logger.error(
-          `CLAIM_HISTORY_FAIL DrawCC quest=${questId.slice(0, 8)} user=@${username}: reward sent (txId=${rewardOfferId}) but history record threw: ${recordErr instanceof Error ? recordErr.message : String(recordErr)}`,
-        );
-      }
-
-      // Asynchronous State Pattern: balance sync tidak memblokir response HTTP.
-      // UI Next.js langsung menerima response, balance di-refresh di belakang.
-      if (username) {
-        void this.inboundSync
-          .alignBalanceFromChain(userId, username)
-          .catch((err) =>
-            this.logger.warn(
-              `Balance sync failed (non-blocking): ${String(err)}`,
-            ),
-          );
-      }
-
-      const rewardMicroCc = BigInt(Math.round(rewardCc * 1_000_000));
+      // Update draw row tambahan: ccAmount + claimSessionContractId.
+      // Completion upsert dgn completedAt khusus draw (helper pakai upsert tanpa completedAt).
       await this.prisma.$transaction([
         this.prisma.winnerDraw.update({
           where: { id: draw.id },
           data: {
             ccAmount: rewardCc,
-            claimFeeLedgerTxId: feeTxId,
-            // distributed + ledgerTxId already persisted above; keep them.
             ...(claimSessionId
               ? { claimSessionContractId: claimSessionId }
               : {}),
           },
         }),
-        this.prisma.questCompletion.upsert({
+        this.prisma.questCompletion.update({
           where: { userId_questId: { userId, questId } },
-          create: {
-            userId,
-            questId,
-            rewardMicroCc,
-            completedAt: completion.completedAt,
-          },
-          update: { rewardMicroCc },
+          data: { completedAt: completion.completedAt },
         }),
       ]);
 
@@ -3061,7 +3126,7 @@ export class QuestsService {
           questId,
           userPartyId: cantonPartyId,
           rewardCc,
-          payoutTxId: rewardOfferId,
+          payoutTxId: drawRewardTxId,
         }).catch((err) =>
           this.logger.warn(`Draw CC ledger sync failed: ${String(err)}`),
         );
@@ -3559,7 +3624,7 @@ export class QuestsService {
       }
 
       // Re-check pool setelah fee (race defense).
-      await this.assertRewardPool(rewardCc);
+      await this.assertRewardPool(rewardCc, normalizeRewardToken(quest.rewardToken));
       let rewardOfferId: string | null = null;
       if (rewardCc > 0) {
         // ⚠️ SECURITY (C1): Re-check distributed right before sendReward.
@@ -3580,62 +3645,22 @@ export class QuestsService {
           };
         }
 
-        const rewardResult = await this.cantonLedger.sendReward({
-          receiverPartyId: cantonPartyId,
-          amountCc: rewardCc,
-          description: `CC+Code raffle reward — ${quest.title}`,
+        // Kirim reward (CC atau USDCx) + persist distributed + history + completion.
+        // Helper menangani security C1 (anti double-payout) + token-aware recording.
+        const raffleResult = await this.sendQuestRewardAndRecord({
+          drawId: draw.id,
+          userId,
+          questId,
+          questTitle: quest.title,
+          cantonPartyId,
+          username,
+          rewardCc,
+          rewardToken: normalizeRewardToken(quest.rewardToken),
+          claimSessionId: ccCodeClaimSessionId,
+          feeTxId,
+          rewardLabel: 'CC+Code raffle reward',
         });
-        if (!rewardResult.ok)
-          throw new Error(rewardResult.error ?? 'CC reward transfer failed');
-        rewardOfferId = rewardResult.rewardTxId ?? `reward-${Date.now()}`;
-        this.logger.log(
-          `Raffle reward ${rewardCc} CC → ${cantonPartyId.split('::')[0]} ` +
-            `(${rewardResult.pending ? 'PENDING — user accepts in wallet' : 'direct'})`,
-        );
-
-        // ⚠️ SECURITY (C1): Persist distributed=true + ledgerTxId IMMEDIATELY after
-        // sendReward succeeds. CC has now left the reward wallet on-chain
-        // (irreversible). If reserveInviteCode or the completion upsert below
-        // throws, the draw is already marked distributed so a retry short-circuits
-        // instead of sending the reward AGAIN (double payout). This is the exact
-        // fix for the C1 scenario where code exhaustion caused a re-send.
-        await this.prisma.winnerDraw.updateMany({
-          where: { id: draw.id, distributed: false },
-          data: {
-            distributed: true,
-            ledgerTxId: rewardOfferId,
-            distributedAt: new Date(),
-          },
-        });
-
-        // recordTransaction is NON-FATAL — CC already moved on-chain + distributed persisted.
-        try {
-          await this.users.recordTransaction({
-            userId,
-            amountCc: rewardCc,
-            type: 'QUEST_REWARD',
-            description: `Received ${rewardCc} CC raffle reward`,
-            referenceId: questId,
-            counterparty: validatorPartyId.split('::')[0],
-            ledgerTxId: rewardOfferId,
-            status: rewardResult.pending ? 'PENDING' : 'COMPLETED',
-            transferInstructionCid: rewardResult.transferInstructionCid ?? null,
-          });
-        } catch (recordErr) {
-          this.logger.error(
-            `CLAIM_HISTORY_FAIL CC+Code quest=${questId.slice(0, 8)} user=@${username}: reward sent (txId=${rewardOfferId}) but history record threw: ${recordErr instanceof Error ? recordErr.message : String(recordErr)}`,
-          );
-        }
-        // Asynchronous State Pattern — non-blocking balance sync
-        if (username) {
-          void this.inboundSync
-            .alignBalanceFromChain(userId, username)
-            .catch((err) =>
-              this.logger.warn(
-                `Balance sync failed (non-blocking): ${String(err)}`,
-              ),
-            );
-        }
+        rewardOfferId = raffleResult.rewardTxId;
       }
       // Atomically reserve one code (FOR UPDATE SKIP LOCKED). The per-user
       // raffle lock above does NOT stop two DIFFERENT users from grabbing the

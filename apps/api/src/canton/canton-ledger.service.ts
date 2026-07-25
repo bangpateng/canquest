@@ -683,6 +683,13 @@ export class CantonLedgerService {
     receiverPartyId: string;
     amountCc: number;
     description: string;
+    /**
+     * Token instrument (opsional). Default = CC/Amulet (behavior lama).
+     * Set keduanya untuk reward non-CC (mis. USDCx): resolve via TokenInstrumentHelper.
+     * `amountCc` = jumlah token (bukan micro) — nama field dipertahankan utk backward-compat.
+     */
+    instrumentId?: string;
+    instrumentAdmin?: string;
   }): Promise<{
     ok: boolean;
     kind?: 'direct' | 'offer';
@@ -705,6 +712,8 @@ export class CantonLedgerService {
       receiverPartyId: params.receiverPartyId,
       amountCc: params.amountCc,
       description: params.description,
+      instrumentId: params.instrumentId,
+      instrumentAdmin: params.instrumentAdmin,
     });
     if (!res.ok) {
       return {

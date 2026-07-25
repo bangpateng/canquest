@@ -16,6 +16,7 @@ import { LockEligibilityService } from './lock-eligibility.service';
 import { OfferReconcilerService } from './offer-reconciler.service';
 import { CantonUpdatesService } from './canton-updates.service';
 import { BalanceEventHandlerService } from './balance-event-handler.service';
+import { TokenInstrumentHelper } from './token-instrument.helper';
 
 /**
  * CantonModule wires together:
@@ -44,6 +45,7 @@ import { BalanceEventHandlerService } from './balance-event-handler.service';
     OfferReconcilerService,
     CantonUpdatesService,
     BalanceEventHandlerService,
+    TokenInstrumentHelper,
   ],
   exports: [
     CantonLedgerService,
@@ -58,6 +60,7 @@ import { BalanceEventHandlerService } from './balance-event-handler.service';
     OfferReconcilerService,
     CantonUpdatesService,
     BalanceEventHandlerService,
+    TokenInstrumentHelper,
   ],
 })
 export class CantonModule {}

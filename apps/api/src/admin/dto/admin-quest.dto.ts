@@ -131,6 +131,16 @@ abstract class QuestMoneyFields {
   @IsString()
   @MaxLength(200)
   rewardPool?: string;
+
+  /**
+   * Token reward: "CC" (Amulet, default) atau "USDCx". Hanya menentukan token
+   * REWARD — claim fee tetap CC. Tidak wajib dikirim (default "CC").
+   * Hanya valid untuk rewardType yang berdistribusi token (CC_ONLY, CC_MANUAL,
+   * CC_AND_CODE_RAFFLE, INVITE_CODE_FCFS, INVITE_CODE_RANDOM).
+   */
+  @IsOptional()
+  @IsIn(['CC', 'USDCx'])
+  rewardToken?: string;
 }
 
 export class CreateQuestDto extends QuestMoneyFields {

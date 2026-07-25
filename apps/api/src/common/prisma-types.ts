@@ -135,7 +135,10 @@ export type TokenTxType =
   /// Sender menarik kembali TransferInstruction yang belum di-accept.
   | 'TOKEN_OFFER_WITHDRAWN'
   /// Fee CC keluar untuk P2P token transfer (fee in CC, reuse TRANSACTION_FEE_CC).
-  | 'TOKEN_FEE_OUT';
+  | 'TOKEN_FEE_OUT'
+  /// Reward token (mis. USDCx) masuk dari reward wallet quest/campaign (user-side, kredit).
+  /// Paralel dgn CcTransactionType.QUEST_REWARD untuk token non-CC.
+  | 'QUEST_REWARD';
 
 /** TokenTxType yang merepresentasikan keluarnya token/CC dari user (debit). */
 export const TOKEN_TX_DEBIT_TYPES: ReadonlySet<TokenTxType> =

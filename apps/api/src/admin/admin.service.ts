@@ -414,6 +414,8 @@ export class AdminService {
     bannerImageUrl?: string | null;
     logoUrl?: string | null;
     rewardCc?: number;
+    /** Token reward: "CC" (default) atau "USDCx". */
+    rewardToken?: string;
     rewardPool?: string;
     deadline?: string;
     startsAt?: string | null;
@@ -467,8 +469,14 @@ export class AdminService {
         bannerImageUrl: data.bannerImageUrl ?? null,
         logoUrl: data.logoUrl ?? null,
         rewardCc: data.rewardCc ?? 0,
+        // Token reward: "CC" (default) atau "USDCx". Normalize supaya aman dari input kosong.
+        rewardToken:
+          (data.rewardToken ?? 'CC').toUpperCase() === 'USDCX' ? 'USDCx' : 'CC',
         rewardPool:
-          data.rewardPool ?? (data.rewardCc ? `${data.rewardCc} CC` : 'TBD'),
+          data.rewardPool ??
+          (data.rewardCc
+            ? `${data.rewardCc} ${(data.rewardToken ?? 'CC').toUpperCase() === 'USDCX' ? 'USDCx' : 'CC'}`
+            : 'TBD'),
         maxWinners: data.maxWinners ?? null,
         codeWinnersQuota: data.codeWinnersQuota ?? null,
         claimFeeCc: data.claimFeeCc ?? null,
@@ -574,6 +582,8 @@ export class AdminService {
       bannerImageUrl?: string | null;
       logoUrl?: string | null;
       rewardCc?: number;
+      /** Token reward: "CC" (default) atau "USDCx". */
+      rewardToken?: string;
       rewardPool?: string;
       deadline?: string | null;
       startsAt?: string | null;
@@ -640,6 +650,12 @@ export class AdminService {
         }),
         ...(data.logoUrl !== undefined && { logoUrl: data.logoUrl }),
         ...(data.rewardCc !== undefined && { rewardCc: data.rewardCc }),
+        ...(data.rewardToken !== undefined && {
+          rewardToken:
+            (data.rewardToken ?? 'CC').toUpperCase() === 'USDCX'
+              ? 'USDCx'
+              : 'CC',
+        }),
         ...(data.rewardPool !== undefined && { rewardPool: data.rewardPool }),
         ...(data.deadline !== undefined && { deadline: data.deadline }),
         ...(data.startsAt !== undefined && {
