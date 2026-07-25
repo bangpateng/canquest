@@ -1,22 +1,27 @@
-# Flow Menu "Earn" — Current State (Snapshot)
+# Flow Menu "Earn" — Current State (Post-Refactor Snapshot)
 
-> Dokumentasi flow menu **Earn** dApp CanQuest **apa adanya** (status: 2026-07-25).
-> Tidak ada perubahan/proposal di sini — murni pemetaan kode yang sedang berjalan.
-> Tujuan: jadi referensi sebelum melakukan modifikasi.
+> Dokumentasi flow menu **Earn** dApp CanQuest, kondisi setelah refactor
+> pemisahan folder (commit `8acc78c`, branch merged ke master).
+>
+> **Tujuan**: jadi referensi akurat sebelum melakukan modifikasi fitur.
+> Update: 2026-07-25.
 
 ---
 
-## 0. ⚠️ Konvensi Penamaan yang Membingungkan
+## 0. ⚠️ Konvensi Penamaan (Baca Dulu)
 
-Ada **dua** hal bernama "earn" di dApp. Pahami dulu agar tidak salah sasaran:
+Ada **dua** hal bernama "earn" di dApp. **Pahami dulu** agar perubahan tidak salah sasaran:
 
-| Menu UI | Route | Isi | `QuestKind` |
-|---|---|---|---|
-| **Earn** (icon ✨ Sparkles) | `/earn` | **Partner campaigns** (Quest Center) | `CAMPAIGN` |
-| **Quest** (icon 🎁 Gift) | `/quests` | **CanQuest Earn hub** (daily/social, points) | `EARN_HUB` |
+| Menu UI | Route | Isi | `QuestKind` (DB) | Folder komponen |
+|---|---|---|---|---|
+| **Earn** (icon ✨ Sparkles) | `/earn` | **Partner campaigns** (Quest Center) | `CAMPAIGN` | `components/app/earn/` |
+| **Quest** (icon 🎁 Gift) | `/quests` | **CanQuest Quest hub** (daily/social, points) | `EARN_HUB` | `components/app/quest/` |
 
-> Jebakan: file/komponen bernama `earn-hub-*` menopang menu **Quest** (`/quests`),
-> BUKAN menu Earn. Definisi resmi di `apps/web/lib/routing/app-routes.ts:3-8`.
+> **Catatan historis (tidak boleh diubah)**:
+> - DB enum `QuestKind.EARN_HUB` = menu **Quest** (nilai persisten, jangan rename).
+> - Route path `/quests/earn-hub` & `/admin/earn-hub` = kontrak BE (dipertahankan).
+> - Identifier FE sudah pakai `questHub*` setelah refactor.
+> - `EarnEntry` model = memang untuk menu **Earn** (campaign gate).
 
 **Dokumen ini hanya membahas menu Earn = `/earn` = partner campaigns (`CAMPAIGN`).**
 
@@ -28,7 +33,7 @@ Ada **dua** hal bernama "earn" di dApp. Pahami dulu agar tidak salah sasaran:
 Menu Earn (✨) → /earn
         │
         ▼
-apps/web/app/(platform)/earn/                 ← Next.js App Router (Server + Client)
+apps/web/app/(platform)/earn/                 ← Next.js App Router
    • page.tsx              → daftar campaigns
    • [questId]/page.tsx    → detail campaign (Server Component)
    • layout.tsx            → pass-through
@@ -54,15 +59,15 @@ Interaksi on-chain via Canton ledger (validator party) + Twitter API untuk verif
 
 | File | Lokasi | Fungsi |
 |---|---|---|
-| `apps/web/components/platform/platform-shell.tsx:31` | `navItems` | Definisi menu Earn: `{ href: ROUTES.campaignQuests, key: "earn", icon: Sparkles }`. Dipakai sidebar desktop (line 119) + bottom nav mobile (line 158). |
-| `apps/web/lib/routing/app-routes.ts:9-18` | `ROUTES` | `campaignQuests = "/earn"`, `campaignQuest(id, slug)`, `earnHub = "/quests"`, `leaderboard`. |
-| `apps/web/lib/auth/wallet-access.ts:8` | `WALLET_GATED_HREFS` | `["/earn"]` — user tanpa wallet di-redirect ke `/wallet?from=/earn`. |
+| `apps/web/components/platform/platform-shell.tsx:31` | `navItems` | Menu Earn: `{ href: ROUTES.campaignQuests, key: "earn", icon: Sparkles }`. Sidebar desktop + bottom nav mobile. |
+| `apps/web/lib/routing/app-routes.ts:9-18` | `ROUTES` | `campaignQuests = "/earn"`, `campaignQuest(id, slug)`, `questHub = "/quests"`, `leaderboard`. |
+| `apps/web/lib/auth/wallet-access.ts:8` | `WALLET_GATED_HREFS` | `["/earn"]` — user tanpa wallet → redirect `/wallet?from=/earn`. |
 | `apps/web/lib/i18n/messages/en.ts:6` | `nav.earn` | Label "Earn" (Turkish: `tr.ts`). |
 
 **Alur akses**:
 1. User klik menu Earn → cek `WALLET_GATED_HREFS`.
-2. Bila **belum punya wallet** → link di-rewrite ke `/wallet?from=/earn` + opacity 50% + tooltip "locked".
-3. Bila **punya wallet** → ke `/earn` → halaman dibungkus `WalletRequiredGate`.
+2. **Belum punya wallet** → link rewrite ke `/wallet?from=/earn` + opacity 50% + tooltip "locked".
+3. **Punya wallet** → ke `/earn` → halaman dibungkus `WalletRequiredGate`.
 
 ---
 
@@ -88,7 +93,7 @@ Interaksi on-chain via Canton ledger (validator party) + Twitter API untuk verif
   - HTTP 403 → "Please create your Canton wallet first" + tombol Create Wallet.
   - HTTP 429 → "Too many requests — wait a few seconds."
   - Timeout 30s → hint cek port 3001.
-- **Empty state**: bila 0 campaign → CTA "Daily tasks" ke `/quests`.
+- **Empty state**: bila 0 campaign → CTA "Daily tasks" ke `ROUTES.questHub` (`/quests`).
 
 ---
 
@@ -104,7 +109,7 @@ Interaksi on-chain via Canton ledger (validator party) + Twitter API untuk verif
    - **Guest** (tidak login): `GET {apiBase}/earn/public/:id` (publik, tanpa session).
 4. Timeout 10s, `cache: "no-store"`.
 5. Bila quest tidak ditemukan → `notFound()` (render `not-found.tsx`).
-6. **Canonical redirect** (line 95-98): bila URL bukan `{id}-{slugify(title)}` → redirect ke canonical (SEO).
+6. **Canonical redirect** (line 95-98): URL bukan `{id}-{slugify(title)}` → redirect ke canonical (SEO).
 
 **Layout detail page**:
 - **Back link** "← Back to Earn" ke `/earn`.
@@ -123,7 +128,10 @@ Interaksi on-chain via Canton ledger (validator party) + Twitter API untuk verif
 
 ## 5. Mengerjakan Task (`QuestTaskPanel` → `TaskRow`)
 
-**File**: `apps/web/components/app/quest/quest-task-panel.tsx`.
+**File**: `apps/web/components/app/quest/quest-task-panel.tsx` (SHARED — dipakai Earn detail & Quest hub).
+
+> **Catatan**: komponen ini **shared** antara menu Earn (detail campaign) & menu Quest (hub).
+> Var lokal `isQuestHub` membedakan behavior (line 157: `const isQuestHub = quest.questKind === "EARN_HUB"`).
 
 ### 5.1 Load Progress
 - `GET /api/quests/:id/progress` (line 231) → response:
@@ -143,13 +151,13 @@ Interaksi on-chain via Canton ledger (validator party) + Twitter API untuk verif
 | Sosial | `twitter_follow`, `twitter_retweet`, `telegram_channel`, `telegram_group`, `telegram_join` (alias), `discord_join` |
 | Data | `submit_email`, `submit_party_id`, `submit_canton_address` |
 | Quiz | `quiz_yes_no`, `quiz_choice` |
-| Harian/Wallet (lebih dominan di EARN_HUB) | `daily_check_in`, `send_transaction`, `send_token`, `daily_swap`, `lock_cc`, `send_any_daily`, `send_to_user_daily`, `receive_external_daily`, `receive_internal_daily` |
+| Harian/Wallet (lebih dominan di Quest hub) | `daily_check_in`, `send_transaction`, `send_token`, `daily_swap`, `lock_cc`, `send_any_daily`, `send_to_user_daily`, `receive_external_daily`, `receive_internal_daily` |
 
 ### 5.3 UI Behavior per Task
 - **Sequential lock** (line 210-217): hanya 1 task terbuka pada satu waktu (`firstOpenTaskIdx`); task lain = "Locked".
 - **Wallet requirement**:
-  - Campaign: semua task butuh wallet (`!hasRealWallet(partyId)` → `WalletCreatePromptModal`).
-  - (Catatan: EARN_HUB hanya butuh wallet untuk party-id + task countable.)
+  - **Campaign (Earn)**: semua task butuh wallet (`!hasRealWallet(partyId)` → `WalletCreatePromptModal`).
+  - Quest hub: hanya party-id + task countable.
 - **Twitter**: task Twitter butuh `twitterUsername` ter-link → hint "Connect X in Settings".
 - **Tombol status single-state** (campaign path, line 1082-1120): `Open/Start` → countdown → `Completed` (atau `Locked`/`Pending`/spinner).
 
@@ -180,7 +188,7 @@ allDone = semua task VERIFIED
 |---|---|---|---|
 | `@Get()` | `/quests` | JWT + WalletRequired | List campaigns |
 | `@Get('my-progress')` | `/quests/my-progress` | JWT + Wallet | Progress semua quest |
-| `@Get('earn-hub')` | `/quests/earn-hub` | (publik) | Singleton EARN_HUB — *bukan Earn menu* |
+| `@Get('earn-hub')` | `/quests/earn-hub` | (publik) | Singleton Quest hub — *bukan Earn menu* |
 | `@Get(':questId')` | `/quests/:id` | JWT | Detail authed |
 | `@Get(':id/progress')` | `/quests/:id/progress` | JWT | Progress 1 quest |
 | `@Get(':id/reward-status')` | `/quests/:id/reward-status` | JWT | Status winner/waitlist |
@@ -267,7 +275,7 @@ Didefinisikan di `apps/web/lib/quest/quest-types.ts:10-15` + config visual di `a
 
 | Model | Lokasi | Fungsi |
 |---|---|---|
-| `User` | line ~57 | `earnPoints Int @default(0)` — lifetime points (dominan EARN_HUB). |
+| `User` | line ~57 | `earnPoints Int @default(0)` — lifetime points (dominan Quest hub). |
 | `Quest` | line ~409+ | `questKind` (`CAMPAIGN`/`EARN_HUB`), `rewardType`, `rewardCc`, `maxWinners`, `startsAt`/`endsAt`, gate fields. |
 | `QuestTask` | — | `type`, `target`, `points`, urutan. |
 | `QuestSubmission` | — | 1 row per user+task, status `PENDING`/`VERIFIED`/`REJECTED`, `proof`, `verifiedAt`. |
@@ -277,7 +285,10 @@ Didefinisikan di `apps/web/lib/quest/quest-types.ts:10-15` + config visual di `a
 | `InviteCode` | — | Pool kode (di-reserve atomik saat klaim). |
 | `AppSetting` | line ~605 | Key-value store, simpan `earn_entry_cost_points` override. |
 
-**Migrations terkait Earn**:
+> Enum `QuestKind` (schema.prisma line ~570): `CAMPAIGN` = menu Earn, `EARN_HUB` = menu Quest.
+> Penamaan historis, nilai DB tetap (lihat komentar di file).
+
+**Migrations terkait**:
 - `20260624180000_remove_spin_add_earn_entry`
 - `20260722120000_earn_hub_singleton_unique`
 
@@ -291,7 +302,10 @@ Didefinisikan di `apps/web/lib/quest/quest-types.ts:10-15` + config visual di `a
 | `apps/web/app/admin/(panel)/earn/new/page.tsx` | Form baru: `<QuestForm questKind="CAMPAIGN" redirectBase="/admin/earn" />`. |
 | `apps/web/components/admin/admin-nav.tsx:16` | Nav admin: `/admin/earn` "Earn campaigns". |
 | `apps/api/src/admin/admin.controller.ts` | Endpoint admin (create/update/draw winners). |
-| `apps/api/src/admin/admin.service.ts:119-127` | Guard: EARN_HUB tidak boleh di-ops campaign-only. |
+| `apps/api/src/admin/admin.service.ts:119-127` | Guard: Quest hub (EARN_HUB) tidak boleh di-ops campaign-only. |
+
+> Komponen admin untuk Quest hub ada di `components/admin/admin-quest-hub-*.tsx`
+> (renamed post-refactor). Bukan bagian dari menu Earn.
 
 ---
 
@@ -299,9 +313,12 @@ Didefinisikan di `apps/web/lib/quest/quest-types.ts:10-15` + config visual di `a
 
 `apps/web/app/api/quests/**/route.ts` — proxy dengan `nestWithAccessCookie` / `nestWithAdminAccessCookie`. Frontend tidak pernah langsung hit NestJS; selalu lewat BFF (cookie-based session).
 
+> Route handler `/quests/earn-hub` & `/admin/earn-hub` tetap pakai path "earn-hub"
+> (kontrak BE). Komentar penjelas ada di masing-masing file.
+
 ---
 
-## 11. Peta File Cepat (Cheat Sheet)
+## 11. Peta File Cepat (Cheat Sheet — Post-Refactor)
 
 ```
 NAVIGATION & GATE
@@ -311,7 +328,7 @@ NAVIGATION & GATE
   apps/web/lib/auth/wallet-access.ts:8                     wallet gate
   apps/web/lib/i18n/messages/en.ts:6                       label
 
-EARN MENU (USER)
+EARN MENU (USER) — components/app/earn/ (5 file)
   apps/web/app/(platform)/earn/page.tsx                    daftar campaign
   apps/web/app/(platform)/earn/[questId]/page.tsx          detail campaign
   apps/web/app/(platform)/earn/[questId]/not-found.tsx     404
@@ -321,32 +338,33 @@ EARN MENU (USER)
   apps/web/components/app/earn/share-campaign.tsx          tombol share
   apps/web/components/app/earn/cc-usd-value.tsx            helper CC→USD
 
-QUEST MENU (USER) — folder dipisah dari Earn
-  apps/web/app/(platform)/quests/page.tsx                  entry → QuestHubPage
-  apps/web/components/app/quest/quest-hub-page.tsx         halaman Quest hub
-  apps/web/components/app/quest/quests-browser.tsx         list + filter (shared)
-  apps/web/components/app/quest/quest-task-panel.tsx       task + klaim (shared)
+QUEST ENGINE (SHARED — dipakai Earn & Quest)
+  apps/web/components/app/quest/quests-browser.tsx         list + filter (variant earn/default)
+  apps/web/components/app/quest/quest-task-panel.tsx       task + klaim (var: isQuestHub)
   apps/web/components/app/quest/quest-card.tsx             bridge variant
-  apps/web/components/app/quest/quest-referral-card.tsx    referral
   apps/web/components/app/quest/quest-submit-section.tsx   submit classic
+  apps/web/components/app/quest/quest-referral-card.tsx    referral (Quest hub)
   apps/web/components/app/quest/task-brand-icon.tsx        ikon task
   apps/web/components/app/quest/task-points-label.tsx      label points
 
-LEADERBOARD (terpisah dari Earn)
-  apps/web/components/app/leaderboard/leaderboard-table.tsx
-
-QUEST ENGINE (dipakai Earn + Quest)
-  apps/web/lib/quest/quest-types.ts                       tipe & label (identifier: questHub*)
-  apps/web/lib/quest/quest-engine.ts                      reward config
-  apps/web/lib/canton/campaign-reward.ts                  reward meta
-
-CAMPAIGN CLAIM SECTIONS
+CAMPAIGN CLAIM SECTIONS (SHARED reward layer)
   apps/web/components/app/campaign/campaign-fcfs-claim.tsx
   apps/web/components/app/campaign/campaign-draw-cc-claim.tsx
   apps/web/components/app/campaign/campaign-cc-and-code-raffle-claim.tsx
   apps/web/components/app/campaign/campaign-invite-claim.tsx
   apps/web/components/app/campaign/campaign-quest-sidebar.tsx
   apps/web/components/app/campaign/campaign-eligibility-badge.tsx
+  apps/web/components/app/campaign/campaign-fcfs-reward-card.tsx
+  apps/web/components/app/campaign/campaign-quest-status-card.tsx
+  apps/web/components/app/campaign/campaign-social-links.tsx
+  apps/web/components/app/campaign/cc-reward-logo.tsx
+  apps/web/components/app/campaign/reward-how-to-use.tsx
+  apps/web/components/app/campaign/reward-reveal.tsx
+
+QUEST ENGINE LIB
+  apps/web/lib/quest/quest-types.ts                       tipe & label (identifier: questHub*)
+  apps/web/lib/quest/quest-engine.ts                      reward config
+  apps/web/lib/canton/campaign-reward.ts                  reward meta
 
 BACKEND (NestJS)
   apps/api/src/earn/earn-public.controller.ts              detail publik
@@ -355,22 +373,11 @@ BACKEND (NestJS)
   apps/api/src/quests/quest-reward-config.ts              reward config
   apps/api/src/canton/quest-ledger.service.ts             on-chain ledger
 
-ADMIN
-  apps/web/app/admin/(panel)/earn/page.tsx                 list admin (Earn campaigns)
+ADMIN (Earn campaigns)
+  apps/web/app/admin/(panel)/earn/page.tsx                 list admin
   apps/web/app/admin/(panel)/earn/new/page.tsx             form baru
-  apps/web/app/admin/(panel)/quests/page.tsx               admin Quest hub
-  apps/web/components/admin/admin-quest-hub-panel.tsx      panel Quest hub (renamed)
-  apps/web/components/admin/admin-quest-hub-tasks-panel.tsx tasks list (renamed)
-  apps/web/components/admin/admin-quest-hub-task-form.tsx  task form (renamed)
   apps/api/src/admin/admin.controller.ts                   endpoint admin
   apps/api/src/admin/admin.service.ts                      logic admin
-
-REFACTOR NOTE (branch refactor/separate-earn-quests)
-  Folder dipisah: earn/ = menu Earn (CAMPAIGN), quest/ = menu Quest (EARN_HUB).
-  Identifier FE earnHub*/EarnHub* → questHub*/QuestHub*.
-  TETAP (kontrak stabil): DB enum QuestKind.EARN_HUB, route path /quests/earn-hub
-  & /admin/earn-hub, field backend earnHubConfigured/earnHubCompleted,
-  string literal "EARN_HUB" di discriminated union TS.
 
 DATA
   apps/api/prisma/schema.prisma                            data model
@@ -394,5 +401,22 @@ DATA
 
 ---
 
-Dokumen ini adalah snapshot kondisi kode per 2026-07-25. Saat ingin mengubah,
-sebutkan bagian mana yang ingin dimodifikasi agar bisa ditelusuri ke file yang tepat.
+## 13. 📝 Panduan Cepat Sebelum Modifikasi
+
+Saat ingin mengubah sesuatu di menu Earn, sebutkan **area** berikut agar saya rujuk ke file yang tepat:
+
+| Mau ubah apa? | File target |
+|---|---|
+| **Tampilan daftar / listing** | `components/app/quest/quests-browser.tsx` (variant earn) + `components/app/earn/earn-campaign-card.tsx` |
+| **Hero/detail page campaign** | `app/(platform)/earn/[questId]/page.tsx` |
+| **Alur pengerjaan task** | `components/app/quest/quest-task-panel.tsx` + `quests.service.ts:submitQuestTask` |
+| **Jenis reward / klaim baru** | `lib/quest/quest-engine.ts` + `lib/quest/quest-types.ts` + `quest-reward-config.ts` + endpoint `claim-*` |
+| **Gate akses (biaya / eligibility)** | `ensureEarnEntry` (service:192) + `schema.prisma` EarnEntry |
+| **Tipe task baru** | `lib/quest/quest-types.ts` (TASK_TYPE_OPTIONS + helper) + backend `submitQuestTask` |
+| **Menu / nav / wallet gate** | `platform-shell.tsx` + `wallet-access.ts` |
+| **API endpoint baru** | `quests.controller.ts` + `quests.service.ts` + BFF `app/api/quests/*/route.ts` |
+
+---
+
+Dokumen ini = snapshot kondisi kode per 2026-07-25 (post-refactor `8acc78c`).
+Saat ingin mengubah, sebutkan bagian mana → saya rujuk ke file & baris yang tepat.
