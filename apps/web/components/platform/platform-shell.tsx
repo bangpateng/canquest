@@ -29,7 +29,7 @@ const navItems: {
 }[] = [
   { href: "/overview", key: "overview", icon: LayoutGrid },
   { href: ROUTES.campaignQuests, key: "earn", icon: Sparkles },
-  { href: ROUTES.earnHub, key: "quests", icon: Gift },
+  { href: ROUTES.questHub, key: "quests", icon: Gift },
   { href: "/wallet", key: "wallet", icon: Wallet },
   { href: ROUTES.leaderboard, key: "leaderboard", icon: Trophy },
   { href: "/settings", key: "settings", icon: Settings },

@@ -3,11 +3,11 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import {
   countBasedDailyTitle,
-  EARN_HUB_TASK_TYPE_OPTIONS,
+  QUEST_HUB_TASK_TYPE_OPTIONS,
   getCountBasedDailyRequired,
   getSendTransactionRequiredCount,
   isCountBasedDailyTask,
-  isEarnHubQuizType,
+  isQuestHubQuizType,
   isSendTransactionTask,
   sendTransactionTitle,
 } from "@/lib/quest/quest-types";
@@ -15,7 +15,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
 
 
-export type EarnHubTaskDraft = {
+export type QuestHubTaskDraft = {
   type: string;
   points: number;
   title: string;
@@ -31,7 +31,7 @@ export type EarnHubTaskDraft = {
 const inputCls =
   "w-full rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2.5 text-sm outline-none ring-[var(--ring)] focus-visible:ring-2";
 
-export function AdminEarnHubTaskForm({
+export function AdminQuestHubTaskForm({
   draft,
   setDraft,
   onSubmit,
@@ -41,8 +41,8 @@ export function AdminEarnHubTaskForm({
   onCancel,
   idPrefix = "task",
 }: {
-  draft: EarnHubTaskDraft;
-  setDraft: React.Dispatch<React.SetStateAction<EarnHubTaskDraft>>;
+  draft: QuestHubTaskDraft;
+  setDraft: React.Dispatch<React.SetStateAction<QuestHubTaskDraft>>;
   onSubmit: (e: React.FormEvent) => void;
   saving: boolean;
   formError: string | null;
@@ -50,8 +50,8 @@ export function AdminEarnHubTaskForm({
   onCancel?: () => void;
   idPrefix?: string;
 }) {
-  const selectedMeta = EARN_HUB_TASK_TYPE_OPTIONS.find((o) => o.value === draft.type);
-  const isQuiz = isEarnHubQuizType(draft.type);
+  const selectedMeta = QUEST_HUB_TASK_TYPE_OPTIONS.find((o) => o.value === draft.type);
+  const isQuiz = isQuestHubQuizType(draft.type);
   const isQuizChoice = draft.type === "quiz_choice";
   const isQuizYesNo = draft.type === "quiz_yes_no";
   // Count picker shows for send_transaction + the new send/receive daily variants.
@@ -90,7 +90,7 @@ export function AdminEarnHubTaskForm({
           }}
           className={inputCls}
         >
-          {EARN_HUB_TASK_TYPE_OPTIONS.map((o) => (
+          {QUEST_HUB_TASK_TYPE_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}
             </option>
@@ -309,7 +309,7 @@ export function AdminEarnHubTaskForm({
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             {(["A", "B", "C", "D"] as const).map((letter, idx) => {
-              const key = ["choiceA", "choiceB", "choiceC", "choiceD"][idx] as keyof EarnHubTaskDraft;
+              const key = ["choiceA", "choiceB", "choiceC", "choiceD"][idx] as keyof QuestHubTaskDraft;
               return (
                 <div key={letter}>
                   <label className="mb-1.5 block text-xs font-medium">

@@ -335,7 +335,7 @@ export function QuestsBrowser({
           </div>
           {isEarn && allQuests.length === 0 ? (
             <Link
-              href={ROUTES.earnHub}
+              href={ROUTES.questHub}
               className={cn(buttonVariants({ size: "sm" }), "mt-6 inline-flex rounded-xl sm:mt-8")}
             >
               {t("earnCampaigns.dailyTasks")}
