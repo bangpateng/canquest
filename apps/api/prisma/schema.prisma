@@ -567,6 +567,10 @@ model QuestSubmission {
   @@unique([userId, taskId])
 }
 
+/// Penamaan historis (nilai DB tetap, JANGAN rename — akan pecah data & wire FE↔BE):
+/// - CAMPAIGN  = menu EARN    (/earn)   → partner campaigns
+/// - EARN_HUB  = menu QUEST   (/quests) → CanQuest daily/social tasks hub
+/// Lihat docs/EARN_FLOW_CURRENT.md. Kode FE identifier sudah pakai "questHub".
 enum QuestKind {
   CAMPAIGN
   EARN_HUB

@@ -1,11 +1,11 @@
-import { EarnHubPage } from "@/components/app/earn/earn-hub-page";
+import { QuestHubPage } from "@/components/app/quest/quest-hub-page";
 import { PlatformPage } from "@/components/platform/platform-page";
 
-/** CanQuest Earn hub — menu Quest → /quest */
-export default function QuestEarnHubPage() {
+/** CanQuest Quest hub — menu Quest → /quests */
+export default function QuestHubRoutePage() {
   return (
     <PlatformPage>
-      <EarnHubPage />
+      <QuestHubPage />
     </PlatformPage>
   );
 }

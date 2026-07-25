@@ -4,22 +4,22 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
 import {
-  AdminEarnHubTaskForm,
-  type EarnHubTaskDraft,
-} from "@/components/admin/admin-earn-hub-task-form";
+  AdminQuestHubTaskForm,
+  type QuestHubTaskDraft,
+} from "@/components/admin/admin-quest-hub-task-form";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
-  buildEarnHubTaskPayload,
-  earnHubTaskToDraft,
-  getEarnHubTaskRowDisplay,
-  isEarnHubQuizType,
+  buildQuestHubTaskPayload,
+  questHubTaskToDraft,
+  getQuestHubTaskRowDisplay,
+  isQuestHubQuizType,
   parseQuizChoices,
-  validateEarnHubTaskDraft,
+  validateQuestHubTaskDraft,
 } from "@/lib/quest/quest-types";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 
-export interface EarnHubTask {
+export interface QuestHubTask {
   id: string;
   type: string;
   title: string;
@@ -32,14 +32,14 @@ export interface EarnHubTask {
   createdAt?: string;
 }
 
-export interface EarnHubQuest {
+export interface QuestHub {
   id: string;
   title: string;
   status: string;
-  tasks: EarnHubTask[];
+  tasks: QuestHubTask[];
 }
 
-const defaultDraft: EarnHubTaskDraft = {
+const defaultDraft: QuestHubTaskDraft = {
   type: "daily_check_in",
   points: 10,
   title: "",
@@ -52,21 +52,21 @@ const defaultDraft: EarnHubTaskDraft = {
   showNewBadge: false,
 };
 
-export function AdminEarnHubTasksPanel({
+export function AdminQuestHubTasksPanel({
   hub,
   onEnsureHub,
   ensuring,
   ensureError,
 }: {
-  hub: EarnHubQuest | null;
+  hub: QuestHub | null;
   onEnsureHub: () => void;
   ensuring: boolean;
   ensureError: string | null;
 }) {
   const router = useRouter();
-  const [tasks, setTasks] = useState<EarnHubTask[]>(hub?.tasks ?? []);
-  const [draft, setDraft] = useState<EarnHubTaskDraft>(defaultDraft);
-  const [editDraft, setEditDraft] = useState<EarnHubTaskDraft | null>(null);
+  const [tasks, setTasks] = useState<QuestHubTask[]>(hub?.tasks ?? []);
+  const [draft, setDraft] = useState<QuestHubTaskDraft>(defaultDraft);
+  const [editDraft, setEditDraft] = useState<QuestHubTaskDraft | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -109,9 +109,9 @@ export function AdminEarnHubTasksPanel({
     setFormError(null);
   }
 
-  function startEdit(task: EarnHubTask) {
+  function startEdit(task: QuestHubTask) {
     setEditingTaskId(task.id);
-    setEditDraft(earnHubTaskToDraft(task));
+    setEditDraft(questHubTaskToDraft(task));
     setFormError(null);
     setShowForm(false);
   }
@@ -119,7 +119,7 @@ export function AdminEarnHubTasksPanel({
   async function handleAddTask(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
-    const err = validateEarnHubTaskDraft(draft);
+    const err = validateQuestHubTaskDraft(draft);
     if (err) {
       setFormError(err);
       return;
@@ -127,13 +127,13 @@ export function AdminEarnHubTasksPanel({
 
     setSaving(true);
     try {
-      const payload = buildEarnHubTaskPayload(draft);
+      const payload = buildQuestHubTaskPayload(draft);
       const res = await fetch(`/api/admin/quests/${hub!.id}/tasks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...payload, order: tasks.length }),
       });
-      const data = (await res.json()) as EarnHubTask & { message?: string };
+      const data = (await res.json()) as QuestHubTask & { message?: string };
       if (!res.ok) {
         setFormError(data.message ?? "Failed to add task");
         return;
@@ -152,7 +152,7 @@ export function AdminEarnHubTasksPanel({
     e.preventDefault();
     if (!editingTaskId || !editDraft) return;
     setFormError(null);
-    const err = validateEarnHubTaskDraft(editDraft);
+    const err = validateQuestHubTaskDraft(editDraft);
     if (err) {
       setFormError(err);
       return;
@@ -160,13 +160,13 @@ export function AdminEarnHubTasksPanel({
 
     setSaving(true);
     try {
-      const payload = buildEarnHubTaskPayload(editDraft);
+      const payload = buildQuestHubTaskPayload(editDraft);
       const res = await fetch(`/api/admin/tasks/${editingTaskId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = (await res.json()) as EarnHubTask & { message?: string };
+      const data = (await res.json()) as QuestHubTask & { message?: string };
       if (!res.ok) {
         setFormError(data.message ?? "Failed to update task");
         return;
@@ -181,7 +181,7 @@ export function AdminEarnHubTasksPanel({
     }
   }
 
-  async function handleDeleteTask(task: EarnHubTask) {
+  async function handleDeleteTask(task: QuestHubTask) {
     if (task.type === "daily_check_in") {
       alert("Daily check-in is permanent and cannot be deleted.");
       return;
@@ -217,7 +217,7 @@ export function AdminEarnHubTasksPanel({
         ) : (
           <ul className="space-y-2">
             {sortedTasks.map((t) => {
-              const row = getEarnHubTaskRowDisplay(t);
+              const row = getQuestHubTaskRowDisplay(t);
               const isEditing = editingTaskId === t.id && editDraft;
 
               if (isEditing) {
@@ -227,10 +227,10 @@ export function AdminEarnHubTasksPanel({
                     className="rounded-xl border border-[var(--primary)]/35 bg-[var(--card)] p-4"
                   >
                     <p className="mb-3 text-sm font-semibold text-canton">Edit task</p>
-                    <AdminEarnHubTaskForm
+                    <AdminQuestHubTaskForm
                       idPrefix={`edit-${t.id}`}
                       draft={editDraft}
-                      setDraft={setEditDraft as React.Dispatch<React.SetStateAction<EarnHubTaskDraft>>}
+                      setDraft={setEditDraft as React.Dispatch<React.SetStateAction<QuestHubTaskDraft>>}
                       onSubmit={handleUpdateTask}
                       saving={saving}
                       formError={formError}
@@ -258,7 +258,7 @@ export function AdminEarnHubTasksPanel({
                         +{t.points} pts
                       </span>
                     </div>
-                    {t.target && !isEarnHubQuizType(t.type) && row.headline !== t.target ? (
+                    {t.target && !isQuestHubQuizType(t.type) && row.headline !== t.target ? (
                       <p className="mt-0.5 truncate text-xs text-[var(--muted-foreground)]">
                         {t.target}
                       </p>
@@ -330,7 +330,7 @@ export function AdminEarnHubTasksPanel({
 
         {showForm && !editingTaskId ? (
           <div className="mt-4">
-            <AdminEarnHubTaskForm
+            <AdminQuestHubTaskForm
               idPrefix="add"
               draft={draft}
               setDraft={setDraft}

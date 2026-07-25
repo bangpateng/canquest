@@ -191,7 +191,7 @@ export type QuestTaskType =
   | "submit_canton_address";
 
 /** CanQuest Earn hub (user menu Quest) — admin adds these only */
-export const EARN_HUB_TASK_TYPE_OPTIONS: { value: string; label: string; hint?: string }[] = [
+export const QUEST_HUB_TASK_TYPE_OPTIONS: { value: string; label: string; hint?: string }[] = [
   { value: "daily_check_in", label: "Daily check-in", hint: "Once per day · resets at 00:00 UTC" },
   {
     value: "send_transaction",
@@ -240,16 +240,16 @@ export const EARN_HUB_TASK_TYPE_OPTIONS: { value: string; label: string; hint?: 
   },
 ];
 
-export function earnHubTaskTypeLabel(type: string): string {
-  const opt = EARN_HUB_TASK_TYPE_OPTIONS.find((t) => t.value === type);
+export function questHubTaskTypeLabel(type: string): string {
+  const opt = QUEST_HUB_TASK_TYPE_OPTIONS.find((t) => t.value === type);
   return opt?.label ?? questTaskTypeLabel(type);
 }
 
-export function isEarnHubQuizType(type: string): boolean {
+export function isQuestHubQuizType(type: string): boolean {
   return type === "quiz_yes_no" || type === "quiz_choice";
 }
 
-export function isEarnHubSocialType(type: string): boolean {
+export function isQuestHubSocialType(type: string): boolean {
   return isCampaignSocialTaskType(type);
 }
 
@@ -272,7 +272,7 @@ export function filterCampaignParticipantTasks<T extends { type: string }>(
 }
 
 /** Short label from X / Telegram / Discord URL or handle (universal for any post). */
-export function formatEarnHubSocialTarget(
+export function formatQuestHubSocialTarget(
   type: string,
   target: string | null | undefined,
 ): string | null {
@@ -334,7 +334,7 @@ function normTaskText(s: string): string {
 }
 
 /** Earn-hub quiz window: NEW label + points only within this period after publish. */
-export const EARN_HUB_NEW_LABEL_TTL_MS = 24 * 60 * 60 * 1000;
+export const QUEST_HUB_NEW_LABEL_TTL_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Daily tasks reset at 00:00 UTC (for WIB users that is 07:00 local time).
@@ -357,13 +357,13 @@ export function msUntilNextUtcDay(now: Date = new Date()): number {
  * Cooldown remaining for repeatable daily tasks = time until the next 00:00 UTC.
  * (Replaces the old rolling-24h-from-last-verify window.)
  */
-export const EARN_HUB_REPEAT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+export const QUEST_HUB_REPEAT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Tasks that repeat once per UTC day (reset at 00:00 UTC). Other tasks stay on
  * Quest when done but are one-time (lock-cc is one-time per tier).
  */
-export function isEarnHubRepeatableTask(task: { type: string }): boolean {
+export function isQuestHubRepeatableTask(task: { type: string }): boolean {
   return (
     task.type === "daily_check_in" ||
     task.type === "send_transaction" ||
@@ -481,7 +481,7 @@ export function lockCcTitle(termKey: string): string {
  * If the user has NOT yet verified today, returns 0 (claimable now). If they
  * already verified today, returns time-to-midnight-UTC.
  */
-export function getEarnHubRepeatCooldownMs(
+export function getQuestHubRepeatCooldownMs(
   submission: { verifiedAt?: string | null; submittedAt?: string } | null | undefined,
   now: number = Date.now(),
 ): number {
@@ -497,7 +497,7 @@ export function getEarnHubRepeatCooldownMs(
   return msUntilNextUtcDay(new Date(now));
 }
 
-export function formatEarnHubCooldown(ms: number): string {
+export function formatQuestHubCooldown(ms: number): string {
   if (ms <= 0) return "";
   const totalMin = Math.ceil(ms / 60_000);
   const h = Math.floor(totalMin / 60);
@@ -507,19 +507,19 @@ export function formatEarnHubCooldown(ms: number): string {
   return `${m}m`;
 }
 
-export function isEarnHubQuizExpired(
+export function isQuestHubQuizExpired(
   task: { type: string; createdAt?: string | null },
   now: number = Date.now(),
 ): boolean {
-  if (!isEarnHubQuizType(task.type)) return false;
+  if (!isQuestHubQuizType(task.type)) return false;
   if (!task.createdAt) return false;
   const created = new Date(task.createdAt).getTime();
   if (Number.isNaN(created)) return false;
-  return now - created > EARN_HUB_NEW_LABEL_TTL_MS;
+  return now - created > QUEST_HUB_NEW_LABEL_TTL_MS;
 }
 
 /** NEW badge: admin enabled, not completed by user, and within 24h of publish. */
-export function shouldShowEarnHubNewLabel(
+export function shouldShowQuestHubNewLabel(
   task: { showNewBadge?: boolean; createdAt?: string | null },
   opts?: { taskCompleted?: boolean; now?: number },
 ): boolean {
@@ -529,13 +529,13 @@ export function shouldShowEarnHubNewLabel(
     const created = new Date(task.createdAt).getTime();
     if (Number.isNaN(created)) return true;
     const now = opts?.now ?? Date.now();
-    if (now - created > EARN_HUB_NEW_LABEL_TTL_MS) return false;
+    if (now - created > QUEST_HUB_NEW_LABEL_TTL_MS) return false;
   }
   return true;
 }
 
 /** One headline + optional detail — avoids type label + title + @handle triple repeat. */
-export function getEarnHubTaskRowDisplay(
+export function getQuestHubTaskRowDisplay(
   task: {
     type: string;
     title: string;
@@ -550,14 +550,14 @@ export function getEarnHubTaskRowDisplay(
   detail: string | null;
   showNew: boolean;
 } {
-  const category = earnHubTaskTypeLabel(task.type);
-  const showNew = shouldShowEarnHubNewLabel(task, opts);
+  const category = questHubTaskTypeLabel(task.type);
+  const showNew = shouldShowQuestHubNewLabel(task, opts);
   const customTitle = task.title?.trim() ?? "";
-  const targetLine = isEarnHubSocialType(task.type)
-    ? formatEarnHubSocialTarget(task.type, task.target)
+  const targetLine = isQuestHubSocialType(task.type)
+    ? formatQuestHubSocialTarget(task.type, task.target)
     : null;
 
-  if (isEarnHubQuizType(task.type)) {
+  if (isQuestHubQuizType(task.type)) {
     return {
       category,
       headline: customTitle || "Quiz",
@@ -566,7 +566,7 @@ export function getEarnHubTaskRowDisplay(
     };
   }
 
-  if (isEarnHubSocialType(task.type)) {
+  if (isQuestHubSocialType(task.type)) {
     return {
       category,
       headline: customTitle || targetLine || category,
@@ -584,7 +584,7 @@ export function getEarnHubTaskRowDisplay(
 }
 
 /** Map stored task → admin form draft (edit published tasks). */
-export function earnHubTaskToDraft(task: {
+export function questHubTaskToDraft(task: {
   type: string;
   title: string;
   points: number;
@@ -617,11 +617,11 @@ export function earnHubTaskToDraft(task: {
     choiceC: choices[2] ?? "",
     choiceD: choices[3] ?? "",
     showNewBadge: Boolean(task.showNewBadge),
-    repeatEvery24h: isEarnHubRepeatableTask({ type: task.type }),
+    repeatEvery24h: isQuestHubRepeatableTask({ type: task.type }),
   };
 }
 
-export function validateEarnHubTaskDraft(
+export function validateQuestHubTaskDraft(
   draft: {
     type: string;
     title?: string;
@@ -678,7 +678,7 @@ export function parseQuizChoices(target: string | null | undefined): string[] {
     .slice(0, 4);
 }
 
-export function buildEarnHubTaskPayload(input: {
+export function buildQuestHubTaskPayload(input: {
   type: string;
   points: number;
   title?: string;
@@ -699,11 +699,11 @@ export function buildEarnHubTaskPayload(input: {
   showNewBadge: boolean;
   repeatEvery24h: boolean;
 } {
-  const label = earnHubTaskTypeLabel(input.type);
+  const label = questHubTaskTypeLabel(input.type);
   const points = Math.max(0, input.points);
 
   const showNewBadge = Boolean(input.showNewBadge);
-  const repeatEvery24h = isEarnHubRepeatableTask({ type: input.type });
+  const repeatEvery24h = isQuestHubRepeatableTask({ type: input.type });
 
   if (input.type === "send_transaction") {
     const required = getSendTransactionRequiredCount(input.target);
@@ -785,7 +785,7 @@ export function buildEarnHubTaskPayload(input: {
   }
 
   const target = input.target?.trim() || null;
-  const targetLine = formatEarnHubSocialTarget(input.type, target);
+  const targetLine = formatQuestHubSocialTarget(input.type, target);
   const customTitle = input.title?.trim();
   return {
     type: input.type,
@@ -946,7 +946,7 @@ export function questTaskTypeLabel(type: string, ctx?: QuestTaskTitleContext): s
     return campaignTaskTypeLabel(type, ctx.projectName ?? "");
   }
   if (ctx?.questKind === "EARN_HUB") {
-    const earn = EARN_HUB_TASK_TYPE_OPTIONS.find((t) => t.value === type);
+    const earn = QUEST_HUB_TASK_TYPE_OPTIONS.find((t) => t.value === type);
     if (earn) return earn.label;
   }
   if (ctx?.projectName?.trim()) {
@@ -954,7 +954,7 @@ export function questTaskTypeLabel(type: string, ctx?: QuestTaskTitleContext): s
   }
   const opt = QUEST_TASK_TYPE_OPTIONS.find((t) => t.value === type);
   if (opt) return opt.label;
-  const earn = EARN_HUB_TASK_TYPE_OPTIONS.find((t) => t.value === type);
+  const earn = QUEST_HUB_TASK_TYPE_OPTIONS.find((t) => t.value === type);
   if (earn) return earn.label;
   if (type === "telegram_join") return "Join Telegram Channel";
   return type.replace(/_/g, " ");

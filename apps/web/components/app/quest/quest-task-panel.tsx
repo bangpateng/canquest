@@ -12,13 +12,13 @@ import {
   TASK_COUNTDOWN_SEC,
   formatTaskCountdownSeconds,
   resolveQuestTaskDisplayTitle,
-  formatEarnHubCooldown,
-  getEarnHubRepeatCooldownMs,
-  getEarnHubTaskRowDisplay,
-  isEarnHubQuizExpired,
-  isEarnHubQuizType,
-  isEarnHubRepeatableTask,
-  isEarnHubSocialType,
+  formatQuestHubCooldown,
+  getQuestHubRepeatCooldownMs,
+  getQuestHubTaskRowDisplay,
+  isQuestHubQuizExpired,
+  isQuestHubQuizType,
+  isQuestHubRepeatableTask,
+  isQuestHubSocialType,
   isSendTransactionTask,
   isSendTokenTask,
   isDailySwapTask,
@@ -154,7 +154,7 @@ export function QuestTaskPanel({
   onPointsEarned?: () => void;
 }) {
   const t = usePlatformT();
-  const isEarnHub = quest.questKind === "EARN_HUB";
+  const isQuestHub = quest.questKind === "EARN_HUB";
   const [submissions, setSubmissions] = useState<Record<string, QuestSubmission>>({});
   const [questCompleted, setQuestCompleted] = useState(false);
   const [allTasksVerified, setAllTasksVerified] = useState(false);
@@ -196,10 +196,10 @@ export function QuestTaskPanel({
   // Points users earned are already credited to their balance and are not removed.
   const visibleTasks = useMemo(
     () =>
-      isEarnHub
-        ? quest.tasks.filter((t) => !isEarnHubQuizExpired(t, now))
+      isQuestHub
+        ? quest.tasks.filter((t) => !isQuestHubQuizExpired(t, now))
         : quest.tasks,
-    [isEarnHub, quest.tasks, now],
+    [isQuestHub, quest.tasks, now],
   );
 
   const firstOpenTaskIdx = useMemo(
@@ -394,15 +394,15 @@ export function QuestTaskPanel({
   );
   const pct = visibleTasks.length
     ? Math.round(
-        ((isEarnHub ? verifiedTodayCount : verifiedCount) / visibleTasks.length) * 100,
+        ((isQuestHub ? verifiedTodayCount : verifiedCount) / visibleTasks.length) * 100,
       )
     : 0;
-  const allDone = isEarnHub
+  const allDone = isQuestHub
     ? verifiedTodayCount === visibleTasks.length && visibleTasks.length > 0
     : verifiedCount === visibleTasks.length && visibleTasks.length > 0;
-  const campaignEnded = !isEarnHub && isCampaignEnded(quest, campaignMeta);
+  const campaignEnded = !isQuestHub && isCampaignEnded(quest, campaignMeta);
   const fcfsSlotsFull =
-    !isEarnHub &&
+    !isQuestHub &&
     Boolean(campaignMeta?.requiresFcfsClaim) &&
     isFcfsSlotsFull(campaignMeta?.remainingSlots, campaignMeta?.maxWinners);
   const userParticipated =
@@ -423,24 +423,24 @@ export function QuestTaskPanel({
   const showInviteClaim =
     requiresPaidInviteClaim &&
     questCompleted &&
-    !isEarnHub &&
+    !isQuestHub &&
     rewardStatus?.state === "fcfs_claimable" &&
     (campaignMeta?.codesRemaining ?? 0) > 0;
   const showCcDrawClaim =
     requiresDrawCcClaim &&
     questCompleted &&
-    !isEarnHub &&
+    !isQuestHub &&
     rewardStatus?.state === "fcfs_claimable";
   // CC + Code combined raffle: winner selected by admin, pays 5 CC fee to claim both CC + code
   const showCcAndCodeRaffleClaim =
     quest.rewardType === "CC_AND_CODE_RAFFLE" &&
     questCompleted &&
-    !isEarnHub &&
+    !isQuestHub &&
     rewardStatus?.state === "fcfs_claimable";
   const showClassicSubmit =
     allDone &&
     !questCompleted &&
-    !isEarnHub &&
+    !isQuestHub &&
     !requiresFcfsClaim &&
     !campaignEnded;
 
@@ -518,7 +518,7 @@ export function QuestTaskPanel({
     );
   }
 
-  if (progressError && !isEarnHub) {
+  if (progressError && !isQuestHub) {
     return (
       <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-5 py-8 text-center">
         <p className="text-sm font-medium text-red-300">{progressError}</p>
@@ -535,7 +535,7 @@ export function QuestTaskPanel({
 
   return (
     <div className="space-y-6">
-      {isEarnHub && progressError ? (
+      {isQuestHub && progressError ? (
         <div className="rounded-xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-xs text-orange-200">
           Could not load your progress — tasks are shown below.{" "}
           <button
@@ -552,7 +552,7 @@ export function QuestTaskPanel({
           {t("quests.campaignEndedClosed")}
         </div>
       ) : null}
-      {fcfsSlotsFull && !campaignEnded && !isEarnHub ? (
+      {fcfsSlotsFull && !campaignEnded && !isQuestHub ? (
         <div className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/25 px-4 py-3 text-sm text-[var(--muted-foreground)]">
           {userParticipated
             ? t("earnCampaigns.slotsFullBanner")
@@ -596,7 +596,7 @@ export function QuestTaskPanel({
               onBusyChange={(busy) =>
                 setBusyTaskId((prev) => (busy ? task.id : prev === task.id ? null : prev))
               }
-              earnHubLayout={isEarnHub}
+              questHubLayout={isQuestHub}
               onPointsEarned={onPointsEarned}
               onVerified={(sub) => onTaskVerified(task.id, sub)}
             />
@@ -655,13 +655,13 @@ export function QuestTaskPanel({
         />
       ) : null}
 
-      {allDone && !questCompleted && isEarnHub ? (
+      {allDone && !questCompleted && isQuestHub ? (
         <p className="text-center text-sm text-[var(--muted-foreground)]">
           All tasks done — points are in your balance above.
         </p>
       ) : null}
 
-      {questCompleted && !isEarnHub && !showCcDrawClaim && !showInviteClaim && !showCcAndCodeRaffleClaim && (
+      {questCompleted && !isQuestHub && !showCcDrawClaim && !showInviteClaim && !showCcAndCodeRaffleClaim && (
         <QuestSubmittedProof
           rewardCc={rewardCc}
           rewardStatus={rewardStatus}
@@ -674,7 +674,7 @@ export function QuestTaskPanel({
       )}
 
       {!questCompleted &&
-        !isEarnHub &&
+        !isQuestHub &&
         requiresFcfsClaim &&
         allDone &&
         !showFcfsClaim &&
@@ -702,7 +702,7 @@ function TaskRow({
   partyId,
   twitterUsername = null,
   campaignEnded = false,
-  earnHubLayout = false,
+  questHubLayout = false,
   sequentiallyLocked = false,
   sendProgress,
   onBusyChange,
@@ -717,7 +717,7 @@ function TaskRow({
   partyId: string | null;
   twitterUsername?: string | null;
   campaignEnded?: boolean;
-  earnHubLayout?: boolean;
+  questHubLayout?: boolean;
   sequentiallyLocked?: boolean;
   sendProgress?: { required: number; today: number };
   onBusyChange?: (busy: boolean) => void;
@@ -728,7 +728,7 @@ function TaskRow({
   const isPartyTask =
     taskType === "submit_party_id" || taskType === "submit_canton_address";
   const isEmailTask = taskType === "submit_email";
-  const isQuiz = isEarnHubQuizType(taskType);
+  const isQuiz = isQuestHubQuizType(taskType);
   const isQuizChoice = taskType === "quiz_choice";
   const isQuizYesNo = taskType === "quiz_yes_no";
   const isDailyCheckIn = taskType === "daily_check_in";
@@ -776,7 +776,7 @@ function TaskRow({
     taskType === "discord_join";
 
   /** Quest hub (/quest): wallet only for party-ID + countable wallet tasks (send/swap/lock). Partner campaigns (/earn): wallet required. */
-  const needsWallet = earnHubLayout
+  const needsWallet = questHubLayout
     ? (isPartyTask || isCountableWalletTask || isLockCc) && !hasRealWallet(partyId)
     : !hasRealWallet(partyId);
 
@@ -796,9 +796,9 @@ function TaskRow({
 
   const isVerified = submission?.status === "VERIFIED";
   const isPending = submission?.status === "PENDING";
-  const isRepeatable = earnHubLayout && isEarnHubRepeatableTask(task);
+  const isRepeatable = questHubLayout && isQuestHubRepeatableTask(task);
   const repeatCooldownMs = isRepeatable
-    ? getEarnHubRepeatCooldownMs(submission, cooldownNow)
+    ? getQuestHubRepeatCooldownMs(submission, cooldownNow)
     : 0;
   const onRepeatCooldown = isRepeatable && isVerified && repeatCooldownMs > 0;
   const canRepeatNow = isRepeatable && isVerified && repeatCooldownMs === 0;
@@ -1025,20 +1025,20 @@ function TaskRow({
   const lockedHint =
     sequentiallyLocked && !isVerified ? "Complete previous tasks first (one at a time)" : null;
 
-  const quizExpired = earnHubLayout && isQuiz && !isVerified && isEarnHubQuizExpired(task);
+  const quizExpired = questHubLayout && isQuiz && !isVerified && isQuestHubQuizExpired(task);
 
   const displayTitle = resolveQuestTaskDisplayTitle(task, quest);
 
-  const earnHubDisplay = earnHubLayout
-    ? getEarnHubTaskRowDisplay(task, {
+  const questHubDisplay = questHubLayout
+    ? getQuestHubTaskRowDisplay(task, {
         taskCompleted: isOneTimeComplete || onRepeatCooldown,
       })
     : null;
 
   // Jalur campaign — kartu standalone, SATU baris: [icon] [title+meta] [button].
   // Tombol sejajar dengan icon & title (kanan), tidak menabrak teks.
-  // Jalur Earn-hub ditangani blok di bawah (butuh earnHubDisplay).
-  if (!(earnHubLayout && earnHubDisplay)) {
+  // Jalur Earn-hub ditangani blok di bawah (butuh questHubDisplay).
+  if (!(questHubLayout && questHubDisplay)) {
     return (
       <li
         className={cn(
@@ -1238,7 +1238,7 @@ function TaskRow({
     );
   }
 
-  if (earnHubLayout && earnHubDisplay) {
+  if (questHubLayout && questHubDisplay) {
     return (
       <li
         className={cn(
@@ -1275,9 +1275,9 @@ function TaskRow({
                   isOneTimeComplete && "line-through opacity-70",
                 )}
               >
-                {earnHubDisplay.headline}
+                {questHubDisplay.headline}
               </p>
-              {earnHubDisplay.showNew ? (
+              {questHubDisplay.showNew ? (
                 <span className="shrink-0 rounded-md bg-canton/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-canton">
                   New
                 </span>
@@ -1286,7 +1286,7 @@ function TaskRow({
             {/* Baris status meta ringkas (cooldown / ready / quiz ended / send progress). */}
             {onRepeatCooldown ? (
               <p className="mt-0.5 truncate text-xs font-medium text-emerald-400/80">
-                {isCountableWalletTask || isLockCc ? "Verified" : "Checked in"} — ready in {formatEarnHubCooldown(repeatCooldownMs)}
+                {isCountableWalletTask || isLockCc ? "Verified" : "Checked in"} — ready in {formatQuestHubCooldown(repeatCooldownMs)}
               </p>
             ) : canRepeatNow && (isCountableWalletTask) ? (
               <p className="mt-0.5 truncate text-xs font-medium text-canton">

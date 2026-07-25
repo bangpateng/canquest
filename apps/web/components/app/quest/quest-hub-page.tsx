@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils/utils";
 import { Gift, Sparkles, Trophy, TrendingUp, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 
-export function EarnHubPage() {
+export function QuestHubPage() {
   const [partyId, setPartyId] = useState<string | null>(null);
   const [twitterUsername, setTwitterUsername] = useState<string | null>(null);
   const [pointsRemaining, setPointsRemaining] = useState(0);

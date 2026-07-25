@@ -2,10 +2,10 @@ import { cookies } from "next/headers";
 import { Gift } from "lucide-react";
 import { CQ_ADMIN_ACCESS_COOKIE } from "@/lib/auth/auth-cookies";
 import { internalApiBase } from "@/lib/api/internal-api-url";
-import { AdminEarnHubPanel } from "@/components/admin/admin-earn-hub-panel";
-import type { EarnHubQuest } from "@/components/admin/admin-earn-hub-tasks-panel";
+import { AdminQuestHubPanel } from "@/components/admin/admin-quest-hub-panel";
+import type { QuestHub } from "@/components/admin/admin-quest-hub-tasks-panel";
 
-async function fetchEarnHub(): Promise<EarnHubQuest | null> {
+async function fetchQuestHub(): Promise<QuestHub | null> {
   const jar = await cookies();
   const token = jar.get(CQ_ADMIN_ACCESS_COOKIE)?.value;
   if (!token) return null;
@@ -17,7 +17,7 @@ async function fetchEarnHub(): Promise<EarnHubQuest | null> {
     if (!res.ok) return null;
     const data = await res.json();
     if (!data || typeof data !== "object" || !("id" in data)) return null;
-    return data as EarnHubQuest;
+    return data as QuestHub;
   } catch {
     return null;
   }
@@ -25,7 +25,7 @@ async function fetchEarnHub(): Promise<EarnHubQuest | null> {
 
 /** Admin — CanQuest Earn hub (user menu Quest) */
 export default async function AdminQuestHubPage() {
-  const hub = await fetchEarnHub();
+  const hub = await fetchQuestHub();
 
   return (
     <div className="space-y-8">
@@ -41,7 +41,7 @@ export default async function AdminQuestHubPage() {
         </p>
       </div>
 
-      <AdminEarnHubPanel initialHub={hub} />
+      <AdminQuestHubPanel initialHub={hub} />
     </div>
   );
 }
