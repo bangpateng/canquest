@@ -6,7 +6,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { RewardHowToUse } from "@/components/app/campaign/reward-how-to-use";
-import { CcRewardLogo } from "@/components/app/campaign/cc-reward-logo";
+import { RewardTokenLogo } from "@/components/app/campaign/reward-token-logo";
 import { getRewardConfig } from "@/lib/quest/quest-engine";
 import { formatRewardAmount } from "@/lib/canton/campaign-reward";
 import { normalizeRewardToken } from "@/lib/quest/quest-types";
@@ -50,6 +50,7 @@ export function RewardReveal({
   //  - Code                  → Ticket (icon code)
   //  - CC + Code (dual)      → CC logo + Ticket (kedua reward tampil)
   const config = getRewardConfig(rewardType);
+  const token = normalizeRewardToken(rewardToken);
   const isDual = config.isDual;
   const isCcOnly = config.isCcToken && !inviteCode;
   const isWaitlist = config.code === "WAITLIST_EMAIL";
@@ -68,7 +69,7 @@ export function RewardReveal({
             & ada pemenang code) tidak berubah — ini murni tampilan icon header. */}
         {isDual ? (
           <span className="flex h-9 w-9 shrink-0 items-center justify-center gap-0.5 rounded-xl bg-gradient-to-br from-canton/15 to-violet-500/15">
-            <CcRewardLogo size={16} />
+            <RewardTokenLogo token={token} size={16} />
             <Ticket className="h-4 w-4 text-violet-300" strokeWidth={2.5} aria-hidden />
           </span>
         ) : (
@@ -83,7 +84,7 @@ export function RewardReveal({
             )}
           >
             {isCcOnly ? (
-              <CcRewardLogo size={18} />
+              <RewardTokenLogo token={token} size={18} />
             ) : isWaitlist ? (
               <Sparkles className="h-5 w-5" strokeWidth={2.5} aria-hidden />
             ) : (

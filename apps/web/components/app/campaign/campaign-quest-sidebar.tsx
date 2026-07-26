@@ -1,4 +1,4 @@
-import { CcRewardLogo } from "@/components/app/campaign/cc-reward-logo";
+import { RewardTokenLogo } from "@/components/app/campaign/reward-token-logo";
 import { CcUsdValue } from "@/components/app/earn/cc-usd-value";
 import { getQuestMeta } from "@/lib/quest/quest-engine";
 import { formatCodePerWinners, formatCodePoolLabel, formatRewardAmount } from "@/lib/canton/campaign-reward";
@@ -47,7 +47,7 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
     rewardPerWinner = (
       <div className="flex flex-wrap items-center gap-1.5">
         <div className="flex items-center gap-1.5">
-          <CcRewardLogo size={18} />
+          <RewardTokenLogo token={token} size={18} />
           <span className={VALUE_CLS}>{quest.rewardCc > 0 ? formatRewardAmount(quest.rewardCc, token) : token}</span>
         </div>
         <span className="text-sm font-semibold text-slate-500">+</span>
@@ -60,7 +60,7 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
   } else if (config.isCcToken) {
     rewardPerWinner = (
       <div className="flex items-center gap-1.5">
-        <CcRewardLogo size={18} />
+        <RewardTokenLogo token={token} size={18} />
         <span className={VALUE_CLS}>
           {quest.rewardCc > 0 ? formatRewardAmount(quest.rewardCc, token) : rewardDisplay.primaryText}
         </span>
@@ -163,7 +163,7 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
             <div className="flex flex-wrap items-center gap-1.5">
               {config.isCcToken ? (
                 <>
-                  <CcRewardLogo size={18} />
+                  <RewardTokenLogo token={token} size={18} />
                   <span className={VALUE_CLS}>{poolDisplay}</span>
                   {poolCcValue > 0 ? <CcUsdValue cc={poolCcValue} /> : null}
                 </>
@@ -174,7 +174,7 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
                 </>
               ) : (
                 <>
-                  <CcRewardLogo size={18} />
+                  <RewardTokenLogo token={token} size={18} />
                   <span className={VALUE_CLS}>{poolDisplay}</span>
                   {summary?.poolTotalCc != null && summary.poolTotalCc > 0 ? (
                     <CcUsdValue cc={summary.poolTotalCc} />

@@ -31,6 +31,7 @@ export function CampaignFcfsClaimSection({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [deliveryKind, setDeliveryKind] = useState<"direct" | "pending_offer" | null>(null);
 
   const remaining = campaignMeta.remainingSlots ?? 0;
   const maxWinners = campaignMeta.maxWinners;
@@ -57,6 +58,7 @@ export function CampaignFcfsClaimSection({
         ok?: boolean;
         message?: string;
         remainingSlots?: number;
+        rewardDelivery?: "direct" | "pending_offer";
       };
       if (!res.ok || data.ok === false) {
         setError(
@@ -68,10 +70,11 @@ export function CampaignFcfsClaimSection({
       }
       const afterRemaining =
         data.remainingSlots ?? Math.max(0, remaining - 1);
+      setDeliveryKind(data.rewardDelivery ?? null);
       setSuccess(
         `${formatFcfsSlotsRemaining(afterRemaining, maxWinners)}\n${formatFcfsClaimFeeHint(fee, rewardCc, token)}`,
       );
-      launchClaimConfetti();
+      launchClaimConfetti(token);
       onClaimed();
     } catch {
       setError(FCFS_CLAIM_FAIL_MSG);
@@ -87,6 +90,8 @@ export function CampaignFcfsClaimSection({
       description={feeHint}
       rewardCc={rewardCc}
       rewardType="CC_ONLY"
+      rewardToken={token}
+      deliveryKind={deliveryKind}
       partyId={partyId}
       canClaim={canClaim}
       isSubmitting={isSubmitting}

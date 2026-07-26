@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CcRewardLogo } from "@/components/app/campaign/cc-reward-logo";
+import { RewardTokenLogo } from "@/components/app/campaign/reward-token-logo";
 import { CheckCircle2, Sparkles, Ticket } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { buttonVariants } from "@/components/ui/button";
@@ -25,13 +25,17 @@ type CampaignFcfsRewardCardProps = {
   claimButtonLabel?: string;
   /**
    * Tipe reward — menentukan icon badge (sesuai resolveIconKind di quest-engine):
-   *  - CC token        → CC reward logo
+   *  - CC/USDCx token  → token reward logo
    *  - Waitlist email  → Sparkles
    *  - Code            → Ticket
-   *  - CC + Code       → CC logo + Ticket
-   * Default (null) = CC reward logo (kompatibel perilaku lama).
+   *  - token + Code    → token logo + Ticket
+   * Default (null) = token reward logo (kompatibel perilaku lama).
    */
   rewardType?: string | null;
+  /** Token reward: "CC" (default) atau "USDCx". */
+  rewardToken?: string | null;
+  /** Status pengiriman reward (hanya relevan setelah claim). direct = masuk wallet; pending_offer = accept di inbox. */
+  deliveryKind?: "direct" | "pending_offer" | null;
 };
 
 export function CampaignFcfsRewardCard({
@@ -48,6 +52,8 @@ export function CampaignFcfsRewardCard({
   sectionLabel = "FCFS reward",
   claimButtonLabel,
   rewardType = null,
+  rewardToken = "CC",
+  deliveryKind = null,
 }: CampaignFcfsRewardCardProps) {
   const isStatus = mode === "status";
   const showClaimButton = mode === "claim" && canClaim && onClaim;
@@ -57,6 +63,8 @@ export function CampaignFcfsRewardCard({
   const isDual = config.isDual;
   const isCcOnly = config.isCcToken && !isDual;
   const isWaitlist = config.code === "WAITLIST_EMAIL";
+  // Token theme: USDCx = biru, CC = mint (default canton). Drives accent color badge.
+  const isUsdcx = (rewardToken ?? "CC").toUpperCase() === "USDCX";
 
   return (
     <section className="overflow-hidden rounded-3xl border border-white/5 bg-[var(--card)]/40 px-6 py-5">
@@ -68,9 +76,13 @@ export function CampaignFcfsRewardCard({
               isStatus
                 ? "bg-[var(--muted)]/60 text-slate-400"
                 : isDual
-                  ? "bg-gradient-to-br from-canton/15 to-violet-500/15 text-violet-300"
+                  ? isUsdcx
+                    ? "bg-gradient-to-br from-sky-400/15 to-violet-500/15 text-violet-300"
+                    : "bg-gradient-to-br from-canton/15 to-violet-500/15 text-violet-300"
                   : isCcOnly
-                    ? "bg-[var(--primary)]/15 text-canton"
+                    ? isUsdcx
+                      ? "bg-sky-400/15 text-sky-300"
+                      : "bg-[var(--primary)]/15 text-canton"
                     : isWaitlist
                       ? "bg-cyan-500/15 text-cyan-300"
                       : "bg-violet-500/15 text-violet-400",
@@ -80,11 +92,11 @@ export function CampaignFcfsRewardCard({
               <CheckCircle2 className="h-5 w-5" aria-hidden />
             ) : isDual ? (
               <span className="flex items-center justify-center gap-0.5">
-                <CcRewardLogo size={16} />
+                <RewardTokenLogo token={rewardToken} size={16} />
                 <Ticket className="h-4 w-4 text-violet-300" strokeWidth={2.5} aria-hidden />
               </span>
             ) : isCcOnly ? (
-              <CcRewardLogo size={20} />
+              <RewardTokenLogo token={rewardToken} size={20} />
             ) : isWaitlist ? (
               <Sparkles className="h-5 w-5" strokeWidth={2.5} aria-hidden />
             ) : (
@@ -128,6 +140,29 @@ export function CampaignFcfsRewardCard({
             Create your wallet
           </Link>{" "}
           first to claim on Canton.
+        </p>
+      ) : null}
+
+      {deliveryKind ? (
+        <p
+          className={cn(
+            "mt-4 inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-medium",
+            deliveryKind === "direct"
+              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+              : "border-amber-500/30 bg-amber-500/10 text-amber-300",
+          )}
+        >
+          {deliveryKind === "direct" ? (
+            <>✓ Reward sent directly to your wallet.</>
+          ) : (
+            <>
+              ⏳ Reward is pending —{" "}
+              <Link href="/wallet" className="font-semibold underline underline-offset-2">
+                accept it in your Wallet inbox
+              </Link>
+              .
+            </>
+          )}
         </p>
       ) : null}
 

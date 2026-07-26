@@ -2578,6 +2578,8 @@ export class QuestsService {
     feeCc: number;
     remainingSlots: number;
     rewardStatus: Awaited<ReturnType<QuestsService['getQuestRewardStatus']>>;
+    /** direct = reward langsung masuk wallet (preapproval aktif); pending_offer = user harus accept di wallet. */
+    rewardDelivery?: 'direct' | 'pending_offer';
   }> {
     const { userId, questId, username, cantonPartyId } = params;
     if (!username?.trim() || !cantonPartyId?.trim()) {
@@ -2608,6 +2610,8 @@ export class QuestsService {
     const rewardCc = quest.rewardCc;
     const rewardToken = normalizeRewardToken(quest.rewardToken);
     const maxWinners = quest.maxWinners ?? 0;
+    // Reward delivery kind (direct vs pending_offer) — di-set saat helper kirim reward.
+    let rewardDeliveryKind: 'direct' | 'pending_offer' | undefined;
 
     const validatorPartyId = this.config
       .get<string>('CANTON_VALIDATOR_PARTY_ID')
@@ -2810,19 +2814,21 @@ export class QuestsService {
 
       // Kirim reward (CC atau USDCx) + persist distributed + history + completion.
       // Helper menangani security C1 (anti double-payout) + token-aware recording.
-      const { rewardTxId } = await this.sendQuestRewardAndRecord({
-        drawId: reservedDrawId,
-        userId,
-        questId,
-        questTitle: quest.title,
-        cantonPartyId,
-        username,
-        rewardCc,
-        rewardToken,
-        claimSessionId,
-        feeTxId,
-        rewardLabel: 'FCFS reward',
-      });
+      const { rewardTxId, pending: rewardPending } =
+        await this.sendQuestRewardAndRecord({
+          drawId: reservedDrawId,
+          userId,
+          questId,
+          questTitle: quest.title,
+          cantonPartyId,
+          username,
+          rewardCc,
+          rewardToken,
+          claimSessionId,
+          feeTxId,
+          rewardLabel: 'FCFS reward',
+        });
+      rewardDeliveryKind = rewardPending ? 'pending_offer' : 'direct';
 
       // Update draw row tambahan: ccAmount (mirror reward amount) + claimSessionContractId.
       // distributed + ledgerTxId + rewardToken sudah di-persist di helper.
@@ -2879,6 +2885,7 @@ export class QuestsService {
       feeCc,
       remainingSlots: remainingAfter,
       rewardStatus,
+      rewardDelivery: rewardDeliveryKind,
     };
   }
 
@@ -2896,6 +2903,7 @@ export class QuestsService {
     rewardCc: number;
     feeCc: number;
     rewardStatus: Awaited<ReturnType<QuestsService['getQuestRewardStatus']>>;
+    rewardDelivery?: 'direct' | 'pending_offer';
   }> {
     const { userId, questId, username, cantonPartyId } = params;
     if (!username?.trim() || !cantonPartyId?.trim()) {
@@ -3088,14 +3096,15 @@ export class QuestsService {
 
       // Kirim reward (CC atau USDCx) + persist distributed + history + completion.
       // Helper menangani security C1 (anti double-payout) + token-aware recording.
-      const { rewardTxId: drawRewardTxId } = await this.sendQuestRewardAndRecord({
-        drawId: draw.id,
-        userId,
-        questId,
-        questTitle: quest.title,
-        cantonPartyId,
-        username,
-        rewardCc,
+      const { rewardTxId: drawRewardTxId, pending: drawRewardPending } =
+        await this.sendQuestRewardAndRecord({
+          drawId: draw.id,
+          userId,
+          questId,
+          questTitle: quest.title,
+          cantonPartyId,
+          username,
+          rewardCc,
         rewardToken: normalizeRewardToken(quest.rewardToken),
         claimSessionId,
         feeTxId,
@@ -3135,10 +3144,13 @@ export class QuestsService {
       const rewardStatus = await this.getQuestRewardStatus(userId, questId);
       return {
         ok: true,
-        message: `${rewardCc} CC sent to your wallet.`,
+        message: drawRewardPending
+          ? `${rewardCc} ${normalizeRewardToken(quest.rewardToken)} sent — accept in your Wallet inbox.`
+          : `${rewardCc} ${normalizeRewardToken(quest.rewardToken)} sent to your wallet.`,
         rewardCc,
         feeCc,
         rewardStatus,
+        rewardDelivery: drawRewardPending ? 'pending_offer' : 'direct',
       };
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
@@ -3445,6 +3457,7 @@ export class QuestsService {
     feeCc: number;
     rewardVariant: 'CODE' | 'CC' | null;
     rewardStatus: Awaited<ReturnType<QuestsService['getQuestRewardStatus']>>;
+    rewardDelivery?: 'direct' | 'pending_offer';
   }> {
     const { userId, questId, username, cantonPartyId } = params;
     if (!username?.trim() || !cantonPartyId?.trim()) {
@@ -3626,6 +3639,7 @@ export class QuestsService {
       // Re-check pool setelah fee (race defense).
       await this.assertRewardPool(rewardCc, normalizeRewardToken(quest.rewardToken));
       let rewardOfferId: string | null = null;
+      let raffleRewardPending = false;
       if (rewardCc > 0) {
         // ⚠️ SECURITY (C1): Re-check distributed right before sendReward.
         const drawPreSend = await this.prisma.winnerDraw.findUnique({
@@ -3661,6 +3675,7 @@ export class QuestsService {
           rewardLabel: 'CC+Code raffle reward',
         });
         rewardOfferId = raffleResult.rewardTxId;
+        raffleRewardPending = raffleResult.pending;
       }
       // Atomically reserve one code (FOR UPDATE SKIP LOCKED). The per-user
       // raffle lock above does NOT stop two DIFFERENT users from grabbing the
@@ -3743,13 +3758,15 @@ export class QuestsService {
       }
 
       const rewardStatus = await this.getQuestRewardStatus(userId, questId);
+      const raffleToken = normalizeRewardToken(quest.rewardToken);
+      const deliverySuffix = raffleRewardPending ? ' — accept in your Wallet inbox.' : '.';
       // Pesan akhir menyesuaikan varian: CODE (hanya kode), CC (hanya token), both (legacy).
       const message =
         variant === 'CODE'
           ? `Congratulations! Your invite code is: ${finalCode}`
           : variant === 'CC'
-            ? `Congratulations! ${rewardCc} CC sent to your wallet.`
-            : `Congratulations! ${rewardCc} CC sent to your wallet and your code is: ${finalCode}`;
+            ? `Congratulations! ${rewardCc} ${raffleToken} sent to your wallet${deliverySuffix}`
+            : `Congratulations! ${rewardCc} ${raffleToken} sent to your wallet${deliverySuffix}${finalCode ? ` and your code is: ${finalCode}` : ''}`;
       return {
         ok: true,
         message,
@@ -3758,6 +3775,7 @@ export class QuestsService {
         feeCc,
         rewardVariant: variant,
         rewardStatus,
+        rewardDelivery: raffleRewardPending ? 'pending_offer' : 'direct',
       };
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);

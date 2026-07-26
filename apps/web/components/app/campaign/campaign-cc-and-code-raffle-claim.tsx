@@ -37,6 +37,7 @@ export function CampaignCcAndCodeRaffleClaimSection({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [claimedCode, setClaimedCode] = useState<string | null>(null);
+  const [deliveryKind, setDeliveryKind] = useState<"direct" | "pending_offer" | null>(null);
 
   const fee = campaignMeta.fcfsClaimFeeCc;
 
@@ -56,6 +57,7 @@ export function CampaignCcAndCodeRaffleClaimSection({
         message?: string;
         inviteCode?: string;
         rewardCc?: number;
+        rewardDelivery?: "direct" | "pending_offer";
       };
       if (!res.ok || data.ok === false) {
         setError(
@@ -67,13 +69,14 @@ export function CampaignCcAndCodeRaffleClaimSection({
       }
       const code = data.inviteCode ?? null;
       setClaimedCode(code);
+      setDeliveryKind(data.rewardDelivery ?? null);
       setSuccess(
         data.message ??
           (code
             ? `${formatRewardAmount(rewardCc, token)} sent to your wallet! Your code: ${code}`
             : `${formatRewardAmount(rewardCc, token)} sent to your wallet.`),
       );
-      launchClaimConfetti();
+      launchClaimConfetti(token);
       onClaimed();
     } catch {
       setError(CLAIM_FAIL_MSG);
@@ -116,6 +119,8 @@ export function CampaignCcAndCodeRaffleClaimSection({
         description={description}
         rewardCc={rewardCc}
         rewardType="CC_AND_CODE_RAFFLE"
+        rewardToken={token}
+        deliveryKind={deliveryKind}
         partyId={partyId}
         canClaim
         isSubmitting={isSubmitting}

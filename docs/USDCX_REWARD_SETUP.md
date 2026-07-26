@@ -8,11 +8,16 @@
 ## Cara kerja (singkat)
 
 - Admin pilih token reward per-campaign saat buat/edit quest (CC atau USDCx).
+- **USDCx didukung untuk semua reward type yang berdistribusi token**:
+  - `CC_ONLY` (FCFS) — slot limit, first-come.
+  - `CC_MANUAL` (Raffle CC) — admin draw winners, user claim.
+  - `CC_AND_CODE_RAFFLE` (Raffle dual) — bayar fee → dapat token + kode.
 - Saat user klaim: reward di-**transfer on-chain** dari reward wallet (`CANTON_REWARD_PARTY_ID`) ke wallet user.
 - **Realtime behavior** (sama kayak CC yang sudah ada):
-  - User **aktif** TransferPreapproval → reward langsung masuk wallet (direct).
-  - User **belum aktif** → reward masuk **Offer** (pending di inbox wallet, user accept manual).
+  - User **aktif** TransferPreapproval → reward langsung masuk wallet (direct). UI tampilkan badge "✓ Sent to your wallet".
+  - User **belum aktif** → reward masuk **Offer** (pending di inbox wallet). UI tampilkan badge "⏳ Accept in Wallet inbox" + link `/wallet`.
 - Claim fee tetap **CC** (default 3 CC) untuk semua token.
+- **Logo token**: CC & USDCx di-serve dari R2 via `/api/uploads/token-logo/{CC,USDCx}` (sama dgn wallet). Component `RewardTokenLogo` menangani fallback gradient.
 
 ---
 
@@ -117,6 +122,9 @@ USDCx `instrumentAdmin` di-resolve dinamis via **OneSwap `listTokens()`** (cache
 ## Catatan teknis
 
 - **DAML receipt** (`atomicFeeAndReward`): tetap CC-only (fee CC + reward proof). USDCx proof hanya di Postgres (`TokenTransaction`). Tidak perlu ubah DAML template.
-- **Admin bulk distribute** (CC_MANUAL): CC-only flow. UI admin **memblokir** kombinasi CC_MANUAL + USDCx (token selector disabled). Untuk USDCx manual, perlu flow terpisah (future scope).
+- **USDCx + CC_MANUAL (Raffle)**: Didukung penuh. CC_MANUAL = user-facing claim (`claimDrawCcReward` via `POST /quests/:id/claim-draw-cc`), BUKAN admin bulk distribute. Method itu sudah token-aware via `sendQuestRewardAndRecord` helper. Admin bulk distribute (`distributeRewards`) tetap CC-only — tapi itu hanya dipakai untuk reward type lain (mis. distribution manual lama), bukan CC_MANUAL.
+- **Reward delivery status**: Response claim (FCFS/draw/raffle) expose `rewardDelivery: "direct" | "pending_offer"` (derived dari `sendReward` return `pending`). FE tampilkan badge sesuai status. Tidak perlu kolom DB baru (info hanya relevan di momen claim).
 - **Decimals**: USDCx pakai `Decimal(38,18)` (kolom `rewardTokenAmount`), CC pakai `BigInt micro-CC` (`rewardMicroCc`). Tidak di-overload.
 - **Realtime**: tidak ada mekanisme auto-accept baru. Behavior = identik CC (direct/offer sesuai preapproval).
+- **Logo**: `RewardTokenLogo` component (FE) render dari `/api/uploads/token-logo/{symbol}`. Backend R2 case-insensitive. Fallback gradient + initial letter kalau asset 404.
+- **Invite codes one-shot**: Form create quest punya textarea codes (muncul untuk reward type invite/dual). Saat submit: POST quest → POST codes (chaining, non-fatal kalau gagal).

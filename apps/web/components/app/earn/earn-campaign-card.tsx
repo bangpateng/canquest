@@ -7,7 +7,7 @@ import { questRewardToken } from "@/lib/quest/quest-types";
 import { ROUTES } from "@/lib/routing/app-routes";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { QUEST_STATUS_BADGE, type Quest, type UserProgress } from "@/lib/quest/quest-types";
-import { CcRewardLogo } from "@/components/app/campaign/cc-reward-logo";
+import { RewardTokenLogo } from "@/components/app/campaign/reward-token-logo";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
 import { useEffect, useState } from "react";
@@ -34,16 +34,18 @@ const ICON_MAP: Record<RewardIconKind, typeof Coins> = {
 function CampaignRewardIcon({
   iconKind,
   isCcToken,
+  token,
   className,
   size = 16,
 }: {
   iconKind: RewardIconKind;
   isCcToken: boolean;
+  token?: string | null;
   className?: string;
   size?: number;
 }) {
   if (isCcToken) {
-    return <CcRewardLogo className={className} size={size} />;
+    return <RewardTokenLogo token={token} size={size} className={className} />;
   }
   const Icon = ICON_MAP[iconKind];
   return <Icon className={className} aria-hidden />;
@@ -262,6 +264,7 @@ export function EarnCampaignCard({
                 <CampaignRewardIcon
                   iconKind={rewardDisplay.iconKind}
                   isCcToken={config.isCcToken}
+                  token={token}
                   className={cn("h-4 w-4 sm:h-[18px] sm:w-[18px]", config.accentClass)}
                   size={18}
                 />

@@ -27,9 +27,10 @@ export function CampaignDrawCcClaimSection({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [deliveryKind, setDeliveryKind] = useState<"direct" | "pending_offer" | null>(null);
 
   const fee = campaignMeta.fcfsClaimFeeCc;
-  const feeHint = formatFcfsClaimFeeHint(fee, rewardCc);
+  const feeHint = formatFcfsClaimFeeHint(fee, rewardCc, token);
 
   async function handleClaim() {
     if (isSubmitting) return;
@@ -45,6 +46,7 @@ export function CampaignDrawCcClaimSection({
       const data = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
         message?: string;
+        rewardDelivery?: "direct" | "pending_offer";
       };
       if (!res.ok || data.ok === false) {
         setError(
@@ -54,8 +56,9 @@ export function CampaignDrawCcClaimSection({
         );
         return;
       }
+      setDeliveryKind(data.rewardDelivery ?? null);
       setSuccess(data.message ?? `${formatRewardAmount(rewardCc, token)} sent to your wallet.`);
-      launchClaimConfetti();
+      launchClaimConfetti(token);
       onClaimed();
     } catch {
       setError(CLAIM_FAIL_MSG);
@@ -72,6 +75,8 @@ export function CampaignDrawCcClaimSection({
       description={feeHint}
       rewardCc={rewardCc}
       rewardType="CC_MANUAL"
+      rewardToken={token}
+      deliveryKind={deliveryKind}
       partyId={partyId}
       canClaim
       isSubmitting={isSubmitting}

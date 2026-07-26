@@ -128,6 +128,7 @@ export function QuestForm({
     logoUrl: initialData?.logoUrl ?? "",
     rewardCc: String(initialData?.rewardCc ?? "0"),
     rewardToken: initialData?.rewardToken === "USDCx" ? "USDCx" : "CC",
+    inviteCodes: "",
     rewardPool: initialData?.rewardPool ?? "",
     startsAt: initialData?.startsAt
       ? new Date(initialData.startsAt).toISOString().slice(0, 16)
@@ -226,13 +227,11 @@ export function QuestForm({
     const config = getRewardConfig(value);
     const noCc = !config.needsCcAmount;
     const claimFee = config.defaultClaimFee;
-    // CC_MANUAL = admin bulk distribute (CC-only flow) → force rewardToken CC.
-    const forceCcToken = config.code === "CC_MANUAL";
     setForm((prev) => ({
       ...prev,
       rewardType: config.code,
       rewardCc: noCc ? "0" : prev.rewardCc,
-      rewardToken: forceCcToken ? "CC" : prev.rewardToken,
+      rewardToken: prev.rewardToken,
       claimFeeCc: claimFee != null ? String(claimFee) : prev.claimFeeCc,
     }));
   }
@@ -417,6 +416,35 @@ export function QuestForm({
       if (!res.ok) {
         setError(data.message ?? `Server error (${res.status})`);
         return;
+      }
+
+      // One-shot invite codes (hanya saat create): upload ke endpoint existing
+      // setelah quest tersimpan. Non-fatal — kalau gagal, quest tetap tersimpan
+      // & admin bisa paste ulang via tab "Invite codes".
+      const newQuestId = isEdit ? null : data.id;
+      const codes = form.inviteCodes
+        .split(/[\n,]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (newQuestId && codes.length > 0) {
+        try {
+          const codesRes = await fetch(`/api/admin/quests/${newQuestId}/invite-codes`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ codes }),
+          });
+          if (!codesRes.ok) {
+            const codesData = (await codesRes.json().catch(() => ({}))) as { message?: string };
+            // Quest sudah tersimpan — tampilkan warning, tetap redirect.
+            // Admin bisa paste ulang via tab Invite codes.
+            console.warn(
+              `Invite codes upload failed (quest ${newQuestId} saved): ${codesData.message ?? codesRes.status}`,
+            );
+          }
+        } catch (codesErr) {
+          console.warn(`Invite codes upload network error (quest saved): ${String(codesErr)}`);
+        }
       }
 
       router.push(`/admin/quests/${isEdit ? initialData!.id : data.id!}`);
@@ -636,11 +664,32 @@ export function QuestForm({
             )}
             {(form.rewardType === "INVITE_CODE_RANDOM") && (
               <p className="mt-2 text-xs text-[var(--muted-foreground)]">
-                After creating the quest, open <strong>Invite codes & draw</strong> to paste
-                codes and run the random draw.
+                After creating the quest, open <strong>Invite codes & draw</strong> to
+                run the random draw. Or paste codes now in the field below.
               </p>
             )}
           </div>
+
+          {/* One-shot invite codes — muncul hanya utk reward type yang pakai kode.
+              Di-upload setelah quest dibuat (POST chaining). Non-fatal kalau gagal. */}
+          {!isEdit && (isInviteRewardType(form.rewardType) || rewardConfig.isDual) && (
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">
+                Invite codes <span className="text-[var(--muted-foreground)]">(optional, one-shot)</span>
+              </label>
+              <textarea
+                value={form.inviteCodes}
+                onChange={(e) => updateField("inviteCodes", e.target.value)}
+                placeholder={"1 code per line / comma-separated\ncontoh:\nABC-123\nXYZ-456"}
+                rows={4}
+                className={cn(inputCls, "font-mono text-xs leading-relaxed resize-y")}
+              />
+              <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                Paste sekarang untuk sekali jalan — codes langsung ter-upload saat campaign dibuat.
+                Atau skip & tambah nanti via tab <strong>Invite codes</strong>.
+              </p>
+            </div>
+          )}
           <div className={cn("grid gap-4", showCcField ? "sm:grid-cols-2" : "sm:grid-cols-1 sm:max-w-xs")}>
             {showCcField && (
               <div className="space-y-2">
@@ -655,26 +704,25 @@ export function QuestForm({
                   placeholder="e.g. 100"
                   className={inputCls}
                 />
-                {/* Token selector — reward token (fee tetap CC). */}
+                {/* Token selector — reward token (fee tetap CC).
+                    USDCx tersedia utk semua reward type yang berdistribusi token
+                    (FCFS/CC_ONLY, Raffle/CC_MANUAL, Raffle dual/CC_AND_CODE_RAFFLE). */}
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-medium text-[var(--muted-foreground)]">Reward token:</span>
                   {(["CC", "USDCx"] as const).map((tok) => {
-                    // CC_MANUAL = admin bulk distribute (CC-only flow) → USDCx tidak didukung.
-                    const blocked = tok === "USDCx" && rewardConfig.code === "CC_MANUAL";
                     const selected = form.rewardToken === tok;
                     return (
                       <button
                         key={tok}
                         type="button"
-                        disabled={blocked}
-                        title={blocked ? "USDCx tidak tersedia untuk CC Manual (admin bulk distribute CC-only)" : undefined}
                         onClick={() => updateField("rewardToken", tok)}
                         className={cn(
                           "rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
                           selected
-                            ? "border-[var(--primary)] bg-[var(--primary)]/15 text-[var(--primary)]"
+                            ? tok === "USDCx"
+                              ? "border-sky-400 bg-sky-400/15 text-sky-300"
+                              : "border-[var(--primary)] bg-[var(--primary)]/15 text-[var(--primary)]"
                             : "border-[var(--border)] bg-[var(--muted)]/30 text-[var(--muted-foreground)] hover:border-[var(--foreground)]/40",
-                          blocked && "cursor-not-allowed opacity-40",
                         )}
                       >
                         {tok}
