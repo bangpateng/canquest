@@ -684,6 +684,27 @@ export class CantonLedgerService {
   }
 
   /**
+   * Feature flag OFFERS: true HANYA kalau USE_WALLET_PROXY on DAN FeaturedAppRight
+   * sudah ada (env override CANTON_PROXY_FAR_CID atau query ACS ada hasil).
+   *
+   * Beda dgn transfer: offers proxy choices (Accept/Reject/Withdraw) butuh
+   * featuredAppRightCid WAJIB — tidak ada fallback BatchTransfer. Jadi kalau
+   * FAR belum approve Canton Foundation, offers TETAP via path lama.
+   *
+   * Async karena butuh cek ProxyCacheService (refresh cache kalau perlu).
+   */
+  async useWalletProxyForOffers(): Promise<boolean> {
+    if (!this.useWalletProxy) return false;
+    if (!this.proxyCache) return false;
+    // Cek env override dulu (sync, cepat)
+    const envFar = this.config.get<string>('CANTON_PROXY_FAR_CID');
+    if (envFar) return true;
+    // Cek cache (refresh kalau basi)
+    const farCid = await this.proxyCache.getFeaturedAppRightCid();
+    return Boolean(farCid);
+  }
+
+  /**
    * Execute transfer via WalletUserProxy_TransferFactory_Transfer.
    *
    * DAML reference: choice controller = `user` party (proxyArg.user). Signatory

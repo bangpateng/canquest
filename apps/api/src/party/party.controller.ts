@@ -1416,7 +1416,8 @@ export class PartyController {
       );
     }
 
-    const result = this.ledger.useWalletProxy
+    const useProxyOffers = await this.ledger.useWalletProxyForOffers();
+    const result = useProxyOffers
       ? await this.ledger.executeProxyOfferChoice({
           userPartyId: user.cantonPartyId,
           transferInstructionCid: cid,
@@ -2032,10 +2033,11 @@ export class PartyController {
     let updateId: string | null = null;
 
     if (offerType === OfferType.TRANSFER_INSTRUCTION) {
-      // CIP-0056 TransferInstruction — route via WalletUserProxy jika flag on.
-      // offerInstrumentAdmin sudah di-lookup di atas (untuk history), dipakai
-      // proxy utk resolve registry choice-context.
-      const result = this.ledger.useWalletProxy
+      // CIP-0056 TransferInstruction — route via WalletUserProxy HANYA kalau
+      // FAR ada (offers proxy choices butuh featuredAppRightCid WAJIB, no fallback).
+      // Kalau FAR belum approve → path lama (acceptTransferInstruction).
+      const useProxyOffers = await this.ledger.useWalletProxyForOffers();
+      const result = useProxyOffers
         ? await this.ledger.executeProxyOfferChoice({
             userPartyId: partyId,
             transferInstructionCid: cid,
@@ -2244,7 +2246,8 @@ export class PartyController {
         this.logger.warn(`lookupOfferDetail (reject) failed: ${String(err)}`);
       }
 
-      const result = this.ledger.useWalletProxy
+      const useProxyOffers = await this.ledger.useWalletProxyForOffers();
+      const result = useProxyOffers
         ? await this.ledger.executeProxyOfferChoice({
             userPartyId: partyId,
             transferInstructionCid: cid,
