@@ -815,10 +815,14 @@ export class CantonLedgerService {
 
     // ── Construct proxy choice argument ─────────────────────────────────
     // WalletUserProxy_TransferFactory_Transfer args:
-    //   { cid: factoryId, proxyArg: { user, choiceArg: { transfer }, featuredAppRightCid } }
+    //   { cid: factoryId, proxyArg: { user, choiceArg: {...}, featuredAppRightCid } }
+    // choiceArg = arg TransferFactory_Transfer (root-level), BUKAN hanya `transfer`.
+    // Field wajib (root level choiceArg): expectedAdmin, transfer, extraArgs.
+    // Registry mengisi extraArgs.context (choiceContextData) — sama dgn path lama.
     const proxyArg: Record<string, unknown> = {
       user: userPartyId,
       choiceArg: {
+        expectedAdmin: effectiveAdmin,
         transfer: {
           sender: userPartyId,
           receiver: receiverPartyId,
@@ -835,6 +839,10 @@ export class CantonLedgerService {
               ? { 'splice.lfdecentralizedtrust.org/reason': description }
               : {},
           },
+        },
+        extraArgs: {
+          context: registry.choiceContextData, // dari registry (choiceContextData)
+          meta: { values: {} },
         },
       },
       featuredAppRightCid: farCid ?? '',
