@@ -211,18 +211,26 @@ export class ProxyCacheService {
         const cid = typeof ev.contractId === 'string' ? ev.contractId : null;
         if (!cid) continue;
 
+        // Field createdEventBlob bisa camelCase (verbose) atau snake_case.
+        // Cek semua kemungkinan utk robust.
+        const blob =
+          typeof ev.createdEventBlob === 'string'
+            ? (ev.createdEventBlob as string)
+            : typeof ev.created_event_blob === 'string'
+              ? (ev.created_event_blob as string)
+              : null;
+
         if (
           tplId.endsWith(':Splice.Util.FeaturedApp.WalletUserProxy:WalletUserProxy')
         ) {
           // Kalau ada multiple WUP, ambil yg pertama (atau favoritkan env override).
           if (!wupCid) {
             wupCid = cid;
-            // createdEventBlob dari createdEvent — dipakai utk disclose WUP ke
-            // user party (WUP signatory=provider, user butuh disclosure utk exercise).
-            wupBlob =
-              typeof ev.createdEventBlob === 'string'
-                ? ev.createdEventBlob
-                : null;
+            wupBlob = blob;
+            // Debug: log struktur entry pertama WUP utk verify field name.
+            this.logger.debug(
+              `WUP entry keys: ${Object.keys(ev).join(',')} | blob=${blob ? 'YES (' + blob.length + ' chars)' : 'NO'}`,
+            );
           }
         } else if (
           tplId.endsWith(':Splice.Api.FeaturedAppRightV1:FeaturedAppRight') ||
@@ -230,10 +238,7 @@ export class ProxyCacheService {
         ) {
           if (!farCid) {
             farCid = cid;
-            farBlob =
-              typeof ev.createdEventBlob === 'string'
-                ? ev.createdEventBlob
-                : null;
+            farBlob = blob;
           }
         }
       }
@@ -293,6 +298,9 @@ export class ProxyCacheService {
       await this.refresh();
     }
     if (!this.cache.walletUserProxyCid || !this.cache.walletUserProxyBlob) {
+      this.logger.warn(
+        `getWalletUserProxyDisclosedContract: cid=${this.cache.walletUserProxyCid?.slice(0, 16)} blob=${this.cache.walletUserProxyBlob ? 'YES' : 'NULL'} → disclosure tidak terbentuk`,
+      );
       return null;
     }
     return {
