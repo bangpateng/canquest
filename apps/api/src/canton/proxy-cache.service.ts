@@ -159,12 +159,15 @@ export class ProxyCacheService {
     }
 
     // Query ACS WildcardFilter party app-canquest.
+    // includeCreatedEventBlob: TRUE (beda dgn idiom balance) — kita butuh blob
+    // utk disclose WUP + FAR ke user party saat exercise proxy choice.
+    // Tanpa blob → disclosure object tidak terbentuk → DAMAL CONTRACT_NOT_FOUND.
     const filtersByParty: Record<string, unknown> = {
       [this.appProviderPartyId]: {
         cumulative: [
           {
             identifierFilter: {
-              WildcardFilter: { value: { includeCreatedEventBlob: false } },
+              WildcardFilter: { value: { includeCreatedEventBlob: true } },
             },
           },
         ],
@@ -227,10 +230,6 @@ export class ProxyCacheService {
           if (!wupCid) {
             wupCid = cid;
             wupBlob = blob;
-            // Debug: log struktur entry pertama WUP utk verify field name.
-            this.logger.debug(
-              `WUP entry keys: ${Object.keys(ev).join(',')} | blob=${blob ? 'YES (' + blob.length + ' chars)' : 'NO'}`,
-            );
           }
         } else if (
           tplId.endsWith(':Splice.Api.FeaturedAppRightV1:FeaturedAppRight') ||
