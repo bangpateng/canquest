@@ -737,7 +737,16 @@ export class CantonLedgerService {
       };
     }
     // FeaturedAppRight opsional: tanpa ini transfer jalan tapi tanpa CC rewards.
+    // AUTO-ROUTE: kalau FAR kosong, fallback ke BatchTransfer (optFeaturedAppRightCid=null)
+    // supaya transfer tetap via proxy walau Canton Foundation belum approve FAR.
+    // Begitu FAR ada, single TransferFactory_Transfer dipakai (utk earn rewards).
     const farCid = await this.proxyCache.getFeaturedAppRightCid();
+    if (!farCid) {
+      this.logger.log(
+        'executeProxyTransfer: FeaturedAppRight belum ada → fallback BatchTransfer (no rewards)',
+      );
+      return this.executeProxyBatchTransfer(params);
+    }
 
     const {
       userPartyId,
@@ -901,6 +910,236 @@ export class CantonLedgerService {
     const errMsg = text.slice(0, 300);
     this.logger.warn(
       `WalletUserProxy_TransferFactory_Transfer failed ${status}: ${errMsg}`,
+    );
+    return {
+      ok: false,
+      updateId: null,
+      transferKind: registry.transferKind,
+      error: errMsg,
+    };
+  }
+
+  /**
+   * Execute transfer via WalletUserProxy_BatchTransfer.
+   *
+   * BERBEDA dgn executeProxyTransfer (single): BatchTransfer punya
+   * `optFeaturedAppRightCid: Optional` → bisa `null` tanpa FeaturedAppRight.
+   * Docs: "Optional so the batched choice can be used without a featured app right."
+   *
+   * Untuk SINGLE transfer (transferCalls.length === 1), BatchTransfer setara
+   * dgn TransferFactory_Transfer tapi tanpa syarat FAR. Jadi BISA JALAN
+   * sebelum Canton Foundation approve FeaturedAppRight (mode tanpa CC rewards).
+   *
+   * Begitu FAR approve, executeProxyTransfer() dipakai (optFeatureAppRightCid
+   * Some(cid) → earn CC rewards).
+   *
+   * DAML reference:
+   *   choice WalletUserProxy_BatchTransfer
+   *   controller = getFirstSender(transferCalls) = sender party transfer[0]
+   *   args: {
+   *     transferCalls: [{ factoryCid, choiceArg }],
+   *     optFeaturedAppRightCid: null | { Some: cid }
+   *   }
+   *
+   * @see docs/WALLET_USER_PROXY_SETUP.md FASE 4b
+   */
+  async executeProxyBatchTransfer(params: {
+    userPartyId: string;
+    receiverPartyId: string;
+    amount: number;
+    description?: string;
+    clientNonce?: string;
+    instrumentId?: string;
+    instrumentAdmin?: string;
+  }): Promise<{
+    ok: boolean;
+    updateId: string | null;
+    transferKind: string;
+    transferInstructionCid?: string | null;
+    error?: string;
+  }> {
+    if (!this.proxyCache) {
+      return {
+        ok: false,
+        updateId: null,
+        transferKind: 'unknown',
+        error: 'ProxyCacheService not injected — proxy transfer unavailable',
+      };
+    }
+    const wupCid = await this.proxyCache.getWalletUserProxyCid();
+    if (!wupCid) {
+      return {
+        ok: false,
+        updateId: null,
+        transferKind: 'unknown',
+        error: 'WalletUserProxy contractId not found (set CANTON_PROXY_WUP_CID)',
+      };
+    }
+    // FAR opsional — kalau ada, attach (Some) utk earn rewards. Kalau kosong,
+    // null (None) — transfer jalan tanpa CC rewards.
+    const farCid = await this.proxyCache.getFeaturedAppRightCid();
+
+    const {
+      userPartyId,
+      receiverPartyId,
+      amount,
+      description,
+      clientNonce,
+      instrumentId = 'Amulet',
+    } = params;
+
+    const dsoParty =
+      this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() || '';
+    const effectiveAdmin = params.instrumentAdmin || dsoParty;
+    const isAmulet = instrumentId.toLowerCase() === 'amulet';
+    if (isAmulet && !dsoParty) {
+      return {
+        ok: false,
+        updateId: null,
+        transferKind: 'unknown',
+        error: 'CANTON_DSO_PARTY_ID not set',
+      };
+    }
+    if (!effectiveAdmin) {
+      return {
+        ok: false,
+        updateId: null,
+        transferKind: 'unknown',
+        error: `instrumentAdmin required for ${instrumentId}`,
+      };
+    }
+
+    const now = new Date();
+    const amountNumeric = amount.toFixed(10);
+
+    // ── Resolve transfer factory + choiceContext (sama dgn single path) ──
+    const choiceContextTransfer = {
+      sender: userPartyId,
+      receiver: receiverPartyId,
+      amount: amountNumeric,
+      instrumentId: { admin: effectiveAdmin, id: instrumentId },
+      lock: null,
+      requestedAt: now.toISOString(),
+      executeBefore: new Date(
+        now.getTime() + 24 * 60 * 60 * 1000,
+      ).toISOString(),
+      inputHoldingCids: [],
+      meta: {
+        values: description
+          ? { 'splice.lfdecentralizedtrust.org/reason': description }
+          : {},
+      },
+    };
+
+    const registry = await this.callTransferFactoryRegistry(
+      {
+        expectedAdmin: effectiveAdmin,
+        transfer: choiceContextTransfer,
+        extraArgs: { context: { values: {} }, meta: { values: {} } },
+      },
+      effectiveAdmin,
+    );
+    if (!registry) {
+      return {
+        ok: false,
+        updateId: null,
+        transferKind: 'unknown',
+        error: 'Transfer Factory Registry call failed',
+      };
+    }
+
+    // ── Construct BatchTransfer choice argument ──────────────────────────
+    // transferCalls = array 1 elemen (single transfer, pakai BatchTransfer
+    // cuma untuk bypass FAR requirement).
+    const choiceArg = {
+      expectedAdmin: effectiveAdmin,
+      transfer: {
+        sender: userPartyId,
+        receiver: receiverPartyId,
+        amount: amountNumeric,
+        instrumentId: { admin: effectiveAdmin, id: instrumentId },
+        lock: null,
+        requestedAt: now.toISOString(),
+        executeBefore: new Date(
+          now.getTime() + 24 * 60 * 60 * 1000,
+        ).toISOString(),
+        inputHoldingCids: [],
+        meta: {
+          values: description
+            ? { 'splice.lfdecentralizedtrust.org/reason': description }
+            : {},
+        },
+      },
+      extraArgs: {
+        context: registry.choiceContextData,
+        meta: { values: {} },
+      },
+    };
+
+    // optFeaturedAppRightCid: null (None) atau {"tags":"Some","value":cid}.
+    // Canton JSON API v2 encode Optional: null untuk None, atau object Some.
+    const optFar = farCid
+      ? { tags: 'Some', value: farCid }
+      : null;
+
+    const choiceArgument = {
+      transferCalls: [
+        {
+          factoryCid: registry.factoryId,
+          choiceArg,
+        },
+      ],
+      optFeaturedAppRightCid: optFar,
+    };
+
+    const commandId = clientNonce
+      ? `proxy-batch-${createHash('sha256')
+          .update(
+            `${userPartyId}|${receiverPartyId}|${amount.toFixed(10)}|${clientNonce}`,
+          )
+          .digest('hex')
+          .slice(0, 32)}`
+      : `proxy-batch-${userPartyId.slice(0, 12)}-${randomUUID().slice(0, 16)}`;
+
+    this.logger.log(
+      `WalletUserProxy_BatchTransfer: user=${userPartyId.split('::')[0]} → ` +
+        `receiver=${receiverPartyId.split('::')[0]} amount=${amount} ${instrumentId} ` +
+        `kind=${registry.transferKind} factory=${registry.factoryId.slice(0, 16)}... ` +
+        `wup=${wupCid.slice(0, 16)}... far=${farCid ? 'attached' : 'None (no reward)'}`,
+    );
+
+    const { ok, status, text } = await this.exerciseChoice(
+      wupCid,
+      this.proxyCache.wupTemplateId,
+      'WalletUserProxy_BatchTransfer',
+      choiceArgument,
+      [userPartyId], // controller = getFirstSender = sender party
+      commandId,
+      'submit-and-wait-for-transaction-tree',
+      registry.disclosedContracts,
+    );
+
+    if (ok) {
+      const updateId = extractUpdateIdFromTree(text);
+      let transferInstructionCid: string | null = null;
+      if (registry.transferKind === 'offer') {
+        transferInstructionCid = extractCreatedContractId(text);
+      }
+      this.logger.log(
+        `Proxy batch transfer OK: kind=${registry.transferKind} ` +
+          `updateId=${updateId?.slice(0, 16) ?? 'unknown'}`,
+      );
+      return {
+        ok: true,
+        updateId,
+        transferKind: registry.transferKind,
+        transferInstructionCid,
+      };
+    }
+
+    const errMsg = text.slice(0, 300);
+    this.logger.warn(
+      `WalletUserProxy_BatchTransfer failed ${status}: ${errMsg}`,
     );
     return {
       ok: false,
