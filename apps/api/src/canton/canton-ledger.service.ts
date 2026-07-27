@@ -1021,6 +1021,23 @@ export class CantonLedgerService {
     const now = new Date();
     const amountNumeric = amount.toFixed(10);
 
+    // ── Query sender's holdings for inputHoldingCids ────────────────────
+    // Sama dgn path lama (line 536): proxy choice TETAP butuh inputHoldingCids
+    // di choiceArg.transfer — DAMAL ga auto-resolve holdings sender.
+    // Tanpa ini → DAML_FAILURE "At least one holding must be provided".
+    const holdings = isAmulet
+      ? await this.queryAmuletHoldings(userPartyId)
+      : await this.getTokenHoldingCids(userPartyId, instrumentId);
+    if (holdings.length === 0) {
+      return {
+        ok: false,
+        updateId: null,
+        transferKind: 'unknown',
+        error: `Sender has no ${instrumentId} holdings — cannot fund proxy transfer`,
+      };
+    }
+    const inputHoldingCids = holdings.map((h) => h.contractId);
+
     // ── Resolve transfer factory + choiceContext (sama dgn single path) ──
     const choiceContextTransfer = {
       sender: userPartyId,
@@ -1032,7 +1049,7 @@ export class CantonLedgerService {
       executeBefore: new Date(
         now.getTime() + 24 * 60 * 60 * 1000,
       ).toISOString(),
-      inputHoldingCids: [],
+      inputHoldingCids,
       meta: {
         values: description
           ? { 'splice.lfdecentralizedtrust.org/reason': description }
@@ -1072,7 +1089,7 @@ export class CantonLedgerService {
         executeBefore: new Date(
           now.getTime() + 24 * 60 * 60 * 1000,
         ).toISOString(),
-        inputHoldingCids: [],
+        inputHoldingCids,
         meta: {
           values: description
             ? { 'splice.lfdecentralizedtrust.org/reason': description }
