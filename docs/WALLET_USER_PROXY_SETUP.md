@@ -18,9 +18,9 @@
 | 3. ProxyCacheService | ✅ DONE | Live di VPS 2, cache query ACS |
 | 4. executeProxyTransfer() | ✅ DONE | Code ready, auth verified di mainnet |
 | 5. Test mainnet (BatchTransfer) | ✅ DONE | Jalan tanpa FAR via BatchTransfer |
-| 6. Offers via proxy (FASE 5) | ✅ Code ready | Accept/Reject/Withdraw via `executeProxyOfferChoice`, route via flag |
-| 7. Test FASE 5 | ⬜ TODO | Accept offer via proxy |
-| 8. Aktivasi TransferFactory_Transfer (earn rewards) | ⏸️ Tunggu FAR approve Canton Foundation |
+| 6. Offers via proxy (FASE 5) | ✅ DONE | Auto-route: FAR ada? proxy : path lama |
+| 7. Test FASE 5 (Accept offer) | ✅ DONE | Path lama (FAR belum ada) — sukses |
+| 8. Aktivasi TransferFactory_Transfer + offers proxy (earn rewards) | ⏸️ Tunggu FAR approve Canton Foundation |
 
 **Flag status**: `USE_WALLET_PROXY="false"` (path lama tetap aktif, wallet aman).
 
