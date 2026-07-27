@@ -17,9 +17,10 @@
 | 2. Create WalletUserProxy | ✅ DONE | contractId `00bd4bfc...0819c6c2d75`, duplikat di-archive |
 | 3. ProxyCacheService | ✅ DONE | Live di VPS 2, cache query ACS |
 | 4. executeProxyTransfer() | ✅ DONE | Code ready, auth verified di mainnet |
-| 5. Test mainnet | ⏸️ BLOCKED | Menunggu **FeaturedAppRight** approve Canton Foundation |
+| 5. Test mainnet (BatchTransfer) | ✅ DONE | Jalan tanpa FAR via BatchTransfer |
 | 6. Offers via proxy (FASE 5) | ✅ Code ready | Accept/Reject/Withdraw via `executeProxyOfferChoice`, route via flag |
-| 7. Test FASE 5 | ⏸️ BLOCKED | Sama — butuh FAR |
+| 7. Test FASE 5 | ⬜ TODO | Accept offer via proxy |
+| 8. Aktivasi TransferFactory_Transfer (earn rewards) | ⏸️ Tunggu FAR approve Canton Foundation |
 
 **Flag status**: `USE_WALLET_PROXY="false"` (path lama tetap aktif, wallet aman).
 
@@ -398,15 +399,46 @@ if isinstance(data, list):
 ```
 **Wallet 100% normal** (send → offer → accept → balance sync realtime).
 
-### Tahap B — flag ON (path proxy) ✅ auth, ⏸️ FAR block
+### Tahap B — flag ON (path proxy) ✅ BERHASIL via BatchTransfer
 
 ```
-[ProxyCacheService] ProxyCache refreshed: WUP=00bd4bfcc29ef7fa… FAR=none (transfer tanpa reward)
-[CantonLedgerService] WalletUserProxy_TransferFactory_Transfer: user=karel → receiver=canquests amount=0.1 Amulet
-[CantonLedgerService] failed 400: COMMAND_PREPROCESSING_FAILED
-  "Missing non-optional fields: Set(expectedAdmin, extraArgs)"
+[ProxyCacheService] ProxyCache refreshed: WUP=00bd4bfcc29ef7fa… FAR=none
+[CantonLedgerService] executeProxyTransfer: → fallback BatchTransfer (no rewards)
+[CantonLedgerService] WalletUserProxy_BatchTransfer: user=karel → canquests amount=0.11 Amulet
+[CantonUpdatesService] PARSED choices=[
+    {"choice":"WalletUserProxy_BatchTransfer",...},      ← PROXY CHOICE
+    {"choice":"TransferFactory_Transfer",...},           ← internal DAML
+    {"choice":"Archive",...}
+]
+[CantonLedgerService] Proxy batch transfer OK: updateId=1220f411bddfc60d
+[BalanceEventHandlerService] CcBalance +14.880397 CC → @karel (realtime WSS)
 ```
-**Auth lewat** (no 403). Hanya payload perlu fix (sudah dikerjakan, commit `b66039c`).
+
+**Transfer via WalletUserProxy JALAN di mainnet tanpa FeaturedAppRight.**
+
+#### Alur debugging (4 error → sukses)
+
+```
+1. COMMAND_PREPROCESSING_FAILED: missing expectedAdmin+extraArgs
+   Fix: choiceArg = full root-level TransferFactory_Transfer arg
+2. CONTRACT_NOT_FOUND: WUP cid
+   Fix: includeCreatedEventBlob=true di ProxyCacheService ACS query
+   + disclose WUP+FAR ke user party (getWalletUserProxyDisclosedContract)
+3. DAML_FAILURE: "At least one holding must be provided"
+   Fix: query sender holdings (queryAmuletHoldings/getTokenHoldingCids)
+   utk inputHoldingCids — proxy TIDAK auto-resolve holdings
+4. ✅ SUKSES: BatchTransfer accepted, balance realtime sync
+```
+
+#### Auto-route logic (di executeProxyTransfer)
+
+```
+USE_WALLET_PROXY=true + klik Send
+   ↓
+executeProxyTransfer() cek FAR ada?
+├── Ya (after Canton Foundation approve) → TransferFactory_Transfer (earn CC rewards)
+└── Tidak (sekarang) → fallback BatchTransfer (optFeaturedAppRightCid=null, no rewards)
+```
 
 ---
 
@@ -438,7 +470,9 @@ tetap jalan di background (cuma ga dipakai).
 | Docker port 7575 tidak dipublished ke host | Akses via docker network IP `172.18.0.6:7575` |
 | packageId hash tidak valid untuk TemplateFilter | Canton 0.6.11 expect package NAME, bukan hash. Pakai WildcardFilter |
 | proxyArg missing `expectedAdmin` + `extraArgs` | choiceArg = root level TransferFactory_Transfer arg, bukan hanya `transfer` |
-| `featuredAppRightCid` wajib (bukan optional) | WalletUserProxy_TransferFactory_Transfer butuh FAR valid. Tunggu approve Canton Foundation |
+| `featuredAppRightCid` wajib (TransferFactory_Transfer) | Pakai `WalletUserProxy_BatchTransfer` dgn `optFeaturedAppRightCid=null` — Optional! |
+| `CONTRACT_NOT_FOUND` WUP cid | `includeCreatedEventBlob=true` di ACS query + disclose WUP+FAR ke user party |
+| `DAML_FAILURE "At least one holding must be provided"` | Query sender holdings utk `inputHoldingCids` — proxy TIDAK auto-resolve |
 | Duplikat WalletUserProxy (create 2x) | Archive salah satu via choice `Archive` |
 
 ---
