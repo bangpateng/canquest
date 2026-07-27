@@ -50,11 +50,15 @@ export class ProxyCacheService {
 
   private cache: {
     walletUserProxyCid: string | null;
+    walletUserProxyBlob: string | null; // createdEventBlob utk disclose ke user party
     featuredAppRightCid: string | null;
+    featuredAppRightBlob: string | null;
     fetchedAt: number; // epoch ms
   } = {
     walletUserProxyCid: null,
+    walletUserProxyBlob: null,
     featuredAppRightCid: null,
+    featuredAppRightBlob: null,
     fetchedAt: 0,
   };
 
@@ -168,7 +172,9 @@ export class ProxyCacheService {
     };
 
     let wupCid: string | null = null;
+    let wupBlob: string | null = null;
     let farCid: string | null = null;
+    let farBlob: string | null = null;
 
     try {
       const res = await fetch(`${this.baseUrl}/v2/state/active-contracts`, {
@@ -209,12 +215,26 @@ export class ProxyCacheService {
           tplId.endsWith(':Splice.Util.FeaturedApp.WalletUserProxy:WalletUserProxy')
         ) {
           // Kalau ada multiple WUP, ambil yg pertama (atau favoritkan env override).
-          if (!wupCid) wupCid = cid;
+          if (!wupCid) {
+            wupCid = cid;
+            // createdEventBlob dari createdEvent — dipakai utk disclose WUP ke
+            // user party (WUP signatory=provider, user butuh disclosure utk exercise).
+            wupBlob =
+              typeof ev.createdEventBlob === 'string'
+                ? ev.createdEventBlob
+                : null;
+          }
         } else if (
           tplId.endsWith(':Splice.Api.FeaturedAppRightV1:FeaturedAppRight') ||
           tplId.endsWith(':Splice.Api.FeaturedAppRightV2:FeaturedAppRight')
         ) {
-          if (!farCid) farCid = cid;
+          if (!farCid) {
+            farCid = cid;
+            farBlob =
+              typeof ev.createdEventBlob === 'string'
+                ? ev.createdEventBlob
+                : null;
+          }
         }
       }
     } catch (err) {
@@ -226,8 +246,10 @@ export class ProxyCacheService {
       // Env override menang (lebih cepat + deterministic).
       walletUserProxyCid:
         this.config.get<string>('CANTON_PROXY_WUP_CID') ?? wupCid,
+      walletUserProxyBlob: wupBlob,
       featuredAppRightCid:
         this.config.get<string>('CANTON_PROXY_FAR_CID') ?? farCid,
+      featuredAppRightBlob: farBlob,
       fetchedAt: Date.now(),
     };
 
@@ -249,6 +271,57 @@ export class ProxyCacheService {
       await this.refresh();
     }
     return this.cache.walletUserProxyCid;
+  }
+
+  /**
+   * Ambil WalletUserProxy sebagai disclosed contract (utk dipass di
+   * disclosedContracts command). Format: { templateId, contractId, createdEventBlob }.
+   *
+   * WAJIB dipass saat exercise proxy choice karena:
+   *   - WUP signatory = provider (app-canquest)
+   *   - Choice controller = user (end user party)
+   *   - User BUKAN signatory → butuh disclosure utk lihat/exercise WUP.
+   *
+   * Tanpa disclosure → DAMAL reject CONTRACT_NOT_FOUND.
+   */
+  async getWalletUserProxyDisclosedContract(): Promise<{
+    templateId: string;
+    contractId: string;
+    createdEventBlob: string;
+  } | null> {
+    if (!this.isCacheFresh() || !this.cache.walletUserProxyCid) {
+      await this.refresh();
+    }
+    if (!this.cache.walletUserProxyCid || !this.cache.walletUserProxyBlob) {
+      return null;
+    }
+    return {
+      templateId: this.wupTemplateId,
+      contractId: this.cache.walletUserProxyCid,
+      createdEventBlob: this.cache.walletUserProxyBlob,
+    };
+  }
+
+  /**
+   * Ambil FeaturedAppRight sebagai disclosed contract (opsional — kalau ada).
+   * Format sama dgn WUP disclosure.
+   */
+  async getFeaturedAppRightDisclosedContract(): Promise<{
+    templateId: string;
+    contractId: string;
+    createdEventBlob: string;
+  } | null> {
+    if (!this.isCacheFresh()) {
+      await this.refresh();
+    }
+    if (!this.cache.featuredAppRightCid || !this.cache.featuredAppRightBlob) {
+      return null;
+    }
+    return {
+      templateId: this.farTemplateId,
+      contractId: this.cache.featuredAppRightCid,
+      createdEventBlob: this.cache.featuredAppRightBlob,
+    };
   }
 
   /**

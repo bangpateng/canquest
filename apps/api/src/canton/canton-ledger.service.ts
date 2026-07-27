@@ -868,8 +868,17 @@ export class CantonLedgerService {
       : `proxy-transfer-${userPartyId.slice(0, 12)}-${randomUUID().slice(0, 16)}`;
 
     // Disclosed contracts: FeaturedAppRight + WalletUserProxy + registry contracts.
-    // WalletUserProxy harus didisclose supaya ledger bisa verify signatory.
-    const disclosedContracts: unknown[] = [...registry.disclosedContracts];
+    // WalletUserProxy harus didisclose supaya user party bisa exercise choice
+    // (WUP signatory=provider, user=controller, user bukan signatory → need disclosure).
+    const wupDisclosure =
+      await this.proxyCache.getWalletUserProxyDisclosedContract();
+    const farDisclosure =
+      await this.proxyCache.getFeaturedAppRightDisclosedContract();
+    const disclosedContracts: unknown[] = [
+      ...registry.disclosedContracts,
+      ...(wupDisclosure ? [wupDisclosure] : []),
+      ...(farDisclosure ? [farDisclosure] : []),
+    ];
 
     this.logger.log(
       `WalletUserProxy_TransferFactory_Transfer: user=${userPartyId.split('::')[0]} → ` +
@@ -1108,6 +1117,19 @@ export class CantonLedgerService {
         `wup=${wupCid.slice(0, 16)}... far=${farCid ? 'attached' : 'None (no reward)'}`,
     );
 
+    // Disclosed contracts: WUP (wajib — user butuh lihat WUP utk exercise) +
+    // FAR (kalau ada) + registry contracts (TransferRule etc).
+    // Tanpa WUP disclosure → DAMAL reject CONTRACT_NOT_FOUND.
+    const wupDisclosure =
+      await this.proxyCache.getWalletUserProxyDisclosedContract();
+    const farDisclosure =
+      await this.proxyCache.getFeaturedAppRightDisclosedContract();
+    const disclosedContracts: unknown[] = [
+      ...registry.disclosedContracts,
+      ...(wupDisclosure ? [wupDisclosure] : []),
+      ...(farDisclosure ? [farDisclosure] : []),
+    ];
+
     const { ok, status, text } = await this.exerciseChoice(
       wupCid,
       this.proxyCache.wupTemplateId,
@@ -1116,7 +1138,7 @@ export class CantonLedgerService {
       [userPartyId], // controller = getFirstSender = sender party
       commandId,
       'submit-and-wait-for-transaction-tree',
-      registry.disclosedContracts,
+      disclosedContracts,
     );
 
     if (ok) {
@@ -1253,6 +1275,18 @@ export class CantonLedgerService {
         `cid=${transferInstructionCid.slice(0, 16)}... wup=${wupCid.slice(0, 16)}...`,
     );
 
+    // Disclosed contracts: registry contracts (utk accept) + WUP + FAR.
+    // WUP wajib disclose supaya user party bisa exercise choice.
+    const wupDisclosure =
+      await this.proxyCache.getWalletUserProxyDisclosedContract();
+    const farDisclosure =
+      await this.proxyCache.getFeaturedAppRightDisclosedContract();
+    const allDisclosed: unknown[] = [
+      ...disclosedContracts,
+      ...(wupDisclosure ? [wupDisclosure] : []),
+      ...(farDisclosure ? [farDisclosure] : []),
+    ];
+
     const { ok, status, text } = await this.exerciseChoice(
       wupCid,
       this.proxyCache.wupTemplateId,
@@ -1261,7 +1295,7 @@ export class CantonLedgerService {
       [userPartyId], // controller = user party
       commandId,
       'submit-and-wait-for-transaction-tree',
-      disclosedContracts,
+      allDisclosed,
     );
 
     if (ok) {
