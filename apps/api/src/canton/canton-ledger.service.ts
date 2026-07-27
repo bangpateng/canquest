@@ -911,6 +911,134 @@ export class CantonLedgerService {
   }
 
   /**
+   * Execute offer choice (Accept / Reject / Withdraw) via WalletUserProxy.
+   *
+   * DAML reference: choice controller = `user` party (proxyArg.user). Signatory
+   * of WalletUserProxy = provider (app-canquest). Membungkus:
+   *   WalletUserProxy_TransferInstruction_Accept
+   *   WalletUserProxy_TransferInstruction_Reject
+   *   WalletUserProxy_TransferInstruction_Withdraw
+   *
+   * DAMAL internal tetap exercise underlying TransferInstruction choice → event
+   * stream WSS fire event sama → OfferReconciler / balance handler tetap realtime.
+   *
+   * Accept butuh choiceContext dari registry (TransferRule disclosed contract).
+   * Reject/Withdraw biasanya choiceArg kosong {}.
+   *
+   * BLOCKER: featuredAppRightCid WAJIB (bukan optional) di proxy choice ini,
+   * sama dgn FASE 4. Flag USE_WALLET_PROXY=true akan DAMAL reject kalau FAR
+   * belum approve Canton Foundation.
+   *
+   * @see docs/WALLET_USER_PROXY_SETUP.md
+   */
+  async executeProxyOfferChoice(params: {
+    userPartyId: string;
+    transferInstructionCid: string;
+    action: 'accept' | 'reject' | 'withdraw';
+    /** instrumentAdmin (utk registry choice-context lookup). Kosong = CC path. */
+    instrumentAdmin?: string;
+  }): Promise<{ ok: boolean; updateId: string | null; error?: string }> {
+    if (!this.proxyCache) {
+      return {
+        ok: false,
+        updateId: null,
+        error: 'ProxyCacheService not injected — proxy offer unavailable',
+      };
+    }
+    const wupCid = await this.proxyCache.getWalletUserProxyCid();
+    if (!wupCid) {
+      return {
+        ok: false,
+        updateId: null,
+        error: 'WalletUserProxy contractId not found (set CANTON_PROXY_WUP_CID)',
+      };
+    }
+    const farCid = await this.proxyCache.getFeaturedAppRightCid();
+    if (!farCid) {
+      return {
+        ok: false,
+        updateId: null,
+        error:
+          'FeaturedAppRight contractId not found — proxy offer choice WAJIB ' +
+          'FAR valid (approve Canton Foundation). Set CANTON_PROXY_FAR_CID kalau sudah ada.',
+      };
+    }
+
+    const { userPartyId, transferInstructionCid, action, instrumentAdmin } = params;
+
+    // choiceContext untuk Accept (registry call). Reject/Withdraw biasanya kosong.
+    // disclosedContracts juga didapat dari sini (TransferRule contract).
+    let choiceContextData: Record<string, unknown> = { values: {} };
+    let disclosedContracts: unknown[] = [];
+    if (action === 'accept') {
+      const ctx = await this.getInstructionChoiceContext(
+        transferInstructionCid,
+        'accept',
+        instrumentAdmin ?? '',
+      );
+      if (!ctx) {
+        return {
+          ok: false,
+          updateId: null,
+          error:
+            'Failed to fetch choice context from registry (404/error). Accept ' +
+            'requires TransferRule disclosed contract.',
+        };
+      }
+      choiceContextData = ctx.choiceContextData;
+      disclosedContracts = ctx.disclosedContracts;
+    }
+
+    // choiceName = WalletUserProxy_TransferInstruction_<Action> (kapital).
+    const choiceName = `WalletUserProxy_TransferInstruction_${
+      action.charAt(0).toUpperCase() + action.slice(1)
+    }`;
+
+    // choiceArg = arg underlying choice (sama dgn path lama).
+    // Accept: { extraArgs: { context, meta } }. Reject/Withdraw: {}.
+    const choiceArg =
+      action === 'accept'
+        ? { extraArgs: { context: choiceContextData, meta: { values: {} } } }
+        : {};
+
+    const proxyArg = {
+      user: userPartyId,
+      choiceArg,
+      featuredAppRightCid: farCid,
+    };
+
+    const commandId = `proxy-${action}-${transferInstructionCid.slice(0, 16)}-${randomUUID().slice(0, 8)}`;
+
+    this.logger.log(
+      `WalletUserProxy_TransferInstruction_${action}: user=${userPartyId.split('::')[0]} ` +
+        `cid=${transferInstructionCid.slice(0, 16)}... wup=${wupCid.slice(0, 16)}...`,
+    );
+
+    const { ok, status, text } = await this.exerciseChoice(
+      wupCid,
+      this.proxyCache.wupTemplateId,
+      choiceName,
+      { cid: transferInstructionCid, proxyArg },
+      [userPartyId], // controller = user party
+      commandId,
+      'submit-and-wait-for-transaction-tree',
+      disclosedContracts,
+    );
+
+    if (ok) {
+      const updateId = extractUpdateIdFromTree(text);
+      this.logger.log(
+        `Proxy ${action} OK: updateId=${updateId?.slice(0, 16) ?? 'unknown'}`,
+      );
+      return { ok: true, updateId };
+    }
+
+    const errMsg = text.slice(0, 300);
+    this.logger.warn(`Proxy ${action} failed ${status}: ${errMsg}`);
+    return { ok: false, updateId: null, error: errMsg };
+  }
+
+  /**
    * Kirim reward CC via CIP-0056 TransferFactory.
    * - Receiver punya TransferPreapproval → 'direct' (langsung mendarat).
    * - Tidak punya → 'offer': AmuletTransferInstruction dibiarkan PENDING di inbox wallet.

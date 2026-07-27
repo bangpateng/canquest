@@ -18,7 +18,8 @@
 | 3. ProxyCacheService | ✅ DONE | Live di VPS 2, cache query ACS |
 | 4. executeProxyTransfer() | ✅ DONE | Code ready, auth verified di mainnet |
 | 5. Test mainnet | ⏸️ BLOCKED | Menunggu **FeaturedAppRight** approve Canton Foundation |
-| 6. Offers via proxy | ⬜ TODO | Opsional, setelah FASE 5 |
+| 6. Offers via proxy (FASE 5) | ✅ Code ready | Accept/Reject/Withdraw via `executeProxyOfferChoice`, route via flag |
+| 7. Test FASE 5 | ⏸️ BLOCKED | Sama — butuh FAR |
 
 **Flag status**: `USE_WALLET_PROXY="false"` (path lama tetap aktif, wallet aman).
 

@@ -1416,11 +1416,18 @@ export class PartyController {
       );
     }
 
-    const result = await this.ledger.withdrawTransferInstruction(
-      cid,
-      user.cantonPartyId,
-      withdrawInstrumentAdmin,
-    );
+    const result = this.ledger.useWalletProxy
+      ? await this.ledger.executeProxyOfferChoice({
+          userPartyId: user.cantonPartyId,
+          transferInstructionCid: cid,
+          action: 'withdraw',
+          instrumentAdmin: withdrawInstrumentAdmin,
+        })
+      : await this.ledger.withdrawTransferInstruction(
+          cid,
+          user.cantonPartyId,
+          withdrawInstrumentAdmin,
+        );
 
     if (!result.ok) {
       throw new BadRequestException(
@@ -2025,8 +2032,17 @@ export class PartyController {
     let updateId: string | null = null;
 
     if (offerType === OfferType.TRANSFER_INSTRUCTION) {
-      // CIP-0056 TransferInstruction
-      const result = await this.ledger.acceptTransferInstruction(cid, partyId);
+      // CIP-0056 TransferInstruction — route via WalletUserProxy jika flag on.
+      // offerInstrumentAdmin sudah di-lookup di atas (untuk history), dipakai
+      // proxy utk resolve registry choice-context.
+      const result = this.ledger.useWalletProxy
+        ? await this.ledger.executeProxyOfferChoice({
+            userPartyId: partyId,
+            transferInstructionCid: cid,
+            action: 'accept',
+            instrumentAdmin: offerInstrumentAdmin,
+          })
+        : await this.ledger.acceptTransferInstruction(cid, partyId);
       ok = result.ok;
       updateId = result.updateId;
       if (!ok) {
@@ -2228,7 +2244,13 @@ export class PartyController {
         this.logger.warn(`lookupOfferDetail (reject) failed: ${String(err)}`);
       }
 
-      const result = await this.ledger.rejectTransferInstruction(cid, partyId);
+      const result = this.ledger.useWalletProxy
+        ? await this.ledger.executeProxyOfferChoice({
+            userPartyId: partyId,
+            transferInstructionCid: cid,
+            action: 'reject',
+          })
+        : await this.ledger.rejectTransferInstruction(cid, partyId);
       if (!result.ok) {
         throw new BadRequestException(
           `Failed to reject: ${result.error ?? 'unknown'}`,
