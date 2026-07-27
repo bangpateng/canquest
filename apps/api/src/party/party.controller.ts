@@ -1021,19 +1021,32 @@ export class PartyController {
         this.splice.resolveOnChainPartyId(recipientPartyId),
       ]);
 
-      // ── MAIN TRANSFER via CIP-0056 (satu-satunya jalur) ─────────────
+      // ── MAIN TRANSFER via CIP-0056 ────────────────────────────────────
+      // Feature flag USE_WALLET_PROXY=true → transfer via WalletUserProxy
+      // (provider = app-canquest; controller = user party). Path lama tetap
+      // aktif kalau flag false/unset. Proxy memungut CC app-reward hanya kalau
+      // FeaturedAppRight sudah approve (Canton Foundation). Lihat
+      // docs/WALLET_USER_PROXY_SETUP.md.
       let accepted = false;
       let ledgerTxId: string | undefined;
       let transferMethod: 'direct' | 'offer_accept' | 'offer_only' =
         'offer_accept';
 
-      const cip56Result = await this.ledger.executeTransferFactoryTransfer({
-        senderPartyId: senderPartyIdOnChain,
-        receiverPartyId: receiverPartyIdOnChain,
-        amountCc: amount,
-        description,
-        clientNonce: body.clientNonce, // dedup ledger — double-click jadi 1 transfer
-      });
+      const cip56Result = this.ledger.useWalletProxy
+        ? await this.ledger.executeProxyTransfer({
+            userPartyId: senderPartyIdOnChain,
+            receiverPartyId: receiverPartyIdOnChain,
+            amount,
+            description,
+            clientNonce: body.clientNonce,
+          })
+        : await this.ledger.executeTransferFactoryTransfer({
+            senderPartyId: senderPartyIdOnChain,
+            receiverPartyId: receiverPartyIdOnChain,
+            amountCc: amount,
+            description,
+            clientNonce: body.clientNonce,
+          });
 
       if (cip56Result.ok) {
         if (cip56Result.transferKind === 'direct') {
@@ -1658,15 +1671,25 @@ export class PartyController {
         this.splice.resolveOnChainPartyId(recipientPartyId),
       ]);
 
-      const cip56Result = await this.ledger.executeTransferFactoryTransfer({
-        senderPartyId: senderPartyIdOnChain,
-        receiverPartyId: receiverPartyIdOnChain,
-        amountCc: amount,
-        description,
-        clientNonce: body.clientNonce,
-        instrumentId,
-        instrumentAdmin,
-      });
+      const cip56Result = this.ledger.useWalletProxy
+        ? await this.ledger.executeProxyTransfer({
+            userPartyId: senderPartyIdOnChain,
+            receiverPartyId: receiverPartyIdOnChain,
+            amount,
+            description,
+            clientNonce: body.clientNonce,
+            instrumentId,
+            instrumentAdmin,
+          })
+        : await this.ledger.executeTransferFactoryTransfer({
+            senderPartyId: senderPartyIdOnChain,
+            receiverPartyId: receiverPartyIdOnChain,
+            amountCc: amount,
+            description,
+            clientNonce: body.clientNonce,
+            instrumentId,
+            instrumentAdmin,
+          });
 
       if (!cip56Result.ok) {
         throw new BadRequestException(

@@ -11,6 +11,7 @@ import {
   cantonPartyIdsEqual,
   normalizeCantonPartyId,
 } from '../common/canton-party-id';
+import { ProxyCacheService } from './proxy-cache.service';
 
 /**
  * HTTP client for the Canton JSON Ledger API v2.
@@ -68,6 +69,7 @@ export class CantonLedgerService {
   constructor(
     private readonly config: ConfigService,
     @Optional() private readonly keycloak: KeycloakTokenService,
+    @Optional() private readonly proxyCache: ProxyCacheService,
   ) {
     // LEDGER_API_URL wajib di prod (gateway publik ledger.canquestlabs.com).
     // Fallback ke CANTON_JSON_API_URL hanya untuk dev (SSH tunnel localhost:7575).
@@ -663,6 +665,235 @@ export class CantonLedgerService {
 
     const errMsg = text.slice(0, 300);
     this.logger.warn(`TransferFactory_Transfer failed ${status}: ${errMsg}`);
+    return {
+      ok: false,
+      updateId: null,
+      transferKind: registry.transferKind,
+      error: errMsg,
+    };
+  }
+
+  /**
+   * Feature flag: true kalau transfer harus via WalletUserProxy (bukan direct
+   * TransferFactory_Transfer). Path lama tetap aktif kalau false / unset, jadi
+   * ini safe incremental rollout di mainnet.
+   */
+  get useWalletProxy(): boolean {
+    const v = this.config.get<string>('USE_WALLET_PROXY');
+    return v === 'true' || v === '1';
+  }
+
+  /**
+   * Execute transfer via WalletUserProxy_TransferFactory_Transfer.
+   *
+   * DAML reference: choice controller = `user` party (proxyArg.user). Signatory
+   * of WalletUserProxy = provider (app-canquest). Jadi submit butuh:
+   *   - actAs: [userParty]            ← user authorize
+   *   - contractId: WalletUserProxy   ← provider's proxy
+   *   - proxyArg.featuredAppRightCid: FeaturedAppRight (opsional — tanpa ini
+   *     transfer jalan tapi tidak earn CC rewards)
+   *
+   * Internal DAML memanggil TransferFactory_Transfer (sama dgn path lama), jadi
+   * event stream /v2/updates akan fire event yg sama → cc-inbound-sync /
+   * balance-event-handler tetap realtime tanpa modifikasi.
+   *
+   * Fallback: kalau ProxyCacheService belum di-inject atau contractId kosong,
+   * return error agar caller (party.controller) fallback ke path lama.
+   *
+   * @see https://docs.canton.network/sdks-tools/api-reference/splice-daml/splice-util-featured-app-proxies/splice-util-featuredapp-walletuserproxy
+   */
+  async executeProxyTransfer(params: {
+    userPartyId: string;
+    receiverPartyId: string;
+    amount: number;
+    description?: string;
+    clientNonce?: string;
+    instrumentId?: string;
+    instrumentAdmin?: string;
+  }): Promise<{
+    ok: boolean;
+    updateId: string | null;
+    transferKind: string;
+    transferInstructionCid?: string | null;
+    error?: string;
+  }> {
+    // Guard: ProxyCacheService harus ter-inject + contractId tersedia.
+    if (!this.proxyCache) {
+      return {
+        ok: false,
+        updateId: null,
+        transferKind: 'unknown',
+        error: 'ProxyCacheService not injected — proxy transfer unavailable',
+      };
+    }
+    const wupCid = await this.proxyCache.getWalletUserProxyCid();
+    if (!wupCid) {
+      return {
+        ok: false,
+        updateId: null,
+        transferKind: 'unknown',
+        error:
+          'WalletUserProxy contractId not found — run setup (FASE 2) or set CANTON_PROXY_WUP_CID',
+      };
+    }
+    // FeaturedAppRight opsional: tanpa ini transfer jalan tapi tanpa CC rewards.
+    const farCid = await this.proxyCache.getFeaturedAppRightCid();
+
+    const {
+      userPartyId,
+      receiverPartyId,
+      amount,
+      description,
+      clientNonce,
+      instrumentId = 'Amulet',
+    } = params;
+
+    // DSO party (admin CC/Amulet). Untuk non-CC, di-resolve dari instrumentAdmin.
+    const dsoParty =
+      this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() || '';
+    const effectiveAdmin = params.instrumentAdmin || dsoParty;
+    const isAmulet = instrumentId.toLowerCase() === 'amulet';
+    if (isAmulet && !dsoParty) {
+      return {
+        ok: false,
+        updateId: null,
+        transferKind: 'unknown',
+        error: 'CANTON_DSO_PARTY_ID not set',
+      };
+    }
+    if (!effectiveAdmin) {
+      return {
+        ok: false,
+        updateId: null,
+        transferKind: 'unknown',
+        error: `instrumentAdmin required for ${instrumentId}`,
+      };
+    }
+
+    // ── Resolve transfer factory + choiceContext (sama dgn path lama) ───
+    // Registry call tetap perlu: factoryId + disclosedContracts + transferKind
+    // (proxy membungkus TransferFactory_Transfer, bukan menggantikan registry).
+    const now = new Date();
+    const amountNumeric = amount.toFixed(10);
+    const choiceContextTransfer = {
+      sender: userPartyId,
+      receiver: receiverPartyId,
+      amount: amountNumeric,
+      instrumentId: { admin: effectiveAdmin, id: instrumentId },
+      lock: null,
+      requestedAt: now.toISOString(),
+      executeBefore: new Date(
+        now.getTime() + 24 * 60 * 60 * 1000,
+      ).toISOString(),
+      inputHoldingCids: [], // proxy resolve sendiri via DAML
+      meta: {
+        values: description
+          ? { 'splice.lfdecentralizedtrust.org/reason': description }
+          : {},
+      },
+    };
+
+    const registry = await this.callTransferFactoryRegistry(
+      {
+        expectedAdmin: effectiveAdmin,
+        transfer: choiceContextTransfer,
+        extraArgs: {
+          context: { values: {} },
+          meta: { values: {} },
+        },
+      },
+      effectiveAdmin,
+    );
+    if (!registry) {
+      return {
+        ok: false,
+        updateId: null,
+        transferKind: 'unknown',
+        error: 'Transfer Factory Registry call failed',
+      };
+    }
+
+    // ── Construct proxy choice argument ─────────────────────────────────
+    // WalletUserProxy_TransferFactory_Transfer args:
+    //   { cid: factoryId, proxyArg: { user, choiceArg: { transfer }, featuredAppRightCid } }
+    const proxyArg: Record<string, unknown> = {
+      user: userPartyId,
+      choiceArg: {
+        transfer: {
+          sender: userPartyId,
+          receiver: receiverPartyId,
+          amount: amountNumeric,
+          instrumentId: { admin: effectiveAdmin, id: instrumentId },
+          lock: null,
+          requestedAt: now.toISOString(),
+          executeBefore: new Date(
+            now.getTime() + 24 * 60 * 60 * 1000,
+          ).toISOString(),
+          inputHoldingCids: [], // proxy handles
+          meta: {
+            values: description
+              ? { 'splice.lfdecentralizedtrust.org/reason': description }
+              : {},
+          },
+        },
+      },
+      featuredAppRightCid: farCid ?? '',
+    };
+
+    // commandId deterministik kalau clientNonce diset (dedup ledger).
+    const commandId = clientNonce
+      ? `proxy-tf-${createHash('sha256')
+          .update(
+            `${userPartyId}|${receiverPartyId}|${amount.toFixed(10)}|${clientNonce}`,
+          )
+          .digest('hex')
+          .slice(0, 32)}`
+      : `proxy-transfer-${userPartyId.slice(0, 12)}-${randomUUID().slice(0, 16)}`;
+
+    // Disclosed contracts: FeaturedAppRight + WalletUserProxy + registry contracts.
+    // WalletUserProxy harus didisclose supaya ledger bisa verify signatory.
+    const disclosedContracts: unknown[] = [...registry.disclosedContracts];
+
+    this.logger.log(
+      `WalletUserProxy_TransferFactory_Transfer: user=${userPartyId.split('::')[0]} → ` +
+        `receiver=${receiverPartyId.split('::')[0]} amount=${amount} ${instrumentId} ` +
+        `kind=${registry.transferKind} factory=${registry.factoryId.slice(0, 16)}... ` +
+        `wup=${wupCid.slice(0, 16)}... far=${farCid ? farCid.slice(0, 16) + '...' : 'none'}`,
+    );
+
+    const { ok, status, text } = await this.exerciseChoice(
+      wupCid,
+      this.proxyCache.wupTemplateId,
+      'WalletUserProxy_TransferFactory_Transfer',
+      { cid: registry.factoryId, proxyArg },
+      [userPartyId], // controller = user party
+      commandId,
+      'submit-and-wait-for-transaction-tree',
+      disclosedContracts,
+    );
+
+    if (ok) {
+      const updateId = extractUpdateIdFromTree(text);
+      let transferInstructionCid: string | null = null;
+      if (registry.transferKind === 'offer') {
+        transferInstructionCid = extractCreatedContractId(text);
+      }
+      this.logger.log(
+        `Proxy transfer OK: kind=${registry.transferKind} ` +
+          `updateId=${updateId?.slice(0, 16) ?? 'unknown'}`,
+      );
+      return {
+        ok: true,
+        updateId,
+        transferKind: registry.transferKind,
+        transferInstructionCid,
+      };
+    }
+
+    const errMsg = text.slice(0, 300);
+    this.logger.warn(
+      `WalletUserProxy_TransferFactory_Transfer failed ${status}: ${errMsg}`,
+    );
     return {
       ok: false,
       updateId: null,

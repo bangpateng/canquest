@@ -17,6 +17,7 @@ import { OfferReconcilerService } from './offer-reconciler.service';
 import { CantonUpdatesService } from './canton-updates.service';
 import { BalanceEventHandlerService } from './balance-event-handler.service';
 import { TokenInstrumentHelper } from './token-instrument.helper';
+import { ProxyCacheService } from './proxy-cache.service';
 
 /**
  * CantonModule wires together:
@@ -46,6 +47,7 @@ import { TokenInstrumentHelper } from './token-instrument.helper';
     CantonUpdatesService,
     BalanceEventHandlerService,
     TokenInstrumentHelper,
+    ProxyCacheService,
   ],
   exports: [
     CantonLedgerService,
@@ -61,6 +63,7 @@ import { TokenInstrumentHelper } from './token-instrument.helper';
     CantonUpdatesService,
     BalanceEventHandlerService,
     TokenInstrumentHelper,
+    ProxyCacheService,
   ],
 })
 export class CantonModule {}
