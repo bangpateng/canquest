@@ -87,7 +87,7 @@ const REWARD_CONFIGS: Record<ActiveRewardCode, RewardConfig> = {
   CC_ONLY: {
     code: "CC_ONLY",
     label: "Token FCFS",
-    shortLabel: "CC FCFS",
+    shortLabel: "Token FCFS",
     isCcToken: true,
     isDual: false,
     isFcfs: true,
@@ -104,7 +104,7 @@ const REWARD_CONFIGS: Record<ActiveRewardCode, RewardConfig> = {
   CC_MANUAL: {
     code: "CC_MANUAL",
     label: "Token Raffle",
-    shortLabel: "CC Raffle",
+    shortLabel: "Token Raffle",
     isCcToken: true,
     isDual: false,
     isFcfs: false,
@@ -172,7 +172,7 @@ const REWARD_CONFIGS: Record<ActiveRewardCode, RewardConfig> = {
   CC_AND_CODE_RAFFLE: {
     code: "CC_AND_CODE_RAFFLE",
     label: "Token + Code Raffle",
-    shortLabel: "CC + Code Raffle",
+    shortLabel: "Token + Code Raffle",
     isCcToken: true,
     isDual: true,
     isFcfs: false,

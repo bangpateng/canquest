@@ -260,7 +260,7 @@ export function QuestSubmittedProof({
     return (
       <CampaignQuestStatusCard
         tone="sky"
-        label="CC + Code Raffle"
+        label="Token + Code Raffle"
         title="Entry recorded"
         description="Winners will be announced after the event ends. You will receive both CC and an invite code."
       />
@@ -272,7 +272,7 @@ export function QuestSubmittedProof({
       <section className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[var(--card)] p-6">
         <div>
           <p className="text-xs font-bold uppercase tracking-wider text-emerald-400/80">
-            Raffle Reward
+            Token Raffle
           </p>
           <p className="mt-0.5 text-base font-bold text-white">Reward claimed</p>
         </div>
@@ -314,7 +314,7 @@ export function QuestSubmittedProof({
     return (
       <CampaignQuestStatusCard
         tone="emerald"
-        label="Raffle reward"
+        label="Token Raffle"
         title="Reward claimed"
         description={`${rewardCc ?? 0} CC has been sent to your wallet.`}
       />

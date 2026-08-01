@@ -176,12 +176,8 @@ export type PlatformMessages = {
     tryOtherTab: string;
     showingCount: string;
     rewardLabel: string;
-    kindFcfs: string;
-    kindCc: string;
     kindInvite: string;
-    kindWaitlist: string;
     kindRaffle: string;
-    kindCcRaffle: string;
     kindCampaign: string;
     dailyTasks: string;
     cardRewardPerWinner: string;

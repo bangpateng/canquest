@@ -206,12 +206,12 @@ export function DocsPageContent() {
               <p><strong className="font-medium text-[var(--foreground)]">Tasks</strong> — social only: follow on X, retweet, join Telegram or Discord. Tasks unlock one at a time.</p>
               <p><strong className="font-medium text-[var(--foreground)]">Six reward types</strong> (set per campaign):</p>
               <UL>
-                <li><strong className="font-medium text-[var(--foreground)]">CC FCFS</strong> — first-come-first-served CC from the pool.</li>
-                <li><strong className="font-medium text-[var(--foreground)]">CC Raffle</strong> — admin-drawn winners receive CC.</li>
+                <li><strong className="font-medium text-[var(--foreground)]">Token FCFS</strong> — first-come-first-served token (CC or USDCx) from the pool.</li>
+                <li><strong className="font-medium text-[var(--foreground)]">Token Raffle</strong> — admin-drawn winners receive a token (CC or USDCx).</li>
                 <li><strong className="font-medium text-[var(--foreground)]">Waitlist FCFS</strong> — first-come invite or access codes.</li>
                 <li><strong className="font-medium text-[var(--foreground)]">Waitlist Raffle</strong> — drawn invite or access codes.</li>
                 <li><strong className="font-medium text-[var(--foreground)]">Waitlist Email</strong> — submit your email for a raffle spot.</li>
-                <li><strong className="font-medium text-[var(--foreground)]">CC + Code Raffle</strong> — drawn winners get CC and a code together.</li>
+                <li><strong className="font-medium text-[var(--foreground)]">Token + Code Raffle</strong> — drawn winners get a token (CC or USDCx) and a code together.</li>
               </UL>
               <p><strong className="font-medium text-[var(--foreground)]">Joining a campaign</strong> — each campaign sets its own gate: free, a CC lock, points, or either a CC lock or points.</p>
             </DocsSection>
