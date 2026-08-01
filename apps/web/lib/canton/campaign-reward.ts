@@ -143,15 +143,6 @@ export function isUnluckyState(state: QuestRewardState | undefined): boolean {
   return state === "not_winner" || state === "fcfs_missed";
 }
 
-export function isWinnerState(state: QuestRewardState | undefined): boolean {
-  return (
-    state === "winner" ||
-    state === "winner_fcfs" ||
-    state === "cc_reward" ||
-    state === "fcfs_claimable"
-  );
-}
-
 export function rewardCodeFromStatus(status: QuestRewardStatus | null): string | null {
   return status?.inviteCode?.trim() || null;
 }

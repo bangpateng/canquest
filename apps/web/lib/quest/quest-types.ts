@@ -191,9 +191,6 @@ export const QUEST_STATUS_BADGE: Record<
 export const DEFAULT_QUEST_BANNER =
   "linear-gradient(135deg,rgba(6,182,212,0.42) 0%,rgba(6,182,212,0.18) 40%,rgba(17,24,39,0.40) 100%)";
 
-export const QUEST_BANNER_TAG_PILL =
-  "rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-medium leading-tight text-neutral-800 shadow-sm backdrop-blur-md sm:text-[11px] dark:bg-neutral-950/75 dark:text-neutral-100";
-
 /** Task types supported in admin + user UI */
 export type QuestTaskType =
   | "daily_check_in"
@@ -291,12 +288,6 @@ export function isCampaignSocialTaskType(type: string): boolean {
   );
 }
 
-export function filterCampaignParticipantTasks<T extends { type: string }>(
-  tasks: T[],
-): T[] {
-  return tasks.filter((t) => isCampaignSocialTaskType(t.type));
-}
-
 /** Short label from X / Telegram / Discord URL or handle (universal for any post). */
 export function formatQuestHubSocialTarget(
   type: string,
@@ -380,12 +371,6 @@ export function msUntilNextUtcDay(now: Date = new Date()): number {
 }
 
 /**
- * Cooldown remaining for repeatable daily tasks = time until the next 00:00 UTC.
- * (Replaces the old rolling-24h-from-last-verify window.)
- */
-export const QUEST_HUB_REPEAT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
-
-/**
  * Tasks that repeat once per UTC day (reset at 00:00 UTC). Other tasks stay on
  * Quest when done but are one-time (lock-cc is one-time per tier).
  */
@@ -421,17 +406,6 @@ export function sendTransactionTitle(requiredCount: number): string {
 /** Send-token tasks: require the user to make N real USDCx sends within 24h. */
 export function isSendTokenTask(type: string): boolean {
   return type === "send_token";
-}
-
-/** Required number of token sends (stored in task.target). Min 1. */
-export function getSendTokenRequiredCount(target: string | null | undefined): number {
-  const n = parseInt((target ?? "").trim(), 10);
-  return Number.isFinite(n) && n > 0 ? n : 1;
-}
-
-/** Human title for a send-token task ("Send 3 USDCx"). */
-export function sendTokenTitle(requiredCount: number, instrumentId = "USDCx"): string {
-  return `Send ${requiredCount} ${instrumentId}`;
 }
 
 /** Daily-swap tasks: require the user to make N real swaps within 24h. */
@@ -471,33 +445,9 @@ export function countBasedDailyTitle(type: string, requiredCount: number): strin
   return `${label} ${requiredCount}×`;
 }
 
-/** Required number of swaps (stored in task.target). Min 1. */
-export function getDailySwapRequiredCount(target: string | null | undefined): number {
-  const n = parseInt((target ?? "").trim(), 10);
-  return Number.isFinite(n) && n > 0 ? n : 1;
-}
-
-/** Human title for a daily-swap task ("Daily Swap 3×"). */
-export function dailySwapTitle(requiredCount: number): string {
-  return `Daily Swap ${requiredCount}×`;
-}
-
 /** Lock-CC tasks: one-time per tier. Tier encoded in task.target as termKey. */
 export function isLockCcTask(type: string): boolean {
   return type === "lock_cc";
-}
-
-/** Lock termKey (3d / 7d / 15d) for a lock-cc task, stored in task.target. */
-export function getLockCcTermFromTarget(target: string | null | undefined): string {
-  const t = (target ?? "").trim().toLowerCase();
-  if (t === "3d" || t === "7d" || t === "15d") return t;
-  return "3d";
-}
-
-/** Human title for a lock-cc task ("Lock CC — 3 Days"). */
-export function lockCcTitle(termKey: string): string {
-  const days = termKey.replace(/[^0-9]/g, "");
-  return `Lock CC${days ? ` — ${days} Days` : ""}`;
 }
 
 /**

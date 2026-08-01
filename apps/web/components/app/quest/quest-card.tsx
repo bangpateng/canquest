@@ -4,7 +4,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { CardTitle } from "@/components/ui/typography";
 import { ROUTES } from "@/lib/routing/app-routes";
 import { EarnCampaignCard } from "@/components/app/earn/earn-campaign-card";
-import { getRewardConfig, type RewardIconKind } from "@/lib/quest/quest-engine";
+import { getRewardConfig } from "@/lib/quest/quest-engine";
 import type { UserProgress } from "@/lib/quest/quest-types";
 import { QUEST_STATUS_BADGE, type Quest } from "@/lib/quest/quest-types";
 import {

@@ -222,16 +222,6 @@ export function getRewardConfig(
   return REWARD_CONFIGS.CC_ONLY;
 }
 
-/**
- * Normalize any reward type string to an active code.
- * Used for comparisons where you need the canonical code.
- */
-export function normalizeRewardCode(
-  rewardType: RewardType | string | undefined | null,
-): ActiveRewardCode {
-  return getRewardConfig(rewardType).code;
-}
-
 // ═══════════════════════════════════════════════════════════════
 // 3. getQuestMeta() — derived UI state
 // ═══════════════════════════════════════════════════════════════
@@ -693,24 +683,4 @@ export function getActiveRewardTypes(): RewardTypeOption[] {
       defaultClaimFee: cfg.defaultClaimFee,
     };
   });
-}
-
-// ═══════════════════════════════════════════════════════════════
-// Re-exports for convenience
-// ═══════════════════════════════════════════════════════════════
-
-/** Check if a reward type code is a legacy code that needs fallback. */
-export function isLegacyRewardCode(code: string): boolean {
-  return code === "CC_AND_INVITE" || code === "INVITE_CODE";
-}
-
-/** Get the active code a legacy code maps to. Returns input if not legacy. */
-export function resolveLegacyCode(code: string): ActiveRewardCode {
-  if (code in LEGACY_MAP) {
-    return LEGACY_MAP[code as LegacyRewardCode];
-  }
-  if (code in REWARD_CONFIGS) {
-    return code as ActiveRewardCode;
-  }
-  return "CC_ONLY";
 }
