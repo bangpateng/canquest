@@ -3,11 +3,17 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import Link from "next/link";
 import { PageTitle } from "@/components/ui/typography";
-import type { QuestRewardStatus, RewardType } from "@/lib/quest/quest-types";
+import type {
+  QuestRewardStatus,
+  RewardType,
+  RewardTokenSymbol,
+} from "@/lib/quest/quest-types";
+import { normalizeRewardToken } from "@/lib/quest/quest-types";
 import {
   campaignUiKind,
   formatFcfsClaimFeeHint,
   formatFcfsSlotsRemaining,
+  formatRewardAmount,
   isFcfsSlotsFull,
   isUnluckyState,
   rewardCodeFromStatus,
@@ -151,6 +157,7 @@ export function QuestSubmittedProof({
   campaignMeta,
   redeemUrl,
   redeemInstructions,
+  rewardToken,
 }: {
   rewardCc: number | null;
   rewardStatus: QuestRewardStatus | null;
@@ -161,9 +168,12 @@ export function QuestSubmittedProof({
   redeemUrl?: string | null;
   /** Instruksi custom redeem; kosong = pakai template 3-step default. */
   redeemInstructions?: string | null;
+  /** Token reward: "CC" (default) atau "USDCx". Mendorong pesan delivery jadi token-aware. */
+  rewardToken?: RewardTokenSymbol | string | null;
 }) {
   const t = usePlatformT();
   const rt = (rewardType ?? "CC_ONLY") as RewardType;
+  const token = normalizeRewardToken(rewardToken);
   const state = rewardStatus?.state;
   const inviteCode = rewardCodeFromStatus(rewardStatus);
   const uiKind = campaignUiKind(rt, campaignMeta?.requiresFcfsClaim ?? false);
@@ -262,7 +272,7 @@ export function QuestSubmittedProof({
         tone="sky"
         label="Token + Code Raffle"
         title="Entry recorded"
-        description="Winners will be announced after the event ends. You will receive both CC and an invite code."
+        description="Winners will be announced after the event ends. You will receive both a token reward and an invite code."
       />
     );
   }
@@ -277,9 +287,9 @@ export function QuestSubmittedProof({
           <p className="mt-0.5 text-base font-bold text-white">Reward claimed</p>
         </div>
         <div className="mt-4 space-y-3">
-          {/* CC reward row */}
+          {/* Reward row */}
           <div className="flex items-center gap-3 rounded-xl border border-[var(--primary)]/20 bg-[var(--primary)]/10 px-4 py-3">
-            <span className="text-sm font-bold text-canton">+{rewardCc ?? 0} CC sent to your wallet</span>
+            <span className="text-sm font-bold text-canton">+{formatRewardAmount(rewardCc ?? 0, token)} sent to your wallet</span>
           </div>
           {/* Invite code row — konsisten dengan claim card (RewardReveal). */}
           {inviteCode ? (
@@ -291,7 +301,7 @@ export function QuestSubmittedProof({
             />
           ) : (
             <p className="text-sm text-slate-400">
-              {rewardStatus?.message ?? `${rewardCc ?? 0} CC and your invite code have been sent.`}
+              {rewardStatus?.message ?? `${formatRewardAmount(rewardCc ?? 0, token)} and your invite code have been sent.`}
             </p>
           )}
         </div>
@@ -316,7 +326,7 @@ export function QuestSubmittedProof({
         tone="emerald"
         label="Token Raffle"
         title="Reward claimed"
-        description={`${rewardCc ?? 0} CC has been sent to your wallet.`}
+        description={`${formatRewardAmount(rewardCc ?? 0, token)} has been sent to your wallet.`}
       />
     );
   }
@@ -327,7 +337,7 @@ export function QuestSubmittedProof({
         <PageTitle className="text-2xl font-bold text-slate-100">Campaign complete</PageTitle>
         <p className="mx-auto mt-3 max-w-md text-sm font-medium text-slate-400">
           {rewardStatus?.message ??
-            `${rewardCc ?? 0} CC will be sent manually by the team via bulk sender. Watch your wallet and email.`}
+            `${formatRewardAmount(rewardCc ?? 0, token)} will be sent manually by the team via bulk sender. Watch your wallet and email.`}
         </p>
       </section>
     );

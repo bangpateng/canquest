@@ -18,12 +18,13 @@ import type {
   RewardType,
   UserProgress,
 } from "@/lib/quest/quest-types";
-import { questRewardToken } from "@/lib/quest/quest-types";
+import { questRewardToken, rewardTokenLabel } from "@/lib/quest/quest-types";
 import type { QuestCampaignSummary } from "@/lib/canton/campaign-reward";
 import {
   fcfsSlotsTaken,
   formatFcfsSlotsFilled,
   formatPoolTotalLabel,
+  formatRewardAmount,
   hasParticipatedInQuest,
   isFcfsSlotsFull,
 } from "@/lib/canton/campaign-reward";
@@ -397,28 +398,29 @@ export function getQuestMeta(
 
   // ── Reward display ────────────────────────────────────────────
   const iconKind = resolveIconKind(config);
+  const token = questRewardToken(quest);
   const poolLabel = formatPoolTotalLabel(
     summary?.poolTotalCc ?? null,
     quest.rewardPool,
-    questRewardToken(quest),
+    token,
   );
 
   let primaryText: string;
   let secondaryText: string | null = null;
 
   if (config.isDual) {
-    // CC + Code
+    // Token + Code
     primaryText =
       quest.rewardCc > 0
-        ? `${quest.rewardCc} CC + 1 Code`
-        : "CC + 1 Code";
+        ? `${formatRewardAmount(quest.rewardCc, token)} + 1 Code`
+        : `${rewardTokenLabel(token)} + 1 Code`;
     if (summary?.poolTotalCc && summary.poolTotalCc > 0) {
-      secondaryText = `${summary.poolTotalCc} CC Reward Pool`;
+      secondaryText = `${formatRewardAmount(summary.poolTotalCc, token)} Reward Pool`;
     }
   } else if (config.isCcToken && quest.rewardCc > 0) {
-    primaryText = `${quest.rewardCc} CC / Winners`;
+    primaryText = `${formatRewardAmount(quest.rewardCc, token)} / Winners`;
     if (summary?.poolTotalCc && summary.poolTotalCc > 0) {
-      secondaryText = `${summary.poolTotalCc} CC Reward Pool`;
+      secondaryText = `${formatRewardAmount(summary.poolTotalCc, token)} Reward Pool`;
     }
   } else if (
     config.code === "INVITE_CODE_FCFS" ||
