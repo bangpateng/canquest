@@ -27,6 +27,7 @@ import {
 } from "@/lib/hooks/use-transaction-notifications";
 import { ROUTES } from "@/lib/routing/app-routes";
 import { cn } from "@/lib/utils/utils";
+import { normalizeRewardToken } from "@/lib/quest/quest-types";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 function timeAgo(
@@ -131,7 +132,7 @@ function NotificationRow({ item }: { item: NotificationItem }) {
           </span>
           {isWin && item.rewardCc != null && item.rewardCc > 0 ? (
             <span className="shrink-0 text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
-              +{item.rewardCc} CC
+              +{item.rewardCc} {normalizeRewardToken(item.rewardToken)}
             </span>
           ) : null}
         </Link>

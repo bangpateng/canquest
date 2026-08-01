@@ -8,6 +8,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { buttonVariants } from "@/components/ui/button";
 import { underlineTabClass } from "@/lib/ui/ui-button-styles";
 import { cn } from "@/lib/utils/utils";
+import { normalizeRewardToken } from "@/lib/quest/quest-types";
 
 interface Participant {
   userId: string;
@@ -64,6 +65,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
 
   const [questTitle, setQuestTitle] = useState("");
   const [questRewardType, setQuestRewardType] = useState("");
+  const [questRewardToken, setQuestRewardToken] = useState<string>("CC");
   const [message, setMessage] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
   useEffect(() => {
@@ -74,7 +76,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
       fetch(`/api/admin/quests/${questId}/winners`).then((r) => r.json()),
       fetch(`/api/admin/quests/${questId}/invite-codes`).then((r) => r.json()),
     ])
-      .then(([quest, p, w, c]: [{ title: string; rewardType?: string; questKind?: string }, Participant[], Winner[], InviteCode[]]) => {
+      .then(([quest, p, w, c]: [{ title: string; rewardType?: string; questKind?: string; rewardToken?: string }, Participant[], Winner[], InviteCode[]]) => {
         // Winners/distribute/invite-codes are CAMPAIGN-only — bounce the Quest
         // hub (EARN_HUB) back to its own panel.
         if (quest?.questKind === "EARN_HUB") {
@@ -83,6 +85,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
         }
         setQuestTitle(quest.title ?? "");
         setQuestRewardType(quest.rewardType ?? "");
+        setQuestRewardToken(normalizeRewardToken(quest.rewardToken));
         setParticipants(Array.isArray(p) ? p : []);
         setWinners(Array.isArray(w) ? w : []);
         setCodes(Array.isArray(c) ? c : []);
@@ -483,7 +486,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
                   <tr className="border-b border-[var(--border)] bg-[var(--muted)]/50 text-left">
                     <th className="px-4 py-3 font-semibold">Winner</th>
                     <th className="px-4 py-3 font-semibold">Variant</th>
-                    <th className="px-4 py-3 font-semibold">CC</th>
+                    <th className="px-4 py-3 font-semibold">{questRewardToken}</th>
                     <th className="px-4 py-3 font-semibold">Invite Code</th>
                     <th className="px-4 py-3 font-semibold">Status</th>
                     <th className="px-4 py-3 font-semibold">Action</th>
@@ -515,7 +518,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
                         )}
                       </td>
                       <td className="px-4 py-3 font-semibold tabular-nums">
-                        {w.ccAmount > 0 ? `${w.ccAmount} CC` : "—"}
+                        {w.ccAmount > 0 ? `${w.ccAmount} ${questRewardToken}` : "—"}
                       </td>
                       <td className="px-4 py-3">
                         {w.inviteCode ? (
