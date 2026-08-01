@@ -114,7 +114,7 @@ export function CampaignCcAndCodeRaffleClaimSection({
     <div className="space-y-3">
       <CampaignFcfsRewardCard
         mode="claim"
-        sectionLabel="CC + Code Raffle reward"
+        sectionLabel="Token + Code Raffle reward"
         slotsLabel={wonLabel}
         description={description}
         rewardCc={rewardCc}

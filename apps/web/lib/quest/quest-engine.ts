@@ -18,12 +18,13 @@ import type {
   RewardType,
   UserProgress,
 } from "@/lib/quest/quest-types";
-import { questRewardToken } from "@/lib/quest/quest-types";
+import { questRewardToken, rewardTokenLabel } from "@/lib/quest/quest-types";
 import type { QuestCampaignSummary } from "@/lib/canton/campaign-reward";
 import {
   fcfsSlotsTaken,
   formatFcfsSlotsFilled,
   formatPoolTotalLabel,
+  formatRewardAmount,
   hasParticipatedInQuest,
   isFcfsSlotsFull,
 } from "@/lib/canton/campaign-reward";
@@ -87,7 +88,7 @@ const REWARD_CONFIGS: Record<ActiveRewardCode, RewardConfig> = {
   CC_ONLY: {
     code: "CC_ONLY",
     label: "Token FCFS",
-    shortLabel: "CC FCFS",
+    shortLabel: "Token FCFS",
     isCcToken: true,
     isDual: false,
     isFcfs: true,
@@ -104,7 +105,7 @@ const REWARD_CONFIGS: Record<ActiveRewardCode, RewardConfig> = {
   CC_MANUAL: {
     code: "CC_MANUAL",
     label: "Token Raffle",
-    shortLabel: "CC Raffle",
+    shortLabel: "Token Raffle",
     isCcToken: true,
     isDual: false,
     isFcfs: false,
@@ -172,7 +173,7 @@ const REWARD_CONFIGS: Record<ActiveRewardCode, RewardConfig> = {
   CC_AND_CODE_RAFFLE: {
     code: "CC_AND_CODE_RAFFLE",
     label: "Token + Code Raffle",
-    shortLabel: "CC + Code Raffle",
+    shortLabel: "Token + Code Raffle",
     isCcToken: true,
     isDual: true,
     isFcfs: false,
@@ -219,16 +220,6 @@ export function getRewardConfig(
 
   // Unknown → CC_ONLY
   return REWARD_CONFIGS.CC_ONLY;
-}
-
-/**
- * Normalize any reward type string to an active code.
- * Used for comparisons where you need the canonical code.
- */
-export function normalizeRewardCode(
-  rewardType: RewardType | string | undefined | null,
-): ActiveRewardCode {
-  return getRewardConfig(rewardType).code;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -397,28 +388,29 @@ export function getQuestMeta(
 
   // ── Reward display ────────────────────────────────────────────
   const iconKind = resolveIconKind(config);
+  const token = questRewardToken(quest);
   const poolLabel = formatPoolTotalLabel(
     summary?.poolTotalCc ?? null,
     quest.rewardPool,
-    questRewardToken(quest),
+    token,
   );
 
   let primaryText: string;
   let secondaryText: string | null = null;
 
   if (config.isDual) {
-    // CC + Code
+    // Token + Code
     primaryText =
       quest.rewardCc > 0
-        ? `${quest.rewardCc} CC + 1 Code`
-        : "CC + 1 Code";
+        ? `${formatRewardAmount(quest.rewardCc, token)} + 1 Code`
+        : `${rewardTokenLabel(token)} + 1 Code`;
     if (summary?.poolTotalCc && summary.poolTotalCc > 0) {
-      secondaryText = `${summary.poolTotalCc} CC Reward Pool`;
+      secondaryText = `${formatRewardAmount(summary.poolTotalCc, token)} Reward Pool`;
     }
   } else if (config.isCcToken && quest.rewardCc > 0) {
-    primaryText = `${quest.rewardCc} CC / Winners`;
+    primaryText = `${formatRewardAmount(quest.rewardCc, token)} / Winners`;
     if (summary?.poolTotalCc && summary.poolTotalCc > 0) {
-      secondaryText = `${summary.poolTotalCc} CC Reward Pool`;
+      secondaryText = `${formatRewardAmount(summary.poolTotalCc, token)} Reward Pool`;
     }
   } else if (
     config.code === "INVITE_CODE_FCFS" ||
@@ -691,24 +683,4 @@ export function getActiveRewardTypes(): RewardTypeOption[] {
       defaultClaimFee: cfg.defaultClaimFee,
     };
   });
-}
-
-// ═══════════════════════════════════════════════════════════════
-// Re-exports for convenience
-// ═══════════════════════════════════════════════════════════════
-
-/** Check if a reward type code is a legacy code that needs fallback. */
-export function isLegacyRewardCode(code: string): boolean {
-  return code === "CC_AND_INVITE" || code === "INVITE_CODE";
-}
-
-/** Get the active code a legacy code maps to. Returns input if not legacy. */
-export function resolveLegacyCode(code: string): ActiveRewardCode {
-  if (code in LEGACY_MAP) {
-    return LEGACY_MAP[code as LegacyRewardCode];
-  }
-  if (code in REWARD_CONFIGS) {
-    return code as ActiveRewardCode;
-  }
-  return "CC_ONLY";
 }

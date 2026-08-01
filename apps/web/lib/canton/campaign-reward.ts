@@ -143,15 +143,6 @@ export function isUnluckyState(state: QuestRewardState | undefined): boolean {
   return state === "not_winner" || state === "fcfs_missed";
 }
 
-export function isWinnerState(state: QuestRewardState | undefined): boolean {
-  return (
-    state === "winner" ||
-    state === "winner_fcfs" ||
-    state === "cc_reward" ||
-    state === "fcfs_claimable"
-  );
-}
-
 export function rewardCodeFromStatus(status: QuestRewardStatus | null): string | null {
   return status?.inviteCode?.trim() || null;
 }
@@ -217,28 +208,6 @@ export function formatFcfsClaimFeeHint(
   token: RewardTokenSymbol | string | null | undefined = "CC",
 ): string {
   return `Pay ${feeCc} CC claim fee on-chain to receive ${formatRewardAmount(rewardCc, token)} from the pool`;
-}
-
-export function campaignTypeDisplayValue(
-  uiKind: ReturnType<typeof campaignUiKind>,
-  rewardType?: string | null,
-): string {
-  switch (uiKind) {
-    case "cc_fcfs":
-      return "CC FCFS";
-    case "cc_manual_draw":
-      return "CC Raffle";
-    case "waitlist_email":
-      return "Waitlist";
-    case "waitlist_code":
-      return rewardType === "INVITE_CODE_FCFS" ? "WAITLIST FCFS" : "WAITLIST RAFFLE";
-    case "cc_manual":
-      return "CC Manual";
-    case "cc_and_code_raffle":
-      return "CC + CODE RAFFLE";
-    default:
-      return "Campaign";
-  }
 }
 
 export function campaignUiKind(

@@ -9,7 +9,8 @@ import { CQ_ACCESS_COOKIE } from "@/lib/auth/auth-cookies";
 import { internalApiBase } from "@/lib/api/internal-api-url";
 import { resolveQuestMediaUrl } from "@/lib/quest/quest-media-url";
 import { slugify } from "@/lib/routing/slug";
-import { QUEST_STATUS_BADGE, type Quest } from "@/lib/quest/quest-types";
+import { QUEST_STATUS_BADGE, questRewardToken, type Quest } from "@/lib/quest/quest-types";
+import { formatRewardAmount } from "@/lib/canton/campaign-reward";
 import { getRewardConfig } from "@/lib/quest/quest-engine";
 import { buttonVariants } from "@/components/ui/button";
 import { surfaceCardClass } from "@/lib/ui/ui-tokens";
@@ -102,11 +103,12 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
   const config = getRewardConfig(quest.rewardType);
 
   // ── Build share text based on reward type ──────────────────────
+  const rtok = questRewardToken(quest);
   let shareText: string;
   if (config.isDual) {
-    shareText = `Earn ${quest.rewardCc > 0 ? `${quest.rewardCc} CC` : "CC"} + 1 invite code`;
+    shareText = `Earn ${quest.rewardCc > 0 ? formatRewardAmount(quest.rewardCc, rtok) : rtok} + 1 invite code`;
   } else if (config.code === "CC_ONLY" || config.code === "CC_MANUAL") {
-    shareText = quest.rewardCc > 0 ? `Earn ${quest.rewardCc} CC` : "Earn CC rewards";
+    shareText = quest.rewardCc > 0 ? `Earn ${formatRewardAmount(quest.rewardCc, rtok)}` : `Earn ${rtok} rewards`;
   } else if (config.code === "INVITE_CODE_FCFS") {
     shareText = "Claim an invite code — first come, first served";
   } else if (config.code === "INVITE_CODE_RANDOM") {

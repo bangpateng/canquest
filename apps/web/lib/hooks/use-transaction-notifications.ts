@@ -48,6 +48,7 @@ export type NotificationDraw = {
   questId: string;
   questTitle: string;
   rewardCc: number | null;
+  rewardToken?: string;
   description: string;
   createdAt: string;
 };
@@ -78,6 +79,7 @@ type ToastPayload = {
   drawKind?: "win" | "loss";
   txType?: NotificationTx["type"];
   amountCc: number;
+  rewardToken?: string;
   description: string;
   counterparty?: string | null;
 };
@@ -138,6 +140,7 @@ export function useTransactionNotifications(
             kind: "draw",
             drawKind: item.drawKind,
             amountCc: item.rewardCc ?? 0,
+            rewardToken: item.rewardToken,
             description: item.description,
           });
         } else if (item.kind === "code") {

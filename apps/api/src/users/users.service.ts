@@ -13,6 +13,7 @@ import {
   normalizeRewardType,
 } from '../common/prisma-types';
 import { Decimal } from '@prisma/client/runtime/library';
+import { normalizeRewardToken } from '../canton/token-instrument.helper';
 import { PointsService } from './points.service';
 import {
   CC_TRANSACTION_HISTORY_WHERE,
@@ -954,11 +955,12 @@ export class UsersService {
     rewardType: RewardType;
     questTitle: string;
     rewardCc: number;
+    rewardToken: string;
     winnerMessage: string | null;
     won: boolean;
     userDraw: { distributed: boolean; inviteCode: string | null } | null;
   }): { description: string; rewardCc: number | null } {
-    const { rewardType, questTitle, rewardCc, winnerMessage, won, userDraw } =
+    const { rewardType, questTitle, rewardCc, rewardToken, winnerMessage, won, userDraw } =
       params;
     if (!won) {
       return {
@@ -970,8 +972,8 @@ export class UsersService {
     if (rewardType === RewardType.CC_MANUAL) {
       return {
         description: userDraw?.distributed
-          ? `You won ${rewardCc} CC from ${questTitle}.`
-          : `You won ${rewardCc} CC — open the campaign to claim your reward.`,
+          ? `You won ${rewardCc} ${rewardToken} from ${questTitle}.`
+          : `You won ${rewardCc} ${rewardToken} — open the campaign to claim your reward.`,
         rewardCc: rewardCc > 0 ? rewardCc : null,
       };
     }
@@ -998,12 +1000,12 @@ export class UsersService {
         : '';
       if (userDraw?.distributed) {
         return {
-          description: `You won ${questTitle}! ${rewardCc} CC${codePart} sent to your wallet.`,
+          description: `You won ${questTitle}! ${rewardCc} ${rewardToken}${codePart} sent to your wallet.`,
           rewardCc: rewardCc > 0 ? rewardCc : null,
         };
       }
       return {
-        description: `You won ${questTitle}! ${rewardCc} CC${codePart} — claim your reward now.`,
+        description: `You won ${questTitle}! ${rewardCc} ${rewardToken}${codePart} — claim your reward now.`,
         rewardCc: rewardCc > 0 ? rewardCc : null,
       };
     }
@@ -1035,6 +1037,7 @@ export class UsersService {
       questId: string;
       questTitle: string;
       rewardCc: number | null;
+      rewardToken: string;
       description: string;
       createdAt: string;
       unread: boolean;
@@ -1051,6 +1054,7 @@ export class UsersService {
             rewardType: true,
             rewardCc: true,
             winnerMessage: true,
+            rewardToken: true,
           },
         },
       },
@@ -1063,6 +1067,7 @@ export class UsersService {
       questId: string;
       questTitle: string;
       rewardCc: number | null;
+      rewardToken: string;
       description: string;
       createdAt: string;
       unread: boolean;
@@ -1084,10 +1089,12 @@ export class UsersService {
       const drawnAt = latestDraw.drawnAt;
       const unread = !lastSeenAt || drawnAt > lastSeenAt;
       const won = Boolean(userDraw);
+      const rewardToken = normalizeRewardToken(c.quest.rewardToken);
       const { description, rewardCc } = this.buildDrawAlertDescription({
         rewardType: rt,
         questTitle: c.quest.title,
         rewardCc: c.quest.rewardCc,
+        rewardToken,
         winnerMessage: c.quest.winnerMessage,
         won,
         userDraw,
@@ -1100,6 +1107,7 @@ export class UsersService {
         questId: c.questId,
         questTitle: c.quest.title,
         rewardCc,
+        rewardToken,
         description,
         createdAt: drawnAt.toISOString(),
         unread,

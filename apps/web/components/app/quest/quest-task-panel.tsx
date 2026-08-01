@@ -670,6 +670,7 @@ export function QuestTaskPanel({
           rewardStatus={rewardStatus}
           ledger={ledgerProof}
           rewardType={quest.rewardType}
+          rewardToken={quest.rewardToken}
           campaignMeta={campaignMeta}
           redeemUrl={quest.redeemUrl}
           redeemInstructions={quest.redeemInstructions}
@@ -687,6 +688,7 @@ export function QuestTaskPanel({
           rewardStatus={rewardStatus}
           ledger={ledgerProof}
           rewardType={quest.rewardType}
+          rewardToken={quest.rewardToken}
           campaignMeta={campaignMeta}
           redeemUrl={quest.redeemUrl}
           redeemInstructions={quest.redeemInstructions}
