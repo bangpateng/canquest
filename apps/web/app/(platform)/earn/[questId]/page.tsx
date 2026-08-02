@@ -198,8 +198,8 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
 
             {/* Org + Title — vertically centered with logo */}
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-semibold text-slate-400">{quest.org}</p>
-              <h1 className="mt-0.5 truncate text-lg font-bold leading-tight text-white sm:text-xl">
+              <p className="break-words text-xs font-semibold text-slate-400">{quest.org}</p>
+              <h1 className="mt-0.5 line-clamp-2 break-words text-lg font-bold leading-tight text-white sm:text-xl">
                 {quest.title}
               </h1>
             </div>
