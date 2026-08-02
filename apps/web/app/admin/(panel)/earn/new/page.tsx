@@ -9,7 +9,7 @@ export default function NewEarnCampaignPage() {
           Shown in the user <strong>Earn</strong> menu. Add tasks after saving.
         </p>
       </div>
-      <QuestForm questKind="CAMPAIGN" redirectBase="/admin/earn" />
+      <QuestForm questKind="CAMPAIGN" />
     </div>
   );
 }

@@ -73,9 +73,6 @@ export type PlatformMessages = {
     description: string;
     createWallet: string;
     navLocked: string;
-    quotaRemaining: string;
-    quotaFull: string;
-    inviteRequired: string;
   };
   questReferral: {
     aria: string;
@@ -218,22 +215,6 @@ export type PlatformMessages = {
     inviteCodeHint: string;
     inviteCodeRetryHint: string;
     nodeIssue: string;
-    walletActive: string;
-    partyId: string;
-    balance: string;
-    refreshBalance: string;
-    estimatedUsd: string;
-    sendReceive: string;
-    transactionHistory: string;
-    checkingPreapproval: string;
-    cip56Active: string;
-    walletNotConnected: string;
-    walletNotConnectedHint: string;
-    enablePreapproval: string;
-    enablePreapprovalBtn: string;
-    enabling: string;
-    generateWallet: string;
-    generatingWallet: string;
     walletCreatedLoading: string;
     profileStale: string;
     profileStaleHint: string;
@@ -266,7 +247,6 @@ export type PlatformMessages = {
     type: string;
     amount: string;
     description: string;
-    counterparty: string;
     ledgerTx: string;
     when: string;
     empty: string;

@@ -11,24 +11,6 @@ const WALLET_FEATURES = [
   { icon: Wallet, label: "Wallet", desc: "Send & receive CC" },
 ] as const;
 
-type WalletCreatePromptProps = {
-  className?: string;
-};
-
-export function WalletCreatePromptBanner({ className }: WalletCreatePromptProps) {
-  return (
-    <div
-      className={cn(
-        "rounded-3xl border border-orange-500/30 bg-orange-500/10 p-6 sm:p-8",
-        className,
-      )}
-      role="status"
-    >
-      <WalletCreatePromptContent variant="banner" />
-    </div>
-  );
-}
-
 export function WalletCreatePromptModal({
   open,
   onClose,
@@ -74,23 +56,19 @@ export function WalletCreatePromptModal({
         >
           <X className="h-5 w-5" />
         </button>
-        <WalletCreatePromptContent variant="modal" onDismiss={onClose} />
+        <WalletCreatePromptContent onDismiss={onClose} />
       </div>
     </div>
   );
 }
 
 function WalletCreatePromptContent({
-  variant,
   onDismiss,
 }: {
-  variant: "banner" | "modal";
   onDismiss?: () => void;
 }) {
-  const isModal = variant === "modal";
-
   return (
-    <div className={cn(isModal ? "pt-2" : "")}>
+    <div className="pt-2">
       <div className="flex items-start gap-4">
         <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-orange-500/15 ring-1 ring-orange-500/25">
           <Wallet className="h-6 w-6 text-orange-300" aria-hidden />
@@ -120,7 +98,7 @@ function WalletCreatePromptContent({
         ))}
       </ul>
 
-      <div className={cn("mt-6 flex flex-wrap gap-3", isModal && "sm:justify-end")}>
+      <div className="mt-6 flex flex-wrap gap-3 sm:justify-end">
         <Link
           href="/wallet"
           onClick={onDismiss}
@@ -131,18 +109,16 @@ function WalletCreatePromptContent({
           <Wallet className="h-5 w-5" />
           Create wallet
         </Link>
-        {isModal ? (
-          <button
-            type="button"
-            onClick={onDismiss}
-            className={cn(
-              buttonVariants({ size: "sm", variant: "ghost" }),
-              "rounded-2xl text-slate-400",
-            )}
-          >
-            Not now
-          </button>
-        ) : null}
+        <button
+          type="button"
+          onClick={onDismiss}
+          className={cn(
+            buttonVariants({ size: "sm", variant: "ghost" }),
+            "rounded-2xl text-slate-400",
+          )}
+        >
+          Not now
+        </button>
       </div>
     </div>
   );

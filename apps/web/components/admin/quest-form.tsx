@@ -24,6 +24,8 @@ import type { QuestSocialLink } from "@/lib/quest/quest-social-links";
 import { QuestSocialLinksEditor } from "@/components/admin/quest-social-links-editor";
 
 type TaskDraft = {
+  /** Stable client-only id used as the React list key. Stripped before submit. */
+  id: string;
   type: string;
   points: number;
   target: string;
@@ -66,10 +68,42 @@ const ENTRY_GATE_MODE_OPTIONS: {
 
 export type AdminQuestKind = "CAMPAIGN" | "EARN_HUB";
 
+/**
+ * Format an ISO date string as a `datetime-local` input value in the USER'S
+ * local timezone (`YYYY-MM-DDTHH:mm`). Browsers interpret `datetime-local`
+ * values as local time, so populating with `toISOString().slice(0,16)` (which
+ * is UTC) silently shifts every deadline by the timezone offset on edit.
+ */
+function toLocalDatetimeInput(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    `T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  );
+}
+
+/**
+ * Auto-derived reward-pool label from the reward config + amounts. Single
+ * source of truth — used both at submit (payload `rewardPool`) and for the
+ * live preview in the form.
+ */
+function buildRewardPoolLabel(
+  config: ReturnType<typeof getRewardConfig>,
+  cc: number,
+  maxW: number | null,
+  token: string,
+): string {
+  if (config.isCcToken && cc > 0 && maxW && maxW > 0) return `${cc * maxW} ${token} pool`;
+  if (config.isCcToken && cc > 0) return `${cc} ${token}`;
+  if (config.isDual && cc > 0) return `${cc} ${token} + Code`;
+  if (maxW && maxW > 0) return `${maxW} ${config.code === "WAITLIST_EMAIL" ? "spots" : "codes"}`;
+  return "TBD";
+}
+
 interface QuestFormProps {
   questKind?: AdminQuestKind;
-  /** After create, redirect to manage page; list link uses redirectBase */
-  redirectBase?: string;
   initialData?: {
     id: string;
     title: string;
@@ -81,7 +115,7 @@ interface QuestFormProps {
     bannerImageUrl?: string | null;
     logoUrl?: string | null;
     rewardCc: number;
-    /** Token reward: "CC" (default) atau "USDCx". */
+    /** Token reward: "CC" (default) or "USDCx". */
     rewardToken?: string;
     rewardPool: string;
     deadline: string | null;
@@ -130,19 +164,13 @@ export function QuestForm({
     rewardToken: initialData?.rewardToken === "USDCx" ? "USDCx" : "CC",
     inviteCodes: "",
     rewardPool: initialData?.rewardPool ?? "",
-    startsAt: initialData?.startsAt
-      ? new Date(initialData.startsAt).toISOString().slice(0, 16)
-      : "",
-    endsAt: initialData?.endsAt
-      ? new Date(initialData.endsAt).toISOString().slice(0, 16)
-      : "",
+    startsAt: initialData?.startsAt ? toLocalDatetimeInput(initialData.startsAt) : "",
+    endsAt: initialData?.endsAt ? toLocalDatetimeInput(initialData.endsAt) : "",
     status: initialData?.status ?? "ACTIVE",
     rewardType: initialRewardType(),
     maxWinners: String(initialData?.maxWinners ?? ""),
     codeWinnersQuota:
-      initialData && (initialData as Record<string, unknown>).codeWinnersQuota != null
-        ? String((initialData as Record<string, unknown>).codeWinnersQuota)
-        : "",
+      initialData?.codeWinnersQuota != null ? String(initialData.codeWinnersQuota) : "",
     claimFeeCc: initialData?.claimFeeCc != null ? String(initialData.claimFeeCc) : "",
     winnerMessage: initialData?.winnerMessage ?? "",
     redeemUrl: initialData?.redeemUrl ?? "",
@@ -160,7 +188,7 @@ export function QuestForm({
   );
   const [tasks, setTasks] = useState<TaskDraft[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string[] | null>(null);
   const [showTasks, setShowTasks] = useState(false);
   const [uploadingBanner, setUploadingBanner] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -204,9 +232,19 @@ export function QuestForm({
     savedUrl: string | null | undefined,
   ) {
     const trimmed = currentUrl.trim();
+    if (
+      !trimmed ||
+      !window.confirm(
+        "Remove this image? It will be deleted from storage now. " +
+          (isEdit && trimmed === (savedUrl ?? "").trim()
+            ? "Save the campaign to apply the change on Earn."
+            : ""),
+      )
+    ) {
+      return;
+    }
     updateField(field, "");
     setUploadMsg(null);
-    if (!trimmed) return;
     void deleteQuestAsset(trimmed)
       .then(() => {
         if (isEdit && trimmed === (savedUrl ?? "").trim()) {
@@ -219,7 +257,18 @@ export function QuestForm({
   }
 
   function updateField(key: keyof typeof form, value: string) {
-    setForm((prev) => ({ ...prev, [key]: value }));
+    // Cap tags at 4 entries (matches the help text "up to 4"). The user can
+    // keep typing, but anything past the 4th comma-separated entry is dropped.
+    const next =
+      key === "tags" && value.split(",").map((t) => t.trim()).filter(Boolean).length > 4
+        ? value
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean)
+            .slice(0, 4)
+            .join(", ")
+        : value;
+    setForm((prev) => ({ ...prev, [key]: next }));
   }
 
   /** Update reward type and auto-fill claim fee from quest-engine config. */
@@ -265,7 +314,15 @@ export function QuestForm({
   function addTask() {
     setTasks((prev) => [
       ...prev,
-      { type: "twitter_follow", points: 10, target: "", correctAnswer: "" },
+      {
+        id: crypto.randomUUID(),
+        // Pre-fill the recommended task type for the current reward type when
+        // known, otherwise default to a social follow.
+        type: recommendedTaskType ?? "twitter_follow",
+        points: 10,
+        target: "",
+        correctAnswer: "",
+      },
     ]);
     setShowTasks(true);
   }
@@ -301,7 +358,7 @@ export function QuestForm({
       });
 
       if (formErrors.length > 0) {
-        setError(formErrors[0]?.message ?? "Validation error");
+        setError(formErrors.map((e) => e.message).filter(Boolean));
         setSubmitting(false);
         return;
       }
@@ -310,7 +367,7 @@ export function QuestForm({
         const start = new Date(form.startsAt).getTime();
         const end = new Date(form.endsAt).getTime();
         if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
-          setError("End date/time must be after start date/time.");
+          setError(["End date/time must be after start date/time."]);
           setSubmitting(false);
           return;
         }
@@ -324,15 +381,8 @@ export function QuestForm({
           ? initialData.orgSlug
           : form.org.trim().split(/\s+/).map((w) => w[0] ?? "").join("").toUpperCase().slice(0, 4)) || form.org.slice(0, 3).toUpperCase();
 
-      // Auto-generate reward pool label from reward type + token
-      const t = form.rewardToken; // "CC" / "USDCx"
-      const autoPoolLabel = (() => {
-        if (rewardConfig.isCcToken && cc > 0 && maxW && maxW > 0) return `${cc * maxW} ${t} pool`;
-        if (rewardConfig.isCcToken && cc > 0) return `${cc} ${t}`;
-        if (rewardConfig.isDual && cc > 0) return `${cc} ${t} + Code`;
-        if (maxW && maxW > 0) return `${maxW} ${rewardConfig.code === "WAITLIST_EMAIL" ? "spots" : "codes"}`;
-        return "TBD";
-      })();
+      // Auto-derived reward pool label (shared with the live preview below).
+      const autoPoolLabel = buildRewardPoolLabel(rewardConfig, cc, maxW, form.rewardToken);
 
       const payload = {
         title: form.title,
@@ -414,13 +464,13 @@ export function QuestForm({
       }
 
       if (!res.ok) {
-        setError(data.message ?? `Server error (${res.status})`);
+        setError([data.message ?? `Server error (${res.status})`]);
         return;
       }
 
-      // One-shot invite codes (hanya saat create): upload ke endpoint existing
-      // setelah quest tersimpan. Non-fatal — kalau gagal, quest tetap tersimpan
-      // & admin bisa paste ulang via tab "Invite codes".
+      // One-shot invite codes (create only): uploaded to the existing endpoint
+      // after the quest is saved. Non-fatal — if it fails the quest is still
+      // saved and the admin can re-paste via the "Invite codes" tab.
       const newQuestId = isEdit ? null : data.id;
       const codes = form.inviteCodes
         .split(/[\n,]+/)
@@ -436,8 +486,8 @@ export function QuestForm({
           });
           if (!codesRes.ok) {
             const codesData = (await codesRes.json().catch(() => ({}))) as { message?: string };
-            // Quest sudah tersimpan — tampilkan warning, tetap redirect.
-            // Admin bisa paste ulang via tab Invite codes.
+            // Quest is already saved — just warn and still redirect.
+            // Admin can re-paste via the Invite codes tab.
             console.warn(
               `Invite codes upload failed (quest ${newQuestId} saved): ${codesData.message ?? codesRes.status}`,
             );
@@ -448,8 +498,8 @@ export function QuestForm({
       }
 
       router.push(`/admin/quests/${isEdit ? initialData!.id : data.id!}`);
-    } catch {
-      setError("Network error");
+    } catch (err) {
+      setError([err instanceof Error ? err.message : "Network error"]);
     } finally {
       setSubmitting(false);
     }
@@ -461,12 +511,16 @@ export function QuestForm({
   return (
     <form onSubmit={(e) => void handleSubmit(e)} className="space-y-6">
       {/* Basic Info */}
-      <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-4">
-        <div className="flex items-center gap-2">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[11px] font-bold text-[var(--primary)]">1</span>
-          <h2 className="type-section-title">Identity</h2>
-        </div>
+      <details open className="group rounded-2xl border border-[var(--border)] bg-[var(--card)]">
+        <summary className="flex cursor-pointer list-none items-center justify-between p-5">
+          <span className="flex items-center gap-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[11px] font-bold text-[var(--primary)]">1</span>
+            <h2 className="type-section-title">Identity</h2>
+          </span>
+          <ChevronDown className="h-4 w-4 text-[var(--muted-foreground)] transition-transform group-open:rotate-180" />
+        </summary>
 
+        <div className="space-y-4 border-t border-[var(--border)] p-5">
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="mb-1.5 block text-sm font-medium">Campaign title *</label>
@@ -490,7 +544,8 @@ export function QuestForm({
             <label className="mb-1.5 block text-sm font-medium">Organization *</label>
             <input required value={form.org} onChange={(e) => updateField("org", e.target.value)} placeholder="e.g. Digital Asset Collective" className={inputCls} />
             <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-              Slug auto-generated from this name (shown on cards when no logo).
+              Slug is auto-generated from the first letters of each word (up to 4 chars),
+              e.g. &ldquo;Digital Asset Collective&rdquo; &rarr; &ldquo;DAC&rdquo;. Shown on cards when no logo.
             </p>
           </div>
           <div>
@@ -638,14 +693,18 @@ export function QuestForm({
             style={{ backgroundImage: `url("${form.bannerImageUrl}")` }}
           />
         ) : null}
-      </section>
+        </div>
+      </details>
 
       {/* Reward */}
-      <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-4">
-        <div className="flex items-center gap-2">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[11px] font-bold text-[var(--primary)]">2</span>
-          <h2 className="type-section-title">Reward</h2>
-        </div>
+      <details open className="group rounded-2xl border border-[var(--border)] bg-[var(--card)]">
+        <summary className="flex cursor-pointer list-none items-center justify-between p-5">
+          <span className="flex items-center gap-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[11px] font-bold text-[var(--primary)]">2</span>
+            <h2 className="type-section-title">Reward</h2>
+          </span>
+          <ChevronDown className="h-4 w-4 text-[var(--muted-foreground)] transition-transform group-open:rotate-180" />
+        </summary>
         <div className="space-y-4">
           <div>
             <label className="mb-2 block text-sm font-medium">Reward type</label>
@@ -670,8 +729,44 @@ export function QuestForm({
             )}
           </div>
 
-          {/* One-shot invite codes — muncul hanya utk reward type yang pakai kode.
-              Di-upload setelah quest dibuat (POST chaining). Non-fatal kalau gagal. */}
+          {/* Reward token — always shown so admins pick CC vs USDCx up front.
+              Available for every reward type that distributes tokens
+              (FCFS/CC_ONLY, Raffle/CC_MANUAL, Raffle dual/CC_AND_CODE_RAFFLE).
+              Note: the claim fee is always paid in CC by design. */}
+          <div className="space-y-1">
+            <span className="block text-sm font-medium">Reward token</span>
+            <div className="flex items-center gap-2">
+              {(["CC", "USDCx"] as const).map((tok) => {
+                const selected = form.rewardToken === tok;
+                return (
+                  <button
+                    key={tok}
+                    type="button"
+                    onClick={() => updateField("rewardToken", tok)}
+                    className={cn(
+                      "rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors",
+                      selected
+                        ? tok === "USDCx"
+                          ? "border-sky-400 bg-sky-400/15 text-sky-300"
+                          : "border-[var(--primary)] bg-[var(--primary)]/15 text-[var(--primary)]"
+                        : "border-[var(--border)] bg-[var(--muted)]/30 text-[var(--muted-foreground)] hover:border-[var(--foreground)]/40",
+                    )}
+                  >
+                    {tok}
+                  </button>
+                );
+              })}
+            </div>
+            {form.rewardToken === "USDCx" && (
+              <p className="text-xs text-amber-500">
+                Fund the reward wallet (CANTON_REWARD_PARTY_ID) with USDCx before the campaign goes live.
+                The claim fee is still paid in CC.
+              </p>
+            )}
+          </div>
+
+          {/* One-shot invite codes (create only): uploaded after the quest is
+              saved (POST chaining). Non-fatal if it fails. */}
           {!isEdit && (isInviteRewardType(form.rewardType) || rewardConfig.isDual) && (
             <div>
               <label className="mb-1.5 block text-sm font-medium">
@@ -680,13 +775,13 @@ export function QuestForm({
               <textarea
                 value={form.inviteCodes}
                 onChange={(e) => updateField("inviteCodes", e.target.value)}
-                placeholder={"1 code per line / comma-separated\ncontoh:\nABC-123\nXYZ-456"}
+                placeholder={"1 code per line / comma-separated\ne.g.:\nABC-123\nXYZ-456"}
                 rows={4}
                 className={cn(inputCls, "font-mono text-xs leading-relaxed resize-y")}
               />
               <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                Paste sekarang untuk sekali jalan — codes langsung ter-upload saat campaign dibuat.
-                Atau skip & tambah nanti via tab <strong>Invite codes</strong>.
+                Paste now to do it in one shot — codes are uploaded right after the campaign is created.
+                Or skip and add them later via the <strong>Invite codes</strong> tab.
               </p>
             </div>
           )}
@@ -704,38 +799,6 @@ export function QuestForm({
                   placeholder="e.g. 100"
                   className={inputCls}
                 />
-                {/* Token selector — reward token (fee tetap CC).
-                    USDCx tersedia utk semua reward type yang berdistribusi token
-                    (FCFS/CC_ONLY, Raffle/CC_MANUAL, Raffle dual/CC_AND_CODE_RAFFLE). */}
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-[var(--muted-foreground)]">Reward token:</span>
-                  {(["CC", "USDCx"] as const).map((tok) => {
-                    const selected = form.rewardToken === tok;
-                    return (
-                      <button
-                        key={tok}
-                        type="button"
-                        onClick={() => updateField("rewardToken", tok)}
-                        className={cn(
-                          "rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
-                          selected
-                            ? tok === "USDCx"
-                              ? "border-sky-400 bg-sky-400/15 text-sky-300"
-                              : "border-[var(--primary)] bg-[var(--primary)]/15 text-[var(--primary)]"
-                            : "border-[var(--border)] bg-[var(--muted)]/30 text-[var(--muted-foreground)] hover:border-[var(--foreground)]/40",
-                        )}
-                      >
-                        {tok}
-                      </button>
-                    );
-                  })}
-                </div>
-                {form.rewardToken === "USDCx" && (
-                  <p className="text-xs text-amber-500">
-                    Reward wallet (CANTON_REWARD_PARTY_ID) harus di-fund USDCx sebelum campaign live.
-                    Fee claim tetap dibayar dalam CC.
-                  </p>
-                )}
               </div>
             )}
             {needsMaxWinners && (
@@ -853,16 +916,12 @@ export function QuestForm({
           <div className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/30 px-3 py-2.5">
             <p className="text-xs font-medium text-[var(--muted-foreground)]">Reward pool label (auto)</p>
             <p className="mt-0.5 text-sm font-semibold text-[var(--foreground)]">
-              {(() => {
-                const cc = Number(form.rewardCc) || 0;
-                const maxW = form.maxWinners.trim() === "" ? null : Number(form.maxWinners);
-                const tt = form.rewardToken;
-                if (rewardConfig.isCcToken && cc > 0 && maxW && maxW > 0) return `${cc * maxW} ${tt} pool`;
-                if (rewardConfig.isCcToken && cc > 0) return `${cc} ${tt}`;
-                if (rewardConfig.isDual && cc > 0) return `${cc} ${tt} + Code`;
-                if (maxW && maxW > 0) return `${maxW} ${rewardConfig.code === "WAITLIST_EMAIL" ? "spots" : "codes"}`;
-                return "TBD";
-              })()}
+              {buildRewardPoolLabel(
+                rewardConfig,
+                Number(form.rewardCc) || 0,
+                form.maxWinners.trim() === "" ? null : Number(form.maxWinners),
+                form.rewardToken,
+              )}
             </p>
             <p className="mt-0.5 text-[11px] text-[var(--muted-foreground)]">
               {questKind === "CAMPAIGN"
@@ -898,35 +957,44 @@ export function QuestForm({
             </div>
           </details>
         </div>
-      </section>
+      </details>
 
       {/* Social Links */}
       {questKind === "CAMPAIGN" ? (
-        <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-4">
-          <div className="flex items-center gap-2">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[11px] font-bold text-[var(--primary)]">3</span>
-            <h2 className="type-section-title">Social links</h2>
+        <details className="group rounded-2xl border border-[var(--border)] bg-[var(--card)]">
+          <summary className="flex cursor-pointer list-none items-center justify-between p-5">
+            <span className="flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[11px] font-bold text-[var(--primary)]">3</span>
+              <h2 className="type-section-title">Social links</h2>
+            </span>
+            <ChevronDown className="h-4 w-4 text-[var(--muted-foreground)] transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="space-y-4 border-t border-[var(--border)] p-5">
+            <p className="text-xs text-[var(--muted-foreground)]">
+              Small icons shown on the campaign page (X, Discord, Telegram, website, etc.).
+            </p>
+            <QuestSocialLinksEditor
+              links={socialLinks}
+              onChange={setSocialLinks}
+              inputCls={inputCls}
+            />
           </div>
-          <p className="text-xs text-[var(--muted-foreground)]">
-            Small icons shown on the campaign page (X, Discord, Telegram, website, etc.).
-          </p>
-          <QuestSocialLinksEditor
-            links={socialLinks}
-            onChange={setSocialLinks}
-            inputCls={inputCls}
-          />
-        </section>
+        </details>
       ) : null}
 
       {/* Earn access gate — CAMPAIGN only */}
       {questKind === "CAMPAIGN" ? (
-        <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-4">
-          <div className="flex items-center gap-2">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[11px] font-bold text-[var(--primary)]">
-              4
+        <details className="group rounded-2xl border border-[var(--border)] bg-[var(--card)]">
+          <summary className="flex cursor-pointer list-none items-center justify-between p-5">
+            <span className="flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[11px] font-bold text-[var(--primary)]">
+                4
+              </span>
+              <h2 className="type-section-title">Earn access gate</h2>
             </span>
-            <h2 className="type-section-title">Earn access gate</h2>
-          </div>
+            <ChevronDown className="h-4 w-4 text-[var(--muted-foreground)] transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="space-y-4 border-t border-[var(--border)] p-5">
           <p className="text-xs text-[var(--muted-foreground)]">
             Requirement to join this event. Users see an &ldquo;Eligible / Not eligible&rdquo;
             badge on the campaign page based on these settings.
@@ -1003,7 +1071,8 @@ export function QuestForm({
               </p>
             )}
           </div>
-        </section>
+          </div>
+        </details>
       ) : null}
 
       {/* Tasks (optional at creation) */}
@@ -1027,7 +1096,7 @@ export function QuestForm({
           {showTasks && (
             <div className="space-y-3">
               {tasks.map((task, idx) => (
-                <div key={idx} className="rounded-xl border border-[var(--border)] p-4 space-y-3">
+                <div key={task.id} className="rounded-xl border border-[var(--border)] p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold uppercase text-[var(--muted-foreground)]">Task {idx + 1}</span>
                     <button type="button" onClick={() => removeTask(idx)} className="text-red-500 hover:text-red-400">
@@ -1089,10 +1158,18 @@ export function QuestForm({
         </p>
       )}
 
-      {error && (
-        <p className="rounded-xl bg-red-500/10 px-4 py-3 text-sm font-medium text-red-600 dark:text-red-400">
-          {error}
-        </p>
+      {error && error.length > 0 && (
+        <div className="rounded-xl bg-red-500/10 px-4 py-3 text-sm font-medium text-red-600 dark:text-red-400">
+          {error.length === 1 ? (
+            <p>{error[0]}</p>
+          ) : (
+            <ul className="list-disc space-y-1 pl-5">
+              {error.map((msg, i) => (
+                <li key={i}>{msg}</li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
 
       <div className="flex gap-3">
