@@ -230,7 +230,7 @@ export function EarnCampaignCard({
 
           {/* Org + Title */}
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[10px] font-semibold text-slate-500 sm:text-xs">{quest.org}</p>
+            <p className="break-words text-[10px] font-semibold text-slate-500 sm:text-xs">{quest.org}</p>
             <h3 className="line-clamp-2 text-sm font-bold leading-tight text-white sm:mt-0.5 sm:text-base">
               {quest.title}
             </h3>
