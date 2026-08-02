@@ -38,6 +38,7 @@ import {
   useBalances,
   useInvalidateWalletTokens,
 } from "@/lib/hooks/use-wallet-tokens";
+import { useFeeConfig } from "@/lib/hooks/use-fee-config";
 import { TokenLogo, displayName } from "@/components/app/wallet/token-logo";
 
 type Sheet = null | "send" | "receive" | "offers" | "swap";
@@ -65,7 +66,11 @@ export function WalletActions({
   const receiveTitleId = useId();
   const router = useRouter();
   const [sheet, setSheet] = useState<Sheet>(null);
-  const [feeCc, setFeeCc] = useState(5);
+
+  // Fee config (TRANSACTION_FEE_CC dari env backend) via shared react-query
+  // hook — ter-dedup dengan SettingsPreapprovalPanel yang baca endpoint sama.
+  const { data: feeConfig } = useFeeConfig();
+  const feeCc = feeConfig?.feeCc ?? 5;
 
   // Pending incoming offers — badge count + modal content.
   const { offers, loading: offersLoading, error: offersError, setOffers, refresh: refreshOffers } = useOffers();
@@ -79,14 +84,6 @@ export function WalletActions({
   } = useSentOffers();
   // Badge total: incoming + outgoing supaya user tahu ada aksi pending.
   const offersCount = offers.length + sentOffers.length;
-
-  // Fetch fee config from backend env so UI stays in sync with .env
-  useEffect(() => {
-    fetch("/api/party/fee-config", { credentials: "include" })
-      .then((r) => r.ok ? r.json() : null)
-      .then((d: { feeCc?: number } | null) => { if (d?.feeCc !== undefined) setFeeCc(d.feeCc); })
-      .catch(() => {});
-  }, []);
 
   // ── Token list untuk Send unified (CC + USDCx + token aktif lainnya) ──
   // Satu UI Send untuk semua token. CC = route /send-cc (preapproval path),

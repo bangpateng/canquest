@@ -113,9 +113,10 @@ export function useTransactionNotifications(
     queryFn: fetchFeed,
     staleTime: pollIntervalMs,
     // Real-time via SSE `transaction:new` (lihat use-realtime.ts). Safety-net
-    // polling 5 menit kalau SSE putus.
+    // polling 5 menit kalau SSE putus. refetchOnWindowFocus sengaja OFF (global)
+    // — hook ini mounted di platform shell (semua halaman); alt-tab tidak boleh
+    // trigger request notifikasi.
     refetchInterval: 300_000,
-    refetchOnWindowFocus: true,
     retry: 2,
   });
 

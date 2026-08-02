@@ -11,7 +11,6 @@ import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { queryKeys } from "@/lib/queries/query-keys";
 import {
   TX_TYPE_KEYS as TX_TYPE_KEYS_SHARED,
-  type TxType,
 } from "@/lib/canton/tx-labels";
 
 export const TRANSACTIONS_PAGE_SIZE = 5;
@@ -411,9 +410,10 @@ export function TransactionsView({
     enabled: Boolean(partyId),
     staleTime: POLL_MS,
     // Real-time via SSE `transaction:new` (lihat use-realtime.ts). Safety-net
-    // polling 5 menit kalau SSE putus.
+    // polling 5 menit kalau SSE putus. refetchOnWindowFocus sengaja OFF (global)
+    // — SSE + polling sudah jadi sumber update, alt-tab tidak perlu trigger
+    // burst request.
     refetchInterval: 300_000,
-    refetchOnWindowFocus: true,
     retry: 2,
   });
 

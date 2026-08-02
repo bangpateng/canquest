@@ -277,9 +277,10 @@ export function QuestTaskPanel({
   }, [loadProgress]);
 
   // ── Realtime progress for send-transaction tasks ──────────────────────────
-  // Agar progress "3/5 sends" update otomatis saat CC benar-benar diterima di
-  // chain (inbound sync / polling tx-history). Polling 10s, pause saat tab
-  // hidden, refetch instan pada event 'cc:new-tx' (bell/transaksi baru).
+  // Progress "3/5 sends" diperbarui via polling 10s (pause saat tab hidden +
+  // refetch instan saat tab kembali visible). Bell notifikasi sekarang
+  // sinkron via invalidateQueries (bukan event bus manual) — polling tetap
+  // jadi sumber update agar progres naik tanpa interaksi user.
   // Poll progress bila quest punya task countable-wallet (send/swap) yang belum selesai.
   const hasUnresolvedCountableWalletTask = useMemo(
     () =>
@@ -318,15 +319,10 @@ export function QuestTaskPanel({
         stopPoll();
       }
     };
-    // 'cc:new-tx' dipancarkan bell saat ada tx masuk/keluar baru → refetch
-    // langsung (silent) supaya progres naik tanpa menunggu interval 10s berikutnya.
-    const onNewTx = () => void loadProgress({ silent: true });
     document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("cc:new-tx", onNewTx);
     return () => {
       stopPoll();
       document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("cc:new-tx", onNewTx);
     };
   }, [hasUnresolvedCountableWalletTask, loadProgress]);
 

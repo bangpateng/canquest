@@ -5,6 +5,7 @@ import { Lock, ChevronDown } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/utils/utils";
 import { TokenLogo, displayName } from "@/components/app/wallet/token-logo";
+import { useFeeConfig } from "@/lib/hooks/use-fee-config";
 
 type PreapprovalStatus = {
   active?: boolean;
@@ -27,8 +28,10 @@ export function SettingsPreapprovalPanel() {
   const [success, setSuccess] = useState<string | null>(null);
 
   // Token mana yang toggle-nya ENABLED (fungsional). CC selalu ada.
-  // Di-fetch dari /api/party/fee-config → preapprovalTokens.
-  const [enabledTokens, setEnabledTokens] = useState<string[]>(["CC"]);
+  // Dari shared hook useFeeConfig (GET /api/party/fee-config → preapprovalTokens).
+  // Ter-dedup dengan WalletActions yang baca endpoint sama.
+  const { data: feeConfig } = useFeeConfig();
+  const enabledTokens = feeConfig?.preapprovalTokens ?? ["CC"];
   const [collapsed, setCollapsed] = useState(false);
 
   const loadCcStatus = useCallback(async () => {
@@ -58,29 +61,9 @@ export function SettingsPreapprovalPanel() {
     }
   }, []);
 
-  const loadConfig = useCallback(async () => {
-    try {
-      const res = await fetch("/api/party/fee-config", {
-        credentials: "include",
-      });
-      if (res.ok) {
-        const data = (await res.json()) as {
-          preapprovalTokens?: string[];
-        };
-        if (data.preapprovalTokens) {
-          setEnabledTokens(
-            data.preapprovalTokens.map((t) => t.toUpperCase()),
-          );
-        }
-      }
-    } catch {
-      /* non-fatal — default CC only */
-    }
-  }, []);
-
   useEffect(() => {
-    void Promise.all([loadCcStatus(), loadConfig()]);
-  }, [loadCcStatus, loadConfig]);
+    void loadCcStatus();
+  }, [loadCcStatus]);
 
   async function toggleCc() {
     setBusy(true);

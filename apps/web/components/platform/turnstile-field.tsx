@@ -1,8 +1,9 @@
 "use client";
 
 import { Turnstile, type TurnstileInstance } from "@marsidev/react-turnstile";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { useTurnstileConfig } from "@/lib/hooks/use-turnstile-config";
 
 type TurnstileFieldProps = {
   onToken: (token: string | null) => void;
@@ -11,38 +12,14 @@ type TurnstileFieldProps = {
 
 export function TurnstileField({ onToken, resetKey = 0 }: TurnstileFieldProps) {
   const ref = useRef<TurnstileInstance>(null);
-  const [siteKey, setSiteKey] = useState(
-    () => process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() ?? "",
-  );
-  const [loading, setLoading] = useState(!siteKey);
-
-  useEffect(() => {
-    if (siteKey) {
-      setLoading(false);
-      return;
-    }
-    let cancelled = false;
-    void fetch("/api/config/public", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: { turnstileSiteKey?: string } | null) => {
-        if (cancelled) return;
-        const key = data?.turnstileSiteKey?.trim() ?? "";
-        setSiteKey(key);
-        setLoading(false);
-      })
-      .catch(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [siteKey]);
+  const { data, isLoading } = useTurnstileConfig();
+  const siteKey = data?.siteKey ?? "";
 
   useEffect(() => {
     onToken(null);
   }, [resetKey, onToken]);
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex justify-center py-2">
         <LoadingSpinner size="lg" tone="muted" />
@@ -83,22 +60,15 @@ export function TurnstileField({ onToken, resetKey = 0 }: TurnstileFieldProps) {
   );
 }
 
-/** `null` = still loading config from server. */
+/**
+ * `null` = still loading config from server. `true` = captcha required.
+ * `false` = no site key configured (captcha disabled).
+ *
+ * Uses the shared `useTurnstileConfig` hook so it dedups with `<TurnstileField>`
+ * when both are used in the same component (e.g. auth modal).
+ */
 export function useTurnstileRequired(): boolean | null {
-  const inlined = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim();
-  const [required, setRequired] = useState<boolean | null>(
-    inlined ? true : null,
-  );
-
-  useEffect(() => {
-    if (inlined) return;
-    void fetch("/api/config/public", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: { turnstileSiteKey?: string } | null) => {
-        setRequired(Boolean(data?.turnstileSiteKey?.trim()));
-      })
-      .catch(() => setRequired(false));
-  }, [inlined]);
-
-  return required;
+  const { data, isLoading } = useTurnstileConfig();
+  if (isLoading) return null;
+  return Boolean(data?.siteKey);
 }

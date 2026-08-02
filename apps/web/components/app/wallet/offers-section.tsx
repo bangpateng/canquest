@@ -119,9 +119,10 @@ function useOffersList(options: {
     },
     staleTime: 30_000,
     // Real-time via SSE `offer:new` (lihat use-realtime.ts). Safety-net polling
-    // 5 menit kalau SSE putus (network glitch, browser sleep).
+    // 5 menit kalau SSE putus (network glitch, browser sleep). refetchOnWindowFocus
+    // sengaja OFF (global) — SSE + polling sudah jadi sumber update, alt-tab tidak
+    // perlu trigger burst request.
     refetchInterval: 300_000,
-    refetchOnWindowFocus: true,
     retry: 2,
   });
 

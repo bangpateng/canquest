@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { cn } from "@/lib/utils/utils";
 import { buttonVariants } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -18,8 +18,8 @@ import {
 import { isTokenActive as isSwapActive } from "@/lib/canton/token-types";
 
 // ── Types ───────────────────────────────────────────────────────────────
-// Reuse WalletToken/PoolsResponse dari shared token-types (tidak duplikasi).
-import type { WalletToken as SwapToken, PoolsResponse } from "@/lib/canton/token-types";
+// Reuse WalletToken dari shared token-types (tidak duplikasi).
+import type { WalletToken as SwapToken } from "@/lib/canton/token-types";
 
 /** Quote response dari POST /api/party/swap/quote — shape OneSwap native
  *  sesuai dokumentasi Quote type. Semua field numeric.
@@ -71,6 +71,7 @@ import {
 } from "@/components/app/wallet/token-logo";
 import {
   useBalances,
+  usePools,
   useInvalidateWalletTokens,
 } from "@/lib/hooks/use-wallet-tokens";
 
@@ -79,21 +80,16 @@ import {
 export function SwapModal({ open, onClose, balance }: SwapModalProps) {
   const titleId = useId();
 
-  // WAVE 6 real-time: saldo dari TanStack Query (auto-refresh saat SSE
-  // balance:changed masuk). Override prop `balance` (CC) supaya modal
-  // selalu tampilkan saldo terbaru tanpa perlu tutup/buka modal.
+  // WAVE 6 real-time: pools & saldo dari TanStack Query (auto-refresh saat SSE
+  // balance:changed masuk). Key dishared dengan TokenList/WalletActions parent
+  // → ter-dedup, tidak ada double-fetch saat SwapModal dibuka.
   const invalidateWalletTokens = useInvalidateWalletTokens();
+  const poolsQuery = usePools({ enabled: open });
   const { data: balancesData } = useBalances({ enabled: open });
 
-  const [tokens, setTokens] = useState<SwapToken[]>([]);
-  const [tokensLoading, setTokensLoading] = useState(false);
-  const [tokensError, setTokensError] = useState<string | null>(null);
-
-  // Saldo per-token (CC + non-CC). Key = "<id>::<admin>", value = decimal string.
-  const [balances, setBalances] = useState<{
-    cc: number;
-    tokens: Record<string, string>;
-  }>({ cc: 0, tokens: {} });
+  const tokens = poolsQuery.data?.tokens ?? [];
+  const tokensLoading = poolsQuery.isLoading;
+  const tokensError = poolsQuery.error ? "Could not load tokens." : null;
 
   // Two independent slots — user can pick any token in either.
   const [sellToken, setSellToken] = useState<SwapToken | null>(null);
@@ -153,47 +149,17 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
       .catch(() => setStatus(null));
   }, [open]);
 
-  // Fetch all tokens when modal opens.
-  const loadTokens = useCallback(async () => {
-    setTokensLoading(true);
-    setTokensError(null);
-    try {
-      const [poolsRes, balRes] = await Promise.all([
-        fetch("/api/party/pools", { credentials: "include" }),
-        fetch("/api/party/balance", { credentials: "include" }),
-      ]);
-      const data = (await poolsRes.json()) as PoolsResponse & {
-        message?: string;
-      };
-      if (!poolsRes.ok) {
-        setTokensError(data.message ?? "Could not load tokens.");
-        return;
-      }
-      const list = data.tokens ?? [];
-      setTokens(list);
-      // Default: sell = CC (Amulet), buy = first non-CC token.
-      const cc = list.find((t) => t.isCC);
-      const firstNonCC = list.find((t) => !t.isCC);
-      setSellToken(cc ?? list[0] ?? null);
-      setBuyToken(firstNonCC ?? (list[1] ?? null));
-      // Load balances (CC + non-CC) — non-blocking, jangan gagal kalau error.
-      if (balRes.ok) {
-        const bal = (await balRes.json()) as {
-          cc: number;
-          tokens: Record<string, string>;
-        };
-        setBalances(bal);
-      }
-    } catch {
-      setTokensError("Network error. Check your connection.");
-    } finally {
-      setTokensLoading(false);
-    }
-  }, []);
-
+  // Default sell/buy token selection — derived from the pools query. Picks
+  // sell = CC (Amulet), buy = first non-CC token once tokens are available.
+  // Runs only when neither slot is set yet (first load / modal reopened).
   useEffect(() => {
-    if (open && statusEnabled) void loadTokens();
-  }, [open, statusEnabled, loadTokens]);
+    if (!open || !statusEnabled || tokens.length === 0) return;
+    if (sellToken && buyToken) return;
+    const cc = tokens.find((t) => t.isCC);
+    const firstNonCC = tokens.find((t) => !t.isCC);
+    setSellToken(cc ?? tokens[0] ?? null);
+    setBuyToken(firstNonCC ?? (tokens[1] ?? null));
+  }, [open, statusEnabled, tokens, sellToken, buyToken]);
 
   // Debounced live quote.
   useEffect(() => {
@@ -239,15 +205,15 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
   if (!open) return null;
 
   const sellIsCC = Boolean(sellToken?.isCC);
-  // WAVE 6 real-time: saldo prioritas dari useBalances hook (auto-refresh SSE).
-  // Fallback ke prop `balance` (CC) + state local (initial load) untuk robustness.
+  // WAVE 6 real-time: saldo dari useBalances hook (auto-refresh SSE).
+  // Fallback ke prop `balance` (CC) saat hook masih loading.
   const ccBalanceEffective =
     typeof balancesData?.cc === "number"
       ? balancesData.cc
       : typeof balance === "number"
         ? balance
-        : balances.cc;
-  const tokensMap = balancesData?.tokens ?? balances.tokens;
+        : 0;
+  const tokensMap = balancesData?.tokens ?? {};
   // DB-DRIVEN: balance key = instrumentId (lowercase), bukan composite id::admin.
   const sellBalance = sellToken
     ? sellIsCC
@@ -317,7 +283,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
       setSwapOutput(data.outputAmount ?? "");
       setSwapReceivedToken(buyToken?.instrumentId ?? "");
       // WAVE 6 real-time: invalidate react-query supaya saldo refresh otomatis
-      // (useBalances hook background refetch). Lebih cepat dari loadTokens manual.
+      // (useBalances/usePools hook background refetch).
       void invalidateWalletTokens();
     } catch {
       setSwapState("error");

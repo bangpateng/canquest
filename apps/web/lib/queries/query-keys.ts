@@ -6,7 +6,7 @@
  *
  * Hierarki ini memungkinkan invalidasi granular ATAU luas:
  *   - invalidateQueries({ queryKey: queryKeys.party.all })       // semua data party
- *   - invalidateQueries({ queryKey: queryKeys.party.balance })   // hanya balance
+ *   - invalidateQueries({ queryKey: queryKeys.party.balances })  // hanya balance
  *   - invalidateQueries({ queryKey: queryKeys.party.transactions.all }) // semua halaman tx
  */
 
@@ -17,12 +17,14 @@ export const queryKeys = {
   },
   party: {
     all: ["party"] as const,
-    balance: ["party", "balance"] as const,
     balances: ["party", "balances"] as const,
     pools: ["party", "pools"] as const,
     lockStatus: ["party", "lock-status"] as const,
     ccPrice: ["party", "cc-price"] as const,
     tokenPrices: ["party", "token-prices"] as const,
+    /** GET /api/party/fee-config — fee CC + token preapproval yang enabled.
+     *  Env-backed (statis per deploy) → staleTime panjang. */
+    feeConfig: ["party", "fee-config"] as const,
     offers: ["party", "offers"] as const,
     /** Outgoing (sent) pending offers — dipakai tab Sent di modal Offers (Withdraw). */
     sentOffers: ["party", "offers", "sent"] as const,
