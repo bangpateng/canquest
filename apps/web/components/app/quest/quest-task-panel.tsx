@@ -1069,7 +1069,7 @@ function TaskRow({
             </p>
             <p
               className={cn(
-                "truncate text-sm font-semibold leading-snug text-slate-100 sm:text-base",
+                "line-clamp-2 break-words text-sm font-semibold leading-snug text-slate-100 sm:text-base",
                 isVerified && "line-through opacity-70",
               )}
             >
@@ -1276,7 +1276,7 @@ function TaskRow({
             <div className="flex flex-wrap items-center gap-2">
               <p
                 className={cn(
-                  "truncate text-sm font-semibold leading-snug text-slate-100 sm:text-base",
+                  "line-clamp-2 break-words text-sm font-semibold leading-snug text-slate-100 sm:text-base",
                   isOneTimeComplete && "line-through opacity-70",
                 )}
               >
@@ -1290,24 +1290,24 @@ function TaskRow({
             </div>
             {/* Baris status meta ringkas (cooldown / ready / quiz ended / send progress). */}
             {onRepeatCooldown ? (
-              <p className="mt-0.5 truncate text-xs font-medium text-emerald-400/80">
+              <p className="mt-0.5 break-words text-xs font-medium text-emerald-400/80">
                 {isCountableWalletTask || isLockCc ? "Verified" : "Checked in"} — ready in {formatQuestHubCooldown(repeatCooldownMs)}
               </p>
             ) : canRepeatNow && (isCountableWalletTask) ? (
-              <p className="mt-0.5 truncate text-xs font-medium text-canton">
+              <p className="mt-0.5 break-words text-xs font-medium text-canton">
                 Ready — verify for +{task.points} pts
               </p>
             ) : canRepeatNow ? (
-              <p className="mt-0.5 truncate text-xs font-medium text-canton">
+              <p className="mt-0.5 break-words text-xs font-medium text-canton">
                 Ready again — check in for +{task.points} pts
               </p>
             ) : quizExpired ? (
-              <p className="mt-0.5 truncate text-xs font-medium text-orange-300/90">
+              <p className="mt-0.5 break-words text-xs font-medium text-orange-300/90">
                 Quiz ended
               </p>
             ) : null}
             {isCountableWalletTask && sendProgress ? (
-              <p className="mt-0.5 truncate text-xs font-medium text-slate-400">
+              <p className="mt-0.5 break-words text-xs font-medium text-slate-400">
                 {sendProgress.today}/{sendProgress.required}{" "}
                 {isDailySwap ? "swaps" : isCountDaily ? "transactions" : "sends"} today
               </p>
