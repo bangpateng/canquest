@@ -7,8 +7,7 @@ import { ROUTES } from "@/lib/routing/app-routes";
 import { hasRealWallet } from "@/lib/auth/wallet-access";
 import { useMe } from "@/lib/hooks/use-me";
 import type { Quest } from "@/lib/quest/quest-types";
-import { cn } from "@/lib/utils/utils";
-import { Gift, Sparkles, Trophy, TrendingUp, Zap } from "lucide-react";
+import { Sparkles, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export function QuestHubPage() {

@@ -348,10 +348,6 @@ export function formatQuestHubSocialTarget(
   return raw;
 }
 
-function normTaskText(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9@]/g, "");
-}
-
 /** Earn-hub quiz window: NEW label + points only within this period after publish. */
 export const QUEST_HUB_NEW_LABEL_TTL_MS = 24 * 60 * 60 * 1000;
 
