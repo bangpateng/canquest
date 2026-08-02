@@ -1,24 +1,20 @@
 "use client";
-import { PageLoading } from "@/components/ui/loading-spinner";
 
 import { EarnCampaignSkeleton } from "@/components/app/earn/earn-campaign-skeleton";
 import { EarnCampaignCard } from "@/components/app/earn/earn-campaign-card";
-import { QuestCard } from "@/components/app/quest/quest-card";
 import type { Quest, QuestStatus, UserProgress } from "@/lib/quest/quest-types";
 import { QUEST_STATUS_BADGE } from "@/lib/quest/quest-types";
 import { filterTabClass } from "@/lib/ui/ui-button-styles";
-import { inputClass, surfaceToolbarClass } from "@/lib/ui/ui-tokens";
 import { cn } from "@/lib/utils/utils";
 import { ListPagination } from "@/components/app/list/list-pagination";
 import { buttonVariants } from "@/components/ui/button";
-import { CheckCircle2, Coins, Layers, Search, Sparkles } from "lucide-react";
+import { Search } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { ROUTES } from "@/lib/routing/app-routes";
 import { resolveQuestMediaUrl } from "@/lib/quest/quest-media-url";
 
-const QUEST_PAGE_SIZE = 6;
 const EARN_PAGE_SIZE = 6;
 
 function isWalletRequiredLoadError(message: string | null): boolean {
@@ -49,16 +45,10 @@ function matchesSearch(quest: Quest, q: string) {
     .includes(s);
 }
 
-export function QuestsBrowser({
-  embedded = false,
-  variant = "default",
-}: {
-  embedded?: boolean;
-  variant?: "default" | "earn";
-}) {
+export function QuestsBrowser({ variant = "earn" }: { variant?: "default" | "earn" }) {
   const t = usePlatformT();
-  const isEarn = variant === "earn" || embedded;
-  const pageSize = isEarn ? EARN_PAGE_SIZE : QUEST_PAGE_SIZE;
+  const isEarn = variant === "earn";
+  const pageSize = EARN_PAGE_SIZE;
 
   const [status, setStatus] = useState<QuestStatus>("ACTIVE");
   const [query, setQuery] = useState("");
@@ -67,7 +57,6 @@ export function QuestsBrowser({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
-  const [completionStats, setCompletionStats] = useState({ completed: 0, total: 0 });
 
   const loadQuests = useCallback(() => {
     const controller = new AbortController();
@@ -115,8 +104,6 @@ export function QuestsBrowser({
       .then(([quests, prog]) => {
         setAllQuests(quests);
         setProgress(prog);
-        const completed = prog?.completedQuestIds?.length ?? 0;
-        setCompletionStats({ completed, total: quests.length });
 
         if (quests.length > 0) {
           const activeCount = quests.filter((q) => q.status === "ACTIVE").length;
@@ -137,7 +124,6 @@ export function QuestsBrowser({
           setLoadError("Could not load campaigns");
         }
         setAllQuests([]);
-        setCompletionStats({ completed: 0, total: 0 });
       })
       .finally(() => setLoading(false));
 
@@ -157,29 +143,6 @@ export function QuestsBrowser({
     for (const q of allQuests) c[q.status]++;
     return c;
   }, [allQuests]);
-
-  const earnSummary = useMemo(() => {
-    let totalRewardCc = 0;
-    for (const q of allQuests) {
-      const perUser = typeof q.rewardCc === "number" ? q.rewardCc : 0;
-      const pool = q.campaignSummary?.poolTotalCc;
-      totalRewardCc += typeof pool === "number" && pool > 0 ? pool : perUser;
-    }
-    return {
-      active: counts.ACTIVE,
-      total: allQuests.length,
-      totalRewardCc,
-      completed: progress?.completedQuestIds?.length ?? 0,
-    };
-  }, [allQuests, counts.ACTIVE, progress]);
-
-  const formatCc = (value: number): string => {
-    if (value <= 0) return "0";
-    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value % 1_000_000 === 0 ? 0 : 1)}M`;
-    if (value >= 1_000) return `${(value / 1_000).toFixed(value % 1_000 === 0 ? 0 : 1)}K`;
-    return value.toLocaleString();
-  };
-
 
   const filtered = useMemo(
     () => allQuests.filter((q) => q.status === status && matchesSearch(q, query)),
@@ -217,29 +180,6 @@ export function QuestsBrowser({
     </div>
   );
 
-  const searchField = (
-    <label
-      className={cn(
-        "relative block w-full shrink-0",
-        isEarn ? "max-w-none" : "sm:max-w-xs",
-      )}
-    >
-      <span className="sr-only">{t("quests.searchLabel")}</span>
-      <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-      <input
-        type="search"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search quests..."
-        className={cn(
-          "w-full rounded-xl border border-white/[0.08] bg-[#0a0c14]/80 py-2.5 pl-11 pr-4 text-sm font-medium text-slate-100 outline-none placeholder:text-slate-500 focus:border-[var(--primary)]/40 focus:ring-2 focus:ring-[var(--ring)] focus:shadow-[0_0_20px_rgb(var(--canton-rgb)/0.08)] transition-all duration-200 backdrop-blur-xl",
-          isEarn && "bg-[var(--background)]/60",
-        )}
-        autoComplete="off"
-      />
-    </label>
-  );
-
   return (
     <div className={cn("w-full max-w-full overflow-hidden", isEarn ? "space-y-4 sm:space-y-5 md:space-y-6" : "space-y-5 sm:space-y-6 md:space-y-8")}>
       {isEarn ? (
@@ -269,24 +209,14 @@ export function QuestsBrowser({
             <div className="min-w-0 flex-1 overflow-hidden">{tabRow}</div>
           </section>
         </>
-      ) : (
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
-          {tabRow}
-
-          {searchField}
-        </div>
-      )}
+      ) : null}
 
       {loading ? (
-        isEarn ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <EarnCampaignSkeleton key={i} />
-            ))}
-          </div>
-        ) : (
-          <PageLoading minHeight="min-h-0" className="py-20" />
-        )
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <EarnCampaignSkeleton key={i} />
+          ))}
+        </div>
       ) : loadError ? (
         <div className="rounded-2xl border border-red-500/20 bg-red-500/5 px-4 py-10 text-center backdrop-blur-xl sm:px-6 sm:py-14">
           <p className="text-lg font-bold tracking-tight text-red-200 sm:text-xl md:text-2xl">
@@ -344,30 +274,17 @@ export function QuestsBrowser({
         </div>
       ) : (
         <>
-          {isEarn ? (
-            <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 md:gap-6 xl:grid-cols-3">
-              {pagedQuests.map((q) => (
-                <div key={q.id} className="w-full overflow-hidden">
-                  <EarnCampaignCard
-                    quest={q}
-                    completed={progress?.completedQuestIds.includes(q.id) ?? false}
-                    userProgress={progress}
-                  />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 md:gap-6 xl:grid-cols-3">
-              {pagedQuests.map((q) => (
-                <div key={q.id} className="w-full overflow-hidden">
-                  <QuestCard
-                    quest={q}
-                    completed={progress?.completedQuestIds.includes(q.id) ?? false}
-                  />
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 md:gap-6 xl:grid-cols-3">
+            {pagedQuests.map((q) => (
+              <div key={q.id} className="w-full overflow-hidden">
+                <EarnCampaignCard
+                  quest={q}
+                  completed={progress?.completedQuestIds.includes(q.id) ?? false}
+                  userProgress={progress}
+                />
+              </div>
+            ))}
+          </div>
           <ListPagination
             page={page}
             totalPages={totalPages}

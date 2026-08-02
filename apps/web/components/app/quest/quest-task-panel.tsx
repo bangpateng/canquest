@@ -6,6 +6,7 @@ import type {
   QuestTaskType,
   QuestSubmission,
   QuestRewardStatus,
+  SubmissionStatus,
 } from "@/lib/quest/quest-types";
 import {
   TASK_ACTION_BUTTON_LABEL,
@@ -18,7 +19,6 @@ import {
   isQuestHubQuizExpired,
   isQuestHubQuizType,
   isQuestHubRepeatableTask,
-  isQuestHubSocialType,
   isSendTransactionTask,
   isSendTokenTask,
   isDailySwapTask,
@@ -29,7 +29,6 @@ import {
 import { CampaignFcfsClaimSection } from "@/components/app/campaign/campaign-fcfs-claim";
 import { CampaignDrawCcClaimSection } from "@/components/app/campaign/campaign-draw-cc-claim";
 import { CampaignCcAndCodeRaffleClaimSection } from "@/components/app/campaign/campaign-cc-and-code-raffle-claim";
-import { TaskPointsLabel } from "@/components/app/quest/task-points-label";
 import { CampaignInviteClaimSection } from "@/components/app/campaign/campaign-invite-claim";
 import {
   QuestSubmitSection,
@@ -47,20 +46,7 @@ import { TaskBrandIcon } from "@/components/app/quest/task-brand-icon";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
 import { hasRealWallet } from "@/lib/auth/wallet-access";
-import {
-  CalendarCheck,
-  Check,
-  CheckCircle2,
-  Circle,
-  Fingerprint,
-  HelpCircle,
-  Lock,
-  Mail,
-  Repeat2,
-  Send,
-  UserPlus,
-  Users,
-} from "lucide-react";
+import { Lock } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useMe } from "@/lib/hooks/use-me";
 import Link from "next/link";
@@ -99,31 +85,6 @@ function taskActionButtonLabel(type: string): string {
  * link channel). Menggantikan label platform redundan lama (info platform sudah
  * ada di ikon + judul). Kembalikan null bila tidak ada yang berguna ditampilkan.
  */
-function taskActionHint(task: QuestTask, type: string): string | null {
-  const t = normalizeType(type);
-  const rawTarget = (task.target ?? "").trim();
-  const handle = rawTarget.replace(/^@/, "");
-
-  const hints: Record<string, string> = {
-    twitter_follow: handle
-      ? `Follow @${handle}, then tap to verify`
-      : "Tap to follow & verify",
-    twitter_retweet: handle
-      ? `Retweet @${handle}, then tap to verify`
-      : "Tap to retweet & verify",
-    telegram_channel: "Join the channel, then tap to verify",
-    telegram_group: "Join the group, then tap to verify",
-    telegram_join: "Join the channel, then tap to verify",
-    discord_join: "Join the server, then tap to verify",
-    submit_email: "Enter your email to verify",
-    submit_party_id: "Submit your Canton party ID to verify",
-    submit_canton_address: "Submit your Canton party ID to verify",
-    daily_check_in: "Check in daily to earn points",
-    quiz_yes_no: "Pick the correct answer",
-    quiz_choice: "Pick the correct answer",
-  };
-  return hints[t] ?? null;
-}
 
 function openTaskTarget(task: QuestTask, taskType: string) {
   const target = task.target?.trim();
@@ -378,18 +339,6 @@ export function QuestTaskPanel({
   // but EARN_HUB uses the per-day variant for accurate "today's progress".
   const verifiedTodayCount = useMemo(
     () => visibleTasks.filter((t) => todayVerified.has(t.id)).length,
-    [visibleTasks, todayVerified],
-  );
-  const totalPoints = useMemo(
-    () => visibleTasks.reduce((s, t) => s + t.points, 0),
-    [visibleTasks],
-  );
-  const earnedPoints = useMemo(
-    () =>
-      visibleTasks.reduce(
-        (s, t) => s + (todayVerified.has(t.id) ? t.points : 0),
-        0,
-      ),
     [visibleTasks, todayVerified],
   );
   const pct = visibleTasks.length
@@ -1450,6 +1399,3 @@ function TaskRow({
     );
   }
 }
-
-
-type SubmissionStatus = "PENDING" | "VERIFIED" | "REJECTED";
