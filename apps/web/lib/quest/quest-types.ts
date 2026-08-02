@@ -343,7 +343,9 @@ export function formatQuestHubSocialTarget(
     return raw;
   }
 
-  return raw.length > 56 ? `${raw.slice(0, 53)}…` : raw;
+  // Tidak slice di JS — andalkan CSS line-clamp-2 break-words di UI
+  // utk mencegah potongan di tengah kata pada layar kecil.
+  return raw;
 }
 
 function normTaskText(s: string): string {
@@ -945,8 +947,9 @@ export function buildQuestTaskTitle(
   const label = questTaskTypeLabel(type, ctx);
   const t = target?.trim();
   if (!t || !shouldAppendTargetToTitle(type, t)) return label;
-  const short = t.length > 48 ? `${t.slice(0, 45)}…` : t;
-  return `${label} — ${short}`;
+  // Tidak slice di JS — andalkan CSS line-clamp-2 break-words di UI
+  // supaya teks dipotong rapi di word boundary, bukan di tengah kata.
+  return `${label} — ${t}`;
 }
 
 /** Title shown to users — fixes legacy DB rows that still say "CanQuest". */
