@@ -369,19 +369,24 @@ template QuestClaimReceipt
           transfer      = feeTransfer
           extraArgs     = feeExtraArgs
 
-        -- 2. REWARD transfer (atomic leg 2, HANYA bila Some).
+        -- 2. REWARD transfer (atomic leg 2, HANYA bila semua Some).
         --    Controller = rewardTransfer.sender (rewardParty) → di-cover actAs.
         --    rewardToken None|"CC" → transfer.instrumentId.id = "Amulet"
         --    rewardToken "USDCx"   → transfer.instrumentId.id = "USDCx"
         --    Kode claim (rewardCc=0) → rewardFactoryCid = None → skip.
-        rewardActuallySent <- case (rewardFactoryCid, rewardTransfer, rewardExtraArgs) of
-          Some rfd, Some rt, Some rea -> do
-            _ <- exercise rfd TransferFactory_Transfer with
-              expectedAdmin = rt.instrumentId.admin
-              transfer      = rt
-              extraArgs     = rea
-            pure True
-          _ -> pure False
+        --    DAML tidak support tuple pattern multi-arg di case — pakai nested.
+        rewardActuallySent <- case rewardFactoryCid of
+          None -> pure False
+          Some rfd -> case rewardTransfer of
+            None -> pure False
+            Some rt -> case rewardExtraArgs of
+              None -> pure False
+              Some rea -> do
+                _ <- exercise rfd TransferFactory_Transfer with
+                  expectedAdmin = rt.instrumentId.admin
+                  transfer      = rt
+                  extraArgs     = rea
+                pure True
 
         -- 3. FAR activity marker (optional - hanya bila Some).
         --    Controller = appProvider -> backend actAs tambah appProvider.
