@@ -305,7 +305,15 @@ CMD=$(jq -n \
     choiceArgument: { updatedAt: $now }
   }}')
 RES=$(submit "$CMD" "test-end-$SUFFIX")
-ENDED_CID=$(extract_created_cid "$RES")
+# EndCampaign = consuming: archive self (ACTIVE) + create baru (status ENDED).
+# Ambil created cid yg BUKAN CAMP_CID lama (yg di-archive).
+ENDED_CID=""
+ALL_CIDS=$(echo "$RES" | jq -r "[.. | objects | select(.contractId != null and .templateId != null) | .contractId] | unique | .[]" 2>/dev/null)
+for cid in $ALL_CIDS; do
+  [ "$cid" = "$CAMP_CID" ] && continue   # skip archived (lama)
+  ENDED_CID="$cid"
+  break
+done
 if [ -n "$ENDED_CID" ] && [ "$ENDED_CID" != "null" ]; then
   ok "EndCampaign berhasil: ${ENDED_CID:0:16}..."
   CAMP_CID="$ENDED_CID"
