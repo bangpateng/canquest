@@ -36,7 +36,6 @@ version: 1.0.0
 dependencies:
   - daml-prim
   - daml-stdlib
-  - daml-script
 data-dependencies:
   # Nama file aktual dari bundle splice-node v0.6.12 (lihat scripts/fetch-daml-deps.sh).
   # Canton AI: path file bebas, tidak harus match nama simbolik.

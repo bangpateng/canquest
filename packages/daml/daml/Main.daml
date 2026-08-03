@@ -72,7 +72,6 @@
 
 module Main where
 
-import Daml.Script ()
 import DA.Foldable (forA_)
 
 -- Token Standard interfaces (data-dependencies, dari participant DAR).
@@ -85,7 +84,6 @@ import Splice.Api.Token.TransferInstructionV1
   , TransferFactory_Transfer(..)
   , Transfer(..)
   )
-import Splice.Api.Token.HoldingV1 (InstrumentId(..))
 import Splice.Api.Token.MetadataV1 (ExtraArgs(..))
 import Splice.Api.FeaturedAppRightV2
   ( FeaturedAppRight(..)
