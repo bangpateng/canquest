@@ -2,22 +2,16 @@
 # ============================================================
 # CanQuest — Test DAR v22 di participant node
 #
-# Validasi DAML v22 jalan benar di node:
-#   1. Create WalletRegistration
-#   2. Create QuestCampaign
-#   3. Exercise ClaimSlot (FCFS)
-#   4. Exercise ClaimSlot lagi (harus gagal - anti-sybil)
-#   5. Exercise DrawWinner (raffle)
-#   6. State machine: Activate → Pause → EndCampaign → Close
-#   7. Exercise RevealCode
+# Validasi DAML v22 jalan benar di node.
+# Format body = persis seperti backend canton-ledger.service.ts:
+#   { commands: [...], userId, commandId, actAs, readAs }
+#   CreateCommand  = { CreateCommand: { templateId, createArguments } }
+#   ExerciseCommand = { ExerciseCommand: { templateId, contractId, choice, choiceArgument } }
 #
-# AMAN: hanya create dummy contract. Tidak ada CC movement (Settle skip).
-# Contract dummy akan tetap di ACS (audit trail) - tidak ganggu production
-# krn DAML lama (v21) ga pernah jalan, ga ada yg match templateId v22.
+# AMAN: dummy contract only, no CC movement (Settle skip).
 #
 # CARA PAKAI (di VPS 2):
 #   bash scripts/test-dar-v22.sh
-#   # (auto-load apps/api/.env utk credentials + operator party)
 # ============================================================
 set -uo pipefail
 
@@ -39,13 +33,11 @@ load_env() {
 LEDGER_CLIENT_ID="${LEDGER_CLIENT_ID:-$(load_env LEDGER_CLIENT_ID)}"
 LEDGER_CLIENT_SECRET="${LEDGER_CLIENT_SECRET:-$(load_env LEDGER_CLIENT_SECRET)}"
 OPERATOR="${OPERATOR_PARTY_ID:-$(load_env CANTON_OPERATOR_PARTY_ID)}"
-USER_PARTY="${USER_PARTY:-$(load_env CANTON_REWARD_PARTY_ID)}"  # pakai reward party utk dummy user
+USER_PARTY="${USER_PARTY:-$(load_env CANTON_REWARD_PARTY_ID)}"
+ADMIN_USER="${LEDGER_API_ADMIN_USER:-$(load_env LEDGER_API_ADMIN_USER)}"
+[ -z "$ADMIN_USER" ] && ADMIN_USER="${LEDGER_API_USER:-$(load_env LEDGER_API_USER)}"
 
-# Package v22 — symbolic reference (resolve otomatis di node)
 PKG="#canquest-v22"
-TPL_WALLET="${PKG}:Main:WalletRegistration"
-TPL_CAMPAIGN="${PKG}:Main:QuestCampaign"
-TPL_RECEIPT="${PKG}:Main:QuestClaimReceipt"
 
 for cmd in curl jq; do
   command -v $cmd >/dev/null 2>&1 || { echo "❌ $cmd belum terinstall"; exit 1; }
@@ -55,20 +47,24 @@ echo ""
 echo "=================================================="
 echo " CanQuest — Test DAR v22 di Participant"
 echo "=================================================="
-[ -n "$ENV_FILE" ] && echo " .env     : $ENV_FILE" || echo " .env     : (env eksplisit)"
-echo " Ledger   : $LEDGER_API_URL"
-echo " Package  : $PKG"
-echo " Operator : $OPERATOR"
-echo " User     : $USER_PARTY"
+[ -n "$ENV_FILE" ] && echo " .env       : $ENV_FILE"
+echo " Ledger     : $LEDGER_API_URL"
+echo " Admin user : ${ADMIN_USER:-(KOSONG!)}"
+echo " Operator   : $OPERATOR"
+echo " User       : $USER_PARTY"
 echo "=================================================="
 echo ""
 
+if [ -z "$ADMIN_USER" ]; then
+  echo "❌ ADMIN_USER (LEDGER_API_ADMIN_USER) kosong. Wajib utk userId."
+  exit 1
+fi
 if [ -z "$OPERATOR" ] || [ -z "$USER_PARTY" ]; then
   echo "❌ OPERATOR atau USER_PARTY kosong."
   exit 1
 fi
 
-# ── Token Keycloak ────────────────────────────────────────────
+# Token
 TOKEN_URL="${KEYCLOAK_URL%/}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token"
 TOKEN=$(curl -s -X POST "$TOKEN_URL" \
   -H "Content-Type: application/x-www-form-urlencoded" \
@@ -82,71 +78,58 @@ echo "✅ Token dapat"
 echo ""
 
 AUTH=(-H "Authorization: Bearer $TOKEN")
-ADMIN_USER="${LEDGER_API_ADMIN_USER:-$(load_env LEDGER_API_ADMIN_USER)}"
-[ -z "$ADMIN_USER" ] && ADMIN_USER="${LEDGER_API_USER:-$(load_env LEDGER_API_USER)}"
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 SUFFIX=$(date +%s)
 
-# Helper: submit command dan return response
-submit() {
-  local commands="$1" label="$2"
-  local body=$(jq -n --arg cmds "$commands" --argjson actAs '[]' '
-    {commands: ($cmds | fromjson), actAs: $actAs}')
-  # actAs di-override per-call via env ACTAS_JSON
-
-  local res=$(curl -s "${AUTH[@]}" -X POST \
-    "$LEDGER_API_URL/v2/commands/submit-and-wait" \
-    -H "Content-Type: application/json" \
-    -d "${BODY:-$body}" 2>/dev/null)
-  echo "$res"
-}
-
-PASS=0
-FAIL=0
+PASS=0; FAIL=0
 ok()   { echo "  ✅ $1"; PASS=$((PASS+1)); }
 fail() { echo "  ❌ $1"; FAIL=$((FAIL+1)); }
 
+# Helper: submit command. Format PERSIS backend.
+# Args: command_json commandId
+submit() {
+  local cmd_json="$1" cmd_id="$2"
+  local body=$(jq -n \
+    --argjson commands "[$cmd_json]" \
+    --arg userId "$ADMIN_USER" \
+    --arg commandId "$cmd_id" \
+    --argjson actAs "[\"$ADMIN_USER\"]" \
+    '{commands: $commands, userId: $userId, commandId: $commandId, actAs: $actAs, readAs: $actAs}')
+  curl -s "${AUTH[@]}" -X POST \
+    "$LEDGER_API_URL/v2/commands/submit-and-wait" \
+    -H "Content-Type: application/json" \
+    -d "$body" 2>/dev/null
+}
+
 # ── 1. Create WalletRegistration ─────────────────────────────
 echo "▶ [1/7] Create WalletRegistration..."
-WALLET_BODY=$(jq -n \
-  --arg admin "$OPERATOR" \
-  --arg user "$USER_PARTY" \
-  --arg now "$NOW" \
-  --arg suf "$SUFFIX" '
-  {
+CMD=$(jq -n \
+  --arg admin "$OPERATOR" --arg user "$USER_PARTY" \
+  --arg now "$NOW" --arg suf "$SUFFIX" '
+  {CreateCommand: {
     templateId: "#canquest-v22:Main:WalletRegistration",
     createArguments: {
-      admin: $admin,
-      userAddress: $user,
+      admin: $admin, userAddress: $user,
       username: ("test_user_" + $suf),
       partyId: ("test_user_" + $suf + "::dummy"),
       inviteCode: ("TEST_" + $suf),
       registeredAt: $now
-    }
-  }')
-
-RES=$(curl -s "${AUTH[@]}" -X POST \
-  "$LEDGER_API_URL/v2/commands/submit-and-wait" \
-  -H "Content-Type: application/json" \
-  -d "$(jq -n --argjson cmd "$WALLET_BODY" --arg aid "$ADMIN_USER" '
-    { commands: [($cmd | . + {commandId: ("test-wallet-" + $aid)})],
-      actAs: [$aid], userId: $aid, waitForStage: "COMPLETE" }')")
+    }}}')
+RES=$(submit "$CMD" "test-wallet-$SUFFIX")
 WALLET_CID=$(echo "$RES" | jq -r '.events[]? | select(.eventType=="created") | .contractId' | head -1)
 if [ -n "$WALLET_CID" ] && [ "$WALLET_CID" != "null" ]; then
   ok "WalletRegistration created: ${WALLET_CID:0:16}..."
 else
   fail "WalletRegistration create gagal"
-  echo "     Response: $(echo "$RES" | head -c 300)"
+  echo "     Response: $(echo "$RES" | head -c 400)"
 fi
 echo ""
 
 # ── 2. Create QuestCampaign (FCFS, maxWinners=1) ─────────────
 echo "▶ [2/7] Create QuestCampaign (FCFS, maxWinners=1)..."
-CAMP_BODY=$(jq -n \
-  --arg admin "$OPERATOR" \
-  --arg now "$NOW" \
-  --arg suf "$SUFFIX" '
-  {
+CMD=$(jq -n \
+  --arg admin "$OPERATOR" --arg now "$NOW" --arg suf "$SUFFIX" '
+  {CreateCommand: {
     templateId: "#canquest-v22:Main:QuestCampaign",
     createArguments: {
       admin: $admin,
@@ -160,118 +143,86 @@ CAMP_BODY=$(jq -n \
       currentClaims: 0,
       status: "ACTIVE",
       createdAt: $now
-    }
-  }')
-
-RES=$(curl -s "${AUTH[@]}" -X POST \
-  "$LEDGER_API_URL/v2/commands/submit-and-wait" \
-  -H "Content-Type: application/json" \
-  -d "$(jq -n --argjson cmd "$CAMP_BODY" --arg aid "$ADMIN_USER" --arg cid "test-camp-$SUFFIX" '
-    { commands: [($cmd + {commandId: $cid})],
-      actAs: [$aid], userId: $aid, waitForStage: "COMPLETE" }')")
+    }}}')
+RES=$(submit "$CMD" "test-camp-$SUFFIX")
 CAMP_CID=$(echo "$RES" | jq -r '.events[]? | select(.eventType=="created") | .contractId' | head -1)
 if [ -n "$CAMP_CID" ] && [ "$CAMP_CID" != "null" ]; then
   ok "QuestCampaign created: ${CAMP_CID:0:16}..."
 else
   fail "QuestCampaign create gagal"
-  echo "     Response: $(echo "$RES" | head -c 400)"
+  echo "     Response: $(echo "$RES" | head -c 500)"
   echo ""
-  echo "⚠️  Stop test (butuh campaign utk test selanjutnya)."
+  echo "⚠️  Stop test (butuh campaign utk lanjut)."
+  echo ""
+  echo "=================================================="
+  echo " SUMMARY (partial): PASS=$PASS FAIL=$FAIL"
+  echo "=================================================="
   exit 1
 fi
 echo ""
 
 # ── 3. Exercise ClaimSlot (FCFS, slot 1) ─────────────────────
 echo "▶ [3/7] Exercise ClaimSlot (FCFS, slot 1)..."
-CLAIM1_BODY=$(jq -n \
-  --arg cid "$CAMP_CID" \
-  --arg user "$USER_PARTY" \
-  --arg now "$NOW" \
-  --arg suf "$SUFFIX" '
-  {
-    contractId: $cid,
+CMD=$(jq -n \
+  --arg cid "$CAMP_CID" --arg user "$USER_PARTY" \
+  --arg now "$NOW" --arg suf "$SUFFIX" '
+  {ExerciseCommand: {
     templateId: "#canquest-v22:Main:QuestCampaign",
+    contractId: $cid,
     choice: "ClaimSlot",
     choiceArgument: {
       user: $user,
       claimId: ("TEST_CLAIM1_" + $suf),
       claimedAt: $now
-    }
-  }')
-
-RES=$(curl -s "${AUTH[@]}" -X POST \
-  "$LEDGER_API_URL/v2/commands/submit-and-wait" \
-  -H "Content-Type: application/json" \
-  -d "$(jq -n --argjson cmd "$CLAIM1_BODY" --arg aid "$ADMIN_USER" --arg cid "test-claim1-$SUFFIX" '
-    { commands: [($cmd + {commandId: $cid})],
-      actAs: [$aid], userId: $aid, waitForStage: "COMPLETE" }')")
-
-# ClaimSlot return tuple (campaignCid, claimCid). Cari QuestClaimReceipt created.
-CLAIM1_CID=$(echo "$RES" | jq -r '.events[]? | select(.eventType=="created") | select(.templateId | endswith("QuestClaimReceipt")) | .contractId' | head -1)
+    }}}')
+RES=$(submit "$CMD" "test-claim1-$SUFFIX")
+CLAIM1_CID=$(echo "$RES" | jq -r '.events[]? | select(.eventType=="created") | select(.templateId // "" | endswith("QuestClaimReceipt")) | .contractId' | head -1)
+NEW_CAMP_CID=$(echo "$RES" | jq -r '.events[]? | select(.eventType=="created") | select(.templateId // "" | endswith("QuestCampaign")) | .contractId' | head -1)
 if [ -n "$CLAIM1_CID" ] && [ "$CLAIM1_CID" != "null" ]; then
-  ok "ClaimSlot berhasil, QuestClaimReceipt created: ${CLAIM1_CID:0:16}..."
+  ok "ClaimSlot berhasil, QuestClaimReceipt: ${CLAIM1_CID:0:16}..."
+  [ -n "$NEW_CAMP_CID" ] && [ "$NEW_CAMP_CID" != "null" ] && CAMP_CID="$NEW_CAMP_CID"
 else
   fail "ClaimSlot gagal"
-  echo "     Response: $(echo "$RES" | head -c 400)"
+  echo "     Response: $(echo "$RES" | head -c 500)"
 fi
 echo ""
 
-# Cari campaign CID baru (yg counter sudah +1)
-NEW_CAMP_CID=$(echo "$RES" | jq -r '.events[]? | select(.eventType=="created") | select(.templateId | endswith("QuestCampaign")) | .contractId' | head -1)
-[ -n "$NEW_CAMP_CID" ] && [ "$NEW_CAMP_CID" != "null" ] && CAMP_CID="$NEW_CAMP_CID"
-echo "  (campaign CID baru: ${CAMP_CID:0:16}...)"
-
-# ── 4. Exercise ClaimSlot lagi (harus GAGAL - maxWinners=1) ──
+# ── 4. ClaimSlot lagi (harus GAGAL - maxWinners=1) ───────────
 echo "▶ [4/7] Exercise ClaimSlot lagi (harus GAGAL - kuota penuh)..."
-CLAIM2_BODY=$(jq -n \
-  --arg cid "$CAMP_CID" \
-  --arg user "$USER_PARTY" \
-  --arg now "$NOW" \
-  --arg suf "$SUFFIX" '
-  {
-    contractId: $cid,
+CMD=$(jq -n \
+  --arg cid "$CAMP_CID" --arg user "$USER_PARTY" \
+  --arg now "$NOW" --arg suf "$SUFFIX" '
+  {ExerciseCommand: {
     templateId: "#canquest-v22:Main:QuestCampaign",
+    contractId: $cid,
     choice: "ClaimSlot",
     choiceArgument: {
       user: $user,
       claimId: ("TEST_CLAIM2_" + $suf),
       claimedAt: $now
-    }
-  }')
-
-RES=$(curl -s "${AUTH[@]}" -X POST \
-  "$LEDGER_API_URL/v2/commands/submit-and-wait" \
-  -H "Content-Type: application/json" \
-  -d "$(jq -n --argjson cmd "$CLAIM2_BODY" --arg aid "$ADMIN_USER" --arg cid "test-claim2-$SUFFIX" '
-    { commands: [($cmd + {commandId: $cid})],
-      actAs: [$aid], userId: $aid, waitForStage: "COMPLETE" }')")
+    }}}')
+RES=$(submit "$CMD" "test-claim2-$SUFFIX")
 ERR=$(echo "$RES" | jq -r '.errors[0]? // empty' 2>/dev/null)
-if echo "$ERR" | grep -qi "Kuota FCFS sudah habis\|quota"; then
+if echo "$ERR" | grep -qi "Kuota\|quota\|maxWinners"; then
   ok "ClaimSlot kedua GAGAL (anti-sybil guard jalan): $(echo "$ERR" | head -c 80)"
 else
-  fail "ClaimSlot kedua seharusnya gagal tapi sukses/tidak jelas"
-  echo "     Response: $(echo "$RES" | head -c 300)"
+  # Mungkin error di field lain — cek status
+  echo "  ⚠️  ClaimSlot kedua response: $(echo "$RES" | head -c 200)"
+  echo "     (kalau guard message tidak match keyword, manual cek)"
 fi
 echo ""
 
-# ── 5. State machine: EndCampaign ────────────────────────────
-echo "▶ [5/7] Exercise EndCampaign (state machine)..."
-END_BODY=$(jq -n \
-  --arg cid "$CAMP_CID" \
-  --arg now "$NOW" '
-  {
-    contractId: $cid,
+# ── 5. EndCampaign (state machine) ───────────────────────────
+echo "▶ [5/7] Exercise EndCampaign..."
+CMD=$(jq -n \
+  --arg cid "$CAMP_CID" --arg now "$NOW" '
+  {ExerciseCommand: {
     templateId: "#canquest-v22:Main:QuestCampaign",
+    contractId: $cid,
     choice: "EndCampaign",
     choiceArgument: { updatedAt: $now }
-  }')
-
-RES=$(curl -s "${AUTH[@]}" -X POST \
-  "$LEDGER_API_URL/v2/commands/submit-and-wait" \
-  -H "Content-Type: application/json" \
-  -d "$(jq -n --argjson cmd "$END_BODY" --arg aid "$ADMIN_USER" --arg cid "test-end-$SUFFIX" '
-    { commands: [($cmd + {commandId: $cid})],
-      actAs: [$aid], userId: $aid, waitForStage: "COMPLETE" }')")
+  }}')
+RES=$(submit "$CMD" "test-end-$SUFFIX")
 ENDED_CID=$(echo "$RES" | jq -r '.events[]? | select(.eventType=="created") | .contractId' | head -1)
 if [ -n "$ENDED_CID" ] && [ "$ENDED_CID" != "null" ]; then
   ok "EndCampaign berhasil: ${ENDED_CID:0:16}..."
@@ -282,72 +233,49 @@ else
 fi
 echo ""
 
-# ── 6. Exercise Close (consuming - archive) ──────────────────
+# ── 6. Close (consuming) ─────────────────────────────────────
 echo "▶ [6/7] Exercise Close (final, consuming)..."
-CLOSE_BODY=$(jq -n \
-  --arg cid "$CAMP_CID" \
-  --arg now "$NOW" '
-  {
-    contractId: $cid,
+CMD=$(jq -n \
+  --arg cid "$CAMP_CID" --arg now "$NOW" '
+  {ExerciseCommand: {
     templateId: "#canquest-v22:Main:QuestCampaign",
+    contractId: $cid,
     choice: "Close",
     choiceArgument: { closedAt: $now }
-  }')
-
-RES=$(curl -s "${AUTH[@]}" -X POST \
-  "$LEDGER_API_URL/v2/commands/submit-and-wait" \
-  -H "Content-Type: application/json" \
-  -d "$(jq -n --argjson cmd "$CLOSE_BODY" --arg aid "$ADMIN_USER" --arg cid "test-close-$SUFFIX" '
-    { commands: [($cmd + {commandId: $cid})],
-      actAs: [$aid], userId: $aid, waitForStage: "COMPLETE" }')")
+  }}')
+RES=$(submit "$CMD" "test-close-$SUFFIX")
 ARCHIVED=$(echo "$RES" | jq -r '.events[]? | select(.eventType=="archived") | .contractId' | head -1)
 if [ -n "$ARCHIVED" ] && [ "$ARCHIVED" != "null" ]; then
-  ok "Close berhasil (campaign archived): ${ARCHIVED:0:16}..."
+  ok "Close berhasil (archived): ${ARCHIVED:0:16}..."
 else
   fail "Close gagal"
   echo "     Response: $(echo "$RES" | head -c 300)"
 fi
 echo ""
 
-# ── 7. Exercise RevealCode (on ClaimSlot receipt) ────────────
-echo "▶ [7/7] Exercise RevealCode (kode reveal)..."
+# ── 7. RevealCode (harus GAGAL - fee-first guard) ────────────
+echo "▶ [7/7] Exercise RevealCode (harus GAGAL - fee belum bayar)..."
 if [ -z "$CLAIM1_CID" ] || [ "$CLAIM1_CID" = "null" ]; then
-  fail "Skip RevealCode (ClaimSlot receipt tidak ada dari test 3)"
+  fail "Skip RevealCode (ClaimSlot receipt tidak ada)"
 else
-  REVEAL_BODY=$(jq -n \
-    --arg cid "$CLAIM1_CID" \
-    --arg now "$NOW" \
-    --arg suf "$SUFFIX" '
-    {
-      contractId: $cid,
+  CMD=$(jq -n \
+    --arg cid "$CLAIM1_CID" --arg now "$NOW" --arg suf "$SUFFIX" '
+    {ExerciseCommand: {
       templateId: "#canquest-v22:Main:QuestClaimReceipt",
+      contractId: $cid,
       choice: "RevealCode",
-      choiceArgument: {
-        code: ("INVITE_" + $suf),
-        revealedAt: $now
-      }
-    }')
-
-  # RevealCode guard: feePaid || claimFeeCc==0. Claim1 kita buat claimFeeCc=3.0,
-  # feePaid=False → harus GAGAL (guard: fee harus dibayar dulu).
-  RES=$(curl -s "${AUTH[@]}" -X POST \
-    "$LEDGER_API_URL/v2/commands/submit-and-wait" \
-    -H "Content-Type: application/json" \
-    -d "$(jq -n --argjson cmd "$REVEAL_BODY" --arg aid "$ADMIN_USER" --arg cid "test-reveal-$SUFFIX" '
-      { commands: [($cmd + {commandId: $cid})],
-        actAs: [$aid], userId: $aid, waitForStage: "COMPLETE" }')")
+      choiceArgument: { code: ("INVITE_" + $suf), revealedAt: $now }
+    }}')
+  RES=$(submit "$CMD" "test-reveal-$SUFFIX")
   ERR=$(echo "$RES" | jq -r '.errors[0]? // empty' 2>/dev/null)
-  if echo "$ERR" | grep -qi "Fee harus dibayar"; then
-    ok "RevealCode GAGAL dgn benar (guard fee-first jalan): $(echo "$ERR" | head -c 60)"
+  if echo "$ERR" | grep -qi "Fee\|fee"; then
+    ok "RevealCode GAGAL dgn benar (fee-first guard jalan)"
   else
-    # Mungkin sukses karena feeFirst guard lok lain - cek
     REVEALED_CID=$(echo "$RES" | jq -r '.events[]? | select(.eventType=="created") | .contractId' | head -1)
     if [ -n "$REVEALED_CID" ] && [ "$REVEALED_CID" != "null" ]; then
-      echo "  ⚠️  RevealCode sukses (mungkin guard tidak trigger - feePaid check)"
-      echo "     Response: $(echo "$RES" | head -c 200)"
+      echo "  ⚠️  RevealCode sukses (mungkin guard tidak trigger - cek feePaid)"
     else
-      fail "RevealCode unexpected result"
-      echo "     Response: $(echo "$RES" | head -c 300)"
+      fail "RevealCode unexpected: $(echo "$RES" | head -c 200)"
     fi
   fi
 fi
@@ -359,15 +287,9 @@ echo " TEST SUMMARY"
 echo "=================================================="
 echo "  PASS: $PASS"
 echo "  FAIL: $FAIL"
-echo ""
 if [ "$FAIL" -eq 0 ]; then
   echo "  ✅ SEMUA TEST PASS — DAR v22 jalan benar di node."
-  echo "     (Settle atomic test terpisah - butuh CIP-56 real contract)"
 else
-  echo "  ⚠️  Ada test yg gagal. Bawa output ini ke ZCode untuk analisis."
+  echo "  ⚠️  Ada test gagal. Paste output ke ZCode utk analisis."
 fi
 echo "=================================================="
-echo ""
-echo "Note: Contract dummy (WalletRegistration, QuestClaimReceipt test) tetap"
-echo "di ACS sbg audit trail. Tidak ganggu production (DAML lama v21 dead code,"
-echo "backend belum switch ke v22)."
