@@ -58,10 +58,8 @@
 
 module Main where
 
-import Daml.Script hiding (forA_)
+import Daml.Script
 import DA.Foldable (forA_)
-import qualified DA.Map as Map
-import qualified DA.Set as Set
 
 -- Token Standard interfaces (data-dependencies, dari participant DAR)
 import Splice.Api.Token.TransferInstructionV1
@@ -141,7 +139,9 @@ template QuestCampaign
     -- FCFS: user klaim slot (CC_ONLY/CC_AND_INVITE/INVITE_CODE_FCFS).
     -- Kuota di-enforce atomic on-chain. Match backend claimFcfsSlot().
     -- Return: (Campaign baru dgn counter+1, QuestClaimReceipt baru).
-    nonconsuming choice ClaimSlot : (ContractId QuestCampaign, ContractId QuestClaimReceipt)
+    -- Consuming (default) — auto-archive self, lalu create baru. Anti-sybil:
+    -- 2 ClaimSlot concurrent pada contract sama → conflict → salah abort.
+    choice ClaimSlot : (ContractId QuestCampaign, ContractId QuestClaimReceipt)
       with
         user         : Party
         claimId      : Text
@@ -155,8 +155,7 @@ template QuestCampaign
         assertMsg "Kuota FCFS sudah habis!"
           (maxWinners == 0 || currentClaims < maxWinners)
 
-        -- Archive campaign lama, recreate dgn counter +1.
-        archive self
+        -- Consuming: auto-archive self (tidak perlu "archive self").
         newCampaignCid <- create this with
           currentClaims = currentClaims + 1
         -- Create receipt child (status PRE_SETTLE, fee/reward belum dibayar).
@@ -181,7 +180,7 @@ template QuestCampaign
     -- Raffle/Waitlist: admin draw pemenang.
     -- Match backend drawRaffleWinner().
     -- questKind RAFFLE: CC_RAFFLE, CODE_RAFFLE, CC_AND_CODE_RAFFLE, WAITLIST.
-    nonconsuming choice DrawWinner : (ContractId QuestCampaign, ContractId QuestClaimReceipt)
+    choice DrawWinner : (ContractId QuestCampaign, ContractId QuestClaimReceipt)
       with
         user         : Party
         claimId      : Text
@@ -198,7 +197,7 @@ template QuestCampaign
          || questKind == "CC_AND_CODE_RAFFLE"
          || questKind == "WAITLIST" )
 
-        archive self
+        -- Consuming: auto-archive self.
         newCampaignCid <- create this with
           currentClaims = currentClaims + 1
         newClaimCid <- create QuestClaimReceipt with
@@ -219,33 +218,30 @@ template QuestCampaign
           claimedAt       = drawnAt
         pure (newCampaignCid, newClaimCid)
 
-    -- State machine choices.
-    nonconsuming choice Activate : ContractId QuestCampaign
+    -- State machine choices. Consuming (auto-archive) + create baru.
+    choice Activate : ContractId QuestCampaign
       with updatedAt : Text
       controller operator
       do
         assertMsg "Transisi tidak sah! Hanya DRAFT/PAUSED → ACTIVE."
           (status == DRAFT || status == PAUSED)
         assertMsg "updatedAt tidak boleh kosong!" (updatedAt /= "")
-        archive self
         create this with status = ACTIVE
 
-    nonconsuming choice Pause : ContractId QuestCampaign
+    choice Pause : ContractId QuestCampaign
       with updatedAt : Text
       controller operator
       do
         assertMsg "Campaign harus ACTIVE untuk pause!" (status == ACTIVE)
         assertMsg "updatedAt tidak boleh kosong!" (updatedAt /= "")
-        archive self
         create this with status = PAUSED
 
-    nonconsuming choice EndCampaign : ContractId QuestCampaign
+    choice EndCampaign : ContractId QuestCampaign
       with updatedAt : Text
       controller operator
       do
         assertMsg "Campaign harus ACTIVE untuk end!" (status == ACTIVE)
         assertMsg "updatedAt tidak boleh kosong!" (updatedAt /= "")
-        archive self
         create this with status = ENDED
 
     -- CLOSED = archive (final state). Tidak bisa reopen.
@@ -304,6 +300,9 @@ template QuestClaimReceipt
     -- Nested exercise TransferFactory_Transfer (fee + reward) + optional
     -- FAR marker. Semua dalam 1 transaction tree → atomic.
     --
+    -- Consuming (auto-archive) + create SETTLED. Atomicity: nested exercise
+    -- inherit authorization dari command-level actAs (Canton M3 auth model).
+    --
     -- Backend submit dgn:
     --   actAs = [operator, userAddress, rewardParty] (+ appProvider bila FAR on)
     -- Pre-step backend (sebelum submit Settle):
@@ -312,7 +311,7 @@ template QuestClaimReceipt
     --   3. queryAmuletHoldings/getTokenHoldingCids → inputHoldingCids
     --   4. (optional) getFeaturedAppRightCid → farCid
     --   Lalu konstruksi Settle args dgn data di atas.
-    nonconsuming choice Settle : ContractId QuestClaimReceipt
+    choice Settle : ContractId QuestClaimReceipt
       with
         -- Fee leg: user → treasury
         feeFactoryCid   : ContractId TransferFactory
@@ -334,29 +333,31 @@ template QuestClaimReceipt
           (claimFeeAmount > 0.0 || rewardAmount > 0.0)
 
         -- 1. FEE transfer (atomic leg 1)
+        --    Controller = feeTransfer.sender (user) → di-cover actAs command.
         _feeResult <- exercise feeFactoryCid TransferFactory_Transfer with
           expectedAdmin = feeTransfer.instrumentId.admin
           transfer      = feeTransfer
           extraArgs     = feeExtraArgs
 
         -- 2. REWARD transfer (atomic leg 2)
+        --    Controller = rewardTransfer.sender (rewardParty) → di-cover actAs.
         _rewardResult <- exercise rewardFactoryCid TransferFactory_Transfer with
           expectedAdmin = rewardTransfer.instrumentId.admin
           transfer      = rewardTransfer
           extraArgs     = rewardExtraArgs
 
-        -- 3. FAR activity marker (optional — hanya bila Some)
+        -- 3. FAR activity marker (optional — hanya bila Some).
         --    Controller = appProvider → backend actAs tambah appProvider.
+        --    AppRewardBeneficiary.weight REQUIRED (Decimal 0.0-1.0).
         forA_ featuredAppRightCid $ \farCid ->
           exercise farCid FeaturedAppRight_CreateActivityMarker with
-            beneficiaries =
-              [ AppRewardBeneficiary with
-                  beneficiary = appProvider
-                  -- weight field hanya di FAR v2; sesuaikan bila v1
-              ]
+            beneficiaries = [ AppRewardBeneficiary with
+              beneficiary = appProvider
+              weight      = 1.0
+            ]
+            weight = None
 
-        -- Archive receipt PRE_SETTLE, create SETTLED (tanpa txId — itu post-settle).
-        archive self
+        -- Consuming: auto-archive PRE_SETTLED, create SETTLED (tanpa txId — itu post-settle).
         create this with
           feePaid    = True
           rewardSent = True
@@ -366,7 +367,7 @@ template QuestClaimReceipt
     -- Tx ID tidak bisa didapat dari dalam Settle (TransferFactory_Transfer
     -- return record, bukan tx id). Backend baca tx id dari Ledger API
     -- response setelah atomic command sukses, lalu exercise RecordTxId.
-    nonconsuming choice RecordTxId : ContractId QuestClaimReceipt
+    choice RecordTxId : ContractId QuestClaimReceipt
       with
         feeTxId    : Text
         rewardTxId : Text
@@ -375,14 +376,13 @@ template QuestClaimReceipt
         assertMsg "Claim harus SETTLED sebelum record tx id!" (status == SETTLED)
         assertMsg "feeTxId tidak boleh kosong!" (feeTxId /= "")
         assertMsg "rewardTxId tidak boleh kosong!" (rewardTxId /= "")
-        archive self
         create this with
-          feeTxId   = Some feeTxId
+          feeTxId    = Some feeTxId
           rewardTxId = Some rewardTxId
 
     -- ── REVEAL CODE (CODE_FCFS / CODE_RAFFLE / CC_AND_CODE_RAFFLE) ──
     -- Reveal kode invite SETELAH fee dibayar. Match backend revealRewardCode().
-    nonconsuming choice RevealCode : ContractId QuestClaimReceipt
+    choice RevealCode : ContractId QuestClaimReceipt
       with
         code       : Text
         revealedAt : Text
@@ -392,7 +392,6 @@ template QuestClaimReceipt
           (feePaid || claimFeeAmount == 0.0)
         assertMsg "Kode tidak boleh kosong!" (code /= "")
         assertMsg "revealedAt tidak boleh kosong!" (revealedAt /= "")
-        archive self
         create this with
           rewardCode = code
           status     = REVEALED
