@@ -1,38 +1,81 @@
 #!/bin/bash
 # ============================================================
-# CanQuest — Cek Contract v21 Aktif (v3 — simpel & robust)
+# CanQuest — Cek Contract v21 Aktif (v4 — format body Canton benar)
 #
-# v3 changes (vs v2):
-#   - HAPUS loop 123-curl untuk resolve nama package (penyebab crash v2)
-#   - Cukup 1x query ACS, ekstrak semua template name + count
-#   - jq path BENAR: .templateId.value.name (object, bukan string)
-#     -- ini bug v1/v2 yang bikin count = "?" (parse gagal)
-#   - Tidak ada set -e yang bikin warning abort script
+# Fix v4 (vs v3):
+#   - Body ACS pakai eventFormat.filtersByParty (BUKAN filter[]+readAs)
+#     — ini penyebab HTTP 400 "Missing required field filtersByParty"
+#   - WAJIB set party: auto-baca dari .env backend VPS 2 kalau
+#     OPERATOR_PARTY_ID tidak diset eksplisit
+#   - Response format nested: results[].contractEntry.JsActiveContract
+#     .createdEvent.templateId.{packageId,moduleName,name}
 #
-# CARA PAKAI (di VPS 2):
-#   export LEDGER_CLIENT_ID="<dari .env>"
-#   export LEDGER_CLIENT_SECRET="<dari .env>"
+# CARA PAKAI (di VPS 2, /var/www/canquest):
+#   bash scripts/check-v21-active-contracts.sh
+#   # (akan auto-baca LEDGER_CLIENT_ID/SECRET + OPERATOR_PARTY_ID dari apps/api/.env)
+#
+# Atau manual:
+#   export LEDGER_CLIENT_ID="..." LEDGER_CLIENT_SECRET="..."
+#   export OPERATOR_PARTY_ID="canquest-operator::..."
 #   bash scripts/check-v21-active-contracts.sh
 #
 # Prereq: curl, jq. READ-ONLY.
 # ============================================================
 
+LEDGER_API_URL="${LEDGER_API_URL:-https://ledger.canquestlabs.com}"
 KEYCLOAK_URL="${KEYCLOAK_URL:-https://auth.canquestlabs.com}"
 KEYCLOAK_REALM="${KEYCLOAK_REALM:-canton}"
-LEDGER_CLIENT_ID="${LEDGER_CLIENT_ID:?LEDGER_CLIENT_ID harus diset}"
-LEDGER_CLIENT_SECRET="${LEDGER_CLIENT_SECRET:?LEDGER_CLIENT_SECRET harus diset}"
-LEDGER_API_URL="${LEDGER_API_URL:-https://ledger.canquestlabs.com}"
 LEDGER_API_AUTH_SCOPE="${LEDGER_API_AUTH_SCOPE:-daml_ledger_api}"
-OPERATOR_PARTY_ID="${OPERATOR_PARTY_ID:-}"
+
+# ── Auto-load dari apps/api/.env kalau ada (VPS 2 path) ──────
+ENV_FILE=""
+for candidate in "/var/www/canquest/apps/api/.env" "./apps/api/.env" "../apps/api/.env"; do
+  if [ -f "$candidate" ]; then ENV_FILE="$candidate"; break; fi
+done
+
+load_env_value() {
+  local key="$1" default="$2"
+  if [ -n "$ENV_FILE" ]; then
+    local v
+    v=$(grep -E "^${key}=" "$ENV_FILE" 2>/dev/null | tail -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+    if [ -n "$v" ]; then printf '%s' "$v"; return; fi
+  fi
+  printf '%s' "$default"
+}
+
+LEDGER_CLIENT_ID="${LEDGER_CLIENT_ID:-$(load_env_value LEDGER_CLIENT_ID '')}"
+LEDGER_CLIENT_SECRET="${LEDGER_CLIENT_SECRET:-$(load_env_value LEDGER_CLIENT_SECRET '')}"
+OPERATOR_PARTY_ID="${OPERATOR_PARTY_ID:-$(load_env_value CANTON_OPERATOR_PARTY_ID '')}"
+if [ -z "$OPERATOR_PARTY_ID" ]; then
+  OPERATOR_PARTY_ID="$(load_env_value CANTON_VALIDATOR_PARTY_ID '')"
+fi
 
 command -v jq   >/dev/null 2>&1 || { echo "❌ jq belum terinstall"; exit 1; }
 command -v curl >/dev/null 2>&1 || { echo "❌ curl belum terinstall"; exit 1; }
 
-# ── 0. Token Keycloak ────────────────────────────────────────
-TOKEN_URL="${KEYCLOAK_URL%/}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token"
 echo ""
-echo "▶ [0/4] Ambil token ledger dari Keycloak..."
-echo "       POST $TOKEN_URL (client_id=$LEDGER_CLIENT_ID)"
+echo "▶ [0/4] Konfigurasi:"
+[ -n "$ENV_FILE" ] && echo "       .env         : $ENV_FILE (auto-loaded)" || echo "       .env         : (tidak ditemukan, pakai env eksplisit)"
+echo "       client_id    : ${LEDGER_CLIENT_ID:-(KOSONG)}"
+echo "       operator     : ${OPERATOR_PARTY_ID:-(KOSONG — AKAN GAGAL)}"
+echo ""
+
+if [ -z "$LEDGER_CLIENT_ID" ] || [ -z "$LEDGER_CLIENT_SECRET" ]; then
+  echo "❌ LEDGER_CLIENT_ID / LEDGER_CLIENT_SECRET kosong."
+  echo "   Set eksplisit atau pastikan apps/api/.env ada."
+  exit 1
+fi
+if [ -z "$OPERATOR_PARTY_ID" ]; then
+  echo "❌ OPERATOR_PARTY_ID kosong. Canton ACS query WAJIB specify party."
+  echo "   Set CANTON_OPERATOR_PARTY_ID di apps/api/.env, atau:"
+  echo "      export OPERATOR_PARTY_ID=\"<party::xxx>\""
+  exit 1
+fi
+
+# ── 1. Token Keycloak ────────────────────────────────────────
+TOKEN_URL="${KEYCLOAK_URL%/}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token"
+echo "▶ [1/4] Ambil token ledger dari Keycloak..."
+echo "       POST $TOKEN_URL"
 echo "--------------------------------------------------"
 TOKEN_RESP=$(curl -s -X POST "$TOKEN_URL" \
   -H "Content-Type: application/x-www-form-urlencoded" \
@@ -54,27 +97,29 @@ echo ""
 AUTH=(-H "Authorization: Bearer $TOKEN")
 
 echo "=================================================="
-echo " CanQuest — Cek Contract Aktif"
+echo " CanQuest — Cek Contract Aktif (operator view)"
 echo " Ledger   : $LEDGER_API_URL"
-echo " Operator : ${OPERATOR_PARTY_ID:-(tidak diset)}"
+echo " Operator : ${OPERATOR_PARTY_ID}"
 echo "=================================================="
 echo ""
 
-# ── 1. Query ACS — 1x request, ambil semua contract ─────────
-echo "▶ [1/4] Query Active Contract Set (semua template):"
+# ── 2. Query ACS — format body BENAR (filtersByParty) ───────
+echo "▶ [2/4] Query Active Contract Set (operator party):"
 echo "--------------------------------------------------"
-ACS_BODY=$(if [ -n "$OPERATOR_PARTY_ID" ]; then
-  jq -n --arg p "$OPERATOR_PARTY_ID" '{
-    filter: [{ cumulative: [{ identifierFilter: { WildcardFilter: { value: {} } } }] }],
-    readAs: [$p],
-    verbose: false
-  }'
-else
-  jq -n '{
-    filter: [{ cumulative: [{ identifierFilter: { WildcardFilter: { value: {} } } }] }],
-    verbose: false
-  }'
-fi)
+
+# Body persis sesuai canton-ledger.service.ts:1472 — eventFormat.filtersByParty
+ACS_BODY=$(jq -n --arg party "$OPERATOR_PARTY_ID" '{
+  eventFormat: {
+    filtersByParty: {
+      ($party): {
+        cumulative: [
+          { identifierFilter: { WildcardFilter: { value: { includeCreatedEventBlob: false } } } }
+        ]
+      }
+    },
+    verbose: true
+  }
+}')
 
 ACS_FILE=$(mktemp)
 trap 'rm -f "$ACS_FILE"' EXIT
@@ -84,7 +129,7 @@ ACS_HTTP=$(curl -s -o "$ACS_FILE" -w "%{http_code}" "${AUTH[@]}" -X POST \
   -H "Content-Type: application/json" \
   -d "$ACS_BODY" 2>/dev/null || echo "000")
 
-echo "  HTTP status : $ACS_HTTP"
+echo "  HTTP status  : $ACS_HTTP"
 echo "  Response size: $(wc -c < "$ACS_FILE" 2>/dev/null || echo '?') bytes"
 
 if [ "$ACS_HTTP" != "200" ]; then
@@ -92,119 +137,90 @@ if [ "$ACS_HTTP" != "200" ]; then
   head -c 1000 "$ACS_FILE"
   echo ""
   echo ""
-  echo "  Kemungkinan: token tidak punya CanReadAsAnyParty right."
-  echo "  Set OPERATOR_PARTY_ID lalu coba lagi, atau pakai service-account token."
+  echo "  Kemungkinan:"
+  echo "   - 403/401: token tidak punya right CanReadAs utk operator party"
+  echo "   - 400    : party ID format salah (harus 'name::hash')"
   exit 1
 fi
-
-# Cek struktur response (results array?)
-TOTAL_CONTRACTS=$(jq '.results | if type=="array" then length else "?" end' "$ACS_FILE" 2>/dev/null || echo "ERR")
-echo "  Total contract (semua template): $TOTAL_CONTRACTS"
 echo ""
 
-if [ "$TOTAL_CONTRACTS" = "ERR" ] || [ "$TOTAL_CONTRACTS" = "?" ]; then
-  echo "  ⚠️  Struktur response tidak terduga. Raw (first 1500 chars):"
-  head -c 1500 "$ACS_FILE"
-  echo ""
-  echo ""
-  echo "  Paste raw ini ke ZCode untuk analisis manual."
-  exit 0
-fi
-
-# ── 2. Daftar semua template yang ada contract aktifnya ─────
-echo "▶ [2/4] Distribusi contract per template (semua):"
+# ── 3. Parse hasil — cari contract canquest (module Main) ────
+echo "▶ [3/4] Distribusi contract per template (top 30):"
 echo "--------------------------------------------------"
-# templateId di Canton ACS = { packageId, moduleName, name } atau {value:{...}}
+
+# Response Canton: results[].contractEntry.JsActiveContract.createdEvent
+# Atau bisa juga flat. Handle dua-duanya.
 jq -r '
-  .results[]
-  | .templateId as $t
-  | ($t.value.name // $t.name // "?") as $name
-  | ($t.value.moduleName // $t.moduleName // "?") as $mod
-  | ($t.value.packageId // $t.packageId // "?") as $pkg
+  .results[]?
+  | (
+      (.contractEntry.JsActiveContract.createdEvent.templateId) //
+      (.contractEntry.JsActiveContract.createdEvent.template_id) //
+      (.createdEvent.templateId) //
+      (.templateId)
+    ) as $t
+  | (
+      ($t.value.name // $t.name // "?") as $name |
+      ($t.value.moduleName // $t.moduleName // "?") as $mod |
+      ($t.value.packageId // $t.packageId // "?") as $pkg
+    )
   | "\($pkg[0:12])...\($mod):\($name)"
-' "$ACS_FILE" 2>/dev/null | sort | uniq -c | sort -rn | head -40
+' "$ACS_FILE" 2>/dev/null | sort | uniq -c | sort -rn | head -30
 
-# Jika output kosong, dump struktur pertama untuk debug
-if ! jq -e '.results[0]' "$ACS_FILE" >/dev/null 2>&1; then
-  echo "  (tidak ada results, atau struktur beda). Sample contract pertama:"
-  jq '.results[0] // .' "$ACS_FILE" 2>/dev/null | head -50
-fi
 echo ""
 
-# ── 3. Fokus: cari contract dengan template canquest ────────
-echo "▶ [3/4] Cari contract CANQUEST (Main:WalletRegistration/QuestCampaign/QuestClaim):"
+# Cari khusus canquest (module Main)
+echo "▶ [4/4] Cari contract CANQUEST (Main:WalletRegistration/QuestCampaign/QuestClaim):"
 echo "--------------------------------------------------"
 
-# List nama template canquest yang dicari (di module Main)
-CANQUEST_MATCHING=$(jq -r '
-  .results[]
-  | .templateId as $t
-  | ($t.value.name // $t.name // "?") as $name
-  | ($t.value.moduleName // $t.moduleName // "?") as $mod
-  | ($t.value.packageId // $t.packageId // "?") as $pkg
+CANQUEST=$(jq -r '
+  .results[]?
+  | (
+      (.contractEntry.JsActiveContract.createdEvent.templateId) //
+      (.contractEntry.JsActiveContract.createdEvent.template_id) //
+      (.createdEvent.templateId) //
+      (.templateId)
+    ) as $t
+  | (($t.value.name // $t.name // "?")) as $name
+  | (($t.value.moduleName // $t.moduleName // "?")) as $mod
+  | (($t.value.packageId // $t.packageId // "?")) as $pkg
   | select($mod == "Main" and ($name == "WalletRegistration" or $name == "QuestCampaign" or $name == "QuestClaim"))
   | "\($pkg)\t\($name)"
 ' "$ACS_FILE" 2>/dev/null)
 
-if [ -z "$CANQUEST_MATCHING" ]; then
-  echo "  ✅ TIDAK ADA contract canquest aktif."
-  echo "     (Tidak ada template Main:WalletRegistration/QuestCampaign/QuestClaim di module Main)"
+if [ -z "$CANQUEST" ]; then
+  echo "  ✅ TIDAK ADA contract canquest (module Main) aktif."
   echo ""
-  # Cek juga apakah ada package dengan module Main sama sekali (bisa jadi nama template beda)
-  echo "  Template lain yang ada di module 'Main':"
+  echo "  Template lain yg ada di module 'Main' (kalau ada):"
   jq -r '
-    .results[]
-    | .templateId as $t
-    | ($t.value.moduleName // $t.moduleName // "?") as $mod
-    | ($t.value.name // $t.name // "?") as $name
+    .results[]?
+    | ((.contractEntry.JsActiveContract.createdEvent.templateId) // (.createdEvent.templateId) // .templateId) as $t
+    | (($t.value.moduleName // $t.moduleName // "?")) as $mod
+    | (($t.value.name // $t.name // "?")) as $name
     | select($mod == "Main")
     | "    - \($name)"
   ' "$ACS_FILE" 2>/dev/null | sort -u | head -20
   echo ""
+  echo "  → LEDGER BERSIH dari DAML canquest lama."
+  echo "  → Bisa langsung FRESH START: draft canquest-v22."
   CANQUEST_TOTAL=0
 else
-  echo "  Ditemukan contract canquest aktif:"
-  printf '%s\n' "$CANQUEST_MATCHING" | awk -F'\t' '{ printf "    %-22s (pkg %s...)\n", $2, substr($1,1,16) }' | sort
+  echo "  ⚠️  Ditemukan contract canquest aktif:"
+  printf '%s\n' "$CANQUEST" | awk -F'\t' '{ printf "    %-22s pkg=%s...\n", $2, substr($1,1,16) }'
   echo ""
-  CANQUEST_TOTAL=$(printf '%s\n' "$CANQUEST_MATCHING" | wc -l | tr -d ' ')
-  # Identifikasi packageId canquest (unique)
-  CANQUEST_PKG=$(printf '%s\n' "$CANQUEST_MATCHING" | awk -F'\t' '{print $1}' | sort -u | head -1)
-  echo "  Package ID canquest: ${CANQUEST_PKG:0:32}..."
+  CANQUEST_TOTAL=$(printf '%s\n' "$CANQUEST" | wc -l | tr -d ' ')
+  echo "  📊 TOTAL contract canquest aktif: $CANQUEST_TOTAL"
+  echo ""
+  echo "  Breakdown per template:"
+  printf '%s\n' "$CANQUEST" | awk -F'\t' '{print $2}' | sort | uniq -c | sed 's/^/    /'
 fi
-echo ""
-echo "  📊 TOTAL contract canquest aktif: $CANQUEST_TOTAL"
-echo ""
 
-# ── 4. Rekomendasi ──────────────────────────────────────────
-echo "▶ [4/4] Rekomendasi:"
-echo "--------------------------------------------------"
-if [ "$CANQUEST_TOTAL" -eq 0 ] 2>/dev/null; then
-  echo "  ✅ FRESH START — ledger BERSIH dari contract canquest aktif."
-  echo "     → Langsung draft canquest-v22."
-  echo "     → DAR lama (kalau ada) boleh dibiarkan; unvet opsional."
-  echo "     → Source v21 boleh dihapus dari repo (simpan DAR artifact utk audit)."
-else
-  echo "  ⚠️  Ada $CANQUEST_TOTAL contract canquest aktif."
-  echo "     Breakdown:"
-  printf '%s\n' "$CANQUEST_MATCHING" | awk -F'\t' '{print $2}' | sort | uniq -c | sed 's/^/       /'
-  echo ""
-  echo "     Opsi:"
-  echo "      A) Fresh start — biarkan contract lama (audit trail), v22 independen."
-  echo "         Cocok kalau cuma WalletRegistration (identitas user lama)."
-  echo "      B) Archive manual dulu — kalau ada QuestCampaign dgn reward outstanding."
-  echo "      C) Migrasi via Upgrade choice — kalau data perlu dipindah ke v22."
-  echo ""
-  echo "     Detail contract (untuk putuskan):"
-  jq -r '
-    .results[]
-    | .templateId as $t
-    | ($t.value.name // $t.name // "?") as $name
-    | ($t.value.moduleName // $t.moduleName // "?") as $mod
-    | select($mod == "Main" and ($name == "WalletRegistration" or $name == "QuestCampaign" or $name == "QuestClaim"))
-    | "    [\($name)] contractId=\(.contractId[0:24])...  payload=\(.arguments // .createArguments // {} | tostring | .[0:120])"
-  ' "$ACS_FILE" 2>/dev/null | head -30
-fi
 echo ""
 echo "=================================================="
-echo " Bawa output ini ke ZCode untuk lanjut draft v22"
+if [ "${CANQUEST_TOTAL:-0}" -eq 0 ]; then
+  echo " ✅ KESIMPULAN: FRESH START"
+  echo "    Ledger bersih → langsung draft canquest-v22."
+else
+  echo " ⚠️  KESIMPULAN: Ada \$CANQUEST_TOTAL contract aktif"
+  echo "    Bawa output ini ke ZCode untuk putuskan archive/migrate."
+fi
 echo "=================================================="
