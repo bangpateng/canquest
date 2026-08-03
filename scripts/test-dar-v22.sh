@@ -86,14 +86,22 @@ ok()   { echo "  ✅ $1"; PASS=$((PASS+1)); }
 fail() { echo "  ❌ $1"; FAIL=$((FAIL+1)); }
 
 # Helper: submit command. Format PERSIS backend.
-# Args: command_json commandId
+# Args: command_json commandId [extra_actAs_party]
+# actAs = [operator] (party ID, BUKAN admin_user UUID).
+# userId = LEDGER_API_ADMIN_USER (UUID ledger-api-user, utk auth).
 submit() {
-  local cmd_json="$1" cmd_id="$2"
+  local cmd_json="$1" cmd_id="$2" extra="${3:-}"
+  local actAs_args
+  if [ -n "$extra" ]; then
+    actAs_args=$(jq -n --arg op "$OPERATOR" --arg x "$extra" '[$op, $x]')
+  else
+    actAs_args=$(jq -n --arg op "$OPERATOR" '[$op]')
+  fi
   local body=$(jq -n \
     --argjson commands "[$cmd_json]" \
     --arg userId "$ADMIN_USER" \
     --arg commandId "$cmd_id" \
-    --argjson actAs "[\"$ADMIN_USER\"]" \
+    --argjson actAs "$actAs_args" \
     '{commands: $commands, userId: $userId, commandId: $commandId, actAs: $actAs, readAs: $actAs}')
   curl -s "${AUTH[@]}" -X POST \
     "$LEDGER_API_URL/v2/commands/submit-and-wait" \
