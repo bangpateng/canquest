@@ -751,17 +751,24 @@ export class QuestLedgerService implements OnModuleInit {
 
       // ── Construct Settle choiceArgument (DAML v23 Optional encoding) ───────
       // DAML Optional: Some x → { tags: 'Some', value: x }, None → null
+      // ExtraArgs record butuh context + meta eksplisit (non-optional).
+      // choiceContextData dari registry bisa null utk direct transfer →
+      // default ke { values: {} } (pattern sama executeTransferFactoryTransfer line 597).
       const opt = <T,>(v: T | null) => (v == null ? null : { tags: 'Some', value: v });
+      const safeContext = (ctx: Record<string, unknown> | null | undefined) =>
+        ctx && typeof ctx === 'object' && Object.keys(ctx).length > 0 ? ctx : { values: {} };
       const choiceArgument: Record<string, unknown> = {
         feeFactoryCid: feeRegistry.factoryId,
         feeTransfer,
         feeExtraArgs: {
-          context: feeRegistry.choiceContextData,
+          context: safeContext(feeRegistry.choiceContextData),
           meta: { values: {} },
         },
         rewardFactoryCid: rewardRegistry ? opt(rewardRegistry.factoryId) : null,
         rewardTransfer: rewardTransfer ? opt(rewardTransfer) : null,
-        rewardExtraArgs: rewardRegistry ? opt({ context: rewardRegistry.choiceContextData, meta: { values: {} } }) : null,
+        rewardExtraArgs: rewardRegistry
+          ? opt({ context: safeContext(rewardRegistry.choiceContextData), meta: { values: {} } })
+          : null,
         featuredAppRightCid: params.featuredAppRightCid ? opt(params.featuredAppRightCid) : null,
         appProvider: params.appProviderPartyId ?? '',
         settledAt: nowIso,
