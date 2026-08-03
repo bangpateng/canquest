@@ -146,35 +146,37 @@ ARCHIVED=0
 # ── 1. QuestCampaign test (Close) ────────────────────────────
 echo "▶ [1/3] Cari + archive QuestCampaign test (Close)..."
 CAMP_LIST=$(query_acs "#canquest-v22:Main:QuestCampaign")
-CAMP_TEST=$(echo "$CAMP_LIST" | jq -c '[.[] | select(.args.campaignId // "" | test("^TEST_"))]' 2>/dev/null)
-CAMP_COUNT=$(echo "$CAMP_TEST" | jq 'length' 2>/dev/null)
-echo "   Ditemukan: $CAMP_COUNT QuestCampaign dgn campaignId TEST_*"
+# Filter: campaignId TEST_ + status ACTIVE/ENDED. Output tab-separated cid<TAB>status.
+CAMP_TEST_TABS=$(echo "$CAMP_LIST" | jq -r '
+  .[] | select(.args.campaignId // "" | test("^TEST_"))
+  | select(.args.status == "ACTIVE" or .args.status == "ENDED")
+  | [.contractId, .args.status] | @tsv' 2>/dev/null)
+CAMP_COUNT=$(printf '%s\n' "$CAMP_TEST_TABS" | grep -c . 2>/dev/null || echo 0)
+echo "   Ditemukan: $CAMP_COUNT QuestCampaign dgn campaignId TEST_* (ACTIVE/ENDED)"
 TOTAL=$((TOTAL + CAMP_COUNT))
-for entry in $(echo "$CAMP_TEST" | jq -c '.[]' 2>/dev/null); do
-  cid=$(echo "$entry" | jq -r '.contractId')
-  status=$(echo "$entry" | jq -r '.args.status')
-  if [ "$status" = "ACTIVE" ] || [ "$status" = "ENDED" ]; then
-    archive_contract "$cid" "#canquest-v22:Main:QuestCampaign" "Close" "{\"closedAt\":\"$NOW\"}" "QuestCampaign TEST" \
-      && ARCHIVED=$((ARCHIVED + 1))
-  fi
-done
+while IFS=$'\t' read -r cid status; do
+  [ -z "$cid" ] && continue
+  archive_contract "$cid" "#canquest-v22:Main:QuestCampaign" "Close" "{\"closedAt\":\"$NOW\"}" "QuestCampaign TEST ($status)" \
+    && ARCHIVED=$((ARCHIVED + 1))
+done <<< "$CAMP_TEST_TABS"
 echo ""
 
 # ── 2. QuestClaimReceipt test (Expire) ───────────────────────
 echo "▶ [2/3] Cari + archive QuestClaimReceipt test (Expire)..."
 RCPT_LIST=$(query_acs "#canquest-v22:Main:QuestClaimReceipt")
-RCPT_TEST=$(echo "$RCPT_LIST" | jq -c '[.[] | select(.args.claimId // "" | test("^TEST_CLAIM"))]' 2>/dev/null)
-RCPT_COUNT=$(echo "$RCPT_TEST" | jq 'length' 2>/dev/null)
-echo "   Ditemukan: $RCPT_COUNT QuestClaimReceipt dgn claimId TEST_CLAIM*"
+# Filter: claimId TEST_CLAIM + status PRE_SETTLE. Output tab-separated.
+RCPT_TEST_TABS=$(echo "$RCPT_LIST" | jq -r '
+  .[] | select(.args.claimId // "" | test("^TEST_CLAIM"))
+  | select(.args.status == "PRE_SETTLE")
+  | [.contractId, .args.status] | @tsv' 2>/dev/null)
+RCPT_COUNT=$(printf '%s\n' "$RCPT_TEST_TABS" | grep -c . 2>/dev/null || echo 0)
+echo "   Ditemukan: $RCPT_COUNT QuestClaimReceipt dgn claimId TEST_CLAIM* (PRE_SETTLE)"
 TOTAL=$((TOTAL + RCPT_COUNT))
-for entry in $(echo "$RCPT_TEST" | jq -c '.[]' 2>/dev/null); do
-  cid=$(echo "$entry" | jq -r '.contractId')
-  status=$(echo "$entry" | jq -r '.args.status')
-  if [ "$status" = "PRE_SETTLE" ]; then
-    archive_contract "$cid" "#canquest-v22:Main:QuestClaimReceipt" "Expire" "{\"expiredAt\":\"$NOW\"}" "QuestClaimReceipt TEST" \
-      && ARCHIVED=$((ARCHIVED + 1))
-  fi
-done
+while IFS=$'\t' read -r cid status; do
+  [ -z "$cid" ] && continue
+  archive_contract "$cid" "#canquest-v22:Main:QuestClaimReceipt" "Expire" "{\"expiredAt\":\"$NOW\"}" "QuestClaimReceipt TEST" \
+    && ARCHIVED=$((ARCHIVED + 1))
+done <<< "$RCPT_TEST_TABS"
 echo ""
 
 # ── 3. WalletRegistration test ───────────────────────────────
