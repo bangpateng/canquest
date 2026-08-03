@@ -77,25 +77,28 @@ import DA.Foldable (forA_)
 
 -- Token Standard interfaces (data-dependencies, dari participant DAR).
 -- Module paths + exports diverifikasi via scripts/inspect-dar.sh.
+-- Constructor choices + records pakai (..) supaya bisa di-exercise sbg
+-- "exercise cid TransferFactory_Transfer with {...}" dan dibuat sbg
+-- "Transfer { ... }" / "AppRewardBeneficiary { ... }".
 import Splice.Api.Token.TransferInstructionV1
-  ( TransferFactory          -- interface (L175)
-  , TransferFactory_Transfer -- nonconsuming choice (L181), controller transfer.sender
-  , TransferInstructionResult
-  , Transfer
+  ( TransferFactory(..)
+  , TransferFactory_Transfer(..)
+  , TransferInstructionResult(..)
+  , Transfer(..)
   )
 import Splice.Api.Token.HoldingV1
-  ( Holding
-  , InstrumentId
+  ( Holding(..)
+  , InstrumentId(..)
   )
 import Splice.Api.Token.MetadataV1
-  ( Metadata
-  , ChoiceContext
-  , ExtraArgs                -- ExtraArgs ada di MetadataV1, BUKAN TransferInstructionV1
+  ( Metadata(..)
+  , ChoiceContext(..)
+  , ExtraArgs(..)
   )
 import Splice.Api.FeaturedAppRightV2
-  ( FeaturedAppRight                 -- interface (L17)
-  , FeaturedAppRight_CreateActivityMarker  -- nonconsuming choice (L22), controller (view this).provider
-  , AppRewardBeneficiary
+  ( FeaturedAppRight(..)
+  , FeaturedAppRight_CreateActivityMarker(..)
+  , AppRewardBeneficiary(..)
   )
 
 
