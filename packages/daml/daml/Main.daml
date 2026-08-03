@@ -320,31 +320,38 @@ template QuestClaimReceipt
     -- Sama pola dgn v21. Backend cek ACS existing sebelum ClaimSlot/DrawWinner.
 
     -- ── ATOMIC SETTLE ──────────────────────────────────────────
-    -- Nested exercise TransferFactory_Transfer (fee + reward) + optional
+    -- Nested exercise TransferFactory_Transfer (fee + OPTIONAL reward) + optional
     -- FAR marker. Semua dalam 1 transaction tree → atomic.
+    --
+    -- v23 CHANGE vs v22: reward leg jadi Optional supaya support kode claim
+    -- (rewardCc=0) — fee-only Settle (reward=None). TransferFactory_Transfer
+    -- reject amount=0, jadi reward leg harus skip bila tidak ada reward.
+    --
+    --   CC/USDCx claim → rewardFactoryCid = Some {...} → atomic fee+reward
+    --   Kode claim     → rewardFactoryCid = None      → fee-only Settle
     --
     -- Consuming (auto-archive) + create SETTLED. Nested exercise inherit
     -- authorization dari command-level actAs (Canton M3 auth model).
     --
     -- Backend submit dgn:
     --   actAs = [admin, userAddress, rewardParty] (+ appProvider bila FAR on)
+    --   Bila reward=None, rewardParty TIDAK wajib di actAs (reward leg skip).
     -- Pre-step backend (sebelum submit Settle):
     --   1. callTransferFactoryRegistry → feeChoiceContext, feeFactoryCid
-    --   2. callTransferFactoryRegistry → rewardChoiceContext, rewardFactoryCid
-    --      (rewardToken None|"CC" → instrumentId "Amulet"; "USDCx" → "USDCx")
+    --   2. (bila reward>0) callTransferFactoryRegistry → rewardCtx, rewardFactoryCid
     --   3. queryAmuletHoldings/getTokenHoldingCids → inputHoldingCids
     --   4. (optional) getFeaturedAppRightCid → farCid
     --   Lalu konstruksi Settle args dgn data di atas.
     choice Settle : ContractId QuestClaimReceipt
       with
-        -- Fee leg: user → treasury
+        -- Fee leg: user → treasury (selalu jalan)
         feeFactoryCid    : ContractId TransferFactory
         feeTransfer      : Transfer
         feeExtraArgs     : ExtraArgs
-        -- Reward leg: rewardParty → user
-        rewardFactoryCid : ContractId TransferFactory
-        rewardTransfer   : Transfer
-        rewardExtraArgs  : ExtraArgs
+        -- Reward leg: rewardParty → user (Optional — None utk kode claim)
+        rewardFactoryCid : Optional (ContractId TransferFactory)
+        rewardTransfer   : Optional Transfer
+        rewardExtraArgs  : Optional ExtraArgs
         -- Optional FAR marker (None bila FAR off)
         featuredAppRightCid : Optional (ContractId FeaturedAppRight)
         appProvider      : Party            -- CANTON_APP_PROVIDER_PARTY_ID
@@ -353,25 +360,28 @@ template QuestClaimReceipt
       do
         -- Guard
         assertMsg "Claim harus PRE_SETTLE!" (status == "PRE_SETTLE")
-        assertMsg "Fee atau reward harus > 0 untuk Settle!"
-          (claimFeeCc > 0.0 || rewardCc > 0.0)
+        assertMsg "Fee harus > 0 untuk Settle!" (claimFeeCc > 0.0)
 
-        -- 1. FEE transfer (atomic leg 1)
+        -- 1. FEE transfer (atomic leg 1, selalu jalan)
         --    Controller = feeTransfer.sender (user) → di-cover actAs command.
         _feeResult <- exercise feeFactoryCid TransferFactory_Transfer with
           expectedAdmin = feeTransfer.instrumentId.admin
           transfer      = feeTransfer
           extraArgs     = feeExtraArgs
 
-        -- 2. REWARD transfer (atomic leg 2)
+        -- 2. REWARD transfer (atomic leg 2, HANYA bila Some).
         --    Controller = rewardTransfer.sender (rewardParty) → di-cover actAs.
         --    rewardToken None|"CC" → transfer.instrumentId.id = "Amulet"
         --    rewardToken "USDCx"   → transfer.instrumentId.id = "USDCx"
-        --    (Backend konstruksi transfer spec sesuai rewardToken.)
-        _rewardResult <- exercise rewardFactoryCid TransferFactory_Transfer with
-          expectedAdmin = rewardTransfer.instrumentId.admin
-          transfer      = rewardTransfer
-          extraArgs     = rewardExtraArgs
+        --    Kode claim (rewardCc=0) → rewardFactoryCid = None → skip.
+        rewardActuallySent <- case (rewardFactoryCid, rewardTransfer, rewardExtraArgs) of
+          Some rfd, Some rt, Some rea -> do
+            _ <- exercise rfd TransferFactory_Transfer with
+              expectedAdmin = rt.instrumentId.admin
+              transfer      = rt
+              extraArgs     = rea
+            pure True
+          _ -> pure False
 
         -- 3. FAR activity marker (optional - hanya bila Some).
         --    Controller = appProvider -> backend actAs tambah appProvider.
@@ -385,9 +395,10 @@ template QuestClaimReceipt
             weight = None
 
         -- Consuming: auto-archive PRE_SETTLED, create SETTLED (tanpa txId — post-settle).
+        -- rewardSent = True hanya bila reward leg benar-benar di-exercise (kode claim False).
         create this with
           feePaid    = True
-          rewardSent = True
+          rewardSent = rewardActuallySent
           status     = "SETTLED"
 
     -- ── POST-SETTLE: Record tx IDs ─────────────────────────────
