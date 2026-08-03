@@ -1,227 +1,209 @@
 #!/bin/bash
 # ============================================================
-# CanQuest — Cek DAR & Contract v21 Aktif (v2 — defensive)
+# CanQuest — Cek Contract v21 Aktif (v3 — simpel & robust)
 #
-# Auth: Keycloak client_credentials (scope=daml_ledger_api)
-#
-# Perubahan v2:
-#   - Handle response /v2/packages format {packageIds: [...]} (Canton 3.3+)
-#   - Resolve nama package via /v2/packages/{id} (detail per package)
-#   - Tampilkan response mentah ACS untuk debug, bukan langsung parse count
-#   - Auto-detect party dari token JWT (untuk readAs fallback)
+# v3 changes (vs v2):
+#   - HAPUS loop 123-curl untuk resolve nama package (penyebab crash v2)
+#   - Cukup 1x query ACS, ekstrak semua template name + count
+#   - jq path BENAR: .templateId.value.name (object, bukan string)
+#     -- ini bug v1/v2 yang bikin count = "?" (parse gagal)
+#   - Tidak ada set -e yang bikin warning abort script
 #
 # CARA PAKAI (di VPS 2):
-#   export KEYCLOAK_URL="https://auth.canquestlabs.com"
-#   export KEYCLOAK_REALM="canton"
-#   export LEDGER_CLIENT_ID="validator-app-backend"
-#   export LEDGER_CLIENT_SECRET="xxx"
-#   export LEDGER_API_URL="https://ledger.canquestlabs.com"
-#   export OPERATOR_PARTY_ID="canquest-operator::..."   # opsional
-#
+#   export LEDGER_CLIENT_ID="<dari .env>"
+#   export LEDGER_CLIENT_SECRET="<dari .env>"
 #   bash scripts/check-v21-active-contracts.sh
 #
-# Prereq: curl, jq, base64
-# Aman: READ-ONLY.
+# Prereq: curl, jq. READ-ONLY.
 # ============================================================
-set -euo pipefail
 
 KEYCLOAK_URL="${KEYCLOAK_URL:-https://auth.canquestlabs.com}"
 KEYCLOAK_REALM="${KEYCLOAK_REALM:-canton}"
-LEDGER_CLIENT_ID="${LEDGER_CLIENT_ID:-}"
-LEDGER_CLIENT_SECRET="${LEDGER_CLIENT_SECRET:-}"
+LEDGER_CLIENT_ID="${LEDGER_CLIENT_ID:?LEDGER_CLIENT_ID harus diset}"
+LEDGER_CLIENT_SECRET="${LEDGER_CLIENT_SECRET:?LEDGER_CLIENT_SECRET harus diset}"
 LEDGER_API_URL="${LEDGER_API_URL:-https://ledger.canquestlabs.com}"
 LEDGER_API_AUTH_SCOPE="${LEDGER_API_AUTH_SCOPE:-daml_ledger_api}"
 OPERATOR_PARTY_ID="${OPERATOR_PARTY_ID:-}"
 
-missing=()
-[ -z "$LEDGER_CLIENT_ID" ]     && missing+=("LEDGER_CLIENT_ID")
-[ -z "$LEDGER_CLIENT_SECRET" ] && missing+=("LEDGER_CLIENT_SECRET")
-if [ ${#missing[@]} -gt 0 ]; then
-  echo "❌ Env belum lengkap:"
-  for m in "${missing[@]}"; do echo "   export $m=\"<nilai>\""; done
-  exit 1
-fi
+command -v jq   >/dev/null 2>&1 || { echo "❌ jq belum terinstall"; exit 1; }
+command -v curl >/dev/null 2>&1 || { echo "❌ curl belum terinstall"; exit 1; }
 
-for cmd in curl jq base64; do
-  command -v $cmd >/dev/null 2>&1 || { echo "❌ $cmd belum terinstall"; exit 1; }
-done
-
-# ── 0. Ambil token dari Keycloak ─────────────────────────────
+# ── 0. Token Keycloak ────────────────────────────────────────
 TOKEN_URL="${KEYCLOAK_URL%/}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token"
 echo ""
-echo "▶ [0/5] Ambil token ledger dari Keycloak..."
-echo "       POST $TOKEN_URL (client_id=$LEDGER_CLIENT_ID, scope=$LEDGER_API_AUTH_SCOPE)"
+echo "▶ [0/4] Ambil token ledger dari Keycloak..."
+echo "       POST $TOKEN_URL (client_id=$LEDGER_CLIENT_ID)"
 echo "--------------------------------------------------"
-
 TOKEN_RESP=$(curl -s -X POST "$TOKEN_URL" \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "grant_type=client_credentials" \
-  -d "client_id=$LEDGER_CLIENT_ID" \
-  -d "client_secret=$LEDGER_CLIENT_SECRET" \
-  -d "scope=$LEDGER_API_AUTH_SCOPE" 2>&1) || {
-    echo "❌ Gagal request token. Response: $TOKEN_RESP"; exit 1; }
+  --data-urlencode "grant_type=client_credentials" \
+  --data-urlencode "client_id=$LEDGER_CLIENT_ID" \
+  --data-urlencode "client_secret=$LEDGER_CLIENT_SECRET" \
+  --data-urlencode "scope=$LEDGER_API_AUTH_SCOPE" 2>&1) || { echo "❌ curl gagal: $TOKEN_RESP"; exit 1; }
 
-TOKEN=$(echo "$TOKEN_RESP" | jq -r '.access_token // empty' 2>/dev/null || echo "")
+TOKEN=$(printf '%s' "$TOKEN_RESP" | jq -r '.access_token // empty' 2>/dev/null)
 if [ -z "$TOKEN" ]; then
   echo "❌ Token kosong. Response Keycloak:"
-  echo "$TOKEN_RESP" | jq . 2>/dev/null || echo "$TOKEN_RESP"
+  printf '%s' "$TOKEN_RESP" | jq . 2>/dev/null || printf '%s\n' "$TOKEN_RESP"
   exit 1
 fi
-echo "✅ Token dapat (len=${#TOKEN}, expires_in=$(echo "$TOKEN_RESP" | jq -r '.expires_in // "?"')s)"
+echo "✅ Token dapat (len=${#TOKEN}, expires_in=$(printf '%s' "$TOKEN_RESP" | jq -r '.expires_in // "?'"')s)"
 echo ""
 
 AUTH=(-H "Authorization: Bearer $TOKEN")
 
 echo "=================================================="
-echo " CanQuest — Cek DAR & Contract v21 Aktif"
+echo " CanQuest — Cek Contract Aktif"
 echo " Ledger   : $LEDGER_API_URL"
 echo " Operator : ${OPERATOR_PARTY_ID:-(tidak diset)}"
 echo "=================================================="
 echo ""
 
-# ── 1. Daftar package IDs ter-deploy ─────────────────────────
-echo "▶ [1/5] GET /v2/packages (raw response):"
+# ── 1. Query ACS — 1x request, ambil semua contract ─────────
+echo "▶ [1/4] Query Active Contract Set (semua template):"
 echo "--------------------------------------------------"
-PKG_RESP=$(curl -s "${AUTH[@]}" "$LEDGER_API_URL/v2/packages" 2>/dev/null || echo '{}')
-echo "$PKG_RESP" | jq . 2>/dev/null || echo "$PKG_RESP"
-echo ""
+ACS_BODY=$(if [ -n "$OPERATOR_PARTY_ID" ]; then
+  jq -n --arg p "$OPERATOR_PARTY_ID" '{
+    filter: [{ cumulative: [{ identifierFilter: { WildcardFilter: { value: {} } } }] }],
+    readAs: [$p],
+    verbose: false
+  }'
+else
+  jq -n '{
+    filter: [{ cumulative: [{ identifierFilter: { WildcardFilter: { value: {} } } }] }],
+    verbose: false
+  }'
+fi)
 
-# Extract list ID. Handle 2 format: {packageIds:[...]} atau array langsung
-PKG_IDS=$(echo "$PKG_RESP" | jq -r '
-  if type == "array" then .[]
-  elif .packageIds then .packageIds[]
-  else empty end' 2>/dev/null)
+ACS_FILE=$(mktemp)
+trap 'rm -f "$ACS_FILE"' EXIT
 
-PKG_COUNT=$(echo "$PKG_IDS" | grep -c . 2>/dev/null || echo 0)
-echo "  Total package IDs: $PKG_COUNT"
-echo ""
-
-# ── 2. Resolve detail per package (cari canquest-v*) ─────────
-echo "▶ [2/5] Resolve detail package (cari canquest-v*):"
-echo "--------------------------------------------------"
-CANQUEST_PACKAGES=""
-CANQUEST_COUNT=0
-if [ -n "$PKG_IDS" ]; then
-  while IFS= read -r PID; do
-    [ -z "$PID" ] && continue
-    # GET detail per package
-    DETAIL=$(curl -s "${AUTH[@]}" "$LEDGER_API_URL/v2/packages/$PID" 2>/dev/null || echo '{}')
-    NAME=$(echo "$DETAIL" | jq -r '.sourcePackageName // .name // .packageName // "?"' 2>/dev/null)
-    VERSION=$(echo "$DETAIL" | jq -r '.packageVersion // .version // "?"' 2>/dev/null)
-    SRC=$(echo "$DETAIL" | jq -r '.sourceDescription // "-" ' 2>/dev/null)
-
-    # Tandai kalau canquest
-    if echo "$NAME $SRC" | grep -qi "canquest"; then
-      echo "  ✅ canquest  $NAME v$VERSION  [id=${PID:0:16}...]  ($SRC)"
-      CANQUEST_PACKAGES="$CANQUEST_PACKAGES $PID"
-      CANQUEST_COUNT=$((CANQUEST_COUNT + 1))
-    fi
-  done <<< "$PKG_IDS"
-fi
-
-if [ "$CANQUEST_COUNT" -eq 0 ]; then
-  echo "  ⚠️  Tidak ada package canquest-v* ditemukan via name match."
-  echo "     (mungkin DAML Anda belum pernah sukses ter-deploy, atau"
-  echo "      backend memanggil templateId tapi gagal diam-diam.)"
-fi
-echo ""
-echo "  📊 Total package canquest ter-deploy: $CANQUEST_COUNT"
-echo ""
-
-# ── 3. Decode party dari token JWT (fallback readAs) ─────────
-echo "▶ [3/5] Decode token JWT (cari party yang bisa read):"
-echo "--------------------------------------------------"
-JWT_PART=$(echo "$TOKEN" | cut -d'.' -f2)
-# Pad base64 ke kelipatan 4
-PAD=$(( (4 - ${#JWT_PART} % 4) % 4 ))
-JWT_PART="${JWT_PART}$(printf '=%.0s' $(seq 1 $PAD))"
-JWT_PAYLOAD=$(echo "$JWT_PART" | tr '_-' '/+' | base64 -d 2>/dev/null || echo '{}')
-
-LEDGER_USER_ID=$(echo "$JWT_PAYLOAD" | jq -r '.sub // "?"')
-TOKEN_PARTIES=$(echo "$JWT_PAYLOAD" | jq -r '(.act_as // .actAs // []) | join(",") // "?"')
-echo "  Token sub (ledger user): $LEDGER_USER_ID"
-echo "  Token act_as parties    : ${TOKEN_PARTIES:-(tidak ada)}"
-echo ""
-
-# ── 4. Query ACS — RAW dulu, baru parse ──────────────────────
-echo "▶ [4/5] Query Active Contract Set (RAW response):"
-echo "--------------------------------------------------"
-
-# Coba 2 varian body: dengan readAs (kalau operator diset) atau filter any-party
-build_acs_body() {
-  if [ -n "$OPERATOR_PARTY_ID" ]; then
-    jq -n --arg p "$OPERATOR_PARTY_ID" '{
-      filter: [{ cumulative: [{ identifierFilter: { WildcardFilter: { value: {} } } }] }],
-      readAs: [$p],
-      verbose: true
-    }'
-  else
-    jq -n '{
-      filter: [{ cumulative: [{ identifierFilter: { WildcardFilter: { value: {} } } }] }],
-      verbose: true
-    }'
-  fi
-}
-
-ACS_HTTP_CODE=$(curl -s -o /tmp/acs_resp.json -w "%{http_code}" "${AUTH[@]}" -X POST \
+ACS_HTTP=$(curl -s -o "$ACS_FILE" -w "%{http_code}" "${AUTH[@]}" -X POST \
   "$LEDGER_API_URL/v2/state/active-contracts" \
   -H "Content-Type: application/json" \
-  -d "$(build_acs_body)" 2>/dev/null || echo "000")
+  -d "$ACS_BODY" 2>/dev/null || echo "000")
 
-echo "  HTTP status: $ACS_HTTP_CODE"
-echo "  Response (first 1500 chars):"
-head -c 1500 /tmp/acs_resp.json
-echo ""
-echo "..."
+echo "  HTTP status : $ACS_HTTP"
+echo "  Response size: $(wc -c < "$ACS_FILE" 2>/dev/null || echo '?') bytes"
 
-if [ "$ACS_HTTP_CODE" != "200" ]; then
+if [ "$ACS_HTTP" != "200" ]; then
+  echo "  ❌ ACS query gagal. Response (first 1000 chars):"
+  head -c 1000 "$ACS_FILE"
   echo ""
-  echo "  ❌ ACS query gagal (HTTP $ACS_HTTP_CODE). Kemungkinan:"
-  echo "     - Token tidak punya right CanReadAsAnyParty (butuh service-account)"
-  echo "     - Filter body salah format"
-  echo "     - Set OPERATOR_PARTY_ID dan coba lagi"
+  echo ""
+  echo "  Kemungkinan: token tidak punya CanReadAsAnyParty right."
+  echo "  Set OPERATOR_PARTY_ID lalu coba lagi, atau pakai service-account token."
+  exit 1
 fi
+
+# Cek struktur response (results array?)
+TOTAL_CONTRACTS=$(jq '.results | if type=="array" then length else "?" end' "$ACS_FILE" 2>/dev/null || echo "ERR")
+echo "  Total contract (semua template): $TOTAL_CONTRACTS"
 echo ""
 
-# ── 5. Parse count per template canquest ─────────────────────
-echo "▶ [5/5] Hitung contract aktif per template canquest:"
+if [ "$TOTAL_CONTRACTS" = "ERR" ] || [ "$TOTAL_CONTRACTS" = "?" ]; then
+  echo "  ⚠️  Struktur response tidak terduga. Raw (first 1500 chars):"
+  head -c 1500 "$ACS_FILE"
+  echo ""
+  echo ""
+  echo "  Paste raw ini ke ZCode untuk analisis manual."
+  exit 0
+fi
+
+# ── 2. Daftar semua template yang ada contract aktifnya ─────
+echo "▶ [2/4] Distribusi contract per template (semua):"
 echo "--------------------------------------------------"
-V21_TEMPLATES=("WalletRegistration" "QuestCampaign" "QuestClaim")
-TOTAL_ACTIVE=0
-PARSE_OK="yes"
+# templateId di Canton ACS = { packageId, moduleName, name } atau {value:{...}}
+jq -r '
+  .results[]
+  | .templateId as $t
+  | ($t.value.name // $t.name // "?") as $name
+  | ($t.value.moduleName // $t.moduleName // "?") as $mod
+  | ($t.value.packageId // $t.packageId // "?") as $pkg
+  | "\($pkg[0:12])...\($mod):\($name)"
+' "$ACS_FILE" 2>/dev/null | sort | uniq -c | sort -rn | head -40
 
-for TPL in "${V21_TEMPLATES[@]}"; do
-  COUNT=$(jq --arg tpl "$TPL" \
-    '[.results[]? | select((.templateId.value.name // .templateId // "") | endswith($tpl))] | length' \
-    /tmp/acs_resp.json 2>/dev/null || echo "ERR")
-  printf "  %-22s : %s\n" "$TPL" "$COUNT"
-  if [ "$COUNT" = "ERR" ]; then PARSE_OK="no";
-  elif [ "$COUNT" -gt 0 ] 2>/dev/null; then TOTAL_ACTIVE=$((TOTAL_ACTIVE + COUNT)); fi
-done
-echo ""
-echo "  📊 TOTAL contract canquest aktif: $TOTAL_ACTIVE"
-echo "  Parse sukses: $PARSE_OK"
-echo ""
-
-# ── Rekomendasi ──────────────────────────────────────────────
-echo "=================================================="
-echo " REKOMENDASI"
-echo "=================================================="
-if [ "$PARSE_OK" = "no" ]; then
-  echo " ⚠️  Parse GAGAL — jangan ambil keputusan dulu."
-  echo "     Lihat raw response ACS di atas. Kalau HTTP 200 tapi"
-  echo "     results kosong → ledger benar-benar bersih (FRESH START)."
-  echo "     Kalau HTTP ≠ 200 → masalah auth/rights, perlu service-account token."
-  echo "     Paste raw response ini ke ZCode untuk analisis."
-elif [ "$TOTAL_ACTIVE" -eq 0 ]; then
-  echo " ✅ FRESH START — ledger bersih dari contract canquest aktif."
-  echo "    → Bisa langsung draft canquest-v22."
-  echo "    → DAR canquest lama (kalau ada) boleh dibiarkan / unvet opsional."
-else
-  echo " ⚠️  Ada $TOTAL_ACTIVE contract aktif. Baca raw response di atas"
-  echo "    untuk detail tiap contract (cid, payload). Putuskan:"
-  echo "    A) Fresh start (biarkan contract lama sebagai audit trail)"
-  echo "    B) Archive manual sebelum deploy v22"
+# Jika output kosong, dump struktur pertama untuk debug
+if ! jq -e '.results[0]' "$ACS_FILE" >/dev/null 2>&1; then
+  echo "  (tidak ada results, atau struktur beda). Sample contract pertama:"
+  jq '.results[0] // .' "$ACS_FILE" 2>/dev/null | head -50
 fi
 echo ""
-echo "Bawa OUTPUT INI (termasuk raw response) ke ZCode untuk lanjut."
+
+# ── 3. Fokus: cari contract dengan template canquest ────────
+echo "▶ [3/4] Cari contract CANQUEST (Main:WalletRegistration/QuestCampaign/QuestClaim):"
+echo "--------------------------------------------------"
+
+# List nama template canquest yang dicari (di module Main)
+CANQUEST_MATCHING=$(jq -r '
+  .results[]
+  | .templateId as $t
+  | ($t.value.name // $t.name // "?") as $name
+  | ($t.value.moduleName // $t.moduleName // "?") as $mod
+  | ($t.value.packageId // $t.packageId // "?") as $pkg
+  | select($mod == "Main" and ($name == "WalletRegistration" or $name == "QuestCampaign" or $name == "QuestClaim"))
+  | "\($pkg)\t\($name)"
+' "$ACS_FILE" 2>/dev/null)
+
+if [ -z "$CANQUEST_MATCHING" ]; then
+  echo "  ✅ TIDAK ADA contract canquest aktif."
+  echo "     (Tidak ada template Main:WalletRegistration/QuestCampaign/QuestClaim di module Main)"
+  echo ""
+  # Cek juga apakah ada package dengan module Main sama sekali (bisa jadi nama template beda)
+  echo "  Template lain yang ada di module 'Main':"
+  jq -r '
+    .results[]
+    | .templateId as $t
+    | ($t.value.moduleName // $t.moduleName // "?") as $mod
+    | ($t.value.name // $t.name // "?") as $name
+    | select($mod == "Main")
+    | "    - \($name)"
+  ' "$ACS_FILE" 2>/dev/null | sort -u | head -20
+  echo ""
+  CANQUEST_TOTAL=0
+else
+  echo "  Ditemukan contract canquest aktif:"
+  printf '%s\n' "$CANQUEST_MATCHING" | awk -F'\t' '{ printf "    %-22s (pkg %s...)\n", $2, substr($1,1,16) }' | sort
+  echo ""
+  CANQUEST_TOTAL=$(printf '%s\n' "$CANQUEST_MATCHING" | wc -l | tr -d ' ')
+  # Identifikasi packageId canquest (unique)
+  CANQUEST_PKG=$(printf '%s\n' "$CANQUEST_MATCHING" | awk -F'\t' '{print $1}' | sort -u | head -1)
+  echo "  Package ID canquest: ${CANQUEST_PKG:0:32}..."
+fi
+echo ""
+echo "  📊 TOTAL contract canquest aktif: $CANQUEST_TOTAL"
+echo ""
+
+# ── 4. Rekomendasi ──────────────────────────────────────────
+echo "▶ [4/4] Rekomendasi:"
+echo "--------------------------------------------------"
+if [ "$CANQUEST_TOTAL" -eq 0 ] 2>/dev/null; then
+  echo "  ✅ FRESH START — ledger BERSIH dari contract canquest aktif."
+  echo "     → Langsung draft canquest-v22."
+  echo "     → DAR lama (kalau ada) boleh dibiarkan; unvet opsional."
+  echo "     → Source v21 boleh dihapus dari repo (simpan DAR artifact utk audit)."
+else
+  echo "  ⚠️  Ada $CANQUEST_TOTAL contract canquest aktif."
+  echo "     Breakdown:"
+  printf '%s\n' "$CANQUEST_MATCHING" | awk -F'\t' '{print $2}' | sort | uniq -c | sed 's/^/       /'
+  echo ""
+  echo "     Opsi:"
+  echo "      A) Fresh start — biarkan contract lama (audit trail), v22 independen."
+  echo "         Cocok kalau cuma WalletRegistration (identitas user lama)."
+  echo "      B) Archive manual dulu — kalau ada QuestCampaign dgn reward outstanding."
+  echo "      C) Migrasi via Upgrade choice — kalau data perlu dipindah ke v22."
+  echo ""
+  echo "     Detail contract (untuk putuskan):"
+  jq -r '
+    .results[]
+    | .templateId as $t
+    | ($t.value.name // $t.name // "?") as $name
+    | ($t.value.moduleName // $t.moduleName // "?") as $mod
+    | select($mod == "Main" and ($name == "WalletRegistration" or $name == "QuestCampaign" or $name == "QuestClaim"))
+    | "    [\($name)] contractId=\(.contractId[0:24])...  payload=\(.arguments // .createArguments // {} | tostring | .[0:120])"
+  ' "$ACS_FILE" 2>/dev/null | head -30
+fi
+echo ""
+echo "=================================================="
+echo " Bawa output ini ke ZCode untuk lanjut draft v22"
+echo "=================================================="
