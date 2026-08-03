@@ -72,7 +72,7 @@
 
 module Main where
 
-import Daml.Script
+import Daml.Script ()
 import DA.Foldable (forA_)
 
 -- Token Standard interfaces (data-dependencies, dari participant DAR).
@@ -83,18 +83,10 @@ import DA.Foldable (forA_)
 import Splice.Api.Token.TransferInstructionV1
   ( TransferFactory(..)
   , TransferFactory_Transfer(..)
-  , TransferInstructionResult(..)
   , Transfer(..)
   )
-import Splice.Api.Token.HoldingV1
-  ( Holding(..)
-  , InstrumentId(..)
-  )
-import Splice.Api.Token.MetadataV1
-  ( Metadata(..)
-  , ChoiceContext(..)
-  , ExtraArgs(..)
-  )
+import Splice.Api.Token.HoldingV1 (InstrumentId(..))
+import Splice.Api.Token.MetadataV1 (ExtraArgs(..))
 import Splice.Api.FeaturedAppRightV2
   ( FeaturedAppRight(..)
   , FeaturedAppRight_CreateActivityMarker(..)
@@ -122,10 +114,10 @@ template WalletRegistration
     signatory admin
     observer userAddress
 
-    -- Idempotency: 1 WalletRegistration per (admin, userAddress).
-    -- Backend registerWallet() cek ACS dulu sebelum create.
-    key (admin, userAddress) : (Party, Party)
-    maintainer key._1
+    -- IDEMPOTENCY (backend-enforced, bukan contract key):
+    -- SDK 3.4.11 participant config tidak support contract keys.
+    -- Backend registerWallet() cek ACS dulu sebelum create (findContractId
+    -- match userAddress) + commandId dedup. Sama pola dgn v21 yg jalan.
 
 
 -- ============================================================
@@ -160,8 +152,8 @@ template QuestCampaign
   where
     signatory admin
 
-    key (admin, campaignId) : (Party, Text)
-    maintainer key._1
+    -- IDEMPOTENCY (backend-enforced): createQuestCampaign pakai commandId
+    -- deterministik `quest-campaign-${campaignId}` + cek ACS existing.
 
     -- FCFS: user klaim slot (CC_ONLY/CC_AND_INVITE/INVITE_CODE_FCFS).
     -- Kuota di-enforce atomic on-chain. Match backend claimFcfsSlot().
@@ -325,10 +317,9 @@ template QuestClaimReceipt
     signatory admin
     observer userAddress
 
-    -- Idempotency: 1 receipt aktif per (admin, campaignId, userAddress).
-    -- Backend cek via lookupByKey sebelum ClaimSlot/DrawWinner.
-    key (admin, campaignId, userAddress) : (Party, Text, Party)
-    maintainer key._1
+    -- IDEMPOTENCY (backend-enforced): claimId uniqueness dijaga backend
+    -- (Postgres row lock + commandId dedup `claim-fcfs-${claimId}-${uuid}`).
+    -- Sama pola dgn v21. Backend cek ACS existing sebelum ClaimSlot/DrawWinner.
 
     -- ── ATOMIC SETTLE ──────────────────────────────────────────
     -- Nested exercise TransferFactory_Transfer (fee + reward) + optional
