@@ -374,15 +374,15 @@ template QuestClaimReceipt
           transfer      = rewardTransfer
           extraArgs     = rewardExtraArgs
 
-        -- 3. FAR activity marker (optional — hanya bila Some).
-        --    Controller = appProvider → backend actAs tambah appProvider.
+        -- 3. FAR activity marker (optional - hanya bila Some).
+        --    Controller = appProvider -> backend actAs tambah appProvider.
         --    AppRewardBeneficiary.weight REQUIRED (Decimal 0.0-1.0).
-        forA_ featuredAppRightCid $ \farCid ->
+        forA_ featuredAppRightCid $ \farCid -> do
           exercise farCid FeaturedAppRight_CreateActivityMarker with
-            beneficiaries = [ AppRewardBeneficiary with
-              beneficiary = appProvider
-              weight      = 1.0
-            ]
+            beneficiaries = [ AppRewardBeneficiary
+              { beneficiary = appProvider
+              , weight      = 1.0
+              } ]
             weight = None
 
         -- Consuming: auto-archive PRE_SETTLED, create SETTLED (tanpa txId — post-settle).
