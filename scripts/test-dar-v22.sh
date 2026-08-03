@@ -110,7 +110,32 @@ submit() {
     -d "$body" 2>/dev/null
 }
 
-# Helper: extract contractId(s) dari response transaction-tree.
+# Helper: query ACS utk cari QuestCampaign by campaignId (deterministik).
+# Backend pattern: queryActiveContracts + filter field match.
+# Args: campaignId
+# Returns: contractId QuestCampaign yg campaignId match, atau empty.
+find_campaign_cid() {
+  local target_campaign_id="$1"
+  local body=$(jq -n --arg op "$OPERATOR" '{
+    eventFormat: {
+      filtersByParty: { ($op): { cumulative: [
+        { identifierFilter: { WildcardFilter: { value: { includeCreatedEventBlob: false } } } }
+      ]}},
+      verbose: false
+    }
+  }')
+  local acs=$(curl -s "${AUTH[@]}" -X POST \
+    "$LEDGER_API_URL/v2/state/active-contracts" \
+    -H "Content-Type: application/json" \
+    -d "$body" 2>/dev/null)
+  # Deep-traverse cari contractQuestCampaign dgn createArgument.campaignId match.
+  # Canton 3.4 ACS: results[].contractEntry.JsActiveContract.createdEvent
+  echo "$acs" | jq -r --arg cid "$target_campaign_id" "
+    [.. | objects
+     | select(.contractId != null)
+     | select((.createArguments.campaignId // .arguments.campaignId // .payload.campaignId // empty) == \$cid)]
+    | .[0].contractId // empty" 2>/dev/null
+}
 # Canton 3.4 nested: transactionTree.eventsById.{n}.CreatedTreeEvent.value.{contractId,templateId}
 # templateId di response = STRING hash (bukan {value:{name}}). Karena itu filter
 # by templateName susah — kita pakai approach: ambil contractId per nodeId order.
@@ -209,57 +234,31 @@ CMD=$(jq -n \
       claimedAt: $now
     }}}')
 RES=$(submit "$CMD" "test-claim1-$SUFFIX")
-# ClaimSlot = consuming choice. Body: archive self (CAMP_CID lama),
-# create campaign baru (counter+1), create QuestClaimReceipt.
-# Tree akan punya: 1 Archived + 2 Created.
-# Strategi: ambil SEMUA created cid, exclude CAMP_CID lama (yg di-archive),
-# lalu identifikasi mana campaign mana receipt.
-ARCHIVED_CID=$(echo "$RES" | jq -r "
-  [.. | objects | select(.contractId != null)
-   | select(has(\"ArchivedTreeEvent\") or has(\"Archived\"))]
-  | .[0].contractId // ([.. | objects | .ArchivedTreeEvent.value.contractId // empty] | first // empty)" 2>/dev/null)
-
-# Semua created cid (deep traverse)
-ALL_CIDS=$(echo "$RES" | jq -r "
+# ClaimSlot = consuming. Setelah sukses, campaign lama di-archive,
+# campaign baru (counter+1) + receipt di-create. Identifikasi via ACS
+# query (deterministik) — cari QuestCampaign aktif dgn campaignId match.
+CLAIM1_CID=$(echo "$RES" | jq -r "
   [.. | objects | select(.contractId != null and .templateId != null)
-   | .contractId] | unique | .[]" 2>/dev/null)
-
-NEW_CAMP_CID=""
-CLAIM1_CID=""
-for cid in $ALL_CIDS; do
-  # Skip cid lama (campaign awal yg di-archive)
-  [ "$cid" = "$CAMP_CID" ] && continue
-  # Skip archived
-  [ "$cid" = "$ARCHIVED_CID" ] && continue
-  # Identifikasi: cek field di node ini
-  NODE_JSON=$(echo "$RES" | jq -r "[.. | objects | select(.contractId==\"$cid\")] | tostring" 2>/dev/null)
-  if echo "$NODE_JSON" | grep -qi "claimId\|claimKind\|claimFeeCc\|rewardCode"; then
-    CLAIM1_CID="$cid"
-  elif echo "$NODE_JSON" | grep -qi "campaignId\|questKind\|maxWinners\|currentClaims"; then
-    NEW_CAMP_CID="$cid"
-  fi
+   | select(.contractId != \"$CAMP_CID\")
+   | .contractId] | first // empty" 2>/dev/null)
+# Ambil cid receipt: yg baru created, BUKAN new campaign
+NEW_CAMP_CID=$(find_campaign_cid "TEST_FCFS_$SUFFIX")
+# Receipt = cid created selain new campaign
+RECEIPT_CANDIDATES=$(echo "$RES" | jq -r "
+  [.. | objects | select(.contractId != null and .templateId != null)
+   | select(.contractId != \"$CAMP_CID\")
+   | select(.contractId != \"$NEW_CAMP_CID\")
+   | .contractId] | .[]" 2>/dev/null)
+for cid in $RECEIPT_CANDIDATES; do
+  CLAIM1_CID="$cid"
+  break
 done
-
-# Fallback kalau field detection gagal: assign by elimination
-if [ -z "$NEW_CAMP_CID" ] || [ -z "$CLAIM1_CID" ]; then
-  REMAINING=""
-  for cid in $ALL_CIDS; do
-    [ "$cid" = "$CAMP_CID" ] && continue
-    [ "$cid" = "$ARCHIVED_CID" ] && continue
-    REMAINING="$REMAINING $cid"
-  done
-  CID_A=$(echo $REMAINING | awk '{print $1}')
-  CID_B=$(echo $REMAINING | awk '{print $2}')
-  [ -z "$NEW_CAMP_CID" ] && NEW_CAMP_CID="$CID_A"
-  [ -z "$CLAIM1_CID" ] && CLAIM1_CID="$CID_B"
-  echo "  (i) Field detection inconclusive. archived=$ARCHIVED_CID cids=$REMAINING"
-fi
 
 if [ -n "$CLAIM1_CID" ] && [ "$CLAIM1_CID" != "null" ]; then
   ok "ClaimSlot berhasil, QuestClaimReceipt: ${CLAIM1_CID:0:16}..."
   if [ -n "$NEW_CAMP_CID" ] && [ "$NEW_CAMP_CID" != "null" ]; then
     CAMP_CID="$NEW_CAMP_CID"
-    echo "  (i) New campaign CID (counter+1): ${CAMP_CID:0:16}... (lama diarchive)"
+    echo "  (i) New campaign CID via ACS: ${CAMP_CID:0:16}..."
   fi
 else
   fail "ClaimSlot gagal - tidak dapat receipt cid"
@@ -305,15 +304,9 @@ CMD=$(jq -n \
     choiceArgument: { updatedAt: $now }
   }}')
 RES=$(submit "$CMD" "test-end-$SUFFIX")
-# EndCampaign = consuming: archive self (ACTIVE) + create baru (status ENDED).
-# Ambil created cid yg BUKAN CAMP_CID lama (yg di-archive).
-ENDED_CID=""
-ALL_CIDS=$(echo "$RES" | jq -r "[.. | objects | select(.contractId != null and .templateId != null) | .contractId] | unique | .[]" 2>/dev/null)
-for cid in $ALL_CIDS; do
-  [ "$cid" = "$CAMP_CID" ] && continue   # skip archived (lama)
-  ENDED_CID="$cid"
-  break
-done
+# EndCampaign = consuming: archive ACTIVE + create baru (status ENDED).
+# Query ACS utk dapat new campaign cid (deterministik).
+ENDED_CID=$(find_campaign_cid "TEST_FCFS_$SUFFIX")
 if [ -n "$ENDED_CID" ] && [ "$ENDED_CID" != "null" ]; then
   ok "EndCampaign berhasil: ${ENDED_CID:0:16}..."
   CAMP_CID="$ENDED_CID"
