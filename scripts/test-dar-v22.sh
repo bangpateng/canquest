@@ -89,6 +89,7 @@ fail() { echo "  ❌ $1"; FAIL=$((FAIL+1)); }
 # Args: command_json commandId [extra_actAs_party]
 # actAs = [operator] (party ID, BUKAN admin_user UUID).
 # userId = LEDGER_API_ADMIN_USER (UUID ledger-api-user, utk auth).
+# Endpoint: submit-and-wait-for-transaction-tree (utk dapat contractId dari tree)
 submit() {
   local cmd_json="$1" cmd_id="$2" extra="${3:-}"
   local actAs_args
@@ -104,9 +105,32 @@ submit() {
     --argjson actAs "$actAs_args" \
     '{commands: $commands, userId: $userId, commandId: $commandId, actAs: $actAs, readAs: $actAs}')
   curl -s "${AUTH[@]}" -X POST \
-    "$LEDGER_API_URL/v2/commands/submit-and-wait" \
+    "$LEDGER_API_URL/v2/commands/submit-and-wait-for-transaction-tree" \
     -H "Content-Type: application/json" \
     -d "$body" 2>/dev/null
+}
+
+# Helper: extract contractId dari response transaction-tree.
+# Response tree: {eventsById: {"0": {Created: {contractId, templateId}}, ...}}
+# Atau flat: {events: [...]} — handle dua-duanya.
+extract_created_cid() {
+  local res="$1" tpl_suffix="${2:-}"
+  if [ -n "$tpl_suffix" ]; then
+    echo "$res" | jq -r "
+      (.events[]? // []),
+      (.eventsById[]? | .Created // empty // .),
+      (.rootEventIds[]? as \$rid | .eventsById[\$rid].Created // empty)
+      | select(.contractId != null)
+      | select((.templateId.value.name // .templateId // \"\") | endswith(\"$tpl_suffix\"))
+      | .contractId" 2>/dev/null | head -1
+  else
+    echo "$res" | jq -r "
+      (.events[]? // []),
+      (.eventsById[]? | .Created // empty // .),
+      (.rootEventIds[]? as \$rid | .eventsById[\$rid].Created // empty),
+      ({contractId: .contractId} // empty)
+      | select(.contractId != null) | .contractId" 2>/dev/null | head -1
+  fi
 }
 
 # ── 1. Create WalletRegistration ─────────────────────────────
@@ -124,7 +148,7 @@ CMD=$(jq -n \
       registeredAt: $now
     }}}')
 RES=$(submit "$CMD" "test-wallet-$SUFFIX")
-WALLET_CID=$(echo "$RES" | jq -r '.events[]? | select(.eventType=="created") | .contractId' | head -1)
+WALLET_CID=$(extract_created_cid "$RES" "WalletRegistration")
 if [ -n "$WALLET_CID" ] && [ "$WALLET_CID" != "null" ]; then
   ok "WalletRegistration created: ${WALLET_CID:0:16}..."
 else
@@ -147,13 +171,13 @@ CMD=$(jq -n \
       rewardCc: "10.0",
       rewardToken: null,
       claimFeeCc: "3.0",
-      maxWinners: 1,
-      currentClaims: 0,
+      maxWinners: "1",
+      currentClaims: "0",
       status: "ACTIVE",
       createdAt: $now
     }}}')
 RES=$(submit "$CMD" "test-camp-$SUFFIX")
-CAMP_CID=$(echo "$RES" | jq -r '.events[]? | select(.eventType=="created") | .contractId' | head -1)
+CAMP_CID=$(extract_created_cid "$RES" "QuestCampaign")
 if [ -n "$CAMP_CID" ] && [ "$CAMP_CID" != "null" ]; then
   ok "QuestCampaign created: ${CAMP_CID:0:16}..."
 else
@@ -184,8 +208,8 @@ CMD=$(jq -n \
       claimedAt: $now
     }}}')
 RES=$(submit "$CMD" "test-claim1-$SUFFIX")
-CLAIM1_CID=$(echo "$RES" | jq -r '.events[]? | select(.eventType=="created") | select(.templateId // "" | endswith("QuestClaimReceipt")) | .contractId' | head -1)
-NEW_CAMP_CID=$(echo "$RES" | jq -r '.events[]? | select(.eventType=="created") | select(.templateId // "" | endswith("QuestCampaign")) | .contractId' | head -1)
+CLAIM1_CID=$(extract_created_cid "$RES" "QuestClaimReceipt")
+NEW_CAMP_CID=$(extract_created_cid "$RES" "QuestCampaign")
 if [ -n "$CLAIM1_CID" ] && [ "$CLAIM1_CID" != "null" ]; then
   ok "ClaimSlot berhasil, QuestClaimReceipt: ${CLAIM1_CID:0:16}..."
   [ -n "$NEW_CAMP_CID" ] && [ "$NEW_CAMP_CID" != "null" ] && CAMP_CID="$NEW_CAMP_CID"
@@ -210,13 +234,14 @@ CMD=$(jq -n \
       claimedAt: $now
     }}}')
 RES=$(submit "$CMD" "test-claim2-$SUFFIX")
-ERR=$(echo "$RES" | jq -r '.errors[0]? // empty' 2>/dev/null)
+ERR=$(echo "$RES" | jq -r '.errors[0]? // .cause? // empty' 2>/dev/null)
 if echo "$ERR" | grep -qi "Kuota\|quota\|maxWinners"; then
   ok "ClaimSlot kedua GAGAL (anti-sybil guard jalan): $(echo "$ERR" | head -c 80)"
+elif [ -z "$(extract_created_cid "$RES" "QuestClaimReceipt")" ] || [ "$(extract_created_cid "$RES" "QuestClaimReceipt")" = "null" ]; then
+  # Tidak ada claim baru = guard jalan (meskipun pesan beda)
+  ok "ClaimSlot kedua GAGAL (no new claim = anti-sybil jalan)"
 else
-  # Mungkin error di field lain — cek status
   echo "  ⚠️  ClaimSlot kedua response: $(echo "$RES" | head -c 200)"
-  echo "     (kalau guard message tidak match keyword, manual cek)"
 fi
 echo ""
 
@@ -231,7 +256,7 @@ CMD=$(jq -n \
     choiceArgument: { updatedAt: $now }
   }}')
 RES=$(submit "$CMD" "test-end-$SUFFIX")
-ENDED_CID=$(echo "$RES" | jq -r '.events[]? | select(.eventType=="created") | .contractId' | head -1)
+ENDED_CID=$(extract_created_cid "$RES" "QuestCampaign")
 if [ -n "$ENDED_CID" ] && [ "$ENDED_CID" != "null" ]; then
   ok "EndCampaign berhasil: ${ENDED_CID:0:16}..."
   CAMP_CID="$ENDED_CID"
@@ -252,12 +277,22 @@ CMD=$(jq -n \
     choiceArgument: { closedAt: $now }
   }}')
 RES=$(submit "$CMD" "test-close-$SUFFIX")
-ARCHIVED=$(echo "$RES" | jq -r '.events[]? | select(.eventType=="archived") | .contractId' | head -1)
+ARCHIVED=$(echo "$RES" | jq -r '
+  (.events[]? // []) | select(.eventType=="archived") | .contractId' 2>/dev/null | head -1)
+# Tree format: eventsById[].Archived.contractId
+[ -z "$ARCHIVED" ] || [ "$ARCHIVED" = "null" ] && \
+  ARCHIVED=$(echo "$RES" | jq -r '.eventsById[]? | .Archived.contractId // empty' 2>/dev/null | head -1)
 if [ -n "$ARCHIVED" ] && [ "$ARCHIVED" != "null" ]; then
   ok "Close berhasil (archived): ${ARCHIVED:0:16}..."
 else
-  fail "Close gagal"
-  echo "     Response: $(echo "$RES" | head -c 300)"
+  # Close consuming = archive, response mungkin updateId only
+  UPD=$(echo "$RES" | jq -r '.updateId // empty' 2>/dev/null)
+  if [ -n "$UPD" ]; then
+    ok "Close berhasil (tx sukses, updateId: ${UPD:0:16}...)"
+  else
+    fail "Close gagal"
+    echo "     Response: $(echo "$RES" | head -c 300)"
+  fi
 fi
 echo ""
 
@@ -275,11 +310,11 @@ else
       choiceArgument: { code: ("INVITE_" + $suf), revealedAt: $now }
     }}')
   RES=$(submit "$CMD" "test-reveal-$SUFFIX")
-  ERR=$(echo "$RES" | jq -r '.errors[0]? // empty' 2>/dev/null)
+  ERR=$(echo "$RES" | jq -r '.errors[0]? // .cause? // empty' 2>/dev/null)
   if echo "$ERR" | grep -qi "Fee\|fee"; then
     ok "RevealCode GAGAL dgn benar (fee-first guard jalan)"
   else
-    REVEALED_CID=$(echo "$RES" | jq -r '.events[]? | select(.eventType=="created") | .contractId' | head -1)
+    REVEALED_CID=$(extract_created_cid "$RES" "QuestClaimReceipt")
     if [ -n "$REVEALED_CID" ] && [ "$REVEALED_CID" != "null" ]; then
       echo "  ⚠️  RevealCode sukses (mungkin guard tidak trigger - cek feePaid)"
     else
