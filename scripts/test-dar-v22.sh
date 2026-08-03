@@ -111,24 +111,24 @@ submit() {
 }
 
 # Helper: extract contractId dari response transaction-tree.
-# Response tree: {eventsById: {"0": {Created: {contractId, templateId}}, ...}}
-# Atau flat: {events: [...]} — handle dua-duanya.
+# Canton 3.4 response format (verified via real response):
+#   {transactionTree: {eventsById: {"0": {CreatedTreeEvent: {value: {contractId, templateId}}}}}}
+# Backend extractCreatedContractId handle beberapa varian — kita juga.
 extract_created_cid() {
   local res="$1" tpl_suffix="${2:-}"
+  local tree=".transactionTree // ."
   if [ -n "$tpl_suffix" ]; then
     echo "$res" | jq -r "
-      (.events[]? // []),
-      (.eventsById[]? | .Created // empty // .),
-      (.rootEventIds[]? as \$rid | .eventsById[\$rid].Created // empty)
+      ($tree | .eventsById[]? | .CreatedTreeEvent.value // .Created // .),
+      ($tree | .events[]? // empty)
       | select(.contractId != null)
       | select((.templateId.value.name // .templateId // \"\") | endswith(\"$tpl_suffix\"))
       | .contractId" 2>/dev/null | head -1
   else
     echo "$res" | jq -r "
-      (.events[]? // []),
-      (.eventsById[]? | .Created // empty // .),
-      (.rootEventIds[]? as \$rid | .eventsById[\$rid].Created // empty),
-      ({contractId: .contractId} // empty)
+      ($tree | .eventsById[]? | .CreatedTreeEvent.value // .Created // .),
+      ($tree | .events[]? // empty),
+      ({contractId: ${tree}.contractId} // empty)
       | select(.contractId != null) | .contractId" 2>/dev/null | head -1
   fi
 }
@@ -278,15 +278,14 @@ CMD=$(jq -n \
   }}')
 RES=$(submit "$CMD" "test-close-$SUFFIX")
 ARCHIVED=$(echo "$RES" | jq -r '
-  (.events[]? // []) | select(.eventType=="archived") | .contractId' 2>/dev/null | head -1)
-# Tree format: eventsById[].Archived.contractId
-[ -z "$ARCHIVED" ] || [ "$ARCHIVED" = "null" ] && \
-  ARCHIVED=$(echo "$RES" | jq -r '.eventsById[]? | .Archived.contractId // empty' 2>/dev/null | head -1)
+  (.transactionTree.eventsById[]? | .ArchivedTreeEvent.value.contractId // .Archived.contractId // empty),
+  (.transactionTree.events[]? | select(.eventType=="archived") | .contractId // empty)
+  ' 2>/dev/null | head -1)
 if [ -n "$ARCHIVED" ] && [ "$ARCHIVED" != "null" ]; then
   ok "Close berhasil (archived): ${ARCHIVED:0:16}..."
 else
-  # Close consuming = archive, response mungkin updateId only
-  UPD=$(echo "$RES" | jq -r '.updateId // empty' 2>/dev/null)
+  # Close consuming = archive, response mungkin updateId only (kalau tree beda)
+  UPD=$(echo "$RES" | jq -r '.transactionTree.updateId // .updateId // empty' 2>/dev/null)
   if [ -n "$UPD" ]; then
     ok "Close berhasil (tx sukses, updateId: ${UPD:0:16}...)"
   else
