@@ -75,19 +75,26 @@ module Main where
 import Daml.Script
 import DA.Foldable (forA_)
 
--- Token Standard interfaces (data-dependencies, dari participant DAR)
+-- Token Standard interfaces (data-dependencies, dari participant DAR).
+-- Module paths + exports diverifikasi via scripts/inspect-dar.sh.
 import Splice.Api.Token.TransferInstructionV1
-  ( TransferFactory
-  , TransferFactory_Transfer
+  ( TransferFactory          -- interface (L175)
+  , TransferFactory_Transfer -- nonconsuming choice (L181), controller transfer.sender
   , TransferInstructionResult
   , Transfer
-  , ExtraArgs
   )
-import Splice.Api.Token.HoldingV1 (Holding, InstrumentId)
-import Splice.Api.Token.MetadataV1 (Metadata, ChoiceContext)
+import Splice.Api.Token.HoldingV1
+  ( Holding
+  , InstrumentId
+  )
+import Splice.Api.Token.MetadataV1
+  ( Metadata
+  , ChoiceContext
+  , ExtraArgs                -- ExtraArgs ada di MetadataV1, BUKAN TransferInstructionV1
+  )
 import Splice.Api.FeaturedAppRightV2
-  ( FeaturedAppRight
-  , FeaturedAppRight_CreateActivityMarker
+  ( FeaturedAppRight                 -- interface (L17)
+  , FeaturedAppRight_CreateActivityMarker  -- nonconsuming choice (L22), controller (view this).provider
   , AppRewardBeneficiary
   )
 
