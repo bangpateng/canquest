@@ -85,14 +85,11 @@ import Splice.Api.Token.TransferInstructionV1
   )
 import Splice.Api.Token.HoldingV1 (Holding, InstrumentId)
 import Splice.Api.Token.MetadataV1 (Metadata, ChoiceContext)
--- FAR di-comment sampai DAR splice-api-featured-app di-dapatkan dari bundle.
--- Build bisa jalan tanpa FAR (FAR off = status production sekarang).
--- Aktifkan kembali setelah dapat nama file DAR featured-app dari bundle.
--- import Splice.Api.FeaturedAppRightV2
---   ( FeaturedAppRight
---   , FeaturedAppRight_CreateActivityMarker
---   , AppRewardBeneficiary
---   )
+import Splice.Api.FeaturedAppRightV2
+  ( FeaturedAppRight
+  , FeaturedAppRight_CreateActivityMarker
+  , AppRewardBeneficiary
+  )
 
 
 -- ============================================================
@@ -338,12 +335,6 @@ template QuestClaimReceipt
     --   3. queryAmuletHoldings/getTokenHoldingCids → inputHoldingCids
     --   4. (optional) getFeaturedAppRightCid → farCid
     --   Lalu konstruksi Settle args dgn data di atas.
-    --
-    -- FAR MARKER DI-COMMENT SEMENTARA:
-    -- DAR splice-api-featured-app belum didapat dari bundle (nama tidak match).
-    -- Build bisa jalan tanpa FAR. Aktifkan kembali setelah DAR FAR tersedia.
-    -- Saat aktif: choice butuh param featuredAppRightCid : Optional (ContractId FeaturedAppRight)
-    -- dan appProvider : Party. Backend kirim None bila FAR off.
     choice Settle : ContractId QuestClaimReceipt
       with
         -- Fee leg: user → treasury
@@ -354,9 +345,9 @@ template QuestClaimReceipt
         rewardFactoryCid : ContractId TransferFactory
         rewardTransfer   : Transfer
         rewardExtraArgs  : ExtraArgs
-        -- TODO FAR: uncomment setelah DAR splice-api-featured-app tersedia
-        -- featuredAppRightCid : Optional (ContractId FeaturedAppRight)
-        -- appProvider         : Party
+        -- Optional FAR marker (None bila FAR off)
+        featuredAppRightCid : Optional (ContractId FeaturedAppRight)
+        appProvider      : Party            -- CANTON_APP_PROVIDER_PARTY_ID
         settledAt        : Text
       controller admin
       do
@@ -382,16 +373,16 @@ template QuestClaimReceipt
           transfer      = rewardTransfer
           extraArgs     = rewardExtraArgs
 
-        -- TODO FAR: uncomment setelah DAR splice-api-featured-app tersedia.
-        -- Controller = appProvider → backend actAs tambah appProvider.
-        -- AppRewardBeneficiary.weight REQUIRED (Decimal 0.0-1.0).
-        -- forA_ featuredAppRightCid $ \farCid ->
-        --   exercise farCid FeaturedAppRight_CreateActivityMarker with
-        --     beneficiaries = [ AppRewardBeneficiary with
-        --       beneficiary = appProvider
-        --       weight      = 1.0
-        --     ]
-        --     weight = None
+        -- 3. FAR activity marker (optional — hanya bila Some).
+        --    Controller = appProvider → backend actAs tambah appProvider.
+        --    AppRewardBeneficiary.weight REQUIRED (Decimal 0.0-1.0).
+        forA_ featuredAppRightCid $ \farCid ->
+          exercise farCid FeaturedAppRight_CreateActivityMarker with
+            beneficiaries = [ AppRewardBeneficiary with
+              beneficiary = appProvider
+              weight      = 1.0
+            ]
+            weight = None
 
         -- Consuming: auto-archive PRE_SETTLED, create SETTLED (tanpa txId — post-settle).
         create this with
