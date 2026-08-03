@@ -111,9 +111,12 @@ submit() {
 }
 
 # Helper: query ACS utk cari QuestCampaign by campaignId (deterministik).
-# Backend pattern: queryActiveContracts + filter field match.
-# Args: campaignId
-# Returns: contractId QuestCampaign yg campaignId match, atau empty.
+# Backend pattern (verified jalan): queryActiveContracts returns ARRAY of
+# contract entries. Field path variants:
+#   - entry.createArgument.campaignId (flat)
+#   - entry.CreatedTreeEvent.createArgument.campaignId (nested)
+#   - entry.CreatedEvent.createArgument.campaignId (alt nested)
+# contractId di entry.contractId (flat).
 find_campaign_cid() {
   local target_campaign_id="$1"
   local body=$(jq -n --arg op "$OPERATOR" '{
@@ -128,13 +131,18 @@ find_campaign_cid() {
     "$LEDGER_API_URL/v2/state/active-contracts" \
     -H "Content-Type: application/json" \
     -d "$body" 2>/dev/null)
-  # Deep-traverse cari contractQuestCampaign dgn createArgument.campaignId match.
-  # Canton 3.4 ACS: results[].contractEntry.JsActiveContract.createdEvent
+  # Handle format: array of entries OR object dgn results array.
+  # Deep-traverse: cari object dgn field createArgument.campaignId == target.
+  # Field path: .createArgument OR .CreatedTreeEvent.createArgument OR .CreatedEvent.createArgument
   echo "$acs" | jq -r --arg cid "$target_campaign_id" "
-    [.. | objects
-     | select(.contractId != null)
-     | select((.createArguments.campaignId // .arguments.campaignId // .payload.campaignId // empty) == \$cid)]
-    | .[0].contractId // empty" 2>/dev/null
+    [(.. | objects)
+     | . as \$e
+     | (\$e.createArgument // \$e.CreatedTreeEvent.createArgument // \$e.CreatedEvent.createArgument // \$e.createdEvent.createArgument // empty) as \$args
+     | select(\$args != null)
+     | select(\$args.campaignId == \$cid)
+     | (\$e.contractId // \$e.CreatedTreeEvent.contractId // \$e.CreatedEvent.contractId // empty)
+     | select(. != null and . != \"\")
+    ] | first // empty" 2>/dev/null
 }
 # Canton 3.4 nested: transactionTree.eventsById.{n}.CreatedTreeEvent.value.{contractId,templateId}
 # templateId di response = STRING hash (bukan {value:{name}}). Karena itu filter
@@ -237,18 +245,31 @@ RES=$(submit "$CMD" "test-claim1-$SUFFIX")
 # ClaimSlot = consuming. Setelah sukses, campaign lama di-archive,
 # campaign baru (counter+1) + receipt di-create. Identifikasi via ACS
 # query (deterministik) — cari QuestCampaign aktif dgn campaignId match.
-CLAIM1_CID=$(echo "$RES" | jq -r "
-  [.. | objects | select(.contractId != null and .templateId != null)
-   | select(.contractId != \"$CAMP_CID\")
-   | .contractId] | first // empty" 2>/dev/null)
-# Ambil cid receipt: yg baru created, BUKAN new campaign
 NEW_CAMP_CID=$(find_campaign_cid "TEST_FCFS_$SUFFIX")
-# Receipt = cid created selain new campaign
+if [ -z "$NEW_CAMP_CID" ] || [ "$NEW_CAMP_CID" = "null" ]; then
+  echo "  (i) find_campaign_cid empty — debug ACS field path."
+  # Dump 1 entry quest campaign utk lihat field structure asli
+  DBG_BODY=$(jq -n --arg op "$OPERATOR" '{
+    eventFormat: {
+      filtersByParty: { ($op): { cumulative: [
+        { identifierFilter: { WildcardFilter: { value: { includeCreatedEventBlob: false } } } }
+      ]}},
+      verbose: true
+    }
+  }')
+  curl -s "${AUTH[@]}" -X POST \
+    "$LEDGER_API_URL/v2/state/active-contracts" \
+    -H "Content-Type: application/json" \
+    -d "$DBG_BODY" 2>/dev/null | jq '[.. | objects | select(.contractId != null and .templateId != null)] | .[0]' 2>/dev/null | head -40
+fi
+
+# Receipt = cid created selain new campaign + selain cid lama (CAMP_CID)
 RECEIPT_CANDIDATES=$(echo "$RES" | jq -r "
   [.. | objects | select(.contractId != null and .templateId != null)
    | select(.contractId != \"$CAMP_CID\")
    | select(.contractId != \"$NEW_CAMP_CID\")
    | .contractId] | .[]" 2>/dev/null)
+CLAIM1_CID=""
 for cid in $RECEIPT_CANDIDATES; do
   CLAIM1_CID="$cid"
   break
