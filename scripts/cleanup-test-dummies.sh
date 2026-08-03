@@ -169,7 +169,8 @@ RCPT_TEST_TABS=$(echo "$RCPT_LIST" | jq -r '
   .[] | select(.args.claimId // "" | test("^TEST_CLAIM"))
   | select(.args.status == "PRE_SETTLE")
   | [.contractId, .args.status] | @tsv' 2>/dev/null)
-RCPT_COUNT=$(printf '%s\n' "$RCPT_TEST_TABS" | grep -c . 2>/dev/null || echo 0)
+RCPT_COUNT=$(printf '%s\n' "$RCPT_TEST_TABS" | grep -c . 2>/dev/null)
+[ -z "$RCPT_COUNT" ] && RCPT_COUNT=0
 echo "   Ditemukan: $RCPT_COUNT QuestClaimReceipt dgn claimId TEST_CLAIM* (PRE_SETTLE)"
 TOTAL=$((TOTAL + RCPT_COUNT))
 while IFS=$'\t' read -r cid status; do
