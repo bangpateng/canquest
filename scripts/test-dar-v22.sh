@@ -209,43 +209,60 @@ CMD=$(jq -n \
       claimedAt: $now
     }}}')
 RES=$(submit "$CMD" "test-claim1-$SUFFIX")
-# ClaimSlot return (newCampaignCid, newClaimCid). 2 created events di tree.
-# ClaimSlot choice body: archive self (campaign lama) → create campaign baru
-# (counter+1) → create QuestClaimReceipt. Identifikasi via createArgument field:
-#   campaign punya field: campaignId, status, questKind, maxWinners
-#   receipt   punya field: claimId, claimKind, claimFeeCc, rewardCode
-# Path di Canton 3.4 tree: eventsById.{n}.CreatedTreeEvent.value.{contractId,
-#   templateId, createArgument:{...}} (createArgument = record fields flat)
-CID1=$(extract_created_cid "$RES" "" 1)
-CID2=$(extract_created_cid "$RES" "" 2)
-# Cek field createArgument utk tiap cid. gunakan contains field detection.
-IS1_RECEIPT=$(echo "$RES" | jq -r "
-  [.. | objects | select(.contractId==\"$CID1\")
-   | (.createdEventBlob // {}) | tostring,
-     (. // {}) | tostring] | join(\"\")
-  | test(\"claimId|claimKind|claimFeeCc\")" 2>/dev/null)
-IS2_RECEIPT=$(echo "$RES" | jq -r "
-  [.. | objects | select(.contractId==\"$CID2\")
-   | (.createdEventBlob // {}) | tostring,
-     (. // {}) | tostring] | join(\"\")
-  | test(\"claimId|claimKind|claimFeeCc\")" 2>/dev/null)
-if [ "$IS1_RECEIPT" = "true" ]; then
-  CLAIM1_CID="$CID1"; NEW_CAMP_CID="$CID2"
-elif [ "$IS2_RECEIPT" = "true" ]; then
-  CLAIM1_CID="$CID2"; NEW_CAMP_CID="$CID1"
-else
-  # Field detection fail — gunakan urutan: Canton create campaign baru dulu
-  # (root child node pertama = campaign archive+create), lalu receipt.
-  # Berdasarkan ClaimSlot body order: archive self, create campaign, create receipt.
-  NEW_CAMP_CID="$CID1"; CLAIM1_CID="$CID2"
-  echo "  (i) Field detection inconclusive, pakai urutan: cid1=campaign, cid2=receipt"
+# ClaimSlot = consuming choice. Body: archive self (CAMP_CID lama),
+# create campaign baru (counter+1), create QuestClaimReceipt.
+# Tree akan punya: 1 Archived + 2 Created.
+# Strategi: ambil SEMUA created cid, exclude CAMP_CID lama (yg di-archive),
+# lalu identifikasi mana campaign mana receipt.
+ARCHIVED_CID=$(echo "$RES" | jq -r "
+  [.. | objects | select(.contractId != null)
+   | select(has(\"ArchivedTreeEvent\") or has(\"Archived\"))]
+  | .[0].contractId // ([.. | objects | .ArchivedTreeEvent.value.contractId // empty] | first // empty)" 2>/dev/null)
+
+# Semua created cid (deep traverse)
+ALL_CIDS=$(echo "$RES" | jq -r "
+  [.. | objects | select(.contractId != null and .templateId != null)
+   | .contractId] | unique | .[]" 2>/dev/null)
+
+NEW_CAMP_CID=""
+CLAIM1_CID=""
+for cid in $ALL_CIDS; do
+  # Skip cid lama (campaign awal yg di-archive)
+  [ "$cid" = "$CAMP_CID" ] && continue
+  # Skip archived
+  [ "$cid" = "$ARCHIVED_CID" ] && continue
+  # Identifikasi: cek field di node ini
+  NODE_JSON=$(echo "$RES" | jq -r "[.. | objects | select(.contractId==\"$cid\")] | tostring" 2>/dev/null)
+  if echo "$NODE_JSON" | grep -qi "claimId\|claimKind\|claimFeeCc\|rewardCode"; then
+    CLAIM1_CID="$cid"
+  elif echo "$NODE_JSON" | grep -qi "campaignId\|questKind\|maxWinners\|currentClaims"; then
+    NEW_CAMP_CID="$cid"
+  fi
+done
+
+# Fallback kalau field detection gagal: assign by elimination
+if [ -z "$NEW_CAMP_CID" ] || [ -z "$CLAIM1_CID" ]; then
+  REMAINING=""
+  for cid in $ALL_CIDS; do
+    [ "$cid" = "$CAMP_CID" ] && continue
+    [ "$cid" = "$ARCHIVED_CID" ] && continue
+    REMAINING="$REMAINING $cid"
+  done
+  CID_A=$(echo $REMAINING | awk '{print $1}')
+  CID_B=$(echo $REMAINING | awk '{print $2}')
+  [ -z "$NEW_CAMP_CID" ] && NEW_CAMP_CID="$CID_A"
+  [ -z "$CLAIM1_CID" ] && CLAIM1_CID="$CID_B"
+  echo "  (i) Field detection inconclusive. archived=$ARCHIVED_CID cids=$REMAINING"
 fi
+
 if [ -n "$CLAIM1_CID" ] && [ "$CLAIM1_CID" != "null" ]; then
   ok "ClaimSlot berhasil, QuestClaimReceipt: ${CLAIM1_CID:0:16}..."
-  [ -n "$NEW_CAMP_CID" ] && [ "$NEW_CAMP_CID" != "null" ] && CAMP_CID="$NEW_CAMP_CID"
-  echo "  (i) New campaign CID utk EndCampaign: ${CAMP_CID:0:16}..."
+  if [ -n "$NEW_CAMP_CID" ] && [ "$NEW_CAMP_CID" != "null" ]; then
+    CAMP_CID="$NEW_CAMP_CID"
+    echo "  (i) New campaign CID (counter+1): ${CAMP_CID:0:16}... (lama diarchive)"
+  fi
 else
-  fail "ClaimSlot gagal"
+  fail "ClaimSlot gagal - tidak dapat receipt cid"
   echo "     Response: $(echo "$RES" | head -c 500)"
 fi
 echo ""
