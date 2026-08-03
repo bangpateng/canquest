@@ -1,36 +1,44 @@
 sdk-version: 3.4.11
 # ============================================================
-# CanQuest DAML Package — canquest-v21 (lean)
-# Version: 2.0.0
+# CanQuest DAML Package — canquest-v22 (LEAN + ATOMIC SETTLE)
+# Version: 1.0.0
 # SDK: 3.4.11 (Canton Network)
 #
-# Model lean (3 template) — lihat CHANGELOG di Main.daml.
+# ARSITEKTUR v22 (menggantikan v21 yang dead code):
+#   3 template (custodial operator pattern):
+#     1. WalletRegistration — jangkar identitas on-chain
+#     2. QuestCampaign      — kuota FCFS/Raffle + state machine
+#     3. QuestClaimReceipt  — receipt + atomic Settle (nested CIP-56)
 #
-# Templates (module Main):
-#   1. WalletRegistration — jangkar identitas on-chain (admin sign, user observer)
-#   2. QuestCampaign      — mesin klaim anti-sybil (FCFS / Raffle + state machine)
-#   3. QuestClaim         — receipt klaim: AtomicFeeAndReward + RevealRewardCode
+# BREAKING CHANGE vs v21 (→ rename package, fresh start):
+#   - QuestClaim → QuestClaimReceipt (rename template)
+#   - AtomicFeeAndReward choice → Settle (nested TransferFactory_Transfer)
+#   - RevealRewardCode → RevealCode
+#   - UpdateCampaignStatus dipecah: Activate / Pause / EndCampaign
+#   - CloseCampaign → Close (consuming = archive, final state)
+#   - Tambah: RecordTxId (post-settle, isi tx id dari backend)
+#   - Tambah field: rewardToken ("CC" | "USDCx")
 #
-# YANG TIDAK ADA DI ON-CHAIN (sengaja, off-chain di Postgres):
-#   - Poin user (earnedPoints/spentPoints)  → backend DB
-#   - Daily check-in (gate 24h)             → backend DB (QuestSubmission unik)
-#   - Referral reward                       → backend DB
-#   - Audit trail CC (CcTransactionLog)     → redundan, ledger Canton sudah audit
-#   - Spin (feature removed)                → tabel di-drop
+# ATOMICITY (quest reward claim):
+#   Settle = nested sub-exercise di 1 transaction tree:
+#     - TransferFactory_Transfer (fee: user → treasury)
+#     - TransferFactory_Transfer (reward: rewardParty → user)
+#     - FeaturedAppRight_CreateActivityMarker (optional, bila FAR on)
+#   actAs command = [operator, userAddress, rewardParty] (+ appProvider bila FAR on)
 #
-# CC/Amulet ASLI bergerak di Canton Token Standard (CIP-56 TransferFactory)
-# di luar DAML, di-orkestrasi backend. DAML Main hanya receipt + anti-sybil.
-#
-# Authorization pattern (Canton M3):
-#   signatory admin  — operator menandatangani semua kontrak
-#   observer user    — user hanya lihat, tidak bisa submit sendiri
-#
-# Docs: https://docs.canton.network/appdev/modules/m3-dev-environment
+# DAR DATA-DEPENDENCIES (BUKAN dependencies — Splice DAR bukan SDK pkg):
+#   Taruh file DAR di packages/daml/dars/ (extract dari participant node).
+#   Lihat README.md cara extract.
 # ============================================================
-name: canquest-v21
+name: canquest-v22
 source: daml
-version: 2.0.0
+version: 1.0.0
 dependencies:
   - daml-prim
   - daml-stdlib
   - daml-script
+data-dependencies:
+  - dars/splice-api-token-transfer-instruction-v1.dar
+  - dars/splice-api-token-holding-v1.dar
+  - dars/splice-api-token-metadata-v1.dar
+  - dars/splice-api-featured-app-v2.dar

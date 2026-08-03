@@ -1,280 +1,409 @@
 -- ============================================================
--- CanQuest DAML Contract — module Main
--- Package: canquest-v21 (lean)  |  SDK: 3.4.11
+-- CanQuest DAML Contract v22 — module Main
+-- Package: canquest-v22  |  SDK: 3.4.11  |  Atomic Settle
 --
--- Model LEAN (3 template). Lihat daml.yaml untuk alasan off-chain.
+-- 3 template (custodial operator pattern). Lihat daml.yaml untuk
+-- arsitektur lengkap. DAML lama (v21) ada di Main.v21.legacy.daml.
 --
 -- Templates:
 --   1. WalletRegistration — jangkar identitas on-chain (Party ID)
---   2. QuestCampaign      — template induk quest (FCFS / Raffle + state machine)
---   3. QuestClaim         — bukti klaim: AtomicFeeAndReward + RevealRewardCode
+--   2. QuestCampaign      — kuota FCFS/Raffle + state machine
+--   3. QuestClaimReceipt  — receipt + ATOMIC Settle (nested CIP-56)
 --
--- ── MODEL KEAMANAN (PENTING DI BACA) ──────────────────────────
--- DAML contract ini HANYA mencatat:
---   (a) hak identitas user (WalletRegistration), dan
---   (b) mesin anti-sybil quest (kuota FCFS/Raffle + state machine campaign),
---   (c) receipt bahwa fee & reward CC sudah dikirim.
+-- ── ATOMICITY PENJELASAN ──────────────────────────────────────
+-- Settle choice di QuestClaimReceipt melakukan NESTED sub-exercise:
+--   1. exercise feeFactoryCid  TransferFactory_Transfer (user→treasury)
+--   2. exercise rewardFactoryCid TransferFactory_Transfer (reward→user)
+--   3. (optional) exercise farCid FeaturedAppRight_CreateActivityMarker
+-- Semua dalam 1 transaction tree → atomic all-or-nothing.
 --
--- Pemindahan CC (Amulet) ASLI terjadi di Canton Token Standard (CIP-56
--- TransferFactory) di luar DAML, di-orkestrasi backend NestJS:
---   - Atomic transfer+fee : cantonLedger.executeTransferWithFee(...)   [Fase B]
---   - Reward send         : cantonLedger.executeTransferFactoryTransfer(...)
--- DAML choice AtomicFeeAndReward hanya menulis status on-chain bahwa fee &
--- reward sudah dikirim. "Atomicity" di sini = atomicity PENULISAN STATUS
--- on-chain (DAML), BUKAN atomicity CC movement.
+-- actAs command submission (backend):
+--   - FAR off: [operator, userAddress, rewardParty]
+--   - FAR on : [operator, userAddress, rewardParty, appProvider]
+-- Service-account token (CanActAsAnyParty) bisa cover semua.
 --
--- ── YANG TIDAK ADA ON-CHAIN (sengaja, off-chain Postgres) ──────
---   - Poin user         → User.earnPoints + EarnEntry (backend DB)
---   - Daily check-in    → QuestSubmission unik + cooldown 24h (backend DB)
---   - Referral reward   → ReferralReward (backend DB)
---   - Audit trail CC    → redundan; ledger Canton sudah audit mutlak
---   - Spin              → feature removed (tabel di-drop)
+-- ── TX ID LIMITATION ──────────────────────────────────────────
+-- TransferFactory_Transfer return TransferInstructionResult (record),
+-- BUKAN tx ID. Tx ID tidak bisa didapat dari dalam choice.
+-- Maka: Settle hanya set boolean feePaid/rewardSent + create settled receipt.
+-- Tx ID diisi BELAKANGAN via choice RecordTxId (post-settlement,
+-- backend baca tx ID dari Ledger API response setelah atomic command sukses).
 --
---   NOTE: Di versi lama (≤ v11.1) ada catatan "SDK 3.4.11 tidak mendukung
---   contract keys". Catatan itu menyesatkan — contract keys & invariant
---   adalah fitur inti DAML dan DIDUKUNG. Uniqueness (claimId) saat ini
---   tetap dijaga backend (Postgres + lock) karena paket app ini memakai
---   pattern fresh-package-rename, bukan karena batasan bahasa.
+-- ── PARTY MODEL (custodial) ───────────────────────────────────
+-- signatory operator — canquest-operator::... (signer DAML)
+-- observer user      — user party (observer-only, tidak submit command)
+-- Backend submit SEMUA command atas nama operator + co-actAs.
 --
--- RewardType yang didukung (sesuai backend, mapRewardTypeToQuestKind):
---   "WAITLIST_EMAIL"      → WAITLIST       (admin draw)
---   "INVITE_CODE_RANDOM"  → CODE_RAFFLE    (admin draw)
---   "INVITE_CODE_FCFS"    → CODE_FCFS      (FCFS, bayar fee untuk reveal)
---   "CC_ONLY"             → CC_FCFS        (FCFS, bayar fee untuk claim)
---   "CC_MANUAL"           → CC_RAFFLE      (raffle, admin draw, fee claim)
---   "CC_AND_INVITE"       → CC_FCFS        (auto-assign saat submit)
---   "CC_AND_CODE_RAFFLE"  → CC_AND_CODE_RAFFLE (admin draw, fee 5 CC)
---   "INVITE_CODE"         → CODE_RAFFLE    (alias legacy)
+-- ── YANG TIDAK ON-CHAIN (sengaja, off-chain Postgres) ────────
+--   - Poin user (earnedPoints/spentPoints) → DB
+--   - Daily check-in (gate 24h) → DB
+--   - Referral reward → DB
+--   - Lock/unlock CC → pure CIP-56 (AmuletRules_Transfer + LockedAmulet)
+--   - Swap OneSwap → pure CIP-56 (TransferFactory_Transfer to depositParty)
+--   - Send CC/USDCx P2P → pure CIP-56 (commandId dedup backend)
+--   - Preapproval → pure CIP-56 (AmuletRules_CreateTransferPreapproval)
+-- Hanya QUEST CLAIM yang butuh DAML (anti-sybil + atomic settle).
 --
--- Authorization pattern (Canton M3):
---   signatory admin  — operator yang menandatangani semua kontrak
---   observer user    — user hanya bisa melihat, tidak bisa submit sendiri
+-- ── REWARD TYPE → questKind (match backend mapRewardTypeToQuestKind) ─
+--   "CC_ONLY"             → CC_FCFS / CC_RAFFLE
+--   "CC_MANUAL"           → CC_RAFFLE
+--   "CC_AND_INVITE"       → CC_FCFS
+--   "INVITE_CODE_FCFS"    → CODE_FCFS
+--   "INVITE_CODE_RANDOM"  → CODE_RAFFLE
+--   "CC_AND_CODE_RAFFLE"  → CC_AND_CODE_RAFFLE
+--   "WAITLIST_EMAIL"      → WAITLIST
 --
--- KEAMANAN:
---   - Semua choice dikontrol oleh admin (tidak ada self-service user)
---   - Validasi ketat di setiap choice (assertMsg)
---   - Kuota FCFS & RAFFLE divalidasi on-chain — jika penuh, transaksi GAGAL
---   - Status campaign di-guard: CLOSED/ENDED tidak bisa draw/claim/reopen
---   - Fee harus dikonfirmasi sebelum reward bisa dikirim
---   - User tidak bisa membuat atau memodifikasi kontrak apapun
---
--- CHANGELOG v21 (lean refactor 2026-06-29):
---   [REFACTOR] Hapus 6 template dead-code: UserAccount, DailyCheckIn,
---              SpinExecution, SpinCcReward, ReferralReward, CcTransactionLog.
---              Semuanya 0 caller di backend (off-chain Postgres).
---   [REFACTOR] Hapus choice dead: ConfirmWalletActive, ConfirmFeePaid,
---              ConfirmRewardSent (digantikan AtomicFeeAndReward).
---   [CHANGE]   AtomicFeeAndReward: return type jadi ContractId QuestClaim
---              tunggal (sebelumnya 3-tuple untuk upgrade-compat v1.0.1).
---              canquest-v21 = fresh package, constraint upgrade gugur.
---              Tidak lagi create CcTransactionLog (redundan dengan ledger).
---   [KEEP]     Seluruh guard on-chain: kuota, state machine, fee-before-reward.
---
--- Docs: https://docs.canton.network/appdev/modules/m3-dev-environment
+-- Docs: https://docs.canton.network/appdev/modules/m3-design-patterns
 -- ============================================================
 
 module Main where
 
+import Daml.Script hiding (forA_)
+import DA.Foldable (forA_)
+import qualified DA.Map as Map
+import qualified DA.Set as Set
+
+-- Token Standard interfaces (data-dependencies, dari participant DAR)
+import Splice.Api.Token.TransferInstructionV1
+  ( TransferFactory
+  , TransferFactory_Transfer
+  , TransferInstructionResult
+  , Transfer
+  , ExtraArgs
+  )
+import Splice.Api.Token.HoldingV1 (Holding, InstrumentId)
+import Splice.Api.Token.MetadataV1 (Metadata, ChoiceContext)
+import Splice.Api.FeaturedAppRightV2
+  ( FeaturedAppRight
+  , FeaturedAppRight_CreateActivityMarker
+  , AppRewardBeneficiary
+  )
+
+
 -- ============================================================
 -- 1. TEMPLATE WALLET REGISTRATION
---    Jangkar identitas on-chain. Dibuat saat user register party.
+--    Jangkar identitas on-chain. Dibuat saat user register wallet.
 --    Create-only — tidak ada choice (state tidak berubah).
+--    Match backend: QuestLedgerService.registerWallet()
 -- ============================================================
 
 template WalletRegistration
   with
-    admin        : Party
-    userAddress  : Party
-    username     : Text
-    partyId      : Text
-    inviteCode   : Text
-    registeredAt : Text
+    operator      : Party       -- canquest-operator (signer)
+    userAddress   : Party       -- user party (observer)
+    username      : Text
+    partyId       : Text        -- format: "username::1220..."
+    inviteCode    : Text
+    registeredAt  : Text        -- ISO-8601
   where
-    signatory admin
+    signatory operator
     observer userAddress
+
+    -- Idempotency: 1 WalletRegistration per (operator, userAddress).
+    -- Backend registerWallet() cek ACS dulu sebelum create.
+    key (operator, userAddress) : (Party, Party)
+    maintainer key._1
 
 
 -- ============================================================
 -- 2. TEMPLATE QUEST CAMPAIGN
---    Template induk quest. Menjaga kuota FCFS/Raffle & state machine
---    secara atomic on-chain — ini inti nilai DAML CanQuest.
+--    Kuota FCFS/Raffle + state machine, atomic on-chain.
+--    Match backend: QuestLedgerService.createQuestCampaign()
+--
+--    State machine (anti-reopen CLOSED):
+--      DRAFT → ACTIVE → PAUSED ↔ ACTIVE
+--      ACTIVE → ENDED → CLOSED (archive, final)
+--      ACTIVE → CLOSED
 -- ============================================================
+
+data CampaignStatus = DRAFT | ACTIVE | PAUSED | ENDED | CLOSED
+  deriving (Eq, Show)
 
 template QuestCampaign
   with
-    admin         : Party
+    operator      : Party
     campaignId    : Text
     title         : Text
-    questKind     : Text
-    rewardCc      : Decimal
-    claimFeeCc    : Decimal
-    maxWinners    : Int
+    questKind     : Text        -- CC_FCFS | CC_RAFFLE | CODE_FCFS | CODE_RAFFLE | CC_AND_CODE_RAFFLE | WAITLIST
+    rewardToken   : Text        -- "CC" | "USDCx" (match backend rewardToken field)
+    rewardAmount  : Decimal     -- rewardCc (CC) atau amount USDCx
+    claimFeeAmount: Decimal     -- claimFeeCc
+    maxWinners    : Int         -- 0 = unlimited
     currentClaims : Int
-    status        : Text
+    status        : CampaignStatus
     createdAt     : Text
   where
-    signatory admin
+    signatory operator
 
-    -- FCFS: user klaim slot (CC_ONLY / CC_AND_INVITE / INVITE_CODE_FCFS).
-    -- Kuota di-enforce atomic on-chain: jika penuh, tx GAGAL (sybil resistance).
-    choice ClaimFcfsSlot : (ContractId QuestCampaign, ContractId QuestClaim)
+    key (operator, campaignId) : (Party, Text)
+    maintainer key._1
+
+    -- FCFS: user klaim slot (CC_ONLY/CC_AND_INVITE/INVITE_CODE_FCFS).
+    -- Kuota di-enforce atomic on-chain. Match backend claimFcfsSlot().
+    -- Return: (Campaign baru dgn counter+1, QuestClaimReceipt baru).
+    nonconsuming choice ClaimSlot : (ContractId QuestCampaign, ContractId QuestClaimReceipt)
       with
-        user      : Party
-        claimId   : Text
-        claimedAt : Text
-      controller admin
+        user         : Party
+        claimId      : Text
+        rewardCode   : Text         -- "" untuk CC reward
+        claimedAt    : Text
+      controller operator
       do
-        assertMsg "Campaign harus ACTIVE!" (status == "ACTIVE")
-        assertMsg "questKind harus FCFS!" (questKind == "CC_FCFS" || questKind == "CODE_FCFS")
-        assertMsg "Kuota FCFS sudah habis!" (maxWinners == 0 || currentClaims < maxWinners)
-        newClaimCid <- create QuestClaim with
-          admin
-          userAddress  = user
-          campaignId
-          claimId
-          claimKind    = questKind
-          rewardCc
-          rewardCode   = ""
-          claimFeeCc
-          feePaid      = False
-          feeTxId      = ""
-          rewardSent   = False
-          rewardTxId   = ""
-          claimedAt
-        newCampaignCid <- create this with currentClaims = currentClaims + 1
+        assertMsg "Campaign harus ACTIVE!" (status == ACTIVE)
+        assertMsg "questKind harus FCFS!"
+          (questKind == "CC_FCFS" || questKind == "CODE_FCFS")
+        assertMsg "Kuota FCFS sudah habis!"
+          (maxWinners == 0 || currentClaims < maxWinners)
+
+        -- Archive campaign lama, recreate dgn counter +1.
+        archive self
+        newCampaignCid <- create this with
+          currentClaims = currentClaims + 1
+        -- Create receipt child (status PRE_SETTLE, fee/reward belum dibayar).
+        newClaimCid <- create QuestClaimReceipt with
+          operator        = operator
+          campaignId      = campaignId
+          userAddress     = user
+          claimId         = claimId
+          claimKind       = questKind
+          rewardToken     = rewardToken
+          rewardAmount    = rewardAmount
+          rewardCode      = rewardCode
+          claimFeeAmount  = claimFeeAmount
+          feePaid         = False
+          feeTxId         = None
+          rewardSent      = False
+          rewardTxId      = None
+          status          = PRE_SETTLE
+          claimedAt       = claimedAt
         pure (newCampaignCid, newClaimCid)
 
-    -- Raffle / Waitlist: admin draw pemenang (CC_MANUAL / CODE_RAFFLE /
-    -- CC_AND_CODE_RAFFLE / WAITLIST).
-    choice DrawRaffleWinner : (ContractId QuestCampaign, ContractId QuestClaim)
+    -- Raffle/Waitlist: admin draw pemenang.
+    -- Match backend drawRaffleWinner().
+    -- questKind RAFFLE: CC_RAFFLE, CODE_RAFFLE, CC_AND_CODE_RAFFLE, WAITLIST.
+    nonconsuming choice DrawWinner : (ContractId QuestCampaign, ContractId QuestClaimReceipt)
       with
-        user       : Party
-        claimId    : Text
-        rewardCode : Text
-        drawnAt    : Text
-      controller admin
+        user         : Party
+        claimId      : Text
+        rewardCode   : Text         -- bisa "" (CC) atau kode invite
+        drawnAt      : Text
+      controller operator
       do
-        assertMsg "Campaign harus ACTIVE!" (status == "ACTIVE")
-        assertMsg "Kuota raffle sudah habis!" (maxWinners == 0 || currentClaims < maxWinners)
-        assertMsg "questKind harus RAFFLE atau WAITLIST!" (
-          questKind == "CC_RAFFLE" ||
-          questKind == "CODE_RAFFLE" ||
-          questKind == "CC_AND_CODE_RAFFLE" ||
-          questKind == "WAITLIST"
-          )
-        newClaimCid <- create QuestClaim with
-          admin
-          userAddress  = user
-          campaignId
-          claimId
-          claimKind    = questKind
-          rewardCc
-          rewardCode
-          claimFeeCc
-          feePaid      = False
-          feeTxId      = ""
-          rewardSent   = False
-          rewardTxId   = ""
-          claimedAt    = drawnAt
-        newCampaignCid <- create this with currentClaims = currentClaims + 1
+        assertMsg "Campaign harus ACTIVE!" (status == ACTIVE)
+        assertMsg "Kuota raffle sudah habis!"
+          (maxWinners == 0 || currentClaims < maxWinners)
+        assertMsg "questKind harus RAFFLE/WAITLIST!"
+          ( questKind == "CC_RAFFLE"
+         || questKind == "CODE_RAFFLE"
+         || questKind == "CC_AND_CODE_RAFFLE"
+         || questKind == "WAITLIST" )
+
+        archive self
+        newCampaignCid <- create this with
+          currentClaims = currentClaims + 1
+        newClaimCid <- create QuestClaimReceipt with
+          operator        = operator
+          campaignId      = campaignId
+          userAddress     = user
+          claimId         = claimId
+          claimKind       = questKind
+          rewardToken     = rewardToken
+          rewardAmount    = rewardAmount
+          rewardCode      = rewardCode
+          claimFeeAmount  = claimFeeAmount
+          feePaid         = False
+          feeTxId         = None
+          rewardSent      = False
+          rewardTxId      = None
+          status          = PRE_SETTLE
+          claimedAt       = drawnAt
         pure (newCampaignCid, newClaimCid)
 
-    -- Tutup campaign secara manual (final state, tidak bisa reopen).
-    choice CloseCampaign : ContractId QuestCampaign
-      with
-        closedAt : Text
-      controller admin
+    -- State machine choices.
+    nonconsuming choice Activate : ContractId QuestCampaign
+      with updatedAt : Text
+      controller operator
+      do
+        assertMsg "Transisi tidak sah! Hanya DRAFT/PAUSED → ACTIVE."
+          (status == DRAFT || status == PAUSED)
+        assertMsg "updatedAt tidak boleh kosong!" (updatedAt /= "")
+        archive self
+        create this with status = ACTIVE
+
+    nonconsuming choice Pause : ContractId QuestCampaign
+      with updatedAt : Text
+      controller operator
+      do
+        assertMsg "Campaign harus ACTIVE untuk pause!" (status == ACTIVE)
+        assertMsg "updatedAt tidak boleh kosong!" (updatedAt /= "")
+        archive self
+        create this with status = PAUSED
+
+    nonconsuming choice EndCampaign : ContractId QuestCampaign
+      with updatedAt : Text
+      controller operator
+      do
+        assertMsg "Campaign harus ACTIVE untuk end!" (status == ACTIVE)
+        assertMsg "updatedAt tidak boleh kosong!" (updatedAt /= "")
+        archive self
+        create this with status = ENDED
+
+    -- CLOSED = archive (final state). Tidak bisa reopen.
+    consuming choice Close : ()
+      with closedAt : Text
+      controller operator
       do
         assertMsg "closedAt tidak boleh kosong!" (closedAt /= "")
-        create this with status = "CLOSED"
-
-    -- State machine status campaign. Anti-reopen CLOSED/ENDED (finality).
-    -- Transisi sah: DRAFT/PAUSED→ACTIVE, ACTIVE→PAUSED/ENDED/CLOSED, ENDED→CLOSED.
-    choice UpdateCampaignStatus : ContractId QuestCampaign
-      with
-        newStatus : Text
-        updatedAt : Text
-      controller admin
-      do
-        assertMsg "newStatus tidak boleh kosong!" (newStatus /= "")
-        assertMsg "updatedAt tidak boleh kosong!" (updatedAt /= "")
-        assertMsg
-          "Transisi status tidak sah! Aktif: DRAFT/PAUSED->ACTIVE, ACTIVE->PAUSED/ENDED/CLOSED. Tidak bisa dari CLOSED/ENDED."
-          ( (newStatus == "ACTIVE"  && (status == "DRAFT" || status == "PAUSED"))
-          || (newStatus == "PAUSED" && status == "ACTIVE")
-          || (newStatus == "ENDED"  && status == "ACTIVE")
-          || (newStatus == "CLOSED" && (status == "ACTIVE" || status == "ENDED"))
-          )
-        create this with status = newStatus
+        assertMsg "Hanya ACTIVE/ENDED → CLOSED." (status == ACTIVE || status == ENDED)
+        return ()
 
 
 -- ============================================================
--- 3. TEMPLATE QUEST CLAIM
---    Receipt klaim. Menjaga ordering fee-before-reward + idempotency.
+-- 3. TEMPLATE QUEST CLAIM RECEIPT
+--    Receipt klaim + ATOMIC Settle.
+--
+--    Lifecycle:
+--      PRE_SETTLE (slot reserved) → [Settle] → SETTLED → [RevealCode] → REVEALED
+--      PRE_SETTLE → [Expire] → archived
+--
+--    Settle = nested CIP-56 (atomic all-or-nothing).
+--    Tx ID diisi post-settle via RecordTxId (tx ID tidak bisa didapat
+--    dari dalam choice — return TransferInstructionResult record).
 -- ============================================================
 
-template QuestClaim
+data ClaimStatus = PRE_SETTLE | SETTLED | REVEALED
+  deriving (Eq, Show)
+
+template QuestClaimReceipt
   with
-    admin      : Party
-    userAddress : Party
-    campaignId : Text
-    claimId    : Text
-    claimKind  : Text
-    rewardCc   : Decimal
-    rewardCode : Text
-    claimFeeCc : Decimal
-    feePaid    : Bool
-    feeTxId    : Text
-    rewardSent : Bool
-    rewardTxId : Text
-    claimedAt  : Text
+    operator        : Party
+    campaignId      : Text
+    userAddress     : Party
+    claimId         : Text
+    claimKind       : Text         -- questKind saat klaim
+    rewardToken     : Text         -- "CC" | "USDCx"
+    rewardAmount    : Decimal
+    rewardCode      : Text         -- "" sampai RevealCode
+    claimFeeAmount  : Decimal
+    feePaid         : Bool
+    feeTxId         : Optional Text
+    rewardSent      : Bool
+    rewardTxId      : Optional Text
+    status          : ClaimStatus
+    claimedAt       : Text
   where
-    signatory admin
+    signatory operator
     observer userAddress
 
-    -- Reveal kode invite setelah fee dibayar (CODE_FCFS / CODE_RAFFLE).
-    choice RevealRewardCode : ContractId QuestClaim
+    -- Idempotency: 1 receipt aktif per (operator, campaignId, userAddress).
+    -- Backend cek via lookupByKey sebelum create (di ClaimSlot/DrawWinner).
+    key (operator, campaignId, userAddress) : (Party, Text, Party)
+    maintainer key._1
+
+    -- ── ATOMIC SETTLE ──────────────────────────────────────────
+    -- Nested exercise TransferFactory_Transfer (fee + reward) + optional
+    -- FAR marker. Semua dalam 1 transaction tree → atomic.
+    --
+    -- Backend submit dgn:
+    --   actAs = [operator, userAddress, rewardParty] (+ appProvider bila FAR on)
+    -- Pre-step backend (sebelum submit Settle):
+    --   1. callTransferFactoryRegistry → feeChoiceContext, feeFactoryCid
+    --   2. callTransferFactoryRegistry → rewardChoiceContext, rewardFactoryCid
+    --   3. queryAmuletHoldings/getTokenHoldingCids → inputHoldingCids
+    --   4. (optional) getFeaturedAppRightCid → farCid
+    --   Lalu konstruksi Settle args dgn data di atas.
+    nonconsuming choice Settle : ContractId QuestClaimReceipt
+      with
+        -- Fee leg: user → treasury
+        feeFactoryCid   : ContractId TransferFactory
+        feeTransfer     : Transfer
+        feeExtraArgs    : ExtraArgs
+        -- Reward leg: rewardParty → user
+        rewardFactoryCid: ContractId TransferFactory
+        rewardTransfer  : Transfer
+        rewardExtraArgs : ExtraArgs
+        -- Optional FAR marker (None bila FAR off)
+        featuredAppRightCid : Optional (ContractId FeaturedAppRight)
+        appProvider     : Party            -- CANTON_APP_PROVIDER_PARTY_ID
+        settledAt       : Text
+      controller operator
+      do
+        -- Guard
+        assertMsg "Claim harus PRE_SETTLE!" (status == PRE_SETTLE)
+        assertMsg "Fee atau reward harus > 0 untuk Settle!"
+          (claimFeeAmount > 0.0 || rewardAmount > 0.0)
+
+        -- 1. FEE transfer (atomic leg 1)
+        _feeResult <- exercise feeFactoryCid TransferFactory_Transfer with
+          expectedAdmin = feeTransfer.instrumentId.admin
+          transfer      = feeTransfer
+          extraArgs     = feeExtraArgs
+
+        -- 2. REWARD transfer (atomic leg 2)
+        _rewardResult <- exercise rewardFactoryCid TransferFactory_Transfer with
+          expectedAdmin = rewardTransfer.instrumentId.admin
+          transfer      = rewardTransfer
+          extraArgs     = rewardExtraArgs
+
+        -- 3. FAR activity marker (optional — hanya bila Some)
+        --    Controller = appProvider → backend actAs tambah appProvider.
+        forA_ featuredAppRightCid $ \farCid ->
+          exercise farCid FeaturedAppRight_CreateActivityMarker with
+            beneficiaries =
+              [ AppRewardBeneficiary with
+                  beneficiary = appProvider
+                  -- weight field hanya di FAR v2; sesuaikan bila v1
+              ]
+
+        -- Archive receipt PRE_SETTLE, create SETTLED (tanpa txId — itu post-settle).
+        archive self
+        create this with
+          feePaid    = True
+          rewardSent = True
+          status     = SETTLED
+
+    -- ── POST-SETTLE: Record tx IDs ─────────────────────────────
+    -- Tx ID tidak bisa didapat dari dalam Settle (TransferFactory_Transfer
+    -- return record, bukan tx id). Backend baca tx id dari Ledger API
+    -- response setelah atomic command sukses, lalu exercise RecordTxId.
+    nonconsuming choice RecordTxId : ContractId QuestClaimReceipt
+      with
+        feeTxId    : Text
+        rewardTxId : Text
+      controller operator
+      do
+        assertMsg "Claim harus SETTLED sebelum record tx id!" (status == SETTLED)
+        assertMsg "feeTxId tidak boleh kosong!" (feeTxId /= "")
+        assertMsg "rewardTxId tidak boleh kosong!" (rewardTxId /= "")
+        archive self
+        create this with
+          feeTxId   = Some feeTxId
+          rewardTxId = Some rewardTxId
+
+    -- ── REVEAL CODE (CODE_FCFS / CODE_RAFFLE / CC_AND_CODE_RAFFLE) ──
+    -- Reveal kode invite SETELAH fee dibayar. Match backend revealRewardCode().
+    nonconsuming choice RevealCode : ContractId QuestClaimReceipt
       with
         code       : Text
         revealedAt : Text
-      controller admin
+      controller operator
       do
-        assertMsg "Fee harus dibayar dulu sebelum kode diungkap!" (feePaid || claimFeeCc == 0.0)
+        assertMsg "Fee harus dibayar dulu sebelum reveal kode!"
+          (feePaid || claimFeeAmount == 0.0)
         assertMsg "Kode tidak boleh kosong!" (code /= "")
         assertMsg "revealedAt tidak boleh kosong!" (revealedAt /= "")
-        create this with rewardCode = code
-
-    -- Atomic receipt: fee + reward sudah dikirim dalam SATU transaksi DAML.
-    -- Jika salah satu langkah gagal, SELURUH transaksi ROLLBACK otomatis.
-    --
-    -- ⚠️ SECURITY NOTE:
-    --   Choice ini HANYA mencatat receipt (feeTxId + rewardTxId).
-    --   Pemindahan CC ASLI terjadi di Canton Token Standard (CIP-56
-    --   TransferFactory) di luar Daml, di-orkestrasi backend (quests.service.ts).
-    --   "Atomic" di sini = atomicity PENULISAN STATUS ON-CHAIN, BUKAN atomicity CC.
-    --
-    -- ⚠️ v21 CHANGE:
-    --   Return type disederhanakan jadi ContractId QuestClaim tunggal.
-    --   Versi lama (≤ v11.1) pakai 3-tuple demi upgrade-compat v1.0.1.
-    --   canquest-v21 = fresh package, constraint gugur.
-    --   Tidak lagi create CcTransactionLog (redundan — ledger Canton sudah audit).
-    --
-    -- Docs: https://docs.canton.network/overview/learn/architecture
-    choice AtomicFeeAndReward : ContractId QuestClaim
-      with
-        feeTxId      : Text
-        rewardTxId   : Text
-        rewardSentAt : Text
-      controller admin
-      do
-        assertMsg "Minimal harus ada fee atau reward untuk transaksi atomic!" (claimFeeCc > 0.0 || rewardCc > 0.0)
-        assertMsg "Fee sudah dibayar sebelumnya!" (not feePaid || claimFeeCc == 0.0)
-        assertMsg "Reward sudah dikirim sebelumnya!" (not rewardSent)
-        assertMsg "feeTxId tidak boleh kosong!" (feeTxId /= "")
-        assertMsg "rewardTxId tidak boleh kosong!" (rewardTxId /= "")
-
+        archive self
         create this with
-          feePaid = True
-          feeTxId = feeTxId
-          rewardSent = True
-          rewardTxId = rewardTxId
+          rewardCode = code
+          status     = REVEALED
+
+    -- ── EXPIRE (cleanup slot yang tidak di-settle) ─────────────
+    -- Untuk slot yang sudah reserved tapi user tidak bayar fee dalam
+    -- waktu tertentu. Backend scheduler jalankan ini.
+    consuming choice Expire : ()
+      with expiredAt : Text
+      controller operator
+      do
+        assertMsg "Hanya PRE_SETTLE yang bisa expire!" (status == PRE_SETTLE)
+        assertMsg "expiredAt tidak boleh kosong!" (expiredAt /= "")
+        return ()
