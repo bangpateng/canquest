@@ -265,9 +265,10 @@ template QuestCampaign
         create this with
           status = "ENDED"
 
-    -- CLOSED = consuming (archive, final state). Tidak bisa reopen.
-    -- Archive event = on-chain finality record (Canton AI Q6 konfirmasi).
-    consuming choice Close : ()
+    -- CLOSED = consuming (archive, final state, default — no keyword needed).
+    -- Canton AI: consuming = default; archive event = on-chain finality record.
+    -- Tidak bisa reopen (contract hilang dari ACS).
+    choice Close : ()
       with closedAt : Text
       controller admin
       do
@@ -427,7 +428,8 @@ template QuestClaimReceipt
     -- ── EXPIRE (cleanup slot yang tidak di-settle) ─────────────
     -- Untuk slot yang sudah reserved tapi user tidak bayar fee dalam
     -- waktu tertentu. Backend scheduler jalankan ini.
-    consuming choice Expire : ()
+    -- Consuming (default — no keyword) = archive, final.
+    choice Expire : ()
       with expiredAt : Text
       controller admin
       do
