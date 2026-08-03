@@ -23,9 +23,10 @@
 # ============================================================
 set -uo pipefail
 
-# Versi Splice bundle. Default 0.5.0 (match Canton SDK 3.4.11).
+# Versi Splice bundle. HARUS match versi node participant Anda (ABI compat).
+# Default 0.6.12 (versi node CanQuest production saat ini).
 # Override via env. Cek versi lain: https://github.com/canton-network/splice/releases
-SPLICE_VERSION="${SPLICE_VERSION:-0.5.0}"
+SPLICE_VERSION="${SPLICE_VERSION:-0.6.12}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
@@ -84,10 +85,11 @@ HTTP=$(curl -sL -o "$BUNDLE_FILE" -w "%{http_code}" "$BUNDLE_URL" 2>/dev/null ||
 if [ "$HTTP" != "200" ]; then
   echo "❌ Download gagal (HTTP $HTTP)."
   echo "   Cek versi: https://github.com/canton-network/splice/releases"
-  echo "   Coba versi lain:"
-  echo "     SPLICE_VERSION=0.6.13 bash scripts/fetch-daml-deps.sh   (MainNet)"
-  echo "     SPLICE_VERSION=0.6.14 bash scripts/fetch-daml-deps.sh   (TestNet)"
-  echo "     SPLICE_VERSION=0.7.0  bash scripts/fetch-daml-deps.sh   (DevNet)"
+  echo "   Coba versi lain (HARUS match versi node Anda):"
+  echo "     SPLICE_VERSION=0.6.12 bash scripts/fetch-daml-deps.sh"
+  echo "     SPLICE_VERSION=0.6.13 bash scripts/fetch-daml-deps.sh"
+  echo "     SPLICE_VERSION=0.6.14 bash scripts/fetch-daml-deps.sh"
+  echo "     SPLICE_VERSION=0.7.0  bash scripts/fetch-daml-deps.sh"
   exit 1
 fi
 SIZE=$(du -h "$BUNDLE_FILE" | cut -f1)
