@@ -209,26 +209,41 @@ CMD=$(jq -n \
       claimedAt: $now
     }}}')
 RES=$(submit "$CMD" "test-claim1-$SUFFIX")
-# ClaimSlot return (newCampaignCid, newClaimCid). 2 created events.
-# Urutan by nodeId: 0 = campaign baru, 1 = receipt (atau sebaliknya).
-# Ambil kedua lalu identifikasi: campaign punya field campaignId+status,
-# receipt punya field claimId+claimFeeCc.
+# ClaimSlot return (newCampaignCid, newClaimCid). 2 created events di tree.
+# ClaimSlot choice body: archive self (campaign lama) → create campaign baru
+# (counter+1) → create QuestClaimReceipt. Identifikasi via createArgument field:
+#   campaign punya field: campaignId, status, questKind, maxWinners
+#   receipt   punya field: claimId, claimKind, claimFeeCc, rewardCode
+# Path di Canton 3.4 tree: eventsById.{n}.CreatedTreeEvent.value.{contractId,
+#   templateId, createArgument:{...}} (createArgument = record fields flat)
 CID1=$(extract_created_cid "$RES" "" 1)
 CID2=$(extract_created_cid "$RES" "" 2)
-# Parse arguments utk identifikasi mana campaign mana receipt
-ARGS1=$(echo "$RES" | jq -r "[.. | objects | select(.contractId==\"$CID1\")][0] | (.createArgument // .arguments // {}) | tostring" 2>/dev/null)
-ARGS2=$(echo "$RES" | jq -r "[.. | objects | select(.contractId==\"$CID2\")][0] | (.createArgument // .arguments // {}) | tostring" 2>/dev/null)
-if echo "$ARGS1" | grep -qi "claimId\|claimFee"; then
+# Cek field createArgument utk tiap cid. gunakan contains field detection.
+IS1_RECEIPT=$(echo "$RES" | jq -r "
+  [.. | objects | select(.contractId==\"$CID1\")
+   | (.createdEventBlob // {}) | tostring,
+     (. // {}) | tostring] | join(\"\")
+  | test(\"claimId|claimKind|claimFeeCc\")" 2>/dev/null)
+IS2_RECEIPT=$(echo "$RES" | jq -r "
+  [.. | objects | select(.contractId==\"$CID2\")
+   | (.createdEventBlob // {}) | tostring,
+     (. // {}) | tostring] | join(\"\")
+  | test(\"claimId|claimKind|claimFeeCc\")" 2>/dev/null)
+if [ "$IS1_RECEIPT" = "true" ]; then
   CLAIM1_CID="$CID1"; NEW_CAMP_CID="$CID2"
-elif echo "$ARGS2" | grep -qi "claimId\|claimFee"; then
+elif [ "$IS2_RECEIPT" = "true" ]; then
   CLAIM1_CID="$CID2"; NEW_CAMP_CID="$CID1"
 else
-  # Fallback: CID1 = campaign (urutan pertama), CID2 = receipt
+  # Field detection fail — gunakan urutan: Canton create campaign baru dulu
+  # (root child node pertama = campaign archive+create), lalu receipt.
+  # Berdasarkan ClaimSlot body order: archive self, create campaign, create receipt.
   NEW_CAMP_CID="$CID1"; CLAIM1_CID="$CID2"
+  echo "  (i) Field detection inconclusive, pakai urutan: cid1=campaign, cid2=receipt"
 fi
 if [ -n "$CLAIM1_CID" ] && [ "$CLAIM1_CID" != "null" ]; then
   ok "ClaimSlot berhasil, QuestClaimReceipt: ${CLAIM1_CID:0:16}..."
   [ -n "$NEW_CAMP_CID" ] && [ "$NEW_CAMP_CID" != "null" ] && CAMP_CID="$NEW_CAMP_CID"
+  echo "  (i) New campaign CID utk EndCampaign: ${CAMP_CID:0:16}..."
 else
   fail "ClaimSlot gagal"
   echo "     Response: $(echo "$RES" | head -c 500)"
