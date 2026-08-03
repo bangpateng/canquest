@@ -111,38 +111,62 @@ submit() {
 }
 
 # Helper: query ACS utk cari QuestCampaign by campaignId (deterministik).
-# Backend pattern (verified jalan): queryActiveContracts returns ARRAY of
-# contract entries. Field path variants:
-#   - entry.createArgument.campaignId (flat)
-#   - entry.CreatedTreeEvent.createArgument.campaignId (nested)
-#   - entry.CreatedEvent.createArgument.campaignId (alt nested)
-# contractId di entry.contractId (flat).
+# Pattern PERSIS backend queryActiveContracts (verified jalan):
+#   - TemplateFilter (bukan Wildcard) dgn templateId spesifik
+#   - activeAtOffset wajib (dari ledgerEnd)
+#   - includeCreatedEventBlob: true
+# Response = array of entries, field: entry.contractId + entry.createArgument.campaignId
 find_campaign_cid() {
   local target_campaign_id="$1"
-  local body=$(jq -n --arg op "$OPERATOR" '{
-    eventFormat: {
-      filtersByParty: { ($op): { cumulative: [
-        { identifierFilter: { WildcardFilter: { value: { includeCreatedEventBlob: false } } } }
-      ]}},
-      verbose: false
-    }
-  }')
+  # 1. Dapat offset dari ledgerEnd
+  local offset=$(curl -s "${AUTH[@]}" "$LEDGER_API_URL/v2/state/ledger-end" 2>/dev/null \
+    | jq -r '.offset // 0' 2>/dev/null)
+  [ -z "$offset" ] || [ "$offset" = "null" ] && offset=0
+
+  # 2. Query ACS dgn TemplateFilter utk QuestCampaign
+  local body=$(jq -n \
+    --arg op "$OPERATOR" \
+    --argjson offset "$offset" '
+    {
+      eventFormat: {
+        filtersByParty: {
+          ($op): {
+            cumulative: [{
+              identifierFilter: {
+                TemplateFilter: {
+                  value: {
+                    templateId: "#canquest-v22:Main:QuestCampaign",
+                    includeCreatedEventBlob: true
+                  }
+                }
+              }
+            }]
+          }
+        },
+        verbose: false
+      },
+      activeAtOffset: $offset
+    }')
   local acs=$(curl -s "${AUTH[@]}" -X POST \
     "$LEDGER_API_URL/v2/state/active-contracts" \
     -H "Content-Type: application/json" \
     -d "$body" 2>/dev/null)
-  # Handle format: array of entries OR object dgn results array.
-  # Deep-traverse: cari object dgn field createArgument.campaignId == target.
-  # Field path: .createArgument OR .CreatedTreeEvent.createArgument OR .CreatedEvent.createArgument
+
+  # 3. Response = array. Filter by createArgument.campaignId == target.
+  # Path: entry.createArgument.campaignId, entry.contractId (flat).
+  # Variant nested fallback: CreatedTreeEvent.createArgument.
   echo "$acs" | jq -r --arg cid "$target_campaign_id" "
-    [(.. | objects)
-     | . as \$e
-     | (\$e.createArgument // \$e.CreatedTreeEvent.createArgument // \$e.CreatedEvent.createArgument // \$e.createdEvent.createArgument // empty) as \$args
-     | select(\$args != null)
-     | select(\$args.campaignId == \$cid)
-     | (\$e.contractId // \$e.CreatedTreeEvent.contractId // \$e.CreatedEvent.contractId // empty)
-     | select(. != null and . != \"\")
-    ] | first // empty" 2>/dev/null
+    [(. // [] | if type==\"array\" then .[] else empty end),
+     (.. | objects)]
+    | unique
+    | (.[])
+    | . as \$e
+    | (\$e.createArgument // \$e.CreatedTreeEvent.createArgument // \$e.CreatedEvent.createArgument // empty) as \$args
+    | select(\$args != null)
+    | select(\$args.campaignId == \$cid)
+    | (\$e.contractId // \$e.CreatedTreeEvent.contractId // \$e.CreatedEvent.contractId // empty)
+    | select(. != null and . != \"\")
+    " 2>/dev/null | head -1
 }
 # Canton 3.4 nested: transactionTree.eventsById.{n}.CreatedTreeEvent.value.{contractId,templateId}
 # templateId di response = STRING hash (bukan {value:{name}}). Karena itu filter
