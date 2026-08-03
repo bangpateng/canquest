@@ -47,7 +47,8 @@ if [ -z "$TOKEN" ]; then
   printf '%s' "$TOKEN_RESP" | jq . 2>/dev/null || printf '%s\n' "$TOKEN_RESP"
   exit 1
 fi
-echo "✅ Token dapat (len=${#TOKEN}, expires_in=$(printf '%s' "$TOKEN_RESP" | jq -r '.expires_in // "?'"')s)"
+EXP=$(printf '%s' "$TOKEN_RESP" | jq -r '.expires_in // "?"')
+echo "✅ Token dapat (len=${#TOKEN}, expires_in=${EXP}s)"
 echo ""
 
 AUTH=(-H "Authorization: Bearer $TOKEN")
