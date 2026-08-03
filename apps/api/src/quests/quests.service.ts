@@ -695,6 +695,21 @@ export class QuestsService {
   }
 
   /**
+   * Feature flag: atomic Settle path (DAML v22/v23).
+   * - true  → settleAndRecord (atomic fee+reward via nested-exercise Settle)
+   * - false → fallback path (collectClaimFee + sendQuestRewardAndRecord terpisah,
+   *           non-atomic seperti v21)
+   *
+   * Default true bila isClaimSessionConfigured (DAML ledger on). Set
+   * QUEST_ATOMIC_SETTLE=false utk emergency kill-switch → fallback ke path lama.
+   */
+  private get useAtomicSettle(): boolean {
+    const v = this.config.get<string>('QUEST_ATOMIC_SETTLE')?.trim().toLowerCase();
+    if (v === 'false' || v === '0') return false;
+    return this.questLedger.isClaimSessionConfigured();
+  }
+
+  /**
    * Ensure reward wallet (canquest-reward) can cover the payout before sending.
    * CC: cek via splice.getUserBalance (cache Splice). USDCx: cek via on-chain
    * balance (getTokenBalanceOnChain) karena Splice cache hanya CC.
@@ -889,20 +904,11 @@ export class QuestsService {
       },
     });
 
-    // DAML atomic receipt — CC-only (fee CC + reward proof). Non-blocking.
-    // Untuk USDCx, receipt tetap mencatat fee CC; bukti USDCx ada di Postgres (TokenTransaction).
-    if (claimSessionId) {
-      const atomicResult = await this.questLedger.atomicFeeAndReward({
-        claimContractId: claimSessionId,
-        feeTxId,
-        rewardTxId,
-      });
-      if (!atomicResult.ok) {
-        this.logger.warn(
-          `DAML_AUDIT_TRAIL_FAIL ${rewardLabel} quest=${questId.slice(0, 8)} user=@${username} (non-blocking): ${atomicResult.errors.join(' | ')}`,
-        );
-      }
-    }
+    // DAML atomic receipt (DAML v21 AtomicFeeAndReward) sudah HAPUS di v22/v23.
+    // Helper ini sekarang FALLBACK path (non-atomic) — dipakai kalau
+    // settleAndRecord() tidak dipakai (feature flag off / kode path).
+    // DAML receipt tidak ditulis di fallback (fee+reward di CIP-56 terpisah).
+    // claimSessionId param tetap ada utk backward-compat tapi diabaikan di sini.
 
     // ── Record history (NON-FATAL — token sudah berpindah on-chain) ─────────
     try {
@@ -972,6 +978,183 @@ export class QuestsService {
     }
 
     return { rewardTxId, pending: rewardPending };
+  }
+
+  /**
+   * settleAndRecord — DAML v22/v23 atomic Settle path.
+   *
+   * Pengganti sendQuestRewardAndRecord + collectClaimFee terpisah (non-atomic).
+   * Fee+reward transfer terjadi DI DALAM Settle choice (nested-exercise) dalam
+   * 1 transaction tree → atomic all-or-nothing.
+   *
+   * Flow:
+   *   1. questLedger.settleAtomic({fee+reward params, claimContractId})
+   *      → atomic CC movement + create QuestClaimReceipt SETTLED
+   *   2. set distributed=true (C1 anti-double-payout, irreversible on-chain)
+   *   3. questLedger.recordTxId (best-effort, post-settle audit)
+   *   4. record history (CcTransaction/TokenTransaction)
+   *   5. upsert QuestCompletion
+   *
+   * Bila rewardAmount=0 (kode claim), reward leg = None di Settle → fee-only
+   * atomic. Reward history tidak ditulis (cuma fee CcTransaction).
+   */
+  private async settleAndRecord(params: {
+    drawId: string;
+    userId: string;
+    questId: string;
+    questTitle: string;
+    cantonPartyId: string;
+    username: string | null;
+    claimContractId: string;            // QuestClaimReceipt PRE_SETTLE
+    feeAmount: number;                  // claimFeeCc
+    rewardAmount: number;               // rewardCc (0 utk kode claim)
+    rewardToken: RewardTokenSymbol;
+    rewardLabel: string;
+  }): Promise<{ settledCid: string | null; updateId: string | null }> {
+    const {
+      drawId, userId, questId, questTitle, cantonPartyId, username,
+      claimContractId, feeAmount, rewardAmount, rewardToken, rewardLabel,
+    } = params;
+
+    const rewardPartyId = this.rewardPartyId;
+    const feePartyId = this.feeTargetPartyId;
+    if (!rewardPartyId) throw new Error('CANTON_REWARD_PARTY_ID not configured');
+    if (!feePartyId) throw new Error('CANTON_FEE_RECIPIENT_PARTY_ID not configured');
+
+    // Resolve instrument untuk USDCx reward (CC default Amulet di settleAtomic).
+    let rewardInstrumentId: string | undefined;
+    let rewardInstrumentAdmin: string | undefined;
+    if (rewardToken === 'USDCx' && rewardAmount > 0) {
+      const ref = await this.tokenInstrument.resolveInstrument('USDCx');
+      rewardInstrumentId = ref.instrumentId;
+      rewardInstrumentAdmin = ref.instrumentAdmin;
+    }
+
+    this.logger.log(
+      `${rewardLabel} (atomic Settle): fee ${feeAmount} CC → ${feePartyId.split('::')[0]}, ` +
+      `reward ${rewardAmount} ${rewardToken}${rewardAmount > 0 ? ` → ${cantonPartyId.split('::')[0]}` : ' (none)'} ` +
+      `(@${username})`,
+    );
+
+    // ── 1. ATOMIC SETTLE (fee + reward dalam 1 transaction tree) ────────────
+    const settleResult = await this.questLedger.settleAtomic({
+      claimContractId,
+      userPartyId: cantonPartyId,
+      feeReceiverPartyId: feePartyId,
+      feeAmount,
+      rewardSenderPartyId: rewardPartyId,
+      rewardAmount,
+      rewardToken,
+      rewardInstrumentId,
+      rewardInstrumentAdmin,
+    });
+    if (!settleResult.ok) {
+      throw new Error(`Atomic Settle failed: ${settleResult.errors.join(' | ')}`);
+    }
+    const updateId = settleResult.updateId ?? `settle-${Date.now()}-${userId.slice(0, 8)}`;
+    const settledCid = settleResult.settledCid;
+    const rewardPending = false; // direct transfer (atomic, no offer-accept)
+
+    this.logger.log(
+      `${rewardLabel} atomic Settle OK: settled=${settledCid?.slice(0, 12) ?? 'none'} updateId=${updateId.slice(0, 12)}`,
+    );
+
+    // ── 2. SECURITY C1: persist distributed=true SETELAH atomic settle ──────
+    // Token sudah berpindah on-chain (irreversible, atomic). Retry short-circuit.
+    await this.prisma.winnerDraw.updateMany({
+      where: { id: drawId, distributed: false },
+      data: {
+        distributed: true,
+        ledgerTxId: updateId,
+        distributedAt: new Date(),
+        rewardToken,
+      },
+    });
+
+    // ── 3. recordTxId (post-settle audit, non-blocking) ─────────────────────
+    if (settledCid) {
+      void this.questLedger
+        .recordTxId({ settledContractId: settledCid, feeTxId: updateId, rewardTxId: updateId })
+        .catch((err) => this.logger.warn(`recordTxId fail (non-blocking): ${String(err)}`));
+    }
+
+    // ── 4. Record history (NON-FATAL — atomic settle sudah committed) ──────
+    try {
+      // Fee record (selalu, CC). Reference 'fee:' supaya hidden dari user history.
+      await this.users.recordTransaction({
+        userId,
+        amountCc: feeAmount,
+        type: 'TRANSFER_OUT',
+        description: `Claim fee — ${questTitle}`,
+        referenceId: `fee:${questId}`,
+        counterparty: feePartyId.split('::')[0],
+        ledgerTxId: updateId,
+        status: 'COMPLETED',
+        transferInstructionCid: null,
+      });
+      // Reward record (hanya bila rewardAmount > 0)
+      if (rewardAmount > 0) {
+        if (rewardToken === 'CC') {
+          await this.users.recordTransaction({
+            userId,
+            amountCc: rewardAmount,
+            type: 'QUEST_REWARD',
+            description: `Received ${rewardAmount} CC reward`,
+            referenceId: questId,
+            counterparty: rewardPartyId.split('::')[0],
+            ledgerTxId: updateId,
+            status: 'COMPLETED',
+            transferInstructionCid: null,
+          });
+        } else {
+          const { instrumentId: instId, instrumentAdmin: instAdmin } =
+            await this.tokenInstrument.resolveInstrument(rewardToken);
+          await this.users.recordTokenTransaction({
+            userId,
+            instrumentId: instId,
+            instrumentAdmin: instAdmin,
+            amount: rewardAmount,
+            type: 'QUEST_REWARD',
+            description: `Received ${rewardAmount} ${rewardToken} reward`,
+            referenceId: questId,
+            ledgerTxId: updateId,
+            status: 'COMPLETED',
+            transferInstructionCid: null,
+          });
+        }
+      }
+    } catch (recordErr) {
+      this.logger.error(
+        `CLAIM_HISTORY_FAIL ${rewardLabel} quest=${questId.slice(0, 8)} user=@${username}: atomic settle committed (updateId=${updateId}) but history record threw: ${recordErr instanceof Error ? recordErr.message : String(recordErr)}`,
+      );
+    }
+
+    // ── 5. Async balance sync (CC only, non-blocking) ───────────────────────
+    if (rewardToken === 'CC' && username && rewardAmount > 0) {
+      void this.inboundSync
+        .alignBalanceFromChain(userId, username)
+        .catch((err) => this.logger.warn(`Balance sync failed (non-blocking): ${String(err)}`));
+    }
+
+    // ── 6. Upsert QuestCompletion ───────────────────────────────────────────
+    if (rewardAmount > 0) {
+      if (rewardToken === 'CC') {
+        const rewardMicroCc = BigInt(Math.round(rewardAmount * 1_000_000));
+        await this.prisma.questCompletion.upsert({
+          where: { userId_questId: { userId, questId } },
+          create: { userId, questId, rewardMicroCc, rewardToken: 'CC' },
+          update: { rewardMicroCc, rewardToken: 'CC' },
+        });
+      } else {
+        await this.prisma.questCompletion.upsert({
+          where: { userId_questId: { userId, questId } },
+          create: { userId, questId, rewardToken: 'USDCx', rewardTokenAmount: rewardAmount },
+          update: { rewardToken: 'USDCx', rewardTokenAmount: rewardAmount },
+        });
+      }
+    }
+
+    return { settledCid, updateId };
   }
 
   /**
@@ -3731,29 +3914,20 @@ export class QuestsService {
       }
 
       // v11.1: Atomic DAML audit trail (fee + reward) + reveal code on-chain.
-      // Sebelumnya flow CC+Code raffle tidak punya DAML audit sama sekali.
-      if (ccCodeClaimSessionId && rewardOfferId) {
-        const atomicResult = await this.questLedger.atomicFeeAndReward({
+      // v22/v23: atomicFeeAndReward sudah hapus. Di fallback path ini (non-atomic),
+      // fee+reward sudah terkirim terpisah di CIP-56, jadi tidak bisa tulis
+      // Settle receipt (feePaid guard akan reject). RevealCode tetap dicoba
+      // (non-blocking) — kalau feePaid guard reject, log saja.
+      // Atomic path (settleAndRecord) dipakai bila useAtomicSettle=true di awal flow.
+      if (ccCodeClaimSessionId && finalCode) {
+        const revealRes = await this.questLedger.revealRewardCode({
           claimContractId: ccCodeClaimSessionId,
-          feeTxId,
-          rewardTxId: rewardOfferId,
+          code: finalCode,
         });
-        if (!atomicResult.ok) {
+        if (!revealRes.ok) {
           this.logger.warn(
-            `DAML_AUDIT_TRAIL_FAIL AtomicFeeAndReward CC+Code quest=${questId.slice(0, 8)} user=@${username} (non-blocking): ${atomicResult.errors.join(' | ')}`,
+            `DAML_AUDIT_TRAIL_FAIL RevealCode CC+Code quest=${questId.slice(0, 8)} user=@${username} code=${finalCode.slice(0, 6)}… (non-blocking): ${revealRes.errors.join(' | ')}`,
           );
-        }
-        // Reveal kode yang baru di-assign dari pool (hanya bila ada kode).
-        if (finalCode) {
-          const revealRes = await this.questLedger.revealRewardCode({
-            claimContractId: atomicResult.claimFinalCid ?? ccCodeClaimSessionId,
-            code: finalCode,
-          });
-          if (!revealRes.ok) {
-            this.logger.warn(
-              `DAML_AUDIT_TRAIL_FAIL RevealRewardCode CC+Code quest=${questId.slice(0, 8)} user=@${username} code=${finalCode.slice(0, 6)}… (non-blocking): ${revealRes.errors.join(' | ')}`,
-            );
-          }
         }
       }
 
