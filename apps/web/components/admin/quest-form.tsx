@@ -791,12 +791,12 @@ export function QuestForm({
                 <label className="mb-0.5 block text-sm font-medium">{form.rewardToken} / Winners</label>
                 <input
                   type="number"
-                  min="1"
-                  step="1"
+                  min="0.1"
+                  step="0.1"
                   required={showCcField}
                   value={form.rewardCc}
                   onChange={(e) => updateField("rewardCc", e.target.value)}
-                  placeholder="e.g. 100"
+                  placeholder="e.g. 100 (or 0.1)"
                   className={inputCls}
                 />
               </div>
