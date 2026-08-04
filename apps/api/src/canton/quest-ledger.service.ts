@@ -757,18 +757,20 @@ export class QuestLedgerService implements OnModuleInit {
       const opt = <T,>(v: T | null) => (v == null ? null : { tags: 'Some', value: v });
       const safeContext = (ctx: Record<string, unknown> | null | undefined) =>
         ctx && typeof ctx === 'object' && Object.keys(ctx).length > 0 ? ctx : { values: {} };
+      const feeExtraArgs = {
+        context: safeContext(feeRegistry.choiceContextData),
+        meta: { values: {} },
+      };
+      const rewardExtraArgs = rewardRegistry
+        ? opt({ context: safeContext(rewardRegistry.choiceContextData), meta: { values: {} } })
+        : null;
       const choiceArgument: Record<string, unknown> = {
         feeFactoryCid: feeRegistry.factoryId,
         feeTransfer,
-        feeExtraArgs: {
-          context: safeContext(feeRegistry.choiceContextData),
-          meta: { values: {} },
-        },
+        feeExtraArgs,
         rewardFactoryCid: rewardRegistry ? opt(rewardRegistry.factoryId) : null,
         rewardTransfer: rewardTransfer ? opt(rewardTransfer) : null,
-        rewardExtraArgs: rewardRegistry
-          ? opt({ context: safeContext(rewardRegistry.choiceContextData), meta: { values: {} } })
-          : null,
+        rewardExtraArgs,
         featuredAppRightCid: params.featuredAppRightCid ? opt(params.featuredAppRightCid) : null,
         appProvider: params.appProviderPartyId ?? '',
         settledAt: nowIso,
@@ -787,6 +789,19 @@ export class QuestLedgerService implements OnModuleInit {
 
       // ── Submit Settle choice ────────────────────────────────────────────────
       const commandId = `settle-${params.claimContractId.slice(0, 16)}-${randomUUID()}`;
+      // DIAGNOSTIC: log full choiceArgument payload untuk debug COMMAND_PREPROCESSING_FAILED.
+      this.logger.debug(
+        `SETTLE_DEBUG payload: ${JSON.stringify({
+          feeFactoryCid: feeRegistry.factoryId.slice(0, 16),
+          feeTransfer: { sender: String(feeTransfer.sender).split('::')[0], receiver: String(feeTransfer.receiver).split('::')[0], meta_keys: Object.keys(feeTransfer.meta ?? {}) },
+          feeExtraArgs: feeExtraArgs,
+          rewardFactoryCid: rewardRegistry?.factoryId?.slice(0, 16) ?? null,
+          rewardTransfer: rewardTransfer ? { sender: String(rewardTransfer.sender).split('::')[0], meta_keys: Object.keys(rewardTransfer.meta ?? {}) } : null,
+          rewardExtraArgs: rewardExtraArgs,
+          feeCtxRaw: feeRegistry.choiceContextData,
+          rewardCtxRaw: rewardRegistry?.choiceContextData ?? null,
+        })}`,
+      );
       const { ok, text } = await this.ledger.exerciseChoice(
         params.claimContractId,
         tpl,
