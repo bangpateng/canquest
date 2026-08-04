@@ -614,12 +614,18 @@ export function validateQuestForm(data: QuestFormData): FormError[] {
     errors.push({ field: "description", message: "Description is required." });
   }
 
-  // CC amount
+  // CC amount — min 0.01 (micro-CC precision). step="any" allows fractions.
   const cc = Number(data.rewardCc) || 0;
   if (config.needsCcAmount && cc <= 0) {
     errors.push({
       field: "rewardCc",
       message: "CC amount must be greater than 0 for this reward type.",
+    });
+  }
+  if (config.needsCcAmount && cc > 0 && cc < 0.01) {
+    errors.push({
+      field: "rewardCc",
+      message: "Minimum reward is 0.01.",
     });
   }
 

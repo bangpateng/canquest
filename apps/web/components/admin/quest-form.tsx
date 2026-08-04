@@ -791,8 +791,8 @@ export function QuestForm({
                 <label className="mb-0.5 block text-sm font-medium">{form.rewardToken} / Winners</label>
                 <input
                   type="number"
-                  min="0.1"
-                  step="0.1"
+                  min="0.01"
+                  step="any"
                   required={showCcField}
                   value={form.rewardCc}
                   onChange={(e) => updateField("rewardCc", e.target.value)}
@@ -941,7 +941,7 @@ export function QuestForm({
               <input
                 type="number"
                 min="0"
-                step="0.01"
+                step="any"
                 value={form.claimFeeCc}
                 onChange={(e) => updateField("claimFeeCc", e.target.value)}
                 placeholder={
