@@ -115,7 +115,11 @@ Ledger user (admin, Keycloak service-account):
   id            : fc334391-0f6a-456f-bb95-098b269e62b6
   username      : service-account-validator-app-backend
   client_id     : validator-app-backend
-  rights        : ParticipantAdmin, CanReadAsAnyParty, CanActAs app-canquest (+ user parties)
+  rights        : ParticipantAdmin, CanReadAsAnyParty, CanActAsAnyParty
+                  # UPGRADE 2026-08-06: was CanActAs app-canquest (+ user parties),
+                  # tapi user lama tidak di-grant → DAML_AUTHORIZATION_ERROR di Settle.
+                  # Fix: CanActAsAnyParty (cover semua user, 1 grant permanent).
+                  # Lihat docs/RUNBOOK_GRANT_ANY_PARTY_RIGHTS.md + §4 hardening.
 ```
 
 ---
