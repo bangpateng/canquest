@@ -89,28 +89,55 @@ curl -s "$PARTICIPANT/v2/users/$REAL_USER/rights" \
 
 ## §3. Grant CanActAsAnyParty (fix utama)
 
+### ⚠️ PENTING: Tiru format dari rights yang SUDAH ADA
+
+Format `CanActAsAnyParty` di Canton v2 REST API bisa salah satu dari beberapa bentuk.
+**Cara paling reliable: ambil format dari `CanReadAsAnyParty` yang sudah ada di response
+§2, lalu ganti namanya jadi `CanActAsAnyParty`.** Format yang sudah diterima participant
+Anda = format yang benar.
+
+### Langkah 3a — Lihat format CanReadAsAnyParty di response §2
+
+Dari output §2 (`GET .../rights`), cari entry `CanReadAsAnyParty`. Catat format-nya:
+```json
+// Contoh kemungkinan format (PILIH SESUAI output Anda):
+{ "kind": "CanReadAsAnyParty" }                          // ← format A: PascalCase flat
+{ "kind": { "CanReadAsAnyParty": {} } }                  // ← format B: PascalCase nested
+{ "canReadAsAnyParty": {} }                              // ← format C: camelCase flat
+```
+
+### Langkah 3b — Tiru format itu, ganti jadi Act
+
+Ganti `Read` → `Act` di format yang Anda temukan di 3a. Contoh:
+- Format A → `{ "kind": "CanActAsAnyParty" }`
+- Format B → `{ "kind": { "CanActAsAnyParty": {} } }`
+- Format C → `{ "canActAsAnyParty": {} }`
+
+### Langkah 3c — Grant pakai format yang sudah dipastikan
+
 ```bash
 PARTICIPANT="http://172.18.0.6:7575"
 REAL_USER="fc334391-0f6a-456f-bb95-098b269e62b6"
 # TOKEN dari §2
+# Ganti FORMAT_ACT di bawah dgn format dari langkah 3b:
 
-curl -X POST "$PARTICIPANT/v2/users/$REAL_USER/rights" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
+curl -X POST "$PARTICIPANT/v2/users/$REAL_USER/rights"   -H "Authorization: Bearer $TOKEN"   -H "Content-Type: application/json"   -d '{
     "identityProviderId": "",
     "userId": "'"$REAL_USER"'",
     "rights": [
-      { "kind": "CanActAsAnyParty" }
+      FORMAT_ACT_DARI_LANGKAH_3B
     ]
   }'
 
+# Contoh kalau format A:
+# curl -X POST "$PARTICIPANT/v2/users/$REAL_USER/rights" #   -H "Authorization: Bearer $TOKEN" #   -H "Content-Type: application/json" #   -d '{"identityProviderId":"","userId":"'"$REAL_USER"'","rights":[{"kind":"CanActAsAnyParty"}]}'
+
 # Verifikasi grant berhasil
-curl -s "$PARTICIPANT/v2/users/$REAL_USER/rights" \
-  -H "Authorization: Bearer $TOKEN" | jq '.rights | map(.kind)'
+curl -s "$PARTICIPANT/v2/users/$REAL_USER/rights"   -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
-**Verifikasi:** response harus ada `CanActAsAnyParty`.
+**Verifikasi:** response `rights` sekarang harus ada entry `CanActAsAnyParty`
+(dengan format yang sama seperti `CanReadAsAnyParty`).
 
 ---
 
