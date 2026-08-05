@@ -1123,11 +1123,12 @@ export class CantonLedgerService {
       },
     };
 
-    // optFeaturedAppRightCid: null (None) atau {"tags":"Some","value":cid}.
-    // Canton JSON API v2 encode Optional: null untuk None, atau object Some.
+    // optFeaturedAppRightCid: Canton JSON API v2 variant encoding.
+    // Optional = variant → { tag: 'Some', value: cid } / { tag: 'None', value: {} }.
+    // BUG LAMA: pakai `tags` (jamak) → Optional tidak ter-decode. Fix: tag tunggal.
     const optFar = farCid
-      ? { tags: 'Some', value: farCid }
-      : null;
+      ? { tag: 'Some', value: farCid }
+      : { tag: 'None', value: {} };
 
     const choiceArgument = {
       transferCalls: [

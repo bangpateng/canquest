@@ -750,28 +750,35 @@ export class QuestLedgerService implements OnModuleInit {
       }
 
       // ── Construct Settle choiceArgument (DAML v23 Optional encoding) ───────
-      // DAML Optional: Some x → { tags: 'Some', value: x }, None → null
+      // Canton JSON Ledger API v2: Optional adalah variant → encode dgn
+      // { tag: 'Some', value: x } / { tag: 'None', value: {} } (tag TUNGGAL).
+      // BUG LAMA: pakai `tags` (jamak) → parser tidak kenal → Optional rusak →
+      // error "Missing non-optional fields: Set(context, meta)" (rewardExtraArgs
+      // Optional ExtraArgs tidak ter-decode). Fix: tag tunggal + None eksplisit.
       // ExtraArgs record butuh context + meta eksplisit (non-optional).
       // choiceContextData dari registry bisa null utk direct transfer →
       // default ke { values: {} } (pattern sama executeTransferFactoryTransfer line 597).
-      const opt = <T,>(v: T | null) => (v == null ? null : { tags: 'Some', value: v });
+      const opt = <T,>(v: T | null) =>
+        v == null ? { tag: 'None', value: {} } : { tag: 'Some', value: v };
       const safeContext = (ctx: Record<string, unknown> | null | undefined) =>
         ctx && typeof ctx === 'object' && Object.keys(ctx).length > 0 ? ctx : { values: {} };
       const feeExtraArgs = {
         context: safeContext(feeRegistry.choiceContextData),
         meta: { values: {} },
       };
-      const rewardExtraArgs = rewardRegistry
-        ? opt({ context: safeContext(rewardRegistry.choiceContextData), meta: { values: {} } })
-        : null;
+      const rewardExtraArgs = opt(
+        rewardRegistry
+          ? { context: safeContext(rewardRegistry.choiceContextData), meta: { values: {} } }
+          : null,
+      );
       const choiceArgument: Record<string, unknown> = {
         feeFactoryCid: feeRegistry.factoryId,
         feeTransfer,
         feeExtraArgs,
-        rewardFactoryCid: rewardRegistry ? opt(rewardRegistry.factoryId) : null,
-        rewardTransfer: rewardTransfer ? opt(rewardTransfer) : null,
+        rewardFactoryCid: opt(rewardRegistry ? rewardRegistry.factoryId : null),
+        rewardTransfer: opt(rewardTransfer),
         rewardExtraArgs,
-        featuredAppRightCid: params.featuredAppRightCid ? opt(params.featuredAppRightCid) : null,
+        featuredAppRightCid: opt(params.featuredAppRightCid ?? null),
         appProvider: params.appProviderPartyId ?? '',
         settledAt: nowIso,
       };
