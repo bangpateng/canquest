@@ -1,6 +1,6 @@
 -- ============================================================
--- CanQuest DAML Contract v22 — module Main
--- Package: canquest-v22  |  SDK: 3.4.11  |  Atomic Settle
+-- CanQuest DAML Contract v24 — module Main
+-- Package: canquest-v24  |  SDK: 3.4.11  |  Atomic Settle (multi-controller)
 --
 -- 3 template (custodial admin/operator pattern).
 -- Match backend apps/api/src/canton/quest-ledger.service.ts.
@@ -161,9 +161,10 @@ template QuestCampaign
     -- pada contract sama → ledger conflict → salah abort.
     choice ClaimSlot : (ContractId QuestCampaign, ContractId QuestClaimReceipt)
       with
-        user       : Party
-        claimId    : Text
-        claimedAt  : Text
+        user          : Party
+        claimId       : Text
+        claimedAt     : Text
+        rewardSender  : Party    -- v24: party reward wallet (CANTON_REWARD_PARTY_ID)
       controller admin
       do
         assertMsg "Campaign harus ACTIVE!" (status == "ACTIVE")
@@ -185,6 +186,7 @@ template QuestCampaign
           rewardCc        = rewardCc
           rewardToken     = rewardToken
           rewardCode      = ""
+          rewardSender    = rewardSender
           claimFeeCc      = claimFeeCc
           feePaid         = False
           feeTxId         = None
@@ -200,10 +202,11 @@ template QuestCampaign
     -- questKind RAFFLE: CC_RAFFLE, CODE_RAFFLE, CC_AND_CODE_RAFFLE, WAITLIST.
     choice DrawWinner : (ContractId QuestCampaign, ContractId QuestClaimReceipt)
       with
-        user        : Party
-        claimId     : Text
-        rewardCode  : Text        -- bisa "" (CC) atau kode invite
-        drawnAt     : Text
+        user          : Party
+        claimId       : Text
+        rewardCode    : Text        -- bisa "" (CC) atau kode invite
+        drawnAt       : Text
+        rewardSender  : Party       -- v24: party reward wallet (CANTON_REWARD_PARTY_ID)
       controller admin
       do
         assertMsg "Campaign harus ACTIVE!" (status == "ACTIVE")
@@ -211,9 +214,9 @@ template QuestCampaign
           (maxWinners == 0 || currentClaims < maxWinners)
         assertMsg "questKind harus RAFFLE/WAITLIST!"
           ( questKind == "CC_RAFFLE"
-         || questKind == "CODE_RAFFLE"
-         || questKind == "CC_AND_CODE_RAFFLE"
-         || questKind == "WAITLIST" )
+           || questKind == "CODE_RAFFLE"
+           || questKind == "CC_AND_CODE_RAFFLE"
+           || questKind == "WAITLIST" )
 
         newCampaignCid <- create this with
           currentClaims = currentClaims + 1
@@ -226,6 +229,7 @@ template QuestCampaign
           rewardCc        = rewardCc
           rewardToken     = rewardToken
           rewardCode      = rewardCode
+          rewardSender    = rewardSender
           claimFeeCc      = claimFeeCc
           feePaid         = False
           feeTxId         = None
@@ -304,6 +308,10 @@ template QuestClaimReceipt
     rewardCc        : Decimal
     rewardToken     : Optional Text -- None|"CC" = Amulet; "USDCx" = token non-CC
     rewardCode      : Text          -- "" sampai RevealCode
+    rewardSender    : Party         -- v24: party reward wallet (CANTON_REWARD_PARTY_ID).
+                                     -- Diperlukan sbg co-controller Settle agar nested
+                                     -- TransferFactory_Transfer (controller=sender=rewardSender)
+                                     -- ter-authorize. Tanpa ini, DAML_AUTHORIZATION_ERROR.
     claimFeeCc      : Decimal
     feePaid         : Bool
     feeTxId         : Optional Text
@@ -356,7 +364,16 @@ template QuestClaimReceipt
         featuredAppRightCid : Optional (ContractId FeaturedAppRight)
         appProvider      : Party            -- CANTON_APP_PROVIDER_PARTY_ID
         settledAt        : Text
-      controller admin
+      -- v24: MULTI-CONTROLLER. Nested TransferFactory_Transfer punya controller
+      -- = transfer.sender (user utk fee, rewardSender utk reward). DAML authorization:
+      -- consequences nested exercise hanya ter-authorize oleh [controller parent +
+      -- signatory parent]. Bila Settle controller hanya admin, consequences = [admin],
+      -- user/rewardSender TIDAK masuk → nested TransferFactory_Transfer gagal
+      -- (DAML_AUTHORIZATION_ERROR "requires authorizers karel but only given operator").
+      -- Fix: userAddress + rewardSender jadi co-controller Settle → consequences
+      -- ter-authorize → nested transfer jalan. (FAR leg controller=appProvider skip
+      -- saat featuredAppRightCid=None; saat FAR on, tambah appProvider sbg controller.)
+      controller admin, userAddress, rewardSender
       do
         -- Guard
         assertMsg "Claim harus PRE_SETTLE!" (status == "PRE_SETTLE")

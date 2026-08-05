@@ -2898,6 +2898,7 @@ export class QuestsService {
     }
 
     const maxPayoutExposure = maxWinners * rewardCc;
+    const rewardPartyId = this.rewardPartyId;   // v24: reward wallet party (co-controller Settle)
     this.logger.log(
       `FCFS claim start quest=${questId} user=@${username} fee=${feeCc} reward=${rewardCc} validator=${validatorPartyId.split('::')[0]} (max pool exposure ~${maxPayoutExposure} CC for ${maxWinners} slots)`,
     );
@@ -2937,6 +2938,7 @@ export class QuestsService {
             campaignContractId,
             userPartyId: cantonPartyId,
             claimId: reservedDrawId,
+            rewardSenderPartyId: rewardPartyId,   // v24: co-controller Settle
           });
           claimSessionId = claimResult.claimContractId;
           if (claimResult.errors.length > 0) {
@@ -3238,6 +3240,7 @@ export class QuestsService {
             campaignContractId,
             userPartyId: cantonPartyId,
             claimId: draw.id,
+            rewardSenderPartyId: this.rewardPartyId,   // v24: co-controller Settle
           });
           claimSessionId = claimResult.claimContractId;
           if (claimResult.errors.length > 0) {
@@ -3595,11 +3598,13 @@ export class QuestsService {
                   campaignContractId,
                   userPartyId: cantonPartyId,
                   claimId,
+                  rewardSenderPartyId: this.rewardPartyId,   // v24: co-controller Settle
                 })
               : await this.questLedger.drawRaffleWinner({
                   campaignContractId,
                   userPartyId: cantonPartyId,
                   claimId,
+                  rewardSenderPartyId: this.rewardPartyId,   // v24: co-controller Settle
                 });
           codeClaimSessionId = claimResult.claimContractId;
           if (claimResult.errors.length > 0) {
@@ -3881,6 +3886,7 @@ export class QuestsService {
             campaignContractId: ccCodeCampaignCid,
             userPartyId: cantonPartyId,
             claimId: draw.id,
+            rewardSenderPartyId: this.rewardPartyId,   // v24: co-controller Settle
           });
           ccCodeClaimSessionId = claimResult.claimContractId;
           if (claimResult.errors.length > 0) {

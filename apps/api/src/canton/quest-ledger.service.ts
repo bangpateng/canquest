@@ -212,7 +212,7 @@ export class QuestLedgerService implements OnModuleInit {
   private get damlPackageRef(): string {
     const name = this.config.get<string>('CANTON_DAML_PACKAGE_NAME')?.trim();
     if (name) return name.startsWith('#') ? name : `#${name}`;
-    return '#canquest-v23';
+    return '#canquest-v24';
   }
 
   private get operatorPartyId(): string | null {
@@ -537,6 +537,9 @@ export class QuestLedgerService implements OnModuleInit {
     campaignContractId: string;
     userPartyId: string;
     claimId: string;
+    rewardSenderPartyId: string;   // v24: party reward wallet (CANTON_REWARD_PARTY_ID)
+                                    // dikirim ke ClaimSlot choice → set field rewardSender
+                                    // di QuestClaimReceipt → jadi co-controller Settle.
   }): Promise<QuestClaimLedgerResult> {
     const result: QuestClaimLedgerResult = {
       ledgerEnabled: false,
@@ -565,6 +568,7 @@ export class QuestLedgerService implements OnModuleInit {
         user: params.userPartyId,
         claimId: params.claimId,
         claimedAt: new Date().toISOString(),
+        rewardSender: params.rewardSenderPartyId,   // v24: co-controller Settle
       },
       [operator],
       `claim-fcfs-${params.claimId}-${randomUUID()}`,
@@ -599,6 +603,7 @@ export class QuestLedgerService implements OnModuleInit {
     userPartyId: string;
     claimId: string;
     rewardCode?: string;
+    rewardSenderPartyId: string;   // v24: party reward wallet (CANTON_REWARD_PARTY_ID)
   }): Promise<QuestClaimLedgerResult> {
     const result: QuestClaimLedgerResult = {
       ledgerEnabled: false,
@@ -628,6 +633,7 @@ export class QuestLedgerService implements OnModuleInit {
         claimId: params.claimId,
         rewardCode: params.rewardCode ?? '',
         drawnAt: new Date().toISOString(),
+        rewardSender: params.rewardSenderPartyId,   // v24: co-controller Settle
       },
       [operator],
       `draw-raffle-${params.claimId}-${randomUUID()}`,
