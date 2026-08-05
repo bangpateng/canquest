@@ -1124,11 +1124,12 @@ export class CantonLedgerService {
     };
 
     // optFeaturedAppRightCid: Canton JSON API v2 variant encoding.
-    // Optional = variant → { tag: 'Some', value: cid } / { tag: 'None', value: {} }.
-    // BUG LAMA: pakai `tags` (jamak) → Optional tidak ter-decode. Fix: tag tunggal.
+    // Optional Some → { tag: 'Some', value: cid } (tag TUNGGAL).
+    // Optional None → null (bukan object; bukti Transfer.lock pakai null & OK).
+    // BUG LAMA: `tags` (jamak) → Optional tidak ter-decode. Fix: tag tunggal + null.
     const optFar = farCid
       ? { tag: 'Some', value: farCid }
-      : { tag: 'None', value: {} };
+      : null;
 
     const choiceArgument = {
       transferCalls: [

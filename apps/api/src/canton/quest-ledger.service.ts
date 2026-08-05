@@ -750,16 +750,18 @@ export class QuestLedgerService implements OnModuleInit {
       }
 
       // ── Construct Settle choiceArgument (DAML v23 Optional encoding) ───────
-      // Canton JSON Ledger API v2: Optional adalah variant → encode dgn
-      // { tag: 'Some', value: x } / { tag: 'None', value: {} } (tag TUNGGAL).
-      // BUG LAMA: pakai `tags` (jamak) → parser tidak kenal → Optional rusak →
-      // error "Missing non-optional fields: Set(context, meta)" (rewardExtraArgs
-      // Optional ExtraArgs tidak ter-decode). Fix: tag tunggal + None eksplisit.
+      // Canton JSON Ledger API v2 Optional encoding:
+      //   Some x → { tag: 'Some', value: x }   (tag TUNGGAL — variant)
+      //   None   → null                         (bukan object, bukti: field
+      //                                           Transfer.lock pakai null & OK)
+      // BUG LAMA: pakai `tags` (jamak) → Optional rusak → "Missing context, meta".
+      // BUG FIX-1: None = {tag:'None',value:{}} → error "Expected ujson.Str"
+      //   (krn Optional ContractId expect string; None harus null).
       // ExtraArgs record butuh context + meta eksplisit (non-optional).
       // choiceContextData dari registry bisa null utk direct transfer →
       // default ke { values: {} } (pattern sama executeTransferFactoryTransfer line 597).
       const opt = <T,>(v: T | null) =>
-        v == null ? { tag: 'None', value: {} } : { tag: 'Some', value: v };
+        v == null ? null : { tag: 'Some', value: v };
       const safeContext = (ctx: Record<string, unknown> | null | undefined) =>
         ctx && typeof ctx === 'object' && Object.keys(ctx).length > 0 ? ctx : { values: {} };
       const feeExtraArgs = {
