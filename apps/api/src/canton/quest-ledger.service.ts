@@ -328,6 +328,46 @@ export class QuestLedgerService implements OnModuleInit {
     return cids;
   }
 
+  /**
+   * Extract contract IDs dari response JSON, FILTER berdasarkan templateId suffix.
+   * Lebih robust dari extractContractIds (urutan-based) — hindari bug WRONGLY_TYPED_CONTRACT
+   * saat urutan CreatedEvent di transaction tree tidak sesuai ekspektasi.
+   *
+   * @param text  - JSON response dari exerciseChoice (submit-and-wait-for-transaction-tree)
+   * @param suffix - templateId suffix, mis. 'Main:QuestClaimReceipt'
+   * @returns contract IDs (string) yg match suffix, urutan appearance. Kosong jika none.
+   */
+  private extractContractIdsByTemplate(
+    text: string,
+    suffix: (typeof TPL)[keyof typeof TPL],
+  ): string[] {
+    const cids: string[] = [];
+    try {
+      const parsed = JSON.parse(text) as Record<string, unknown>;
+      const stack: unknown[] = [parsed];
+      const seen = new Set<string>();
+      while (stack.length) {
+        const cur = stack.pop();
+        if (!cur || typeof cur !== 'object') continue;
+        if (Array.isArray(cur)) {
+          for (let i = cur.length - 1; i >= 0; i--) stack.push(cur[i]);
+          continue;
+        }
+        const obj = cur as Record<string, unknown>;
+        const cid = typeof obj.contractId === 'string' ? obj.contractId : null;
+        const tplId = typeof obj.templateId === 'string' ? obj.templateId : null;
+        if (cid && tplId && tplId.endsWith(suffix) && !seen.has(cid)) {
+          cids.push(cid);
+          seen.add(cid);
+        }
+        for (const v of Object.values(obj)) stack.push(v);
+      }
+    } catch {
+      /* ignore parse errors */
+    }
+    return cids;
+  }
+
   // ── 1. WalletRegistration ───────────────────────────────────────────────────
 
   async registerWallet(params: {
@@ -531,12 +571,17 @@ export class QuestLedgerService implements OnModuleInit {
       'submit-and-wait-for-transaction-tree',
     );
     if (ok) {
-      const cids = this.extractContractIds(text);
-      result.campaignContractId = cids.length >= 2 ? (cids[0] ?? null) : null;
-      result.claimContractId =
-        cids.length >= 2 ? (cids[1] ?? null) : (cids[0] ?? null);
+      // FIX: extract by templateId (bukan urutan) — ClaimSlot return
+      // (ContractId QuestCampaign, ContractId QuestClaimReceipt) tapi urutan
+      // di transaction tree response tidak dijamin. Sebelumnya pakai cids[0/1]
+      // → kadang dapat QuestCampaign sbg claimContractId → Settle gagal
+      // WRONGLY_TYPED_CONTRACT ("Expected QuestClaimReceipt but got QuestCampaign").
+      const campaignCids = this.extractContractIdsByTemplate(text, TPL.QuestCampaign);
+      const claimCids = this.extractContractIdsByTemplate(text, TPL.QuestClaimReceipt);
+      result.campaignContractId = campaignCids[0] ?? null;
+      result.claimContractId = claimCids[0] ?? null;
       this.logger.log(
-        `ClaimSlot: user=${params.userPartyId.split('::')[0]} campaign=${params.campaignContractId.slice(0, 12)}... claim=${result.claimContractId?.slice(0, 12) ?? 'none'}`,
+        `ClaimSlot: user=${params.userPartyId.split('::')[0]} campaign=${result.campaignContractId?.slice(0, 12) ?? 'none'}... claim=${result.claimContractId?.slice(0, 12) ?? 'none'}`,
       );
     } else {
       result.errors.push(
@@ -588,9 +633,11 @@ export class QuestLedgerService implements OnModuleInit {
       `draw-raffle-${params.claimId}-${randomUUID()}`,
     );
     if (ok) {
-      const cids = this.extractContractIds(text);
-      result.campaignContractId = cids[0] ?? null;
-      result.claimContractId = cids[1] ?? null;
+      // FIX: extract by templateId (bukan urutan) — sama bug dgn claimFcfsSlot.
+      const campaignCids = this.extractContractIdsByTemplate(text, TPL.QuestCampaign);
+      const claimCids = this.extractContractIdsByTemplate(text, TPL.QuestClaimReceipt);
+      result.campaignContractId = campaignCids[0] ?? null;
+      result.claimContractId = claimCids[0] ?? null;
     } else {
       result.errors.push(
         this.formatLedgerError(text, 'DrawWinner failed'),
