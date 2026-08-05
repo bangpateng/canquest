@@ -239,6 +239,20 @@ export class CantonLedgerService {
         if (disclosedContracts && disclosedContracts.length > 0) {
           body.disclosedContracts = disclosedContracts;
         }
+        // DIAGNOSTIC (AUTH_DEBUG): log exact actAs + userId per submit.
+        // Investigasi DAML_AUTHORIZATION_ERROR — bandingkan command yg OK vs FAIL.
+        const cmdChoice =
+          Array.isArray(commands) && commands[0] && typeof commands[0] === 'object'
+            ? (commands[0] as Record<string, unknown>)?.ExerciseCommand as
+                | Record<string, unknown>
+                | undefined
+            : undefined;
+        this.logger.debug(
+          `AUTH_DEBUG submit: choice=${cmdChoice?.choice ?? '?'} ` +
+            `userId=${effectiveUserId.slice(0, 12)} ` +
+            `actAs=${actAs.map((p) => p.split('::')[0]).join(',')} ` +
+            `actAsFull=${JSON.stringify(actAs)}`,
+        );
         const res = await fetch(url, {
           method: 'POST',
           headers: await this.authHeaders(identity ?? 'admin'),
