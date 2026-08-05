@@ -785,7 +785,12 @@ export class QuestLedgerService implements OnModuleInit {
         rewardTransfer: opt(rewardTransfer),
         rewardExtraArgs,
         featuredAppRightCid: opt(params.featuredAppRightCid ?? null),
-        appProvider: params.appProviderPartyId ?? '',
+        // appProvider: DAML Party TIDAK boleh empty string (error "Daml-LF Party
+        // is empty"). Saat FAR off (CANTON_APP_PROVIDER_PARTY_ID not set),
+        // default ke operator party (pasti valid — sudah signatory). appProvider
+        // cuma benar-benar dipakai saat FAR on (beneficiary marker); saat FAR
+        // off nilainya tidak relevan, hanya perlu valid Party utk lolos validasi.
+        appProvider: params.appProviderPartyId ?? operator,
         settledAt: nowIso,
       };
 
