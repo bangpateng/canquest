@@ -1123,13 +1123,13 @@ export class CantonLedgerService {
       },
     };
 
-    // optFeaturedAppRightCid: Canton JSON API v2 variant encoding.
-    // Optional Some → { tag: 'Some', value: cid } (tag TUNGGAL).
-    // Optional None → null (bukan object; bukti Transfer.lock pakai null & OK).
-    // BUG LAMA: `tags` (jamak) → Optional tidak ter-decode. Fix: tag tunggal + null.
-    const optFar = farCid
-      ? { tag: 'Some', value: farCid }
-      : null;
+    // optFeaturedAppRightCid: DAML-LF JSON Optional = nullable (BUKAN variant).
+    //   Some cid → cid (raw string)
+    //   None     → null
+    // Bukti: Transfer.lock (Optional Lock) pakai null & ledger ACCEPT.
+    // BUG LAMA: {tags:'Some',value:cid} / {tag:'Some',value:cid} → salah,
+    // Optional bukan variant. Fix: raw value / null.
+    const optFar = farCid ?? null;
 
     const choiceArgument = {
       transferCalls: [

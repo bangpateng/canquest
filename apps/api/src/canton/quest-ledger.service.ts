@@ -750,18 +750,22 @@ export class QuestLedgerService implements OnModuleInit {
       }
 
       // ── Construct Settle choiceArgument (DAML v23 Optional encoding) ───────
-      // Canton JSON Ledger API v2 Optional encoding:
-      //   Some x → { tag: 'Some', value: x }   (tag TUNGGAL — variant)
-      //   None   → null                         (bukan object, bukti: field
-      //                                           Transfer.lock pakai null & OK)
-      // BUG LAMA: pakai `tags` (jamak) → Optional rusak → "Missing context, meta".
-      // BUG FIX-1: None = {tag:'None',value:{}} → error "Expected ujson.Str"
-      //   (krn Optional ContractId expect string; None harus null).
+      // DAML-LF JSON: Optional = NULLABLE special case (BUKAN variant).
+      //   Some x → langsung x (raw value, TANPA wrapper tag/value)
+      //   None   → null
+      // Bukti: field Transfer.lock (Optional Lock) pakai null & ledger ACCEPT.
+      // Ref: docs DAML-LF JSON Encoding — "Optional: JSON value when defined,
+      //      or null when empty."
+      //
+      // BUG HISTORY (jangan ulangi):
+      //   {tags:'Some',value:x}   → "Missing context, meta" (tags jamak, salah)
+      //   {tag:'Some',value:x}    → sama error (wrapper tetap salah utk Optional)
+      //   {tag:'None',value:{}}   → "Expected ujson.Str" (None harus null)
+      //
       // ExtraArgs record butuh context + meta eksplisit (non-optional).
       // choiceContextData dari registry bisa null utk direct transfer →
       // default ke { values: {} } (pattern sama executeTransferFactoryTransfer line 597).
-      const opt = <T,>(v: T | null) =>
-        v == null ? null : { tag: 'Some', value: v };
+      const opt = <T,>(v: T | null | undefined) => (v == null ? null : v);
       const safeContext = (ctx: Record<string, unknown> | null | undefined) =>
         ctx && typeof ctx === 'object' && Object.keys(ctx).length > 0 ? ctx : { values: {} };
       const feeExtraArgs = {
