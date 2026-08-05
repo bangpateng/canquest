@@ -1,14 +1,26 @@
 # 7TRUST Domain Verification — Runbook Eksekusi Manual di VPS 1
 
+> **STATUS: DEPLOYED 2026-08-05** ✅ — 11/12 langkah selesai, infrastruktur jalan
+> production. Tinggal first login + DNS verify (browser-only).
+>
 > **Cara pakai:** Buka terminal SSH ke VPS 1 (`ssh root@162.250.191.195`),
-> lalu copy-paste tiap block command sesuai urutan. Paste output balik ke chat
-> bila perlu analisa. Jangan skip verifikasi (langkah bertanda ✅).
+> lalu copy-paste tiap block command sesuai urutan.
 >
 > **Target host:** VPS 1 (hostname: `ubuntu`, IP 162.250.191.195) — Canton participant node
 > **Sumber guide resmi:** 7TRUST Deployment Guide (PDF dari 7trust.c7.digital)
 > **DAR:** `domain-verification-model-0.1.0.dar` dari `github.com/C7-Digital/public-dars`
-> **Docker:** `ghcr.io/c7-digital/7trust-client` (tag `:test` dulu, lalu `:prod`)
+> **Docker:** `ghcr.io/c7-digital/7trust-client:prod` (mainnet, langsung — bukan testnet)
 > **Tanggal:** 2026-08-05
+>
+> **LESSON LEARNED (penting, dari eksekusi 2026-08-05):**
+> - Container listen **port 8080** (bukan 80 per guide). Mapping host: `-p 8088:8080`.
+> - **JANGAN tambah `listen 80` block** di nginx — akan konflik dgn docker-proxy
+>   splice-validator-nginx (`127.0.0.1:80`) dan bikin nginx restart GAGAL = production down.
+>   Hanya `listen 443` block. Cloudflare sudah handle HTTPS terminate.
+> - Image `:prod` **hardcoded mainnet** (`C7_API_BACKEND_URL`, `C7_ISSUER_PARTY`, `CANTON_NETWORK=prod`).
+>   Hanya override `CANTON_LEDGER_URL`, `OIDC_AUTHORITY`, `OIDC_CLIENT_ID`.
+> - `systemctl restart nginx` bisa GAGAL bila ada zombie/port conflict. Pakai
+>   `systemctl reload` setelah edit config. Hanya `restart` bila yakin tidak ada konflik.
 
 ---
 
@@ -472,17 +484,68 @@ sudo nginx -t && sudo systemctl reload nginx
 ## CHECKLIST EKSEKUSI
 
 ```
-[ ] 0.  Baseline: docker layout OK, port 8088 free, credential ter-set
-[ ] 1.  Download DAR (size 554506, Zip archive)
-[ ] 2.  Token Keycloak + baseline package count tercatat
-[ ] 3.  Upload DAR → package count +1, DAR domain-verification muncul
-[ ] 4.  (opsional) Cek vetting
-[ ] 5.  Docker pull ghcr.io/c7-digital/7trust-client:test
-[ ] 6.  OIDC client domain-verification dibuat di Keycloak
-[ ] 7.  Container run di port 8088, logs bersih
-[ ] 8.  Subdomain 7trust.canquestlabs.com (DNS + nginx), curl OK
-[ ] 9.  First login + accept T&C + DNS verify → credential terbit
-[ ] 10. (prod) Switch :test → :prod
+[x] 0.  Baseline: docker layout OK, port 8088 free, credential ter-set
+[x] 1.  Download DAR (size 554506, Zip archive) — domain-verification-model-0.1.0.dar
+[x] 2.  Token Keycloak + baseline package count (125) tercatat
+[x] 3.  Upload DAR → package count 126, package ID be0b32ad... confirmed
+[x] 4.  Cek vetting — package ada di ledger (vetting bila perlu saat first login)
+[x] 5.  Docker pull ghcr.io/c7-digital/7trust-client:prod (mainnet langsung)
+[x] 6.  OIDC client domain-verification dibuat di Keycloak (public, standardFlow)
+[x] 7.  Container run port 8088:8080, nginx up, logs bersih
+[x] 8.  Subdomain 7trust.canquestlabs.com (DNS CF + nginx 443 only), HTTP 200
+[x] 9a. User 7trust-admin dibuat + grant rights actAs party canquest-validator-1
+[ ] 9b. First login via browser (https://7trust.canquestlabs.com) + T&C + DNS verify
+[ ] 9c. 7TRUST credential terbit on-chain
+```
+
+## STATE FINAL (deployed 2026-08-05)
+
+| Item | Value |
+|---|---|
+| DAR package ID | `be0b32ad325c3b3573d0a16cae3d3221c2e5c860869eb2bfb399e89f6519d7db` |
+| Container | `7trust-client` (image `:prod`), port `0.0.0.0:8088->8080/tcp` |
+| Subdomain | `https://7trust.canquestlabs.com` → Cloudflare → nginx 443 → `127.0.0.1:8088` |
+| OIDC client | `domain-verification` (public, standardFlow, realm `canton`) |
+| Login user | `7trust-admin` (UUID `7247e6cf-e004-4162-ad8b-81706e657301`) |
+| Party verified | `canquest-validator-1::12209fe74271728c49a1922362aa0c8d2bff7f7546b81963b7d5b65361fd8e5442fb` |
+| nginx config | `/etc/nginx/sites-available/7trust.canquestlabs.com` (443 only, no listen 80) |
+| C7 API (mainnet) | `https://c7trust-api.canton.global.canton.network.c7.digital` (hardcoded di image) |
+| C7 issuer party | `c7trust::12202e2325b04b0f0ee30685088289293b3e7a28d8b26470b39435502912e2876cba` |
+
+## COMMANDS VERIFIED (copy-paste siap pakai)
+
+### Recreate container (kalau perlu restart)
+```bash
+docker rm -f 7trust-client
+docker run -d \
+  --name 7trust-client \
+  --restart unless-stopped \
+  -p 8088:8080 \
+  -e CANTON_LEDGER_URL=https://ledger.canquestlabs.com \
+  -e OIDC_AUTHORITY=https://auth.canquestlabs.com/realms/canton \
+  -e OIDC_CLIENT_ID=domain-verification \
+  ghcr.io/c7-digital/7trust-client:prod
+```
+
+### Verify semuanya jalan
+```bash
+# Container
+docker ps --filter name=7trust-client
+# HTTP local
+curl -sI http://127.0.0.1:8088/ | head -3
+# HTTP via domain
+curl -sI https://7trust.canquestlabs.com/ | head -5
+# nginx
+systemctl is-active nginx
+```
+
+### Rollback (emergency, TIDAK sentuh production lain)
+```bash
+docker rm -f 7trust-client
+rm -f /etc/nginx/sites-enabled/7trust.canquestlabs.com
+nginx -t && systemctl reload nginx
+# DAR immutable (tidak bisa remove), tapi inert bila tidak ada contract pakai.
+# User 7trust-admin: disable via Keycloak admin bila perlu.
 ```
 
 ---
