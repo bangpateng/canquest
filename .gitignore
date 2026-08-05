@@ -141,3 +141,8 @@ scripts/vps2-deploy-from-windows.ps1
 # ─── Internal working docs (NEVER publish) ─────────────────────────────────
 HANDOFF_CONTEXT.md
 MASTER_PLAN.md
+
+# Ops runbooks dengan IP publik VPS (local only - repo is public)
+7LOCK_RUNBOOK_VPS1.md
+7TRUST_RUNBOOK_VPS1.md
+HANDOFF_7TRUST_DEPLOY.md
