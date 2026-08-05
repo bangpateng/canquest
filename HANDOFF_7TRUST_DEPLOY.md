@@ -8,6 +8,10 @@
 > **Target host:** VPS 1 (Canton participant node, bukan VPS 2)
 > **Repo:** C:\Users\Bang Pateng\Documents\can (master)
 > **Commit saat ini:** `cd8ae9f` (diag SETTLE_DEBUG)
+>
+> **UPDATE 2026-08-05 (research selesai):** DAR source & Docker image SUDAH
+> TER-KONFIRMASI (lihat §3a & §4a). Open question tersisa: #2 (OIDC client),
+> #4 (vetting), #5 (mainnet/testnet), #6 (party ID). Lihat §6 untuk status.
 
 ---
 
@@ -113,24 +117,42 @@ Untuk 7TRUST, party yang relevan kemungkinan **app-canquest** (app provider) ata
 
 ## 3. STEP 1 — DEPLOY DAR (7TRUST)
 
-### 3a. Download DAR 7TRUST
+### 3a. Download DAR 7TRUST ✅ TER-KONFIRMASI
 
-DAR download dari public GitHub C7. **TODO di chat baru: cari link DAR yang benar.**
+**Repo DAR publik:** `github.com/C7-Digital/public-dars` (org `C7-Digital`, publik).
+Store semua DAR aplikasi C7 di Canton Network.
 
-Berdasarkan guide: "Download the latest DAR file here from the public C7 GitHub repository".
-Likely repo: `github.com/c7-digital/*`. Cari:
-- release asset `.dar` file
-- atau `packages/daml/.daml/dist/*.dar`
+**Release yang benar (bukan c7-credential-v1):**
+- Tag: `domain-verification/v0.1.0`
+- Nama: "7Trust Domain-Verification Model v0.1.0"
+- File: `domain-verification-model-0.1.0.dar` (554.506 bytes)
+- Re-tagged dari `v0.1.0` ke namespace-by-app; originally published 2026-03-27.
+
+**URL download (ter-verify: 302→200, octet-stream, 554506 bytes):**
+```
+https://github.com/C7-Digital/public-dars/releases/download/domain-verification/v0.1.0/domain-verification-model-0.1.0.dar
+```
 
 ```bash
 # Di VPS 1 (atau lokal lalu scp):
-wget -O 7trust.dar "<DAR_DOWNLOAD_URL>"   # ← isi URL dari GitHub C7
+curl -L -o domain-verification-model-0.1.0.dar \
+  "https://github.com/C7-Digital/public-dars/releases/download/domain-verification/v0.1.0/domain-verification-model-0.1.0.dar"
+
+# Verify size (harus 554506):
+ls -l domain-verification-model-0.1.0.dar
+# Verify content-type octet-stream:
+file domain-verification-model-0.1.0.dar  # Zip archive (DAR = zip)
 ```
+
+> **Catatan:** Repo juga punya DAR terkait: `c7-credential-v1-0.0.1.dar`,
+> `c7-kyc-0.0.1.dar`, `c7-unlock-0.1.0.dar`, `c7lock-model-0.2.x.dar`.
+> Untuk 7Trust Domain Verification, pakai `domain-verification-model-0.1.0.dar`.
 
 ### 3b. Upload DAR ke participant node
 
 **Pola upload SUDAH TER-VERIFIED jalan** di repo Anda (untuk canquest-v23).
-Pattern (dari `packages/daml/README.md` + `apps/api/scripts/upload-daml-dar.cjs`):
+Pattern (dari `packages/daml/README.md` + `apps/api/scripts/upload-daml-dar.cjs`
++ diuji ulang via `scripts/check-parties.sh` — token recipe identik).
 
 ```bash
 # 1. Dapat token dari Keycloak
@@ -145,35 +167,53 @@ TOKEN=$(curl -s -X POST "https://auth.canquestlabs.com/realms/canton/protocol/op
 curl -X POST "https://ledger.canquestlabs.com/v2/packages" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/octet-stream" \
-  --data-binary @7trust.dar
+  --data-binary @domain-verification-model-0.1.0.dar
 
 # 3. Verify package count (harus +1)
 curl -s -H "Authorization: Bearer $TOKEN" \
   "https://ledger.canquestlabs.com/v2/packages" | jq '.packageIds | length'
-#   Sebelumnya 125 packages → setelah 7TRUST upload = 126
+#   Catat count sebelum upload sebagai baseline, lalu bandingkan sesudah.
 
-# 4. List packages, cari yang 7trust
+# 4. List packages, cari yang 7trust / domain-verification
 curl -s -H "Authorization: Bearer $TOKEN" \
-  "https://ledger.canquestlabs.com/v2/packages" | jq -r '.packageDetails[] | select(.packageName | test("7trust|seventrust|c7"; "i")) | .packageName + " " + .packageVersion'
+  "https://ledger.canquestlabs.com/v2/packages" | jq -r '.packageDetails[] | select(.packageName | test("7trust|seventrust|domain.verification|credential|c7"; "i")) | .packageName + " " + .packageVersion'
 ```
+
+> **Rekomendasi:** Pakai uploader canonical Anda agar konsisten:
+> `cd apps/api && node scripts/upload-daml-dar.cjs <path-to-dar>`
+> (parameter path — cek dulu apakah script terima arg path DAR; kalau hardcode
+> ke canquest-v10, modify temporary atau taruh DAR di path yang sama).
 
 ⚠️ **Catatan soal vetting:** Upload DAR ke `/v2/packages` **tidak butuh vetting**.
 Tapi **menggunakan** DAR (create contract / exercise choice) butuh vetting party.
 Bila 7TRUST client gagal pertama kali dengan error "package not vetted", perlu
-vetting via participant admin API (TODO: confirm command di chat baru).
+vetting via participant admin API (lihat §6 #4 — status: butuh confirm command).
 
 ---
 
 ## 4. STEP 2 — DEPLOY DOCKER CLIENT (7TRUST)
 
-### 4a. Pull Docker image
+### 4a. Pull Docker image ✅ TER-KONFIRMASI
+
+**Package page:** `github.com/orgs/C7-Digital/packages/container/package/7trust-client`
+Org `C7-Digital` (sama dengan repo DAR). Package publik, bisa `docker pull` tanpa login.
+
+**Image:** `ghcr.io/c7-digital/7trust-client` — multi-arch (amd64 + arm64), VPS1 Anda OK.
+
+**Tag map (ter-konfirmasi dari package page, per 2026-08-05):**
+| Tag | Versi | Tujuan |
+|---|---|---|
+| `prod` | 418 (=`latest`) | Production / mainnet |
+| `test` | 417 | Testnet |
+| `latest` | 418 | Sama dengan prod |
+| `<n>` | incremental | Numeric build |
+| `sha-<commit>` | — | Pinned by commit |
 
 ```bash
-# Di VPS 1:
-# TESTNET (utk test dulu):
+# Di VPS 1 — mulai dulu dengan TEST (testnet), per §6 #5:
 docker pull ghcr.io/c7-digital/7trust-client:test
 
-# MAINNET (production):
+# Setelah verifikasi OK di testnet, ganti ke PROD (mainnet):
 docker pull ghcr.io/c7-digital/7trust-client:prod
 ```
 
@@ -219,11 +259,14 @@ docker run -d \
   -e CANTON_LEDGER_URL=https://ledger.canquestlabs.com \
   -e OIDC_AUTHORITY=https://auth.canquestlabs.com/realms/canton \
   -e OIDC_CLIENT_ID=7trust-client \
-  ghcr.io/c7-digital/7trust-client:prod
+  ghcr.io/c7-digital/7trust-client:test
 
 # Cek logs:
 docker logs -f 7trust-client
 ```
+
+> Mulai dengan tag `:test` (testnet) dulu. Setelah first login + DNS verify
+> berhasil, ganti `:test` → `:prod` dan re-run container.
 
 ### 4e. (Recommended) Setup subdomain + nginx reverse proxy
 
@@ -268,18 +311,31 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ## 6. PERTANYAAN YANG PERLU DI-CLARIFY DI CHAT BARU
 
-Sebelum eksekusi, assistant chat baru harus bantu jawab:
+Status riset per 2026-08-05:
 
-1. **DAR 7TRUST source** — link GitHub C7 yang benar (release asset .dar).
-   Saat ini belum konfirm.
-2. **OIDC client** — buat baru atau reuse `validator-app-backend`?
-   Rekomendasi: buat baru (`7trust-client`) supaya isolasi.
-3. **Port conflict** — Keycloak & 7TRUST sama-sama 8080. Solusi: 7TRUST ke 8088.
-4. **Vetting** — apakah DAR 7TRUST butuh vetting participant sebelum dipakai?
-   Bila ya, perlu admin API call ke participant node.
-5. **Mainnet vs Testnet** — mulai dengan testnet (`:test`) dulu, baru prod (`:prod`)?
-   Rekomendasi: test dulu.
-6. **Party ID mana yang dipakai 7TRUST** — app-canquest? validator? Confirm saat first login.
+1. ✅ **RESOLVED — DAR 7TRUST source:** `domain-verification-model-0.1.0.dar`
+   dari `github.com/C7-Digital/public-dars` release `domain-verification/v0.1.0`.
+   URL download ter-verify (§3a).
+2. 🔲 **OPEN — OIDC client:** buat baru atau reuse `validator-app-backend`?
+   Rekomendasi: buat baru (`7trust-client`) supaya isolasi. Butuh akses Keycloak
+   admin console (`https://auth.canquestlabs.com/admin/canton/`). Lihat §4c.
+3. ✅ **RESOLVED — Port conflict:** Keycloak & 7TRUST sama-sama 8080 → 7TRUST ke
+   **8088** via `-p 8088:8080`. Nginx reverse-proxy subdomain `7trust.canquestlabs.com`.
+4. 🔲 **OPEN — Vetting:** apakah DAR 7TRUST butuh vetting participant sebelum
+   dipakai? Upload tidak butuh; tapi **menggunakan** DAR (create/exercise) butuh
+   vetting party. Bila client error "package not vetted", perlu admin API call
+   ke participant node. Command confirm di chat baru.
+5. ✅ **RESOLVED — Mainnet vs Testnet:** mulai dengan **testnet** (`:test` =417),
+   setelah first login + DNS verify OK, ganti ke `:prod` (=418=latest). Tag map
+   ter-konfirmasi dari package page (§4a).
+6. 🔲 **OPEN — Party ID mana yang dipakai 7TRUST:** `app-canquest` (app provider)
+   atau `canquest-validator-1` (validator)? 7Trust dirancang untuk **validator**
+   (per deskripsi ecosystem: "7Trust allows Canton **Validators** to prove their
+   identity"). Rekomendasi awal: `canquest-validator-1`. Confirm saat first login.
+
+> **Catatan tambahan:** 7Trust menyebut "Canton Validators" sebagai target user,
+> jadi party `canquest-validator-1` lebih mungkin dipakai daripada `app-canquest`.
+> Tapi confirm dari UI first-login.
 
 ---
 
@@ -300,16 +356,41 @@ Sebelum eksekusi, assistant chat baru harus bantu jawab:
 ## 8. CHECKLIST (centang saat selesai di chat baru)
 
 ```
-[ ] 1. Dapat link download DAR 7TRUST dari GitHub C7
-[ ] 2. Download DAR 7TRUST
-[ ] 3. Upload DAR ke participant (POST /v2/packages) → verify package count +1
-[ ] 4. (bila perlu) Vetting DAR 7TRUST di participant
-[ ] 5. Buat OIDC client 7trust-client di Keycloak realm canton
-[ ] 6. Pull Docker image 7trust-client (test dulu, lalu prod)
-[ ] 7. Run container dgn env (CANTON_LEDGER_URL, OIDC_AUTHORITY, OIDC_CLIENT_ID)
-[ ] 8. Setup subdomain 7trust.canquestlabs.com (DNS + nginx)
-[ ] 9. First login via browser
-[ ] 10. Accept T&C
-[ ] 11. DNS verification domain canquestlabs.com
-[ ] 12. 7TRUST credential terbit on-chain
+[x] 0. (DONE 2026-08-05) Riset: DAR source + Docker image ter-konfirmasi
+[ ] 1. Download DAR 7TRUST (domain-verification-model-0.1.0.dar) — §3a
+[ ] 2. Upload DAR ke participant (POST /v2/packages) → verify package count +1 — §3b
+[ ] 3. (bila perlu) Vetting DAR 7TRUST di participant — §6 #4
+[ ] 4. Buat OIDC client 7trust-client di Keycloak realm canton — §4c
+[ ] 5. Pull Docker image 7trust-client:test (testnet dulu) — §4a
+[ ] 6. Run container dgn env (CANTON_LEDGER_URL, OIDC_AUTHORITY, OIDC_CLIENT_ID) — §4d
+[ ] 7. Setup subdomain 7trust.canquestlabs.com (DNS + nginx) — §4e
+[ ] 8. First login via browser → confirm party ID (validator vs app-canquest) — §6 #6
+[ ] 9. Accept T&C + Privacy Policy
+[ ] 10. DNS verification domain canquestlabs.com
+[ ] 11. 7TRUST credential terbit on-chain
+[ ] 12. (optional) Switch tag :test → :prod (mainnet), re-verify
 ```
+
+---
+
+## 9. CATATAN EKSEKUSI (untuk assistant chat baru)
+
+**SSH ke VPS 1:** Tidak bisa passwordless dari mesin Windows pengguna
+(`Permission denied (publickey,password)` — host 162.250.191.195 ada di
+known_hosts tapi tidak ada key ter-deploy untuk host ini). User harus
+eksekusi command di VPS 1 sendiri via terminal SSH-nya, ATAU deploy
+SSH key publik `~/.ssh/id_rsa.pub` ke `root@162.250.191.195:~/.ssh/authorized_keys`
+dulu supaya assistant bisa run command remote.
+
+**Token upload DAR:** Recipe di `scripts/check-parties.sh` (repo Anda sendiri)
+ter-verify — baca `LEDGER_CLIENT_ID` / `LEDGER_CLIENT_SECRET` dari
+`apps/api/.env` (VPS2: `/var/www/canquest/apps/api/.env`).
+
+**Urutan eksekusi rekomendasi:**
+1. Download DAR (§3a) — lokal atau di VPS1, cepat.
+2. Baseline package count + upload DAR (§3b) — butuh token Keycloak.
+3. Sambil itu, buat OIDC client di Keycloak admin (§4c) — paralel, manual di UI.
+4. Pull image `:test` + run container di port 8088 (§4d).
+5. Setup subdomain nginx (§4e).
+6. First login + DNS verify (§5).
+7. Setelah OK, switch `:test` → `:prod`.
