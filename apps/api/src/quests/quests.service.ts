@@ -684,6 +684,22 @@ export class QuestsService {
     );
   }
 
+  /**
+   * v24: rewardSender WAJIB non-null utk co-controller Settle (DAML multi-party).
+   * Resolve rewardPartyId atau throw dgn pesan jelas. Dipakai oleh semua
+   * claim path (FCFS/Raffle/Code/CC+Code) yg kirim rewardSenderPartyId ke
+   * claimFcfsSlot/drawRaffleWinner.
+   */
+  private requireRewardPartyId(): string {
+    const id = this.rewardPartyId;
+    if (!id) {
+      throw new Error(
+        'CANTON_REWARD_PARTY_ID not configured (required for v24 atomic Settle)',
+      );
+    }
+    return id;
+  }
+
   /** Resolve the fee target party ID (fee recipient). */
   private get feeTargetPartyId(): string | null {
     return (
@@ -2899,6 +2915,9 @@ export class QuestsService {
 
     const maxPayoutExposure = maxWinners * rewardCc;
     const rewardPartyId = this.rewardPartyId;   // v24: reward wallet party (co-controller Settle)
+    if (!rewardPartyId) {
+      throw new Error('CANTON_REWARD_PARTY_ID not configured (required for v24 atomic Settle)');
+    }
     this.logger.log(
       `FCFS claim start quest=${questId} user=@${username} fee=${feeCc} reward=${rewardCc} validator=${validatorPartyId.split('::')[0]} (max pool exposure ~${maxPayoutExposure} CC for ${maxWinners} slots)`,
     );
@@ -3240,7 +3259,7 @@ export class QuestsService {
             campaignContractId,
             userPartyId: cantonPartyId,
             claimId: draw.id,
-            rewardSenderPartyId: this.rewardPartyId,   // v24: co-controller Settle
+            rewardSenderPartyId: this.requireRewardPartyId(),   // v24: co-controller Settle
           });
           claimSessionId = claimResult.claimContractId;
           if (claimResult.errors.length > 0) {
@@ -3598,13 +3617,13 @@ export class QuestsService {
                   campaignContractId,
                   userPartyId: cantonPartyId,
                   claimId,
-                  rewardSenderPartyId: this.rewardPartyId,   // v24: co-controller Settle
+                  rewardSenderPartyId: this.requireRewardPartyId(),   // v24: co-controller Settle
                 })
               : await this.questLedger.drawRaffleWinner({
                   campaignContractId,
                   userPartyId: cantonPartyId,
                   claimId,
-                  rewardSenderPartyId: this.rewardPartyId,   // v24: co-controller Settle
+                  rewardSenderPartyId: this.requireRewardPartyId(),   // v24: co-controller Settle
                 });
           codeClaimSessionId = claimResult.claimContractId;
           if (claimResult.errors.length > 0) {
@@ -3886,7 +3905,7 @@ export class QuestsService {
             campaignContractId: ccCodeCampaignCid,
             userPartyId: cantonPartyId,
             claimId: draw.id,
-            rewardSenderPartyId: this.rewardPartyId,   // v24: co-controller Settle
+            rewardSenderPartyId: this.requireRewardPartyId(),   // v24: co-controller Settle
           });
           ccCodeClaimSessionId = claimResult.claimContractId;
           if (claimResult.errors.length > 0) {
