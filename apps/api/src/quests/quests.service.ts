@@ -711,20 +711,134 @@ export class QuestsService {
   }
 
   /**
+   * v25: Check eligibility status WITHOUT throwing (utk pre-check UI / endpoint).
+   * Return structured object: { eligible, reason, action }.
+   * Dipakai oleh GET /quests/:id/eligibility-status + resolveEligibilityCid.
+   *
+   * Logic:
+   *   eligibilityType = NONE → eligible: true (no check)
+   *   LOCK_CC: cek ccLocks (LOCKED) — amount >= min + latestLockAt > campaignCreatedAt
+   *   POINTS : cek PointsService.getNetPoints >= min
+   *
+   * Tidak touch DAML (read-only). Tidak create CampaignEligibility contract.
+   */
+  async checkEligibilityStatus(params: {
+    userId: string;
+    eligibilityType: string;          // quest.eligibilityType (NONE|LOCK_CC|POINTS)
+    eligibilityAmount: number;        // quest.eligibilityAmount
+    campaignCreatedAt: string;        // ISO quest.createdAt (utk lock-after guard)
+  }): Promise<{ eligible: boolean; reason: string | null; action: string | null; currentAmount?: number }> {
+    const { userId, eligibilityType, eligibilityAmount, campaignCreatedAt } = params;
+
+    if (eligibilityType === 'NONE' || eligibilityAmount <= 0) {
+      return { eligible: true, reason: null, action: null };
+    }
+
+    if (eligibilityType === 'LOCK_CC') {
+      const locks = await this.prisma.ccLock.findMany({
+        where: { userId, status: 'LOCKED' },
+        select: { amountCc: true, lockedAt: true },
+        orderBy: { lockedAt: 'desc' },
+      });
+      const totalLocked = locks.reduce((s, l) => s + Number(l.amountCc), 0);
+      if (totalLocked < eligibilityAmount) {
+        return {
+          eligible: false,
+          currentAmount: totalLocked,
+          reason: `Insufficient locked CC (${totalLocked.toFixed(2)} / ${eligibilityAmount} CC required).`,
+          action: `Lock at least ${eligibilityAmount} CC to participate in this campaign.`,
+        };
+      }
+      const latestLockAt = locks[0]?.lockedAt;
+      if (!latestLockAt) {
+        return {
+          eligible: false,
+          currentAmount: 0,
+          reason: 'No active CC lock found.',
+          action: 'Lock CC to participate in this campaign.',
+        };
+      }
+      if (new Date(latestLockAt).getTime() <= new Date(campaignCreatedAt).getTime()) {
+        return {
+          eligible: false,
+          currentAmount: totalLocked,
+          reason: 'Your CC lock is older than this campaign.',
+          action: 'Unlock and re-lock your CC now to become eligible.',
+        };
+      }
+      return { eligible: true, reason: null, action: null, currentAmount: totalLocked };
+    }
+
+    if (eligibilityType === 'POINTS') {
+      const netPoints = await this.points.getNetPoints(userId);
+      if (netPoints < eligibilityAmount) {
+        return {
+          eligible: false,
+          currentAmount: netPoints,
+          reason: `Insufficient points (${netPoints} / ${eligibilityAmount} required).`,
+          action: 'Complete more quests to earn points.',
+        };
+      }
+      return { eligible: true, reason: null, action: null, currentAmount: netPoints };
+    }
+
+    // Unknown type → treat as eligible (defensive)
+    return { eligible: true, reason: null, action: null };
+  }
+
+  /**
+   * v25: Wrapper checkEligibilityStatus utk quest by id (utk endpoint pre-check).
+   * Query Quest dari DB (eligibilityType/amount/createdAt), lalu panggil
+   * checkEligibilityStatus. Return enhanced object dgn requiredAmount + type.
+   */
+  async checkClaimEligibility(questId: string, userId: string): Promise<{
+    eligible: boolean;
+    reason: string | null;
+    action: string | null;
+    currentAmount?: number;
+    requiredAmount: number;
+    eligibilityType: string;
+  }> {
+    const quest = await this.prisma.quest.findUnique({
+      where: { id: questId },
+      select: {
+        eligibilityType: true,
+        eligibilityAmount: true,
+        createdAt: true,
+      },
+    });
+    if (!quest) {
+      return {
+        eligible: false,
+        reason: 'Campaign not found.',
+        action: null,
+        requiredAmount: 0,
+        eligibilityType: 'NONE',
+      };
+    }
+    const status = await this.checkEligibilityStatus({
+      userId,
+      eligibilityType: quest.eligibilityType ?? 'NONE',
+      eligibilityAmount: quest.eligibilityAmount ?? 0,
+      campaignCreatedAt: (quest.createdAt ?? new Date()).toISOString(),
+    });
+    return {
+      eligible: status.eligible,
+      reason: status.reason,
+      action: status.action,
+      currentAmount: status.currentAmount,
+      requiredAmount: quest.eligibilityAmount ?? 0,
+      eligibilityType: quest.eligibilityType ?? 'NONE',
+    };
+  }
+
+  /**
    * v25: Resolve (or create) DAML CampaignEligibility contract id utk user+quest.
    * Dipanggil oleh 5 claim path sebelum claimFcfsSlot/drawRaffleWinner.
+   * Pre-check via checkEligibilityStatus (throw BadRequestException dgn pesan EN),
+   * lalu create CampaignEligibility contract bila eligible.
    *
-   * Flow:
-   *   1. Skip bila quest.eligibilityType = NONE (return null)
-   *   2. Cek CampaignEligibilityLedger cache (questId+userId, status ELIGIBLE)
-   *   3. Kalau ada, return cached contractId
-   *   4. Kalau tidak, create baru:
-   *      LOCK_CC: verify lock CC via ccLocks (lockedAt > campaign createdAt, amount >= min)
-   *      POINTS : verify net points >= min via PointsService
-   *      → questLedger.createCampaignEligibility
-   *      → persist ke CampaignEligibilityLedger
-   *
-   * Best-effort: kalau create gagal, return null (claim tetap jalan, DAML guard
+   * Best-effort: kalau create DAML gagal, return null (claim tetap jalan, DAML guard
    * akan reject bila eligibility wajib). Idempoten via commandId.
    */
   private async resolveEligibilityCid(params: {
@@ -747,46 +861,36 @@ export class QuestsService {
     });
     if (cached?.contractId) return cached.contractId;
 
-    // 2. Verify eligibility source (LOCK_CC / POINTS) + compute amount + lockedAt
-    let amount = 0;
+    // 2. Pre-check eligibility (throw EN error bila tidak eligible — dipakai UI juga)
+    const status = await this.checkEligibilityStatus({
+      userId,
+      eligibilityType,
+      eligibilityAmount,
+      campaignCreatedAt,
+    });
+    if (!status.eligible) {
+      const detail = status.reason ? ` ${status.reason}` : '';
+      throw new BadRequestException(
+        `Not eligible to claim this campaign.${detail}${status.action ? ` ${status.action}` : ''}`,
+      );
+    }
+
+    // 3. Recompute amount + lockedAt utk DAML contract (status sudah pasti eligible)
+    let amount = status.currentAmount ?? 0;
     let lockedAt: string | null = null;
     let typeForDaml: 'LOCK_CC' | 'POINTS' = eligibilityType === 'POINTS' ? 'POINTS' : 'LOCK_CC';
 
     if (typeForDaml === 'LOCK_CC') {
-      // Cek ccLocks (LOCKED, milik user). Ambil lockedAt terbaru + total amount.
       const locks = await this.prisma.ccLock.findMany({
         where: { userId, status: 'LOCKED' },
-        select: { amountCc: true, lockedAt: true },
+        select: { lockedAt: true },
         orderBy: { lockedAt: 'desc' },
       });
-      amount = locks.reduce((s, l) => s + Number(l.amountCc), 0);
-      if (amount < eligibilityAmount) {
-        throw new BadRequestException(
-          `Lock CC kurang dari minimum (${amount.toFixed(2)} < ${eligibilityAmount} CC). Lock lebih banyak CC utk klaim.`,
-        );
-      }
-      // Guard: lock TERBARU harus SETELAH campaign dibuat.
       const latestLockAt = locks[0]?.lockedAt;
-      if (!latestLockAt) {
-        throw new BadRequestException('Belum ada lock CC aktif utk klaim campaign ini.');
-      }
-      if (new Date(latestLockAt).getTime() <= new Date(campaignCreatedAt).getTime()) {
-        throw new BadRequestException(
-          'Lock CC harus dilakukan SETELAH campaign dibuat. Lock ulang CC sekarang utk eligible.',
-        );
-      }
-      lockedAt = new Date(latestLockAt).toISOString();
-    } else {
-      // POINTS: cek net points
-      amount = await this.points.getNetPoints(userId);
-      if (amount < eligibilityAmount) {
-        throw new BadRequestException(
-          `Points kurang dari minimum (${amount} < ${eligibilityAmount}). Selesaikan lebih banyak quest utk earn points.`,
-        );
-      }
+      lockedAt = latestLockAt ? new Date(latestLockAt).toISOString() : null;
     }
 
-    // 3. Create DAML CampaignEligibility contract
+    // 4. Create DAML CampaignEligibility contract
     const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(); // 7 hari default
     const result = await this.questLedger.createCampaignEligibility({
       userPartyId,
@@ -802,7 +906,7 @@ export class QuestsService {
       return null; // best-effort; DAML guard akan reject bila wajib
     }
 
-    // 4. Persist ke cache
+    // 5. Persist ke cache
     await this.prisma.campaignEligibilityLedger.upsert({
       where: { questId_userId: { questId, userId } },
       create: {

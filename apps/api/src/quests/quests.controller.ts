@@ -175,6 +175,23 @@ export class QuestsController {
     );
   }
 
+  /**
+   * v25: Pre-check claim eligibility (LOCK_CC / POINTS) utk campaign ini.
+   * READ-ONLY — tida throw. Return { eligible, reason, action } utk badge FE.
+   * Frontend pakai utk tampilkan "Re-lock required" / "Insufficient points"
+   * SEBELUM user klik Claim (UX proaktif).
+   *
+   * Berbeda dgn /eligibility (Earn gate) — ini khusus utk quest CLAIM eligibility
+   * (DAML v25 CampaignEligibility guard).
+   */
+  @Get(':questId/claim-eligibility')
+  async claimEligibility(
+    @Param('questId') questId: string,
+    @Req() req: AuthedReq,
+  ) {
+    return this.quests.checkClaimEligibility(questId, req.user.userId);
+  }
+
   /** FCFS CC — claim fee on-chain + reward from pool (first-come slots). */
   @Post(':questId/claim-fcfs')
   @UseGuards(WalletRequiredGuard)
