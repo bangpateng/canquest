@@ -1276,34 +1276,6 @@ export class QuestLedgerService implements OnModuleInit {
       return fail([msg]);
     }
   }
-    try {
-      const { ok, text } = await this.ledger.exerciseChoice(
-        params.platformTransferCid,
-        tpl,
-        'ExecuteTransfer',
-        choiceArgument,
-        actAs,
-        commandId,
-        'submit-and-wait-for-transaction-tree',
-      );
-      if (ok) {
-        const cids = this.extractContractIds(text);
-        const settledCid = cids[0] ?? null;
-        const updateId = this.extractUpdateId(text);
-        this.logger.log(
-          `PlatformTransfer ExecuteTransfer OK: settled=${settledCid?.slice(0, 12) ?? 'none'} updateId=${updateId?.slice(0, 12) ?? 'none'}`,
-        );
-        return { ok: true, settledCid, updateId, errors: [] };
-      }
-      const err = this.formatLedgerError(text, 'ExecuteTransfer failed');
-      this.logger.warn(`PlatformTransfer exec fail: ${text.slice(0, 300)}`);
-      return { ok: false, settledCid: null, updateId: null, errors: [err] };
-    } catch (err) {
-      const msg = `executePlatformTransfer exception: ${String(err)}`;
-      this.logger.warn(msg);
-      return { ok: false, settledCid: null, updateId: null, errors: [msg] };
-    }
-  }
 
   // ── Legacy / deprecated stubs ───────────────────────────────────────────────
 
