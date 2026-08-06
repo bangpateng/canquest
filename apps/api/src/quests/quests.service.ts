@@ -711,6 +711,122 @@ export class QuestsService {
   }
 
   /**
+   * v25: Resolve (or create) DAML CampaignEligibility contract id utk user+quest.
+   * Dipanggil oleh 5 claim path sebelum claimFcfsSlot/drawRaffleWinner.
+   *
+   * Flow:
+   *   1. Skip bila quest.eligibilityType = NONE (return null)
+   *   2. Cek CampaignEligibilityLedger cache (questId+userId, status ELIGIBLE)
+   *   3. Kalau ada, return cached contractId
+   *   4. Kalau tidak, create baru:
+   *      LOCK_CC: verify lock CC via ccLocks (lockedAt > campaign createdAt, amount >= min)
+   *      POINTS : verify net points >= min via PointsService
+   *      → questLedger.createCampaignEligibility
+   *      → persist ke CampaignEligibilityLedger
+   *
+   * Best-effort: kalau create gagal, return null (claim tetap jalan, DAML guard
+   * akan reject bila eligibility wajib). Idempoten via commandId.
+   */
+  private async resolveEligibilityCid(params: {
+    questId: string;
+    userId: string;
+    userPartyId: string;
+    eligibilityType: string;          // quest.eligibilityType (NONE|LOCK_CC|POINTS)
+    eligibilityAmount: number;        // quest.eligibilityAmount
+    campaignCreatedAt: string;        // ISO quest.createdAt (utk lock-after guard)
+  }): Promise<string | null> {
+    const { questId, userId, userPartyId, eligibilityType, eligibilityAmount, campaignCreatedAt } = params;
+
+    // NONE → no on-chain eligibility check
+    if (eligibilityType === 'NONE' || eligibilityAmount <= 0) return null;
+
+    // 1. Cek cache (CampaignEligibilityLedger)
+    const cached = await this.prisma.campaignEligibilityLedger.findFirst({
+      where: { questId, userId, status: 'ELIGIBLE' },
+      select: { contractId: true },
+    });
+    if (cached?.contractId) return cached.contractId;
+
+    // 2. Verify eligibility source (LOCK_CC / POINTS) + compute amount + lockedAt
+    let amount = 0;
+    let lockedAt: string | null = null;
+    let typeForDaml: 'LOCK_CC' | 'POINTS' = eligibilityType === 'POINTS' ? 'POINTS' : 'LOCK_CC';
+
+    if (typeForDaml === 'LOCK_CC') {
+      // Cek ccLocks (LOCKED, milik user). Ambil lockedAt terbaru + total amount.
+      const locks = await this.prisma.ccLock.findMany({
+        where: { userId, status: 'LOCKED' },
+        select: { amountCc: true, lockedAt: true },
+        orderBy: { lockedAt: 'desc' },
+      });
+      amount = locks.reduce((s, l) => s + Number(l.amountCc), 0);
+      if (amount < eligibilityAmount) {
+        throw new BadRequestException(
+          `Lock CC kurang dari minimum (${amount.toFixed(2)} < ${eligibilityAmount} CC). Lock lebih banyak CC utk klaim.`,
+        );
+      }
+      // Guard: lock TERBARU harus SETELAH campaign dibuat.
+      const latestLockAt = locks[0]?.lockedAt;
+      if (!latestLockAt) {
+        throw new BadRequestException('Belum ada lock CC aktif utk klaim campaign ini.');
+      }
+      if (new Date(latestLockAt).getTime() <= new Date(campaignCreatedAt).getTime()) {
+        throw new BadRequestException(
+          'Lock CC harus dilakukan SETELAH campaign dibuat. Lock ulang CC sekarang utk eligible.',
+        );
+      }
+      lockedAt = new Date(latestLockAt).toISOString();
+    } else {
+      // POINTS: cek net points
+      amount = await this.points.getNetPoints(userId);
+      if (amount < eligibilityAmount) {
+        throw new BadRequestException(
+          `Points kurang dari minimum (${amount} < ${eligibilityAmount}). Selesaikan lebih banyak quest utk earn points.`,
+        );
+      }
+    }
+
+    // 3. Create DAML CampaignEligibility contract
+    const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(); // 7 hari default
+    const result = await this.questLedger.createCampaignEligibility({
+      userPartyId,
+      campaignId: questId,
+      campaignCreatedAt,
+      eligibilityType: typeForDaml,
+      amount,
+      lockedAt,
+      expiresAt,
+    });
+    if (!result.ok || !result.contractId) {
+      this.logger.warn(`Eligibility create fail: ${result.errors.join(' | ')}`);
+      return null; // best-effort; DAML guard akan reject bila wajib
+    }
+
+    // 4. Persist ke cache
+    await this.prisma.campaignEligibilityLedger.upsert({
+      where: { questId_userId: { questId, userId } },
+      create: {
+        questId,
+        userId,
+        contractId: result.contractId,
+        eligibilityType: typeForDaml,
+        amount,
+        lockedAt: lockedAt ? new Date(lockedAt) : null,
+        status: 'ELIGIBLE',
+      },
+      update: {
+        contractId: result.contractId,
+        eligibilityType: typeForDaml,
+        amount,
+        lockedAt: lockedAt ? new Date(lockedAt) : null,
+        status: 'ELIGIBLE',
+      },
+    });
+
+    return result.contractId;
+  }
+
+  /**
    * Feature flag: atomic Settle path (DAML v22/v23).
    * - true  → settleAndRecord (atomic fee+reward via nested-exercise Settle)
    * - false → fallback path (collectClaimFee + sendQuestRewardAndRecord terpisah,
@@ -2955,11 +3071,26 @@ export class QuestsService {
       if (this.questLedger.isClaimSessionConfigured() && cantonPartyId) {
         const campaignContractId = (quest as any).ledgerCampaignId ?? null;
         if (campaignContractId) {
+          // v25: resolve eligibility contract (LOCK_CC / POINTS) utk on-chain guard.
+          let eligibilityCid: string | null = null;
+          try {
+            eligibilityCid = await this.resolveEligibilityCid({
+              questId,
+              userId,
+              userPartyId: cantonPartyId,
+              eligibilityType: (quest as any).eligibilityType ?? 'NONE',
+              eligibilityAmount: (quest as any).eligibilityAmount ?? 0,
+              campaignCreatedAt: (quest.createdAt ?? new Date()).toISOString(),
+            });
+          } catch (e) {
+            throw new BadRequestException(String(e?.message ?? e));
+          }
           const claimResult = await this.questLedger.claimFcfsSlot({
             campaignContractId,
             userPartyId: cantonPartyId,
             claimId: reservedDrawId,
             rewardSenderPartyId: rewardPartyId,   // v24: co-controller Settle
+            eligibilityCid,                        // v25: on-chain guard
           });
           claimSessionId = claimResult.claimContractId;
           if (claimResult.errors.length > 0) {
@@ -3257,11 +3388,26 @@ export class QuestsService {
       if (this.questLedger.isClaimSessionConfigured() && cantonPartyId) {
         const campaignContractId = (quest as any).ledgerCampaignId ?? null;
         if (campaignContractId) {
+          // v25: resolve eligibility contract utk on-chain guard.
+          let eligibilityCid: string | null = null;
+          try {
+            eligibilityCid = await this.resolveEligibilityCid({
+              questId,
+              userId,
+              userPartyId: cantonPartyId,
+              eligibilityType: (quest as any).eligibilityType ?? 'NONE',
+              eligibilityAmount: (quest as any).eligibilityAmount ?? 0,
+              campaignCreatedAt: (quest.createdAt ?? new Date()).toISOString(),
+            });
+          } catch (e) {
+            throw new BadRequestException(String(e?.message ?? e));
+          }
           const claimResult = await this.questLedger.drawRaffleWinner({
             campaignContractId,
             userPartyId: cantonPartyId,
             claimId: draw.id,
             rewardSenderPartyId: this.requireRewardPartyId(),   // v24: co-controller Settle
+            eligibilityCid,                                      // v25: on-chain guard
           });
           claimSessionId = claimResult.claimContractId;
           if (claimResult.errors.length > 0) {
@@ -3613,6 +3759,15 @@ export class QuestsService {
       if (campaignContractId) {
         const claimId = `code-${existingDraw?.id ?? userId.slice(0, 12)}-${Date.now().toString(36)}`;
         try {
+          // v25: resolve eligibility contract utk on-chain guard.
+          const eligibilityCid = await this.resolveEligibilityCid({
+            questId,
+            userId,
+            userPartyId: cantonPartyId,
+            eligibilityType: (quest as any).eligibilityType ?? 'NONE',
+            eligibilityAmount: (quest as any).eligibilityAmount ?? 0,
+            campaignCreatedAt: (quest.createdAt ?? new Date()).toISOString(),
+          });
           const claimResult =
             codeClaimKind === 'CODE_FCFS'
               ? await this.questLedger.claimFcfsSlot({
@@ -3620,12 +3775,14 @@ export class QuestsService {
                   userPartyId: cantonPartyId,
                   claimId,
                   rewardSenderPartyId: this.requireRewardPartyId(),   // v24: co-controller Settle
+                  eligibilityCid,                                      // v25: on-chain guard
                 })
               : await this.questLedger.drawRaffleWinner({
                   campaignContractId,
                   userPartyId: cantonPartyId,
                   claimId,
                   rewardSenderPartyId: this.requireRewardPartyId(),   // v24: co-controller Settle
+                  eligibilityCid,                                      // v25: on-chain guard
                 });
           codeClaimSessionId = claimResult.claimContractId;
           if (claimResult.errors.length > 0) {
@@ -3903,11 +4060,21 @@ export class QuestsService {
         ccCodeCampaignCid
       ) {
         try {
+          // v25: resolve eligibility contract utk on-chain guard.
+          const eligibilityCid = await this.resolveEligibilityCid({
+            questId,
+            userId,
+            userPartyId: cantonPartyId,
+            eligibilityType: (quest as any).eligibilityType ?? 'NONE',
+            eligibilityAmount: (quest as any).eligibilityAmount ?? 0,
+            campaignCreatedAt: (quest.createdAt ?? new Date()).toISOString(),
+          });
           const claimResult = await this.questLedger.drawRaffleWinner({
             campaignContractId: ccCodeCampaignCid,
             userPartyId: cantonPartyId,
             claimId: draw.id,
             rewardSenderPartyId: this.requireRewardPartyId(),   // v24: co-controller Settle
+            eligibilityCid,                                      // v25: on-chain guard
           });
           ccCodeClaimSessionId = claimResult.claimContractId;
           if (claimResult.errors.length > 0) {

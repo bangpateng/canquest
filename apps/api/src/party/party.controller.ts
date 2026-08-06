@@ -994,6 +994,14 @@ export class PartyController {
       const isInternalUser = recipientDbUser !== null;
       const effectiveFeeCc = feeCc;
 
+      // v25 NOTE: DAML PlatformTransfer template (atomic send+fee) tersedia di
+      // questLedger.createPlatformTransfer / executePlatformTransfer, TAPI wiring
+      // ke sendCc ini belum (butuh registry/holdings pre-step seperti settleAtomic).
+      // Path lama (2 executeTransferFactoryTransfer terpisah: transfer + fee) tetap
+      // dipakai sampai iterasi berikutnya. Feature flag QUEST_ATOMIC_PLATFORM_TRANSFER
+      // (default false) akan enable atomic path saat siap.
+      // Lihat docs/RUNBOOK_DAML_V24_DEPLOY.md + quest-ledger.service executePlatformTransfer.
+
       // ── Balance check (DB cache — fast path) ─────
       const dbBalance = await this.prisma.ccBalance.findUnique({
         where: { userId: sender.id },

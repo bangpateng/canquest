@@ -500,6 +500,17 @@ export class AdminService {
           data.entryCostPoints != null && data.entryCostPoints > 0
             ? data.entryCostPoints
             : null,
+        // v25: mirror DAML eligibility (backend map dari entryGateMode di atas).
+        // eligibilityType/eligibilityAmount di-set saat quest create utk konsistensi
+        // dgn on-chain QuestCampaign field. Claim path baca ini utk resolve eligibilityCid.
+        eligibilityType:
+          (data.entryGateMode === EntryGateMode.CC_ONLY ? 'LOCK_CC'
+           : data.entryGateMode === EntryGateMode.POINTS_ONLY ? 'POINTS'
+           : 'NONE') as string,
+        eligibilityAmount:
+          data.entryGateMode === EntryGateMode.CC_ONLY ? (data.entryCcLock ?? 30)
+          : data.entryGateMode === EntryGateMode.POINTS_ONLY ? (data.entryCostPoints ?? 200)
+          : 0,
         tags: JSON.stringify(data.tags ?? []),
         socialLinks: serializeQuestSocialLinks(
           normalizeQuestSocialLinksForSave(data.socialLinks ?? []),
@@ -532,13 +543,28 @@ export class AdminService {
             data.rewardType ?? RewardType.CC_ONLY,
             (data.maxWinners ?? 0) > 0,
           );
+          // v25: map entryGateMode → DAML eligibilityType.
+          //   CC_ONLY → LOCK_CC, POINTS_ONLY → POINTS, CC_OR_POINTS/NONE → NONE.
+          // CC_OR_POINTS ditangani backend-only (on-chain cek hanya utk CC_ONLY/POINTS_ONLY).
+          const gateMode = (data.entryGateMode ?? EntryGateMode.CC_OR_POINTS) as EntryGateMode;
+          const eligibilityType: 'NONE' | 'LOCK_CC' | 'POINTS' =
+            gateMode === EntryGateMode.CC_ONLY ? 'LOCK_CC'
+            : gateMode === EntryGateMode.POINTS_ONLY ? 'POINTS'
+            : 'NONE';
+          const eligibilityAmount =
+            eligibilityType === 'LOCK_CC' ? (data.entryCcLock ?? 30)
+            : eligibilityType === 'POINTS' ? (data.entryCostPoints ?? 200)
+            : 0;
           const ledgerResult = await this.questLedger.createQuestCampaign({
             campaignId: quest.id,
             title: quest.title,
             questKind: questKindDaml,
             rewardCc: quest.rewardCc,
+            rewardToken: (quest.rewardToken === 'USDCx' ? 'USDCx' : 'CC') as 'CC' | 'USDCx', // v25 FIX bug: tidak dikirim sebelumnya
             claimFeeCc: quest.claimFeeCc ?? 0,
             maxWinners: quest.maxWinners ?? 0,
+            eligibilityType,        // v25 NEW
+            eligibilityAmount,      // v25 NEW
           });
           if (ledgerResult.contractId) {
             await this.prisma.quest.update({
