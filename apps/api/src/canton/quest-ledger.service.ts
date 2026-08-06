@@ -4,12 +4,14 @@ import { randomUUID } from 'crypto';
 import { CantonLedgerService } from './canton-ledger.service';
 
 /**
- * DAML template paths — module Main (canquest-v21 lean, DAR yang ter-deploy di ledger)
+ * DAML template paths — module Main (canquest-v25, DAR yang ter-deploy di ledger)
  *
- * Templates (3 — yang benar-benar dipakai backend):
- *   Main:WalletRegistration — jangkar identitas on-chain (Party ID)
- *   Main:QuestCampaign      — template induk quest (6 questKind) + state machine
- *   Main:QuestClaim         — bukti klaim: AtomicFeeAndReward + RevealRewardCode
+ * Templates (5 — v25):
+ *   Main:WalletRegistration  — jangkar identitas on-chain (Party ID)
+ *   Main:CampaignEligibility — v25: bukti eligibility (LOCK_CC / POINTS) per campaign
+ *   Main:QuestCampaign       — template induk quest (6 questKind) + state machine + eligibility guard
+ *   Main:QuestClaimReceipt   — bukti klaim: atomic Settle + RevealCode + RecordTxId
+ *   Main:PlatformTransfer    — v25: atomic send token + platform fee
  *
  * YANG TIDAK ADA ON-CHAIN (off-chain Postgres):
  *   - Poin user        → User.earnPoints + EarnEntry (backend DB)
@@ -18,17 +20,20 @@ import { CantonLedgerService } from './canton-ledger.service';
  *   - Audit trail CC   → redundan; ledger Canton sudah audit mutlak
  *   - Spin             → feature removed (tabel di-drop)
  *
- * Authorization pattern (Canton M3):
+ * Authorization pattern (Canton M3 + v24 multi-controller fix):
  *   signatory admin  — operator signs all contracts
  *   observer user    — user can only read, backend submits on their behalf
+ *   Settle multi-controller: admin + userAddress + rewardSender (nested auth propagate)
  *
  * All methods are best-effort: they log errors but never throw,
  * so a Canton outage does not break the main application flow.
  */
 const TPL = {
   WalletRegistration: 'Main:WalletRegistration',
+  CampaignEligibility: 'Main:CampaignEligibility',   // v25
   QuestCampaign: 'Main:QuestCampaign',
   QuestClaimReceipt: 'Main:QuestClaimReceipt',
+  PlatformTransfer: 'Main:PlatformTransfer',         // v25
 } as const;
 
 // ── Result types ──────────────────────────────────────────────────────────────
@@ -212,7 +217,7 @@ export class QuestLedgerService implements OnModuleInit {
   private get damlPackageRef(): string {
     const name = this.config.get<string>('CANTON_DAML_PACKAGE_NAME')?.trim();
     if (name) return name.startsWith('#') ? name : `#${name}`;
-    return '#canquest-v24';
+    return '#canquest-v25';
   }
 
   private get operatorPartyId(): string | null {
@@ -483,6 +488,12 @@ export class QuestLedgerService implements OnModuleInit {
     rewardToken?: 'CC' | 'USDCx' | null;
     claimFeeCc: number;
     maxWinners: number;
+    /** v25: DAML eligibility type. "NONE" default = no on-chain eligibility check.
+     *  Backend map dari Quest.entryGateMode (CC_ONLY→LOCK_CC, POINTS_ONLY→POINTS,
+     *  CC_OR_POINTS/NONE→NONE). */
+    eligibilityType?: 'NONE' | 'LOCK_CC' | 'POINTS';
+    /** v25: min CC locked (LOCK_CC) atau min points (POINTS). 0 bila NONE. */
+    eligibilityAmount?: number;
   }): Promise<QuestCampaignLedgerResult> {
     const result: QuestCampaignLedgerResult = {
       ledgerEnabled: false,
@@ -515,6 +526,8 @@ export class QuestLedgerService implements OnModuleInit {
         maxWinners: this.intStr(params.maxWinners),
         currentClaims: this.intStr(0),
         status: 'ACTIVE',
+        eligibilityType: params.eligibilityType ?? 'NONE',         // v25
+        eligibilityAmount: this.dec(params.eligibilityAmount ?? 0), // v25
         createdAt: new Date().toISOString(),
       },
       [operator],
@@ -522,7 +535,7 @@ export class QuestLedgerService implements OnModuleInit {
     );
     if (res.ok && res.contractId) {
       this.logger.log(
-        `QuestCampaign created: ${params.campaignId} kind=${params.questKind} quota=${params.maxWinners}`,
+        `QuestCampaign created: ${params.campaignId} kind=${params.questKind} quota=${params.maxWinners} eligibility=${params.eligibilityType ?? 'NONE'}`,
       );
       result.contractId = res.contractId;
     } else {
@@ -533,6 +546,62 @@ export class QuestLedgerService implements OnModuleInit {
     return result;
   }
 
+  // ── 2b. CampaignEligibility (v25) ─────────────────────────────────────────
+  // Eligibility proof: bukti on-chain user memenuhi syarat utk claim campaign.
+  // Dibuat backend SETELAH verifikasi lock CC (AllocationFactory) atau points.
+  // Fetch di ClaimSlot/DrawWinner utk guard on-chain.
+
+  async createCampaignEligibility(params: {
+    userPartyId: string;
+    campaignId: string;
+    campaignCreatedAt: string;       // ISO timestamp campaign dibuat (utk lock-after guard)
+    eligibilityType: 'LOCK_CC' | 'POINTS';
+    amount: number;                  // CC locked (LOCK_CC) atau points (POINTS)
+    lockedAt: string | null;         // ISO kapan user lock CC (LOCK_CC); null bila POINTS
+    expiresAt: string;               // ISO eligibility berlaku sampai kapan
+  }): Promise<{ ok: boolean; contractId: string | null; errors: string[] }> {
+    if (!this.isClaimSessionConfigured())
+      return { ok: false, contractId: null, errors: ['Claim session ledger disabled'] };
+    const tpl = this.templateId(TPL.CampaignEligibility);
+    const operator = this.operatorPartyId;
+    if (!operator)
+      return { ok: false, contractId: null, errors: ['Canton operator party not configured'] };
+    const reachErr = await this.ensureReachable();
+    if (reachErr)
+      return { ok: false, contractId: null, errors: [reachErr] };
+    try {
+      const res = await this.ledger.createContract(
+        tpl,
+        {
+          admin: operator,
+          userAddress: params.userPartyId,
+          campaignId: params.campaignId,
+          campaignCreatedAt: params.campaignCreatedAt,
+          eligibilityType: params.eligibilityType,
+          amount: this.dec(params.amount),
+          lockedAt: params.lockedAt ?? '',
+          expiresAt: params.expiresAt,
+          status: 'ELIGIBLE',
+        },
+        [operator],
+        `eligibility-${params.campaignId}-${params.userPartyId.slice(0, 16)}`,
+      );
+      if (res.ok && res.contractId) {
+        this.logger.log(
+          `CampaignEligibility created: campaign=${params.campaignId.slice(0, 8)} user=${params.userPartyId.split('::')[0]} type=${params.eligibilityType} amount=${params.amount}`,
+        );
+        return { ok: true, contractId: res.contractId, errors: [] };
+      }
+      const err = this.formatLedgerError(res.error, 'Failed to create CampaignEligibility');
+      this.logger.warn(`CampaignEligibility fail: ${err}`);
+      return { ok: false, contractId: null, errors: [err] };
+    } catch (err) {
+      const msg = `createCampaignEligibility exception: ${String(err)}`;
+      this.logger.warn(msg);
+      return { ok: false, contractId: null, errors: [msg] };
+    }
+  }
+
   async claimFcfsSlot(params: {
     campaignContractId: string;
     userPartyId: string;
@@ -540,6 +609,9 @@ export class QuestLedgerService implements OnModuleInit {
     rewardSenderPartyId: string;   // v24: party reward wallet (CANTON_REWARD_PARTY_ID)
                                     // dikirim ke ClaimSlot choice → set field rewardSender
                                     // di QuestClaimReceipt → jadi co-controller Settle.
+    /** v25: DAML CampaignEligibility contract id (utk fetch guard on-chain).
+     *  Null bila quest eligibilityType=NONE (tidak perlu eligibility check). */
+    eligibilityCid?: string | null;
   }): Promise<QuestClaimLedgerResult> {
     const result: QuestClaimLedgerResult = {
       ledgerEnabled: false,
@@ -569,6 +641,7 @@ export class QuestLedgerService implements OnModuleInit {
         claimId: params.claimId,
         claimedAt: new Date().toISOString(),
         rewardSender: params.rewardSenderPartyId,   // v24: co-controller Settle
+        eligibilityCid: params.eligibilityCid ?? null, // v25: Optional (nullable)
       },
       [operator],
       `claim-fcfs-${params.claimId}-${randomUUID()}`,
@@ -604,6 +677,8 @@ export class QuestLedgerService implements OnModuleInit {
     claimId: string;
     rewardCode?: string;
     rewardSenderPartyId: string;   // v24: party reward wallet (CANTON_REWARD_PARTY_ID)
+    /** v25: DAML CampaignEligibility contract id. Null bila NONE. */
+    eligibilityCid?: string | null;
   }): Promise<QuestClaimLedgerResult> {
     const result: QuestClaimLedgerResult = {
       ledgerEnabled: false,
@@ -634,6 +709,7 @@ export class QuestLedgerService implements OnModuleInit {
         rewardCode: params.rewardCode ?? '',
         drawnAt: new Date().toISOString(),
         rewardSender: params.rewardSenderPartyId,   // v24: co-controller Settle
+        eligibilityCid: params.eligibilityCid ?? null, // v25: Optional (nullable)
       },
       [operator],
       `draw-raffle-${params.claimId}-${randomUUID()}`,
@@ -911,11 +987,14 @@ export class QuestLedgerService implements OnModuleInit {
    * Tx ID tidak bisa didapat dari dalam Settle (TransferFactory_Transfer return
    * record, bukan tx id). Backend baca tx id dari Settle response (updateId),
    * lalu exercise RecordTxId utk persist ke contract.
+   *
+   * v25: rewardTxId jadi Optional Text di DAML (kode claim reward=0 → null).
+   *      Backend kirim null bila kode claim (rewardAmount=0), string bila ada reward.
    */
   async recordTxId(params: {
     settledContractId: string;
     feeTxId: string;
-    rewardTxId: string;
+    rewardTxId: string | null;   // v25: null bila kode claim (reward=0), DAML Optional Text
   }): Promise<{ ok: boolean; errors: string[] }> {
     if (!this.isClaimSessionConfigured()) return { ok: false, errors: ['Claim session ledger disabled'] };
     const tpl = this.templateId(TPL.QuestClaimReceipt);
@@ -986,6 +1065,143 @@ export class QuestLedgerService implements OnModuleInit {
       }
     } catch { /* ignore */ }
     return null;
+  }
+
+  // ── 4. PlatformTransfer (v25) — atomic send token + platform fee ─────────
+  // 2-step: create PENDING contract lalu execute (atomic transfer + fee + FAR).
+  // Backend feature flag QUEST_ATOMIC_PLATFORM_TRANSFER utk gradual rollout.
+  // Fallback: sendCc/sendToken existing (2 transfer terpisah, non-atomic).
+
+  async createPlatformTransfer(params: {
+    userPartyId: string;
+    transferId: string;       // client idempotency id
+    amount: number;
+    feeAmount: number;
+    receiverPartyId: string;  // receiver (full party id dgn ::suffix)
+    treasuryPartyId: string;  // CANTON_FEE_RECIPIENT_PARTY_ID
+    token: string;            // "CC" | "USDCx" | instrument id lain
+  }): Promise<{ ok: boolean; contractId: string | null; errors: string[] }> {
+    if (!this.isClaimSessionConfigured())
+      return { ok: false, contractId: null, errors: ['Claim session ledger disabled'] };
+    const tpl = this.templateId(TPL.PlatformTransfer);
+    const operator = this.operatorPartyId;
+    if (!operator)
+      return { ok: false, contractId: null, errors: ['Canton operator party not configured'] };
+    const reachErr = await this.ensureReachable();
+    if (reachErr)
+      return { ok: false, contractId: null, errors: [reachErr] };
+    try {
+      const res = await this.ledger.createContract(
+        tpl,
+        {
+          admin: operator,
+          userAddress: params.userPartyId,
+          transferId: params.transferId,
+          amount: this.dec(params.amount),
+          feeAmount: this.dec(params.feeAmount),
+          receiver: params.receiverPartyId,
+          treasury: params.treasuryPartyId,
+          token: params.token,
+          status: 'PENDING',
+          createdAt: new Date().toISOString(),
+        },
+        [operator],
+        `platform-transfer-${params.transferId}`,
+      );
+      if (res.ok && res.contractId) {
+        this.logger.log(
+          `PlatformTransfer created: transferId=${params.transferId.slice(0, 16)} amount=${params.amount} ${params.token} fee=${params.feeAmount}`,
+        );
+        return { ok: true, contractId: res.contractId, errors: [] };
+      }
+      const err = this.formatLedgerError(res.error, 'Failed to create PlatformTransfer');
+      this.logger.warn(`PlatformTransfer create fail: ${err}`);
+      return { ok: false, contractId: null, errors: [err] };
+    } catch (err) {
+      const msg = `createPlatformTransfer exception: ${String(err)}`;
+      this.logger.warn(msg);
+      return { ok: false, contractId: null, errors: [msg] };
+    }
+  }
+
+  /**
+   * Execute PlatformTransfer atomically: transfer utama + platform fee + FAR marker.
+   * Mirrors settleAtomic pattern (multi-controller, registry pre-step, FAR optional).
+   *
+   * Pre-step backend (sebelum submit):
+   *   1. callTransferFactoryRegistry × 2 (transfer utama + fee)
+   *   2. queryAmuletHoldings/getTokenHoldingCids × 2 utk inputHoldingCids
+   *   3. (optional) getFeaturedAppRightCid → farCid
+   *   Lalu konstruksi ExecuteTransfer args dgn data di atas.
+   *
+   * actAs: [operator, userPartyId] (+ appProvider bila FAR on)
+   * Multi-controller: admin + userAddress (kedua leg controller = user, sender).
+   */
+  async executePlatformTransfer(params: {
+    platformTransferCid: string;       // PlatformTransfer PENDING contract
+    userPartyId: string;
+    transferFactoryCid: string;
+    transferSpec: Record<string, unknown>;
+    transferExtraArgs: Record<string, unknown>;
+    feeFactoryCid: string;
+    feeSpec: Record<string, unknown>;
+    feeExtraArgs: Record<string, unknown>;
+    featuredAppRightCid?: string | null;
+    appProviderPartyId?: string | null;
+  }): Promise<{ ok: boolean; settledCid: string | null; updateId: string | null; errors: string[] }> {
+    if (!this.isClaimSessionConfigured())
+      return { ok: false, settledCid: null, updateId: null, errors: ['Claim session ledger disabled'] };
+    const tpl = this.templateId(TPL.PlatformTransfer);
+    const operator = this.operatorPartyId;
+    if (!operator)
+      return { ok: false, settledCid: null, updateId: null, errors: ['Canton operator party not configured'] };
+
+    const opt = <T,>(v: T | null | undefined) => (v == null ? null : v); // DAML Optional = nullable
+    const choiceArgument: Record<string, unknown> = {
+      transferFactoryCid: params.transferFactoryCid,
+      transferSpec: params.transferSpec,
+      transferExtraArgs: params.transferExtraArgs,
+      feeFactoryCid: params.feeFactoryCid,
+      feeSpec: params.feeSpec,
+      feeExtraArgs: params.feeExtraArgs,
+      featuredAppRightCid: opt(params.featuredAppRightCid),
+      appProvider: params.appProviderPartyId ?? operator,
+      settledAt: new Date().toISOString(),
+    };
+
+    const actAs = [operator, params.userPartyId];
+    if (params.featuredAppRightCid && params.appProviderPartyId) {
+      actAs.push(params.appProviderPartyId);
+    }
+
+    const commandId = `platform-exec-${params.platformTransferCid.slice(0, 16)}-${randomUUID()}`;
+    try {
+      const { ok, text } = await this.ledger.exerciseChoice(
+        params.platformTransferCid,
+        tpl,
+        'ExecuteTransfer',
+        choiceArgument,
+        actAs,
+        commandId,
+        'submit-and-wait-for-transaction-tree',
+      );
+      if (ok) {
+        const cids = this.extractContractIds(text);
+        const settledCid = cids[0] ?? null;
+        const updateId = this.extractUpdateId(text);
+        this.logger.log(
+          `PlatformTransfer ExecuteTransfer OK: settled=${settledCid?.slice(0, 12) ?? 'none'} updateId=${updateId?.slice(0, 12) ?? 'none'}`,
+        );
+        return { ok: true, settledCid, updateId, errors: [] };
+      }
+      const err = this.formatLedgerError(text, 'ExecuteTransfer failed');
+      this.logger.warn(`PlatformTransfer exec fail: ${text.slice(0, 300)}`);
+      return { ok: false, settledCid: null, updateId: null, errors: [err] };
+    } catch (err) {
+      const msg = `executePlatformTransfer exception: ${String(err)}`;
+      this.logger.warn(msg);
+      return { ok: false, settledCid: null, updateId: null, errors: [msg] };
+    }
   }
 
   // ── Legacy / deprecated stubs ───────────────────────────────────────────────

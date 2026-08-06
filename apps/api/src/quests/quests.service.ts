@@ -1089,8 +1089,10 @@ export class QuestsService {
 
     // ── 3. recordTxId (post-settle audit, non-blocking) ─────────────────────
     if (settledCid) {
+      // v25: rewardTxId Optional. Null bila kode claim (rewardAmount=0).
+      const rewardTxIdValue = rewardAmount > 0 ? updateId : null;
       void this.questLedger
-        .recordTxId({ settledContractId: settledCid, feeTxId: updateId, rewardTxId: updateId })
+        .recordTxId({ settledContractId: settledCid, feeTxId: updateId, rewardTxId: rewardTxIdValue })
         .catch((err) => this.logger.warn(`recordTxId fail (non-blocking): ${String(err)}`));
     }
 
