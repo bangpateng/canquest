@@ -467,6 +467,13 @@ model Quest {
   entryCcLock      Int?
   /// Override biaya points (jalur points). Null = pakai default global (earn_entry_cost_points AppSetting / 200).
   entryCostPoints  Int?
+  /// v25 DAML eligibility type utk on-chain claim guard. Backend map dari entryGateMode:
+  ///   CC_ONLY → "LOCK_CC", POINTS_ONLY → "POINTS", CC_OR_POINTS/NONE → "NONE".
+  /// "NONE" = siapa saja bisa klaim (no on-chain eligibility check).
+  eligibilityType    String            @default("NONE")
+  /// v25 DAML min amount utk eligibility (CC locked utk LOCK_CC, points utk POINTS). 0 bila NONE.
+  /// Backend isi dari entryCcLock (LOCK_CC) atau entryCostPoints (POINTS).
+  eligibilityAmount  Float             @default(0)
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   tasks            QuestTask[]
@@ -678,6 +685,60 @@ model PendingDelivery {
   deliveredAt             DateTime?
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
+
+  @@index([userId, status])
+  @@index([status, createdAt])
+}
+
+// ─── v25: DAML CampaignEligibility contract tracking ───────────────────────
+// Mirror on-chain CampaignEligibility contract (LOCK_CC / POINTS eligibility proof).
+// Dibuat backend SETELAH verifikasi lock CC / points utk quest claim.
+// Source of truth on-chain; tabel ini cache + lookup utk eligibilityCid di claim path.
+model CampaignEligibilityLedger {
+  id              String   @id @default(cuid())
+  questId         String
+  userId          String
+  /// DAML CampaignEligibility contract id (Main:CampaignEligibility).
+  contractId      String   @unique
+  /// "LOCK_CC" | "POINTS" (match DAML eligibilityType).
+  eligibilityType String
+  /// Jumlah CC locked atau points (match DAML amount field).
+  amount          Float
+  /// Timestamp lock CC (LOCK_CC); null bila POINTS. Source: ccLocks.lockedAt.
+  lockedAt        DateTime?
+  /// "ELIGIBLE" | "REVOKED" | "EXPIRED" (match DAML status).
+  status          String   @default("ELIGIBLE")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([questId, userId])
+  @@index([userId, status])
+  @@index([questId, status])
+}
+
+// ─── v25: DAML PlatformTransfer contract tracking ──────────────────────────
+// Mirror on-chain PlatformTransfer contract (atomic send + platform fee).
+// Dibuat backend saat user send token dgn platform fee (feature flag on).
+// Replaces non-atomic sendCc path (2 transfer terpisah) bila QUEST_ATOMIC_PLATFORM_TRANSFER=true.
+model PlatformTransferLedger {
+  id         String   @id @default(cuid())
+  userId     String
+  /// Client-side transfer id (idempotency, match DAML transferId).
+  transferId String   @unique
+  amount     Float
+  feeAmount  Float
+  /// Receiver party id (full, dgn ::suffix).
+  receiver   String
+  /// Treasury party id (full, CANTON_FEE_RECIPIENT_PARTY_ID).
+  treasury   String
+  /// "CC" | "USDCx" | token lain (match DAML token field).
+  token      String   @default("CC")
+  /// DAML PlatformTransfer contract id (null bila create belum sukses).
+  contractId String?
+  /// "PENDING" | "SETTLED" | "CANCELLED" (match DAML status).
+  status     String   @default("PENDING")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@index([userId, status])
   @@index([status, createdAt])
