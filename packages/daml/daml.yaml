@@ -26,9 +26,9 @@ sdk-version: 3.4.11
 # DAR DATA-DEPENDENCIES (BUKAN dependencies — Splice DAR bukan SDK pkg):
 #   File DAR dari bundle splice-node v0.6.12 (lihat scripts/fetch-daml-deps.sh).
 # ============================================================
-name: canquest-v25
+name: canquest-v27
 source: daml
-version: 1.3.0
+version: 1.4.0
 dependencies:
   - daml-prim
   - daml-stdlib
