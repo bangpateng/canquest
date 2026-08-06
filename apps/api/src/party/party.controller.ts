@@ -1119,9 +1119,9 @@ export class PartyController {
 
       // Path lama (non-atomic) — hanya bila atomic TIDAK dipakai ATAU gagal.
       // accepted=true berarti atomic sukses, skip path lama.
-      let cip56Result: { ok: boolean; updateId?: string | null; transferKind?: string; error?: string; transferInstructionCid?: string } | null = null;
+      let cip56Result: { ok: boolean; updateId?: string | null; transferKind?: string; error?: string; transferInstructionCid?: string | null } | null = null;
       if (!accepted) {
-        cip56Result = this.ledger.useWalletProxy
+        const legacy = this.ledger.useWalletProxy
           ? await this.ledger.executeProxyTransfer({
               userPartyId: senderPartyIdOnChain,
               receiverPartyId: receiverPartyIdOnChain,
@@ -1136,22 +1136,23 @@ export class PartyController {
               description,
               clientNonce: body.clientNonce,
             });
+        cip56Result = legacy;
 
-        if (cip56Result.ok) {
-          if (cip56Result.transferKind === 'direct') {
+        if (legacy.ok) {
+          if (legacy.transferKind === 'direct') {
             accepted = true;
             transferMethod = 'direct';
-            ledgerTxId = cip56Result.updateId ?? undefined;
+            ledgerTxId = legacy.updateId ?? undefined;
             this.logger.log(
               `CC transfer direct: ${sender.username} → ${recipientLabel} ${amount} CC`,
             );
-          } else if (cip56Result.transferKind === 'offer') {
+          } else if (legacy.transferKind === 'offer') {
             // Receiver tidak punya TransferPreapproval aktif.
             // JANGAN auto-accept — biarkan pending di inbox wallet receiver.
             // User terima/reject manual via menu Offers (POST /party/offers/accept|reject).
             // ledgerTxId = Canton update_id ("1220…") supaya link explorer jalan.
             // contract_id (transferInstructionCid) disimpan di field terpisah di row.
-            ledgerTxId = cip56Result.updateId ?? undefined;
+            ledgerTxId = legacy.updateId ?? undefined;
             transferMethod = 'offer_only';
             this.logger.log(
               `CC transfer offer (pending): ${sender.username} → ${recipientLabel} ${amount} CC ` +
@@ -1160,9 +1161,9 @@ export class PartyController {
           }
         }
 
-        if (!cip56Result.ok) {
+        if (!legacy.ok) {
           throw new BadRequestException(
-            `Transfer gagal: ${cip56Result.error?.slice(0, 120) ?? 'unknown'}`,
+            `Transfer gagal: ${legacy.error?.slice(0, 120) ?? 'unknown'}`,
           );
         }
       } // end if (!accepted) — legacy path
@@ -1352,7 +1353,7 @@ export class PartyController {
             // Status PENDING: dana sudah keluar sebagai offer, tapi belum diterima
             // receiver. Saat offer di-accept, acceptOfferInbox update ke COMPLETED.
             status: 'PENDING',
-            transferInstructionCid: cip56Result.transferInstructionCid ?? null,
+            transferInstructionCid: cip56Result?.transferInstructionCid ?? null,
           });
           pendingRowId = pendingRow.id;
         } catch (err) {
@@ -1360,7 +1361,7 @@ export class PartyController {
             `⚠️ AUDIT-TRAIL LOSS (offer): offer SUCCEEDED but DB record failed. ` +
               `sender=${sender.id} @${sender.username} amount=${amount} CC ` +
               `recipient=${recipientLabel} ledgerTxId=${ledgerTxId ?? 'n/a'} ` +
-              `instructionCid=${cip56Result.transferInstructionCid ?? 'n/a'}. ` +
+              `instructionCid=${cip56Result?.transferInstructionCid ?? 'n/a'}. ` +
               `Reconcile manually. Error: ${String(err)}`,
           );
         }
