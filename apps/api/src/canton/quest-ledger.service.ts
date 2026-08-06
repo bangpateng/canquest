@@ -1130,51 +1130,152 @@ export class QuestLedgerService implements OnModuleInit {
    *
    * Pre-step backend (sebelum submit):
    *   1. callTransferFactoryRegistry × 2 (transfer utama + fee)
-   *   2. queryAmuletHoldings/getTokenHoldingCids × 2 utk inputHoldingCids
-   *   3. (optional) getFeaturedAppRightCid → farCid
+   *   2. queryAmuletHoldings × 2 utk inputHoldingCids (transfer + fee)
+   *   3. (optional) featuredAppRightCid → farCid
    *   Lalu konstruksi ExecuteTransfer args dgn data di atas.
+   *
+   * Self-contained: caller cukup pass platformTransferCid + userPartyId + amounts +
+   * receiver/treasury party ids. Method handle registry/holdings sendiri
+   * (pattern sama settleAtomic). CC (Amulet) only — utk USDCx, extend caller resolve.
    *
    * actAs: [operator, userPartyId] (+ appProvider bila FAR on)
    * Multi-controller: admin + userAddress (kedua leg controller = user, sender).
    */
   async executePlatformTransfer(params: {
     platformTransferCid: string;       // PlatformTransfer PENDING contract
-    userPartyId: string;
-    transferFactoryCid: string;
-    transferSpec: Record<string, unknown>;
-    transferExtraArgs: Record<string, unknown>;
-    feeFactoryCid: string;
-    feeSpec: Record<string, unknown>;
-    feeExtraArgs: Record<string, unknown>;
+    userPartyId: string;               // sender kedua leg (transfer + fee)
+    receiverPartyId: string;           // receiver transfer utama
+    feeReceiverPartyId: string;        // treasury (CANTON_FEE_RECIPIENT_PARTY_ID)
+    amount: number;                    // transfer utama (CC)
+    feeAmount: number;                 // platform fee (CC); 0 → fee leg skip via guard
     featuredAppRightCid?: string | null;
     appProviderPartyId?: string | null;
   }): Promise<{ ok: boolean; settledCid: string | null; updateId: string | null; errors: string[] }> {
+    const fail = (errors: string[]) => ({ ok: false, settledCid: null, updateId: null, errors });
     if (!this.isClaimSessionConfigured())
-      return { ok: false, settledCid: null, updateId: null, errors: ['Claim session ledger disabled'] };
+      return fail(['Claim session ledger disabled']);
     const tpl = this.templateId(TPL.PlatformTransfer);
     const operator = this.operatorPartyId;
     if (!operator)
-      return { ok: false, settledCid: null, updateId: null, errors: ['Canton operator party not configured'] };
+      return fail(['Canton operator party not configured']);
+    const dso = this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim();
+    if (!dso) return fail(['CANTON_DSO_PARTY_ID not configured']);
 
-    const opt = <T,>(v: T | null | undefined) => (v == null ? null : v); // DAML Optional = nullable
-    const choiceArgument: Record<string, unknown> = {
-      transferFactoryCid: params.transferFactoryCid,
-      transferSpec: params.transferSpec,
-      transferExtraArgs: params.transferExtraArgs,
-      feeFactoryCid: params.feeFactoryCid,
-      feeSpec: params.feeSpec,
-      feeExtraArgs: params.feeExtraArgs,
-      featuredAppRightCid: opt(params.featuredAppRightCid),
-      appProvider: params.appProviderPartyId ?? operator,
-      settledAt: new Date().toISOString(),
-    };
+    try {
+      const now = new Date();
+      const nowIso = now.toISOString();
+      const executeBefore = new Date(now.getTime() + 24 * 3600 * 1000).toISOString();
+      const instrumentAdmin = dso;
 
-    const actAs = [operator, params.userPartyId];
-    if (params.featuredAppRightCid && params.appProviderPartyId) {
-      actAs.push(params.appProviderPartyId);
+      // ── TRANSFER leg: user → receiver ───────────────────────────────────────
+      const transferHoldings = await this.ledger.queryAmuletHoldings(params.userPartyId);
+      // Holdings harus cukup utk amount + feeAmount (kedua leg dari wallet user sama).
+      const transferInputCids = this.greedyFillHoldings(transferHoldings, params.amount + params.feeAmount);
+      if (transferInputCids.length === 0 && (params.amount + params.feeAmount) > 0) {
+        return fail([`Insufficient Amulet holdings for transfer ${params.amount} + fee ${params.feeAmount} CC (user=${params.userPartyId.split('::')[0]})`]);
+      }
+      const transferSpec = {
+        sender: params.userPartyId,
+        receiver: params.receiverPartyId,
+        amount: params.amount.toFixed(10),
+        instrumentId: { admin: instrumentAdmin, id: 'Amulet' },
+        lock: null,
+        requestedAt: nowIso,
+        executeBefore,
+        inputHoldingCids: transferInputCids,
+        meta: { values: {} },
+      };
+      const transferRegistry = await this.ledger.callTransferFactoryRegistry(
+        { expectedAdmin: instrumentAdmin, transfer: transferSpec, extraArgs: { context: { values: {} }, meta: { values: {} } } },
+        instrumentAdmin,
+      );
+      if (!transferRegistry) return fail(['Transfer leg: callTransferFactoryRegistry returned null']);
+
+      // ── FEE leg: user → treasury (CC Amulet) ────────────────────────────────
+      const feeHoldings = await this.ledger.queryAmuletHoldings(params.userPartyId);
+      const feeInputCids = this.greedyFillHoldings(feeHoldings, params.feeAmount);
+      if (params.feeAmount > 0 && feeInputCids.length === 0) {
+        return fail([`Insufficient Amulet holdings for fee ${params.feeAmount} CC (user=${params.userPartyId.split('::')[0]})`]);
+      }
+      const feeSpec = {
+        sender: params.userPartyId,
+        receiver: params.feeReceiverPartyId,
+        amount: params.feeAmount.toFixed(10),
+        instrumentId: { admin: instrumentAdmin, id: 'Amulet' },
+        lock: null,
+        requestedAt: nowIso,
+        executeBefore,
+        inputHoldingCids: feeInputCids,
+        meta: { values: {} },
+      };
+      const feeRegistry = await this.ledger.callTransferFactoryRegistry(
+        { expectedAdmin: instrumentAdmin, transfer: feeSpec, extraArgs: { context: { values: {} }, meta: { values: {} } } },
+        instrumentAdmin,
+      );
+      if (!feeRegistry) return fail(['Fee leg: callTransferFactoryRegistry returned null']);
+
+      // ── Construct ExecuteTransfer choiceArgument ────────────────────────────
+      const opt = <T,>(v: T | null | undefined) => (v == null ? null : v); // DAML Optional = nullable
+      const safeContext = (ctx: Record<string, unknown> | null | undefined) =>
+        ctx && typeof ctx === 'object' && Object.keys(ctx).length > 0 ? ctx : { values: {} };
+      const transferExtraArgs = {
+        context: safeContext(transferRegistry.choiceContextData),
+        meta: { values: {} },
+      };
+      const feeExtraArgs = {
+        context: safeContext(feeRegistry.choiceContextData),
+        meta: { values: {} },
+      };
+      const choiceArgument: Record<string, unknown> = {
+        transferFactoryCid: transferRegistry.factoryId,
+        transferSpec,
+        transferExtraArgs,
+        feeFactoryCid: feeRegistry.factoryId,
+        feeSpec,
+        feeExtraArgs,
+        featuredAppRightCid: opt(params.featuredAppRightCid),
+        appProvider: params.appProviderPartyId ?? operator,
+        settledAt: nowIso,
+      };
+
+      // actAs: [operator, userPartyId] (+ appProvider bila FAR)
+      const actAs = [operator, params.userPartyId];
+      if (params.featuredAppRightCid && params.appProviderPartyId) {
+        actAs.push(params.appProviderPartyId);
+      }
+
+      // disclosedContracts: concat transfer + fee registry
+      const disclosedContracts: unknown[] = [...transferRegistry.disclosedContracts, ...feeRegistry.disclosedContracts];
+
+      const commandId = `platform-exec-${params.platformTransferCid.slice(0, 16)}-${randomUUID()}`;
+      const { ok, text } = await this.ledger.exerciseChoice(
+        params.platformTransferCid,
+        tpl,
+        'ExecuteTransfer',
+        choiceArgument,
+        actAs,
+        commandId,
+        'submit-and-wait-for-transaction-tree',
+        disclosedContracts,
+      );
+      if (ok) {
+        const cids = this.extractContractIds(text);
+        const settledCid = cids[0] ?? null;
+        const updateId = this.extractUpdateId(text);
+        this.logger.log(
+          `PlatformTransfer ExecuteTransfer OK: settled=${settledCid?.slice(0, 12) ?? 'none'} updateId=${updateId?.slice(0, 12) ?? 'none'}`,
+        );
+        return { ok: true, settledCid, updateId, errors: [] };
+      }
+      const err = this.formatLedgerError(text, 'ExecuteTransfer failed');
+      this.logger.warn(`PlatformTransfer exec fail: ${text.slice(0, 300)}`);
+      return fail([err]);
+    } catch (err) {
+      const msg = `executePlatformTransfer exception: ${String(err)}`;
+      this.logger.warn(msg);
+      return fail([msg]);
     }
-
-    const commandId = `platform-exec-${params.platformTransferCid.slice(0, 16)}-${randomUUID()}`;
+  }
     try {
       const { ok, text } = await this.ledger.exerciseChoice(
         params.platformTransferCid,

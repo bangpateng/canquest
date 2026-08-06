@@ -994,13 +994,12 @@ export class PartyController {
       const isInternalUser = recipientDbUser !== null;
       const effectiveFeeCc = feeCc;
 
-      // v25 NOTE: DAML PlatformTransfer template (atomic send+fee) tersedia di
-      // questLedger.createPlatformTransfer / executePlatformTransfer, TAPI wiring
-      // ke sendCc ini belum (butuh registry/holdings pre-step seperti settleAtomic).
-      // Path lama (2 executeTransferFactoryTransfer terpisah: transfer + fee) tetap
-      // dipakai sampai iterasi berikutnya. Feature flag QUEST_ATOMIC_PLATFORM_TRANSFER
-      // (default false) akan enable atomic path saat siap.
-      // Lihat docs/RUNBOOK_DAML_V24_DEPLOY.md + quest-ledger.service executePlatformTransfer.
+      // v25: Atomic send+fee via PlatformTransfer (DAML). Feature flag
+      // QUEST_ATOMIC_PLATFORM_TRANSFER (default false). Kalau ON, transfer utama +
+      // platform fee jadi 1 transaction tree (all-or-nothing). Kalau gagal,
+      // fallback ke path lama (2 transfer terpisah non-atomic).
+      const useAtomicPlatformTransfer =
+        this.config.get<string>('QUEST_ATOMIC_PLATFORM_TRANSFER') === 'true';
 
       // ── Balance check (DB cache — fast path) ─────
       const dbBalance = await this.prisma.ccBalance.findUnique({
@@ -1040,56 +1039,137 @@ export class PartyController {
       let transferMethod: 'direct' | 'offer_accept' | 'offer_only' =
         'offer_accept';
 
-      const cip56Result = this.ledger.useWalletProxy
-        ? await this.ledger.executeProxyTransfer({
-            userPartyId: senderPartyIdOnChain,
-            receiverPartyId: receiverPartyIdOnChain,
-            amount,
-            description,
-            clientNonce: body.clientNonce,
-          })
-        : await this.ledger.executeTransferFactoryTransfer({
-            senderPartyId: senderPartyIdOnChain,
-            receiverPartyId: receiverPartyIdOnChain,
-            amountCc: amount,
-            description,
-            clientNonce: body.clientNonce,
-          });
-
-      if (cip56Result.ok) {
-        if (cip56Result.transferKind === 'direct') {
-          accepted = true;
-          transferMethod = 'direct';
-          ledgerTxId = cip56Result.updateId ?? undefined;
-          this.logger.log(
-            `CC transfer direct: ${sender.username} → ${recipientLabel} ${amount} CC`,
-          );
-        } else if (cip56Result.transferKind === 'offer') {
-          // Receiver tidak punya TransferPreapproval aktif.
-          // JANGAN auto-accept — biarkan pending di inbox wallet receiver.
-          // User terima/reject manual via menu Offers (POST /party/offers/accept|reject).
-          // ledgerTxId = Canton update_id ("1220…") supaya link explorer jalan.
-          // contract_id (transferInstructionCid) disimpan di field terpisah di row.
-          ledgerTxId = cip56Result.updateId ?? undefined;
-          transferMethod = 'offer_only';
-          this.logger.log(
-            `CC transfer offer (pending): ${sender.username} → ${recipientLabel} ${amount} CC ` +
-              `— recipient must accept via Offers menu`,
-          );
-        }
-      }
-
-      if (!cip56Result.ok) {
-        throw new BadRequestException(
-          `Transfer gagal: ${cip56Result.error?.slice(0, 120) ?? 'unknown'}`,
-        );
-      }
-
-      // ── FEE COLLECT (HANYA jika transfer berhasil) ───────────────────
+      // v25: Atomic path (PlatformTransfer) bila flag ON. Transfer utama + fee
+      // dalam 1 transaction tree. Kalau gagal, fallback ke path lama di bawah.
+      // Deklarasi variabel fee di sini (dipakai atomic path + legacy path).
       let feeCollected = false;
       let feeLedgerTxId: string | undefined;
       let feeTreasuryPartyId: string | undefined;
 
+      if (useAtomicPlatformTransfer && this.questLedger.isClaimSessionConfigured()) {
+        try {
+          const feePartyRawAtomic =
+            this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
+            validatorPartyId;
+          const feePartyOnChainAtomic =
+            await this.splice.resolveOnChainPartyId(feePartyRawAtomic);
+          // 1. Create PlatformTransfer PENDING contract
+          const transferId = `sendcc-${sender.id}-${Date.now().toString(36)}`;
+          const createRes = await this.questLedger.createPlatformTransfer({
+            userPartyId: senderPartyIdOnChain,
+            transferId,
+            amount,
+            feeAmount: effectiveFeeCc,
+            receiverPartyId: receiverPartyIdOnChain,
+            treasuryPartyId: feePartyOnChainAtomic,
+            token: 'CC',
+          });
+          if (createRes.ok && createRes.contractId) {
+            // Persist PlatformTransferLedger
+            await this.prisma.platformTransferLedger.create({
+              data: {
+                userId: sender.id,
+                transferId,
+                amount,
+                feeAmount: effectiveFeeCc,
+                receiver: receiverPartyIdOnChain,
+                treasury: feePartyOnChainAtomic,
+                token: 'CC',
+                contractId: createRes.contractId,
+                status: 'PENDING',
+              },
+            }).catch(() => undefined);
+            // 2. Execute atomic
+            const execRes = await this.questLedger.executePlatformTransfer({
+              platformTransferCid: createRes.contractId,
+              userPartyId: senderPartyIdOnChain,
+              receiverPartyId: receiverPartyIdOnChain,
+              feeReceiverPartyId: feePartyOnChainAtomic,
+              amount,
+              feeAmount: effectiveFeeCc,
+            });
+            if (execRes.ok && execRes.updateId) {
+              // Atomic sukses — transfer + fee dalam 1 tx
+              accepted = true;
+              transferMethod = 'direct';
+              ledgerTxId = execRes.updateId;
+              feeCollected = effectiveFeeCc > 0;
+              feeLedgerTxId = execRes.updateId; // sama dgn transfer (atomic, 1 tx)
+              feeTreasuryPartyId = feePartyOnChainAtomic;
+              this.logger.log(
+                `CC transfer ATOMIC: ${sender.username} → ${recipientLabel} ${amount} CC + fee ${effectiveFeeCc} CC (1 tx)`,
+              );
+              // Skip path lama (cip56Result) — atomic sudah handle transfer + fee.
+              // Record history + return di bawah (setelah blok fee lama di-skip).
+            } else {
+              this.logger.warn(
+                `Atomic PlatformTransfer gagal, fallback ke path lama: ${execRes.errors.join(' | ')}`,
+              );
+              // Update PlatformTransferLedger status CANCELLED
+              await this.prisma.platformTransferLedger.updateMany({
+                where: { transferId },
+                data: { status: 'CANCELLED' },
+              }).catch(() => undefined);
+            }
+          }
+        } catch (err) {
+          this.logger.warn(`Atomic PlatformTransfer exception, fallback: ${String(err)}`);
+        }
+      }
+
+      // Path lama (non-atomic) — hanya bila atomic TIDAK dipakai ATAU gagal.
+      // accepted=true berarti atomic sukses, skip path lama.
+      let cip56Result: { ok: boolean; updateId?: string | null; transferKind?: string; error?: string; transferInstructionCid?: string } | null = null;
+      if (!accepted) {
+        cip56Result = this.ledger.useWalletProxy
+          ? await this.ledger.executeProxyTransfer({
+              userPartyId: senderPartyIdOnChain,
+              receiverPartyId: receiverPartyIdOnChain,
+              amount,
+              description,
+              clientNonce: body.clientNonce,
+            })
+          : await this.ledger.executeTransferFactoryTransfer({
+              senderPartyId: senderPartyIdOnChain,
+              receiverPartyId: receiverPartyIdOnChain,
+              amountCc: amount,
+              description,
+              clientNonce: body.clientNonce,
+            });
+
+        if (cip56Result.ok) {
+          if (cip56Result.transferKind === 'direct') {
+            accepted = true;
+            transferMethod = 'direct';
+            ledgerTxId = cip56Result.updateId ?? undefined;
+            this.logger.log(
+              `CC transfer direct: ${sender.username} → ${recipientLabel} ${amount} CC`,
+            );
+          } else if (cip56Result.transferKind === 'offer') {
+            // Receiver tidak punya TransferPreapproval aktif.
+            // JANGAN auto-accept — biarkan pending di inbox wallet receiver.
+            // User terima/reject manual via menu Offers (POST /party/offers/accept|reject).
+            // ledgerTxId = Canton update_id ("1220…") supaya link explorer jalan.
+            // contract_id (transferInstructionCid) disimpan di field terpisah di row.
+            ledgerTxId = cip56Result.updateId ?? undefined;
+            transferMethod = 'offer_only';
+            this.logger.log(
+              `CC transfer offer (pending): ${sender.username} → ${recipientLabel} ${amount} CC ` +
+                `— recipient must accept via Offers menu`,
+            );
+          }
+        }
+
+        if (!cip56Result.ok) {
+          throw new BadRequestException(
+            `Transfer gagal: ${cip56Result.error?.slice(0, 120) ?? 'unknown'}`,
+          );
+        }
+      } // end if (!accepted) — legacy path
+
+      // ── FEE COLLECT (HANYA jika transfer berhasil) ───────────────────
+      // (variabel feeCollected/feeLedgerTxId/feeTreasuryPartyId sudah dideklarasi
+      //  di atas utk atomic path. Legacy path set di sini bila !accepted.)
       if (effectiveFeeCc > 0 && sender.cantonPartyId && accepted) {
         const feePartyRaw =
           this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
