@@ -1,0 +1,46 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# CanQuest — Postgres + Redis for LOCAL DEVELOPMENT only
+#
+# This does NOT run the app (Next.js / NestJS) — run those with npm as usual.
+# Connection strings match apps/api/.env (see infra/env/api.env.testnet.example).
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up -d
+#   docker compose -f docker-compose.dev.yml down   # keeps data volume
+#   docker compose -f docker-compose.dev.yml down -v  # WARNING: wipes data
+# ─────────────────────────────────────────────────────────────────────────────
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: canquest
+      POSTGRES_PASSWORD: canquest_dev
+      POSTGRES_DB: canquest_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U canquest -d canquest_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  pg_data:
+  redis_data:

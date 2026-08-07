@@ -2,11 +2,11 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// PostgreSQL (Supabase Postgres cloud).
-// Local dev: install PostgreSQL locally or run `docker compose up db` from /infra.
-// Production: Supabase cloud — runtime pakai pooler PgBouncer port 6543
-//   (DATABASE_URL), migration pakai direct connection port 5432 (DIRECT_URL)
-//   supaya tidak kena error P1001/P2024 saat prisma migrate.
+// PostgreSQL.
+// Local dev:  `docker compose -f docker-compose.dev.yml up -d` (Postgres 16).
+// Production: Postgres lokal di VPS 2 (localhost:5432, tanpa pooler).
+//   - DATABASE_URL: app runtime (driver adapter-pg).
+//   - DIRECT_URL:   prisma migrate deploy (di VPS 2 = sama dengan DATABASE_URL).
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")

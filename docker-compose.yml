@@ -1,0 +1,58 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# CanQuest — Postgres + Redis on VPS 2 (production app database)
+#
+# Runs ONLY the database + cache. The app (NestJS API) runs under PM2, not here.
+# Postgres binds to 127.0.0.1 only — never reachable from the public internet
+# (UFW also denies 5432/6379 in infra/redeploy.sh, defense in depth).
+#
+# Usage:
+#   docker compose up -d                 # start
+#   docker compose ps                    # status
+#   docker compose logs -f postgres      # tail logs
+#   docker compose down                  # stop (keeps data volume)
+#
+# Password must be set in apps/api/.env as PG_PASSWORD (see below).
+# ─────────────────────────────────────────────────────────────────────────────
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: canquest-postgres
+    restart: unless-stopped
+    # Loopback only — nginx/PM2 app talk to localhost. Do NOT expose to 0.0.0.0.
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-canquest}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in apps/api/.env}
+      POSTGRES_DB: ${POSTGRES_DB:-canquest_app}
+      # Tuning for a small VPS — conservative shared_buffers/work_mem.
+      # Override via POSTGRES_INITDB_ARGS is not used here; tune via custom
+      # postgresql.conf mounted if needed later.
+    volumes:
+      - canquest_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-canquest} -d ${POSTGRES_DB:-canquest_app}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    container_name: canquest-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - canquest_redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  canquest_pg_data:
+  canquest_redis_data:

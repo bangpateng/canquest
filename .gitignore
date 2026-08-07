@@ -18,6 +18,11 @@
 **/.env.example
 **/.env.*.example
 
+# ─── DB migration dumps (may contain real user data) ────────────────────────
+.migration-dumps/
+*.dump
+*.sql.bak
+
 # infra/env/ — real values, VPS copy-paste, references (NEVER commit)
 infra/env/*
 !infra/env/*.example

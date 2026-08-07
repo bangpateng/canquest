@@ -4,20 +4,19 @@ import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 
 /**
- * Prisma dengan driver adapter `@prisma/adapter-pg` — fix PgBouncer incompatibility.
+ * Prisma dengan driver adapter `@prisma/adapter-pg` (connection pool `pg`).
  *
- * MASALAH: Supabase pooler port 6543 (PgBouncer, mode transaction pooling) tidak
- * support prepared statements. Engine Prisma default bikin prepared statements
- * (s1, s2, s3...) → conflict error `prepared statement "s1" already exists`
- * (Postgres code 42P05) → semua query gagal → pool habis → login 504 + admin blank.
- *
- * FIX: driver adapter `pg` mengelola connection pooling sendiri dan KOMPATIBEL
- * dengan PgBouncer (tidak pakai prepared statements). Ini fix RESMI Prisma 6
- * untuk Supabase pooler.
+ * SEJARAH: awalnya dipakai untuk mengatasi PgBouncer pooler Supabase (port 6543)
+ * yang tidak support prepared statements. Sekarang database production sudah
+ * Postgres lokal di VPS 2 (`localhost:5432`, tanpa pooler), namun driver
+ * adapter ini tetap dipertahankan karena: (1) kompatibel penuh dengan Postgres
+ * lokal, (2) mengelola pool sendiri (pool size via `max`), (3) menghindari
+ * potensi issue prepared-statement di kemudian hari jika pakai pooler.
  *
  * Koneksi:
- *   - DATABASE_URL (pooler 6543) untuk app runtime via adapter — unlimited.
- *   - DIRECT_URL (5432) untuk migration (di-set di schema.prisma directUrl).
+ *   - DATABASE_URL → app runtime via adapter (pool lokal di VPS 2).
+ *   - DIRECT_URL   → prisma migrate deploy (di-set di schema.prisma directUrl).
+ *     Pada Postgres lokal, nilainya SAMA dengan DATABASE_URL.
  */
 function buildAdapterOptions(): { adapter?: PrismaPg } {
   const url = process.env.DATABASE_URL;
