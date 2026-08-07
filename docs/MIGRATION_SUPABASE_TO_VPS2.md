@@ -199,3 +199,59 @@ SQL
   skala besar, tapi berlebih untuk skala saat ini.
 - **Resource:** Postgres+Redis+API bareng butuh RAM ~1–1.5 GB saat aktif. VPS 2
   minimum recommended 2 GB RAM.
+
+---
+
+## Gotcha aktual (ditemukan saat migrasi pertama — sudah di-handle script)
+
+Skrip `migrate-supabase-to-vps2.sh` sudah mengatasi ketiga hal ini otomatis,
+tapi didokumentasikan di sini agar bisa tracing kalau ada masalah.
+
+### 1. pg_dump version mismatch
+```
+pg_dump: error: aborting because of server version mismatch
+  server version: 17.6; pg_dump version: 16.14
+```
+**Sebab:** Supabase = PostgreSQL 17, tapi `pg_dump` default di PATH VPS = 16.
+PostgreSQL client tools v17 terinstall di `/usr/lib/postgresql/17/bin/` tapi
+tidak di-prioritaskan di PATH. `pg_dump` harus **>= versi source server**.
+
+**Fix script:** deteksi source `server_version`, cari binary `pg_dump` versi
+tertinggi di `/usr/lib/postgresql/*/bin/`, abort kalau terlalu lama.
+
+**Manual (kalau perlu):** `export PATH="/usr/lib/postgresql/17/bin:$PATH"`
+
+### 2. Extension pg_stat_statements (superuser-only)
+```
+psql: ERROR: permission denied to create extension "pg_stat_statements"
+HINT: Must be superuser to create this extension.
+```
+**Sebab:** dump Supabase menyertakan extension monitoring yang butuh superuser.
+
+**Fix script:** filter ke `-n public` (lihat #3) → extension otomatis skip.
+
+### 3. Schema "auth"/"storage" Supabase + transaction_timeout (PG17 GUC)
+```
+ERROR: schema "auth" already exists
+ERROR: unrecognized configuration parameter "transaction_timeout"
+```
+**Sebab:** dump full Supabase mencakup semua schema internal (auth, storage,
+realtime, graphql_public) yang tidak dibutuhkan app. Ditambah `SET transaction_timeout`
+itu GCU baru PG17 yang tidak dikenal target <17.
+
+**Fix script:** convert custom-format dump → plain SQL dengan filter `-n public`
+(HANYA schema public, tempat data app: User, Quest, _prisma_migrations, dll.),
+buang baris `transaction_timeout`, restore via `psql`. Skip `pg_restore` langsung
+yang kena kedua error di atas.
+
+---
+
+## Pemetaan nama database (catatan)
+
+Saat migrasi pertama (7 Agustus 2026), target yang dipakai = `canquest_prod`
+(database baru), bukan `canquest_app`. Sebab VPS 2 sebelumnya punya DB lokal
+`canquest_mainnet` berisi snapshot user lama (5 Juli) — dipertahankan sebagai
+backup, bukan ditimpa. Setelah verify stabil, DB lokal lama di-drop.
+
+**Arsitektur final:** database production = `canquest_prod` di Postgres natif
+VPS 2 (`localhost:5432`), user `canquest`. Frontend = Vercel. Canton/Keycloak = VPS 1.

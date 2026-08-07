@@ -169,9 +169,28 @@ DUMP_FILE="$DUMP_DIR/supabase_${TS}.dump"
 
 echo ""
 echo "→ Dumping Supabase → $DUMP_FILE"
-# --no-owner / --no-privileges: avoid role mismatch (supabase roles ≠ local roles).
-# Include _prisma_migrations so prisma migrate deploy knows the state.
-pg_dump "$SOURCE_URL" \
+
+# GOTCHA #1: pg_dump HARUS versi >= source server. Supabase = PG17, jadi
+# pg_dump default (PG16 di VPS ini) akan error:
+#   "aborting because of server version mismatch (server 17.x, pg_dump 16.x)"
+# Cari pg_dump versi tertinggi terinstall; pakai PATH override.
+SRC_PGVER=$(psql "$SOURCE_URL" -tAc "SHOW server_version;" 2>/dev/null | grep -oE '^[0-9]+' || echo 0)
+PGDUMP_BIN="pg_dump"
+for v in $(ls -d /usr/lib/postgresql/*/bin 2>/dev/null | sort -Vr); do
+  if [ -x "$v/pg_dump" ]; then
+    PGDUMP_BIN="$v/pg_dump"
+    break
+  fi
+done
+PGDUMP_VER=$("$PGDUMP_BIN" --version | grep -oE '[0-9]+' | head -1)
+echo "  Source PG major: ${SRC_PGVER} | pg_dump: $(basename $(dirname "$PGDUMP_BIN")) v${PGDUMP_VER}"
+if [ "$SRC_PGVER" -gt 0 ] && [ "$PGDUMP_VER" -lt "$SRC_PGVER" ]; then
+  red "ERROR: pg_dump v${PGDUMP_VER} < source PG${SRC_PGVER}. Install postgresql-client-${SRC_PGVER}."
+  exit 1
+fi
+
+# custom format dump (untuk arsip). --no-owner/--no-privileges: role mismatch safe.
+"$PGDUMP_BIN" "$SOURCE_URL" \
   --format=custom \
   --no-owner --no-privileges \
   --no-comments \
@@ -180,10 +199,9 @@ pg_dump "$SOURCE_URL" \
 DUMP_SIZE=$(du -h "$DUMP_FILE" | cut -f1)
 green "  ✓ Dump saved (${DUMP_SIZE})"
 
-# ── Restore ──────────────────────────────────────────────────────────────────
+# ── Prepare target (drop & recreate schema, clean state) ─────────────────────
 echo ""
-echo "→ Preparing target (drop & recreate schema, clean state)..."
-# Drop public schema cascade → recreate, so restore lands on an empty DB.
+echo "→ Preparing target (drop & recreate schema public, clean state)..."
 psql "$TARGET_URL" -v ON_ERROR_STOP=1 <<'SQL'
 DROP SCHEMA IF EXISTS public CASCADE;
 DROP SCHEMA IF EXISTS _prisma_migrations CASCADE;
@@ -192,16 +210,35 @@ GRANT ALL ON SCHEMA public TO postgres;
 GRANT ALL ON SCHEMA public TO public;
 SQL
 
-echo "→ Restoring dump into VPS 2 Postgres..."
-# Schema sudah di-drop & recreate di langkah sebelumnya → target kosong.
-# --if-exists (butuh --clean) tidak dipakai di sini justru untuk menghindari
-# dependency itu. --no-owner/--no-privileges hindari role mismatch (supabase roles ≠ local).
-pg_restore --dbname="$TARGET_URL" \
-  --no-owner --no-privileges \
-  --no-comments \
-  --exit-on-error \
-  "$DUMP_FILE"
+# ── Restore (plain-text path — robust against PG17→PG16 + Supabase schemas) ──
+# GOTCHA #2: pg_restore langsung gagal karena:
+#   (a) extension pg_stat_statements butuh superuser → ON_ERROR_STOP aborts.
+#   (b) schema "auth"/"storage"/"realtime" Supabase ikut ter-restore → conflict.
+#   (c) SET transaction_timeout (PG17 GUC) tidak dikenal PG16 target.
+# Solusi: convert ke plain text dengan filter -n public (HANYA schema public
+# yang berisi data app: User, Quest, _prisma_migrations, dll.), buang baris
+# transaction_timeout, lalu restore via psql.
+echo "→ Converting dump → public-schema-only plain SQL..."
+PGRESTORE_BIN="pg_restore"
+for v in $(ls -d /usr/lib/postgresql/*/bin 2>/dev/null | sort -Vr); do
+  if [ -x "$v/pg_restore" ]; then
+    PGRESTORE_BIN="$v/pg_restore"
+    break
+  fi
+done
+PLAIN_SQL="${DUMP_FILE%.dump}.sql"
+"$PGRESTORE_BIN" "$DUMP_FILE" -n public -f "$PLAIN_SQL" \
+  --no-owner --no-privileges --no-comments
+
+# Buang transaction_timeout (PG17 GUC, error di target <17)
+grep -v "transaction_timeout" "$PLAIN_SQL" > "${PLAIN_SQL}.clean"
+
+echo "→ Restoring into target via psql..."
+psql "$TARGET_URL" -v ON_ERROR_STOP=1 -f "${PLAIN_SQL}.clean"
 green "  ✓ Restore complete"
+
+# Cleanup file temp plain-text (dump custom format tetap dipertahankan utk arsip)
+rm -f "$PLAIN_SQL" "${PLAIN_SQL}.clean"
 
 # ── Verify ───────────────────────────────────────────────────────────────────
 echo ""
