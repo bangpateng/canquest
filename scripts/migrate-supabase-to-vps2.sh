@@ -193,11 +193,12 @@ GRANT ALL ON SCHEMA public TO public;
 SQL
 
 echo "→ Restoring dump into VPS 2 Postgres..."
-# --clean disabled (we already dropped schema). --if-exists + --no-owner avoid role errors.
+# Schema sudah di-drop & recreate di langkah sebelumnya → target kosong.
+# --if-exists (butuh --clean) tidak dipakai di sini justru untuk menghindari
+# dependency itu. --no-owner/--no-privileges hindari role mismatch (supabase roles ≠ local).
 pg_restore --dbname="$TARGET_URL" \
   --no-owner --no-privileges \
   --no-comments \
-  --if-exists \
   --exit-on-error \
   "$DUMP_FILE"
 green "  ✓ Restore complete"
