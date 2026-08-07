@@ -1371,7 +1371,9 @@ export class QuestLedgerService implements OnModuleInit {
           expiresAt: params.expiresAt,
           description: params.description,
         },
-        [params.userPartyId], // sender = user
+        // actAs = SEMUA signatory (Splice AppPaymentRequest signatory =
+        // sender + receivers + provider). Backend pegang CanActAsAnyParty.
+        [params.userPartyId, treasury, platform],
         `apr-${params.requestId}`,
       );
       if (res.ok && res.contractId) {
