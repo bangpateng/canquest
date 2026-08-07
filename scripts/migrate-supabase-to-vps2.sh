@@ -46,16 +46,20 @@ usage() {
   exit 1
 }
 
-for arg in "$@"; do
+while [ $# -gt 0 ]; do
+  arg="$1"
   case "$arg" in
     --source-url=*)  SOURCE_URL="${arg#*=}" ;;
+    --source-url)    shift; SOURCE_URL="$1" ;;
     --target-url=*)  TARGET_URL="${arg#*=}" ;;
+    --target-url)    shift; TARGET_URL="$1" ;;
     --dry-run)       DRY_RUN=true ;;
     --force)         FORCE=true ;;
     --yes|-y)        ASSUME_YES=true ;;
     -h|--help)       usage ;;
     *) echo "Unknown arg: $arg"; usage ;;
   esac
+  shift
 done
 
 # ── Load apps/api/.env for fallback URLs ─────────────────────────────────────
