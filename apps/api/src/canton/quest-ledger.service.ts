@@ -1150,6 +1150,10 @@ export class QuestLedgerService implements OnModuleInit {
     feeAmount: number;                 // platform fee (CC); 0 → fee leg skip via guard
     featuredAppRightCid?: string | null;
     appProviderPartyId?: string | null;
+    /** Instrument transfer leg. Default 'Amulet' (CC). Utk non-CC (USDCx dll),
+     *  set transferInstrumentId + transferInstrumentAdmin (resolve dari OneSwap). */
+    transferInstrumentId?: string;       // default 'Amulet'
+    transferInstrumentAdmin?: string;    // default CANTON_DSO_PARTY_ID
   }): Promise<{ ok: boolean; settledCid: string | null; updateId: string | null; errors: string[] }> {
     const fail = (errors: string[]) => ({ ok: false, settledCid: null, updateId: null, errors });
     if (!this.isClaimSessionConfigured())
@@ -1165,20 +1169,30 @@ export class QuestLedgerService implements OnModuleInit {
       const now = new Date();
       const nowIso = now.toISOString();
       const executeBefore = new Date(now.getTime() + 24 * 3600 * 1000).toISOString();
-      const instrumentAdmin = dso;
+
+      // Transfer leg instrument: default Amulet (CC), support non-CC (USDCx dll).
+      // Fee leg SELALU Amulet/CC (fee platform dibayar dalam CC).
+      const tInstrumentId = params.transferInstrumentId ?? 'Amulet';
+      const isAmuletTransfer = tInstrumentId.toLowerCase() === 'amulet';
+      const tInstrumentAdmin = params.transferInstrumentAdmin ?? dso;
 
       // ── TRANSFER leg: user → receiver ───────────────────────────────────────
-      const transferHoldings = await this.ledger.queryAmuletHoldings(params.userPartyId);
-      // Holdings harus cukup utk amount + feeAmount (kedua leg dari wallet user sama).
-      const transferInputCids = this.greedyFillHoldings(transferHoldings, params.amount + params.feeAmount);
-      if (transferInputCids.length === 0 && (params.amount + params.feeAmount) > 0) {
-        return fail([`Insufficient Amulet holdings for transfer ${params.amount} + fee ${params.feeAmount} CC (user=${params.userPartyId.split('::')[0]})`]);
+      // Holdings: CC (Amulet) pakai queryAmuletHoldings, non-CC pakai getTokenHoldingCids.
+      // CC transfer butuh budget amount + fee (kedua leg dari wallet user sama).
+      // Non-CC transfer: holdings di-resolve per instrument (fee tetap CC, di-resolve terpisah di bawah).
+      const transferHoldings = isAmuletTransfer
+        ? await this.ledger.queryAmuletHoldings(params.userPartyId)
+        : await this.ledger.getTokenHoldingCids(params.userPartyId, tInstrumentId);
+      const transferBudget = isAmuletTransfer ? params.amount + params.feeAmount : params.amount;
+      const transferInputCids = this.greedyFillHoldings(transferHoldings, transferBudget);
+      if (transferInputCids.length === 0 && transferBudget > 0) {
+        return fail([`Insufficient ${tInstrumentId} holdings for transfer ${params.amount}${isAmuletTransfer ? ` + fee ${params.feeAmount} CC` : ''} (user=${params.userPartyId.split('::')[0]})`]);
       }
       const transferSpec = {
         sender: params.userPartyId,
         receiver: params.receiverPartyId,
         amount: params.amount.toFixed(10),
-        instrumentId: { admin: instrumentAdmin, id: 'Amulet' },
+        instrumentId: { admin: tInstrumentAdmin, id: tInstrumentId },
         lock: null,
         requestedAt: nowIso,
         executeBefore,
@@ -1186,8 +1200,8 @@ export class QuestLedgerService implements OnModuleInit {
         meta: { values: {} },
       };
       const transferRegistry = await this.ledger.callTransferFactoryRegistry(
-        { expectedAdmin: instrumentAdmin, transfer: transferSpec, extraArgs: { context: { values: {} }, meta: { values: {} } } },
-        instrumentAdmin,
+        { expectedAdmin: tInstrumentAdmin, transfer: transferSpec, extraArgs: { context: { values: {} }, meta: { values: {} } } },
+        tInstrumentAdmin,
       );
       if (!transferRegistry) return fail(['Transfer leg: callTransferFactoryRegistry returned null']);
 
@@ -1201,7 +1215,7 @@ export class QuestLedgerService implements OnModuleInit {
         sender: params.userPartyId,
         receiver: params.feeReceiverPartyId,
         amount: params.feeAmount.toFixed(10),
-        instrumentId: { admin: instrumentAdmin, id: 'Amulet' },
+        instrumentId: { admin: dso, id: 'Amulet' },
         lock: null,
         requestedAt: nowIso,
         executeBefore,
@@ -1209,8 +1223,8 @@ export class QuestLedgerService implements OnModuleInit {
         meta: { values: {} },
       };
       const feeRegistry = await this.ledger.callTransferFactoryRegistry(
-        { expectedAdmin: instrumentAdmin, transfer: feeSpec, extraArgs: { context: { values: {} }, meta: { values: {} } } },
-        instrumentAdmin,
+        { expectedAdmin: dso, transfer: feeSpec, extraArgs: { context: { values: {} }, meta: { values: {} } } },
+        dso,
       );
       if (!feeRegistry) return fail(['Fee leg: callTransferFactoryRegistry returned null']);
 

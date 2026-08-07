@@ -1768,6 +1768,137 @@ export class PartyController {
         this.splice.resolveOnChainPartyId(recipientPartyId),
       ]);
 
+      // ── v25: Atomic send-token+fee via PlatformTransfer (DAML) ──────────────
+      // Feature flag QUEST_ATOMIC_PLATFORM_TRANSFER (sama dgn sendCc). Kalau ON,
+      // transfer utama (non-CC) + platform fee (CC) jadi 1 transaction tree.
+      // Kalau gagal, fallback ke path lama (2 transfer terpisah di bawah).
+      const useAtomicPlatformTransferToken =
+        this.config.get<string>('QUEST_ATOMIC_PLATFORM_TRANSFER') === 'true';
+      let atomicLedgerTxId: string | undefined;
+
+      if (
+        useAtomicPlatformTransferToken &&
+        this.questLedger.isClaimSessionConfigured()
+      ) {
+        try {
+          const feePartyRawToken =
+            this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
+            (this.config.get<string>('CANTON_VALIDATOR_PARTY_ID') ?? '');
+          const feePartyOnChainToken =
+            await this.splice.resolveOnChainPartyId(feePartyRawToken);
+          const transferIdToken = `sendtoken-${sender.id}-${Date.now().toString(36)}`;
+          // 1. Create PlatformTransfer PENDING (token = instrumentId utk tracking)
+          const createResToken =
+            await this.questLedger.createPlatformTransfer({
+              userPartyId: senderPartyIdOnChain,
+              transferId: transferIdToken,
+              amount,
+              feeAmount: feeCc,
+              receiverPartyId: receiverPartyIdOnChain,
+              treasuryPartyId: feePartyOnChainToken,
+              token: instrumentId,
+            });
+          if (createResToken.ok && createResToken.contractId) {
+            await this.prisma.platformTransferLedger
+              .create({
+                data: {
+                  userId: sender.id,
+                  transferId: transferIdToken,
+                  amount,
+                  feeAmount: feeCc,
+                  receiver: receiverPartyIdOnChain,
+                  treasury: feePartyOnChainToken,
+                  token: instrumentId,
+                  contractId: createResToken.contractId,
+                  status: 'PENDING',
+                },
+              })
+              .catch(() => undefined);
+            // 2. Execute atomic — transfer leg non-CC, fee leg CC
+            const execResToken =
+              await this.questLedger.executePlatformTransfer({
+                platformTransferCid: createResToken.contractId,
+                userPartyId: senderPartyIdOnChain,
+                receiverPartyId: receiverPartyIdOnChain,
+                feeReceiverPartyId: feePartyOnChainToken,
+                amount,
+                feeAmount: feeCc,
+                transferInstrumentId: instrumentId,
+                transferInstrumentAdmin: instrumentAdmin,
+              });
+            if (execResToken.ok && execResToken.updateId) {
+              atomicLedgerTxId = execResToken.updateId;
+              this.logger.log(
+                `Token transfer ATOMIC: ${sender.username} → ${recipientLabel} ${amount} ${instrumentId} + fee ${feeCc} CC (1 tx)`,
+              );
+              // Record history (instrument-aware). Non-CC: offer (receiver accept manual).
+              try {
+                const row = await this.users.recordTokenTransaction({
+                  userId: sender.id,
+                  instrumentId,
+                  instrumentAdmin,
+                  amount,
+                  type: 'TOKEN_TRANSFER_OUT',
+                  description,
+                  referenceId:
+                    normalizeCantonPartyId(recipientPartyId) ?? recipientPartyId,
+                  ledgerTxId: atomicLedgerTxId,
+                  cantonUpdateId: atomicLedgerTxId,
+                  status: 'PENDING',
+                  transferInstructionCid: null,
+                });
+                // fee record (CC, atomic = 1 tx dgn transfer)
+                await this.users.recordTransaction({
+                  userId: sender.id,
+                  amountCc: feeCc,
+                  type: 'TRANSFER_OUT',
+                  description: `Platform fee (token transfer to ${recipientLabel})`,
+                  referenceId: `fee:${normalizeCantonPartyId(feePartyRawToken) ?? feePartyRawToken}`,
+                  ledgerTxId: atomicLedgerTxId,
+                  cantonUpdateId: atomicLedgerTxId,
+                });
+                return {
+                  ok: true,
+                  message: `${amount} ${instrumentId} sent to ${recipientLabel} (atomic w/ fee). Recipient may need to accept via Offers menu.`,
+                  ledgerTxId: atomicLedgerTxId,
+                  transferInstructionCid: null,
+                  transactionId: row.id,
+                  feeCollected: true,
+                  feeLedgerTxId: atomicLedgerTxId,
+                };
+              } catch (recErr) {
+                this.logger.warn(
+                  `Atomic token history record failed (transfer committed, updateId=${atomicLedgerTxId.slice(0, 12)}): ${String(recErr)}`,
+                );
+                return {
+                  ok: true,
+                  message: `${amount} ${instrumentId} sent to ${recipientLabel} (atomic w/ fee). History record pending.`,
+                  ledgerTxId: atomicLedgerTxId,
+                  transferInstructionCid: null,
+                  transactionId: undefined,
+                  feeCollected: true,
+                  feeLedgerTxId: atomicLedgerTxId,
+                };
+              }
+            } else {
+              this.logger.warn(
+                `Atomic PlatformTransfer (token) gagal, fallback ke path lama: ${execResToken.errors.join(' | ')}`,
+              );
+              await this.prisma.platformTransferLedger
+                .updateMany({
+                  where: { transferId: transferIdToken },
+                  data: { status: 'CANCELLED' },
+                })
+                .catch(() => undefined);
+            }
+          }
+        } catch (err) {
+          this.logger.warn(
+            `Atomic PlatformTransfer (token) exception, fallback: ${String(err)}`,
+          );
+        }
+      }
+
       const cip56Result = this.ledger.useWalletProxy
         ? await this.ledger.executeProxyTransfer({
             userPartyId: senderPartyIdOnChain,
