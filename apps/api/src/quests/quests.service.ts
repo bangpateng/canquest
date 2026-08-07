@@ -17,6 +17,7 @@ import {
 } from '../common/prisma-types';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   computePoolTotalCc,
@@ -931,17 +932,15 @@ export class QuestsService {
   }
 
   /**
-   * Feature flag: atomic Settle path (DAML v22/v23).
-   * - true  → settleAndRecord (atomic fee+reward via nested-exercise Settle)
-   * - false → fallback path (collectClaimFee + sendQuestRewardAndRecord terpisah,
-   *           non-atomic seperti v21)
+   * v27 hybrid payout path gate.
+   * - true  → executeClaimPayoutV27 (fee via AppPaymentRequest, reward via CIP-56)
+   * - false → ledger not configured (claim flow skip on-chain, DB-only)
    *
-   * Default true bila isClaimSessionConfigured (DAML ledger on). Set
-   * QUEST_ATOMIC_SETTLE=false utk emergency kill-switch → fallback ke path lama.
+   * v27 menggantikan v25 settleAtomic. QuestReward TETAP CIP-56 (Splice tidak
+   * punya native platform→user reward — verified vs docs.sync.global).
+   * Default true bila isClaimSessionConfigured (DAML ledger on).
    */
   private get useAtomicSettle(): boolean {
-    const v = this.config.get<string>('QUEST_ATOMIC_SETTLE')?.trim().toLowerCase();
-    if (v === 'false' || v === '0') return false;
     return this.questLedger.isClaimSessionConfigured();
   }
 
@@ -1040,224 +1039,51 @@ export class QuestsService {
   }
 
   /**
-   * Kirim reward (CC atau USDCx) dari reward wallet → user, persist distributed,
-   * record history, dan upsert QuestCompletion. Token-aware.
+   * executeClaimPayoutV27 — orchestrate v27 hybrid claim payout.
    *
-   * Dipakai oleh semua claim flow (FCFS / Draw / Invite / Raffle) supaya logic
-   * security C1 (anti double-payout) + history konsisten di satu tempat.
+   * v27 menggantikan v25 settleAtomic. Flow (FEE via AppPaymentRequest, REWARD
+   * via CIP-56 — Splice tidak punya native platform→user reward, verified vs
+   * docs.sync.global):
+   *   1. createQuestPaymentRequest  → QuestPaymentRequest cid (PENDING)
+   *   2. createAppPaymentRequest    → AppPaymentRequest cid (sender=user, receiver=treasury)
+   *   3. acceptAppPaymentRequest    → AcceptedAppPayment cid (custodial, actAs user+validator)
+   *   4. markAccepted               → QuestPaymentRequest status ACCEPTED
+   *   5. collectAcceptedAppPayment  → fee cair ke treasury (no preapproval), collectTxId
+   *   6. markSettled                → QuestPaymentRequest status SETTLED
+   *   [TERPISAH] sendQuestRewardCip56 → reward wallet → user (bila rewardAmount > 0)
+   *   DB bookkeeping dipindahkan dari settleAndRecord lama.
    *
-   * Behavior:
-   * - CC (default): sendReward Amulet + recordTransaction (CcTransaction) + rewardMicroCc.
-   * - USDCx: resolve instrument → sendReward dgn instrumentId/Admin + recordTokenTransaction
-   *   (TokenTransaction) + rewardTokenAmount. DAML receipt tetap CC-only (fee CC).
-   *
-   * Realtime: direct kalau user punya TransferPreapproval; offer (pending) kalau tidak.
-   * Token sudah keluar reward wallet di kedua kasus → distributed=true selalu di-set
-   * (irreversible on-chain).
-   *
-   * @returns { rewardTxId, pending } — pending=true artinya user harus accept offer di wallet.
+   * Return { settledCid, updateId } utk compat callers lama:
+   *   settledCid = QuestPaymentRequest cid (ACCEPTED→SETTLED)
+   *   updateId   = collectTxId (fee cair) — dipakai DB utk ledgerTxId/claimFeeLedgerTxId
    */
-  private async sendQuestRewardAndRecord(params: {
+  private async executeClaimPayoutV27(params: {
     drawId: string;
     userId: string;
     questId: string;
     questTitle: string;
     cantonPartyId: string;
     username: string | null;
-    rewardCc: number;
-    rewardToken: RewardTokenSymbol;
-    /** DAML claimSessionId untuk atomicFeeAndReward receipt (opsional, CC-only). */
-    claimSessionId?: string | null;
-    /** DAML fee txId untuk atomicFeeAndReward receipt. */
-    feeTxId: string;
-    /** Label utk log/description (mis. 'FCFS reward', 'Raffle reward'). */
-    rewardLabel: string;
-  }): Promise<{ rewardTxId: string; pending: boolean }> {
-    const {
-      drawId,
-      userId,
-      questId,
-      questTitle,
-      cantonPartyId,
-      username,
-      rewardCc,
-      rewardToken,
-      claimSessionId,
-      feeTxId,
-      rewardLabel,
-    } = params;
-
-    const rewardPartyId = this.rewardPartyId;
-    if (!rewardPartyId) {
-      throw new Error('CANTON_REWARD_PARTY_ID not configured');
-    }
-
-    // Resolve instrument ref untuk USDCx (CC tidak perlu — default Amulet di sendReward).
-    let instrumentId: string | undefined;
-    let instrumentAdmin: string | undefined;
-    if (rewardToken === 'USDCx') {
-      const ref = await this.tokenInstrument.resolveInstrument('USDCx');
-      instrumentId = ref.instrumentId;
-      instrumentAdmin = ref.instrumentAdmin;
-    }
-
-    this.logger.log(
-      `${rewardLabel}: ${rewardPartyId.split('::')[0]} → ${cantonPartyId.split('::')[0]} ` +
-        `(@${username}, ${rewardCc} ${rewardToken}${instrumentId ? ` [${instrumentId}]` : ''})`,
-    );
-
-    // ── Kirim reward on-chain (CIP-56 TransferFactory) ──────────────────────
-    const rewardResult = await this.cantonLedger.sendReward({
-      senderPartyId: rewardPartyId,
-      receiverPartyId: cantonPartyId,
-      amountCc: rewardCc,
-      description: `${rewardLabel} — ${questTitle}`,
-      instrumentId,
-      instrumentAdmin,
-    });
-    if (!rewardResult.ok) {
-      throw new Error(rewardResult.error ?? 'reward transfer failed');
-    }
-    const rewardTxId =
-      rewardResult.rewardTxId ?? `reward-${Date.now()}-${userId.slice(0, 8)}`;
-    const rewardPending = rewardResult.pending;
-    this.logger.log(
-      `${rewardLabel} ${rewardCc} ${rewardToken} → ${cantonPartyId.split('::')[0]} ` +
-        `(${rewardPending ? 'PENDING — user accepts in wallet' : 'direct'})`,
-    );
-
-    // ⚠️ SECURITY (C1): Persist distributed=true + ledgerTxId IMMEDIATELY after
-    // sendReward succeeds. Token (CC atau USDCx) sudah keluar reward wallet
-    // on-chain (irreversible). Jika step di bawah throw, retry short-circuit di
-    // distributed=true check, BUKAN kirim reward lagi (double payout).
-    await this.prisma.winnerDraw.updateMany({
-      where: { id: drawId, distributed: false },
-      data: {
-        distributed: true,
-        ledgerTxId: rewardTxId,
-        distributedAt: new Date(),
-        rewardToken,
-      },
-    });
-
-    // DAML atomic receipt (DAML v21 AtomicFeeAndReward) sudah HAPUS di v22/v23.
-    // Helper ini sekarang FALLBACK path (non-atomic) — dipakai kalau
-    // settleAndRecord() tidak dipakai (feature flag off / kode path).
-    // DAML receipt tidak ditulis di fallback (fee+reward di CIP-56 terpisah).
-    // claimSessionId param tetap ada utk backward-compat tapi diabaikan di sini.
-
-    // ── Record history (NON-FATAL — token sudah berpindah on-chain) ─────────
-    try {
-      if (rewardToken === 'CC') {
-        await this.users.recordTransaction({
-          userId,
-          amountCc: rewardCc,
-          type: 'QUEST_REWARD',
-          description: `Received ${rewardCc} CC reward`,
-          referenceId: questId,
-          counterparty: rewardPartyId.split('::')[0],
-          ledgerTxId: rewardTxId,
-          status: rewardPending ? 'PENDING' : 'COMPLETED',
-          transferInstructionCid: rewardResult.transferInstructionCid ?? null,
-        });
-      } else {
-        // USDCx → TokenTransaction (instrument-aware), BUKAN CcTransaction.
-        const { instrumentId: instId, instrumentAdmin: instAdmin } =
-          await this.tokenInstrument.resolveInstrument(rewardToken);
-        await this.users.recordTokenTransaction({
-          userId,
-          instrumentId: instId,
-          instrumentAdmin: instAdmin,
-          amount: rewardCc,
-          type: 'QUEST_REWARD',
-          description: `Received ${rewardCc} ${rewardToken} reward`,
-          referenceId: questId,
-          ledgerTxId: rewardTxId,
-          status: rewardPending ? 'PENDING' : 'COMPLETED',
-          transferInstructionCid: rewardResult.transferInstructionCid ?? null,
-        });
-      }
-    } catch (recordErr) {
-      this.logger.error(
-        `CLAIM_HISTORY_FAIL ${rewardLabel} quest=${questId.slice(0, 8)} user=@${username}: reward sent (txId=${rewardTxId}) but history record threw: ${recordErr instanceof Error ? recordErr.message : String(recordErr)}`,
-      );
-    }
-
-    // Async balance sync (non-blocking) — CC saja (USDCx balance via ACS event handler).
-    if (rewardToken === 'CC' && username) {
-      void this.inboundSync
-        .alignBalanceFromChain(userId, username)
-        .catch((err) =>
-          this.logger.warn(`Balance sync failed (non-blocking): ${String(err)}`),
-        );
-    }
-
-    // ── Upsert QuestCompletion dgn token fields ─────────────────────────────
-    if (rewardToken === 'CC') {
-      const rewardMicroCc = BigInt(Math.round(rewardCc * 1_000_000));
-      await this.prisma.questCompletion.upsert({
-        where: { userId_questId: { userId, questId } },
-        create: { userId, questId, rewardMicroCc, rewardToken: 'CC' },
-        update: { rewardMicroCc, rewardToken: 'CC' },
-      });
-    } else {
-      await this.prisma.questCompletion.upsert({
-        where: { userId_questId: { userId, questId } },
-        create: {
-          userId,
-          questId,
-          rewardToken: 'USDCx',
-          rewardTokenAmount: rewardCc,
-        },
-        update: { rewardToken: 'USDCx', rewardTokenAmount: rewardCc },
-      });
-    }
-
-    return { rewardTxId, pending: rewardPending };
-  }
-
-  /**
-   * settleAndRecord — DAML v22/v23 atomic Settle path.
-   *
-   * Pengganti sendQuestRewardAndRecord + collectClaimFee terpisah (non-atomic).
-   * Fee+reward transfer terjadi DI DALAM Settle choice (nested-exercise) dalam
-   * 1 transaction tree → atomic all-or-nothing.
-   *
-   * Flow:
-   *   1. questLedger.settleAtomic({fee+reward params, claimContractId})
-   *      → atomic CC movement + create QuestClaimReceipt SETTLED
-   *   2. set distributed=true (C1 anti-double-payout, irreversible on-chain)
-   *   3. questLedger.recordTxId (best-effort, post-settle audit)
-   *   4. record history (CcTransaction/TokenTransaction)
-   *   5. upsert QuestCompletion
-   *
-   * Bila rewardAmount=0 (kode claim), reward leg = None di Settle → fee-only
-   * atomic. Reward history tidak ditulis (cuma fee CcTransaction).
-   */
-  private async settleAndRecord(params: {
-    drawId: string;
-    userId: string;
-    questId: string;
-    questTitle: string;
-    cantonPartyId: string;
-    username: string | null;
-    claimContractId: string;            // QuestClaimReceipt PRE_SETTLE
-    feeAmount: number;                  // claimFeeCc
-    rewardAmount: number;               // rewardCc (0 utk kode claim)
+    claimId: string;                     // korelasi ke slot (utk QuestPaymentRequest.claimId)
+    feeAmount: number;                   // claimFeeCc
+    rewardAmount: number;                // rewardCc (0 utk kode claim)
     rewardToken: RewardTokenSymbol;
     rewardLabel: string;
+    /** clientNonce utk reward CIP-56 idempotency (dedup double-click/retry). */
+    rewardClientNonce?: string;
   }): Promise<{ settledCid: string | null; updateId: string | null }> {
     const {
       drawId, userId, questId, questTitle, cantonPartyId, username,
-      claimContractId, feeAmount, rewardAmount, rewardToken, rewardLabel,
+      claimId, feeAmount, rewardAmount, rewardToken, rewardLabel,
     } = params;
 
     const rewardPartyId = this.rewardPartyId;
     const feePartyId = this.feeTargetPartyId;
-    if (!rewardPartyId) throw new Error('CANTON_REWARD_PARTY_ID not configured');
+    if (!rewardPartyId && rewardAmount > 0)
+      throw new Error('CANTON_REWARD_PARTY_ID not configured (needed for reward)');
     if (!feePartyId) throw new Error('CANTON_FEE_RECIPIENT_PARTY_ID not configured');
 
-    // Resolve instrument untuk USDCx reward (CC default Amulet di settleAtomic).
+    // Resolve instrument utk USDCx reward (CC default Amulet).
     let rewardInstrumentId: string | undefined;
     let rewardInstrumentAdmin: string | undefined;
     if (rewardToken === 'USDCx' && rewardAmount > 0) {
@@ -1267,56 +1093,124 @@ export class QuestsService {
     }
 
     this.logger.log(
-      `${rewardLabel} (atomic Settle): fee ${feeAmount} CC → ${feePartyId.split('::')[0]}, ` +
-      `reward ${rewardAmount} ${rewardToken}${rewardAmount > 0 ? ` → ${cantonPartyId.split('::')[0]}` : ' (none)'} ` +
+      `${rewardLabel} (v27): fee ${feeAmount} CC → ${feePartyId.split('::')[0]} (AppPaymentRequest), ` +
+      `reward ${rewardAmount} ${rewardToken}${rewardAmount > 0 ? ` → ${cantonPartyId.split('::')[0]} (CIP-56)` : ' (none)'} ` +
       `(@${username})`,
     );
 
-    // ── 1. ATOMIC SETTLE (fee + reward dalam 1 transaction tree) ────────────
-    const settleResult = await this.questLedger.settleAtomic({
-      claimContractId,
+    // ── FEE FLOW: AppPaymentRequest (user→treasury, locked, no preapproval) ──
+    const requestId = randomUUID();
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+    // 1. createQuestPaymentRequest (PENDING wrapper)
+    const qpr = await this.questLedger.createQuestPaymentRequest({
       userPartyId: cantonPartyId,
-      feeReceiverPartyId: feePartyId,
+      campaignId: questId,
+      claimId,
+      requestId,
       feeAmount,
-      rewardSenderPartyId: rewardPartyId,
-      rewardAmount,
-      rewardToken,
-      rewardInstrumentId,
-      rewardInstrumentAdmin,
+      token: 'CC',
+      expiresAt,
     });
-    if (!settleResult.ok) {
-      throw new Error(`Atomic Settle failed: ${settleResult.errors.join(' | ')}`);
-    }
-    const updateId = settleResult.updateId ?? `settle-${Date.now()}-${userId.slice(0, 8)}`;
-    const settledCid = settleResult.settledCid;
-    const rewardPending = false; // direct transfer (atomic, no offer-accept)
+    if (!qpr.contractId)
+      throw new Error(`createQuestPaymentRequest failed: ${qpr.errors.join(' | ')}`);
+    const qprCid = qpr.contractId;
+
+    // 2. createAppPaymentRequest (sender=user, receiver=treasury, FEE ONLY)
+    const apr = await this.questLedger.createAppPaymentRequest({
+      userPartyId: cantonPartyId,
+      feeAmount,
+      treasuryPartyId: feePartyId,
+      expiresAt,
+      description: `Claim fee — ${questTitle}`,
+      requestId,
+    });
+    if (!apr.appPaymentRequestCid)
+      throw new Error(`createAppPaymentRequest failed: ${apr.errors.join(' | ')}`);
+
+    // 3. acceptAppPaymentRequest (custodial — actAs [user, walletProvider])
+    const accept = await this.questLedger.acceptAppPaymentRequest({
+      appPaymentRequestCid: apr.appPaymentRequestCid,
+      userPartyId: cantonPartyId,
+      feeAmount,
+    });
+    if (!accept.ok || !accept.acceptedAppPaymentCid)
+      throw new Error(`AppPaymentRequest_Accept failed: ${accept.errors.join(' | ')}`);
+
+    // 4. markAccepted (QuestPaymentRequest PENDING → ACCEPTED)
+    const marked = await this.questLedger.markAccepted({
+      requestContractId: qprCid,
+      acceptedAppPaymentCid: accept.acceptedAppPaymentCid,
+    });
+    if (!marked.ok)
+      throw new Error(`MarkAccepted failed: ${marked.errors.join(' | ')}`);
+    const qprAcceptedCid = marked.newContractId ?? qprCid;
+
+    // 5. collectAcceptedAppPayment (fee cair ke treasury, direct)
+    const collect = await this.questLedger.collectAcceptedAppPayment({
+      acceptedAppPaymentCid: accept.acceptedAppPaymentCid,
+      userPartyId: cantonPartyId,
+    });
+    if (!collect.ok || !collect.collectTxId)
+      throw new Error(`AcceptedAppPayment_Collect failed: ${collect.errors.join(' | ')}`);
+
+    // 6. markSettled (QuestPaymentRequest ACCEPTED → SETTLED)
+    const settled = await this.questLedger.markSettled({
+      requestContractId: qprAcceptedCid,
+      collectTxId: collect.collectTxId,
+    });
+
+    const updateId = collect.collectTxId;
+    const settledCid = settled.ok ? (settled.newContractId ?? qprAcceptedCid) : qprAcceptedCid;
 
     this.logger.log(
-      `${rewardLabel} atomic Settle OK: settled=${settledCid?.slice(0, 12) ?? 'none'} updateId=${updateId.slice(0, 12)}`,
+      `${rewardLabel} fee flow OK: qpr=${qprCid.slice(0, 12)} collectTx=${updateId.slice(0, 12)}`,
     );
 
-    // ── 2. SECURITY C1: persist distributed=true SETELAH atomic settle ──────
-    // Token sudah berpindah on-chain (irreversible, atomic). Retry short-circuit.
+    // ── REWARD FLOW: CIP-56 (platform→user, terpisah) — bila rewardAmount > 0 ─
+    let rewardTxId: string | null = null;
+    if (rewardAmount > 0 && rewardPartyId) {
+      const reward = await this.questLedger.sendQuestRewardCip56({
+        userPartyId: cantonPartyId,
+        rewardAmount,
+        rewardSenderPartyId: rewardPartyId,
+        description: rewardLabel,
+        token: rewardToken,
+        instrumentId: rewardInstrumentId,
+        instrumentAdmin: rewardInstrumentAdmin,
+        clientNonce: params.rewardClientNonce,
+      });
+      if (!reward.ok || !reward.updateId) {
+        // Reward gagal — fee sudah committed. Log error, jangan throw (anti
+        // double-fee). Reward bisa di-retry via queue (JOB_DISTRIBUTE_REWARD).
+        this.logger.error(
+          `CLAIM_REWARD_FAIL ${rewardLabel} quest=${questId.slice(0, 8)} user=@${username}: ` +
+          `fee committed (updateId=${updateId}) but reward CIP-56 failed: ${reward.errors.join(' | ')}. ` +
+          `Reward bisa di-retry via queue.`,
+        );
+      } else {
+        rewardTxId = reward.updateId;
+        this.logger.log(
+          `${rewardLabel} reward CIP-56 OK: txId=${rewardTxId.slice(0, 12)} kind=${reward.transferKind}`,
+        );
+      }
+    }
+
+    // ── SECURITY C1: persist distributed=true SETELAH fee (dan reward bila ada) ─
+    // Fee sudah cair on-chain (irreversible). Reward mungkin pending (offer) —
+    // distributed=true tetap aman karena anti-double-payout flag, reward retry
+    // via queue check distributed=false sebelum resend.
     await this.prisma.winnerDraw.updateMany({
       where: { id: drawId, distributed: false },
       data: {
         distributed: true,
-        ledgerTxId: updateId,
+        ledgerTxId: rewardTxId ?? updateId,   // prefer reward tx bila ada
         distributedAt: new Date(),
         rewardToken,
       },
     });
 
-    // ── 3. recordTxId (post-settle audit, non-blocking) ─────────────────────
-    if (settledCid) {
-      // v25: rewardTxId Optional. Null bila kode claim (rewardAmount=0).
-      const rewardTxIdValue = rewardAmount > 0 ? updateId : null;
-      void this.questLedger
-        .recordTxId({ settledContractId: settledCid, feeTxId: updateId, rewardTxId: rewardTxIdValue })
-        .catch((err) => this.logger.warn(`recordTxId fail (non-blocking): ${String(err)}`));
-    }
-
-    // ── 4. Record history (NON-FATAL — atomic settle sudah committed) ──────
+    // ── Record history (NON-FATAL — fee sudah committed on-chain) ───────────
     try {
       // Fee record (selalu, CC). Reference 'fee:' supaya hidden dari user history.
       await this.users.recordTransaction({
@@ -1330,8 +1224,8 @@ export class QuestsService {
         status: 'COMPLETED',
         transferInstructionCid: null,
       });
-      // Reward record (hanya bila rewardAmount > 0)
-      if (rewardAmount > 0) {
+      // Reward record (hanya bila rewardAmount > 0 dan rewardTxId ada)
+      if (rewardAmount > 0 && rewardTxId) {
         if (rewardToken === 'CC') {
           await this.users.recordTransaction({
             userId,
@@ -1339,8 +1233,8 @@ export class QuestsService {
             type: 'QUEST_REWARD',
             description: `Received ${rewardAmount} CC reward`,
             referenceId: questId,
-            counterparty: rewardPartyId.split('::')[0],
-            ledgerTxId: updateId,
+            counterparty: rewardPartyId!.split('::')[0],
+            ledgerTxId: rewardTxId,
             status: 'COMPLETED',
             transferInstructionCid: null,
           });
@@ -1355,7 +1249,7 @@ export class QuestsService {
             type: 'QUEST_REWARD',
             description: `Received ${rewardAmount} ${rewardToken} reward`,
             referenceId: questId,
-            ledgerTxId: updateId,
+            ledgerTxId: rewardTxId,
             status: 'COMPLETED',
             transferInstructionCid: null,
           });
@@ -1363,18 +1257,18 @@ export class QuestsService {
       }
     } catch (recordErr) {
       this.logger.error(
-        `CLAIM_HISTORY_FAIL ${rewardLabel} quest=${questId.slice(0, 8)} user=@${username}: atomic settle committed (updateId=${updateId}) but history record threw: ${recordErr instanceof Error ? recordErr.message : String(recordErr)}`,
+        `CLAIM_HISTORY_FAIL ${rewardLabel} quest=${questId.slice(0, 8)} user=@${username}: fee committed (updateId=${updateId}) but history record threw: ${recordErr instanceof Error ? recordErr.message : String(recordErr)}`,
       );
     }
 
-    // ── 5. Async balance sync (CC only, non-blocking) ───────────────────────
-    if (rewardToken === 'CC' && username && rewardAmount > 0) {
+    // ── Async balance sync (CC reward only, non-blocking) ───────────────────
+    if (rewardToken === 'CC' && username && rewardTxId) {
       void this.inboundSync
         .alignBalanceFromChain(userId, username)
         .catch((err) => this.logger.warn(`Balance sync failed (non-blocking): ${String(err)}`));
     }
 
-    // ── 6. Upsert QuestCompletion ───────────────────────────────────────────
+    // ── Upsert QuestCompletion ──────────────────────────────────────────────
     if (rewardAmount > 0) {
       if (rewardToken === 'CC') {
         const rewardMicroCc = BigInt(Math.round(rewardAmount * 1_000_000));
@@ -3193,17 +3087,16 @@ export class QuestsService {
             campaignContractId,
             userPartyId: cantonPartyId,
             claimId: reservedDrawId,
-            rewardSenderPartyId: rewardPartyId,   // v24: co-controller Settle
             eligibilityCid,                        // v25: on-chain guard
           });
-          claimSessionId = claimResult.claimContractId;
+          claimSessionId = claimResult.campaignContractId;   // v27: campaignCid (no receipt)
           if (claimResult.errors.length > 0) {
             this.logger.warn(
               `ClaimFcfsSlot warnings: ${claimResult.errors.join(' | ')}`,
             );
           } else {
             this.logger.log(
-              `ClaimFcfsSlot OK: user=@${username} quest=${questId.slice(0, 8)} claim=${claimSessionId?.slice(0, 12)}`,
+              `ClaimFcfsSlot OK: user=@${username} quest=${questId.slice(0, 8)} campaign=${claimSessionId?.slice(0, 12)}`,
             );
           }
         } else {
@@ -3222,33 +3115,32 @@ export class QuestsService {
       // (race defense) → send reward.
       await this.assertRewardPool(rewardCc);
 
-      // ── BRANCH: atomic Settle vs fallback (non-atomic) ──────────────────────
-      // Atomic: fee+reward transfer terjadi DI DALAM Settle choice (1 tx tree).
-      //   Tidak boleh collectClaimFee/sendReward terpisah (akan double-transfer).
-      // Fallback: collectClaimFee + sendReward terpisah (non-atomic, path v21).
+      // ── v27 hybrid payout: fee via AppPaymentRequest, reward via CIP-56 ───────
+      // v25 settleAtomic dihapus. Fee+reward sekarang 2 jalur terpisah (reward
+      // tetap CIP-56 — Splice tidak punya native platform→user reward).
       if (this.useAtomicSettle && claimSessionId) {
-        // ATOMIC PATH (DAML v22/v23 Settle)
-        const { updateId } = await this.settleAndRecord({
+        const { updateId } = await this.executeClaimPayoutV27({
           drawId: reservedDrawId,
           userId,
           questId,
           questTitle: quest.title,
           cantonPartyId,
           username,
-          claimContractId: claimSessionId,
+          claimId: reservedDrawId,
           feeAmount: feeCc,
           rewardAmount: rewardCc,
           rewardToken,
           rewardLabel: 'FCFS reward',
         });
         rewardDeliveryKind = 'direct';
-        // claimFeeLedgerTxId = updateId (atomic, fee+reward 1 tx)
+        // claimFeeLedgerTxId = collectTxId fee (AppPaymentRequest). Reward tx
+        // tersimpan di winnerDraw.ledgerTxId (di helper).
         await this.prisma.winnerDraw.update({
           where: { id: reservedDrawId },
           data: {
             ccAmount: rewardCc,
             claimFeeLedgerTxId: updateId,
-            claimSessionContractId: claimSessionId,
+            claimSessionContractId: claimSessionId,   // v27: QuestPaymentRequest cid
           },
         });
         if (cantonPartyId) {
@@ -3258,74 +3150,6 @@ export class QuestsService {
             userPartyId: cantonPartyId,
             rewardCc,
             payoutTxId: updateId ?? '',
-          }).catch((err) =>
-            this.logger.warn(`FCFS ledger sync failed: ${String(err)}`),
-          );
-        }
-      } else {
-        // FALLBACK PATH (non-atomic, v21-style: collectClaimFee + sendReward terpisah)
-        const feeTxId =
-          drawNow?.claimFeeLedgerTxId ??
-          (await this.collectClaimFee({
-            userId,
-            cantonPartyId,
-            username,
-            questTitle: quest.title,
-            feeCc,
-            feeLabel: 'FCFS claim fee',
-            feeTargetPartyId: this.feeTargetPartyId ?? validatorPartyId,
-          }));
-
-        // Persist fee TX early so retries don't double-charge and slot stays reserved.
-        if (!drawNow?.claimFeeLedgerTxId) {
-          await this.prisma.winnerDraw.updateMany({
-            where: {
-              id: reservedDrawId,
-              questId,
-              userId,
-              distributed: false,
-              claimFeeLedgerTxId: null,
-            },
-            data: { claimFeeLedgerTxId: feeTxId },
-          });
-        }
-
-        // Step 2: reward wallet (canquest-reward) sends reward → same user party.
-        await this.assertRewardPool(rewardCc, rewardToken);
-
-        const { rewardTxId, pending: rewardPending } =
-          await this.sendQuestRewardAndRecord({
-            drawId: reservedDrawId,
-            userId,
-            questId,
-            questTitle: quest.title,
-            cantonPartyId,
-            username,
-            rewardCc,
-            rewardToken,
-            claimSessionId,
-            feeTxId,
-            rewardLabel: 'FCFS reward',
-          });
-        rewardDeliveryKind = rewardPending ? 'pending_offer' : 'direct';
-
-        await this.prisma.winnerDraw.update({
-          where: { id: reservedDrawId },
-          data: {
-            ccAmount: rewardCc,
-            ...(claimSessionId
-              ? { claimSessionContractId: claimSessionId }
-              : {}),
-          },
-        });
-
-        if (cantonPartyId) {
-          void this.syncCampaignLedgerAfterPayout({
-            userId,
-            questId,
-            userPartyId: cantonPartyId,
-            rewardCc,
-            payoutTxId: rewardTxId,
           }).catch((err) =>
             this.logger.warn(`FCFS ledger sync failed: ${String(err)}`),
           );
@@ -3510,17 +3334,16 @@ export class QuestsService {
             campaignContractId,
             userPartyId: cantonPartyId,
             claimId: draw.id,
-            rewardSenderPartyId: this.requireRewardPartyId(),   // v24: co-controller Settle
             eligibilityCid,                                      // v25: on-chain guard
           });
-          claimSessionId = claimResult.claimContractId;
+          claimSessionId = claimResult.campaignContractId;   // v27: campaignCid (no receipt)
           if (claimResult.errors.length > 0) {
             this.logger.warn(
               `DrawRaffleWinner warnings: ${claimResult.errors.join(' | ')}`,
             );
           } else {
             this.logger.log(
-              `DrawRaffleWinner OK: user=@${username} quest=${questId.slice(0, 8)} claim=${claimSessionId?.slice(0, 12)}`,
+              `DrawRaffleWinner OK: user=@${username} quest=${questId.slice(0, 8)} campaign=${claimSessionId?.slice(0, 12)}`,
             );
           }
         } else {
@@ -3537,17 +3360,16 @@ export class QuestsService {
       let drawRewardPending = false;
       let drawRewardTxId = '';
 
-      // ── BRANCH: atomic Settle vs fallback (non-atomic) ──────────────────────
+      // ── v27 hybrid payout: fee via AppPaymentRequest, reward via CIP-56 ───────
       if (this.useAtomicSettle && claimSessionId) {
-        // ATOMIC PATH (DAML v22/v23 Settle)
-        const { updateId } = await this.settleAndRecord({
+        const { updateId } = await this.executeClaimPayoutV27({
           drawId: draw.id,
           userId,
           questId,
           questTitle: quest.title,
           cantonPartyId,
           username,
-          claimContractId: claimSessionId,
+          claimId: draw.id,
           feeAmount: feeCc,
           rewardAmount: rewardCc,
           rewardToken: normalizeRewardToken(quest.rewardToken),
@@ -3560,84 +3382,7 @@ export class QuestsService {
             data: {
               ccAmount: rewardCc,
               claimFeeLedgerTxId: drawRewardTxId,
-              claimSessionContractId: claimSessionId,
-            },
-          }),
-          this.prisma.questCompletion.update({
-            where: { userId_questId: { userId, questId } },
-            data: { completedAt: completion.completedAt },
-          }),
-        ]);
-      } else {
-        // FALLBACK PATH (non-atomic, v21-style)
-        // ⚠️ SECURITY (C1): Fee idempotency guard.
-        const feeTxId =
-          drawNow?.claimFeeLedgerTxId ??
-          (await this.collectClaimFee({
-            userId,
-            cantonPartyId,
-            username,
-            questTitle: quest.title,
-            feeCc,
-            feeLabel: 'Raffle claim fee',
-            feeTargetPartyId: this.feeTargetPartyId ?? validatorPartyId,
-          }));
-
-        if (!drawNow?.claimFeeLedgerTxId) {
-          await this.prisma.winnerDraw.updateMany({
-            where: {
-              id: draw.id,
-              questId,
-              userId,
-              distributed: false,
-              claimFeeLedgerTxId: null,
-            },
-            data: { claimFeeLedgerTxId: feeTxId },
-          });
-        }
-
-        await this.assertRewardPool(rewardCc, normalizeRewardToken(quest.rewardToken));
-
-        // C1 re-check distributed sebelum sendReward.
-        const drawPreSend = await this.prisma.winnerDraw.findUnique({
-          where: { id: draw.id },
-          select: { distributed: true, ledgerTxId: true },
-        });
-        if (drawPreSend?.distributed) {
-          const rewardStatus = await this.getQuestRewardStatus(userId, questId);
-          return {
-            ok: true,
-            message: 'You already claimed this reward.',
-            rewardCc: quest.rewardCc,
-            feeCc: 0,
-            rewardStatus,
-          };
-        }
-
-        const { rewardTxId, pending } = await this.sendQuestRewardAndRecord({
-          drawId: draw.id,
-          userId,
-          questId,
-          questTitle: quest.title,
-          cantonPartyId,
-          username,
-          rewardCc,
-          rewardToken: normalizeRewardToken(quest.rewardToken),
-          claimSessionId,
-          feeTxId,
-          rewardLabel: 'Raffle reward',
-        });
-        drawRewardTxId = rewardTxId;
-        drawRewardPending = pending;
-
-        await this.prisma.$transaction([
-          this.prisma.winnerDraw.update({
-            where: { id: draw.id },
-            data: {
-              ccAmount: rewardCc,
-              ...(claimSessionId
-                ? { claimSessionContractId: claimSessionId }
-                : {}),
+              claimSessionContractId: claimSessionId,   // v27: QuestPaymentRequest cid
             },
           }),
           this.prisma.questCompletion.update({
@@ -3797,71 +3542,24 @@ export class QuestsService {
     }
 
     // ── BRANCH: atomic Settle (fee-only, reward=0) vs fallback ──────────────
-    // Atomic: fee transfer di Settle choice (1 transaction tree). Tidak collectClaimFee.
-    // Fallback: collectClaimFee terpisah (non-atomic, path v21).
-    let feeTxId: string;
+    // v27 hybrid: fee via AppPaymentRequest (fee-only, reward=0 utk kode claim).
+    // v25 fallback collectClaimFee dihapus — semua jalan executeClaimPayoutV27.
+    let feeTxId: string = existingDraw?.claimFeeLedgerTxId ?? '';
     let inviteSettledCid: string | null = null;
-    const useAtomicInvite = this.useAtomicSettle;
-
-    if (!useAtomicInvite) {
-      // FALLBACK: collectClaimFee terpisah
-      if (existingDraw?.claimFeeLedgerTxId) {
-        feeTxId = existingDraw.claimFeeLedgerTxId;
-      } else {
-        try {
-          feeTxId = await this.collectClaimFee({
-            userId,
-            cantonPartyId,
-            username,
-            questTitle: quest.title,
-            feeCc,
-            feeLabel: 'Claim fee',
-            feeTargetPartyId: this.feeTargetPartyId ?? validatorPartyId,
-          });
-        } catch {
-          throw new BadRequestException(FCFS_CLAIM_FAIL_MSG);
-        }
-
-        // Persist fee TX early so retries don't double-charge.
-        await this.prisma.winnerDraw.upsert({
-          where: { questId_userId: { questId, userId } },
-          create: {
-            questId,
-            userId,
-            ccAmount: quest.rewardCc,
-            distributed: false,
-            claimFeeLedgerTxId: feeTxId,
-          },
-          update: {
-            claimFeeLedgerTxId: feeTxId,
-          },
-        });
-      }
-    } else {
-      // ATOMIC: fee akan dikirim di Settle (fee-only, rewardAmount=0).
-      // feeTxId placeholder; akan di-update setelah settleAtomic sukses.
-      feeTxId = existingDraw?.claimFeeLedgerTxId ?? '';
-    }
 
     // Determine claim kind for Code rewards (CODE_FCFS or CODE_RAFFLE).
     //
-    // v11.1 fix: Sebelumnya blok ini memanggil 4 stub deprecated
-    // (createEarnClaimSession / markEarnClaimFeePaid / createRaffleWinner /
-    // createFcfsSlotReservation) yang SEMUA selalu return null → tidak ada
-    // audit trail DAML sama sekali untuk Code rewards.
-    //
-    // Fix: exercise QuestCampaign on-chain (ClaimFcfsSlot atau DrawRaffleWinner),
-    // yang menghasilkan (campaignCid, claimCid). claimCid disimpan untuk
-    // revealRewardCode SETELAH kode benar-benar di-assign dari pool.
-    // Kuota FCFS & status campaign divalidasi on-chain di DAML choice.
+    // Exercise QuestCampaign on-chain (ClaimSlot atau DrawWinner) utk kuota
+    // guard + audit trail. Kuota FCFS & status campaign divalidasi on-chain.
     const codeClaimKind: 'CODE_FCFS' | 'CODE_RAFFLE' =
       rewardType === RewardType.INVITE_CODE_FCFS ? 'CODE_FCFS' : 'CODE_RAFFLE';
 
     let codeClaimSessionId: string | null = null;
+    let codeClaimId = '';
     if (this.questLedger.isClaimSessionConfigured() && cantonPartyId) {
       const campaignContractId = (quest as any).ledgerCampaignId ?? null;
       if (campaignContractId) {
-        const claimId = `code-${existingDraw?.id ?? userId.slice(0, 12)}-${Date.now().toString(36)}`;
+        codeClaimId = `code-${existingDraw?.id ?? userId.slice(0, 12)}-${Date.now().toString(36)}`;
         try {
           // v25: resolve eligibility contract utk on-chain guard.
           const eligibilityCid = await this.resolveEligibilityCid({
@@ -3877,25 +3575,23 @@ export class QuestsService {
               ? await this.questLedger.claimFcfsSlot({
                   campaignContractId,
                   userPartyId: cantonPartyId,
-                  claimId,
-                  rewardSenderPartyId: this.requireRewardPartyId(),   // v24: co-controller Settle
+                  claimId: codeClaimId,
                   eligibilityCid,                                      // v25: on-chain guard
                 })
               : await this.questLedger.drawRaffleWinner({
                   campaignContractId,
                   userPartyId: cantonPartyId,
-                  claimId,
-                  rewardSenderPartyId: this.requireRewardPartyId(),   // v24: co-controller Settle
+                  claimId: codeClaimId,
                   eligibilityCid,                                      // v25: on-chain guard
                 });
-          codeClaimSessionId = claimResult.claimContractId;
+          codeClaimSessionId = claimResult.campaignContractId;   // v27: campaignCid (no receipt)
           if (claimResult.errors.length > 0) {
             this.logger.warn(
               `QuestCampaign ${codeClaimKind} warnings: ${claimResult.errors.join(' | ')}`,
             );
           } else {
             this.logger.log(
-              `QuestCampaign ${codeClaimKind} OK: user=@${username} quest=${questId.slice(0, 8)} claim=${codeClaimSessionId?.slice(0, 12)}`,
+              `QuestCampaign ${codeClaimKind} OK: user=@${username} quest=${questId.slice(0, 8)} campaign=${codeClaimSessionId?.slice(0, 12)}`,
             );
           }
         } catch (err) {
@@ -3910,20 +3606,19 @@ export class QuestsService {
       }
     }
 
-    // ── ATOMIC Settle (fee-only, reward=0) utk kode claim ───────────────────
-    // DAML v23: reward leg Optional. rewardAmount=0 → reward=None → fee-only
-    // atomic Settle. feePaid=True setelah ini, sehingga RevealCode bisa jalan.
-    if (useAtomicInvite && codeClaimSessionId) {
+    // ── v27 hybrid payout (fee-only, reward=0 utk kode claim) ────────────────
+    // Fee via AppPaymentRequest. QuestPaymentRequest wrapper di-settle sebagai
+    // audit trail. RevealCode DAML dihapus — code delivery via DB (inviteCode).
+    if (this.useAtomicSettle && codeClaimSessionId) {
       try {
-        const feePartyId = this.feeTargetPartyId ?? validatorPartyId;
-        const settleRes = await this.settleAndRecord({
+        const settleRes = await this.executeClaimPayoutV27({
           drawId: existingDraw?.id ?? '',
           userId,
           questId,
           questTitle: quest.title,
           cantonPartyId,
           username,
-          claimContractId: codeClaimSessionId,
+          claimId: codeClaimId,
           feeAmount: feeCc,
           rewardAmount: 0,            // kode claim: no token reward
           rewardToken: 'CC',
@@ -3974,26 +3669,12 @@ export class QuestsService {
         }),
       ]);
 
-      // Re-read the row so downstream ledger sync has the assigned id/code.
-      const codeRow = await this.prisma.inviteCodePool.findFirst({
-        where: { questId, userId, code: claimedCode },
-      });
-
-      // v22/v23: RevealCode di DAML — pakai inviteSettledCid (feePaid=True dari
-      // atomic Settle, RevealCode akan sukses). Fallback: codeClaimSessionId
-      // (feePaid guard reject krn Settle tidak dijalankan di fallback — non-blocking).
-      const revealTarget = inviteSettledCid ?? codeClaimSessionId;
-      if (revealTarget) {
-        const revealRes = await this.questLedger.revealRewardCode({
-          claimContractId: revealTarget,
-          code: claimedCode,
-        });
-        if (!revealRes.ok) {
-          this.logger.warn(
-            `DAML_AUDIT_TRAIL_FAIL RevealCode ${codeClaimKind} quest=${questId.slice(0, 8)} user=@${username} (non-blocking): ${revealRes.errors.join(' | ')}`,
-          );
-        }
-      }
+      // v27: RevealCode DAML dihapus (QuestClaimReceipt tidak ada). Code delivery
+      // via DB only (inviteCode column di-assign di atas). Audit trail on-chain
+      // ada di QuestPaymentRequest (inviteSettledCid).
+      this.logger.log(
+        `Code claim assigned: quest=${questId.slice(0, 8)} user=@${username} qpr=${inviteSettledCid?.slice(0, 12) ?? 'none'}`,
+      );
     } catch (err) {
       this.logger.warn(`claimInviteReward DB failed: ${String(err)}`);
       throw new BadRequestException(FCFS_CLAIM_FAIL_MSG);
@@ -4177,17 +3858,16 @@ export class QuestsService {
             campaignContractId: ccCodeCampaignCid,
             userPartyId: cantonPartyId,
             claimId: draw.id,
-            rewardSenderPartyId: this.requireRewardPartyId(),   // v24: co-controller Settle
             eligibilityCid,                                      // v25: on-chain guard
           });
-          ccCodeClaimSessionId = claimResult.claimContractId;
+          ccCodeClaimSessionId = claimResult.campaignContractId;   // v27: campaignCid (no receipt)
           if (claimResult.errors.length > 0) {
             this.logger.warn(
               `DrawRaffleWinner (CC+Code) warnings: ${claimResult.errors.join(' | ')}`,
             );
           } else {
             this.logger.log(
-              `DrawRaffleWinner (CC+Code) OK: user=@${username} quest=${questId.slice(0, 8)} claim=${ccCodeClaimSessionId?.slice(0, 12)}`,
+              `DrawRaffleWinner (CC+Code) OK: user=@${username} quest=${questId.slice(0, 8)} campaign=${ccCodeClaimSessionId?.slice(0, 12)}`,
             );
           }
         } catch (err) {
@@ -4206,17 +3886,17 @@ export class QuestsService {
       let feeTxId: string;
       let settledCid: string | null = null;
 
+      // ── v27 hybrid payout: fee via AppPaymentRequest, reward via CIP-56 ───────
       if (this.useAtomicSettle && ccCodeClaimSessionId && rewardCc > 0) {
-        // ATOMIC PATH (DAML v22/v23 Settle)
         await this.assertRewardPool(rewardCc, normalizeRewardToken(quest.rewardToken));
-        const settleRes = await this.settleAndRecord({
+        const settleRes = await this.executeClaimPayoutV27({
           drawId: draw.id,
           userId,
           questId,
           questTitle: quest.title,
           cantonPartyId,
           username,
-          claimContractId: ccCodeClaimSessionId,
+          claimId: draw.id,
           feeAmount: feeCc,
           rewardAmount: rewardCc,
           rewardToken: normalizeRewardToken(quest.rewardToken),
@@ -4226,68 +3906,25 @@ export class QuestsService {
         settledCid = settleRes.settledCid;
         feeTxId = rewardOfferId ?? `fee-${Date.now()}-${userId.slice(0, 8)}`;
       } else {
-        // FALLBACK PATH (non-atomic, v21-style)
-        // ⚠️ SECURITY (C1): Fee idempotency guard.
-        feeTxId =
-          drawNow?.claimFeeLedgerTxId ??
-          (await this.collectClaimFee({
-            userId,
-            cantonPartyId,
-            username,
-            questTitle: quest.title,
-            feeCc,
-            feeLabel: 'CC+Code raffle claim fee',
-            feeTargetPartyId: this.feeTargetPartyId ?? validatorPartyId,
-          }));
-
-        if (!drawNow?.claimFeeLedgerTxId) {
-          await this.prisma.winnerDraw.updateMany({
-            where: {
-              id: draw.id,
-              questId,
-              userId,
-              distributed: false,
-              claimFeeLedgerTxId: null,
-            },
-            data: { claimFeeLedgerTxId: feeTxId },
-          });
-        }
-
-        await this.assertRewardPool(rewardCc, normalizeRewardToken(quest.rewardToken));
-        if (rewardCc > 0) {
-          // C1 re-check distributed sebelum sendReward.
-          const drawPreSend = await this.prisma.winnerDraw.findUnique({
-            where: { id: draw.id },
-            select: { distributed: true, ledgerTxId: true },
-          });
-          if (drawPreSend?.distributed) {
-            const rewardStatus = await this.getQuestRewardStatus(userId, questId);
-            return {
-              ok: true,
-              message: 'You already claimed this reward.',
-              rewardCc: quest.rewardCc,
-              inviteCode: drawPreSend.ledgerTxId ? null : null,
-              feeCc: 0,
-              rewardVariant: variant,
-              rewardStatus,
-            };
-          }
-
-          const raffleResult = await this.sendQuestRewardAndRecord({
+        // rewardCc == 0 (CODE-only variant): fee-only path via executeClaimPayoutV27.
+        // Tidak ada token reward, tapi fee tetap via AppPaymentRequest.
+        feeTxId = drawNow?.claimFeeLedgerTxId ?? '';
+        if (this.useAtomicSettle && ccCodeClaimSessionId && !feeTxId) {
+          const settleRes = await this.executeClaimPayoutV27({
             drawId: draw.id,
             userId,
             questId,
             questTitle: quest.title,
             cantonPartyId,
             username,
-            rewardCc,
-            rewardToken: normalizeRewardToken(quest.rewardToken),
-            claimSessionId: ccCodeClaimSessionId,
-            feeTxId,
-            rewardLabel: 'CC+Code raffle reward',
+            claimId: draw.id,
+            feeAmount: feeCc,
+            rewardAmount: 0,
+            rewardToken: 'CC',
+            rewardLabel: 'CC+Code raffle fee',
           });
-          rewardOfferId = raffleResult.rewardTxId;
-          raffleRewardPending = raffleResult.pending;
+          settledCid = settleRes.settledCid;
+          feeTxId = settleRes.updateId ?? `fee-${Date.now()}-${userId.slice(0, 8)}`;
         }
       }
       // Atomically reserve one code (FOR UPDATE SKIP LOCKED). The per-user
@@ -4343,20 +3980,13 @@ export class QuestsService {
         );
       }
 
-      // v22/v23: RevealCode di DAML — bila atomic path, pakai settledCid (feePaid
-      // sudah True dari Settle, RevealCode akan sukses). Bila fallback path, pakai
-      // ccCodeClaimSessionId (feePaid guard akan reject krn Settle tidak dijalankan
-      // di fallback — non-blocking, log saja).
-      if (finalCode && (settledCid || ccCodeClaimSessionId)) {
-        const revealRes = await this.questLedger.revealRewardCode({
-          claimContractId: settledCid ?? ccCodeClaimSessionId!,
-          code: finalCode,
-        });
-        if (!revealRes.ok) {
-          this.logger.warn(
-            `DAML_AUDIT_TRAIL_FAIL RevealCode CC+Code quest=${questId.slice(0, 8)} user=@${username} code=${finalCode.slice(0, 6)}… (non-blocking): ${revealRes.errors.join(' | ')}`,
-          );
-        }
+      // v27: RevealCode DAML dihapus (QuestClaimReceipt tidak ada). Code delivery
+      // via DB (finalCode di-assign dari reserveInviteCode). Audit trail on-chain
+      // ada di QuestPaymentRequest (settledCid).
+      if (finalCode) {
+        this.logger.log(
+          `CC+Code code assigned: quest=${questId.slice(0, 8)} user=@${username} qpr=${settledCid?.slice(0, 12) ?? 'none'}`,
+        );
       }
 
       const rewardStatus = await this.getQuestRewardStatus(userId, questId);

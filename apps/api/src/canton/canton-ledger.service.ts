@@ -1898,7 +1898,12 @@ export class CantonLedgerService {
    * returning camelCase { contractId, templateId, blob, round? } for disclosure.
    * Scan API uses snake_case (contract_id, template_id, created_event_blob).
    */
-  private async fetchScanProxyContract(
+  /**
+   * Public accessor untuk scan-proxy contracts (amulet-rules, open-and-issuing-mining-rounds).
+   * Dipakai QuestLedgerService utk resolve PaymentTransferContext (AppPaymentRequest_Accept)
+   * dan AppTransferContext (AcceptedAppPayment_Collect) — v27 hybrid reward flow.
+   */
+  async fetchScanProxyContract(
     seg: 'amulet-rules' | 'open-and-issuing-mining-rounds',
   ): Promise<{
     contractId: string;

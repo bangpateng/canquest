@@ -27,7 +27,60 @@ Branch master, HEAD 659dde1.
 
 ---
 
-## 🎯 KONTEKS UTAMA — Kenapa v27?
+## 🛑 KOREKSI PENTING (2026-08-07) — PREMIS v27 ASLI CACAT
+
+> **Baca ini dulu sebelum lanjut.** Doc di bawah section ini adalah versi ASLI
+> (pre-correction) yang disimpan utk history. Premis arsitektur v27 1.4.0
+> ternyata **salah** — diverifikasi melalui dokumentasi resmi Splice
+> (`docs.sync.global`) + analisa codebase mendalam.
+
+### Apa yang salah di premis asli?
+
+Doc asli (bawah) mengasumsikan **satu AppPaymentRequest bawa reward+fee**:
+`sender=user, receiverAmounts=[(user, reward), (treasury, fee)]`. Itu **mustahil** —
+user tidak bisa kirim reward ke dirinya sendiri.
+
+### Kenapa salah? (verified vs docs Splice)
+
+`AppPaymentRequest` adalah flow **USER-BAYAR** (source: `docs.sync.global`):
+- `sender` = "the party that should **pay**"
+- `receiverAmounts` = "pairs of (party, amount) requesting to be **paid**"
+- `provider` = "the app provider; **receives** usage rewards"
+
+Selain itu, **Splice tidak punya mekanisme native platform→user reward** sama sekali:
+- `AppRewardCoupon` dimiliki **provider** (network → app utk usage), bukan app → user.
+- `WalletUserProxy` = provider *earn* credit dari aktivitas user, bukan provider *pay* user.
+
+Jadi reward delivery di codebase Anda (CIP-56 `TransferFactory_Transfer`) **tetap**
+apa pun versi DAML — itu satu-satunya primitif platform→user yang ada.
+
+### v27 yang BENAR (hybrid — yang sudah di-implement)
+
+| Flow | Mekanisme | Arah |
+|---|---|---|
+| **Fee claim** (user → treasury) | `AppPaymentRequest` (locked, anti-preapproval) | user-bayar |
+| **Reward** (platform → user) | CIP-56 `TransferFactory_Transfer` (unchanged dari v25) | platform-bayar |
+
+### Yang sudah di-ubah di code (v27 hybrid, DAML 1.4.0 → **1.5.0**):
+- DAML `QuestPaymentRequest`: **DROP** field `rewardAmount` (cacat). Fee-only wrapper.
+- Backend: `executeClaimPayoutV27` (quests.service.ts) — fee via AppPaymentRequest,
+  reward via `sendQuestRewardCip56` (CIP-56). v25 settleAtomic/recordTxId/revealRewardCode
+  dihapus. ClaimSlot/DrawWinner drop `rewardSender`, return campaignCid only.
+- Reward delivery **tidak berubah** dari v25 (CIP-56) — itu memang tidak bisa di-fix
+  via AppPaymentRequest (arah terbalik). Fragilitas preapproval reward tetap ada;
+  solusinya = pastikan preapproval always-on saat onboarding (bukan via DAML v27).
+
+### Yang TIDAK berubah / TIDAK bisa di-fix via v27:
+- Reward preapproval fragility (itu adalah masalah CIP-56 receiver, bukan DAML).
+- Frontend wallet SDK (tidak perlu — Accept custodial oleh backend).
+
+---
+
+## 🎯 KONTEKS UTAMA — Kenapa v27? (DOC ASLI, pre-correction)
+
+> ⚠️ Section di bawah ini adalah **versi asli** doc, sebelum koreksi premise
+> di atas. Dipertahankan utk history/konteks. Lihat section KOREKSI di atas
+> utk arsitektur yang benar dan sudah di-implement.
 
 v25 (sekarang jalan) pakai `Settle` choice (nested TransferFactory_Transfer,
 multi-controller). **Masalah:** receiver butuh TransferPreapproval aktif supaya
