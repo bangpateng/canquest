@@ -102,7 +102,7 @@ VPS 1 (node): Docker containers
   - splice-validator-nginx-1        : 127.0.0.1:80 (gateway)
 
 VPS 2 (dapp) : NestJS API + apps/web
-Database     : Supabase (Postgres)
+Database     : Postgres lokal VPS 2 (canquest_prod, 127.0.0.1:5432)
 
 Parties:
   app-canquest (provider)  : app-canquest::12209fe74271728c49a1922362aa0c8d2bff7f7546b81963b7d5b65361fd8e5442fb

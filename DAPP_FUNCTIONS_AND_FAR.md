@@ -18,7 +18,7 @@
 | Ledger | Canton participant node (VPS 1 `ledger.canquestlabs.com`) |
 | Validator app | Splice validator (`validator.canquestlabs.com`) |
 | Auth | Keycloak sendiri (`auth.canquestlabs.com`), client_credentials, scope `daml_ledger_api` |
-| Database | Supabase (Postgres) |
+| Database | Postgres lokal VPS 2 (`canquest_prod`, 127.0.0.1:5432) |
 | Swap | OneSwap (DEX eksternal Canton, via `@oneswap/sdk`) |
 
 **Custody:** CUSTODIAL penuh. Backend (operator party `canquest-operator`) submit

@@ -42,7 +42,7 @@ Cek saldo USDCx reward wallet:
 curl http://localhost:3001/api/admin/stats  # cek reward wallet balance
 ```
 
-### 2. Jalankan DB migration di Supabase production
+### 2. Jalankan DB migration di Postgres production (VPS 2)
 
 Migration file: `apps/api/prisma/migrations/20260725120000_add_reward_token/migration.sql`
 
@@ -59,7 +59,16 @@ ALTER TABLE "QuestCompletion" ADD COLUMN "rewardTokenAmount" DECIMAL(38,18);
 ALTER TYPE "TokenTxType" ADD VALUE 'QUEST_REWARD';
 ```
 
-Di Supabase dashboard: SQL Editor → jalankan statement 1-4 dulu (commit), lalu statement 5.
+Di VPS 2, via `psql` (atau pakai `prisma migrate deploy` yang otomatis handle per-statement):
+
+```bash
+# Opsi A: prisma migrate deploy (rekomendasi — handle statement splitting otomatis)
+cd /var/www/canquest/apps/api
+npx prisma migrate deploy
+
+# Opsi B: manual via psql — jalankan statement 1-4 dulu (commit), lalu statement 5
+psql "postgresql://canquest:<PW>@127.0.0.1:5432/canquest_prod"
+```
 
 **Verifikasi**:
 ```sql
@@ -73,7 +82,7 @@ Default "CC" → semua quest existing **tidak berubah behavior** (backward-compa
 
 - **VPS API**: `git pull origin master && npm run build && pm2 restart canquest-api --update-env`
 - **Vercel web**: auto-deploy saat push master
-- **Supabase**: sudah di-migrate (langkah 2)
+- **DB (VPS 2 Postgres)**: sudah di-migrate (langkah 2)
 
 ### 4. Test di staging dulu
 
