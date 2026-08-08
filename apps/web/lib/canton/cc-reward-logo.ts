@@ -19,6 +19,14 @@ export function ccRewardLogoApiUrl(): string {
   return `${apiOrigin()}/api/uploads/cc-reward-logo`;
 }
 
+/**
+ * Token logo URL for a given symbol (e.g. "CC", "USDCx").
+ * Served by the API: /api/uploads/token-logo/:symbol
+ */
+export function tokenLogoUrl(symbol: string): string {
+  return `${apiOrigin()}/api/uploads/token-logo/${encodeURIComponent(symbol)}`;
+}
+
 function isDirectR2Url(url: string): boolean {
   return /\.r2\.dev\b/i.test(url) || /\.r2\.cloudflarestorage\.com/i.test(url);
 }

@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" font-family="Inter, system-ui, sans-serif">
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0a0c14"/><stop offset="100%" stop-color="#07080d"/>
+    </linearGradient>
+    <radialGradient id="g2" cx="50%" cy="0%" r="55%">
+      <stop offset="0%" stop-color="#5AD98A" stop-opacity="0.16"/><stop offset="100%" stop-color="#5AD98A" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="brand2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#5AD98A"/><stop offset="100%" stop-color="#B8F0D4"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="900" fill="url(#bg2)"/>
+  <rect width="1200" height="900" fill="url(#g2)"/>
+
+  <rect x="60" y="60" width="1080" height="780" rx="22" fill="#0c0e16" stroke="#ffffff" stroke-opacity="0.06"/>
+  <circle cx="96" cy="96" r="6" fill="#ffffff" fill-opacity="0.15"/>
+  <circle cx="118" cy="96" r="6" fill="#ffffff" fill-opacity="0.15"/>
+  <circle cx="140" cy="96" r="6" fill="#ffffff" fill-opacity="0.15"/>
+  <text x="600" y="101" fill="#6b6e7b" font-size="13" text-anchor="middle">app.canquest.com/wallet</text>
+
+  <text x="100" y="170" fill="#edeef2" font-size="26" font-weight="800">Lock CC</text>
+  <text x="100" y="200" fill="#6b6e7b" font-size="14">Reach Full access by locking your CC. Returned in full on unlock.</text>
+
+  <rect x="100" y="240" width="1000" height="110" rx="16" fill="#10131b" stroke="#5AD98A" stroke-opacity="0.3"/>
+  <text x="128" y="278" fill="#6b6e7b" font-size="12" font-weight="600" letter-spacing="1">AMOUNT</text>
+  <text x="128" y="324" fill="#edeef2" font-size="40" font-weight="800">30.00</text>
+  <rect x="940" y="284" width="130" height="40" rx="20" fill="#5AD98A" fill-opacity="0.12"/>
+  <circle cx="968" cy="304" r="10" fill="#5AD98A"/>
+  <text x="990" y="310" fill="#5AD98A" font-size="15" font-weight="700">CC</text>
+
+  <text x="100" y="396" fill="#6b6e7b" font-size="13" font-weight="600" letter-spacing="1">LOCK DURATION</text>
+  <rect x="100" y="416" width="320" height="64" rx="14" fill="#5AD98A" fill-opacity="0.1" stroke="#5AD98A" stroke-opacity="0.5"/>
+  <text x="260" y="454" fill="#5AD98A" font-size="17" font-weight="700" text-anchor="middle">7 days</text>
+  <rect x="440" y="416" width="320" height="64" rx="14" fill="#10131b" stroke="#ffffff" stroke-opacity="0.06"/>
+  <text x="600" y="454" fill="#edeef2" font-size="17" font-weight="600" text-anchor="middle">15 days</text>
+  <rect x="780" y="416" width="320" height="64" rx="14" fill="#10131b" stroke="#ffffff" stroke-opacity="0.06"/>
+  <text x="940" y="454" fill="#edeef2" font-size="17" font-weight="600" text-anchor="middle">30 days</text>
+
+  <rect x="100" y="510" width="1000" height="120" rx="16" fill="#10131b" stroke="#ffffff" stroke-opacity="0.05"/>
+  <text x="128" y="548" fill="#edeef2" font-size="15" font-weight="700">Progress to Full access</text>
+  <text x="1072" y="548" fill="#5AD98A" font-size="14" font-weight="700" text-anchor="end">30 / 30 CC</text>
+  <rect x="128" y="572" width="944" height="10" rx="5" fill="#1a1f2e"/>
+  <rect x="128" y="572" width="944" height="10" rx="5" fill="url(#brand2)"/>
+  <text x="128" y="608" fill="#5AD98A" font-size="13" font-weight="600">✓ Full access unlocked</text>
+
+  <rect x="100" y="670" width="1000" height="68" rx="16" fill="#5AD98A"/>
+  <text x="600" y="712" fill="#0a0a0c" font-size="18" font-weight="800" text-anchor="middle">Lock 30 CC for 7 days</text>
+
+  <g transform="translate(100,776)">
+    <rect x="0" y="0" width="1000" height="44" rx="12" fill="#10131b" stroke="#5AD98A" stroke-opacity="0.2" stroke-dasharray="4 4"/>
+    <g transform="translate(20,14)" stroke="#5AD98A" stroke-width="2" fill="none"><rect x="0" y="4" width="12" height="10" rx="2"/><path d="M3 4 V2 a3 3 0 0 1 6 0 V4"/></g>
+    <text x="44" y="28" fill="#6b6e7b" font-size="13">Your CC stays yours — locked in your wallet, returned in full. Small holding fee applies.</text>
+  </g>
+</svg>

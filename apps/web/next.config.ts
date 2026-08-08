@@ -19,6 +19,9 @@ const nextConfig: NextConfig = {
   },
   // Allow Next.js Image Optimization to serve images from the API CDN
   images: {
+    // We ship our own SVG mockups in /public/landing — safe to serve.
+    // (Only affects SVGs we author, not user-uploaded content.)
+    dangerouslyAllowSVG: true,
     remotePatterns: [
       {
         protocol: "https",
@@ -29,6 +32,16 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "api.canquest.cc",
         pathname: "/api/uploads/quests/**",
+      },
+      {
+        protocol: "https",
+        hostname: "api.canquest.cc",
+        pathname: "/api/uploads/token-logo/**",
+      },
+      {
+        protocol: "https",
+        hostname: "api.canquest.cc",
+        pathname: "/api/uploads/cc-reward-logo",
       },
       {
         protocol: "https",
