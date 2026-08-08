@@ -16,7 +16,7 @@ export function CtaSection() {
             aria-hidden
           />
           <h2 className="mx-auto max-w-2xl text-2xl font-bold tracking-tight text-[var(--foreground)] sm:text-3xl md:text-4xl">
-            Mulai kunci CC dan buka kampanye partner.
+            Lock CC and unlock partner campaigns.
           </h2>
           <div className="mt-8 flex justify-center">
             <LaunchAppButton
@@ -25,7 +25,7 @@ export function CtaSection() {
             />
           </div>
           <p className="mt-4 text-xs text-[var(--muted-foreground)]">
-            Invite-gated · butuh kode invite tim
+            Invite-gated · requires a team invite code
           </p>
         </div>
       </LandingShell>

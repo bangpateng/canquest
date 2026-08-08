@@ -31,7 +31,7 @@ export function LockSection() {
     <LandingSection id="lock">
       <SectionHeader
         eyebrow="How it works"
-        title="Lock CC, buka kampanye"
+        title="Lock CC, unlock campaigns"
         align="center"
         className="mb-10 md:mb-14"
       />

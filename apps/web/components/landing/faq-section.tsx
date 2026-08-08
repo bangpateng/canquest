@@ -5,37 +5,36 @@ import { SectionHeader } from "@/components/landing/section-header";
 /**
  * FAQ — native <details>/<summary>, no JS.
  *
- * Rule: hanya bahas hal yang BELUM dijelaskan di section lain.
- * Yang sudah ada gambarnya (lock, swap, wallet) tidak diulang di sini.
+ * Rule: only cover topics NOT already explained by other sections.
  */
 const faqs = [
   {
-    q: "CC saya hilang waktu di-lock?",
-    a: "Tidak. CC tetap di wallet kamu sendiri lewat AmuletRules, dan balik utuh pas di-unlock. Yang ada cuma biaya holding kecil selama lock — pokoknya tidak dipotong.",
+    q: "Do I lose my CC when I lock it?",
+    a: "No. Your CC stays in your own wallet via AmuletRules, and returns in full when you unlock. There's only a small holding fee while it's locked — the principal is never deducted.",
   },
   {
-    q: "Reward quest ada jenis apa aja?",
-    a: "Empat: First-come-first-served (slot yang bisa habis), Raffle (admin undi pemenang), Invite code (buka kode partner setelah fee), dan CC + Code raffle (gabungan CC + kode). Tiap kampanye tentuin sendiri mau pakai yang mana.",
+    q: "What kind of rewards can I claim from quests?",
+    a: "Four types: First-come-first-served (slots that can run out), Raffle (admin draws winners), Invite code (reveals a partner code after the fee), and CC + Code raffle (a combined CC + code draw). Each campaign picks which type it offers.",
   },
   {
-    q: "Kirim CC atau USDCx dikenakan fee?",
-    a: "Ya. Keduanya pakai transfer CIP-56 Canton. Sebagian kecil dari amount dialihkan ke treasury party sebagai platform fee. Fee udah ditampilin di preview sebelum kamu konfirmasi.",
+    q: "Is there a fee to send CC or USDCx?",
+    a: "Yes. Both use Canton's CIP-56 transfer. A small portion of the amount is routed to the treasury party as a platform fee. The fee is shown in the preview before you confirm.",
   },
   {
-    q: "Pair swap yang tersedia?",
-    a: "Saat ini CC ↔ USDCx. Pair lain menyusul — saat ini masih Beta.",
+    q: "Which swap pairs are available?",
+    a: "Currently CC ↔ USDCx. More pairs are coming — it's still in Beta.",
   },
   {
-    q: "Kenapa wallet-nya custodial?",
-    a: "Supaya onboarding gampang: daftar email + kode invite, bukan urus private key. Operator yang submit command ke ledger, tapi saldo dan transaksi kamu tetap record nyata on-chain di Canton — bukan angka off-chain di database.",
+    q: "Why is the wallet custodial?",
+    a: "To make onboarding simple: sign up with email + invite code, no private keys to manage. The operator submits commands to the ledger, but your balance and transactions are still real on-chain records on Canton — not an off-chain database counter.",
   },
   {
-    q: "Cara dapet invite code?",
-    a: "Dari tim CanQuest atau partner. Wallet creation di-gate oleh kode invite dengan kuota harian. Tanpa kode, belum bisa bikin party ID.",
+    q: "How do I get an invite code?",
+    a: "From the CanQuest team or a partner. Wallet creation is gated by an invite code under a daily quota. Without a code, you can't create a party ID yet.",
   },
   {
-    q: "Gimana CaraQuest ngehindarin bot/farming?",
-    a: "Satu party ID per orang yang terverifikasi lewat invite-gated — bot farming mahal di sini. Quest, poin, dan reward draw ditentukan di server dengan audit trail, bukan di browser, jadi gak bisa dimanipulasi client-side.",
+    q: "How does CanQuest prevent bots and farming?",
+    a: "One party ID per verified human, enforced through invite-gated sign-ups — so bot farming is costly here. Quests, points, and reward draws are decided server-side with an audit trail, never in the browser, so they can't be manipulated client-side.",
   },
 ];
 
@@ -44,7 +43,7 @@ export function FaqSection() {
     <LandingSection id="faq">
       <SectionHeader
         eyebrow="FAQ"
-        title="Pertanyaan umum"
+        title="Frequently asked questions"
         align="center"
         className="mb-8 md:mb-10"
       />

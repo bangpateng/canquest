@@ -8,7 +8,7 @@ export function CantonSection() {
     <LandingSection id="canton" variant="muted" className="border-b-0">
       <SectionHeader
         eyebrow="Wallet"
-        title="Saldo & identitas di ledger Canton"
+        title="Balance & identity on the Canton ledger"
         align="center"
         className="mb-8 md:mb-10"
       />

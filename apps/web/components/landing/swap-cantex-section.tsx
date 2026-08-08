@@ -10,7 +10,7 @@ export function SwapCantexSection() {
     <LandingSection id="swap" variant="muted">
       <SectionHeader
         eyebrow="Swap"
-        title="Tukar CC ↔ USDCx"
+        title="Swap CC ↔ USDCx"
         align="center"
         className="mb-10 md:mb-12"
       />
