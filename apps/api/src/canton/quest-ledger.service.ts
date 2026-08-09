@@ -1433,7 +1433,6 @@ export class QuestLedgerService implements OnModuleInit {
     userPartyId: string;
     campaignId: string;          // QuestCampaign campaignId (korelasi ke claim slot)
     claimId: string;             // korelasi ke WinnerDraw id / draw id
-    rewardAmount: number;
     feeAmount: number;
     token: 'CC' | 'USDCx';
     expiresAt: string;           // ISO — sama dgn AppPaymentRequest.expiresAt (PATH B)
@@ -1459,7 +1458,6 @@ export class QuestLedgerService implements OnModuleInit {
           claimId: params.claimId,
           requestId,
           appPaymentRequestCid: '',          // kosong saat create; update via MarkAccepted (PATH B)
-          rewardAmount: this.dec(params.rewardAmount),
           feeAmount: this.dec(params.feeAmount),
           token: params.token,
           status: 'PENDING',
@@ -1471,7 +1469,7 @@ export class QuestLedgerService implements OnModuleInit {
       );
       if (res.ok && res.contractId) {
         this.logger.log(
-          `QuestPaymentRequest created: claimId=${params.claimId.slice(0, 16)} reward=${params.rewardAmount} fee=${params.feeAmount} ${params.token}`,
+          `QuestPaymentRequest created: claimId=${params.claimId.slice(0, 16)} fee=${params.feeAmount} ${params.token} (reward via PlatformTransfer/AppPaymentRequest, bukan di wrapper)`,
         );
         return { ok: true, contractId: res.contractId, errors: [] };
       }

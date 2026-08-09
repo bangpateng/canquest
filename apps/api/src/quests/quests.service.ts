@@ -1544,7 +1544,6 @@ export class QuestsService {
       userPartyId: cantonPartyId,
       campaignId,
       claimId: drawId,
-      rewardAmount,
       feeAmount,
       token: rewardToken,
       expiresAt,
