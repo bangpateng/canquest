@@ -5105,12 +5105,22 @@ export class CantonLedgerService {
           .join(', ')}] inputs=${inputs.length} total=${totalAmount}CC`,
     );
 
+    // actAs = transferControllers = sender + provider + SEMUA receivers.
+    // DAML: transferControllers t = foldl addOutputController {sender, provider} outputs
+    // Setiap receiver di outputs jadi authorizer wajib.
+    // Backend custodial: service account punya CanActAs rights utk semua party tsb
+    // (sender = user, provider = validator, receivers = receiver user + fee party).
+    const actAsParties = new Set<string>([params.senderPartyId, provider]);
+    for (const o of params.outputs) {
+      if (o.receiver !== params.senderPartyId) actAsParties.add(o.receiver);
+    }
+
     const { ok, status, text } = await this.exerciseChoice(
       amuletRules.contractId,
       amuletRules.templateId,
       'AmuletRules_Transfer',
       choiceArgument,
-      [params.senderPartyId, provider], // transferControllers = sender + provider
+      [...actAsParties], // transferControllers = sender + provider + receivers
       commandId,
       'submit-and-wait-for-transaction-tree',
       disclosedContracts,
