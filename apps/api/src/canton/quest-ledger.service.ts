@@ -4,14 +4,21 @@ import { randomUUID } from 'crypto';
 import { CantonLedgerService } from './canton-ledger.service';
 
 /**
- * DAML template paths — module Main (canquest-v25, DAR yang ter-deploy di ledger)
+ * DAML template paths — module Main (canquest-v28, DAR yang ter-deploy di ledger)
  *
- * Templates (5 — v25):
- *   Main:WalletRegistration  — jangkar identitas on-chain (Party ID)
- *   Main:CampaignEligibility — v25: bukti eligibility (LOCK_CC / POINTS) per campaign
- *   Main:QuestCampaign       — template induk quest (6 questKind) + state machine + eligibility guard
- *   Main:QuestClaimReceipt   — bukti klaim: atomic Settle + RevealCode + RecordTxId
- *   Main:PlatformTransfer    — v25: atomic send token + platform fee
+ * Templates (6 — v28):
+ *   Main:WalletRegistrationProposal — v28: 2-step consent (admin propose → user Accept)
+ *   Main:WalletRegistration         — identitas on-chain (signatory admin + userAddress)
+ *   Main:CampaignEligibility        — bukti eligibility (LOCK_CC / POINTS) per campaign
+ *   Main:QuestCampaign              — template induk quest (6 questKind) + state machine + eligibility guard
+ *   Main:QuestClaimReceipt          — bukti klaim: atomic Settle + RevealCode + RecordTxId
+ *   Main:PlatformTransfer           — atomic send token + platform fee
+ *
+ * v28 CHANGE vs v25:
+ *   - WalletRegistration field username/inviteCode → userProfileRef (PII off-chain)
+ *   - WalletRegistration signatory admin → admin,userAddress (co-signed)
+ *     → backend create via 2-step: WalletRegistrationProposal → Accept (custodial)
+ *   - userProfileRef format: "user:<userId>" (reference ke Prisma User.id)
  *
  * YANG TIDAK ADA ON-CHAIN (off-chain Postgres):
  *   - Poin user        → User.earnPoints + EarnEntry (backend DB)
@@ -24,16 +31,19 @@ import { CantonLedgerService } from './canton-ledger.service';
  *   signatory admin  — operator signs all contracts
  *   observer user    — user can only read, backend submits on their behalf
  *   Settle multi-controller: admin + userAddress + rewardSender (nested auth propagate)
+ *   WalletRegistrationProposal.Accept: controller userAddress
+ *     (backend custodial actAs [admin, userAddress] via grant rights)
  *
  * All methods are best-effort: they log errors but never throw,
  * so a Canton outage does not break the main application flow.
  */
 const TPL = {
   WalletRegistration: 'Main:WalletRegistration',
-  CampaignEligibility: 'Main:CampaignEligibility',   // v25
+  WalletRegistrationProposal: 'Main:WalletRegistrationProposal', // v28 NEW (2-step)
+  CampaignEligibility: 'Main:CampaignEligibility',
   QuestCampaign: 'Main:QuestCampaign',
   QuestClaimReceipt: 'Main:QuestClaimReceipt',
-  PlatformTransfer: 'Main:PlatformTransfer',         // v25
+  PlatformTransfer: 'Main:PlatformTransfer',
 } as const;
 
 // ── Result types ──────────────────────────────────────────────────────────────
@@ -217,7 +227,7 @@ export class QuestLedgerService implements OnModuleInit {
   private get damlPackageRef(): string {
     const name = this.config.get<string>('CANTON_DAML_PACKAGE_NAME')?.trim();
     if (name) return name.startsWith('#') ? name : `#${name}`;
-    return '#canquest-v25';
+    return '#canquest-v28';
   }
 
   private get operatorPartyId(): string | null {
@@ -373,13 +383,24 @@ export class QuestLedgerService implements OnModuleInit {
     return cids;
   }
 
-  // ── 1. WalletRegistration ───────────────────────────────────────────────────
+  // ── 1. WalletRegistration (v28: 2-step Proposal → Accept) ───────────────────
+  //
+  // v28 WalletRegistration jadi co-signed (signatory admin + userAddress).
+  // Admin tidak bisa create sendiri → backend jalankan 2-step custodial:
+  //   Step 1: create WalletRegistrationProposal (actAs: [admin])
+  //   Step 2: exercise Accept atas nama user (actAs: [admin, userAddress])
+  // Pattern sama dengan Settle multi-controller (grant rights utk user party).
+  //
+  // userProfileRef format: "user:<userId>" (reference ke Prisma User.id).
+  // PII (username, inviteCode) TIDAK on-chain — tetap di DB, direferensikan
+  // via userProfileRef.
 
   async registerWallet(params: {
     userPartyId: string;
-    username: string;
+    userId: string;        // v28: utk userProfileRef "user:<userId>"
+    username: string;      // utk log + commandId (tidak dikirim ke ledger)
     partyId: string;
-    inviteCode: string;
+    inviteCode: string;    // tetap di DB, TIDAK on-chain (v28)
   }): Promise<WalletRegistrationLedgerResult> {
     const result: WalletRegistrationLedgerResult = {
       ledgerEnabled: false,
@@ -387,7 +408,8 @@ export class QuestLedgerService implements OnModuleInit {
       errors: [],
     };
     if (!this.isConfigured()) return result;
-    const tpl = this.templateId(TPL.WalletRegistration);
+    const walletTpl = this.templateId(TPL.WalletRegistration);
+    const proposalTpl = this.templateId(TPL.WalletRegistrationProposal);
     const operator = this.operatorPartyId;
     if (!operator) {
       result.errors.push('Canton operator party not configured');
@@ -404,38 +426,97 @@ export class QuestLedgerService implements OnModuleInit {
       .catch((err) =>
         this.logger.warn(`grantUserRights(operator) failed: ${String(err)}`),
       );
+    // Grant rights utk user party (needed utk Step 2 Accept, controller userAddress).
+    await this.ledger
+      .grantUserRights(params.userPartyId)
+      .catch((err) =>
+        this.logger.warn(
+          `grantUserRights(user) failed: ${String(err)}`,
+        ),
+      );
+
+    // Idempotency: jika WalletRegistration utk user ini sudah ada, return langsung.
     const existing = this.findContractId(
-      await this.ledger.queryActiveContracts(tpl, [operator]),
+      await this.ledger.queryActiveContracts(walletTpl, [operator]),
       (args) => args.userAddress === params.userPartyId,
     );
     if (existing) {
       result.contractId = existing;
       return result;
     }
-    const res = await this.ledger.createContract(
-      tpl,
+
+    const userProfileRef = `user:${params.userId}`;
+    const nowIso = new Date().toISOString();
+
+    // ── Step 1: create WalletRegistrationProposal (actAs: [admin]) ──────────
+    const proposalRes = await this.ledger.createContract(
+      proposalTpl,
       {
         admin: operator,
         userAddress: params.userPartyId,
-        username: params.username,
+        userProfileRef,
         partyId: params.partyId,
-        inviteCode: params.inviteCode,
-        registeredAt: new Date().toISOString(),
+        registeredAt: nowIso,
       },
       [operator],
-      `wallet-reg-${params.username}-${randomUUID()}`,
+      `wallet-prop-${params.username}-${randomUUID()}`,
     );
-    if (res.ok && res.contractId) {
-      this.logger.log(
-        `WalletRegistration created: @${params.username} partyId=${params.partyId.split('::')[0]}`,
-      );
-      result.contractId = res.contractId;
-    } else {
+    if (!proposalRes.ok || !proposalRes.contractId) {
       result.errors.push(
         this.formatLedgerError(
-          res.error,
-          'Failed to create WalletRegistration',
+          proposalRes.error,
+          'Failed to create WalletRegistrationProposal',
         ),
+      );
+      return result;
+    }
+    const proposalCid = proposalRes.contractId;
+
+    // ── Step 2: exercise Accept (actAs: [admin, userAddress], custodial) ────
+    // Accept controller = userAddress. Backend submit atas nama user
+    // (grant rights sudah dilakukan di atas). Accept create WalletRegistration.
+    const acceptRes = await this.ledger.exerciseChoice(
+      proposalCid,
+      proposalTpl,
+      'Accept',
+      {}, // Accept tidak punya choice arg (hanya controller)
+      [operator, params.userPartyId],
+      `wallet-accept-${params.username}-${randomUUID()}`,
+      'submit-and-wait-for-transaction-tree',
+    );
+    if (!acceptRes.ok) {
+      // Step 2 gagal → Proposal orphan (non-critical). Idempotency check di
+      // retry tetap valid (WalletRegistration belum ada). Proposal bisa di-
+      // cleanup manual nanti bila perlu.
+      result.errors.push(
+        this.formatLedgerError(
+          acceptRes.text,
+          'Failed to exercise WalletRegistrationProposal.Accept',
+        ),
+      );
+      return result;
+    }
+
+    // WalletRegistration created event ada di transaction tree.
+    // Extract by template (lebih robust dari urutan-based).
+    const walletCids = this.extractContractIdsByTemplate(
+      acceptRes.text,
+      TPL.WalletRegistration,
+    );
+    const walletCid = walletCids[0] ?? null;
+    if (walletCid) {
+      this.logger.log(
+        `WalletRegistration created (v28 2-step): @${params.username} partyId=${params.partyId.split('::')[0]} profileRef=${userProfileRef}`,
+      );
+      result.contractId = walletCid;
+    } else {
+      // Accept sukses tapi WalletRegistration cid tidak ter-extract —
+      // log warning, tetap anggap sukses (ledger state sudah benar).
+      this.logger.warn(
+        `WalletRegistration Accept OK tapi cid tidak ter-extract @${params.username}`,
+      );
+      result.errors.push(
+        'WalletRegistrationProposal.Accept succeeded but WalletRegistration cid not found in tree',
       );
     }
     return result;
@@ -1401,6 +1482,7 @@ export class QuestLedgerService implements OnModuleInit {
 
   async recordPartyRegistration(params: {
     userPartyId: string;
+    userId?: string;        // v28: utk userProfileRef "user:<userId>"
     username?: string;
     partyHint?: string;
     inviteCode?: string;
@@ -1409,9 +1491,22 @@ export class QuestLedgerService implements OnModuleInit {
     if (!params.userPartyId) return { ok: true, contractId: null, errors: [] };
     const resolvedUsername =
       params.username ?? params.partyHint ?? params.userPartyId.split('::')[0];
+    // v28: userId wajib utk userProfileRef. Jika tidak provided (caller lama),
+    // fallback ke partyHint (kurang ideal — log warning utk surface bug).
+    const userId =
+      params.userId ??
+      (typeof params.userId === 'string' ? params.userId : resolvedUsername);
+    if (!params.userId) {
+      this.logger.warn(
+        `recordPartyRegistration called tanpa userId — userProfileRef fallback ke username @${resolvedUsername}. ` +
+          `Caller harus pass userId (req.user.userId).`,
+      );
+    }
     // v21: hanya create WalletRegistration. UserAccount dihapus (poin off-chain).
+    // v28: 2-step Proposal→Accept, userProfileRef = "user:<userId>".
     const walletResult = await this.registerWallet({
       userPartyId: params.userPartyId,
+      userId,
       username: resolvedUsername,
       partyId: params.userPartyId,
       inviteCode: params.inviteCode ?? '',

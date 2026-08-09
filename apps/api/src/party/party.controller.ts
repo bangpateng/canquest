@@ -320,6 +320,7 @@ export class PartyController {
             userPartyId: cantonPartyId,
             username,
             inviteCode: inviteCode ?? '',
+            userId: req.user.userId, // v28: utk userProfileRef "user:<userId>"
             spliceOnboarded: true,
             preapprovalActive,
           })
@@ -579,6 +580,7 @@ export class PartyController {
             userPartyId: cantonPartyId,
             username,
             inviteCode: inviteCode ?? '',
+            userId, // v28: utk userProfileRef "user:<userId>" (param method)
             spliceOnboarded: true,
             preapprovalActive,
           })
