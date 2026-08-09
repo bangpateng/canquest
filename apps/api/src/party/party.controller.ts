@@ -1055,29 +1055,41 @@ export class PartyController {
             validatorPartyId;
           const feePartyOnChainAtomic =
             await this.splice.resolveOnChainPartyId(feePartyRawAtomic);
-          // ── ATOMIC via AmuletRules_Transfer (native CC multi-output) ──────
-          // CC (Amulet) punya native multi-output: 1 transfer dgn outputs array
-          // [transfer, fee]. Ini pattern atomic yang benar utk CC — BERBEDA dari
-          // token-standard TransferFactory_Transfer (single receiver).
-          // BatchTransfer/TransferFactory gagal utk multi-leg CC krn Leg 1
-          // consume amulet → Leg 2 CONTRACT_NOT_ACTIVE.
+          // ── HYBRID: atomic if receiver preapproved, offer if not ──────────
+          // AmuletRules_Transfer multi-output atomic HANYA berlaku jika SEMUA
+          // receiver (termasuk transfer receiver) punya CanActAs rights utk
+          // service account (custodial). Utk receiver off-preapproval, atomic
+          // bypass offer system (CC masuk langsung tanpa consent) — itu
+          // melanggar design intent CanQuest (DEFAULT OFF = user bisa reject).
           //
-          // DAML: Splice.AmuletRules Transfer.outputs = [TransferOutput]
-          // Template: based on lockCc() yang sudah proven jalan di production.
-          const outputs: Array<{ receiver: string; amount: number }> = [
-            { receiver: receiverPartyIdOnChain, amount },
-          ];
-          if (effectiveFeeCc > 0) {
-            outputs.push({ receiver: feePartyOnChainAtomic, amount: effectiveFeeCc });
-          }
-          const amuletRes = await this.ledger.executeAmuletRulesTransferMulti({
-            senderPartyId: senderPartyIdOnChain,
-            outputs,
-            clientNonce: body.clientNonce,
-          });
-          if (amuletRes.ok && amuletRes.updateId) {
-            // Atomic sukses — transfer + fee dalam 1 tx (AmuletRules_Transfer)
-            accepted = true;
+          // Strategi:
+          //   - Receiver preapproved (ON) → AmuletRules_Transfer atomic (1 tx)
+          //   - Receiver off-preapproval → skip atomic, fallback ke legacy
+          //     offer path (TransferFactory_Transfer, receiver accept manual)
+          const receiverPreapproved =
+            await this.splice.hasTransferPreapproval(receiverPartyIdOnChain);
+          if (!receiverPreapproved) {
+            this.logger.log(
+              `CC atomic skipped: receiver @${receiverPartyIdOnChain.split('::')[0]} off-preapproval → offer path (2 tx)`,
+            );
+          } else {
+            // ── ATOMIC via AmuletRules_Transfer (native CC multi-output) ────
+            // CC (Amulet) punya native multi-output: 1 transfer dgn outputs array
+            // [transfer, fee]. Atomic hanya utk receiver preapproved.
+            const outputs: Array<{ receiver: string; amount: number }> = [
+              { receiver: receiverPartyIdOnChain, amount },
+            ];
+            if (effectiveFeeCc > 0) {
+              outputs.push({ receiver: feePartyOnChainAtomic, amount: effectiveFeeCc });
+            }
+            const amuletRes = await this.ledger.executeAmuletRulesTransferMulti({
+              senderPartyId: senderPartyIdOnChain,
+              outputs,
+              clientNonce: body.clientNonce,
+            });
+            if (amuletRes.ok && amuletRes.updateId) {
+              // Atomic sukses — transfer + fee dalam 1 tx (AmuletRules_Transfer)
+              accepted = true;
             transferMethod = 'direct';
             ledgerTxId = amuletRes.updateId;
             feeCollected = effectiveFeeCc > 0;
@@ -1088,11 +1100,12 @@ export class PartyController {
             );
             // Skip path lama (cip56Result) — atomic sudah handle transfer + fee.
             // Record history + return di bawah (setelah blok fee lama di-skip).
-          } else {
-            this.logger.warn(
-              `Atomic AmuletRules_Transfer gagal, fallback ke path lama: ${amuletRes.error ?? 'unknown'}`,
-            );
-          }
+            } else {
+              this.logger.warn(
+                `Atomic AmuletRules_Transfer gagal, fallback ke path lama: ${amuletRes.error ?? 'unknown'}`,
+              );
+            }
+          } // end if (receiverPreapproved) — else: skip atomic, go to legacy offer path
         } catch (err) {
           this.logger.warn(`Atomic AmuletRules_Transfer exception, fallback: ${String(err)}`);
         }
