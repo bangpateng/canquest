@@ -230,6 +230,29 @@ export class QuestLedgerService implements OnModuleInit {
     return '#canquest-v25';
   }
 
+  /**
+   * Deteksi apakah package DAR yang ter-deploy adalah v27 (AppPaymentRequest arch).
+   *
+   * Dipakai utk branching signature ClaimSlot/DrawWinner (v27 hapus field
+   * rewardSender + return hanya ContractId QuestCampaign, bukan tuple).
+   *
+   * v27 detection:
+   *   - CANTON_DAML_PACKAGE_NAME mengandung "v27" (string) → true
+   *   - CANTON_DAML_PACKAGE_NAME = hash hex (post-upload) → tidak bisa detect
+   *     dari hash saja. Fallback ke QUEST_V27_FLOW flag (caller sudah set true
+   *     saat deploy v27).
+   *
+   * Saat v27 fully verified + v25 dihapus (Step 7), method ini jadi always-true
+   * dan bisa di-delete.
+   */
+  private get isV27Package(): boolean {
+    const name = this.config.get<string>('CANTON_DAML_PACKAGE_NAME')?.trim() ?? '';
+    if (name.includes('v27')) return true;
+    // Hash hex (post-upload) → rely on flag (caller wajib set QUEST_V27_FLOW=true).
+    const flag = this.config.get<string>('QUEST_V27_FLOW')?.trim().toLowerCase();
+    return flag === 'true' || flag === '1';
+  }
+
   private get operatorPartyId(): string | null {
     const dedicated = this.config
       .get<string>('CANTON_OPERATOR_PARTY_ID')
@@ -642,33 +665,49 @@ export class QuestLedgerService implements OnModuleInit {
       return result;
     }
     result.ledgerEnabled = true;
+    // v27 signature: TIDAK ada field rewardSender (dihapus), return hanya
+    // ContractId QuestCampaign (bukan tuple QuestClaimReceipt).
+    // v25 signature: ada rewardSender (co-controller Settle), return tuple.
+    const isV27 = this.isV27Package;
+    const choiceArgs = isV27
+      ? {
+          user: params.userPartyId,
+          claimId: params.claimId,
+          claimedAt: new Date().toISOString(),
+          eligibilityCid: params.eligibilityCid ?? null,
+        }
+      : {
+          user: params.userPartyId,
+          claimId: params.claimId,
+          claimedAt: new Date().toISOString(),
+          rewardSender: params.rewardSenderPartyId,   // v24: co-controller Settle
+          eligibilityCid: params.eligibilityCid ?? null, // v25: Optional (nullable)
+        };
     const { ok, text } = await this.ledger.exerciseChoice(
       params.campaignContractId,
       tpl,
       'ClaimSlot',
-      {
-        user: params.userPartyId,
-        claimId: params.claimId,
-        claimedAt: new Date().toISOString(),
-        rewardSender: params.rewardSenderPartyId,   // v24: co-controller Settle
-        eligibilityCid: params.eligibilityCid ?? null, // v25: Optional (nullable)
-      },
+      choiceArgs,
       [operator],
       `claim-fcfs-${params.claimId}-${randomUUID()}`,
       'submit-and-wait-for-transaction-tree',
     );
     if (ok) {
-      // FIX: extract by templateId (bukan urutan) — ClaimSlot return
-      // (ContractId QuestCampaign, ContractId QuestClaimReceipt) tapi urutan
-      // di transaction tree response tidak dijamin. Sebelumnya pakai cids[0/1]
-      // → kadang dapat QuestCampaign sbg claimContractId → Settle gagal
-      // WRONGLY_TYPED_CONTRACT ("Expected QuestClaimReceipt but got QuestCampaign").
       const campaignCids = this.extractContractIdsByTemplate(text, TPL.QuestCampaign);
-      const claimCids = this.extractContractIdsByTemplate(text, TPL.QuestClaimReceipt);
       result.campaignContractId = campaignCids[0] ?? null;
-      result.claimContractId = claimCids[0] ?? null;
+      if (isV27) {
+        // v27: ClaimSlot return hanya ContractId QuestCampaign (QuestClaimReceipt
+        // dihapus). claimContractId set ke campaignContractId sbg pengganti
+        // (caller path v27 pakai sbg claimContractId → settleAndRecordV27).
+        result.claimContractId = result.campaignContractId;
+      } else {
+        // v25: ClaimSlot return tuple (QuestCampaign, QuestClaimReceipt).
+        // Extract by templateId (bukan urutan) — urutan tx tree tidak dijamin.
+        const claimCids = this.extractContractIdsByTemplate(text, TPL.QuestClaimReceipt);
+        result.claimContractId = claimCids[0] ?? null;
+      }
       this.logger.log(
-        `ClaimSlot: user=${params.userPartyId.split('::')[0]} campaign=${result.campaignContractId?.slice(0, 12) ?? 'none'}... claim=${result.claimContractId?.slice(0, 12) ?? 'none'}`,
+        `ClaimSlot${isV27 ? ' [v27]' : ''}: user=${params.userPartyId.split('::')[0]} campaign=${result.campaignContractId?.slice(0, 12) ?? 'none'}... claim=${result.claimContractId?.slice(0, 12) ?? 'none'}`,
       );
     } else {
       result.errors.push(
@@ -709,27 +748,44 @@ export class QuestLedgerService implements OnModuleInit {
       return result;
     }
     result.ledgerEnabled = true;
+    // v27 signature: TIDAK ada field rewardSender + rewardCode (dihapus),
+    // return hanya ContractId QuestCampaign (bukan tuple QuestClaimReceipt).
+    // v25 signature: ada rewardSender + rewardCode, return tuple.
+    const isV27 = this.isV27Package;
+    const choiceArgs = isV27
+      ? {
+          user: params.userPartyId,
+          claimId: params.claimId,
+          drawnAt: new Date().toISOString(),
+          eligibilityCid: params.eligibilityCid ?? null,
+        }
+      : {
+          user: params.userPartyId,
+          claimId: params.claimId,
+          rewardCode: params.rewardCode ?? '',
+          drawnAt: new Date().toISOString(),
+          rewardSender: params.rewardSenderPartyId,   // v24: co-controller Settle
+          eligibilityCid: params.eligibilityCid ?? null, // v25: Optional (nullable)
+        };
     const { ok, text } = await this.ledger.exerciseChoice(
       params.campaignContractId,
       tpl,
       'DrawWinner',
-      {
-        user: params.userPartyId,
-        claimId: params.claimId,
-        rewardCode: params.rewardCode ?? '',
-        drawnAt: new Date().toISOString(),
-        rewardSender: params.rewardSenderPartyId,   // v24: co-controller Settle
-        eligibilityCid: params.eligibilityCid ?? null, // v25: Optional (nullable)
-      },
+      choiceArgs,
       [operator],
       `draw-raffle-${params.claimId}-${randomUUID()}`,
     );
     if (ok) {
-      // FIX: extract by templateId (bukan urutan) — sama bug dgn claimFcfsSlot.
       const campaignCids = this.extractContractIdsByTemplate(text, TPL.QuestCampaign);
-      const claimCids = this.extractContractIdsByTemplate(text, TPL.QuestClaimReceipt);
       result.campaignContractId = campaignCids[0] ?? null;
-      result.claimContractId = claimCids[0] ?? null;
+      if (isV27) {
+        // v27: return hanya ContractId QuestCampaign (QuestClaimReceipt dihapus).
+        result.claimContractId = result.campaignContractId;
+      } else {
+        // v25: return tuple (QuestCampaign, QuestClaimReceipt).
+        const claimCids = this.extractContractIdsByTemplate(text, TPL.QuestClaimReceipt);
+        result.claimContractId = claimCids[0] ?? null;
+      }
     } else {
       result.errors.push(
         this.formatLedgerError(text, 'DrawWinner failed'),
