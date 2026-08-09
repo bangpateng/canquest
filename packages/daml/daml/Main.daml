@@ -289,10 +289,22 @@ template QuestCampaign
 
         newCampaignCid <- create this with currentClaims = currentClaims + 1
         newClaimCid <- create QuestClaimReceipt with
-          admin = admin, campaignId = campaignId, userAddress = user, claimId = claimId,
-          claimKind = questKind, rewardCc = rewardCc, rewardToken = rewardToken, rewardCode = "",
-          rewardSender = rewardSender, claimFeeCc = claimFeeCc, feePaid = False, feeTxId = None,
-          rewardSent = False, rewardTxId = None, status = "PRE_SETTLE", claimedAt = claimedAt
+          admin = admin
+          campaignId = campaignId
+          userAddress = user
+          claimId = claimId
+          claimKind = questKind
+          rewardCc = rewardCc
+          rewardToken = rewardToken
+          rewardCode = ""
+          rewardSender = rewardSender
+          claimFeeCc = claimFeeCc
+          feePaid = False
+          feeTxId = None
+          rewardSent = False
+          rewardTxId = None
+          status = "PRE_SETTLE"
+          claimedAt = claimedAt
         pure (newCampaignCid, newClaimCid)
 
     -- ── RAFFLE / WAITLIST DRAW ────────────────────────────────
@@ -339,10 +351,22 @@ template QuestCampaign
 
         newCampaignCid <- create this with currentClaims = currentClaims + 1
         newClaimCid <- create QuestClaimReceipt with
-          admin = admin, campaignId = campaignId, userAddress = user, claimId = claimId,
-          claimKind = questKind, rewardCc = rewardCc, rewardToken = rewardToken, rewardCode = rewardCode,
-          rewardSender = rewardSender, claimFeeCc = claimFeeCc, feePaid = False, feeTxId = None,
-          rewardSent = False, rewardTxId = None, status = "PRE_SETTLE", claimedAt = drawnAt
+          admin = admin
+          campaignId = campaignId
+          userAddress = user
+          claimId = claimId
+          claimKind = questKind
+          rewardCc = rewardCc
+          rewardToken = rewardToken
+          rewardCode = rewardCode
+          rewardSender = rewardSender
+          claimFeeCc = claimFeeCc
+          feePaid = False
+          feeTxId = None
+          rewardSent = False
+          rewardTxId = None
+          status = "PRE_SETTLE"
+          claimedAt = drawnAt
         pure (newCampaignCid, newClaimCid)
 
     -- ── STATE MACHINE ─────────────────────────────────────────
@@ -478,10 +502,16 @@ template QuestClaimReceipt
         -- Leg 3 (FAR marker, optional): app rewards ke appProvider
         forA_ featuredAppRightCid $ \farCid -> do
           exercise farCid FeaturedAppRight_CreateActivityMarker with
-            beneficiaries = [ AppRewardBeneficiary { beneficiary = appProvider, weight = 1.0 } ]
+            beneficiaries = [ AppRewardBeneficiary
+              { beneficiary = appProvider
+              , weight      = 1.0
+              } ]
             weight = None
 
-        create this with feePaid = True, rewardSent = rewardActuallySent, status = "SETTLED"
+        create this with
+          feePaid = True
+          rewardSent = rewardActuallySent
+          status = "SETTLED"
 
     -- ── RECORD TX ID ──────────────────────────────────────────
     -- Post-settle: isi feeTxId + rewardTxId.
@@ -495,7 +525,9 @@ template QuestClaimReceipt
       controller admin
       do
         assertMsg "Claim harus SETTLED!" (status == "SETTLED")
-        create this with feeTxId = Some feeTxId, rewardTxId = rewardTxId
+        create this with
+          feeTxId = Some feeTxId
+          rewardTxId = rewardTxId
 
     -- ── REVEAL CODE ───────────────────────────────────────────
     -- Utk kode reward: reveal kode setelah Settle sukses.
@@ -506,7 +538,9 @@ template QuestClaimReceipt
       controller admin
       do
         assertMsg "Harus SETTLED sebelum reveal kode!" (status == "SETTLED")
-        create this with rewardCode = code, status = "REVEALED"
+        create this with
+          rewardCode = code
+          status = "REVEALED"
 
     -- ── EXPIRE ────────────────────────────────────────────────
     -- Cleanup claim PRE_SETTLE yang gagal/expired.
