@@ -970,6 +970,21 @@ export class QuestsService {
     return this.config.get<string>('CANTON_APP_PROVIDER_PARTY_ID')?.trim() || null;
   }
 
+  /** Resolve WALLET_PROVIDER_PARTY (utk AppPaymentRequest_Accept, PATH B).
+   *  Biasanya sama dgn CANTON_VALIDATOR_PARTY_ID (validator operator). */
+  private get walletProviderPartyId(): string | null {
+    return (
+      this.config.get<string>('CANTON_WALLET_PROVIDER_PARTY_ID')?.trim() ||
+      this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ||
+      null
+    );
+  }
+
+  /** Resolve DSO_PARTY (utk AppPaymentRequest.dso field, PATH B). */
+  private get dsoPartyId(): string | null {
+    return this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() || null;
+  }
+
   /**
    * Cek apakah user punya TransferPreapproval CC yang valid (PATH A eligibility).
    *
@@ -1512,24 +1527,7 @@ export class QuestsService {
       usePathA = await this.resolvePreapprovalValid(cantonPartyId);
     }
 
-    if (!usePathA) {
-      // PATH B (AppPaymentRequest) — Fase 2b.
-      throw new Error(
-        `v27 PATH B (AppPaymentRequest) not implemented yet (Fase 2b). ` +
-          `Token=${rewardToken} preapproval=${!isUSDCx ? 'OFF/expired' : 'n/a (USDCx)'}. ` +
-          `Disable QUEST_V27_FLOW or enable preapproval utk CC reward.`,
-      );
-    }
-
-    this.logger.log(
-      `${rewardLabel} (v27 PATH A): fee ${feeAmount} CC → ${feePartyId.split('::')[0]}, ` +
-        `reward ${rewardAmount} ${rewardToken} → ${cantonPartyId.split('::')[0]} ` +
-        `(@${username}) [preapproval ON]`,
-    );
-
-    // ── Resolve instrument utk USDCx reward (CC default Amulet) ─────────────
-    // PATH A hanya jalankan bila CC + preapproval, tapi tetap handle instrument
-    // utk robustness (bila preapproval USDCx dibuka di future).
+    // ── Shared pre-step: resolve instrument, FAR, expiresAt, create QPR ─────
     let rewardInstrumentId: string | undefined;
     let rewardInstrumentAdmin: string | undefined;
     if (rewardToken === 'USDCx') {
@@ -1537,15 +1535,11 @@ export class QuestsService {
       rewardInstrumentId = ref.instrumentId;
       rewardInstrumentAdmin = ref.instrumentAdmin;
     }
-
-    // ── Resolve FAR marker (optional, utk app rewards built-in) ─────────────
     const featuredAppRightCid = await this.proxyCache.getFeaturedAppRightCid();
     const appProvider = this.appProviderPartyId;
-
-    const nowIso = new Date().toISOString();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // +10 menit
 
-    // ── 1. Create QuestPaymentRequest (DAML wrapper, audit trail PENDING) ───
+    // Create QuestPaymentRequest (DAML wrapper, audit trail PENDING) — shared.
     const qprResult = await this.questLedger.createQuestPaymentRequest({
       userPartyId: cantonPartyId,
       campaignId,
@@ -1560,60 +1554,159 @@ export class QuestsService {
     }
     const qprCid = qprResult.contractId;
 
-    // ── 2. Create PlatformTransfer (PENDING, amount=reward, feeAmount=fee) ──
-    const ptCreate = await this.questLedger.createPlatformTransfer({
-      userPartyId: cantonPartyId,
-      transferId: drawId,                // idempotency id (korelasi WinnerDraw)
-      amount: rewardAmount,
-      feeAmount,
-      receiverPartyId: cantonPartyId,    // receiver reward leg = user
-      treasuryPartyId: feePartyId,
-      token: rewardToken,
-    });
-    if (!ptCreate.ok || !ptCreate.contractId) {
-      throw new Error(`v27 createPlatformTransfer failed: ${ptCreate.errors.join(' | ')}`);
-    }
-    const platformTransferCid = ptCreate.contractId;
+    // ── EXECUTE per-PATH ────────────────────────────────────────────────────
+    let updateId: string;
+    let settledCid: string | null = null;
+    let path: 'A' | 'B';
 
-    // ── 3. Execute PlatformTransfer atomically (reward + fee + FAR marker) ──
-    // reward leg sender = REWARD_SENDER (bukan user), fee leg sender = user.
-    const execResult = await this.questLedger.executePlatformTransferReward({
-      platformTransferCid,
-      userPartyId: cantonPartyId,
-      rewardSenderPartyId: rewardPartyId,
-      feeReceiverPartyId: feePartyId,
-      rewardAmount,
-      feeAmount,
-      rewardToken,
-      rewardInstrumentId,
-      rewardInstrumentAdmin,
-      featuredAppRightCid,
-      appProviderPartyId: appProvider,
-    });
-    if (!execResult.ok) {
-      throw new Error(`v27 PATH A ExecuteTransfer failed: ${execResult.errors.join(' | ')}`);
-    }
-    const updateId = execResult.updateId ?? `v27-pathA-${Date.now()}-${userId.slice(0, 8)}`;
-    const settledCid = execResult.settledCid;
+    if (usePathA) {
+      path = 'A';
+      this.logger.log(
+        `${rewardLabel} (v27 PATH A): fee ${feeAmount} CC → ${feePartyId.split('::')[0]}, ` +
+          `reward ${rewardAmount} ${rewardToken} → ${cantonPartyId.split('::')[0]} ` +
+          `(@${username}) [preapproval ON]`,
+      );
 
-    this.logger.log(
-      `${rewardLabel} v27 PATH A OK: ptSettled=${settledCid?.slice(0, 12) ?? 'none'} ` +
-        `updateId=${updateId.slice(0, 12)}`,
-    );
+      // PATH A: createPlatformTransfer → executePlatformTransferReward (atomic).
+      const ptCreate = await this.questLedger.createPlatformTransfer({
+        userPartyId: cantonPartyId,
+        transferId: drawId,
+        amount: rewardAmount,
+        feeAmount,
+        receiverPartyId: cantonPartyId,
+        treasuryPartyId: feePartyId,
+        token: rewardToken,
+      });
+      if (!ptCreate.ok || !ptCreate.contractId) {
+        throw new Error(`v27 createPlatformTransfer failed: ${ptCreate.errors.join(' | ')}`);
+      }
+      const execResult = await this.questLedger.executePlatformTransferReward({
+        platformTransferCid: ptCreate.contractId,
+        userPartyId: cantonPartyId,
+        rewardSenderPartyId: rewardPartyId,
+        feeReceiverPartyId: feePartyId,
+        rewardAmount,
+        feeAmount,
+        rewardToken,
+        rewardInstrumentId,
+        rewardInstrumentAdmin,
+        featuredAppRightCid,
+        appProviderPartyId: appProvider,
+      });
+      if (!execResult.ok) {
+        throw new Error(`v27 PATH A ExecuteTransfer failed: ${execResult.errors.join(' | ')}`);
+      }
+      updateId = execResult.updateId ?? `v27-pathA-${Date.now()}-${userId.slice(0, 8)}`;
+      settledCid = execResult.settledCid;
+      this.logger.log(
+        `${rewardLabel} v27 PATH A OK: ptSettled=${settledCid?.slice(0, 12) ?? 'none'} ` +
+          `updateId=${updateId.slice(0, 12)}`,
+      );
+    } else {
+      // PATH B: AppPaymentRequest → Accept → MarkAccepted → Collect → MarkSettled.
+      path = 'B';
+      if (!appProvider) throw new Error('CANTON_APP_PROVIDER_PARTY_ID required for PATH B');
+      const walletProvider = this.walletProviderPartyId;
+      if (!walletProvider) throw new Error('CANTON_WALLET_PROVIDER_PARTY_ID required for PATH B');
+      const dsoPartyId = this.dsoPartyId;
+      if (!dsoPartyId) throw new Error('CANTON_DSO_PARTY_ID required for PATH B');
+
+      this.logger.log(
+        `${rewardLabel} (v27 PATH B): fee ${feeAmount} → ${feePartyId.split('::')[0]}, ` +
+          `reward ${rewardAmount} ${rewardToken} → ${cantonPartyId.split('::')[0]} ` +
+          `(@${username}) [${isUSDCx ? 'USDCx' : 'preapproval OFF'}]`,
+      );
+
+      // B1. Create AppPaymentRequest.
+      const apreq = await this.questLedger.createAppPaymentRequest({
+        senderPartyId: rewardPartyId,
+        receiverUserPartyId: cantonPartyId,
+        feeReceiverPartyId: feePartyId,
+        providerPartyId: appProvider,
+        dsoPartyId,
+        rewardAmount,
+        feeAmount,
+        token: rewardToken,
+        expiresAt,
+        description: `CanQuest Reward: ${campaignId} | ${drawId}`,
+        commandIdHint: drawId,
+      });
+      if (!apreq.ok || !apreq.appPaymentRequestCid) {
+        // QPR tetap PENDING — markExpired 'TIMEOUT' utk cleanup audit.
+        void this.questLedger.markExpired({ questPaymentRequestCid: qprCid, reason: 'TIMEOUT' })
+          .catch((e) => this.logger.warn(`markExpired after apreq create fail: ${String(e)}`));
+        throw new Error(`v27 PATH B createAppPaymentRequest failed: ${apreq.errors.join(' | ')}`);
+      }
+
+      // B2. Accept (sync custodial). Funding dari REWARD_SENDER holdings.
+      const accept = await this.questLedger.acceptAppPaymentRequest({
+        appPaymentRequestCid: apreq.appPaymentRequestCid,
+        senderPartyId: rewardPartyId,
+        walletProviderPartyId: walletProvider,
+        fundingAmount: rewardAmount + feeAmount,
+        commandIdHint: drawId,
+      });
+      if (!accept.ok || !accept.acceptedAppPaymentCid) {
+        void this.questLedger.markExpired({ questPaymentRequestCid: qprCid, reason: 'REJECTED' })
+          .catch((e) => this.logger.warn(`markExpired after accept fail: ${String(e)}`));
+        throw new Error(`v27 PATH B Accept failed: ${accept.errors.join(' | ')}`);
+      }
+
+      // B3. MarkAccepted (update QPR field appPaymentRequestCid, status→ACCEPTED).
+      const markAcc = await this.questLedger.markAccepted({
+        questPaymentRequestCid: qprCid,
+        acceptedAppPaymentCid: accept.acceptedAppPaymentCid,
+      });
+      if (!markAcc.ok) {
+        this.logger.warn(`v27 PATH B MarkAccepted non-fatal fail: ${markAcc.errors.join(' | ')}`);
+        // Lanjut ke Collect — MarkAccepted hanya audit, Collect tetap jalan.
+      }
+
+      // B4. Collect (atomic: LockedAmulet release, user+fee terima, FAR built-in).
+      const collect = await this.questLedger.collectAcceptedAppPayment({
+        acceptedAppPaymentCid: accept.acceptedAppPaymentCid,
+        rewardSenderPartyId: rewardPartyId,
+        appProviderPartyId: appProvider,
+        userPartyId: cantonPartyId,
+        feeReceiverPartyId: feePartyId,
+        featuredAppRightCid,
+        commandIdHint: drawId,
+      });
+      if (!collect.ok || !collect.collectTxId) {
+        void this.questLedger.markExpired({ questPaymentRequestCid: qprCid, reason: 'CANCELLED' })
+          .catch((e) => this.logger.warn(`markExpired after collect fail: ${String(e)}`));
+        throw new Error(`v27 PATH B Collect failed: ${collect.errors.join(' | ')}`);
+      }
+
+      // B5. MarkSettled (status ACCEPTED→SETTLED, simpan collectTxId).
+      const markSet = await this.questLedger.markSettled({
+        questPaymentRequestCid: qprCid,
+        collectTxId: collect.collectTxId,
+      });
+      if (!markSet.ok) {
+        this.logger.warn(`v27 PATH B MarkSettled non-fatal fail: ${markSet.errors.join(' | ')}`);
+      }
+
+      updateId = collect.collectTxId;
+      this.logger.log(
+        `${rewardLabel} v27 PATH B OK: collectTxId=${updateId.slice(0, 12)} accepted=${accept.acceptedAppPaymentCid.slice(0, 12)}`,
+      );
+    }
 
     // ── 4. SECURITY C1: persist distributed=true SETELAH atomic transfer ────
-    // Token sudah berpindah on-chain (PlatformTransfer SETTLED, irreversible).
+    // Token sudah berpindah on-chain (PATH A: PlatformTransfer SETTLED;
+    // PATH B: AcceptedAppPayment_Collect). Irreversible.
+    const persistData: Prisma.WinnerDrawUpdateManyMutationInput = {
+      distributed: true,
+      ledgerTxId: updateId,
+      distributedAt: new Date(),
+      rewardToken,
+      rewardPath: path === 'A' ? 'V27_PATH_A' : 'V27_PATH_B',
+      questPaymentRequestCid: qprCid,
+    };
     await this.prisma.winnerDraw.updateMany({
       where: { id: drawId, distributed: false },
-      data: {
-        distributed: true,
-        ledgerTxId: updateId,
-        distributedAt: new Date(),
-        rewardToken,
-        rewardPath: 'V27_PATH_A',
-        questPaymentRequestCid: qprCid,
-        paymentCollectedAt: new Date(), // PATH A instan — langsung collected
-      },
+      data: persistData,
     });
 
     // ── 5. Record history (NON-FATAL — atomic transfer sudah committed) ────
@@ -1662,7 +1755,7 @@ export class QuestsService {
     } catch (recordErr) {
       this.logger.error(
         `CLAIM_HISTORY_FAIL ${rewardLabel} quest=${questId.slice(0, 8)} user=@${username}: ` +
-          `v27 PATH A committed (updateId=${updateId}) but history record threw: ` +
+          `v27 PATH ${path} committed (updateId=${updateId}) but history record threw: ` +
           `${recordErr instanceof Error ? recordErr.message : String(recordErr)}`,
       );
     }
@@ -1690,7 +1783,7 @@ export class QuestsService {
       });
     }
 
-    return { settledCid: settledCid ?? null, updateId, path: 'A' };
+    return { settledCid: settledCid ?? null, updateId, path };
   }
 
   /**
