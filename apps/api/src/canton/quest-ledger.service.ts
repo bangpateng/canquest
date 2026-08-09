@@ -1266,68 +1266,44 @@ export class QuestLedgerService implements OnModuleInit {
         text: string;
         errors: string[];
       }> => {
-        // ── RESOLVE INPUT HOLDINGS (partition utk CC, terpisah utk non-CC) ──────
-        // ⚠️ CRITICAL: PlatformTransfer punya 2 leg, keduanya sender = user yang sama.
-        // Untuk CC (Amulet), kedua leg minum dari POOL holdings Amulet yang sama.
-        // Kalau greedyFillHoldings di-query 2x terpisah, kedua leg bisa pilih CID yang
-        // SAMA → leg 1 archive CID → leg 2 CONTRACT_NOT_ACTIVE (bug fix: ini root cause
-        // CONTRACT_NOT_ACTIVE di log deploy pertama).
+        // ── RESOLVE INPUT HOLDINGS (kirim SEMUA, match legacy executeTransferFactoryTransfer) ──
+        // ⚠️ CRITICAL LESSON (deploy v28): greedyFill pre-select holdings →
+        // CONTRACT_NOT_ACTIVE. Splice TransferFactory_Transfer dirancang menerima
+        // SEMUA holdings & pilih sendiri yang valid (change amulet auto-created).
+        // Pre-select subset (greedyFill) bikin fragile — holding pilihan bisa stale.
         //
-        // Fix: utk CC, query 1x lalu PARTISI — transferInputCids ambil sebagian, fee
-        // ambil dari SISA (tidak overlap). Utk non-CC, pool transfer (USDCx) beda dari
-        // pool fee (Amulet/CC) → query terpisah aman (tidak overlap by definition).
+        // Fix: kirim SEMUA holdings (holdings.map), biarkan Splice pilih.
+        // Utk CC: kedua leg (transfer + fee) minum dari pool Amulet sama →
+        // kedua leg kirim pool yang sama, Splice handle change utk atomic multi-leg.
+        // Utk non-CC: pool transfer (USDCx) ≠ pool fee (Amulet) → query terpisah.
         let transferInputCids: string[];
         let feeInputCids: string[];
         if (isAmuletTransfer) {
-          // CC: pool sama → partisi. Query sekali, alokasi transfer dulu, fee dari sisa.
+          // CC: query pool Amulet sekali, kedua leg pakai SEMUA holdings.
           const ccHoldings = await this.ledger.queryAmuletHoldings(params.userPartyId);
-          const sorted = [...ccHoldings].sort(
-            (a, b) => parseFloat(b.amount) - parseFloat(a.amount),
-          );
-          // Alokasi transfer leg (amount) — ambil holdings desc sampai cukup.
-          let acc = 0;
-          const transferCids: string[] = [];
-          for (const h of sorted) {
-            if (acc >= params.amount) break;
-            transferCids.push(h.contractId);
-            acc += parseFloat(h.amount);
-          }
-          if (params.amount > 0 && transferCids.length === 0) {
+          if (params.amount > 0 && ccHoldings.length === 0) {
             return { ok: false, text: '', errors: [`Insufficient CC for transfer ${params.amount} (user=${params.userPartyId.split('::')[0]})`] };
           }
-          // Fee leg: ambil dari holdings yang TIDAK dipakai transfer (sisa), lalu
-          // kalau sisa kurang, boleh reuse (registry CIP-56 handle via change amulet).
-          const transferCidSet = new Set(transferCids);
-          const remainder = sorted.filter((h) => !transferCidSet.has(h.contractId));
-          let feeAcc = 0;
-          const feeCids: string[] = [];
-          for (const h of remainder) {
-            if (feeAcc >= params.feeAmount) break;
-            feeCids.push(h.contractId);
-            feeAcc += parseFloat(h.amount);
+          // Balance check: total pool harus cukup utk transfer + fee.
+          const totalPool = ccHoldings.reduce((sum, h) => sum + parseFloat(h.amount), 0);
+          if (totalPool < params.amount + params.feeAmount) {
+            return { ok: false, text: '', errors: [`Insufficient CC: pool ${totalPool} < transfer ${params.amount} + fee ${params.feeAmount}`] };
           }
-          // Kalau sisa < fee tapi total pool cukup (transfer leg ada change), izinkan
-          // reuse CID transfer — registry akan return change amulet (DAML handle).
-          // Ini edge case: user punya 1 holding besar. CIP-56 TransferFactory_Transfer
-          // split otomatis (input consumed, change created).
-          if (feeCids.length === 0 && params.feeAmount > 0) {
-            // fallback: reuse 1 CID terbesar (registry buat change amulet utk sisa).
-            if (sorted.length > 0) feeCids.push(sorted[0].contractId);
-          }
-          transferInputCids = transferCids;
-          feeInputCids = feeCids;
+          // Kedua leg kirim SEMUA holdings — Splice pilih & handle change.
+          transferInputCids = ccHoldings.map((h) => h.contractId);
+          feeInputCids = ccHoldings.map((h) => h.contractId);
         } else {
-          // Non-CC: pool transfer (USDCx) ≠ pool fee (Amulet/CC). Query terpisah aman.
+          // Non-CC: pool transfer (USDCx) ≠ pool fee (Amulet/CC). Query terpisah.
           const tokenHoldings = await this.ledger.getTokenHoldingCids(
             params.userPartyId,
             tInstrumentId,
           );
-          transferInputCids = this.greedyFillHoldings(tokenHoldings, params.amount);
-          if (params.amount > 0 && transferInputCids.length === 0) {
+          if (params.amount > 0 && tokenHoldings.length === 0) {
             return { ok: false, text: '', errors: [`Insufficient ${tInstrumentId} for transfer ${params.amount} (user=${params.userPartyId.split('::')[0]})`] };
           }
+          transferInputCids = tokenHoldings.map((h) => h.contractId);
           const ccHoldingsForFee = await this.ledger.queryAmuletHoldings(params.userPartyId);
-          feeInputCids = this.greedyFillHoldings(ccHoldingsForFee, params.feeAmount);
+          feeInputCids = ccHoldingsForFee.map((h) => h.contractId);
         }
         if (params.feeAmount > 0 && feeInputCids.length === 0) {
           return { ok: false, text: '', errors: [`Insufficient CC for fee ${params.feeAmount} (user=${params.userPartyId.split('::')[0]})`] };
