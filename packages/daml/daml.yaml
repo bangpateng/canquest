@@ -1,34 +1,40 @@
 sdk-version: 3.4.11
 # ============================================================
-# CanQuest DAML Package — canquest-v23 (LEAN + ATOMIC SETTLE + Optional reward)
-# Version: 1.1.0
+# CanQuest DAML Package — canquest-v28 (Settle + 2-step Wallet Register)
+# Version: 1.0.0
 # SDK: 3.4.11 (Canton Network)
 #
-# ARSITEKTUR v23 (menggantikan v22):
-#   3 template (custodial operator pattern):
-#     1. WalletRegistration — jangkar identitas on-chain
-#     2. QuestCampaign      — kuota FCFS/Raffle + state machine
-#     3. QuestClaimReceipt  — receipt + atomic Settle (nested CIP-56)
+# ARSITEKTUR v28 (rollback reward flow ke Settle + improvement wallet):
+#   6 template:
+#     1. WalletRegistrationProposal — admin propose → user Accept (2-step consent)
+#     2. WalletRegistration         — identitas on-chain (userProfileRef, PII off-chain)
+#     3. CampaignEligibility        — LOCK_CC/POINTS proof (non-consuming revoke/expire)
+#     4. QuestCampaign              — kuota FCFS/Raffle + state machine + eligibility guard
+#     5. QuestClaimReceipt          — receipt + atomic Settle + RevealCode
+#     6. PlatformTransfer           — send token + platform fee atomic
 #
-# CHANGE vs v22 (non-breaking upgrade, fresh package krn Settle args change):
-#   - Settle choice reward leg jadi Optional (utk support kode claim rewardCc=0)
-#   - feeFactoryCid tetap wajib (selalu jalan)
-#   - rewardFactoryCid/rewardTransfer/rewardExtraArgs = Optional (None utk kode)
-#   - rewardSent = True hanya bila reward leg di-exercise (kode claim False)
-#   - Kode claim path: Settle dgn reward=None → fee-only atomic → RevealCode
-#     bisa jalan (feePaid=True dari Settle)
+# CHANGE vs v27 (ROLLBACK reward flow):
+#   - v27 (AppPaymentRequest) di-rollback ke Settle multi-controller (pola v25)
+#   - HAPUS QuestPaymentRequest (wrapper AppPaymentRequest v27)
+#   - KEMBALI: QuestClaimReceipt + Settle + RecordTxId + RevealCode + Expire
+#   - KEMBALI: ClaimSlot/DrawWinner return tuple (Campaign, Receipt) + rewardSender param
 #
-# ARSITEKTUR v22 (sama, carried over):
-#   - Settle = nested sub-exercise di 1 transaction tree (atomic)
-#   - actAs = [operator, userAddress, rewardParty] (+ appProvider bila FAR on)
-#   - DAML boundary: quest logic only; wallet ops pure CIP-56
+# IMPROVEMENT v28 (dari playbook, BUKAN rollback):
+#   - NEW: WalletRegistrationProposal (2-step consent)
+#   - WalletRegistration: userProfileRef ganti username/inviteCode (PII off-chain)
+#   - CampaignEligibility: revoke/expire non-consuming (audit trail)
+#
+# Kenapa rollback v27 ke Settle:
+#   v27 AppPaymentRequest Fase 2 backend rewrite belum selesai. Settle flow
+#   (v25) yang sekarang jalan sudah verified OK. v28 = Settle pattern (stable)
+#   + wallet/eligibility improvement.
 #
 # DAR DATA-DEPENDENCIES (BUKAN dependencies — Splice DAR bukan SDK pkg):
 #   File DAR dari bundle splice-node v0.6.12 (lihat scripts/fetch-daml-deps.sh).
 # ============================================================
-name: canquest-v27
+name: canquest-v28
 source: daml
-version: 1.4.0
+version: 1.0.0
 dependencies:
   - daml-prim
   - daml-stdlib
