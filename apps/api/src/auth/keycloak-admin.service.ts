@@ -113,6 +113,9 @@ export class KeycloakAdminService {
   /**
    * Buat user baru di realm canton.
    * POST /admin/realms/{realm}/users
+   *
+   * Return UUID user bila berhasil create baru (diekstrak dari Location header).
+   * Return null bila user sudah ada (409) — caller harus getUserId() utk dapat UUID.
    */
   async createUser(params: {
     username: string;
@@ -120,7 +123,7 @@ export class KeycloakAdminService {
     firstName: string;
     lastName: string;
     password: string;
-  }): Promise<void> {
+  }): Promise<string | null> {
     const token = await this.getAdminToken();
     const url = `${this.baseUrl}/admin/realms/${this.realm}/users`;
 
@@ -153,17 +156,22 @@ export class KeycloakAdminService {
     });
 
     if (res.status === 201) {
+      // Keycloak 201 response punya Location header:
+      //   /admin/realms/{realm}/users/{uuid}
+      // Extract UUID langsung — lebih reliable dari search query (race-free).
+      const location = res.headers.get('location') || '';
+      const uuid = location.split('/').pop() || '';
       this.logger.log(
-        `Keycloak user created: ${params.username} (${params.email})`,
+        `Keycloak user created: ${params.username} (${params.email}) uuid=${uuid.slice(0, 8)}...`,
       );
-      return;
+      return uuid || null;
     }
 
     if (res.status === 409) {
       this.logger.warn(
         `Keycloak user '${params.username}' already exists (409) — reusing existing user`,
       );
-      return;
+      return null;
     }
 
     const text = await res.text();
@@ -175,38 +183,59 @@ export class KeycloakAdminService {
   /**
    * Ambil UUID (sub) user Keycloak berdasarkan username.
    * GET /admin/realms/{realm}/users?username={username}
+   *
+   * Retry sampai 3x dengan delay 500ms utk handle Keycloak indexing lag
+   * (user baru created tapi belum searchable via query).
    */
   async getUserId(username: string): Promise<string> {
     const token = await this.getAdminToken();
     const url = `${this.baseUrl}/admin/realms/${this.realm}/users?username=${encodeURIComponent(username)}`;
 
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
-      // Timeout:.getUserId dipanggil tepat setelah createUser — tanpa abort,
-      // onboarding bisa hang tanpa feedback ke user.
-      signal: AbortSignal.timeout(15_000),
-    });
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY_MS = 500;
 
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(
-        `Keycloak getUserId gagal (${res.status}): ${text.slice(0, 300)}`,
-      );
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+        // Timeout:.getUserId dipanggil tepat setelah createUser — tanpa abort,
+        // onboarding bisa hang tanpa feedback ke user.
+        signal: AbortSignal.timeout(15_000),
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(
+          `Keycloak getUserId gagal (${res.status}): ${text.slice(0, 300)}`,
+        );
+      }
+
+      const data = (await res.json()) as Array<{ id: string }>;
+      if (Array.isArray(data) && data.length > 0) {
+        return data[0].id;
+      }
+
+      // Indexing lag — user belum searchable. Retry bila belum attempt terakhir.
+      if (attempt < MAX_RETRIES) {
+        this.logger.debug(
+          `Keycloak getUserId: '${username}' belum ter-index (attempt ${attempt}/${MAX_RETRIES}) — retry dalam ${RETRY_DELAY_MS}ms`,
+        );
+        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+      }
     }
 
-    const data = (await res.json()) as Array<{ id: string }>;
-    if (!Array.isArray(data) || data.length === 0) {
-      throw new Error(
-        `Keycloak user '${username}' tidak ditemukan setelah createUser`,
-      );
-    }
-
-    return data[0].id;
+    throw new Error(
+      `Keycloak user '${username}' tidak ditemukan setelah ${MAX_RETRIES}x retry (indexing lag)`,
+    );
   }
 
   /**
    * Gabungan: buat user + ambil UUID.
    * Return UUID (sub) yang bisa dipakai untuk bridge ke Ledger API.
+   *
+   * Strategi (race-free):
+   * 1. createUser() → baca UUID dari Location header 201 response (langsung).
+   * 2. Fallback: bila header kosong (201) ATAU user sudah ada (409),
+   *    panggil getUserId() dengan retry (handle indexing lag).
    */
   async createUserAndGetId(params: {
     username: string;
@@ -215,7 +244,9 @@ export class KeycloakAdminService {
     lastName: string;
     password: string;
   }): Promise<string> {
-    await this.createUser(params);
+    const directUuid = await this.createUser(params);
+    if (directUuid) return directUuid;
+    // Fallback: user sudah ada (409) atau Location header kosong.
     return this.getUserId(params.username);
   }
 }
