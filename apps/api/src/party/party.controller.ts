@@ -1170,10 +1170,14 @@ export class PartyController {
         }
       } // end if (!accepted) — legacy path
 
-      // ── FEE COLLECT (HANYA jika transfer berhasil) ───────────────────
+      // ── FEE COLLECT (HANYA jika transfer berhasil DAN belum terkumpul) ────
       // (variabel feeCollected/feeLedgerTxId/feeTreasuryPartyId sudah dideklarasi
-      //  di atas utk atomic path. Legacy path set di sini bila !accepted.)
-      if (effectiveFeeCc > 0 && sender.cantonPartyId && accepted) {
+      //  di atas utk atomic path. Legacy path set di sini bila !accepted ATAU
+      //  atomic sukses tapi fee belum terkumpul.)
+      // ⚠️ GUARD !feeCollected: atomic path ExecuteTransfer sudah handle fee leg
+      //    (transfer + fee dalam 1 tx). Tanpa guard ini, fee didouble-charge
+      //    (1x di atomic, 1x di sini).
+      if (effectiveFeeCc > 0 && sender.cantonPartyId && accepted && !feeCollected) {
         const feePartyRaw =
           this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
           validatorPartyId;
