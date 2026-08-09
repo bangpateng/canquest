@@ -1649,6 +1649,417 @@ export class QuestLedgerService implements OnModuleInit {
     }
   }
 
+  // ── 5b. v27 PATH B — AppPaymentRequest flow (Splice native) ─────────────────
+  // PATH B dipakai saat: token=USDCx (selalu) ATAU CC tanpa preapproval.
+  // Flow: createAppPaymentRequest → acceptAppPaymentRequest → markAccepted →
+  //       collectAcceptedAppPayment → markSettled.
+  //
+  // AppPaymentRequest & AcceptedAppPayment adalah template Splice native
+  // (#splice-wallet-payments:Splice.Wallet.Payment:...) — BUKAN template Main.
+  // Diakses via Ledger API JSON-RPC langsung ke participant node.
+  //
+  // Sync Accept: backend exercise AppPaymentRequest_Accept atas nama user
+  // (custodial, actAs [userPartyId, walletProvider]). Sesuai arsitektur custodial
+  // yang sudah dipakai settleAtomic (actAs multi-party via service account).
+
+  /** Template ID Splice utk AppPaymentRequest & AcceptedAppPayment. */
+  private static readonly SPLICE_APP_PAYMENT_REQUEST_TPL =
+    '#splice-wallet-payments:Splice.Wallet.Payment:AppPaymentRequest';
+  private static readonly SPLICE_ACCEPTED_APP_PAYMENT_TPL =
+    '#splice-wallet-payments:Splice.Wallet.Payment:AcceptedAppPayment';
+
+  /**
+   * createAppPaymentRequest — create Splice AppPaymentRequest (PATH B step 1).
+   *
+   * Template: #splice-wallet-payments:Splice.Wallet.Payment:AppPaymentRequest
+   * sender = REWARD_SENDER (sumber dana reward), provider = APP_PROVIDER,
+   * dso = DSO. receiverAmounts = [(user, reward), (feeParty, fee)].
+   *
+   * actAs: 5-party [operator, rewardSender, appProvider, userPartyId, feeParty]
+   *   (AppPaymentRequest signatory = sender + receivers + provider, per master flow).
+   * disclosedContracts: AmuletRules + OpenMiningRound (resolve via scan-proxy).
+   *
+   * unit encoding: CC = 'AmuletUnit', USDCx = 'USDUnit'.
+   */
+  async createAppPaymentRequest(params: {
+    senderPartyId: string;          // CANTON_REWARD_PARTY_ID
+    receiverUserPartyId: string;    // user (receiver reward)
+    feeReceiverPartyId: string;     // CANTON_FEE_RECIPIENT_PARTY_ID (receiver fee)
+    providerPartyId: string;        // CANTON_APP_PROVIDER_PARTY_ID
+    dsoPartyId: string;             // CANTON_DSO_PARTY_ID
+    rewardAmount: number;
+    feeAmount: number;
+    token: 'CC' | 'USDCx';          // CC → AmuletUnit, USDCx → USDUnit
+    expiresAt: string;              // ISO — sinkron dgn QuestPaymentRequest.expiresAt
+    description: string;
+    commandIdHint: string;          // idempotency (mis. claimId)
+  }): Promise<{ ok: boolean; appPaymentRequestCid: string | null; errors: string[] }> {
+    const fail = (errors: string[]) => ({ ok: false, appPaymentRequestCid: null, errors });
+    if (!this.isClaimSessionConfigured())
+      return fail(['Claim session ledger disabled']);
+    const operator = this.operatorPartyId;
+    if (!operator) return fail(['Canton operator party not configured']);
+    const reachErr = await this.ensureReachable();
+    if (reachErr) return fail([reachErr]);
+
+    // Resolve disclosed contracts (AmuletRules + OpenMiningRound).
+    const splice = await this.ledger.resolveSpliceDisclosedContracts();
+    if (!splice) return fail(['Failed to resolve Splice disclosed contracts (AmuletRules/OpenMiningRound)']);
+
+    // unit: CC → AmuletUnit, USDCx → USDUnit.
+    const unit = params.token === 'CC' ? 'AmuletUnit' : 'USDUnit';
+
+    try {
+      const tpl = QuestLedgerService.SPLICE_APP_PAYMENT_REQUEST_TPL;
+      const createArguments = {
+        sender: params.senderPartyId,
+        receiverAmounts: [
+          {
+            receiver: params.receiverUserPartyId,
+            amount: { amount: this.dec(params.rewardAmount), unit },
+          },
+          {
+            receiver: params.feeReceiverPartyId,
+            amount: { amount: this.dec(params.feeAmount), unit },
+          },
+        ],
+        provider: params.providerPartyId,
+        dso: params.dsoPartyId,
+        expiresAt: params.expiresAt,
+        description: params.description,
+      };
+      // actAs: 5-party (signatory sender + receivers + provider, + operator utk submit).
+      const actAs = [
+        operator,
+        params.senderPartyId,
+        params.providerPartyId,
+        params.receiverUserPartyId,
+        params.feeReceiverPartyId,
+      ];
+      const res = await this.ledger.createContract(
+        tpl,
+        createArguments,
+        actAs,
+        `apreq-create-${params.commandIdHint.slice(0, 16)}-${randomUUID()}`,
+        splice.disclosedContracts,
+      );
+      if (res.ok && res.contractId) {
+        this.logger.log(
+          `AppPaymentRequest created: hint=${params.commandIdHint.slice(0, 16)} reward=${params.rewardAmount} fee=${params.feeAmount} ${params.token}`,
+        );
+        return { ok: true, appPaymentRequestCid: res.contractId, errors: [] };
+      }
+      const err = this.formatLedgerError(res.error, 'Failed to create AppPaymentRequest');
+      this.logger.warn(`AppPaymentRequest create fail: ${err}`);
+      return fail([err]);
+    } catch (err) {
+      const msg = `createAppPaymentRequest exception: ${String(err)}`;
+      this.logger.warn(msg);
+      return fail([msg]);
+    }
+  }
+
+  /**
+   * acceptAppPaymentRequest — exercise AppPaymentRequest_Accept (PATH B step 2).
+   *
+   * Sync Accept: backend exercise atas nama user (custodial). Membangun:
+   *   inputs = TransferInput[] dari REWARD_SENDER Amulet holdings ({tag:'InputAmulet', value}).
+   *     ⚠️ SENDER reward = REWARD_SENDER (bukan user). User TIDAK funding — user hanya
+   *     receiver. Funding datang dari sender (REWARD_SENDER) wallet. Tapi Accept choice
+   *     dikontrol sender (user dalam konteks AppPaymentRequest = sender field), jadi
+   *     inputs = holdings REWARD_SENDER (sender funding locked amulet).
+   *     Koreksi: AppPaymentRequest.sender = REWARD_SENDER → Accept controller = sender
+   *     → inputs dari REWARD_SENDER holdings.
+   *   context = PaymentTransferContext { amuletRules, context: TransferContext }
+   *   walletProvider = CANTON_WALLET_PROVIDER_PARTY_ID
+   *
+   * actAs: [userPartyId, walletProvider] per master flow line 190.
+   *   ⚠️ "userPartyId" di sini = AppPaymentRequest.sender = REWARD_SENDER party
+   *   (sender adalah party yang accept). Backend pass senderPartyId sbg actAs[0].
+   *
+   * Return: { acceptedAppPaymentCid, senderChangeAmulet } dari AcceptResult.
+   */
+  async acceptAppPaymentRequest(params: {
+    appPaymentRequestCid: string;
+    senderPartyId: string;          // AppPaymentRequest.sender = REWARD_SENDER
+    walletProviderPartyId: string;  // CANTON_WALLET_PROVIDER_PARTY_ID
+    fundingAmount: number;          // total reward+fee utk greedyFill inputs
+    commandIdHint: string;
+  }): Promise<{
+    ok: boolean;
+    acceptedAppPaymentCid: string | null;
+    senderChangeAmulet: string | null;
+    errors: string[];
+  }> {
+    const fail = (errors: string[]) => ({
+      ok: false,
+      acceptedAppPaymentCid: null,
+      senderChangeAmulet: null,
+      errors,
+    });
+    if (!this.isClaimSessionConfigured())
+      return fail(['Claim session ledger disabled']);
+    const operator = this.operatorPartyId;
+    if (!operator) return fail(['Canton operator party not configured']);
+
+    const splice = await this.ledger.resolveSpliceDisclosedContracts();
+    if (!splice) return fail(['Failed to resolve Splice disclosed contracts']);
+
+    // Build TransferInput[] dari sender (REWARD_SENDER) Amulet holdings.
+    const senderHoldings = await this.ledger.queryAmuletHoldings(params.senderPartyId);
+    const inputCids = this.greedyFillHoldings(senderHoldings, params.fundingAmount);
+    if (inputCids.length === 0) {
+      return fail([`Insufficient Amulet holdings for Accept funding ${params.fundingAmount} (sender=${params.senderPartyId.split('::')[0]})`]);
+    }
+    const inputs = inputCids.map((cid) => ({ tag: 'InputAmulet', value: cid }));
+
+    // PaymentTransferContext = { amuletRules, context: TransferContext }
+    // TransferContext = { openMiningRound, issuingMiningRounds, validatorRights, featuredAppRight }
+    const choiceArgument = {
+      inputs,
+      context: {
+        amuletRules: splice.amuletRulesCid,
+        context: {
+          openMiningRound: splice.openMiningRoundCid,
+          issuingMiningRounds: [],
+          validatorRights: [],
+          featuredAppRight: null,
+        },
+      },
+      walletProvider: params.walletProviderPartyId,
+    };
+
+    // actAs: [sender, walletProvider] per master flow.
+    const actAs = [params.senderPartyId, params.walletProviderPartyId];
+
+    try {
+      const tpl = QuestLedgerService.SPLICE_APP_PAYMENT_REQUEST_TPL;
+      const { ok, text } = await this.ledger.exerciseChoice(
+        params.appPaymentRequestCid,
+        tpl,
+        'AppPaymentRequest_Accept',
+        choiceArgument,
+        actAs,
+        `apreq-accept-${params.commandIdHint.slice(0, 16)}-${randomUUID()}`,
+        'submit-and-wait-for-transaction-tree',
+        splice.disclosedContracts,
+      );
+      if (ok) {
+        // Parse AcceptedAppPayment cid + senderChangeAmulet dari transaction tree.
+        const acceptedCid = this.extractCidBySuffix(text, ':Splice.Wallet.Payment:AcceptedAppPayment');
+        const changeAmulet = this.extractCidBySuffix(text, ':Splice.Amulet:Amulet');
+        this.logger.log(
+          `AppPaymentRequest_Accept OK: accepted=${acceptedCid?.slice(0, 12) ?? 'none'} changeAmulet=${changeAmulet?.slice(0, 12) ?? 'none'}`,
+        );
+        return {
+          ok: true,
+          acceptedAppPaymentCid: acceptedCid,
+          senderChangeAmulet: changeAmulet,
+          errors: [],
+        };
+      }
+      const err = this.formatLedgerError(text, 'AppPaymentRequest_Accept failed');
+      this.logger.warn(`AppPaymentRequest_Accept fail: ${text.slice(0, 300)}`);
+      return fail([err]);
+    } catch (err) {
+      const msg = `acceptAppPaymentRequest exception: ${String(err)}`;
+      this.logger.warn(msg);
+      return fail([msg]);
+    }
+  }
+
+  /**
+   * markAccepted — exercise QuestPaymentRequest.MarkAccepted (PATH B step 3).
+   *
+   * Dipanggil setelah acceptAppPaymentRequest sukses. Update field
+   * appPaymentRequestCid ke acceptedAppPaymentCid, status PENDING → ACCEPTED.
+   *
+   * actAs: [operator] (controller admin).
+   */
+  async markAccepted(params: {
+    questPaymentRequestCid: string;   // QuestPaymentRequest (status PENDING)
+    acceptedAppPaymentCid: string;    // dari AcceptResult.acceptedPayment
+  }): Promise<{ ok: boolean; errors: string[] }> {
+    if (!this.isClaimSessionConfigured()) return { ok: false, errors: ['Claim session ledger disabled'] };
+    const tpl = this.templateId(TPL.QuestPaymentRequest);
+    const operator = this.operatorPartyId;
+    if (!operator) return { ok: false, errors: ['Canton operator party not configured'] };
+    try {
+      const nowIso = new Date().toISOString();
+      const { ok, text } = await this.ledger.exerciseChoice(
+        params.questPaymentRequestCid,
+        tpl,
+        'MarkAccepted',
+        { acceptedAppPaymentCid: params.acceptedAppPaymentCid, acceptedAt: nowIso },
+        [operator],
+        `qpr-accepted-${params.questPaymentRequestCid.slice(0, 16)}-${randomUUID()}`,
+        'submit-and-wait-for-transaction-tree',
+      );
+      if (ok) {
+        this.logger.log(`MarkAccepted OK: qpr=${params.questPaymentRequestCid.slice(0, 12)}`);
+        return { ok: true, errors: [] };
+      }
+      const err = this.formatLedgerError(text, 'MarkAccepted failed');
+      this.logger.warn(`MarkAccepted fail: ${text.slice(0, 200)}`);
+      return { ok: false, errors: [err] };
+    } catch (err) {
+      return { ok: false, errors: [`markAccepted exception: ${String(err)}`] };
+    }
+  }
+
+  /**
+   * collectAcceptedAppPayment — exercise AcceptedAppPayment_Collect (PATH B step 4).
+   *
+   * Template: #splice-wallet-payments:Splice.Wallet.Payment:AcceptedAppPayment
+   * Choice: AcceptedAppPayment_Collect, args = { context: AppTransferContext }.
+   * AppTransferContext = { amuletRules, openMiningRound, featuredAppRight: Optional }
+   *   (FLAT — beda dari PaymentTransferContext nested Accept).
+   *
+   * actAs: 4-party [rewardSender, appProvider, userPartyId, feeReceiver]
+   *   (controller = signatory this = SEMUA signatory AcceptedAppPayment).
+   *   Kurang 1 party → DITOLAK ledger.
+   *
+   * ATOMIC 1 TX: LockedAmulet dilepas, user + fee terima reward, FAR built-in.
+   * Return: { receiverAmulets (array), collectTxId (Canton updateId) }.
+   */
+  async collectAcceptedAppPayment(params: {
+    acceptedAppPaymentCid: string;
+    rewardSenderPartyId: string;     // sender (signatory)
+    appProviderPartyId: string;      // provider (signatory)
+    userPartyId: string;             // receiver reward (signatory)
+    feeReceiverPartyId: string;      // receiver fee (signatory)
+    featuredAppRightCid?: string | null; // Optional — null utk basic collect
+    commandIdHint: string;
+  }): Promise<{
+    ok: boolean;
+    collectTxId: string | null;
+    errors: string[];
+  }> {
+    const fail = (errors: string[]) => ({ ok: false, collectTxId: null, errors });
+    if (!this.isClaimSessionConfigured())
+      return fail(['Claim session ledger disabled']);
+    const operator = this.operatorPartyId;
+    if (!operator) return fail(['Canton operator party not configured']);
+
+    const splice = await this.ledger.resolveSpliceDisclosedContracts();
+    if (!splice) return fail(['Failed to resolve Splice disclosed contracts']);
+
+    // AppTransferContext = { amuletRules, openMiningRound, featuredAppRight: Optional }
+    const opt = <T,>(v: T | null | undefined) => (v == null ? null : v); // DAML Optional = nullable
+    const choiceArgument = {
+      context: {
+        amuletRules: splice.amuletRulesCid,
+        openMiningRound: splice.openMiningRoundCid,
+        featuredAppRight: opt(params.featuredAppRightCid ?? null),
+      },
+    };
+
+    // actAs: 4 signatory (controller = signatory this).
+    const actAs = [
+      params.rewardSenderPartyId,
+      params.appProviderPartyId,
+      params.userPartyId,
+      params.feeReceiverPartyId,
+    ];
+
+    try {
+      const tpl = QuestLedgerService.SPLICE_ACCEPTED_APP_PAYMENT_TPL;
+      const { ok, text } = await this.ledger.exerciseChoice(
+        params.acceptedAppPaymentCid,
+        tpl,
+        'AcceptedAppPayment_Collect',
+        choiceArgument,
+        actAs,
+        `apreq-collect-${params.commandIdHint.slice(0, 16)}-${randomUUID()}`,
+        'submit-and-wait-for-transaction-tree',
+        splice.disclosedContracts,
+      );
+      if (ok) {
+        const collectTxId = this.extractUpdateId(text);
+        this.logger.log(
+          `AcceptedAppPayment_Collect OK: txId=${collectTxId?.slice(0, 12) ?? 'none'}`,
+        );
+        return { ok: true, collectTxId, errors: [] };
+      }
+      const err = this.formatLedgerError(text, 'AcceptedAppPayment_Collect failed');
+      this.logger.warn(`AcceptedAppPayment_Collect fail: ${text.slice(0, 300)}`);
+      return fail([err]);
+    } catch (err) {
+      const msg = `collectAcceptedAppPayment exception: ${String(err)}`;
+      this.logger.warn(msg);
+      return fail([msg]);
+    }
+  }
+
+  /**
+   * markExpired — exercise QuestPaymentRequest.MarkExpired (PATH B failure flow).
+   *
+   * 4 skenario: TIMEOUT, REJECTED, WITHDRAWN, CANCELLED.
+   * Consuming choice → QuestPaymentRequest di-archive setelah expired.
+   *
+   * actAs: [operator] (controller admin).
+   */
+  async markExpired(params: {
+    questPaymentRequestCid: string;
+    reason: 'TIMEOUT' | 'REJECTED' | 'WITHDRAWN' | 'CANCELLED';
+  }): Promise<{ ok: boolean; errors: string[] }> {
+    if (!this.isClaimSessionConfigured()) return { ok: false, errors: ['Claim session ledger disabled'] };
+    const tpl = this.templateId(TPL.QuestPaymentRequest);
+    const operator = this.operatorPartyId;
+    if (!operator) return { ok: false, errors: ['Canton operator party not configured'] };
+    try {
+      const nowIso = new Date().toISOString();
+      const { ok, text } = await this.ledger.exerciseChoice(
+        params.questPaymentRequestCid,
+        tpl,
+        'MarkExpired',
+        { reason: params.reason, expiredAt: nowIso },
+        [operator],
+        `qpr-expired-${params.questPaymentRequestCid.slice(0, 16)}-${randomUUID()}`,
+        'submit-and-wait-for-transaction-tree',
+      );
+      if (ok) {
+        this.logger.log(`MarkExpired OK: qpr=${params.questPaymentRequestCid.slice(0, 12)} reason=${params.reason}`);
+        return { ok: true, errors: [] };
+      }
+      const err = this.formatLedgerError(text, 'MarkExpired failed');
+      this.logger.warn(`MarkExpired fail: ${text.slice(0, 200)}`);
+      return { ok: false, errors: [err] };
+    } catch (err) {
+      return { ok: false, errors: [`markExpired exception: ${String(err)}`] };
+    }
+  }
+
+  /**
+   * extractCidBySuffix — generic contractId extractor by templateId suffix.
+   *
+   * Berbeda dari extractContractIdsByTemplate (typed TPL union), ini accept
+   * arbitrary string suffix (utk Splice template IDs di luar TPL const).
+   * Walk transaction-tree JSON, return first contractId whose templateId.endsWith(suffix).
+   */
+  private extractCidBySuffix(text: string, suffix: string): string | null {
+    try {
+      const parsed = JSON.parse(text) as Record<string, unknown>;
+      const stack: unknown[] = [parsed];
+      while (stack.length) {
+        const cur = stack.pop();
+        if (!cur || typeof cur !== 'object') continue;
+        if (Array.isArray(cur)) {
+          for (const item of cur) stack.push(item);
+          continue;
+        }
+        const obj = cur as Record<string, unknown>;
+        const cid = typeof obj.contractId === 'string' ? obj.contractId : null;
+        const tplId = typeof obj.templateId === 'string' ? obj.templateId : null;
+        if (cid && tplId && tplId.endsWith(suffix)) return cid;
+        for (const v of Object.values(obj)) stack.push(v);
+      }
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }
+
   // ── Legacy / deprecated stubs ───────────────────────────────────────────────
 
   /** @deprecated */

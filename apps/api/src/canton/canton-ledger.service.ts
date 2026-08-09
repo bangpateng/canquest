@@ -2007,6 +2007,53 @@ export class CantonLedgerService {
   }
 
   /**
+   * Resolve AmuletRules + OpenMiningRound dari scan-proxy dan bangun
+   * disclosedContracts bundle (utk PATH B AppPaymentRequest create/exercise).
+   *
+   * Public wrapper atas fetchScanProxyContract (private). Dipakai quest-ledger
+   * utk AppPaymentRequest_Accept (butuh PaymentTransferContext + disclosed),
+   * AcceptedAppPayment_Collect (butuh AppTransferContext + disclosed).
+   *
+   * Return null bila salah satu contract tidak resolve (caller harus fail).
+   */
+  async resolveSpliceDisclosedContracts(): Promise<{
+    amuletRulesCid: string;
+    openMiningRoundCid: string;
+    amuletRulesTemplateId: string;
+    openMiningRoundTemplateId: string;
+    disclosedContracts: unknown[];
+  } | null> {
+    const amuletRules = await this.fetchScanProxyContract('amulet-rules');
+    const openRound = await this.fetchScanProxyContract(
+      'open-and-issuing-mining-rounds',
+    );
+    if (!amuletRules || !openRound) {
+      this.logger.warn(
+        'resolveSpliceDisclosedContracts: amuletRules atau openMiningRound tidak resolve',
+      );
+      return null;
+    }
+    return {
+      amuletRulesCid: amuletRules.contractId,
+      openMiningRoundCid: openRound.contractId,
+      amuletRulesTemplateId: amuletRules.templateId,
+      openMiningRoundTemplateId: openRound.templateId,
+      disclosedContracts: [
+        {
+          templateId: amuletRules.templateId,
+          contractId: amuletRules.contractId,
+          createdEventBlob: amuletRules.blob,
+        },
+        {
+          templateId: openRound.templateId,
+          contractId: openRound.contractId,
+          createdEventBlob: openRound.blob,
+        },
+      ],
+    };
+  }
+
+  /**
    * Harga CC (Amulet) dalam USD dari scan-proxy OpenMiningRound.
    *
    * Sumber resmi Canton (scan-proxy/open-and-issuing-mining-rounds →
@@ -4201,6 +4248,9 @@ export class CantonLedgerService {
     createArguments: unknown,
     actAs: string[],
     commandId?: string,
+    /** CIP-0056 / Splice: disclosed contracts (e.g. AmuletRules + OpenMiningRound
+     *  utk AppPaymentRequest create). Forward ke submitCommand. */
+    disclosedContracts?: unknown[],
   ): Promise<{
     ok: boolean;
     contractId: string | null;
@@ -4214,6 +4264,7 @@ export class CantonLedgerService {
       commandId,
       undefined, // identity
       'submit-and-wait-for-transaction-tree',
+      disclosedContracts,
     );
 
     if (ok) {
