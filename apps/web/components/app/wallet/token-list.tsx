@@ -110,46 +110,66 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
   return (
     <div className="w-full max-w-full min-w-0 space-y-5 md:space-y-6 font-sans">
       {/* ── Balance Hero Card ───────────────────────────────────────────── */}
-      <Card className="relative w-full overflow-hidden p-6 sm:p-8 md:p-10 lg:p-12">
+      <Card className="relative w-full overflow-hidden p-6 sm:p-8">
         <div
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_0%,rgb(var(--canton-rgb)/0.10),transparent_70%)]"
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(ellipse 90% 70% at 50% 0%, rgb(var(--canton-rgb) / 0.12), transparent 70%)",
+          }}
           aria-hidden
         />
-        <div className="relative flex items-center justify-between gap-3 mb-6 sm:mb-8">
-          <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
-            Total Balance
-          </span>
-          <button
-            type="button"
-            onClick={handleRefresh}
-            disabled={loading}
-            className={cn(
-              buttonVariants({ variant: "icon", size: "sm" }),
-              "border-0 bg-transparent hover:bg-transparent",
-            )}
-            aria-label="Refresh balance"
-          >
-            {loading ? (
-              <LoadingSpinner size="sm" tone="muted" />
-            ) : (
-              <RefreshCw className="h-4 w-4 sm:h-5 sm:w-5" />
-            )}
-          </button>
-        </div>
-
         <div className="relative">
-          <p className="relative text-3xl font-extrabold tabular-nums leading-none tracking-tight text-white sm:text-4xl md:text-5xl glow-text">
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+              Total Balance
+            </p>
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={loading}
+              className={cn(
+                buttonVariants({ variant: "icon", size: "sm" }),
+                "border-0 bg-transparent hover:bg-transparent",
+              )}
+              aria-label="Refresh balance"
+            >
+              {loading ? (
+                <LoadingSpinner size="sm" tone="muted" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+
+          <p className="mt-3 text-4xl font-extrabold tabular-nums leading-none tracking-tight text-[var(--foreground)] glow-text sm:text-5xl">
             {initialLoad ? (
               <span className="text-[var(--muted-foreground)]">—</span>
             ) : (
               <>
-                ${totalUsdStr}{" "}
-                <span className="text-base font-semibold text-[var(--muted-foreground)] sm:text-lg md:text-xl">
+                ${totalUsdStr}
+                <span className="ml-2 text-base font-semibold text-[var(--muted-foreground)] sm:text-lg">
                   USD
                 </span>
               </>
             )}
           </p>
+
+          {/* Breakdown strip */}
+          {!initialLoad && (
+            <div className="mt-5 flex items-center gap-4 text-sm">
+              <span className="flex items-center gap-1.5 text-[var(--muted-foreground)]">
+                <span className="h-2 w-2 rounded-full bg-[var(--primary)]" />
+                CC ${(ccFiatStr)}
+              </span>
+              {tokenNonCcValue > 0 && (
+                <span className="flex items-center gap-1.5 text-[var(--muted-foreground)]">
+                  <span className="h-2 w-2 rounded-full bg-[rgb(var(--canton-cyan-rgb))]" />
+                  Tokens ${tokenNonCcValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </Card>
 
@@ -176,9 +196,9 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
       {/* ── My Tokens ──────────────────────────────────────────────────── */}
       <div>
         <div className="mb-3 flex items-center justify-between gap-3">
-          <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
             My Tokens
-          </span>
+          </p>
           {loading && (
             <LoadingSpinner size="sm" tone="muted" />
           )}

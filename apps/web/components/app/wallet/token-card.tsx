@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils/utils";
+import { Card } from "@/components/ui/card";
 import { TokenLogo, displayName } from "./token-logo";
 
 export interface TokenCardProps {
@@ -23,35 +24,41 @@ export function TokenCard({ symbol, balance, fiatValue, comingSoon }: TokenCardP
   const display = displayName(symbol);
 
   return (
-    <div
+    <Card
       className={cn(
-        "flex w-full items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 text-left",
-        comingSoon && "opacity-50",
+        "flex w-full items-center gap-3 p-4",
+        comingSoon && "opacity-60",
       )}
     >
       <TokenLogo symbol={symbol} size="sm" />
       <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-[var(--foreground)]">{display}</span>
-            {comingSoon && (
-              <span className="rounded-full bg-slate-700/50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
-                Coming soon
-              </span>
-            )}
-          </div>
-          {fiatValue && !comingSoon && (
-            <span className="text-xs text-[var(--muted-foreground)] tabular-nums">
-              {fiatValue}
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-[var(--foreground)]">
+            {display}
+          </span>
+          {comingSoon && (
+            <span className="rounded-full border border-[var(--border)] bg-[var(--muted)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
+              Coming soon
             </span>
           )}
         </div>
-        <div className="mt-0.5">
-          <span className="text-sm font-medium tabular-nums text-[var(--muted-foreground)]">
-            {comingSoon ? "—" : `${balance} ${display}`}
-          </span>
-        </div>
       </div>
-    </div>
+      <div className="shrink-0 text-right">
+        {comingSoon ? (
+          <span className="text-sm font-medium text-[var(--muted-foreground)]">—</span>
+        ) : (
+          <>
+            <p className="text-sm font-bold tabular-nums text-[var(--foreground)]">
+              {balance}
+            </p>
+            {fiatValue && (
+              <p className="text-xs tabular-nums text-[var(--muted-foreground)]">
+                {fiatValue}
+              </p>
+            )}
+          </>
+        )}
+      </div>
+    </Card>
   );
 }
