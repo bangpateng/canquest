@@ -1,7 +1,7 @@
 "use client";
 
 import { TransactionsView } from "@/components/app/wallet/transactions-view";
-import { PlatformPage, PlatformPageIntro } from "@/components/platform/platform-page";
+import { PlatformPage } from "@/components/platform/platform-page";
 import { useMe } from "@/lib/hooks/use-me";
 
 export default function ActivityListPage() {
@@ -13,7 +13,6 @@ export default function ActivityListPage() {
 
   return (
     <PlatformPage>
-      <PlatformPageIntro eyebrow="Activity" title="Transaction history" eyebrowBrand />
       <TransactionsView partyId={partyId} />
     </PlatformPage>
   );
