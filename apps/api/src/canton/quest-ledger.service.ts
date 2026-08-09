@@ -794,6 +794,7 @@ export class QuestLedgerService implements OnModuleInit {
       },
       [operator],
       `draw-raffle-${params.claimId}-${randomUUID()}`,
+      'submit-and-wait-for-transaction-tree',
     );
     if (ok) {
       // FIX: extract by templateId (bukan urutan) — sama bug dgn claimFcfsSlot.
