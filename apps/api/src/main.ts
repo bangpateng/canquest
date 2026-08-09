@@ -7,7 +7,12 @@ import helmet from 'helmet';
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-    logger: ['log', 'warn', 'error', 'debug'],
+    // Production: hanya log + warn + error. Debug tetap bisa di-enable saat
+    // troubleshoot via uncomment 'debug' atau pakai env LOG_LEVEL=debug.
+    logger:
+      process.env.LOG_LEVEL === 'debug'
+        ? ['log', 'warn', 'error', 'debug', 'verbose']
+        : ['log', 'warn', 'error'],
   });
 
   // Nginx / Vercel BFF send X-Forwarded-For — needed for fair per-user rate limits.
