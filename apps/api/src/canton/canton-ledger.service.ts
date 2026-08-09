@@ -1282,7 +1282,10 @@ export class CantonLedgerService {
     // Utk non-CC: pool per instrument (USDCx ≠ CC fee), query terpisah.
     const transferCalls: Array<{ factoryCid: string; choiceArg: Record<string, unknown> }> = [];
     let lastTransferKind = 'direct';
-    let lastDisclosedContracts: unknown[] = [];
+    // Gabungkan disclosed contracts dari SEMUA legs — setiap factory butuh
+    // disclosed contracts-nya sendiri utk visibility participant. Kalau hanya
+    // kirim dari leg terakhir, factory leg 1 → CONTRACT_NOT_FOUND.
+    const allDisclosedContracts: unknown[] = [];
 
     for (const t of transfers) {
       const isAmulet = t.instrumentId.toLowerCase() === 'amulet';
@@ -1334,7 +1337,15 @@ export class CantonLedgerService {
         };
       }
       lastTransferKind = registry.transferKind;
-      lastDisclosedContracts = registry.disclosedContracts;
+      // Gabungkan disclosed contracts dari leg ini (dedupe by contractId).
+      for (const dc of registry.disclosedContracts) {
+        const dcCid = (dc as Record<string, unknown>)?.contract as unknown;
+        const exists = allDisclosedContracts.some(
+          (existing) =>
+            (existing as Record<string, unknown>)?.contract === dcCid,
+        );
+        if (!exists) allDisclosedContracts.push(dc);
+      }
 
       transferCalls.push({
         factoryCid: registry.factoryId,
@@ -1378,7 +1389,7 @@ export class CantonLedgerService {
     const farDisclosure =
       await this.proxyCache.getFeaturedAppRightDisclosedContract();
     const disclosedContracts: unknown[] = [
-      ...lastDisclosedContracts,
+      ...allDisclosedContracts,
       ...(wupDisclosure ? [wupDisclosure] : []),
       ...(farDisclosure ? [farDisclosure] : []),
     ];
