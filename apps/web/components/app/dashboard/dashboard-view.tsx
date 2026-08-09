@@ -154,15 +154,15 @@ export function DashboardView() {
 
           {/* ── Error Banner ─────────────────────────────────────────────── */}
           {loadError ? (
-            <div className="rounded-2xl border border-orange-500/20 bg-orange-500/10 backdrop-blur-xl shadow-xl shadow-black/30 px-5 py-4 sm:px-6 sm:py-5">
+            <div className="rounded-2xl border border-orange-500/20 bg-orange-500/10 px-5 py-4 sm:px-6 sm:py-5">
               <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--muted)]">
-                  <svg className="h-5 w-5 text-[var(--muted-foreground)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/15 ring-1 ring-orange-500/20">
+                  <svg className="h-5 w-5 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                   </svg>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-orange-200 leading-relaxed">
+                  <p className="text-sm font-medium text-orange-300 leading-relaxed">
                     {loadError}
                   </p>
                 </div>
@@ -180,7 +180,7 @@ export function DashboardView() {
           {/* ── Cards Bento Grid ─────────────────────────────────────────── */}
           {!initialLoading && !loadError && (
             <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 md:gap-5">
-              {/* Profile (full width on mobile, 12 cols on desktop) */}
+              {/* Profile (full width) */}
               <div className="sm:col-span-2 lg:col-span-12">
                 <ProfileCard
                   displayName={me?.displayName}
@@ -192,21 +192,21 @@ export function DashboardView() {
                 />
               </div>
 
-              {/* CC Holdings (4 cols) */}
-              <div className="sm:col-span-2 lg:col-span-4">
+              {/* CC Holdings — hero card (wider) */}
+              <div className="sm:col-span-2 lg:col-span-6">
                 <CcHoldingsCard hasWallet={hasWallet} />
               </div>
 
-              {/* Points (4 cols) */}
-              <div className="sm:col-span-1 lg:col-span-4">
+              {/* Points (narrow) */}
+              <div className="sm:col-span-1 lg:col-span-3">
                 <PointsCard
                   remaining={pointsBalance?.remaining ?? s.pointsRemaining ?? 0}
                   loading={loading}
                 />
               </div>
 
-              {/* Activity totals (4 cols) */}
-              <div className="sm:col-span-1 lg:col-span-4">
+              {/* Activity totals (narrow) */}
+              <div className="sm:col-span-1 lg:col-span-3">
                 <ActivityStatsCard
                   questsDone={s.earnHubCompleted ?? 0}
                   earnDone={s.campaignCompleted ?? 0}

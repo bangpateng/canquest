@@ -4,6 +4,7 @@ import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { ROUTES } from "@/lib/routing/app-routes";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
+import { ArrowUpRight, AtSign } from "lucide-react";
 
 const AVATAR_GRADIENTS = [
   "linear-gradient(145deg, #d4ff3f 0%, #8b9c0d 100%)",
@@ -11,7 +12,7 @@ const AVATAR_GRADIENTS = [
   "linear-gradient(145deg, #f472b6 0%, #9333ea 100%)",
   "linear-gradient(145deg, #34d399 0%, #0d9488 100%)",
   "linear-gradient(145deg, #fb923c 0%, #c2410c 100%)",
-  "linear-gradient(145deg, #a78bfa 0%, #6d28d9 100%)",
+  "linear-gradient(145deg, #a78bfa 0%, #6d28ed 100%)",
 ];
 
 function avatarGradient(seed: string): string {
@@ -52,71 +53,79 @@ export function ProfileCard({
   const seed = username?.trim() || displayName?.trim() || "guest";
 
   return (
-    <Card interactive className="relative overflow-hidden p-5 sm:p-6">
+    <Card interactive className="relative overflow-hidden p-6 sm:p-7">
       <div
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_60%_at_0%_0%,rgb(251_191_36/0.08),transparent_70%)]"
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(ellipse 70% 60% at 0% 0%, rgb(251 191 36 / 0.06), transparent 70%)",
+        }}
         aria-hidden
       />
-      <div className="relative flex items-center gap-4">
-        <div
-          className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full ring-2 ring-white/10"
-          aria-hidden
-          style={avatarSrc ? undefined : { backgroundImage: avatarGradient(seed) }}
-        >
-          {avatarSrc ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={avatarSrc}
-              alt=""
-              className="h-full w-full object-cover"
-              loading="lazy"
-              decoding="async"
-              referrerPolicy="no-referrer"
-            />
-          ) : (
-            <span className="text-base font-bold uppercase tracking-wider text-white">
-              {getInitials(name)}
-            </span>
-          )}
+
+      <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+        {/* ── Identity ── */}
+        <div className="flex items-center gap-4">
+          <div
+            className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl ring-1 ring-[var(--border)]"
+            style={avatarSrc ? undefined : { backgroundImage: avatarGradient(seed) }}
+          >
+            {avatarSrc ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={avatarSrc}
+                alt=""
+                className="h-full w-full object-cover"
+                loading="lazy"
+                decoding="async"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <span className="text-lg font-bold uppercase tracking-wider text-white">
+                {getInitials(name)}
+              </span>
+            )}
+          </div>
+
+          <div className="min-w-0">
+            <p className="truncate text-lg font-bold tracking-tight text-[var(--foreground)]">
+              {name}
+            </p>
+            {twitterUsername?.trim() ? (
+              <a
+                href={`https://x.com/${twitterUsername.trim()}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-0.5 inline-flex items-center gap-1 text-sm font-medium text-canton hover:underline"
+              >
+                <AtSign className="h-3 w-3" />
+                @{twitterUsername.trim()}
+              </a>
+            ) : (
+              <Link
+                href="/settings"
+                className="mt-0.5 inline-block text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+              >
+                {t("dashboard.connectTwitter")}
+              </Link>
+            )}
+          </div>
         </div>
 
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-lg font-bold tracking-tight text-white">{name}</p>
-          {twitterUsername?.trim() ? (
-            <a
-              href={`https://x.com/${twitterUsername.trim()}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-0.5 inline-block max-w-full truncate text-sm font-medium text-[var(--primary)] hover:underline"
-            >
-              @{twitterUsername.trim()}
-            </a>
-          ) : (
-            <Link
-              href="/settings"
-              className="mt-0.5 inline-block text-sm font-medium text-slate-500 hover:text-slate-300"
-            >
-              {t("dashboard.connectTwitter")}
-            </Link>
-          )}
-        </div>
-      </div>
-
-      {/* Weekly rank strip */}
-      <div className="relative mt-5 flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-            {t("dashboard.weeklyRank")}
-          </p>
-          <p className="text-xl font-extrabold tabular-nums tracking-tight text-white">
-            {loading || weeklyRank === null ? "—" : `#${weeklyRank}`}
-          </p>
-        </div>
+        {/* ── Weekly rank badge ── */}
         <Link
           href={ROUTES.leaderboard}
-          className="shrink-0 rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-slate-300 transition-colors hover:bg-white/[0.06] hover:text-white"
+          className="group flex shrink-0 items-center gap-3 rounded-xl bg-[var(--muted)] px-4 py-2.5 ring-1 ring-[var(--border)] transition-colors hover:bg-[var(--primary)]/5"
         >
-          {t("dashboard.viewLeaderboard")}
+          <div className="text-right">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+              {t("dashboard.weeklyRank")}
+            </p>
+            <p className="text-xl font-extrabold tabular-nums tracking-tight text-[var(--foreground)]">
+              {loading || weeklyRank === null ? "—" : `#${weeklyRank}`}
+            </p>
+          </div>
+          <ArrowUpRight className="h-4 w-4 text-[var(--muted-foreground)] transition-colors group-hover:text-canton" />
         </Link>
       </div>
     </Card>

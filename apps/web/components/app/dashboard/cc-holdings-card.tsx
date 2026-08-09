@@ -3,7 +3,7 @@
 import { useLockStatus } from "@/lib/hooks/use-lock-status";
 import { useCcPrice } from "@/lib/hooks/use-cc-price";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
-import { Wallet } from "lucide-react";
+import { Wallet, Lock, ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { CcRewardLogo } from "@/components/app/campaign/cc-reward-logo";
 import { Card } from "@/components/ui/card";
@@ -28,119 +28,147 @@ export function CcHoldingsCard({ hasWallet }: CcHoldingsCardProps) {
   const { status, loading } = useLockStatus({ enabled: hasWallet });
   const { price } = useCcPrice();
 
+  // ── No wallet state ──
   if (!hasWallet) {
     return (
-      <Card className="relative overflow-hidden p-5 sm:p-6">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-500/10 ring-1 ring-slate-500/20">
-            <Wallet className="h-5 w-5 text-slate-400" aria-hidden />
-          </div>
-          <span className="inline-block text-[10px] font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
-            {t("dashboard.ccBalance")}
+      <Card className="relative overflow-hidden p-6 sm:p-8">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--muted)] ring-1 ring-[var(--border)]">
+            <Wallet className="h-6 w-6 text-[var(--muted-foreground)]" aria-hidden />
           </span>
+          <div>
+            <p className="text-sm font-semibold text-[var(--foreground)]">
+              {t("dashboard.ccBalance")}
+            </p>
+            <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+              {t("dashboard.noWalletCreate")}
+            </p>
+          </div>
+          <Link
+            href="/wallet"
+            className="mt-2 inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-[var(--primary-foreground)] transition-opacity hover:opacity-90"
+          >
+            {t("dashboard.createWallet")}
+            <ArrowUpRight className="h-4 w-4" />
+          </Link>
         </div>
-        <p className="mt-4 text-sm font-medium text-slate-400">
-          {t("dashboard.noWalletCreate")}
-        </p>
-        <Link
-          href="/wallet"
-          className="mt-4 inline-flex items-center rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary-foreground)] transition-opacity hover:opacity-90"
-        >
-          {t("dashboard.createWallet")}
-        </Link>
       </Card>
     );
   }
 
+  // ── Main portfolio card (redesigned) ──
   const available = status.availableCc ?? 0;
   const locked = status.lockedCc ?? 0;
   const total = available + locked;
   const availableUsd = price ? available * price : null;
   const lockedUsd = price ? locked * price : null;
   const totalUsd = price ? total * price : null;
-  const lockedPct = total > 0 ? (locked / total) * 100 : 0;
+  const lockedPct = total > 0 ? Math.round((locked / total) * 100) : 0;
 
   return (
-    <Card interactive className="relative overflow-hidden p-5 sm:p-6">
+    <Card interactive className="relative overflow-hidden p-6 sm:p-7">
+      {/* Ambient glow */}
       <div
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_100%_0%,rgb(59_130_246/0.08),transparent_70%)]"
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(ellipse 80% 60% at 100% 0%, rgb(90 217 138 / 0.10), transparent 70%)",
+        }}
         aria-hidden
       />
+
       <div className="relative">
+        {/* ── Balance hero ── */}
         <div className="flex items-start justify-between">
-          <span className="inline-block text-[10px] font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
-            {t("dashboard.ccBalance")}
-          </span>
-          {totalUsd !== null && (
-            <div className="text-right">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                {t("dashboard.portfolioValue")}
+          <div className="flex items-center gap-2.5">
+            <CcRewardLogo size={28} className="text-canton" />
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+                {t("dashboard.ccBalance")}
               </p>
-              <p className="text-sm font-bold tabular-nums text-white">${formatUsd(totalUsd)}</p>
+              <p className="mt-0.5 text-3xl font-extrabold tabular-nums tracking-tight text-[var(--foreground)] glow-text">
+                {loading ? "…" : formatCc(total)}
+              </p>
             </div>
-          )}
+          </div>
+          {totalUsd !== null && !loading ? (
+            <div className="rounded-xl bg-[var(--muted)] px-3 py-1.5 text-right ring-1 ring-[var(--border)]">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
+                Value
+              </p>
+              <p className="text-sm font-bold tabular-nums text-[var(--foreground)]">
+                ${formatUsd(totalUsd)}
+              </p>
+            </div>
+          ) : null}
         </div>
 
-        {/* Available */}
-        <div className="mt-5 flex items-center justify-between">
-          <span className="text-sm font-medium text-slate-400">{t("dashboard.availableCc")}</span>
-          <div className="text-right">
-            {loading ? (
-              <span className="text-sm text-slate-600">…</span>
-            ) : (
-              <>
-                <p className="flex items-center justify-end gap-1.5 text-base font-bold tabular-nums text-white">
-                  <CcRewardLogo size={16} className="text-canton" />
-                  {formatCc(available)}
-                </p>
-                {availableUsd !== null && (
-                  <p className="text-[11px] tabular-nums text-slate-500">≈ ${formatUsd(availableUsd)}</p>
-                )}
-              </>
-            )}
+        {/* ── Split breakdown ── */}
+        <div className="mt-6 space-y-3">
+          {/* Available row */}
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
+              <span className="h-2 w-2 rounded-full bg-[var(--primary)]" />
+              {t("dashboard.availableCc")}
+            </span>
+            <div className="text-right">
+              {loading ? (
+                <span className="text-sm text-[var(--muted-foreground)]">…</span>
+              ) : (
+                <div className="flex items-baseline justify-end gap-2">
+                  <span className="text-base font-bold tabular-nums text-[var(--foreground)]">
+                    {formatCc(available)}
+                  </span>
+                  {availableUsd !== null && (
+                    <span className="text-xs tabular-nums text-[var(--muted-foreground)]">
+                      ${formatUsd(availableUsd)}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Locked row */}
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
+              <Lock className="h-3 w-3 text-canton" />
+              {t("dashboard.lockedCc")}
+            </span>
+            <div className="text-right">
+              {loading ? (
+                <span className="text-sm text-[var(--muted-foreground)]">…</span>
+              ) : (
+                <div className="flex items-baseline justify-end gap-2">
+                  <span className="text-base font-bold tabular-nums text-[var(--foreground)]">
+                    {formatCc(locked)}
+                  </span>
+                  {lockedUsd !== null && (
+                    <span className="text-xs tabular-nums text-[var(--muted-foreground)]">
+                      ${formatUsd(lockedUsd)}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Locked */}
-        <div className="mt-3 flex items-center justify-between">
-          <span className="text-sm font-medium text-slate-400">{t("dashboard.lockedCc")}</span>
-          <div className="text-right">
-            {loading ? (
-              <span className="text-sm text-slate-600">…</span>
-            ) : (
-              <>
-                <p className="flex items-center justify-end gap-1.5 text-base font-bold tabular-nums text-white">
-                  <CcRewardLogo size={16} className="text-amber-400" />
-                  {formatCc(locked)}
-                </p>
-                {lockedUsd !== null && (
-                  <p className="text-[11px] tabular-nums text-slate-500">≈ ${formatUsd(lockedUsd)}</p>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Split bar */}
+        {/* ── Allocation bar ── */}
         <div className="mt-5">
-          <div className="flex h-2 w-full overflow-hidden rounded-full bg-white/[0.06]">
+          <div className="relative h-2 w-full overflow-hidden rounded-full bg-[var(--muted)]">
             <div
-              className="h-full bg-gradient-to-r from-blue-500 to-cyan-400"
+              className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-[var(--primary)] to-[rgb(var(--canton-cyan-rgb))]"
               style={{ width: `${Math.max(0, 100 - lockedPct)}%` }}
             />
             <div
-              className="h-full bg-gradient-to-r from-amber-500 to-orange-400"
-              style={{ width: `${Math.min(100, lockedPct)}%` }}
+              className="absolute inset-y-0 rounded-full bg-gradient-to-r from-[rgb(var(--canton-rgb)/0.4)] to-[var(--primary)]"
+              style={{ left: `${100 - lockedPct}%`, width: `${lockedPct}%` }}
             />
           </div>
-          <div className="mt-2 flex items-center justify-between text-[11px] font-medium text-slate-500">
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-cyan-400" /> {t("dashboard.availableCc")}
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              {t("dashboard.lockedCc")} <span className="h-2 w-2 rounded-full bg-amber-400" />
-            </span>
-          </div>
+          <p className="mt-2 text-right text-[11px] font-medium tabular-nums text-[var(--muted-foreground)]">
+            {lockedPct}% locked
+          </p>
         </div>
       </div>
     </Card>

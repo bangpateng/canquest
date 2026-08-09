@@ -3,6 +3,7 @@
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Card } from "@/components/ui/card";
+import { Sparkles } from "lucide-react";
 
 export interface PointsCardProps {
   /** Saldo tersedia (sisa) = total earned - spent di Earn events. */
@@ -14,33 +15,42 @@ export function PointsCard({ remaining, loading }: PointsCardProps) {
   const t = usePlatformT();
 
   return (
-    <Card interactive className="relative overflow-hidden p-5 sm:p-6">
+    <Card interactive className="relative overflow-hidden p-6 sm:p-7">
+      {/* Ambient glow */}
       <div
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_0%_0%,rgb(var(--canton-rgb)/0.10),transparent_70%)]"
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(ellipse 80% 60% at 0% 0%, rgb(124 58 237 / 0.12), transparent 70%)",
+        }}
         aria-hidden
       />
+
       <div className="relative">
-        <div className="flex items-start justify-between">
-          <span className="inline-block text-[10px] font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
-            {t("dashboard.questPoints")}
+        {/* Icon + label */}
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]/15">
+            <Sparkles className="h-4 w-4 text-canton" aria-hidden />
           </span>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+            {t("dashboard.questPoints")}
+          </p>
         </div>
 
-        {/* Headline: remaining (saldo tersedia) */}
+        {/* Headline number */}
         <div className="mt-5">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-            {t("dashboard.pointsRemaining")}
-          </p>
           {loading ? (
-            <div className="mt-1 flex h-10 items-center">
+            <div className="flex h-12 items-center">
               <LoadingSpinner size="lg" tone="muted" />
             </div>
           ) : (
-            <p className="mt-1 text-3xl sm:text-4xl font-extrabold tabular-nums tracking-tight text-white glow-text">
+            <p className="text-4xl font-extrabold tabular-nums tracking-tight text-[var(--foreground)] glow-text">
               {remaining.toLocaleString()}
             </p>
           )}
-          <p className="mt-1 text-xs text-slate-500">{t("dashboard.pointsRemainingHint")}</p>
+          <p className="mt-1.5 text-xs text-[var(--muted-foreground)]">
+            {t("dashboard.pointsRemainingHint")}
+          </p>
         </div>
       </div>
     </Card>
