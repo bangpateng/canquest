@@ -1276,34 +1276,103 @@ export class CantonLedgerService {
     const nowIso = now.toISOString();
 
     // ── Build transferCalls array ─────────────────────────────────────────
-    // Setiap call butuh: query holdings utk instrumentId tsb + registry resolve.
-    // Khusus CC (Amulet): semua leg minum dari pool yang sama. Kirim SEMUA
-    // holdings ke setiap leg — BatchTransfer akan threading change amulet.
-    // Utk non-CC: pool per instrument (USDCx ≠ CC fee), query terpisah.
-    const transferCalls: Array<{ factoryCid: string; choiceArg: Record<string, unknown> }> = [];
-    let lastTransferKind = 'direct';
-    // Gabungkan disclosed contracts dari SEMUA legs — setiap factory butuh
-    // disclosed contracts-nya sendiri utk visibility participant. Kalau hanya
-    // kirim dari leg terakhir, factory leg 1 → CONTRACT_NOT_FOUND.
+    // GROUP BY INSTRUMENT (admin + id): panggil registry SEKALI per instrument,
+    // bukan per-leg. Factory + disclosed contracts adalah per-instrument.
+    // Kalau panggil registry 2x utk instrument sama (mis. 2 leg CC Amulet),
+    // factory contract conflict → CONTRACT_NOT_FOUND saat exercise BatchTransfer.
+    //
+    // BatchTransfer design: setiap transferCall boleh beda receiver, tapi
+    // factory untuk instrument yang sama adalah identik. Reuse = aman.
+    const instrumentRegistries = new Map<
+      string, // key = `${admin}|${id}`
+      {
+        factoryId: string;
+        choiceContextData: Record<string, unknown>;
+        disclosedContracts: unknown[];
+        transferKind: string;
+      }
+    >();
     const allDisclosedContracts: unknown[] = [];
+    let lastTransferKind = 'direct';
+
+    const transferCalls: Array<{ factoryCid: string; choiceArg: Record<string, unknown> }> = [];
 
     for (const t of transfers) {
-      const isAmulet = t.instrumentId.toLowerCase() === 'amulet';
-      // Query holdings utk instrument leg ini.
-      const holdings = isAmulet
+      const instrumentKey = `${t.instrumentAdmin}|${t.instrumentId}`;
+      // Resolve registry utk instrument ini (cache per-instrument).
+      let registry = instrumentRegistries.get(instrumentKey);
+      if (!registry) {
+        // Query holdings utk instrument leg ini.
+        const isAmulet = t.instrumentId.toLowerCase() === 'amulet';
+        const holdings = isAmulet
+          ? await this.queryAmuletHoldings(senderPartyId)
+          : await this.getTokenHoldingCids(senderPartyId, t.instrumentId);
+        if (holdings.length === 0) {
+          return {
+            ok: false,
+            updateId: null,
+            transferKind: 'unknown',
+            error: `Sender has no ${t.instrumentId} holdings for leg to ${t.receiverPartyId.split('::')[0]}`,
+          };
+        }
+        // Kirim SEMUA holdings ke registry resolve (prototype spec).
+        // BatchTransfer akan threading change antar leg.
+        const inputHoldingCids = holdings.map((h) => h.contractId);
+        const protoTransferSpec = {
+          sender: senderPartyId,
+          receiver: t.receiverPartyId,
+          amount: t.amount.toFixed(10),
+          instrumentId: { admin: t.instrumentAdmin, id: t.instrumentId },
+          lock: null,
+          requestedAt: nowIso,
+          executeBefore,
+          inputHoldingCids,
+          meta: {
+            values: t.description
+              ? { 'splice.lfdecentralizedtrust.org/reason': t.description }
+              : {},
+          },
+        };
+        const regRes = await this.callTransferFactoryRegistry(
+          {
+            expectedAdmin: t.instrumentAdmin,
+            transfer: protoTransferSpec,
+            extraArgs: { context: { values: {} }, meta: { values: {} } },
+          },
+          t.instrumentAdmin,
+        );
+        if (!regRes) {
+          return {
+            ok: false,
+            updateId: null,
+            transferKind: 'unknown',
+            error: `Registry call failed for ${t.instrumentId} leg to ${t.receiverPartyId.split('::')[0]}`,
+          };
+        }
+        registry = {
+          factoryId: regRes.factoryId,
+          choiceContextData: regRes.choiceContextData,
+          disclosedContracts: regRes.disclosedContracts,
+          transferKind: regRes.transferKind,
+        };
+        instrumentRegistries.set(instrumentKey, registry);
+        lastTransferKind = registry.transferKind;
+        // Dedupe disclosed contracts per instrument.
+        for (const dc of registry.disclosedContracts) {
+          const dcCid = (dc as Record<string, unknown>)?.contract as unknown;
+          const exists = allDisclosedContracts.some(
+            (existing) =>
+              (existing as Record<string, unknown>)?.contract === dcCid,
+          );
+          if (!exists) allDisclosedContracts.push(dc);
+        }
+      }
+      // Build transferSpec utk leg ini (receiver + amount spesifik per leg).
+      // Kirim SEMUA holdings — BatchTransfer threading change antar leg.
+      const isAmuletLeg = t.instrumentId.toLowerCase() === 'amulet';
+      const legHoldings = isAmuletLeg
         ? await this.queryAmuletHoldings(senderPartyId)
         : await this.getTokenHoldingCids(senderPartyId, t.instrumentId);
-      if (holdings.length === 0) {
-        return {
-          ok: false,
-          updateId: null,
-          transferKind: 'unknown',
-          error: `Sender has no ${t.instrumentId} holdings for leg to ${t.receiverPartyId.split('::')[0]}`,
-        };
-      }
-      // Kirim SEMUA holdings — BatchTransfer threading change antar leg.
-      const inputHoldingCids = holdings.map((h) => h.contractId);
-
       const transferSpec = {
         sender: senderPartyId,
         receiver: t.receiverPartyId,
@@ -1312,41 +1381,13 @@ export class CantonLedgerService {
         lock: null,
         requestedAt: nowIso,
         executeBefore,
-        inputHoldingCids,
+        inputHoldingCids: legHoldings.map((h) => h.contractId),
         meta: {
           values: t.description
             ? { 'splice.lfdecentralizedtrust.org/reason': t.description }
             : {},
         },
       };
-
-      const registry = await this.callTransferFactoryRegistry(
-        {
-          expectedAdmin: t.instrumentAdmin,
-          transfer: transferSpec,
-          extraArgs: { context: { values: {} }, meta: { values: {} } },
-        },
-        t.instrumentAdmin,
-      );
-      if (!registry) {
-        return {
-          ok: false,
-          updateId: null,
-          transferKind: 'unknown',
-          error: `Registry call failed for leg to ${t.receiverPartyId.split('::')[0]}`,
-        };
-      }
-      lastTransferKind = registry.transferKind;
-      // Gabungkan disclosed contracts dari leg ini (dedupe by contractId).
-      for (const dc of registry.disclosedContracts) {
-        const dcCid = (dc as Record<string, unknown>)?.contract as unknown;
-        const exists = allDisclosedContracts.some(
-          (existing) =>
-            (existing as Record<string, unknown>)?.contract === dcCid,
-        );
-        if (!exists) allDisclosedContracts.push(dc);
-      }
-
       transferCalls.push({
         factoryCid: registry.factoryId,
         choiceArg: {
