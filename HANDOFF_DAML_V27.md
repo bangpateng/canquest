@@ -1,8 +1,10 @@
 # HANDOFF — DAML v27 (AppPaymentRequest Architecture Migration)
 
-> **Tanggal:** 2026-08-09 (updated dengan master flow reference)
-> **HEAD:** `659dde1` (DAML v27 applied, backend belum rewrite)
-> **Status:** DAML v27 compiled (DAR built), v25 Settle **MASIH JALAN** (jangan deploy v27 sampai Fase 2 selesai)
+> **Tanggal:** 2026-08-09 (updated: Fase 2 backend rewrite in progress)
+> **HEAD:** `35d8bfc` (DAML v27 applied, Fase 2 backend rewrite dimulai)
+> **Status:** DAML v27 compiled (DAR built di VPS), v25 Settle **MASIH JALAN** (jangan deploy v27 sampai Fase 2 selesai)
+>
+> ⚠️ **Koreksi akurasi (2026-08-09):** HEAD aktual = `35d8bfc` (bukan `659dde1` seperti tertulis di versi doc sebelumnya). Commit `659dde1` tidak ditemukan di git log — kemungkinan typo. DAR `canquest-v27-1.4.0.dar` **dibuild di VPS**, bukan di repo lokal (folder `.daml/dist/` & `target/` lokal kosong — ini wajar).
 > **Tujuan doc ini:** Konteks lengkap utk chat baru, supaya tidak keluar jalur.
 
 ---
@@ -61,11 +63,13 @@ preapproval needed. Dana terkunci saat accept, platform collect atomik.
 
 | Komponen | Status | Catatan |
 |---|---|---|
-| **DAML v27** | ✅ Applied + compiled | `659dde1`, DAR `canquest-v27-1.4.0.dar` built di VPS |
+| **DAML v27** | ✅ Applied + compiled | HEAD `35d8bfc`, source di `packages/daml/daml/Main.daml` (5 template) |
+| **DAR v27 built** | ✅ Built di VPS | `canquest-v27-1.4.0.dar` dibuild di VPS (bukan repo lokal). Folder `.daml/dist/` lokal sengaja kosong |
 | **v25 Settle** | ✅ MASIH JALAN | Jangan deploy v27 sampai Fase 2 backend selesai |
-| **Backend v27** | ❌ Belum | Masih pakai v25 settleAtomic/recordTxId |
-| **Frontend v27** | ❌ Belum | AppPaymentRequest_Accept UI belum |
-| **DAR v27 uploaded?** | ❌ Belum | JANGAN upload sebelum Fase 2 selesai |
+| **Backend v27** | 🚧 Fase 2 in progress | Masih pakai v25 settleAtomic/recordTxId; Fase 2 rewrite di-belakang flag `QUEST_V27_FLOW` |
+| **Frontend v27** | ❌ Belum | AppPaymentRequest_Accept UI belum (Fase 3 — Fase 2 pakai sync Accept custodial) |
+| **DAR v27 uploaded?** | ❌ Belum | JANGAN upload sebelum Fase 2 selesai + verified |
+| **AppPaymentRequest DAR** | ℹ️ Native Splice | Bukan DAR milik kita — bagian participant node bawaan. Backend akses via Ledger API JSON-RPC |
 
 ---
 
