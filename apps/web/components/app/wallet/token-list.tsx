@@ -3,6 +3,9 @@
 import { useCallback, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { buttonVariants } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils/utils";
 import { useTokenPrices } from "@/lib/hooks/use-token-prices";
 import {
   usePools,
@@ -107,7 +110,7 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
   return (
     <div className="w-full max-w-full min-w-0 space-y-5 md:space-y-6 font-sans">
       {/* ── Balance Hero Card ───────────────────────────────────────────── */}
-      <div className="relative w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50 p-6 sm:p-8 md:p-10 lg:p-12">
+      <Card className="relative w-full overflow-hidden p-6 sm:p-8 md:p-10 lg:p-12">
         <div
           className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_0%,rgb(var(--canton-rgb)/0.10),transparent_70%)]"
           aria-hidden
@@ -120,7 +123,10 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
             type="button"
             onClick={handleRefresh}
             disabled={loading}
-            className="rounded-xl p-2.5 text-slate-400 transition-all duration-200 hover:bg-white/[0.06] hover:text-slate-100 disabled:opacity-40"
+            className={cn(
+              buttonVariants({ variant: "icon", size: "sm" }),
+              "border-0 bg-transparent hover:bg-transparent",
+            )}
             aria-label="Refresh balance"
           >
             {loading ? (
@@ -134,18 +140,18 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
         <div className="relative">
           <p className="relative text-3xl font-extrabold tabular-nums leading-none tracking-tight text-white sm:text-4xl md:text-5xl glow-text">
             {initialLoad ? (
-              <span className="text-slate-500">—</span>
+              <span className="text-[var(--muted-foreground)]">—</span>
             ) : (
               <>
                 ${totalUsdStr}{" "}
-                <span className="text-base font-semibold text-slate-500 sm:text-lg md:text-xl">
+                <span className="text-base font-semibold text-[var(--muted-foreground)] sm:text-lg md:text-xl">
                   USD
                 </span>
               </>
             )}
           </p>
         </div>
-      </div>
+      </Card>
 
       {/* ── Actions ── */}
       <WalletActions

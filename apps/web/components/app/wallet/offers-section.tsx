@@ -358,7 +358,7 @@ export function OffersModal({
     >
       <button
         type="button"
-        className="fixed inset-0 bg-black/55 backdrop-blur-[2px]"
+        className="modal-backdrop"
         aria-label="Close"
         onClick={onClose}
       />
@@ -366,14 +366,14 @@ export function OffersModal({
         role="dialog"
         aria-modal="true"
         aria-label="Transfer offers"
-        className="relative z-10 my-auto w-full max-h-[min(90vh,90dvh)] max-w-md overflow-y-auto rounded-3xl border border-white/5 bg-[var(--card)] p-6 sm:p-8 shadow-xl"
+        className="relative z-10 my-auto w-full max-h-[min(90vh,90dvh)] max-w-md overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 sm:p-8 shadow-xl"
       >
         <div className="flex items-center justify-between gap-2">
           {/* Segmented tab control: Incoming | Sent */}
           <div
             role="tablist"
             aria-label="Offer direction"
-            className="flex items-center gap-1 rounded-xl bg-white/[0.03] p-1"
+            className="flex items-center gap-1 rounded-xl bg-[var(--muted)] p-1"
           >
             <button
               type="button"
@@ -383,14 +383,14 @@ export function OffersModal({
               className={cn(
                 "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
                 activeTab === "incoming"
-                  ? "bg-emerald-500/15 text-emerald-400"
-                  : "text-slate-400 hover:text-slate-200",
+                  ? "bg-canton-subtle text-canton"
+                  : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
               )}
             >
               <ArrowDownLeft className="h-3.5 w-3.5" />
               Incoming
               {offers.length > 0 && (
-                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500/20 px-1 text-[10px] font-bold text-emerald-400">
+                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-canton-soft px-1 text-[10px] font-bold text-canton">
                   {offers.length}
                 </span>
               )}
@@ -403,14 +403,14 @@ export function OffersModal({
               className={cn(
                 "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
                 activeTab === "sent"
-                  ? "bg-amber-500/15 text-amber-400"
-                  : "text-slate-400 hover:text-slate-200",
+                  ? "bg-canton-subtle text-canton"
+                  : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
               )}
             >
               <ArrowUpRight className="h-3.5 w-3.5" />
               Sent
               {sentOffers.length > 0 && (
-                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500/20 px-1 text-[10px] font-bold text-amber-400">
+                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-canton-soft px-1 text-[10px] font-bold text-canton">
                   {sentOffers.length}
                 </span>
               )}
@@ -444,11 +444,11 @@ export function OffersModal({
                 {error}
               </div>
             ) : offers.length === 0 ? (
-              <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-5 py-8 text-center">
-                <p className="text-sm font-medium text-slate-400">
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--muted)] px-5 py-8 text-center">
+                <p className="text-sm font-medium text-[var(--muted-foreground)]">
                   No pending offers
                 </p>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-[var(--muted-foreground)]">
                   Incoming transfer requests will appear here.
                 </p>
               </div>
@@ -466,34 +466,34 @@ export function OffersModal({
                   return (
                     <li
                       key={offer.contractId}
-                      className="flex flex-col gap-3 rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl px-5 py-4"
+                      className="flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] backdrop-blur-2xl px-5 py-4"
                     >
                       <div className="min-w-0 flex-1 space-y-1.5">
                         <div className="flex items-center gap-2.5">
-                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-green-500/10 text-green-500">
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-canton-subtle text-canton">
                             <ArrowDownLeft className="h-4 w-4" />
                           </span>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
-                              <p className="truncate text-sm font-semibold text-white">
+                              <p className="truncate text-sm font-semibold text-[var(--foreground)]">
                                 {formatAmount(offer)}{" "}
                                 {displayName(offer.instrumentId ?? "Amulet")}{" "}
                                 from {senderDisplay(offer)}
                               </p>
                             </div>
                             {offer.description ? (
-                              <p className="truncate text-xs font-medium text-slate-400">
+                              <p className="truncate text-xs font-medium text-[var(--muted-foreground)]">
                                 {offer.description}
                               </p>
                             ) : null}
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
-                          <p className="font-mono text-[10px] font-medium text-slate-500 truncate">
+                          <p className="font-mono text-[10px] font-medium text-[var(--muted-foreground)] truncate">
                             ID: {offer.contractId.slice(0, 24)}…
                           </p>
                           {offer.expiresAt && (
-                            <span className="flex shrink-0 items-center gap-1 text-[10px] text-slate-600">
+                            <span className="flex shrink-0 items-center gap-1 text-[10px] text-[var(--muted-foreground)]">
                               <Clock className="h-3 w-3" />
                               Expires{" "}
                               {new Date(offer.expiresAt).toLocaleDateString()}
@@ -549,11 +549,11 @@ export function OffersModal({
               {sentError}
             </div>
           ) : sentOffers.length === 0 ? (
-            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-5 py-8 text-center">
-              <p className="text-sm font-medium text-slate-400">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--muted)] px-5 py-8 text-center">
+              <p className="text-sm font-medium text-[var(--muted-foreground)]">
                 No outgoing transfers
               </p>
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-1 text-xs text-[var(--muted-foreground)]">
                 Pending transfers you&apos;ve sent can be cancelled here.
               </p>
             </div>
@@ -567,34 +567,34 @@ export function OffersModal({
                 return (
                   <li
                     key={offer.contractId}
-                    className="flex flex-col gap-3 rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl px-5 py-4"
+                    className="flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] backdrop-blur-2xl px-5 py-4"
                   >
                     <div className="min-w-0 flex-1 space-y-1.5">
                       <div className="flex items-center gap-2.5">
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-500">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-canton-subtle text-canton">
                           <ArrowUpRight className="h-4 w-4" />
                         </span>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <p className="truncate text-sm font-semibold text-white">
+                            <p className="truncate text-sm font-semibold text-[var(--foreground)]">
                               {formatAmount(offer)}{" "}
                               {displayName(offer.instrumentId ?? "Amulet")} →{" "}
                               {receiverDisplay(offer)}
                             </p>
                           </div>
                           {offer.description ? (
-                            <p className="truncate text-xs font-medium text-slate-400">
+                            <p className="truncate text-xs font-medium text-[var(--muted-foreground)]">
                               {offer.description}
                             </p>
                           ) : null}
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <p className="font-mono text-[10px] font-medium text-slate-500 truncate">
+                        <p className="font-mono text-[10px] font-medium text-[var(--muted-foreground)] truncate">
                           ID: {offer.contractId.slice(0, 24)}…
                         </p>
                         {offer.expiresAt && (
-                          <span className="flex shrink-0 items-center gap-1 text-[10px] text-slate-600">
+                          <span className="flex shrink-0 items-center gap-1 text-[10px] text-[var(--muted-foreground)]">
                             <Clock className="h-3 w-3" />
                             Expires{" "}
                             {new Date(offer.expiresAt).toLocaleDateString()}

@@ -6,6 +6,7 @@ import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { Wallet } from "lucide-react";
 import Link from "next/link";
 import { CcRewardLogo } from "@/components/app/campaign/cc-reward-logo";
+import { Card } from "@/components/ui/card";
 
 function formatCc(n: number): string {
   return n.toLocaleString(undefined, {
@@ -29,7 +30,7 @@ export function CcHoldingsCard({ hasWallet }: CcHoldingsCardProps) {
 
   if (!hasWallet) {
     return (
-      <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[var(--card)]/80 backdrop-blur-2xl shadow-2xl shadow-black/50 p-5 sm:p-6">
+      <Card className="relative overflow-hidden p-5 sm:p-6">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-500/10 ring-1 ring-slate-500/20">
             <Wallet className="h-5 w-5 text-slate-400" aria-hidden />
@@ -47,7 +48,7 @@ export function CcHoldingsCard({ hasWallet }: CcHoldingsCardProps) {
         >
           {t("dashboard.createWallet")}
         </Link>
-      </div>
+      </Card>
     );
   }
 
@@ -60,7 +61,7 @@ export function CcHoldingsCard({ hasWallet }: CcHoldingsCardProps) {
   const lockedPct = total > 0 ? (locked / total) * 100 : 0;
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[var(--card)]/80 backdrop-blur-2xl shadow-2xl shadow-black/50 transition-all duration-300 hover:border-white/[0.08] p-5 sm:p-6">
+    <Card interactive className="relative overflow-hidden p-5 sm:p-6">
       <div
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_100%_0%,rgb(59_130_246/0.08),transparent_70%)]"
         aria-hidden
@@ -142,6 +143,6 @@ export function CcHoldingsCard({ hasWallet }: CcHoldingsCardProps) {
           </div>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }

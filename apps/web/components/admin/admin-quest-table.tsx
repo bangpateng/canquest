@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Trash2, Pencil, Trophy, AlertCircle, CheckCircle2, Clock, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils/utils";
+import { buttonVariants } from "@/components/ui/button";
 import { formatRewardAmount } from "@/lib/canton/campaign-reward";
 import { normalizeRewardToken } from "@/lib/quest/quest-types";
 
@@ -181,7 +182,7 @@ export function AdminQuestTable({
                   <div className="flex flex-wrap items-center gap-2">
                     <Link
                       href={`/admin/quests/${q.id}`}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-[var(--muted)]"
+                      className={buttonVariants({ variant: "secondary", size: "sm" })}
                     >
                       <Pencil className="h-3 w-3" />
                       Manage
@@ -189,7 +190,7 @@ export function AdminQuestTable({
                     {showWinners ? (
                       <Link
                         href={`/admin/quests/${q.id}/winners`}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-[var(--muted)]"
+                        className={buttonVariants({ variant: "secondary", size: "sm" })}
                       >
                         <Trophy className="h-3 w-3" />
                         Winners
@@ -199,7 +200,7 @@ export function AdminQuestTable({
                       type="button"
                       onClick={() => void handleDelete(q)}
                       disabled={deletingId === q.id}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-400 transition-colors hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-50"
+                      className={cn(buttonVariants({ variant: "danger", size: "sm" }), "disabled:cursor-not-allowed")}
                     >
                       {deletingId === q.id ? (
                         <span className="text-[10px]">Deleting…</span>

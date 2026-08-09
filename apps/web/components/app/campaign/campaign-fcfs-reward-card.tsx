@@ -74,7 +74,7 @@ export function CampaignFcfsRewardCard({
             className={cn(
               "mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl",
               isStatus
-                ? "bg-[var(--muted)]/60 text-slate-400"
+                ? "bg-[var(--muted)]/60 text-[var(--muted-foreground)]"
                 : isDual
                   ? isUsdcx
                     ? "bg-gradient-to-br from-sky-400/15 to-violet-500/15 text-violet-300"
@@ -104,14 +104,14 @@ export function CampaignFcfsRewardCard({
             )}
           </div>
           <div className="min-w-0">
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
+            <p className="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
               {sectionLabel}
             </p>
-            <p className="mt-1 text-base font-bold leading-snug text-slate-100">
+            <p className="mt-1 text-base font-bold leading-snug text-[var(--foreground)]">
               {slotsLabel}
             </p>
             {description ? (
-              <p className="mt-2 text-sm font-medium leading-relaxed text-slate-400">
+              <p className="mt-2 text-sm font-medium leading-relaxed text-[var(--muted-foreground)]">
                 {description}
               </p>
             ) : null}

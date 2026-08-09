@@ -334,14 +334,14 @@ export function WalletActions({
             buttonVariants({ variant: "secondary", size: "sm" }),
             "relative w-full justify-center gap-2",
             offersCount > 0 &&
-              "border-emerald-500/40 text-emerald-400 hover:border-emerald-500/60 hover:bg-emerald-500/10",
+              "border-canton-muted text-canton hover:border-canton-muted hover:bg-canton-subtle",
           )}
         >
           <Inbox className="h-5 w-5 shrink-0" aria-hidden />
           Offers
           {offersCount > 0 && (
             <span
-              className="absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-500 px-1.5 text-[10px] font-bold text-white shadow ring-2 ring-[var(--card)]"
+              className="absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--primary)] px-1.5 text-[10px] font-bold text-white shadow ring-2 ring-[var(--card)]"
               aria-hidden
             >
               {offersCount}
@@ -368,14 +368,14 @@ export function WalletActions({
             buttonVariants({ variant: "secondary", size: "sm" }),
             "relative w-full justify-center gap-2",
             lockedCc > 0 &&
-              "border-emerald-500/40 text-emerald-400 hover:border-emerald-500/60 hover:bg-emerald-500/10",
+              "border-canton-muted text-canton hover:border-canton-muted hover:bg-canton-subtle",
           )}
         >
           <Lock className="h-5 w-5 shrink-0" aria-hidden />
           Lock
           {lockedCc > 0 && (
             <span
-              className="absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-500 px-1.5 text-[10px] font-bold text-white shadow ring-2 ring-[var(--card)]"
+              className="absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--primary)] px-1.5 text-[10px] font-bold text-white shadow ring-2 ring-[var(--card)]"
               aria-hidden
             >
               {lockedCc > 999 ? "999+" : lockedCc}
@@ -405,7 +405,7 @@ export function WalletActions({
         >
           <button
             type="button"
-            className="fixed inset-0 bg-black/45 backdrop-blur-[2px]"
+            className="modal-backdrop"
             aria-label="Close dialog"
             onClick={close}
           />
@@ -413,13 +413,13 @@ export function WalletActions({
             role="dialog"
             aria-modal="true"
             aria-labelledby={sendTitleId}
-            className="relative z-10 my-auto w-full max-h-[min(90vh,90dvh)] max-w-md overflow-y-auto rounded-3xl border border-white/5 bg-[var(--card)] p-8 shadow-xl"
+            className="relative z-10 my-auto w-full max-h-[min(90vh,90dvh)] max-w-md overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-8 shadow-xl"
           >
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2
                   id={sendTitleId}
-                  className="text-xl font-bold text-slate-100"
+                  className="text-xl font-bold text-[var(--foreground)]"
                 >
                   Send
                 </h2>
@@ -449,38 +449,38 @@ export function WalletActions({
               <form onSubmit={onSendSubmit} className="mt-8 space-y-6">
                 {/* ── TOKEN SELECTOR (CC + USDCx + token aktif lainnya) ── */}
                 <div className="relative space-y-2">
-                  <label className="text-sm font-medium text-slate-400">Token</label>
+                  <label className="text-sm font-medium text-[var(--muted-foreground)]">Token</label>
                   <button
                     type="button"
                     onClick={() => setTokenPickerOpen((v) => !v)}
                     disabled={sendState === "loading"}
-                    className="flex w-full items-center justify-between rounded-2xl border border-white/5 bg-white/5 px-4 py-3 text-left disabled:opacity-50"
+                    className="flex w-full items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--muted)] px-4 py-3 text-left disabled:opacity-50"
                   >
                     <span className="flex items-center gap-2">
                       {selectedSendToken ? (
                         <>
                           <TokenLogo symbol={selectedSendToken.instrumentId} size="sm" />
-                          <span className="font-bold text-slate-100">
+                          <span className="font-bold text-[var(--foreground)]">
                             {displayName(selectedSendToken.instrumentId)}
                           </span>
                         </>
                       ) : (
-                        <span className="text-slate-500">Select token</span>
+                        <span className="text-[var(--muted-foreground)]">Select token</span>
                       )}
                     </span>
-                    <ChevronDown className="h-4 w-4 text-slate-400" />
+                    <ChevronDown className="h-4 w-4 text-[var(--muted-foreground)]" />
                   </button>
 
                   {tokenPickerOpen && (
-                    <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-y-auto rounded-2xl border border-white/10 bg-[var(--card)] p-2 shadow-xl">
+                    <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-2 shadow-xl">
                       <div className="mb-2 flex items-center gap-2 px-2">
-                        <Search className="h-4 w-4 text-slate-500" />
+                        <Search className="h-4 w-4 text-[var(--muted-foreground)]" />
                         <input
                           autoFocus
                           value={tokenPickerQuery}
                           onChange={(e) => setTokenPickerQuery(e.target.value)}
                           placeholder="Search token"
-                          className="w-full bg-transparent py-1 text-sm text-slate-100 outline-none placeholder:text-slate-500"
+                          className="w-full bg-transparent py-1 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)]"
                         />
                       </div>
                       {sendTokens
@@ -513,22 +513,22 @@ export function WalletActions({
                               className={cn(
                                 "flex w-full items-center justify-between rounded-xl px-3 py-2 text-left",
                                 tokenActive
-                                  ? "hover:bg-white/5"
+                                  ? "hover:bg-[var(--muted)]"
                                   : "cursor-not-allowed opacity-50",
                               )}
                             >
                               <span className="flex items-center gap-2">
                                 <TokenLogo symbol={t.instrumentId} size="sm" />
-                                <span className="font-medium text-slate-100">
+                                <span className="font-medium text-[var(--foreground)]">
                                   {displayName(t.instrumentId)}
                                 </span>
                                 {!tokenActive && (
-                                  <span className="rounded bg-slate-700/50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                                  <span className="rounded bg-slate-700/50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
                                     Coming soon
                                   </span>
                                 )}
                               </span>
-                              <span className="text-xs tabular-nums text-slate-400">
+                              <span className="text-xs tabular-nums text-[var(--muted-foreground)]">
                                 {tokenActive ? bal.toFixed(4) : "—"}
                               </span>
                             </button>
@@ -542,12 +542,12 @@ export function WalletActions({
                   <div className="flex items-center justify-between">
                     <label
                       htmlFor="wallet-send-amount"
-                      className="text-sm font-medium text-slate-400"
+                      className="text-sm font-medium text-[var(--muted-foreground)]"
                     >
                       Amount
                     </label>
                     {selectedSendToken && (
-                      <p className="tabular-nums text-xs text-slate-400">
+                      <p className="tabular-nums text-xs text-[var(--muted-foreground)]">
                         {selectedBalance.toFixed(6)}{" "}
                         {displayName(selectedSendToken.instrumentId)}
                       </p>
@@ -563,7 +563,7 @@ export function WalletActions({
                       onChange={(e) => setCcAmount(e.target.value)}
                       placeholder="0.00"
                       disabled={sendState === "loading"}
-                      className="w-full rounded-2xl border border-white/5 bg-white/5 py-3 pl-4 pr-16 text-base font-bold tabular-nums text-slate-100 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
+                      className="w-full rounded-2xl border border-[var(--border)] bg-[var(--muted)] py-3 pl-4 pr-16 text-base font-bold tabular-nums text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--primary)]/40 disabled:opacity-50"
                     />
                     {selectedBalance > 0 && (
                       <button
@@ -576,7 +576,10 @@ export function WalletActions({
                           setCcAmount(max.toFixed(6));
                         }}
                         disabled={sendState === "loading"}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg px-2.5 py-1 text-xs font-semibold text-[var(--primary)] hover:bg-white/5 disabled:opacity-40"
+                        className={cn(
+                          buttonVariants({ variant: "ghost", size: "sm" }),
+                          "absolute right-2 top-1/2 h-auto -translate-y-1/2 px-2.5 py-1 text-xs",
+                        )}
                       >
                         MAX
                       </button>
@@ -587,7 +590,7 @@ export function WalletActions({
                 <div className="space-y-2">
                   <label
                     htmlFor="wallet-send-recipient"
-                    className="text-sm font-medium text-slate-400"
+                    className="text-sm font-medium text-[var(--muted-foreground)]"
                   >
                     Recipient
                   </label>
@@ -604,17 +607,17 @@ export function WalletActions({
                     }}
                     placeholder="Recipient wallet address"
                     disabled={sendState === "loading"}
-                    className="w-full resize-none rounded-2xl border border-white/5 bg-white/5 px-4 py-3 font-mono text-sm font-medium text-slate-100 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
+                    className="w-full resize-none rounded-2xl border border-[var(--border)] bg-[var(--muted)] px-4 py-3 font-mono text-sm font-medium text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--primary)]/40 disabled:opacity-50"
                   />
                 </div>
 
                 <div className="space-y-2">
                   <label
                     htmlFor="wallet-send-memo"
-                    className="text-sm font-medium text-slate-400"
+                    className="text-sm font-medium text-[var(--muted-foreground)]"
                   >
                     Memo{" "}
-                    <span className="font-normal text-slate-500">(optional)</span>
+                    <span className="font-normal text-[var(--muted-foreground)]">(optional)</span>
                   </label>
                   <input
                     id="wallet-send-memo"
@@ -623,7 +626,7 @@ export function WalletActions({
                     onChange={(e) => setMemo(e.target.value)}
                     placeholder="Add a note"
                     disabled={sendState === "loading"}
-                    className="w-full rounded-2xl border border-white/5 bg-white/5 px-4 py-3 text-base font-medium text-slate-100 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
+                    className="w-full rounded-2xl border border-[var(--border)] bg-[var(--muted)] px-4 py-3 text-base font-medium text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--primary)]/40 disabled:opacity-50"
                   />
                 </div>
 
@@ -702,7 +705,7 @@ export function WalletActions({
         >
           <button
             type="button"
-            className="fixed inset-0 bg-black/45 backdrop-blur-[2px]"
+            className="modal-backdrop"
             aria-label="Close dialog"
             onClick={close}
           />
@@ -710,13 +713,13 @@ export function WalletActions({
             role="dialog"
             aria-modal="true"
             aria-labelledby={receiveTitleId}
-            className="relative z-10 my-auto w-full max-h-[min(90vh,90dvh)] max-w-md overflow-y-auto rounded-3xl border border-white/5 bg-[var(--card)] p-8 shadow-xl"
+            className="relative z-10 my-auto w-full max-h-[min(90vh,90dvh)] max-w-md overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-8 shadow-xl"
           >
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2
                   id={receiveTitleId}
-                  className="text-xl font-bold text-slate-100"
+                  className="text-xl font-bold text-[var(--foreground)]"
                 >
                   Receive
                 </h2>
@@ -731,7 +734,7 @@ export function WalletActions({
               </button>
             </div>
 
-            <div className="mt-8 flex justify-center rounded-3xl border border-white/5 bg-white p-6 dark:bg-zinc-950">
+            <div className="mt-8 flex justify-center rounded-3xl border border-[var(--border)] bg-white p-6 dark:bg-zinc-950">
               <QRCodeSVG
                 value={displayPartyId}
                 size={200}

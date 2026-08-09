@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils/utils";
 import { ListPagination } from "@/components/app/list/list-pagination";
 import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Ban, Coins, Gift, Lock, LockOpen, RefreshCw, ShieldCheck, ShieldOff, Undo2, Zap } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { TransactionDetailModal } from "@/components/app/wallet/transaction-detail-modal";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
@@ -204,8 +205,8 @@ function txIconBg(type: TxItem["type"]): string {
     case "TOKEN_OFFER_REJECTED":
     case "TOKEN_OFFER_WITHDRAWN":
     case "PREAPPROVAL_DISABLED":
-      // Aksi toggle netral — slate, bukan merah (tidak ada pergerakan CC).
-      return "bg-slate-500/10 text-slate-400";
+      // Aksi toggle netral — muted, bukan merah (tidak ada pergerakan CC).
+      return "bg-[var(--muted)] text-[var(--muted-foreground)]";
     case "PREAPPROVAL_ENABLED":
       return "bg-blue-500/10 text-blue-400";
     case "QUEST_REWARD":
@@ -225,8 +226,8 @@ function txIconBg(type: TxItem["type"]): string {
 }
 
 function amountColor(type: TxItem["type"]): string {
-  // Toggle (amount 0) → slate netral.
-  if (TOGGLE_TX_TYPES.has(type)) return "text-slate-400";
+  // Toggle (amount 0) → muted netral.
+  if (TOGGLE_TX_TYPES.has(type)) return "text-[var(--muted-foreground)]";
   // CC_LOCK = debit (amber, netral — bukan merah transfer).
   if (type === "CC_LOCK") return "text-amber-500";
   // Debit (keluar): TRANSFER_OUT, TOKEN_TRANSFER_OUT.
@@ -264,7 +265,7 @@ function AmountText({ tx }: { tx: TxItem }) {
     const amt = Number(rawAmt ?? "0");
     if (!rawAmt || !Number.isFinite(amt) || amt <= 0) {
       // Data lama (sebelum kolom cancelled ada) → tetap netral.
-      return <span className="text-slate-500">\u2014</span>;
+      return <span className="text-[var(--muted-foreground)]">{"\u2014"}</span>;
     }
     const label = tokenCancelled
       ? tx.cancelledInstrumentId ?? tx.instrumentId ?? "token"
@@ -277,7 +278,7 @@ function AmountText({ tx }: { tx: TxItem }) {
     );
   }
   if (TOGGLE_TX_TYPES.has(tx.type)) {
-    return <span className="text-slate-500">\u2014</span>;
+    return <span className="text-[var(--muted-foreground)]">\u2014</span>;
   }
   // Token non-CC: amount sudah dalam unit asli (decimal), bukan microCC.
   if (isTokenAmountTx(tx)) {
@@ -446,7 +447,10 @@ export function TransactionsView({
             type="button"
             onClick={refresh}
             disabled={loading}
-            className="mt-1 shrink-0 text-slate-400 transition-colors hover:text-slate-100 disabled:opacity-40"
+            className={cn(
+              buttonVariants({ variant: "icon", size: "sm" }),
+              "mt-1 shrink-0 border-0 bg-transparent hover:bg-transparent",
+            )}
             aria-label="Refresh transactions"
           >
             {loading ? (
@@ -471,7 +475,7 @@ export function TransactionsView({
             <p className="text-base font-semibold text-white">
               {t("transactions.empty")}
             </p>
-            <p className="mt-2 text-sm font-medium text-slate-400">
+            <p className="mt-2 text-sm font-medium text-[var(--muted-foreground)]">
               Complete quests or send/receive CC to see activity here.
             </p>
           </div>
@@ -479,7 +483,7 @@ export function TransactionsView({
           <>
             <div className="hidden min-w-0 md:block">
               <table className="w-full table-fixed text-left text-base">
-                <thead className="border-b border-white/[0.06] bg-white/[0.01] text-sm font-semibold uppercase tracking-wide text-slate-500">
+                <thead className="border-b border-white/[0.06] bg-white/[0.01] text-sm font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                   <tr>
                     <th className="whitespace-nowrap px-5 py-3.5 sm:px-6 sm:py-4 font-semibold">{t("transactions.type")}</th>
                     <th className="whitespace-nowrap px-5 py-3.5 sm:px-6 sm:py-4 font-semibold">{t("transactions.amount")}</th>
@@ -527,7 +531,7 @@ export function TransactionsView({
                         >
                           <AmountText tx={tx} />
                         </td>
-                        <td className="max-w-[12rem] truncate px-5 py-3.5 sm:px-6 sm:py-4 text-sm font-medium text-slate-400">
+                        <td className="max-w-[12rem] truncate px-5 py-3.5 sm:px-6 sm:py-4 text-sm font-medium text-[var(--muted-foreground)]">
                            {txDisplayDescription(tx, t(TX_TYPE_KEYS[tx.type]))}
                          </td>
                          <td className="px-5 py-3.5 sm:px-6 sm:py-4">
@@ -550,7 +554,7 @@ export function TransactionsView({
                             );
                           })()}
                         </td>
-                        <td className="whitespace-nowrap px-5 py-3.5 sm:px-6 sm:py-4 text-sm font-medium text-slate-400">
+                        <td className="whitespace-nowrap px-5 py-3.5 sm:px-6 sm:py-4 text-sm font-medium text-[var(--muted-foreground)]">
                           {date}
                         </td>
                       </tr>
@@ -589,10 +593,10 @@ export function TransactionsView({
                            {txDirection(tx.type)}
                            <TxStatusBadge status={tx.status} />
                          </p>
-                         <p className="mt-0.5 truncate text-xs font-medium text-slate-400">
+                         <p className="mt-0.5 truncate text-xs font-medium text-[var(--muted-foreground)]">
                            {txDisplayDescription(tx, t(TX_TYPE_KEYS[tx.type]))}
                          </p>
-                         <p className="mt-0.5 text-xs font-medium text-slate-500">{date}</p>
+                         <p className="mt-0.5 text-xs font-medium text-[var(--muted-foreground)]">{date}</p>
                        </div>
                        <div className="shrink-0 text-right">
                          <p

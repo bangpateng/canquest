@@ -66,9 +66,9 @@ function NavLinks({
             ? " opacity-50 cursor-not-allowed"
             : active
               ? variant === "mobile"
-                ? " bg-slate-800/80 backdrop-blur-xl text-white shadow-md shadow-black/20 ring-1 ring-inset ring-white/10 rounded-lg"
-                : " bg-slate-800/80 backdrop-blur-xl text-white shadow-md shadow-black/20 ring-1 ring-white/10"
-              : " text-slate-400 hover:bg-slate-800/50 hover:text-white hover:backdrop-blur-xl");
+                ? " bg-canton-subtle text-[var(--foreground)] shadow-md shadow-black/20 ring-1 ring-inset ring-[var(--primary)]/20 rounded-lg"
+                : " bg-canton-subtle text-[var(--foreground)] shadow-md shadow-black/20 ring-1 ring-[var(--primary)]/20"
+              : " text-[var(--muted-foreground)] hover:bg-[var(--primary)]/5 hover:text-[var(--foreground)]");
 
         return (
           <Link
@@ -80,8 +80,8 @@ function NavLinks({
             <Icon
               className={
                 variant === "sidebar"
-                  ? cn("h-5 w-5 shrink-0", active && "text-[var(--primary)]")
-                  : cn("h-5 w-5 shrink-0", active ? "text-[var(--primary)]" : "text-slate-400")
+                  ? cn("h-5 w-5 shrink-0", active && "text-canton")
+                  : cn("h-5 w-5 shrink-0", active ? "text-canton" : "text-[var(--muted-foreground)]")
               }
             />
             {variant === "mobile" ? (
@@ -108,32 +108,32 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen w-full max-w-full items-start overflow-x-hidden bg-[var(--background)] font-sans">
       {/* Desktop Sidebar — hidden on mobile */}
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-white/[0.05] bg-slate-950/95 px-4 py-8 backdrop-blur-2xl md:flex">
+      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--card)]/60 px-4 py-8 backdrop-blur-2xl md:flex">
         <div className="mb-6 min-w-0 px-2">
           <CanQuestLogo size="md" href="/overview" />
         </div>
-        <p className="mb-6 px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-600">
+        <p className="mb-6 px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--muted-foreground)]">
           {t("shell.platform")}
         </p>
         <nav className="flex flex-1 flex-col gap-1.5">
           <NavLinks variant="sidebar" hasWallet={hasWallet} />
         </nav>
-        <div className="mt-auto space-y-1 border-t border-white/[0.05] pt-5">
+        <div className="mt-auto space-y-1 border-t border-[var(--border)] pt-5">
           <Link
             href="/"
-            className="flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium text-slate-500 transition-all duration-200 hover:bg-slate-800/50 hover:text-slate-300"
+            className="flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium text-[var(--muted-foreground)] transition-all duration-200 hover:bg-[var(--primary)]/5 hover:text-[var(--foreground)]"
           >
             <Compass className="h-4 w-4" />
             {t("shell.landing")}
           </Link>
-          <p className="px-4 pt-2 text-[10px] font-medium text-slate-700">canquest.cc</p>
+          <p className="px-4 pt-2 text-[10px] font-medium text-[var(--muted-foreground)]">canquest.cc</p>
         </div>
       </aside>
 
       {/* Main Content Area */}
       <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden pb-24 md:pb-0" style={{ maxWidth: '100%' }}>
         {/* Top Header */}
-        <header className="sticky top-0 z-30 flex h-16 w-full max-w-full items-center justify-between gap-4 border-b border-white/[0.05] bg-[var(--background)]/95 px-4 backdrop-blur-2xl sm:h-[4.5rem] sm:px-6 md:px-8 lg:px-10">
+        <header className="sticky top-0 z-30 flex h-16 w-full max-w-full items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--background)]/80 px-4 backdrop-blur-2xl sm:h-[4.5rem] sm:px-6 md:px-8 lg:px-10">
           {/* Match landing-header structure: wrap logo in a flex/centered box so
               the lockup sits vertically centered like on the landing page. */}
           <div className="flex shrink-0 items-center justify-start md:hidden">
@@ -151,7 +151,7 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
 
       {/* Mobile Bottom Navigation — centered 6-item grid, no truncation */}
       <nav
-        className="fixed bottom-0 left-0 right-0 z-50 bg-slate-950/90 backdrop-blur-xl border-t border-white/[0.06] py-1.5 px-2 md:hidden"
+        className="fixed bottom-0 left-0 right-0 z-50 bg-[var(--card)]/90 backdrop-blur-xl border-t border-[var(--border)] py-1.5 px-2 md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0.375rem)" }}
       >
         <div className="grid grid-cols-6 w-full items-center mx-auto max-w-lg gap-0">

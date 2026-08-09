@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Share2, Link2, Check } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
 
 interface ShareCampaignProps {
@@ -88,7 +89,7 @@ export function ShareCampaign({ url, title, text, className }: ShareCampaignProp
         type="button"
         onClick={handleClick}
         aria-label="Share campaign"
-        className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-slate-100 transition-colors hover:bg-white/10"
+        className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}
       >
         <Share2 className="h-4 w-4" />
         Share

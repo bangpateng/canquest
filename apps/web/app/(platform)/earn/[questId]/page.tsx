@@ -13,6 +13,7 @@ import { QUEST_STATUS_BADGE, questRewardToken, type Quest } from "@/lib/quest/qu
 import { formatRewardAmount } from "@/lib/canton/campaign-reward";
 import { getRewardConfig } from "@/lib/quest/quest-engine";
 import { buttonVariants } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { surfaceCardClass } from "@/lib/ui/ui-tokens";
 import { cn } from "@/lib/utils/utils";
 import { ArrowLeft } from "lucide-react";
@@ -133,7 +134,7 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
       </Link>
 
       {/* ── Hero Header ─────────────────────────────────────────────────── */}
-      <header className="overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50">
+      <Card className="overflow-hidden">
         {/* Banner area — status + share float over it */}
         {quest.bannerImageUrl ? (
           <div className="relative h-32 sm:h-36 md:h-44 w-full overflow-hidden">
@@ -226,7 +227,7 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
             </div>
           )}
         </div>
-      </header>
+      </Card>
 
       <CampaignQuestSidebar quest={quest} />
 

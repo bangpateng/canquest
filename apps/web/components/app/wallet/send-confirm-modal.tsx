@@ -48,10 +48,10 @@ function DetailRow({
 }) {
   return (
     <div className="flex items-center justify-between gap-3 py-2.5">
-      <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+      <span className="text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
         {label}
       </span>
-      <span className="min-w-0 max-w-[60%] truncate text-right text-sm font-medium text-slate-200">
+      <span className="min-w-0 max-w-[60%] truncate text-right text-sm font-medium text-[var(--foreground)]">
         {children}
       </span>
     </div>
@@ -82,7 +82,7 @@ export function SendConfirmModal({
     >
       <button
         type="button"
-        className="fixed inset-0 bg-black/55 backdrop-blur-[2px]"
+        className="modal-backdrop"
         aria-label="Close"
         onClick={() => {
           if (!busy) onClose();
@@ -92,10 +92,10 @@ export function SendConfirmModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative z-10 my-auto w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-white/5 bg-[var(--card)] p-6 sm:p-8 shadow-xl"
+        className="relative z-10 my-auto w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 sm:p-8 shadow-xl"
       >
         <div className="flex items-start justify-between gap-4">
-          <h2 id={titleId} className="text-xl font-bold text-slate-100">
+          <h2 id={titleId} className="text-xl font-bold text-[var(--foreground)]">
             Confirm transaction
           </h2>
           <button
@@ -112,19 +112,19 @@ export function SendConfirmModal({
         </div>
 
         {/* ── Block amount besar di tengah (tanpa logo) ── */}
-        <div className="mt-6 flex flex-col items-center justify-center rounded-2xl border border-white/5 bg-white/5 px-6 py-7 text-center">
-          <p className="text-3xl font-bold tabular-nums text-slate-100">
+        <div className="mt-6 flex flex-col items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--muted)] px-6 py-7 text-center">
+          <p className="text-3xl font-bold tabular-nums text-[var(--foreground)]">
             {amount || "0"} {tokenName}
           </p>
         </div>
 
         {/* ── Baris detail ── */}
-        <dl className="mt-5 divide-y divide-slate-800/60">
+        <dl className="mt-5 divide-y divide-[var(--border)]">
           <DetailRow label="Recipient">{recipientDisplay || ""}</DetailRow>
           <DetailRow label="Memo">{memoDisplay}</DetailRow>
           <DetailRow label="Network">Canton</DetailRow>
           <DetailRow label="Platform fee">
-            <span className="tabular-nums text-amber-400">{feeCc} CC</span>
+            <span className="tabular-nums text-canton">{feeCc} CC</span>
           </DetailRow>
         </dl>
 

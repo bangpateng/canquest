@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Loader2, ShieldAlert, Power, PowerOff } from "lucide-react";
 import { cn } from "@/lib/utils/utils";
+import { buttonVariants } from "@/components/ui/button";
 
 interface MaintenanceStatus {
   enabled: boolean;
@@ -157,7 +158,7 @@ export function AdminMaintenancePanel() {
             onClick={() => setEnabled((v) => !v)}
             className={cn(
               "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors",
-              enabled ? "bg-amber-500" : "bg-[var(--muted)]",
+              enabled ? "bg-[var(--primary)]" : "bg-[var(--muted)]",
             )}
           >
             <span
@@ -180,7 +181,7 @@ export function AdminMaintenancePanel() {
             onChange={(e) => setTitle(e.target.value)}
             maxLength={120}
             placeholder={DEFAULT_TITLE}
-            className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-canton"
+            className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--primary)]/50"
           />
         </div>
 
@@ -194,7 +195,7 @@ export function AdminMaintenancePanel() {
             maxLength={1000}
             rows={4}
             placeholder={DEFAULT_MESSAGE}
-            className="w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-canton"
+            className="w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--primary)]/50"
           />
         </div>
 
@@ -209,7 +210,7 @@ export function AdminMaintenancePanel() {
             type="datetime-local"
             value={estimatedEnd}
             onChange={(e) => setEstimatedEnd(e.target.value)}
-            className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-canton"
+            className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--primary)]/50"
           />
         </div>
 
@@ -218,8 +219,8 @@ export function AdminMaintenancePanel() {
             type="submit"
             disabled={saving}
             className={cn(
-              "inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white transition-opacity disabled:opacity-60",
-              enabled ? "bg-amber-500 hover:opacity-90" : "bg-emerald-600 hover:opacity-90",
+              buttonVariants({ variant: "primary", size: "sm" }),
+              "transition-opacity disabled:opacity-60",
             )}
           >
             {saving ? (
@@ -234,7 +235,7 @@ export function AdminMaintenancePanel() {
           <button
             type="button"
             onClick={refresh}
-            className="rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+            className={buttonVariants({ variant: "secondary", size: "sm" })}
           >
             Muat ulang
           </button>

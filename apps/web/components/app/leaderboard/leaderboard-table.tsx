@@ -1,5 +1,6 @@
 "use client";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { Card } from "@/components/ui/card";
 import { useMe } from "@/lib/hooks/use-me";
 
 import { ListPagination } from "@/components/app/list/list-pagination";
@@ -203,7 +204,7 @@ export function LeaderboardTable() {
       </div>
 
       {/* Leaderboard Card */}
-      <div className="w-full max-w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50">
+      <Card className="w-full max-w-full overflow-hidden">
         {/* Card Header */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 border-b border-white/[0.06] bg-white/[0.01] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
           <div>
@@ -294,7 +295,7 @@ export function LeaderboardTable() {
             />
           </div>
         )}
-      </div>
+      </Card>
     </div>
   );
 }

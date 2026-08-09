@@ -4,6 +4,7 @@ import { formatApiError } from "@/lib/api/format-api-error";
 import { Lock, ChevronDown } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/utils/utils";
+import { Card } from "@/components/ui/card";
 import { TokenLogo, displayName } from "@/components/app/wallet/token-logo";
 import { useFeeConfig } from "@/lib/hooks/use-fee-config";
 
@@ -104,27 +105,27 @@ export function SettingsPreapprovalPanel() {
   }
 
   return (
-    <section
+    <Card
       id="preapproval"
-      className="scroll-mt-8 overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50"
+      className="scroll-mt-8 overflow-hidden"
     >
       {/* Section Header — clickable to collapse/expand */}
       <button
         type="button"
         onClick={() => setCollapsed((c) => !c)}
-        className="flex w-full items-center justify-between border-b border-white/[0.06] bg-white/[0.01] px-5 py-4 sm:px-6 sm:py-5 md:px-8 transition hover:bg-white/[0.02]"
+        className="flex w-full items-center justify-between border-b border-[var(--border)] bg-[var(--muted)]/30 px-5 py-4 sm:px-6 sm:py-5 md:px-8 transition hover:bg-[var(--muted)]/50"
       >
         <div className="text-left">
-          <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
+          <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] bg-[var(--muted)] px-2.5 py-1 rounded-full border border-[var(--border)]">
             One Step Transfer
           </span>
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
             Auto-accept incoming transfers without manual approval
           </p>
         </div>
         <ChevronDown
           className={cn(
-            "h-5 w-5 shrink-0 text-slate-500 transition-transform duration-200",
+            "h-5 w-5 shrink-0 text-[var(--muted-foreground)] transition-transform duration-200",
             collapsed ? "" : "rotate-180",
           )}
         />
@@ -137,7 +138,7 @@ export function SettingsPreapprovalPanel() {
         )}
       >
         {loading ? (
-          <div className="flex items-center gap-3 text-sm text-slate-400">
+          <div className="flex items-center gap-3 text-sm text-[var(--muted-foreground)]">
             <LoadingSpinner size="sm" tone="muted" />
             Checking status…
           </div>
@@ -176,7 +177,7 @@ export function SettingsPreapprovalPanel() {
           </p>
         ) : null}
       </div>
-    </section>
+    </Card>
   );
 }
 
@@ -205,7 +206,7 @@ function TokenToggleRow({
 }) {
   const instrumentId = TOKEN_INSTRUMENT_ID[token];
   return (
-    <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-white/[0.04] bg-white/[0.01] px-4 py-3">
+    <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[var(--border)] bg-[var(--muted)]/30 px-4 py-3">
       <div className="flex items-center gap-3 min-w-0">
         <TokenLogo symbol={instrumentId} size="sm" />
         <div className="min-w-0">
@@ -216,19 +217,19 @@ function TokenToggleRow({
                 enabled
                   ? active
                     ? "text-emerald-300/80"
-                    : "text-slate-200"
-                  : "text-slate-500",
+                    : "text-[var(--foreground)]"
+                  : "text-[var(--muted-foreground)]",
               )}
             >
               {displayName(instrumentId)}
             </p>
             {!enabled && (
-              <span className="rounded-full bg-slate-700/50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500">
+              <span className="rounded-full bg-[var(--muted)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
                 Coming soon
               </span>
             )}
           </div>
-          <p className="mt-0.5 text-xs text-slate-500">
+          <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
             {enabled
               ? active
                 ? `Incoming ${token} arrives directly`
@@ -236,7 +237,7 @@ function TokenToggleRow({
               : `${token} auto-accept — not yet available`}
           </p>
           {enabled && active && expiresAt && (
-            <p className="mt-1 text-xs text-slate-600">
+            <p className="mt-1 text-xs text-[var(--muted-foreground)]/70">
               Expires {new Date(expiresAt).toLocaleDateString()}
             </p>
           )}
@@ -255,14 +256,14 @@ function TokenToggleRow({
           className="relative shrink-0"
         >
           {busy ? (
-            <div className="flex h-7 w-12 items-center justify-center rounded-full bg-slate-700">
+            <div className="flex h-7 w-12 items-center justify-center rounded-full bg-[var(--muted)]">
               <LoadingSpinner size="sm" />
             </div>
           ) : (
             <div
               className={cn(
                 "h-7 w-12 rounded-full transition-colors duration-200",
-                active ? "bg-emerald-600" : "bg-slate-700",
+                active ? "bg-[var(--primary)]" : "bg-[var(--muted)]",
               )}
             >
               <div
@@ -276,8 +277,8 @@ function TokenToggleRow({
         </button>
       ) : (
         // Disabled placeholder — lock icon, tidak bisa diklik.
-        <div className="flex h-7 w-12 items-center justify-center rounded-full bg-slate-800/50">
-          <Lock className="h-3.5 w-3.5 text-slate-600" />
+        <div className="flex h-7 w-12 items-center justify-center rounded-full bg-[var(--muted)]/50">
+          <Lock className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
         </div>
       )}
     </div>

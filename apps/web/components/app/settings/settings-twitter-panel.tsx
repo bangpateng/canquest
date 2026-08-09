@@ -4,6 +4,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useCallback, useEffect, useState } from "react";
 import { TurnstileField, useTurnstileRequired } from "@/components/platform/turnstile-field";
 import { buttonVariants } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { formatApiError } from "@/lib/api/format-api-error";
 import { cn } from "@/lib/utils/utils";
 import { AtSign } from "lucide-react";
@@ -99,17 +100,17 @@ export function SettingsTwitterPanel({
   // Akun terhubung dikunci permanen — tidak ada disconnect/change di UI ini.
 
   return (
-    <section
+    <Card
       id="twitter"
-      className="scroll-mt-8 overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/50"
+      className="scroll-mt-8 overflow-hidden"
     >
       {/* Section Header */}
-      <div className="border-b border-white/[0.06] bg-white/[0.01] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
+      <div className="border-b border-[var(--border)] bg-[var(--muted)]/30 px-5 py-4 sm:px-6 sm:py-5 md:px-8">
         <div>
-          <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
+          <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] bg-[var(--muted)] px-2.5 py-1 rounded-full border border-[var(--border)]">
             X (Twitter)
           </span>
-          <p className="mt-1 text-xs text-slate-500">Connect for quest verification</p>
+          <p className="mt-1 text-xs text-[var(--muted-foreground)]">Connect for quest verification</p>
         </div>
       </div>
 
@@ -121,37 +122,37 @@ export function SettingsTwitterPanel({
         ) : null}
 
         {status.connected && status.username ? (
-          <div className="rounded-xl border border-emerald-500/15 bg-emerald-500/5 px-5 py-4 sm:px-6 sm:py-5 backdrop-blur-xl">
+          <div className="rounded-xl border border-emerald-500/15 bg-emerald-500/5 px-5 py-4 sm:px-6 sm:py-5">
             <div className="flex items-center gap-3">
               <div>
                 <p className="text-xs font-semibold text-emerald-300/80 uppercase tracking-wider">Connected</p>
-                <p className="mt-0.5 font-mono text-base font-semibold text-slate-100">
+                <p className="mt-0.5 font-mono text-base font-semibold text-[var(--foreground)]">
                   @{status.username}
                 </p>
               </div>
             </div>
             {/* LOCK PERMANEN: akun terhubung tidak bisa diganti / dilepas. */}
-            <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-slate-400">
-              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-500" />
+            <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-[var(--muted-foreground)]">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--muted-foreground)]" />
               This X account is permanently linked and cannot be changed or disconnected.
             </p>
           </div>
         ) : (
           <form onSubmit={(e) => void handleConnect(e)} className="space-y-4">
             <div>
-              <label htmlFor="twitter-handle" className="text-sm font-semibold text-slate-500 flex items-center gap-1.5">
+              <label htmlFor="twitter-handle" className="text-sm font-semibold text-[var(--muted-foreground)] flex items-center gap-1.5">
                 <AtSign className="h-3.5 w-3.5" />
                 X username
               </label>
-              <div className="mt-2 flex rounded-xl border border-white/[0.08] bg-[#0a0c14]/80 backdrop-blur-xl transition-all duration-200 focus-within:border-[var(--primary)]/30 focus-within:ring-2 focus-within:ring-[var(--ring)] focus-within:shadow-[0_0_20px_rgb(var(--canton-rgb)/0.08)]">
-                <span className="flex items-center pl-4 text-base font-medium text-slate-500">@</span>
+              <div className="mt-2 flex rounded-xl border border-[var(--border)] bg-[var(--muted)] transition-colors focus-within:border-[var(--primary)]/50">
+                <span className="flex items-center pl-4 text-base font-medium text-[var(--muted-foreground)]">@</span>
                 <input
                   id="twitter-handle"
                   value={input}
                   onChange={(e) => setInput(e.target.value.replace(/^@/, ""))}
                   placeholder="your_handle"
                   disabled={busy}
-                  className="min-w-0 flex-1 bg-transparent py-3 pr-4 text-base font-medium text-white outline-none placeholder:text-slate-500"
+                  className="min-w-0 flex-1 bg-transparent py-3 pr-4 text-base font-medium text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)]"
                   autoComplete="off"
                   spellCheck={false}
                 />
@@ -181,6 +182,6 @@ export function SettingsTwitterPanel({
           </p>
         ) : null}
       </div>
-    </section>
+    </Card>
   );
 }

@@ -298,7 +298,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
     >
       <button
         type="button"
-        className="fixed inset-0 bg-black/60 backdrop-blur-[3px]"
+        className="modal-backdrop"
         aria-label="Close dialog"
         onClick={onClose}
       />
@@ -306,7 +306,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative z-10 my-auto w-full max-h-[min(90vh,90dvh)] max-w-md overflow-y-auto rounded-3xl border border-white/10 bg-[#0a0b0d] p-5 shadow-2xl"
+        className="relative z-10 my-auto w-full max-h-[min(90vh,90dvh)] max-w-md overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-2xl"
       >
         {/* Header */}
         <div className="mb-5 flex items-center justify-between">
@@ -329,7 +329,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
 
         {/* Status banner */}
         {!statusEnabled ? (
-          <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-center text-xs text-amber-300">
+          <div className="mb-4 rounded-xl border border-canton-muted bg-canton-subtle p-3 text-center text-xs text-canton">
             {status ?? "Swap is not available right now."}
           </div>
         ) : null}
@@ -375,7 +375,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                 <button
                   type="button"
                   onClick={flipTokens}
-                  className="flex h-10 w-10 items-center justify-center rounded-full border-4 border-[#0a0b0d] bg-[#1a1d23] text-amber-400 transition hover:rotate-180 hover:bg-[#252a32]"
+                  className="flex h-10 w-10 items-center justify-center rounded-full border-4 border-[var(--card)] bg-[var(--muted)] text-canton transition hover:rotate-180 hover:bg-[var(--primary)]/10"
                   aria-label="Flip tokens"
                 >
                   <ArrowDown className="h-4 w-4" />
@@ -398,7 +398,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
 
             {/* Same token warning */}
             {sameToken && (
-              <p className="mt-3 text-center text-sm text-amber-400">
+              <p className="mt-3 text-center text-sm text-canton">
                 Select different tokens to swap.
               </p>
             )}
@@ -418,7 +418,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                   <span>{quoteError}</span>
                 </div>
               ) : quote ? (
-                <div className="mt-3 space-y-2 rounded-xl border border-white/5 bg-[#13151a] p-4 text-xs">
+                <div className="mt-3 space-y-2 rounded-xl border border-[var(--border)] bg-[var(--muted)] p-4 text-xs">
                   <DetailRow
                     label="Rate"
                     value={`1 ${displayName(sellToken?.instrumentId ?? "")} ≈ ${formatPriceNum(quote.amountOut / (quote.effInput || parseFloat(amount) || 1))} ${displayName(buyToken?.instrumentId ?? "")}`}
@@ -567,11 +567,11 @@ function TokenPicker({
     >
       <button
         type="button"
-        className="fixed inset-0 bg-black/70 backdrop-blur-sm"
+        className="modal-backdrop"
         aria-label="Close token list"
         onClick={onClose}
       />
-      <div className="relative z-10 my-auto max-h-[85vh] w-full max-w-md overflow-y-auto rounded-3xl border border-white/10 bg-[#0a0b0d] p-5 shadow-2xl">
+      <div className="relative z-10 my-auto max-h-[85vh] w-full max-w-md overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-2xl">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-base font-bold text-white">Select Token</h3>
           <button
@@ -593,7 +593,7 @@ function TokenPicker({
             placeholder="Search token..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-xl border border-white/10 bg-[#13151a] py-2.5 pl-10 pr-4 text-sm text-white outline-none placeholder:text-slate-600 focus:border-amber-500/50"
+            className="w-full rounded-xl border border-[var(--border)] bg-[var(--muted)] py-2.5 pl-10 pr-4 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)]/50"
           />
         </div>
         {/* List */}
@@ -618,7 +618,7 @@ function TokenPicker({
                   <p className="truncate text-sm font-semibold text-white">
                     {displayName(t.instrumentId)}
                     {t.isCC && (
-                      <span className="ml-1.5 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-400">
+                      <span className="ml-1.5 rounded bg-canton-subtle px-1.5 py-0.5 text-[10px] font-bold text-canton">
                         CC
                       </span>
                     )}
@@ -671,7 +671,7 @@ function SwapCard({
 
   return (
     <>
-      <div className="rounded-2xl border border-white/5 bg-[#13151a] p-4">
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--muted)] p-4">
         <div className="mb-2 flex items-center justify-between">
           <span className="text-xs font-medium text-slate-500">{label}</span>
           {isInput && balance && (
@@ -684,7 +684,7 @@ function SwapCard({
                       key={p}
                       type="button"
                       onClick={() => onPercentClick(p)}
-                      className="rounded bg-[#252a32] px-1.5 py-0.5 text-[10px] font-semibold text-slate-300 hover:bg-[#323842] hover:text-white"
+                      className="rounded bg-[var(--card)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--foreground)] ring-1 ring-[var(--border)] hover:bg-[var(--primary)]/10 hover:text-canton"
                     >
                       {p === 0.25 ? "25" : p === 0.5 ? "50" : "75"}%
                     </button>
@@ -692,7 +692,7 @@ function SwapCard({
                   <button
                     type="button"
                     onClick={() => onPercentClick(1)}
-                    className="rounded bg-[#252a32] px-1.5 py-0.5 text-[10px] font-semibold text-amber-400 hover:bg-[#323842]"
+                    className="rounded bg-[var(--card)] px-1.5 py-0.5 text-[10px] font-semibold text-canton ring-1 ring-[var(--border)] hover:bg-[var(--primary)]/10"
                   >
                     MAX
                   </button>
@@ -720,8 +720,8 @@ function SwapCard({
                 "w-full min-w-0 flex-1 text-2xl font-bold",
                 estimated
                   ? isLoading
-                    ? "text-slate-600"
-                    : "text-amber-300"
+                    ? "text-[var(--muted-foreground)]"
+                    : "text-canton"
                   : "text-white",
               )}
             >
@@ -733,7 +733,7 @@ function SwapCard({
           <button
             type="button"
             onClick={() => setPickerOpen(true)}
-            className="flex shrink-0 items-center gap-2 rounded-full bg-[#252a32] px-3 py-2 transition hover:bg-[#323842]"
+            className="flex shrink-0 items-center gap-2 rounded-full bg-[var(--card)] px-3 py-2 ring-1 ring-[var(--border)] transition hover:bg-[var(--primary)]/10"
           >
             {selectedToken ? (
               <>

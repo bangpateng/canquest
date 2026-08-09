@@ -2,6 +2,7 @@
 
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { Card } from "@/components/ui/card";
 
 export interface ActivityStatsCardProps {
   questsDone: number;
@@ -42,7 +43,7 @@ export function ActivityStatsCard({
   const t = usePlatformT();
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[var(--card)]/80 backdrop-blur-2xl shadow-2xl shadow-black/50 transition-all duration-300 hover:border-white/[0.08] p-5 sm:p-6">
+    <Card interactive className="relative overflow-hidden p-5 sm:p-6">
       <div
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_50%_0%,rgb(124_58_237/0.08),transparent_70%)]"
         aria-hidden
@@ -69,6 +70,6 @@ export function ActivityStatsCard({
           />
         </div>
       </div>
-    </div>
+    </Card>
   );
 }

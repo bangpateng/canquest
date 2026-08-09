@@ -9,6 +9,7 @@ import { useMe } from "@/lib/hooks/use-me";
 import type { Quest } from "@/lib/quest/quest-types";
 import { Sparkles, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Card } from "@/components/ui/card";
 
 export function QuestHubPage() {
   const [partyId, setPartyId] = useState<string | null>(null);
@@ -96,8 +97,8 @@ export function QuestHubPage() {
     <div className="w-full max-w-full min-w-0 overflow-x-hidden space-y-5 md:space-y-6 font-sans">
 
       {/* ── Hero Card — Split Layout: Left (Points) + Right (Profile) ────── */}
-      <section
-        className="relative w-full max-w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-[var(--card)]/80 backdrop-blur-2xl shadow-2xl shadow-black/50"
+      <Card
+        className="relative w-full max-w-full overflow-hidden"
         aria-label="Points balance"
       >
         {/* Background glow — right side accent */}
@@ -151,7 +152,7 @@ export function QuestHubPage() {
             )}
           </div>
         </div>
-      </section>
+      </Card>
 
       {/* ── Tasks / Hub Content ─────────────────────────────────────────── */}
       {loading ? (

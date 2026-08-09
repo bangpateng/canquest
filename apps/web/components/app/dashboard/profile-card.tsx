@@ -3,6 +3,7 @@
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { ROUTES } from "@/lib/routing/app-routes";
 import Link from "next/link";
+import { Card } from "@/components/ui/card";
 
 const AVATAR_GRADIENTS = [
   "linear-gradient(145deg, #d4ff3f 0%, #8b9c0d 100%)",
@@ -51,7 +52,7 @@ export function ProfileCard({
   const seed = username?.trim() || displayName?.trim() || "guest";
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[var(--card)]/80 backdrop-blur-2xl shadow-2xl shadow-black/50 transition-all duration-300 hover:border-white/[0.08] p-5 sm:p-6">
+    <Card interactive className="relative overflow-hidden p-5 sm:p-6">
       <div
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_60%_at_0%_0%,rgb(251_191_36/0.08),transparent_70%)]"
         aria-hidden
@@ -118,6 +119,6 @@ export function ProfileCard({
           {t("dashboard.viewLeaderboard")}
         </Link>
       </div>
-    </div>
+    </Card>
   );
 }

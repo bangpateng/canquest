@@ -12,7 +12,7 @@ export const surfaceInsetClass =
   "rounded-md border border-[var(--border)] bg-[var(--muted)]/50";
 
 export const inputClass =
-  "w-full rounded-lg border border-[var(--border)] bg-[var(--muted)] px-3 py-2.5 text-sm text-[var(--foreground)] outline-none transition-colors placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)]/50 disabled:opacity-50";
+  "w-full rounded-xl border border-[var(--border)] bg-[var(--muted)] px-3 py-2.5 text-sm text-[var(--foreground)] outline-none transition-colors placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)]/50 disabled:opacity-50";
 
 /** Permukaan kartu reward/claim — var-based (bukan hex hardcode), radius konsisten. */
 export const rewardCardClass =

@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils/utils";
+import { buttonVariants } from "@/components/ui/button";
 
 /** Period / status filter pills (Weekly, Active, etc.) */
 export function filterTabClass(selected: boolean, className?: string) {
@@ -33,12 +34,11 @@ export function underlineTabClass(selected: boolean, className?: string) {
   );
 }
 
-/** Small icon-only control (toolbar, copy, close) */
+/** Small icon-only control (toolbar, copy, close).
+ *  Delegates to the centralized cva `icon` variant for radius/color
+ *  consistency, then layers on any per-call className. */
 export function iconButtonClass(className?: string) {
-  return cn(
-    "inline-flex items-center justify-center rounded-full border border-[var(--border)] bg-[var(--card)]/80 text-[var(--muted-foreground)] transition-all hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10 hover:text-[var(--foreground)] disabled:opacity-40",
-    className,
-  );
+  return cn(buttonVariants({ variant: "icon" }), className);
 }
 
 /** Compact toolbar trigger (language menu) */

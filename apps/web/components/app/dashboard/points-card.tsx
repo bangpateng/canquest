@@ -2,6 +2,7 @@
 
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { Card } from "@/components/ui/card";
 
 export interface PointsCardProps {
   /** Saldo tersedia (sisa) = total earned - spent di Earn events. */
@@ -13,7 +14,7 @@ export function PointsCard({ remaining, loading }: PointsCardProps) {
   const t = usePlatformT();
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[var(--card)]/80 backdrop-blur-2xl shadow-2xl shadow-black/50 transition-all duration-300 hover:border-white/[0.08] p-5 sm:p-6">
+    <Card interactive className="relative overflow-hidden p-5 sm:p-6">
       <div
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_0%_0%,rgb(var(--canton-rgb)/0.10),transparent_70%)]"
         aria-hidden
@@ -42,6 +43,6 @@ export function PointsCard({ remaining, loading }: PointsCardProps) {
           <p className="mt-1 text-xs text-slate-500">{t("dashboard.pointsRemainingHint")}</p>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }

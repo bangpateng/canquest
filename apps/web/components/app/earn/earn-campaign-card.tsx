@@ -11,6 +11,7 @@ import { RewardTokenLogo } from "@/components/app/campaign/reward-token-logo";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
 import { useEffect, useState } from "react";
+import { Card } from "@/components/ui/card";
 import {
   Calendar,
   Clock,
@@ -180,8 +181,8 @@ export function EarnCampaignCard({
     ) : null;
 
   const inner = (
-    <article className={cn(
-      "group relative flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-[var(--card)]/80 backdrop-blur-2xl shadow-2xl shadow-black/50",
+    <Card interactive className={cn(
+      "group relative flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden",
       "transition-all duration-300 ease-out",
       meta.canOpen && !meta.joinBlocked && "hover:-translate-y-1 hover:border-[rgb(var(--canton-rgb)/0.25)] hover:shadow-[0_24px_60px_rgb(0_0_0/0.5),0_0_0_1px_rgb(var(--canton-rgb)/0.15)]",
       (quest.status === "ENDED" || meta.joinBlocked) && "opacity-90",
@@ -346,7 +347,7 @@ export function EarnCampaignCard({
           </span>
         </div>
       </div>
-    </article>
+    </Card>
   );
 
   if (meta.joinBlocked || !meta.canOpen) return inner;

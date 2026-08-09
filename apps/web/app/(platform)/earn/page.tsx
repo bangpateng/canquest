@@ -1,5 +1,5 @@
 import { EarnCampaignsPage } from "@/components/app/earn/earn-campaigns-page";
-import { PlatformPage } from "@/components/platform/platform-page";
+import { PlatformPage, PlatformPageIntro } from "@/components/platform/platform-page";
 import { WalletRequiredGate } from "@/components/platform/wallet-required-gate";
 import { Suspense } from "react";
 
@@ -7,6 +7,7 @@ import { Suspense } from "react";
 export default function EarnPage() {
   return (
     <PlatformPage>
+      <PlatformPageIntro eyebrow="Earn" title="Partner campaigns" eyebrowBrand />
       <Suspense fallback={null}>
         <WalletRequiredGate>
           <EarnCampaignsPage />

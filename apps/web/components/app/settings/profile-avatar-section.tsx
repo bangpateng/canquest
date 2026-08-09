@@ -171,18 +171,18 @@ export function ProfileAvatarSection({
             <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center gap-2 px-3 text-center">
-              <span className="text-xl font-bold text-slate-400">
+              <span className="text-xl font-bold text-[var(--muted-foreground)]">
                 {initials}
               </span>
-              <UserRound className="h-7 w-7 text-slate-400 opacity-50" />
+              <UserRound className="h-7 w-7 text-[var(--muted-foreground)] opacity-50" />
             </div>
           )}
         </div>
       </div>
       <div className="min-w-0 flex-1 space-y-4">
         <div>
-          <p className="text-sm font-medium text-slate-400">Profile photo</p>
-          <p className="mt-2 text-sm font-medium text-slate-400">
+          <p className="text-sm font-medium text-[var(--muted-foreground)]">Profile photo</p>
+          <p className="mt-2 text-sm font-medium text-[var(--muted-foreground)]">
             Shown on the leaderboard. Stored in your account folder on the server.
           </p>
         </div>

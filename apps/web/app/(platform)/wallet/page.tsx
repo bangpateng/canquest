@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { WalletSetup } from "@/components/app/wallet/wallet-setup";
 import { WalletDashboard } from "@/components/app/wallet/wallet-dashboard";
 import { WalletReconnect } from "@/components/app/wallet/wallet-reconnect";
-import { PlatformPage } from "@/components/platform/platform-page";
+import { PlatformPage, PlatformPageIntro } from "@/components/platform/platform-page";
 import { getLedgerStatus, type LedgerStatus } from "@/lib/services/api";
 import { useMe } from "@/lib/hooks/use-me";
 import { useInvalidateWalletTokens } from "@/lib/hooks/use-wallet-tokens";
@@ -100,6 +100,7 @@ export default function WalletPage() {
 
   return (
     <PlatformPage>
+      <PlatformPageIntro eyebrow="Wallet" title="Send, swap & lock" eyebrowBrand />
       {profileStale ? (
         <div className="flex w-full min-w-0 items-start gap-3 rounded-3xl border border-amber-500/20 bg-amber-500/5 px-5 py-4 backdrop-blur-xl">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />

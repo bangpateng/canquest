@@ -265,6 +265,17 @@
     animation: float 6s ease-in-out infinite;
   }
 
+  /* Modal backdrop — unified dismiss layer for all dialogs.
+     Replaces per-modal hand-rolled `fixed inset-0 bg-black/xx backdrop-blur-[xpx]`. */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background-color: rgb(0 0 0 / 0.6);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    cursor: default;
+  }
+
   /* Scroll-in reveal (progressive enhancement; no JS). Elements are visible
      by default and only get the reveal animation when the browser supports
      the animation-timeline property, so SSR/no-support users see content. */

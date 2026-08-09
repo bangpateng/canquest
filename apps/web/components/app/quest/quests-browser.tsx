@@ -8,6 +8,7 @@ import { filterTabClass } from "@/lib/ui/ui-button-styles";
 import { cn } from "@/lib/utils/utils";
 import { ListPagination } from "@/components/app/list/list-pagination";
 import { buttonVariants } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Search } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -185,7 +186,7 @@ export function QuestsBrowser({ variant = "earn" }: { variant?: "default" | "ear
       {isEarn ? (
         <>
           {/* ── Hero header ─────────────────────────────────────────────── */}
-          <section className="relative w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl shadow-black/40">
+          <Card className="relative w-full overflow-hidden">
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_80%_at_100%_0%,rgb(var(--canton-rgb)/0.12),transparent_60%)]" />
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_70%_at_0%_100%,rgb(167_139_250/0.06),transparent_55%)]" />
             <div className="relative flex flex-col gap-5 p-4 sm:p-6 md:flex-row md:items-center md:justify-between md:p-7">
@@ -199,7 +200,7 @@ export function QuestsBrowser({ variant = "earn" }: { variant?: "default" | "ear
               </div>
 
             </div>
-          </section>
+          </Card>
 
           {/* ── Toolbar: tabs ──────────────────────────────────── */}
           <section

@@ -159,7 +159,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
     >
       <button
         type="button"
-        className="fixed inset-0 bg-black/55 backdrop-blur-[2px]"
+        className="modal-backdrop"
         aria-label="Close"
         onClick={onClose}
       />
@@ -167,14 +167,14 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative z-10 w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-white/5 bg-[var(--card)] p-6 sm:p-8 shadow-xl"
+        className="relative z-10 w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 sm:p-8 shadow-xl"
       >
         {/* Drag handle (mobile bottom-sheet feel) */}
 
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-2">
-            <Lock className="h-5 w-5 text-emerald-400" aria-hidden />
-            <h2 id={titleId} className="text-xl font-bold text-slate-100">Lock</h2>
+            <Lock className="h-5 w-5 text-canton" aria-hidden />
+            <h2 id={titleId} className="text-xl font-bold text-[var(--foreground)]">Lock</h2>
           </div>
           <button
             type="button"
@@ -190,7 +190,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
         <form onSubmit={submitLock} className="mt-6 space-y-5">
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label htmlFor="cc-lock-amount" className="text-sm font-medium text-slate-400">
+              <label htmlFor="cc-lock-amount" className="text-sm font-medium text-[var(--muted-foreground)]">
                 Amount
               </label>
               {status.availableCc != null && status.availableCc > 0 && (
@@ -198,7 +198,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
                   type="button"
                   onClick={() => setAmount(status.availableCc!.toFixed(4))}
                   disabled={lockState === "loading"}
-                  className="text-xs font-semibold text-emerald-400 hover:underline disabled:opacity-40"
+                  className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "h-auto px-1 py-0 text-xs")}
                 >
                   MAX
                 </button>
@@ -213,15 +213,15 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
               onChange={(e) => setAmount(e.target.value)}
               placeholder="e.g. 30"
               disabled={lockState === "loading"}
-              className="w-full rounded-2xl border border-white/5 bg-white/5 px-4 py-3 text-base font-bold tabular-nums text-slate-100 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
+              className="w-full rounded-2xl border border-[var(--border)] bg-[var(--muted)] px-4 py-3 text-base font-bold tabular-nums text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--primary)]/40 disabled:opacity-50"
             />
-            <p className="text-xs text-slate-500">Lock 30 CC to unlock Earn campaigns.</p>
+            <p className="text-xs text-[var(--muted-foreground)]">Lock 30 CC to unlock Earn campaigns.</p>
           </div>
 
           {/* Pilihan durasi — di-render dari GET /lock-terms, BUKAN hard-code */}
           {terms.length > 0 ? (
             <div className="space-y-2">
-              <span className="text-sm font-medium text-slate-400">Duration</span>
+              <span className="text-sm font-medium text-[var(--muted-foreground)]">Duration</span>
               <div className="grid grid-cols-3 gap-2">
                 {terms.map((t) => {
                   const active = selectedTerm === t.key;
@@ -234,8 +234,8 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
                       className={cn(
                         "rounded-2xl border px-3 py-2.5 text-sm font-semibold transition-all disabled:opacity-50",
                         active
-                          ? "border-emerald-500 text-emerald-400 bg-emerald-500/10"
-                          : "border-white/10 text-slate-400 bg-white/5 hover:text-slate-200",
+                          ? "border-canton-muted bg-canton-subtle text-canton"
+                          : "border-[var(--border)] bg-[var(--muted)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
                       )}
                     >
                       {termLabel(t.key)}
@@ -245,7 +245,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
               </div>
             </div>
           ) : (
-            <p className="text-xs text-slate-500">Loading duration options…</p>
+            <p className="text-xs text-[var(--muted-foreground)]">Loading duration options…</p>
           )}
 
           {lockState === "error" && (
@@ -270,15 +270,15 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
                 : "Lock"
             )}
           </button>
-          <p className="text-center text-xs text-slate-500">
+          <p className="text-center text-xs text-[var(--muted-foreground)]">
             CC remains yours, with full return upon unlocking; a small network fee (holding fee) applies while locked
           </p>
         </form>
 
         {/* ── Bagian BAWAH: kelola lock aktif ── */}
         {status.activeLocks.length > 0 && (
-          <div className="mt-7 border-t border-white/5 pt-5">
-            <h3 className="mb-3 text-sm font-semibold text-slate-300">Lock active</h3>
+          <div className="mt-7 border-t border-[var(--border)] pt-5">
+            <h3 className="mb-3 text-sm font-semibold text-[var(--foreground)]">Lock active</h3>
             <ul className="space-y-3">
               {status.activeLocks.map((lock) => (
                 <ActiveLockRow
@@ -316,13 +316,13 @@ function ActiveLockRow({
   const countdown = formatCountdown(remainingMs);
 
   return (
-    <li className="rounded-2xl border border-white/5 bg-white/5 p-4">
+    <li className="rounded-2xl border border-[var(--border)] bg-[var(--muted)] p-4">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-slate-100">
+          <p className="truncate text-sm font-semibold text-[var(--foreground)]">
             {lock.amountCc} CC · {termLabel(lock.termKey)}
           </p>
-          <p className={cn("text-xs font-medium", ready ? "text-emerald-400" : "text-slate-500")}>
+          <p className={cn("text-xs font-medium", ready ? "text-canton" : "text-[var(--muted-foreground)]")}>
             {ready ? "Unlocked" : `Unlock ${countdown}`}
           </p>
         </div>
@@ -331,10 +331,8 @@ function ActiveLockRow({
           onClick={onUnlock}
           disabled={!ready || unlocking}
           className={cn(
-            "shrink-0 rounded-xl px-4 py-2 text-xs font-semibold transition-all disabled:cursor-not-allowed",
-            ready
-              ? "bg-emerald-500 text-white hover:bg-emerald-400 disabled:opacity-60"
-              : "bg-white/5 text-slate-500 opacity-60",
+            buttonVariants({ variant: ready ? "primary" : "muted", size: "sm" }),
+            "shrink-0",
           )}
         >
           {unlocking ? <LoadingSpinner size="sm" /> : "Unlock"}

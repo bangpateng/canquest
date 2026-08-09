@@ -29,6 +29,7 @@ import { ROUTES } from "@/lib/routing/app-routes";
 import { cn } from "@/lib/utils/utils";
 import { normalizeRewardToken } from "@/lib/quest/quest-types";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { buttonVariants } from "@/components/ui/button";
 
 function timeAgo(
   iso: string,
@@ -391,14 +392,14 @@ export function TransactionNotifications() {
         return <LockOpen className="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />;
       case "OFFER_REJECTED":
       case "TOKEN_OFFER_REJECTED":
-        return <Ban className="mt-0.5 h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" />;
+        return <Ban className="mt-0.5 h-4 w-4 shrink-0 text-[var(--muted-foreground)]" />;
       case "OFFER_WITHDRAWN":
       case "TOKEN_OFFER_WITHDRAWN":
-        return <Undo2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" />;
+        return <Undo2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--muted-foreground)]" />;
       case "PREAPPROVAL_ENABLED":
         return <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />;
       case "PREAPPROVAL_DISABLED":
-        return <ShieldOff className="mt-0.5 h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" />;
+        return <ShieldOff className="mt-0.5 h-4 w-4 shrink-0 text-[var(--muted-foreground)]" />;
       default:
         return <Gift className="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />;
     }
@@ -485,7 +486,7 @@ export function TransactionNotifications() {
                 <button
                   type="button"
                   onClick={() => void markSeen()}
-                  className="text-xs font-medium text-[var(--primary)] hover:underline"
+                  className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "h-auto px-2 py-0.5")}
                 >
                   {t("notifications.markRead")}
                 </button>
@@ -537,7 +538,10 @@ export function TransactionNotifications() {
             <button
               type="button"
               onClick={() => dismissToast(toast.id)}
-              className="shrink-0 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+              className={cn(
+                buttonVariants({ variant: "ghost", size: "sm" }),
+                "shrink-0 h-auto p-1 text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
+              )}
               aria-label="Dismiss"
             >
               <X className="h-3.5 w-3.5" />

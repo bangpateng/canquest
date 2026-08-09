@@ -9,6 +9,8 @@ import {
 } from "@/lib/auth/wallet-session-cache";
 import { createRefetchThrottle } from "@/lib/utils/refetch-throttle";
 import { useMe } from "@/lib/hooks/use-me";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils/utils";
 
 import { CcHoldingsCard } from "./cc-holdings-card";
 import { ProfileCard } from "./profile-card";
@@ -154,8 +156,8 @@ export function DashboardView() {
           {loadError ? (
             <div className="rounded-2xl border border-orange-500/20 bg-orange-500/10 backdrop-blur-xl shadow-xl shadow-black/30 px-5 py-4 sm:px-6 sm:py-5">
               <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-500/20">
-                  <svg className="h-5 w-5 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--muted)]">
+                  <svg className="h-5 w-5 text-[var(--muted-foreground)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                   </svg>
                 </div>
@@ -166,7 +168,7 @@ export function DashboardView() {
                 </div>
                 <button
                   type="button"
-                  className="shrink-0 rounded-lg bg-orange-500/20 px-4 py-2 text-sm font-semibold text-orange-200 transition-all duration-200 hover:bg-orange-500/30 hover:text-orange-100"
+                  className={cn(buttonVariants({ variant: "secondary" }), "shrink-0")}
                   onClick={() => void fetchAll()}
                 >
                   Retry
