@@ -1416,10 +1416,12 @@ export class QuestLedgerService implements OnModuleInit {
         return { ok, text, errors: [] };
       };
 
-      // ── Submit dengan retry bila CONTRACT_NOT_ACTIVE (stale amulet) ──────────
-      // Amulet Splice bisa rotate/archive holding antara query & submit (race).
-      // Bila CONTRACT_NOT_ACTIVE, re-query holdings fresh + retry 1x.
-      const MAX_ATTEMPTS = 2;
+      // ── Submit dengan retry bila CONTRACT_NOT_ACTIVE (stale amulet/rebase) ───
+      // Amulet Splice di-rebase (archive + create baru) secara periodik.
+      // Query return amulet aktif, tapi saat tx diproses amulet sudah di-rebase
+      // → CONTRACT_NOT_ACTIVE. Retry dgn exponential backoff supaya melewati
+      // window rebasing (rebase cycle ~beberapa detik).
+      const MAX_ATTEMPTS = 4;
       let lastText = '';
       let lastErrors: string[] = [];
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -1435,13 +1437,15 @@ export class QuestLedgerService implements OnModuleInit {
           );
           return { ok: true, settledCid, updateId, errors: [] };
         }
-        // CONTRACT_NOT_ACTIVE → re-query holdings fresh + retry (stale amulet).
+        // CONTRACT_NOT_ACTIVE → re-query holdings fresh + retry (stale amulet/rebase).
         const isStale = result.text.includes('CONTRACT_NOT_ACTIVE') || (result.errors.join(' ').includes('CONTRACT_NOT_ACTIVE'));
         if (isStale && attempt < MAX_ATTEMPTS) {
+          // Exponential backoff: 500ms, 1000ms, 2000ms — supaya melewati rebase window.
+          const delay = 500 * Math.pow(2, attempt - 1);
           this.logger.warn(
-            `PlatformTransfer: CONTRACT_NOT_ACTIVE (attempt ${attempt}/${MAX_ATTEMPTS}) — re-query holdings fresh + retry`,
+            `PlatformTransfer: CONTRACT_NOT_ACTIVE (attempt ${attempt}/${MAX_ATTEMPTS}) — re-query holdings fresh + retry in ${delay}ms`,
           );
-          await new Promise((r) => setTimeout(r, 300)); // brief settle delay
+          await new Promise((r) => setTimeout(r, delay));
           continue;
         }
         // Non-retryable error or last attempt → fail.
