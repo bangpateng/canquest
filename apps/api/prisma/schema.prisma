@@ -538,6 +538,21 @@ model WinnerDraw {
   /// Set while on-chain FCFS claim runs (prevents parallel double-claim / double payout).
   fcfsClaimLockedAt      DateTime?
 
+  // ── v27 DAML AppPaymentRequest reward flow tracking ────────────────────
+  // Semua nullable → backward-compat dgn v25 settle flow (rows lama tetap NULL).
+  /// v27: reward flow path taken. V25_SETTLE | V27_PATH_A | V27_PATH_B | LEGACY.
+  rewardPath             String?
+  /// v27: DAML QuestPaymentRequest wrapper contractId (audit trail on-chain).
+  questPaymentRequestCid String?
+  /// v27 PATH B: Splice AppPaymentRequest → AcceptedAppPayment contractId.
+  appPaymentRequestCid   String?
+  /// v27 PATH B: timestamp AppPaymentRequest_Accept sukses.
+  paymentAcceptedAt      DateTime?
+  /// v27 PATH B: timestamp AcceptedAppPayment_Collect sukses.
+  paymentCollectedAt     DateTime?
+  /// v27 PATH B failure: TIMEOUT | REJECTED | WITHDRAWN | CANCELLED.
+  paymentExpiredReason   String?
+
   @@unique([questId, userId])
 }
 
