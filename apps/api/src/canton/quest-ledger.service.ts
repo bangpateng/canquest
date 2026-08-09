@@ -1257,165 +1257,202 @@ export class QuestLedgerService implements OnModuleInit {
       const isAmuletTransfer = tInstrumentId.toLowerCase() === 'amulet';
       const tInstrumentAdmin = params.transferInstrumentAdmin ?? dso;
 
-      // ── RESOLVE INPUT HOLDINGS (partition utk CC, terpisah utk non-CC) ────────
-      // ⚠️ CRITICAL: PlatformTransfer punya 2 leg, keduanya sender = user yang sama.
-      // Untuk CC (Amulet), kedua leg minum dari POOL holdings Amulet yang sama.
-      // Kalau greedyFillHoldings di-query 2x terpisah, kedua leg bisa pilih CID yang
-      // SAMA → leg 1 archive CID → leg 2 CONTRACT_NOT_ACTIVE (bug fix: ini root cause
-      // CONTRACT_NOT_ACTIVE di log deploy pertama).
-      //
-      // Fix: utk CC, query 1x lalu PARTISI — transferInputCids ambil sebagian, fee
-      // ambil dari SISA (tidak overlap). Utk non-CC, pool transfer (USDCx) beda dari
-      // pool fee (Amulet/CC) → query terpisah aman (tidak overlap by definition).
-      let transferInputCids: string[];
-      let feeInputCids: string[];
-      if (isAmuletTransfer) {
-        // CC: pool sama → partisi. Query sekali, alokasi transfer dulu, fee dari sisa.
-        const ccHoldings = await this.ledger.queryAmuletHoldings(params.userPartyId);
-        const sorted = [...ccHoldings].sort(
-          (a, b) => parseFloat(b.amount) - parseFloat(a.amount),
+      // ── resolveAndSubmit: query holdings + registry + submit ExecuteTransfer ─
+      // Di-refactor jadi inner function supaya bisa di-retry bila encounter
+      // CONTRACT_NOT_ACTIVE (stale amulet — holding di-archive antara query & submit
+      // oleh Splice amulet rotation atau concurrent tx). Retry re-query holdings fresh.
+      const resolveAndSubmit = async (): Promise<{
+        ok: boolean;
+        text: string;
+        errors: string[];
+      }> => {
+        // ── RESOLVE INPUT HOLDINGS (partition utk CC, terpisah utk non-CC) ──────
+        // ⚠️ CRITICAL: PlatformTransfer punya 2 leg, keduanya sender = user yang sama.
+        // Untuk CC (Amulet), kedua leg minum dari POOL holdings Amulet yang sama.
+        // Kalau greedyFillHoldings di-query 2x terpisah, kedua leg bisa pilih CID yang
+        // SAMA → leg 1 archive CID → leg 2 CONTRACT_NOT_ACTIVE (bug fix: ini root cause
+        // CONTRACT_NOT_ACTIVE di log deploy pertama).
+        //
+        // Fix: utk CC, query 1x lalu PARTISI — transferInputCids ambil sebagian, fee
+        // ambil dari SISA (tidak overlap). Utk non-CC, pool transfer (USDCx) beda dari
+        // pool fee (Amulet/CC) → query terpisah aman (tidak overlap by definition).
+        let transferInputCids: string[];
+        let feeInputCids: string[];
+        if (isAmuletTransfer) {
+          // CC: pool sama → partisi. Query sekali, alokasi transfer dulu, fee dari sisa.
+          const ccHoldings = await this.ledger.queryAmuletHoldings(params.userPartyId);
+          const sorted = [...ccHoldings].sort(
+            (a, b) => parseFloat(b.amount) - parseFloat(a.amount),
+          );
+          // Alokasi transfer leg (amount) — ambil holdings desc sampai cukup.
+          let acc = 0;
+          const transferCids: string[] = [];
+          for (const h of sorted) {
+            if (acc >= params.amount) break;
+            transferCids.push(h.contractId);
+            acc += parseFloat(h.amount);
+          }
+          if (params.amount > 0 && transferCids.length === 0) {
+            return { ok: false, text: '', errors: [`Insufficient CC for transfer ${params.amount} (user=${params.userPartyId.split('::')[0]})`] };
+          }
+          // Fee leg: ambil dari holdings yang TIDAK dipakai transfer (sisa), lalu
+          // kalau sisa kurang, boleh reuse (registry CIP-56 handle via change amulet).
+          const transferCidSet = new Set(transferCids);
+          const remainder = sorted.filter((h) => !transferCidSet.has(h.contractId));
+          let feeAcc = 0;
+          const feeCids: string[] = [];
+          for (const h of remainder) {
+            if (feeAcc >= params.feeAmount) break;
+            feeCids.push(h.contractId);
+            feeAcc += parseFloat(h.amount);
+          }
+          // Kalau sisa < fee tapi total pool cukup (transfer leg ada change), izinkan
+          // reuse CID transfer — registry akan return change amulet (DAML handle).
+          // Ini edge case: user punya 1 holding besar. CIP-56 TransferFactory_Transfer
+          // split otomatis (input consumed, change created).
+          if (feeCids.length === 0 && params.feeAmount > 0) {
+            // fallback: reuse 1 CID terbesar (registry buat change amulet utk sisa).
+            if (sorted.length > 0) feeCids.push(sorted[0].contractId);
+          }
+          transferInputCids = transferCids;
+          feeInputCids = feeCids;
+        } else {
+          // Non-CC: pool transfer (USDCx) ≠ pool fee (Amulet/CC). Query terpisah aman.
+          const tokenHoldings = await this.ledger.getTokenHoldingCids(
+            params.userPartyId,
+            tInstrumentId,
+          );
+          transferInputCids = this.greedyFillHoldings(tokenHoldings, params.amount);
+          if (params.amount > 0 && transferInputCids.length === 0) {
+            return { ok: false, text: '', errors: [`Insufficient ${tInstrumentId} for transfer ${params.amount} (user=${params.userPartyId.split('::')[0]})`] };
+          }
+          const ccHoldingsForFee = await this.ledger.queryAmuletHoldings(params.userPartyId);
+          feeInputCids = this.greedyFillHoldings(ccHoldingsForFee, params.feeAmount);
+        }
+        if (params.feeAmount > 0 && feeInputCids.length === 0) {
+          return { ok: false, text: '', errors: [`Insufficient CC for fee ${params.feeAmount} (user=${params.userPartyId.split('::')[0]})`] };
+        }
+
+        // ── TRANSFER leg: user → receiver ─────────────────────────────────────
+        const transferSpec = {
+          sender: params.userPartyId,
+          receiver: params.receiverPartyId,
+          amount: params.amount.toFixed(10),
+          instrumentId: { admin: tInstrumentAdmin, id: tInstrumentId },
+          lock: null,
+          requestedAt: nowIso,
+          executeBefore,
+          inputHoldingCids: transferInputCids,
+          meta: { values: {} },
+        };
+        const transferRegistry = await this.ledger.callTransferFactoryRegistry(
+          { expectedAdmin: tInstrumentAdmin, transfer: transferSpec, extraArgs: { context: { values: {} }, meta: { values: {} } } },
+          tInstrumentAdmin,
         );
-        // Alokasi transfer leg (amount) — ambil holdings desc sampai cukup.
-        let acc = 0;
-        const transferCids: string[] = [];
-        for (const h of sorted) {
-          if (acc >= params.amount) break;
-          transferCids.push(h.contractId);
-          acc += parseFloat(h.amount);
-        }
-        if (params.amount > 0 && transferCids.length === 0) {
-          return fail([`Insufficient CC for transfer ${params.amount} (user=${params.userPartyId.split('::')[0]})`]);
-        }
-        // Fee leg: ambil dari holdings yang TIDAK dipakai transfer (sisa), lalu
-        // kalau sisa kurang, boleh reuse (registry CIP-56 handle via change amulet).
-        const transferCidSet = new Set(transferCids);
-        const remainder = sorted.filter((h) => !transferCidSet.has(h.contractId));
-        let feeAcc = 0;
-        const feeCids: string[] = [];
-        for (const h of remainder) {
-          if (feeAcc >= params.feeAmount) break;
-          feeCids.push(h.contractId);
-          feeAcc += parseFloat(h.amount);
-        }
-        // Kalau sisa < fee tapi total pool cukup (transfer leg ada change), izinkan
-        // reuse CID transfer — registry akan return change amulet (DAML handle).
-        // Ini edge case: user punya 1 holding besar. CIP-56 TransferFactory_Transfer
-        // split otomatis (input consumed, change created).
-        if (feeCids.length === 0 && params.feeAmount > 0) {
-          // fallback: reuse 1 CID terbesar (registry buat change amulet utk sisa).
-          if (sorted.length > 0) feeCids.push(sorted[0].contractId);
-        }
-        transferInputCids = transferCids;
-        feeInputCids = feeCids;
-      } else {
-        // Non-CC: pool transfer (USDCx) ≠ pool fee (Amulet/CC). Query terpisah aman.
-        const tokenHoldings = await this.ledger.getTokenHoldingCids(
-          params.userPartyId,
-          tInstrumentId,
+        if (!transferRegistry) return { ok: false, text: '', errors: ['Transfer leg: callTransferFactoryRegistry returned null'] };
+
+        // ── FEE leg: user → treasury (CC Amulet) ──────────────────────────────
+        const feeSpec = {
+          sender: params.userPartyId,
+          receiver: params.feeReceiverPartyId,
+          amount: params.feeAmount.toFixed(10),
+          instrumentId: { admin: dso, id: 'Amulet' },
+          lock: null,
+          requestedAt: nowIso,
+          executeBefore,
+          inputHoldingCids: feeInputCids,
+          meta: { values: {} },
+        };
+        const feeRegistry = await this.ledger.callTransferFactoryRegistry(
+          { expectedAdmin: dso, transfer: feeSpec, extraArgs: { context: { values: {} }, meta: { values: {} } } },
+          dso,
         );
-        transferInputCids = this.greedyFillHoldings(tokenHoldings, params.amount);
-        if (params.amount > 0 && transferInputCids.length === 0) {
-          return fail([`Insufficient ${tInstrumentId} for transfer ${params.amount} (user=${params.userPartyId.split('::')[0]})`]);
+        if (!feeRegistry) return { ok: false, text: '', errors: ['Fee leg: callTransferFactoryRegistry returned null'] };
+
+        // ── Construct ExecuteTransfer choiceArgument ──────────────────────────
+        const opt = <T,>(v: T | null | undefined) => (v == null ? null : v); // DAML Optional = nullable
+        const safeContext = (ctx: Record<string, unknown> | null | undefined) =>
+          ctx && typeof ctx === 'object' && Object.keys(ctx).length > 0 ? ctx : { values: {} };
+        const transferExtraArgs = {
+          context: safeContext(transferRegistry.choiceContextData),
+          meta: { values: {} },
+        };
+        const feeExtraArgs = {
+          context: safeContext(feeRegistry.choiceContextData),
+          meta: { values: {} },
+        };
+        const choiceArgument: Record<string, unknown> = {
+          transferFactoryCid: transferRegistry.factoryId,
+          transferSpec,
+          transferExtraArgs,
+          feeFactoryCid: feeRegistry.factoryId,
+          feeSpec,
+          feeExtraArgs,
+          featuredAppRightCid: opt(params.featuredAppRightCid),
+          appProvider: params.appProviderPartyId ?? operator,
+          settledAt: nowIso,
+        };
+
+        // ── actAs: [operator, userPartyId] (+ appProvider bila FAR) ───────────
+        const actAs = [operator, params.userPartyId];
+        if (params.featuredAppRightCid && params.appProviderPartyId) {
+          actAs.push(params.appProviderPartyId);
         }
-        const ccHoldingsForFee = await this.ledger.queryAmuletHoldings(params.userPartyId);
-        feeInputCids = this.greedyFillHoldings(ccHoldingsForFee, params.feeAmount);
-      }
-      if (params.feeAmount > 0 && feeInputCids.length === 0) {
-        return fail([`Insufficient CC for fee ${params.feeAmount} (user=${params.userPartyId.split('::')[0]})`]);
-      }
 
-      // ── TRANSFER leg: user → receiver ───────────────────────────────────────
-      const transferSpec = {
-        sender: params.userPartyId,
-        receiver: params.receiverPartyId,
-        amount: params.amount.toFixed(10),
-        instrumentId: { admin: tInstrumentAdmin, id: tInstrumentId },
-        lock: null,
-        requestedAt: nowIso,
-        executeBefore,
-        inputHoldingCids: transferInputCids,
-        meta: { values: {} },
-      };
-      const transferRegistry = await this.ledger.callTransferFactoryRegistry(
-        { expectedAdmin: tInstrumentAdmin, transfer: transferSpec, extraArgs: { context: { values: {} }, meta: { values: {} } } },
-        tInstrumentAdmin,
-      );
-      if (!transferRegistry) return fail(['Transfer leg: callTransferFactoryRegistry returned null']);
+        // ── disclosedContracts: concat transfer + fee registry ───────────────
+        const disclosedContracts: unknown[] = [...transferRegistry.disclosedContracts, ...feeRegistry.disclosedContracts];
 
-      // ── FEE leg: user → treasury (CC Amulet) ────────────────────────────────
-      const feeSpec = {
-        sender: params.userPartyId,
-        receiver: params.feeReceiverPartyId,
-        amount: params.feeAmount.toFixed(10),
-        instrumentId: { admin: dso, id: 'Amulet' },
-        lock: null,
-        requestedAt: nowIso,
-        executeBefore,
-        inputHoldingCids: feeInputCids,
-        meta: { values: {} },
-      };
-      const feeRegistry = await this.ledger.callTransferFactoryRegistry(
-        { expectedAdmin: dso, transfer: feeSpec, extraArgs: { context: { values: {} }, meta: { values: {} } } },
-        dso,
-      );
-      if (!feeRegistry) return fail(['Fee leg: callTransferFactoryRegistry returned null']);
-
-      // ── Construct ExecuteTransfer choiceArgument ────────────────────────────
-      const opt = <T,>(v: T | null | undefined) => (v == null ? null : v); // DAML Optional = nullable
-      const safeContext = (ctx: Record<string, unknown> | null | undefined) =>
-        ctx && typeof ctx === 'object' && Object.keys(ctx).length > 0 ? ctx : { values: {} };
-      const transferExtraArgs = {
-        context: safeContext(transferRegistry.choiceContextData),
-        meta: { values: {} },
-      };
-      const feeExtraArgs = {
-        context: safeContext(feeRegistry.choiceContextData),
-        meta: { values: {} },
-      };
-      const choiceArgument: Record<string, unknown> = {
-        transferFactoryCid: transferRegistry.factoryId,
-        transferSpec,
-        transferExtraArgs,
-        feeFactoryCid: feeRegistry.factoryId,
-        feeSpec,
-        feeExtraArgs,
-        featuredAppRightCid: opt(params.featuredAppRightCid),
-        appProvider: params.appProviderPartyId ?? operator,
-        settledAt: nowIso,
-      };
-
-      // actAs: [operator, userPartyId] (+ appProvider bila FAR)
-      const actAs = [operator, params.userPartyId];
-      if (params.featuredAppRightCid && params.appProviderPartyId) {
-        actAs.push(params.appProviderPartyId);
-      }
-
-      // disclosedContracts: concat transfer + fee registry
-      const disclosedContracts: unknown[] = [...transferRegistry.disclosedContracts, ...feeRegistry.disclosedContracts];
-
-      const commandId = `platform-exec-${params.platformTransferCid.slice(0, 16)}-${randomUUID()}`;
-      const { ok, text } = await this.ledger.exerciseChoice(
-        params.platformTransferCid,
-        tpl,
-        'ExecuteTransfer',
-        choiceArgument,
-        actAs,
-        commandId,
-        'submit-and-wait-for-transaction-tree',
-        disclosedContracts,
-      );
-      if (ok) {
-        const cids = this.extractContractIds(text);
-        const settledCid = cids[0] ?? null;
-        const updateId = this.extractUpdateId(text);
-        this.logger.log(
-          `PlatformTransfer ExecuteTransfer OK: settled=${settledCid?.slice(0, 12) ?? 'none'} updateId=${updateId?.slice(0, 12) ?? 'none'}`,
+        const commandId = `platform-exec-${params.platformTransferCid.slice(0, 16)}-${randomUUID()}`;
+        const { ok, text } = await this.ledger.exerciseChoice(
+          params.platformTransferCid,
+          tpl,
+          'ExecuteTransfer',
+          choiceArgument,
+          actAs,
+          commandId,
+          'submit-and-wait-for-transaction-tree',
+          disclosedContracts,
         );
-        return { ok: true, settledCid, updateId, errors: [] };
+        return { ok, text, errors: [] };
+      };
+
+      // ── Submit dengan retry bila CONTRACT_NOT_ACTIVE (stale amulet) ──────────
+      // Amulet Splice bisa rotate/archive holding antara query & submit (race).
+      // Bila CONTRACT_NOT_ACTIVE, re-query holdings fresh + retry 1x.
+      const MAX_ATTEMPTS = 2;
+      let lastText = '';
+      let lastErrors: string[] = [];
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        const result = await resolveAndSubmit();
+        lastText = result.text;
+        lastErrors = result.errors;
+        if (result.ok) {
+          const cids = this.extractContractIds(result.text);
+          const settledCid = cids[0] ?? null;
+          const updateId = this.extractUpdateId(result.text);
+          this.logger.log(
+            `PlatformTransfer ExecuteTransfer OK: settled=${settledCid?.slice(0, 12) ?? 'none'} updateId=${updateId?.slice(0, 12) ?? 'none'}${attempt > 1 ? ` (retry ${attempt})` : ''}`,
+          );
+          return { ok: true, settledCid, updateId, errors: [] };
+        }
+        // CONTRACT_NOT_ACTIVE → re-query holdings fresh + retry (stale amulet).
+        const isStale = result.text.includes('CONTRACT_NOT_ACTIVE') || (result.errors.join(' ').includes('CONTRACT_NOT_ACTIVE'));
+        if (isStale && attempt < MAX_ATTEMPTS) {
+          this.logger.warn(
+            `PlatformTransfer: CONTRACT_NOT_ACTIVE (attempt ${attempt}/${MAX_ATTEMPTS}) — re-query holdings fresh + retry`,
+          );
+          await new Promise((r) => setTimeout(r, 300)); // brief settle delay
+          continue;
+        }
+        // Non-retryable error or last attempt → fail.
+        const err = result.errors.length > 0
+          ? result.errors.join(' | ')
+          : this.formatLedgerError(result.text, 'ExecuteTransfer failed');
+        this.logger.warn(`PlatformTransfer exec fail: ${result.text.slice(0, 300)}`);
+        return fail([err]);
       }
-      const err = this.formatLedgerError(text, 'ExecuteTransfer failed');
-      this.logger.warn(`PlatformTransfer exec fail: ${text.slice(0, 300)}`);
-      return fail([err]);
+      // Should not reach here, but satisfy type checker.
+      return fail(lastErrors.length > 0 ? lastErrors : ['ExecuteTransfer max retries exceeded']);
     } catch (err) {
       const msg = `executePlatformTransfer exception: ${String(err)}`;
       this.logger.warn(msg);
