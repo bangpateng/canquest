@@ -1055,67 +1055,66 @@ export class PartyController {
             validatorPartyId;
           const feePartyOnChainAtomic =
             await this.splice.resolveOnChainPartyId(feePartyRawAtomic);
-          // 1. Create PlatformTransfer PENDING contract
-          const transferId = `sendcc-${sender.id}-${Date.now().toString(36)}`;
-          const createRes = await this.questLedger.createPlatformTransfer({
-            userPartyId: senderPartyIdOnChain,
-            transferId,
-            amount,
-            feeAmount: effectiveFeeCc,
-            receiverPartyId: receiverPartyIdOnChain,
-            treasuryPartyId: feePartyOnChainAtomic,
-            token: 'CC',
-          });
-          if (createRes.ok && createRes.contractId) {
-            // Persist PlatformTransferLedger
-            await this.prisma.platformTransferLedger.create({
-              data: {
-                userId: sender.id,
-                transferId,
-                amount,
-                feeAmount: effectiveFeeCc,
-                receiver: receiverPartyIdOnChain,
-                treasury: feePartyOnChainAtomic,
-                token: 'CC',
-                contractId: createRes.contractId,
-                status: 'PENDING',
-              },
-            }).catch(() => undefined);
-            // 2. Execute atomic
-            const execRes = await this.questLedger.executePlatformTransfer({
-              platformTransferCid: createRes.contractId,
-              userPartyId: senderPartyIdOnChain,
+          const dsoPartyAtomic =
+            this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() || '';
+          // ── ATOMIC via Splice native WalletUserProxy_BatchTransfer ────────
+          // Pattern ini (transferCalls array) adalah NATIVE Splice utk atomic
+          // multi-receiver. Holding threading otomatis: Leg 1 (transfer)
+          // dapat change amulet → Leg 2 (fee) pakai change tsb sbg input.
+          // Berbeda dgn DAML PlatformTransfer.ExecuteTransfer (2x exercise
+          // TransferFactory_Transfer terpisah) yang gagal krn Leg 1 consume
+          // amulet → Leg 2 CONTRACT_NOT_ACTIVE.
+          //
+          // Source: Splice.Util.FeaturedApp.WalletUserProxy executeTransferCalls
+          const transfers: Array<{
+            receiverPartyId: string;
+            amount: number;
+            instrumentId: string;
+            instrumentAdmin: string;
+            description?: string;
+          }> = [
+            {
               receiverPartyId: receiverPartyIdOnChain,
-              feeReceiverPartyId: feePartyOnChainAtomic,
               amount,
-              feeAmount: effectiveFeeCc,
+              instrumentId: 'Amulet',
+              instrumentAdmin: dsoPartyAtomic,
+              description,
+            },
+          ];
+          if (effectiveFeeCc > 0) {
+            transfers.push({
+              receiverPartyId: feePartyOnChainAtomic,
+              amount: effectiveFeeCc,
+              instrumentId: 'Amulet',
+              instrumentAdmin: dsoPartyAtomic,
+              description: `Platform fee: ${recipientLabel}`,
             });
-            if (execRes.ok && execRes.updateId) {
-              // Atomic sukses — transfer + fee dalam 1 tx
-              accepted = true;
-              transferMethod = 'direct';
-              ledgerTxId = execRes.updateId;
-              feeCollected = effectiveFeeCc > 0;
-              feeLedgerTxId = execRes.updateId; // sama dgn transfer (atomic, 1 tx)
-              feeTreasuryPartyId = feePartyOnChainAtomic;
-              this.logger.log(
-                `CC transfer ATOMIC: ${sender.username} → ${recipientLabel} ${amount} CC + fee ${effectiveFeeCc} CC (1 tx)`,
-              );
-              // Skip path lama (cip56Result) — atomic sudah handle transfer + fee.
-              // Record history + return di bawah (setelah blok fee lama di-skip).
-            } else {
-              this.logger.warn(
-                `Atomic PlatformTransfer gagal, fallback ke path lama: ${execRes.errors.join(' | ')}`,
-              );
-              // Update PlatformTransferLedger status CANCELLED
-              await this.prisma.platformTransferLedger.updateMany({
-                where: { transferId },
-                data: { status: 'CANCELLED' },
-              }).catch(() => undefined);
-            }
+          }
+          const batchRes = await this.ledger.executeProxyBatchTransferMulti({
+            senderPartyId: senderPartyIdOnChain,
+            transfers,
+            clientNonce: body.clientNonce,
+          });
+          if (batchRes.ok && batchRes.updateId) {
+            // Atomic sukses — transfer + fee dalam 1 tx (BatchTransfer)
+            accepted = true;
+            transferMethod = batchRes.transferKind === 'offer' ? 'offer_only' : 'direct';
+            ledgerTxId = batchRes.updateId;
+            feeCollected = effectiveFeeCc > 0;
+            feeLedgerTxId = batchRes.updateId; // sama dgn transfer (atomic, 1 tx)
+            feeTreasuryPartyId = feePartyOnChainAtomic;
+            this.logger.log(
+              `CC transfer ATOMIC (BatchTransfer): ${sender.username} → ${recipientLabel} ${amount} CC + fee ${effectiveFeeCc} CC (1 tx, ${transfers.length} legs)`,
+            );
+            // Skip path lama (cip56Result) — atomic sudah handle transfer + fee.
+            // Record history + return di bawah (setelah blok fee lama di-skip).
+          } else {
+            this.logger.warn(
+              `Atomic BatchTransfer gagal, fallback ke path lama: ${batchRes.error ?? 'unknown'}`,
+            );
           }
         } catch (err) {
-          this.logger.warn(`Atomic PlatformTransfer exception, fallback: ${String(err)}`);
+          this.logger.warn(`Atomic BatchTransfer exception, fallback: ${String(err)}`);
         }
       }
 
@@ -1774,9 +1773,11 @@ export class PartyController {
         this.splice.resolveOnChainPartyId(recipientPartyId),
       ]);
 
-      // ── v25: Atomic send-token+fee via PlatformTransfer (DAML) ──────────────
+      // ── v28: Atomic send-token+fee via Splice BatchTransfer (native) ────────
       // Feature flag QUEST_ATOMIC_PLATFORM_TRANSFER (sama dgn sendCc). Kalau ON,
-      // transfer utama (non-CC) + platform fee (CC) jadi 1 transaction tree.
+      // transfer utama (non-CC) + platform fee (CC) jadi 1 tx via
+      // WalletUserProxy_BatchTransfer (transferCalls array). Pattern Splice
+      // native dgn holding threading otomatis.
       // Kalau gagal, fallback ke path lama (2 transfer terpisah di bawah).
       const useAtomicPlatformTransferToken =
         this.config.get<string>('QUEST_ATOMIC_PLATFORM_TRANSFER') === 'true';
@@ -1792,86 +1793,79 @@ export class PartyController {
             (this.config.get<string>('CANTON_VALIDATOR_PARTY_ID') ?? '');
           const feePartyOnChainToken =
             await this.splice.resolveOnChainPartyId(feePartyRawToken);
-          const transferIdToken = `sendtoken-${sender.id}-${Date.now().toString(36)}`;
-          // 1. Create PlatformTransfer PENDING (token = instrumentId utk tracking)
-          const createResToken =
-            await this.questLedger.createPlatformTransfer({
-              userPartyId: senderPartyIdOnChain,
-              transferId: transferIdToken,
-              amount,
-              feeAmount: feeCc,
+          // ── ATOMIC via Splice native BatchTransfer ──────────────────────
+          // Leg 1: token transfer (USDCx dll, non-CC)
+          // Leg 2: fee (CC/Amulet) — instrument berbeda, pool berbeda, tidak conflict.
+          const transfersToken: Array<{
+            receiverPartyId: string;
+            amount: number;
+            instrumentId: string;
+            instrumentAdmin: string;
+            description?: string;
+          }> = [
+            {
               receiverPartyId: receiverPartyIdOnChain,
-              treasuryPartyId: feePartyOnChainToken,
-              token: instrumentId,
+              amount,
+              instrumentId,
+              instrumentAdmin,
+              description,
+            },
+          ];
+          if (feeCc > 0) {
+            transfersToken.push({
+              receiverPartyId: feePartyOnChainToken,
+              amount: feeCc,
+              instrumentId: 'Amulet',
+              instrumentAdmin:
+                this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() || '',
+              description: `Platform fee: ${recipientLabel}`,
             });
-          if (createResToken.ok && createResToken.contractId) {
-            await this.prisma.platformTransferLedger
-              .create({
-                data: {
-                  userId: sender.id,
-                  transferId: transferIdToken,
-                  amount,
-                  feeAmount: feeCc,
-                  receiver: receiverPartyIdOnChain,
-                  treasury: feePartyOnChainToken,
-                  token: instrumentId,
-                  contractId: createResToken.contractId,
-                  status: 'PENDING',
-                },
-              })
-              .catch(() => undefined);
-            // 2. Execute atomic — transfer leg non-CC, fee leg CC
-            const execResToken =
-              await this.questLedger.executePlatformTransfer({
-                platformTransferCid: createResToken.contractId,
-                userPartyId: senderPartyIdOnChain,
-                receiverPartyId: receiverPartyIdOnChain,
-                feeReceiverPartyId: feePartyOnChainToken,
+          }
+          const batchResToken =
+            await this.ledger.executeProxyBatchTransferMulti({
+              senderPartyId: senderPartyIdOnChain,
+              transfers: transfersToken,
+            });
+          if (batchResToken.ok && batchResToken.updateId) {
+            atomicLedgerTxId = batchResToken.updateId;
+            this.logger.log(
+              `Token transfer ATOMIC (BatchTransfer): ${sender.username} → ${recipientLabel} ${amount} ${instrumentId} + fee ${feeCc} CC (1 tx, ${transfersToken.length} legs)`,
+            );
+            // Record history (instrument-aware). Non-CC: offer (receiver accept manual).
+            try {
+              const row = await this.users.recordTokenTransaction({
+                userId: sender.id,
+                instrumentId,
+                instrumentAdmin,
                 amount,
-                feeAmount: feeCc,
-                transferInstrumentId: instrumentId,
-                transferInstrumentAdmin: instrumentAdmin,
+                type: 'TOKEN_TRANSFER_OUT',
+                description,
+                referenceId:
+                  normalizeCantonPartyId(recipientPartyId) ?? recipientPartyId,
+                ledgerTxId: atomicLedgerTxId,
+                cantonUpdateId: atomicLedgerTxId,
+                status: 'PENDING',
+                transferInstructionCid: null,
               });
-            if (execResToken.ok && execResToken.updateId) {
-              atomicLedgerTxId = execResToken.updateId;
-              this.logger.log(
-                `Token transfer ATOMIC: ${sender.username} → ${recipientLabel} ${amount} ${instrumentId} + fee ${feeCc} CC (1 tx)`,
-              );
-              // Record history (instrument-aware). Non-CC: offer (receiver accept manual).
-              try {
-                const row = await this.users.recordTokenTransaction({
-                  userId: sender.id,
-                  instrumentId,
-                  instrumentAdmin,
-                  amount,
-                  type: 'TOKEN_TRANSFER_OUT',
-                  description,
-                  referenceId:
-                    normalizeCantonPartyId(recipientPartyId) ?? recipientPartyId,
-                  ledgerTxId: atomicLedgerTxId,
-                  cantonUpdateId: atomicLedgerTxId,
-                  status: 'PENDING',
-                  transferInstructionCid: null,
-                });
-                // fee record (CC, atomic = 1 tx dgn transfer)
-                await this.users.recordTransaction({
-                  userId: sender.id,
-                  amountCc: feeCc,
-                  type: 'TRANSFER_OUT',
-                  description: `Platform fee (token transfer to ${recipientLabel})`,
-                  referenceId: `fee:${normalizeCantonPartyId(feePartyRawToken) ?? feePartyRawToken}`,
-                  ledgerTxId: atomicLedgerTxId,
-                  cantonUpdateId: atomicLedgerTxId,
-                });
-                return {
-                  ok: true,
-                  message: `${amount} ${instrumentId} sent to ${recipientLabel} (atomic w/ fee). Recipient may need to accept via Offers menu.`,
-                  ledgerTxId: atomicLedgerTxId,
-                  transferInstructionCid: null,
-                  transactionId: row.id,
-                  feeCollected: true,
-                  feeLedgerTxId: atomicLedgerTxId,
-                };
+              // fee record (CC, atomic = 1 tx dgn transfer)
+              await this.users.recordTransaction({
+                userId: sender.id,
+                amountCc: feeCc,
+                type: 'TRANSFER_OUT',
+                description: `Platform fee (token transfer to ${recipientLabel})`,
+                referenceId: `fee:${normalizeCantonPartyId(feePartyRawToken) ?? feePartyRawToken}`,
+                ledgerTxId: atomicLedgerTxId,
+                cantonUpdateId: atomicLedgerTxId,
+              });
+              return {
+                ok: true,
+                message: `${amount} ${instrumentId} sent to ${recipientLabel} (atomic w/ fee). Recipient may need to accept via Offers menu.`,
+                ledgerTxId: atomicLedgerTxId,
+                transferInstructionCid: null,
+                transactionId: row.id,
+                feeCollected: true,
+                feeLedgerTxId: atomicLedgerTxId,
+              };
               } catch (recErr) {
                 this.logger.warn(
                   `Atomic token history record failed (transfer committed, updateId=${atomicLedgerTxId.slice(0, 12)}): ${String(recErr)}`,
@@ -1888,19 +1882,12 @@ export class PartyController {
               }
             } else {
               this.logger.warn(
-                `Atomic PlatformTransfer (token) gagal, fallback ke path lama: ${execResToken.errors.join(' | ')}`,
+                `Atomic BatchTransfer (token) gagal, fallback ke path lama: ${batchResToken.error ?? 'unknown'}`,
               );
-              await this.prisma.platformTransferLedger
-                .updateMany({
-                  where: { transferId: transferIdToken },
-                  data: { status: 'CANCELLED' },
-                })
-                .catch(() => undefined);
             }
-          }
         } catch (err) {
           this.logger.warn(
-            `Atomic PlatformTransfer (token) exception, fallback: ${String(err)}`,
+            `Atomic BatchTransfer (token) exception, fallback: ${String(err)}`,
           );
         }
       }

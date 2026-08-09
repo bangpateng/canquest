@@ -1212,6 +1212,219 @@ export class CantonLedgerService {
   }
 
   /**
+   * Execute ATOMIC multi-leg transfer via WalletUserProxy_BatchTransfer.
+   *
+   * Pattern ini adalah NATIVE Splice utk atomic multi-receiver dari sender pool
+   * yang sama. Berbeda dgn 2x TransferFactory_Transfer terpisah (yang gagal krn
+   * Leg 1 consume amulet → Leg 2 CONTRACT_NOT_ACTIVE), BatchTransfer THREADING
+   * holdings secara internal:
+   *
+   *   1. Leg 1 (transfer) execute → dapat senderChangeCids (change amulet)
+   *   2. HoldingMap simpan change per instrumentId
+   *   3. Leg 2 (fee) execute dgn actualInputHoldingCids = original + change
+   *
+   * Source: Splice.Util.FeaturedApp.WalletUserProxy.daml executeTransferCalls
+   *   let actualInputHoldingCids = tf.inputHoldingCids ++ change dari holdingMap
+   *   let newHoldingMap = M.insert instrumentId result.senderChangeCids holdingMap
+   *
+   * Use case: Send Token/CC atomic (transfer utama + platform fee dalam 1 tx).
+   *
+   * actAs: [senderParty] (controller = getFirstSender)
+   */
+  async executeProxyBatchTransferMulti(params: {
+    senderPartyId: string;
+    transfers: Array<{
+      receiverPartyId: string;
+      amount: number;
+      instrumentId: string;        // 'Amulet' (CC) atau token id (USDCx)
+      instrumentAdmin: string;     // DSO utk CC, registrar utk non-CC
+      description?: string;
+    }>;
+    clientNonce?: string;
+  }): Promise<{
+    ok: boolean;
+    updateId: string | null;
+    transferKind: string;
+    transferInstructionCid?: string | null;
+    error?: string;
+  }> {
+    if (!this.proxyCache) {
+      return {
+        ok: false,
+        updateId: null,
+        transferKind: 'unknown',
+        error: 'ProxyCacheService not injected — proxy transfer unavailable',
+      };
+    }
+    const wupCid = await this.proxyCache.getWalletUserProxyCid();
+    if (!wupCid) {
+      return {
+        ok: false,
+        updateId: null,
+        transferKind: 'unknown',
+        error: 'WalletUserProxy contractId not found (set CANTON_PROXY_WUP_CID)',
+      };
+    }
+    const farCid = await this.proxyCache.getFeaturedAppRightCid();
+    const { senderPartyId, transfers, clientNonce } = params;
+    if (transfers.length === 0) {
+      return { ok: false, updateId: null, transferKind: 'unknown', error: 'No transfers provided' };
+    }
+
+    const now = new Date();
+    const executeBefore = new Date(now.getTime() + 24 * 3600 * 1000).toISOString();
+    const nowIso = now.toISOString();
+
+    // ── Build transferCalls array ─────────────────────────────────────────
+    // Setiap call butuh: query holdings utk instrumentId tsb + registry resolve.
+    // Khusus CC (Amulet): semua leg minum dari pool yang sama. Kirim SEMUA
+    // holdings ke setiap leg — BatchTransfer akan threading change amulet.
+    // Utk non-CC: pool per instrument (USDCx ≠ CC fee), query terpisah.
+    const transferCalls: Array<{ factoryCid: string; choiceArg: Record<string, unknown> }> = [];
+    let lastTransferKind = 'direct';
+    let lastDisclosedContracts: unknown[] = [];
+
+    for (const t of transfers) {
+      const isAmulet = t.instrumentId.toLowerCase() === 'amulet';
+      // Query holdings utk instrument leg ini.
+      const holdings = isAmulet
+        ? await this.queryAmuletHoldings(senderPartyId)
+        : await this.getTokenHoldingCids(senderPartyId, t.instrumentId);
+      if (holdings.length === 0) {
+        return {
+          ok: false,
+          updateId: null,
+          transferKind: 'unknown',
+          error: `Sender has no ${t.instrumentId} holdings for leg to ${t.receiverPartyId.split('::')[0]}`,
+        };
+      }
+      // Kirim SEMUA holdings — BatchTransfer threading change antar leg.
+      const inputHoldingCids = holdings.map((h) => h.contractId);
+
+      const transferSpec = {
+        sender: senderPartyId,
+        receiver: t.receiverPartyId,
+        amount: t.amount.toFixed(10),
+        instrumentId: { admin: t.instrumentAdmin, id: t.instrumentId },
+        lock: null,
+        requestedAt: nowIso,
+        executeBefore,
+        inputHoldingCids,
+        meta: {
+          values: t.description
+            ? { 'splice.lfdecentralizedtrust.org/reason': t.description }
+            : {},
+        },
+      };
+
+      const registry = await this.callTransferFactoryRegistry(
+        {
+          expectedAdmin: t.instrumentAdmin,
+          transfer: transferSpec,
+          extraArgs: { context: { values: {} }, meta: { values: {} } },
+        },
+        t.instrumentAdmin,
+      );
+      if (!registry) {
+        return {
+          ok: false,
+          updateId: null,
+          transferKind: 'unknown',
+          error: `Registry call failed for leg to ${t.receiverPartyId.split('::')[0]}`,
+        };
+      }
+      lastTransferKind = registry.transferKind;
+      lastDisclosedContracts = registry.disclosedContracts;
+
+      transferCalls.push({
+        factoryCid: registry.factoryId,
+        choiceArg: {
+          expectedAdmin: t.instrumentAdmin,
+          transfer: transferSpec,
+          extraArgs: {
+            context: registry.choiceContextData,
+            meta: { values: {} },
+          },
+        },
+      });
+    }
+
+    // optFeaturedAppRightCid: nullable (null bila FAR belum setup).
+    const optFar = farCid ?? null;
+
+    const choiceArgument = {
+      transferCalls,
+      optFeaturedAppRightCid: optFar,
+    };
+
+    const commandId = clientNonce
+      ? `proxy-batch-multi-${createHash('sha256')
+          .update(`${senderPartyId}|${clientNonce}`)
+          .digest('hex')
+          .slice(0, 32)}`
+      : `proxy-batch-multi-${senderPartyId.slice(0, 12)}-${randomUUID().slice(0, 16)}`;
+
+    this.logger.log(
+      `WalletUserProxy_BatchTransfer (multi ${transferCalls.length} legs): ` +
+        `sender=${senderPartyId.split('::')[0]} legs=[${transfers
+          .map((t) => `${t.receiverPartyId.split('::')[0]}:${t.amount}:${t.instrumentId}`)
+          .join(', ')}] ` +
+        `wup=${wupCid.slice(0, 16)}... far=${farCid ? 'attached' : 'None'}`,
+    );
+
+    // Disclosed contracts: WUP + FAR + registry contracts.
+    const wupDisclosure =
+      await this.proxyCache.getWalletUserProxyDisclosedContract();
+    const farDisclosure =
+      await this.proxyCache.getFeaturedAppRightDisclosedContract();
+    const disclosedContracts: unknown[] = [
+      ...lastDisclosedContracts,
+      ...(wupDisclosure ? [wupDisclosure] : []),
+      ...(farDisclosure ? [farDisclosure] : []),
+    ];
+
+    const { ok, status, text } = await this.exerciseChoice(
+      wupCid,
+      this.proxyCache.wupTemplateId,
+      'WalletUserProxy_BatchTransfer',
+      choiceArgument,
+      [senderPartyId], // controller = getFirstSender = sender party
+      commandId,
+      'submit-and-wait-for-transaction-tree',
+      disclosedContracts,
+    );
+
+    if (ok) {
+      const updateId = extractUpdateIdFromTree(text);
+      let transferInstructionCid: string | null = null;
+      if (lastTransferKind === 'offer') {
+        transferInstructionCid = extractCreatedContractId(text);
+      }
+      this.logger.log(
+        `Proxy batch transfer (multi) OK: kind=${lastTransferKind} ` +
+          `updateId=${updateId?.slice(0, 16) ?? 'unknown'} legs=${transferCalls.length}`,
+      );
+      return {
+        ok: true,
+        updateId,
+        transferKind: lastTransferKind,
+        transferInstructionCid,
+      };
+    }
+
+    const errMsg = text.slice(0, 300);
+    this.logger.warn(
+      `WalletUserProxy_BatchTransfer (multi) failed ${status}: ${errMsg}`,
+    );
+    return {
+      ok: false,
+      updateId: null,
+      transferKind: lastTransferKind,
+      error: errMsg,
+    };
+  }
+
+  /**
    * Execute offer choice (Accept / Reject / Withdraw) via WalletUserProxy.
    *
    * DAML reference: choice controller = `user` party (proxyArg.user). Signatory
