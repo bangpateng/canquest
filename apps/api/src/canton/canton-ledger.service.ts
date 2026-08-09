@@ -4954,6 +4954,192 @@ export class CantonLedgerService {
   }
 
   /**
+   * ATOMIC CC transfer multi-output via AmuletRules_Transfer (native Amulet).
+   *
+   * Pattern ini adalah NATIVE Splice utk CC (Amulet): 1 transfer dgn multiple
+   * outputs (sender → [receiver1, receiver2, ...]). Berbeda dgn token-standard
+   * TransferFactory_Transfer (single receiver) — utk atomic transfer+fee CC,
+   * pakai AmuletRules_Transfer dgn outputs array.
+   *
+   * DAML reference (Splice.AmuletRules):
+   *   data Transfer = Transfer with
+   *     sender : Party
+   *     provider : Party
+   *     inputs : [TransferInput]
+   *     outputs : [TransferOutput]   -- ← multi-receiver!
+   *     beneficiaries : Optional [AppRewardBeneficiary]
+   *
+   *   data TransferOutput = TransferOutput with
+   *     receiver : Party
+   *     receiverFeeRatio : Decimal
+   *     amount : Decimal
+   *     lock : Optional TimeLock
+   *
+   * actAs: [sender, provider] (transferControllers = sender + provider).
+   *
+   * Template: based on lockCc() yang sudah proven jalan di production.
+   */
+  async executeAmuletRulesTransferMulti(params: {
+    senderPartyId: string;
+    /** Provider party (validator). Default CANTON_VALIDATOR_PARTY_ID. */
+    providerPartyId?: string;
+    outputs: Array<{
+      receiver: string;
+      amount: number; // CC amount (effective, bukan initial)
+    }>;
+    /** Optional: lock utk output tertentu (mis. utk eligibility LOCK_CC). */
+    clientNonce?: string;
+  }): Promise<{
+    ok: boolean;
+    updateId: string | null;
+    error?: string;
+  }> {
+    const expectedDso = this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim();
+    if (!expectedDso)
+      return { ok: false, updateId: null, error: 'CANTON_DSO_PARTY_ID not set' };
+    const provider =
+      params.providerPartyId ??
+      this.config.get<string>('CANTON_VALIDATOR_PARTY_ID') ??
+      '';
+    if (!provider)
+      return { ok: false, updateId: null, error: 'CANTON_VALIDATOR_PARTY_ID not set' };
+    if (params.outputs.length === 0)
+      return { ok: false, updateId: null, error: 'No outputs provided' };
+
+    // 1) Disclosed contracts from scan-proxy (DSO-signed, with created_event_blob)
+    const amuletRules = await this.fetchScanProxyContract('amulet-rules');
+    if (!amuletRules)
+      return { ok: false, updateId: null, error: 'scan-proxy /amulet-rules failed' };
+    const openRound = await this.fetchScanProxyContract(
+      'open-and-issuing-mining-rounds',
+    );
+    if (!openRound)
+      return {
+        ok: false,
+        updateId: null,
+        error: 'scan-proxy /open-and-issuing-mining-rounds failed',
+      };
+
+    // 2) Sender's Amulet inputs — pakai effective amount (decay-adjusted).
+    //    AmuletRules_Transfer butuh inputs dgn effective amount >= total outputs.
+    const holdings = await this.queryAmuletHoldingsRaw(params.senderPartyId);
+    if (holdings.length === 0)
+      return {
+        ok: false,
+        updateId: null,
+        error: `${params.senderPartyId.split('::')[0]} tidak punya Amulet`,
+      };
+    const round = openRound.round ?? 0;
+    const scored = holdings
+      .map((h) => {
+        const init = parseFloat(h.initialAmount) || 0;
+        const rate = parseFloat(h.ratePerRound) || 0;
+        const decay = Math.max(0, round - (h.createdAtRound || 0)) * rate;
+        return { h, eff: Math.max(0, init - decay) };
+      })
+      .sort((a, b) => b.eff - a.eff);
+    const totalAmount = params.outputs.reduce((s, o) => s + o.amount, 0);
+    const totalEff = scored.reduce((s, x) => s + x.eff, 0);
+    if (totalEff < totalAmount)
+      return {
+        ok: false,
+        updateId: null,
+        error: `Saldo efektif ~${totalEff.toFixed(4)} < ${totalAmount} CC (total outputs)`,
+      };
+
+    const inputs: Array<{ tag: 'InputAmulet'; value: string }> = [];
+    let acc = 0;
+    for (const s of scored) {
+      inputs.push({ tag: 'InputAmulet', value: s.h.contractId });
+      acc += s.eff;
+      if (acc >= totalAmount) break;
+    }
+
+    // 3) Build outputs array (transfer + fee dalam 1 transfer)
+    const outputs = params.outputs.map((o) => ({
+      receiver: o.receiver,
+      receiverFeeRatio: '0.0',
+      amount: o.amount.toFixed(10),
+      lock: null,
+    }));
+
+    // 4) choiceArgument — AmuletRules_Transfer (FLAT TransferContext, bukan nested)
+    const choiceArgument = {
+      transfer: {
+        sender: params.senderPartyId,
+        provider,
+        inputs,
+        outputs,
+        beneficiaries: null,
+      },
+      context: {
+        openMiningRound: openRound.contractId,
+        issuingMiningRounds: [],
+        validatorRights: [],
+        featuredAppRight: null,
+      },
+      expectedDso,
+    };
+
+    const disclosedContracts = [
+      {
+        templateId: amuletRules.templateId,
+        contractId: amuletRules.contractId,
+        createdEventBlob: amuletRules.blob,
+      },
+      {
+        templateId: openRound.templateId,
+        contractId: openRound.contractId,
+        createdEventBlob: openRound.blob,
+      },
+    ];
+
+    const commandId = params.clientNonce
+      ? `amulet-transfer-multi-${params.senderPartyId.split('::')[0]}-${params.clientNonce.slice(0, 16)}`
+      : `amulet-transfer-multi-${params.senderPartyId.split('::')[0]}-${randomUUID().slice(0, 16)}`;
+
+    this.logger.log(
+      `AmuletRules_Transfer (multi-output): sender=${params.senderPartyId.split('::')[0]} ` +
+        `outputs=[${params.outputs
+          .map((o) => `${o.receiver.split('::')[0]}:${o.amount}`)
+          .join(', ')}] inputs=${inputs.length} total=${totalAmount}CC`,
+    );
+
+    const { ok, status, text } = await this.exerciseChoice(
+      amuletRules.contractId,
+      amuletRules.templateId,
+      'AmuletRules_Transfer',
+      choiceArgument,
+      [params.senderPartyId, provider], // transferControllers = sender + provider
+      commandId,
+      'submit-and-wait-for-transaction-tree',
+      disclosedContracts,
+    );
+
+    if (ok) {
+      const updateId = extractUpdateIdFromTree(text);
+      this.logger.log(
+        `AmuletRules_Transfer (multi-output) OK: updateId=${updateId?.slice(0, 16) ?? 'unknown'} outputs=${outputs.length}`,
+      );
+      return { ok: true, updateId };
+    }
+
+    // Ambigous error → verify on-chain (sama pattern lockCc)
+    if (this.isAmbiguousError(status)) {
+      this.logger.warn(
+        `AmuletRules_Transfer ambiguous error ${status} — tx mungkin sudah land. updateId akan null.`,
+      );
+      // Best-effort: return ok dgn updateId null (caller handle)
+      return { ok: true, updateId: null };
+    }
+
+    this.logger.warn(
+      `AmuletRules_Transfer (multi-output) failed ${status}: ${text.slice(0, 300)}`,
+    );
+    return { ok: false, updateId: null, error: `Ledger ${status}: ${text.slice(0, 300)}` };
+  }
+
+  /**
    * True untuk HTTP status yang ambigu — command mungkin sudah dieksekusi
    * validator walau client tidak menerima response sukses.
    *   - 0   = network error / timeout / abort (fetch threw)

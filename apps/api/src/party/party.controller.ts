@@ -1055,66 +1055,46 @@ export class PartyController {
             validatorPartyId;
           const feePartyOnChainAtomic =
             await this.splice.resolveOnChainPartyId(feePartyRawAtomic);
-          const dsoPartyAtomic =
-            this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() || '';
-          // ── ATOMIC via Splice native WalletUserProxy_BatchTransfer ────────
-          // Pattern ini (transferCalls array) adalah NATIVE Splice utk atomic
-          // multi-receiver. Holding threading otomatis: Leg 1 (transfer)
-          // dapat change amulet → Leg 2 (fee) pakai change tsb sbg input.
-          // Berbeda dgn DAML PlatformTransfer.ExecuteTransfer (2x exercise
-          // TransferFactory_Transfer terpisah) yang gagal krn Leg 1 consume
-          // amulet → Leg 2 CONTRACT_NOT_ACTIVE.
+          // ── ATOMIC via AmuletRules_Transfer (native CC multi-output) ──────
+          // CC (Amulet) punya native multi-output: 1 transfer dgn outputs array
+          // [transfer, fee]. Ini pattern atomic yang benar utk CC — BERBEDA dari
+          // token-standard TransferFactory_Transfer (single receiver).
+          // BatchTransfer/TransferFactory gagal utk multi-leg CC krn Leg 1
+          // consume amulet → Leg 2 CONTRACT_NOT_ACTIVE.
           //
-          // Source: Splice.Util.FeaturedApp.WalletUserProxy executeTransferCalls
-          const transfers: Array<{
-            receiverPartyId: string;
-            amount: number;
-            instrumentId: string;
-            instrumentAdmin: string;
-            description?: string;
-          }> = [
-            {
-              receiverPartyId: receiverPartyIdOnChain,
-              amount,
-              instrumentId: 'Amulet',
-              instrumentAdmin: dsoPartyAtomic,
-              description,
-            },
+          // DAML: Splice.AmuletRules Transfer.outputs = [TransferOutput]
+          // Template: based on lockCc() yang sudah proven jalan di production.
+          const outputs: Array<{ receiver: string; amount: number }> = [
+            { receiver: receiverPartyIdOnChain, amount },
           ];
           if (effectiveFeeCc > 0) {
-            transfers.push({
-              receiverPartyId: feePartyOnChainAtomic,
-              amount: effectiveFeeCc,
-              instrumentId: 'Amulet',
-              instrumentAdmin: dsoPartyAtomic,
-              description: `Platform fee: ${recipientLabel}`,
-            });
+            outputs.push({ receiver: feePartyOnChainAtomic, amount: effectiveFeeCc });
           }
-          const batchRes = await this.ledger.executeProxyBatchTransferMulti({
+          const amuletRes = await this.ledger.executeAmuletRulesTransferMulti({
             senderPartyId: senderPartyIdOnChain,
-            transfers,
+            outputs,
             clientNonce: body.clientNonce,
           });
-          if (batchRes.ok && batchRes.updateId) {
-            // Atomic sukses — transfer + fee dalam 1 tx (BatchTransfer)
+          if (amuletRes.ok && amuletRes.updateId) {
+            // Atomic sukses — transfer + fee dalam 1 tx (AmuletRules_Transfer)
             accepted = true;
-            transferMethod = batchRes.transferKind === 'offer' ? 'offer_only' : 'direct';
-            ledgerTxId = batchRes.updateId;
+            transferMethod = 'direct';
+            ledgerTxId = amuletRes.updateId;
             feeCollected = effectiveFeeCc > 0;
-            feeLedgerTxId = batchRes.updateId; // sama dgn transfer (atomic, 1 tx)
+            feeLedgerTxId = amuletRes.updateId; // sama dgn transfer (atomic, 1 tx)
             feeTreasuryPartyId = feePartyOnChainAtomic;
             this.logger.log(
-              `CC transfer ATOMIC (BatchTransfer): ${sender.username} → ${recipientLabel} ${amount} CC + fee ${effectiveFeeCc} CC (1 tx, ${transfers.length} legs)`,
+              `CC transfer ATOMIC (AmuletRules_Transfer): ${sender.username} → ${recipientLabel} ${amount} CC + fee ${effectiveFeeCc} CC (1 tx, ${outputs.length} outputs)`,
             );
             // Skip path lama (cip56Result) — atomic sudah handle transfer + fee.
             // Record history + return di bawah (setelah blok fee lama di-skip).
           } else {
             this.logger.warn(
-              `Atomic BatchTransfer gagal, fallback ke path lama: ${batchRes.error ?? 'unknown'}`,
+              `Atomic AmuletRules_Transfer gagal, fallback ke path lama: ${amuletRes.error ?? 'unknown'}`,
             );
           }
         } catch (err) {
-          this.logger.warn(`Atomic BatchTransfer exception, fallback: ${String(err)}`);
+          this.logger.warn(`Atomic AmuletRules_Transfer exception, fallback: ${String(err)}`);
         }
       }
 
