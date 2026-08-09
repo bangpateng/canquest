@@ -1,6 +1,6 @@
 # HANDOFF — DAML v27 (AppPaymentRequest Architecture Migration)
 
-> **Tanggal:** 2026-08-06
+> **Tanggal:** 2026-08-09 (updated dengan master flow reference)
 > **HEAD:** `659dde1` (DAML v27 applied, backend belum rewrite)
 > **Status:** DAML v27 compiled (DAR built), v25 Settle **MASIH JALAN** (jangan deploy v27 sampai Fase 2 selesai)
 > **Tujuan doc ini:** Konteks lengkap utk chat baru, supaya tidak keluar jalur.
@@ -13,17 +13,34 @@ Copy-paste prompt ini di awal chat baru:
 
 ```
 Saya melanjutkan DAML v27 migration (Fase 2 backend rewrite).
-Detail lengkap ada di file HANDOFF_DAML_V27.md di root repo.
+Detail lengkap ada di 2 file:
+1. HANDOFF_DAML_V27.md (root repo) — status + plan
+2. docs/V27_MASTER_FLOW_REFERENCE.md — master flow lengkap dari Canton AI
 
 Singkatnya: DAML v27 sudah applied + compiled (DAR built, commit 659dde1).
-Tapi backend belum rewrite — masih pakai v25 Settle yang jalan.
-Fase 2 = backend rewrite utk AppPaymentRequest flow (create + accept + collect).
+Backend belum rewrite — masih pakai v25 Settle yang jalan.
+Fase 2 = backend rewrite utk reward flow v27 (2 PATH: PlatformTransfer + AppPaymentRequest).
 
-Tolong baca HANDOFF_DAML_V27.md utk konteks lengkap, lalu bantu saya
+Tolong baca KEDUA file itu utk konteks lengkap, lalu bantu saya
 kerjakan Fase 2 (bertahap, terverifikasi, tidak terburu-buru).
 
-Branch master, HEAD 659dde1.
+Branch master, HEAD 659dde1 (atau check git log terbaru).
 ```
+
+---
+
+## 🎯 INSIGHT BARU (update 2026-08-09) — 2 PATH reward flow
+
+Dari master flow reference (docs/V27_MASTER_FLOW_REFERENCE.md), v27 reward claim punya **2 PATH**:
+
+| Path | Kondisi | Flow | User action |
+|---|---|---|---|
+| **A** | CC + preapproval valid | PlatformTransfer.ExecuteTransfer (sudah ada di v27!) | ❌ Instan |
+| **B** | CC no preapproval ATAU USDCx | AppPaymentRequest → Accept → Collect | ✅ User accept |
+
+**PATH A pakai PlatformTransfer yang SUDAH kita build** (Fase 5 v25). Hanya PATH B yang butuh AppPaymentRequest (complex). Ini mengurangi scope Fase 2 — Path A bisa jalan duluan.
+
+Baca docs/V27_MASTER_FLOW_REFERENCE.md untuk detail lengkap flow + actAs + koreksi kritis.
 
 ---
 
