@@ -1,8 +1,8 @@
 # HANDOFF — DAML v27 (AppPaymentRequest Architecture Migration)
 
-> **Tanggal:** 2026-08-09 (updated: Fase 2 backend rewrite in progress)
-> **HEAD:** `35d8bfc` (DAML v27 applied, Fase 2 backend rewrite dimulai)
-> **Status:** DAML v27 compiled (DAR built di VPS), v25 Settle **MASIH JALAN** (jangan deploy v27 sampai Fase 2 selesai)
+> **Tanggal:** 2026-08-09 (updated: Fase 2 backend code COMPLETE, mainnet deploy pending)
+> **HEAD:** `feat/daml-v27-fase2-backend` branch (6 commit, merge ke master saat siap)
+> **Status:** DAML v27 compiled (DAR built di VPS), v25 Settle **MASIH JALAN** sebagai fallback (flag QUEST_V27_FLOW=false default)
 >
 > ⚠️ **Koreksi akurasi (2026-08-09):** HEAD aktual = `35d8bfc` (bukan `659dde1` seperti tertulis di versi doc sebelumnya). Commit `659dde1` tidak ditemukan di git log — kemungkinan typo. DAR `canquest-v27-1.4.0.dar` **dibuild di VPS**, bukan di repo lokal (folder `.daml/dist/` & `target/` lokal kosong — ini wajar).
 > **Tujuan doc ini:** Konteks lengkap utk chat baru, supaya tidak keluar jalur.
@@ -66,10 +66,11 @@ preapproval needed. Dana terkunci saat accept, platform collect atomik.
 | **DAML v27** | ✅ Applied + compiled | HEAD `35d8bfc`, source di `packages/daml/daml/Main.daml` (5 template) |
 | **DAR v27 built** | ✅ Built di VPS | `canquest-v27-1.4.0.dar` dibuild di VPS (bukan repo lokal). Folder `.daml/dist/` lokal sengaja kosong |
 | **v25 Settle** | ✅ MASIH JALAN | Jangan deploy v27 sampai Fase 2 backend selesai |
-| **Backend v27** | 🚧 Fase 2 in progress | Masih pakai v25 settleAtomic/recordTxId; Fase 2 rewrite di-belakang flag `QUEST_V27_FLOW` |
-| **Frontend v27** | ❌ Belum | AppPaymentRequest_Accept UI belum (Fase 3 — Fase 2 pakai sync Accept custodial) |
-| **DAR v27 uploaded?** | ❌ Belum | JANGAN upload sebelum Fase 2 selesai + verified |
+| **Backend v27** | ✅ Fase 2 code COMPLETE | 6 commit di branch `feat/daml-v27-fase2-backend`. PATH A + PATH B implemented di-belakang flag `QUEST_V27_FLOW`. v25 fallback intact. |
+| **Frontend v27** | ❌ Belum (Fase 3) | AppPaymentRequest_Accept UI belum. Fase 2 pakai sync Accept custodial (backend exercise Accept atas nama user) — tidak butuh frontend utk PATH A/B |
+| **DAR v27 uploaded?** | ❌ Belum | Upload saat deploy mainnet (lihat `docs/RUNBOOK_DAML_V27_DEPLOY.md` §3) |
 | **AppPaymentRequest DAR** | ℹ️ Native Splice | Bukan DAR milik kita — bagian participant node bawaan. Backend akses via Ledger API JSON-RPC |
+| **Runbook deploy** | ✅ `docs/RUNBOOK_DAML_V27_DEPLOY.md` | MAINNET-specific: FAR off, PATH A duluan, amount kecil |
 
 ---
 
@@ -256,18 +257,33 @@ ac6f852 feat(api): v25 Fase 2 — backend DAML glue
 
 ---
 
-## 🎯 NEXT STEP (Fase 2 — besok)
+## 🎯 NEXT STEP (Fase 2 code DONE — deploy mainnet next)
 
-1. Baca doc ini
-2. Mulai Fase 2b: NEW methods QuestLedgerService (createQuestPaymentRequest dulu — paling gampang)
-3. Fase 2c: AppPaymentRequest Accept (paling sulit — TransferInput + context)
-4. Fase 2d: Collect + MarkSettled
-5. Fase 2e: Rewrite 5 caller claim path
-6. Fase 2f: Build + test di VPS
-7. HANYA SETELAH Fase 2 sukses: upload DAR v27 + restart backend
+**Fase 2 backend rewrite COMPLETE** (6 commit di branch `feat/daml-v27-fase2-backend`):
 
-**JANGAN upload DAR v27 atau restart backend sebelum Fase 2 selesai.**
-v25 Settle tetap jalan sampai Fase 2 deploy.
+| Step | Commit | Isi |
+|---|---|---|
+| 0 | `e1808ad` | Fix HANDOFF accuracy (HEAD hash + DAR location) |
+| 1 | `454fa04` | DB Migration: WinnerDraw +6 kolom v27 payment tracking (nullable) |
+| 2 | `71db1e0` | Fase 2a PATH A Ledger Methods (createQuestPaymentRequest + executePlatformTransferReward + markSettled) |
+| 3 | `8497651` | Fase 2a Caller Integration (useV27Flow + settleAndRecordV27 + 3 caller branch) |
+| 4 | `f89bf2a` | Fase 2b PATH B Ledger Methods (createAppPaymentRequest + acceptAppPaymentRequest + markAccepted + collectAcceptedAppPayment + markExpired) |
+| 5 | `d5cc2ca` | Fase 2b Wiring + Hardening (PATH B routing + error recovery + idempotency) |
+
+**NEXT — deploy mainnet** (lihat `docs/RUNBOOK_DAML_V27_DEPLOY.md`):
+1. Merge `feat/daml-v27-fase2-backend` ke master
+2. DB migration (nullable, zero-risk)
+3. Upload DAR v27 ke participant mainnet
+4. Set `CANTON_DAML_PACKAGE_NAME` ke hash v27
+5. Verify CanActAs rights (PATH B butuh 5-party + 4-party + 2-party)
+6. Test PATH A duluan (CC + preapproval ON, amount kecil)
+7. Test PATH B (CC no preapproval atau USDCx)
+8. Setelah verified ≥ 1 minggu: Step 7 v25 cleanup
+
+**v25 Settle tetap jalan** sebagai fallback (flag `QUEST_V27_FLOW=false` default).
+Rollback safety: set `QUEST_V27_FLOW=false` + restart → kembali ke v25 instan.
+
+⚠️ **MAINNET constraints:** FAR belum approved (off) — transfer jalan tanpa app rewards. DSO party dari MainNet scan endpoint. Funding REWARD_SENDER wajib real CC.
 
 ---
 
