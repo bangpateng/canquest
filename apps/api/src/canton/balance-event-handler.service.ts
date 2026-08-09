@@ -252,8 +252,8 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
         create: { userId: user.userId, balanceMicroCc: deltaMicroCc },
         update: { balanceMicroCc: { increment: deltaMicroCc } },
       });
-      this.logger.log(
-        `BalanceEventHandler: CcBalance +${totalAmount.toFixed(6)} CC → @${user.username ?? user.userId.slice(0, 8)} (updateId=${updateId.slice(0, 16)}…)`,
+      this.logger.debug(
+        `BalanceEventHandler: CcBalance +${totalAmount.toFixed(6)} CC → @${user.username ?? user.userId.slice(0, 8)}`,
       );
       // Push realtime balance:changed (UI refresh wallet).
       this.realtime.push(user.userId, 'balance:changed', null);
@@ -301,8 +301,8 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
         cantonUpdateId: updateId,
         status: 'COMPLETED',
       });
-      this.logger.log(
-        `BalanceEventHandler: +${totalAmount.toFixed(6)} CC → @${user.username ?? user.userId.slice(0, 8)} (updateId=${updateId.slice(0, 16)}…)`,
+      this.logger.debug(
+        `BalanceEventHandler: +${totalAmount.toFixed(6)} CC → @${user.username ?? user.userId.slice(0, 8)}`,
       );
     } catch (err) {
       const errMsg = String(err);
@@ -368,8 +368,8 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
           },
         });
       }
-      this.logger.log(
-        `BalanceEventHandler: CantexTokenBalance +${tk.amount} ${tk.instrumentId} → @${tk.username ?? tk.userId.slice(0, 8)}… (updateId=${updateId.slice(0, 16)}…)`,
+      this.logger.debug(
+        `BalanceEventHandler: CantexTokenBalance +${tk.amount} ${tk.instrumentId} → @${tk.username ?? tk.userId.slice(0, 8)}`,
       );
       // Push realtime balance:changed (UI refresh wallet).
       this.realtime.push(tk.userId, 'balance:changed', null);

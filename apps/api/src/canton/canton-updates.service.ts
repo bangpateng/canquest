@@ -540,9 +540,9 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
           },
         },
       };
-      // DIAGNOSTIK: log payload persis yang dikirim. Lepas setelah stabil.
-      this.logger.log(
-        `CantonUpdates: WS sending subscription request: ${JSON.stringify(requestBody)}`,
+      // DIAGNOSTIK: subscription request payload hanya utk debug connect issue.
+      this.logger.debug(
+        `CantonUpdates: WS sending subscription request (beginExclusive=${this.lastOffset})`,
       );
       ws.send(JSON.stringify(requestBody));
 
@@ -573,10 +573,10 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
           : Array.isArray(data)
             ? Buffer.concat(data as Buffer[]).toString('utf8')
             : (data as Buffer).toString('utf8');
-      // DIAGNOSTIK: log raw message (sebelum parse) supaya terlihat kalau
-      // server kirim error JSON sebelum close. Lepas ini bisa dihapus.
-      this.logger.log(
-        `CantonUpdates: WS message received (${text.length} bytes): ${text.slice(0, 500)}`,
+      // DIAGNOSTIK: raw WS message sangat berisik (setiap tx = 1 message).
+      // Demote ke debug — hanya aktif bila LOG_LEVEL=debug.
+      this.logger.debug(
+        `CantonUpdates: WS message received (${text.length} bytes)`,
       );
       this.handleStreamLine(text);
     });
@@ -751,22 +751,18 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     // (BUKAN di ws.on('open')) supaya close-1000 loop bisa capai MAX & berhenti.
     this.reconnectAttempts = 0;
 
-    // WAVE 6 DEBUG: log structured event untuk verify parser benar di produksi.
-    // Lepas setelah parser terverifikasi stabil.
-    const partySample = [...parties].slice(0, 3).map((p) => p.split('::')[0]);
-    const exercisedSummary = exercised.map((e) => ({
-      choice: e.choice,
-      template: e.templateId?.split(':').slice(-2).join(':'),
-      childCount: e.childNodeIds?.length ?? 0,
-    }));
-    this.logger.log(
-      `CantonUpdates: PARSED event offset=${offset} parties=[${partySample.join(',')}] ` +
-        `created=${created.length} archived=${archived.length} exercised=${exercised.length}` +
-        (exercisedSummary.length > 0
-          ? ` choices=${JSON.stringify(exercisedSummary)}`
-          : '') +
-        ` updateId=${update.updateId?.slice(0, 20) ?? '?'}…`,
-    );
+    // Structured event — demote ke debug (parser sudah stabil di production).
+    // Hanya log choices summary di debug utk troubleshooting.
+    if (this.logger['debug']) {
+      const partySample = [...parties].slice(0, 3).map((p) => p.split('::')[0]);
+      const choices = exercised.map((e) => e.choice).filter(Boolean);
+      this.logger.debug(
+        `CantonUpdates: offset=${offset} parties=[${partySample.join(',')}] ` +
+          `created=${created.length} archived=${archived.length} exercised=${exercised.length}` +
+          (choices.length > 0 ? ` choices=[${choices.join(',')}]` : '') +
+          ` updateId=${update.updateId?.slice(0, 16) ?? '?'}…`,
+      );
+    }
 
     this.updates$.next({
       offset: offset ?? this.lastOffset ?? 0,

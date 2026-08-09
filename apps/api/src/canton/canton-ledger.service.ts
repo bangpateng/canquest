@@ -377,9 +377,8 @@ export class CantonLedgerService {
       url = `${registryBase}/api/token-standard/v0/registrars/${registrarPartyId}/registry/transfer-instruction/v1/transfer-factory`;
     }
 
-    this.logger.log(
-      `Registry call: ${isCc ? 'CC (Scan-proxy)' : 'Registry token (Utility Registry API)'} ` +
-        `admin=${instrumentAdmin.slice(0, 24)}… url=${url.slice(0, 100)}…`,
+    this.logger.debug(
+      `Registry call: ${isCc ? 'CC' : 'Token'} admin=${instrumentAdmin.split('::')[0]}`,
     );
 
     try {
@@ -417,9 +416,8 @@ export class CantonLedgerService {
         return null;
       }
 
-      this.logger.log(
-        `Registry OK: factory=${data.factoryId.slice(0, 16)}... kind=${data.transferKind ?? 'unknown'} ` +
-          `disclosed=${data.choiceContext.disclosedContracts?.length ?? 0}`,
+      this.logger.debug(
+        `Registry OK: kind=${data.transferKind ?? 'unknown'} disclosed=${data.choiceContext.disclosedContracts?.length ?? 0}`,
       );
 
       return {
