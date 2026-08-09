@@ -1625,6 +1625,12 @@ export class QuestLedgerService implements OnModuleInit {
       const disclosedContracts: unknown[] = [...transferRegistry.disclosedContracts, ...feeRegistry.disclosedContracts];
 
       const commandId = `v27-pathA-${params.platformTransferCid.slice(0, 16)}-${randomUUID()}`;
+      // DEBUG: log actAs utk diagnose DAML_AUTHORIZATION_ERROR (party drop issue).
+      this.logger.debug(
+        `v27 PATH A DEBUG actAs=[${actAs.map((p) => p.split('::')[0]).join(',')}] ` +
+          `rewardSender=${params.rewardSenderPartyId.split('::')[0]} user=${params.userPartyId.split('::')[0]} ` +
+          `transferSpec.sender=${String(transferSpec.sender).split('::')[0]} feeSpec.sender=${String(feeSpec.sender).split('::')[0]}`,
+      );
       const { ok, text } = await this.ledger.exerciseChoice(
         params.platformTransferCid,
         tpl,
