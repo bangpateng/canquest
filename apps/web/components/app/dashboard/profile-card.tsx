@@ -90,7 +90,7 @@ export function ProfileCard({
                 className="mt-0.5 inline-flex items-center gap-1 text-sm font-medium text-canton hover:underline"
               >
                 <AtSign className="h-3 w-3" />
-                @{twitterUsername.trim()}
+                {twitterUsername.trim()}
               </a>
             ) : (
               <Link
