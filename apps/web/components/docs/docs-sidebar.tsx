@@ -1,37 +1,54 @@
+"use client";
+
 import Link from "next/link";
-import { DOCS_NAV } from "@/components/docs/docs-nav";
+import { usePathname } from "next/navigation";
+import { DOCS_NAV, docsHref } from "@/components/docs/docs-nav";
 import { cn } from "@/lib/utils/utils";
 
-function DocsNavItems({ className, onNavigate }: { className?: string; onNavigate?: () => void }) {
+/**
+ * Multi-page docs navigation. Active page is derived from the current
+ * pathname (not a scroll spy), which is why this is a client component.
+ */
+
+function DocsNavItems({ onNavigate }: { onNavigate?: () => void }) {
+  const pathname = usePathname();
+  const current = (slug: string) =>
+    slug === "" ? pathname === "/docs" : pathname === `/docs/${slug}`;
+
   return (
-    <ul className={cn("space-y-1", className)}>
-      {DOCS_NAV.map((item) => (
-        <li key={item.id}>
-          <Link
-            href={`#${item.id}`}
-            onClick={onNavigate}
-            className="block rounded-md px-2 py-1.5 text-sm text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)]/40 hover:text-[var(--foreground)]"
-          >
-            {item.title}
-          </Link>
-          {item.children && item.children.length > 0 ? (
-            <ul className="mt-0.5 space-y-0.5 border-l border-[var(--border)] pl-3 ml-2">
-              {item.children.map((child) => (
-                <li key={child.id}>
+    <nav aria-label="Documentation">
+      {DOCS_NAV.map((group, gi) => (
+        <div key={gi} className={gi > 0 ? "mt-6" : ""}>
+          {group.group ? (
+            <p className="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+              {group.group}
+            </p>
+          ) : null}
+          <ul className="space-y-0.5">
+            {group.items.map((item) => {
+              const active = current(item.slug);
+              return (
+                <li key={item.slug}>
                   <Link
-                    href={`#${child.id}`}
+                    href={docsHref(item.slug)}
                     onClick={onNavigate}
-                    className="block rounded-md px-2 py-1 text-xs text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)]/40 hover:text-[var(--foreground)]"
+                    aria-current={active ? "page" : undefined}
+                    className={cn(
+                      "block rounded-md px-2 py-1.5 text-sm transition-colors",
+                      active
+                        ? "bg-canton-subtle font-medium text-[rgb(var(--canton-ink))]"
+                        : "text-[var(--muted-foreground)] hover:bg-[var(--muted)]/40 hover:text-[var(--foreground)]",
+                    )}
                   >
-                    {child.title}
+                    {item.title}
                   </Link>
                 </li>
-              ))}
-            </ul>
-          ) : null}
-        </li>
+              );
+            })}
+          </ul>
+        </div>
       ))}
-    </ul>
+    </nav>
   );
 }
 
@@ -39,13 +56,10 @@ function DocsNavItems({ className, onNavigate }: { className?: string; onNavigat
 export function DocsSidebar() {
   return (
     <aside
-      className="hidden w-56 shrink-0 lg:block xl:w-60"
+      className="hidden w-56 shrink-0 lg:block xl:w-64"
       aria-label="Documentation navigation"
     >
       <div className="sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto border-r border-[var(--border)] pb-8 pr-6">
-        <p className="mb-3 px-2 text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-          On this page
-        </p>
         <DocsNavItems />
         <div className="mt-8 space-y-2 border-t border-[var(--border)] pt-4">
           <Link
@@ -72,7 +86,7 @@ export function DocsMobileNav() {
     <details className="group mb-8 rounded-xl border border-[var(--border)] bg-[var(--card)] lg:hidden">
       <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-[var(--foreground)] marker:content-none [&::-webkit-details-marker]:hidden">
         <span className="flex items-center justify-between gap-2">
-          On this page
+          Browse docs
           <span
             className="text-xs text-[var(--muted-foreground)] transition-transform group-open:rotate-180"
             aria-hidden
@@ -81,9 +95,9 @@ export function DocsMobileNav() {
           </span>
         </span>
       </summary>
-      <nav className="border-t border-[var(--border)] px-2 py-3" aria-label="Documentation navigation">
+      <div className="border-t border-[var(--border)] px-2 py-3">
         <DocsNavItems />
-      </nav>
+      </div>
     </details>
   );
 }
