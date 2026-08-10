@@ -21,9 +21,12 @@ import { cn } from "@/lib/utils/utils";
  * team@canquest.cc → copy the "Access Key".
  */
 
-// 🔑 Paste your Web3Forms access key here, OR set NEXT_PUBLIC_WEB3FORMS_KEY on Vercel.
+// Web3Forms access key — public-safe (only authorizes sending TO the inbox
+// registered to the key, i.e. team@canquest.cc). Override via
+// NEXT_PUBLIC_WEB3FORMS_KEY on Vercel if you ever need to rotate it.
 const WEB3FORMS_ACCESS_KEY =
-  process.env.NEXT_PUBLIC_WEB3FORMS_KEY?.trim() || "YOUR_WEB3FORMS_ACCESS_KEY";
+  process.env.NEXT_PUBLIC_WEB3FORMS_KEY?.trim() ||
+  "3f131914-8aae-4a73-b1db-b29cf24aca57";
 
 const SUBMIT_URL = "https://api.web3forms.com/submit";
 const CONTACT_EMAIL = "team@canquest.cc";
@@ -62,13 +65,6 @@ export function ContactForm() {
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
-
-    if (WEB3FORMS_ACCESS_KEY === "YOUR_WEB3FORMS_ACCESS_KEY") {
-      setError(
-        "This form isn't connected yet. Please reach us directly at team@canquest.cc.",
-      );
-      return;
-    }
 
     const form = e.currentTarget;
     const fd = new FormData(form);
