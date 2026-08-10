@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { CooperationPageContent } from "@/components/cooperation/cooperation-page-content";
 
 export const metadata: Metadata = {
-  title: "Cooperation — CanQuest",
+  title: "Work with CanQuest",
   description:
-    "Partner with CanQuest to launch Earn campaigns, events, and activations on Canton — CC rewards, invite codes, and ecosystem access for your community.",
+    "Run a campaign on CanQuest and reach real Canton users. Earn campaigns, launches, and events — with CC, codes, or access as rewards.",
   alternates: {
     canonical: "/cooperation",
   },
