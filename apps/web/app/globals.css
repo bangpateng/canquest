@@ -78,6 +78,19 @@
     background: linear-gradient(135deg, rgb(var(--canton-rgb)), rgb(var(--canton-ink)));
     -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
   }
+  /* Richer hero headline gradient: green → cyan → bright green.
+     Gives the headline a luminous, fintech feel like the premium refs. */
+  .text-gradient-hero {
+    background: linear-gradient(
+      110deg,
+      rgb(var(--canton-rgb)) 0%,
+      rgb(var(--canton-cyan-rgb)) 50%,
+      var(--primary-strong) 100%
+    );
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
 }
 
 /* ── Typography primitives (used by components/ui/typography.tsx) ──
@@ -218,6 +231,34 @@
     text-shadow: 0 0 40px rgb(var(--canton-rgb) / 0.35);
   }
 
+  /* ── Hero floating dashboard cards ──
+     Glass surfaces that float around the central hero mockup.
+     Each card sets its own animation-delay/duration inline so they
+     bob out of phase (premium, organic motion). */
+  .hero-card {
+    background-color: rgb(var(--canton-card, var(--card)) / 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow:
+      0 1px 0 0 rgb(255 255 255 / 0.04) inset,
+      0 20px 50px -20px rgb(0 0 0 / 0.7),
+      0 0 40px -12px rgb(var(--canton-rgb) / 0.25);
+  }
+  .hero-card-float {
+    animation: float 6s ease-in-out infinite;
+    will-change: transform;
+  }
+
+  /* Conic progress ring — used by floating cards to show tier/rank progress.
+     The ring is the conic gradient; a same-colored inner disc masks the
+     center so only the 1px-isthmus ring remains. */
+  .progress-ring {
+    background: conic-gradient(
+      rgb(var(--canton-rgb)) calc(var(--p, 0.5) * 360deg),
+      rgb(var(--canton-rgb) / 0.12) 0
+    );
+  }
+
   /* Marquee track for the partner logo cloud. Pause on hover for usability. */
   .marquee-track {
     animation: marquee 32s linear infinite;
@@ -322,8 +363,9 @@
   .marquee-track,
   .shimmer::after,
   .float-y,
+  .hero-card-float,
   .reveal {
     animation: none !important;
   }
-  .float-y { transform: none !important; }
+  .float-y, .hero-card-float { transform: none !important; }
 }
