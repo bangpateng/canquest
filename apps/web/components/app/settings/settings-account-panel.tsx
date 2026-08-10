@@ -74,19 +74,19 @@ export function SettingsAccountPanel() {
 
         {/* Twitter avatar row */}
         {me?.twitterUsername && me?.avatarUrl ? (
-          <div className="mt-5 flex items-center gap-4 rounded-xl border border-canton-muted bg-canton-subtle p-4 sm:mt-6 sm:gap-5 sm:p-5">
+          <div className="mt-5 flex items-center gap-4 rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 p-4 sm:mt-6 sm:gap-5 sm:p-5">
             <img
               src={me.avatarUrl}
               alt=""
-              width={64}
-              height={64}
-              className="h-14 w-14 shrink-0 rounded-full object-cover ring-2 ring-[var(--primary)]/20 sm:h-16 sm:w-16"
+              width={56}
+              height={56}
+              className="h-12 w-12 shrink-0 rounded-full object-cover sm:h-14 sm:w-14"
             />
             <div className="min-w-0">
-              <p className="truncate text-base font-semibold text-[var(--foreground)] sm:text-lg">
+              <p className="truncate text-sm font-semibold text-[var(--foreground)] sm:text-base">
                 {me.displayName ?? me.twitterUsername}
               </p>
-              <p className="mt-1 truncate text-sm font-medium text-canton-muted">
+              <p className="mt-0.5 truncate text-sm text-[var(--muted-foreground)]">
                 @{me.twitterUsername}
               </p>
             </div>

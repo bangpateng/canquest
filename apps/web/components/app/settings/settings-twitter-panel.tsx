@@ -121,23 +121,17 @@ export function SettingsTwitterPanel({
         ) : null}
 
         {status.connected && status.username ? (
-          <div className="rounded-xl border border-canton-muted bg-canton-subtle px-5 py-4 sm:px-6 sm:py-5">
-            <div className="flex items-center gap-3">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--primary)]/15 ring-1 ring-[var(--primary)]/20">
-                <AtSign className="h-4 w-4 text-canton" />
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <AtSign className="h-3.5 w-3.5 text-[var(--muted-foreground)]" aria-hidden />
+              <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
+                Connected
               </span>
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-canton-muted">
-                  Connected
-                </p>
-                <p className="mt-0.5 font-mono text-base font-semibold text-[var(--foreground)]">
-                  @{status.username}
-                </p>
-              </div>
             </div>
-            {/* LOCK PERMANEN: akun terhubung tidak bisa diganti / dilepas. */}
-            <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-[var(--muted-foreground)]">
-              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--muted-foreground)]" />
+            <p className="mt-1.5 font-mono text-sm font-semibold text-[var(--foreground)]">
+              @{status.username}
+            </p>
+            <p className="mt-2 text-xs text-[var(--muted-foreground)]">
               This X account is permanently linked and cannot be changed or disconnected.
             </p>
           </div>
@@ -146,20 +140,20 @@ export function SettingsTwitterPanel({
             <div>
               <label
                 htmlFor="twitter-handle"
-                className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]"
+                className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-[var(--muted-foreground)]"
               >
-                <AtSign className="h-3.5 w-3.5" />
+                <AtSign className="h-3.5 w-3.5" aria-hidden />
                 X username
               </label>
-              <div className="mt-2 flex rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 transition-colors focus-within:border-[var(--primary)]/50">
-                <span className="flex items-center pl-4 text-base font-medium text-[var(--muted-foreground)]">@</span>
+              <div className="mt-1.5 flex rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 transition-colors focus-within:border-[var(--primary)]/50">
+                <span className="flex items-center pl-4 text-sm font-medium text-[var(--muted-foreground)]">@</span>
                 <input
                   id="twitter-handle"
                   value={input}
                   onChange={(e) => setInput(e.target.value.replace(/^@/, ""))}
                   placeholder="your_handle"
                   disabled={busy}
-                  className="min-w-0 flex-1 bg-transparent py-3 pr-4 text-base font-medium text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)]"
+                  className="min-w-0 flex-1 bg-transparent py-3 pr-4 text-sm font-medium text-[var(--foreground)] outline-none placeholder:font-normal placeholder:text-[var(--muted-foreground)]"
                   autoComplete="off"
                   spellCheck={false}
                 />
@@ -184,8 +178,7 @@ export function SettingsTwitterPanel({
           </p>
         ) : null}
         {success ? (
-          <p className="mt-4 flex items-center gap-1.5 text-sm font-semibold text-emerald-400">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+          <p className="mt-4 text-sm font-medium text-[var(--foreground)]">
             {success}
           </p>
         ) : null}
