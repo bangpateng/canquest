@@ -32,39 +32,28 @@ function SettingsField({
   mono?: boolean;
   loading?: boolean;
 }) {
-  // Read-only field rendered as a clean info row (label left, value right)
-  // to match the glassmorphism look. The underlying <input> stays read-only
-  // so semantics/focus behaviour are preserved.
+  // Clean info field: small label on top, value below, icon left.
+  // The underlying <input readOnly> is VISIBLE so users can see/copy their
+  // email, display name, party ID, etc. (previously hidden via sr-only bug).
   return (
-    <label
-      htmlFor={id}
-      className="group flex items-center justify-between gap-4 rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3.5 transition-colors hover:border-[var(--primary)]/30 sm:px-5"
-    >
-      <span className="flex min-w-0 items-center gap-2.5">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]/15">
-          <Icon className="h-4 w-4 text-canton" />
-        </span>
-        <span className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] sm:text-[13px]">
-          {label}
-        </span>
-      </span>
-      <span
-        className={`min-w-0 truncate text-right font-semibold text-[var(--foreground)] ${
-          mono ? "font-mono text-xs sm:text-sm" : "text-sm sm:text-[15px]"
-        }`}
+    <div className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3">
+      <label
+        htmlFor={id}
+        className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-[var(--muted-foreground)]"
       >
-        {loading ? (
-          <span className="text-[var(--muted-foreground)]">Loading…</span>
-        ) : value ? (
-          value
-        ) : (
-          <span className="font-medium text-[var(--muted-foreground)]">{placeholder}</span>
-        )}
-      </span>
-      {/* Visually hidden read-only input keeps the htmlFor semantics / a11y
-          relationship intact without changing the visual layer. */}
-      <input id={id} readOnly value={loading ? "" : value} className="sr-only" tabIndex={-1} aria-hidden />
-    </label>
+        <Icon className="h-3.5 w-3.5" aria-hidden />
+        {label}
+      </label>
+      <input
+        id={id}
+        readOnly
+        value={loading ? "" : value || ""}
+        placeholder={loading ? "Loading…" : placeholder}
+        className={`mt-1.5 w-full bg-transparent text-sm font-semibold text-[var(--foreground)] outline-none placeholder:font-normal placeholder:text-[var(--muted-foreground)] ${
+          mono ? "font-mono text-xs" : ""
+        }`}
+      />
+    </div>
   );
 }
 
