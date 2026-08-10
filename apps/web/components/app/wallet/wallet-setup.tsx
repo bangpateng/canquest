@@ -9,6 +9,8 @@ import { Wallet, Lock, CheckCircle2, ArrowLeft, MailCheck } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { OtpInput } from "@/components/ui/otp-input";
 import { Countdown } from "@/components/ui/countdown";
+import { Card } from "@/components/ui/card";
+import { PageTitle } from "@/components/ui/typography";
 import { useEffect, useState } from "react";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { useMe } from "@/lib/hooks/use-me";
@@ -197,43 +199,286 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
   if (step === "otp") {
     return (
       <div className="flex min-h-[60vh] w-full min-w-0 items-center justify-center">
-        <div className="w-full min-w-0 max-w-md">
+        <Card className="relative w-full min-w-0 max-w-md overflow-hidden p-8 sm:p-10">
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                "radial-gradient(ellipse 80% 60% at 50% 0%, rgb(var(--canton-rgb) / 0.10), transparent 70%)",
+            }}
+            aria-hidden
+          />
+          <div className="relative">
+            <div className="mb-8 flex justify-center">
+              <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-canton-muted bg-canton-subtle">
+                <MailCheck className="h-10 w-10 text-canton" />
+              </div>
+            </div>
+
+            <PageTitle as="h2" className="text-center">
+              {t("wallet.otpTitle")}
+            </PageTitle>
+            <p className="mt-3 text-center text-sm font-medium text-[var(--muted-foreground)]">
+              {t("wallet.otpSubtitle")}{" "}
+              <span className="font-semibold text-[var(--foreground)]">{email}</span>
+            </p>
+
+            <form onSubmit={handleVerifyOtp} className="mt-8 space-y-6">
+              {otpExpiresAt ? (
+                <div className="text-center">
+                  <OtpInput
+                    value={otp}
+                    onChange={setOtp}
+                    onComplete={(code) => {
+                      setOtp(code);
+                    }}
+                    disabled={busy || otpExpired}
+                  />
+                  <p className="mt-3 text-xs font-medium text-[var(--muted-foreground)]">
+                    {t("wallet.otpExpiresIn")}{" "}
+                    <Countdown
+                      expiresAt={otpExpiresAt}
+                      onExpire={() => setOtpExpired(true)}
+                      className={cn(
+                        "font-mono font-semibold",
+                        otpExpired ? "text-red-400" : "text-[var(--foreground)]",
+                      )}
+                    />
+                  </p>
+                </div>
+              ) : null}
+
+              {error ? (
+                <p
+                  className="rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm font-medium text-orange-300"
+                  role="alert"
+                >
+                  {error}
+                </p>
+              ) : null}
+
+              <button
+                type="submit"
+                disabled={busy || otp.length !== 6 || otpExpired}
+                className={cn(buttonVariants({ size: "lg" }), "w-full gap-2")}
+              >
+                {busy ? <LoadingSpinner size="md" /> : null}
+                {t("wallet.verifyAndCreate")}
+              </button>
+
+              <div className="flex items-center justify-between text-sm">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStep("form");
+                    setError(null);
+                    setOtp("");
+                  }}
+                  className="flex items-center gap-1 text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  {t("wallet.backToForm")}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResendOtp}
+                  disabled={resendCooldown || busy}
+                  className={cn(
+                    "font-semibold",
+                    resendCooldown
+                      ? "cursor-not-allowed text-[var(--muted-foreground)]"
+                      : "text-canton hover:underline",
+                  )}
+                >
+                  {resendCooldown ? t("wallet.resendIn") : t("wallet.resendCode")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  // ── Render step: SUCCESS ─────────────────────────────────────────────────
+  if (step === "success") {
+    return (
+      <div className="flex min-h-[60vh] w-full min-w-0 items-center justify-center">
+        <Card className="relative w-full min-w-0 max-w-md overflow-hidden p-8 text-center sm:p-10">
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                "radial-gradient(ellipse 80% 60% at 50% 0%, rgb(16 185 129 / 0.10), transparent 70%)",
+            }}
+            aria-hidden
+          />
+          <div className="relative">
+            <div className="mb-8 flex justify-center">
+              <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-emerald-500/30 bg-emerald-500/10">
+                <CheckCircle2 className="h-10 w-10 text-emerald-400" />
+              </div>
+            </div>
+            <PageTitle as="h2">{t("wallet.successTitle")}</PageTitle>
+            <p className="mt-3 text-sm font-medium text-[var(--muted-foreground)]">
+              {t("wallet.successSubtitle")}
+            </p>
+            <div className="mt-6 flex items-center justify-center gap-2 text-canton">
+              <LoadingSpinner size="sm" />
+              <span className="text-sm">{t("wallet.walletCreatedLoading")}</span>
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  // ── Render step: FORM (default) ──────────────────────────────────────────
+  return (
+    <div className="flex min-h-[60vh] w-full min-w-0 items-center justify-center">
+      <Card className="relative w-full min-w-0 max-w-md overflow-hidden p-8 sm:p-10">
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(ellipse 80% 60% at 50% 0%, rgb(var(--canton-rgb) / 0.10), transparent 70%)",
+          }}
+          aria-hidden
+        />
+        <div className="relative">
           <div className="mb-8 flex justify-center">
-            <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-white/5 bg-canton/10">
-              <MailCheck className="h-10 w-10 text-canton" />
+            <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-canton-muted bg-canton-subtle">
+              <Wallet className="h-10 w-10 text-canton" />
             </div>
           </div>
 
-          <h2 className="text-center text-2xl font-bold text-slate-100">
-            {t("wallet.otpTitle")}
-          </h2>
-          <p className="mt-3 text-center text-sm font-medium text-slate-400">
-            {t("wallet.otpSubtitle")}{" "}
-            <span className="font-semibold text-slate-300">{email}</span>
+          <PageTitle as="h2" className="text-center">
+            {t("wallet.createTitle")}
+          </PageTitle>
+          <p className="mt-3 text-center text-sm font-medium text-[var(--muted-foreground)]">
+            {needsInvite ? t("wallet.inviteCodeHint") : t("wallet.inviteCodeRetryHint")}
           </p>
 
-          <form onSubmit={handleVerifyOtp} className="mt-8 space-y-6">
-            {otpExpiresAt ? (
-              <div className="text-center">
-                <OtpInput
-                  value={otp}
-                  onChange={setOtp}
-                  onComplete={(code) => {
-                    setOtp(code);
-                  }}
-                  disabled={busy || otpExpired}
-                />
-                <p className="mt-3 text-xs font-medium text-slate-500">
-                  {t("wallet.otpExpiresIn")}{" "}
-                  <Countdown
-                    expiresAt={otpExpiresAt}
-                    onExpire={() => setOtpExpired(true)}
-                    className={cn(
-                      "font-mono font-semibold",
-                      otpExpired ? "text-red-400" : "text-slate-300",
-                    )}
+          <form onSubmit={handleSubmitForOtp} className="mt-10 space-y-6">
+            {/* Email (read-only, verified via Google badge) */}
+            {email ? (
+              <div className="space-y-2">
+                <label
+                  htmlFor="wallet-email"
+                  className="text-sm font-medium text-[var(--muted-foreground)]"
+                >
+                  {t("wallet.emailLabel")}
+                </label>
+                <div className="relative">
+                  <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted-foreground)]" />
+                  <input
+                    id="wallet-email"
+                    value={email}
+                    readOnly
+                    className={cn(inputClass, "pl-10 opacity-80")}
                   />
+                </div>
+                <p className="flex items-center gap-1 text-xs text-emerald-400">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  {t("wallet.emailVerified")}
                 </p>
+              </div>
+            ) : null}
+
+            <div className="space-y-2">
+              <label
+                htmlFor="wallet-username"
+                className="text-sm font-medium text-[var(--muted-foreground)]"
+              >
+                {t("wallet.usernameLabel")}{" "}
+                <span className="font-normal text-[var(--muted-foreground)]">
+                  ({t("wallet.usernameHint")})
+                </span>
+              </label>
+              <input
+                id="wallet-username"
+                value={username}
+                onChange={(e) =>
+                  setUsername(
+                    e.target.value.replace(/^@/, "").toLowerCase().replace(/[^a-z0-9_]/g, ""),
+                  )
+                }
+                placeholder="e.g. alex_canton"
+                minLength={3}
+                maxLength={32}
+                pattern="[a-z0-9_]+"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+                required
+                disabled={busy}
+                className={cn(inputClass, "font-mono")}
+              />
+            </div>
+
+            {/* First/last name (side-by-side, optional) */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <label
+                  htmlFor="wallet-first-name"
+                  className="text-sm font-medium text-[var(--muted-foreground)]"
+                >
+                  {t("wallet.firstNameLabel")}
+                </label>
+                <input
+                  id="wallet-first-name"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value.slice(0, 50))}
+                  maxLength={50}
+                  autoComplete="given-name"
+                  disabled={busy}
+                  className={inputClass}
+                />
+              </div>
+              <div className="space-y-2">
+                <label
+                  htmlFor="wallet-last-name"
+                  className="text-sm font-medium text-[var(--muted-foreground)]"
+                >
+                  {t("wallet.lastNameLabel")}
+                </label>
+                <input
+                  id="wallet-last-name"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value.slice(0, 50))}
+                  maxLength={50}
+                  autoComplete="family-name"
+                  disabled={busy}
+                  className={inputClass}
+                />
+              </div>
+            </div>
+            <p className="-mt-3 text-xs text-[var(--muted-foreground)]">
+              {t("wallet.nameOptionalHint")}
+            </p>
+
+            {needsInvite ? (
+              <div className="space-y-2">
+                <label
+                  htmlFor="wallet-invite-code"
+                  className="text-sm font-medium text-[var(--muted-foreground)]"
+                >
+                  {t("wallet.inviteCodeLabel")}
+                </label>
+                <input
+                  id="wallet-invite-code"
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value.replace(/\s+/g, ""))}
+                  placeholder="8-character code (e.g. aB3xKp9Q)"
+                  minLength={4}
+                  maxLength={64}
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  required
+                  disabled={busy}
+                  className={cn(inputClass, "font-mono")}
+                />
               </div>
             ) : null}
 
@@ -248,243 +493,28 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
 
             <button
               type="submit"
-              disabled={busy || otp.length !== 6 || otpExpired}
+              disabled={
+                busy ||
+                username.trim().length < 3 ||
+                (needsInvite && inviteCode.trim().length < 4)
+              }
               className={cn(buttonVariants({ size: "lg" }), "w-full gap-2")}
             >
-              {busy ? <LoadingSpinner size="md" /> : null}
-              {t("wallet.verifyAndCreate")}
+              {busy ? (
+                <>
+                  <LoadingSpinner size="md" />
+                  {t("wallet.sendingCode")}
+                </>
+              ) : (
+                <>
+                  <Wallet className="h-5 w-5" />
+                  {t("wallet.sendOtpButton")}
+                </>
+              )}
             </button>
-
-            <div className="flex items-center justify-between text-sm">
-              <button
-                type="button"
-                onClick={() => {
-                  setStep("form");
-                  setError(null);
-                  setOtp("");
-                }}
-                className="flex items-center gap-1 text-slate-400 hover:text-slate-200"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                {t("wallet.backToForm")}
-              </button>
-              <button
-                type="button"
-                onClick={handleResendOtp}
-                disabled={resendCooldown || busy}
-                className={cn(
-                  "font-semibold",
-                  resendCooldown
-                    ? "cursor-not-allowed text-slate-600"
-                    : "text-canton hover:underline",
-                )}
-              >
-                {resendCooldown ? t("wallet.resendIn") : t("wallet.resendCode")}
-              </button>
-            </div>
           </form>
         </div>
-      </div>
-    );
-  }
-
-  // ── Render step: SUCCESS ─────────────────────────────────────────────────
-  if (step === "success") {
-    return (
-      <div className="flex min-h-[60vh] w-full min-w-0 items-center justify-center">
-        <div className="w-full min-w-0 max-w-md text-center">
-          <div className="mb-8 flex justify-center">
-            <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-emerald-500/30 bg-emerald-500/10">
-              <CheckCircle2 className="h-10 w-10 text-emerald-400" />
-            </div>
-          </div>
-          <h2 className="text-2xl font-bold text-slate-100">
-            {t("wallet.successTitle")}
-          </h2>
-          <p className="mt-3 text-sm font-medium text-slate-400">
-            {t("wallet.successSubtitle")}
-          </p>
-          <div className="mt-6 flex items-center justify-center gap-2 text-canton">
-            <LoadingSpinner size="sm" />
-            <span className="text-sm">{t("wallet.walletCreatedLoading")}</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Render step: FORM (default) ──────────────────────────────────────────
-  return (
-    <div className="flex min-h-[60vh] w-full min-w-0 items-center justify-center">
-      <div className="w-full min-w-0 max-w-md">
-        <div className="mb-8 flex justify-center">
-          <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-white/5 bg-canton/10">
-            <Wallet className="h-10 w-10 text-canton" />
-          </div>
-        </div>
-
-        <h2 className="text-center text-2xl font-bold text-slate-100">
-          {t("wallet.createTitle")}
-        </h2>
-        <p className="mt-3 text-center text-sm font-medium text-slate-400">
-          {needsInvite ? t("wallet.inviteCodeHint") : t("wallet.inviteCodeRetryHint")}
-        </p>
-
-        <form onSubmit={handleSubmitForOtp} className="mt-10 space-y-6">
-          {/* Email (read-only, verified via Google badge) */}
-          {email ? (
-            <div className="space-y-2">
-              <label
-                htmlFor="wallet-email"
-                className="text-sm font-medium text-slate-400"
-              >
-                {t("wallet.emailLabel")}
-              </label>
-              <div className="relative">
-                <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-                <input
-                  id="wallet-email"
-                  value={email}
-                  readOnly
-                  className={cn(inputClass, "pl-10 opacity-80")}
-                />
-              </div>
-              <p className="flex items-center gap-1 text-xs text-emerald-400">
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                {t("wallet.emailVerified")}
-              </p>
-            </div>
-          ) : null}
-
-          <div className="space-y-2">
-            <label
-              htmlFor="wallet-username"
-              className="text-sm font-medium text-slate-400"
-            >
-              {t("wallet.usernameLabel")}{" "}
-              <span className="font-normal text-slate-500">
-                ({t("wallet.usernameHint")})
-              </span>
-            </label>
-            <input
-              id="wallet-username"
-              value={username}
-              onChange={(e) =>
-                setUsername(
-                  e.target.value.replace(/^@/, "").toLowerCase().replace(/[^a-z0-9_]/g, ""),
-                )
-              }
-              placeholder="e.g. alex_canton"
-              minLength={3}
-              maxLength={32}
-              pattern="[a-z0-9_]+"
-              autoCapitalize="off"
-              autoCorrect="off"
-              spellCheck={false}
-              required
-              disabled={busy}
-              className={cn(inputClass, "font-mono")}
-            />
-          </div>
-
-          {/* First/last name (side-by-side, optional) */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <label
-                htmlFor="wallet-first-name"
-                className="text-sm font-medium text-slate-400"
-              >
-                {t("wallet.firstNameLabel")}
-              </label>
-              <input
-                id="wallet-first-name"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value.slice(0, 50))}
-                maxLength={50}
-                autoComplete="given-name"
-                disabled={busy}
-                className={inputClass}
-              />
-            </div>
-            <div className="space-y-2">
-              <label
-                htmlFor="wallet-last-name"
-                className="text-sm font-medium text-slate-400"
-              >
-                {t("wallet.lastNameLabel")}
-              </label>
-              <input
-                id="wallet-last-name"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value.slice(0, 50))}
-                maxLength={50}
-                autoComplete="family-name"
-                disabled={busy}
-                className={inputClass}
-              />
-            </div>
-          </div>
-          <p className="-mt-3 text-xs text-slate-500">
-            {t("wallet.nameOptionalHint")}
-          </p>
-
-          {needsInvite ? (
-            <div className="space-y-2">
-              <label
-                htmlFor="wallet-invite-code"
-                className="text-sm font-medium text-slate-400"
-              >
-                {t("wallet.inviteCodeLabel")}
-              </label>
-              <input
-                id="wallet-invite-code"
-                value={inviteCode}
-                onChange={(e) => setInviteCode(e.target.value.replace(/\s+/g, ""))}
-                placeholder="8-character code (e.g. aB3xKp9Q)"
-                minLength={4}
-                maxLength={64}
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                required
-                disabled={busy}
-                className={cn(inputClass, "font-mono")}
-              />
-            </div>
-          ) : null}
-
-          {error ? (
-            <p
-              className="rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm font-medium text-orange-300"
-              role="alert"
-            >
-              {error}
-            </p>
-          ) : null}
-
-          <button
-            type="submit"
-            disabled={
-              busy ||
-              username.trim().length < 3 ||
-              (needsInvite && inviteCode.trim().length < 4)
-            }
-            className={cn(buttonVariants({ size: "lg" }), "w-full gap-2")}
-          >
-            {busy ? (
-              <>
-                <LoadingSpinner size="md" />
-                {t("wallet.sendingCode")}
-              </>
-            ) : (
-              <>
-                <Wallet className="h-5 w-5" />
-                {t("wallet.sendOtpButton")}
-              </>
-            )}
-          </button>
-        </form>
-      </div>
+      </Card>
     </div>
   );
 }

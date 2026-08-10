@@ -157,9 +157,18 @@ export function ProfileAvatarSection({
           className="sr-only"
           onChange={(e) => void onPickFile(e.target.files)}
         />
+        {/* Ambient glow behind the avatar tile */}
+        <div
+          className="pointer-events-none absolute -inset-2"
+          style={{
+            background:
+              "radial-gradient(ellipse 80% 80% at 50% 0%, rgb(var(--canton-rgb) / 0.14), transparent 70%)",
+          }}
+          aria-hidden
+        />
         <div
           className={cn(
-            "relative flex h-32 w-32 overflow-hidden rounded-3xl border border-white/5 bg-[var(--muted)] shadow-inner sm:h-36 sm:w-36",
+            "relative flex h-32 w-32 overflow-hidden rounded-3xl border border-canton-muted bg-[var(--muted)] shadow-inner sm:h-36 sm:w-36",
           )}
         >
           {busy ? (
@@ -171,9 +180,7 @@ export function ProfileAvatarSection({
             <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center gap-2 px-3 text-center">
-              <span className="text-xl font-bold text-[var(--muted-foreground)]">
-                {initials}
-              </span>
+              <span className="text-xl font-bold text-canton">{initials}</span>
               <UserRound className="h-7 w-7 text-[var(--muted-foreground)] opacity-50" />
             </div>
           )}
@@ -181,7 +188,9 @@ export function ProfileAvatarSection({
       </div>
       <div className="min-w-0 flex-1 space-y-4">
         <div>
-          <p className="text-sm font-medium text-[var(--muted-foreground)]">Profile photo</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+            Profile photo
+          </p>
           <p className="mt-2 text-sm font-medium text-[var(--muted-foreground)]">
             Shown on the leaderboard. Stored in your account folder on the server.
           </p>

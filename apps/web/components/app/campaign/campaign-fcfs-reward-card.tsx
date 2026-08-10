@@ -5,6 +5,11 @@ import { RewardTokenLogo } from "@/components/app/campaign/reward-token-logo";
 import { CheckCircle2, Sparkles, Ticket } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { buttonVariants } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import {
+  errorBannerClass,
+  successBannerClass,
+} from "@/lib/ui/ui-tokens";
 import { getRewardConfig } from "@/lib/quest/quest-engine";
 import { cn } from "@/lib/utils/utils";
 
@@ -67,8 +72,17 @@ export function CampaignFcfsRewardCard({
   const isUsdcx = (rewardToken ?? "CC").toUpperCase() === "USDCX";
 
   return (
-    <section className="overflow-hidden rounded-3xl border border-white/5 bg-[var(--card)]/40 px-6 py-5">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-5">
+    <Card className="relative overflow-hidden px-6 py-5">
+      {/* Ambient glow — canton-tinted when claimable, neutral when status-only. */}
+      <div
+        className={cn(
+          "pointer-events-none absolute inset-0",
+          isStatus
+            ? "bg-[radial-gradient(ellipse_60%_80%_at_0%_0%,rgb(var(--canton-rgb)/0.06),transparent_60%)]"
+            : "bg-[radial-gradient(ellipse_60%_80%_at_0%_0%,rgb(var(--canton-rgb)/0.12),transparent_60%)]",
+        )}
+      />
+      <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-5">
         <div className="flex min-w-0 items-start gap-4">
           <div
             className={cn(
@@ -104,7 +118,7 @@ export function CampaignFcfsRewardCard({
             )}
           </div>
           <div className="min-w-0">
-            <p className="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
               {sectionLabel}
             </p>
             <p className="mt-1 text-base font-bold leading-snug text-[var(--foreground)]">
@@ -135,7 +149,7 @@ export function CampaignFcfsRewardCard({
       </div>
 
       {mode === "claim" && !partyId ? (
-        <p className="mt-4 text-sm font-medium text-orange-300">
+        <p className="relative mt-4 text-sm font-medium text-orange-300">
           <Link href="/wallet" className="font-semibold underline underline-offset-2">
             Create your wallet
           </Link>{" "}
@@ -146,10 +160,9 @@ export function CampaignFcfsRewardCard({
       {deliveryKind ? (
         <p
           className={cn(
-            "mt-4 inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-medium",
-            deliveryKind === "direct"
-              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-              : "border-amber-500/30 bg-amber-500/10 text-amber-300",
+            "relative mt-4 inline-flex items-center gap-2",
+            successBannerClass,
+            deliveryKind === "direct" ? "" : "border-amber-500/30 bg-amber-500/10 text-amber-300",
           )}
         >
           {deliveryKind === "direct" ? (
@@ -167,16 +180,14 @@ export function CampaignFcfsRewardCard({
       ) : null}
 
       {error ? (
-        <p className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-300">
-          {error}
-        </p>
+        <p className={cn("relative mt-4", errorBannerClass)}>{error}</p>
       ) : null}
 
       {success ? (
-        <p className="mt-4 whitespace-pre-line rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-300">
+        <p className={cn("relative mt-4 whitespace-pre-line", successBannerClass)}>
           {success}
         </p>
       ) : null}
-    </section>
+    </Card>
   );
 }

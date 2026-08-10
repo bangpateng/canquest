@@ -102,19 +102,28 @@ export function SettingsTwitterPanel({
   return (
     <Card
       id="twitter"
-      className="scroll-mt-8 overflow-hidden"
+      className="relative scroll-mt-8 overflow-hidden"
     >
-      {/* Section Header */}
-      <div className="border-b border-[var(--border)] bg-[var(--muted)]/30 px-5 py-4 sm:px-6 sm:py-5 md:px-8">
-        <div>
-          <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] bg-[var(--muted)] px-2.5 py-1 rounded-full border border-[var(--border)]">
-            X (Twitter)
-          </span>
-          <p className="mt-1 text-xs text-[var(--muted-foreground)]">Connect for quest verification</p>
-        </div>
-      </div>
+      {/* Ambient glow */}
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(ellipse 80% 60% at 50% 0%, rgb(var(--canton-rgb) / 0.10), transparent 70%)",
+        }}
+        aria-hidden
+      />
 
-      <div className="p-5 sm:p-6 md:p-8">
+      <div className="relative p-6 sm:p-7">
+        {/* Section header */}
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+          X (Twitter)
+        </p>
+        <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+          Connect for quest verification
+        </p>
+
+        <div className="mt-5 sm:mt-6">
         {status.apiConfigured === false ? (
           <p className="rounded-xl border border-orange-500/20 bg-orange-500/5 px-5 py-4 text-sm font-medium text-orange-200">
             Twitter verification is not configured on this server yet.
@@ -122,10 +131,15 @@ export function SettingsTwitterPanel({
         ) : null}
 
         {status.connected && status.username ? (
-          <div className="rounded-xl border border-emerald-500/15 bg-emerald-500/5 px-5 py-4 sm:px-6 sm:py-5">
+          <div className="rounded-xl border border-canton-muted bg-canton-subtle px-5 py-4 sm:px-6 sm:py-5">
             <div className="flex items-center gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--primary)]/15 ring-1 ring-[var(--primary)]/20">
+                <AtSign className="h-4 w-4 text-canton" />
+              </span>
               <div>
-                <p className="text-xs font-semibold text-emerald-300/80 uppercase tracking-wider">Connected</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-canton-muted">
+                  Connected
+                </p>
                 <p className="mt-0.5 font-mono text-base font-semibold text-[var(--foreground)]">
                   @{status.username}
                 </p>
@@ -140,11 +154,14 @@ export function SettingsTwitterPanel({
         ) : (
           <form onSubmit={(e) => void handleConnect(e)} className="space-y-4">
             <div>
-              <label htmlFor="twitter-handle" className="text-sm font-semibold text-[var(--muted-foreground)] flex items-center gap-1.5">
+              <label
+                htmlFor="twitter-handle"
+                className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]"
+              >
                 <AtSign className="h-3.5 w-3.5" />
                 X username
               </label>
-              <div className="mt-2 flex rounded-xl border border-[var(--border)] bg-[var(--muted)] transition-colors focus-within:border-[var(--primary)]/50">
+              <div className="mt-2 flex rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 transition-colors focus-within:border-[var(--primary)]/50">
                 <span className="flex items-center pl-4 text-base font-medium text-[var(--muted-foreground)]">@</span>
                 <input
                   id="twitter-handle"
@@ -169,6 +186,7 @@ export function SettingsTwitterPanel({
             </button>
           </form>
         )}
+        </div>
 
         {error ? (
           <p className="mt-5 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm font-medium text-red-300 sm:mt-6 sm:px-5 sm:py-4">
@@ -176,7 +194,7 @@ export function SettingsTwitterPanel({
           </p>
         ) : null}
         {success ? (
-          <p className="mt-4 text-sm font-semibold text-emerald-400 flex items-center gap-1.5">
+          <p className="mt-4 flex items-center gap-1.5 text-sm font-semibold text-emerald-400">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
             {success}
           </p>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect } from "react";
 import { Sparkles, Wallet, X } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils/utils";
 
 const WALLET_FEATURES = [
@@ -47,17 +48,27 @@ export function WalletCreatePromptModal({
         aria-label="Close"
         onClick={onClose}
       />
-      <div className="relative w-full max-w-md rounded-3xl border border-orange-500/25 bg-[var(--card)] p-8 shadow-2xl shadow-black/40">
+      <Card className="relative w-full max-w-md overflow-hidden p-8">
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(ellipse 80% 60% at 50% 0%, rgb(var(--canton-rgb) / 0.10), transparent 70%)",
+          }}
+          aria-hidden
+        />
         <button
           type="button"
           onClick={onClose}
-          className="absolute right-4 top-4 rounded-2xl p-2 text-slate-400 transition-colors hover:bg-[var(--muted)] hover:text-slate-100"
+          className="absolute right-4 top-4 z-10 rounded-2xl p-2 text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
           aria-label="Close"
         >
           <X className="h-5 w-5" />
         </button>
-        <WalletCreatePromptContent onDismiss={onClose} />
-      </div>
+        <div className="relative">
+          <WalletCreatePromptContent onDismiss={onClose} />
+        </div>
+      </Card>
     </div>
   );
 }
@@ -70,14 +81,14 @@ function WalletCreatePromptContent({
   return (
     <div className="pt-2">
       <div className="flex items-start gap-4">
-        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-orange-500/15 ring-1 ring-orange-500/25">
-          <Wallet className="h-6 w-6 text-orange-300" aria-hidden />
+        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-canton-muted bg-canton-subtle">
+          <Wallet className="h-6 w-6 text-canton" aria-hidden />
         </span>
         <div className="min-w-0 flex-1 pr-8">
-          <p id="wallet-create-prompt-title" className="text-lg font-bold text-orange-100">
+          <p id="wallet-create-prompt-title" className="type-card-title text-[var(--foreground)]">
             Create your wallet first
           </p>
-          <p className="mt-2 text-sm font-medium text-orange-200/85">
+          <p className="mt-2 text-sm font-medium text-[var(--muted-foreground)]">
             Needed to access Earn campaigns.
           </p>
         </div>
@@ -87,12 +98,12 @@ function WalletCreatePromptContent({
         {WALLET_FEATURES.map(({ icon: Icon, label, desc }) => (
           <li
             key={label}
-            className="flex items-center gap-3 rounded-2xl border border-white/5 bg-[var(--background)]/50 px-4 py-3"
+            className="flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--muted)]/50 px-4 py-3"
           >
             <Icon className="h-5 w-5 shrink-0 text-canton" aria-hidden />
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-slate-100">{label}</p>
-              <p className="text-xs font-medium text-slate-400">{desc}</p>
+              <p className="text-sm font-semibold text-[var(--foreground)]">{label}</p>
+              <p className="text-xs font-medium text-[var(--muted-foreground)]">{desc}</p>
             </div>
           </li>
         ))}
@@ -114,7 +125,7 @@ function WalletCreatePromptContent({
           onClick={onDismiss}
           className={cn(
             buttonVariants({ size: "sm", variant: "ghost" }),
-            "rounded-2xl text-slate-400",
+            "rounded-2xl text-[var(--muted-foreground)]",
           )}
         >
           Not now

@@ -107,36 +107,47 @@ export function SettingsPreapprovalPanel() {
   return (
     <Card
       id="preapproval"
-      className="scroll-mt-8 overflow-hidden"
+      className="relative scroll-mt-8 overflow-hidden"
     >
-      {/* Section Header — clickable to collapse/expand */}
-      <button
-        type="button"
-        onClick={() => setCollapsed((c) => !c)}
-        className="flex w-full items-center justify-between border-b border-[var(--border)] bg-[var(--muted)]/30 px-5 py-4 sm:px-6 sm:py-5 md:px-8 transition hover:bg-[var(--muted)]/50"
-      >
-        <div className="text-left">
-          <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] bg-[var(--muted)] px-2.5 py-1 rounded-full border border-[var(--border)]">
-            One Step Transfer
-          </span>
-          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-            Auto-accept incoming transfers without manual approval
-          </p>
-        </div>
-        <ChevronDown
-          className={cn(
-            "h-5 w-5 shrink-0 text-[var(--muted-foreground)] transition-transform duration-200",
-            collapsed ? "" : "rotate-180",
-          )}
-        />
-      </button>
-
+      {/* Ambient glow */}
       <div
-        className={cn(
-          "p-5 sm:p-6 md:p-8 space-y-4",
-          collapsed && "hidden",
-        )}
-      >
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(ellipse 80% 60% at 100% 0%, rgb(var(--canton-rgb) / 0.10), transparent 70%)",
+        }}
+        aria-hidden
+      />
+
+      <div className="relative">
+        {/* Section header — clickable to collapse/expand */}
+        <button
+          type="button"
+          onClick={() => setCollapsed((c) => !c)}
+          className="flex w-full items-center justify-between p-6 transition-colors hover:bg-[var(--primary)]/[0.04] sm:p-7"
+        >
+          <div className="text-left">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+              One Step Transfer
+            </p>
+            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+              Auto-accept incoming transfers without manual approval
+            </p>
+          </div>
+          <ChevronDown
+            className={cn(
+              "h-5 w-5 shrink-0 text-canton transition-transform duration-200",
+              collapsed ? "" : "rotate-180",
+            )}
+          />
+        </button>
+
+        <div
+          className={cn(
+            "space-y-3 px-6 pb-6 sm:space-y-4 sm:px-7 sm:pb-7",
+            collapsed && "hidden",
+          )}
+        >
         {loading ? (
           <div className="flex items-center gap-3 text-sm text-[var(--muted-foreground)]">
             <LoadingSpinner size="sm" tone="muted" />
@@ -176,6 +187,7 @@ export function SettingsPreapprovalPanel() {
             {success}
           </p>
         ) : null}
+        </div>
       </div>
     </Card>
   );
@@ -206,8 +218,8 @@ function TokenToggleRow({
 }) {
   const instrumentId = TOKEN_INSTRUMENT_ID[token];
   return (
-    <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[var(--border)] bg-[var(--muted)]/30 px-4 py-3">
-      <div className="flex items-center gap-3 min-w-0">
+    <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3.5 transition-colors hover:border-[var(--primary)]/25 sm:px-5">
+      <div className="flex min-w-0 items-center gap-3">
         <TokenLogo symbol={instrumentId} size="sm" />
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -216,7 +228,7 @@ function TokenToggleRow({
                 "text-sm font-semibold",
                 enabled
                   ? active
-                    ? "text-emerald-300/80"
+                    ? "text-canton"
                     : "text-[var(--foreground)]"
                   : "text-[var(--muted-foreground)]",
               )}
@@ -237,7 +249,7 @@ function TokenToggleRow({
               : `${token} auto-accept — not yet available`}
           </p>
           {enabled && active && expiresAt && (
-            <p className="mt-1 text-xs text-[var(--muted-foreground)]/70">
+            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
               Expires {new Date(expiresAt).toLocaleDateString()}
             </p>
           )}

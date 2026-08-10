@@ -23,6 +23,8 @@ import { CampaignFcfsRewardCard } from "@/components/app/campaign/campaign-fcfs-
 import { CampaignQuestStatusCard } from "@/components/app/campaign/campaign-quest-status-card";
 import { RewardReveal } from "@/components/app/campaign/reward-reveal";
 import { buttonVariants } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { errorBannerClass, successBannerClass, warnBannerClass } from "@/lib/ui/ui-tokens";
 import { cn } from "@/lib/utils/utils";
 import { Check, ChevronDown, Copy, Shield } from "lucide-react";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
@@ -110,10 +112,12 @@ export function QuestSubmitSection({
 
   return (
     <section className="py-6">
-      <div className="text-center">
+      <Card className="relative overflow-hidden px-6 py-8 text-center">
+        {/* Ambient glow — canton-tinted, draws the eye to the submit CTA. */}
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_100%_at_50%_0%,rgb(var(--canton-rgb)/0.12),transparent_60%)]" />
 
         {campaignEnded ? (
-          <p className="mx-auto mt-6 max-w-md text-sm font-medium text-orange-300">
+          <p className={cn("relative mx-auto mt-2 max-w-md", warnBannerClass)}>
             {t("quests.campaignEndedClosed")}
           </p>
         ) : null}
@@ -123,8 +127,8 @@ export function QuestSubmitSection({
           disabled={submitting || !partyId || campaignEnded}
           onClick={onSubmit}
           className={cn(
-            buttonVariants({ size: "sm" }),
-            "min-w-[8rem] bg-emerald-500 px-5 font-bold hover:bg-emerald-400",
+            buttonVariants({ size: "default" }),
+            "relative min-w-[8rem] px-5",
           )}
         >
           {submitting ? <LoadingSpinner size="sm" /> : null}
@@ -132,7 +136,7 @@ export function QuestSubmitSection({
         </button>
 
         {!partyId && (
-          <p className="mt-6 text-sm font-medium text-orange-300">
+          <p className={cn("relative mt-6", warnBannerClass)}>
             <Link href="/wallet" className="font-semibold underline underline-offset-2">
               Create your wallet
             </Link>{" "}
@@ -140,11 +144,11 @@ export function QuestSubmitSection({
           </p>
         )}
         {submitError && (
-          <p className="mx-auto mt-6 max-w-md rounded-2xl border border-red-500/30 bg-red-500/10 px-6 py-3 text-sm font-medium text-red-300">
+          <p className={cn("relative mx-auto mt-6 max-w-md", errorBannerClass)}>
             {submitError}
           </p>
         )}
-      </div>
+      </Card>
     </section>
   );
 }
@@ -235,25 +239,31 @@ export function QuestSubmittedProof({
 
   if (uiKind === "waitlist_email" && state === "winner") {
     return (
-      <section className="rounded-2xl border border-white/[0.06] bg-[var(--card)] p-8 text-center">
-        <PageTitle>Congratulations — you&apos;re selected!</PageTitle>
-        <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted-foreground)]">
-          {rewardStatus?.message ??
-            "You were selected in the draw. Check your email or the message below for next steps."}
-        </p>
-      </section>
+      <Card className="relative overflow-hidden p-8 text-center">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_100%_at_50%_0%,rgb(var(--canton-rgb)/0.12),transparent_60%)]" />
+        <div className="relative">
+          <PageTitle>Congratulations — you&apos;re selected!</PageTitle>
+          <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted-foreground)]">
+            {rewardStatus?.message ??
+              "You were selected in the draw. Check your email or the message below for next steps."}
+          </p>
+        </div>
+      </Card>
     );
   }
 
   if (uiKind === "waitlist_email" && state === "waitlist") {
     return (
-      <section className="rounded-2xl border border-white/[0.06] bg-[var(--card)] p-8 text-center">
-        <PageTitle>You&apos;re on the waitlist</PageTitle>
-        <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted-foreground)]">
-          {rewardStatus?.message ??
-            "Your email is registered. We will contact you if you are selected."}
-        </p>
-      </section>
+      <Card className="relative overflow-hidden p-8 text-center">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_100%_at_50%_0%,rgb(var(--canton-rgb)/0.08),transparent_60%)]" />
+        <div className="relative">
+          <PageTitle>You&apos;re on the waitlist</PageTitle>
+          <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted-foreground)]">
+            {rewardStatus?.message ??
+              "Your email is registered. We will contact you if you are selected."}
+          </p>
+        </div>
+      </Card>
     );
   }
 
@@ -279,16 +289,17 @@ export function QuestSubmittedProof({
 
   if (uiKind === "cc_and_code_raffle" && state === "cc_reward") {
     return (
-      <section className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[var(--card)] p-6">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-emerald-400/80">
+      <Card className="relative overflow-hidden p-6">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_80%_at_0%_0%,rgb(var(--canton-rgb)/0.12),transparent_60%)]" />
+        <div className="relative">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-canton">
             Token Raffle
           </p>
-          <p className="mt-0.5 text-base font-bold text-white">Reward claimed</p>
+          <p className="mt-0.5 text-base font-bold text-[var(--foreground)]">Reward claimed</p>
         </div>
-        <div className="mt-4 space-y-3">
+        <div className="relative mt-4 space-y-3">
           {/* Reward row */}
-          <div className="flex items-center gap-3 rounded-xl border border-[var(--primary)]/20 bg-[var(--primary)]/10 px-4 py-3">
+          <div className="flex items-center gap-3 rounded-xl border border-canton-muted bg-canton-subtle px-4 py-3">
             <span className="text-sm font-bold text-canton">+{formatRewardAmount(rewardCc ?? 0, token)} sent to your wallet</span>
           </div>
           {/* Invite code row — konsisten dengan claim card (RewardReveal). */}
@@ -300,12 +311,12 @@ export function QuestSubmittedProof({
               redeemInstructions={redeemInstructions}
             />
           ) : (
-            <p className="text-sm text-slate-400">
+            <p className="text-sm text-[var(--muted-foreground)]">
               {rewardStatus?.message ?? `${formatRewardAmount(rewardCc ?? 0, token)} and your invite code have been sent.`}
             </p>
           )}
         </div>
-      </section>
+      </Card>
     );
   }
 
@@ -333,13 +344,16 @@ export function QuestSubmittedProof({
 
   if (uiKind === "cc_manual" && state === "cc_reward") {
     return (
-      <section className="rounded-2xl border border-white/[0.06] bg-[var(--card)] p-8 text-center">
-        <PageTitle className="text-2xl font-bold text-slate-100">Campaign complete</PageTitle>
-        <p className="mx-auto mt-3 max-w-md text-sm font-medium text-slate-400">
-          {rewardStatus?.message ??
-            `${formatRewardAmount(rewardCc ?? 0, token)} will be sent manually by the team via bulk sender. Watch your wallet and email.`}
-        </p>
-      </section>
+      <Card className="relative overflow-hidden p-8 text-center">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_100%_at_50%_0%,rgb(var(--canton-rgb)/0.12),transparent_60%)]" />
+        <div className="relative">
+          <PageTitle>Campaign complete</PageTitle>
+          <p className="mx-auto mt-3 max-w-md text-sm font-medium text-[var(--muted-foreground)]">
+            {rewardStatus?.message ??
+              `${formatRewardAmount(rewardCc ?? 0, token)} will be sent manually by the team via bulk sender. Watch your wallet and email.`}
+          </p>
+        </div>
+      </Card>
     );
   }
 
@@ -361,7 +375,7 @@ export function QuestSubmittedProof({
   return (
     <div className="space-y-6">
         {uiKind === "waitlist_code" && state === "winner" && inviteCode ? (
-          <p className="text-sm font-medium text-violet-300">
+          <p className={cn("rounded-2xl px-6 py-4 text-center text-sm font-medium", successBannerClass)}>
             {t("earnCampaigns.congratsWinnerCode")}
           </p>
         ) : null}
@@ -378,7 +392,7 @@ export function QuestSubmittedProof({
 
         {/* Pesan custom pemenang (CC_AND_INVITE legacy / waitlist code winner). */}
         {isCcAndInvite && rewardStatus?.message ? (
-          <p className="rounded-2xl border border-white/5 bg-[var(--muted)]/40 px-6 py-4 text-center text-sm font-medium text-slate-100">
+          <p className="rounded-2xl border border-[var(--border)] bg-[var(--muted)]/40 px-6 py-4 text-center text-sm font-medium text-[var(--foreground)]">
             {rewardStatus.message}
           </p>
         ) : null}
@@ -387,34 +401,34 @@ export function QuestSubmittedProof({
           rewardStatus?.message &&
           !inviteCode &&
           uiKind !== "cc_fcfs" && (
-          <p className="rounded-2xl border border-white/5 bg-[var(--muted)]/40 px-6 py-4 text-center text-sm font-medium text-slate-100">
+          <p className="rounded-2xl border border-[var(--border)] bg-[var(--muted)]/40 px-6 py-4 text-center text-sm font-medium text-[var(--foreground)]">
             {rewardStatus.message}
           </p>
         )}
 
         {(participationId || completionId) && (
-          <div className="overflow-hidden rounded-2xl border border-white/5 bg-[var(--card)]/80">
+          <Card bare className="overflow-hidden rounded-2xl ring-1 ring-[var(--border)]">
             <button
               type="button"
               onClick={() => setProofOpen((o) => !o)}
               className="flex w-full items-center justify-between gap-4 px-6 py-4 text-left transition-colors hover:bg-[var(--muted)]/30"
             >
-              <span className="flex items-center gap-3 text-xs font-bold uppercase tracking-wider text-slate-400">
+              <span className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
                 <Shield className="h-4 w-4" />
                 On-chain proof
                 {taskCount > 0 ? (
-                  <span className="font-normal normal-case tracking-normal text-slate-400">
+                  <span className="font-normal normal-case tracking-normal text-[var(--muted-foreground)]">
                     · {taskCount} task{taskCount === 1 ? "" : "s"}
                   </span>
                 ) : null}
               </span>
               <span className="flex items-center gap-3">
-                <code className="font-mono text-sm font-medium text-slate-400">
+                <code className="font-mono text-sm font-medium text-[var(--muted-foreground)]">
                   {shortLedgerId(participationId ?? completionId ?? "")}
                 </code>
                 <ChevronDown
                   className={cn(
-                    "h-5 w-5 text-slate-400 transition-transform",
+                    "h-5 w-5 text-[var(--muted-foreground)] transition-transform",
                     proofOpen && "rotate-180",
                   )}
                 />
@@ -424,7 +438,7 @@ export function QuestSubmittedProof({
               <div className="space-y-3 border-t border-[var(--border)] bg-[var(--muted)]/20 px-4 py-3">
                 {participationId ? (
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
                       QuestParticipation
                     </p>
                     <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -437,7 +451,7 @@ export function QuestSubmittedProof({
                 ) : null}
                 {completionId ? (
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
                       QuestCompletion
                     </p>
                     <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -450,11 +464,11 @@ export function QuestSubmittedProof({
                 ) : null}
               </div>
             )}
-          </div>
+          </Card>
         )}
 
       {ledger && ledger.errors.length > 0 && (
-        <div className="rounded-xl border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-xs text-orange-200">
+        <div className={cn("text-xs", warnBannerClass)}>
           {ledger.errors.join(" · ")}
         </div>
       )}

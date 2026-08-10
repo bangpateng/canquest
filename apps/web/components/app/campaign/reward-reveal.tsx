@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Check, Copy, Sparkles, Ticket } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils/utils";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { RewardHowToUse } from "@/components/app/campaign/reward-how-to-use";
@@ -56,14 +57,16 @@ export function RewardReveal({
   const isWaitlist = config.code === "WAITLIST_EMAIL";
 
   return (
-    <div
+    <Card
       className={cn(
-        "rounded-2xl border border-white/[0.06] bg-[var(--card)] p-5",
+        "relative overflow-hidden p-5",
         className,
       )}
     >
+      {/* Ambient glow — canton-tinted, subtle. */}
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_80%_at_0%_0%,rgb(var(--canton-rgb)/0.12),transparent_60%)]" />
       {/* Header */}
-      <div className="flex items-center gap-3">
+      <div className="relative flex items-center gap-3">
         {/* Dual reward (CC + Code): tampilkan CC logo + icon code berdampingan
             untuk menandakan kedua jenis reward. Fungsi raffle (ada pemenang CC
             & ada pemenang code) tidak berubah — ini murni tampilan icon header. */}
@@ -103,7 +106,7 @@ export function RewardReveal({
       </div>
 
       {/* Reward rows */}
-      <div className="mt-4 space-y-4">
+      <div className="relative mt-4 space-y-4">
         {rewardCc ? (
           <div className="flex items-baseline justify-between gap-3">
             <p className="font-mono text-lg font-bold tabular-nums text-canton">
@@ -139,11 +142,11 @@ export function RewardReveal({
           inviteCode={inviteCode}
           redeemUrl={redeemUrl}
           redeemInstructions={redeemInstructions}
-          className="mt-4 border-t border-white/[0.06] pt-4"
+          className="relative mt-4 border-t border-[var(--border)] pt-4"
           flat
         />
       ) : null}
-    </div>
+    </Card>
   );
 }
 

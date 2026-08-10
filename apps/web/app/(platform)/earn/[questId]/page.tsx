@@ -14,6 +14,7 @@ import { formatRewardAmount } from "@/lib/canton/campaign-reward";
 import { getRewardConfig } from "@/lib/quest/quest-engine";
 import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { SectionTitle } from "@/components/ui/typography";
 import { surfaceCardClass } from "@/lib/ui/ui-tokens";
 import { cn } from "@/lib/utils/utils";
 import { ArrowLeft } from "lucide-react";
@@ -30,7 +31,7 @@ function StatusPill({ status, label }: { status: Quest["status"]; label: string 
       "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider backdrop-blur-md",
       status === "ACTIVE" && "border border-emerald-500/30 bg-emerald-500/20 text-emerald-300",
       status === "COMING_SOON" && "border border-cyan-500/30 bg-cyan-500/20 text-cyan-300",
-      status === "ENDED" && "border border-white/15 bg-black/40 text-slate-300",
+      status === "ENDED" && "border border-[var(--border)] bg-[var(--muted)]/60 text-[var(--muted-foreground)]",
     )}>
       <span className={cn(
         "relative flex h-1.5 w-1.5",
@@ -40,7 +41,7 @@ function StatusPill({ status, label }: { status: Quest["status"]; label: string 
       )}>
         <span className={cn(
           "relative inline-flex h-1.5 w-1.5 rounded-full",
-          status === "ACTIVE" ? "bg-emerald-400" : status === "COMING_SOON" ? "bg-cyan-400" : "bg-slate-500",
+          status === "ACTIVE" ? "bg-emerald-400" : status === "COMING_SOON" ? "bg-cyan-400" : "bg-[var(--muted-foreground)]",
         )} />
       </span>
       {label}
@@ -142,7 +143,7 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
               className="absolute inset-0 bg-cover bg-center"
               style={{ backgroundImage: `url("${quest.bannerImageUrl}")` }}
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#0a0c14] via-[#0a0c14]/50 to-[#0a0c14]/20" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[var(--background)] via-[var(--background)]/50 to-[var(--background)]/20" />
             {/* Status + Type badges float over banner — top-left */}
             <div className="absolute left-3 top-3 flex items-center gap-1.5 sm:left-4 sm:top-4">
               <StatusPill status={quest.status} label={statusMeta.label} />
@@ -185,8 +186,8 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
           )}>
             {/* Logo */}
             <div className={cn(
-              "relative shrink-0 overflow-hidden rounded-2xl bg-[var(--muted)] shadow-lg ring-2 ring-white/10",
-              quest.bannerImageUrl ? "h-16 w-16 border-4 border-[#0a0c14] sm:h-20 sm:w-20" : "h-12 w-12 sm:h-16 sm:w-16",
+              "relative shrink-0 overflow-hidden rounded-2xl bg-[var(--muted)] shadow-lg ring-2 ring-[var(--border)]",
+              quest.bannerImageUrl ? "h-16 w-16 border-4 border-[var(--background)] sm:h-20 sm:w-20" : "h-12 w-12 sm:h-16 sm:w-16",
             )}>
               {quest.logoUrl ? (
                 <img src={quest.logoUrl} alt="" className="h-full w-full object-cover" />
@@ -199,8 +200,8 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
 
             {/* Org + Title — vertically centered with logo */}
             <div className="min-w-0 flex-1">
-              <p className="break-words text-xs font-semibold text-slate-400">{quest.org}</p>
-              <h1 className="mt-0.5 line-clamp-2 break-words text-lg font-bold leading-tight text-white sm:text-xl">
+              <p className="break-words text-xs font-semibold text-[var(--muted-foreground)]">{quest.org}</p>
+              <h1 className="mt-0.5 line-clamp-2 break-words text-lg font-bold leading-tight text-[var(--foreground)] sm:text-xl">
                 {quest.title}
               </h1>
             </div>
@@ -215,9 +216,9 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
 
           {/* Description + social links — inside header */}
           {(quest.description || (quest.socialLinks && quest.socialLinks.length > 0)) && (
-            <div className="mt-4 grid gap-3 border-t border-white/[0.05] pt-4 sm:grid-cols-[1fr_auto] sm:items-center">
+            <div className="mt-4 grid gap-3 border-t border-[var(--border)] pt-4 sm:grid-cols-[1fr_auto] sm:items-center">
               {quest.description && (
-                <p className="text-sm leading-relaxed text-slate-400">
+                <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
                   {quest.description}
                 </p>
               )}
@@ -240,10 +241,10 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
             <QuestTaskPanel quest={quest} />
           </>
         ) : (
-          <div className={cn(surfaceCardClass, "bg-[#0a0c14]/80 p-5 text-center")}>
+          <div className={cn(surfaceCardClass, "p-5 text-center")}>
             <div>
-              <h2 className="text-lg font-semibold text-white">Sign in to participate</h2>
-              <p className="mt-2 text-sm text-slate-400 max-w-sm mx-auto">
+              <SectionTitle>Sign in to participate</SectionTitle>
+              <p className="mt-2 text-sm text-[var(--muted-foreground)] max-w-sm mx-auto">
                 You need an account to complete missions and claim rewards.
               </p>
             </div>

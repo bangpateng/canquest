@@ -32,25 +32,39 @@ function SettingsField({
   mono?: boolean;
   loading?: boolean;
 }) {
+  // Read-only field rendered as a clean info row (label left, value right)
+  // to match the glassmorphism look. The underlying <input> stays read-only
+  // so semantics/focus behaviour are preserved.
   return (
-    <div>
-      <label
-        className="text-xs font-semibold text-[var(--muted-foreground)] sm:text-sm flex items-center gap-1.5"
-        htmlFor={id}
+    <label
+      htmlFor={id}
+      className="group flex items-center justify-between gap-4 rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3.5 transition-colors hover:border-[var(--primary)]/30 sm:px-5"
+    >
+      <span className="flex min-w-0 items-center gap-2.5">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]/15">
+          <Icon className="h-4 w-4 text-canton" />
+        </span>
+        <span className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] sm:text-[13px]">
+          {label}
+        </span>
+      </span>
+      <span
+        className={`min-w-0 truncate text-right font-semibold text-[var(--foreground)] ${
+          mono ? "font-mono text-xs sm:text-sm" : "text-sm sm:text-[15px]"
+        }`}
       >
-        <Icon className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
-        {label}
-      </label>
-      <input
-        id={id}
-        readOnly
-        value={loading ? "" : value}
-        placeholder={loading ? "Loading…" : placeholder}
-        className={`mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--muted)] px-4 py-2.5 ${
-          mono ? "font-mono text-xs sm:text-sm" : "text-sm sm:text-base"
-        } font-medium text-[var(--foreground)] outline-none transition-colors focus:border-[var(--primary)]/50 sm:py-3`}
-      />
-    </div>
+        {loading ? (
+          <span className="text-[var(--muted-foreground)]">Loading…</span>
+        ) : value ? (
+          value
+        ) : (
+          <span className="font-medium text-[var(--muted-foreground)]">{placeholder}</span>
+        )}
+      </span>
+      {/* Visually hidden read-only input keeps the htmlFor semantics / a11y
+          relationship intact without changing the visual layer. */}
+      <input id={id} readOnly value={loading ? "" : value} className="sr-only" tabIndex={-1} aria-hidden />
+    </label>
   );
 }
 
@@ -62,20 +76,26 @@ export function SettingsAccountPanel() {
   const errorMsg = isError ? formatApiError(error) : null;
 
   return (
-    <Card className="w-full max-w-full overflow-hidden">
-      {/* Section Header */}
-      <div className="border-b border-white/[0.06] bg-white/[0.01] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
-        <div>
-          <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] bg-[var(--muted)] px-2.5 py-1 rounded-full border border-[var(--border)]">
-            Profile
-          </span>
-        </div>
-      </div>
+    <Card className="relative w-full max-w-full overflow-hidden">
+      {/* Ambient glow */}
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(ellipse 80% 60% at 0% 0%, rgb(var(--canton-rgb) / 0.10), transparent 70%)",
+        }}
+        aria-hidden
+      />
 
-      <div className="p-5 sm:p-6 md:p-8">
-        {/* Twitter Avatar Row */}
+      <div className="relative p-6 sm:p-7">
+        {/* Section header */}
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+          Profile
+        </p>
+
+        {/* Twitter avatar row */}
         {me?.twitterUsername && me?.avatarUrl ? (
-          <div className="mb-6 flex items-center gap-4 rounded-xl border border-[var(--border)] bg-[var(--muted)] p-4 sm:mb-8 sm:gap-5 sm:p-5">
+          <div className="mt-5 flex items-center gap-4 rounded-xl border border-canton-muted bg-canton-subtle p-4 sm:mt-6 sm:gap-5 sm:p-5">
             <img
               src={me.avatarUrl}
               alt=""
@@ -84,18 +104,18 @@ export function SettingsAccountPanel() {
               className="h-14 w-14 shrink-0 rounded-full object-cover ring-2 ring-[var(--primary)]/20 sm:h-16 sm:w-16"
             />
             <div className="min-w-0">
-              <p className="text-base font-semibold text-[var(--foreground)] sm:text-lg truncate">
+              <p className="truncate text-base font-semibold text-[var(--foreground)] sm:text-lg">
                 {me.displayName ?? me.twitterUsername}
               </p>
-              <p className="mt-1 text-sm font-medium text-[var(--muted-foreground)] truncate">
+              <p className="mt-1 truncate text-sm font-medium text-canton-muted">
                 @{me.twitterUsername}
               </p>
             </div>
           </div>
         ) : null}
 
-        {/* Fields Grid */}
-        <div className="grid gap-4 sm:grid-cols-2 sm:gap-5 md:gap-6">
+        {/* Fields grid */}
+        <div className="mt-5 grid gap-3 sm:mt-6 sm:grid-cols-2 sm:gap-4">
           <SettingsField
             id="settings-email"
             label="Email"
