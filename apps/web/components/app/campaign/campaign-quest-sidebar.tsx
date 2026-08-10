@@ -4,6 +4,7 @@ import { getQuestMeta } from "@/lib/quest/quest-engine";
 import { formatCodePerWinners, formatCodePoolLabel, formatRewardAmount } from "@/lib/canton/campaign-reward";
 import { questRewardToken } from "@/lib/quest/quest-types";
 import type { Quest } from "@/lib/quest/quest-types";
+import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils/utils";
 import {
   Calendar,
@@ -39,7 +40,7 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
   const { config, rewardDisplay, slots, metrics } = meta;
   const summary = quest.campaignSummary;
 
-  const VALUE_CLS = "text-base font-bold text-white";
+  const VALUE_CLS = "text-base font-bold text-[var(--foreground)]";
 
   // ── Reward / winner value ──────────────────────────────────────
   let rewardPerWinner: React.ReactNode;
@@ -50,9 +51,9 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
           <RewardTokenLogo token={token} size={18} />
           <span className={VALUE_CLS}>{quest.rewardCc > 0 ? formatRewardAmount(quest.rewardCc, token) : token}</span>
         </div>
-        <span className="text-sm font-semibold text-slate-500">+</span>
+        <span className="text-sm font-semibold text-[var(--muted-foreground)]">+</span>
         <div className="flex items-center gap-1.5">
-          <Ticket className="h-4 w-4 text-violet-300" aria-hidden />
+          <Ticket className="h-4 w-4 text-canton" aria-hidden />
           <span className={VALUE_CLS}>1 Code</span>
         </div>
       </div>
@@ -69,14 +70,14 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
   } else if (config.code === "INVITE_CODE_FCFS" || config.code === "INVITE_CODE_RANDOM") {
     rewardPerWinner = (
       <div className="flex items-center gap-1.5">
-        <Ticket className="h-4 w-4 text-violet-300" aria-hidden />
+        <Ticket className="h-4 w-4 text-canton" aria-hidden />
         <span className={VALUE_CLS}>{formatCodePerWinners()}</span>
       </div>
     );
   } else if (config.code === "WAITLIST_EMAIL") {
     rewardPerWinner = (
       <div className="flex items-center gap-1.5">
-        <Sparkles className="h-4 w-4 text-cyan-300" aria-hidden />
+        <Sparkles className="h-4 w-4 text-canton" aria-hidden />
         <span className={VALUE_CLS}>Waitlist spot</span>
       </div>
     );
@@ -134,19 +135,20 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
   }
 
   return (
-    <section
-      className="relative w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-[var(--card)] backdrop-blur-2xl shadow-2xl shadow-black/40"
+    <Card
+      className="relative w-full overflow-hidden"
       aria-label="Campaign reward"
     >
-      {/* ── Reward highlight (single hero block) ──────────────────── */}
-      <div className="relative border-b border-white/[0.06]">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_90%_at_0%_0%,rgb(var(--canton-rgb)/0.10),transparent_60%)]" />
+      {/* Ambient brand glow over the reward highlight */}
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_90%_at_0%_0%,rgb(var(--canton-rgb)/0.10),transparent_60%)]" />
 
+      {/* ── Reward highlight (single hero block) ──────────────────── */}
+      <div className="relative border-b border-[var(--border)]">
         {/* Reward winner + Pool — 2 equal columns */}
-        <div className="relative grid grid-cols-2 gap-px bg-white/[0.04]">
+        <div className="relative grid grid-cols-2 gap-px bg-[var(--border)]">
           {/* Reward · winner */}
-          <div className="flex min-w-0 flex-col gap-1.5 bg-[var(--card)]/90 px-5 py-4 sm:px-6 sm:py-5">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 sm:text-xs">
+          <div className="flex min-w-0 flex-col gap-1.5 bg-[var(--card)] px-5 py-4 sm:px-6 sm:py-5">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)] sm:text-xs">
               Reward · winner
             </span>
             <div className="flex flex-wrap items-center gap-2">
@@ -156,8 +158,8 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
           </div>
 
           {/* Reward Pool */}
-          <div className="flex min-w-0 flex-col gap-1.5 bg-[var(--card)]/90 px-5 py-4 sm:px-6 sm:py-5">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 sm:text-xs">
+          <div className="flex min-w-0 flex-col gap-1.5 bg-[var(--card)] px-5 py-4 sm:px-6 sm:py-5">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)] sm:text-xs">
               Reward Pool
             </span>
             <div className="flex flex-wrap items-center gap-1.5">
@@ -169,7 +171,7 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
                 </>
               ) : config.code === "INVITE_CODE_FCFS" || config.code === "INVITE_CODE_RANDOM" ? (
                 <>
-                  <Ticket className="h-4 w-4 shrink-0 text-violet-400" />
+                  <Ticket className="h-4 w-4 shrink-0 text-canton" />
                   <span className={VALUE_CLS}>{poolDisplay}</span>
                 </>
               ) : (
@@ -187,11 +189,11 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
 
         {/* Claim fee row — single line, clear */}
         {claimFeeDisplay !== null ? (
-          <div className="relative flex items-center gap-2 bg-[var(--card)]/90 px-5 py-2.5 sm:px-6">
-            <span className="text-xs font-semibold text-slate-400">Claim fee</span>
+          <div className="relative flex items-center gap-2 bg-[var(--card)] px-5 py-2.5 sm:px-6">
+            <span className="text-xs font-semibold text-[var(--muted-foreground)]">Claim fee</span>
             <span className={cn(
               "ml-auto text-xs font-bold",
-              claimFeeDisplay === "Free" ? "text-emerald-400" : "text-amber-300",
+              claimFeeDisplay === "Free" ? "text-canton" : "text-[var(--foreground)]",
             )}>
               {claimFeeDisplay}
             </span>
@@ -201,17 +203,17 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
 
       {/* ── Slots progress (full-width when applicable) ──────────── */}
       {showSlotsProgress ? (
-        <div className="border-b border-white/[0.04] px-5 py-3 sm:px-6">
+        <div className="relative border-b border-[var(--border)] px-5 py-3 sm:px-6">
           <div className="mb-2 flex items-center justify-between text-xs">
-            <span className="inline-flex items-center gap-1.5 font-semibold text-slate-400">
-              {isFcfsType ? <Zap className="h-3.5 w-3.5" /> : <Users className="h-3.5 w-3.5" />}
+            <span className="inline-flex items-center gap-1.5 font-semibold text-[var(--muted-foreground)]">
+              {isFcfsType ? <Zap className="h-3.5 w-3.5 text-canton" /> : <Users className="h-3.5 w-3.5 text-canton" />}
               {slotsLabel}
             </span>
-            <span className="font-bold tabular-nums text-white">
-              {slotsValue}{slotsHint ? <span className="ml-1.5 text-[10px] font-medium text-slate-500">{slotsHint}</span> : null}
+            <span className="font-bold tabular-nums text-[var(--foreground)]">
+              {slotsValue}{slotsHint ? <span className="ml-1.5 text-[10px] font-medium text-[var(--muted-foreground)]">{slotsHint}</span> : null}
             </span>
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-white/[0.06]">
+          <div className="h-2 overflow-hidden rounded-full bg-[var(--muted)]">
             <div
               className={cn(
                 "h-full rounded-full transition-all duration-500",
@@ -228,7 +230,7 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
       ) : null}
 
       {/* ── Metrics (3 columns) ──────────────────────────────────── */}
-      <dl className="grid grid-cols-3 gap-px bg-white/[0.04]">
+      <dl className="relative grid grid-cols-3 gap-px bg-[var(--border)]">
         <MetricTile
           icon={isFcfsType ? Zap : Users}
           label={slotsLabel}
@@ -242,7 +244,7 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
           small
         />
       </dl>
-    </section>
+    </Card>
   );
 }
 
@@ -259,13 +261,13 @@ function MetricTile({
   small?: boolean;
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1.5 bg-[var(--card)]/90 px-4 py-3">
-      <dt className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-        <Icon className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+    <div className="flex min-w-0 flex-col gap-1.5 bg-[var(--card)] px-4 py-3">
+      <dt className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+        <Icon className="h-3 w-3 shrink-0 text-[var(--muted-foreground)]" aria-hidden />
         <span className="truncate">{label}</span>
       </dt>
       <dd className={cn(
-        "truncate font-bold text-slate-100",
+        "truncate font-bold text-[var(--foreground)]",
         small ? "text-xs leading-snug" : "text-sm",
       )}>
         {value}

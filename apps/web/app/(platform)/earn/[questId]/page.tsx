@@ -15,7 +15,6 @@ import { getRewardConfig } from "@/lib/quest/quest-engine";
 import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SectionTitle } from "@/components/ui/typography";
-import { surfaceCardClass } from "@/lib/ui/ui-tokens";
 import { cn } from "@/lib/utils/utils";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
@@ -241,14 +240,16 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
             <QuestTaskPanel quest={quest} />
           </>
         ) : (
-          <div className={cn(surfaceCardClass, "p-5 text-center")}>
-            <div>
+          <Card className="relative overflow-hidden p-5 text-center sm:p-6">
+            {/* Ambient brand glow */}
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_80%_at_50%_0%,rgb(var(--canton-rgb)/0.10),transparent_60%)]" />
+            <div className="relative">
               <SectionTitle>Sign in to participate</SectionTitle>
               <p className="mt-2 text-sm text-[var(--muted-foreground)] max-w-sm mx-auto">
                 You need an account to complete missions and claim rewards.
               </p>
             </div>
-            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-center">
+            <div className="relative mt-4 flex flex-col gap-2 sm:flex-row sm:justify-center">
               <Link
                 href={`/?auth=register&next=${encodeURIComponent(canonicalPath)}`}
                 className={buttonVariants()}
@@ -262,7 +263,7 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
                 Sign in
               </Link>
             </div>
-          </div>
+          </Card>
         )}
       </section>
     </PlatformPage>

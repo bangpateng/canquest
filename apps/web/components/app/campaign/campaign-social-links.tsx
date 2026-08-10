@@ -108,17 +108,15 @@ export function CampaignSocialLinks({ links, className }: Props) {
     <div className={cn("flex flex-wrap items-center gap-2", className)}>
       {links.map((link) => {
         const safe = safeSocialUrl(link.url);
-        // Render an inert span (no href) for disallowed schemes so the icon is
-        // still visible but is not clickable/weaponizable.
         if (!safe) {
           return (
             <span
               key={link.platform}
               title={`${platformLabel(link.platform)} (invalid link)`}
               aria-disabled
-              className="inline-flex h-8 w-8 cursor-not-allowed items-center justify-center rounded-lg border border-white/5 bg-[var(--muted)]/50 text-slate-600 opacity-60"
+              className="inline-flex h-9 w-9 cursor-not-allowed items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--muted)]/50 text-[var(--muted-foreground)] opacity-60"
             >
-              <SocialIcon platform={link.platform} className="h-3.5 w-3.5" />
+              <SocialIcon platform={link.platform} className="h-4 w-4" />
             </span>
           );
         }
@@ -130,9 +128,9 @@ export function CampaignSocialLinks({ links, className }: Props) {
             rel="noopener noreferrer"
             title={platformLabel(link.platform)}
             aria-label={`${platformLabel(link.platform)} (opens in new tab)`}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/5 bg-[var(--muted)]/50 text-slate-400 transition-colors hover:border-[var(--primary)]/40 hover:bg-[var(--primary)]/10 hover:text-slate-100"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--muted)] text-[var(--muted-foreground)] transition-all hover:border-canton-muted hover:bg-canton-subtle hover:text-canton"
           >
-            <SocialIcon platform={link.platform} className="h-3.5 w-3.5" />
+            <SocialIcon platform={link.platform} className="h-4 w-4" />
           </a>
         );
       })}
