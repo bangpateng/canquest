@@ -25,10 +25,9 @@ export default function FaqPage() {
 
       <DocsSection title="Is CanQuest an airdrop or farming platform?">
         <p>
-          No. CanQuest is a <Lead>growth layer</Lead> for Canton ecosystem
-          projects — it connects them with verified early users. CC rewards are
-          a bonus, not the headline. The value hierarchy is: (1) early access
-          to projects, (2) verified on-chain standing, (3) CC rewards.
+          No. The point is early access to ecosystem projects and a verified
+          on-chain standing — CC rewards come with that, but they&apos;re not
+          the main thing.
         </p>
       </DocsSection>
 

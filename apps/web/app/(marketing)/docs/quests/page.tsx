@@ -89,30 +89,25 @@ export default function QuestsPage() {
         </Callout>
       </DocsSection>
 
-      <DocsSection title="How a claim works (under the hood)">
-        <p>
-          Every claim is designed to be atomic and anti-sybil:
-        </p>
+      <DocsSection title="How a claim works">
+        <p>Each claim is atomic and anti-sybil:</p>
         <UL>
           <li>
-            <Lead>Reserve your slot</Lead> — the campaign records your claim
-            on-chain (first-come or a drawn winner), so the same account cannot
-            claim twice.
+            <Lead>Reserve your slot</Lead> — recorded on-chain, so one account
+            can&apos;t claim twice.
           </li>
           <li>
-            <Lead>Pay the fee &amp; receive the reward</Lead> — the fee (user →
-            treasury) and the reward (reward pool → user) settle together in one
-            transaction when atomic settlement is enabled.
+            <Lead>Pay the fee &amp; receive the reward</Lead> — settle together
+            in one transaction.
           </li>
           <li>
-            <Lead>Reveal a code</Lead> — for code-based rewards, the code is
-            revealed only after the fee settles.
+            <Lead>Reveal a code</Lead> — for code rewards, the code appears only
+            after the fee settles.
           </li>
         </UL>
-        <Callout type="note" title="Raffle draws">
-          For raffle campaigns, the project admin draws the winners from the
-          eligible pool. Only drawn winners can then claim — there is no
-          &ldquo;claim and maybe win&rdquo; path.
+        <Callout type="note" title="Raffles">
+          For raffle campaigns, the project admin draws winners from the
+          eligible pool first. Only drawn winners can claim.
         </Callout>
       </DocsSection>
 

@@ -92,41 +92,25 @@ export default function WalletPage() {
           ]}
         />
         <Callout type="tip" title="No platform fee on swaps">
-          CanQuest does <em>not</em> add its own fee on swaps — you only pay
-          the native OneSwap fees (platform, LP, and network). The platform fee
-          applies to the Send path, not swap.
+          CanQuest doesn&apos;t add its own fee on swaps — you only pay the
+          native OneSwap fees. The platform fee applies to Send, not swap.
         </Callout>
-        <p>
-          Swaps are atomic deposit-then-return: your input is sent to the
-          OneSwap deposit party, the swap executes in-pool, and the output
-          returns to your party. You never hold funds &ldquo;stranded&rdquo; in
-          a separate account.
-        </p>
       </DocsSection>
 
       <DocsSection title="Lock CC">
         <p>
           Lock CC from your wallet to reach <Lead>Full access</Lead> and unlock
           partner campaigns. Your CC stays in your wallet and returns in full
-          at the end of the term.
+          at the end of the term. Pick a term — options come from the server
+          (typically <InlineCode>7d</InlineCode>, <InlineCode>15d</InlineCode>,{" "}
+          <InlineCode>30d</InlineCode>). A small network cost applies while locked.
         </p>
-        <UL>
-          <li>Pick a lock term — options come from the server (e.g. 7, 15, 30 days).</li>
-          <li>Active locks show a countdown to expiry.</li>
-          <li>A small network cost applies while CC is locked.</li>
-        </UL>
-        <Callout type="info" title="Lock terms">
-          Terms are not hard-coded — they are configured server-side and
-          returned by the lock-terms endpoint. Typical terms are{" "}
-          <InlineCode>7d</InlineCode>, <InlineCode>15d</InlineCode>, and{" "}
-          <InlineCode>30d</InlineCode>.
-        </Callout>
       </DocsSection>
 
       <DocsSection title="Unlock CC">
         <p>
           Once a lock&apos;s term has expired, unlock it to return the CC to
-          your spendable balance. You cannot unlock before the term ends.
+          your spendable balance. You can&apos;t unlock before the term ends.
         </p>
       </DocsSection>
 
@@ -161,14 +145,9 @@ export default function WalletPage() {
 
       <DocsSection title="Transaction history" className="border-b-0">
         <p>
-          Full transaction history — sends, receives, locks, unlocks, swaps,
-          offers, and rewards — paginated, with a link to the Canton explorer
-          for each on-chain action.
-        </p>
-        <p>
-          Tap any transaction to see its detail and the on-chain update it
-          corresponds to. Read more in{" "}
-          <DocsLink slug="concepts">Core concepts</DocsLink>.
+          Full history — sends, receives, locks, unlocks, swaps, offers, and
+          rewards — with a link to the Canton explorer for each on-chain
+          action. Tap any transaction for its detail.
         </p>
       </DocsSection>
 
