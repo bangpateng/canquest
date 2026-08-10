@@ -63,9 +63,9 @@ export function CampaignEligibilityBadge({ questId }: { questId: string }) {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3">
-        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-slate-400" aria-hidden />
-        <span className="text-xs font-medium text-slate-400">
+      <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3">
+        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[var(--muted-foreground)]" aria-hidden />
+        <span className="text-xs font-medium text-[var(--muted-foreground)]">
           Checking eligibility…
         </span>
       </div>
@@ -75,8 +75,8 @@ export function CampaignEligibilityBadge({ questId }: { questId: string }) {
   // Network/API failure: don't block the user — show a neutral state.
   if (error || !data) {
     return (
-      <div className="flex items-start gap-2.5 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3">
-        <span className="flex-1 text-xs leading-relaxed text-slate-400">
+      <div className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3">
+        <span className="text-xs leading-relaxed text-[var(--muted-foreground)]">
           Could not verify eligibility right now. The access check will run again when
           you submit your first task.
         </span>
@@ -89,17 +89,14 @@ export function CampaignEligibilityBadge({ questId }: { questId: string }) {
   return (
     <div
       className={cn(
-        "flex items-start gap-2.5 rounded-2xl border px-4 py-3",
+        "flex items-start gap-2.5 rounded-lg border px-4 py-3",
         eligible
-          ? "border-emerald-500/25 bg-emerald-500/[0.06]"
-          : "border-red-500/25 bg-red-500/[0.06]",
+          ? "border-emerald-500/20 bg-emerald-500/5"
+          : "border-red-500/20 bg-red-500/5",
       )}
     >
       {eligible ? (
-        <CheckCircle2
-          className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400"
-          aria-hidden
-        />
+        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" aria-hidden />
       ) : (
         <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" aria-hidden />
       )}
@@ -107,12 +104,12 @@ export function CampaignEligibilityBadge({ questId }: { questId: string }) {
         <p
           className={cn(
             "text-xs font-bold uppercase tracking-wider",
-            eligible ? "text-emerald-300" : "text-red-300",
+            eligible ? "text-emerald-400" : "text-red-400",
           )}
         >
           {eligible ? "Eligible" : "Not eligible"}
         </p>
-        <p className="mt-0.5 text-xs leading-relaxed text-slate-300">{data.reason}</p>
+        <p className="mt-0.5 text-xs leading-relaxed text-[var(--muted-foreground)]">{data.reason}</p>
       </div>
     </div>
   );
