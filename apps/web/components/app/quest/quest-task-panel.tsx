@@ -130,8 +130,9 @@ export function QuestTaskPanel({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [ledgerProof, setLedgerProof] = useState<QuestLedgerProof | null>(null);
   const [cantonLedgerConfigured, setCantonLedgerConfigured] = useState(false);
-  // TaskIds verified during the current UTC day — drives the accurate per-day
-  // progress bar (resets at 00:00 UTC) instead of the all-time VERIFIED status.
+  // TaskIds verified within the last 24h (rolling window) — drives the accurate
+  // progress bar that mirrors the rolling-24h cooldown gate, instead of the
+  // all-time VERIFIED status.
   const [todayVerified, setTodayVerified] = useState<Set<string>>(new Set());
   const [partyId, setPartyId] = useState<string | null>(viewerPartyId);
   const [twitterUsername, setTwitterUsername] = useState<string | null>(
@@ -330,9 +331,9 @@ export function QuestTaskPanel({
     () => visibleTasks.filter((t) => submissions[t.id]?.status === "VERIFIED").length,
     [visibleTasks, submissions],
   );
-  // Daily progress: tasks verified during the current UTC day. Resets at
-  // 00:00 UTC. The all-time `verifiedCount`/`allDone` are kept for CAMPAIGN,
-  // but EARN_HUB uses the per-day variant for accurate "today's progress".
+  // Rolling-24h progress: tasks verified within the last 24h. Mirrors the
+  // rolling-24h cooldown gate. The all-time `verifiedCount`/`allDone` are kept
+  // for CAMPAIGN, but EARN_HUB uses this rolling variant for accurate progress.
   const verifiedTodayCount = useMemo(
     () => visibleTasks.filter((t) => todayVerified.has(t.id)).length,
     [visibleTasks, todayVerified],
@@ -688,7 +689,8 @@ function TaskRow({
   const isCountDaily = isCountBasedDailyTask(taskType);
   const isLockCc = isLockCcTask(taskType);
   // Countable wallet tasks share the same flow: wallet-required → auto-submit
-  // → backend re-counts real on-chain activity since 00:00 UTC.
+  // → backend re-counts real on-chain activity since 00:00 UTC (the lookback
+  // window is calendar-anchored; the claim cooldown itself is rolling 24h).
   const isCountableWalletTask = isSendTx || isSendToken || isDailySwap || isCountDaily;
   const quizChoices = isQuizChoice ? parseQuizChoices(task.target) : [];
 
@@ -888,7 +890,7 @@ function TaskRow({
       setCooldownNow(Date.now());
       setSuccessMsg(
         isDailyCheckIn || isRepeatable
-          ? `+${task.points} pts! Come back after 00:00 UTC for more.`
+          ? `+${task.points} pts! Come back in 24 hours for more.`
           : "Correct! Points awarded.",
       );
       setStarted(false);

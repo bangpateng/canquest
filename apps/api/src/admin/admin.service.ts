@@ -257,7 +257,7 @@ export class AdminService {
         tags: JSON.stringify(['earn', 'daily']),
         tasks: {
           create: [
-            // 1. Daily check-in (resets at 00:00 UTC).
+            // 1. Daily check-in (rolling 24h cooldown from last check-in).
             {
               type: 'daily_check_in',
               title: 'Daily check-in',
@@ -302,7 +302,8 @@ export class AdminService {
               target: '15d',
               order: 5,
             },
-            // 7–10. Daily send/receive tasks (CC + USDCx, resets at 00:00 UTC).
+            // 7–10. Daily send/receive tasks (CC + USDCx). Claim cooldown is a
+            // rolling 24h window; on-chain activity is counted since 00:00 UTC.
             // Required count stored in `target`.
             {
               type: 'send_any_daily',

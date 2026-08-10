@@ -52,7 +52,9 @@ import { parseQuestSocialLinks } from './quest-social-links.util';
 import { isFeeTransactionRow } from '../users/cc-transaction-visibility';
 import {
   startOfTodayUtc,
-  msUntilNextUtcDay,
+  ROLLING_24H_MS,
+  isWithin24h,
+  msUntil24hExpires,
 } from '../common/time-utils';
 import {
   normalizeCantonPartyId,
@@ -1705,13 +1707,13 @@ export class QuestsService {
       userId,
       questId,
     );
-    // Per-day progress for daily (repeatable) tasks: taskIds whose submission
-    // was verified during the current UTC day. The frontend uses this to render
-    // an accurate "today's progress" bar that resets at 00:00 UTC, instead of
-    // the all-time VERIFIED status (which stays true forever and was misleading).
-    const todayStart = startOfTodayUtc();
+    // Rolling-24h progress for daily (repeatable) tasks: taskIds whose last
+    // verification is within the past 24h. The frontend renders this as a
+    // "today's progress" bar. This intentionally mirrors the rolling cooldown
+    // gate (a task counts as "done today" while it is on cooldown).
+    const rollingStart = new Date(Date.now() - ROLLING_24H_MS);
     const todayVerifiedTaskIds = submissions
-      .filter((s) => s.verifiedAt && s.verifiedAt >= todayStart)
+      .filter((s) => s.verifiedAt && s.verifiedAt >= rollingStart)
       .map((s) => s.taskId);
     return {
       completed,
@@ -2056,18 +2058,19 @@ export class QuestsService {
     if (existing) {
       if (existing.status === SubmissionStatus.VERIFIED) {
         if (repeatable24h) {
-          // Daily reset anchored to 00:00 UTC. A repeat is allowed once the
-          // user's last verification falls before today's UTC midnight.
+          // Rolling 24h cooldown: a repeat is allowed exactly 24h after the
+          // user's last verification. This is a rolling window (not a
+          // calendar-day reset) so every user faces the same wait regardless
+          // of when they claimed.
           const lastAt = existing.verifiedAt ?? existing.submittedAt;
-          const todayStart = startOfTodayUtc();
-          if (lastAt && lastAt >= todayStart) {
-            const msLeft = msUntilNextUtcDay();
+          if (lastAt && isWithin24h(lastAt)) {
+            const msLeft = msUntil24hExpires(lastAt);
             const hoursLeft = Math.max(
               1,
               Math.ceil(msLeft / (60 * 60 * 1000)),
             );
             throw new BadRequestException(
-              `Already completed today — resets in ~${hoursLeft}h at 00:00 UTC.`,
+              `Already completed — try again in ~${hoursLeft}h.`,
             );
           }
 

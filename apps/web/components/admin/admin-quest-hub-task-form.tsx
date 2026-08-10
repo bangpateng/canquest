@@ -212,15 +212,18 @@ export function AdminQuestHubTaskForm({
             {isSendTx ? (
               <>
                 <strong className="text-amber-400">Send transaction</strong> requires a Canton
-                wallet and resets at <strong className="text-canton">00:00 UTC</strong>. Only real
-                outgoing CC sends count (platform fees excluded).
+                wallet. On-chain sends are counted since{" "}
+                <strong className="text-canton">00:00 UTC</strong> (calendar-day lookback); the task
+                can be claimed again <strong className="text-canton">24h</strong> after the last
+                claim. Only real outgoing CC sends count (platform fees excluded).
               </>
             ) : (
               <>
                 <strong className="text-amber-400">{selectedMeta?.label ?? "Daily task"}</strong>{" "}
-                requires a Canton wallet and resets at{" "}
-                <strong className="text-canton">00:00 UTC</strong>. Only real on-chain activity
-                counts.
+                requires a Canton wallet. On-chain activity is counted since{" "}
+                <strong className="text-canton">00:00 UTC</strong> (calendar-day lookback); the task
+                can be claimed again <strong className="text-canton">24h</strong> after the last
+                claim. Only real on-chain activity counts.
               </>
             )}
           </p>
@@ -230,8 +233,8 @@ export function AdminQuestHubTaskForm({
       {draft.type === "daily_check_in" ? (
         <p className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs text-[var(--muted-foreground)]">
           <strong className="text-emerald-400">Daily check-in</strong> stays on Quest permanently.
-          Users can check in again after <strong className="text-canton">00:00 UTC</strong> for more
-          points.
+          Users can check in again <strong className="text-canton">24h</strong> after their last
+          check-in for more points.
         </p>
       ) : !isCountTask ? (
         <p className="text-xs text-[var(--muted-foreground)]">

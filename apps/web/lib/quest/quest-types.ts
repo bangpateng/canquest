@@ -352,16 +352,30 @@ export function formatQuestHubSocialTarget(
 export const QUEST_HUB_NEW_LABEL_TTL_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Daily tasks reset at 00:00 UTC (for WIB users that is 07:00 local time).
- * Mirrors apps/api/src/common/time-utils.ts — keep both in sync.
+ * Time helpers for the quest cadence. Mirrors
+ * apps/api/src/common/time-utils.ts — keep both in sync.
+ *
+ * Two distinct windows; do NOT conflate:
+ *  - ROLLING-24H COOLDOWN: repeatable tasks may be claimed again exactly 24h
+ *    after the user's last verification (QUEST_HUB_REPEAT_COOLDOWN_MS below).
+ *  - UTC-DAY LOOKBACK: on-chain activity is counted since 00:00 UTC by the
+ *    backend (mirrored here for reference via startOfTodayUtc/msUntilNextUtcDay)
+ *    to verify a task's real transactions for the current calendar day.
  */
+
+/** Rolling cooldown for repeatable tasks: 24 hours from last verification. */
+export const QUEST_HUB_REPEAT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
+/** Midnight (00:00:00.000) UTC for the day containing `now`. Used by the
+ *  backend's on-chain lookback window; mirrored here for reference. */
 export function startOfTodayUtc(now: Date = new Date()): Date {
   return new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
   );
 }
 
-/** Milliseconds remaining until the next 00:00 UTC boundary. */
+/** Milliseconds remaining until the next 00:00 UTC boundary. Mirrored for
+ *  reference; the backend uses this for its on-chain lookback window. */
 export function msUntilNextUtcDay(now: Date = new Date()): number {
   const next = startOfTodayUtc(now);
   next.setUTCDate(next.getUTCDate() + 1);
@@ -369,8 +383,9 @@ export function msUntilNextUtcDay(now: Date = new Date()): number {
 }
 
 /**
- * Tasks that repeat once per UTC day (reset at 00:00 UTC). Other tasks stay on
- * Quest when done but are one-time (lock-cc is one-time per tier).
+ * Tasks that repeat on a rolling 24h cooldown (claim again exactly 24h after
+ * the last verification). Other tasks stay on Quest when done but are one-time
+ * (lock-cc is one-time per tier).
  */
 export function isQuestHubRepeatableTask(task: { type: string }): boolean {
   return (
@@ -449,11 +464,12 @@ export function isLockCcTask(type: string): boolean {
 }
 
 /**
- * Time until a repeatable task can be claimed again. Anchor = next 00:00 UTC
- * boundary (daily reset), regardless of when the user last verified.
+ * Time until a repeatable task can be claimed again. Rolling 24h window
+ * anchored to the user's last verification time: claimable again exactly 24h
+ * after `verifiedAt ?? submittedAt`.
  *
- * If the user has NOT yet verified today, returns 0 (claimable now). If they
- * already verified today, returns time-to-midnight-UTC.
+ * Returns 0 if the 24h window has already elapsed (claimable now), otherwise
+ * the remaining ms.
  */
 export function getQuestHubRepeatCooldownMs(
   submission: { verifiedAt?: string | null; submittedAt?: string } | null | undefined,
@@ -464,11 +480,8 @@ export function getQuestHubRepeatCooldownMs(
   if (!raw) return 0;
   const last = new Date(raw).getTime();
   if (Number.isNaN(last)) return 0;
-  const todayStart = startOfTodayUtc(new Date(now)).getTime();
-  // Verified before today's UTC midnight → free to claim again now.
-  if (last < todayStart) return 0;
-  // Verified today → must wait until next 00:00 UTC.
-  return msUntilNextUtcDay(new Date(now));
+  const expires = last + QUEST_HUB_REPEAT_COOLDOWN_MS;
+  return Math.max(0, expires - now);
 }
 
 export function formatQuestHubCooldown(ms: number): string {
