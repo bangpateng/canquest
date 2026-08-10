@@ -146,22 +146,6 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
               </>
             )}
           </p>
-
-          {/* Breakdown strip */}
-          {!initialLoad && (
-            <div className="mt-5 flex items-center gap-4 text-sm">
-              <span className="flex items-center gap-1.5 text-[var(--muted-foreground)]">
-                <span className="h-2 w-2 rounded-full bg-[var(--primary)]" />
-                CC ${(ccFiatStr)}
-              </span>
-              {tokenNonCcValue > 0 && (
-                <span className="flex items-center gap-1.5 text-[var(--muted-foreground)]">
-                  <span className="h-2 w-2 rounded-full bg-[rgb(var(--canton-cyan-rgb))]" />
-                  Tokens ${tokenNonCcValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-              )}
-            </div>
-          )}
         </div>
       </Card>
 
