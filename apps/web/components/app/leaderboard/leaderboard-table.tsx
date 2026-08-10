@@ -70,10 +70,25 @@ function leaderboardAvatarSrc(url: string | null): string | null {
 }
 
 function RankBadge({ rank }: { rank: number }) {
-  if (rank === 1) return <Crown className="h-5 w-5 text-amber-400 drop-shadow-[0_0_6px_rgb(251_191_36/0.5)]" />;
-  if (rank === 2) return <Medal className="h-5 w-5 text-slate-300 drop-shadow-[0_0_4px_rgb(203_213_225/0.3)]" />;
-  if (rank === 3) return <Medal className="h-5 w-5 text-amber-700 drop-shadow-[0_0_4px_rgb(180_83_9/0.3)]" />;
-  return <span className="text-sm font-bold tabular-nums text-slate-500">{rank}</span>;
+  if (rank === 1)
+    return (
+      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-canton-subtle ring-1 ring-[var(--primary)]/25">
+        <Crown className="h-5 w-5 text-canton" />
+      </span>
+    );
+  if (rank === 2)
+    return (
+      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--muted)] ring-1 ring-[var(--border)]">
+        <Medal className="h-5 w-5 text-[var(--foreground)]" />
+      </span>
+    );
+  if (rank === 3)
+    return (
+      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--muted)] ring-1 ring-[var(--border)]">
+        <Medal className="h-5 w-5 text-canton-muted" />
+      </span>
+    );
+  return <span className="text-sm font-bold tabular-nums text-[var(--muted-foreground)]">{rank}</span>;
 }
 
 function ParticipantCell({
@@ -89,7 +104,7 @@ function ParticipantCell({
     <td className="px-4 py-3.5 sm:px-6 sm:py-4">
       <div className="flex items-center gap-3 sm:gap-4">
         <div
-          className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full ring-2 ring-white/10 ring-offset-1 ring-offset-[#0a0c14] sm:h-12 sm:w-12"
+          className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full ring-1 ring-[var(--border)] sm:h-12 sm:w-12"
           aria-hidden
           style={
             avatarSrc
@@ -110,24 +125,24 @@ function ParticipantCell({
               referrerPolicy="no-referrer"
             />
           ) : (
-            <span className="text-xs font-bold uppercase tracking-wider text-white drop-shadow-sm">
+            <span className="text-xs font-bold uppercase tracking-wider text-[var(--foreground)] drop-shadow-sm">
               {getInitials(row.displayName)}
             </span>
           )}
         </div>
         <div className="min-w-0 leading-tight">
           <div className="flex flex-wrap items-center gap-2 gap-y-1">
-            <span className="text-sm font-semibold text-slate-100 sm:text-base">
+            <span className="text-sm font-semibold text-[var(--foreground)] sm:text-base">
               {row.displayName}
             </span>
             {isCurrentUser && (
-              <span className="rounded-md bg-[var(--primary)]/20 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-[var(--primary)]">
+              <span className="rounded-md bg-canton-subtle px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-canton ring-1 ring-[var(--primary)]/20">
                 You
               </span>
             )}
           </div>
           {row.twitterUsername ? (
-            <p className="mt-0.5 text-xs font-medium text-slate-500 sm:text-sm">
+            <p className="mt-0.5 text-xs font-medium text-[var(--muted-foreground)] sm:text-sm">
               @{row.twitterUsername}
             </p>
           ) : null}
@@ -204,49 +219,59 @@ export function LeaderboardTable() {
       </div>
 
       {/* Leaderboard Card */}
-      <Card className="w-full max-w-full overflow-hidden">
+      <Card interactive className="relative w-full max-w-full overflow-hidden">
+        {/* Ambient glow */}
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(ellipse 80% 60% at 50% 0%, rgb(var(--canton-rgb) / 0.10), transparent 70%)",
+          }}
+          aria-hidden
+        />
+
         {/* Card Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 border-b border-white/[0.06] bg-white/[0.01] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
+        <div className="relative flex flex-col sm:flex-row sm:items-center gap-3 border-b border-[var(--border)] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
           <div>
-            <h2 className="text-base sm:text-lg font-semibold tracking-tight text-white">
-              Top Participants
-            </h2>
-            <p className="text-xs sm:text-sm font-medium text-slate-500">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
               {period === "all" ? "All time" : period === "weekly" ? "Weekly ranking" : "Monthly ranking"}
             </p>
+            <h2 className="mt-1 text-base sm:text-lg font-semibold tracking-tight text-[var(--foreground)]">
+              Top Participants
+            </h2>
           </div>
           {data && (
-            <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10 sm:ml-auto">
+            <p className="inline-block text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)] sm:ml-auto">
               {data.total.toLocaleString()} participants
-            </span>
+            </p>
           )}
         </div>
 
         {/* Table Body */}
         {loading ? (
-          <div className="flex items-center justify-center py-20 sm:py-24 md:py-28">
+          <div className="relative flex items-center justify-center py-20 sm:py-24 md:py-28">
             <LoadingSpinner size="xl" tone="muted" />
           </div>
         ) : !data || data.rows.length === 0 ? (
-          <div className="px-5 py-20 sm:py-24 md:py-28 text-center">
+          <div className="relative px-5 py-20 sm:py-24 md:py-28 text-center">
             <div className="flex flex-col items-center gap-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/5 ring-1 ring-white/10">
-                <Trophy className="h-8 w-8 text-slate-500" />
-              </div>
+              <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-canton-subtle ring-1 ring-[var(--primary)]/15">
+                <Trophy className="h-8 w-8 text-canton" />
+              </span>
               <div>
-                <p className="text-base sm:text-lg font-semibold text-slate-100">
+                <p className="text-base sm:text-lg font-semibold text-[var(--foreground)]">
                   No participants yet
                 </p>
-                <p className="mt-2 text-xs sm:text-sm font-medium text-slate-500">
+                <p className="mt-2 text-xs sm:text-sm font-medium text-[var(--muted-foreground)]">
                   Complete quests to appear on the leaderboard.
                 </p>
               </div>
             </div>
           </div>
         ) : (
-          <div className="w-full overflow-x-auto">
+          <div className="relative w-full overflow-x-auto">
             <table className="w-full min-w-[300px] text-left">
-              <thead className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <thead className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
                 <tr>
                   <th className="whitespace-nowrap px-4 py-3.5 font-semibold sm:px-6 sm:py-4 md:px-8">Rank</th>
                   <th className="min-w-[10rem] px-3 py-3.5 font-semibold sm:px-4 sm:py-4">Participant</th>
@@ -260,8 +285,8 @@ export function LeaderboardTable() {
                     <tr
                       key={row.userId}
                       className={cn(
-                        "border-t border-white/[0.04] transition-all duration-200 hover:bg-white/[0.03]",
-                        isCurrentUser && "bg-[var(--primary)]/5 hover:bg-[var(--primary)]/8",
+                        "border-t border-[var(--border)] transition-all duration-200 hover:bg-[var(--muted)]/60",
+                        isCurrentUser && "bg-canton-subtle/60 hover:bg-canton-subtle",
                       )}
                     >
                       <td className="px-4 py-3.5 sm:px-6 sm:py-4 md:px-8">
@@ -269,10 +294,10 @@ export function LeaderboardTable() {
                       </td>
                       <ParticipantCell row={row} isCurrentUser={isCurrentUser} />
                       <td className="px-4 py-3.5 text-right sm:px-6 sm:py-4 md:px-8">
-                        <span className="text-sm sm:text-base tabular-nums font-bold text-white">
+                        <span className="text-sm sm:text-base tabular-nums font-extrabold text-[var(--foreground)]">
                           {row.points.toLocaleString()}
                         </span>
-                        <span className="ml-1 text-xs font-medium text-slate-500">pts</span>
+                        <span className="ml-1 text-xs font-medium text-[var(--muted-foreground)]">pts</span>
                       </td>
                     </tr>
                   );
@@ -284,7 +309,7 @@ export function LeaderboardTable() {
 
         {/* Pagination */}
         {!loading && data && data.rows.length > 0 && (
-          <div className="border-t border-white/[0.06] bg-white/[0.01]">
+          <div className="relative border-t border-[var(--border)]">
             <ListPagination
               className="px-5 py-4 sm:px-6 sm:py-5 md:px-8"
               page={page}

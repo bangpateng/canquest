@@ -7,6 +7,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { inputClass } from "@/lib/ui/ui-tokens";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { cn } from "@/lib/utils/utils";
+import { Card } from "@/components/ui/card";
 
 type ReferralStats = {
   referralCode: string;
@@ -56,9 +57,10 @@ export function QuestReferralCard() {
   }
 
   return (
-    <section
-      className="overflow-hidden rounded-3xl border border-white/5 bg-[var(--card)]/40"
-      aria-label={t("questReferral.aria")}
+    <section aria-label={t("questReferral.aria")}>
+    <Card
+      bare
+      className="overflow-hidden rounded-3xl"
     >
       <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--muted)]/20 px-6 py-4">
         <p className="flex items-center gap-3 text-sm font-medium text-[var(--muted-foreground)]">
@@ -103,7 +105,7 @@ export function QuestReferralCard() {
               <p className="text-sm font-medium text-[var(--muted-foreground)]">
                 {t("settings.referralCodeLabel")}
               </p>
-              <code className="block truncate rounded-2xl border border-white/5 bg-[var(--muted)]/40 px-4 py-3 font-mono text-base font-medium tracking-wider text-[var(--foreground)]">
+              <code className="block truncate rounded-2xl border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3 font-mono text-base font-medium tracking-wider text-[var(--foreground)]">
                 {stats.referralCode}
               </code>
             </div>
@@ -129,6 +131,7 @@ export function QuestReferralCard() {
           </div>
         ) : null}
       </div>
+    </Card>
     </section>
   );
 }

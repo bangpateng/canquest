@@ -187,27 +187,29 @@ export function QuestsBrowser({ variant = "earn" }: { variant?: "default" | "ear
         <>
           {/* ── Hero header ─────────────────────────────────────────────── */}
           <Card className="relative w-full overflow-hidden">
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_80%_at_100%_0%,rgb(var(--canton-rgb)/0.12),transparent_60%)]" />
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_70%_at_0%_100%,rgb(167_139_250/0.06),transparent_55%)]" />
-            <div className="relative flex flex-col gap-5 p-4 sm:p-6 md:flex-row md:items-center md:justify-between md:p-7">
-              <div className="min-w-0">
-                <span className="inline-flex items-center rounded-full border border-[rgb(var(--canton-rgb)/0.25)] bg-[rgb(var(--canton-rgb)/0.08)] px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-canton sm:text-xs">
-                  {t("earnCampaigns.kindCampaign")}
-                </span>
-                <h1 className="mt-3 text-2xl font-bold leading-tight tracking-tight text-white sm:text-3xl md:text-4xl">
-                  Earn Rewards
-                </h1>
-              </div>
-
+            {/* Ambient glow — subtle canton radial (dashboard-card style) */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_80%_at_100%_0%,rgb(var(--canton-rgb)/0.12),transparent_60%)]"
+            />
+            <div className="relative p-6 sm:p-7">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+                {t("earnCampaigns.kindCampaign")}
+              </p>
+              <h1 className="mt-2 text-2xl font-bold leading-tight tracking-tight text-[var(--foreground)] sm:text-3xl md:text-4xl">
+                Earn Rewards
+              </h1>
             </div>
           </Card>
 
           {/* ── Toolbar: tabs ──────────────────────────────────── */}
           <section
-            className="w-full overflow-hidden rounded-xl border border-white/[0.06] bg-[#0a0c14]/70 backdrop-blur-2xl p-3 sm:p-4"
             aria-label={t("earnCampaigns.filterAria")}
+            className="w-full overflow-hidden"
           >
-            <div className="min-w-0 flex-1 overflow-hidden">{tabRow}</div>
+            <Card bare className="w-full overflow-hidden p-3 sm:p-4">
+              <div className="min-w-0 flex-1 overflow-hidden">{tabRow}</div>
+            </Card>
           </section>
         </>
       ) : null}
@@ -219,7 +221,7 @@ export function QuestsBrowser({ variant = "earn" }: { variant?: "default" | "ear
           ))}
         </div>
       ) : loadError ? (
-        <div className="rounded-2xl border border-red-500/20 bg-red-500/5 px-4 py-10 text-center backdrop-blur-xl sm:px-6 sm:py-14">
+        <Card className="px-4 py-10 text-center sm:px-6 sm:py-14">
           <p className="text-lg font-bold tracking-tight text-red-200 sm:text-xl md:text-2xl">
             {t("earnCampaigns.loadFailed")}
           </p>
@@ -244,18 +246,18 @@ export function QuestsBrowser({ variant = "earn" }: { variant?: "default" | "ear
               Retry
             </button>
           )}
-        </div>
+        </Card>
       ) : filtered.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-white/[0.08] bg-white/[0.02] px-4 py-16 text-center backdrop-blur-xl sm:px-8 sm:py-20">
+        <Card className="border-dashed px-4 py-16 text-center sm:px-8 sm:py-20">
           <div className="flex flex-col items-center gap-4">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/5 ring-1 ring-white/10">
-              <Search className="h-8 w-8 text-slate-500" />
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--muted)] ring-1 ring-[var(--border)]">
+              <Search className="h-8 w-8 text-[var(--muted-foreground)]" />
             </div>
             <div>
-              <p className="text-lg font-bold tracking-tight text-slate-100 sm:text-xl md:text-2xl">
+              <p className="text-lg font-bold tracking-tight text-[var(--foreground)] sm:text-xl md:text-2xl">
                 {query ? t("quests.noMatch") : t("quests.noPrograms")}
               </p>
-              <p className="mx-auto mt-2 max-w-md text-sm font-medium leading-relaxed text-slate-500 sm:mt-3 sm:text-base">
+              <p className="mx-auto mt-2 max-w-md text-sm font-medium leading-relaxed text-[var(--muted-foreground)] sm:mt-3 sm:text-base">
                 {query
                   ? t("quests.tryAnother")
                   : allQuests.length === 0
@@ -272,7 +274,7 @@ export function QuestsBrowser({ variant = "earn" }: { variant?: "default" | "ear
               {t("earnCampaigns.dailyTasks")}
             </Link>
           ) : null}
-        </div>
+        </Card>
       ) : (
         <>
           <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 md:gap-6 xl:grid-cols-3">

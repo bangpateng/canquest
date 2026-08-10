@@ -96,81 +96,77 @@ export function QuestHubPage() {
   return (
     <div className="w-full max-w-full min-w-0 overflow-x-hidden space-y-5 md:space-y-6 font-sans">
 
-      {/* ── Hero Card — Split Layout: Left (Points) + Right (Profile) ────── */}
+      {/* ── Points hero — icon-led, matches dashboard PointsCard ──────── */}
       <Card
-        className="relative w-full max-w-full overflow-hidden"
+        interactive
+        className="relative w-full max-w-full overflow-hidden p-6 sm:p-7"
         aria-label="Points balance"
       >
-        {/* Background glow — right side accent */}
+        {/* Ambient glow — canton radial (dashboard-card style) */}
         <div
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_100%_0%,rgb(var(--canton-rgb)/0.10),transparent_60%)]"
           aria-hidden
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_100%_0%,rgb(var(--canton-rgb)/0.12),transparent_60%)]"
         />
 
         <div className="relative">
-          {/* Header */}
-          <div className="border-b border-white/[0.06] bg-white/[0.01] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
-            <div>
-              <span className="inline-block text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
-                Quest Hub
-              </span>
+          {loading ? (
+            <div className="flex h-12 items-center">
+              <LoadingSpinner size="lg" tone="muted" />
             </div>
-          </div>
-
-          {/* Body — Full-width Points Display */}
-          <div className="px-5 py-6 sm:px-6 sm:py-8 md:px-8 md:py-10">
-            {loading ? (
-              <div className="flex h-16 items-center gap-3 text-sm sm:text-base font-medium text-slate-400">
-                <LoadingSpinner size="lg" />
-                Loading…
+          ) : (
+            <>
+              {/* Icon + eyebrow label */}
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]/15">
+                  <Sparkles className="h-4 w-4 text-canton" aria-hidden />
+                </span>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+                  Quest Hub · Available Points
+                </p>
               </div>
-            ) : (
-              <>
-                <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-2">
-                  Available Points
-                </p>
-                <p className="text-4xl font-extrabold tabular-nums leading-none tracking-tight text-white sm:text-5xl md:text-6xl glow-text">
-                  {pointsRemaining.toLocaleString()}
-                  <span className="ml-2 text-base font-semibold text-[var(--primary)] sm:ml-2.5 sm:text-lg md:text-xl">
-                    pts
-                  </span>
-                </p>
-                <p className="mt-3 text-xs sm:text-sm font-normal leading-relaxed text-slate-400 sm:mt-4 max-w-md">
-                  Your spendable balance. Complete daily tasks and invite friends to earn more.
-                </p>
 
-                {/* Quick Actions */}
-                <div className="mt-5 flex flex-wrap items-center gap-3 sm:mt-6">
-                  <Link
-                    href={ROUTES.leaderboard}
-                    className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10 hover:shadow-[0_0_20px_rgb(var(--canton-rgb)/0.08)] sm:px-5 sm:py-3"
-                  >
-                    View Leaderboard
-                  </Link>
-                </div>
-              </>
-            )}
-          </div>
+              {/* Headline number */}
+              <p className="mt-5 text-4xl font-extrabold tabular-nums leading-none tracking-tight text-[var(--foreground)] glow-text sm:text-5xl md:text-6xl">
+                {pointsRemaining.toLocaleString()}
+                <span className="ml-2 text-base font-semibold text-[var(--primary)] sm:ml-2.5 sm:text-lg md:text-xl">
+                  pts
+                </span>
+              </p>
+              <p className="mt-3 max-w-md text-xs font-normal leading-relaxed text-[var(--muted-foreground)] sm:mt-4 sm:text-sm">
+                Your spendable balance. Complete daily tasks and invite friends to earn more.
+              </p>
+
+              {/* Quick Actions */}
+              <div className="mt-5 flex flex-wrap items-center gap-3 sm:mt-6">
+                <Link
+                  href={ROUTES.leaderboard}
+                  className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)]/80 px-4 py-2.5 text-sm font-semibold text-[var(--foreground)] transition-all duration-200 hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10 sm:px-5 sm:py-3"
+                >
+                  View Leaderboard
+                </Link>
+              </div>
+            </>
+          )}
         </div>
       </Card>
 
       {/* ── Tasks / Hub Content ─────────────────────────────────────────── */}
       {loading ? (
-        <div className="flex items-center justify-center gap-3 py-20 text-base font-medium text-slate-400 sm:py-24">
-          <LoadingSpinner size="lg" />
+        <div className="flex items-center justify-center gap-3 py-20 text-base font-medium text-[var(--muted-foreground)] sm:py-24">
+          <LoadingSpinner size="lg" tone="muted" />
           Loading tasks…
         </div>
       ) : hubError || !hub ? (
-        <div className="rounded-2xl border border-dashed border-white/[0.08] bg-white/[0.02] py-16 text-center sm:py-20">
+        <Card className="border-dashed py-16 text-center sm:py-20">
           <div className="flex flex-col items-center gap-4">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/5 ring-1 ring-white/10">
-              <Zap className="h-8 w-8 text-slate-500" />
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--muted)] ring-1 ring-[var(--border)]">
+              <Zap className="h-8 w-8 text-[var(--muted-foreground)]" />
             </div>
-            <p className="text-sm font-medium text-slate-500">
+            <p className="text-sm font-medium text-[var(--muted-foreground)]">
               {hubError ?? "No Quest hub yet."}
             </p>
           </div>
-        </div>
+        </Card>
       ) : (
         <>
           {hub.status === "ACTIVE" ? (
@@ -191,23 +187,23 @@ export function QuestHubPage() {
                 }}
               />
             ) : (
-              <div className="rounded-2xl border border-dashed border-white/[0.08] bg-white/[0.02] py-16 text-center">
+              <Card className="border-dashed py-16 text-center">
                 <div className="flex flex-col items-center gap-4">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/5 ring-1 ring-white/10">
-                    <Sparkles className="h-8 w-8 text-slate-500" />
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--muted)] ring-1 ring-[var(--border)]">
+                    <Sparkles className="h-8 w-8 text-[var(--muted-foreground)]" />
                   </div>
-                  <p className="text-sm font-medium text-slate-500">
+                  <p className="text-sm font-medium text-[var(--muted-foreground)]">
                     No tasks yet. Check back soon.
                   </p>
                 </div>
-              </div>
+              </Card>
             )
           ) : (
-            <div className="rounded-2xl border border-dashed border-white/[0.08] bg-white/[0.02] py-16 text-center">
-              <p className="text-sm font-medium text-slate-500">
+            <Card className="border-dashed py-16 text-center">
+              <p className="text-sm font-medium text-[var(--muted-foreground)]">
                 Quest is not active right now.
               </p>
-            </div>
+            </Card>
           )}
 
           <QuestReferralCard />

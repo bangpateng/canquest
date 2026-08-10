@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils/utils";
 import { ListPagination } from "@/components/app/list/list-pagination";
 import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Ban, Coins, Gift, Lock, LockOpen, RefreshCw, ShieldCheck, ShieldOff, Undo2, Zap } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { TransactionDetailModal } from "@/components/app/wallet/transaction-detail-modal";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
@@ -191,37 +192,37 @@ function txIconBg(type: TxItem["type"]): string {
   switch (type) {
     case "TRANSFER_OUT":
     case "TOKEN_TRANSFER_OUT":
-      return "bg-red-500/10 text-red-500";
+      return "bg-red-500/10 text-red-500 ring-1 ring-red-500/15";
     case "TRANSFER_IN":
     case "TOKEN_TRANSFER_IN":
-      return "bg-green-500/10 text-green-500";
+      return "bg-canton-subtle text-canton ring-1 ring-[var(--primary)]/15";
     case "CC_LOCK":
       // Netral/amber — BUKAN merah transfer (dana dikunci, bukan keluar).
-      return "bg-amber-500/10 text-amber-500";
+      return "bg-orange-500/10 text-orange-500 ring-1 ring-orange-500/15";
     case "CC_UNLOCK":
-      return "bg-green-500/10 text-green-500";
+      return "bg-canton-subtle text-canton ring-1 ring-[var(--primary)]/15";
     case "OFFER_REJECTED":
     case "OFFER_WITHDRAWN":
     case "TOKEN_OFFER_REJECTED":
     case "TOKEN_OFFER_WITHDRAWN":
     case "PREAPPROVAL_DISABLED":
       // Aksi toggle netral — muted, bukan merah (tidak ada pergerakan CC).
-      return "bg-[var(--muted)] text-[var(--muted-foreground)]";
+      return "bg-[var(--muted)] text-[var(--muted-foreground)] ring-1 ring-[var(--border)]";
     case "PREAPPROVAL_ENABLED":
-      return "bg-blue-500/10 text-blue-400";
+      return "bg-canton-subtle text-canton ring-1 ring-[var(--primary)]/15";
     case "QUEST_REWARD":
-      return "bg-[var(--primary)]/15 text-[var(--foreground)]";
+      return "bg-canton-subtle text-canton ring-1 ring-[var(--primary)]/20";
     case "SPIN_REWARD":
     case "AIRDROP":
-      return "bg-purple-500/10 text-purple-500";
+      return "bg-canton-subtle text-canton-muted ring-1 ring-[var(--primary)]/15";
     case "SWAP_OUT":
       // CC keluar — merah (sama transfer out).
-      return "bg-red-500/10 text-red-500";
+      return "bg-red-500/10 text-red-500 ring-1 ring-red-500/15";
     case "SWAP_IN":
-      // CC masuk — hijau (sama transfer in).
-      return "bg-green-500/10 text-green-500";
+      // CC masuk — canton/green (sama transfer in).
+      return "bg-canton-subtle text-canton ring-1 ring-[var(--primary)]/15";
     default:
-      return "bg-blue-500/10 text-blue-500";
+      return "bg-[var(--muted)] text-[var(--muted-foreground)] ring-1 ring-[var(--border)]";
   }
 }
 
@@ -229,11 +230,12 @@ function amountColor(type: TxItem["type"]): string {
   // Toggle (amount 0) → muted netral.
   if (TOGGLE_TX_TYPES.has(type)) return "text-[var(--muted-foreground)]";
   // CC_LOCK = debit (amber, netral — bukan merah transfer).
-  if (type === "CC_LOCK") return "text-amber-500";
-  // Debit (keluar): TRANSFER_OUT, TOKEN_TRANSFER_OUT.
+  if (type === "CC_LOCK") return "text-orange-500";
+  // Debit (keluar): muted, bukan merah.
   if (type === "TRANSFER_OUT" || type === "TOKEN_TRANSFER_OUT")
-    return "text-red-500";
-  return "text-green-500";
+    return "text-[var(--muted-foreground)]";
+  // Credit (masuk) → canton/green.
+  return "text-canton";
 }
 
 function amountSign(type: TxItem["type"]): string {
@@ -432,14 +434,19 @@ export function TransactionsView({
 
   return (
     <div className={cn(embedded ? "" : "space-y-8", className)}>
-      <div
-        className={cn(
-          "w-full min-w-0 overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl",
-        )}
-      >
-        <div className="flex items-start justify-between gap-4 border-b border-white/[0.06] bg-white/[0.01] px-5 py-4 sm:px-6 sm:py-5">
+      <Card className="relative w-full min-w-0 overflow-hidden">
+        {/* Ambient glow */}
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(ellipse 80% 60% at 50% 0%, rgb(var(--canton-rgb) / 0.08), transparent 70%)",
+          }}
+          aria-hidden
+        />
+        <div className="relative flex items-start justify-between gap-4 border-b border-[var(--border)] px-5 py-4 sm:px-6 sm:py-5">
           <div className="min-w-0">
-            <p className="text-base font-semibold text-white">
+            <p className="text-base font-semibold text-[var(--foreground)]">
               {t("transactions.title")}
             </p>
           </div>
@@ -449,7 +456,7 @@ export function TransactionsView({
             disabled={loading}
             className={cn(
               buttonVariants({ variant: "icon", size: "sm" }),
-              "mt-1 shrink-0 border-0 bg-transparent hover:bg-transparent",
+              "mt-1 shrink-0 border-0 bg-transparent text-[var(--muted-foreground)] hover:bg-transparent hover:text-[var(--foreground)]",
             )}
             aria-label="Refresh transactions"
           >
@@ -464,26 +471,33 @@ export function TransactionsView({
         {loading ? (
           <div
             className={cn(
-              "flex items-center justify-center",
+              "relative flex items-center justify-center",
               embedded ? "py-12" : "py-20",
             )}
           >
             <LoadingSpinner size="lg" />
           </div>
         ) : !txPage || txPage.items.length === 0 ? (
-          <div className={cn("text-center", embedded ? "py-12" : "py-20")}>
-            <p className="text-base font-semibold text-white">
-              {t("transactions.empty")}
-            </p>
-            <p className="mt-2 text-sm font-medium text-[var(--muted-foreground)]">
-              Complete quests or send/receive CC to see activity here.
-            </p>
+          <div className={cn("relative text-center", embedded ? "py-12" : "py-20")}>
+            <div className="flex flex-col items-center gap-4">
+              <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-canton-subtle ring-1 ring-[var(--primary)]/15">
+                <Coins className="h-7 w-7 text-canton" />
+              </span>
+              <div>
+                <p className="text-base font-semibold text-[var(--foreground)]">
+                  {t("transactions.empty")}
+                </p>
+                <p className="mt-2 text-sm font-medium text-[var(--muted-foreground)]">
+                  Complete quests or send/receive CC to see activity here.
+                </p>
+              </div>
+            </div>
           </div>
         ) : (
           <>
-            <div className="hidden min-w-0 md:block">
+            <div className="relative hidden min-w-0 md:block">
               <table className="w-full table-fixed text-left text-base">
-                <thead className="border-b border-white/[0.06] bg-white/[0.01] text-sm font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                <thead className="border-b border-[var(--border)] text-sm font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                   <tr>
                     <th className="whitespace-nowrap px-5 py-3.5 sm:px-6 sm:py-4 font-semibold">{t("transactions.type")}</th>
                     <th className="whitespace-nowrap px-5 py-3.5 sm:px-6 sm:py-4 font-semibold">{t("transactions.amount")}</th>
@@ -503,7 +517,7 @@ export function TransactionsView({
                     return (
                       <tr
                         key={tx.id}
-                        className="border-t border-white/[0.04] transition-colors hover:bg-white/[0.03] cursor-pointer"
+                        className="border-t border-[var(--border)] transition-colors hover:bg-[var(--muted)]/60 cursor-pointer"
                         onClick={() => setModalTx(tx)}
 
                       >
@@ -517,7 +531,7 @@ export function TransactionsView({
                             >
                               <TxTypeIcon type={tx.type} />
                             </span>
-                            <span className="text-base font-semibold text-white">
+                            <span className="text-base font-semibold text-[var(--foreground)]">
                               {txDirection(tx.type)}
                               <TxStatusBadge status={tx.status} />
                             </span>
@@ -546,7 +560,7 @@ export function TransactionsView({
                               (raw.startsWith("1220") ||
                                 (raw.startsWith("00") && /^[0-9a-f]+$/.test(raw)));
                             return (
-                              <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-1 font-mono text-xs font-medium text-[var(--primary)]">
+                              <span className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--muted)]/60 px-2.5 py-1 font-mono text-xs font-medium text-canton">
                                 {looksReal
                                   ? `${(raw as string).slice(0, 10)}\u2026`
                                   : "View"}
@@ -564,7 +578,7 @@ export function TransactionsView({
               </table>
             </div>
 
-            <ul className="divide-y divide-white/[0.04] md:hidden">
+            <ul className="relative divide-y divide-[var(--border)] md:hidden">
               {txPage.items.map((tx) => {
                 const date = new Date(tx.createdAt).toLocaleString("en-GB", {
                   day: "2-digit",
@@ -577,7 +591,7 @@ export function TransactionsView({
                     <button
                       type="button"
                       onClick={() => setModalTx(tx)}
-                      className="flex w-full items-center gap-4 px-5 py-4 transition-colors hover:bg-white/[0.03] text-left"
+                      className="flex w-full items-center gap-4 px-5 py-4 transition-colors hover:bg-[var(--muted)]/60 text-left"
                     >
 
                       <div
@@ -589,7 +603,7 @@ export function TransactionsView({
                         <TxTypeIcon type={tx.type} />
                       </div>
                        <div className="min-w-0 flex-1">
-                         <p className="truncate text-sm font-semibold text-white">
+                         <p className="truncate text-sm font-semibold text-[var(--foreground)]">
                            {txDirection(tx.type)}
                            <TxStatusBadge status={tx.status} />
                          </p>
@@ -614,17 +628,19 @@ export function TransactionsView({
               })}
             </ul>
 
-            <ListPagination
-              className="px-5 pb-4 sm:px-6"
-              page={currentPage}
-              totalPages={txPage.totalPages}
-              total={txPage.total}
-              disabled={loading}
-              onPageChange={changePage}
-            />
+            <div className="relative">
+              <ListPagination
+                className="px-5 pb-4 sm:px-6"
+                page={currentPage}
+                totalPages={txPage.totalPages}
+                total={txPage.total}
+                disabled={loading}
+                onPageChange={changePage}
+              />
+            </div>
           </>
         )}
-      </div>
+      </Card>
 
       {/* Transaction Detail Modal — list is DB-only, modal fetches detail by id. */}
       <TransactionDetailModal

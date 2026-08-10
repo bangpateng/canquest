@@ -507,8 +507,8 @@ export function QuestTaskPanel({
 
       {/* Progress bar — tanpa header teks "Missions". */}
       {visibleTasks.length > 0 ? (
-        <div className="rounded-2xl border border-white/[0.06] bg-[var(--card)]/60 px-4 py-3 backdrop-blur-2xl sm:px-5">
-          <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)]/60 px-4 py-3 backdrop-blur-2xl sm:px-5">
+          <div className="h-1.5 overflow-hidden rounded-full bg-[var(--muted)]">
             <div
               className={cn(
                 "h-full rounded-full transition-all duration-500",
@@ -995,7 +995,7 @@ function TaskRow({
           "rounded-2xl border bg-[var(--card)] p-4 transition-all duration-200 sm:p-5",
           isVerified
             ? "border-emerald-500/30 bg-emerald-500/[0.06]"
-            : "border-white/[0.06] hover:border-[var(--primary)]/30",
+            : "border-[var(--border)] hover:border-[var(--primary)]/30",
           sequentiallyLocked && !isVerified && "opacity-55",
         )}
       >
@@ -1014,14 +1014,14 @@ function TaskRow({
             </p>
             <p
               className={cn(
-                "line-clamp-2 break-words text-sm font-semibold leading-snug text-slate-100 sm:text-base",
+                "line-clamp-2 break-words text-sm font-semibold leading-snug text-[var(--foreground)] sm:text-base",
                 isVerified && "line-through opacity-70",
               )}
             >
               {displayTitle}
             </p>
             {lockedHint ? (
-              <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-slate-400">
+              <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-[var(--muted-foreground)]">
                 <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden />
                 {lockedHint}
               </p>
@@ -1195,7 +1195,7 @@ function TaskRow({
           "rounded-2xl border bg-[var(--card)] p-4 transition-all duration-200 sm:p-5",
           isOneTimeComplete || onRepeatCooldown
             ? "border-emerald-500/30 bg-emerald-500/[0.06]"
-            : "border-white/[0.06] hover:border-[var(--primary)]/30",
+            : "border-[var(--border)] hover:border-[var(--primary)]/30",
           sequentiallyLocked && !isVerified && "opacity-55",
         )}
       >
@@ -1221,7 +1221,7 @@ function TaskRow({
             <div className="flex flex-wrap items-center gap-2">
               <p
                 className={cn(
-                  "line-clamp-2 break-words text-sm font-semibold leading-snug text-slate-100 sm:text-base",
+                  "line-clamp-2 break-words text-sm font-semibold leading-snug text-[var(--foreground)] sm:text-base",
                   isOneTimeComplete && "line-through opacity-70",
                 )}
               >
@@ -1252,7 +1252,7 @@ function TaskRow({
               </p>
             ) : null}
             {isCountableWalletTask && sendProgress ? (
-              <p className="mt-0.5 break-words text-xs font-medium text-slate-400">
+              <p className="mt-0.5 break-words text-xs font-medium text-[var(--muted-foreground)]">
                 {sendProgress.today}/{sendProgress.required}{" "}
                 {isDailySwap ? "swaps" : isCountDaily ? "transactions" : "sends"} today
               </p>

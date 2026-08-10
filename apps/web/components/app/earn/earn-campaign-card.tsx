@@ -95,7 +95,7 @@ function StatusBadge({
         "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider backdrop-blur-md sm:text-[10px]",
         isActive && "border border-emerald-500/25 bg-emerald-500/15 text-emerald-300",
         isComing && "border border-cyan-500/25 bg-cyan-500/15 text-cyan-300",
-        !isActive && !isComing && "border border-white/10 bg-black/50 text-slate-300",
+        !isActive && !isComing && "border border-[var(--border)] bg-[var(--muted)] text-[var(--muted-foreground)]",
         className,
       )}
     >
@@ -106,7 +106,7 @@ function StatusBadge({
         <span
           className={cn(
             "relative inline-flex h-1.5 w-1.5 rounded-full",
-            isActive ? "bg-emerald-400" : isComing ? "bg-cyan-400" : "bg-slate-500",
+            isActive ? "bg-emerald-400" : isComing ? "bg-cyan-400" : "bg-[var(--muted-foreground)]",
           )}
         />
       </span>
@@ -174,7 +174,7 @@ export function EarnCampaignCard({
   const urgencyText = quest.endsAt
     ? (slots.full ? null : <CountdownTimer endsAt={quest.endsAt} />)
     : quest.deadline ? (
-      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-500 sm:text-xs">
+      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[var(--muted-foreground)] sm:text-xs">
         <Calendar className="h-3 w-3" />
         <span className="truncate max-w-[120px]">{quest.deadline}</span>
       </span>
@@ -219,7 +219,7 @@ export function EarnCampaignCard({
         {/* Header: logo + org/title — aligned center so they line up */}
         <div className="flex w-full min-w-0 items-center gap-3 sm:gap-3.5">
           {/* Logo */}
-          <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-slate-800/80 ring-1 ring-white/10 sm:h-12 sm:w-12">
+          <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-[var(--muted)] ring-1 ring-[var(--border)] sm:h-12 sm:w-12">
             {quest.logoUrl ? (
               <img src={quest.logoUrl} alt="" className="h-full w-full object-cover" />
             ) : (
@@ -231,24 +231,24 @@ export function EarnCampaignCard({
 
           {/* Org + Title */}
           <div className="min-w-0 flex-1">
-            <p className="break-words text-[10px] font-semibold text-slate-500 sm:text-xs">{quest.org}</p>
-            <h3 className="line-clamp-2 text-sm font-bold leading-tight text-white sm:mt-0.5 sm:text-base">
+            <p className="break-words text-[10px] font-semibold text-[var(--muted-foreground)] sm:text-xs">{quest.org}</p>
+            <h3 className="line-clamp-2 text-sm font-bold leading-tight text-[var(--foreground)] sm:mt-0.5 sm:text-base">
               {quest.title}
             </h3>
           </div>
         </div>
 
         {/* Description */}
-        <p className="mt-2.5 line-clamp-2 text-xs font-medium leading-relaxed text-slate-400 sm:mt-3 sm:text-sm">
+        <p className="mt-2.5 line-clamp-2 text-xs font-medium leading-relaxed text-[var(--muted-foreground)] sm:mt-3 sm:text-sm">
           {quest.description}
         </p>
 
         {/* ── REWARD HERO BLOCK (paling menonjol) ───────────────── */}
         <div className={cn(
-          "mt-3 overflow-hidden rounded-xl border bg-white/[0.02] sm:mt-4",
+          "mt-3 overflow-hidden rounded-xl border bg-[var(--muted)]/40 sm:mt-4",
           config.isCcToken
             ? "border-[rgb(var(--canton-rgb)/0.18)]"
-            : "border-white/[0.08]",
+            : "border-[var(--border)]",
         )}>
           <div className={cn(
             "pointer-events-none absolute inset-0",
@@ -271,7 +271,7 @@ export function EarnCampaignCard({
                 />
               </span>
               <div className="min-w-0">
-                <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-500 sm:text-[10px]">
+                <p className="text-[9px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)] sm:text-[10px]">
                   {config.isDual ? "Reward · winner" : config.shortLabel}
                 </p>
                 <p className={cn(
@@ -285,20 +285,20 @@ export function EarnCampaignCard({
             {/* Right: pool value + USD */}
             {summary?.poolTotalCc != null && summary.poolTotalCc > 0 ? (
               <div className="shrink-0 text-right">
-                <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-500 sm:text-[10px]">Pool</p>
-                <p className="truncate text-xs font-bold tabular-nums text-white sm:text-sm">{poolDisplay}</p>
+                <p className="text-[9px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)] sm:text-[10px]">Pool</p>
+                <p className="truncate text-xs font-bold tabular-nums text-[var(--foreground)] sm:text-sm">{poolDisplay}</p>
               </div>
             ) : null}
           </div>
 
           {/* Progress bar (FCFS) */}
           {meta.showProgress && meta.progressBar ? (
-            <div className="relative border-t border-white/[0.04] px-3 py-2 sm:px-4">
-              <div className="mb-1 flex justify-between text-[9px] font-semibold tabular-nums text-slate-500 sm:text-[10px]">
+            <div className="relative border-t border-[var(--border)] px-3 py-2 sm:px-4">
+              <div className="mb-1 flex justify-between text-[9px] font-semibold tabular-nums text-[var(--muted-foreground)] sm:text-[10px]">
                 <span>{t("earnCampaigns.slotsClaimed", { used: String(meta.progressBar.used), max: String(meta.progressBar.max) })}</span>
                 <span>{meta.progressBar.pct}%</span>
               </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+              <div className="h-1.5 overflow-hidden rounded-full bg-[var(--muted)]">
                 <div className={cn("h-full rounded-full transition-all duration-500",
                   meta.progressBar.warn ? "bg-gradient-to-r from-amber-500 to-orange-500" : "bg-gradient-to-r from-[var(--primary)] to-[var(--primary-strong)]")}
                   style={{ width: `${Math.max(6, meta.progressBar.pct)}%` }} />
@@ -311,7 +311,7 @@ export function EarnCampaignCard({
         {quest.tags.length > 0 && (
           <div className="mt-2.5 flex flex-wrap gap-1 sm:mt-3">
             {quest.tags.slice(0, 4).map((tag) => (
-              <span key={tag} className="inline-flex items-center gap-0.5 rounded-md border border-white/[0.06] bg-white/[0.03] px-1.5 py-0.5 text-[9px] font-medium text-slate-500 sm:text-[10px]">
+              <span key={tag} className="inline-flex items-center gap-0.5 rounded-md border border-[var(--border)] bg-[var(--muted)]/60 px-1.5 py-0.5 text-[9px] font-medium text-[var(--muted-foreground)] sm:text-[10px]">
                 <Tag className="h-2.5 w-2.5 shrink-0 opacity-50" aria-hidden />
                 {tag}
               </span>
@@ -320,7 +320,7 @@ export function EarnCampaignCard({
         )}
 
         {/* Meta row — single line: tasks + deadline */}
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-semibold text-slate-500 sm:mt-3.5 sm:text-xs">
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-semibold text-[var(--muted-foreground)] sm:mt-3.5 sm:text-xs">
           <span className="inline-flex items-center gap-1 sm:gap-1.5">
             <ListChecks className="h-3 w-3 text-canton sm:h-3.5 sm:w-3.5" />
             {quest.tasks.length} tasks
