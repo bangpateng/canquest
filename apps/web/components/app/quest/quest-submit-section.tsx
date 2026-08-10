@@ -112,10 +112,7 @@ export function QuestSubmitSection({
 
   return (
     <section className="py-6">
-      <Card className="relative overflow-hidden px-6 py-8 text-center">
-        {/* Ambient glow — canton-tinted, draws the eye to the submit CTA. */}
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_100%_at_50%_0%,rgb(var(--canton-rgb)/0.12),transparent_60%)]" />
-
+      <Card className="overflow-hidden px-6 py-8 text-center">
         {campaignEnded ? (
           <p className={cn("relative mx-auto mt-2 max-w-md", warnBannerClass)}>
             {t("quests.campaignEndedClosed")}
@@ -239,9 +236,8 @@ export function QuestSubmittedProof({
 
   if (uiKind === "waitlist_email" && state === "winner") {
     return (
-      <Card className="relative overflow-hidden p-8 text-center">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_100%_at_50%_0%,rgb(var(--canton-rgb)/0.12),transparent_60%)]" />
-        <div className="relative">
+      <Card className="overflow-hidden p-8 text-center">
+        <div>
           <PageTitle>Congratulations — you&apos;re selected!</PageTitle>
           <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted-foreground)]">
             {rewardStatus?.message ??
@@ -254,9 +250,8 @@ export function QuestSubmittedProof({
 
   if (uiKind === "waitlist_email" && state === "waitlist") {
     return (
-      <Card className="relative overflow-hidden p-8 text-center">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_100%_at_50%_0%,rgb(var(--canton-rgb)/0.08),transparent_60%)]" />
-        <div className="relative">
+      <Card className="overflow-hidden p-8 text-center">
+        <div>
           <PageTitle>You&apos;re on the waitlist</PageTitle>
           <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted-foreground)]">
             {rewardStatus?.message ??
@@ -289,9 +284,8 @@ export function QuestSubmittedProof({
 
   if (uiKind === "cc_and_code_raffle" && state === "cc_reward") {
     return (
-      <Card className="relative overflow-hidden p-6">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_80%_at_0%_0%,rgb(var(--canton-rgb)/0.12),transparent_60%)]" />
-        <div className="relative">
+      <Card className="overflow-hidden p-6">
+        <div>
           <p className="text-[11px] font-semibold uppercase tracking-wider text-canton">
             Token Raffle
           </p>
@@ -344,9 +338,8 @@ export function QuestSubmittedProof({
 
   if (uiKind === "cc_manual" && state === "cc_reward") {
     return (
-      <Card className="relative overflow-hidden p-8 text-center">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_100%_at_50%_0%,rgb(var(--canton-rgb)/0.12),transparent_60%)]" />
-        <div className="relative">
+      <Card className="overflow-hidden p-8 text-center">
+        <div>
           <PageTitle>Campaign complete</PageTitle>
           <p className="mx-auto mt-3 max-w-md text-sm font-medium text-[var(--muted-foreground)]">
             {rewardStatus?.message ??
@@ -407,7 +400,7 @@ export function QuestSubmittedProof({
         )}
 
         {(participationId || completionId) && (
-          <Card bare className="overflow-hidden rounded-2xl ring-1 ring-[var(--border)]">
+          <Card bare className="overflow-hidden rounded-2xl">
             <button
               type="button"
               onClick={() => setProofOpen((o) => !o)}

@@ -59,14 +59,12 @@ export function RewardReveal({
   return (
     <Card
       className={cn(
-        "relative overflow-hidden p-5",
+        "overflow-hidden p-5",
         className,
       )}
     >
-      {/* Ambient glow — canton-tinted, subtle. */}
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_80%_at_0%_0%,rgb(var(--canton-rgb)/0.12),transparent_60%)]" />
       {/* Header */}
-      <div className="relative flex items-center gap-3">
+      <div className="flex items-center gap-3">
         {/* Dual reward (CC + Code): tampilkan CC logo + icon code berdampingan
             untuk menandakan kedua jenis reward. Fungsi raffle (ada pemenang CC
             & ada pemenang code) tidak berubah — ini murni tampilan icon header. */}

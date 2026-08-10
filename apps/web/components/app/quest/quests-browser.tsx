@@ -186,13 +186,8 @@ export function QuestsBrowser({ variant = "earn" }: { variant?: "default" | "ear
       {isEarn ? (
         <>
           {/* ── Hero header ─────────────────────────────────────────────── */}
-          <Card className="relative w-full overflow-hidden">
-            {/* Ambient glow — subtle canton radial (dashboard-card style) */}
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_80%_at_100%_0%,rgb(var(--canton-rgb)/0.12),transparent_60%)]"
-            />
-            <div className="relative p-6 sm:p-7">
+          <Card className="w-full overflow-hidden">
+            <div className="p-6 sm:p-7">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
                 {t("earnCampaigns.kindCampaign")}
               </p>
@@ -250,7 +245,7 @@ export function QuestsBrowser({ variant = "earn" }: { variant?: "default" | "ear
       ) : filtered.length === 0 ? (
         <Card className="border-dashed px-4 py-16 text-center sm:px-8 sm:py-20">
           <div className="flex flex-col items-center gap-4">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--muted)] ring-1 ring-[var(--border)]">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--muted)]">
               <Search className="h-8 w-8 text-[var(--muted-foreground)]" />
             </div>
             <div>

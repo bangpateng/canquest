@@ -33,7 +33,7 @@ export function CcHoldingsCard({ hasWallet }: CcHoldingsCardProps) {
     return (
       <Card className="relative overflow-hidden p-6 sm:p-8">
         <div className="flex flex-col items-center gap-4 text-center">
-          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--muted)] ring-1 ring-[var(--border)]">
+          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--muted)]">
             <Wallet className="h-6 w-6 text-[var(--muted-foreground)]" aria-hidden />
           </span>
           <div>
@@ -66,18 +66,8 @@ export function CcHoldingsCard({ hasWallet }: CcHoldingsCardProps) {
   const lockedPct = total > 0 ? Math.round((locked / total) * 100) : 0;
 
   return (
-    <Card interactive className="relative overflow-hidden p-6 sm:p-7">
-      {/* Ambient glow */}
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(ellipse 80% 60% at 100% 0%, rgb(90 217 138 / 0.10), transparent 70%)",
-        }}
-        aria-hidden
-      />
-
-      <div className="relative">
+    <Card interactive className="overflow-hidden p-6 sm:p-7">
+      <div>
         {/* ── Balance hero ── */}
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-2.5">
@@ -92,7 +82,7 @@ export function CcHoldingsCard({ hasWallet }: CcHoldingsCardProps) {
             </div>
           </div>
           {totalUsd !== null && !loading ? (
-            <div className="rounded-xl bg-[var(--muted)] px-3 py-1.5 text-right ring-1 ring-[var(--border)]">
+            <div className="rounded-xl bg-[var(--muted)] px-3 py-1.5 text-right">
               <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
                 Value
               </p>

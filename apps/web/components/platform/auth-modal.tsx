@@ -208,10 +208,9 @@ export function AuthModal() {
         onClick={closeAuth}
       />
       <div className="relative w-full max-w-[420px] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl">
-        <div className="gradient-mesh pointer-events-none absolute inset-0 opacity-30" />
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[var(--primary)]/50 to-transparent" />
 
-        <div className="relative px-6 pb-4 pt-6">
+        <div className="px-6 pb-4 pt-6">
           <button
             type="button"
             onClick={closeAuth}

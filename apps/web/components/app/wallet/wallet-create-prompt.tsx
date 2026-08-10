@@ -48,15 +48,7 @@ export function WalletCreatePromptModal({
         aria-label="Close"
         onClick={onClose}
       />
-      <Card className="relative w-full max-w-md overflow-hidden p-8">
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(ellipse 80% 60% at 50% 0%, rgb(var(--canton-rgb) / 0.10), transparent 70%)",
-          }}
-          aria-hidden
-        />
+      <Card className="w-full max-w-md overflow-hidden p-8">
         <button
           type="button"
           onClick={onClose}

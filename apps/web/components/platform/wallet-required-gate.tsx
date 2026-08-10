@@ -38,16 +38,8 @@ export function WalletRequiredGate({ children }: { children: React.ReactNode }) 
   if (!hasWallet) {
     return (
       <div className="mx-auto flex min-h-[50vh] max-w-md items-center justify-center px-4 py-10">
-        <Card className="relative w-full overflow-hidden p-8 text-center sm:p-10">
-          <div
-            className="pointer-events-none absolute inset-0"
-            style={{
-              background:
-                "radial-gradient(ellipse 80% 60% at 50% 0%, rgb(var(--canton-rgb) / 0.10), transparent 70%)",
-            }}
-            aria-hidden
-          />
-          <div className="relative flex flex-col items-center gap-4">
+        <Card className="w-full overflow-hidden p-8 text-center sm:p-10">
+          <div className="flex flex-col items-center gap-4">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-canton-muted bg-canton-subtle">
               <Lock className="h-7 w-7 text-canton" aria-hidden />
             </div>

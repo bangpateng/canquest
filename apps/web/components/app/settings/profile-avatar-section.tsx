@@ -157,15 +157,6 @@ export function ProfileAvatarSection({
           className="sr-only"
           onChange={(e) => void onPickFile(e.target.files)}
         />
-        {/* Ambient glow behind the avatar tile */}
-        <div
-          className="pointer-events-none absolute -inset-2"
-          style={{
-            background:
-              "radial-gradient(ellipse 80% 80% at 50% 0%, rgb(var(--canton-rgb) / 0.14), transparent 70%)",
-          }}
-          aria-hidden
-        />
         <div
           className={cn(
             "relative flex h-32 w-32 overflow-hidden rounded-3xl border border-canton-muted bg-[var(--muted)] shadow-inner sm:h-36 sm:w-36",

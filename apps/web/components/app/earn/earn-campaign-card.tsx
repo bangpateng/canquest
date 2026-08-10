@@ -219,7 +219,7 @@ export function EarnCampaignCard({
         {/* Header: logo + org/title — aligned center so they line up */}
         <div className="flex w-full min-w-0 items-center gap-3 sm:gap-3.5">
           {/* Logo */}
-          <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-[var(--muted)] ring-1 ring-[var(--border)] sm:h-12 sm:w-12">
+          <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-[var(--muted)] sm:h-12 sm:w-12">
             {quest.logoUrl ? (
               <img src={quest.logoUrl} alt="" className="h-full w-full object-cover" />
             ) : (
@@ -250,11 +250,7 @@ export function EarnCampaignCard({
             ? "border-[rgb(var(--canton-rgb)/0.18)]"
             : "border-[var(--border)]",
         )}>
-          <div className={cn(
-            "pointer-events-none absolute inset-0",
-            config.isCcToken && "bg-[radial-gradient(ellipse_80%_100%_at_50%_0%,rgb(var(--canton-rgb)/0.10),transparent_70%)]",
-          )} />
-          <div className="relative flex items-center justify-between gap-3 px-3 py-2.5 sm:px-4 sm:py-3">
+          <div className="flex items-center justify-between gap-3 px-3 py-2.5 sm:px-4 sm:py-3">
             <div className="flex min-w-0 items-center gap-2 sm:gap-2.5">
               <span className={cn(
                 "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg sm:h-9 sm:w-9",

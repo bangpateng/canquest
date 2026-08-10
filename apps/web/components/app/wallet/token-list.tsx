@@ -110,16 +110,8 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
   return (
     <div className="w-full max-w-full min-w-0 space-y-5 md:space-y-6 font-sans">
       {/* ── Balance Hero Card ───────────────────────────────────────────── */}
-      <Card className="relative w-full overflow-hidden p-6 sm:p-8">
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(ellipse 90% 70% at 50% 0%, rgb(var(--canton-rgb) / 0.12), transparent 70%)",
-          }}
-          aria-hidden
-        />
-        <div className="relative">
+      <Card className="w-full overflow-hidden p-6 sm:p-8">
+        <div>
           <div className="flex items-center justify-between">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
               Total Balance

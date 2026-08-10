@@ -50,22 +50,8 @@ export function CampaignQuestStatusCard({
   const styles = toneStyles[tone];
 
   return (
-    <Card className="relative overflow-hidden px-6 py-5">
-      {/* Ambient glow — accent shifts subtly with tone. */}
-      <div
-        className={cn(
-          "pointer-events-none absolute inset-0",
-          tone === "sky" &&
-            "bg-[radial-gradient(ellipse_60%_80%_at_0%_0%,rgb(56_189_248/0.10),transparent_60%)]",
-          tone === "amber" &&
-            "bg-[radial-gradient(ellipse_60%_80%_at_0%_0%,rgb(251_191_36/0.10),transparent_60%)]",
-          tone === "emerald" &&
-            "bg-[radial-gradient(ellipse_60%_80%_at_0%_0%,rgb(var(--canton-rgb)/0.12),transparent_60%)]",
-          tone === "neutral" &&
-            "bg-[radial-gradient(ellipse_60%_80%_at_0%_0%,rgb(var(--canton-rgb)/0.06),transparent_60%)]",
-        )}
-      />
-      <div className="relative flex min-w-0 items-start gap-4">
+    <Card className="overflow-hidden px-6 py-5">
+      <div className="flex min-w-0 items-start gap-4">
         {Icon ? (
           <div
             className={cn(

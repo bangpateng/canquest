@@ -40,16 +40,8 @@ export function WalletReconnect({ username, onConnected }: WalletReconnectProps)
 
   return (
     <div className="flex min-h-[60vh] w-full min-w-0 items-center justify-center">
-      <Card className="relative w-full min-w-0 max-w-md overflow-hidden p-8 text-center sm:p-10">
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(ellipse 80% 60% at 50% 0%, rgb(251 146 60 / 0.10), transparent 70%)",
-          }}
-          aria-hidden
-        />
-        <div className="relative">
+      <Card className="w-full min-w-0 max-w-md overflow-hidden p-8 text-center sm:p-10">
+        <div>
           <div className="mb-8 flex justify-center">
             <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-orange-500/30 bg-orange-500/10">
               <Wallet className="h-10 w-10 text-orange-400" />

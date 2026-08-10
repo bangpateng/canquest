@@ -207,7 +207,7 @@ function txIconBg(type: TxItem["type"]): string {
     case "TOKEN_OFFER_WITHDRAWN":
     case "PREAPPROVAL_DISABLED":
       // Aksi toggle netral — muted, bukan merah (tidak ada pergerakan CC).
-      return "bg-[var(--muted)] text-[var(--muted-foreground)] ring-1 ring-[var(--border)]";
+      return "bg-[var(--muted)] text-[var(--muted-foreground)]";
     case "PREAPPROVAL_ENABLED":
       return "bg-canton-subtle text-canton ring-1 ring-[var(--primary)]/15";
     case "QUEST_REWARD":
@@ -222,7 +222,7 @@ function txIconBg(type: TxItem["type"]): string {
       // CC masuk — canton/green (sama transfer in).
       return "bg-canton-subtle text-canton ring-1 ring-[var(--primary)]/15";
     default:
-      return "bg-[var(--muted)] text-[var(--muted-foreground)] ring-1 ring-[var(--border)]";
+      return "bg-[var(--muted)] text-[var(--muted-foreground)]";
   }
 }
 
@@ -434,17 +434,8 @@ export function TransactionsView({
 
   return (
     <div className={cn(embedded ? "" : "space-y-8", className)}>
-      <Card className="relative w-full min-w-0 overflow-hidden">
-        {/* Ambient glow */}
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(ellipse 80% 60% at 50% 0%, rgb(var(--canton-rgb) / 0.08), transparent 70%)",
-          }}
-          aria-hidden
-        />
-        <div className="relative flex items-start justify-between gap-4 border-b border-[var(--border)] px-5 py-4 sm:px-6 sm:py-5">
+      <Card className="w-full min-w-0 overflow-hidden">
+        <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] px-5 py-4 sm:px-6 sm:py-5">
           <div className="min-w-0">
             <p className="text-base font-semibold text-[var(--foreground)]">
               {t("transactions.title")}

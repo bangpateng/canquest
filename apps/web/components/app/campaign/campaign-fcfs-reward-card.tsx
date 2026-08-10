@@ -72,17 +72,8 @@ export function CampaignFcfsRewardCard({
   const isUsdcx = (rewardToken ?? "CC").toUpperCase() === "USDCX";
 
   return (
-    <Card className="relative overflow-hidden px-6 py-5">
-      {/* Ambient glow — canton-tinted when claimable, neutral when status-only. */}
-      <div
-        className={cn(
-          "pointer-events-none absolute inset-0",
-          isStatus
-            ? "bg-[radial-gradient(ellipse_60%_80%_at_0%_0%,rgb(var(--canton-rgb)/0.06),transparent_60%)]"
-            : "bg-[radial-gradient(ellipse_60%_80%_at_0%_0%,rgb(var(--canton-rgb)/0.12),transparent_60%)]",
-        )}
-      />
-      <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-5">
+    <Card className="overflow-hidden px-6 py-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-5">
         <div className="flex min-w-0 items-start gap-4">
           <div
             className={cn(

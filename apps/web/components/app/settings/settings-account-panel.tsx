@@ -76,18 +76,8 @@ export function SettingsAccountPanel() {
   const errorMsg = isError ? formatApiError(error) : null;
 
   return (
-    <Card className="relative w-full max-w-full overflow-hidden">
-      {/* Ambient glow */}
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(ellipse 80% 60% at 0% 0%, rgb(var(--canton-rgb) / 0.10), transparent 70%)",
-        }}
-        aria-hidden
-      />
-
-      <div className="relative p-6 sm:p-7">
+    <Card className="w-full max-w-full overflow-hidden">
+      <div className="p-6 sm:p-7">
         {/* Section header */}
         <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
           Profile

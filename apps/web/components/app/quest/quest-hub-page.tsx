@@ -99,16 +99,10 @@ export function QuestHubPage() {
       {/* ── Points hero — icon-led, matches dashboard PointsCard ──────── */}
       <Card
         interactive
-        className="relative w-full max-w-full overflow-hidden p-6 sm:p-7"
+        className="w-full max-w-full overflow-hidden p-6 sm:p-7"
         aria-label="Points balance"
       >
-        {/* Ambient glow — canton radial (dashboard-card style) */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_100%_0%,rgb(var(--canton-rgb)/0.12),transparent_60%)]"
-        />
-
-        <div className="relative">
+        <div>
           {loading ? (
             <div className="flex h-12 items-center">
               <LoadingSpinner size="lg" tone="muted" />
@@ -159,7 +153,7 @@ export function QuestHubPage() {
       ) : hubError || !hub ? (
         <Card className="border-dashed py-16 text-center sm:py-20">
           <div className="flex flex-col items-center gap-4">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--muted)] ring-1 ring-[var(--border)]">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--muted)]">
               <Zap className="h-8 w-8 text-[var(--muted-foreground)]" />
             </div>
             <p className="text-sm font-medium text-[var(--muted-foreground)]">
@@ -189,7 +183,7 @@ export function QuestHubPage() {
             ) : (
               <Card className="border-dashed py-16 text-center">
                 <div className="flex flex-col items-center gap-4">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--muted)] ring-1 ring-[var(--border)]">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--muted)]">
                     <Sparkles className="h-8 w-8 text-[var(--muted-foreground)]" />
                   </div>
                   <p className="text-sm font-medium text-[var(--muted-foreground)]">

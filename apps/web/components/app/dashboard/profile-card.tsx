@@ -53,21 +53,12 @@ export function ProfileCard({
   const seed = username?.trim() || displayName?.trim() || "guest";
 
   return (
-    <Card interactive className="relative overflow-hidden p-6 sm:p-7">
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(ellipse 70% 60% at 0% 0%, rgb(251 191 36 / 0.06), transparent 70%)",
-        }}
-        aria-hidden
-      />
-
-      <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+    <Card interactive className="overflow-hidden p-6 sm:p-7">
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
         {/* ── Identity ── */}
         <div className="flex items-center gap-4">
           <div
-            className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl ring-1 ring-[var(--border)]"
+            className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl"
             style={avatarSrc ? undefined : { backgroundImage: avatarGradient(seed) }}
           >
             {avatarSrc ? (
@@ -115,7 +106,7 @@ export function ProfileCard({
         {/* ── Weekly rank badge ── */}
         <Link
           href={ROUTES.leaderboard}
-          className="group flex shrink-0 items-center gap-3 rounded-xl bg-[var(--muted)] px-4 py-2.5 ring-1 ring-[var(--border)] transition-colors hover:bg-[var(--primary)]/5"
+          className="group flex shrink-0 items-center gap-3 rounded-xl bg-[var(--muted)] px-4 py-2.5 transition-colors hover:bg-[var(--primary)]/5"
         >
           <div className="text-right">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">

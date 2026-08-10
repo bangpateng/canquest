@@ -2,19 +2,15 @@ import { forwardRef } from "react";
 import { cn } from "@/lib/utils/utils";
 
 /**
- * Unified Card — the single surface primitive for the dApp.
+ * Unified Card — single flat surface primitive (Vercel/GitHub style).
  *
- * Replaces the ~14 hand-rolled card class strings
- * (`rounded-2xl border-white/[0.06] bg-[#0a0c14]/80 backdrop-blur-2xl shadow-2xl ...`)
- * with one token-driven glass card.
- *
- * `interactive` adds the gradient-hairline frame + lift-on-hover glow,
- * matching the landing page's premium feel.
+ * Design: solid background, one thin border, subtle shadow. No blur, no glow,
+ * no gradient hairlines. Clean and quiet.
  */
 export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
-  /** Enable gradient-hairline frame + hover lift. */
+  /** Subtle hover lift + border highlight. Use on actionable/linked cards. */
   interactive?: boolean;
-  /** Remove the default ring (for nested cards). */
+  /** Remove the default border (for nested cards on tinted backgrounds). */
   bare?: boolean;
 }
 
@@ -23,9 +19,10 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
     <div
       ref={ref}
       className={cn(
-        "glass-card rounded-2xl",
-        !bare && "ring-1 ring-[var(--border)]",
-        interactive && "glass-card-hover gradient-hairline",
+        "rounded-xl bg-[var(--card)]",
+        !bare && "border border-[var(--border)]",
+        interactive &&
+          "transition-colors hover:border-[var(--primary)]/30",
         className,
       )}
       {...props}
@@ -40,7 +37,7 @@ export function CardHeader({
 }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("flex flex-col gap-1 p-6 pb-0", className)}
+      className={cn("flex flex-col gap-1 p-5 pb-0", className)}
       {...props}
     />
   );
@@ -50,5 +47,5 @@ export function CardContent({
   className,
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("p-6", className)} {...props} />;
+  return <div className={cn("p-5", className)} {...props} />;
 }

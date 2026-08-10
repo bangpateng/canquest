@@ -107,19 +107,9 @@ export function SettingsPreapprovalPanel() {
   return (
     <Card
       id="preapproval"
-      className="relative scroll-mt-8 overflow-hidden"
+      className="scroll-mt-8 overflow-hidden"
     >
-      {/* Ambient glow */}
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(ellipse 80% 60% at 100% 0%, rgb(var(--canton-rgb) / 0.10), transparent 70%)",
-        }}
-        aria-hidden
-      />
-
-      <div className="relative">
+      <div>
         {/* Section header — clickable to collapse/expand */}
         <button
           type="button"

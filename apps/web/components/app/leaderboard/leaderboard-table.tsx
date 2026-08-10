@@ -78,13 +78,13 @@ function RankBadge({ rank }: { rank: number }) {
     );
   if (rank === 2)
     return (
-      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--muted)] ring-1 ring-[var(--border)]">
+      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--muted)]">
         <Medal className="h-5 w-5 text-[var(--foreground)]" />
       </span>
     );
   if (rank === 3)
     return (
-      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--muted)] ring-1 ring-[var(--border)]">
+      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--muted)]">
         <Medal className="h-5 w-5 text-canton-muted" />
       </span>
     );
@@ -104,7 +104,7 @@ function ParticipantCell({
     <td className="px-4 py-3.5 sm:px-6 sm:py-4">
       <div className="flex items-center gap-3 sm:gap-4">
         <div
-          className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full ring-1 ring-[var(--border)] sm:h-12 sm:w-12"
+          className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full sm:h-12 sm:w-12"
           aria-hidden
           style={
             avatarSrc
@@ -219,19 +219,9 @@ export function LeaderboardTable() {
       </div>
 
       {/* Leaderboard Card */}
-      <Card interactive className="relative w-full max-w-full overflow-hidden">
-        {/* Ambient glow */}
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(ellipse 80% 60% at 50% 0%, rgb(var(--canton-rgb) / 0.10), transparent 70%)",
-          }}
-          aria-hidden
-        />
-
+      <Card interactive className="w-full max-w-full overflow-hidden">
         {/* Card Header */}
-        <div className="relative flex flex-col sm:flex-row sm:items-center gap-3 border-b border-[var(--border)] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 border-b border-[var(--border)] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
               {period === "all" ? "All time" : period === "weekly" ? "Weekly ranking" : "Monthly ranking"}

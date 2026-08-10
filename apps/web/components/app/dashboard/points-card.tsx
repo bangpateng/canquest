@@ -15,18 +15,8 @@ export function PointsCard({ remaining, loading }: PointsCardProps) {
   const t = usePlatformT();
 
   return (
-    <Card interactive className="relative overflow-hidden p-6 sm:p-7">
-      {/* Ambient glow */}
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(ellipse 80% 60% at 0% 0%, rgb(124 58 237 / 0.12), transparent 70%)",
-        }}
-        aria-hidden
-      />
-
-      <div className="relative">
+    <Card interactive className="overflow-hidden p-6 sm:p-7">
+      <div>
         {/* Icon + label */}
         <div className="flex items-center gap-2.5">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]/15">

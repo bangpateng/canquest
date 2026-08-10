@@ -102,19 +102,9 @@ export function SettingsTwitterPanel({
   return (
     <Card
       id="twitter"
-      className="relative scroll-mt-8 overflow-hidden"
+      className="scroll-mt-8 overflow-hidden"
     >
-      {/* Ambient glow */}
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(ellipse 80% 60% at 50% 0%, rgb(var(--canton-rgb) / 0.10), transparent 70%)",
-        }}
-        aria-hidden
-      />
-
-      <div className="relative p-6 sm:p-7">
+      <div className="p-6 sm:p-7">
         {/* Section header */}
         <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
           X (Twitter)

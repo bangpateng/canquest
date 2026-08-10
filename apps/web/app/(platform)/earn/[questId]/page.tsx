@@ -240,10 +240,8 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
             <QuestTaskPanel quest={quest} />
           </>
         ) : (
-          <Card className="relative overflow-hidden p-5 text-center sm:p-6">
-            {/* Ambient brand glow */}
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_80%_at_50%_0%,rgb(var(--canton-rgb)/0.10),transparent_60%)]" />
-            <div className="relative">
+          <Card className="overflow-hidden p-5 text-center sm:p-6">
+            <div>
               <SectionTitle>Sign in to participate</SectionTitle>
               <p className="mt-2 text-sm text-[var(--muted-foreground)] max-w-sm mx-auto">
                 You need an account to complete missions and claim rewards.

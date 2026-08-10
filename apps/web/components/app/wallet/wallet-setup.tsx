@@ -199,16 +199,8 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
   if (step === "otp") {
     return (
       <div className="flex min-h-[60vh] w-full min-w-0 items-center justify-center">
-        <Card className="relative w-full min-w-0 max-w-md overflow-hidden p-8 sm:p-10">
-          <div
-            className="pointer-events-none absolute inset-0"
-            style={{
-              background:
-                "radial-gradient(ellipse 80% 60% at 50% 0%, rgb(var(--canton-rgb) / 0.10), transparent 70%)",
-            }}
-            aria-hidden
-          />
-          <div className="relative">
+        <Card className="w-full min-w-0 max-w-md overflow-hidden p-8 sm:p-10">
+          <div>
             <div className="mb-8 flex justify-center">
               <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-canton-muted bg-canton-subtle">
                 <MailCheck className="h-10 w-10 text-canton" />
@@ -304,16 +296,8 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
   if (step === "success") {
     return (
       <div className="flex min-h-[60vh] w-full min-w-0 items-center justify-center">
-        <Card className="relative w-full min-w-0 max-w-md overflow-hidden p-8 text-center sm:p-10">
-          <div
-            className="pointer-events-none absolute inset-0"
-            style={{
-              background:
-                "radial-gradient(ellipse 80% 60% at 50% 0%, rgb(16 185 129 / 0.10), transparent 70%)",
-            }}
-            aria-hidden
-          />
-          <div className="relative">
+        <Card className="w-full min-w-0 max-w-md overflow-hidden p-8 text-center sm:p-10">
+          <div>
             <div className="mb-8 flex justify-center">
               <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-emerald-500/30 bg-emerald-500/10">
                 <CheckCircle2 className="h-10 w-10 text-emerald-400" />
@@ -336,16 +320,8 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
   // ── Render step: FORM (default) ──────────────────────────────────────────
   return (
     <div className="flex min-h-[60vh] w-full min-w-0 items-center justify-center">
-      <Card className="relative w-full min-w-0 max-w-md overflow-hidden p-8 sm:p-10">
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(ellipse 80% 60% at 50% 0%, rgb(var(--canton-rgb) / 0.10), transparent 70%)",
-          }}
-          aria-hidden
-        />
-        <div className="relative">
+      <Card className="w-full min-w-0 max-w-md overflow-hidden p-8 sm:p-10">
+        <div>
           <div className="mb-8 flex justify-center">
             <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-canton-muted bg-canton-subtle">
               <Wallet className="h-10 w-10 text-canton" />

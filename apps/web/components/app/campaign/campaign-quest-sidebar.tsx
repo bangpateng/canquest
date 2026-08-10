@@ -136,14 +136,11 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
 
   return (
     <Card
-      className="relative w-full overflow-hidden"
+      className="w-full overflow-hidden"
       aria-label="Campaign reward"
     >
-      {/* Ambient brand glow over the reward highlight */}
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_90%_at_0%_0%,rgb(var(--canton-rgb)/0.10),transparent_60%)]" />
-
       {/* ── Reward highlight (single hero block) ──────────────────── */}
-      <div className="relative border-b border-[var(--border)]">
+      <div className="border-b border-[var(--border)]">
         {/* Reward winner + Pool — 2 equal columns */}
         <div className="relative grid grid-cols-2 gap-px bg-[var(--border)]">
           {/* Reward · winner */}
