@@ -250,11 +250,6 @@ export function isDisposableEmail(email: string | null | undefined): boolean {
   return DISPOSABLE_EMAIL_DOMAINS.has(domain);
 }
 
-/** Untuk dipakai admin/observability: cek domain mentah. */
-export function isDisposableDomain(domain: string): boolean {
-  return DISPOSABLE_EMAIL_DOMAINS.has(domain.trim().toLowerCase());
-}
-
 /**
  * true jika domain email termasuk allowlist webmail permanen.
  * Aman dipanggil dengan input apa pun (mengembalikan false untuk input tak valid).
@@ -265,16 +260,6 @@ export function isAllowedEmailDomain(
   const domain = getDomainFromEmail(email);
   if (!domain) return false;
   return ALLOWED_EMAIL_DOMAINS.has(domain);
-}
-
-/** true jika domain mentah ada di allowlist. */
-export function isAllowedDomain(domain: string): boolean {
-  return ALLOWED_EMAIL_DOMAINS.has(domain.trim().toLowerCase());
-}
-
-/** Daftar domain allowlist (untuk ditampilkan ke UI / pesan error). */
-export function getAllowedEmailDomainList(): string[] {
-  return [...ALLOWED_EMAIL_DOMAINS];
 }
 
 /**
@@ -315,22 +300,6 @@ export function canonicalEmail(email: string | null | undefined): string {
   }
 
   return `${local}@${domain}`;
-}
-
-/**
- * true jika email terlihat seperti alias Gmail yang dimanipulasi (titik/plus).
- * Dipakai admin fraud detection untuk menandai referral mencurigakan WALAUI
- * domainnya gmail. True bila: domain gmail/googlemail DAN bentuk kanoniknya
- * berbeda dari bentuk aslinya (artinya ada titik/plus yang dihilangkan).
- */
-export function isGmailAliasVariant(email: string | null | undefined): boolean {
-  if (!email) return false;
-  const lower = email.trim().toLowerCase();
-  const at = lower.lastIndexOf('@');
-  if (at < 0) return false;
-  const domain = lower.slice(at + 1);
-  if (domain !== 'gmail.com' && domain !== 'googlemail.com') return false;
-  return canonicalEmail(email) !== lower;
 }
 
 /** Hasil validasi email saat registrasi. */

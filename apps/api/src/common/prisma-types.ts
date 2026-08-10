@@ -150,7 +150,3 @@ export const UserStatus = {
   SUSPENDED: 'SUSPENDED' as UserStatus,
   BANNED: 'BANNED' as UserStatus,
 };
-
-/** CcTransactionTypes that represent a lock/unlock (no counterparty; CC stays in user's party). */
-export const CC_LOCK_TYPES: ReadonlySet<CcTransactionType> =
-  new Set<CcTransactionType>(['CC_LOCK', 'CC_UNLOCK']);

@@ -11,6 +11,7 @@ import {
   cantonPartyIdsEqual,
   normalizeCantonPartyId,
 } from '../common/canton-party-id';
+import { DEBUG_LEDGER } from '../common/debug-flags';
 import { ProxyCacheService } from './proxy-cache.service';
 
 /**
@@ -3103,10 +3104,12 @@ export class CantonLedgerService {
       total += effective;
     }
     // Hot path: getLedgerBalance dipanggil tiap poll sync (30s) & per-request
-    // balance. Turunkan ke verbose supaya tidak spam.
-    this.logger.verbose(
-      `Balance Ledger: party=${partyId.split('::')[0]} = ${total} CC (${holdings.length} Amulets, round ${currentRound})`,
-    );
+    // balance. Gate dengan DEBUG_LEDGER supaya template string tidak jalan.
+    if (DEBUG_LEDGER) {
+      this.logger.verbose(
+        `Balance Ledger: party=${partyId.split('::')[0]} = ${total} CC (${holdings.length} Amulets, round ${currentRound})`,
+      );
+    }
     return total;
   }
 
@@ -3291,10 +3294,12 @@ export class CantonLedgerService {
     }
 
     // Hot path: queryTokenHoldings dipanggil per-request balance & per-poll sync.
-    // Log di level verbose supaya tidak spam di produksi (level info default).
-    this.logger.verbose(
-      `Amulet ACS query (wildcard): party=${ownerPartyId.split('::')[0]} found ${holdings.length} holdings from ${allContracts.length} total contracts`,
-    );
+    // Gate dengan DEBUG_LEDGER supaya template string tidak jalan tiap poll.
+    if (DEBUG_LEDGER) {
+      this.logger.verbose(
+        `Amulet ACS query (wildcard): party=${ownerPartyId.split('::')[0]} found ${holdings.length} holdings from ${allContracts.length} total contracts`,
+      );
+    }
     return holdings;
   }
 
@@ -3543,10 +3548,12 @@ export class CantonLedgerService {
     }
 
     // Hot path: queryTokenHoldings dipanggil per-request balance & per-poll sync.
-    // Log di level verbose supaya tidak spam di produksi (level info default).
-    this.logger.verbose(
-      `Token ACS query: party=${ownerPartyId.split('::')[0]} instrument=${instrumentId} found ${holdings.length} holdings from ${allContracts.length} total contracts`,
-    );
+    // Gate dengan DEBUG_LEDGER supaya template string tidak jalan tiap poll.
+    if (DEBUG_LEDGER) {
+      this.logger.verbose(
+        `Token ACS query: party=${ownerPartyId.split('::')[0]} instrument=${instrumentId} found ${holdings.length} holdings from ${allContracts.length} total contracts`,
+      );
+    }
     return holdings;
   }
 
@@ -3677,11 +3684,13 @@ export class CantonLedgerService {
       result[id] = (result[id] ?? 0) + amount;
     }
 
-    this.logger.verbose(
-      `Token InterfaceFilter query: party=${partyId.split('::')[0]} ` +
-        `found ${allContracts.length} holding contracts, ` +
-        `${Object.keys(result).length} instruments`,
-    );
+    if (DEBUG_LEDGER) {
+      this.logger.verbose(
+        `Token InterfaceFilter query: party=${partyId.split('::')[0]} ` +
+          `found ${allContracts.length} holding contracts, ` +
+          `${Object.keys(result).length} instruments`,
+      );
+    }
     return result;
   }
 
@@ -3740,9 +3749,11 @@ export class CantonLedgerService {
       }
       // Empty — kalau bukan attempt terakhir, tunggu lalu retry (timing/offset lag).
       if (attempt < maxRetries) {
-        this.logger.verbose(
-          `getTokenHoldingCids: ${instrumentId} not found for ${partyId.split('::')[0]} (attempt ${attempt}/${maxRetries}), retry in ${retryDelayMs}ms...`,
-        );
+        if (DEBUG_LEDGER) {
+          this.logger.verbose(
+            `getTokenHoldingCids: ${instrumentId} not found for ${partyId.split('::')[0]} (attempt ${attempt}/${maxRetries}), retry in ${retryDelayMs}ms...`,
+          );
+        }
         await new Promise((r) => setTimeout(r, retryDelayMs));
       }
     }

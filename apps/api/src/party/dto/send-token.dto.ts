@@ -23,12 +23,6 @@ import {
  */
 export const MAX_TRANSFER_TOKEN = 1_000_000_000;
 
-/**
- * Pola party id Canton: alphanumeric + "::" + hex. Dipakai untuk membedakan
- * input recipient berupa username vs party id. Mirror pola di party.controller.
- */
-const PARTY_ID_REGEX = /^[a-zA-Z0-9_-]+::[a-fA-F0-9]+$/;
-
 export class SendTokenDto {
   /** Recipient — username ("@alice" / "alice") atau Canton party id ("alice::1220…"). */
   @IsString()
@@ -78,9 +72,4 @@ export class SendTokenDto {
   @MinLength(8, { message: 'Idempotency nonce is required.' })
   @MaxLength(64)
   clientNonce!: string;
-}
-
-/** Type-guard helper: apakah string input terlihat seperti Canton party id. */
-export function looksLikeTokenPartyId(input: string): boolean {
-  return PARTY_ID_REGEX.test(input.trim());
 }

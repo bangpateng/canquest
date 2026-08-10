@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { Response } from 'express';
+import { DEBUG_LEDGER } from '../common/debug-flags';
 
 /**
  * In-memory registry koneksi SSE aktif, dikelompokkan per userId.
@@ -25,7 +26,7 @@ export class RealtimeService {
       this.clients.set(userId, set);
     }
     set.add(res);
-    this.logger.debug(`+client user=${userId} (total ${set.size})`);
+    if (DEBUG_LEDGER) this.logger.debug(`+client user=${userId} (total ${set.size})`);
   }
 
   /** Hapus koneksi SSE (saat user tutup tab / koneksi putus). */
@@ -34,7 +35,7 @@ export class RealtimeService {
     if (!set) return;
     set.delete(res);
     if (set.size === 0) this.clients.delete(userId);
-    this.logger.debug(`-client user=${userId} (total ${set.size})`);
+    if (DEBUG_LEDGER) this.logger.debug(`-client user=${userId} (total ${set.size})`);
   }
 
   /**

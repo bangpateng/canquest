@@ -23,7 +23,3 @@ export function looksLikeQuestId(value: string): boolean {
   if (v.startsWith('@') || v.startsWith('Validator')) return false;
   return /^[a-z0-9_-]+$/i.test(v);
 }
-
-export function isLegacyQuestRewardDescription(description: string): boolean {
-  return parseQuestIdFromRewardDescription(description) !== null;
-}

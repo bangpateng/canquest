@@ -162,9 +162,6 @@ export const BADGE_UNREAD_TX_TYPES: CcTransactionType[] = [
   'SWAP_IN',
 ];
 
-/** @deprecated Use FEED_TX_TYPES (feed) / BADGE_UNREAD_TX_TYPES (badge). */
-export const NOTIFICATION_TX_TYPES: CcTransactionType[] = FEED_TX_TYPES;
-
 /**
  * TokenTransaction types yang tampil di notification bell (feed) dan memicu
  * badge unread. Paralel dengan FEED_TX_TYPES / BADGE_UNREAD_TX_TYPES untuk CC.

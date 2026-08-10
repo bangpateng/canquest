@@ -12,8 +12,6 @@ import { OneSwapClient } from '../oneswap/oneswap-client';
  */
 export type RewardTokenSymbol = 'CC' | 'USDCx';
 
-export const REWARD_TOKEN_DEFAULT: RewardTokenSymbol = 'CC';
-
 /** Coerce sembarang string DB → RewardTokenSymbol yang aman (default CC). */
 export function normalizeRewardToken(value: string | null | undefined): RewardTokenSymbol {
   const v = (value ?? '').trim().toUpperCase();

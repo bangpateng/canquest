@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Decimal } from '@prisma/client/runtime/library';
+import { DEBUG_LEDGER } from '../common/debug-flags';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { CantonLedgerService } from './canton-ledger.service';
@@ -330,10 +331,12 @@ export class OfferReconcilerService implements OnModuleInit, OnModuleDestroy {
       'outgoing',
     );
     const activeCids = new Set(activeOffers.map((o) => o.contractId));
-    this.logger.debug(
-      `Offer reconciler @${user.username}: ${rows.length} pending row(s) vs ` +
-        `${activeOffers.length} active outgoing offer(s) on-chain`,
-    );
+    if (DEBUG_LEDGER) {
+      this.logger.debug(
+        `Offer reconciler @${user.username}: ${rows.length} pending row(s) vs ` +
+          `${activeOffers.length} active outgoing offer(s) on-chain`,
+      );
+    }
 
     const ccRows = rows.filter((r) => r.table === 'cc');
     const tokenRows = rows.filter((r) => r.table === 'token');

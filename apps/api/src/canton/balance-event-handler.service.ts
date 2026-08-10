@@ -37,6 +37,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Decimal } from '@prisma/client/runtime/library';
 import type { Subscription } from 'rxjs';
+import { DEBUG_LEDGER } from '../common/debug-flags';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { UsersService } from '../users/users.service';
@@ -252,9 +253,11 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
         create: { userId: user.userId, balanceMicroCc: deltaMicroCc },
         update: { balanceMicroCc: { increment: deltaMicroCc } },
       });
-      this.logger.debug(
-        `BalanceEventHandler: CcBalance +${totalAmount.toFixed(6)} CC → @${user.username ?? user.userId.slice(0, 8)}`,
-      );
+      if (DEBUG_LEDGER) {
+        this.logger.debug(
+          `BalanceEventHandler: CcBalance +${totalAmount.toFixed(6)} CC → @${user.username ?? user.userId.slice(0, 8)}`,
+        );
+      }
       // Push realtime balance:changed (UI refresh wallet).
       this.realtime.push(user.userId, 'balance:changed', null);
     } catch (err) {
@@ -282,9 +285,11 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
       // Controller sudah catat (SWAP_IN / TRANSFER_IN / TOKEN_TRANSFER_IN).
       // Skip insert history + skip push transaction:new (anti duplikat badge).
       // Balance increment di STEP 1 tetap jalan (itu wajib).
-      this.logger.debug(
-        `BalanceEventHandler: skip history insert CC +${totalAmount} untuk @${user.username ?? user.userId.slice(0, 8)} (tx sudah dicatat sebagai ${existing.type}, updateId=${updateId.slice(0, 16)}…)`,
-      );
+      if (DEBUG_LEDGER) {
+        this.logger.debug(
+          `BalanceEventHandler: skip history insert CC +${totalAmount} untuk @${user.username ?? user.userId.slice(0, 8)} (tx sudah dicatat sebagai ${existing.type}, updateId=${updateId.slice(0, 16)}…)`,
+        );
+      }
       return;
     }
 
@@ -301,9 +306,11 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
         cantonUpdateId: updateId,
         status: 'COMPLETED',
       });
-      this.logger.debug(
-        `BalanceEventHandler: +${totalAmount.toFixed(6)} CC → @${user.username ?? user.userId.slice(0, 8)}`,
-      );
+      if (DEBUG_LEDGER) {
+        this.logger.debug(
+          `BalanceEventHandler: +${totalAmount.toFixed(6)} CC → @${user.username ?? user.userId.slice(0, 8)}`,
+        );
+      }
     } catch (err) {
       const errMsg = String(err);
       if (!errMsg.includes('P2002') && !errMsg.includes('Unique constraint')) {
@@ -368,9 +375,11 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
           },
         });
       }
-      this.logger.debug(
-        `BalanceEventHandler: CantexTokenBalance +${tk.amount} ${tk.instrumentId} → @${tk.username ?? tk.userId.slice(0, 8)}`,
-      );
+      if (DEBUG_LEDGER) {
+        this.logger.debug(
+          `BalanceEventHandler: CantexTokenBalance +${tk.amount} ${tk.instrumentId} → @${tk.username ?? tk.userId.slice(0, 8)}`,
+        );
+      }
       // Push realtime balance:changed (UI refresh wallet).
       this.realtime.push(tk.userId, 'balance:changed', null);
 
@@ -407,9 +416,11 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
       select: { id: true, type: true },
     });
     if (existing) {
-      this.logger.debug(
-        `BalanceEventHandler: skip history insert ${tk.instrumentId} +${tk.amount} untuk @${tk.username ?? tk.userId.slice(0, 8)} (tx sudah dicatat sebagai ${existing.type}, updateId=${updateId.slice(0, 16)}…)`,
-      );
+      if (DEBUG_LEDGER) {
+        this.logger.debug(
+          `BalanceEventHandler: skip history insert ${tk.instrumentId} +${tk.amount} untuk @${tk.username ?? tk.userId.slice(0, 8)} (tx sudah dicatat sebagai ${existing.type}, updateId=${updateId.slice(0, 16)}…)`,
+        );
+      }
       return;
     }
 
@@ -417,9 +428,11 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
     // (TokenTransaction di-handle controller via recordTokenTransaction).
     // Token history row tidak di-insert oleh handler untuk hindari kompleksitas
     // cross-table dedup — controller (acceptOffer/sendToken) sudah reliable.
-    this.logger.debug(
-      `BalanceEventHandler: token history untuk ${tk.instrumentId} +${tk.amount} tidak di-insert handler (controller akan handle)`,
-    );
+    if (DEBUG_LEDGER) {
+      this.logger.debug(
+        `BalanceEventHandler: token history untuk ${tk.instrumentId} +${tk.amount} tidak di-insert handler (controller akan handle)`,
+      );
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -756,10 +769,12 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
               where: { id: row.id },
               data: { balance: newBalance.lt(0) ? new Decimal(0) : newBalance },
             });
-            this.logger.log(
-              `BalanceEventHandler: CantexTokenBalance -${cached.amount} ${cached.instrumentId} ` +
-                `(archive cid=${a.contractId.slice(0, 12)}…) → user=${cached.userId.slice(0, 8)}…`,
-            );
+            if (DEBUG_LEDGER) {
+              this.logger.debug(
+                `BalanceEventHandler: CantexTokenBalance -${cached.amount} ${cached.instrumentId} ` +
+                  `(archive cid=${a.contractId.slice(0, 12)}…) → user=${cached.userId.slice(0, 8)}…`,
+              );
+            }
             this.realtime.push(cached.userId, 'balance:changed', null);
           }
         } catch (err) {
@@ -836,8 +851,8 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
           status,
           ev.updateId,
         );
-        if (flipped > 0) {
-          this.logger.log(
+        if (flipped > 0 && DEBUG_LEDGER) {
+          this.logger.debug(
             `BalanceEventHandler: offer ${choice} cid=${cid.slice(0, 16)}… → ${status} (flipped ${flipped} row, updateId=${ev.updateId?.slice(0, 16)}…)`,
           );
         }

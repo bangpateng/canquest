@@ -1,46 +1,18 @@
 /**
- * OneSwap types — re-export SDK types + tipe lokal untuk view ke frontend.
+ * OneSwap types — tipe lokal untuk view ke frontend.
  *
- * Error classes + type shapes diambil langsung dari @oneswap/sdk (sumber
- * kebenaran, bukan diduplikasi) supaya selalu sinkron dengan versi SDK.
+ * Hanya error classes yang benar-benar dipakai controller yang di-re-export
+ * dari @oneswap/sdk (sumber kebenaran, bukan diduplikasi) supaya selalu
+ * sinkron dengan versi SDK. Type shapes SDK lainnya di-import langsung dari
+ * @oneswap/sdk oleh konsumen yang membutuhkan.
  */
 
 // Re-export error classes dari SDK (dipakai controller untuk catch bertingkat).
 export {
   OneSwapError,
-  AuthError,
-  ValidationError,
-  NotFoundError,
-  RateLimitError,
-  ConflictError,
-  OpenSwapExistsError,
   NoDirectPoolError,
   AmbiguousPoolPairError,
-  ServerError,
-  NetworkError,
-  TimeoutError,
 } from '@oneswap/sdk';
-
-// Re-export type shapes dari SDK (QuoteResult, Swap, Token, Pool, dst.)
-export type {
-  OneSwapConfig,
-  OneSwapEnvironment,
-  Swap,
-  SwapStatus,
-  CreateSwapArgs,
-  WaitForSwapOptions,
-  Token,
-  Pool,
-  PoolAsset,
-  PoolDetail,
-  PoolTicker,
-  PoolSwap,
-  Quote,
-  QuoteResult,
-  GetQuoteArgs,
-  PoolPairCandidate,
-} from '@oneswap/sdk';
-export { isTerminal, TERMINAL_STATUSES } from '@oneswap/sdk';
 
 /**
  * Parameter executeSwap — berbasis symbol (bukan instrumentId+admin ganda
@@ -68,29 +40,4 @@ export interface SwapExecResult {
   swapId?: string;
   /** Pesan error/user-facing bila gagal. */
   message?: string;
-}
-
-/**
- * View quote untuk frontend — subset field Quote yang relevan untuk UI swap.
- * Frontend menampilkan: output estimate, price impact, breakdown fee.
- */
-export interface QuoteView {
-  /** Estimasi output (token yang dibeli). */
-  amountOut: number;
-  /** Price impact trade ini, persen. */
-  priceImpactPct: number;
-  /** Network fee dari input (gasless — user tidak butuh CC untuk gas). */
-  networkFeeIn: number;
-  /** Potongan platform dari pool fee (di input token). */
-  platformFee: number;
-  /** Potongan LP dari pool fee (di input token). */
-  lpFee: number;
-  /** Fee pool total (basis points), sebelum diskon. */
-  swapFeeBps: number;
-  /** Fee efektif (basis points) setelah diskon. */
-  effFeeBps: number;
-  /** Pool yang dipakai untuk quote (transparansi). */
-  poolId: string;
-  /** Symbol input. */
-  inSym: string;
 }

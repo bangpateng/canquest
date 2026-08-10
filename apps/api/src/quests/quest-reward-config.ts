@@ -48,17 +48,6 @@ export function isFcfsSlotsFull(
   return fcfsSlotsTakenCount(remaining, maxWinners) >= Math.max(1, maxWinners);
 }
 
-/** Winners claimed / max (0/2, 1/2). "Ended" when pool is full. */
-export function formatFcfsSlotsFilledLabel(
-  remaining: number,
-  maxWinners: number,
-): string {
-  const max = Math.max(1, maxWinners);
-  if (isFcfsSlotsFull(remaining, maxWinners)) return 'Ended';
-  const taken = fcfsSlotsTakenCount(remaining, maxWinners);
-  return `${taken}/${max}`;
-}
-
 /** Claim success copy — filled count + fee hint context */
 export function formatFcfsSlotsRemainingLabel(
   remaining: number,

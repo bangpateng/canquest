@@ -73,6 +73,7 @@ import { Subject } from 'rxjs';
 import WebSocket from 'ws';
 
 import { KeycloakTokenService } from '../auth/keycloak-token.service';
+import { DEBUG_LEDGER } from '../common/debug-flags';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { CantonLedgerService } from './canton-ledger.service';
@@ -752,8 +753,8 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     this.reconnectAttempts = 0;
 
     // Structured event — demote ke debug (parser sudah stabil di production).
-    // Hanya log choices summary di debug utk troubleshooting.
-    if (this.logger['debug']) {
+    // Gate dengan DEBUG_LEDGER agar alloc array+map+join tidak jalan tiap message.
+    if (DEBUG_LEDGER) {
       const partySample = [...parties].slice(0, 3).map((p) => p.split('::')[0]);
       const choices = exercised.map((e) => e.choice).filter(Boolean);
       this.logger.debug(

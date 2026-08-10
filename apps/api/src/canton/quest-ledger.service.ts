@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
+import { DEBUG_LEDGER } from '../common/debug-flags';
 import { CantonLedgerService } from './canton-ledger.service';
 
 /**
@@ -81,12 +82,6 @@ export interface QuestTaskLedgerResult {
   ledgerEnabled: boolean;
   participationContractId: string | null;
   taskSubmissionContractId: string | null;
-  errors: string[];
-}
-
-export interface ClaimSessionLedgerResult {
-  ledgerEnabled: boolean;
-  sessionContractId: string | null;
   errors: string[];
 }
 
@@ -1018,19 +1013,22 @@ export class QuestLedgerService implements OnModuleInit {
 
       // ── Submit Settle choice ────────────────────────────────────────────────
       const commandId = `settle-${params.claimContractId.slice(0, 16)}-${randomUUID()}`;
-      // DIAGNOSTIC: log full choiceArgument payload untuk debug COMMAND_PREPROCESSING_FAILED.
-      this.logger.debug(
-        `SETTLE_DEBUG payload: ${JSON.stringify({
-          feeFactoryCid: feeRegistry.factoryId.slice(0, 16),
-          feeTransfer: { sender: String(feeTransfer.sender).split('::')[0], receiver: String(feeTransfer.receiver).split('::')[0], meta_keys: Object.keys(feeTransfer.meta ?? {}) },
-          feeExtraArgs: feeExtraArgs,
-          rewardFactoryCid: rewardRegistry?.factoryId?.slice(0, 16) ?? null,
-          rewardTransfer: rewardTransfer ? { sender: String(rewardTransfer.sender).split('::')[0], meta_keys: Object.keys(rewardTransfer.meta ?? {}) } : null,
-          rewardExtraArgs: rewardExtraArgs,
-          feeCtxRaw: feeRegistry.choiceContextData,
-          rewardCtxRaw: rewardRegistry?.choiceContextData ?? null,
-        })}`,
-      );
+      // DIAGNOSTIC: full choiceArgument payload untuk debug COMMAND_PREPROCESSING_FAILED.
+      // Gate dengan DEBUG_LEDGER agar JSON.stringify tidak jalan di production.
+      if (DEBUG_LEDGER) {
+        this.logger.debug(
+          `SETTLE_DEBUG payload: ${JSON.stringify({
+            feeFactoryCid: feeRegistry.factoryId.slice(0, 16),
+            feeTransfer: { sender: String(feeTransfer.sender).split('::')[0], receiver: String(feeTransfer.receiver).split('::')[0], meta_keys: Object.keys(feeTransfer.meta ?? {}) },
+            feeExtraArgs: feeExtraArgs,
+            rewardFactoryCid: rewardRegistry?.factoryId?.slice(0, 16) ?? null,
+            rewardTransfer: rewardTransfer ? { sender: String(rewardTransfer.sender).split('::')[0], meta_keys: Object.keys(rewardTransfer.meta ?? {}) } : null,
+            rewardExtraArgs: rewardExtraArgs,
+            feeCtxRaw: feeRegistry.choiceContextData,
+            rewardCtxRaw: rewardRegistry?.choiceContextData ?? null,
+          })}`,
+        );
+      }
       const { ok, text } = await this.ledger.exerciseChoice(
         params.claimContractId,
         tpl,
@@ -1443,61 +1441,6 @@ export class QuestLedgerService implements OnModuleInit {
 
   // ── Legacy / deprecated stubs ───────────────────────────────────────────────
 
-  /** @deprecated */
-  async ensureParticipation(params: {
-    questId: string;
-    questKind: string;
-    userPartyId: string;
-  }): Promise<{ contractId: string | null; error?: string }> {
-    return { contractId: null };
-  }
-  /** @deprecated */
-  async createClaimSession(params: {
-    questId: string;
-    userPartyId: string;
-    claimKind: string;
-    feeCc: number;
-    rewardCc: number;
-  }): Promise<ClaimSessionLedgerResult> {
-    return { ledgerEnabled: false, sessionContractId: null, errors: [] };
-  }
-  /** @deprecated */
-  async createEarnClaimSession(params: {
-    questId?: string;
-    campaignId?: string;
-    userPartyId: string;
-    [key: string]: unknown;
-  }): Promise<{ contractId: string | null; error?: string }> {
-    return { contractId: null };
-  }
-  /** @deprecated */
-  async createFcfsSlotReservation(params: {
-    questId?: string;
-    campaignId?: string;
-    userPartyId: string;
-    [key: string]: unknown;
-  }): Promise<{ contractId: string | null; error?: string }> {
-    return { contractId: null };
-  }
-  /** @deprecated */
-  async createCcRewardEntitlement(params: {
-    questId?: string;
-    campaignId?: string;
-    userPartyId: string;
-    [key: string]: unknown;
-  }): Promise<{ contractId: string | null; error?: string }> {
-    return { contractId: null };
-  }
-  /** @deprecated */
-  async createCodeRewardEntitlement(params: {
-    questId?: string;
-    campaignId?: string;
-    userPartyId: string;
-    [key: string]: unknown;
-  }): Promise<{ contractId: string | null; error?: string }> {
-    return { contractId: null };
-  }
-
   async recordPartyRegistration(params: {
     userPartyId: string;
     userId?: string;        // v28: utk userProfileRef "user:<userId>"
@@ -1545,48 +1488,6 @@ export class QuestLedgerService implements OnModuleInit {
     [key: string]: unknown;
   }): Promise<{ ok: boolean; contractId: string | null; errors: string[] }> {
     return { ok: true, contractId: null, errors: [] };
-  }
-  /** @deprecated */
-  async createRaffleWinner(params: {
-    userPartyId: string;
-    questId?: string;
-    campaignId?: string;
-    rewardCc?: number;
-    txId?: string;
-    [key: string]: unknown;
-  }): Promise<{ contractId: string | null; error?: string }> {
-    return { contractId: null };
-  }
-  /** @deprecated — v21: gunakan atomicFeeAndReward (gabungan fee+reward) */
-  async markEarnClaimFeePaid(params: {
-    sessionContractId: string;
-    feeTxId: string;
-  }): Promise<{ ok: boolean; errors: string[] }> {
-    return { ok: true, errors: [] };
-  }
-  /** @deprecated — v21: gunakan atomicFeeAndReward (gabungan fee+reward) */
-  async markEarnClaimRewardSent(params: {
-    sessionContractId: string;
-    rewardTxId: string;
-  }): Promise<{ ok: boolean; errors: string[] }> {
-    return { ok: true, errors: [] };
-  }
-  /** @deprecated */
-  async markClaimFeePaid(params: {
-    sessionContractId: string;
-    feeTxId: string;
-  }): Promise<{ ok: boolean; errors: string[] }> {
-    return this.markEarnClaimFeePaid(params);
-  }
-  /** @deprecated */
-  async markClaimRewardSent(params: {
-    sessionContractId: string;
-    rewardTxId: string;
-  }): Promise<{ ok: boolean; errors: string[] }> {
-    return this.markEarnClaimRewardSent({
-      sessionContractId: params.sessionContractId,
-      rewardTxId: params.rewardTxId,
-    });
   }
   /** @deprecated */
   async markRewardClaimed(params: {

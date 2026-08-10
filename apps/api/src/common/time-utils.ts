@@ -20,20 +20,3 @@ export function msUntilNextUtcDay(now: Date = new Date()): number {
   next.setUTCDate(next.getUTCDate() + 1);
   return Math.max(0, next.getTime() - now.getTime());
 }
-
-/**
- * Stable UTC day key ("YYYY-MM-DD") — useful as an idempotency key for
- * once-per-day operations (e.g. daily completion bonus dedup).
- */
-export function getUtcDayKey(now: Date = new Date()): string {
-  return startOfTodayUtc(now).toISOString().slice(0, 10);
-}
-
-/**
- * True if `when` falls inside the current UTC day (i.e. on or after the most
- * recent 00:00 UTC). Returns false for null/undefined.
- */
-export function isTodayUtc(when: Date | null | undefined, now: Date = new Date()): boolean {
-  if (!when) return false;
-  return when.getTime() >= startOfTodayUtc(now).getTime();
-}
