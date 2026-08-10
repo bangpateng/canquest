@@ -7,7 +7,7 @@ export function filterTabClass(selected: boolean, className?: string) {
     "shrink-0 rounded-full text-[10px] sm:text-xs font-semibold uppercase tracking-wider transition-all",
     selected
       ? "border-0 bg-emerald-500 text-white px-2.5 py-1"
-      : "border border-white/10 bg-white/5 text-slate-400 hover:text-slate-200 px-2.5 py-1",
+      : "border border-white/10 bg-white/5 text-slate-300 hover:text-white px-2.5 py-1",
     className,
   );
 }
@@ -35,10 +35,17 @@ export function underlineTabClass(selected: boolean, className?: string) {
 }
 
 /** Small icon-only control (toolbar, copy, close).
- *  Delegates to the centralized cva `icon` variant for radius/color
- *  consistency, then layers on any per-call className. */
+ *
+ *  Self-contained: provides its own surface background + explicit white icon
+ *  color so the lucide SVG (stroke=currentColor) is ALWAYS visible on dark
+ *  cards, no matter where it's rendered. Previously delegated to the cva
+ *  `icon` variant which had no background and inherited a dim color, making
+ *  bell/close/copy icons render dark/invisible. */
 export function iconButtonClass(className?: string) {
-  return cn(buttonVariants({ variant: "icon" }), className);
+  return cn(
+    "inline-flex items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card)]/80 text-white transition-colors hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10 hover:text-white disabled:pointer-events-none disabled:opacity-50",
+    className,
+  );
 }
 
 /** Compact toolbar trigger (language menu) */
