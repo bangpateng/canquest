@@ -111,7 +111,7 @@ export function QuestHubPage() {
             <>
               {/* Icon + eyebrow label */}
               <div className="flex items-center gap-2.5">
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]/15">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--primary)]/10">
                   <Sparkles className="h-4 w-4 text-canton" aria-hidden />
                 </span>
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
