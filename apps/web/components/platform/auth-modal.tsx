@@ -214,7 +214,7 @@ export function AuthModal() {
           <button
             type="button"
             onClick={closeAuth}
-            className="absolute right-4 top-4 rounded-lg p-1.5 text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+            className="absolute right-4 top-4 rounded-lg p-1.5 text-slate-300 transition-colors hover:bg-[var(--muted)] hover:text-white"
           >
             <X className="h-5 w-5" />
           </button>

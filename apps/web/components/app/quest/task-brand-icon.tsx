@@ -91,7 +91,7 @@ export function TaskBrandIcon({
   return (
     <span
       className={cn(
-        "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--muted)] text-slate-400 ring-1 ring-white/5",
+        "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--muted)] text-slate-300 ring-1 ring-white/5",
         className,
       )}
     >

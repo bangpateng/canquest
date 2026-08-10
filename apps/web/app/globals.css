@@ -59,6 +59,13 @@
   * { max-width: 100%; box-sizing: border-box; }
   ::-webkit-scrollbar { width: 5px; }
   ::-webkit-scrollbar-thumb { background: rgb(255 255 255 / 0.08); border-radius: 4px; }
+
+  /* Lucide icons must always inherit the parent text color so they stay
+     visible on every surface (fix: icons rendered dark/invisible because
+     stroke="currentColor" was inheriting an unset/dark color in some contexts).
+     Explicitly set fill=none + stroke=currentColor so the SVG never picks up
+     a stray fill, and never falls back to the user-agent default. */
+  svg.lucide { fill: none; stroke: currentColor; flex-shrink: 0; }
 }
 
 @layer utilities {

@@ -22,7 +22,7 @@ export const buttonVariants = cva(
         danger:
           "border border-red-500/30 bg-red-500/10 text-red-300 hover:border-red-500/45 hover:bg-red-500/15",
         icon:
-          "border-0 bg-transparent text-[var(--foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]",
+          "border-0 bg-transparent text-white hover:bg-[var(--muted)] hover:text-white",
       },
       size: {
         default: "h-11 px-5 text-sm",

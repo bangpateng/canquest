@@ -570,7 +570,7 @@ export function AdminUsersPanel() {
               <button
                 type="button"
                 onClick={() => setReferralModalUser(null)}
-                className="rounded-lg p-1.5 text-[var(--muted-foreground)] hover:bg-[var(--muted)]"
+                className="rounded-lg p-1.5 text-slate-300 hover:bg-[var(--muted)] hover:text-white"
                 aria-label="Close"
               >
                 <X className="h-5 w-5" />

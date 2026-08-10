@@ -1,6 +1,5 @@
 import { AppOverviewSection } from "@/components/landing/app-overview-section";
 import { CantonSection } from "@/components/landing/canton-section";
-import { CtaSection } from "@/components/landing/cta-section";
 import { FaqSection } from "@/components/landing/faq-section";
 import { LandingHero } from "@/components/landing/hero";
 import { LockSection } from "@/components/landing/lock-section";
@@ -15,7 +14,6 @@ export default function MarketingHomePage() {
       <AppOverviewSection />
       <SwapCantexSection />
       <FaqSection />
-      <CtaSection />
     </>
   );
 }

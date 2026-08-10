@@ -119,7 +119,7 @@ function CopyButton({ value, label = "Copy" }: { value: string; label?: string }
     <button
       type="button"
       onClick={onCopy}
-      className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+      className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:text-white"
       aria-label={`${label} ${value}`}
     >
       {copied ? (
@@ -211,7 +211,7 @@ function LogoPreview({ asset }: { asset: LogoAsset }) {
           <a
             href={asset.src}
             download
-            className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+            className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:text-white"
           >
             <Download className="h-3.5 w-3.5" />
             PNG
