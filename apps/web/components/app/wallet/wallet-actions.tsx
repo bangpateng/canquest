@@ -605,7 +605,7 @@ export function WalletActions({
                       onChange={(e) => setCcAmount(e.target.value)}
                       placeholder="0.00"
                       disabled={sendState === "loading"}
-                      className="w-full rounded-2xl border border-[var(--border)] bg-[var(--muted)] py-3 pl-4 pr-16 text-base font-bold tabular-nums text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--primary)]/40 disabled:opacity-50"
+                      className="w-full rounded-2xl border border-[var(--border)] bg-[var(--muted)] py-3 pl-4 pr-16 text-base font-bold tabular-nums text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[rgb(var(--canton-rgb)/0.40)] disabled:opacity-50"
                     />
                     {selectedBalance > 0 && (
                       <button
@@ -656,7 +656,7 @@ export function WalletActions({
                     }}
                     placeholder="Recipient wallet address"
                     disabled={sendState === "loading"}
-                    className="w-full resize-none rounded-2xl border border-[var(--border)] bg-[var(--muted)] px-4 py-3 font-mono text-sm font-medium text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--primary)]/40 disabled:opacity-50"
+                    className="w-full resize-none rounded-2xl border border-[var(--border)] bg-[var(--muted)] px-4 py-3 font-mono text-sm font-medium text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[rgb(var(--canton-rgb)/0.40)] disabled:opacity-50"
                   />
                 </div>
 
@@ -675,7 +675,7 @@ export function WalletActions({
                     onChange={(e) => setMemo(e.target.value)}
                     placeholder="Add a note"
                     disabled={sendState === "loading"}
-                    className="w-full rounded-2xl border border-[var(--border)] bg-[var(--muted)] px-4 py-3 text-base font-medium text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--primary)]/40 disabled:opacity-50"
+                    className="w-full rounded-2xl border border-[var(--border)] bg-[var(--muted)] px-4 py-3 text-base font-medium text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[rgb(var(--canton-rgb)/0.40)] disabled:opacity-50"
                   />
                 </div>
 

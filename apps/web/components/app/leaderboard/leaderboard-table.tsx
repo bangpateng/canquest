@@ -72,7 +72,7 @@ function leaderboardAvatarSrc(url: string | null): string | null {
 function RankBadge({ rank }: { rank: number }) {
   if (rank === 1)
     return (
-      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-canton-subtle ring-1 ring-[var(--primary)]/25">
+      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-canton-subtle ring-1 ring-[rgb(var(--canton-rgb)/0.25)]">
         <Crown className="h-5 w-5 text-canton" />
       </span>
     );
@@ -136,7 +136,7 @@ function ParticipantCell({
               {row.displayName}
             </span>
             {isCurrentUser && (
-              <span className="rounded-md bg-canton-subtle px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-canton ring-1 ring-[var(--primary)]/20">
+              <span className="rounded-md bg-canton-subtle px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-canton ring-1 ring-[rgb(var(--canton-rgb)/0.20)]">
                 You
               </span>
             )}
@@ -245,7 +245,7 @@ export function LeaderboardTable() {
         ) : !data || data.rows.length === 0 ? (
           <div className="relative px-5 py-20 sm:py-24 md:py-28 text-center">
             <div className="flex flex-col items-center gap-4">
-              <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-canton-subtle ring-1 ring-[var(--primary)]/15">
+              <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-canton-subtle ring-1 ring-[rgb(var(--canton-rgb)/0.15)]">
                 <Trophy className="h-8 w-8 text-canton" />
               </span>
               <div>

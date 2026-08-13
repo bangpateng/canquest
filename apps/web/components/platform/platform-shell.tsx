@@ -67,8 +67,8 @@ function NavLinks({
             ? " opacity-50 cursor-not-allowed"
             : active
               ? variant === "mobile"
-                ? " bg-canton-subtle text-[var(--foreground)] shadow-md shadow-black/20 ring-1 ring-inset ring-[var(--primary)]/20 rounded-lg"
-                : " bg-canton-subtle text-[var(--foreground)] shadow-md shadow-black/20 ring-1 ring-[var(--primary)]/20"
+                ? " bg-canton-subtle text-[var(--foreground)] shadow-md shadow-black/20 ring-1 ring-inset ring-[rgb(var(--canton-rgb)/0.20)] rounded-lg"
+                : " bg-canton-subtle text-[var(--foreground)] shadow-md shadow-black/20 ring-1 ring-[rgb(var(--canton-rgb)/0.20)]"
               : " text-[var(--muted-foreground)] hover:bg-[var(--primary)]/5 hover:text-[var(--foreground)]");
 
         return (

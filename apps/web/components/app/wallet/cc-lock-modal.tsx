@@ -256,7 +256,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
               onChange={(e) => setAmount(e.target.value)}
               placeholder="e.g. 30"
               disabled={lockState === "loading"}
-              className="w-full rounded-2xl border border-[var(--border)] bg-[var(--muted)] px-4 py-3 text-base font-bold tabular-nums text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--primary)]/40 disabled:opacity-50"
+              className="w-full rounded-2xl border border-[var(--border)] bg-[var(--muted)] px-4 py-3 text-base font-bold tabular-nums text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[rgb(var(--canton-rgb)/0.40)] disabled:opacity-50"
             />
             <p className="text-xs text-[var(--muted-foreground)]">Lock 30 CC to unlock Earn campaigns.</p>
           </div>

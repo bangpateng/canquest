@@ -195,12 +195,12 @@ function txIconBg(type: TxItem["type"]): string {
       return "bg-red-500/10 text-red-500 ring-1 ring-red-500/15";
     case "TRANSFER_IN":
     case "TOKEN_TRANSFER_IN":
-      return "bg-canton-subtle text-canton ring-1 ring-[var(--primary)]/15";
+      return "bg-canton-subtle text-canton ring-1 ring-[rgb(var(--canton-rgb)/0.15)]";
     case "CC_LOCK":
       // Netral/amber — BUKAN merah transfer (dana dikunci, bukan keluar).
       return "bg-orange-500/10 text-orange-500 ring-1 ring-orange-500/15";
     case "CC_UNLOCK":
-      return "bg-canton-subtle text-canton ring-1 ring-[var(--primary)]/15";
+      return "bg-canton-subtle text-canton ring-1 ring-[rgb(var(--canton-rgb)/0.15)]";
     case "OFFER_REJECTED":
     case "OFFER_WITHDRAWN":
     case "TOKEN_OFFER_REJECTED":
@@ -209,18 +209,18 @@ function txIconBg(type: TxItem["type"]): string {
       // Aksi toggle netral — muted, bukan merah (tidak ada pergerakan CC).
       return "bg-[var(--muted)] text-[var(--muted-foreground)]";
     case "PREAPPROVAL_ENABLED":
-      return "bg-canton-subtle text-canton ring-1 ring-[var(--primary)]/15";
+      return "bg-canton-subtle text-canton ring-1 ring-[rgb(var(--canton-rgb)/0.15)]";
     case "QUEST_REWARD":
-      return "bg-canton-subtle text-canton ring-1 ring-[var(--primary)]/20";
+      return "bg-canton-subtle text-canton ring-1 ring-[rgb(var(--canton-rgb)/0.20)]";
     case "SPIN_REWARD":
     case "AIRDROP":
-      return "bg-canton-subtle text-canton-muted ring-1 ring-[var(--primary)]/15";
+      return "bg-canton-subtle text-canton-muted ring-1 ring-[rgb(var(--canton-rgb)/0.15)]";
     case "SWAP_OUT":
       // CC keluar — merah (sama transfer out).
       return "bg-red-500/10 text-red-500 ring-1 ring-red-500/15";
     case "SWAP_IN":
       // CC masuk — canton/green (sama transfer in).
-      return "bg-canton-subtle text-canton ring-1 ring-[var(--primary)]/15";
+      return "bg-canton-subtle text-canton ring-1 ring-[rgb(var(--canton-rgb)/0.15)]";
     default:
       return "bg-[var(--muted)] text-[var(--muted-foreground)]";
   }
@@ -471,7 +471,7 @@ export function TransactionsView({
         ) : !txPage || txPage.items.length === 0 ? (
           <div className={cn("relative text-center", embedded ? "py-12" : "py-20")}>
             <div className="flex flex-col items-center gap-4">
-              <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-canton-subtle ring-1 ring-[var(--primary)]/15">
+              <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-canton-subtle ring-1 ring-[rgb(var(--canton-rgb)/0.15)]">
                 <Coins className="h-7 w-7 text-canton" />
               </span>
               <div>

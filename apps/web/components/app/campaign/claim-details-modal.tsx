@@ -100,13 +100,13 @@ export function ClaimDetailsModal({
           {/* Hero */}
           <div className="flex flex-col items-center text-center">
             {tokenHero === "CC" ? (
-              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-[var(--primary)]/20 to-transparent text-base font-black text-black ring-4 ring-[var(--primary)]/10">
+              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-[var(--primary)]/20 to-transparent text-base font-black text-black ring-4 ring-[rgb(var(--canton-rgb)/0.10)]">
                 <span className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-[11px] text-black">
                   C
                 </span>
               </span>
             ) : tokenHero === "USDCx" ? (
-              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-[var(--primary)]/20 to-transparent ring-4 ring-[var(--primary)]/10">
+              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-[var(--primary)]/20 to-transparent ring-4 ring-[rgb(var(--canton-rgb)/0.10)]">
                 <span className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-blue-400 to-blue-600 text-[11px] font-bold text-black">
                   U
                 </span>
