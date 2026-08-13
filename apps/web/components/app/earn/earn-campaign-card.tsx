@@ -10,7 +10,6 @@ import { QUEST_STATUS_BADGE, type Quest, type UserProgress } from "@/lib/quest/q
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
 import { useEffect, useState } from "react";
-import { Card } from "@/components/ui/card";
 import { Calendar, Clock, ListChecks, Users } from "lucide-react";
 
 function CountdownTimer({ endsAt }: { endsAt: string | null }) {
@@ -153,15 +152,13 @@ export function EarnCampaignCard({
       : null;
 
   const inner = (
-    <Card
-      interactive
+    <div
       className={cn(
-        "group relative flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden",
-        "transition-all duration-300 ease-out",
+        "group relative flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden rounded-2xl border border-white/5 bg-[var(--card)] transition-all duration-300 ease-out",
         meta.canOpen &&
           !meta.joinBlocked &&
-          "hover:-translate-y-1 hover:border-[rgb(var(--canton-rgb)/0.25)] hover:shadow-[0_24px_60px_rgb(0_0_0/0.5),0_0_0_1px_rgb(var(--canton-rgb)/0.15)]",
-        (quest.status === "ENDED" || meta.joinBlocked) && "opacity-90",
+          "hover:-translate-y-1 hover:border-[var(--primary)]/30",
+        (quest.status === "ENDED" || meta.joinBlocked) && "opacity-60",
       )}
     >
       {/* ── Banner ─────────────────────────────────────────────── */}
@@ -186,7 +183,7 @@ export function EarnCampaignCard({
       </div>
 
       {/* ── Body (overlaps banner so the logo punches through) ── */}
-      <div className="relative flex flex-1 flex-col p-4 sm:p-5" style={{ marginTop: "-2rem" }}>
+      <div className="relative -mt-8 flex flex-1 flex-col p-4 sm:p-5">
         {/* Logo + reward row */}
         <div className="mb-3 flex items-end justify-between gap-3">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--card)] shadow-lg ring-4 ring-[var(--card)]">
@@ -275,7 +272,7 @@ export function EarnCampaignCard({
           </span>
         </div>
       </div>
-    </Card>
+    </div>
   );
 
   if (meta.joinBlocked || !meta.canOpen) return inner;
