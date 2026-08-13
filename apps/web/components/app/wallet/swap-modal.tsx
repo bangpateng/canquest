@@ -335,7 +335,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto overscroll-contain p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overscroll-contain p-4"
       role="presentation"
     >
       <button
@@ -348,9 +348,8 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative z-10 my-auto w-full max-h-[min(92vh,92dvh)] max-w-md overflow-y-auto rounded-t-3xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-2xl sm:rounded-3xl"
+        className="relative z-10 my-auto w-full max-h-[min(92vh,92dvh)] max-w-md overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-2xl"
       >
-        <div className="mx-auto mb-4 h-1.5 w-10 shrink-0 rounded-full bg-[var(--muted)] sm:hidden" aria-hidden />
         {/* Header */}
         <div className="mb-5 flex items-center justify-between">
           <h2 id={titleId} className="text-lg font-bold text-white">

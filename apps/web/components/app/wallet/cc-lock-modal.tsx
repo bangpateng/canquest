@@ -199,7 +199,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4"
       role="presentation"
     >
       <button
@@ -212,11 +212,8 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative z-10 my-auto w-full max-h-[min(92vh,92dvh)] max-w-md overflow-y-auto rounded-t-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-xl sm:rounded-3xl sm:p-8"
+        className="relative z-10 my-auto w-full max-h-[min(92vh,92dvh)] max-w-md overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-xl sm:p-8"
       >
-        {/* Drag handle (mobile bottom-sheet feel) */}
-        <div className="mx-auto mb-4 h-1.5 w-10 shrink-0 rounded-full bg-[var(--muted)] sm:hidden" aria-hidden />
-
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-2">
             <Lock className="h-5 w-5 text-canton" aria-hidden />

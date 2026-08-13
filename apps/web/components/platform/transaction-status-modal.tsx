@@ -33,7 +33,7 @@ export function TransactionStatusModal() {
       aria-modal="true"
     >
       <button className="modal-backdrop" aria-label="Close" onClick={dismiss} />
-      <div className="relative z-10 my-auto w-full max-w-[380px] overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--card)] shadow-2xl">
+      <div className="relative z-10 my-auto w-full max-w-[380px] max-h-[min(92vh,92dvh)] overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] shadow-2xl">
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[var(--primary)]/50 to-transparent" />
         <button
           className={iconButtonClass("absolute right-3 top-3 h-8 w-8")}

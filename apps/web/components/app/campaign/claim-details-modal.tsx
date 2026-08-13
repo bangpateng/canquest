@@ -68,7 +68,7 @@ export function ClaimDetailsModal({
       aria-label="Claim reward"
     >
       <button className="modal-backdrop" aria-label="Close" onClick={onClose} />
-      <div className="relative z-10 my-auto w-full max-w-[380px] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl claim-modal-pop">
+      <div className="relative z-10 my-auto w-full max-w-[380px] max-h-[min(92vh,92dvh)] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl claim-modal-pop">
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[var(--primary)]/5 to-transparent"
