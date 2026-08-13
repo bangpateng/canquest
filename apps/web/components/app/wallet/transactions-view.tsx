@@ -582,7 +582,7 @@ export function TransactionsView({
                     <button
                       type="button"
                       onClick={() => setModalTx(tx)}
-                      className="flex w-full items-center gap-4 px-5 py-4 transition-colors hover:bg-[var(--muted)]/60 text-left"
+                      className="flex w-full items-center gap-4 px-5 py-4 text-left transition-colors [-webkit-tap-highlight-color:transparent] hover:bg-[var(--muted)]/60 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]/60"
                     >
 
                       <div
