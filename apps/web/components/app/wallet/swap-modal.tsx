@@ -5,12 +5,15 @@ import { cn } from "@/lib/utils/utils";
 import { buttonVariants } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { iconButtonClass } from "@/lib/ui/ui-button-styles";
+import { useTransactionStatus } from "@/lib/tx/transaction-status";
 import {
   ArrowDown,
   ChevronDown,
   X,
   AlertCircle,
   Search,
+  Settings2,
+  Route,
 } from "lucide-react";
 
 /** Token aktif untuk swap (selain CC). Lainnya = Coming Soon.
@@ -79,6 +82,7 @@ import {
 
 export function SwapModal({ open, onClose, balance }: SwapModalProps) {
   const titleId = useId();
+  const tx = useTransactionStatus();
 
   // WAVE 6 real-time: pools & saldo dari TanStack Query (auto-refresh saat SSE
   // balance:changed masuk). Key dishared dengan TokenList/WalletActions parent
@@ -116,6 +120,11 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
   const [swapMessage, setSwapMessage] = useState("");
   const [swapOutput, setSwapOutput] = useState("");
   const [swapReceivedToken, setSwapReceivedToken] = useState("");
+
+  // Slippage tolerance (client-controlled; passed to the swap endpoint, ignored
+  // if unsupported). "Minimum received" is computed honestly from the quote.
+  const [slippageOpen, setSlippageOpen] = useState(false);
+  const [slippage, setSlippage] = useState(0.5);
 
   // Escape to close.
   useEffect(() => {
@@ -252,15 +261,29 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
     setSwapState("loading");
     setSwapMessage("");
     setSwapOutput("");
+
+    const sellSym = sellToken.symbol ?? (sellToken.isCC ? "CC" : sellToken.instrumentId);
+    const buySym = buyToken.symbol ?? (buyToken.isCC ? "CC" : buyToken.instrumentId);
+    const estOut = quote ? formatAmountNum(quote.amountOut) : "0";
+    tx.start({
+      amountText: `${formatAmountNum(parseFloat(amount))} ${displayName(sellToken.instrumentId)} → ${estOut} ${displayName(buyToken.instrumentId)}`,
+      title: "Swap complete",
+      subtitle: `Received ${estOut} ${displayName(buyToken.instrumentId)}`,
+      accentBg: "bg-[var(--primary)]/15",
+      accentText: "text-canton",
+    });
+    tx.broadcast();
+
     try {
       const res = await fetch("/api/party/swap", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          from: sellToken.symbol ?? (sellToken.isCC ? "CC" : sellToken.instrumentId),
-          to: buyToken.symbol ?? (buyToken.isCC ? "CC" : buyToken.instrumentId),
+          from: sellSym,
+          to: buySym,
           amount: parseFloat(amount),
+          slippagePct: slippage,
           clientNonce:
             typeof crypto !== "undefined" && crypto.randomUUID
               ? crypto.randomUUID()
@@ -273,6 +296,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
         message?: string;
       };
       if (!res.ok || !data.success) {
+        tx.dismiss();
         setSwapState("error");
         setSwapMessage(
           data.message ?? "Swap failed. Please try again.",
@@ -285,7 +309,25 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
       // WAVE 6 real-time: invalidate react-query supaya saldo refresh otomatis
       // (useBalances/usePools hook background refetch).
       void invalidateWalletTokens();
+
+      tx.succeed({
+        amountText: `${formatAmountNum(parseFloat(amount))} ${displayName(sellToken.instrumentId)} → ${data.outputAmount ?? estOut} ${displayName(buyToken.instrumentId)}`,
+        title: "Swap complete",
+        subtitle: `Received ${data.outputAmount ?? estOut} ${displayName(buyToken.instrumentId)}`,
+        accentBg: "bg-[var(--primary)]/15",
+        accentText: "text-canton",
+        meta: quote
+          ? [
+              {
+                label: "Rate",
+                value: `1 ${displayName(sellToken.instrumentId)} ≈ ${formatPriceNum(quote.amountOut / (quote.effInput || parseFloat(amount) || 1))} ${displayName(buyToken.instrumentId)}`,
+              },
+              { label: "Min received", value: `${formatAmountNum(quote.amountOut * (1 - slippage / 100))} ${displayName(buyToken.instrumentId)}` },
+            ]
+          : undefined,
+      });
     } catch {
+      tx.dismiss();
       setSwapState("error");
       setSwapMessage("Network error. Check your connection.");
     }
@@ -293,7 +335,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overscroll-contain p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto overscroll-contain p-0 sm:items-center sm:p-4"
       role="presentation"
     >
       <button
@@ -306,20 +348,54 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative z-10 my-auto w-full max-h-[min(90vh,90dvh)] max-w-md overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-2xl"
+        className="relative z-10 my-auto w-full max-h-[min(92vh,92dvh)] max-w-md overflow-y-auto rounded-t-3xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-2xl sm:rounded-3xl"
       >
+        <div className="mx-auto mb-4 h-1.5 w-10 shrink-0 rounded-full bg-[var(--muted)] sm:hidden" aria-hidden />
         {/* Header */}
         <div className="mb-5 flex items-center justify-between">
           <h2 id={titleId} className="text-lg font-bold text-white">
             Swap
           </h2>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setSlippageOpen((v) => !v)}
+                className={iconButtonClass("h-8 w-8")}
+                aria-label="Slippage settings"
+              >
+                <Settings2 className="h-4 w-4" />
+              </button>
+              {slippageOpen && (
+                <div className="absolute right-0 top-full z-30 mt-2 w-56 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3.5 shadow-xl">
+                  <p className="text-xs font-semibold text-[var(--foreground)]">Slippage tolerance</p>
+                  <div className="mt-2 flex items-center gap-1.5">
+                    {[0.1, 0.5, 1.0].map((v) => (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => setSlippage(v)}
+                        className={cn(
+                          "flex-1 rounded-lg border py-1.5 text-xs font-semibold",
+                          slippage === v
+                            ? "border-canton-muted bg-canton-subtle text-canton"
+                            : "border-[var(--border)] bg-[var(--muted)] text-[var(--muted-foreground)]",
+                        )}
+                      >
+                        {v}%
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-[11px] leading-relaxed text-[var(--muted-foreground)]">
+                    Your swap will revert if the price moves unfavorably by more than this amount.
+                  </p>
+                </div>
+              )}
+            </div>
             <button
               type="button"
               onClick={onClose}
-              className={iconButtonClass(
-                "h-8 w-8 text-slate-300 hover:text-white",
-              )}
+              className={iconButtonClass("h-8 w-8")}
               aria-label="Close"
             >
               <X className="h-4 w-4" />
@@ -371,7 +447,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
               />
 
               {/* ── Flip button ── */}
-              <div className="relative z-10 flex justify-center">
+              <div className="relative z-10 -my-2 flex justify-center">
                 <button
                   type="button"
                   onClick={flipTokens}
@@ -432,6 +508,11 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                         : "text-emerald-400"
                     }
                   />
+                  <DetailRow label="Max slippage" value={`${slippage}%`} />
+                  <DetailRow
+                    label="Minimum received"
+                    value={`${formatAmountNum(quote.amountOut * (1 - slippage / 100))} ${displayName(buyToken?.instrumentId ?? "")}`}
+                  />
                   <DetailRow
                     label="Pool Fee"
                     value={`${(quote.effFeeBps / 100).toFixed(2)}% (${formatAmountNum(quote.lpFee + quote.platformFee)} ${displayName(sellToken?.instrumentId ?? "")})`}
@@ -439,10 +520,6 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                   <DetailRow
                     label="Network Fee"
                     value={`${formatAmountNum(quote.networkFeeIn)} ${displayName(sellToken?.instrumentId ?? "")}`}
-                  />
-                  <DetailRow
-                    label="You Swap"
-                    value={`${formatAmountNum(quote.effInput)} ${displayName(sellToken?.instrumentId ?? "")}`}
                   />
                 </div>
               ) : null)}
@@ -523,8 +600,9 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
           </>
         )}
 
-        <p className="mt-4 text-center text-[11px] font-medium text-slate-600">
-          powered by OneSwap
+        <p className="mt-4 flex items-center justify-center gap-1.5 text-center text-[11px] font-medium text-[var(--muted-foreground)]">
+          <Route className="h-3 w-3" />
+          Best route via OneSwap
         </p>
       </div>
     </div>

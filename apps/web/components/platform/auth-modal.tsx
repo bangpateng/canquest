@@ -6,6 +6,7 @@ import { X } from "lucide-react";
 import { useAuthModal, type AuthModalMode } from "@/components/platform/auth-context";
 import { TurnstileField, useTurnstileRequired } from "@/components/platform/turnstile-field";
 import { buttonVariants } from "@/components/ui/button";
+import { iconButtonClass } from "@/lib/ui/ui-button-styles";
 import { PasswordInput } from "@/components/ui/password-input";
 import { formatApiError } from "@/lib/api/format-api-error";
 import { verifyOtp, forgotPassword, resetPassword } from "@/lib/services/api/auth";
@@ -203,18 +204,19 @@ export function AuthModal() {
     >
       <button
         type="button"
-        className="absolute inset-0 bg-black/75 backdrop-blur-sm"
+        className="modal-backdrop"
         aria-label="Close"
         onClick={closeAuth}
       />
-      <div className="relative w-full max-w-[420px] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl">
+      <div className="relative w-full max-w-[420px] overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--card)] shadow-2xl">
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[var(--primary)]/50 to-transparent" />
 
         <div className="px-6 pb-4 pt-6">
           <button
             type="button"
             onClick={closeAuth}
-            className="absolute right-4 top-4 rounded-lg p-1.5 text-slate-300 transition-colors hover:bg-[var(--muted)] hover:text-white"
+            className={iconButtonClass("absolute right-4 top-4 h-9 w-9")}
+            aria-label="Close"
           >
             <X className="h-5 w-5" />
           </button>

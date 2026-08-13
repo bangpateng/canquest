@@ -2,15 +2,16 @@ import { forwardRef } from "react";
 import { cn } from "@/lib/utils/utils";
 
 /**
- * Unified Card — single flat surface primitive (Vercel/GitHub style).
+ * Unified Card — glass surface primitive (aligned to platform mockup).
  *
- * Design: solid background, one thin border, subtle shadow. No blur, no glow,
- * no gradient hairlines. Clean and quiet.
+ * Design: translucent glass background + backdrop blur, thin border, inset
+ * highlight and soft shadow. `bare` collapses to a solid `--card-solid` panel
+ * (for nested cards). `interactive` adds a hover lift + border highlight + glow.
  */
 export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
-  /** Subtle hover lift + border highlight. Use on actionable/linked cards. */
+  /** Subtle hover lift + border highlight + glow. Use on actionable/linked cards. */
   interactive?: boolean;
-  /** Remove the default border (for nested cards on tinted backgrounds). */
+  /** Solid panel (no glass blur) for nested cards on tinted backgrounds. */
   bare?: boolean;
 }
 
@@ -19,10 +20,12 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
     <div
       ref={ref}
       className={cn(
-        "rounded-xl bg-[var(--card)]",
-        !bare && "border border-[var(--border)]",
+        "rounded-[1.125rem]",
+        bare
+          ? "bg-[var(--card-solid)]"
+          : "border border-[var(--border)] bg-[var(--surface-glass)] backdrop-blur-xl shadow-[var(--shadow-card)]",
         interactive &&
-          "transition-colors hover:border-[var(--primary)]/30",
+          "transition-[border-color,transform,box-shadow] duration-200 [transition-timing-function:var(--ease)] hover:-translate-y-0.5 hover:border-[var(--primary)]/32 hover:shadow-[var(--shadow-card-hover)]",
         className,
       )}
       {...props}

@@ -77,7 +77,7 @@ export function SendConfirmModal({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto p-4"
+      className="fixed inset-0 z-[60] flex items-end justify-center overflow-y-auto p-0 sm:items-center sm:p-4"
       role="presentation"
     >
       <button
@@ -92,8 +92,9 @@ export function SendConfirmModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative z-10 my-auto w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 sm:p-8 shadow-xl"
+        className="relative z-10 my-auto w-full max-w-md max-h-[min(92vh,92dvh)] overflow-y-auto rounded-t-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-xl sm:rounded-3xl sm:p-8"
       >
+        <div className="mx-auto mb-4 h-1.5 w-10 shrink-0 rounded-full bg-[var(--muted)] sm:hidden" aria-hidden />
         <div className="flex items-start justify-between gap-4">
           <h2 id={titleId} className="text-xl font-bold text-[var(--foreground)]">
             Confirm transaction
@@ -112,7 +113,7 @@ export function SendConfirmModal({
         </div>
 
         {/* ── Block amount besar di tengah (tanpa logo) ── */}
-        <div className="mt-6 flex flex-col items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--muted)] px-6 py-7 text-center">
+        <div className="mt-6 flex flex-col items-center justify-center rounded-3xl border border-[var(--border)] bg-[var(--muted)] px-6 py-7 text-center">
           <p className="text-3xl font-bold tabular-nums text-[var(--foreground)]">
             {amount || "0"} {tokenName}
           </p>

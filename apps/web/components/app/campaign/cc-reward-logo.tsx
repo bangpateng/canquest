@@ -1,11 +1,10 @@
-import { Coins } from "lucide-react";
 import { getCcRewardLogoUrl } from "@/lib/canton/cc-reward-logo";
 import { cn } from "@/lib/utils/utils";
 
 type CcRewardLogoProps = {
   className?: string;
   size?: number;
-  /** Lucide Coins when URL missing (default true). */
+  /** Gradient "C" coin when URL missing (default true). */
   fallbackIcon?: boolean;
 };
 
@@ -17,12 +16,18 @@ export function CcRewardLogo({
   const url = getCcRewardLogoUrl();
   if (!url) {
     if (!fallbackIcon) return null;
+    // Amber gradient "C" coin — matches the CC token logo used elsewhere.
     return (
-      <Coins
-        className={cn("shrink-0 text-canton", className)}
-        style={{ width: size, height: size }}
+      <span
+        className={cn(
+          "inline-flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 font-bold text-black",
+          className,
+        )}
+        style={{ width: size, height: size, fontSize: Math.round(size * 0.46) }}
         aria-hidden
-      />
+      >
+        C
+      </span>
     );
   }
   return (

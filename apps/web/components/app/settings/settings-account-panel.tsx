@@ -1,10 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { formatPartyIdForDisplay, formatUsernameForDisplay } from "@/lib/canton/canton-party-id";
 import { formatApiError } from "@/lib/api/format-api-error";
 import { useMe } from "@/lib/hooks/use-me";
 import { Card } from "@/components/ui/card";
-import { User, Mail, AtSign, Shield, Key } from "lucide-react";
+import { User, Mail, AtSign, Shield, Key, Copy, Check } from "lucide-react";
 
 type Me = {
   email?: string;
@@ -23,6 +24,7 @@ function SettingsField({
   icon: Icon,
   mono = false,
   loading = false,
+  copyable = false,
 }: {
   id: string;
   label: string;
@@ -31,12 +33,15 @@ function SettingsField({
   icon: React.ElementType;
   mono?: boolean;
   loading?: boolean;
+  copyable?: boolean;
 }) {
+  const [copied, setCopied] = useState(false);
+
   // Clean info field: small label on top, value below, icon left.
   // The underlying <input readOnly> is VISIBLE so users can see/copy their
   // email, display name, party ID, etc. (previously hidden via sr-only bug).
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3">
+    <div className="relative rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3">
       <label
         htmlFor={id}
         className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-[var(--muted-foreground)]"
@@ -51,8 +56,27 @@ function SettingsField({
         placeholder={loading ? "Loading…" : placeholder}
         className={`mt-1.5 w-full bg-transparent text-sm font-semibold text-[var(--foreground)] outline-none placeholder:font-normal placeholder:text-[var(--muted-foreground)] ${
           mono ? "font-mono text-xs" : ""
-        }`}
+        } ${copyable && value ? "pr-9" : ""}`}
       />
+      {copyable && value ? (
+        <button
+          type="button"
+          onClick={() => {
+            void navigator.clipboard?.writeText(value).then(() => {
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            });
+          }}
+          className="absolute bottom-2.5 right-2.5 inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--muted-foreground)] transition-colors hover:bg-[var(--primary)]/10 hover:text-canton"
+          aria-label={`Copy ${label}`}
+        >
+          {copied ? (
+            <Check className="h-3.5 w-3.5 text-canton" />
+          ) : (
+            <Copy className="h-3.5 w-3.5" />
+          )}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -146,6 +170,7 @@ export function SettingsAccountPanel() {
               placeholder="Not created — go to Wallet"
               mono
               loading={loading}
+              copyable
             />
           </div>
         </div>

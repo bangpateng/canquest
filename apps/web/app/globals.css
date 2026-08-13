@@ -2,28 +2,38 @@
 @tailwind components;
 @tailwind utilities;
 
-/* CanQuest — simple Web3 dApp palette */
+/* CanQuest — Web3 dApp palette (aligned to platform mockup: brighter, glassy). */
 :root, .dark {
-  --canton-rgb: 90 217 138;
-  --canton-ink: 184 240 212;
-  --canton-ink-muted: 122 184 154;
-  --canton-cyan-rgb: 32 211 195;
-  --background: #07080d;
-  --foreground: #edeef2;
-  --muted: #10131b;
-  --muted-foreground: #6b6e7b;
-  --card: #0c0e16;
-  --border: rgb(255 255 255 / 0.05);
+  --canton-rgb: 94 232 156;
+  --canton-ink: 196 250 222;
+  --canton-ink-muted: 138 198 168;
+  --canton-cyan-rgb: 45 224 214;
+  --background: #05060a;
+  --foreground: #f6f7fb;
+  --muted: #12141d;
+  --muted-foreground: #868b9c;
+  --card: #10131c;
+  --card-solid: #0e1017;
+  --border: rgb(255 255 255 / 0.07);
   --primary: rgb(var(--canton-rgb));
-  --primary-strong: #72e8a4;
-  --primary-soft: rgb(var(--canton-rgb) / 0.12);
-  --primary-foreground: #0a0a0c;
-  --accent: #5eead4;
+  --primary-strong: #8bf6bb;
+  --primary-soft: rgb(var(--canton-rgb) / 0.13);
+  --primary-foreground: #04120b;
+  --accent: #67e8d9;
   --accent-muted: rgb(var(--canton-cyan-rgb) / 0.1);
-  --ring: rgb(var(--canton-rgb) / 0.4);
-  --danger: #f87171;
+  --ring: rgb(var(--canton-rgb) / 0.45);
+  --danger: #fb7185;
   --success: #4ade80;
   --warn-rgb: 251 146 60;
+  --violet-rgb: 167 139 250;
+  /* Glass surface for cards/modals — translucent so backdrop-blur reads. */
+  --surface-glass: rgb(16 19 28 / 0.78);
+  /* Brand gradient + premium shadows/easing (from mockup). */
+  --gradient-brand: linear-gradient(135deg, #5ee89c 0%, #2de0d6 100%);
+  --shadow-card: 0 1px 0 0 rgb(255 255 255 / 0.04) inset, 0 24px 48px -28px rgb(0 0 0 / 0.75);
+  --shadow-glow: 0 10px 30px -10px rgb(var(--canton-rgb) / 0.45);
+  --shadow-card-hover: 0 1px 0 0 rgb(255 255 255 / 0.04) inset, 0 24px 48px -28px rgb(0 0 0 / 0.75), 0 10px 30px -10px rgb(var(--canton-rgb) / 0.45);
+  --ease: cubic-bezier(0.16, 0.84, 0.44, 1);
 }
 
 .light {
@@ -46,6 +56,12 @@
   --danger: #dc2626;
   --success: #16a34a;
   --warn-rgb: 234 88 12;
+  --violet-rgb: 139 92 246;
+  --surface-glass: var(--card);
+  --gradient-brand: linear-gradient(135deg, #34d399 0%, #14b8a6 100%);
+  --shadow-card: 0 1px 0 0 rgb(255 255 255 / 0.6) inset, 0 18px 40px -24px rgb(15 23 42 / 0.25);
+  --shadow-glow: 0 10px 30px -12px rgb(var(--canton-rgb) / 0.35);
+  --ease: cubic-bezier(0.16, 0.84, 0.44, 1);
 }
 
 @layer base {
@@ -90,6 +106,10 @@
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+  }
+  /* Solid brand gradient as a background (135deg green → cyan, from mockup). */
+  .bg-gradient-brand {
+    background-image: var(--gradient-brand);
   }
 }
 
@@ -226,9 +246,15 @@
     pointer-events: none;
   }
 
-  /* Glow halo behind hero headline / CTAs. */
+  /* Glow halo behind big numbers / hero headline. Gradient-clip gives the
+     luminous top→bottom fade (foreground → canton-ink) used across the mockup. */
   .glow-text {
-    text-shadow: 0 0 40px rgb(var(--canton-rgb) / 0.35);
+    text-shadow: 0 0 44px rgb(var(--canton-rgb) / 0.4);
+    background: linear-gradient(180deg, var(--foreground) 42%, rgb(var(--canton-ink) / 0.85));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
   }
 
   /* ── Hero floating dashboard cards ──
@@ -307,14 +333,32 @@
   }
 
   /* Modal backdrop — unified dismiss layer for all dialogs.
-     Replaces per-modal hand-rolled `fixed inset-0 bg-black/xx backdrop-blur-[xpx]`. */
+     Darker + heavier blur/saturation to match the mockup's depth. */
   .modal-backdrop {
     position: fixed;
     inset: 0;
-    background-color: rgb(0 0 0 / 0.6);
-    backdrop-filter: blur(3px);
-    -webkit-backdrop-filter: blur(3px);
+    background-color: rgb(4 5 8 / 0.72);
+    backdrop-filter: blur(6px) saturate(140%);
+    -webkit-backdrop-filter: blur(6px) saturate(140%);
     cursor: default;
+  }
+
+  /* Brand-gradient primary button surface (green → cyan) with inset highlight,
+     soft glow, and a brightness/lift on hover. Pairs with the Button `primary`
+     variant so gradients stay in CSS (where they render cleanly). */
+  .btn-brand-gradient {
+    background-image: var(--gradient-brand);
+    color: var(--primary-foreground);
+    box-shadow: 0 1px 0 0 rgb(255 255 255 / 0.35) inset, 0 10px 24px -10px rgb(var(--canton-rgb) / 0.55);
+  }
+  .btn-brand-gradient:hover {
+    filter: brightness(1.06);
+  }
+
+  /* Brand-gradient "on" state for pill switches/toggles (preapproval, etc). */
+  .switch-brand-on {
+    background-image: var(--gradient-brand);
+    box-shadow: 0 4px 14px -4px rgb(var(--canton-rgb) / 0.55);
   }
 
   /* Scroll-in reveal (progressive enhancement; no JS). Elements are visible
@@ -356,6 +400,43 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* ── On-chain transaction status modal animations (mockup parity) ── */
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes tx-pulse-ring {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(var(--canton-rgb) / 0.32); }
+  50% { box-shadow: 0 0 0 10px rgb(var(--canton-rgb) / 0); }
+}
+@keyframes tx-sweep {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(220%); }
+}
+@keyframes tx-check-pop {
+  0% { transform: scale(0.55); opacity: 0; }
+  65% { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); }
+}
+@keyframes tx-fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes claim-modal-pop {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.tx-pulse { animation: tx-pulse-ring 1.8s var(--ease) infinite; }
+.tx-progress-track { position: relative; overflow: hidden; }
+.tx-progress-sweep {
+  position: absolute;
+  inset: 0;
+  width: 35%;
+  animation: tx-sweep 1.15s ease-in-out infinite;
+}
+.tx-check-pop { animation: tx-check-pop 0.4s var(--ease) both; }
+.tx-fade-up { animation: tx-fade-up 0.32s var(--ease) both; }
+.claim-modal-pop { animation: claim-modal-pop 0.18s ease-out both; }
+.spin { animation: spin 1s linear infinite; }
+
 /* Respect users who prefer reduced motion — disable all decorative motion. */
 @media (prefers-reduced-motion: reduce) {
   .hero-aurora::before,
@@ -364,7 +445,13 @@
   .shimmer::after,
   .float-y,
   .hero-card-float,
-  .reveal {
+  .reveal,
+  .tx-pulse,
+  .tx-progress-sweep,
+  .tx-check-pop,
+  .tx-fade-up,
+  .claim-modal-pop,
+  .spin {
     animation: none !important;
   }
   .float-y, .hero-card-float { transform: none !important; }

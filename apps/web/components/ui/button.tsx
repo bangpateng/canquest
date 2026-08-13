@@ -3,14 +3,14 @@ import { forwardRef } from "react";
 import { cn } from "@/lib/utils/utils";
 
 export const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition-[background-color,border-color,color,transform,box-shadow,filter] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
         primary:
-          "border-0 bg-emerald-500 text-white hover:bg-emerald-400 active:bg-emerald-600",
+          "btn-brand-gradient border-0 font-bold hover:-translate-y-px active:translate-y-0",
         secondary:
-          "border border-[var(--border)] bg-[var(--card)]/80 text-[var(--foreground)] hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10",
+          "border border-[var(--border)] bg-[var(--card)]/80 text-[var(--foreground)] backdrop-blur-md hover:-translate-y-px hover:border-[var(--primary)]/35 hover:bg-[var(--primary)]/10",
         ghost:
           "border-0 bg-transparent text-[var(--foreground)] hover:bg-[var(--primary)]/10 hover:text-[var(--foreground)]",
         success:
@@ -20,7 +20,7 @@ export const buttonVariants = cva(
         dashed:
           "border border-dashed border-[var(--border)] bg-transparent text-[var(--muted-foreground)] cursor-not-allowed",
         danger:
-          "border border-red-500/30 bg-red-500/10 text-red-300 hover:border-red-500/45 hover:bg-red-500/15",
+          "border border-[var(--danger)]/30 bg-[var(--danger)]/10 text-[var(--danger)] hover:border-[var(--danger)]/45 hover:bg-[var(--danger)]/15",
         icon:
           "border-0 bg-transparent text-white hover:bg-[var(--muted)] hover:text-white",
       },

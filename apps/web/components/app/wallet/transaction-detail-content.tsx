@@ -42,13 +42,13 @@ function AddressValue({
   address: string | null | undefined;
   partyId: string | null | undefined;
 }) {
-  if (!address) return <span className="text-slate-400">{"\u2014"}</span>;
+  if (!address) return <span className="text-[var(--muted-foreground)]">{"\u2014"}</span>;
   const isYou = partyIdsEqual(address, partyId);
   return (
     <span className="inline-flex flex-wrap items-baseline gap-x-2">
       <span>{address}</span>
       {isYou ? (
-        <span className="text-xs font-medium text-slate-500">(You)</span>
+        <span className="text-xs font-medium text-[var(--muted-foreground)]">(You)</span>
       ) : null}
     </span>
   );
@@ -70,7 +70,7 @@ function InlineCopyButton({ value, label = "Copy" }: { value: string; label?: st
     <button
       type="button"
       onClick={copy}
-      className={iconButtonClass("h-7 w-7 shrink-0 text-slate-100")}
+      className={iconButtonClass("h-7 w-7 shrink-0 text-[var(--foreground)]")}
       aria-label={label}
     >
       {copied ? (
@@ -93,10 +93,10 @@ function ReceiptField({
 }) {
   return (
     <div className="flex items-start justify-between gap-3 py-2.5">
-      <dt className="shrink-0 text-sm font-medium text-slate-400">{label}</dt>
+      <dt className="shrink-0 text-sm font-medium text-[var(--muted-foreground)]">{label}</dt>
       <dd
         className={cn(
-          "min-w-0 text-right text-sm font-semibold text-slate-100 [overflow-wrap:anywhere]",
+          "min-w-0 text-right text-sm font-semibold text-[var(--foreground)] [overflow-wrap:anywhere]",
           mono && "font-mono",
         )}
       >
@@ -135,8 +135,8 @@ export function TransactionDetailContent({
 
   if (error) {
     return (
-      <div className="rounded-3xl border border-white/5 bg-[var(--card)] p-8 text-center">
-        <p className="text-sm font-medium text-slate-400">{error}</p>
+      <div className="rounded-3xl border border-[var(--border)] bg-[var(--card)] p-8 text-center">
+        <p className="text-sm font-medium text-[var(--muted-foreground)]">{error}</p>
       </div>
     );
   }
@@ -230,8 +230,10 @@ export function TransactionDetailContent({
     <>
       <div
         className={cn(
-          "w-full min-w-0 overflow-hidden rounded-3xl border border-white/5 bg-[var(--card)]",
-          compact ? "p-5" : "p-8",
+          "w-full min-w-0",
+          compact
+            ? ""
+            : "overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--card)] p-8",
         )}
       >
         {/* Centered amount hero */}
@@ -240,7 +242,7 @@ export function TransactionDetailContent({
             className={cn(
               "flex h-11 w-11 items-center justify-center rounded-full",
               isToggle
-                ? "bg-slate-500/15 text-slate-400"
+                ? "bg-[var(--muted)] text-[var(--muted-foreground)]"
                 : isLock
                   ? "bg-amber-500/15 text-amber-500"
                   : isUnlock || isIn || isTokenIn
@@ -266,7 +268,7 @@ export function TransactionDetailContent({
               "mt-3 font-bold tabular-nums",
               compact ? "text-3xl" : "text-4xl",
               isToggle
-                ? "text-slate-400"
+                ? "text-[var(--muted-foreground)]"
                 : isLock
                   ? "text-amber-500"
                   : isOut
@@ -288,13 +290,13 @@ export function TransactionDetailContent({
                   : `${ccAmt.toFixed(4)} CC`}
           </p>
           {usdDisplay != null ? (
-            <p className="mt-0.5 text-sm font-medium text-slate-400 tabular-nums">
+            <p className="mt-0.5 text-sm font-medium text-[var(--muted-foreground)] tabular-nums">
               ≈ ${usdDisplay.toFixed(2)} USD
             </p>
           ) : null}
         </div>
 
-        <dl className="mt-4 divide-y divide-slate-800/60">
+        <dl className="mt-4 divide-y divide-[var(--border)]">
           <ReceiptField label="Type">{txTypeLabel(detail.type, t)}</ReceiptField>
 
           {isTransfer ? (
@@ -414,19 +416,19 @@ export function TransactionDetailContent({
       {showLedgerEvents ? (
         <div
           className={cn(
-            "w-full min-w-0 overflow-hidden rounded-3xl border border-white/5 bg-[var(--card)]",
+            "w-full min-w-0 overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--card)]",
             compact ? "mt-4 p-5" : "mt-5 p-8",
           )}
         >
-          <h3 className="text-base font-bold text-slate-100">On-chain events</h3>
-          <p className="mt-2 text-sm font-medium text-slate-400">
+          <h3 className="text-base font-bold text-[var(--foreground)]">On-chain events</h3>
+          <p className="mt-2 text-sm font-medium text-[var(--muted-foreground)]">
             Contract lifecycle visible to your wallet.
           </p>
-          <ul className="mt-4 divide-y divide-slate-800/80">
+          <ul className="mt-4 divide-y divide-[var(--border)]">
             {detail.ledgerEvents.map((ev, i) => (
               <li key={`${ev.contractId}-${i}`} className="py-3">
-                <p className="text-base font-semibold capitalize text-slate-100">{ev.kind}</p>
-                <p className="mt-1 font-mono text-sm font-medium text-slate-400">
+                <p className="text-base font-semibold capitalize text-[var(--foreground)]">{ev.kind}</p>
+                <p className="mt-1 font-mono text-sm font-medium text-[var(--muted-foreground)]">
                   {shortTemplate(ev.templateId)}
                 </p>
               </li>
@@ -434,7 +436,7 @@ export function TransactionDetailContent({
           </ul>
         </div>
       ) : !isTransfer && detail.ledgerFetchError ? (
-        <p className="mt-4 text-sm font-medium text-slate-400">{detail.ledgerFetchError}</p>
+        <p className="mt-4 text-sm font-medium text-[var(--muted-foreground)]">{detail.ledgerFetchError}</p>
       ) : null}
     </>
   );

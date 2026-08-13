@@ -7,6 +7,7 @@ import {
   formatFcfsSlotsRemaining,
 } from "@/lib/canton/campaign-reward";
 import { CampaignFcfsRewardCard } from "@/components/app/campaign/campaign-fcfs-reward-card";
+import { ClaimDetailsModal } from "@/components/app/campaign/claim-details-modal";
 import { normalizeRewardToken, type RewardTokenSymbol } from "@/lib/quest/quest-types";
 import { useState } from "react";
 import { launchClaimConfetti } from "@/components/ui/confetti-effect";
@@ -32,6 +33,7 @@ export function CampaignFcfsClaimSection({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [deliveryKind, setDeliveryKind] = useState<"direct" | "pending_offer" | null>(null);
+  const [claimOpen, setClaimOpen] = useState(false);
 
   const remaining = campaignMeta.remainingSlots ?? 0;
   const maxWinners = campaignMeta.maxWinners;
@@ -84,20 +86,44 @@ export function CampaignFcfsClaimSection({
   }
 
   return (
-    <CampaignFcfsRewardCard
-      mode="claim"
-      slotsLabel={canClaim ? slotsLabel : "Checking slot availability…"}
-      description={feeHint}
-      rewardCc={rewardCc}
-      rewardType="CC_ONLY"
-      rewardToken={token}
-      deliveryKind={deliveryKind}
-      partyId={partyId}
-      canClaim={canClaim}
-      isSubmitting={isSubmitting}
-      error={error}
-      success={success}
-      onClaim={() => void handleFCFSClaim()}
-    />
+    <>
+      <CampaignFcfsRewardCard
+        mode="claim"
+        slotsLabel={canClaim ? slotsLabel : "Checking slot availability…"}
+        description={feeHint}
+        rewardCc={rewardCc}
+        rewardType="CC_ONLY"
+        rewardToken={token}
+        deliveryKind={deliveryKind}
+        partyId={partyId}
+        canClaim={canClaim}
+        isSubmitting={isSubmitting}
+        error={error}
+        success={success}
+        onClaim={() => setClaimOpen(true)}
+      />
+
+      <ClaimDetailsModal
+        open={claimOpen}
+        onClose={() => setClaimOpen(false)}
+        heroAmount={`${rewardCc} ${token}`}
+        rewardLabel="Reward"
+        tokenHero={String(token).toUpperCase() === "USDCX" ? "USDCx" : "CC"}
+        rows={[
+          {
+            label: "Claim fee",
+            value: fee > 0 ? `${fee} CC` : "Free",
+            accent: fee <= 0,
+          },
+          { label: "Slots", value: slotsLabel },
+          { label: "Network", value: "Canton" },
+        ]}
+        isConfirming={isSubmitting}
+        onConfirm={() => {
+          setClaimOpen(false);
+          void handleFCFSClaim();
+        }}
+      />
+    </>
   );
 }

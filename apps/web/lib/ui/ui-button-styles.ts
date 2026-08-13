@@ -1,13 +1,13 @@
 import { cn } from "@/lib/utils/utils";
 import { buttonVariants } from "@/components/ui/button";
 
-/** Period / status filter pills (Weekly, Active, etc.) */
+/** Period / status filter pills (Weekly, Active, etc.) — active = brand gradient. */
 export function filterTabClass(selected: boolean, className?: string) {
   return cn(
-    "shrink-0 rounded-full text-[10px] sm:text-xs font-semibold uppercase tracking-wider transition-all",
+    "shrink-0 rounded-full text-[10px] sm:text-xs font-semibold uppercase tracking-wider transition-all px-2.5 py-1",
     selected
-      ? "border-0 bg-emerald-500 text-white px-2.5 py-1"
-      : "border border-white/10 bg-white/5 text-slate-300 hover:text-white px-2.5 py-1",
+      ? "border-0 bg-gradient-brand text-[var(--primary-foreground)] shadow-[0_6px_16px_-8px_rgb(var(--canton-rgb)/0.6)]"
+      : "border border-white/10 bg-white/5 text-slate-300 hover:text-white",
     className,
   );
 }
@@ -43,7 +43,7 @@ export function underlineTabClass(selected: boolean, className?: string) {
  *  bell/close/copy icons render dark/invisible. */
 export function iconButtonClass(className?: string) {
   return cn(
-    "inline-flex items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card)]/80 text-white transition-colors hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10 hover:text-white disabled:pointer-events-none disabled:opacity-50",
+    "inline-flex items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card)]/80 text-white backdrop-blur-md transition-[border-color,background-color,transform] hover:-translate-y-px hover:border-[var(--primary)]/35 hover:bg-[var(--primary)]/10 hover:text-white disabled:pointer-events-none disabled:opacity-50",
     className,
   );
 }

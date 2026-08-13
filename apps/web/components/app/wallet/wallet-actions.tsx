@@ -9,6 +9,7 @@ import {
   normalizeSendRecipientInput,
 } from "@/lib/canton/canton-party-id";
 import { cn } from "@/lib/utils/utils";
+import { useTransactionStatus } from "@/lib/tx/transaction-status";
 import { TransactionDetailModal } from "@/components/app/wallet/transaction-detail-modal";
 import { OffersModal, useOffers, useSentOffers } from "@/components/app/wallet/offers-section";
 import { SwapModal } from "@/components/app/wallet/swap-modal";
@@ -24,6 +25,10 @@ import {
   Search,
   Activity as ActivityIcon,
   Lock,
+  Zap,
+  Share2,
+  AlertTriangle,
+  CheckCircle2,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { useCallback, useEffect, useId, useState } from "react";
@@ -71,6 +76,10 @@ export function WalletActions({
   // hook — ter-dedup dengan SettingsPreapprovalPanel yang baca endpoint sama.
   const { data: feeConfig } = useFeeConfig();
   const feeCc = feeConfig?.feeCc ?? 5;
+
+  // Unified on-chain transaction status modal (Sign → Broadcast → Confirmed).
+  // Presentation layer only — driven around the existing fetch in submitSend.
+  const tx = useTransactionStatus();
 
   // Pending incoming offers — badge count + modal content.
   const { offers, loading: offersLoading, error: offersError, setOffers, refresh: refreshOffers } = useOffers();
@@ -214,6 +223,21 @@ export function WalletActions({
     setSendState("loading");
     setSendMessage("");
 
+    // Open the unified status modal at Sign, then advance to Broadcast while
+    // the real fetch is in flight. On resolve we call succeed() (or dismiss()
+    // on error). The fetch itself is unchanged.
+    const tokenLabel = displayName(selectedSendToken.instrumentId);
+    const recipientDisplay = formatPartyIdForDisplay(recipient);
+    tx.start({
+      amountText: `${amount} ${tokenLabel}`,
+      subText: recipientDisplay,
+      title: "Transfer sent",
+      subtitle: "Funds are on the way.",
+      accentBg: "bg-[var(--primary)]/15",
+      accentText: "text-canton",
+    });
+    tx.broadcast();
+
     // ── AUTO-ROUTE: CC → /send-cc, non-CC → /send-token ──────────────────
     // User pilih token di selector, tidak sadar backend beda. CC pakai jalur
     // lama (preapproval path, bisa direct). Non-CC pakai CIP-0056 two-step.
@@ -262,6 +286,7 @@ export function WalletActions({
       // Error hanya jika HTTP error ATAU success=false
       // accepted=false + offerPending=true = offer berhasil dibuat, receiver perlu accept manual (BUKAN error)
       if (!res.ok || data.success === false) {
+        tx.dismiss();
         setSendState("error");
         setSendMessage(data.message ?? data.error ?? "Transfer failed. Please try again.");
         setConfirmOpen(false);
@@ -272,7 +297,6 @@ export function WalletActions({
       setConfirmOpen(false);
       setSheet(null);
       setSendState("idle");
-      const tokenLabel = displayName(selectedSendToken.instrumentId);
       if (typeof data.transactionId === "string" && data.transactionId) {
         setSuccessTransactionId(data.transactionId);
       } else if (data.offerPending) {
@@ -297,7 +321,25 @@ export function WalletActions({
       onBalanceRefresh?.();
       // Refresh token balances supaya balance selector update (non-CC credit).
       void invalidateWalletTokens();
+
+      // Advance the unified status modal to Confirmed (overlay above the
+      // receipt/success UI). Done → reveals whatever was opened below.
+      const isOffer = Boolean(data.offerPending);
+      tx.succeed({
+        amountText: `${amount} ${tokenLabel}`,
+        title: isOffer ? "Offer sent" : "Transfer sent",
+        subtitle: isOffer ? "Recipient must accept to receive." : "Funds are on the way.",
+        accentBg: "bg-[var(--primary)]/15",
+        accentText: "text-canton",
+        meta: [
+          { label: "Amount", value: `${amount} ${tokenLabel}` },
+          ...(selectedIsCC && data.fee ? [{ label: "Fee", value: `${data.fee} CC` }] : []),
+          { label: "Recipient", value: recipientDisplay, mono: true },
+          { label: "Network", value: "Canton" },
+        ],
+      });
     } catch {
+      tx.dismiss();
       setSendState("error");
       setSendMessage("Network error. Check your connection and try again.");
       setConfirmOpen(false);
@@ -400,7 +442,7 @@ export function WalletActions({
       {/* ── SEND DIALOG ── */}
       {sheet === "send" ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overscroll-contain p-4"
+          className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto overscroll-contain p-0 sm:items-center sm:p-4"
           role="presentation"
         >
           <button
@@ -413,8 +455,9 @@ export function WalletActions({
             role="dialog"
             aria-modal="true"
             aria-labelledby={sendTitleId}
-            className="relative z-10 my-auto w-full max-h-[min(90vh,90dvh)] max-w-md overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-8 shadow-xl"
+            className="relative z-10 my-auto w-full max-h-[min(92vh,92dvh)] max-w-md overflow-y-auto rounded-t-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-xl sm:rounded-3xl sm:p-8"
           >
+            <div className="mx-auto mb-4 h-1.5 w-10 shrink-0 rounded-full bg-[var(--muted)] sm:hidden" aria-hidden />
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2
@@ -588,12 +631,19 @@ export function WalletActions({
                 </div>
 
                 <div className="space-y-2">
-                  <label
-                    htmlFor="wallet-send-recipient"
-                    className="text-sm font-medium text-[var(--muted-foreground)]"
-                  >
-                    Recipient
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label
+                      htmlFor="wallet-send-recipient"
+                      className="text-sm font-medium text-[var(--muted-foreground)]"
+                    >
+                      Recipient
+                    </label>
+                    {normalizeSendRecipientInput(recipientUsername) ? (
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-canton">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Ready
+                      </span>
+                    ) : null}
+                  </div>
                   <textarea
                     id="wallet-send-recipient"
                     required
@@ -631,9 +681,21 @@ export function WalletActions({
                 </div>
 
                 {sendState === "error" && (
-                  <div className="flex items-start gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-4">
-                    <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
-                    <p className="text-sm font-medium text-red-400">{sendMessage}</p>
+                  <div className="flex items-start gap-3 rounded-2xl border border-[var(--danger)]/30 bg-[var(--danger)]/10 p-4">
+                    <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-[var(--danger)]" />
+                    <p className="text-sm font-medium text-[var(--danger)]">{sendMessage}</p>
+                  </div>
+                )}
+
+                {selectedIsCC && (
+                  <div className="flex items-center justify-between rounded-2xl bg-[var(--muted)]/60 px-4 py-2.5 text-xs">
+                    <span className="flex items-center gap-1.5 text-[var(--muted-foreground)]">
+                      <Zap className="h-3.5 w-3.5" />
+                      Network fee
+                    </span>
+                    <span className="font-semibold tabular-nums text-[var(--foreground)]">
+                      ≈ {feeCc} CC · Canton
+                    </span>
                   </div>
                 )}
 
@@ -700,7 +762,7 @@ export function WalletActions({
       {/* ── RECEIVE DIALOG ── */}
       {sheet === "receive" ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overscroll-contain p-4"
+          className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto overscroll-contain p-0 sm:items-center sm:p-4"
           role="presentation"
         >
           <button
@@ -713,8 +775,9 @@ export function WalletActions({
             role="dialog"
             aria-modal="true"
             aria-labelledby={receiveTitleId}
-            className="relative z-10 my-auto w-full max-h-[min(90vh,90dvh)] max-w-md overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-8 shadow-xl"
+            className="relative z-10 my-auto w-full max-h-[min(92vh,92dvh)] max-w-md overflow-y-auto rounded-t-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-xl sm:rounded-3xl sm:p-8"
           >
+            <div className="mx-auto mb-4 h-1.5 w-10 shrink-0 rounded-full bg-[var(--muted)] sm:hidden" aria-hidden />
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2
@@ -723,6 +786,9 @@ export function WalletActions({
                 >
                   Receive
                 </h2>
+                <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
+                  Only send assets on Canton to this address.
+                </p>
               </div>
               <button
                 type="button"
@@ -734,7 +800,7 @@ export function WalletActions({
               </button>
             </div>
 
-            <div className="mt-8 flex justify-center rounded-3xl border border-[var(--border)] bg-white p-6 dark:bg-zinc-950">
+            <div className="relative mt-7 flex justify-center rounded-3xl border border-[var(--border)] bg-white p-6 dark:bg-zinc-950">
               <QRCodeSVG
                 value={displayPartyId}
                 size={200}
@@ -742,22 +808,57 @@ export function WalletActions({
                 marginSize={2}
                 className="h-[200px] w-[200px]"
               />
+              <span
+                className="absolute left-1/2 top-1/2 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-4 border-white bg-gradient-to-br from-amber-400 to-amber-600 text-[11px] font-black text-black shadow-md dark:border-zinc-950"
+                aria-hidden
+              >
+                C
+              </span>
+            </div>
+            <div className="mt-4 flex items-center justify-center gap-1.5 text-xs font-semibold text-[var(--muted-foreground)]">
+              <span className="h-1.5 w-1.5 rounded-full bg-canton" />
+              Canton Network
             </div>
 
-            <div className="mt-8">
+            <div className="mt-6">
               <CopyField label="Your Canton Party ID" value={displayPartyId} />
             </div>
 
-            <button
-              type="button"
-              onClick={close}
-              className={cn(
-                buttonVariants({ variant: "secondary", size: "sm" }),
-                "mt-8 w-full sm:w-auto",
-              )}
-            >
-              Done
-            </button>
+            <div className="mt-3 flex items-start gap-2 rounded-xl bg-amber-500/10 px-3.5 py-2.5 text-xs text-amber-300">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              Sending unsupported assets or wrong-network tokens to this address may result in permanent loss.
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  const shareData = {
+                    title: "My Canton Party ID",
+                    text: displayPartyId,
+                  };
+                  if (typeof navigator !== "undefined" && navigator.share) {
+                    void navigator.share(shareData).catch(() => {});
+                  } else if (typeof navigator !== "undefined" && navigator.clipboard) {
+                    void navigator.clipboard.writeText(displayPartyId);
+                  }
+                }}
+                className={cn(
+                  buttonVariants({ variant: "secondary", size: "sm" }),
+                  "flex-1 gap-2",
+                )}
+              >
+                <Share2 className="h-4 w-4" />
+                Share
+              </button>
+              <button
+                type="button"
+                onClick={close}
+                className={cn(buttonVariants({ size: "sm" }), "flex-1")}
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

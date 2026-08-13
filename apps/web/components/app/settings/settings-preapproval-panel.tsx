@@ -265,7 +265,7 @@ function TokenToggleRow({
             <div
               className={cn(
                 "h-7 w-12 rounded-full transition-colors duration-200",
-                active ? "bg-[var(--primary)]" : "bg-[var(--muted)]",
+                active ? "switch-brand-on" : "bg-[var(--muted)]",
               )}
             >
               <div

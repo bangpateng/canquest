@@ -14,6 +14,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { CanQuestLogo } from "@/components/ui/canquest-logo";
 import { PlatformToolbar } from "@/components/platform/platform-toolbar";
+import { TransactionStatusModal } from "@/components/platform/transaction-status-modal";
 import { platformContentClass } from "@/components/platform/platform-page";
 import { PlatformI18nProvider, usePlatformI18n } from "@/lib/i18n/platform-provider";
 import { ROUTES } from "@/lib/routing/app-routes";
@@ -106,7 +107,16 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
   useRealtime();
 
   return (
-    <div className="flex min-h-screen w-full max-w-full items-start overflow-x-hidden bg-[var(--background)] font-sans">
+    <div className="relative flex min-h-screen w-full max-w-full isolate items-start overflow-x-hidden bg-[var(--background)] font-sans">
+      {/* Ambient nebula — fixed radial glows (canton / violet / cyan) behind all platform content. */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 -z-10"
+        style={{
+          background:
+            "radial-gradient(48rem 30rem at 14% -8%, rgb(var(--canton-rgb) / 0.16), transparent 60%), radial-gradient(40rem 26rem at 100% 8%, rgb(var(--violet-rgb) / 0.12), transparent 55%), radial-gradient(36rem 24rem at 8% 92%, rgb(var(--canton-cyan-rgb) / 0.08), transparent 55%)",
+        }}
+      />
       {/* Desktop Sidebar — hidden on mobile */}
       <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--card)]/60 px-4 py-8 backdrop-blur-2xl md:flex">
         <div className="mb-6 min-w-0 px-2">
@@ -158,6 +168,9 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
           <NavLinks variant="mobile" hasWallet={hasWallet} />
         </div>
       </nav>
+
+      {/* Unified on-chain transaction status dialog (Sign → Broadcast → Confirmed). */}
+      <TransactionStatusModal />
     </div>
   );
 }

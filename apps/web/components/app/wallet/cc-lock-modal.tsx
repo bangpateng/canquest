@@ -6,6 +6,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { buttonVariants } from "@/components/ui/button";
 import { iconButtonClass } from "@/lib/ui/ui-button-styles";
 import { cn } from "@/lib/utils/utils";
+import { useTransactionStatus } from "@/lib/tx/transaction-status";
 import type { ActiveLock, LockStatus } from "@/lib/hooks/use-lock-status";
 
 /** Render termKey (mis. "15d"/"5m") jadi label manusiawi untuk tombol aksi. */
@@ -36,6 +37,7 @@ interface TermOption {
 
 export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalProps) {
   const titleId = useId();
+  const tx = useTransactionStatus();
   const [terms, setTerms] = useState<TermOption[]>([]);
   const [amount, setAmount] = useState("");
   const [selectedTerm, setSelectedTerm] = useState<string>("");
@@ -95,6 +97,15 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
       if (!selectedTerm || !amountValid) return;
       setLockState("loading");
       setLockMessage("");
+      tx.start({
+        amountText: `Lock ${numericAmount} CC`,
+        subText: `for ${termLabel(selectedTerm)}`,
+        title: "CC locked",
+        subtitle: `Locked for ${termLabel(selectedTerm)}`,
+        accentBg: "bg-[var(--primary)]/15",
+        accentText: "text-canton",
+      });
+      tx.broadcast();
       try {
         const res = await fetch("/api/party/lock", {
           method: "POST",
@@ -107,6 +118,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
         });
         const data = (await res.json()) as { ok?: boolean; error?: string };
         if (!res.ok || data.ok === false) {
+          tx.dismiss();
           setLockState("error");
           setLockMessage(data.error ?? "Lock failed. Please try again.");
           return;
@@ -115,17 +127,37 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
         setLockMessage("");
         setAmount("");
         onRefresh();
+        tx.succeed({
+          amountText: `${numericAmount} CC`,
+          title: "CC locked",
+          subtitle: `Locked for ${termLabel(selectedTerm)}`,
+          meta: [
+            { label: "Amount", value: `${numericAmount} CC` },
+            { label: "Duration", value: termLabel(selectedTerm) },
+            { label: "Network", value: "Canton" },
+          ],
+        });
       } catch {
+        tx.dismiss();
         setLockState("error");
         setLockMessage("Network error. Check your connection.");
       }
     },
-    [selectedTerm, amountValid, numericAmount, onRefresh],
+    [selectedTerm, amountValid, numericAmount, onRefresh, tx],
   );
 
   const submitUnlock = useCallback(
     async (lockId: string) => {
+      const lock = status.activeLocks.find((l) => l.id === lockId);
       setUnlockingId(lockId);
+      tx.start({
+        amountText: lock ? `Unlock ${lock.amountCc} CC` : "Unlock CC",
+        title: "CC unlocked",
+        subtitle: "Funds returned to your wallet.",
+        accentBg: "bg-[var(--primary)]/15",
+        accentText: "text-canton",
+      });
+      tx.broadcast();
       try {
         const res = await fetch("/api/party/unlock", {
           method: "POST",
@@ -135,26 +167,39 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
         });
         const data = (await res.json()) as { ok?: boolean; error?: string };
         if (!res.ok || data.ok === false) {
+          tx.dismiss();
           setLockState("error");
           setLockMessage(data.error ?? "Unlock failed.");
         } else {
           onRefresh();
+          tx.succeed({
+            amountText: lock ? `${lock.amountCc} CC` : "CC",
+            title: "CC unlocked",
+            subtitle: "Funds returned to your wallet.",
+            meta: lock
+              ? [
+                  { label: "Amount", value: `${lock.amountCc} CC` },
+                  { label: "Network", value: "Canton" },
+                ]
+              : undefined,
+          });
         }
       } catch {
+        tx.dismiss();
         setLockState("error");
         setLockMessage("Network error.");
       } finally {
         setUnlockingId(null);
       }
     },
-    [onRefresh],
+    [onRefresh, status.activeLocks, tx],
   );
 
   if (!open) return null;
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto p-0 sm:items-center sm:p-4"
       role="presentation"
     >
       <button
@@ -167,9 +212,10 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative z-10 w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 sm:p-8 shadow-xl"
+        className="relative z-10 my-auto w-full max-h-[min(92vh,92dvh)] max-w-md overflow-y-auto rounded-t-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-xl sm:rounded-3xl sm:p-8"
       >
         {/* Drag handle (mobile bottom-sheet feel) */}
+        <div className="mx-auto mb-4 h-1.5 w-10 shrink-0 rounded-full bg-[var(--muted)] sm:hidden" aria-hidden />
 
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-2">
