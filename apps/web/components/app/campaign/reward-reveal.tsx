@@ -58,8 +58,9 @@ export function RewardReveal({
 
   return (
     <Card
+      bare
       className={cn(
-        "overflow-hidden p-5",
+        "rounded-[20px] border border-[var(--border)] p-5 shadow-[0_20px_44px_-24px_rgb(0_0_0/0.8)]",
         className,
       )}
     >

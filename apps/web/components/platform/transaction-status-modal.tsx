@@ -33,8 +33,8 @@ export function TransactionStatusModal() {
       aria-modal="true"
     >
       <button className="modal-backdrop" aria-label="Close" onClick={dismiss} />
-      <div className="relative z-10 my-auto w-full max-w-[380px] max-h-[min(92vh,92dvh)] overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] shadow-2xl">
-        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[var(--primary)]/50 to-transparent" />
+      <div className="relative z-10 my-auto max-h-[min(92vh,92dvh)] w-full max-w-[380px] overflow-y-auto rounded-[20px] border border-[var(--border)] bg-[var(--card-solid)] shadow-[0_20px_44px_-24px_rgb(0_0_0/0.8)]">
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[var(--primary)]/40 to-transparent" />
         <button
           className={iconButtonClass("absolute right-3 top-3 h-8 w-8")}
           onClick={dismiss}
@@ -106,11 +106,8 @@ export function TransactionStatusModal() {
           {/* CONFIRMED — success */}
           {stage === "confirmed" && (
             <div className="flex flex-col items-center text-center tx-fade-up">
-              <div className="relative flex h-16 w-16 items-center justify-center">
-                <span className="absolute inset-0 -m-2 rounded-full bg-emerald-400/25 blur-xl" />
-                <span className="relative z-10 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-400 tx-check-pop">
-                  <Check className="h-7 w-7" />
-                </span>
+              <div className="flex h-14 w-14 items-center justify-center rounded-[14px] bg-emerald-500/[0.13] text-emerald-400 tx-check-pop">
+                <Check className="h-7 w-7" />
               </div>
               <p className="mt-4 text-base font-bold text-[var(--foreground)]">{config.title}</p>
               {config.subtitle ? (

@@ -153,7 +153,7 @@ export function CampaignFcfsClaimSection({
             value: slotsFull ? "Full Claimed" : formatFcfsSlotsFilled(remaining, maxWinners),
             tag: !slotsFull ? `${remaining} left` : undefined,
           },
-          { label: "Network", value: "Canton", dot: true },
+          { label: "Network", value: "Canton" },
           ...(formatEndMeta(campaignMeta.endsAt)
             ? [{ label: campaignMeta.ended ? "Ended" : "Closes", value: formatEndMeta(campaignMeta.endsAt)! }]
             : []),

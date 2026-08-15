@@ -9,10 +9,11 @@ import { iconButtonClass } from "@/lib/ui/ui-button-styles";
 import { cn } from "@/lib/utils/utils";
 
 /**
- * Pre-claim confirmation modal — "Claim Reward" (uploaded mockup, revised).
+ * Pre-claim confirmation modal — "Claim Reward" (mockup editan user, rev.2).
  *
- * Center badge = logo ASLI sesuai tipe reward (CC/USDCx via RewardTokenLogo,
- * code = ticket, waitlist = sparkles) — tanpa ring animasi.
+ * Solid card-solid surface, logo reward 44px (RewardTokenLogo — logo asli
+ * CC/USDCx dari API), amount polos 36px, eligible strip teks polos,
+ * CTA gradient rounded-xl. Tanpa ring, tanpa ikon dekoratif.
  * Pure presentation — the claim fetch runs in the caller's `onConfirm`.
  */
 export interface ClaimRow {
@@ -20,8 +21,6 @@ export interface ClaimRow {
   value: string;
   /** Render the value in the canton accent (e.g. a "Free" fee). */
   accent?: boolean;
-  /** Cyan network dot before the value (Network row). */
-  dot?: boolean;
   /** Amber chip after the value (e.g. "1 left" on the Slots row). */
   tag?: string;
 }
@@ -39,7 +38,7 @@ interface ClaimDetailsModalProps {
   rewardLabel?: string;
   /** Detail rows (Claim fee / Slots / Network / Closes / …). */
   rows?: ClaimRow[];
-  /** Optional eligibility strip text under the rows. */
+  /** Optional eligibility line under the rows (plain text + check). */
   eligibleHint?: string;
   /** Logo reward di tengah: CC / USDCx (logo asli), CODE (ticket), WAITLIST (sparkles). */
   tokenHero?: "CC" | "USDCx" | "CODE" | "WAITLIST";
@@ -49,21 +48,21 @@ interface ClaimDetailsModalProps {
   onConfirm: () => void;
 }
 
-/** Logo reward di tengah modal — mengikuti tipe reward. */
+/** Logo reward di tengah modal — mengikuti tipe reward (44px, mockup rev.2). */
 function ClaimTokenIcon({ token }: { token?: "CC" | "USDCx" | "CODE" | "WAITLIST" }) {
   if (token === "CC" || token === "USDCx") {
-    return <RewardTokenLogo token={token} size={64} circular />;
+    return <RewardTokenLogo token={token} size={44} circular />;
   }
   if (token === "WAITLIST") {
     return (
-      <span className="flex h-16 w-16 items-center justify-center rounded-full bg-cyan-500/15 text-cyan-300 shadow-[inset_0_0_0_1px_rgb(255_255_255/0.08)]">
-        <Sparkles className="h-8 w-8" aria-hidden />
+      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-cyan-500/[0.14] text-cyan-300 shadow-[inset_0_0_0_1px_rgb(255_255_255/0.06)]">
+        <Sparkles className="h-[22px] w-[22px]" aria-hidden />
       </span>
     );
   }
   return (
-    <span className="flex h-16 w-16 items-center justify-center rounded-full bg-violet-500/15 text-violet-300 shadow-[inset_0_0_0_1px_rgb(255_255_255/0.08)]">
-      <Ticket className="h-8 w-8" aria-hidden />
+    <span className="flex h-11 w-11 items-center justify-center rounded-full bg-violet-500/[0.14] text-violet-300 shadow-[inset_0_0_0_1px_rgb(255_255_255/0.06)]">
+      <Ticket className="h-[22px] w-[22px]" aria-hidden />
     </span>
   );
 }
@@ -94,7 +93,7 @@ export function ClaimDetailsModal({
       aria-label="Claim reward"
     >
       <button className="modal-backdrop" aria-label="Close" onClick={onClose} />
-      <div className="claim-modal-pop relative z-10 my-auto max-h-[min(92vh,92dvh)] w-full max-w-[400px] overflow-y-auto rounded-[20px] border border-[var(--border)] bg-gradient-to-b from-[var(--card)] to-[var(--card-solid)] p-7 pb-6 shadow-[0_30px_80px_-20px_rgb(0_0_0/0.7),inset_0_0_0_1px_rgb(255_255_255/0.02)]">
+      <div className="claim-modal-pop relative z-10 my-auto max-h-[min(92vh,92dvh)] w-full max-w-[400px] overflow-y-auto rounded-[20px] border border-[var(--border)] bg-[var(--card-solid)] p-7 pb-6 shadow-[0_20px_44px_-24px_rgb(0_0_0/0.8)]">
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <div className="text-base font-semibold tracking-tight text-[var(--foreground)]">
@@ -111,17 +110,15 @@ export function ClaimDetailsModal({
         </div>
 
         {/* Reward logo + hero amount */}
-        <div className="mb-5 flex flex-col items-center">
+        <div className="mb-4 flex flex-col items-center">
           <ClaimTokenIcon token={tokenHero} />
-          <p className="mb-1.5 mt-4 font-mono text-[10.5px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+          <p className="mb-1.5 mt-3.5 font-mono text-[10.5px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
             {rewardLabel}
           </p>
-          <p className="text-[38px] font-bold leading-none tracking-[-0.02em]">
-            <span className="bg-gradient-to-r from-[var(--foreground)] to-[var(--muted-foreground)] bg-clip-text text-transparent">
-              {headline}
-            </span>
+          <p className="text-[36px] font-bold leading-none tracking-[-0.02em] tabular-nums text-[var(--foreground)]">
+            {headline}
             {heroUnit ? (
-              <span className="ml-1 text-[17px] font-semibold text-[var(--muted-foreground)]">
+              <span className="ml-1 text-[16px] font-semibold text-[var(--muted-foreground)]">
                 {heroUnit}
               </span>
             ) : null}
@@ -135,18 +132,12 @@ export function ClaimDetailsModal({
               <div
                 key={i}
                 className={cn(
-                  "flex items-center justify-between py-[13px]",
+                  "flex items-center justify-between py-[11px]",
                   i < rows.length - 1 && "border-b border-[var(--border)]",
                 )}
               >
                 <span className="text-[13px] text-[var(--muted-foreground)]">{r.label}</span>
                 <span className="flex items-center gap-1.5 font-mono text-[13px] font-medium text-[var(--foreground)]">
-                  {r.dot ? (
-                    <span
-                      className="h-1.5 w-1.5 rounded-full bg-cyan-400 shadow-[0_0_6px_#22d3ee]"
-                      aria-hidden
-                    />
-                  ) : null}
                   <span className={r.accent ? "text-canton" : undefined}>{r.value}</span>
                   {r.tag ? (
                     <span className="rounded-[20px] border border-amber-400/25 bg-amber-400/10 px-1.5 py-0.5 font-mono text-[10.5px] text-amber-300">
@@ -159,18 +150,18 @@ export function ClaimDetailsModal({
           </div>
         ) : null}
 
-        {/* Eligibility strip */}
+        {/* Eligibility — plain text line with mint check (mockup rev.2) */}
         {eligibleHint ? (
-          <div className="mb-4 flex items-center gap-2.5 rounded-[12px] border border-[rgb(var(--canton-rgb)/0.22)] bg-[rgb(var(--canton-rgb)/0.08)] px-3.5 py-2.5 text-[12.5px] text-canton">
-            <Check className="h-[15px] w-[15px] shrink-0" strokeWidth={2.4} aria-hidden />
+          <p className="flex items-center gap-2 px-0.5 pb-[18px] text-[12.5px] text-[var(--muted-foreground)]">
+            <Check className="h-[15px] w-[15px] shrink-0 text-canton" strokeWidth={2.4} aria-hidden />
             {eligibleHint}
-          </div>
+          </p>
         ) : null}
 
         {/* CTA */}
         <div>
           <Button
-            className="h-[52px] w-full rounded-[13px] text-[14.5px] font-bold"
+            className="h-[50px] w-full rounded-xl text-[14.5px] font-bold shadow-[0_8px_20px_-12px_rgb(94_232_156/0.45)]"
             onClick={onConfirm}
             disabled={isConfirming}
           >

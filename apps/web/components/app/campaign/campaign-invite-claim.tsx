@@ -129,7 +129,7 @@ export function CampaignInviteClaimSection({
             label: "Codes",
             value: codes > 0 ? `${codes} left` : "None",
           },
-          { label: "Network", value: "Canton", dot: true },
+          { label: "Network", value: "Canton" },
           ...(formatEndMeta(campaignMeta.endsAt)
             ? [{ label: campaignMeta.ended ? "Ended" : "Closes", value: formatEndMeta(campaignMeta.endsAt)! }]
             : []),

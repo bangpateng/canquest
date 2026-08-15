@@ -888,7 +888,7 @@ export function QuestForm({
                   className={inputCls}
                 />
                 <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                  Opens as an &ldquo;Open&rdquo; button in the default 3-step template.
+                  Step 1 of the default template: &ldquo;Create an account at …&rdquo;.
                 </p>
               </div>
               <div>
@@ -906,7 +906,8 @@ export function QuestForm({
                   className={cn(inputCls, "resize-y font-mono text-xs")}
                 />
                 <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                  Leave empty to use the default 3-step template (Register &rarr; Enter code &rarr; Done).
+                  Leave empty to use the default template (Create an account &rarr; Enter code
+                  during signup &rarr; You&rsquo;re all set).
                 </p>
               </div>
             </div>

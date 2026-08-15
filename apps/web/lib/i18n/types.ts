@@ -206,6 +206,8 @@ export type PlatformMessages = {
     howToUseTitle: string;
     howToUseStepRegister: string;
     howToUseStepUseCode: string;
+    howToUseDuringSignup: string;
+    howToUseAllSet: string;
     howToUseStepDone: string;
     howToUseOpen: string;
   };

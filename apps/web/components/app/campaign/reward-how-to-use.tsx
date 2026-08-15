@@ -66,71 +66,60 @@ export function RewardHowToUse({
             ))}
         </div>
       ) : (
-        // Template 3-step default.
-        <ol className="mt-3 space-y-2.5">
-          <li className="flex items-start gap-3">
+        // Template default 2 langkah (mockup rev.2):
+        // ① Create an account at <link>  ② Enter code <CODE> during signup
+        // + status penutup "You're all set" dipisah dari list bernomor.
+        <div className="mt-3">
+          <div className="flex items-start gap-3">
             <StepBadge n={1} />
-            <div className="min-w-0 flex-1 flex-wrap items-center gap-1.5 text-xs leading-relaxed text-[var(--muted-foreground)]">
-              <span>{t("earnCampaigns.howToUseStepRegister")}</span>
+            <p className="min-w-0 flex-wrap text-xs leading-relaxed text-[var(--muted-foreground)]">
+              {t("earnCampaigns.howToUseStepRegister")}{" "}
               {url ? (
+                <a
+                  href={ensureAbsoluteUrl(url)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-canton underline underline-offset-2 hover:text-canton/80 break-all"
+                >
+                  {prettyUrl(url)}
+                </a>
+              ) : null}
+            </p>
+          </div>
+
+          <div className="mt-2.5 flex items-start gap-3">
+            <StepBadge n={2} />
+            <p className="min-w-0 text-xs leading-relaxed text-[var(--muted-foreground)]">
+              {t("earnCampaigns.howToUseStepUseCode")}
+              {inviteCode ? (
                 <>
-                  <span aria-hidden>: </span>
-                  <a
-                    href={ensureAbsoluteUrl(url)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-medium text-canton underline underline-offset-2 hover:text-canton/80 break-all"
-                  >
-                    {prettyUrl(url)}
-                  </a>
+                  {": "}
+                  <span className="font-mono font-bold tracking-widest text-canton">
+                    {inviteCode}
+                  </span>{" "}
+                  {t("earnCampaigns.howToUseDuringSignup")}
                 </>
               ) : null}
-            </div>
-          </li>
+            </p>
+          </div>
 
-          <li className="flex items-start gap-3">
-            <StepBadge n={2} />
-            <div className="min-w-0">
-              <span className="text-xs leading-relaxed text-[var(--muted-foreground)]">
-                {t("earnCampaigns.howToUseStepUseCode")}
-                {inviteCode ? (
-                  <>
-                    {": "}
-                    <span className="font-mono font-bold tracking-widest text-canton">
-                      {inviteCode}
-                    </span>
-                  </>
-                ) : null}
-              </span>
-            </div>
-          </li>
-
-          <li className="flex items-start gap-3">
-            <StepBadge n={3} done />
-            <div className="min-w-0">
-              <span className="text-xs leading-relaxed text-[var(--muted-foreground)]">
-                {t("earnCampaigns.howToUseStepDone")} ✅
-              </span>
-            </div>
-          </li>
-        </ol>
+          <p className="mt-3.5 flex items-center gap-2 border-t border-[var(--border)] pt-3.5 text-[12.5px] font-semibold text-canton">
+            <CheckCircle2 className="h-[15px] w-[15px] shrink-0 text-canton" strokeWidth={2.5} aria-hidden />
+            {t("earnCampaigns.howToUseAllSet")}
+          </p>
+        </div>
       )}
     </div>
   );
 }
 
-function StepBadge({ n, done }: { n: number; done?: boolean }) {
+function StepBadge({ n }: { n: number }) {
   return (
     <span
-      className={cn(
-        "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold",
-        done
-          ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-          : "bg-canton/15 text-canton",
-      )}
+      className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-canton/15 text-xs font-bold text-canton"
       aria-hidden
     >
-      {done ? <CheckCircle2 className="h-4 w-4" strokeWidth={2.5} /> : n}
+      {n}
     </span>
   );
 }
