@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { apiFetch, ApiError } from "@/lib/services/api/client";
+import { apiFetch } from "@/lib/services/api/client";
 import { useEffect, useState } from "react";
 import { AdminQuestHubTasksPanel, type QuestHub } from "@/components/admin/admin-quest-hub-tasks-panel";
 

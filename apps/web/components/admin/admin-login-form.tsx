@@ -1,5 +1,6 @@
 'use client';
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { apiFetch, ApiError } from "@/lib/services/api/client";
 
 import { useSearchParams } from 'next/navigation';
 import { useRouter } from 'next/navigation';
@@ -24,36 +25,19 @@ export function AdminLoginForm() {
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/auth/login', {
+      await apiFetch('/api/admin/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), password }),
+        json: { email: email.trim(), password },
       });
-
-      let data: { message?: string | string[] } = {};
-      try {
-        data = (await res.json()) as { message?: string };
-      } catch {
-        /* empty */
-      }
-
-      if (!res.ok) {
-        let msg: string;
-        if (Array.isArray(data.message)) {
-          msg = data.message.map(String).join('; ');
-        } else if (typeof data.message === 'string') {
-          msg = data.message;
-        } else {
-          msg = 'Sign-in failed.';
-        }
-        setError(msg);
-        return;
-      }
 
       router.push(next && next.startsWith('/admin') ? next : '/admin');
       router.refresh();
-    } catch {
-      setError('Network error — try again.');
+    } catch (err) {
+      const msg =
+        err instanceof ApiError && err.message
+          ? err.message
+          : 'Sign-in failed — try again.';
+      setError(msg);
     } finally {
       setLoading(false);
     }

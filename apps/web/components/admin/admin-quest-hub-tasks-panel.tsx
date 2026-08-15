@@ -1,5 +1,6 @@
 "use client";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { apiFetch } from "@/lib/services/api/client";
 
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
@@ -128,16 +129,10 @@ export function AdminQuestHubTasksPanel({
     setSaving(true);
     try {
       const payload = buildQuestHubTaskPayload(draft);
-      const res = await fetch(`/api/admin/quests/${hub!.id}/tasks`, {
+      const data = await apiFetch<QuestHubTask>(`/api/admin/quests/${hub!.id}/tasks`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...payload, order: tasks.length }),
+        json: { ...payload, order: tasks.length },
       });
-      const data = (await res.json()) as QuestHubTask & { message?: string };
-      if (!res.ok) {
-        setFormError(data.message ?? "Failed to add task");
-        return;
-      }
       setTasks((prev) => [...prev, data]);
       setDraft({ ...defaultDraft, type: draft.type });
       router.refresh();
@@ -161,16 +156,10 @@ export function AdminQuestHubTasksPanel({
     setSaving(true);
     try {
       const payload = buildQuestHubTaskPayload(editDraft);
-      const res = await fetch(`/api/admin/tasks/${editingTaskId}`, {
+      const data = await apiFetch<QuestHubTask>(`/api/admin/tasks/${editingTaskId}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        json: payload,
       });
-      const data = (await res.json()) as QuestHubTask & { message?: string };
-      if (!res.ok) {
-        setFormError(data.message ?? "Failed to update task");
-        return;
-      }
       setTasks((prev) => prev.map((t) => (t.id === editingTaskId ? { ...t, ...data } : t)));
       cancelEdit();
       router.refresh();
@@ -189,7 +178,7 @@ export function AdminQuestHubTasksPanel({
     if (!confirm("Delete this task?")) return;
     const taskId = task.id;
     if (editingTaskId === taskId) cancelEdit();
-    await fetch(`/api/admin/tasks/${taskId}`, { method: "DELETE" });
+    await apiFetch(`/api/admin/tasks/${taskId}`, { method: "DELETE" }).catch(() => undefined);
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
     router.refresh();
   }

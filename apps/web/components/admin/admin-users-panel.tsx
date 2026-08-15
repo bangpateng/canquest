@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { apiFetch } from "@/lib/services/api/client";
 import {
   Search,
   Trash2,
@@ -112,13 +113,7 @@ export function AdminUsersPanel() {
     });
     if (search.trim()) params.set('q', search.trim());
     try {
-      const res = await fetch(`/api/admin/users?${params}`, { cache: 'no-store' });
-      if (!res.ok) {
-        setMessage('Failed to load users');
-        setData(null);
-        return;
-      }
-      const json = (await res.json()) as UsersResponse;
+      const json = await apiFetch<UsersResponse>(`/api/admin/users?${params}`);
       setData(json);
       setSelected(new Set());
     } catch {
@@ -167,20 +162,13 @@ export function AdminUsersPanel() {
     setBusy(true);
     setMessage(null);
     try {
-      const res = await fetch('/api/admin/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userIds: [...selected] }),
-      });
-      const json = (await res.json()) as {
+      const json = await apiFetch<{
         deleted?: number;
         blocked?: { email: string }[];
-        message?: string;
-      };
-      if (!res.ok) {
-        setMessage(json.message ?? 'Delete failed');
-        return;
-      }
+      }>('/api/admin/users', {
+        method: 'POST',
+        json: { userIds: [...selected] },
+      });
       const blocked = json.blocked?.length
         ? ` (${json.blocked.length} admin skipped)`
         : '';
@@ -207,12 +195,7 @@ export function AdminUsersPanel() {
     }
     setBusy(true);
     try {
-      const res = await fetch(`/api/admin/users/${user.id}`, { method: 'DELETE' });
-      const json = (await res.json()) as { deleted?: number; message?: string };
-      if (!res.ok) {
-        setMessage(json.message ?? 'Delete failed');
-        return;
-      }
+      await apiFetch(`/api/admin/users/${user.id}`, { method: 'DELETE' });
       setMessage(`Deleted ${user.email}`);
       await load();
     } catch {
@@ -244,16 +227,10 @@ export function AdminUsersPanel() {
     setBusy(true);
     setMessage(null);
     try {
-      const res = await fetch(`/api/admin/users/${user.id}/status`, {
+      await apiFetch(`/api/admin/users/${user.id}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        json: body,
       });
-      const json = (await res.json()) as { ok?: boolean; message?: string };
-      if (!res.ok) {
-        setMessage(json.message ?? 'Status update failed');
-        return;
-      }
       setMessage(
         `${user.email} → ${next}${body.reason ? ` (${body.reason})` : ''}`,
       );
@@ -272,14 +249,9 @@ export function AdminUsersPanel() {
     setReferralMessage(null);
     setReferralsLoading(true);
     try {
-      const res = await fetch(`/api/admin/users/${user.id}/referrals`, {
-        cache: 'no-store',
-      });
-      if (!res.ok) {
-        setReferralMessage('Failed to load referrals');
-        return;
-      }
-      const json = (await res.json()) as ReferralsResponse;
+      const json = await apiFetch<ReferralsResponse>(
+        `/api/admin/users/${user.id}/referrals`,
+      );
       setReferrals(json);
     } catch {
       setReferralMessage('API unreachable');
@@ -303,20 +275,10 @@ export function AdminUsersPanel() {
     setBusy(true);
     setReferralMessage(null);
     try {
-      const res = await fetch(
-        `/api/admin/referrals/${row.referredUserId}`,
-        { method: 'DELETE' },
-      );
-      const json = (await res.json()) as {
-        ok?: boolean;
+      const json = await apiFetch<{
         pointsClawedBack?: number;
         referrerEarnPointsNow?: number;
-        message?: string;
-      };
-      if (!res.ok) {
-        setReferralMessage(json.message ?? 'Revoke failed');
-        return;
-      }
+      }>(`/api/admin/referrals/${row.referredUserId}`, { method: 'DELETE' });
       setReferralMessage(
         `Removed referral · clawed back ${json.pointsClawedBack ?? row.points} pts. Referrer now at ${json.referrerEarnPointsNow ?? '?'} pts.`,
       );

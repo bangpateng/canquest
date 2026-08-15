@@ -1,6 +1,7 @@
 "use client";
 
 import { buttonVariants } from "@/components/ui/button";
+import { apiFetch } from "@/lib/services/api/client";
 import { inputClass } from "@/lib/ui/ui-tokens";
 import { cn } from "@/lib/utils/utils";
 import { Copy, Plus, Trash2 } from "lucide-react";
@@ -45,16 +46,8 @@ export function AdminWalletInvitesPanel() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/admin/wallet-invites", { cache: "no-store" });
-      const json = (await res.json().catch(() => null)) as ListResponse | { message?: string };
-      if (!res.ok) {
-        throw new Error(
-          json && typeof json === "object" && "message" in json && typeof json.message === "string"
-            ? json.message
-            : "Failed to load wallet invite codes",
-        );
-      }
-      setData(json as ListResponse);
+      const json = await apiFetch<ListResponse>("/api/admin/wallet-invites");
+      setData(json);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
       setData(null);
@@ -85,18 +78,10 @@ export function AdminWalletInvitesPanel() {
               note: note.trim() || undefined,
             };
 
-      const res = await fetch("/api/admin/wallet-invites", {
+      const json = await apiFetch<{ codes?: string[] }>("/api/admin/wallet-invites", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        json: body,
       });
-      const json = (await res.json().catch(() => null)) as {
-        codes?: string[];
-        message?: string;
-      };
-      if (!res.ok) {
-        throw new Error(json?.message ?? "Generate failed");
-      }
       setLastGenerated(json.codes ?? []);
       setCustomCodes("");
       await load();
@@ -112,11 +97,7 @@ export function AdminWalletInvitesPanel() {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`/api/admin/wallet-invites/${id}`, { method: "DELETE" });
-      if (!res.ok) {
-        const json = (await res.json().catch(() => null)) as { message?: string };
-        throw new Error(json?.message ?? "Delete failed");
-      }
+      await apiFetch(`/api/admin/wallet-invites/${id}`, { method: "DELETE" });
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Delete failed");

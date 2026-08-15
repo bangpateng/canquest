@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiFetch, ApiError } from "@/lib/services/api/client";
+import { apiFetch } from "@/lib/services/api/client";
 import { Loader2, ShieldAlert, Power, PowerOff } from "lucide-react";
 import { cn } from "@/lib/utils/utils";
 import { buttonVariants } from "@/components/ui/button";

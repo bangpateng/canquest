@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiFetch, ApiError } from "@/lib/services/api/client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, Download, Plus, Trash2, Users, Trophy } from "lucide-react";
@@ -80,7 +81,7 @@ export function QuestDetail({ questId }: { questId: string }) {
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/admin/quests/${questId}`)
+    apiFetch(`/api/admin/quests/${questId}`)
       .then((r) => r.json())
       .then((d: QuestData) => {
         if (d?.questKind === "EARN_HUB") {
@@ -96,13 +97,12 @@ export function QuestDetail({ questId }: { questId: string }) {
   async function handleExportCsv() {
     setExporting(true);
     try {
-      const res = await fetch(`/api/admin/quests/${questId}/export`);
-      const data = (await res.json()) as {
+      const data = await apiFetch<{
         csv?: string;
         filename?: string;
         quest?: { title: string };
-      };
-      if (!res.ok || !data.csv) return;
+      }>(`/api/admin/quests/${questId}/export`);
+      if (!data.csv) return;
       const blob = new Blob([data.csv], { type: "text/csv;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -124,10 +124,14 @@ export function QuestDetail({ questId }: { questId: string }) {
       return;
     setDeleting(true);
     try {
-      const res = await fetch(`/api/admin/quests/${questId}`, { method: "DELETE" });
-      if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { message?: string };
-        alert(data.message ?? "Delete failed. Try again.");
+      try {
+        await apiFetch(`/api/admin/quests/${questId}`, { method: "DELETE" });
+      } catch (err) {
+        const msg =
+          err instanceof ApiError && err.message
+            ? err.message
+            : "Delete failed. Try again.";
+        alert(msg);
         return;
       }
       // Redirect back to the campaign list (this page is CAMPAIGN-only —
@@ -142,33 +146,33 @@ export function QuestDetail({ questId }: { questId: string }) {
     e.preventDefault();
     if (!quest) return;
     setTaskSaving(true);
-    const res = await fetch(`/api/admin/quests/${questId}/tasks`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type: newTask.type,
-        title: buildQuestTaskTitle(newTask.type, newTask.target, {
-          projectName: projectNameForTasks,
-          questKind: quest.questKind ?? "CAMPAIGN",
-        }),
-        description: null,
-        points: newTask.points,
-        target: newTask.target || null,
-        correctAnswer: newTask.correctAnswer || null,
-      }),
-    });
-    if (res.ok) {
-      const task = (await res.json()) as Task;
+    try {
+      const task = await apiFetch<Task>(`/api/admin/quests/${questId}/tasks`, {
+        method: "POST",
+        json: {
+          type: newTask.type,
+          title: buildQuestTaskTitle(newTask.type, newTask.target, {
+            projectName: projectNameForTasks,
+            questKind: quest.questKind ?? "CAMPAIGN",
+          }),
+          description: null,
+          points: newTask.points,
+          target: newTask.target || null,
+          correctAnswer: newTask.correctAnswer || null,
+        },
+      });
       setQuest((prev) => prev ? { ...prev, tasks: [...prev.tasks, task] } : prev);
       setAddingTask(false);
       setNewTask({ type: "twitter_follow", points: 10, target: "", correctAnswer: "" });
+    } catch {
+      /* gagal tambah task — admin bisa retry */
     }
     setTaskSaving(false);
   }
 
   async function handleDeleteTask(taskId: string) {
     if (!confirm("Delete this task?")) return;
-    await fetch(`/api/admin/tasks/${taskId}`, { method: "DELETE" });
+    await apiFetch(`/api/admin/tasks/${taskId}`, { method: "DELETE" }).catch(() => undefined);
     setQuest((prev) =>
       prev ? { ...prev, tasks: prev.tasks.filter((t) => t.id !== taskId) } : prev,
     );

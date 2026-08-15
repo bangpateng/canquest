@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, useCallback, useEffect, useState } from 'react';
+import { apiFetch } from "@/lib/services/api/client";
 import { Trash2, RefreshCw, AlertTriangle } from 'lucide-react';
 import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils/utils';
@@ -49,15 +50,7 @@ export function AdminReferralAuditPanel() {
     setLoading(true);
     setMessage(null);
     try {
-      const res = await fetch('/api/admin/users/referrals/fraud', {
-        cache: 'no-store',
-      });
-      if (!res.ok) {
-        setMessage('Failed to load fraud report');
-        setData(null);
-        return;
-      }
-      const json = (await res.json()) as FraudResponse;
+      const json = await apiFetch<FraudResponse>('/api/admin/users/referrals/fraud');
       setData(json);
       setSelected(new Set());
     } catch {
@@ -101,21 +94,14 @@ export function AdminReferralAuditPanel() {
     setBusy(true);
     setMessage(null);
     try {
-      const res = await fetch('/api/admin/referrals/revoke-bulk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ referredUserIds: [...selected] }),
-      });
-      const j = (await res.json().catch(() => ({}))) as {
+      const j = await apiFetch<{
         revoked?: number;
         pointsClawedBack?: number;
         referrersUpdated?: number;
-        message?: string;
-      };
-      if (!res.ok) {
-        setMessage(j.message ?? 'Bulk remove failed');
-        return;
-      }
+      }>('/api/admin/referrals/revoke-bulk', {
+        method: 'POST',
+        json: { referredUserIds: [...selected] },
+      });
       setMessage(
         `Removed ${j.revoked ?? 0} referral(s) · clawed back ${j.pointsClawedBack ?? 0} pts across ${j.referrersUpdated ?? 0} referrer(s).`,
       );
@@ -140,21 +126,14 @@ export function AdminReferralAuditPanel() {
     setBusy(true);
     setMessage(null);
     try {
-      const res = await fetch('/api/admin/referrals/revoke-bulk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ all: true }),
-      });
-      const j = (await res.json().catch(() => ({}))) as {
+      const j = await apiFetch<{
         revoked?: number;
         pointsClawedBack?: number;
         referrersUpdated?: number;
-        message?: string;
-      };
-      if (!res.ok) {
-        setMessage(j.message ?? 'Bulk remove failed');
-        return;
-      }
+      }>('/api/admin/referrals/revoke-bulk', {
+        method: 'POST',
+        json: { all: true },
+      });
       setMessage(
         `Removed ${j.revoked ?? 0} referral(s) · clawed back ${j.pointsClawedBack ?? 0} pts across ${j.referrersUpdated ?? 0} referrer(s).`,
       );
@@ -177,17 +156,10 @@ export function AdminReferralAuditPanel() {
     setBusy(true);
     setMessage(null);
     try {
-      const res = await fetch(`/api/admin/referrals/${r.referredUserId}`, {
-        method: 'DELETE',
-      });
-      const j = (await res.json().catch(() => ({}))) as {
-        pointsClawedBack?: number;
-        message?: string;
-      };
-      if (!res.ok) {
-        setMessage(j.message ?? 'Revoke failed');
-        return;
-      }
+      const j = await apiFetch<{ pointsClawedBack?: number }>(
+        `/api/admin/referrals/${r.referredUserId}`,
+        { method: 'DELETE' },
+      );
       setMessage(`Removed · clawed back ${j.pointsClawedBack ?? r.points} pts`);
       await load();
     } catch {
