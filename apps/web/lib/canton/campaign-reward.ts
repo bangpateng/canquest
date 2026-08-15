@@ -233,3 +233,16 @@ export function campaignUiKind(
       return "other";
   }
 }
+
+/** "Aug 14, 21:39" — compact end date untuk claim-details rows & sidebar. */
+export function formatEndMeta(
+  endsAt: string | null | undefined,
+): string | null {
+  if (!endsAt) return null;
+  return new Date(endsAt).toLocaleString("en-GB", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}

@@ -6,6 +6,7 @@ import { QuestTaskPanel } from "@/components/app/quest/quest-task-panel";
 import { ROUTES } from "@/lib/routing/app-routes";
 import { hasRealWallet } from "@/lib/auth/wallet-access";
 import { useMe } from "@/lib/hooks/use-me";
+import { usePoints, useInvalidatePoints } from "@/lib/hooks/use-points";
 import type { Quest } from "@/lib/quest/quest-types";
 import { Sparkles, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -14,7 +15,6 @@ import { Card } from "@/components/ui/card";
 export function QuestHubPage() {
   const [partyId, setPartyId] = useState<string | null>(null);
   const [twitterUsername, setTwitterUsername] = useState<string | null>(null);
-  const [pointsRemaining, setPointsRemaining] = useState(0);
   const [hub, setHub] = useState<Quest | null>(null);
   const [hubLoading, setHubLoading] = useState(true);
   const [hubError, setHubError] = useState<string | null>(null);
@@ -23,6 +23,10 @@ export function QuestHubPage() {
   // Sebelumnya `/api/me` di-fetch manual di dalam Promise.all (duplikat dengan
   // QuestTaskPanel child yang juga fetch /api/me).
   const { me, isLoading: meLoading } = useMe();
+  // Points via react-query (key dishare dengan Dashboard — tidak ada fetch ganda).
+  const { data: points } = usePoints();
+  const pointsRemaining = points?.remaining ?? 0;
+  const invalidatePoints = useInvalidatePoints();
   useEffect(() => {
     setPartyId(
       hasRealWallet(me?.cantonPartyId) ? me!.cantonPartyId!.trim() : null,
@@ -43,20 +47,9 @@ export function QuestHubPage() {
           cache: "no-store" as const,
           signal: AbortSignal.timeout(12_000),
         };
-        // `/api/me` ditangani useMe() di atas — di sini hanya hub + points.
-        const [hubRes, pointsRes] = await Promise.all([
-          fetch("/api/quests/earn-hub", fetchOpts),
-          fetch("/api/points", fetchOpts),
-        ]);
-
-        if (!cancelled) {
-          if (pointsRes.ok) {
-            const pts = (await pointsRes.json()) as { remaining?: number };
-            setPointsRemaining(
-              typeof pts.remaining === "number" ? pts.remaining : 0,
-            );
-          }
-        }
+        // `/api/me` + `/api/points` ditangani useMe()/usePoints() di atas —
+        // di sini hanya fetch hub.
+        const hubRes = await fetch("/api/quests/earn-hub", fetchOpts);
 
         if (!cancelled) {
           if (!hubRes.ok) {
@@ -170,14 +163,8 @@ export function QuestHubPage() {
                 viewerPartyId={partyId}
                 viewerTwitterUsername={twitterUsername}
                 onPointsEarned={() => {
-                  void fetch("/api/points", { credentials: "include", cache: "no-store" })
-                    .then((r) => (r.ok ? r.json() : null))
-                    .then((pts: { remaining?: number } | null) => {
-                      if (pts && typeof pts.remaining === "number") {
-                        setPointsRemaining(pts.remaining);
-                      }
-                    })
-                    .catch(() => undefined);
+                  // Invalidate cache points — react-query refetch di background.
+                  invalidatePoints();
                 }}
               />
             ) : (

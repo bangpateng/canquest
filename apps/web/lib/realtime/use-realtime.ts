@@ -71,6 +71,11 @@ export function useRealtime(): void {
       // Server konfirmasi koneksi sukses → schedule refresh token berikutnya.
       es.addEventListener("ready", () => {
         if (cancelled) return;
+        // Sinyalkan koneksi SSE hidup — komponen dengan data kritis (mis.
+        // quest progress) bisa melonggarkan polling-nya jadi fallback saja.
+        window.dispatchEvent(
+          new CustomEvent("cq:realtime", { detail: { connected: true } }),
+        );
         // Refresh token sebelum expired (60s token → refresh di 50s).
         if (tokenTimerRef.current) clearTimeout(tokenTimerRef.current);
         tokenTimerRef.current = setTimeout(() => void connect(), 50_000);
@@ -89,7 +94,7 @@ export function useRealtime(): void {
       es.addEventListener("balance:changed", () => {
         // BUG-A fix: sebelumnya invalidasi key ["party","balance"] (singular)
         // yang dipakai endpoint /api/party/balance (CC-only). Wallet hero
-        // baca dari ["party","balances"] (plural) → /api/party/balances
+        // baca dari ["party","balances"] → /api/party/balance
         // (CC + multi-token). Tanpa fix ini, saldo wallet tidak refresh
         // real-time setelah swap/send/transfer-in.
         void queryClient.invalidateQueries({
@@ -129,12 +134,18 @@ export function useRealtime(): void {
 
       es.addEventListener("quest:progress", () => {
         void queryClient.invalidateQueries({ queryKey: queryKeys.quests.all });
+        // Panel quest-task-panel memakai state lokal (bukan react-query) —
+        // beri sinyal agar refresh progress instan tanpa menunggu poll.
+        window.dispatchEvent(new CustomEvent("cq:quest-progress"));
       });
 
       // Saat koneksi error/putus → EventSource auto-reconnect, tapi kalau
       // token sudah expired (401 dari server saat reconnect), kita perlu minta
       // token baru. Backoff lalu reconnect full.
       es.onerror = () => {
+        window.dispatchEvent(
+          new CustomEvent("cq:realtime", { detail: { connected: false } }),
+        );
         es.close();
         esRef.current = null;
         if (cancelled) return;

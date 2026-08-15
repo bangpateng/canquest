@@ -1,7 +1,7 @@
 import { RewardTokenLogo } from "@/components/app/campaign/reward-token-logo";
 import { CcUsdValue } from "@/components/app/earn/cc-usd-value";
 import { getQuestMeta } from "@/lib/quest/quest-engine";
-import { formatCodePerWinners, formatCodePoolLabel, formatRewardAmount } from "@/lib/canton/campaign-reward";
+import { formatCodePerWinners, formatCodePoolLabel, formatEndMeta, formatRewardAmount } from "@/lib/canton/campaign-reward";
 import { questRewardToken } from "@/lib/quest/quest-types";
 import type { Quest } from "@/lib/quest/quest-types";
 import { Card } from "@/components/ui/card";
@@ -19,15 +19,7 @@ import type { LucideIcon } from "lucide-react";
 
 /** Compact date format: "Jun 15, 21:39" */
 function formatEnd(quest: Quest): string {
-  if (quest.endsAt) {
-    return new Date(quest.endsAt).toLocaleString("en-GB", {
-      day: "numeric",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).replace(",", ",");
-  }
-  return quest.deadline ?? "—";
+  return formatEndMeta(quest.endsAt) ?? quest.deadline ?? "—";
 }
 
 /**

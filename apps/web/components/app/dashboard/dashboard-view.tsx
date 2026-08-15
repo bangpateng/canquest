@@ -9,6 +9,7 @@ import {
 } from "@/lib/auth/wallet-session-cache";
 import { createRefetchThrottle } from "@/lib/utils/refetch-throttle";
 import { useMe } from "@/lib/hooks/use-me";
+import { usePoints } from "@/lib/hooks/use-points";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
 
@@ -17,10 +18,6 @@ import { ProfileCard } from "./profile-card";
 import { PointsCard } from "./points-card";
 import { ActivityStatsCard } from "./activity-stats-card";
 import { PageLoading } from "@/components/ui/loading-spinner";
-import {
-  getPointsBalance,
-  type PointsBalance,
-} from "@/lib/services/api/points";
 
 const FOCUS_REFETCH_MIN_MS = 60_000;
 const throttleFocusRefetch = createRefetchThrottle(FOCUS_REFETCH_MIN_MS);
@@ -71,8 +68,9 @@ export function DashboardView() {
   // Profil user via cache global `useMe` — ter-dedup lintas halaman.
   // Sebelumnya `me` di-fetch manual di dalam Promise.all (bersama stats & points).
   const { me, isError: meError } = useMe();
+  // Points via react-query (key dishare dengan Quest hub — tidak ada fetch ganda).
+  const { data: pointsBalance } = usePoints();
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [pointsBalance, setPointsBalance] = useState<PointsBalance | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -92,21 +90,15 @@ export function DashboardView() {
     if (!opts?.background) setLoading(true);
     setLoadError(null);
     try {
-      // `/api/me` sudah ditangani useMe() di atas — di sini hanya stats + points.
-      const [statsResult, pointsResult] = await Promise.all([
-        fetchJson<DashboardStats>("/api/quests/dashboard-stats"),
-        getPointsBalance().then(
-          (data) => ({ ok: true, data }) as { ok: true; data: PointsBalance },
-        ).catch(() => ({ ok: false, data: null }) as { ok: false; data: null }),
-      ]);
+      // `/api/me` + points sudah ditangani useMe()/usePoints() — di sini hanya stats.
+      const statsResult = await fetchJson<DashboardStats>(
+        "/api/quests/dashboard-stats",
+      );
 
       if (statsResult.ok && statsResult.data) {
         setStats(statsResult.data);
       } else {
         setStats(EMPTY_STATS);
-      }
-      if (pointsResult.ok && pointsResult.data) {
-        setPointsBalance(pointsResult.data);
       }
 
       if (!statsResult.ok) {

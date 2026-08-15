@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { formatEndMeta } from "@/lib/canton/campaign-reward";
 import type { CampaignMeta } from "@/lib/canton/campaign-reward";
 import { CampaignClaimCta } from "@/components/app/campaign/campaign-fcfs-reward-card";
 import { CampaignStatusRow } from "@/components/app/campaign/campaign-status-row";
@@ -9,17 +10,6 @@ import { RewardReveal } from "@/components/app/campaign/reward-reveal";
 import { useTransactionStatus } from "@/lib/tx/transaction-status";
 import { FCFS_CLAIM_FAIL_MSG } from "@/lib/campaign/claim-messages";
 import { Trophy } from "lucide-react";
-
-/** "Aug 14, 21:39" — compact end date for the claim-details rows. */
-function formatEndMeta(endsAt: string | null | undefined): string | null {
-  if (!endsAt) return null;
-  return new Date(endsAt).toLocaleString("en-GB", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 export function CampaignInviteClaimSection({
   questId,

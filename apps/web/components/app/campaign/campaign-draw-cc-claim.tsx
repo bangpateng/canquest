@@ -1,7 +1,10 @@
 "use client";
 
 import type { CampaignMeta } from "@/lib/canton/campaign-reward";
-import { formatRewardAmount } from "@/lib/canton/campaign-reward";
+import {
+  formatEndMeta,
+  formatRewardAmount,
+} from "@/lib/canton/campaign-reward";
 import { CampaignClaimCta } from "@/components/app/campaign/campaign-fcfs-reward-card";
 import { CampaignStatusRow } from "@/components/app/campaign/campaign-status-row";
 import { ClaimDetailsModal } from "@/components/app/campaign/claim-details-modal";
@@ -10,17 +13,6 @@ import { CLAIM_FAIL_MSG } from "@/lib/campaign/claim-messages";
 import { normalizeRewardToken, type RewardTokenSymbol } from "@/lib/quest/quest-types";
 import { Trophy } from "lucide-react";
 import { useState } from "react";
-
-/** "Aug 14, 21:39" — compact end date for the claim-details rows. */
-function formatEndMeta(endsAt: string | null | undefined): string | null {
-  if (!endsAt) return null;
-  return new Date(endsAt).toLocaleString("en-GB", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 export function CampaignDrawCcClaimSection({
   questId,

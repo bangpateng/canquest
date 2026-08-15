@@ -294,9 +294,31 @@ export function QuestTaskPanel({
       ),
     [visibleTasks, submissions],
   );
+
+  // SSE live di PlatformShell emit "cq:realtime" (status koneksi) dan
+  // "cq:progress"/"cq:quest-progress" (event quest:progress dari server).
+  // Selama SSE hidup, progress di-refresh instan via event dan interval poll
+  // di bawah hanya jadi watchdog longgar (60s). Saat SSE putus → kembali 10s.
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
+  useEffect(() => {
+    const onRealtime = (e: Event) => {
+      const detail = (e as CustomEvent<{ connected?: boolean }>).detail;
+      setRealtimeConnected(Boolean(detail?.connected));
+    };
+    const onQuestProgress = () => {
+      void loadProgress({ silent: true });
+    };
+    window.addEventListener("cq:realtime", onRealtime);
+    window.addEventListener("cq:quest-progress", onQuestProgress);
+    return () => {
+      window.removeEventListener("cq:realtime", onRealtime);
+      window.removeEventListener("cq:quest-progress", onQuestProgress);
+    };
+  }, [loadProgress]);
+
   useEffect(() => {
     if (!hasUnresolvedCountableWalletTask) return;
-    const POLL_MS = 10_000;
+    const POLL_MS = realtimeConnected ? 60_000 : 10_000;
     let intervalId: ReturnType<typeof setInterval> | null = null;
     const startPoll = () => {
       if (intervalId) clearInterval(intervalId);
@@ -325,7 +347,7 @@ export function QuestTaskPanel({
       stopPoll();
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [hasUnresolvedCountableWalletTask, loadProgress]);
+  }, [hasUnresolvedCountableWalletTask, realtimeConnected, loadProgress]);
 
   const verifiedCount = useMemo(
     () => visibleTasks.filter((t) => submissions[t.id]?.status === "VERIFIED").length,

@@ -41,4 +41,7 @@ export const queryKeys = {
     /** Progress quest individual (termasuk status task & submission). */
     progress: (questId: string) => ["quests", questId, "progress"] as const,
   },
+
+  /** Saldo points (GET /api/points) — dishare Quest hub + Dashboard. */
+  points: ["points"] as const,
 } as const;
