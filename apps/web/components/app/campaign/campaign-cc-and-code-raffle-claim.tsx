@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { CampaignMeta } from "@/lib/canton/campaign-reward";
 import { formatRewardAmount } from "@/lib/canton/campaign-reward";
-import { CampaignFcfsRewardCard } from "@/components/app/campaign/campaign-fcfs-reward-card";
+import { CampaignClaimCta } from "@/components/app/campaign/campaign-fcfs-reward-card";
 import { ClaimDetailsModal } from "@/components/app/campaign/claim-details-modal";
 import { RewardReveal } from "@/components/app/campaign/reward-reveal";
 import { useTransactionStatus } from "@/lib/tx/transaction-status";
@@ -59,15 +59,20 @@ export function CampaignCcAndCodeRaffleClaimSection({
 
   const fee = campaignMeta.fcfsClaimFeeCc;
   const feeLabel = fee > 0 ? `${fee} CC` : "Free";
+  const isCodeOnly = rewardVariant === "CODE";
+  const isUsdcx = token === "USDCx";
   const subtitle = [questOrg, questTitle].filter(Boolean).join(" · ") || undefined;
+  const claimLabel = isCodeOnly
+    ? "Claim your Code"
+    : rewardVariant === "CC"
+      ? `Claim ${formatRewardAmount(rewardCc, token)}`
+      : `Claim ${formatRewardAmount(rewardCc, token)} + Code`;
 
   async function handleClaim() {
     if (isSubmitting) return;
     setIsSubmitting(true);
     setError(null);
     setSuccess(null);
-
-    const isCodeOnly = rewardVariant === "CODE";
 
     // Mockup claim flow: tx-status modal (broadcast → confirmed), no confetti.
     tx.start({
@@ -77,8 +82,8 @@ export function CampaignCcAndCodeRaffleClaimSection({
         ? "1 invite code"
         : `+${formatRewardAmount(rewardCc, token)} + 1 Code`,
       subText: subtitle,
-      accentBg: token === "USDCx" ? "bg-sky-500/15" : "bg-canton-subtle",
-      accentText: isCodeOnly ? "text-violet-300" : token === "USDCx" ? "text-sky-300" : "text-canton",
+      accentBg: isUsdcx ? "bg-sky-500/15" : "bg-canton-subtle",
+      accentText: isCodeOnly ? "text-violet-300" : isUsdcx ? "text-sky-300" : "text-canton",
       meta: [{ label: "Claim fee paid", value: feeLabel }],
     });
     tx.broadcast();
@@ -134,64 +139,29 @@ export function CampaignCcAndCodeRaffleClaimSection({
     }
   }
 
-  // Label menyesuaikan varian pemenang.
-  const isCodeOnly = rewardVariant === "CODE";
-  const isCcOnly = rewardVariant === "CC";
-  const wonLabel = isCodeOnly
-    ? "You won · Code"
-    : isCcOnly
-      ? `You won · ${formatRewardAmount(rewardCc, token)}`
-      : `You won · ${formatRewardAmount(rewardCc, token)} + Code`;
-  const claimLabel = isCodeOnly
-    ? "Claim your Code"
-    : isCcOnly
-      ? `Claim ${formatRewardAmount(rewardCc, token)}`
-      : `Claim ${formatRewardAmount(rewardCc, token)} + Code`;
-  const description = isCodeOnly
-    ? fee > 0
-      ? `Pay ${fee} CC claim fee on-chain to reveal your invite code`
-      : "Claim your invite code"
-    : isCcOnly
-      ? fee > 0
-        ? `Pay ${fee} CC claim fee on-chain to receive ${formatRewardAmount(rewardCc, token)}`
-        : `Claim your ${formatRewardAmount(rewardCc, token)} reward`
-      : fee > 0
-        ? `Pay ${fee} CC claim fee on-chain to receive ${formatRewardAmount(rewardCc, token)} + your invite code`
-        : `Claim your ${formatRewardAmount(rewardCc, token)} reward and invite code`;
-
   return (
     <div className="space-y-3">
-      <CampaignFcfsRewardCard
-        mode="claim"
-        sectionLabel="Token + Code Raffle reward"
-        slotsLabel={wonLabel}
-        description={description}
-        rewardCc={rewardCc}
-        rewardType="CC_AND_CODE_RAFFLE"
-        rewardToken={token}
-        deliveryKind={deliveryKind}
-        partyId={partyId}
-        canClaim
+      {/* Cukup tombol Claim — rincian (fee/reward) ada di modal. */}
+      <CampaignClaimCta
+        label={claimLabel}
         isSubmitting={isSubmitting}
+        needsWallet={!partyId}
         error={error}
         success={success}
-        claimButtonLabel={claimLabel}
+        deliveryKind={deliveryKind}
         onClaim={() => setClaimOpen(true)}
       />
 
       <ClaimDetailsModal
         open={claimOpen}
         onClose={() => setClaimOpen(false)}
-        heroAmount={
-          isCodeOnly
-            ? "1 invite code"
-            : `${formatRewardAmount(rewardCc, token)} + 1 Code`
-        }
+        heroValue={isCodeOnly ? "1" : String(rewardCc)}
+        heroUnit={isCodeOnly ? "invite code" : `${token} + 1 Code`}
         rewardLabel="Reward · winner"
-        tokenHero={isCodeOnly ? undefined : token === "USDCx" ? "USDCx" : "CC"}
+        tokenHero={isCodeOnly ? undefined : isUsdcx ? "USDCx" : "CC"}
         rows={[
           { label: "Claim fee", value: feeLabel, accent: fee <= 0 },
-          { label: "Network", value: "Canton" },
+          { label: "Network", value: "Canton", dot: true },
           ...(formatEndMeta(campaignMeta.endsAt)
             ? [{ label: campaignMeta.ended ? "Ended" : "Closes", value: formatEndMeta(campaignMeta.endsAt)! }]
             : []),

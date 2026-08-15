@@ -2,12 +2,11 @@
 
 import { useState } from "react";
 import type { CampaignMeta } from "@/lib/canton/campaign-reward";
-import { CampaignFcfsRewardCard } from "@/components/app/campaign/campaign-fcfs-reward-card";
+import { CampaignClaimCta } from "@/components/app/campaign/campaign-fcfs-reward-card";
 import { ClaimDetailsModal } from "@/components/app/campaign/claim-details-modal";
 import { RewardReveal } from "@/components/app/campaign/reward-reveal";
 import { useTransactionStatus } from "@/lib/tx/transaction-status";
 import { FCFS_CLAIM_FAIL_MSG } from "@/lib/campaign/claim-messages";
-import { usePlatformT } from "@/lib/i18n/platform-provider";
 
 /** "Aug 14, 21:39" — compact end date for the claim-details rows. */
 function formatEndMeta(endsAt: string | null | undefined): string | null {
@@ -37,7 +36,6 @@ export function CampaignInviteClaimSection({
   questTitle?: string | null;
   onClaimed: () => void;
 }) {
-  const t = usePlatformT();
   const tx = useTransactionStatus();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,18 +43,9 @@ export function CampaignInviteClaimSection({
   const [claimedCode, setClaimedCode] = useState<string | null>(null);
   const [claimOpen, setClaimOpen] = useState(false);
 
-  const sectionLabel =
-    rewardType === "INVITE_CODE_FCFS"
-      ? t("earnCampaigns.kindInvite")
-      : t("earnCampaigns.kindRaffle");
-
   const fee = campaignMeta.fcfsClaimFeeCc;
   const feeLabel = fee > 0 ? `${fee} CC` : "Free";
   const codes = campaignMeta.codesRemaining ?? 0;
-  // Hint langsung; tidak perlu hack string.replace (sebelumnya mengganti "receive 0 CC").
-  const feeHint = fee > 0
-    ? `Pay ${fee} CC claim fee on-chain to reveal your invite code`
-    : "Claim your invite code";
   const subtitle = [questOrg, questTitle].filter(Boolean).join(" · ") || undefined;
 
   async function handleClaim() {
@@ -116,31 +105,30 @@ export function CampaignInviteClaimSection({
 
   return (
     <div className="space-y-3">
-      <CampaignFcfsRewardCard
-        mode="claim"
-        sectionLabel={sectionLabel}
-        slotsLabel={codes > 0 ? `${codes} code(s) left` : "No codes left"}
-        description={codes > 0 ? feeHint : "No codes left in the pool."}
-        rewardCc={0}
-        rewardType={rewardType}
-        partyId={partyId}
-        canClaim={codes > 0}
+      {/* Cukup tombol Claim — rincian (fee/codes) ada di modal. */}
+      <CampaignClaimCta
+        label={codes > 0 ? "Claim" : "No codes left"}
+        disabled={codes <= 0}
         isSubmitting={isSubmitting}
+        needsWallet={!partyId}
         error={error}
         success={success}
-        claimButtonLabel="Claim"
         onClaim={() => setClaimOpen(true)}
       />
 
       <ClaimDetailsModal
         open={claimOpen}
         onClose={() => setClaimOpen(false)}
-        heroAmount="1 invite code"
+        heroValue="1"
+        heroUnit="invite code"
         rewardLabel="Reward"
         rows={[
           { label: "Claim fee", value: feeLabel, accent: fee <= 0 },
-          { label: "Codes left", value: codes > 0 ? String(codes) : "—" },
-          { label: "Network", value: "Canton" },
+          {
+            label: "Codes",
+            value: codes > 0 ? `${codes} left` : "None",
+          },
+          { label: "Network", value: "Canton", dot: true },
           ...(formatEndMeta(campaignMeta.endsAt)
             ? [{ label: campaignMeta.ended ? "Ended" : "Closes", value: formatEndMeta(campaignMeta.endsAt)! }]
             : []),

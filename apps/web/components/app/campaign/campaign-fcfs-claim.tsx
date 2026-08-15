@@ -2,11 +2,11 @@
 
 import type { CampaignMeta } from "@/lib/canton/campaign-reward";
 import {
-  formatFcfsClaimFeeHint,
   formatFcfsSlotsFilled,
   formatFcfsSlotsRemaining,
+  isFcfsSlotsFull,
 } from "@/lib/canton/campaign-reward";
-import { CampaignFcfsRewardCard } from "@/components/app/campaign/campaign-fcfs-reward-card";
+import { CampaignClaimCta } from "@/components/app/campaign/campaign-fcfs-reward-card";
 import { ClaimDetailsModal } from "@/components/app/campaign/claim-details-modal";
 import { normalizeRewardToken, type RewardTokenSymbol } from "@/lib/quest/quest-types";
 import { useTransactionStatus } from "@/lib/tx/transaction-status";
@@ -55,10 +55,7 @@ export function CampaignFcfsClaimSection({
   const maxWinners = campaignMeta.maxWinners;
   const fee = campaignMeta.fcfsClaimFeeCc;
   const canClaim = remaining > 0 && maxWinners != null && maxWinners > 0;
-  const slotsLabel =
-    remaining > 0
-      ? formatFcfsSlotsRemaining(remaining, maxWinners)
-      : formatFcfsSlotsFilled(remaining, maxWinners, "Full Claimed");
+  const slotsFull = isFcfsSlotsFull(remaining, maxWinners);
   const feeLabel = fee > 0 ? `${fee} CC` : "Free";
   const isUsdcx = token === "USDCx";
   const subtitle = [questOrg, questTitle].filter(Boolean).join(" · ") || undefined;
@@ -130,32 +127,33 @@ export function CampaignFcfsClaimSection({
 
   return (
     <>
-      <CampaignFcfsRewardCard
-        mode="claim"
-        slotsLabel={canClaim ? slotsLabel : "Checking slot availability…"}
-        description={formatFcfsClaimFeeHint(fee, rewardCc, token)}
-        rewardCc={rewardCc}
-        rewardType="CC_ONLY"
-        rewardToken={token}
-        deliveryKind={deliveryKind}
-        partyId={partyId}
-        canClaim={canClaim}
+      {/* Cukup tombol Claim — rincian (fee/slots/reward) ada di modal. */}
+      <CampaignClaimCta
+        label={canClaim ? "Claim" : "Checking slot availability…"}
+        disabled={!canClaim}
         isSubmitting={isSubmitting}
+        needsWallet={!partyId}
         error={error}
         success={success}
+        deliveryKind={deliveryKind}
         onClaim={() => setClaimOpen(true)}
       />
 
       <ClaimDetailsModal
         open={claimOpen}
         onClose={() => setClaimOpen(false)}
-        heroAmount={`${rewardCc} ${token}`}
+        heroValue={String(rewardCc)}
+        heroUnit={token}
         rewardLabel="Reward"
         tokenHero={isUsdcx ? "USDCx" : "CC"}
         rows={[
           { label: "Claim fee", value: feeLabel, accent: fee <= 0 },
-          { label: "Slots", value: slotsLabel },
-          { label: "Network", value: "Canton" },
+          {
+            label: "Slots",
+            value: slotsFull ? "Full Claimed" : formatFcfsSlotsFilled(remaining, maxWinners),
+            tag: !slotsFull ? `${remaining} left` : undefined,
+          },
+          { label: "Network", value: "Canton", dot: true },
           ...(formatEndMeta(campaignMeta.endsAt)
             ? [{ label: campaignMeta.ended ? "Ended" : "Closes", value: formatEndMeta(campaignMeta.endsAt)! }]
             : []),

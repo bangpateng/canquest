@@ -1,8 +1,8 @@
 "use client";
 
 import type { CampaignMeta } from "@/lib/canton/campaign-reward";
-import { formatFcfsClaimFeeHint, formatRewardAmount } from "@/lib/canton/campaign-reward";
-import { CampaignFcfsRewardCard } from "@/components/app/campaign/campaign-fcfs-reward-card";
+import { formatRewardAmount } from "@/lib/canton/campaign-reward";
+import { CampaignClaimCta } from "@/components/app/campaign/campaign-fcfs-reward-card";
 import { ClaimDetailsModal } from "@/components/app/campaign/claim-details-modal";
 import { useTransactionStatus } from "@/lib/tx/transaction-status";
 import { CLAIM_FAIL_MSG } from "@/lib/campaign/claim-messages";
@@ -48,7 +48,6 @@ export function CampaignDrawCcClaimSection({
   const [claimOpen, setClaimOpen] = useState(false);
 
   const fee = campaignMeta.fcfsClaimFeeCc;
-  const feeHint = formatFcfsClaimFeeHint(fee, rewardCc, token);
   const feeLabel = fee > 0 ? `${fee} CC` : "Free";
   const isUsdcx = token === "USDCx";
   const subtitle = [questOrg, questTitle].filter(Boolean).join(" · ") || undefined;
@@ -115,33 +114,27 @@ export function CampaignDrawCcClaimSection({
 
   return (
     <>
-      <CampaignFcfsRewardCard
-        mode="claim"
-        sectionLabel="Raffle reward"
-        slotsLabel={`You won · ${formatRewardAmount(rewardCc, token)}`}
-        description={feeHint}
-        rewardCc={rewardCc}
-        rewardType="CC_MANUAL"
-        rewardToken={token}
-        deliveryKind={deliveryKind}
-        partyId={partyId}
-        canClaim
+      {/* Cukup tombol Claim — rincian (fee/reward) ada di modal. */}
+      <CampaignClaimCta
+        label={`Claim ${formatRewardAmount(rewardCc, token)}`}
         isSubmitting={isSubmitting}
+        needsWallet={!partyId}
         error={error}
         success={success}
-        claimButtonLabel="Claim"
+        deliveryKind={deliveryKind}
         onClaim={() => setClaimOpen(true)}
       />
 
       <ClaimDetailsModal
         open={claimOpen}
         onClose={() => setClaimOpen(false)}
-        heroAmount={formatRewardAmount(rewardCc, token)}
+        heroValue={String(rewardCc)}
+        heroUnit={token}
         rewardLabel="Reward · winner"
         tokenHero={isUsdcx ? "USDCx" : "CC"}
         rows={[
           { label: "Claim fee", value: feeLabel, accent: fee <= 0 },
-          { label: "Network", value: "Canton" },
+          { label: "Network", value: "Canton", dot: true },
           ...(formatEndMeta(campaignMeta.endsAt)
             ? [{ label: campaignMeta.ended ? "Ended" : "Closes", value: formatEndMeta(campaignMeta.endsAt)! }]
             : []),
