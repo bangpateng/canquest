@@ -8,6 +8,7 @@ import { UsersService } from '../users/users.service';
 import { R2StorageService } from '../storage/r2-storage.service';
 import { QuestLedgerService } from '../canton/quest-ledger.service';
 import { CantonLedgerService } from '../canton/canton-ledger.service';
+import { PointsService } from '../users/points.service';
 
 /**
  * Unit tests untuk anti-silent-failure fix di AdminService.distributeRewards.
@@ -133,6 +134,7 @@ describe('AdminService.distributeRewards — anti-silent-failure', () => {
         { provide: R2StorageService, useValue: {} },
         { provide: QuestLedgerService, useValue: {} },
         { provide: CantonLedgerService, useValue: {} },
+        { provide: PointsService, useValue: {} },
       ],
     }).compile();
 

@@ -1,7 +1,7 @@
 import { RewardType, normalizeRewardType } from '../common/prisma-types';
 
 /** Default platform claim fee (CC) when quest.claimFeeCc is null. */
-function defaultClaimFeeCc(rewardType: string): number | null {
+export function defaultClaimFeeCc(rewardType: string): number | null {
   const rt = normalizeRewardType(rewardType as RewardType);
   switch (rt) {
     case RewardType.INVITE_CODE_FCFS:
@@ -30,7 +30,7 @@ export function resolveClaimFeeCc(quest: {
   return defaultClaimFeeCc(quest.rewardType);
 }
 
-function fcfsSlotsTakenCount(remaining: number, maxWinners: number): number {
+export function fcfsSlotsTakenCount(remaining: number, maxWinners: number): number {
   const max = Math.max(1, maxWinners);
   const left = Math.max(0, Math.min(remaining, max));
   return max - left;

@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { CantonLedgerService } from './canton/canton-ledger.service';
 import { SpliceValidatorService } from './canton/splice-validator.service';
+import { PrismaService } from './prisma/prisma.service';
 
 describe('AppController', () => {
   let appController: AppController;
@@ -32,6 +33,10 @@ describe('AppController', () => {
         {
           provide: CantonLedgerService,
           useValue: { isReachable: () => true },
+        },
+        {
+          provide: PrismaService,
+          useValue: { $queryRaw: () => Promise.resolve([{ ok: 1 }]) },
         },
       ],
     }).compile();
