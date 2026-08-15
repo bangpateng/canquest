@@ -195,7 +195,7 @@ export function QuestsBrowser({ variant = "earn" }: { variant?: "default" | "ear
                 Earn Rewards
               </h1>
               <p className="mt-2 max-w-md text-xs font-medium leading-relaxed text-[var(--muted-foreground)] sm:text-sm">
-                Complete quests from partner projects to earn CC, tokens, invite codes and early access.
+                Complete partner quests and claim your early access codes, invite passes, and special rewards
               </p>
             </div>
           </Card>

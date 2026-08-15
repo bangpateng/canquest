@@ -85,16 +85,8 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
     rewardPerWinner = <span className={VALUE_CLS}>{rewardDisplay.primaryText}</span>;
   }
 
-  // ── Claim fee ──────────────────────────────────────────────────
-  const claimFeeCc = summary?.fcfsClaimFeeCc ?? config.defaultClaimFee ?? 0;
-  const claimFeeDisplay =
-    config.code === "WAITLIST_EMAIL"
-      ? null
-      : claimFeeCc > 0
-        ? `${claimFeeCc} CC`
-        : "Free";
-
   // ── Pool label ─────────────────────────────────────────────────
+  // (Claim fee TIDAK ditampilkan di sini — sudah ada di claim modal.)
   const isCodeReward =
     config.code === "INVITE_CODE_FCFS" || config.code === "INVITE_CODE_RANDOM";
   const poolMetric = metrics.find((m) => m.key === "pool");
@@ -183,19 +175,6 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
             </div>
           </div>
         </div>
-
-        {/* Claim fee row — single line, clear */}
-        {claimFeeDisplay !== null ? (
-          <div className="relative flex items-center gap-2 bg-[var(--card)] px-5 py-2.5 sm:px-6">
-            <span className="text-xs font-semibold text-[var(--muted-foreground)]">Claim fee</span>
-            <span className={cn(
-              "ml-auto text-xs font-bold",
-              claimFeeDisplay === "Free" ? "text-canton" : "text-[var(--foreground)]",
-            )}>
-              {claimFeeDisplay}
-            </span>
-          </div>
-        ) : null}
       </div>
 
       {/* ── Slots progress (full-width when applicable) ──────────── */}
