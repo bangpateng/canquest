@@ -1,18 +1,18 @@
 "use client";
 
-import { Check, Sparkles, Ticket, X, Zap } from "lucide-react";
+import { Check, Sparkles, Ticket, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { RewardTokenLogo } from "@/components/app/campaign/reward-token-logo";
 import { iconButtonClass } from "@/lib/ui/ui-button-styles";
 import { cn } from "@/lib/utils/utils";
 
 /**
- * Pre-claim confirmation modal — redesigned to the uploaded
- * "Claim Reward — Web3 Mockup" HTML (token ring, big amount, stat panel).
+ * Pre-claim confirmation modal — "Claim Reward" (uploaded mockup, revised).
  *
- * Signature element: token badge wrapped in an animated claim-progress ring
- * (brand gradient fills clockwise on open — see .claim-ring-* in globals.css).
+ * Center badge = logo ASLI sesuai tipe reward (CC/USDCx via RewardTokenLogo,
+ * code = ticket, waitlist = sparkles) — tanpa ring animasi.
  * Pure presentation — the claim fetch runs in the caller's `onConfirm`.
  */
 export interface ClaimRow {
@@ -41,39 +41,29 @@ interface ClaimDetailsModalProps {
   rows?: ClaimRow[];
   /** Optional eligibility strip text under the rows. */
   eligibleHint?: string;
-  /** Hero token icon (center of the ring). Omit for a neutral ticket. */
-  tokenHero?: "CC" | "USDCx";
+  /** Logo reward di tengah: CC / USDCx (logo asli), CODE (ticket), WAITLIST (sparkles). */
+  tokenHero?: "CC" | "USDCx" | "CODE" | "WAITLIST";
   /** Confirm CTA label. */
   confirmLabel?: string;
   isConfirming?: boolean;
   onConfirm: () => void;
 }
 
-/** Center of the claim ring — amber CC / blue USDCx token, violet ticket fallback. */
-function ClaimTokenIcon({ token }: { token?: "CC" | "USDCx" }) {
-  if (token === "CC") {
-    return (
-      <span
-        className="flex h-[60px] w-[60px] items-center justify-center rounded-full text-[22px] font-bold text-[#3b2400] shadow-[inset_0_0_0_1px_rgb(255_255_255/0.08),0_8px_20px_-6px_rgb(245_166_35/0.55)]"
-        style={{ background: "radial-gradient(circle at 32% 28%, #ffc857, #f5a623 60%, #d4841a)" }}
-      >
-        C
-      </span>
-    );
+/** Logo reward di tengah modal — mengikuti tipe reward. */
+function ClaimTokenIcon({ token }: { token?: "CC" | "USDCx" | "CODE" | "WAITLIST" }) {
+  if (token === "CC" || token === "USDCx") {
+    return <RewardTokenLogo token={token} size={64} circular />;
   }
-  if (token === "USDCx") {
+  if (token === "WAITLIST") {
     return (
-      <span
-        className="flex h-[60px] w-[60px] items-center justify-center rounded-full text-[22px] font-bold text-[#041a33] shadow-[inset_0_0_0_1px_rgb(255_255_255/0.08),0_8px_20px_-6px_rgb(59_130_246/0.55)]"
-        style={{ background: "radial-gradient(circle at 32% 28%, #7cc4ff, #3b82f6 60%, #1d4ed8)" }}
-      >
-        U
+      <span className="flex h-16 w-16 items-center justify-center rounded-full bg-cyan-500/15 text-cyan-300 shadow-[inset_0_0_0_1px_rgb(255_255_255/0.08)]">
+        <Sparkles className="h-8 w-8" aria-hidden />
       </span>
     );
   }
   return (
-    <span className="flex h-[60px] w-[60px] items-center justify-center rounded-full bg-violet-500/15 text-violet-300 shadow-[inset_0_0_0_1px_rgb(255_255_255/0.08)]">
-      <Ticket className="h-7 w-7" aria-hidden />
+    <span className="flex h-16 w-16 items-center justify-center rounded-full bg-violet-500/15 text-violet-300 shadow-[inset_0_0_0_1px_rgb(255_255_255/0.08)]">
+      <Ticket className="h-8 w-8" aria-hidden />
     </span>
   );
 }
@@ -107,8 +97,7 @@ export function ClaimDetailsModal({
       <div className="claim-modal-pop relative z-10 my-auto max-h-[min(92vh,92dvh)] w-full max-w-[400px] overflow-y-auto rounded-[20px] border border-[var(--border)] bg-gradient-to-b from-[var(--card)] to-[var(--card-solid)] p-7 pb-6 shadow-[0_30px_80px_-20px_rgb(0_0_0/0.7),inset_0_0_0_1px_rgb(255_255_255/0.02)]">
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-2.5 text-base font-semibold tracking-tight text-[var(--foreground)]">
-            <Sparkles className="h-[17px] w-[17px] text-canton" aria-hidden />
+          <div className="text-base font-semibold tracking-tight text-[var(--foreground)]">
             Claim Reward
           </div>
           <button
@@ -121,31 +110,9 @@ export function ClaimDetailsModal({
           </button>
         </div>
 
-        {/* Token ring + hero amount */}
+        {/* Reward logo + hero amount */}
         <div className="mb-5 flex flex-col items-center">
-          <div className="relative flex h-[92px] w-[92px] items-center justify-center">
-            <svg
-              className="absolute inset-0 h-full w-full -rotate-90"
-              viewBox="0 0 92 92"
-              aria-hidden
-            >
-              <defs>
-                <linearGradient id="claimRingGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#5ee89c" />
-                  <stop offset="100%" stopColor="#2de0d6" />
-                </linearGradient>
-              </defs>
-              <circle className="claim-ring-track" cx="46" cy="46" r="40" />
-              <circle
-                className="claim-ring-progress"
-                stroke="url(#claimRingGrad)"
-                cx="46"
-                cy="46"
-                r="40"
-              />
-            </svg>
-            <ClaimTokenIcon token={tokenHero} />
-          </div>
+          <ClaimTokenIcon token={tokenHero} />
           <p className="mb-1.5 mt-4 font-mono text-[10.5px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
             {rewardLabel}
           </p>
@@ -207,7 +174,7 @@ export function ClaimDetailsModal({
             onClick={onConfirm}
             disabled={isConfirming}
           >
-            {isConfirming ? <LoadingSpinner size="sm" /> : <Zap className="h-4 w-4" />}
+            {isConfirming ? <LoadingSpinner size="sm" /> : null}
             {confirmLabel}
           </Button>
           <button

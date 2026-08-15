@@ -122,6 +122,7 @@ export function CampaignInviteClaimSection({
         heroValue="1"
         heroUnit="invite code"
         rewardLabel="Reward"
+        tokenHero="CODE"
         rows={[
           { label: "Claim fee", value: feeLabel, accent: fee <= 0 },
           {

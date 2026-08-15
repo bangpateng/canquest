@@ -218,10 +218,10 @@ export function CampaignClaimCta({
         onClick={onClaim}
         className={cn(
           buttonVariants({ size: "block" }),
-          "h-12 gap-2 text-sm font-bold",
+          "h-12 text-sm font-bold",
         )}
       >
-        {isSubmitting ? <LoadingSpinner size="sm" /> : <Sparkles className="h-4 w-4" aria-hidden />}
+        {isSubmitting ? <LoadingSpinner size="sm" /> : null}
         {isSubmitting ? "Claiming…" : label}
       </button>
 

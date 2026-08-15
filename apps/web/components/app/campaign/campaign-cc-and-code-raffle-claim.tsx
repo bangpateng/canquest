@@ -158,7 +158,7 @@ export function CampaignCcAndCodeRaffleClaimSection({
         heroValue={isCodeOnly ? "1" : String(rewardCc)}
         heroUnit={isCodeOnly ? "invite code" : `${token} + 1 Code`}
         rewardLabel="Reward · winner"
-        tokenHero={isCodeOnly ? undefined : isUsdcx ? "USDCx" : "CC"}
+        tokenHero={isCodeOnly ? "CODE" : isUsdcx ? "USDCx" : "CC"}
         rows={[
           { label: "Claim fee", value: feeLabel, accent: fee <= 0 },
           { label: "Network", value: "Canton", dot: true },
