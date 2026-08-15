@@ -7,10 +7,9 @@ import { questRewardToken } from "@/lib/quest/quest-types";
 import { ROUTES } from "@/lib/routing/app-routes";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { QUEST_STATUS_BADGE, type Quest, type UserProgress } from "@/lib/quest/quest-types";
-import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
 import { useEffect, useState } from "react";
-import { Calendar, Clock, ListChecks, Users } from "lucide-react";
+import { Calendar, ListChecks } from "lucide-react";
 
 function CountdownTimer({ endsAt }: { endsAt: string | null }) {
   const [now, setNow] = useState(Date.now());
@@ -30,46 +29,21 @@ function CountdownTimer({ endsAt }: { endsAt: string | null }) {
   if (hours > 0 || days > 0) parts.push(`${hours}h`);
   parts.push(`${mins}m`);
   return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-300 sm:text-xs">
-      <Clock className="h-3 w-3" aria-hidden />
+    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-300">
       {parts.join(" ")}
     </span>
   );
 }
 
-/** Status badge — floats top-left over the banner. */
-function StatusBadge({
-  quest,
-  statusLabel,
-}: {
-  quest: Quest;
-  statusLabel: string;
-}) {
-  const isActive = quest.status === "ACTIVE";
-  const isComing = quest.status === "COMING_SOON";
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider backdrop-blur-md sm:text-[10px]",
-        isActive && "border border-emerald-500/25 bg-emerald-500/15 text-emerald-300",
-        isComing && "border border-cyan-500/25 bg-cyan-500/15 text-cyan-300",
-        !isActive && !isComing && "border border-[var(--border)] bg-[var(--muted)] text-[var(--muted-foreground)]",
-      )}
-    >
-      <span className="relative flex h-1.5 w-1.5">
-        {isActive && (
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/70" />
-        )}
-        <span
-          className={cn(
-            "relative inline-flex h-1.5 w-1.5 rounded-full",
-            isActive ? "bg-emerald-400" : isComing ? "bg-cyan-400" : "bg-[var(--muted-foreground)]",
-          )}
-        />
-      </span>
-      {statusLabel}
-    </span>
-  );
+/** "Aug 25" — short end date for raffle / meta rows. */
+function shortEndDate(quest: Quest): string {
+  if (quest.endsAt) {
+    return new Date(quest.endsAt).toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+    });
+  }
+  return quest.deadline ?? "—";
 }
 
 export function EarnCampaignCard({
@@ -87,9 +61,8 @@ export function EarnCampaignCard({
   const meta = getQuestMeta(quest, userProgress);
   const { config, slots } = meta;
 
-  const isCodeReward =
-    config.code === "INVITE_CODE_FCFS" ||
-    config.code === "INVITE_CODE_RANDOM";
+  const isEnded = quest.status === "ENDED";
+  const isSoon = quest.status === "COMING_SOON";
   const token = questRewardToken(quest);
 
   const statusMeta = QUEST_STATUS_BADGE[quest.status];
@@ -98,179 +71,247 @@ export function EarnCampaignCard({
       ? t("earnCampaigns.slotsEnded")
       : statusMeta.label;
 
-  // Reward pill text
-  let rewardPillText: string;
+  // Reward value (boxed row) — "0.05 CC · first-come" / "0.02 CC · winner".
+  let rewardText: string;
   if (config.isDual) {
-    rewardPillText =
+    rewardText =
       quest.rewardCc > 0
-        ? `${formatRewardAmount(quest.rewardCc, token)} + 1 Code`
-        : `${token} + 1 Code`;
+        ? `${formatRewardAmount(quest.rewardCc, token)} + Code`
+        : `${token} + Code`;
   } else if (config.isCcToken && quest.rewardCc > 0) {
-    rewardPillText = `${formatRewardAmount(quest.rewardCc, token)} · winner`;
-  } else if (isCodeReward) {
-    rewardPillText = t("earnCampaigns.cardRewardPerUserCode");
+    rewardText = `${formatRewardAmount(quest.rewardCc, token)} · ${
+      config.isFcfs ? "first-come" : "winner"
+    }`;
+  } else if (
+    config.code === "INVITE_CODE_FCFS" ||
+    config.code === "INVITE_CODE_RANDOM"
+  ) {
+    rewardText = "1 invite code";
   } else if (config.code === "WAITLIST_EMAIL") {
-    rewardPillText = "Waitlist spot";
+    rewardText = "Waitlist spot";
   } else {
-    rewardPillText = quest.rewardPool ?? "—";
+    rewardText = quest.rewardPool ?? "—";
   }
 
   // CTA
   const ctaLabel = meta.joinBlocked
     ? t("earnCampaigns.slotsEnded")
-    : quest.status === "ENDED"
-      ? "View"
+    : isEnded
+      ? "View Result"
       : completed
         ? t("quests.questComplete")
         : meta.hasParticipated && slots.full
           ? t("earnCampaigns.viewMyQuest")
           : t("quests.joinQuest");
 
-  const ctaVariant: "primary" | "secondary" | "success" | "muted" | "dashed" =
+  const ctaVariant: "primary" | "ghost" | "muted" =
     meta.joinBlocked
       ? "muted"
-      : quest.status === "ENDED"
-        ? "secondary"
+      : isEnded
+        ? "ghost"
         : completed
-          ? "success"
+          ? "primary"
           : meta.canOpen
             ? "primary"
-            : "dashed";
+            : "muted";
 
-  // Urgency text
+  const ctaClass =
+    ctaVariant === "primary"
+      ? "bg-[var(--primary)] font-semibold text-[var(--primary-foreground)]"
+      : ctaVariant === "ghost"
+        ? "border border-white/[0.13] bg-transparent font-semibold text-[var(--foreground)]"
+        : "border border-[var(--border)] bg-[var(--card-solid)] font-medium text-[var(--muted-foreground)]";
+
+  // FCFS progress fill: gray utk ended/full, amber saat hampir habis, mint default.
+  const progressFillClass = cn(
+    "h-full rounded-full",
+    isEnded || slots.full
+      ? "bg-[var(--muted-foreground)]"
+      : slots.warn
+        ? "bg-gradient-to-r from-amber-600 to-amber-400"
+        : "bg-gradient-to-r from-[rgb(var(--canton-rgb)/0.55)] to-[rgb(var(--canton-rgb))]",
+  );
+
+  // Urgency meta (kanan): countdown live utk ACTIVE, kalender utk lainnya.
   const urgencyText = quest.endsAt
-    ? slots.full
-      ? null
+    ? slots.full || isEnded
+      ? (
+        <span className="inline-flex items-center gap-1.5">
+          <Calendar className="h-[13px] w-[13px]" />
+          {isEnded ? "Ended" : "Ends"} {shortEndDate(quest)}
+        </span>
+      )
       : <CountdownTimer endsAt={quest.endsAt} />
     : quest.deadline
       ? (
-        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[var(--muted-foreground)]">
-          <Calendar className="h-3 w-3" />
-          <span className="truncate max-w-[120px]">{quest.deadline}</span>
+        <span className="inline-flex items-center gap-1.5">
+          <Calendar className="h-[13px] w-[13px]" />
+          <span className="truncate max-w-[110px]">{quest.deadline}</span>
         </span>
       )
       : null;
 
+  const showFcfsProgress = config.isFcfs && slots.max > 0;
+  const showRaffleRow = !config.isFcfs && config.isRaffle && slots.max > 0;
+  const raffleText =
+    slots.used > 0
+      ? `${slots.used} winners drawn`
+      : `${slots.max} winners · draws ${shortEndDate(quest)}`;
+
   const inner = (
     <div
       className={cn(
-        "group relative flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden rounded-2xl border border-white/5 bg-[var(--card)] transition-all duration-300 ease-out",
-        meta.canOpen &&
-          !meta.joinBlocked &&
-          "hover:-translate-y-1 hover:border-[var(--primary)]/30",
-        (quest.status === "ENDED" || meta.joinBlocked) && "opacity-60",
+        "group relative flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden rounded-[20px] border border-white/[0.07] bg-[var(--card)] transition-colors duration-300",
+        meta.canOpen && !meta.joinBlocked && "hover:border-[var(--primary)]/30",
       )}
     >
-      {/* ── Banner ─────────────────────────────────────────────── */}
-      <div className="relative h-32 w-full shrink-0 overflow-hidden">
+      {/* ── Banner (104px) + status/type chips ─────────────────── */}
+      <div className="relative h-[104px] w-full shrink-0 overflow-hidden">
         {quest.bannerImageUrl ? (
           <div
-            className="absolute inset-0 bg-cover bg-center transition-transform duration-500 group-hover:scale-110"
+            className={cn(
+              "absolute inset-0 bg-cover bg-center",
+              isEnded && "grayscale brightness-[0.6]",
+            )}
             style={{ backgroundImage: `url("${quest.bannerImageUrl}")` }}
           />
         ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-[var(--primary)]/15 to-[var(--muted)]" />
+          /* Fallback: stripes + watermark huruf org (mockup banner-fallback) */
+          <div
+            className="absolute inset-0 flex items-center justify-center"
+            style={{
+              backgroundImage:
+                "repeating-linear-gradient(135deg, rgba(94,232,156,0.06) 0 2px, transparent 2px 14px), linear-gradient(160deg,#16211b,#0b0f0d)",
+            }}
+          >
+            <span className="text-[30px] font-extrabold text-[rgb(var(--canton-rgb)/0.28)]">
+              {quest.orgSlug.slice(0, 2).toUpperCase()}
+            </span>
+          </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-[var(--card)] via-transparent to-transparent" />
-        {/* Status badge — top-left */}
-        <div className="absolute left-2.5 top-2.5">
-          <StatusBadge quest={quest} statusLabel={statusLabel} />
-        </div>
-        {/* Type short-label pill — top-right */}
-        <span className="absolute right-2.5 top-2.5 inline-flex items-center rounded-full bg-black/50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white/90 ring-1 ring-white/10 backdrop-blur-md">
-          {config.shortLabel}
-        </span>
-      </div>
-
-      {/* ── Body (overlaps banner so the logo punches through) ── */}
-      <div className="relative -mt-8 flex flex-1 flex-col p-4">
-        {/* Logo + reward row */}
-        <div className="mb-3 flex items-end justify-between gap-3">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--card)] shadow-lg ring-4 ring-[var(--card)]">
-            {quest.logoUrl ? (
-              <img src={quest.logoUrl} alt="" className="h-full w-full rounded-xl object-cover" />
-            ) : (
-              <span className={cn("text-sm font-bold", config.accentClass)}>
-                {quest.orgSlug.slice(0, 2).toUpperCase()}
-              </span>
-            )}
-          </div>
-          <div className="min-w-0 text-right">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-              {config.isDual ? "Reward · winner" : "Reward"}
-            </p>
-            <p className={cn("truncate text-sm font-bold tabular-nums", config.accentClass)}>
-              {rewardPillText}
-            </p>
-          </div>
-        </div>
-
-        <p className="text-[10px] font-semibold text-[var(--muted-foreground)]">{quest.org}</p>
-        <h3 className="mt-0.5 line-clamp-2 text-base font-bold leading-tight text-[var(--foreground)]">
-          {quest.title}
-        </h3>
-        <p className="mt-1.5 line-clamp-2 text-xs font-medium leading-relaxed text-[var(--muted-foreground)]">
-          {quest.description}
-        </p>
-
-        {/* FCFS progress */}
-        {meta.showProgress && meta.progressBar ? (
-          <div className="mt-3">
-            <div className="mb-1 flex justify-between text-[10px] font-semibold tabular-nums text-[var(--muted-foreground)]">
-              <span>
-                {meta.progressBar.used} / {meta.progressBar.max}
-              </span>
-              <span>{meta.progressBar.pct}%</span>
-            </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-[var(--muted)]">
-              <div
-                className={cn(
-                  "h-full rounded-full transition-all duration-500",
-                  meta.progressBar.warn
-                    ? "bg-gradient-to-r from-amber-500 to-orange-500"
-                    : "bg-gradient-brand",
-                )}
-                style={{ width: `${Math.max(6, meta.progressBar.pct)}%` }}
-              />
-            </div>
+        {isEnded ? <div className="absolute inset-0 bg-[#060a08]/25" /> : null}
+        {isSoon ? (
+          <div className="absolute inset-0 z-[2] flex items-center justify-center bg-[#060a08]/35 backdrop-blur-[3px] saturate-[0.7]">
+            <span className="rounded-full border border-white/[0.13] bg-[#060a08]/60 px-3 py-1.5 text-xs font-bold text-[var(--foreground)]">
+              Coming soon
+            </span>
           </div>
         ) : null}
 
-        {/* Footer meta */}
-        <div className="mt-auto flex items-center justify-between gap-2 border-t border-white/5 pt-4 text-[10px] font-semibold text-[var(--muted-foreground)]">
-          <span className="inline-flex items-center gap-1">
-            <ListChecks className="h-3 w-3 text-canton" />
-            {quest.tasks.length}
+        {/* Chips: status (kiri) · tipe reward (kanan) */}
+        <div className="relative z-[3] flex w-full items-start justify-between px-3.5 py-3">
+          <span
+            className={cn(
+              "inline-flex items-center gap-[5px] rounded-full border border-white/[0.12] bg-[#060a08]/55 px-[9px] py-[5px] text-[10px] font-bold uppercase tracking-[0.6px] text-[var(--foreground)] backdrop-blur-md",
+              quest.status === "ACTIVE" &&
+                !slots.full &&
+                "border-[rgb(var(--canton-rgb)/0.3)] text-canton",
+              quest.status === "COMING_SOON" &&
+                "border-amber-300/30 text-amber-300",
+            )}
+          >
+            <span
+              className={cn(
+                "h-[6px] w-[6px] rounded-full",
+                quest.status === "ACTIVE"
+                  ? slots.full
+                    ? "bg-[var(--muted-foreground)]"
+                    : "bg-[var(--primary)] shadow-[0_0_0_3px_rgb(var(--canton-rgb)/0.18)]"
+                  : quest.status === "COMING_SOON"
+                    ? "bg-amber-300"
+                    : "bg-[var(--muted-foreground)]",
+              )}
+            />
+            {statusLabel}
           </span>
-          {slots.max > 0 ? (
-            <span className="inline-flex items-center gap-1">
-              <Users className="h-3 w-3" />
-              {meta.showProgress && meta.progressBar
-                ? `${meta.progressBar.used}/${meta.progressBar.max}`
-                : `${slots.max} ${config.isFcfs ? "slots" : "winners"}`}
-            </span>
+          <span className="inline-flex items-center rounded-full border border-white/[0.12] bg-[#060a08]/55 px-[9px] py-[5px] text-[10px] font-bold uppercase tracking-[0.6px] text-[var(--muted-foreground)] backdrop-blur-md">
+            {config.shortLabel}
+          </span>
+        </div>
+      </div>
+
+      {/* ── Head: logo 44px + judul & deskripsi satu baris ─────── */}
+      <div className="flex items-center gap-3 px-4 pb-3.5 pt-4">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/[0.13] bg-[var(--card-solid)] text-base font-bold text-canton">
+          {quest.logoUrl ? (
+            <img src={quest.logoUrl} alt="" className="h-full w-full object-cover" />
           ) : (
-            <span aria-hidden />
+            quest.orgSlug.slice(0, 2).toUpperCase()
           )}
-          {urgencyText ?? (
-            <span className="inline-flex items-center gap-1">
-              <Calendar className="h-3 w-3" />
-              {quest.deadline ?? "—"}
-            </span>
-          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p
+            className={cn(
+              "truncate text-[15.5px] font-bold leading-tight",
+              isEnded ? "text-[var(--muted-foreground)]" : "text-[var(--foreground)]",
+            )}
+          >
+            {quest.title}
+          </p>
+          <p className="mt-0.5 truncate text-xs text-[var(--muted-foreground)]">
+            {quest.description}
+          </p>
+        </div>
+      </div>
+
+      {/* ── Body ─────────────────────────────────────────────────── */}
+      <div className="flex flex-1 flex-col px-4 pb-4">
+        {/* Reward row (boxed) */}
+        <div className="mb-3 rounded-[10px] border border-[var(--border)] bg-[var(--card-solid)] px-3 py-2.5">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.4px] text-[var(--muted-foreground)]/70">
+            Reward
+          </p>
+          <p
+            className={cn(
+              "mt-0.5 font-mono text-sm font-bold",
+              isEnded ? "text-[var(--muted-foreground)]" : "text-canton",
+            )}
+          >
+            {rewardText}
+          </p>
+        </div>
+
+        {/* FCFS progress ATAU raffle row */}
+        {showFcfsProgress ? (
+          <div className="mb-3.5">
+            <div className="mb-[5px] flex justify-between text-[11px] text-[var(--muted-foreground)]/70">
+              <span>
+                {slots.used} / {slots.max} claimed
+              </span>
+              <span className="font-mono">{slots.pct}%</span>
+            </div>
+            <div className="h-[5px] overflow-hidden rounded-full bg-[var(--card-solid)]">
+              <div
+                className={progressFillClass}
+                style={{ width: `${Math.max(slots.pct > 0 ? 2 : 0, slots.pct)}%` }}
+              />
+            </div>
+          </div>
+        ) : showRaffleRow ? (
+          <p className="mb-3.5 flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
+            <Calendar className="h-[13px] w-[13px] text-[var(--muted-foreground)]/70" aria-hidden />
+            {raffleText}
+          </p>
+        ) : null}
+
+        {/* Meta row */}
+        <div className="mb-3.5 mt-auto flex items-center gap-3.5 border-t border-[var(--border)] pt-3 text-[11.5px] text-[var(--muted-foreground)]/70">
+          <span className="inline-flex items-center gap-[5px]">
+            <ListChecks className="h-[13px] w-[13px]" aria-hidden />
+            {quest.tasks.length} {quest.tasks.length === 1 ? "task" : "tasks"}
+          </span>
+          {urgencyText}
         </div>
 
         {/* CTA */}
-        <div className="mt-3">
-          <span
-            className={cn(
-              buttonVariants({ variant: ctaVariant, size: "block" }),
-              "flex h-11 w-full items-center justify-center rounded-xl text-sm font-semibold",
-            )}
-          >
-            {ctaLabel}
-          </span>
-        </div>
+        <span
+          className={cn(
+            "flex h-10 w-full items-center justify-center rounded-[9px] px-4 text-[13px] transition-opacity hover:opacity-90",
+            ctaClass,
+          )}
+        >
+          {ctaLabel}
+        </span>
       </div>
     </div>
   );
@@ -280,7 +321,7 @@ export function EarnCampaignCard({
   return (
     <Link
       href={ROUTES.campaignQuest(quest.id, quest.title)}
-      className="block h-full w-full min-w-0 max-w-full overflow-hidden rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+      className="block h-full w-full min-w-0 max-w-full overflow-hidden rounded-[20px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
     >
       {inner}
     </Link>
