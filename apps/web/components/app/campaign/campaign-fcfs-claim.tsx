@@ -9,12 +9,13 @@ import {
 import { CampaignFcfsRewardCard } from "@/components/app/campaign/campaign-fcfs-reward-card";
 import { ClaimDetailsModal } from "@/components/app/campaign/claim-details-modal";
 import { normalizeRewardToken, type RewardTokenSymbol } from "@/lib/quest/quest-types";
-import { useState } from "react";
-import { launchClaimConfetti } from "@/components/ui/confetti-effect";
+import { useTransactionStatus } from "@/lib/tx/transaction-status";
 import { FCFS_CLAIM_FAIL_MSG } from "@/lib/campaign/claim-messages";
+import { useState } from "react";
 
 /** "Aug 14, 21:39" — compact end date for the claim-details rows. */
-function formatEndMeta(endsAt: string): string {
+function formatEndMeta(endsAt: string | null | undefined): string | null {
+  if (!endsAt) return null;
   return new Date(endsAt).toLocaleString("en-GB", {
     day: "numeric",
     month: "short",
@@ -29,6 +30,8 @@ export function CampaignFcfsClaimSection({
   rewardCc,
   rewardToken,
   campaignMeta,
+  questOrg,
+  questTitle,
   onClaimed,
 }: {
   questId: string;
@@ -36,9 +39,12 @@ export function CampaignFcfsClaimSection({
   rewardCc: number;
   rewardToken?: RewardTokenSymbol | string | null;
   campaignMeta: CampaignMeta;
+  questOrg?: string | null;
+  questTitle?: string | null;
   onClaimed: () => void;
 }) {
   const token: RewardTokenSymbol = normalizeRewardToken(rewardToken);
+  const tx = useTransactionStatus();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -53,13 +59,27 @@ export function CampaignFcfsClaimSection({
     remaining > 0
       ? formatFcfsSlotsRemaining(remaining, maxWinners)
       : formatFcfsSlotsFilled(remaining, maxWinners, "Full Claimed");
-  const feeHint = canClaim ? formatFcfsClaimFeeHint(fee, rewardCc, token) : null;
+  const feeLabel = fee > 0 ? `${fee} CC` : "Free";
+  const isUsdcx = token === "USDCx";
+  const subtitle = [questOrg, questTitle].filter(Boolean).join(" · ") || undefined;
 
   async function handleFCFSClaim() {
     if (isSubmitting) return;
     setIsSubmitting(true);
     setError(null);
     setSuccess(null);
+
+    // Mockup claim flow: tx-status modal (broadcast → confirmed), no confetti.
+    tx.start({
+      title: "Reward claimed",
+      subtitle,
+      amountText: `+${rewardCc} ${token}`,
+      subText: subtitle,
+      accentBg: isUsdcx ? "bg-sky-500/15" : "bg-canton-subtle",
+      accentText: isUsdcx ? "text-sky-300" : "text-canton",
+      meta: [{ label: "Claim fee paid", value: feeLabel }],
+    });
+    tx.broadcast();
 
     try {
       const res = await fetch(`/api/quests/${questId}/claim-fcfs`, {
@@ -73,6 +93,7 @@ export function CampaignFcfsClaimSection({
         rewardDelivery?: "direct" | "pending_offer";
       };
       if (!res.ok || data.ok === false) {
+        tx.dismiss();
         setError(
           typeof data.message === "string" && data.message.trim()
             ? data.message
@@ -82,13 +103,25 @@ export function CampaignFcfsClaimSection({
       }
       const afterRemaining =
         data.remainingSlots ?? Math.max(0, remaining - 1);
-      setDeliveryKind(data.rewardDelivery ?? null);
+      const delivery = data.rewardDelivery ?? null;
+      setDeliveryKind(delivery);
       setSuccess(
-        `${formatFcfsSlotsRemaining(afterRemaining, maxWinners)}\n${formatFcfsClaimFeeHint(fee, rewardCc, token)}`,
+        `${formatFcfsSlotsRemaining(afterRemaining, maxWinners)}\nReward: +${rewardCc} ${token}${fee > 0 ? ` · fee ${fee} CC` : ""}`,
       );
-      launchClaimConfetti(token);
+      tx.succeed({
+        meta: [
+          { label: "Claim fee paid", value: feeLabel },
+          ...(delivery
+            ? [{
+                label: "Delivery",
+                value: delivery === "direct" ? "Sent to wallet" : "Accept in wallet inbox",
+              }]
+            : []),
+        ],
+      });
       onClaimed();
     } catch {
+      tx.dismiss();
       setError(FCFS_CLAIM_FAIL_MSG);
     } finally {
       setIsSubmitting(false);
@@ -100,7 +133,7 @@ export function CampaignFcfsClaimSection({
       <CampaignFcfsRewardCard
         mode="claim"
         slotsLabel={canClaim ? slotsLabel : "Checking slot availability…"}
-        description={feeHint}
+        description={formatFcfsClaimFeeHint(fee, rewardCc, token)}
         rewardCc={rewardCc}
         rewardType="CC_ONLY"
         rewardToken={token}
@@ -118,19 +151,16 @@ export function CampaignFcfsClaimSection({
         onClose={() => setClaimOpen(false)}
         heroAmount={`${rewardCc} ${token}`}
         rewardLabel="Reward"
-        tokenHero={String(token).toUpperCase() === "USDCX" ? "USDCx" : "CC"}
+        tokenHero={isUsdcx ? "USDCx" : "CC"}
         rows={[
-          {
-            label: "Claim fee",
-            value: fee > 0 ? `${fee} CC` : "Free",
-            accent: fee <= 0,
-          },
+          { label: "Claim fee", value: feeLabel, accent: fee <= 0 },
           { label: "Slots", value: slotsLabel },
           { label: "Network", value: "Canton" },
-          ...(campaignMeta.endsAt
-            ? [{ label: campaignMeta.ended ? "Ended" : "Closes", value: formatEndMeta(campaignMeta.endsAt) }]
+          ...(formatEndMeta(campaignMeta.endsAt)
+            ? [{ label: campaignMeta.ended ? "Ended" : "Closes", value: formatEndMeta(campaignMeta.endsAt)! }]
             : []),
         ]}
+        eligibleHint="All milestones completed — you're eligible"
         isConfirming={isSubmitting}
         onConfirm={() => {
           setClaimOpen(false);

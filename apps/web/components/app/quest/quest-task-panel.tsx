@@ -579,6 +579,8 @@ export function QuestTaskPanel({
           rewardCc={quest.rewardCc}
           rewardToken={quest.rewardToken}
           campaignMeta={campaignMeta!}
+          questOrg={quest.org}
+          questTitle={quest.title}
           onClaimed={() => loadProgress()}
         />
       ) : null}
@@ -589,6 +591,8 @@ export function QuestTaskPanel({
           partyId={partyId}
           campaignMeta={campaignMeta}
           rewardType={quest.rewardType}
+          questOrg={quest.org}
+          questTitle={quest.title}
           onClaimed={() => loadProgress()}
         />
       ) : null}
@@ -600,6 +604,8 @@ export function QuestTaskPanel({
           rewardCc={quest.rewardCc}
           rewardToken={quest.rewardToken}
           campaignMeta={campaignMeta}
+          questOrg={quest.org}
+          questTitle={quest.title}
           onClaimed={() => loadProgress()}
         />
       ) : null}
@@ -612,6 +618,8 @@ export function QuestTaskPanel({
           rewardVariant={rewardStatus?.rewardVariant ?? null}
           rewardToken={quest.rewardToken}
           campaignMeta={campaignMeta}
+          questOrg={quest.org}
+          questTitle={quest.title}
           onClaimed={() => loadProgress()}
         />
       ) : null}

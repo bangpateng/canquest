@@ -130,130 +130,121 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
         Back to Earn
       </Link>
 
-      {/* ── Two-column layout: content + sticky reward sidebar (mockup) ── */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px] lg:items-start">
-        {/* ── Left column: hero + quest milestones ─────────────────── */}
-        <div className="min-w-0 space-y-5 sm:space-y-6">
-          {/* ── Hero Header ──────────────────────────────────────────── */}
-          <Card className="overflow-hidden">
-            {/* Banner or gradient strip — status + type pills shown ONCE here */}
-            {quest.bannerImageUrl ? (
-              <div className="relative h-44 w-full overflow-hidden sm:h-52 md:h-64">
-                <div
-                  className="absolute inset-0 bg-cover bg-center"
-                  style={{ backgroundImage: `url("${quest.bannerImageUrl}")` }}
-                />
-                {/* Mockup gradient: fade the banner into the card surface so the
-                    logo below can punch through with its ring. */}
-                <div className="absolute inset-0 bg-gradient-to-t from-[var(--card)] via-[#05060a]/25 to-transparent" />
-                <div className="absolute left-3 top-3 flex items-center gap-1.5 sm:left-4 sm:top-4">
-                  <StatusPill status={quest.status} label={statusMeta.label} />
-                  <TypePill config={config} />
-                </div>
-                <div className="absolute right-3 top-3 sm:right-4 sm:top-4">
-                  <ShareCampaign title={quest.title} text={shareText} />
-                </div>
+      {/* ── Hero Header ─────────────────────────────────────────────────── */}
+      <Card className="overflow-hidden">
+        {/* Banner or gradient strip — status + type pills shown ONCE here */}
+        {quest.bannerImageUrl ? (
+          <div className="relative h-44 w-full overflow-hidden sm:h-52 md:h-64">
+            <div
+              className="absolute inset-0 bg-cover bg-center"
+              style={{ backgroundImage: `url("${quest.bannerImageUrl}")` }}
+            />
+            {/* Mockup gradient: fade the banner into the card surface so the
+                logo below can punch through with its ring. */}
+            <div className="absolute inset-0 bg-gradient-to-t from-[var(--card)] via-[#05060a]/25 to-transparent" />
+            <div className="absolute left-3 top-3 flex items-center gap-1.5 sm:left-4 sm:top-4">
+              <StatusPill status={quest.status} label={statusMeta.label} />
+              <TypePill config={config} />
+            </div>
+            <div className="absolute right-3 top-3 sm:right-4 sm:top-4">
+              <ShareCampaign title={quest.title} text={shareText} />
+            </div>
+          </div>
+        ) : (
+          <div className="relative w-full overflow-hidden">
+            <div className={cn(
+              "absolute inset-0 h-12 bg-gradient-to-r opacity-50",
+              config.isDual
+                ? "from-[rgb(var(--canton-rgb)/0.6)] via-violet-500/40 to-transparent"
+                : config.accentClass.includes("violet")
+                  ? "from-violet-500/60 via-violet-400/30 to-transparent"
+                  : config.accentClass.includes("cyan")
+                    ? "from-cyan-500/60 via-cyan-400/30 to-transparent"
+                    : "from-[rgb(var(--canton-rgb)/0.6)] via-[rgb(var(--canton-rgb)/0.3)] to-transparent"
+            )} />
+            <div className="relative flex h-12 items-center justify-between px-3 sm:px-4">
+              <div className="flex items-center gap-1.5">
+                <StatusPill status={quest.status} label={statusMeta.label} />
+                <TypePill config={config} />
               </div>
-            ) : (
-              <div className="relative w-full overflow-hidden">
-                <div className={cn(
-                  "absolute inset-0 h-12 bg-gradient-to-r opacity-50",
-                  config.isDual
-                    ? "from-[rgb(var(--canton-rgb)/0.6)] via-violet-500/40 to-transparent"
-                    : config.accentClass.includes("violet")
-                      ? "from-violet-500/60 via-violet-400/30 to-transparent"
-                      : config.accentClass.includes("cyan")
-                        ? "from-cyan-500/60 via-cyan-400/30 to-transparent"
-                        : "from-[rgb(var(--canton-rgb)/0.6)] via-[rgb(var(--canton-rgb)/0.3)] to-transparent"
-                )} />
-                <div className="relative flex h-12 items-center justify-between px-3 sm:px-4">
-                  <div className="flex items-center gap-1.5">
-                    <StatusPill status={quest.status} label={statusMeta.label} />
-                    <TypePill config={config} />
-                  </div>
-                  <ShareCampaign title={quest.title} text={shareText} />
-                </div>
-              </div>
-            )}
+              <ShareCampaign title={quest.title} text={shareText} />
+            </div>
+          </div>
+        )}
 
-            {/* Header content — NO duplicate status pill (removed mobile-only one) */}
-            <div className="relative px-5 pb-6 sm:px-6">
-              <div className={cn(
-                "flex items-end gap-4",
-                quest.bannerImageUrl && "-mt-12",
-              )}>
-                <div className={cn(
-                  "relative z-10 shrink-0 overflow-hidden rounded-2xl bg-[var(--card)] shadow-xl ring-4 ring-[var(--card)]",
-                  quest.bannerImageUrl ? "h-16 w-16 sm:h-20 sm:w-20" : "h-12 w-12 sm:h-16 sm:w-16",
-                )}>
-                  {quest.logoUrl ? (
-                    <img src={quest.logoUrl} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-lg font-bold text-canton sm:text-xl">
-                      {quest.orgSlug.slice(0, 2).toUpperCase()}
-                    </div>
-                  )}
+        {/* Header content — NO duplicate status pill (removed mobile-only one) */}
+        <div className="relative px-5 pb-6 sm:px-6">
+          <div className={cn(
+            "flex items-end gap-4",
+            quest.bannerImageUrl && "-mt-12",
+          )}>
+            <div className={cn(
+              "relative z-10 shrink-0 overflow-hidden rounded-2xl bg-[var(--card)] shadow-xl ring-4 ring-[var(--card)]",
+              quest.bannerImageUrl ? "h-16 w-16 sm:h-20 sm:w-20" : "h-12 w-12 sm:h-16 sm:w-16",
+            )}>
+              {quest.logoUrl ? (
+                <img src={quest.logoUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-lg font-bold text-canton sm:text-xl">
+                  {quest.orgSlug.slice(0, 2).toUpperCase()}
                 </div>
+              )}
+            </div>
 
-                <div className="min-w-0 flex-1 pb-1">
-                  <p className="break-words text-xs font-semibold text-[var(--muted-foreground)]">{quest.org}</p>
-                  <h1 className="mt-0.5 line-clamp-2 break-words text-xl font-bold leading-tight text-[var(--foreground)] md:text-2xl">
-                    {quest.title}
-                  </h1>
-                </div>
-              </div>
+            <div className="min-w-0 flex-1 pb-1">
+              <p className="break-words text-xs font-semibold text-[var(--muted-foreground)]">{quest.org}</p>
+              <h1 className="mt-0.5 line-clamp-2 break-words text-xl font-bold leading-tight text-[var(--foreground)] md:text-2xl">
+                {quest.title}
+              </h1>
+            </div>
+          </div>
 
-              {/* Description + social links */}
-              {quest.description ? (
-                <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[var(--muted-foreground)]">
-                  {quest.description}
-                </p>
-              ) : null}
-              {quest.socialLinks && quest.socialLinks.length > 0 ? (
-                <div className="mt-4">
-                  <CampaignSocialLinks links={quest.socialLinks} />
-                </div>
-              ) : null}
+          {/* Description + social links */}
+          {quest.description ? (
+            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[var(--muted-foreground)]">
+              {quest.description}
+            </p>
+          ) : null}
+          {quest.socialLinks && quest.socialLinks.length > 0 ? (
+            <div className="mt-4">
+              <CampaignSocialLinks links={quest.socialLinks} />
+            </div>
+          ) : null}
+        </div>
+      </Card>
+
+      <CampaignQuestSidebar quest={quest} />
+
+      {/* ── Task Panel / Auth Prompt ────────────────────────────── */}
+      <section className="min-w-0 space-y-4">
+        {isAuthed ? (
+          <>
+            <CampaignEligibilityBadge questId={quest.id} />
+            <QuestTaskPanel quest={quest} />
+          </>
+        ) : (
+          <Card className="p-5 text-center sm:p-6">
+            <SectionTitle>Sign in to participate</SectionTitle>
+            <p className="mt-2 text-sm text-[var(--muted-foreground)] max-w-sm mx-auto">
+              You need an account to complete missions and claim rewards.
+            </p>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-center">
+              <Link
+                href={`/?auth=register&next=${encodeURIComponent(canonicalPath)}`}
+                className={buttonVariants()}
+              >
+                Sign up
+              </Link>
+              <Link
+                href={`/?auth=login&next=${encodeURIComponent(canonicalPath)}`}
+                className={buttonVariants({ variant: "secondary" })}
+              >
+                Sign in
+              </Link>
             </div>
           </Card>
-
-          {/* ── Task Panel / Auth Prompt ────────────────────────────── */}
-          <section className="min-w-0 space-y-4">
-            {isAuthed ? (
-              <>
-                <CampaignEligibilityBadge questId={quest.id} />
-                <QuestTaskPanel quest={quest} />
-              </>
-            ) : (
-              <Card className="p-5 text-center sm:p-6">
-                <SectionTitle>Sign in to participate</SectionTitle>
-                <p className="mt-2 text-sm text-[var(--muted-foreground)] max-w-sm mx-auto">
-                  You need an account to complete missions and claim rewards.
-                </p>
-                <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-center">
-                  <Link
-                    href={`/?auth=register&next=${encodeURIComponent(canonicalPath)}`}
-                    className={buttonVariants()}
-                  >
-                    Sign up
-                  </Link>
-                  <Link
-                    href={`/?auth=login&next=${encodeURIComponent(canonicalPath)}`}
-                    className={buttonVariants({ variant: "secondary" })}
-                  >
-                    Sign in
-                  </Link>
-                </div>
-              </Card>
-            )}
-          </section>
-        </div>
-
-        {/* ── Right column: sticky reward sidebar (mockup) ─────────── */}
-        <div className="space-y-4 lg:sticky lg:top-24">
-          <CampaignQuestSidebar quest={quest} />
-        </div>
-      </div>
+        )}
+      </section>
     </PlatformPage>
   );
 }

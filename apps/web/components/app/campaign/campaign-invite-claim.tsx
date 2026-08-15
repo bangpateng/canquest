@@ -1,12 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { formatFcfsClaimFeeHint } from "@/lib/canton/campaign-reward";
 import type { CampaignMeta } from "@/lib/canton/campaign-reward";
 import { CampaignFcfsRewardCard } from "@/components/app/campaign/campaign-fcfs-reward-card";
 import { ClaimDetailsModal } from "@/components/app/campaign/claim-details-modal";
 import { RewardReveal } from "@/components/app/campaign/reward-reveal";
-import { launchClaimConfetti } from "@/components/ui/confetti-effect";
+import { useTransactionStatus } from "@/lib/tx/transaction-status";
 import { FCFS_CLAIM_FAIL_MSG } from "@/lib/campaign/claim-messages";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 
@@ -26,15 +25,20 @@ export function CampaignInviteClaimSection({
   partyId,
   campaignMeta,
   rewardType,
+  questOrg,
+  questTitle,
   onClaimed,
 }: {
   questId: string;
   partyId: string | null;
   campaignMeta: CampaignMeta;
   rewardType?: string | null;
+  questOrg?: string | null;
+  questTitle?: string | null;
   onClaimed: () => void;
 }) {
   const t = usePlatformT();
+  const tx = useTransactionStatus();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -47,17 +51,32 @@ export function CampaignInviteClaimSection({
       : t("earnCampaigns.kindRaffle");
 
   const fee = campaignMeta.fcfsClaimFeeCc;
+  const feeLabel = fee > 0 ? `${fee} CC` : "Free";
   const codes = campaignMeta.codesRemaining ?? 0;
   // Hint langsung; tidak perlu hack string.replace (sebelumnya mengganti "receive 0 CC").
   const feeHint = fee > 0
     ? `Pay ${fee} CC claim fee on-chain to reveal your invite code`
     : "Claim your invite code";
+  const subtitle = [questOrg, questTitle].filter(Boolean).join(" · ") || undefined;
 
   async function handleClaim() {
     if (isSubmitting) return;
     setIsSubmitting(true);
     setError(null);
     setSuccess(null);
+
+    // Mockup claim flow: tx-status modal (broadcast → confirmed), no confetti.
+    tx.start({
+      title: "Invite code claimed",
+      subtitle,
+      amountText: "1 invite code",
+      subText: subtitle,
+      accentBg: "bg-violet-500/15",
+      accentText: "text-violet-300",
+      meta: [{ label: "Claim fee paid", value: feeLabel }],
+    });
+    tx.broadcast();
+
     try {
       const res = await fetch(`/api/quests/${questId}/claim-invite`, {
         method: "POST",
@@ -69,6 +88,7 @@ export function CampaignInviteClaimSection({
         inviteCode?: string;
       };
       if (!res.ok || data.ok === false) {
+        tx.dismiss();
         setError(
           typeof data.message === "string" && data.message.trim()
             ? data.message
@@ -79,9 +99,15 @@ export function CampaignInviteClaimSection({
       const code = data.inviteCode ?? null;
       setClaimedCode(code);
       setSuccess(data.message ?? (code ? `Your code: ${code}` : "Claimed."));
-      launchClaimConfetti();
+      tx.succeed({
+        meta: [
+          { label: "Claim fee paid", value: feeLabel },
+          ...(code ? [{ label: "Your code", value: code, mono: true }] : []),
+        ],
+      });
       onClaimed();
     } catch {
+      tx.dismiss();
       setError(FCFS_CLAIM_FAIL_MSG);
     } finally {
       setIsSubmitting(false);
@@ -112,11 +138,7 @@ export function CampaignInviteClaimSection({
         heroAmount="1 invite code"
         rewardLabel="Reward"
         rows={[
-          {
-            label: "Claim fee",
-            value: fee > 0 ? `${fee} CC` : "Free",
-            accent: fee <= 0,
-          },
+          { label: "Claim fee", value: feeLabel, accent: fee <= 0 },
           { label: "Codes left", value: codes > 0 ? String(codes) : "—" },
           { label: "Network", value: "Canton" },
           ...(formatEndMeta(campaignMeta.endsAt)
