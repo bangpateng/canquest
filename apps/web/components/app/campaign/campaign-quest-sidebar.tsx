@@ -226,13 +226,23 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
         </div>
       ) : null}
 
-      {/* ── Metrics (3 columns) ──────────────────────────────────── */}
-      <dl className="relative grid grid-cols-3 gap-px bg-[var(--border)]">
-        <MetricTile
-          icon={isFcfsType ? Zap : Users}
-          label={slotsLabel}
-          value={showSlotsProgress ? slotsValue : slotsValue}
-        />
+      {/* ── Metrics ─────────────────────────────────────────────────
+          Saat section slots progress di atas sudah tampil (FCFS slots /
+          Winners drawn + bar), label slots TIDAK diulang di sini —
+          mencegah duplikasi "FCFS slots" double. */}
+      <dl
+        className={cn(
+          "relative grid gap-px bg-[var(--border)]",
+          showSlotsProgress ? "grid-cols-2" : "grid-cols-3",
+        )}
+      >
+        {!showSlotsProgress ? (
+          <MetricTile
+            icon={isFcfsType ? Zap : Users}
+            label={slotsLabel}
+            value={slotsValue}
+          />
+        ) : null}
         <MetricTile icon={ListChecks} label="Tasks" value={String(quest.tasks.length)} />
         <MetricTile
           icon={quest.endsAt ? Clock : Calendar}
