@@ -2,7 +2,6 @@
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import Link from "next/link";
-import { PageTitle } from "@/components/ui/typography";
 import type {
   QuestRewardStatus,
   RewardType,
@@ -11,22 +10,19 @@ import type {
 import { normalizeRewardToken } from "@/lib/quest/quest-types";
 import {
   campaignUiKind,
-  formatFcfsClaimFeeHint,
-  formatFcfsSlotsRemaining,
   formatRewardAmount,
   isFcfsSlotsFull,
   isUnluckyState,
   rewardCodeFromStatus,
   type CampaignMeta,
 } from "@/lib/canton/campaign-reward";
-import { CampaignFcfsRewardCard } from "@/components/app/campaign/campaign-fcfs-reward-card";
-import { CampaignQuestStatusCard } from "@/components/app/campaign/campaign-quest-status-card";
+import { CampaignStatusRow } from "@/components/app/campaign/campaign-status-row";
 import { RewardReveal } from "@/components/app/campaign/reward-reveal";
 import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { errorBannerClass, successBannerClass, warnBannerClass } from "@/lib/ui/ui-tokens";
+import { errorBannerClass, warnBannerClass } from "@/lib/ui/ui-tokens";
 import { cn } from "@/lib/utils/utils";
-import { Check, ChevronDown, Copy, Shield } from "lucide-react";
+import { Check, ChevronDown, Clock, Copy, Hourglass, Shield, Sparkles, Ticket, X } from "lucide-react";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { useState } from "react";
 
@@ -150,6 +146,17 @@ export function QuestSubmitSection({
   );
 }
 
+/** Label prefix baris status per uiKind (mockup rev. user). */
+function notSelectedLabel(uiKind: string): string {
+  if (uiKind === "cc_manual_draw") return "Raffle Result";
+  if (uiKind === "waitlist_code") return "Code Raffle";
+  if (uiKind === "cc_and_code_raffle") return "CC + Code Raffle";
+  return "Draw Result";
+}
+
+/** Ikon jam — Clock utk pending draw, Hourglass utk entry tercatat (mockup). */
+const ICON_SW = 2.4;
+
 export function QuestSubmittedProof({
   rewardCc,
   rewardStatus,
@@ -172,7 +179,6 @@ export function QuestSubmittedProof({
   /** Token reward: "CC" (default) atau "USDCx". Mendorong pesan delivery jadi token-aware. */
   rewardToken?: RewardTokenSymbol | string | null;
 }) {
-  const t = usePlatformT();
   const rt = (rewardType ?? "CC_ONLY") as RewardType;
   const token = normalizeRewardToken(rewardToken);
   const state = rewardStatus?.state;
@@ -192,76 +198,75 @@ export function QuestSubmittedProof({
   const showCcReward =
     (isCcAndInvite && (rewardCc ?? 0) > 0) ||
     (uiKind === "cc_fcfs" && state === "cc_reward" && (rewardCc ?? 0) > 0);
-  const fcfsSlotsLabel =
-    uiKind === "cc_fcfs" && campaignMeta
-      ? formatFcfsSlotsRemaining(
-          campaignMeta.remainingSlots ?? 0,
-          campaignMeta.maxWinners,
-        )
-      : null;
-  const fcfsFeeHint =
-    uiKind === "cc_fcfs" && campaignMeta
-      ? formatFcfsClaimFeeHint(campaignMeta.fcfsClaimFeeCc, rewardCc ?? 0)
-      : null;
 
-  if (uiKind === "cc_fcfs" && state === "cc_reward" && fcfsSlotsLabel) {
-    const slotsFull = campaignMeta
-      ? isFcfsSlotsFull(campaignMeta.remainingSlots, campaignMeta.maxWinners)
-      : fcfsSlotsLabel.toLowerCase().includes("ended");
+  // ── FCFS token: claimed / full ───────────────────────────────────
+  if (uiKind === "cc_fcfs" && state === "cc_reward") {
+    const slotsFull = isFcfsSlotsFull(
+      campaignMeta?.remainingSlots,
+      campaignMeta?.maxWinners,
+    );
     return (
-      <CampaignFcfsRewardCard
-        mode="status"
-        slotsLabel={fcfsSlotsLabel}
-        description={
-          slotsFull
-            ? "All reward slots are taken. Thanks for completing the campaign tasks."
-            : fcfsFeeHint
-        }
-      />
+      <div className="space-y-3">
+        {slotsFull ? (
+          <CampaignStatusRow tone="neutral" icon={Check} label="FCFS Reward">
+            Full claimed, all slots taken
+          </CampaignStatusRow>
+        ) : (
+          <CampaignStatusRow tone="emerald" icon={Check} label="FCFS Reward">
+            Claimed · sent to your wallet
+          </CampaignStatusRow>
+        )}
+      </div>
     );
   }
 
+  // ── Tidak terpilih / kehabisan slot ──────────────────────────────
   if (isUnluckyState(state)) {
+    if (state === "fcfs_missed" && uiKind === "cc_fcfs") {
+      return (
+        <CampaignStatusRow tone="neutral" icon={X} label="FCFS Reward">
+          Slots ran out before you claimed
+        </CampaignStatusRow>
+      );
+    }
     return (
-      <CampaignQuestStatusCard
-        tone="neutral"
-        label="Draw result"
-        title="Not selected this time"
-        description={
-          "You were not selected in the raffle draw. Thanks for participating — better luck on the next campaign."
-        }
-      />
+      <CampaignStatusRow tone="neutral" icon={X} label={notSelectedLabel(uiKind)}>
+        Not selected this time
+      </CampaignStatusRow>
     );
   }
 
+  // ── Invite code: pool kode habis ─────────────────────────────────
+  if (
+    uiKind === "waitlist_code" &&
+    state === "fcfs_claimable" &&
+    (campaignMeta?.codesRemaining ?? 0) <= 0
+  ) {
+    return (
+      <CampaignStatusRow tone="neutral" icon={X} label="Invite Code">
+        All codes have been claimed
+      </CampaignStatusRow>
+    );
+  }
+
+  // ── Waitlist email ────────────────────────────────────────────────
   if (uiKind === "waitlist_email" && state === "winner") {
     return (
-      <Card className="overflow-hidden p-8 text-center">
-        <div>
-          <PageTitle>Congratulations — you&apos;re selected!</PageTitle>
-          <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted-foreground)]">
-            {rewardStatus?.message ??
-              "You were selected in the draw. Check your email or the message below for next steps."}
-          </p>
-        </div>
-      </Card>
+      <CampaignStatusRow tone="emerald" icon={Check} label="Waitlist">
+        Selected · check your email
+      </CampaignStatusRow>
     );
   }
 
   if (uiKind === "waitlist_email" && state === "waitlist") {
     return (
-      <Card className="overflow-hidden p-8 text-center">
-        <div>
-          <PageTitle>You&apos;re on the waitlist</PageTitle>
-          <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted-foreground)]">
-            {rewardStatus?.message ??
-              "Your email is registered. We will contact you if you are selected."}
-          </p>
-        </div>
-      </Card>
+      <CampaignStatusRow tone="sky" icon={Sparkles} strokeWidth={ICON_SW} label="Waitlist">
+        Recorded · we&apos;ll email you at launch
+      </CampaignStatusRow>
     );
   }
 
+  // ── Claimable → ditangani claim section (baris WIN + tombol Claim) ──
   if (uiKind === "cc_manual_draw" && state === "fcfs_claimable") {
     return null;
   }
@@ -271,106 +276,78 @@ export function QuestSubmittedProof({
     return null;
   }
 
+  // ── Raffle: entry tercatat / menunggu draw ───────────────────────
   if (uiKind === "cc_and_code_raffle" && state === "waitlist") {
     return (
-      <CampaignQuestStatusCard
-        tone="sky"
-        label="Token + Code Raffle"
-        title="Entry recorded"
-        description="Winners will be announced after the event ends. You will receive both a token reward and an invite code."
-      />
-    );
-  }
-
-  if (uiKind === "cc_and_code_raffle" && state === "cc_reward") {
-    return (
-      <Card className="overflow-hidden p-6">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-canton">
-            Token Raffle
-          </p>
-          <p className="mt-0.5 text-base font-bold text-[var(--foreground)]">Reward claimed</p>
-        </div>
-        <div className="relative mt-4 space-y-3">
-          {/* Reward row */}
-          <div className="flex items-center gap-3 rounded-xl border border-canton-muted bg-canton-subtle px-4 py-3">
-            <span className="text-sm font-bold text-canton">+{formatRewardAmount(rewardCc ?? 0, token)} sent to your wallet</span>
-          </div>
-          {/* Invite code row — konsisten dengan claim card (RewardReveal). */}
-          {inviteCode ? (
-            <RewardReveal
-              inviteCode={inviteCode}
-              rewardType={rewardType}
-              redeemUrl={redeemUrl}
-              redeemInstructions={redeemInstructions}
-            />
-          ) : (
-            <p className="text-sm text-[var(--muted-foreground)]">
-              {rewardStatus?.message ?? `${formatRewardAmount(rewardCc ?? 0, token)} and your invite code have been sent.`}
-            </p>
-          )}
-        </div>
-      </Card>
+      <CampaignStatusRow tone="sky" icon={Hourglass} strokeWidth={ICON_SW} label="CC + Code Raffle">
+        Entry recorded · winners drawn at close
+      </CampaignStatusRow>
     );
   }
 
   if (uiKind === "cc_manual_draw" && state === "waitlist") {
     return (
-      <CampaignQuestStatusCard
-        tone="sky"
-        label="Quest submitted"
-        title="Entry recorded"
-        description="Winners will be announced after the event ends."
-      />
+      <CampaignStatusRow tone="sky" icon={Hourglass} strokeWidth={ICON_SW} label="Raffle Entry">
+        Recorded · winners drawn when the campaign ends
+      </CampaignStatusRow>
     );
   }
 
   if (uiKind === "cc_manual_draw" && state === "cc_reward") {
     return (
-      <CampaignQuestStatusCard
-        tone="emerald"
-        label="Token Raffle"
-        title="Reward claimed"
-        description={`${formatRewardAmount(rewardCc ?? 0, token)} has been sent to your wallet.`}
-      />
+      <CampaignStatusRow tone="emerald" icon={Check} label="Raffle Reward">
+        Claimed · sent to your wallet
+      </CampaignStatusRow>
+    );
+  }
+
+  if (uiKind === "cc_and_code_raffle" && state === "cc_reward") {
+    return (
+      <div className="space-y-3">
+        <CampaignStatusRow tone="emerald" icon={Check} label="CC + Code Raffle">
+          Claimed · token sent + code below
+        </CampaignStatusRow>
+        {inviteCode ? (
+          <RewardReveal
+            inviteCode={inviteCode}
+            rewardType={rewardType}
+            redeemUrl={redeemUrl}
+            redeemInstructions={redeemInstructions}
+          />
+        ) : (
+          <p className="text-sm text-[var(--muted-foreground)]">
+            {rewardStatus?.message ??
+              `${formatRewardAmount(rewardCc ?? 0, token)} has been sent to your wallet.`}
+          </p>
+        )}
+      </div>
     );
   }
 
   if (uiKind === "cc_manual" && state === "cc_reward") {
     return (
-      <Card className="overflow-hidden p-8 text-center">
-        <div>
-          <PageTitle>Campaign complete</PageTitle>
-          <p className="mx-auto mt-3 max-w-md text-sm font-medium text-[var(--muted-foreground)]">
-            {rewardStatus?.message ??
-              `${formatRewardAmount(rewardCc ?? 0, token)} will be sent manually by the team via bulk sender. Watch your wallet and email.`}
-          </p>
-        </div>
-      </Card>
+      <CampaignStatusRow tone="emerald" icon={Check} label="Reward">
+        Will be sent manually by the team · watch your wallet
+      </CampaignStatusRow>
     );
   }
 
   if (state === "pending_draw") {
-    const pendingDescription =
-      uiKind === "cc_manual_draw"
-        ? "The event has ended. Winners will be announced after the admin runs the draw."
-        : "The admin will run the random draw. Your reward will appear here if you are selected.";
     return (
-      <CampaignQuestStatusCard
-        tone="amber"
-        label="Draw pending"
-        title="Submitted — awaiting draw"
-        description={pendingDescription}
-      />
+      <CampaignStatusRow tone="amber" icon={Clock} strokeWidth={ICON_SW} label="Raffle Draw">
+        {uiKind === "cc_manual_draw"
+          ? "Campaign ended · awaiting winner draw"
+          : "Awaiting winner draw"}
+      </CampaignStatusRow>
     );
   }
 
   return (
     <div className="space-y-6">
         {uiKind === "waitlist_code" && state === "winner" && inviteCode ? (
-          <p className={cn("rounded-2xl px-6 py-4 text-center text-sm font-medium", successBannerClass)}>
-            {t("earnCampaigns.congratsWinnerCode")}
-          </p>
+          <CampaignStatusRow tone="emerald" icon={Ticket} strokeWidth={ICON_SW} label="Invite Code">
+            Claimed · save your code below
+          </CampaignStatusRow>
         ) : null}
 
         {(inviteCode || showCcReward) && uiKind !== "cc_fcfs" ? (

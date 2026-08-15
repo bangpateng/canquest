@@ -3,10 +3,12 @@
 import { useState } from "react";
 import type { CampaignMeta } from "@/lib/canton/campaign-reward";
 import { CampaignClaimCta } from "@/components/app/campaign/campaign-fcfs-reward-card";
+import { CampaignStatusRow } from "@/components/app/campaign/campaign-status-row";
 import { ClaimDetailsModal } from "@/components/app/campaign/claim-details-modal";
 import { RewardReveal } from "@/components/app/campaign/reward-reveal";
 import { useTransactionStatus } from "@/lib/tx/transaction-status";
 import { FCFS_CLAIM_FAIL_MSG } from "@/lib/campaign/claim-messages";
+import { Trophy } from "lucide-react";
 
 /** "Aug 14, 21:39" — compact end date for the claim-details rows. */
 function formatEndMeta(endsAt: string | null | undefined): string | null {
@@ -105,6 +107,14 @@ export function CampaignInviteClaimSection({
 
   return (
     <div className="space-y-3">
+      {/* Baris WIN untuk code raffle (INVITE_CODE_RANDOM); FCFS code tidak
+          menampilkan baris ini (bukan undian). */}
+      {rewardType === "INVITE_CODE_RANDOM" ? (
+        <CampaignStatusRow tone="emerald" icon={Trophy} strokeWidth={2.4} label="Code Raffle">
+          You won · claim your invite code below
+        </CampaignStatusRow>
+      ) : null}
+
       {/* Cukup tombol Claim — rincian (fee/codes) ada di modal. */}
       <CampaignClaimCta
         label={codes > 0 ? "Claim" : "No codes left"}

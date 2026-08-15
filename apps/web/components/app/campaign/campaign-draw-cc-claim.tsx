@@ -3,10 +3,12 @@
 import type { CampaignMeta } from "@/lib/canton/campaign-reward";
 import { formatRewardAmount } from "@/lib/canton/campaign-reward";
 import { CampaignClaimCta } from "@/components/app/campaign/campaign-fcfs-reward-card";
+import { CampaignStatusRow } from "@/components/app/campaign/campaign-status-row";
 import { ClaimDetailsModal } from "@/components/app/campaign/claim-details-modal";
 import { useTransactionStatus } from "@/lib/tx/transaction-status";
 import { CLAIM_FAIL_MSG } from "@/lib/campaign/claim-messages";
 import { normalizeRewardToken, type RewardTokenSymbol } from "@/lib/quest/quest-types";
+import { Trophy } from "lucide-react";
 import { useState } from "react";
 
 /** "Aug 14, 21:39" — compact end date for the claim-details rows. */
@@ -113,7 +115,12 @@ export function CampaignDrawCcClaimSection({
   }
 
   return (
-    <>
+    <div className="space-y-3">
+      {/* Baris WIN (state fcfs_claimable) — pemenang ditarik admin, belum claim. */}
+      <CampaignStatusRow tone="emerald" icon={Trophy} strokeWidth={2.4} label="Raffle Result">
+        You won · claim your reward below
+      </CampaignStatusRow>
+
       {/* Cukup tombol Claim — rincian (fee/reward) ada di modal. */}
       <CampaignClaimCta
         label={`Claim ${formatRewardAmount(rewardCc, token)}`}
@@ -146,6 +153,6 @@ export function CampaignDrawCcClaimSection({
           void handleClaim();
         }}
       />
-    </>
+    </div>
   );
 }
