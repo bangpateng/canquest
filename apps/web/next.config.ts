@@ -26,11 +26,6 @@ const nextConfig: NextConfig = {
       {
         protocol: "https",
         hostname: "api.canquest.cc",
-        pathname: "/quest-media/**",
-      },
-      {
-        protocol: "https",
-        hostname: "api.canquest.cc",
         pathname: "/api/uploads/quests/**",
       },
       {

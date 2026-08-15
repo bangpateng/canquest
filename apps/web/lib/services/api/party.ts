@@ -12,24 +12,6 @@ export function getLedgerStatus() {
   });
 }
 
-export function setUsername(username: string) {
-  return apiFetch('/api/party/username', {
-    method: 'POST',
-    json: { username },
-  });
-}
-
 export function allocateParty() {
   return apiFetch('/api/party/allocate', { method: 'POST' });
-}
-
-export function sendCc(body: Record<string, unknown>) {
-  return apiFetch('/api/party/send-cc', {
-    method: 'POST',
-    json: body,
-  });
-}
-
-export function getTransactions(page: number, pageSize: number) {
-  return apiFetch(`/api/party/transactions?page=${page}&pageSize=${pageSize}`);
 }

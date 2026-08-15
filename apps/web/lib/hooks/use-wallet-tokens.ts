@@ -34,7 +34,7 @@ export function usePools(opts?: {
 }
 
 /**
- * Semua saldo (CC + token non-CC) dari satu endpoint (GET /api/party/balances).
+ * Semua saldo (CC + token non-CC) dari satu endpoint (GET /api/party/balance).
  *
  * Sama seperti usePools: key dishared → dedup antar TokenList & WalletActions.
  */

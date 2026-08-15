@@ -1,6 +1,7 @@
 /**
- * Isolated API client — all browser → Next BFF calls go through here.
- * Does not change endpoints, payloads, or cookie behavior.
+ * Shared API client untuk layer services (lib/services/api/*).
+ * Menambahkan JSON helper, ApiError, dan sinyal maintenance 503.
+ * Catatan: sebagian komponen lama masih memakai fetch() langsung.
  */
 
 export type ApiFetchOptions = RequestInit & {

@@ -49,7 +49,7 @@ export interface PoolsResponse {
 }
 
 /**
- * Shape response GET /api/party/balances.
+ * Shape response GET /api/party/balance.
  * `tokens` = map balance keyed by instrumentId (lowercase) → decimal string.
  *
  * Authoritative: saldo token di-read on-chain (ledger). CC baca CcBalance.
