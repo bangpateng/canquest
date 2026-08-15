@@ -1,6 +1,10 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
-import { CQ_ACCESS_COOKIE } from '@/lib/auth/auth-cookies';
+import {
+  CQ_ACCESS_COOKIE,
+  CQ_REFRESH_COOKIE,
+  setAuthCookies,
+} from '@/lib/auth/auth-cookies';
 import { internalApiBase } from '@/lib/api/internal-api-url';
 
 async function upstreamToNext(upstream: Response): Promise<NextResponse> {
@@ -53,13 +57,42 @@ export async function nestWithAccessCookie(
 
   const timeoutMs = options?.upstreamTimeoutMs ?? 15_000;
 
-  try {
-    const upstream = await fetch(url, {
+  const fetchUpstream = (bearer: string): Promise<Response> => {
+    const upstreamHeaders = new Headers(headers);
+    upstreamHeaders.set('Authorization', `Bearer ${bearer}`);
+    return fetch(url, {
       ...init,
-      headers,
+      headers: upstreamHeaders,
       cache: 'no-store',
       signal: init.signal ?? AbortSignal.timeout(timeoutMs),
     });
+  };
+
+  try {
+    let upstream = await fetchUpstream(token);
+
+    // Access token expired (15 menit) → tukar cq_refresh ke Nest sekali, retry 1x.
+    // Melindungi SEMUA BFF route dari logout paksa — client tidak perlu tahu.
+    if (upstream.status === 401) {
+      const refreshToken = req.cookies.get(CQ_REFRESH_COOKIE)?.value;
+      // Body stream tidak bisa dikirim ulang; BFF routes selalu pass string body.
+      const bodyRetriable =
+        init.body === undefined ||
+        typeof init.body === 'string' ||
+        init.body instanceof ArrayBuffer;
+
+      if (refreshToken && bodyRetriable) {
+        const refreshed = await refreshSingleFlight(refreshToken);
+        if (refreshed) {
+          upstream = await fetchUpstream(refreshed.accessToken);
+          const out = await upstreamToNext(upstream);
+          // Rotasi cookie sesi (access 15m + refresh 30d) untuk request berikutnya.
+          setAuthCookies(out, refreshed.accessToken, refreshed.refreshToken);
+          return out;
+        }
+      }
+    }
+
     return upstreamToNext(upstream);
   } catch (err) {
     const isTimeout =
@@ -81,5 +114,46 @@ export async function nestWithAccessCookie(
       { ok: false, message: 'Upstream API unavailable' },
       { status: 502 },
     );
+  }
+}
+
+type RefreshedTokens = { accessToken: string; refreshToken: string };
+
+/** Single-flight: banyak 401 paralel → satu round-trip refresh saja. */
+let inflightRefresh: Promise<RefreshedTokens | null> | null = null;
+
+function refreshSingleFlight(refreshToken: string): Promise<RefreshedTokens | null> {
+  if (!inflightRefresh) {
+    inflightRefresh = refreshSession(refreshToken).finally(() => {
+      inflightRefresh = null;
+    });
+  }
+  return inflightRefresh;
+}
+
+async function refreshSession(refreshToken: string): Promise<RefreshedTokens | null> {
+  try {
+    const res = await fetch(`${internalApiBase()}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+      cache: 'no-store',
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json().catch(() => null)) as {
+      accessToken?: unknown;
+      refreshToken?: unknown;
+    } | null;
+    if (
+      data &&
+      typeof data.accessToken === 'string' &&
+      typeof data.refreshToken === 'string'
+    ) {
+      return { accessToken: data.accessToken, refreshToken: data.refreshToken };
+    }
+    return null;
+  } catch {
+    return null;
   }
 }
