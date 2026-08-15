@@ -1,16 +1,13 @@
 import {
   Body,
   Controller,
-  Get,
   InternalServerErrorException,
   Logger,
   Post,
   Req,
   ServiceUnavailableException,
   UnauthorizedException,
-  UseGuards,
 } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
 import type { Request } from 'express';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -19,9 +16,6 @@ import { timingSafeEqual } from 'crypto';
 import * as bcrypt from 'bcrypt';
 
 import { AdminLoginDto } from './dto/admin-login.dto';
-
-type AdminReqUser = { adminPanel: true; email: string };
-type AdminAuthedReq = Request & { user: AdminReqUser };
 
 /**
  * Constant-time string comparison to avoid leaking the length/prefix of the
@@ -115,7 +109,7 @@ export class AdminAuthController {
           [
             'Admin panel credentials are not configured.',
             'Production requires ADMIN_PANEL_EMAIL + ADMIN_PANEL_PASSWORD_HASH (bcrypt).',
-            'Generate a hash: node -e "console.log(require(\'bcrypt\').hashSync(\'YOUR_PASSWORD\', 12))"',
+            "Generate a hash: node -e \"console.log(require('bcrypt').hashSync('YOUR_PASSWORD', 12))\"",
             'Set them in apps/api/.env or ensure no empty OS-level env duplicates those names, then restart the API.',
           ].join(' '),
         );
@@ -196,12 +190,5 @@ export class AdminAuthController {
       // Reset the counter so a new window starts after the lockout expires.
       this.failedAttempts.delete(key);
     }
-  }
-
-  /** Check whether the Bearer token is a valid panel session. */
-  @Get('me')
-  @UseGuards(AuthGuard('admin-jwt'))
-  me(@Req() req: AdminAuthedReq) {
-    return { ok: true, email: req.user.email };
   }
 }

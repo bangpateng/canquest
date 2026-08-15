@@ -33,7 +33,7 @@ import { QuestLedgerService } from '../canton/quest-ledger.service';
           throw new Error(
             'ADMIN_JWT_SECRET must differ from JWT_ACCESS_SECRET — ' +
               'a shared secret defeats key separation. Generate a unique ' +
-              'ADMIN_JWT_SECRET (node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'hex\'))").',
+              "ADMIN_JWT_SECRET (node -e \"console.log(require('crypto').randomBytes(48).toString('hex'))\").",
           );
         }
         return {

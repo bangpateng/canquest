@@ -7,7 +7,7 @@
  * Shared util — dipakai PartyController + CantonPriceService (agar key price
  * map konsisten dengan daftar token di /pools).
  */
-export const VISIBLE_INSTRUMENTS = new Set([
+const VISIBLE_INSTRUMENTS = new Set([
   'AMULET', // CC / Canton Coin
   'USDCX',
   'CBTC',
@@ -25,7 +25,7 @@ export function isVisibleInstrument(id: string): boolean {
  *
  * Dipakai endpoint GET /pools (token picker swap).
  */
-export const SWAP_INSTRUMENTS = new Set([
+const SWAP_INSTRUMENTS = new Set([
   'AMULET', // CC / Canton Coin
   'USDCX',
 ]);

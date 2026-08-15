@@ -22,10 +22,7 @@
 export const ROLLING_24H_MS = 24 * 60 * 60 * 1000;
 
 /** Returns true if `lastAt` is less than 24h before `now` (still on cooldown). */
-export function isWithin24h(
-  lastAt: Date,
-  now: Date = new Date(),
-): boolean {
+export function isWithin24h(lastAt: Date, now: Date = new Date()): boolean {
   return now.getTime() - lastAt.getTime() < ROLLING_24H_MS;
 }
 
@@ -44,9 +41,7 @@ export function startOfTodayUtc(now: Date = new Date()): Date {
   );
 }
 
-/** Milliseconds remaining until the next 00:00 UTC boundary. */
-export function msUntilNextUtcDay(now: Date = new Date()): number {
-  const next = startOfTodayUtc(now);
-  next.setUTCDate(next.getUTCDate() + 1);
-  return Math.max(0, next.getTime() - now.getTime());
+/** Async sleep — pengganti inline `new Promise((r) => setTimeout(r, ms))`. */
+export function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
 }

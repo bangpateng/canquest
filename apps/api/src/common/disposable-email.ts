@@ -244,7 +244,7 @@ export function getDomainFromEmail(email: string | null | undefined): string {
  * true jika domain email termasuk provider sekali-pakai yang diblokir.
  * Aman dipanggil dengan input apa pun (mengembalikan false untuk input tak valid).
  */
-export function isDisposableEmail(email: string | null | undefined): boolean {
+function isDisposableEmail(email: string | null | undefined): boolean {
   const domain = getDomainFromEmail(email);
   if (!domain) return false;
   return DISPOSABLE_EMAIL_DOMAINS.has(domain);

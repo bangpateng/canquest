@@ -365,7 +365,8 @@ export class QuestLedgerService implements OnModuleInit {
         }
         const obj = cur as Record<string, unknown>;
         const cid = typeof obj.contractId === 'string' ? obj.contractId : null;
-        const tplId = typeof obj.templateId === 'string' ? obj.templateId : null;
+        const tplId =
+          typeof obj.templateId === 'string' ? obj.templateId : null;
         if (cid && tplId && tplId.endsWith(suffix) && !seen.has(cid)) {
           cids.push(cid);
           seen.add(cid);
@@ -392,10 +393,10 @@ export class QuestLedgerService implements OnModuleInit {
 
   async registerWallet(params: {
     userPartyId: string;
-    userId: string;        // v28: utk userProfileRef "user:<userId>"
-    username: string;      // utk log + commandId (tidak dikirim ke ledger)
+    userId: string; // v28: utk userProfileRef "user:<userId>"
+    username: string; // utk log + commandId (tidak dikirim ke ledger)
     partyId: string;
-    inviteCode: string;    // tetap di DB, TIDAK on-chain (v28)
+    inviteCode: string; // tetap di DB, TIDAK on-chain (v28)
   }): Promise<WalletRegistrationLedgerResult> {
     const result: WalletRegistrationLedgerResult = {
       ledgerEnabled: false,
@@ -425,9 +426,7 @@ export class QuestLedgerService implements OnModuleInit {
     await this.ledger
       .grantUserRights(params.userPartyId)
       .catch((err) =>
-        this.logger.warn(
-          `grantUserRights(user) failed: ${String(err)}`,
-        ),
+        this.logger.warn(`grantUserRights(user) failed: ${String(err)}`),
       );
 
     // Idempotency: jika WalletRegistration utk user ini sudah ada, return langsung.
@@ -602,7 +601,7 @@ export class QuestLedgerService implements OnModuleInit {
         maxWinners: this.intStr(params.maxWinners),
         currentClaims: this.intStr(0),
         status: 'ACTIVE',
-        eligibilityType: params.eligibilityType ?? 'NONE',         // v25
+        eligibilityType: params.eligibilityType ?? 'NONE', // v25
         eligibilityAmount: this.dec(params.eligibilityAmount ?? 0), // v25
         createdAt: new Date().toISOString(),
       },
@@ -630,21 +629,28 @@ export class QuestLedgerService implements OnModuleInit {
   async createCampaignEligibility(params: {
     userPartyId: string;
     campaignId: string;
-    campaignCreatedAt: string;       // ISO timestamp campaign dibuat (utk lock-after guard)
+    campaignCreatedAt: string; // ISO timestamp campaign dibuat (utk lock-after guard)
     eligibilityType: 'LOCK_CC' | 'POINTS';
-    amount: number;                  // CC locked (LOCK_CC) atau points (POINTS)
-    lockedAt: string | null;         // ISO kapan user lock CC (LOCK_CC); null bila POINTS
-    expiresAt: string;               // ISO eligibility berlaku sampai kapan
+    amount: number; // CC locked (LOCK_CC) atau points (POINTS)
+    lockedAt: string | null; // ISO kapan user lock CC (LOCK_CC); null bila POINTS
+    expiresAt: string; // ISO eligibility berlaku sampai kapan
   }): Promise<{ ok: boolean; contractId: string | null; errors: string[] }> {
     if (!this.isClaimSessionConfigured())
-      return { ok: false, contractId: null, errors: ['Claim session ledger disabled'] };
+      return {
+        ok: false,
+        contractId: null,
+        errors: ['Claim session ledger disabled'],
+      };
     const tpl = this.templateId(TPL.CampaignEligibility);
     const operator = this.operatorPartyId;
     if (!operator)
-      return { ok: false, contractId: null, errors: ['Canton operator party not configured'] };
+      return {
+        ok: false,
+        contractId: null,
+        errors: ['Canton operator party not configured'],
+      };
     const reachErr = await this.ensureReachable();
-    if (reachErr)
-      return { ok: false, contractId: null, errors: [reachErr] };
+    if (reachErr) return { ok: false, contractId: null, errors: [reachErr] };
     try {
       const res = await this.ledger.createContract(
         tpl,
@@ -668,7 +674,10 @@ export class QuestLedgerService implements OnModuleInit {
         );
         return { ok: true, contractId: res.contractId, errors: [] };
       }
-      const err = this.formatLedgerError(res.error, 'Failed to create CampaignEligibility');
+      const err = this.formatLedgerError(
+        res.error,
+        'Failed to create CampaignEligibility',
+      );
       this.logger.warn(`CampaignEligibility fail: ${err}`);
       return { ok: false, contractId: null, errors: [err] };
     } catch (err) {
@@ -682,9 +691,9 @@ export class QuestLedgerService implements OnModuleInit {
     campaignContractId: string;
     userPartyId: string;
     claimId: string;
-    rewardSenderPartyId: string;   // v24: party reward wallet (CANTON_REWARD_PARTY_ID)
-                                    // dikirim ke ClaimSlot choice → set field rewardSender
-                                    // di QuestClaimReceipt → jadi co-controller Settle.
+    rewardSenderPartyId: string; // v24: party reward wallet (CANTON_REWARD_PARTY_ID)
+    // dikirim ke ClaimSlot choice → set field rewardSender
+    // di QuestClaimReceipt → jadi co-controller Settle.
     /** v25: DAML CampaignEligibility contract id (utk fetch guard on-chain).
      *  Null bila quest eligibilityType=NONE (tidak perlu eligibility check). */
     eligibilityCid?: string | null;
@@ -716,7 +725,7 @@ export class QuestLedgerService implements OnModuleInit {
         user: params.userPartyId,
         claimId: params.claimId,
         claimedAt: new Date().toISOString(),
-        rewardSender: params.rewardSenderPartyId,   // v24: co-controller Settle
+        rewardSender: params.rewardSenderPartyId, // v24: co-controller Settle
         eligibilityCid: params.eligibilityCid ?? null, // v25: Optional (nullable)
       },
       [operator],
@@ -729,8 +738,14 @@ export class QuestLedgerService implements OnModuleInit {
       // di transaction tree response tidak dijamin. Sebelumnya pakai cids[0/1]
       // → kadang dapat QuestCampaign sbg claimContractId → Settle gagal
       // WRONGLY_TYPED_CONTRACT ("Expected QuestClaimReceipt but got QuestCampaign").
-      const campaignCids = this.extractContractIdsByTemplate(text, TPL.QuestCampaign);
-      const claimCids = this.extractContractIdsByTemplate(text, TPL.QuestClaimReceipt);
+      const campaignCids = this.extractContractIdsByTemplate(
+        text,
+        TPL.QuestCampaign,
+      );
+      const claimCids = this.extractContractIdsByTemplate(
+        text,
+        TPL.QuestClaimReceipt,
+      );
       result.campaignContractId = campaignCids[0] ?? null;
       result.claimContractId = claimCids[0] ?? null;
       this.logger.log(
@@ -752,7 +767,7 @@ export class QuestLedgerService implements OnModuleInit {
     userPartyId: string;
     claimId: string;
     rewardCode?: string;
-    rewardSenderPartyId: string;   // v24: party reward wallet (CANTON_REWARD_PARTY_ID)
+    rewardSenderPartyId: string; // v24: party reward wallet (CANTON_REWARD_PARTY_ID)
     /** v25: DAML CampaignEligibility contract id. Null bila NONE. */
     eligibilityCid?: string | null;
   }): Promise<QuestClaimLedgerResult> {
@@ -784,7 +799,7 @@ export class QuestLedgerService implements OnModuleInit {
         claimId: params.claimId,
         rewardCode: params.rewardCode ?? '',
         drawnAt: new Date().toISOString(),
-        rewardSender: params.rewardSenderPartyId,   // v24: co-controller Settle
+        rewardSender: params.rewardSenderPartyId, // v24: co-controller Settle
         eligibilityCid: params.eligibilityCid ?? null, // v25: Optional (nullable)
       },
       [operator],
@@ -793,14 +808,18 @@ export class QuestLedgerService implements OnModuleInit {
     );
     if (ok) {
       // FIX: extract by templateId (bukan urutan) — sama bug dgn claimFcfsSlot.
-      const campaignCids = this.extractContractIdsByTemplate(text, TPL.QuestCampaign);
-      const claimCids = this.extractContractIdsByTemplate(text, TPL.QuestClaimReceipt);
+      const campaignCids = this.extractContractIdsByTemplate(
+        text,
+        TPL.QuestCampaign,
+      );
+      const claimCids = this.extractContractIdsByTemplate(
+        text,
+        TPL.QuestClaimReceipt,
+      );
       result.campaignContractId = campaignCids[0] ?? null;
       result.claimContractId = claimCids[0] ?? null;
     } else {
-      result.errors.push(
-        this.formatLedgerError(text, 'DrawWinner failed'),
-      );
+      result.errors.push(this.formatLedgerError(text, 'DrawWinner failed'));
     }
     return result;
   }
@@ -864,25 +883,31 @@ export class QuestLedgerService implements OnModuleInit {
    *     bila settleAtomic dipakai (double-transfer). Fallback path di-belakang flag.
    */
   async settleAtomic(params: {
-    claimContractId: string;          // QuestClaimReceipt PRE_SETTLE
-    userPartyId: string;              // sender fee leg, receiver reward leg
-    feeReceiverPartyId: string;       // CANTON_FEE_RECIPIENT_PARTY_ID
-    feeAmount: number;                // CC amount (claimFeeCc)
-    rewardSenderPartyId: string;      // CANTON_REWARD_PARTY_ID (skip bila rewardAmount=0)
-    rewardAmount: number;             // 0 untuk kode claim → reward=None
+    claimContractId: string; // QuestClaimReceipt PRE_SETTLE
+    userPartyId: string; // sender fee leg, receiver reward leg
+    feeReceiverPartyId: string; // CANTON_FEE_RECIPIENT_PARTY_ID
+    feeAmount: number; // CC amount (claimFeeCc)
+    rewardSenderPartyId: string; // CANTON_REWARD_PARTY_ID (skip bila rewardAmount=0)
+    rewardAmount: number; // 0 untuk kode claim → reward=None
     rewardToken: 'CC' | 'USDCx';
-    rewardInstrumentId?: string;      // resolve caller utk USDCx (CC default Amulet)
-    rewardInstrumentAdmin?: string;   // resolve caller utk USDCx (CC default DSO)
+    rewardInstrumentId?: string; // resolve caller utk USDCx (CC default Amulet)
+    rewardInstrumentAdmin?: string; // resolve caller utk USDCx (CC default DSO)
     featuredAppRightCid?: string | null;
     appProviderPartyId?: string;
   }): Promise<{
     ok: boolean;
-    settledCid: string | null;        // QuestClaimReceipt SETTLED baru
-    updateId: string | null;          // Canton tx id (utk recordTxId)
+    settledCid: string | null; // QuestClaimReceipt SETTLED baru
+    updateId: string | null; // Canton tx id (utk recordTxId)
     errors: string[];
   }> {
-    const fail = (errors: string[]) => ({ ok: false, settledCid: null, updateId: null, errors });
-    if (!this.isClaimSessionConfigured()) return fail(['Claim session ledger disabled']);
+    const fail = (errors: string[]) => ({
+      ok: false,
+      settledCid: null,
+      updateId: null,
+      errors,
+    });
+    if (!this.isClaimSessionConfigured())
+      return fail(['Claim session ledger disabled']);
     const tpl = this.templateId(TPL.QuestClaimReceipt);
     const operator = this.operatorPartyId;
     if (!operator) return fail(['Canton operator party not configured']);
@@ -892,15 +917,24 @@ export class QuestLedgerService implements OnModuleInit {
     try {
       const now = new Date();
       const nowIso = now.toISOString();
-      const executeBefore = new Date(now.getTime() + 24 * 3600 * 1000).toISOString();
+      const executeBefore = new Date(
+        now.getTime() + 24 * 3600 * 1000,
+      ).toISOString();
       const hasReward = params.rewardAmount > 0;
 
       // ── FEE leg: user → feeReceiver (CC Amulet, selalu jalan) ──────────────
       const feeInstrumentAdmin = dso;
-      const feeHoldings = await this.ledger.queryAmuletHoldings(params.userPartyId);
-      const feeInputCids = this.greedyFillHoldings(feeHoldings, params.feeAmount);
+      const feeHoldings = await this.ledger.queryAmuletHoldings(
+        params.userPartyId,
+      );
+      const feeInputCids = this.greedyFillHoldings(
+        feeHoldings,
+        params.feeAmount,
+      );
       if (feeInputCids.length === 0) {
-        return fail([`Insufficient Amulet holdings for fee ${params.feeAmount} CC (user=${params.userPartyId.split('::')[0]})`]);
+        return fail([
+          `Insufficient Amulet holdings for fee ${params.feeAmount} CC (user=${params.userPartyId.split('::')[0]})`,
+        ]);
       }
       const feeTransfer = {
         sender: params.userPartyId,
@@ -914,7 +948,11 @@ export class QuestLedgerService implements OnModuleInit {
         meta: { values: {} },
       };
       const feeRegistry = await this.ledger.callTransferFactoryRegistry(
-        { expectedAdmin: feeInstrumentAdmin, transfer: feeTransfer, extraArgs: { context: { values: {} }, meta: { values: {} } } },
+        {
+          expectedAdmin: feeInstrumentAdmin,
+          transfer: feeTransfer,
+          extraArgs: { context: { values: {} }, meta: { values: {} } },
+        },
         feeInstrumentAdmin,
       );
       if (!feeRegistry) {
@@ -922,24 +960,40 @@ export class QuestLedgerService implements OnModuleInit {
       }
 
       // ── REWARD leg (optional, hanya bila hasReward) ────────────────────────
-      let rewardRegistry: { factoryId: string; choiceContextData: Record<string, unknown>; disclosedContracts: unknown[] } | null = null;
+      let rewardRegistry: {
+        factoryId: string;
+        choiceContextData: Record<string, unknown>;
+        disclosedContracts: unknown[];
+      } | null = null;
       let rewardTransfer: Record<string, unknown> | null = null;
       if (hasReward) {
         const rewardInstrumentId = params.rewardInstrumentId ?? 'Amulet';
         const rewardInstrumentAdmin = params.rewardInstrumentAdmin ?? dso;
         // Reward sender holdings (reward wallet)
-        const rewardHoldings = rewardInstrumentId.toLowerCase() === 'amulet'
-          ? await this.ledger.queryAmuletHoldings(params.rewardSenderPartyId)
-          : await this.ledger.getTokenHoldingCids(params.rewardSenderPartyId, rewardInstrumentId);
-        const rewardInputCids = this.greedyFillHoldings(rewardHoldings, params.rewardAmount);
+        const rewardHoldings =
+          rewardInstrumentId.toLowerCase() === 'amulet'
+            ? await this.ledger.queryAmuletHoldings(params.rewardSenderPartyId)
+            : await this.ledger.getTokenHoldingCids(
+                params.rewardSenderPartyId,
+                rewardInstrumentId,
+              );
+        const rewardInputCids = this.greedyFillHoldings(
+          rewardHoldings,
+          params.rewardAmount,
+        );
         if (rewardInputCids.length === 0) {
-          return fail([`Insufficient ${rewardInstrumentId} holdings for reward ${params.rewardAmount} (sender=${params.rewardSenderPartyId.split('::')[0]})`]);
+          return fail([
+            `Insufficient ${rewardInstrumentId} holdings for reward ${params.rewardAmount} (sender=${params.rewardSenderPartyId.split('::')[0]})`,
+          ]);
         }
         rewardTransfer = {
           sender: params.rewardSenderPartyId,
           receiver: params.userPartyId,
           amount: params.rewardAmount.toFixed(10),
-          instrumentId: { admin: rewardInstrumentAdmin, id: rewardInstrumentId },
+          instrumentId: {
+            admin: rewardInstrumentAdmin,
+            id: rewardInstrumentId,
+          },
           lock: null,
           requestedAt: nowIso,
           executeBefore,
@@ -947,11 +1001,17 @@ export class QuestLedgerService implements OnModuleInit {
           meta: { values: {} },
         };
         rewardRegistry = await this.ledger.callTransferFactoryRegistry(
-          { expectedAdmin: rewardInstrumentAdmin, transfer: rewardTransfer, extraArgs: { context: { values: {} }, meta: { values: {} } } },
+          {
+            expectedAdmin: rewardInstrumentAdmin,
+            transfer: rewardTransfer,
+            extraArgs: { context: { values: {} }, meta: { values: {} } },
+          },
           rewardInstrumentAdmin,
         );
         if (!rewardRegistry) {
-          return fail(['Reward leg: callTransferFactoryRegistry returned null']);
+          return fail([
+            'Reward leg: callTransferFactoryRegistry returned null',
+          ]);
         }
       }
 
@@ -971,16 +1031,21 @@ export class QuestLedgerService implements OnModuleInit {
       // ExtraArgs record butuh context + meta eksplisit (non-optional).
       // choiceContextData dari registry bisa null utk direct transfer →
       // default ke { values: {} } (pattern sama executeTransferFactoryTransfer line 597).
-      const opt = <T,>(v: T | null | undefined) => (v == null ? null : v);
+      const opt = <T>(v: T | null | undefined) => (v == null ? null : v);
       const safeContext = (ctx: Record<string, unknown> | null | undefined) =>
-        ctx && typeof ctx === 'object' && Object.keys(ctx).length > 0 ? ctx : { values: {} };
+        ctx && typeof ctx === 'object' && Object.keys(ctx).length > 0
+          ? ctx
+          : { values: {} };
       const feeExtraArgs = {
         context: safeContext(feeRegistry.choiceContextData),
         meta: { values: {} },
       };
       const rewardExtraArgs = opt(
         rewardRegistry
-          ? { context: safeContext(rewardRegistry.choiceContextData), meta: { values: {} } }
+          ? {
+              context: safeContext(rewardRegistry.choiceContextData),
+              meta: { values: {} },
+            }
           : null,
       );
       const choiceArgument: Record<string, unknown> = {
@@ -1009,7 +1074,8 @@ export class QuestLedgerService implements OnModuleInit {
 
       // ── disclosedContracts: concat fee + reward registry ───────────────────
       const disclosedContracts: unknown[] = [...feeRegistry.disclosedContracts];
-      if (rewardRegistry) disclosedContracts.push(...rewardRegistry.disclosedContracts);
+      if (rewardRegistry)
+        disclosedContracts.push(...rewardRegistry.disclosedContracts);
 
       // ── Submit Settle choice ────────────────────────────────────────────────
       const commandId = `settle-${params.claimContractId.slice(0, 16)}-${randomUUID()}`;
@@ -1019,10 +1085,19 @@ export class QuestLedgerService implements OnModuleInit {
         this.logger.debug(
           `SETTLE_DEBUG payload: ${JSON.stringify({
             feeFactoryCid: feeRegistry.factoryId.slice(0, 16),
-            feeTransfer: { sender: String(feeTransfer.sender).split('::')[0], receiver: String(feeTransfer.receiver).split('::')[0], meta_keys: Object.keys(feeTransfer.meta ?? {}) },
+            feeTransfer: {
+              sender: String(feeTransfer.sender).split('::')[0],
+              receiver: String(feeTransfer.receiver).split('::')[0],
+              meta_keys: Object.keys(feeTransfer.meta ?? {}),
+            },
             feeExtraArgs: feeExtraArgs,
             rewardFactoryCid: rewardRegistry?.factoryId?.slice(0, 16) ?? null,
-            rewardTransfer: rewardTransfer ? { sender: String(rewardTransfer.sender).split('::')[0], meta_keys: Object.keys(rewardTransfer.meta ?? {}) } : null,
+            rewardTransfer: rewardTransfer
+              ? {
+                  sender: String(rewardTransfer.sender).split('::')[0],
+                  meta_keys: Object.keys(rewardTransfer.meta ?? {}),
+                }
+              : null,
             rewardExtraArgs: rewardExtraArgs,
             feeCtxRaw: feeRegistry.choiceContextData,
             rewardCtxRaw: rewardRegistry?.choiceContextData ?? null,
@@ -1074,12 +1149,14 @@ export class QuestLedgerService implements OnModuleInit {
   async recordTxId(params: {
     settledContractId: string;
     feeTxId: string;
-    rewardTxId: string | null;   // v25: null bila kode claim (reward=0), DAML Optional Text
+    rewardTxId: string | null; // v25: null bila kode claim (reward=0), DAML Optional Text
   }): Promise<{ ok: boolean; errors: string[] }> {
-    if (!this.isClaimSessionConfigured()) return { ok: false, errors: ['Claim session ledger disabled'] };
+    if (!this.isClaimSessionConfigured())
+      return { ok: false, errors: ['Claim session ledger disabled'] };
     const tpl = this.templateId(TPL.QuestClaimReceipt);
     const operator = this.operatorPartyId;
-    if (!operator) return { ok: false, errors: ['Canton operator party not configured'] };
+    if (!operator)
+      return { ok: false, errors: ['Canton operator party not configured'] };
     try {
       const { ok, text } = await this.ledger.exerciseChoice(
         params.settledContractId,
@@ -1091,7 +1168,9 @@ export class QuestLedgerService implements OnModuleInit {
         'submit-and-wait-for-transaction-tree',
       );
       if (ok) {
-        this.logger.log(`RecordTxId OK: settled=${params.settledContractId.slice(0, 12)}`);
+        this.logger.log(
+          `RecordTxId OK: settled=${params.settledContractId.slice(0, 12)}`,
+        );
         return { ok: true, errors: [] };
       }
       const err = this.formatLedgerError(text, 'RecordTxId failed');
@@ -1110,7 +1189,9 @@ export class QuestLedgerService implements OnModuleInit {
     holdings: Array<{ contractId: string; amount: string }>,
     target: number,
   ): string[] {
-    const sorted = [...holdings].sort((a, b) => parseFloat(b.amount) - parseFloat(a.amount));
+    const sorted = [...holdings].sort(
+      (a, b) => parseFloat(b.amount) - parseFloat(a.amount),
+    );
     const cids: string[] = [];
     let acc = 0;
     for (const h of sorted) {
@@ -1128,7 +1209,9 @@ export class QuestLedgerService implements OnModuleInit {
   private extractUpdateId(text: string): string | null {
     try {
       const parsed = JSON.parse(text) as Record<string, unknown>;
-      const tree = parsed.transactionTree as Record<string, unknown> | undefined;
+      const tree = parsed.transactionTree as
+        | Record<string, unknown>
+        | undefined;
       if (tree && typeof tree.updateId === 'string') return tree.updateId;
       if (typeof parsed.updateId === 'string') return parsed.updateId;
       // safety net: deep-search string berawalan "1220"
@@ -1136,314 +1219,28 @@ export class QuestLedgerService implements OnModuleInit {
       while (stack.length > 0) {
         const cur = stack.pop();
         if (!cur || typeof cur !== 'object') continue;
-        if (Array.isArray(cur)) { stack.push(...cur); continue; }
+        if (Array.isArray(cur)) {
+          stack.push(...cur);
+          continue;
+        }
         const rec = cur as Record<string, unknown>;
         for (const [k, v] of Object.entries(rec)) {
-          if (k === 'updateId' && typeof v === 'string' && v.startsWith('1220')) return v;
+          if (k === 'updateId' && typeof v === 'string' && v.startsWith('1220'))
+            return v;
           if (v && typeof v === 'object') stack.push(v);
         }
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     return null;
   }
 
-  // ── 4. PlatformTransfer (v25) — atomic send token + platform fee ─────────
-  // 2-step: create PENDING contract lalu execute (atomic transfer + fee + FAR).
-  // Backend feature flag QUEST_ATOMIC_PLATFORM_TRANSFER utk gradual rollout.
-  // Fallback: sendCc/sendToken existing (2 transfer terpisah, non-atomic).
-
-  async createPlatformTransfer(params: {
-    userPartyId: string;
-    transferId: string;       // client idempotency id
-    amount: number;
-    feeAmount: number;
-    receiverPartyId: string;  // receiver (full party id dgn ::suffix)
-    treasuryPartyId: string;  // CANTON_FEE_RECIPIENT_PARTY_ID
-    token: string;            // "CC" | "USDCx" | instrument id lain
-  }): Promise<{ ok: boolean; contractId: string | null; errors: string[] }> {
-    if (!this.isClaimSessionConfigured())
-      return { ok: false, contractId: null, errors: ['Claim session ledger disabled'] };
-    const tpl = this.templateId(TPL.PlatformTransfer);
-    const operator = this.operatorPartyId;
-    if (!operator)
-      return { ok: false, contractId: null, errors: ['Canton operator party not configured'] };
-    const reachErr = await this.ensureReachable();
-    if (reachErr)
-      return { ok: false, contractId: null, errors: [reachErr] };
-    try {
-      const res = await this.ledger.createContract(
-        tpl,
-        {
-          admin: operator,
-          userAddress: params.userPartyId,
-          transferId: params.transferId,
-          amount: this.dec(params.amount),
-          feeAmount: this.dec(params.feeAmount),
-          receiver: params.receiverPartyId,
-          treasury: params.treasuryPartyId,
-          token: params.token,
-          status: 'PENDING',
-          createdAt: new Date().toISOString(),
-        },
-        [operator],
-        `platform-transfer-${params.transferId}`,
-      );
-      if (res.ok && res.contractId) {
-        this.logger.log(
-          `PlatformTransfer created: transferId=${params.transferId.slice(0, 16)} amount=${params.amount} ${params.token} fee=${params.feeAmount}`,
-        );
-        return { ok: true, contractId: res.contractId, errors: [] };
-      }
-      const err = this.formatLedgerError(res.error, 'Failed to create PlatformTransfer');
-      this.logger.warn(`PlatformTransfer create fail: ${err}`);
-      return { ok: false, contractId: null, errors: [err] };
-    } catch (err) {
-      const msg = `createPlatformTransfer exception: ${String(err)}`;
-      this.logger.warn(msg);
-      return { ok: false, contractId: null, errors: [msg] };
-    }
-  }
-
-  /**
-   * Execute PlatformTransfer atomically: transfer utama + platform fee + FAR marker.
-   * Mirrors settleAtomic pattern (multi-controller, registry pre-step, FAR optional).
-   *
-   * Pre-step backend (sebelum submit):
-   *   1. callTransferFactoryRegistry × 2 (transfer utama + fee)
-   *   2. queryAmuletHoldings × 2 utk inputHoldingCids (transfer + fee)
-   *   3. (optional) featuredAppRightCid → farCid
-   *   Lalu konstruksi ExecuteTransfer args dgn data di atas.
-   *
-   * Self-contained: caller cukup pass platformTransferCid + userPartyId + amounts +
-   * receiver/treasury party ids. Method handle registry/holdings sendiri
-   * (pattern sama settleAtomic). CC (Amulet) only — utk USDCx, extend caller resolve.
-   *
-   * actAs: [operator, userPartyId] (+ appProvider bila FAR on)
-   * Multi-controller: admin + userAddress (kedua leg controller = user, sender).
-   */
-  async executePlatformTransfer(params: {
-    platformTransferCid: string;       // PlatformTransfer PENDING contract
-    userPartyId: string;               // sender kedua leg (transfer + fee)
-    receiverPartyId: string;           // receiver transfer utama
-    feeReceiverPartyId: string;        // treasury (CANTON_FEE_RECIPIENT_PARTY_ID)
-    amount: number;                    // transfer utama (CC)
-    feeAmount: number;                 // platform fee (CC); 0 → fee leg skip via guard
-    featuredAppRightCid?: string | null;
-    appProviderPartyId?: string | null;
-    /** Instrument transfer leg. Default 'Amulet' (CC). Utk non-CC (USDCx dll),
-     *  set transferInstrumentId + transferInstrumentAdmin (resolve dari OneSwap). */
-    transferInstrumentId?: string;       // default 'Amulet'
-    transferInstrumentAdmin?: string;    // default CANTON_DSO_PARTY_ID
-  }): Promise<{ ok: boolean; settledCid: string | null; updateId: string | null; errors: string[] }> {
-    const fail = (errors: string[]) => ({ ok: false, settledCid: null, updateId: null, errors });
-    if (!this.isClaimSessionConfigured())
-      return fail(['Claim session ledger disabled']);
-    const tpl = this.templateId(TPL.PlatformTransfer);
-    const operator = this.operatorPartyId;
-    if (!operator)
-      return fail(['Canton operator party not configured']);
-    const dso = this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim();
-    if (!dso) return fail(['CANTON_DSO_PARTY_ID not configured']);
-
-    try {
-      const now = new Date();
-      const nowIso = now.toISOString();
-      const executeBefore = new Date(now.getTime() + 24 * 3600 * 1000).toISOString();
-
-      // Transfer leg instrument: default Amulet (CC), support non-CC (USDCx dll).
-      // Fee leg SELALU Amulet/CC (fee platform dibayar dalam CC).
-      const tInstrumentId = params.transferInstrumentId ?? 'Amulet';
-      const isAmuletTransfer = tInstrumentId.toLowerCase() === 'amulet';
-      const tInstrumentAdmin = params.transferInstrumentAdmin ?? dso;
-
-      // ── resolveAndSubmit: query holdings + registry + submit ExecuteTransfer ─
-      // Di-refactor jadi inner function supaya bisa di-retry bila encounter
-      // CONTRACT_NOT_ACTIVE (stale amulet — holding di-archive antara query & submit
-      // oleh Splice amulet rotation atau concurrent tx). Retry re-query holdings fresh.
-      const resolveAndSubmit = async (): Promise<{
-        ok: boolean;
-        text: string;
-        errors: string[];
-      }> => {
-        // ── RESOLVE INPUT HOLDINGS (kirim SEMUA, match legacy executeTransferFactoryTransfer) ──
-        // ⚠️ CRITICAL LESSON (deploy v28): greedyFill pre-select holdings →
-        // CONTRACT_NOT_ACTIVE. Splice TransferFactory_Transfer dirancang menerima
-        // SEMUA holdings & pilih sendiri yang valid (change amulet auto-created).
-        // Pre-select subset (greedyFill) bikin fragile — holding pilihan bisa stale.
-        //
-        // Fix: kirim SEMUA holdings (holdings.map), biarkan Splice pilih.
-        // Utk CC: kedua leg (transfer + fee) minum dari pool Amulet sama →
-        // kedua leg kirim pool yang sama, Splice handle change utk atomic multi-leg.
-        // Utk non-CC: pool transfer (USDCx) ≠ pool fee (Amulet) → query terpisah.
-        let transferInputCids: string[];
-        let feeInputCids: string[];
-        if (isAmuletTransfer) {
-          // CC: query pool Amulet sekali, kedua leg pakai SEMUA holdings.
-          const ccHoldings = await this.ledger.queryAmuletHoldings(params.userPartyId);
-          if (params.amount > 0 && ccHoldings.length === 0) {
-            return { ok: false, text: '', errors: [`Insufficient CC for transfer ${params.amount} (user=${params.userPartyId.split('::')[0]})`] };
-          }
-          // Balance check: total pool harus cukup utk transfer + fee.
-          const totalPool = ccHoldings.reduce((sum, h) => sum + parseFloat(h.amount), 0);
-          if (totalPool < params.amount + params.feeAmount) {
-            return { ok: false, text: '', errors: [`Insufficient CC: pool ${totalPool} < transfer ${params.amount} + fee ${params.feeAmount}`] };
-          }
-          // Kedua leg kirim SEMUA holdings — Splice pilih & handle change.
-          transferInputCids = ccHoldings.map((h) => h.contractId);
-          feeInputCids = ccHoldings.map((h) => h.contractId);
-        } else {
-          // Non-CC: pool transfer (USDCx) ≠ pool fee (Amulet/CC). Query terpisah.
-          const tokenHoldings = await this.ledger.getTokenHoldingCids(
-            params.userPartyId,
-            tInstrumentId,
-          );
-          if (params.amount > 0 && tokenHoldings.length === 0) {
-            return { ok: false, text: '', errors: [`Insufficient ${tInstrumentId} for transfer ${params.amount} (user=${params.userPartyId.split('::')[0]})`] };
-          }
-          transferInputCids = tokenHoldings.map((h) => h.contractId);
-          const ccHoldingsForFee = await this.ledger.queryAmuletHoldings(params.userPartyId);
-          feeInputCids = ccHoldingsForFee.map((h) => h.contractId);
-        }
-        if (params.feeAmount > 0 && feeInputCids.length === 0) {
-          return { ok: false, text: '', errors: [`Insufficient CC for fee ${params.feeAmount} (user=${params.userPartyId.split('::')[0]})`] };
-        }
-
-        // ── TRANSFER leg: user → receiver ─────────────────────────────────────
-        const transferSpec = {
-          sender: params.userPartyId,
-          receiver: params.receiverPartyId,
-          amount: params.amount.toFixed(10),
-          instrumentId: { admin: tInstrumentAdmin, id: tInstrumentId },
-          lock: null,
-          requestedAt: nowIso,
-          executeBefore,
-          inputHoldingCids: transferInputCids,
-          meta: { values: {} },
-        };
-        const transferRegistry = await this.ledger.callTransferFactoryRegistry(
-          { expectedAdmin: tInstrumentAdmin, transfer: transferSpec, extraArgs: { context: { values: {} }, meta: { values: {} } } },
-          tInstrumentAdmin,
-        );
-        if (!transferRegistry) return { ok: false, text: '', errors: ['Transfer leg: callTransferFactoryRegistry returned null'] };
-
-        // ── FEE leg: user → treasury (CC Amulet) ──────────────────────────────
-        const feeSpec = {
-          sender: params.userPartyId,
-          receiver: params.feeReceiverPartyId,
-          amount: params.feeAmount.toFixed(10),
-          instrumentId: { admin: dso, id: 'Amulet' },
-          lock: null,
-          requestedAt: nowIso,
-          executeBefore,
-          inputHoldingCids: feeInputCids,
-          meta: { values: {} },
-        };
-        const feeRegistry = await this.ledger.callTransferFactoryRegistry(
-          { expectedAdmin: dso, transfer: feeSpec, extraArgs: { context: { values: {} }, meta: { values: {} } } },
-          dso,
-        );
-        if (!feeRegistry) return { ok: false, text: '', errors: ['Fee leg: callTransferFactoryRegistry returned null'] };
-
-        // ── Construct ExecuteTransfer choiceArgument ──────────────────────────
-        const opt = <T,>(v: T | null | undefined) => (v == null ? null : v); // DAML Optional = nullable
-        const safeContext = (ctx: Record<string, unknown> | null | undefined) =>
-          ctx && typeof ctx === 'object' && Object.keys(ctx).length > 0 ? ctx : { values: {} };
-        const transferExtraArgs = {
-          context: safeContext(transferRegistry.choiceContextData),
-          meta: { values: {} },
-        };
-        const feeExtraArgs = {
-          context: safeContext(feeRegistry.choiceContextData),
-          meta: { values: {} },
-        };
-        const choiceArgument: Record<string, unknown> = {
-          transferFactoryCid: transferRegistry.factoryId,
-          transferSpec,
-          transferExtraArgs,
-          feeFactoryCid: feeRegistry.factoryId,
-          feeSpec,
-          feeExtraArgs,
-          featuredAppRightCid: opt(params.featuredAppRightCid),
-          appProvider: params.appProviderPartyId ?? operator,
-          settledAt: nowIso,
-        };
-
-        // ── actAs: [operator, userPartyId] (+ appProvider bila FAR) ───────────
-        const actAs = [operator, params.userPartyId];
-        if (params.featuredAppRightCid && params.appProviderPartyId) {
-          actAs.push(params.appProviderPartyId);
-        }
-
-        // ── disclosedContracts: concat transfer + fee registry ───────────────
-        const disclosedContracts: unknown[] = [...transferRegistry.disclosedContracts, ...feeRegistry.disclosedContracts];
-
-        const commandId = `platform-exec-${params.platformTransferCid.slice(0, 16)}-${randomUUID()}`;
-        const { ok, text } = await this.ledger.exerciseChoice(
-          params.platformTransferCid,
-          tpl,
-          'ExecuteTransfer',
-          choiceArgument,
-          actAs,
-          commandId,
-          'submit-and-wait-for-transaction-tree',
-          disclosedContracts,
-        );
-        return { ok, text, errors: [] };
-      };
-
-      // ── Submit dengan retry bila CONTRACT_NOT_ACTIVE (stale amulet/rebase) ───
-      // Amulet Splice di-rebase (archive + create baru) secara periodik.
-      // Query return amulet aktif, tapi saat tx diproses amulet sudah di-rebase
-      // → CONTRACT_NOT_ACTIVE. Retry dgn exponential backoff supaya melewati
-      // window rebasing (rebase cycle ~beberapa detik).
-      const MAX_ATTEMPTS = 4;
-      let lastText = '';
-      let lastErrors: string[] = [];
-      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-        const result = await resolveAndSubmit();
-        lastText = result.text;
-        lastErrors = result.errors;
-        if (result.ok) {
-          const cids = this.extractContractIds(result.text);
-          const settledCid = cids[0] ?? null;
-          const updateId = this.extractUpdateId(result.text);
-          this.logger.log(
-            `PlatformTransfer ExecuteTransfer OK: settled=${settledCid?.slice(0, 12) ?? 'none'} updateId=${updateId?.slice(0, 12) ?? 'none'}${attempt > 1 ? ` (retry ${attempt})` : ''}`,
-          );
-          return { ok: true, settledCid, updateId, errors: [] };
-        }
-        // CONTRACT_NOT_ACTIVE → re-query holdings fresh + retry (stale amulet/rebase).
-        const isStale = result.text.includes('CONTRACT_NOT_ACTIVE') || (result.errors.join(' ').includes('CONTRACT_NOT_ACTIVE'));
-        if (isStale && attempt < MAX_ATTEMPTS) {
-          // Exponential backoff: 500ms, 1000ms, 2000ms — supaya melewati rebase window.
-          const delay = 500 * Math.pow(2, attempt - 1);
-          this.logger.warn(
-            `PlatformTransfer: CONTRACT_NOT_ACTIVE (attempt ${attempt}/${MAX_ATTEMPTS}) — re-query holdings fresh + retry in ${delay}ms`,
-          );
-          await new Promise((r) => setTimeout(r, delay));
-          continue;
-        }
-        // Non-retryable error or last attempt → fail.
-        const err = result.errors.length > 0
-          ? result.errors.join(' | ')
-          : this.formatLedgerError(result.text, 'ExecuteTransfer failed');
-        this.logger.warn(`PlatformTransfer exec fail: ${result.text.slice(0, 300)}`);
-        return fail([err]);
-      }
-      // Should not reach here, but satisfy type checker.
-      return fail(lastErrors.length > 0 ? lastErrors : ['ExecuteTransfer max retries exceeded']);
-    } catch (err) {
-      const msg = `executePlatformTransfer exception: ${String(err)}`;
-      this.logger.warn(msg);
-      return fail([msg]);
-    }
-  }
-
-  // ── Legacy / deprecated stubs ───────────────────────────────────────────────
+  // ── Party registration (WalletRegistration on-chain) ────────────────────────
 
   async recordPartyRegistration(params: {
     userPartyId: string;
-    userId?: string;        // v28: utk userProfileRef "user:<userId>"
+    userId?: string; // v28: utk userProfileRef "user:<userId>"
     username?: string;
     partyHint?: string;
     inviteCode?: string;
@@ -1476,59 +1273,6 @@ export class QuestLedgerService implements OnModuleInit {
       ok: !!walletResult.contractId,
       contractId: walletResult.contractId,
       errors: walletResult.errors,
-    };
-  }
-
-  /** @deprecated */
-  async recordCcTransfer(params: {
-    senderPartyId?: string;
-    receiverPartyId?: string;
-    amount?: number;
-    txId?: string;
-    [key: string]: unknown;
-  }): Promise<{ ok: boolean; contractId: string | null; errors: string[] }> {
-    return { ok: true, contractId: null, errors: [] };
-  }
-  /** @deprecated */
-  async markRewardClaimed(params: {
-    rewardContractId: string;
-    payoutTxId: string;
-  }): Promise<{ ok: boolean; errors: string[] }> {
-    return { ok: true, errors: [] };
-  }
-  /** @deprecated */
-  async recordQuestCompletion(params: {
-    questId: string;
-    questKind: string;
-    questTitle: string;
-    rewardCc: number;
-    userPartyId: string;
-    taskIds: string[];
-    proofs: Array<{ taskId: string; taskType: string; proof: string | null }>;
-  }): Promise<QuestLedgerSubmitResult> {
-    return {
-      ledgerEnabled: false,
-      participationContractId: null,
-      completionContractId: null,
-      rewardContractId: null,
-      taskSubmissionIds: [],
-      errors: [],
-    };
-  }
-  /** @deprecated */
-  async recordTaskSubmission(params: {
-    questId: string;
-    questKind: string;
-    taskId: string;
-    taskType: string;
-    proof: string | null;
-    userPartyId: string;
-  }): Promise<QuestTaskLedgerResult> {
-    return {
-      ledgerEnabled: false,
-      participationContractId: null,
-      taskSubmissionContractId: null,
-      errors: [],
     };
   }
 

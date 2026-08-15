@@ -1,5 +1,5 @@
 /** ~48×48 Twitter CDN avatar — keeps leaderboard light. */
-export function normalizeTwitterAvatarUrl(
+function normalizeTwitterAvatarUrl(
   url: string | null | undefined,
 ): string | null {
   if (!url?.trim()) return null;

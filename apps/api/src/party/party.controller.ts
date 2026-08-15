@@ -3,7 +3,6 @@ import {
   Body,
   ConflictException,
   Controller,
-  Delete,
   ForbiddenException,
   Get,
   Logger,
@@ -52,13 +51,12 @@ import {
 import { UsersService } from '../users/users.service';
 import { WalletInviteCodeService } from './wallet-invite-code.service';
 import { isVisibleInstrument, isSwapInstrument } from './visible-instruments';
+import { CC_INSTRUMENT_ID, CC_SYMBOL } from '../canton/token-instrument.helper';
 import { AllocateWalletDto } from './dto/allocate-wallet.dto';
-import { CantonPartyBindingDto } from './dto/canton-party-binding.dto';
 import { SendCcDto } from './dto/send-cc.dto';
 import { SendTokenDto } from './dto/send-token.dto';
 import { LockCcDto } from './dto/lock-cc.dto';
 import { UnlockCcDto } from './dto/unlock-cc.dto';
-import { SetUsernameDto } from './dto/set-username.dto';
 import { SendWalletOtpDto } from './dto/send-wallet-otp.dto';
 import { VerifyWalletOtpDto } from './dto/verify-wallet-otp.dto';
 import { AuthService } from '../auth/auth.service';
@@ -206,152 +204,6 @@ export class PartyController {
       requiresInviteCode: true,
       hasRedeemedInvite,
     };
-  }
-
-  @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
-  @Post('username')
-  async setUsername(@Req() req: AuthedReq, @Body() body: SetUsernameDto) {
-    const username = normalizeWalletUsername(body.username) ?? '';
-    if (username.length < 3) {
-      throw new BadRequestException('Username must be at least 3 characters.');
-    }
-    const existing = await this.users.findById(req.user.userId);
-    if (!existing) {
-      throw new BadRequestException('User not found');
-    }
-
-    if (hasRealWallet(existing.cantonPartyId)) {
-      throw new ConflictException(
-        'You already have a wallet. Only one wallet is allowed per account.',
-      );
-    }
-
-    const taken = await this.users.findByUsernameInsensitive(username);
-    if (taken && taken.id !== req.user.userId) {
-      throw new ConflictException('Party ID Already Taken');
-    }
-
-    const needsInviteFlow = !hasRealWallet(existing.cantonPartyId);
-    const inviteCode = body.walletInviteCode;
-
-    if (needsInviteFlow) {
-      await this.walletInvites.assertCanCreateWallet(
-        req.user.userId,
-        inviteCode,
-      );
-    }
-
-    let cantonPartyId: string;
-    try {
-      // ── Keycloak model: onboard via WalletOnboardingService ──────
-      const { keycloakId, partyId } =
-        await this.walletOnboarding.onboardWalletForUser({
-          username,
-          email: existing.email,
-          firstName: body.firstName,
-          lastName: body.lastName,
-        });
-      cantonPartyId = normalizeCantonPartyId(partyId) ?? partyId;
-
-      const partyOwner = await this.users.findByPartyId(cantonPartyId);
-      if (partyOwner && partyOwner.id !== req.user.userId) {
-        throw new ConflictException('Party ID Already Taken');
-      }
-
-      this.assertPartyOnValidatorParticipant(cantonPartyId);
-
-      // Simpan atomik: partyId + keycloakId
-      try {
-        await this.users.setCantonIdentity(req.user.userId, {
-          partyId: cantonPartyId,
-          keycloakId,
-          username,
-        });
-      } catch (err: unknown) {
-        if (
-          err &&
-          typeof err === 'object' &&
-          'code' in err &&
-          (err as { code: string }).code === 'P2002'
-        ) {
-          throw new ConflictException('Party ID Already Taken');
-        }
-        throw err;
-      }
-
-      // Redeem invite HANYA setelah onboarding + simpan sukses
-      if (needsInviteFlow) {
-        await this.walletInvites.redeemAfterWalletCreated(
-          req.user.userId,
-          inviteCode,
-        );
-        await this.walletInvites.recordAllocation({
-          userId: req.user.userId,
-          username,
-          partyId: cantonPartyId,
-        });
-      }
-
-      void this.featuredActivity
-        .recordActivity(
-          'wallet_created',
-          cantonPartyId,
-          `Wallet created for @${username}`,
-        )
-        .catch(() => {
-          /* non-critical */
-        });
-
-      // TransferPreapproval: DEFAULT OFF.
-      // JANGAN auto-create saat register — biarkan OFF supaya SEMUA CC masuk
-      // (reward/transfer/spin) jadi offer yang harus di-accept manual. User
-      // baru bisa meng-enable sendiri via menu Wallet bila ingin transfer instan.
-      // Jika user sebelumnya sudah enable (existing), pertahankan apa adanya.
-      let preapprovalActive = false;
-      const existingPreapproval =
-        await this.splice.hasTransferPreapproval(cantonPartyId);
-      if (existingPreapproval) {
-        preapprovalActive = true;
-      }
-
-      if (needsInviteFlow) {
-        void this.questLedger
-          .recordPartyRegistration({
-            userPartyId: cantonPartyId,
-            username,
-            inviteCode: inviteCode ?? '',
-            userId: req.user.userId, // v28: utk userProfileRef "user:<userId>"
-            spliceOnboarded: true,
-            preapprovalActive,
-          })
-          .catch((err: unknown) => {
-            this.logger.warn(
-              `PartyRegistration ledger record failed: ${String(err)}`,
-            );
-          });
-      }
-
-      const message = preapprovalActive
-        ? 'Wallet created — Party ID registered. Direct CC transfers enabled (CIP-56 compliant).'
-        : 'Wallet created — Party ID registered. CC transfers work via offer/accept flow.';
-
-      return {
-        username,
-        cantonPartyId,
-        isPlaceholder: false,
-        spliceOnboarded: true,
-        preapproval: { active: preapprovalActive },
-        message,
-      };
-    } catch (err) {
-      if (needsInviteFlow) {
-        await this.walletInvites.releaseReservation(
-          req.user.userId,
-          inviteCode,
-        );
-      }
-      throw err;
-    }
   }
 
   /**
@@ -848,40 +700,6 @@ export class PartyController {
   }
 
   /**
-   * Alias /create-wallet → /allocate.
-   *
-   * Endpoint create-wallet yang lebih jelas namanya (semantik REST-friendly).
-   * Logic identik dengan allocateCantonParty — pakai method yang sama supaya
-   * tidak duplikasi fungsi. Frontend bisa pakai salah satu; /create-wallet
-   * lebih deskriptif untuk integrasi eksternal / dokumentasi API.
-   */
-  @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
-  @Post('create-wallet')
-  async createWalletAlias(
-    @Req() req: AuthedReq,
-    @Body() body: AllocateWalletDto,
-  ) {
-    return this.allocateCantonParty(req, body);
-  }
-
-  @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
-  @Post('canton-binding')
-  async bindCantonParty(
-    @Req() req: AuthedReq,
-    @Body() body: CantonPartyBindingDto,
-  ) {
-    const cantonPartyId = body.cantonPartyId.trim();
-    this.assertPartyOnValidatorParticipant(cantonPartyId);
-    await this.users.setPartyId(req.user.userId, cantonPartyId);
-    return {
-      cantonPartyId,
-      isPlaceholder: false,
-      message:
-        'Canton Party ID saved manually. No ledger validation was performed.',
-    };
-  }
-
-  /**
    * User-to-user CC transfer with platform fee.
    *
    * Transfer priority:
@@ -1048,7 +866,10 @@ export class PartyController {
       let feeLedgerTxId: string | undefined;
       let feeTreasuryPartyId: string | undefined;
 
-      if (useAtomicPlatformTransfer && this.questLedger.isClaimSessionConfigured()) {
+      if (
+        useAtomicPlatformTransfer &&
+        this.questLedger.isClaimSessionConfigured()
+      ) {
         try {
           const feePartyRawAtomic =
             this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
@@ -1066,8 +887,9 @@ export class PartyController {
           //   - Receiver preapproved (ON) → AmuletRules_Transfer atomic (1 tx)
           //   - Receiver off-preapproval → skip atomic, fallback ke legacy
           //     offer path (TransferFactory_Transfer, receiver accept manual)
-          const receiverPreapproved =
-            await this.splice.hasTransferPreapproval(receiverPartyIdOnChain);
+          const receiverPreapproved = await this.splice.hasTransferPreapproval(
+            receiverPartyIdOnChain,
+          );
           if (!receiverPreapproved) {
             this.logger.log(
               `CC atomic skipped: receiver @${receiverPartyIdOnChain.split('::')[0]} off-preapproval → offer path (2 tx)`,
@@ -1080,26 +902,31 @@ export class PartyController {
               { receiver: receiverPartyIdOnChain, amount },
             ];
             if (effectiveFeeCc > 0) {
-              outputs.push({ receiver: feePartyOnChainAtomic, amount: effectiveFeeCc });
+              outputs.push({
+                receiver: feePartyOnChainAtomic,
+                amount: effectiveFeeCc,
+              });
             }
-            const amuletRes = await this.ledger.executeAmuletRulesTransferMulti({
-              senderPartyId: senderPartyIdOnChain,
-              outputs,
-              clientNonce: body.clientNonce,
-            });
+            const amuletRes = await this.ledger.executeAmuletRulesTransferMulti(
+              {
+                senderPartyId: senderPartyIdOnChain,
+                outputs,
+                clientNonce: body.clientNonce,
+              },
+            );
             if (amuletRes.ok && amuletRes.updateId) {
               // Atomic sukses — transfer + fee dalam 1 tx (AmuletRules_Transfer)
               accepted = true;
-            transferMethod = 'direct';
-            ledgerTxId = amuletRes.updateId;
-            feeCollected = effectiveFeeCc > 0;
-            feeLedgerTxId = amuletRes.updateId; // sama dgn transfer (atomic, 1 tx)
-            feeTreasuryPartyId = feePartyOnChainAtomic;
-            this.logger.log(
-              `CC transfer ATOMIC (AmuletRules_Transfer): ${sender.username} → ${recipientLabel} ${amount} CC + fee ${effectiveFeeCc} CC (1 tx, ${outputs.length} outputs)`,
-            );
-            // Skip path lama (cip56Result) — atomic sudah handle transfer + fee.
-            // Record history + return di bawah (setelah blok fee lama di-skip).
+              transferMethod = 'direct';
+              ledgerTxId = amuletRes.updateId;
+              feeCollected = effectiveFeeCc > 0;
+              feeLedgerTxId = amuletRes.updateId; // sama dgn transfer (atomic, 1 tx)
+              feeTreasuryPartyId = feePartyOnChainAtomic;
+              this.logger.log(
+                `CC transfer ATOMIC (AmuletRules_Transfer): ${sender.username} → ${recipientLabel} ${amount} CC + fee ${effectiveFeeCc} CC (1 tx, ${outputs.length} outputs)`,
+              );
+              // Skip path lama (cip56Result) — atomic sudah handle transfer + fee.
+              // Record history + return di bawah (setelah blok fee lama di-skip).
             } else {
               this.logger.warn(
                 `Atomic AmuletRules_Transfer gagal, fallback ke path lama: ${amuletRes.error ?? 'unknown'}`,
@@ -1107,13 +934,21 @@ export class PartyController {
             }
           } // end if (receiverPreapproved) — else: skip atomic, go to legacy offer path
         } catch (err) {
-          this.logger.warn(`Atomic AmuletRules_Transfer exception, fallback: ${String(err)}`);
+          this.logger.warn(
+            `Atomic AmuletRules_Transfer exception, fallback: ${String(err)}`,
+          );
         }
       }
 
       // Path lama (non-atomic) — hanya bila atomic TIDAK dipakai ATAU gagal.
       // accepted=true berarti atomic sukses, skip path lama.
-      let cip56Result: { ok: boolean; updateId?: string | null; transferKind?: string; error?: string; transferInstructionCid?: string | null } | null = null;
+      let cip56Result: {
+        ok: boolean;
+        updateId?: string | null;
+        transferKind?: string;
+        error?: string;
+        transferInstructionCid?: string | null;
+      } | null = null;
       if (!accepted) {
         const legacy = this.ledger.useWalletProxy
           ? await this.ledger.executeProxyTransfer({
@@ -1169,7 +1004,12 @@ export class PartyController {
       // ⚠️ GUARD !feeCollected: atomic path ExecuteTransfer sudah handle fee leg
       //    (transfer + fee dalam 1 tx). Tanpa guard ini, fee didouble-charge
       //    (1x di atomic, 1x di sini).
-      if (effectiveFeeCc > 0 && sender.cantonPartyId && accepted && !feeCollected) {
+      if (
+        effectiveFeeCc > 0 &&
+        sender.cantonPartyId &&
+        accepted &&
+        !feeCollected
+      ) {
         const feePartyRaw =
           this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
           validatorPartyId;
@@ -1393,26 +1233,6 @@ export class PartyController {
 
       const totalDeducted = amount + (feeCollected ? feeCc : 0);
       const message = `Sent ${amount} CC to ${recipientLabel} (platform fee ${feeCc} CC).`;
-
-      if (sender.cantonPartyId && accepted) {
-        void this.questLedger
-          .recordCcTransfer({
-            senderPartyId: sender.cantonPartyId,
-            recipientPartyId,
-            amountCc: amount,
-            feeCc: feeCollected ? feeCc : 0,
-            totalDeductedCc: totalDeducted,
-            memo: body.memo?.trim(),
-            transferTxId: ledgerTxId,
-            feeTxId: feeLedgerTxId,
-            transferKind: 'USER_TO_USER',
-          })
-          .catch((err: unknown) => {
-            this.logger.warn(
-              `CcTransferRecord ledger record failed: ${String(err)}`,
-            );
-          });
-      }
 
       return {
         success: true,
@@ -1859,25 +1679,25 @@ export class PartyController {
                 feeCollected: true,
                 feeLedgerTxId: atomicLedgerTxId,
               };
-              } catch (recErr) {
-                this.logger.warn(
-                  `Atomic token history record failed (transfer committed, updateId=${atomicLedgerTxId.slice(0, 12)}): ${String(recErr)}`,
-                );
-                return {
-                  ok: true,
-                  message: `${amount} ${instrumentId} sent to ${recipientLabel} (atomic w/ fee). History record pending.`,
-                  ledgerTxId: atomicLedgerTxId,
-                  transferInstructionCid: null,
-                  transactionId: undefined,
-                  feeCollected: true,
-                  feeLedgerTxId: atomicLedgerTxId,
-                };
-              }
-            } else {
+            } catch (recErr) {
               this.logger.warn(
-                `Atomic BatchTransfer (token) gagal, fallback ke path lama: ${batchResToken.error ?? 'unknown'}`,
+                `Atomic token history record failed (transfer committed, updateId=${atomicLedgerTxId.slice(0, 12)}): ${String(recErr)}`,
               );
+              return {
+                ok: true,
+                message: `${amount} ${instrumentId} sent to ${recipientLabel} (atomic w/ fee). History record pending.`,
+                ledgerTxId: atomicLedgerTxId,
+                transferInstructionCid: null,
+                transactionId: undefined,
+                feeCollected: true,
+                feeLedgerTxId: atomicLedgerTxId,
+              };
             }
+          } else {
+            this.logger.warn(
+              `Atomic BatchTransfer (token) gagal, fallback ke path lama: ${batchResToken.error ?? 'unknown'}`,
+            );
+          }
         } catch (err) {
           this.logger.warn(
             `Atomic BatchTransfer (token) exception, fallback: ${String(err)}`,
@@ -3387,18 +3207,18 @@ export class PartyController {
     }
     try {
       const tokens = await this.oneswap.listTokens();
-      // Token CC = Amulet (instrument id). symbol 'CC' dipakai di UI swap.
-      const ccId = 'amulet';
+      const isCc = (id: string) =>
+        id.toLowerCase() === CC_INSTRUMENT_ID.toLowerCase();
       return {
         // Filter: hanya token yang bisa di-swap (CC + USDCx). CBTC Coming soon.
         tokens: tokens
           .filter((t) => isSwapInstrument(t.id))
           .map((t) => ({
             // Display symbol untuk swap picker OneSwap ('CC', 'USDCX').
-            symbol: t.id.toLowerCase() === ccId ? 'CC' : t.symbol,
+            symbol: isCc(t.id) ? CC_SYMBOL : t.symbol,
             instrumentId: t.id,
             instrumentAdmin: t.admin,
-            isCC: t.id.toLowerCase() === ccId,
+            isCC: isCc(t.id),
           })),
       };
     } catch (err) {

@@ -1,6 +1,6 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { randomUUID } from 'crypto';
+import { sleep } from '../common/time-utils';
 import {
   cantonPartyIdsEqual,
   normalizeCantonPartyId,
@@ -78,7 +78,10 @@ export class SpliceValidatorService {
    * untuk submit, tapi DB simpan lowercase → resolve ke node tiap transfer
    * mahal; cache TTL 5 menit cukup karena casing party tidak berubah.
    */
-  private readonly onChainPartyCache = new Map<string, { onChain: string; expiresAt: number }>();
+  private readonly onChainPartyCache = new Map<
+    string,
+    { onChain: string; expiresAt: number }
+  >();
   private static readonly ON_CHAIN_CACHE_TTL_MS = 5 * 60 * 1000;
 
   constructor(
@@ -160,9 +163,8 @@ export class SpliceValidatorService {
    * Without a subject → admin token (Keycloak operator). WITH a subject this
    * would require a per-user wallet JWT, which does not exist in keycloak
    * (operator) mode — the backend acts as operator for every party. We fail
-   * loud here so any per-user call-site (createTransferOffer-as-user,
-   * acceptOfferViaWallet, etc.) surfaces immediately instead of producing a
-   * 401 from the validator.
+   * loud here so any per-user call-site surfaces immediately instead of
+   * producing a 401 from the validator.
    */
   private async jsonAuthHeaders(
     subject?: string,
@@ -434,7 +436,9 @@ export class SpliceValidatorService {
    * kembalikan input apa adanya. Maka transfer mungkin tetap gagal seperti
    * status quo — tidak ada regression, tidak ada data corruption.
    */
-  async resolveOnChainPartyId(partyId: string | null | undefined): Promise<string> {
+  async resolveOnChainPartyId(
+    partyId: string | null | undefined,
+  ): Promise<string> {
     const input = partyId?.trim();
     if (!input) return input ?? '';
 
@@ -610,113 +614,6 @@ export class SpliceValidatorService {
   }
 
   /**
-   * Send a CC reward from the validator wallet to a Splice user.
-   *
-   * Uses the Splice Wallet API (transfer offer flow):
-   *   POST /api/validator/v0/wallet/transfer-offers  (as the validator admin user)
-   *
-   * Auth: sub = validator admin username, aud = CANTON_SPLICE_AUDIENCE
-   *
-   * The offer is created with a 7-day expiry. The receiver must accept it
-   * (either manually via Splice Wallet UI, or automatically via acceptTransferOffer).
-   *
-   * Returns the offer_contract_id on success, null on failure.
-   */
-  async createTransferOffer(
-    receiverPartyId: string,
-    amountCc: number,
-    description = 'CanQuest reward',
-    trackingId = randomUUID(),
-    /** Who is sending — defaults to the validator admin (for rewards). Pass user's username for user-to-user transfers. */
-    senderUsername?: string,
-  ): Promise<string | null> {
-    if (!this.isConfigured) return null;
-
-    const effectiveSender =
-      senderUsername ??
-      this.config.get<string>('CANTON_VALIDATOR_ADMIN_USER') ??
-      'administrator';
-
-    // Resolve sender party ID
-    const senderPartyId =
-      (effectiveSender !== 'administrator'
-        ? await this.getWalletPartyId(effectiveSender)
-        : null) ??
-      this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ??
-      '';
-
-    // Resolve operator/DSO party
-    const dsoParty =
-      this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() ||
-      this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ||
-      '';
-
-    // Deadline: 7 days from now in ISO-8601 (for transferBefore)
-    const transferBefore = new Date(
-      Date.now() + 7 * 24 * 3_600_000,
-    ).toISOString();
-
-    // expires_at must be in MICROSECONDS (Unix timestamp × 1_000_000).
-    const nowMicros = BigInt(Date.now()) * 1_000n;
-    const sevenDaysMicros = 7n * 24n * 3_600n * 1_000_000n;
-    const expiresAtMicros = nowMicros + sevenDaysMicros;
-
-    const url = `${this.baseUrl}/api/validator/v0/wallet/transfer-offers`;
-
-    try {
-      const body = {
-        // Legacy Splice REST fields (backward compatible)
-        receiver_party_id: receiverPartyId,
-        amount: amountCc.toString(),
-        description,
-        expires_at: Number(expiresAtMicros),
-        tracking_id: trackingId,
-
-        // TwoStepTransfer fields per Splice.Amulet.TwoStepTransfer DAML type
-        dso: dsoParty,
-        sender: senderPartyId,
-        receiver: receiverPartyId,
-        lockContext: description,
-        transferBefore,
-        transferBeforeDeadline: 'Transfer expiry',
-        provider: dsoParty,
-        allowFeaturing: false,
-      };
-
-      this.logger.log(
-        `TransferOffer TwoStepTransfer: ${senderPartyId.split('::')[0]} → ${receiverPartyId.split('::')[0]} ${amountCc} CC`,
-      );
-
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: await this.jsonAuthHeaders(effectiveSender),
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(30_000),
-      });
-
-      const text = await res.text();
-      if (!res.ok) {
-        this.logger.warn(
-          `createTransferOffer ${res.status}: ${text.slice(0, 300)}`,
-        );
-        return null;
-      }
-
-      const data = JSON.parse(text) as { offer_contract_id?: string };
-      const contractId = data.offer_contract_id ?? null;
-      if (contractId) {
-        this.logger.log(
-          `TransferOffer created: ${amountCc} CC → ${receiverPartyId.split('::')[0]} (${contractId.slice(0, 20)}...)`,
-        );
-      }
-      return contractId;
-    } catch (err) {
-      this.logger.error(`createTransferOffer failed: ${String(err)}`);
-      return null;
-    }
-  }
-
-  /**
    * Party ID bound to a Splice wallet user (authoritative for treasury / fee recipient).
    * GET /api/validator/v0/wallet/user-status
    */
@@ -740,56 +637,9 @@ export class SpliceValidatorService {
       return null;
     }
   }
-
-  /**
-   * Resolve treasury wallet for platform / claim fees (same rules as Send CC).
-   * Prefer CANTON_FEE_RECIPIENT_PARTY_ID → CANTON_FEE_PARTY_ID → Splice user-status party.
-   * Fee TIDAK PERNAH dikirim ke validator lagi — TERISOLASI ke canquest-fee.
-   */
-  async resolveTreasuryFeeTarget(): Promise<{
-    treasuryPartyId: string;
-    treasuryAcceptUsername: string;
-  } | null> {
-    const treasuryAcceptUsername =
-      this.config.get<string>('CANTON_FEE_ACCEPT_USERNAME')?.trim() ||
-      this.config.get<string>('CANTON_VALIDATOR_ADMIN_USER')?.trim() ||
-      'administrator';
-
-    let treasuryPartyId =
-      this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
-      this.config.get<string>('CANTON_FEE_PARTY_ID')?.trim() ||
-      null;
-
-    if (!treasuryPartyId) {
-      const validatorPartyId = this.config
-        .get<string>('CANTON_VALIDATOR_PARTY_ID')
-        ?.trim();
-      if (!validatorPartyId) return null;
-      treasuryPartyId = validatorPartyId;
-      this.logger.warn(
-        'CANTON_FEE_RECIPIENT_PARTY_ID & CANTON_FEE_PARTY_ID both unset — fallback to CANTON_VALIDATOR_PARTY_ID (NOT recommended for mainnet)',
-      );
-    }
-
-    const walletParty = await this.getWalletPartyId(treasuryAcceptUsername);
-    if (walletParty && walletParty !== treasuryPartyId) {
-      this.logger.warn(
-        `Fee party mismatch: .env treasury=${treasuryPartyId.split('::')[0]} but Splice user ${treasuryAcceptUsername} → ${walletParty.split('::')[0]}. Using wallet party.`,
-      );
-      treasuryPartyId = walletParty;
-    } else if (
-      !this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() &&
-      !this.config.get<string>('CANTON_FEE_PARTY_ID')?.trim() &&
-      walletParty
-    ) {
-      treasuryPartyId = walletParty;
-    }
-
-    return { treasuryPartyId, treasuryAcceptUsername };
-  }
-
   /**
    * FCFS / invite claim fee: user → CANTON_VALIDATOR_PARTY_ID (your node validator wallet).
+
    * Uses CIP-0056 collectPlatformFee (executeTransferFactoryTransfer).
    * Reward must only be sent after this returns collected=true.
    */
@@ -969,7 +819,7 @@ export class SpliceValidatorService {
       const bal = await this.getUserBalance(username);
       if (bal !== null) return bal;
       if (i < attempts - 1) {
-        await new Promise((r) => setTimeout(r, 800));
+        await sleep(800);
       }
     }
     return null;
@@ -992,7 +842,7 @@ export class SpliceValidatorService {
       }
       return true;
     }
-    await new Promise((r) => setTimeout(r, 2500));
+    await sleep(2500);
     const balanceAfter = await this.readTreasuryBalanceWithRetry(
       params.treasuryAcceptUsername,
     );
@@ -1121,45 +971,6 @@ export class SpliceValidatorService {
             ? 'Tidak bisa hubungi Splice. Jalankan SSH tunnel.'
             : msg,
       };
-    }
-  }
-
-  /**
-   * Accept a specific TransferOffer via the Splice Wallet API (as a given user).
-   * Used to accept fee offers arriving in the validator/admin wallet.
-   *
-   * POST /api/validator/v0/wallet/transfer-offers/{contractId}/accept
-   */
-  async acceptOfferViaWallet(
-    contractId: string,
-    asUsername: string,
-  ): Promise<boolean> {
-    if (!this.isConfigured) return false;
-    try {
-      const encodedId = encodeURIComponent(contractId);
-      const res = await fetch(
-        `${this.baseUrl}/api/validator/v0/wallet/transfer-offers/${encodedId}/accept`,
-        {
-          method: 'POST',
-          headers: await this.jsonAuthHeaders(asUsername),
-          body: '{}',
-          signal: AbortSignal.timeout(45_000),
-        },
-      );
-      const text = await res.text();
-      if (res.ok) {
-        this.logger.log(
-          `Offer accepted via Splice Wallet API: ${contractId.slice(0, 16)}…`,
-        );
-        return true;
-      }
-      this.logger.warn(
-        `Splice Wallet accept failed ${res.status}: ${text.slice(0, 200)}`,
-      );
-      return false;
-    } catch (err) {
-      this.logger.warn(`acceptOfferViaWallet error: ${String(err)}`);
-      return false;
     }
   }
 

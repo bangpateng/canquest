@@ -1,4 +1,4 @@
-export const QUEST_SOCIAL_PLATFORMS = [
+const QUEST_SOCIAL_PLATFORMS = [
   'twitter',
   'discord',
   'telegram',

@@ -72,10 +72,14 @@ export class OfferReconcilerService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     if (!this.enabled) {
-      this.logger.log('Offer reconciler disabled (OFFER_RECONCILER_ENABLED=false)');
+      this.logger.log(
+        'Offer reconciler disabled (OFFER_RECONCILER_ENABLED=false)',
+      );
       return;
     }
-    this.logger.log(`Offer reconciler started (every ${this.pollIntervalMs}ms)`);
+    this.logger.log(
+      `Offer reconciler started (every ${this.pollIntervalMs}ms)`,
+    );
     // Delay start supaya app stabil dulu saat boot (jangan rebut resource dgn startup lain).
     setTimeout(() => void this.runOnce(), 10_000);
     this.timer = setInterval(() => {
@@ -372,7 +376,9 @@ export class OfferReconcilerService implements OnModuleInit, OnModuleDestroy {
         // berikutnya tidak pakai delta baseline yang basi.
         if (onChainBalance !== null) {
           try {
-            onChainBalance = await this.ledger.getLedgerBalance(user.cantonPartyId);
+            onChainBalance = await this.ledger.getLedgerBalance(
+              user.cantonPartyId,
+            );
           } catch {
             /* keep last known */
           }

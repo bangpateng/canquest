@@ -90,6 +90,8 @@ export class RealtimeController {
     };
     res.on('close', cleanup);
 
-    this.logger.log(`SSE connected user=${userId} (total=${this.realtime.totalConnections})`);
+    this.logger.log(
+      `SSE connected user=${userId} (total=${this.realtime.totalConnections})`,
+    );
   }
 }

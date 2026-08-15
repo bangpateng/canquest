@@ -43,22 +43,6 @@ export class AdminController {
     return this.admin.getDashboardStats();
   }
 
-  /* ── Preapproval diagnostics ── */
-
-  /**
-   * Diagnose TransferPreapproval status for a user across all sources.
-   * Pass ?user=<partyId> or ?user=@username.
-   */
-  @Get('preapproval-debug')
-  preapprovalDebug(@Query('user') user?: string) {
-    if (!user?.trim()) {
-      return {
-        error: 'Provide ?user=<partyId-with-double-colon> or ?user=@username',
-      };
-    }
-    return this.admin.debugPreapproval(user);
-  }
-
   /* ── Quest CRUD ── */
 
   @Get('quests')
@@ -90,10 +74,7 @@ export class AdminController {
   }
 
   @Patch('quests/:questId')
-  updateQuest(
-    @Param('questId') questId: string,
-    @Body() body: UpdateQuestDto,
-  ) {
+  updateQuest(@Param('questId') questId: string, @Body() body: UpdateQuestDto) {
     return this.admin.updateQuest(questId, body);
   }
 
@@ -105,18 +86,12 @@ export class AdminController {
   /* ── Task CRUD ── */
 
   @Post('quests/:questId/tasks')
-  addTask(
-    @Param('questId') questId: string,
-    @Body() body: AddTaskDto,
-  ) {
+  addTask(@Param('questId') questId: string, @Body() body: AddTaskDto) {
     return this.admin.addTask(questId, body);
   }
 
   @Patch('tasks/:taskId')
-  updateTask(
-    @Param('taskId') taskId: string,
-    @Body() body: UpdateTaskDto,
-  ) {
+  updateTask(@Param('taskId') taskId: string, @Body() body: UpdateTaskDto) {
     return this.admin.updateTask(taskId, body);
   }
 
@@ -140,10 +115,7 @@ export class AdminController {
   /* ── Winner selection ── */
 
   @Post('quests/:questId/draw-winners')
-  drawWinners(
-    @Param('questId') questId: string,
-    @Body() body: DrawWinnersDto,
-  ) {
+  drawWinners(@Param('questId') questId: string, @Body() body: DrawWinnersDto) {
     return this.admin.drawWinners(questId, body);
   }
 
@@ -244,14 +216,6 @@ export class AdminController {
   @Post('users/delete-bulk')
   deleteUsersBulk(@Body() body: { userIds: string[] }) {
     return this.admin.deleteUsers(body.userIds ?? []);
-  }
-
-  @Patch('users/:userId/admin')
-  setAdmin(
-    @Param('userId') userId: string,
-    @Body() body: { isAdmin: boolean },
-  ) {
-    return this.admin.setAdmin(userId, body.isAdmin);
   }
 
   /** Ban / suspend / unban a user (Phase 1: login+refresh gate, session revoke). */

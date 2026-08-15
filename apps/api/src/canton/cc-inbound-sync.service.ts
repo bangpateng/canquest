@@ -140,26 +140,6 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
       this.syncingUsers.delete(userId);
     }
   }
-
-  /**
-   * Sync one user on-demand (dipanggil controller sebelum balance / transaction
-   * list). TIDAK gated by pollEnabled — on-demand method ini independen dari
-   * background poller, supaya send/swap/reward tetap sync walau poller off.
-   */
-  async syncUser(
-    userId: string,
-    username: string,
-    cantonPartyId?: string | null,
-  ): Promise<void> {
-    if (!this.splice.isConfigured) return;
-    if (!username || cantonPartyId?.startsWith('canquest:')) return;
-    try {
-      await this.syncUserBalance(userId, username, cantonPartyId);
-    } catch (err) {
-      this.logger.warn(`syncUser failed for @${username}: ${String(err)}`);
-    }
-  }
-
   /**
    * Event-driven reconcile untuk SATU party (dipanggil CantonUpdatesService saat
    * stream ledger mendeteksi perubahan balance/holding untuk party ini).

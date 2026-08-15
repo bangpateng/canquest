@@ -103,7 +103,10 @@ export class MaintenanceService {
     const estimatedEnd = input.estimatedEnd ? input.estimatedEnd.trim() : null;
 
     const entries: { key: string; value: string }[] = [
-      { key: MAINTENANCE_KEYS.enabled, value: input.enabled ? 'true' : 'false' },
+      {
+        key: MAINTENANCE_KEYS.enabled,
+        value: input.enabled ? 'true' : 'false',
+      },
       { key: MAINTENANCE_KEYS.title, value: title },
       { key: MAINTENANCE_KEYS.message, value: message },
       { key: MAINTENANCE_KEYS.estimatedEnd, value: estimatedEnd ?? '' },
@@ -134,10 +137,13 @@ export class MaintenanceService {
 
     const enabledRaw = map.get(MAINTENANCE_KEYS.enabled);
     const enabled = enabledRaw === 'true';
-    const title = (map.get(MAINTENANCE_KEYS.title) ?? '').trim() || DEFAULT_TITLE;
+    const title =
+      (map.get(MAINTENANCE_KEYS.title) ?? '').trim() || DEFAULT_TITLE;
     const message =
       (map.get(MAINTENANCE_KEYS.message) ?? '').trim() || DEFAULT_MESSAGE;
-    const estimatedEndRaw = (map.get(MAINTENANCE_KEYS.estimatedEnd) ?? '').trim();
+    const estimatedEndRaw = (
+      map.get(MAINTENANCE_KEYS.estimatedEnd) ?? ''
+    ).trim();
     const estimatedEnd = estimatedEndRaw || null;
 
     return { enabled, title, message, estimatedEnd };

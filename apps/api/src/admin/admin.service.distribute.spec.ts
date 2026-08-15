@@ -38,7 +38,11 @@ describe('AdminService.distributeRewards — anti-silent-failure', () => {
   let service: AdminService;
   let prisma: {
     quest: { findUnique: jest.Mock };
-    winnerDraw: { findMany: jest.Mock; update: jest.Mock; updateMany: jest.Mock };
+    winnerDraw: {
+      findMany: jest.Mock;
+      update: jest.Mock;
+      updateMany: jest.Mock;
+    };
   };
   let splice: { sendReward: jest.Mock };
   let users: { recordTransaction: jest.Mock };
@@ -49,14 +53,16 @@ describe('AdminService.distributeRewards — anti-silent-failure', () => {
   const CC_AMOUNT = 5;
 
   /** Build a draw row shaped like the Prisma include in distributeRewards. */
-  function makeDraw(overrides: Partial<{
-    id: string;
-    userId: string;
-    ccAmount: number;
-    inviteCode: string | null;
-    cantonPartyId: string | null;
-    email: string;
-  }> = {}) {
+  function makeDraw(
+    overrides: Partial<{
+      id: string;
+      userId: string;
+      ccAmount: number;
+      inviteCode: string | null;
+      cantonPartyId: string | null;
+      email: string;
+    }> = {},
+  ) {
     // cantonPartyId defaultnya 'winner::fp', tapi override `null` harus
     // dipertahankan (nullish coalescing akan menelan null → pakai spread eksplisit).
     const party =

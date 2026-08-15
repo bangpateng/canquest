@@ -13,7 +13,9 @@ import { OneSwapClient } from '../oneswap/oneswap-client';
 export type RewardTokenSymbol = 'CC' | 'USDCx';
 
 /** Coerce sembarang string DB → RewardTokenSymbol yang aman (default CC). */
-export function normalizeRewardToken(value: string | null | undefined): RewardTokenSymbol {
+export function normalizeRewardToken(
+  value: string | null | undefined,
+): RewardTokenSymbol {
   const v = (value ?? '').trim().toUpperCase();
   return v === 'USDCx'.toUpperCase() ? 'USDCx' : 'CC';
 }
@@ -52,9 +54,7 @@ export class TokenInstrumentHelper {
   ) {}
 
   /** Resolve instrument ref (id + admin) untuk symbol reward token. */
-  async resolveInstrument(
-    symbol: RewardTokenSymbol,
-  ): Promise<InstrumentRef> {
+  async resolveInstrument(symbol: RewardTokenSymbol): Promise<InstrumentRef> {
     // CC/Amulet: admin = DSO party (dari env), tidak perlu OneSwap call.
     if (symbol === 'CC') {
       const admin = this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim();

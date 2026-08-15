@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { sleep } from '../common/time-utils';
 import { ConfigService } from '@nestjs/config';
 
 /**
@@ -219,7 +220,7 @@ export class KeycloakAdminService {
         this.logger.debug(
           `Keycloak getUserId: '${username}' belum ter-index (attempt ${attempt}/${MAX_RETRIES}) — retry dalam ${RETRY_DELAY_MS}ms`,
         );
-        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+        await sleep(RETRY_DELAY_MS);
       }
     }
 

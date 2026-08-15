@@ -3,7 +3,6 @@ import {
   Body,
   ConflictException,
   Controller,
-  Delete,
   Get,
   Post,
   Req,
@@ -137,29 +136,5 @@ export class TwitterController {
       avatarUrl: resolved.profileImageUrl,
       connectedAt: now.toISOString(),
     };
-  }
-
-  @Delete('disconnect')
-  async disconnect(@Req() req: AuthedReq) {
-    // LOCK PERMANEN: akun yang sudah terhubung tidak boleh dilepas.
-    const user = await this.prisma.user.findUnique({
-      where: { id: req.user.userId },
-      select: { twitterUsername: true },
-    });
-    if (user?.twitterUsername) {
-      throw new BadRequestException(
-        'Once an X account is linked, it cannot be disconnected. Contact support if you need help.',
-      );
-    }
-    await this.prisma.user.update({
-      where: { id: req.user.userId },
-      data: {
-        twitterUsername: null,
-        twitterUserId: null,
-        twitterAvatarUrl: null,
-        twitterConnectedAt: null,
-      },
-    });
-    return { ok: true };
   }
 }

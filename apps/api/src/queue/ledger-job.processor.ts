@@ -2,12 +2,7 @@ import { Process, Processor } from '@nestjs/bull';
 import { Logger } from '@nestjs/common';
 import Bull from 'bull';
 type Job<T> = Bull.Job<T>;
-import {
-  QUEUE_LEDGER,
-  JOB_SEND_CC_REWARD,
-  JOB_DISTRIBUTE_REWARD,
-  JOB_ACCEPT_OFFER,
-} from './queue.constants';
+import { QUEUE_LEDGER, JOB_SEND_CC_REWARD } from './queue.constants';
 import { CantonLedgerService } from '../canton/canton-ledger.service';
 import { QuestLedgerService } from '../canton/quest-ledger.service';
 import { UsersService } from '../users/users.service';
@@ -26,30 +21,13 @@ export interface SendCcRewardPayload {
   referenceId?: string;
 }
 
-export interface DistributeRewardPayload {
-  drawId: string;
-  questId: string;
-  userId: string;
-  username: string | null;
-  cantonPartyId: string | null;
-  amountCc: number;
-}
-
-export interface AcceptOfferPayload {
-  offerContractId: string;
-  /** Splice username — digunakan sebagai JWT sub untuk acceptOfferViaWallet */
-  username: string;
-  /** Human label untuk log */
-  label?: string;
-}
-
 // ── Processor ─────────────────────────────────────────────────────────────────
 
 /**
- * LedgerJobProcessor — BullMQ worker untuk semua operasi Canton ledger.
+ * LedgerJobProcessor — Bull worker untuk operasi Canton ledger.
  *
  * Keuntungan vs fire-and-forget di controller:
- *   ✅ Retry otomatis (exponential backoff via BullMQ)
+ *   ✅ Retry otomatis (exponential backoff via Bull)
  *   ✅ Job tidak hilang jika server restart (Redis-persisted)
  *   ✅ Concurrency terkontrol (defaultConcurrency=2)
  *   ✅ Audit trail lengkap di job history
@@ -83,8 +61,8 @@ export class LedgerJobProcessor {
       `[Job ${job.id}] SendCcReward (CIP-0056): ${amountCc} CC → @${username} (attempt ${job.attemptsMade + 1})`,
     );
 
-    // ── Fund-safety #5: re-check guard (cegah double payout saat BullMQ retry) ──
-    // jobId dedup (cc-reward-${userId}-${referenceId}) blok re-enqueue, TAPI BullMQ
+    // ── Fund-safety #5: re-check guard (cegah double payout saat Bull retry) ──
+    // jobId dedup (cc-reward-${userId}-${referenceId}) blok re-enqueue, TAPI Bull
     // retry internal (attempts:3) re-run job yang sama kalau throw. Tanpa guard ini,
     // retry setelah DB-error bisa re-send CC (commandId random → tidak di-dedup ledger)
     // → double payout. Cek apakah reward untuk quest/user ini sudah pernah tercatat.
@@ -104,7 +82,7 @@ export class LedgerJobProcessor {
         this.logger.warn(
           `[Job ${job.id}] ⚠️ SKIP double-payout: reward untuk @${username} ` +
             `sudah tercatat (txId=${alreadyPaid.ledgerTxId?.slice(0, 16) ?? 'n/a'}). ` +
-            `BullMQ retry di-skip — CC tidak dikirim ulang.`,
+            `Bull retry di-skip — CC tidak dikirim ulang.`,
         );
         return; // job selesai sukses, tidak re-send CC
       }
@@ -147,7 +125,7 @@ export class LedgerJobProcessor {
 
     // Step 3: catat transaksi ke DB.
     // ── Fund-safety #5: JANGAN throw kalau DB write gagal setelah CC sudah terkirim.
-    // Throw akan trigger BullMQ retry → re-send CC (commandId random → double payout).
+    // Throw akan trigger Bull retry → re-send CC (commandId random → double payout).
     // Bungkus: log AUDIT-TRAIL LOSS + tetap anggap job sukses supaya tidak retry.
     // Balance self-heal via cc-inbound-sync; history row reconcile manual dari log.
     try {
@@ -169,139 +147,9 @@ export class LedgerJobProcessor {
       // Sengaja tidak throw — CC sudah pergi, retry hanya akan double-payout.
     }
 
-    if (referenceId && this.questLedger.isConfigured()) {
-      try {
-        const completion = await this.prisma.questCompletion.findUnique({
-          where: { userId_questId: { userId, questId: referenceId } },
-          select: { ledgerRewardId: true },
-        });
-        if (completion?.ledgerRewardId) {
-          const marked = await this.questLedger.markRewardClaimed({
-            rewardContractId: completion.ledgerRewardId,
-            payoutTxId: ledgerTxId,
-          });
-          if (!marked.ok) {
-            this.logger.warn(
-              `[Job ${job.id}] QuestReward mark claimed: ${marked.errors.join(' | ')}`,
-            );
-          }
-        }
-      } catch (err) {
-        this.logger.warn(
-          `[Job ${job.id}] markRewardClaimed failed (non-blocking): ${String(err)}`,
-        );
-      }
-    }
-
     this.logger.log(
       `[Job ${job.id}] ✅ ${amountCc} CC → @${username} kind=${cip56Result.transferKind} ` +
         `${accepted ? 'accepted' : 'pending (preapproval OFF)'} txId=${ledgerTxId.slice(0, 16)}…`,
     );
-  }
-
-  // ── Distribute Quest Reward (Admin) ──────────────────────────────────────────
-
-  @Process(JOB_DISTRIBUTE_REWARD)
-  async processDistributeReward(
-    job: Job<DistributeRewardPayload>,
-  ): Promise<void> {
-    const { drawId, questId, userId, username, cantonPartyId, amountCc } =
-      job.data;
-    this.logger.log(
-      `[Job ${job.id}] DistributeReward (CIP-0056): draw=${drawId} ${amountCc} CC → @${username ?? 'unknown'}`,
-    );
-
-    let ledgerTxId: string | null = null;
-    let ccSent = false;
-
-    if (amountCc > 0 && cantonPartyId && username) {
-      const validatorPartyId =
-        this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim() ?? '';
-
-      // CIP-0056: try TransferFactory_Transfer first, fallback to Splice TransferOffer
-      // identity='reward' → dapp-reward identity for CC reward transfers
-      const cip56Result = await this.ledger.executeTransferFactoryTransfer({
-        senderPartyId: validatorPartyId,
-        receiverPartyId: cantonPartyId,
-        amountCc,
-        description: `Quest winner reward: ${questId}`,
-        identity: 'reward',
-      });
-
-      if (cip56Result.ok) {
-        // Preapproval ON (direct) → CC langsung masuk.
-        // Preapproval OFF (offer) → JANGAN auto-accept. Biarkan pending,
-        //   penerima accept/reject manual via menu Offers.
-        // ledgerTxId = Canton update_id ("1220…") supaya link explorer jalan.
-        ledgerTxId = cip56Result.updateId ?? null;
-        ccSent = true;
-      } else {
-        // CIP-0056 is the only supported reward path — retry on failure.
-        throw new Error(
-          `CIP-0056 distribute unavailable for draw=${drawId} ` +
-            `(${cip56Result.error?.slice(0, 80) ?? 'unknown'}) — will retry`,
-        );
-      }
-
-      if (ccSent && ledgerTxId) {
-        // ── Fund-safety #6: JANGAN throw kalau DB write gagal setelah CC terkirim.
-        // Throw → BullMQ retry → re-send CC (commandId random) → double payout.
-        try {
-          await this.users.recordTransaction({
-            userId,
-            amountCc,
-            type: 'QUEST_REWARD',
-            description: `Quest winner reward: ${questId}`,
-            ledgerTxId,
-            cantonUpdateId: cip56Result.updateId ?? undefined,
-          });
-        } catch (err) {
-          this.logger.error(
-            `[Job ${job.id}] ⚠️ AUDIT-TRAIL LOSS: distribute reward CC SUDAH terkirim tapi DB record gagal. ` +
-              `draw=${drawId} user=${userId} amount=${amountCc} CC ledgerTxId=${ledgerTxId.slice(0, 16)}… ` +
-              `TIDAK throw (cegah retry double-payout). Error: ${String(err)}`,
-          );
-        }
-      }
-    }
-
-    // ── Fund-safety #6: conditional update — hanya flip distributed=true kalau belum.
-    // Plain update() menimpa apapun nilainya → retry bisa re-flip yang sudah distributed.
-    // updateMany WHERE distributed:false = atomic conditional → hanya 1 job yang berhasil.
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-    const upd = await (this.prisma as any).winnerDraw.updateMany({
-      where: { id: drawId, distributed: false },
-      data: {
-        distributed: true,
-        ledgerTxId: ledgerTxId ?? undefined,
-        distributedAt: new Date(),
-      },
-    });
-    if (upd.count === 0) {
-      this.logger.warn(
-        `[Job ${job.id}] ⚠️ draw=${drawId} already distributed — skip (cegah double-payout).`,
-      );
-      return; // sudah distributed job lain/retry sebelumnya → jangan lanjut
-    }
-
-    this.logger.log(
-      `[Job ${job.id}] ✅ draw=${drawId} distributed ccSent=${String(ccSent)} ` +
-        `${ccSent ? '(direct or pending offer)' : ''}`,
-    );
-  }
-
-  // ── Accept Transfer Offer ────────────────────────────────────────────────────
-
-  @Process(JOB_ACCEPT_OFFER)
-  processAcceptOffer(job: Job<AcceptOfferPayload>): Promise<void> {
-    const { offerContractId, username, label } = job.data;
-
-    // JOB_ACCEPT_OFFER was a legacy Splice per-user offer flow. All transfers
-    // are now CIP-0056, so this path is never created anymore. Don't throw —
-    // just log and return, so any stale job left in the queue doesn't retry.
-    this.logger.warn(
-      `[Job ${job.id}] JOB_ACCEPT_OFFER is a no-op in keycloak mode (legacy Splice offer). cid=${offerContractId.slice(0, 16)}… as @${username} ${label ?? ''}`,
-    );
-    return Promise.resolve();
   }
 }

@@ -126,8 +126,7 @@ export class ProxyCacheService {
   private isCacheFresh(): boolean {
     if (this.ttlMs <= 0) return false;
     return (
-      this.cache.fetchedAt > 0 &&
-      Date.now() - this.cache.fetchedAt < this.ttlMs
+      this.cache.fetchedAt > 0 && Date.now() - this.cache.fetchedAt < this.ttlMs
     );
   }
 
@@ -191,7 +190,9 @@ export class ProxyCacheService {
       });
       if (!res.ok) {
         const t = await res.text();
-        this.logger.warn(`ProxyCache ACS query ${res.status}: ${t.slice(0, 200)}`);
+        this.logger.warn(
+          `ProxyCache ACS query ${res.status}: ${t.slice(0, 200)}`,
+        );
         return;
       }
       const arr = (await res.json()) as unknown[];
@@ -218,13 +219,15 @@ export class ProxyCacheService {
         // Cek semua kemungkinan utk robust.
         const blob =
           typeof ev.createdEventBlob === 'string'
-            ? (ev.createdEventBlob as string)
+            ? ev.createdEventBlob
             : typeof ev.created_event_blob === 'string'
-              ? (ev.created_event_blob as string)
+              ? ev.created_event_blob
               : null;
 
         if (
-          tplId.endsWith(':Splice.Util.FeaturedApp.WalletUserProxy:WalletUserProxy')
+          tplId.endsWith(
+            ':Splice.Util.FeaturedApp.WalletUserProxy:WalletUserProxy',
+          )
         ) {
           // Kalau ada multiple WUP, ambil yg pertama (atau favoritkan env override).
           if (!wupCid) {
@@ -343,25 +346,5 @@ export class ProxyCacheService {
       await this.refresh();
     }
     return this.cache.featuredAppRightCid;
-  }
-
-  /** Snapshot cache saat ini (untuk debug / health endpoint). */
-  snapshot(): {
-    walletUserProxyCid: string | null;
-    featuredAppRightCid: string | null;
-    fetchedAt: number;
-    fresh: boolean;
-  } {
-    return {
-      walletUserProxyCid: this.cache.walletUserProxyCid,
-      featuredAppRightCid: this.cache.featuredAppRightCid,
-      fetchedAt: this.cache.fetchedAt,
-      fresh: this.isCacheFresh(),
-    };
-  }
-
-  /** Invalidate cache — paksa refresh di panggilan berikutnya. */
-  invalidate(): void {
-    this.cache.fetchedAt = 0;
   }
 }

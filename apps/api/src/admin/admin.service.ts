@@ -120,9 +120,7 @@ export class AdminService {
    * must be rejected explicitly. The frontend also redirects away, but this
    * hard-blocks direct API hits / misuse.
    */
-  private assertCampaignQuest(
-    quest: { questKind: QuestKind } | null,
-  ): void {
+  private assertCampaignQuest(quest: { questKind: QuestKind } | null): void {
     if (!quest) return; // callers handle "not found" separately
     if (quest.questKind === QuestKind.EARN_HUB) {
       throw new BadRequestException(
@@ -492,7 +490,8 @@ export class AdminService {
         redeemInstructions: data.redeemInstructions?.trim() || null,
         questKind,
         // Per-event Earn access gate (CAMPAIGN). Null = global default.
-        entryGateMode: (data.entryGateMode ?? EntryGateMode.CC_OR_POINTS) as any,
+        entryGateMode: (data.entryGateMode ??
+          EntryGateMode.CC_OR_POINTS) as any,
         entryCcLock:
           data.entryCcLock != null && data.entryCcLock > 0
             ? data.entryCcLock
@@ -505,13 +504,17 @@ export class AdminService {
         // eligibilityType/eligibilityAmount di-set saat quest create utk konsistensi
         // dgn on-chain QuestCampaign field. Claim path baca ini utk resolve eligibilityCid.
         eligibilityType:
-          (data.entryGateMode === EntryGateMode.CC_ONLY ? 'LOCK_CC'
-           : data.entryGateMode === EntryGateMode.POINTS_ONLY ? 'POINTS'
-           : 'NONE') as string,
+          data.entryGateMode === EntryGateMode.CC_ONLY
+            ? 'LOCK_CC'
+            : data.entryGateMode === EntryGateMode.POINTS_ONLY
+              ? 'POINTS'
+              : 'NONE',
         eligibilityAmount:
-          data.entryGateMode === EntryGateMode.CC_ONLY ? (data.entryCcLock ?? 30)
-          : data.entryGateMode === EntryGateMode.POINTS_ONLY ? (data.entryCostPoints ?? 200)
-          : 0,
+          data.entryGateMode === EntryGateMode.CC_ONLY
+            ? (data.entryCcLock ?? 30)
+            : data.entryGateMode === EntryGateMode.POINTS_ONLY
+              ? (data.entryCostPoints ?? 200)
+              : 0,
         tags: JSON.stringify(data.tags ?? []),
         socialLinks: serializeQuestSocialLinks(
           normalizeQuestSocialLinksForSave(data.socialLinks ?? []),
@@ -547,25 +550,29 @@ export class AdminService {
           // v25: map entryGateMode → DAML eligibilityType.
           //   CC_ONLY → LOCK_CC, POINTS_ONLY → POINTS, CC_OR_POINTS/NONE → NONE.
           // CC_OR_POINTS ditangani backend-only (on-chain cek hanya utk CC_ONLY/POINTS_ONLY).
-          const gateMode = (data.entryGateMode ?? EntryGateMode.CC_OR_POINTS) as EntryGateMode;
+          const gateMode = data.entryGateMode ?? EntryGateMode.CC_OR_POINTS;
           const eligibilityType: 'NONE' | 'LOCK_CC' | 'POINTS' =
-            gateMode === EntryGateMode.CC_ONLY ? 'LOCK_CC'
-            : gateMode === EntryGateMode.POINTS_ONLY ? 'POINTS'
-            : 'NONE';
+            gateMode === EntryGateMode.CC_ONLY
+              ? 'LOCK_CC'
+              : gateMode === EntryGateMode.POINTS_ONLY
+                ? 'POINTS'
+                : 'NONE';
           const eligibilityAmount =
-            eligibilityType === 'LOCK_CC' ? (data.entryCcLock ?? 30)
-            : eligibilityType === 'POINTS' ? (data.entryCostPoints ?? 200)
-            : 0;
+            eligibilityType === 'LOCK_CC'
+              ? (data.entryCcLock ?? 30)
+              : eligibilityType === 'POINTS'
+                ? (data.entryCostPoints ?? 200)
+                : 0;
           const ledgerResult = await this.questLedger.createQuestCampaign({
             campaignId: quest.id,
             title: quest.title,
             questKind: questKindDaml,
             rewardCc: quest.rewardCc,
-            rewardToken: (quest.rewardToken === 'USDCx' ? 'USDCx' : 'CC') as 'CC' | 'USDCx', // v25 FIX bug: tidak dikirim sebelumnya
+            rewardToken: quest.rewardToken === 'USDCx' ? 'USDCx' : 'CC', // v25 FIX bug: tidak dikirim sebelumnya
             claimFeeCc: quest.claimFeeCc ?? 0,
             maxWinners: quest.maxWinners ?? 0,
-            eligibilityType,        // v25 NEW
-            eligibilityAmount,      // v25 NEW
+            eligibilityType, // v25 NEW
+            eligibilityAmount, // v25 NEW
           });
           if (ledgerResult.contractId) {
             await this.prisma.quest.update({
@@ -1248,7 +1255,11 @@ export class AdminService {
       // Varian menentukan janji reward: CODE → kode (ccAmount 0, kode di-claim
       // nanti); CC → token (ccAmount = rewardCc, tanpa kode); null → both (legacy).
       const promisedCc =
-        variant === 'CODE' ? 0 : variant === 'CC' ? quest.rewardCc : quest.rewardCc;
+        variant === 'CODE'
+          ? 0
+          : variant === 'CC'
+            ? quest.rewardCc
+            : quest.rewardCc;
 
       await this.prisma.winnerDraw.create({
         data: {
@@ -1671,15 +1682,6 @@ export class AdminService {
       totalPages: Math.ceil(total / pageSize),
     };
   }
-
-  async setAdmin(userId: string, isAdmin: boolean) {
-    return this.prisma.user.update({
-      where: { id: userId },
-      data: { isAdmin },
-      select: { id: true, email: true, isAdmin: true },
-    });
-  }
-
   /**
    * Set a user's account status (ACTIVE | SUSPENDED | BANNED).
    * - Admin & protected-email accounts cannot be banned/suspended.
@@ -1906,7 +1908,9 @@ export class AdminService {
       reward.referrer.isAdmin ||
       protectedEmails.has(reward.referrer.email.toLowerCase())
     ) {
-      throw new BadRequestException('Cannot revoke referral of an admin account');
+      throw new BadRequestException(
+        'Cannot revoke referral of an admin account',
+      );
     }
 
     // 1. Hapus record referral (sumber poin).
@@ -2010,19 +2014,15 @@ export class AdminService {
       }
     >();
     for (const r of flagged) {
-      const existing =
-        byReferrer.get(r.referrerId) ??
-        {
-          referrerId: r.referrerId,
-          referrerEmail: r.referrer.email,
-          referrerEarnPoints: r.referrer.earnPoints,
-          isAdmin: r.referrer.isAdmin,
-          isProtected: protectedEmails.has(
-            r.referrer.email.toLowerCase(),
-          ),
-          flaggedCount: 0,
-          totalPoints: 0,
-        };
+      const existing = byReferrer.get(r.referrerId) ?? {
+        referrerId: r.referrerId,
+        referrerEmail: r.referrer.email,
+        referrerEarnPoints: r.referrer.earnPoints,
+        isAdmin: r.referrer.isAdmin,
+        isProtected: protectedEmails.has(r.referrer.email.toLowerCase()),
+        flaggedCount: 0,
+        totalPoints: 0,
+      };
       existing.flaggedCount += 1;
       existing.totalPoints += r.points;
       byReferrer.set(r.referrerId, existing);
@@ -2069,7 +2069,11 @@ export class AdminService {
     referredUserIds?: string[];
     all?: boolean;
   }) {
-    const requestedIds = [...new Set((opts.referredUserIds ?? []).map((id) => id.trim()).filter(Boolean))];
+    const requestedIds = [
+      ...new Set(
+        (opts.referredUserIds ?? []).map((id) => id.trim()).filter(Boolean),
+      ),
+    ];
     const useAll = opts.all === true;
 
     if (!useAll && requestedIds.length === 0) {
@@ -2098,7 +2102,10 @@ export class AdminService {
     );
 
     const target = allRewards.filter((r) => {
-      if (r.referrer.isAdmin || protectedEmails.has(r.referrer.email.toLowerCase())) {
+      if (
+        r.referrer.isAdmin ||
+        protectedEmails.has(r.referrer.email.toLowerCase())
+      ) {
         return false; // lindungi admin
       }
       if (useAll) {
@@ -2350,112 +2357,5 @@ export class AdminService {
       }
       return code;
     });
-  }
-
-  /**
-   * Diagnose TransferPreapproval status for a user across all sources.
-   *
-   * Used by admins to investigate the "toggle shows Disabled but transfers still
-   * arrive directly" symptom. Reports what each source sees so we can tell a
-   * rights gap (operator CanActAs/CanReadAs) from a normalization mismatch from
-   * a provider-side-only-visible contract.
-   *
-   * @param lookup - partyId OR username (with or without leading @).
-   */
-  async debugPreapproval(lookup: string): Promise<{
-    input: string;
-    resolvedPartyId: string | null;
-    resolvedUsername: string | null;
-    hasWallet: boolean;
-    authoritative: {
-      active: boolean;
-      source?: string;
-      expiresAt?: string;
-      provider?: string;
-      contractId?: string;
-    };
-    sources: {
-      ledgerReceiver: boolean;
-      ledgerProvider: boolean;
-      splice: boolean | null;
-    };
-    spliceRest: {
-      active: boolean;
-      expiresAt?: string;
-      provider?: string;
-    };
-  }> {
-    // Resolve a user by partyId or username.
-    const trimmed = lookup.trim();
-    const looksLikeParty = trimmed.includes('::');
-    let partyId: string | null = null;
-    let username: string | null = null;
-
-    if (looksLikeParty) {
-      const byParty = await this.prisma.user.findFirst({
-        where: { cantonPartyId: trimmed },
-        select: { cantonPartyId: true, username: true },
-      });
-      partyId = byParty?.cantonPartyId ?? trimmed;
-      username = byParty?.username ?? null;
-    } else {
-      const uname = trimmed.replace(/^@/, '').toLowerCase();
-      const byName = await this.prisma.user.findFirst({
-        where: { username: { equals: uname, mode: 'insensitive' } },
-        select: { cantonPartyId: true, username: true },
-      });
-      username = byName?.username ?? uname;
-      partyId = byName?.cantonPartyId ?? null;
-    }
-
-    if (!partyId || !hasRealWallet(partyId)) {
-      return {
-        input: trimmed,
-        resolvedPartyId: partyId,
-        resolvedUsername: username,
-        hasWallet: false,
-        authoritative: { active: false },
-        sources: { ledgerReceiver: false, ledgerProvider: false, splice: null },
-        spliceRest: { active: false },
-      };
-    }
-
-    const spliceRest = await this.splice.getTransferPreapproval(partyId);
-    const auth = await this.ledger.getTransferPreapprovalAuthoritative(
-      partyId,
-      {
-        active: spliceRest !== null,
-        expiresAt: spliceRest?.expiresAt,
-        provider: spliceRest?.provider,
-      },
-    );
-
-    this.logger.log(
-      `debugPreapproval @${username ?? '?'} party=${partyId.split('::')[0]} ` +
-        `authoritative.active=${auth.active} source=${auth.source ?? 'none'} ` +
-        `ledgerReceiver=${auth.sources.ledgerReceiver} ` +
-        `ledgerProvider=${auth.sources.ledgerProvider} ` +
-        `splice=${auth.sources.splice}`,
-    );
-
-    return {
-      input: trimmed,
-      resolvedPartyId: partyId,
-      resolvedUsername: username,
-      hasWallet: true,
-      authoritative: {
-        active: auth.active,
-        source: auth.source,
-        expiresAt: auth.expiresAt,
-        provider: auth.provider,
-        contractId: auth.contractId,
-      },
-      sources: auth.sources,
-      spliceRest: {
-        active: spliceRest !== null,
-        expiresAt: spliceRest?.expiresAt,
-        provider: spliceRest?.provider,
-      },
-    };
   }
 }

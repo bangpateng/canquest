@@ -198,13 +198,6 @@ export class UsersService {
   findById(id: string) {
     return this.prisma.user.findUnique({ where: { id } });
   }
-
-  findByUsername(username: string) {
-    const normalized = normalizeWalletUsername(username);
-    if (!normalized) return null;
-    return this.prisma.user.findUnique({ where: { username: normalized } });
-  }
-
   /** Case-insensitive username lookup (Send CC / party resolve). */
   findByUsernameInsensitive(username: string) {
     return this.prisma.user.findFirst({
@@ -292,14 +285,6 @@ export class UsersService {
       },
     });
   }
-
-  findByTwitterUsername(username: string) {
-    const normalized = username.trim().replace(/^@/, '').toLowerCase();
-    return this.prisma.user.findFirst({
-      where: { twitterUsername: { equals: normalized, mode: 'insensitive' } },
-    });
-  }
-
   setOtpPending(userId: string, otpCodeHash: string, otpExpiresAt: Date) {
     return this.prisma.user.update({
       where: { id: userId },
@@ -335,18 +320,6 @@ export class UsersService {
       },
     });
   }
-
-  updatePasswordHash(
-    userId: string,
-    passwordHash: string,
-    emailVerified = true,
-  ) {
-    return this.prisma.user.update({
-      where: { id: userId },
-      data: { passwordHash, emailVerified },
-    });
-  }
-
   /** Replace credentials for a user who never completed email OTP verification. */
   resumeUnverifiedRegistration(
     userId: string,
@@ -957,8 +930,15 @@ export class UsersService {
     won: boolean;
     userDraw: { distributed: boolean; inviteCode: string | null } | null;
   }): { description: string; rewardCc: number | null } {
-    const { rewardType, questTitle, rewardCc, rewardToken, winnerMessage, won, userDraw } =
-      params;
+    const {
+      rewardType,
+      questTitle,
+      rewardCc,
+      rewardToken,
+      winnerMessage,
+      won,
+      userDraw,
+    } = params;
     if (!won) {
       return {
         description: `Not selected for ${questTitle}. Better luck next time.`,
@@ -1121,74 +1101,6 @@ export class UsersService {
     });
     return { ok: true as const };
   }
-
-  /**
-   * Paginated transaction list for a user (newest first). BigInt serialized as string.
-   *
-   * Fee rows diexclude dua lapis: (1) filter Prisma `CC_TRANSACTION_HISTORY_WHERE` berdasarkan
-   * marker/deskripsi, lalu (2) post-filter `isFeePartyRecipient()` membuang baris yang
-   * penerimanya = party fee (mis. "Sent to canquest-fee…") walau tidak bermarker. Karena
-   * post-filter butuh counterparty yang di-resolve (DB), kita hitung id transaksi yang lolos
-   * dulu, lalu paginate berdasarkan id agar total/halaman tetap akurat.
-   */
-  async getTransactions(userId: string, page: number, pageSize: number) {
-    const baseWhere = { userId, ...CC_TRANSACTION_HISTORY_WHERE };
-
-    // 1. Ambil id + referenceId + type untuk seluruh history (proyeksi ringan).
-    const allRows = await this.prisma.ccTransaction.findMany({
-      where: baseWhere,
-      orderBy: { createdAt: 'desc' },
-      select: { id: true, referenceId: true, type: true, createdAt: true },
-    });
-
-    // 2. Post-filter: buang baris yang penerimanya = party fee.
-    const visibleIds: string[] = [];
-    for (const row of allRows) {
-      if (row.type !== 'TRANSFER_IN' && row.type !== 'TRANSFER_OUT') {
-        visibleIds.push(row.id);
-        continue;
-      }
-      const resolved = await this.resolveTransferCounterparty(row.referenceId);
-      if (!isFeePartyRecipient(row.referenceId, resolved)) {
-        visibleIds.push(row.id);
-      }
-    }
-
-    const total = visibleIds.length;
-    const skip = (page - 1) * pageSize;
-    const pageIds = visibleIds.slice(skip, skip + pageSize);
-
-    // 3. Ambil baris penuh untuk id halaman ini (urutan createdAt desc dipertahankan).
-    const items = pageIds.length
-      ? await this.prisma.ccTransaction.findMany({
-          where: { id: { in: pageIds } },
-          orderBy: { createdAt: 'desc' },
-        })
-      : [];
-
-    const enriched = await this.enrichQuestRewardDescriptions(items);
-    const serialized = await Promise.all(
-      enriched.map(async (tx) => {
-        const counterparty =
-          tx.type === 'TRANSFER_IN' || tx.type === 'TRANSFER_OUT'
-            ? await this.resolveTransferCounterparty(tx.referenceId)
-            : null;
-        return {
-          ...tx,
-          amountMicroCc: tx.amountMicroCc.toString(),
-          counterparty,
-        };
-      }),
-    );
-    return {
-      items: serialized,
-      total,
-      page,
-      pageSize,
-      totalPages: Math.max(1, Math.ceil(total / pageSize)),
-    };
-  }
-
   /**
    * Unified Activity feed — menggabungkan CcTransaction + TokenTransaction jadi
    * satu timeline terurut. Sebelumnya getTransactions() hanya baca CcTransaction,

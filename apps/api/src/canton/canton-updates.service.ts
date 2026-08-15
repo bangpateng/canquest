@@ -67,7 +67,12 @@
  * double-effect) karena stream bisa re-deliver saat reconnect dari checkpoint.
  */
 
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Subject } from 'rxjs';
 import WebSocket from 'ws';
@@ -261,11 +266,15 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit(): void {
     if (!this.enabled) {
-      this.logger.log('CantonUpdatesService DISABLED (set CANTON_UPDATES_WS_ENABLED=true to enable).');
+      this.logger.log(
+        'CantonUpdatesService DISABLED (set CANTON_UPDATES_WS_ENABLED=true to enable).',
+      );
       return;
     }
     if (!this.baseUrl) {
-      this.logger.warn('CantonUpdatesService: no LEDGER_API_URL, skipping stream.');
+      this.logger.warn(
+        'CantonUpdatesService: no LEDGER_API_URL, skipping stream.',
+      );
       return;
     }
 
@@ -274,7 +283,9 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     this.updates$.subscribe({
       next: (ev) => this.dispatchUpdate(ev),
       error: (err) =>
-        this.logger.error(`CantonUpdates: stream subject error: ${String(err)}`),
+        this.logger.error(
+          `CantonUpdates: stream subject error: ${String(err)}`,
+        ),
     });
 
     // WAVE 6 Phase 2: BalanceEventHandler juga subscribe ke stream yg sama.
@@ -296,11 +307,16 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
 
     // Non-blocking: jangan block app startup kalau ledger lambat connect.
     void this.startStream();
-    this.logger.log('CantonUpdatesService ENABLED — connecting WS to /v2/updates.');
+    this.logger.log(
+      'CantonUpdatesService ENABLED — connecting WS to /v2/updates.',
+    );
   }
 
   /** Debounce timers per party — coalesce burst jadi 1 reconcile call. */
-  private readonly partyDebounce = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly partyDebounce = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
   private static readonly DEBOUNCE_MS = 2_000;
 
   /**
@@ -419,8 +435,10 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
    */
   private buildWsUrl(): string {
     let url = this.baseUrl;
-    if (url.startsWith('https://')) url = 'wss://' + url.slice('https://'.length);
-    else if (url.startsWith('http://')) url = 'ws://' + url.slice('http://'.length);
+    if (url.startsWith('https://'))
+      url = 'wss://' + url.slice('https://'.length);
+    else if (url.startsWith('http://'))
+      url = 'ws://' + url.slice('http://'.length);
     return `${url}/v2/updates`;
   }
 
@@ -506,7 +524,9 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     // reconnect. 15s cukup untuk handshake TLS+WS.
     this.connectTimer = setTimeout(() => {
       if (this.ws && this.ws.readyState !== WebSocket.OPEN) {
-        this.logger.warn('CantonUpdates: WS connect timeout (15s) — reconnecting.');
+        this.logger.warn(
+          'CantonUpdates: WS connect timeout (15s) — reconnecting.',
+        );
         this.ws.emit('error', new Error('connect timeout'));
       }
     }, 15_000);
@@ -650,7 +670,9 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     try {
       raw = JSON.parse(line);
     } catch {
-      this.logger.debug(`CantonUpdates: skip non-JSON message (${line.length} bytes)`);
+      this.logger.debug(
+        `CantonUpdates: skip non-JSON message (${line.length} bytes)`,
+      );
       return;
     }
 
@@ -746,7 +768,8 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    if (created.length === 0 && archived.length === 0 && exercised.length === 0) return;
+    if (created.length === 0 && archived.length === 0 && exercised.length === 0)
+      return;
 
     // Event valid masuk = subscription sukses. Reset counter reconnect di sini
     // (BUKAN di ws.on('open')) supaya close-1000 loop bisa capai MAX & berhenti.
@@ -794,7 +817,7 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       typeof raw.offset !== 'undefined' ||
       typeof raw.updateId === 'string'
     ) {
-      return raw as unknown as CantonUpdate;
+      return raw;
     }
 
     // Shape (2) & (3): nested di dalam `update.Transaction.value` atau `update.OffsetCheckpoint.value`.
@@ -838,17 +861,18 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     const candidates = [
       raw.offset,
       (raw as { value?: { offset?: unknown } }).value?.offset,
-      (raw as { update?: { OffsetCheckpoint?: { value?: { offset?: unknown } } } })
-        .update?.OffsetCheckpoint?.value?.offset,
+      (
+        raw as {
+          update?: { OffsetCheckpoint?: { value?: { offset?: unknown } } };
+        }
+      ).update?.OffsetCheckpoint?.value?.offset,
       (raw as { update?: { Transaction?: { value?: { offset?: unknown } } } })
         .update?.Transaction?.value?.offset,
     ];
     for (const c of candidates) {
       if (c === undefined || c === null) continue;
       const num = Number(
-        typeof c === 'object'
-          ? (c as { absolute?: unknown }).absolute
-          : c,
+        typeof c === 'object' ? (c as { absolute?: unknown }).absolute : c,
       );
       if (Number.isFinite(num)) {
         this.lastOffset = num;
@@ -983,7 +1007,10 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
       if (!payload) return null;
       const padded = payload + '='.repeat((4 - (payload.length % 4)) % 4);
       const decoded = JSON.parse(
-        Buffer.from(padded.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'),
+        Buffer.from(
+          padded.replace(/-/g, '+').replace(/_/g, '/'),
+          'base64',
+        ).toString('utf8'),
       ) as { exp?: unknown };
       return typeof decoded.exp === 'number' ? decoded.exp * 1000 : null;
     } catch {
@@ -1012,7 +1039,9 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     );
     this.reconnectTimer = setTimeout(() => {
       if (this.closedByUser) return;
-      this.logger.log('CantonUpdates: proactive reconnect (token nearing expiry).');
+      this.logger.log(
+        'CantonUpdates: proactive reconnect (token nearing expiry).',
+      );
       // Tutup koneksi lama secara graceful → trigger reconnect dengan token baru.
       // reconnectAttempts TIDAK di-increment di sini (ini planned reconnect,
       // bukan failure). startStream() akan fetch token fresh dari Keycloak.

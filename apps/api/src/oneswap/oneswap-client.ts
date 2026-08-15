@@ -36,26 +36,11 @@ export class OneSwapClient {
     return this.sdk;
   }
 
-  // ── Tokens & Pools (read-only, dipakai CantonPriceService + controller) ──
+  // ── Tokens (read-only, dipakai CantonPriceService + token helper) ──
 
   /** Daftar token yang bisa di-settle OneSwap: {symbol, admin, id, registryUrl?}. */
   async listTokens() {
     return this.ensureReady().tokens.list();
-  }
-
-  /** Semua pool visible: reserves, fee config, swapsEnabled flag. */
-  async listPools() {
-    return this.ensureReady().pools.list();
-  }
-
-  /** Satu pool + history swap-nya. */
-  async getPool(poolId: string) {
-    return this.ensureReady().pools.get(poolId);
-  }
-
-  /** Live market data pool: USD price, 24h change, 24h volume. */
-  async getTicker(poolId: string) {
-    return this.ensureReady().pools.getTicker(poolId);
   }
 
   // ── Quotes ───────────────────────────────────────────────────────────────
@@ -77,11 +62,6 @@ export class OneSwapClient {
     slippageBps?: number;
   }) {
     return this.ensureReady().swaps.createSwap(args);
-  }
-
-  /** State swap by id (poll manual). */
-  async getSwap(id: string) {
-    return this.ensureReady().swaps.getSwap(id);
   }
 
   /**

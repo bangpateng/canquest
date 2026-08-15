@@ -96,15 +96,6 @@ export class TwitterApiService {
     }
     return body;
   }
-
-  /** Validate handle exists on X and return canonical username + id when available. */
-  async resolveUser(
-    username: string,
-  ): Promise<{ username: string; userId: string | null }> {
-    const profile = await this.fetchUserProfile(username);
-    return { username: profile.username, userId: profile.userId };
-  }
-
   /** Full profile for registration / leaderboard avatars (twitterapi.io). */
   async fetchUserProfile(username: string): Promise<TwitterUserProfile> {
     const name = normalizeTwitterUsername(username);

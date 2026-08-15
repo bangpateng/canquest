@@ -26,7 +26,8 @@ export class RealtimeService {
       this.clients.set(userId, set);
     }
     set.add(res);
-    if (DEBUG_LEDGER) this.logger.debug(`+client user=${userId} (total ${set.size})`);
+    if (DEBUG_LEDGER)
+      this.logger.debug(`+client user=${userId} (total ${set.size})`);
   }
 
   /** Hapus koneksi SSE (saat user tutup tab / koneksi putus). */
@@ -35,7 +36,8 @@ export class RealtimeService {
     if (!set) return;
     set.delete(res);
     if (set.size === 0) this.clients.delete(userId);
-    if (DEBUG_LEDGER) this.logger.debug(`-client user=${userId} (total ${set.size})`);
+    if (DEBUG_LEDGER)
+      this.logger.debug(`-client user=${userId} (total ${set.size})`);
   }
 
   /**

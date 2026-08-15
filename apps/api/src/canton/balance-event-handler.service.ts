@@ -34,7 +34,12 @@
  *   - Events jarang (<1/s). O(n) parse per event, n = jumlah contracts di event.
  *   - DB lookup party → user di-cache (Map) supaya tidak query tiap event.
  */
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { Decimal } from '@prisma/client/runtime/library';
 import type { Subscription } from 'rxjs';
 import { DEBUG_LEDGER } from '../common/debug-flags';
@@ -55,7 +60,9 @@ const OWNER_CACHE_TTL_MS = 5 * 60_000;
 const OWNER_CACHE_MAX = 500;
 
 @Injectable()
-export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy {
+export class BalanceEventHandlerService
+  implements OnModuleInit, OnModuleDestroy
+{
   private readonly logger = new Logger(BalanceEventHandlerService.name);
   /** Subscription ke CantonUpdatesService.updates$ Subject. */
   private subscription: Subscription | null = null;
@@ -148,21 +155,25 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
       // Sum semua initialAmount Amulet yang owner-nya sama dalam 1 updateId.
       // Lalu apply 1x increment per user (bukan per event).
       const ccByOwner = new Map<string, number>(); // partyId → totalAmount
-      const tokenByOwnerKey = new Map<string, {
-        userId: string;
-        username: string | null;
-        instrumentId: string;
-        instrumentAdmin: string;
-        amount: number;
-        /** Contract IDs yang menyumbang ke agregat ini (untuk isi holding cache). */
-        contractIds: string[];
-      }>();
+      const tokenByOwnerKey = new Map<
+        string,
+        {
+          userId: string;
+          username: string | null;
+          instrumentId: string;
+          instrumentAdmin: string;
+          amount: number;
+          /** Contract IDs yang menyumbang ke agregat ini (untuk isi holding cache). */
+          contractIds: string[];
+        }
+      >();
 
       for (const c of ev.created) {
         const template = c.templateId || '';
         if (template.includes(':Splice.Amulet:Amulet')) {
           const args = c.createArgument ?? {};
-          const ownerPartyId = typeof args.owner === 'string' ? args.owner : null;
+          const ownerPartyId =
+            typeof args.owner === 'string' ? args.owner : null;
           if (!ownerPartyId) continue;
           const amtObj = args.amount as Record<string, unknown> | undefined;
           const amountStr =
@@ -176,7 +187,10 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
           if (!amountStr) continue;
           const amount = parseFloat(amountStr);
           if (!Number.isFinite(amount) || amount <= 0) continue;
-          ccByOwner.set(ownerPartyId, (ccByOwner.get(ownerPartyId) ?? 0) + amount);
+          ccByOwner.set(
+            ownerPartyId,
+            (ccByOwner.get(ownerPartyId) ?? 0) + amount,
+          );
         } else if (this.isTokenHoldingTemplate(template)) {
           // Token non-CC (mis. USDCx = `Utility.Registry.Holding.V0.Holding:Holding`)
           // — aggregate by owner+instrument.
@@ -458,7 +472,8 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
     // Mainnet utility-registry holding (USDCx): `…Utility.Registry.Holding.V0.Holding:Holding`
     if (t.endsWith(':Holding:Holding')) return true;
     // Varian lama / alternatif (defensive).
-    if (t.includes(':HoldingV1:Holding') || t.includes(':HoldingV0:Holding')) return true;
+    if (t.includes(':HoldingV1:Holding') || t.includes(':HoldingV0:Holding'))
+      return true;
     return false;
   }
 
@@ -478,16 +493,25 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
    * Fix: coba resolve SEMUA party non-system, jangan skip auth0_.
    */
   private async handleTokenHoldingCreated(
-    c: { contractId: string; templateId: string; createArgument?: Record<string, unknown>; signatories?: string[]; witnessParties?: string[] },
+    c: {
+      contractId: string;
+      templateId: string;
+      createArgument?: Record<string, unknown>;
+      signatories?: string[];
+      witnessParties?: string[];
+    },
     ev: CantonUpdateEvent,
-    tokenByOwnerKey: Map<string, {
-      userId: string;
-      username: string | null;
-      instrumentId: string;
-      instrumentAdmin: string;
-      amount: number;
-      contractIds: string[];
-    }>,
+    tokenByOwnerKey: Map<
+      string,
+      {
+        userId: string;
+        username: string | null;
+        instrumentId: string;
+        instrumentAdmin: string;
+        amount: number;
+        contractIds: string[];
+      }
+    >,
   ): Promise<void> {
     const args = c.createArgument ?? {};
     const cid = c.contractId;
@@ -522,8 +546,14 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
       this.logger.warn(
         `BalanceEventHandler: Holding created tapi owner tidak resolve ke user Canquest. ` +
           `ownerField=${ownerField.split('::')[0]} createKeys=[${Object.keys(args).join(',')}] ` +
-          `signatories=[${(c.signatories ?? []).slice(0, 2).map((p) => p.split('::')[0]).join(',')}] ` +
-          `eventParties=[${ev.parties.slice(0, 4).map((p) => p.split('::')[0]).join(',')}]`,
+          `signatories=[${(c.signatories ?? [])
+            .slice(0, 2)
+            .map((p) => p.split('::')[0])
+            .join(',')}] ` +
+          `eventParties=[${ev.parties
+            .slice(0, 4)
+            .map((p) => p.split('::')[0])
+            .join(',')}]`,
       );
       return;
     }
@@ -601,15 +631,22 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
    *   - args.instrumentId = { id, admin }         (registry-app style)
    *   - args.instrumentId = "..." + args.registrar = "..."  (USDCx registrar)
    */
-  private extractTokenInstrument(
-    args: Record<string, unknown>,
-  ): { instrumentId: string; instrumentAdmin: string } {
+  private extractTokenInstrument(args: Record<string, unknown>): {
+    instrumentId: string;
+    instrumentAdmin: string;
+  } {
     let instId = '';
     let instAdmin = '';
 
     // Shape 1: nested args.instrument = { id, admin, source, urn, token }
     const instNested = args.instrument as
-      | { id?: string; admin?: string; source?: string; urn?: string; token?: string }
+      | {
+          id?: string;
+          admin?: string;
+          source?: string;
+          urn?: string;
+          token?: string;
+        }
       | undefined;
     if (instNested) {
       if (instNested.id) instId = instNested.id;
@@ -638,9 +675,9 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
 
     // Shape 3: flat args.instrumentAdmin + args.instrumentId (string).
     if (!instId && typeof args.instrumentAdmin === 'string') {
-      instAdmin = instAdmin || (args.instrumentAdmin as string);
+      instAdmin = instAdmin || args.instrumentAdmin;
       if (typeof args.instrumentId === 'string') {
-        instId = args.instrumentId as string;
+        instId = args.instrumentId;
       }
     }
 
@@ -658,9 +695,9 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
 
     // Shape 5: USDCx holding — args.registrar = admin party + args.label = id.
     if (!instAdmin && typeof args.registrar === 'string') {
-      instAdmin = args.registrar as string;
+      instAdmin = args.registrar;
       if (!instId && typeof args.label === 'string') {
-        instId = args.label as string;
+        instId = args.label;
       }
     }
 
@@ -710,10 +747,17 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
   /** Simpan info holding ke cache (untuk decrement saat archived). */
   private putHoldingCache(
     contractId: string,
-    data: { userId: string; instrumentId: string; instrumentAdmin: string; amount: number },
+    data: {
+      userId: string;
+      instrumentId: string;
+      instrumentAdmin: string;
+      amount: number;
+    },
   ): void {
     // Evict oldest kalau mendekati max.
-    if (this.holdingCache.size >= BalanceEventHandlerService.HOLDING_CACHE_MAX) {
+    if (
+      this.holdingCache.size >= BalanceEventHandlerService.HOLDING_CACHE_MAX
+    ) {
       const oldest = [...this.holdingCache.entries()].sort(
         (a, b) => a[1].cachedAt - b[1].cachedAt,
       )[0];
@@ -721,7 +765,6 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
     }
     this.holdingCache.set(contractId, { ...data, cachedAt: Date.now() });
   }
-
 
   // ═══════════════════════════════════════════════════════════════════════════
   // Archived event handlers (balance decrease)
@@ -737,9 +780,11 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
    * Untuk Amulet (CC): hanya push realtime (frontend refetch), outflow tracking
    * via CcInboundSyncService polling (CC punya reconciler sendiri).
    */
-  private async handleArchivedEvent(
-    a: { contractId: string; templateId: string; witnessParties?: string[] },
-  ): Promise<void> {
+  private async handleArchivedEvent(a: {
+    contractId: string;
+    templateId: string;
+    witnessParties?: string[];
+  }): Promise<void> {
     const template = a.templateId || '';
     const isAmulet = template.includes(':Splice.Amulet:Amulet');
     const isToken = this.isTokenHoldingTemplate(template);
@@ -756,8 +801,14 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
           const row = await this.prisma.cantexTokenBalance.findFirst({
             where: {
               userId: cached.userId,
-              instrumentId: { equals: cached.instrumentId, mode: 'insensitive' },
-              instrumentAdmin: { equals: cached.instrumentAdmin, mode: 'insensitive' },
+              instrumentId: {
+                equals: cached.instrumentId,
+                mode: 'insensitive',
+              },
+              instrumentAdmin: {
+                equals: cached.instrumentAdmin,
+                mode: 'insensitive',
+              },
             },
             select: { id: true, balance: true },
           });
@@ -901,9 +952,7 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
 
     // Extract username prefix dari party ID (sebelum "::") untuk fallback match.
     // Mis. "karel::1220..." → "karel". "auth0_007c..." → null (no ::).
-    const usernameHint = partyId.includes('::')
-      ? partyId.split('::')[0]
-      : null;
+    const usernameHint = partyId.includes('::') ? partyId.split('::')[0] : null;
 
     // Cari user — coba cantonPartyId exact, lalu keycloakId exact, lalu username.
     let user = await this.prisma.user.findFirst({
@@ -912,7 +961,14 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
           { cantonPartyId: { equals: partyId, mode: 'insensitive' } },
           { keycloakId: { equals: partyId, mode: 'insensitive' } },
           ...(usernameHint
-            ? [{ username: { equals: usernameHint, mode: 'insensitive' as const } }]
+            ? [
+                {
+                  username: {
+                    equals: usernameHint,
+                    mode: 'insensitive' as const,
+                  },
+                },
+              ]
             : []),
         ],
       },
@@ -950,7 +1006,9 @@ export class BalanceEventHandlerService implements OnModuleInit, OnModuleDestroy
   private markProcessed(updateId: string): void {
     this.processedUpdates.add(updateId);
     // Evict oldest kalau set mendekati max (FIFO approximation via insertion order).
-    if (this.processedUpdates.size >= BalanceEventHandlerService.PROCESSED_MAX) {
+    if (
+      this.processedUpdates.size >= BalanceEventHandlerService.PROCESSED_MAX
+    ) {
       const first = this.processedUpdates.values().next().value;
       if (first) this.processedUpdates.delete(first);
     }

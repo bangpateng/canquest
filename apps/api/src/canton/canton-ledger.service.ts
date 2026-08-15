@@ -4,6 +4,7 @@ import {
   Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { sleep } from '../common/time-utils';
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomUUID } from 'crypto';
 import { KeycloakTokenService } from '../auth/keycloak-token.service';
@@ -469,7 +470,7 @@ export class CantonLedgerService {
     /**
      * Ledger identity to use for authentication.
      * 'admin'  → validator-app-backend (general operations, default)
-     * 'reward' → reward client (CC reward transfers — JOB_SEND_CC_REWARD, JOB_DISTRIBUTE_REWARD)
+     * 'reward' → reward client (CC reward transfers — JOB_SEND_CC_REWARD)
      */
     identity?: 'admin' | 'reward';
     /**
@@ -1001,7 +1002,8 @@ export class CantonLedgerService {
         ok: false,
         updateId: null,
         transferKind: 'unknown',
-        error: 'WalletUserProxy contractId not found (set CANTON_PROXY_WUP_CID)',
+        error:
+          'WalletUserProxy contractId not found (set CANTON_PROXY_WUP_CID)',
       };
     }
     // FAR opsional — kalau ada, attach (Some) utk earn rewards. Kalau kosong,
@@ -1235,8 +1237,8 @@ export class CantonLedgerService {
     transfers: Array<{
       receiverPartyId: string;
       amount: number;
-      instrumentId: string;        // 'Amulet' (CC) atau token id (USDCx)
-      instrumentAdmin: string;     // DSO utk CC, registrar utk non-CC
+      instrumentId: string; // 'Amulet' (CC) atau token id (USDCx)
+      instrumentAdmin: string; // DSO utk CC, registrar utk non-CC
       description?: string;
     }>;
     clientNonce?: string;
@@ -1261,17 +1263,25 @@ export class CantonLedgerService {
         ok: false,
         updateId: null,
         transferKind: 'unknown',
-        error: 'WalletUserProxy contractId not found (set CANTON_PROXY_WUP_CID)',
+        error:
+          'WalletUserProxy contractId not found (set CANTON_PROXY_WUP_CID)',
       };
     }
     const farCid = await this.proxyCache.getFeaturedAppRightCid();
     const { senderPartyId, transfers, clientNonce } = params;
     if (transfers.length === 0) {
-      return { ok: false, updateId: null, transferKind: 'unknown', error: 'No transfers provided' };
+      return {
+        ok: false,
+        updateId: null,
+        transferKind: 'unknown',
+        error: 'No transfers provided',
+      };
     }
 
     const now = new Date();
-    const executeBefore = new Date(now.getTime() + 24 * 3600 * 1000).toISOString();
+    const executeBefore = new Date(
+      now.getTime() + 24 * 3600 * 1000,
+    ).toISOString();
     const nowIso = now.toISOString();
 
     // ── Build transferCalls array ─────────────────────────────────────────
@@ -1294,7 +1304,10 @@ export class CantonLedgerService {
     const allDisclosedContracts: unknown[] = [];
     let lastTransferKind = 'direct';
 
-    const transferCalls: Array<{ factoryCid: string; choiceArg: Record<string, unknown> }> = [];
+    const transferCalls: Array<{
+      factoryCid: string;
+      choiceArg: Record<string, unknown>;
+    }> = [];
 
     for (const t of transfers) {
       const instrumentKey = `${t.instrumentAdmin}|${t.instrumentId}`;
@@ -1358,7 +1371,7 @@ export class CantonLedgerService {
         lastTransferKind = registry.transferKind;
         // Dedupe disclosed contracts per instrument.
         for (const dc of registry.disclosedContracts) {
-          const dcCid = (dc as Record<string, unknown>)?.contract as unknown;
+          const dcCid = (dc as Record<string, unknown>)?.contract;
           const exists = allDisclosedContracts.some(
             (existing) =>
               (existing as Record<string, unknown>)?.contract === dcCid,
@@ -1418,7 +1431,10 @@ export class CantonLedgerService {
     this.logger.log(
       `WalletUserProxy_BatchTransfer (multi ${transferCalls.length} legs): ` +
         `sender=${senderPartyId.split('::')[0]} legs=[${transfers
-          .map((t) => `${t.receiverPartyId.split('::')[0]}:${t.amount}:${t.instrumentId}`)
+          .map(
+            (t) =>
+              `${t.receiverPartyId.split('::')[0]}:${t.amount}:${t.instrumentId}`,
+          )
           .join(', ')}] ` +
         `wup=${wupCid.slice(0, 16)}... far=${farCid ? 'attached' : 'None'}`,
     );
@@ -1515,7 +1531,8 @@ export class CantonLedgerService {
       return {
         ok: false,
         updateId: null,
-        error: 'WalletUserProxy contractId not found (set CANTON_PROXY_WUP_CID)',
+        error:
+          'WalletUserProxy contractId not found (set CANTON_PROXY_WUP_CID)',
       };
     }
     const farCid = await this.proxyCache.getFeaturedAppRightCid();
@@ -1529,7 +1546,8 @@ export class CantonLedgerService {
       };
     }
 
-    const { userPartyId, transferInstructionCid, action, instrumentAdmin } = params;
+    const { userPartyId, transferInstructionCid, action, instrumentAdmin } =
+      params;
 
     // choiceContext untuk Accept (registry call). Reject/Withdraw biasanya kosong.
     // disclosedContracts juga didapat dari sini (TransferRule contract).
@@ -1815,17 +1833,6 @@ export class CantonLedgerService {
     return null;
   }
 
-  async hasTransferPreapprovalViaLedger(partyId: string): Promise<boolean> {
-    return (await this.findTransferPreapprovalContract(partyId)) !== null;
-  }
-
-  async getTransferPreapprovalViaLedger(
-    partyId: string,
-  ): Promise<{ expiresAt?: string; provider?: string } | null> {
-    const c = await this.findTransferPreapprovalContract(partyId);
-    return c ? { expiresAt: c.expiresAt, provider: c.provider } : null;
-  }
-
   /**
    * Authoritative TransferPreapproval read — source of truth for the app.
    *
@@ -2008,7 +2015,7 @@ export class CantonLedgerService {
     for (let i = 0; i < tries; i++) {
       const status = await this.getTransferPreapprovalAuthoritative(partyId);
       if (!status.active) return true;
-      await new Promise((r) => setTimeout(r, delayMs));
+      await sleep(delayMs);
     }
     return false;
   }
@@ -2919,25 +2926,6 @@ export class CantonLedgerService {
     }
   }
 
-  /**
-   * Verify a Party ID exists on this participant.
-   * GET /v2/parties?parties=<partyId>
-   */
-  async verifyParty(partyId: string): Promise<boolean> {
-    try {
-      const encoded = encodeURIComponent(partyId);
-      const res = await fetch(`${this.baseUrl}/v2/parties?parties=${encoded}`, {
-        headers: await this.authHeaders(),
-        signal: AbortSignal.timeout(6_000),
-      });
-      if (!res.ok) return false;
-      const data = (await res.json()) as { partyDetails?: unknown[] };
-      return Array.isArray(data.partyDetails) && data.partyDetails.length > 0;
-    } catch {
-      return false;
-    }
-  }
-
   /** Ambil current mining round dari Validator API (admin Keycloak token). */
   /**
    * Ambil nomor round Canton saat ini dari validator balance endpoint.
@@ -3113,62 +3101,6 @@ export class CantonLedgerService {
     return total;
   }
 
-  /** List parties visible to this participant. */
-  async listParties(): Promise<unknown[]> {
-    const res = await fetch(`${this.baseUrl}/v2/parties`, {
-      headers: await this.authHeaders(),
-      signal: AbortSignal.timeout(6_000),
-    });
-    const text = await res.text();
-    if (!res.ok)
-      throw new ServiceUnavailableException(
-        `Canton /v2/parties GET ${res.status}`,
-      );
-    return (JSON.parse(text) as { partyDetails: unknown[] }).partyDetails ?? [];
-  }
-
-  /**
-   * Auto-discover the ExternalPartyAmuletRules factory contract ID from the ledger.
-   * Queries ACS for Splice.ExternalPartyAmuletRules:ExternalPartyAmuletRules visible to the operator.
-   * No need to configure CANTON_TRANSFER_FACTORY_CONTRACT_ID in .env.
-   */
-  async discoverTransferFactoryContractId(
-    operatorPartyId: string,
-  ): Promise<string | null> {
-    const tplId =
-      '#splice-amulet:Splice.ExternalPartyAmuletRules:ExternalPartyAmuletRules';
-    try {
-      const contracts = await this.queryActiveContracts(tplId, [
-        operatorPartyId,
-      ]);
-      for (const entry of contracts) {
-        if (!entry || typeof entry !== 'object') continue;
-        const obj = entry as Record<string, unknown>;
-        const cid =
-          typeof obj.contractId === 'string'
-            ? obj.contractId
-            : typeof (obj as { CreatedTreeEvent?: { contractId?: string } })
-                  ?.CreatedTreeEvent?.contractId === 'string'
-              ? (obj as { CreatedTreeEvent: { contractId: string } })
-                  .CreatedTreeEvent.contractId
-              : null;
-        if (cid) {
-          this.logger.log(`Discovered TransferFactory: ${cid.slice(0, 16)}...`);
-          return cid;
-        }
-      }
-      this.logger.warn(
-        `No ExternalPartyAmuletRules contract found for operator ${operatorPartyId.split('::')[0]}`,
-      );
-      return null;
-    } catch (err) {
-      this.logger.warn(
-        `discoverTransferFactoryContractId error: ${String(err)}`,
-      );
-      return null;
-    }
-  }
-
   /** Returns current ledger-end offset. */
   async ledgerEnd(): Promise<unknown> {
     const res = await fetch(`${this.baseUrl}/v2/state/ledger-end`, {
@@ -3302,261 +3234,6 @@ export class CantonLedgerService {
     }
     return holdings;
   }
-
-  /**
-   * Query holding generic untuk token APA PUN (CC/Amulet + non-CC: USDCx, CBTC, dll).
-   *
-   * Memakai WildcardFilter + client-side filter by createArgument.instrument.
-   * Token standard Canton (CIP-0056) expose holding via interface HoldingV1
-   * dengan field: owner, instrumentId {admin, id}, amount. Filter client-side
-   * cocokkan instrumentId + admin + owner.
-   *
-   * Untuk CC/Amulet, fallback ke queryAmuletHoldings (struktur field berbeda:
-   * Amulet punya amount.initialAmount, bukan flat amount).
-   *
-   * @param ownerPartyId - Canton party ID pemilik holding
-   * @param instrumentId - Instrument id token (mis. "USDCx")
-   * @param instrumentAdmin - Admin party instrument
-   * @param readAs - parties dengan read rights
-   * @returns Array of { contractId, amount }
-   */
-  async queryTokenHoldings(
-    ownerPartyId: string,
-    instrumentId: string,
-    instrumentAdmin: string,
-    readAs?: string[],
-  ): Promise<Array<{ contractId: string; amount: string }>> {
-    // Amulet/CC punya struktur khusus — pakai method existing yang proven.
-    if (instrumentId.toLowerCase() === 'amulet') {
-      return this.queryAmuletHoldings(ownerPartyId, readAs);
-    }
-
-    const effectiveReadAs = readAs ?? [ownerPartyId];
-
-    let offset: number | string = 0;
-    try {
-      const end = (await this.ledgerEnd()) as { offset?: number | string };
-      offset = end?.offset ?? 0;
-    } catch {
-      offset = 0;
-    }
-
-    const filtersByParty: Record<string, unknown> = {};
-    for (const party of effectiveReadAs) {
-      filtersByParty[party] = {
-        cumulative: [
-          {
-            identifierFilter: {
-              WildcardFilter: { value: { includeCreatedEventBlob: false } },
-            },
-          },
-        ],
-      };
-    }
-
-    let allContracts: unknown[] = [];
-    try {
-      const res = await fetch(`${this.baseUrl}/v2/state/active-contracts`, {
-        method: 'POST',
-        headers: await this.authHeaders(),
-        body: JSON.stringify({
-          eventFormat: { filtersByParty, verbose: true },
-          activeAtOffset: offset,
-        }),
-        signal: AbortSignal.timeout(20_000),
-      });
-      if (res.ok) {
-        allContracts = (await res.json()) as unknown[];
-        if (!Array.isArray(allContracts)) allContracts = [];
-      } else {
-        const text = await res.text();
-        this.logger.warn(
-          `queryTokenHoldings wildcard ${res.status}: ${text.slice(0, 200)}`,
-        );
-      }
-    } catch (err) {
-      this.logger.warn(`queryTokenHoldings error: ${String(err)}`);
-    }
-
-    // Client-side filter: holding contracts dengan instrument + owner match.
-    // Defensive parsing: holding USDCx (utility-registry-holding) mungkin punya
-    // field shape beda dari CC (Amulet). Coba beberapa conventions:
-    //   - nested: args.instrument = { id, admin }
-    //   - flat: args.instrumentId = { id, admin }  ATAU  args.instrumentAdmin + args.instrumentId
-    //   - registry-app: args.instrument = { admin, id } atau args.transfer.instrumentId
-    const targetId = instrumentId.toLowerCase();
-    const targetAdmin = instrumentAdmin.toLowerCase();
-    const holdings: Array<{ contractId: string; amount: string }> = [];
-    let skippedForDebug = 0;
-    for (const entry of allContracts) {
-      if (!entry || typeof entry !== 'object') continue;
-      const wrapper = entry as Record<string, unknown>;
-      const active = wrapper.contractEntry as
-        | Record<string, unknown>
-        | undefined;
-      const jsActive = active?.JsActiveContract as
-        | Record<string, unknown>
-        | undefined;
-      const ev = (jsActive?.createdEvent ?? wrapper) as Record<string, unknown>;
-      const cid = typeof ev.contractId === 'string' ? ev.contractId : null;
-      const args =
-        (ev.createArgument as Record<string, unknown> | undefined) ?? {};
-      if (!cid) continue;
-
-      // (Debug dump dihapus — field shape sudah diketahui: instrument.{id,source})
-
-      // Coba extract instrument id + admin dari beberapa field shapes.
-      let instId = '';
-      let instAdmin = '';
-
-      // Shape 1: nested args.instrument = { id, admin } (CC/Amulet style)
-      const instNested = args.instrument as
-        | {
-            id?: string;
-            admin?: string;
-            source?: string;
-            token?: string;
-            urn?: string;
-          }
-        | undefined;
-      if (instNested) {
-        // USDCx holding: instrument.source = admin party, instrument.id or instrument.urn = id
-        if (instNested.id) instId = instNested.id.toLowerCase();
-        if (instNested.admin) instAdmin = instNested.admin.toLowerCase();
-        if (!instAdmin && instNested.source)
-          instAdmin = instNested.source.toLowerCase(); // USDCx uses "source" for admin
-        if (!instId && instNested.token)
-          instId = instNested.token.toLowerCase();
-        if (!instId && instNested.urn) {
-          // URN format: "utility::USDCx::decentralized-usdc-interchain-rep::..."
-          const urnParts = instNested.urn.split('::');
-          if (urnParts.length >= 2) instId = urnParts[1].toLowerCase();
-        }
-      }
-
-      // Shape 2: args.instrumentId = { id, admin, source } (registry-app style)
-      if (!instId) {
-        const instIdField = args.instrumentId as
-          | { id?: string; admin?: string; source?: string }
-          | string
-          | undefined;
-        if (typeof instIdField === 'object' && instIdField?.id) {
-          instId = instIdField.id.toLowerCase();
-          instAdmin = (
-            instIdField.admin ??
-            instIdField.source ??
-            ''
-          ).toLowerCase();
-        } else if (typeof instIdField === 'string') {
-          instId = instIdField.toLowerCase();
-        }
-      }
-
-      // Shape 3: flat args.instrumentAdmin + args.instrumentId (string)
-      if (!instId && typeof args.instrumentAdmin === 'string') {
-        instAdmin = args.instrumentAdmin.toLowerCase();
-        if (typeof args.instrumentId === 'string') {
-          instId = args.instrumentId.toLowerCase();
-        }
-      }
-
-      // Shape 4: nested di args.transfer.instrumentId (TransferOffer shape)
-      if (!instId) {
-        const transfer = args.transfer as
-          | {
-              instrumentId?: { id?: string; admin?: string; source?: string };
-              sender?: string;
-            }
-          | undefined;
-        const tInst = transfer?.instrumentId;
-        if (tInst?.id) {
-          instId = tInst.id.toLowerCase();
-          instAdmin = (tInst.admin ?? tInst.source ?? '').toLowerCase();
-        }
-      }
-
-      // Shape 5: USDCx holding — args.registrar = admin party
-      // (dari dump: registrar = decentralized-usdc-interchain-rep::...)
-      if (!instAdmin && typeof args.registrar === 'string') {
-        instAdmin = args.registrar.toLowerCase();
-        // instId mungkin masih kosong — label field atau instrument.id
-        if (!instId && typeof args.label === 'string') {
-          instId = args.label.toLowerCase();
-        }
-      }
-
-      // Match instrument id (case-insensitive, exact match).
-      // Match admin (case-insensitive, PREFIX-tolerant: party IDs panjang,
-      // bisa beda suffix antara sumber pool vs sumber contract. Cukup match
-      // prefix 30 char pertama — unik enough untuk distinguish registrar).
-      if (instId !== targetId) {
-        skippedForDebug++;
-        continue;
-      }
-      // Admin match: exact OR prefix-match (first 30 chars).
-      const adminPrefixLen = 30;
-      const adminMatch =
-        instAdmin === targetAdmin ||
-        (instAdmin.length >= adminPrefixLen &&
-          targetAdmin.length >= adminPrefixLen &&
-          instAdmin.slice(0, adminPrefixLen) ===
-            targetAdmin.slice(0, adminPrefixLen));
-      if (!adminMatch) {
-        // Log mismatch sekali untuk debug (first mismatch only).
-        if (skippedForDebug === 0) {
-          this.logger.warn(
-            `queryTokenHoldings admin mismatch: contract admin=${instAdmin.slice(0, 30)}… ` +
-              `vs target admin=${targetAdmin.slice(0, 30)}… (instrument=${instrumentId})`,
-          );
-        }
-        skippedForDebug++;
-        continue;
-      }
-
-      // Match owner (beberapa field name: owner, receiver, holder).
-      // Case-insensitive: on-chain casing bisa beda vs ownerPartyId (DB lowercase).
-      const cOwner =
-        typeof args.owner === 'string'
-          ? args.owner
-          : typeof args.receiver === 'string'
-            ? args.receiver
-            : '';
-      if (cOwner && !cantonPartyIdsEqual(cOwner, ownerPartyId)) continue;
-
-      // Extract amount (defensive: flat string, nested initialAmount, atau amount object).
-      const amtRaw = args.amount as Record<string, unknown> | undefined;
-      const amountStr =
-        typeof amtRaw?.initialAmount === 'string'
-          ? amtRaw.initialAmount
-          : typeof amtRaw?.amount === 'string'
-            ? amtRaw.amount
-            : typeof args.amount === 'string'
-              ? args.amount
-              : typeof args.balance === 'string'
-                ? args.balance
-                : '0';
-
-      holdings.push({ contractId: cid, amount: amountStr });
-    }
-
-    if (holdings.length === 0 && skippedForDebug > 0) {
-      this.logger.warn(
-        `queryTokenHoldings: 0 holdings matched instrument=${instrumentId} ` +
-          `admin=${instrumentAdmin.slice(0, 24)}… (${skippedForDebug} contracts skipped). ` +
-          `Field shape holding USDCx mungkin berbeda — perlu dump createArgument untuk debug.`,
-      );
-    }
-
-    // Hot path: queryTokenHoldings dipanggil per-request balance & per-poll sync.
-    // Gate dengan DEBUG_LEDGER supaya template string tidak jalan tiap poll.
-    if (DEBUG_LEDGER) {
-      this.logger.verbose(
-        `Token ACS query: party=${ownerPartyId.split('::')[0]} instrument=${instrumentId} found ${holdings.length} holdings from ${allContracts.length} total contracts`,
-      );
-    }
-    return holdings;
-  }
-
   /**
    * Query token holdings via InterfaceFilter — AUTHORITATIVE on-chain read.
    *
@@ -3564,8 +3241,7 @@ export class CantonLedgerService {
    * ledger sesuai state on-chain TERKINI, BUKAN dari DB off-chain.
    *
    * KENAPA BUTUH INI:
-   *   `queryTokenHoldings()` di atas pakai WildcardFilter — tapi per konfirmasi
-   *   Canton docs, WildcardFilter TIDAK match contract yang hanya visible via
+   *   Alternatif WildcardFilter TIDAK match contract yang hanya visible via
    *   interface. Token standard (USDCx = `Utility.Registry.Holding.V0:Holding`)
    *   terekspos via interface `HoldingV1`, BUKAN template langsung. Itu sebabnya
    *   WildcardFilter return [] padahal holding itu ADA (dibuktikan WSS stream
@@ -3754,7 +3430,7 @@ export class CantonLedgerService {
             `getTokenHoldingCids: ${instrumentId} not found for ${partyId.split('::')[0]} (attempt ${attempt}/${maxRetries}), retry in ${retryDelayMs}ms...`,
           );
         }
-        await new Promise((r) => setTimeout(r, retryDelayMs));
+        await sleep(retryDelayMs);
       }
     }
     // Final attempt tetap kosong — log WARN supaya keliatan di produksi.
@@ -4001,7 +3677,11 @@ export class CantonLedgerService {
         // Direction filter: incoming → must be receiver; outgoing → must be sender.
         // Case-insensitive: on-chain party ID bisa beda casing (Cantex vs cantex)
         // vs DB yang selalu lowercase → pakai cantonPartyIdsEqual, bukan ===.
-        if (isOutgoing ? !cantonPartyIdsEqual(sender, partyId) : !cantonPartyIdsEqual(receiver, partyId))
+        if (
+          isOutgoing
+            ? !cantonPartyIdsEqual(sender, partyId)
+            : !cantonPartyIdsEqual(receiver, partyId)
+        )
           continue;
         const ccAmount = typeof args.amount === 'string' ? args.amount : '0';
         const desc =
@@ -4044,7 +3724,11 @@ export class CantonLedgerService {
           typeof transfer.sender === 'string' ? transfer.sender : '';
         // Direction filter: incoming → must be receiver; outgoing → must be sender.
         // Case-insensitive: on-chain party ID bisa beda casing vs DB lowercase.
-        if (isOutgoing ? !cantonPartyIdsEqual(sender, partyId) : !cantonPartyIdsEqual(receiver, partyId))
+        if (
+          isOutgoing
+            ? !cantonPartyIdsEqual(sender, partyId)
+            : !cantonPartyIdsEqual(receiver, partyId)
+        )
           continue;
 
         const amount =
@@ -4114,7 +3798,11 @@ export class CantonLedgerService {
           typeof transfer.sender === 'string' ? transfer.sender : '';
         // Direction filter: incoming → must be receiver; outgoing → must be sender.
         // Case-insensitive: on-chain party ID bisa beda casing vs DB lowercase.
-        if (isOutgoing ? !cantonPartyIdsEqual(sender, partyId) : !cantonPartyIdsEqual(receiver, partyId))
+        if (
+          isOutgoing
+            ? !cantonPartyIdsEqual(sender, partyId)
+            : !cantonPartyIdsEqual(receiver, partyId)
+        )
           continue;
         const amount =
           typeof transfer.amount === 'string'
@@ -4340,121 +4028,6 @@ export class CantonLedgerService {
       this.logger.warn(`queryActiveContracts error: ${String(err)}`);
       return [];
     }
-  }
-
-  /**
-   * Fetch a contract by its DAML key using the Canton JSON Ledger API v2.
-   *
-   * POST /v2/contracts/by-key
-   *
-   * Body per official docs:
-   * {
-   *   "templateId": "<packageId>:<ModuleName>:<TemplateName>",
-   *   "key": { ... },       // e.g. { "_1": "party", "_2": "username" } for (Party, Text) key
-   *   "readAs": ["party"]
-   * }
-   *
-   * NOTE: `/v2/contracts/by-key` may not be available in all Canton versions.
-   * If the endpoint returns 404, we fall back to queryActiveContracts and
-   * apply the key-based filter client-side.
-   *
-   * Returns the contract entry (with contractId) if found, null if not found,
-   * or throws on permission / transport errors.
-   *
-   * See: https://docs.canton.network/appdev/modules/m3-contract-keys
-   */
-  async fetchByKey(
-    templateId: string,
-    key: unknown,
-    readAs: string[],
-  ): Promise<{ contractId: string; createArgument?: unknown } | null> {
-    try {
-      const res = await fetch(`${this.baseUrl}/v2/contracts/by-key`, {
-        method: 'POST',
-        headers: await this.authHeaders(),
-        body: JSON.stringify({ templateId, key, readAs }),
-        signal: AbortSignal.timeout(10_000),
-      });
-
-      // 404 = endpoint not available on this participant version
-      // → fall back to ACS query + client-side key match
-      if (res.status === 404) {
-        this.logger.debug(
-          `/v2/contracts/by-key returned 404 — falling back to ACS query`,
-        );
-        return this.fetchByKeyViaAcs(templateId, key, readAs);
-      }
-
-      if (!res.ok) {
-        const text = await res.text();
-        this.logger.warn(`fetchByKey ${res.status}: ${text.slice(0, 200)}`);
-        return null;
-      }
-
-      const data = (await res.json()) as Record<string, unknown>;
-      // Response may be { contractId, createArgument } or wrapped in CreatedEvent
-      const contractId =
-        typeof data.contractId === 'string' ? data.contractId : null;
-      const args = (data.createArgument ??
-        (data.CreatedEvent as Record<string, unknown> | undefined)
-          ?.createArgument ??
-        (data.CreatedTreeEvent as Record<string, unknown> | undefined)
-          ?.createArgument ??
-        null) as Record<string, unknown> | null;
-
-      if (!contractId) return null;
-      return { contractId, createArgument: args ?? undefined };
-    } catch (err) {
-      this.logger.warn(`fetchByKey error: ${String(err)}`);
-      return null;
-    }
-  }
-
-  /**
-   * Fallback: query ACS for the template and filter by key client-side.
-   * Used when `/v2/contracts/by-key` is not available (older Canton versions).
-   *
-   * keyMatch is a simple shallow comparison of the DAML createArguments fields
-   * against the provided key record. For canonical Canton key serialisation,
-   * keys are compared via Daml-LF value equality, but for our internal app
-   * templates this shallow match is sufficient.
-   */
-  private async fetchByKeyViaAcs(
-    templateId: string,
-    key: unknown,
-    readAs: string[],
-  ): Promise<{ contractId: string; createArgument?: unknown } | null> {
-    try {
-      const contracts = await this.queryActiveContracts(templateId, readAs);
-      const keyObj = key as Record<string, unknown>;
-
-      for (const entry of contracts) {
-        if (!entry || typeof entry !== 'object') continue;
-        const obj = entry as Record<string, unknown>;
-        const args =
-          (obj.createArgument as Record<string, unknown> | undefined) ??
-          ((obj.CreatedTreeEvent as Record<string, unknown> | undefined)
-            ?.createArgument as Record<string, unknown> | undefined) ??
-          ((obj.CreatedEvent as Record<string, unknown> | undefined)
-            ?.createArgument as Record<string, unknown> | undefined);
-        const cid = typeof obj.contractId === 'string' ? obj.contractId : null;
-
-        if (!args || !cid) continue;
-
-        // Shallow key match — compare every key in keyObj against args
-        let match = true;
-        for (const [k, v] of Object.entries(keyObj)) {
-          if (args[k] !== v) {
-            match = false;
-            break;
-          }
-        }
-        if (match) return { contractId: cid, createArgument: args };
-      }
-    } catch (err) {
-      this.logger.warn(`fetchByKeyViaAcs error: ${String(err)}`);
-    }
-    return null;
   }
 
   /**
@@ -5005,20 +4578,32 @@ export class CantonLedgerService {
   }> {
     const expectedDso = this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim();
     if (!expectedDso)
-      return { ok: false, updateId: null, error: 'CANTON_DSO_PARTY_ID not set' };
+      return {
+        ok: false,
+        updateId: null,
+        error: 'CANTON_DSO_PARTY_ID not set',
+      };
     const provider =
       params.providerPartyId ??
       this.config.get<string>('CANTON_VALIDATOR_PARTY_ID') ??
       '';
     if (!provider)
-      return { ok: false, updateId: null, error: 'CANTON_VALIDATOR_PARTY_ID not set' };
+      return {
+        ok: false,
+        updateId: null,
+        error: 'CANTON_VALIDATOR_PARTY_ID not set',
+      };
     if (params.outputs.length === 0)
       return { ok: false, updateId: null, error: 'No outputs provided' };
 
     // 1) Disclosed contracts from scan-proxy (DSO-signed, with created_event_blob)
     const amuletRules = await this.fetchScanProxyContract('amulet-rules');
     if (!amuletRules)
-      return { ok: false, updateId: null, error: 'scan-proxy /amulet-rules failed' };
+      return {
+        ok: false,
+        updateId: null,
+        error: 'scan-proxy /amulet-rules failed',
+      };
     const openRound = await this.fetchScanProxyContract(
       'open-and-issuing-mining-rounds',
     );
@@ -5155,7 +4740,11 @@ export class CantonLedgerService {
     this.logger.warn(
       `AmuletRules_Transfer (multi-output) failed ${status}: ${text.slice(0, 300)}`,
     );
-    return { ok: false, updateId: null, error: `Ledger ${status}: ${text.slice(0, 300)}` };
+    return {
+      ok: false,
+      updateId: null,
+      error: `Ledger ${status}: ${text.slice(0, 300)}`,
+    };
   }
 
   /**
@@ -5524,9 +5113,4 @@ function extractUpdateIdFromTree(responseText: string): string | null {
     /* ignore */
   }
   return null;
-}
-
-/** Exponential-backoff sleep helper (milliseconds). */
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

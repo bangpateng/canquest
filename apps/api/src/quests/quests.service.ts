@@ -39,7 +39,6 @@ import {
   normalizeRewardToken,
   type RewardTokenSymbol,
 } from '../canton/token-instrument.helper';
-import { ProfileAvatarService } from '../users/profile-avatar.service';
 import { resolvePublicAvatarUrl } from '../users/user-avatar-url';
 import { PointsService } from '../users/points.service';
 import { UsersService } from '../users/users.service';
@@ -110,7 +109,6 @@ export class QuestsService {
     private readonly prisma: PrismaService,
     private readonly questLedger: QuestLedgerService,
     private readonly cantonLedger: CantonLedgerService,
-    private readonly avatars: ProfileAvatarService,
     private readonly users: UsersService,
     private readonly points: PointsService,
     private readonly twitterApi: TwitterApiService,
@@ -726,11 +724,17 @@ export class QuestsService {
    */
   async checkEligibilityStatus(params: {
     userId: string;
-    eligibilityType: string;          // quest.eligibilityType (NONE|LOCK_CC|POINTS)
-    eligibilityAmount: number;        // quest.eligibilityAmount
-    campaignCreatedAt: string;        // ISO quest.createdAt (utk lock-after guard)
-  }): Promise<{ eligible: boolean; reason: string | null; action: string | null; currentAmount?: number }> {
-    const { userId, eligibilityType, eligibilityAmount, campaignCreatedAt } = params;
+    eligibilityType: string; // quest.eligibilityType (NONE|LOCK_CC|POINTS)
+    eligibilityAmount: number; // quest.eligibilityAmount
+    campaignCreatedAt: string; // ISO quest.createdAt (utk lock-after guard)
+  }): Promise<{
+    eligible: boolean;
+    reason: string | null;
+    action: string | null;
+    currentAmount?: number;
+  }> {
+    const { userId, eligibilityType, eligibilityAmount, campaignCreatedAt } =
+      params;
 
     if (eligibilityType === 'NONE' || eligibilityAmount <= 0) {
       return { eligible: true, reason: null, action: null };
@@ -760,7 +764,10 @@ export class QuestsService {
           action: 'Lock CC to participate in this campaign.',
         };
       }
-      if (new Date(latestLockAt).getTime() <= new Date(campaignCreatedAt).getTime()) {
+      if (
+        new Date(latestLockAt).getTime() <=
+        new Date(campaignCreatedAt).getTime()
+      ) {
         return {
           eligible: false,
           currentAmount: totalLocked,
@@ -768,7 +775,12 @@ export class QuestsService {
           action: 'Unlock and re-lock your CC now to become eligible.',
         };
       }
-      return { eligible: true, reason: null, action: null, currentAmount: totalLocked };
+      return {
+        eligible: true,
+        reason: null,
+        action: null,
+        currentAmount: totalLocked,
+      };
     }
 
     if (eligibilityType === 'POINTS') {
@@ -781,59 +793,17 @@ export class QuestsService {
           action: 'Complete more quests to earn points.',
         };
       }
-      return { eligible: true, reason: null, action: null, currentAmount: netPoints };
+      return {
+        eligible: true,
+        reason: null,
+        action: null,
+        currentAmount: netPoints,
+      };
     }
 
     // Unknown type → treat as eligible (defensive)
     return { eligible: true, reason: null, action: null };
   }
-
-  /**
-   * v25: Wrapper checkEligibilityStatus utk quest by id (utk endpoint pre-check).
-   * Query Quest dari DB (eligibilityType/amount/createdAt), lalu panggil
-   * checkEligibilityStatus. Return enhanced object dgn requiredAmount + type.
-   */
-  async checkClaimEligibility(questId: string, userId: string): Promise<{
-    eligible: boolean;
-    reason: string | null;
-    action: string | null;
-    currentAmount?: number;
-    requiredAmount: number;
-    eligibilityType: string;
-  }> {
-    const quest = await this.prisma.quest.findUnique({
-      where: { id: questId },
-      select: {
-        eligibilityType: true,
-        eligibilityAmount: true,
-        createdAt: true,
-      },
-    });
-    if (!quest) {
-      return {
-        eligible: false,
-        reason: 'Campaign not found.',
-        action: null,
-        requiredAmount: 0,
-        eligibilityType: 'NONE',
-      };
-    }
-    const status = await this.checkEligibilityStatus({
-      userId,
-      eligibilityType: quest.eligibilityType ?? 'NONE',
-      eligibilityAmount: quest.eligibilityAmount ?? 0,
-      campaignCreatedAt: (quest.createdAt ?? new Date()).toISOString(),
-    });
-    return {
-      eligible: status.eligible,
-      reason: status.reason,
-      action: status.action,
-      currentAmount: status.currentAmount,
-      requiredAmount: quest.eligibilityAmount ?? 0,
-      eligibilityType: quest.eligibilityType ?? 'NONE',
-    };
-  }
-
   /**
    * v25: Resolve (or create) DAML CampaignEligibility contract id utk user+quest.
    * Dipanggil oleh 5 claim path sebelum claimFcfsSlot/drawRaffleWinner.
@@ -847,11 +817,18 @@ export class QuestsService {
     questId: string;
     userId: string;
     userPartyId: string;
-    eligibilityType: string;          // quest.eligibilityType (NONE|LOCK_CC|POINTS)
-    eligibilityAmount: number;        // quest.eligibilityAmount
-    campaignCreatedAt: string;        // ISO quest.createdAt (utk lock-after guard)
+    eligibilityType: string; // quest.eligibilityType (NONE|LOCK_CC|POINTS)
+    eligibilityAmount: number; // quest.eligibilityAmount
+    campaignCreatedAt: string; // ISO quest.createdAt (utk lock-after guard)
   }): Promise<string | null> {
-    const { questId, userId, userPartyId, eligibilityType, eligibilityAmount, campaignCreatedAt } = params;
+    const {
+      questId,
+      userId,
+      userPartyId,
+      eligibilityType,
+      eligibilityAmount,
+      campaignCreatedAt,
+    } = params;
 
     // NONE → no on-chain eligibility check
     if (eligibilityType === 'NONE' || eligibilityAmount <= 0) return null;
@@ -878,9 +855,10 @@ export class QuestsService {
     }
 
     // 3. Recompute amount + lockedAt utk DAML contract (status sudah pasti eligible)
-    let amount = status.currentAmount ?? 0;
+    const amount = status.currentAmount ?? 0;
     let lockedAt: string | null = null;
-    let typeForDaml: 'LOCK_CC' | 'POINTS' = eligibilityType === 'POINTS' ? 'POINTS' : 'LOCK_CC';
+    const typeForDaml: 'LOCK_CC' | 'POINTS' =
+      eligibilityType === 'POINTS' ? 'POINTS' : 'LOCK_CC';
 
     if (typeForDaml === 'LOCK_CC') {
       const locks = await this.prisma.ccLock.findMany({
@@ -942,7 +920,10 @@ export class QuestsService {
    * QUEST_ATOMIC_SETTLE=false utk emergency kill-switch → fallback ke path lama.
    */
   private get useAtomicSettle(): boolean {
-    const v = this.config.get<string>('QUEST_ATOMIC_SETTLE')?.trim().toLowerCase();
+    const v = this.config
+      .get<string>('QUEST_ATOMIC_SETTLE')
+      ?.trim()
+      .toLowerCase();
     if (v === 'false' || v === '0') return false;
     return this.questLedger.isClaimSessionConfigured();
   }
@@ -974,7 +955,8 @@ export class QuestsService {
     }
 
     // USDCx (dan token non-CC lain): baca on-chain via instrument id.
-    const { instrumentId } = await this.tokenInstrument.resolveInstrument(token);
+    const { instrumentId } =
+      await this.tokenInstrument.resolveInstrument(token);
     const balance = await this.cantonLedger.getTokenBalanceOnChain(
       rewardPartyId,
       instrumentId,
@@ -1190,7 +1172,9 @@ export class QuestsService {
       void this.inboundSync
         .alignBalanceFromChain(userId, username)
         .catch((err) =>
-          this.logger.warn(`Balance sync failed (non-blocking): ${String(err)}`),
+          this.logger.warn(
+            `Balance sync failed (non-blocking): ${String(err)}`,
+          ),
         );
     }
 
@@ -1243,21 +1227,32 @@ export class QuestsService {
     questTitle: string;
     cantonPartyId: string;
     username: string | null;
-    claimContractId: string;            // QuestClaimReceipt PRE_SETTLE
-    feeAmount: number;                  // claimFeeCc
-    rewardAmount: number;               // rewardCc (0 utk kode claim)
+    claimContractId: string; // QuestClaimReceipt PRE_SETTLE
+    feeAmount: number; // claimFeeCc
+    rewardAmount: number; // rewardCc (0 utk kode claim)
     rewardToken: RewardTokenSymbol;
     rewardLabel: string;
   }): Promise<{ settledCid: string | null; updateId: string | null }> {
     const {
-      drawId, userId, questId, questTitle, cantonPartyId, username,
-      claimContractId, feeAmount, rewardAmount, rewardToken, rewardLabel,
+      drawId,
+      userId,
+      questId,
+      questTitle,
+      cantonPartyId,
+      username,
+      claimContractId,
+      feeAmount,
+      rewardAmount,
+      rewardToken,
+      rewardLabel,
     } = params;
 
     const rewardPartyId = this.rewardPartyId;
     const feePartyId = this.feeTargetPartyId;
-    if (!rewardPartyId) throw new Error('CANTON_REWARD_PARTY_ID not configured');
-    if (!feePartyId) throw new Error('CANTON_FEE_RECIPIENT_PARTY_ID not configured');
+    if (!rewardPartyId)
+      throw new Error('CANTON_REWARD_PARTY_ID not configured');
+    if (!feePartyId)
+      throw new Error('CANTON_FEE_RECIPIENT_PARTY_ID not configured');
 
     // Resolve instrument untuk USDCx reward (CC default Amulet di settleAtomic).
     let rewardInstrumentId: string | undefined;
@@ -1270,8 +1265,8 @@ export class QuestsService {
 
     this.logger.log(
       `${rewardLabel} (atomic Settle): fee ${feeAmount} CC → ${feePartyId.split('::')[0]}, ` +
-      `reward ${rewardAmount} ${rewardToken}${rewardAmount > 0 ? ` → ${cantonPartyId.split('::')[0]}` : ' (none)'} ` +
-      `(@${username})`,
+        `reward ${rewardAmount} ${rewardToken}${rewardAmount > 0 ? ` → ${cantonPartyId.split('::')[0]}` : ' (none)'} ` +
+        `(@${username})`,
     );
 
     // ── 1. ATOMIC SETTLE (fee + reward dalam 1 transaction tree) ────────────
@@ -1287,9 +1282,12 @@ export class QuestsService {
       rewardInstrumentAdmin,
     });
     if (!settleResult.ok) {
-      throw new Error(`Atomic Settle failed: ${settleResult.errors.join(' | ')}`);
+      throw new Error(
+        `Atomic Settle failed: ${settleResult.errors.join(' | ')}`,
+      );
     }
-    const updateId = settleResult.updateId ?? `settle-${Date.now()}-${userId.slice(0, 8)}`;
+    const updateId =
+      settleResult.updateId ?? `settle-${Date.now()}-${userId.slice(0, 8)}`;
     const settledCid = settleResult.settledCid;
     const rewardPending = false; // direct transfer (atomic, no offer-accept)
 
@@ -1314,8 +1312,14 @@ export class QuestsService {
       // v25: rewardTxId Optional. Null bila kode claim (rewardAmount=0).
       const rewardTxIdValue = rewardAmount > 0 ? updateId : null;
       void this.questLedger
-        .recordTxId({ settledContractId: settledCid, feeTxId: updateId, rewardTxId: rewardTxIdValue })
-        .catch((err) => this.logger.warn(`recordTxId fail (non-blocking): ${String(err)}`));
+        .recordTxId({
+          settledContractId: settledCid,
+          feeTxId: updateId,
+          rewardTxId: rewardTxIdValue,
+        })
+        .catch((err) =>
+          this.logger.warn(`recordTxId fail (non-blocking): ${String(err)}`),
+        );
     }
 
     // ── 4. Record history (NON-FATAL — atomic settle sudah committed) ──────
@@ -1373,7 +1377,11 @@ export class QuestsService {
     if (rewardToken === 'CC' && username && rewardAmount > 0) {
       void this.inboundSync
         .alignBalanceFromChain(userId, username)
-        .catch((err) => this.logger.warn(`Balance sync failed (non-blocking): ${String(err)}`));
+        .catch((err) =>
+          this.logger.warn(
+            `Balance sync failed (non-blocking): ${String(err)}`,
+          ),
+        );
     }
 
     // ── 6. Upsert QuestCompletion ───────────────────────────────────────────
@@ -1388,7 +1396,12 @@ export class QuestsService {
       } else {
         await this.prisma.questCompletion.upsert({
           where: { userId_questId: { userId, questId } },
-          create: { userId, questId, rewardToken: 'USDCx', rewardTokenAmount: rewardAmount },
+          create: {
+            userId,
+            questId,
+            rewardToken: 'USDCx',
+            rewardTokenAmount: rewardAmount,
+          },
           update: { rewardToken: 'USDCx', rewardTokenAmount: rewardAmount },
         });
       }
@@ -1625,20 +1638,6 @@ export class QuestsService {
       status: resolveQuestDisplayStatus(q),
     };
   }
-
-  /** Landing page — active & upcoming quests, newest first (no auth). */
-  async listFeaturedQuests(limit = 20) {
-    const take = Math.min(30, Math.max(1, limit));
-    const all = await this.listQuests();
-    return all
-      .filter(
-        (q) =>
-          q.status === QuestStatus.ACTIVE ||
-          q.status === QuestStatus.COMING_SOON,
-      )
-      .slice(0, take);
-  }
-
   /** Quest campaign title for wallet / transaction labels */
   async getQuestTitle(questId: string): Promise<string> {
     const q = await this.prisma.quest.findUnique({
@@ -1853,75 +1852,6 @@ export class QuestsService {
     return kind === QuestKind.EARN_HUB ? 'EARN_HUB' : 'CAMPAIGN';
   }
 
-  /** FCFS/invite claims skip submitQuest — record DAML completion + mark reward after CIP-56 payout. */
-  private async syncCampaignLedgerAfterPayout(params: {
-    userId: string;
-    questId: string;
-    userPartyId: string;
-    rewardCc: number;
-    payoutTxId: string;
-  }): Promise<void> {
-    if (!this.questLedger.isConfigured()) return;
-
-    const quest = await this.prisma.quest.findUnique({
-      where: { id: params.questId },
-      include: { tasks: true },
-    });
-    if (!quest) return;
-
-    const submissions = await this.prisma.questSubmission.findMany({
-      where: {
-        userId: params.userId,
-        questId: params.questId,
-        status: SubmissionStatus.VERIFIED,
-      },
-    });
-
-    const ledgerResult = await this.questLedger.recordQuestCompletion({
-      questId: params.questId,
-      questKind: this.damlQuestKind(quest.questKind),
-      questTitle: quest.title,
-      rewardCc: params.rewardCc,
-      userPartyId: params.userPartyId,
-      taskIds: quest.tasks.map((t) => t.id),
-      proofs: submissions.map((s) => {
-        const t = quest.tasks.find((qt) => qt.id === s.taskId);
-        return {
-          taskId: s.taskId,
-          taskType: t ? this.normalizeTaskType(t.type) : 'unknown',
-          proof: s.proof,
-        };
-      }),
-    });
-
-    if (ledgerResult.errors.length > 0) {
-      this.logger.warn(
-        `Campaign ledger sync: quest=${params.questId} ${ledgerResult.errors.join(' | ')}`,
-      );
-    }
-
-    await this.prisma.questCompletion.updateMany({
-      where: { userId: params.userId, questId: params.questId },
-      data: {
-        ledgerParticipationId: ledgerResult.participationContractId,
-        ledgerRewardId: ledgerResult.rewardContractId,
-        ledgerTaskSubmissionIds: ledgerResult.taskSubmissionIds,
-      },
-    });
-
-    if (ledgerResult.rewardContractId) {
-      const marked = await this.questLedger.markRewardClaimed({
-        rewardContractId: ledgerResult.rewardContractId,
-        payoutTxId: params.payoutTxId,
-      });
-      if (!marked.ok) {
-        this.logger.warn(
-          `QuestReward mark claimed: ${marked.errors.join(' | ')}`,
-        );
-      }
-    }
-  }
-
   private parseLedgerTaskIds(raw: unknown): string[] {
     if (!raw) return [];
     if (Array.isArray(raw)) {
@@ -2065,10 +1995,7 @@ export class QuestsService {
           const lastAt = existing.verifiedAt ?? existing.submittedAt;
           if (lastAt && isWithin24h(lastAt)) {
             const msLeft = msUntil24hExpires(lastAt);
-            const hoursLeft = Math.max(
-              1,
-              Math.ceil(msLeft / (60 * 60 * 1000)),
-            );
+            const hoursLeft = Math.max(1, Math.ceil(msLeft / (60 * 60 * 1000)));
             throw new BadRequestException(
               `Already completed — try again in ~${hoursLeft}h.`,
             );
@@ -2358,26 +2285,6 @@ export class QuestsService {
       await this.users.creditEarnPoints(userId, task.points);
     }
 
-    if (autoVerify && userPartyId && this.questLedger.isConfigured()) {
-      const taskLedger = await this.questLedger.recordTaskSubmission({
-        questId,
-        questKind: this.damlQuestKind(quest.questKind),
-        taskId,
-        taskType,
-        proof: proof ?? null,
-        userPartyId,
-      });
-      if (taskLedger.errors.length > 0) {
-        this.logger.warn(
-          `Task ledger: quest=${questId} task=${taskId} ${taskLedger.errors.join(' | ')}`,
-        );
-      } else if (taskLedger.taskSubmissionContractId) {
-        this.logger.log(
-          `Task ledger OK: quest=${questId} task=${taskId} submission=${taskLedger.taskSubmissionContractId.slice(0, 24)}…`,
-        );
-      }
-    }
-
     this.logger.log(
       `Task submitted: user=${userId.slice(0, 8)} quest=${questId} task=${taskId} auto=${String(autoVerify)}`,
     );
@@ -2386,53 +2293,6 @@ export class QuestsService {
   }
 
   /* ─── Quest completion (after all tasks verified) ─── */
-
-  async checkAndCompleteQuest(params: {
-    userId: string;
-    questId: string;
-    ledgerTxId?: string;
-  }): Promise<{ justCompleted: boolean; rewardMicroCc: bigint }> {
-    const { userId, questId, ledgerTxId } = params;
-
-    const existing = await this.prisma.questCompletion.findUnique({
-      where: { userId_questId: { userId, questId } },
-    });
-    if (existing)
-      return { justCompleted: false, rewardMicroCc: existing.rewardMicroCc };
-
-    const quest = await this.prisma.quest.findUnique({
-      where: { id: questId },
-      include: { tasks: true },
-    });
-    if (!quest) throw new NotFoundException('Quest not found');
-
-    // Check all tasks are verified
-    const verified = await this.prisma.questSubmission.findMany({
-      where: { userId, questId, status: SubmissionStatus.VERIFIED },
-    });
-    const allDone = quest.tasks.every((t) =>
-      verified.some((s) => s.taskId === t.id),
-    );
-
-    if (!allDone) return { justCompleted: false, rewardMicroCc: 0n };
-
-    const rewardMicroCc = BigInt(Math.round(quest.rewardCc * 1_000_000));
-    await this.prisma.questCompletion.create({
-      data: { userId, questId, rewardMicroCc, ledgerTxId: ledgerTxId ?? null },
-    });
-
-    const completionBonus = Math.round(quest.rewardCc * 10);
-    if (completionBonus > 0) {
-      await this.users.creditEarnPoints(userId, completionBonus);
-    }
-
-    this.logger.log(
-      `Quest completed: user=${userId.slice(0, 8)} quest=${questId} reward=${quest.rewardCc} CC`,
-    );
-
-    return { justCompleted: true, rewardMicroCc };
-  }
-
   /** All tasks verified but quest not yet submitted to Canton / rewards. */
   async areAllTasksVerified(userId: string, questId: string): Promise<boolean> {
     const quest = await this.prisma.quest.findUnique({
@@ -2460,9 +2320,9 @@ export class QuestsService {
     rewardCc: number;
     inviteCode: string | null;
     rewardStatus: Awaited<ReturnType<QuestsService['getQuestRewardStatus']>>;
-    ledger: Awaited<ReturnType<QuestLedgerService['recordQuestCompletion']>>;
+    ledger: QuestLedgerSubmitResult;
   }> {
-    const { userId, questId, userPartyId, username } = params;
+    const { userId, questId } = params;
 
     const existing = await this.prisma.questCompletion.findUnique({
       where: { userId_questId: { userId, questId } },
@@ -2534,10 +2394,6 @@ export class QuestsService {
       };
     }
 
-    const submissions = await this.prisma.questSubmission.findMany({
-      where: { userId, questId, status: SubmissionStatus.VERIFIED },
-    });
-
     const rewardType = normalizeRewardType(quest.rewardType);
     let rewardCc = 0;
     if (
@@ -2583,26 +2439,8 @@ export class QuestsService {
       }
     }
 
-    let ledgerResult: QuestLedgerSubmitResult = this.emptyLedgerResult();
-
-    if (userPartyId && this.questLedger.isConfigured()) {
-      ledgerResult = await this.questLedger.recordQuestCompletion({
-        questId,
-        questKind: this.damlQuestKind(quest.questKind),
-        questTitle: quest.title,
-        rewardCc,
-        userPartyId,
-        taskIds: quest.tasks.map((t) => t.id),
-        proofs: submissions.map((s) => {
-          const t = quest.tasks.find((qt) => qt.id === s.taskId);
-          return {
-            taskId: s.taskId,
-            taskType: t ? this.normalizeTaskType(t.type) : 'unknown',
-            proof: s.proof,
-          };
-        }),
-      });
-    }
+    // Ledger completion record dinonaktifkan (poin off-chain sejak v21).
+    const ledgerResult: QuestLedgerSubmitResult = this.emptyLedgerResult();
 
     const rewardMicroCc = BigInt(Math.round(rewardCc * 1_000_000));
     await this.prisma.questCompletion.create({
@@ -3139,9 +2977,11 @@ export class QuestsService {
     }
 
     const maxPayoutExposure = maxWinners * rewardCc;
-    const rewardPartyId = this.rewardPartyId;   // v24: reward wallet party (co-controller Settle)
+    const rewardPartyId = this.rewardPartyId; // v24: reward wallet party (co-controller Settle)
     if (!rewardPartyId) {
-      throw new Error('CANTON_REWARD_PARTY_ID not configured (required for v24 atomic Settle)');
+      throw new Error(
+        'CANTON_REWARD_PARTY_ID not configured (required for v24 atomic Settle)',
+      );
     }
     this.logger.log(
       `FCFS claim start quest=${questId} user=@${username} fee=${feeCc} reward=${rewardCc} validator=${validatorPartyId.split('::')[0]} (max pool exposure ~${maxPayoutExposure} CC for ${maxWinners} slots)`,
@@ -3196,8 +3036,8 @@ export class QuestsService {
             campaignContractId,
             userPartyId: cantonPartyId,
             claimId: reservedDrawId,
-            rewardSenderPartyId: rewardPartyId,   // v24: co-controller Settle
-            eligibilityCid,                        // v25: on-chain guard
+            rewardSenderPartyId: rewardPartyId, // v24: co-controller Settle
+            eligibilityCid, // v25: on-chain guard
           });
           claimSessionId = claimResult.claimContractId;
           if (claimResult.errors.length > 0) {
@@ -3254,17 +3094,6 @@ export class QuestsService {
             claimSessionContractId: claimSessionId,
           },
         });
-        if (cantonPartyId) {
-          void this.syncCampaignLedgerAfterPayout({
-            userId,
-            questId,
-            userPartyId: cantonPartyId,
-            rewardCc,
-            payoutTxId: updateId ?? '',
-          }).catch((err) =>
-            this.logger.warn(`FCFS ledger sync failed: ${String(err)}`),
-          );
-        }
       } else {
         // FALLBACK PATH (non-atomic, v21-style: collectClaimFee + sendReward terpisah)
         const feeTxId =
@@ -3321,18 +3150,6 @@ export class QuestsService {
               : {}),
           },
         });
-
-        if (cantonPartyId) {
-          void this.syncCampaignLedgerAfterPayout({
-            userId,
-            questId,
-            userPartyId: cantonPartyId,
-            rewardCc,
-            payoutTxId: rewardTxId,
-          }).catch((err) =>
-            this.logger.warn(`FCFS ledger sync failed: ${String(err)}`),
-          );
-        }
       }
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
@@ -3513,8 +3330,8 @@ export class QuestsService {
             campaignContractId,
             userPartyId: cantonPartyId,
             claimId: draw.id,
-            rewardSenderPartyId: this.requireRewardPartyId(),   // v24: co-controller Settle
-            eligibilityCid,                                      // v25: on-chain guard
+            rewardSenderPartyId: this.requireRewardPartyId(), // v24: co-controller Settle
+            eligibilityCid, // v25: on-chain guard
           });
           claimSessionId = claimResult.claimContractId;
           if (claimResult.errors.length > 0) {
@@ -3599,7 +3416,10 @@ export class QuestsService {
           });
         }
 
-        await this.assertRewardPool(rewardCc, normalizeRewardToken(quest.rewardToken));
+        await this.assertRewardPool(
+          rewardCc,
+          normalizeRewardToken(quest.rewardToken),
+        );
 
         // C1 re-check distributed sebelum sendReward.
         const drawPreSend = await this.prisma.winnerDraw.findUnique({
@@ -3648,18 +3468,6 @@ export class QuestsService {
             data: { completedAt: completion.completedAt },
           }),
         ]);
-      }
-
-      if (cantonPartyId && drawRewardTxId) {
-        void this.syncCampaignLedgerAfterPayout({
-          userId,
-          questId,
-          userPartyId: cantonPartyId,
-          rewardCc,
-          payoutTxId: drawRewardTxId,
-        }).catch((err) =>
-          this.logger.warn(`Draw CC ledger sync failed: ${String(err)}`),
-        );
       }
 
       const rewardStatus = await this.getQuestRewardStatus(userId, questId);
@@ -3881,15 +3689,15 @@ export class QuestsService {
                   campaignContractId,
                   userPartyId: cantonPartyId,
                   claimId,
-                  rewardSenderPartyId: this.requireRewardPartyId(),   // v24: co-controller Settle
-                  eligibilityCid,                                      // v25: on-chain guard
+                  rewardSenderPartyId: this.requireRewardPartyId(), // v24: co-controller Settle
+                  eligibilityCid, // v25: on-chain guard
                 })
               : await this.questLedger.drawRaffleWinner({
                   campaignContractId,
                   userPartyId: cantonPartyId,
                   claimId,
-                  rewardSenderPartyId: this.requireRewardPartyId(),   // v24: co-controller Settle
-                  eligibilityCid,                                      // v25: on-chain guard
+                  rewardSenderPartyId: this.requireRewardPartyId(), // v24: co-controller Settle
+                  eligibilityCid, // v25: on-chain guard
                 });
           codeClaimSessionId = claimResult.claimContractId;
           if (claimResult.errors.length > 0) {
@@ -3928,7 +3736,7 @@ export class QuestsService {
           username,
           claimContractId: codeClaimSessionId,
           feeAmount: feeCc,
-          rewardAmount: 0,            // kode claim: no token reward
+          rewardAmount: 0, // kode claim: no token reward
           rewardToken: 'CC',
           rewardLabel: 'Code claim fee',
         });
@@ -4180,8 +3988,8 @@ export class QuestsService {
             campaignContractId: ccCodeCampaignCid,
             userPartyId: cantonPartyId,
             claimId: draw.id,
-            rewardSenderPartyId: this.requireRewardPartyId(),   // v24: co-controller Settle
-            eligibilityCid,                                      // v25: on-chain guard
+            rewardSenderPartyId: this.requireRewardPartyId(), // v24: co-controller Settle
+            eligibilityCid, // v25: on-chain guard
           });
           ccCodeClaimSessionId = claimResult.claimContractId;
           if (claimResult.errors.length > 0) {
@@ -4211,7 +4019,10 @@ export class QuestsService {
 
       if (this.useAtomicSettle && ccCodeClaimSessionId && rewardCc > 0) {
         // ATOMIC PATH (DAML v22/v23 Settle)
-        await this.assertRewardPool(rewardCc, normalizeRewardToken(quest.rewardToken));
+        await this.assertRewardPool(
+          rewardCc,
+          normalizeRewardToken(quest.rewardToken),
+        );
         const settleRes = await this.settleAndRecord({
           drawId: draw.id,
           userId,
@@ -4256,7 +4067,10 @@ export class QuestsService {
           });
         }
 
-        await this.assertRewardPool(rewardCc, normalizeRewardToken(quest.rewardToken));
+        await this.assertRewardPool(
+          rewardCc,
+          normalizeRewardToken(quest.rewardToken),
+        );
         if (rewardCc > 0) {
           // C1 re-check distributed sebelum sendReward.
           const drawPreSend = await this.prisma.winnerDraw.findUnique({
@@ -4264,7 +4078,10 @@ export class QuestsService {
             select: { distributed: true, ledgerTxId: true },
           });
           if (drawPreSend?.distributed) {
-            const rewardStatus = await this.getQuestRewardStatus(userId, questId);
+            const rewardStatus = await this.getQuestRewardStatus(
+              userId,
+              questId,
+            );
             return {
               ok: true,
               message: 'You already claimed this reward.',
@@ -4334,17 +4151,6 @@ export class QuestsService {
         }),
       ]);
       const finalCode = claimedCode;
-      if (cantonPartyId && rewardOfferId) {
-        void this.syncCampaignLedgerAfterPayout({
-          userId,
-          questId,
-          userPartyId: cantonPartyId,
-          rewardCc,
-          payoutTxId: rewardOfferId,
-        }).catch((err) =>
-          this.logger.warn(`CC+Code raffle ledger sync failed: ${String(err)}`),
-        );
-      }
 
       // v22/v23: RevealCode di DAML — bila atomic path, pakai settledCid (feePaid
       // sudah True dari Settle, RevealCode akan sukses). Bila fallback path, pakai
@@ -4364,7 +4170,9 @@ export class QuestsService {
 
       const rewardStatus = await this.getQuestRewardStatus(userId, questId);
       const raffleToken = normalizeRewardToken(quest.rewardToken);
-      const deliverySuffix = raffleRewardPending ? ' — accept in your Wallet inbox.' : '.';
+      const deliverySuffix = raffleRewardPending
+        ? ' — accept in your Wallet inbox.'
+        : '.';
       // Pesan akhir menyesuaikan varian: CODE (hanya kode), CC (hanya token), both (legacy).
       const message =
         variant === 'CODE'
@@ -4436,89 +4244,6 @@ export class QuestsService {
   }
 
   /* ─── Admin: create/seed quests ─── */
-
-  async upsertQuest(data: {
-    id?: string;
-    title: string;
-    org: string;
-    orgSlug: string;
-    description: string;
-    banner?: string;
-    rewardCc: number;
-    rewardPool?: string;
-    deadline?: string;
-    status?: QuestStatus;
-    tags?: string[];
-    tasks?: Array<{
-      id?: string;
-      type: string;
-      title: string;
-      description?: string;
-      points?: number;
-      target?: string;
-      order?: number;
-      correctAnswer?: string;
-    }>;
-  }) {
-    const tagsJson = JSON.stringify(data.tags ?? []);
-    const quest = await this.prisma.quest.upsert({
-      where: { id: data.id ?? '' },
-      create: {
-        title: data.title,
-        org: data.org,
-        orgSlug: data.orgSlug,
-        description: data.description,
-        banner: data.banner ?? 'linear-gradient(135deg,#1e293b,#0f172a)',
-        rewardCc: data.rewardCc,
-        rewardPool: data.rewardPool ?? `${data.rewardCc} CC`,
-        deadline: data.deadline ?? null,
-        status: data.status ?? QuestStatus.ACTIVE,
-        tags: tagsJson,
-      },
-      update: {
-        title: data.title,
-        org: data.org,
-        orgSlug: data.orgSlug,
-        description: data.description,
-        banner: data.banner ?? 'linear-gradient(135deg,#1e293b,#0f172a)',
-        rewardCc: data.rewardCc,
-        rewardPool: data.rewardPool ?? `${data.rewardCc} CC`,
-        deadline: data.deadline ?? null,
-        status: data.status ?? QuestStatus.ACTIVE,
-        tags: tagsJson,
-      },
-    });
-
-    if (data.tasks) {
-      for (const [i, t] of data.tasks.entries()) {
-        await this.prisma.questTask.upsert({
-          where: { id: t.id ?? '' },
-          create: {
-            questId: quest.id,
-            type: t.type,
-            title: t.title,
-            description: t.description ?? null,
-            points: t.points ?? 10,
-            target: t.target ?? null,
-            order: t.order ?? i,
-            correctAnswer: t.correctAnswer ?? null,
-          },
-          update: {
-            type: t.type,
-            title: t.title,
-            description: t.description ?? null,
-            points: t.points ?? 10,
-            target: t.target ?? null,
-            order: t.order ?? i,
-            correctAnswer: t.correctAnswer ?? null,
-          },
-        });
-      }
-    }
-
-    return quest;
-  }
-
   /* ─── Leaderboard ─── */
 
   /**
@@ -4642,102 +4367,6 @@ export class QuestsService {
   }
 
   /* ─── Recent activity feed ─── */
-
-  async getRecentActivity(
-    userId: string,
-    page = 1,
-    pageSize = 5,
-  ): Promise<{
-    items: ActivityItem[];
-    total: number;
-    page: number;
-    pageSize: number;
-    totalPages: number;
-  }> {
-    const fetchCap = 100;
-    const [submissions, txs, completions, referrals] = await Promise.all([
-      this.prisma.questSubmission.findMany({
-        where: { userId, status: 'VERIFIED' },
-        orderBy: { verifiedAt: 'desc' },
-        take: fetchCap,
-        include: {
-          task: { select: { title: true, points: true } },
-          quest: { select: { title: true } },
-        },
-      }),
-      this.prisma.ccTransaction.findMany({
-        where: { userId },
-        orderBy: { createdAt: 'desc' },
-        take: fetchCap,
-      }),
-      this.prisma.questCompletion.findMany({
-        where: { userId },
-        orderBy: { completedAt: 'desc' },
-        take: fetchCap,
-        include: { quest: { select: { title: true, rewardCc: true } } },
-      }),
-      this.prisma.referralReward.findMany({
-        where: { referrerId: userId },
-        orderBy: { createdAt: 'desc' },
-        take: fetchCap,
-      }),
-    ]);
-
-    const items: ActivityItem[] = [];
-
-    for (const c of completions) {
-      items.push({
-        type: 'quest_completed',
-        title: 'Quest completed',
-        detail: `${c.quest.title}${c.quest.rewardCc > 0 ? ` · +${c.quest.rewardCc} CC` : ''}`,
-        time: c.completedAt.toISOString(),
-      });
-    }
-
-    for (const s of submissions) {
-      items.push({
-        type: 'task_verified',
-        title: 'Task verified',
-        detail: `${s.task.title} · +${s.task.points} pts`,
-        time: (s.verifiedAt ?? s.submittedAt).toISOString(),
-      });
-    }
-
-    for (const ref of referrals) {
-      items.push({
-        type: 'task_verified',
-        title: 'Referral reward',
-        detail: `Friend verified · +${ref.points} pts`,
-        time: ref.createdAt.toISOString(),
-      });
-    }
-
-    for (const tx of txs) {
-      if (tx.type === 'QUEST_REWARD') continue;
-      const ccAmt = Math.abs(Number(tx.amountMicroCc)) / 1_000_000;
-      const sign = tx.type === 'TRANSFER_OUT' ? '−' : '+';
-      items.push({
-        type: 'cc_transfer',
-        title: tx.type === 'TRANSFER_OUT' ? 'CC sent' : 'CC received',
-        detail: `${sign}${ccAmt.toFixed(2)} CC${tx.description ? ' · ' + tx.description : ''}`,
-        time: tx.createdAt.toISOString(),
-      });
-    }
-
-    const sorted = items.sort(
-      (a, b) => new Date(b.time).getTime() - new Date(a.time).getTime(),
-    );
-    const total = sorted.length;
-    const skip = (page - 1) * pageSize;
-    return {
-      items: sorted.slice(skip, skip + pageSize),
-      total,
-      page,
-      pageSize,
-      totalPages: Math.max(1, Math.ceil(total / pageSize)),
-    };
-  }
-
   /* ─── Helpers ─── */
 
   private normalizeTaskType(type: string): string {
@@ -4879,7 +4508,10 @@ export class QuestsService {
       };
     }
     const windowStart = startOfTodayUtc();
-    const today = await this.countRecentUserTokenSends(params.userId, windowStart);
+    const today = await this.countRecentUserTokenSends(
+      params.userId,
+      windowStart,
+    );
     if (today < params.requiredCount) {
       return {
         ok: false,
@@ -4965,7 +4597,10 @@ export class QuestsService {
   }
 
   /** Count today's outgoing CC + token sends (combined) — for send_any_daily. */
-  private async countSendAnyToday(userId: string, since: Date): Promise<number> {
+  private async countSendAnyToday(
+    userId: string,
+    since: Date,
+  ): Promise<number> {
     const [cc, token] = await Promise.all([
       this.countRecentUserSends(userId, since),
       this.countRecentUserTokenSends(userId, since),
@@ -5047,7 +4682,10 @@ export class QuestsService {
     userId: string,
     since: Date,
   ): Promise<number> {
-    const candidates = await this.collectTodayOutgoingCounterparties(userId, since);
+    const candidates = await this.collectTodayOutgoingCounterparties(
+      userId,
+      since,
+    );
     if (candidates.length === 0) return 0;
     const { isCq } = await this.resolveCanQuestCounterparties(candidates);
     let count = 0;
@@ -5094,7 +4732,9 @@ export class QuestsService {
   private async collectTodayIncomingCounterparties(
     userId: string,
     since: Date,
-  ): Promise<{ ccRows: { referenceId: string | null; ledgerTxId: string | null }[] }> {
+  ): Promise<{
+    ccRows: { referenceId: string | null; ledgerTxId: string | null }[];
+  }> {
     const ccRows = await this.prisma.ccTransaction.findMany({
       where: {
         userId,
@@ -5121,14 +4761,18 @@ export class QuestsService {
     since: Date,
     ownPartyId: string | null | undefined,
   ): Promise<number> {
-    const { ccRows } = await this.collectTodayIncomingCounterparties(userId, since);
+    const { ccRows } = await this.collectTodayIncomingCounterparties(
+      userId,
+      since,
+    );
     const candidates: string[] = [];
     for (const r of ccRows) {
       // Skip legacy balance-sync rows with no sender identity.
       if (r.ledgerTxId?.startsWith('inbound-sync:')) continue;
       if (!r.referenceId) continue;
       // Skip self-referential rows (legacy inbound-sync fallback).
-      if (ownPartyId && cantonPartyIdsEqual(r.referenceId, ownPartyId)) continue;
+      if (ownPartyId && cantonPartyIdsEqual(r.referenceId, ownPartyId))
+        continue;
       candidates.push(r.referenceId);
     }
     if (candidates.length === 0) return 0;
@@ -5180,7 +4824,10 @@ export class QuestsService {
   ): Promise<number> {
     const [ccCount, tokenCount] = await Promise.all([
       (async () => {
-        const { ccRows } = await this.collectTodayIncomingCounterparties(userId, since);
+        const { ccRows } = await this.collectTodayIncomingCounterparties(
+          userId,
+          since,
+        );
         const candidates: string[] = [];
         for (const r of ccRows) {
           if (r.ledgerTxId?.startsWith('inbound-sync:')) continue;
@@ -5271,7 +4918,11 @@ export class QuestsService {
     // Cascade: auto-complete lower-tier sibling lock-cc tasks in the same quest.
     const cascaded: string[] = [];
     const siblings = await this.prisma.questTask.findMany({
-      where: { questId: params.questId, type: 'lock_cc', id: { not: params.taskId } },
+      where: {
+        questId: params.questId,
+        type: 'lock_cc',
+        id: { not: params.taskId },
+      },
       select: { id: true, target: true, points: true },
     });
     const now = new Date();
@@ -5285,7 +4936,12 @@ export class QuestsService {
       if (existing) {
         await this.prisma.questSubmission.update({
           where: { id: existing.id },
-          data: { proof: 'lock_cascade', status: SubmissionStatus.VERIFIED, verifiedAt: now, submittedAt: now },
+          data: {
+            proof: 'lock_cascade',
+            status: SubmissionStatus.VERIFIED,
+            verifiedAt: now,
+            submittedAt: now,
+          },
         });
       } else {
         await this.prisma.questSubmission.create({

@@ -255,10 +255,7 @@ export class AuthService {
       // invalid TIDAK block signup Google — user tetap dibuat tanpa referrer.
       let referredById: string | null = null;
       try {
-        referredById = await this.resolveReferralForEmail(
-          email,
-          referralCode,
-        );
+        referredById = await this.resolveReferralForEmail(email, referralCode);
       } catch (err) {
         this.logger.warn(
           `Google signup referral resolve failed for ${email}: ${String(err)}`,
@@ -501,7 +498,9 @@ export class AuthService {
    * Token SSE TETAP pakai HS256 + JWT_ACCESS_SECRET, karena token ini di-mint &
    * di-verify internal Nest (tidak keluar ke client selain via query param SSE).
    */
-  async issueSseToken(userId: string): Promise<{ token: string; expiresIn: number }> {
+  async issueSseToken(
+    userId: string,
+  ): Promise<{ token: string; expiresIn: number }> {
     const expiresIn = 60; // detik
     const token = await this.jwt.signAsync(
       { sub: userId, kind: 'sse' },

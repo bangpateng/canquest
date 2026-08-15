@@ -73,7 +73,7 @@ export const CC_TRANSACTION_HISTORY_WHERE: Prisma.CcTransactionWhereInput = {
  *
  * Env fallback mengikuti quests.service.feeTargetPartyId & party.controller fee collect.
  */
-export function feePartyLabels(): string[] {
+function feePartyLabels(): string[] {
   const ids = [
     process.env.CANTON_FEE_RECIPIENT_PARTY_ID,
     process.env.CANTON_FEE_PARTY_ID,

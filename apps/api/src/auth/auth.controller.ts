@@ -1,12 +1,4 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Post,
-  Req,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
@@ -18,17 +10,12 @@ import { RegisterDto } from './dto/register.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
-import { UploadAvatarDto } from './dto/upload-avatar.dto';
-import { ProfileAvatarService } from '../users/profile-avatar.service';
 
 type AuthedReq = Request & { user: { userId: string; email: string } };
 
 @Controller('auth')
 export class AuthController {
-  constructor(
-    private readonly auth: AuthService,
-    private readonly avatars: ProfileAvatarService,
-  ) {}
+  constructor(private readonly auth: AuthService) {}
 
   /**
    * Register — ketat: 10 req/menit (auth tier).
@@ -116,18 +103,5 @@ export class AuthController {
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
   sseToken(@Req() req: AuthedReq) {
     return this.auth.issueSseToken(req.user.userId);
-  }
-
-  @Post('me/avatar')
-  @UseGuards(AuthGuard('jwt'))
-  @Throttle({ default: { limit: 20, ttl: 60_000 } })
-  uploadAvatar(@Req() req: AuthedReq, @Body() body: UploadAvatarDto) {
-    return this.avatars.setFromDataUrl(req.user.userId, body.image);
-  }
-
-  @Delete('me/avatar')
-  @UseGuards(AuthGuard('jwt'))
-  removeAvatar(@Req() req: AuthedReq) {
-    return this.avatars.remove(req.user.userId);
   }
 }

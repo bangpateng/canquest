@@ -70,12 +70,6 @@ export class LockEligibilityService {
     const locked = await this.lockedCcOf(ownerParty);
     return locked >= this.tierFull ? 'FULL' : 'NONE';
   }
-
-  /** Boleh ikut Earn quest (partner campaigns) — butuh tier FULL (≥30 CC). */
-  async canJoinEarn(ownerParty: string): Promise<boolean> {
-    return (await this.tierOf(ownerParty)) === 'FULL';
-  }
-
   /**
    * Snapshot LockedAmulet on-chain milik ownerParty, lengkap dengan durasi term.
    * Term (detik) dihitung dari selisih expiresAt − lockedAt on-chain, lalu
@@ -181,8 +175,7 @@ export class LockEligibilityService {
     if (dbRows.length > 0) {
       const onChainCids = new Set(onChain.map((l) => l.contractId));
       const staleRows = dbRows.filter(
-        (r) =>
-          r.lockedAmuletCid && !onChainCids.has(r.lockedAmuletCid),
+        (r) => r.lockedAmuletCid && !onChainCids.has(r.lockedAmuletCid),
       );
       for (const stale of staleRows) {
         // Defensive: jangan cleanup row yang expiresAt-nya belum lewat DAN
