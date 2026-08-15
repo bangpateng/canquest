@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { apiFetch, ApiError } from "@/lib/services/api/client";
 import { useEffect, useState } from "react";
 import { AdminQuestHubTasksPanel, type QuestHub } from "@/components/admin/admin-quest-hub-tasks-panel";
 
@@ -18,12 +19,9 @@ export function AdminQuestHubPanel({ initialHub }: { initialHub: QuestHub | null
     setEnsuring(true);
     setEnsureError(null);
     try {
-      const res = await fetch("/api/admin/earn-hub/ensure", { method: "POST" });
-      const data = (await res.json()) as QuestHub & { message?: string };
-      if (!res.ok) {
-        setEnsureError(data.message ?? "Failed to create hub");
-        return;
-      }
+      const data = await apiFetch<QuestHub>("/api/admin/earn-hub/ensure", {
+        method: "POST",
+      });
       setHub(data);
       router.refresh();
     } catch {

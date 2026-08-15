@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiFetch, ApiError } from "@/lib/services/api/client";
 import { Loader2, ShieldAlert, Power, PowerOff } from "lucide-react";
 import { cn } from "@/lib/utils/utils";
 import { buttonVariants } from "@/components/ui/button";
@@ -30,9 +31,7 @@ export function AdminMaintenancePanel() {
 
   async function refresh() {
     try {
-      const res = await fetch("/api/admin/maintenance", { cache: "no-store" });
-      if (!res.ok) throw new Error("Gagal memuat status");
-      const data = (await res.json()) as MaintenanceStatus;
+      const data = await apiFetch<MaintenanceStatus>("/api/admin/maintenance");
       setStatus(data);
       setEnabled(data.enabled);
       setTitle(data.title || DEFAULT_TITLE);
@@ -66,26 +65,17 @@ export function AdminMaintenancePanel() {
 
     setSaving(true);
     try {
-      const res = await fetch("/api/admin/maintenance", {
+      await apiFetch("/api/admin/maintenance", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        json: {
           enabled,
           title: title.trim() || undefined,
           message: message.trim() || undefined,
           estimatedEnd: estimatedEnd
             ? new Date(estimatedEnd).toISOString()
             : null,
-        }),
+        },
       });
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        throw new Error(
-          (body && typeof body === "object" && "message" in body
-            ? String((body as { message: unknown }).message)
-            : null) ?? `Gagal menyimpan (${res.status})`,
-        );
-      }
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");

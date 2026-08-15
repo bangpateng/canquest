@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { apiFetch, ApiError } from "@/lib/services/api/client";
 import { useState } from "react";
 import { Trash2, Pencil, Trophy, AlertCircle, CheckCircle2, Clock, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils/utils";
@@ -82,10 +83,14 @@ export function AdminQuestTable({
       if (onDelete) {
         await onDelete(quest.id);
       } else {
-        const res = await fetch(`/api/admin/quests/${quest.id}`, { method: "DELETE" });
-        if (!res.ok) {
-          const data = (await res.json().catch(() => ({}))) as { message?: string };
-          setDeleteError(data.message ?? "Delete failed. Try again.");
+        try {
+          await apiFetch(`/api/admin/quests/${quest.id}`, { method: "DELETE" });
+        } catch (err) {
+          const msg =
+            err instanceof ApiError && err.message
+              ? err.message
+              : "Delete failed. Try again.";
+          setDeleteError(msg);
         }
       }
     } catch {

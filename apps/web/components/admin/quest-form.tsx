@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiFetch, ApiError } from "@/lib/services/api/client";
 import { useRouter } from "next/navigation";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils/utils";
@@ -197,9 +198,10 @@ export function QuestForm({
   async function uploadQuestAsset(file: File): Promise<string> {
     const fd = new FormData();
     fd.append("file", file);
-    const res = await fetch("/api/admin/uploads/quest-asset", { method: "POST", body: fd });
-    const data = (await res.json()) as { url?: string; message?: string };
-    if (!res.ok) throw new Error(data.message ?? "Upload failed");
+    const data = await apiFetch<{ url?: string }>("/api/admin/uploads/quest-asset", {
+      method: "POST",
+      body: fd,
+    });
     if (!data.url) throw new Error("No URL returned");
     return data.url;
   }
@@ -207,13 +209,10 @@ export function QuestForm({
   async function deleteQuestAsset(url: string): Promise<void> {
     const trimmed = url.trim();
     if (!trimmed) return;
-    const res = await fetch("/api/admin/uploads/quest-asset", {
+    await apiFetch("/api/admin/uploads/quest-asset", {
       method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: trimmed }),
+      json: { url: trimmed },
     });
-    const data = (await res.json()) as { message?: string };
-    if (!res.ok) throw new Error(data.message ?? "Failed to remove image from storage");
   }
 
   /** Delete storage object when replacing an upload not yet saved on the quest. */
@@ -449,22 +448,15 @@ export function QuestForm({
         : `/api/admin/quests`;
       const method = isEdit ? "PATCH" : "POST";
 
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      let data: { id?: string; message?: string } = {};
+      let data: { id?: string };
       try {
-        const text = await res.text();
-        data = text ? (JSON.parse(text) as typeof data) : {};
-      } catch {
-        data = {};
-      }
-
-      if (!res.ok) {
-        setError([data.message ?? `Server error (${res.status})`]);
+        data = await apiFetch<{ id?: string }>(url, { method, json: payload });
+      } catch (err) {
+        const msg =
+          err instanceof ApiError && err.message
+            ? err.message
+            : "Could not save quest";
+        setError([msg]);
         return;
       }
 
@@ -478,20 +470,10 @@ export function QuestForm({
         .filter(Boolean);
       if (newQuestId && codes.length > 0) {
         try {
-          const codesRes = await fetch(`/api/admin/quests/${newQuestId}/invite-codes`, {
+          await apiFetch(`/api/admin/quests/${newQuestId}/invite-codes`, {
             method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ codes }),
+            json: { codes },
           });
-          if (!codesRes.ok) {
-            const codesData = (await codesRes.json().catch(() => ({}))) as { message?: string };
-            // Quest is already saved — just warn and still redirect.
-            // Admin can re-paste via the Invite codes tab.
-            console.warn(
-              `Invite codes upload failed (quest ${newQuestId} saved): ${codesData.message ?? codesRes.status}`,
-            );
-          }
         } catch (codesErr) {
           console.warn(`Invite codes upload network error (quest saved): ${String(codesErr)}`);
         }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiFetch, ApiError } from "@/lib/services/api/client";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, CheckCircle2, Clock, Send, Shuffle, Ticket, UserCheck, Plus, Trash2 } from "lucide-react";
@@ -46,6 +47,11 @@ interface InviteCode {
 
 type Tab = "participants" | "winners" | "codes";
 
+/** Pesan error dari ApiError (BFF) dengan fallback generik. */
+function errMsg(err: unknown, fallback: string): string {
+  return err instanceof ApiError && err.message ? err.message : fallback;
+}
+
 export function WinnersPanel({ questId }: { questId: string }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("participants");
@@ -71,10 +77,10 @@ export function WinnersPanel({ questId }: { questId: string }) {
   useEffect(() => {
     setLoading(true);
     Promise.all([
-      fetch(`/api/admin/quests/${questId}`).then((r) => r.json()),
-      fetch(`/api/admin/quests/${questId}/participants`).then((r) => r.json()),
-      fetch(`/api/admin/quests/${questId}/winners`).then((r) => r.json()),
-      fetch(`/api/admin/quests/${questId}/invite-codes`).then((r) => r.json()),
+      apiFetch(`/api/admin/quests/${questId}`),
+      apiFetch(`/api/admin/quests/${questId}/participants`),
+      apiFetch(`/api/admin/quests/${questId}/winners`),
+      apiFetch(`/api/admin/quests/${questId}/invite-codes`),
     ])
       .then(([quest, p, w, c]: [{ title: string; rewardType?: string; questKind?: string; rewardToken?: string }, Participant[], Winner[], InviteCode[]]) => {
         // Winners/distribute/invite-codes are CAMPAIGN-only — bounce the Quest
@@ -97,13 +103,11 @@ export function WinnersPanel({ questId }: { questId: string }) {
   async function handleDrawRandom() {
     setDrawing(true);
     setMessage(null);
-    const res = await fetch(`/api/admin/quests/${questId}/draw-winners`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ count: Number(drawCount) }),
-    });
-    const data = (await res.json()) as { added: number; winners: Winner[] };
-    if (res.ok) {
+    try {
+      const data = await apiFetch<{ added: number; winners: Winner[] }>(
+        `/api/admin/quests/${questId}/draw-winners`,
+        { method: "POST", json: { count: Number(drawCount) } },
+      );
       setWinners((prev) => [...prev, ...data.winners]);
       setParticipants((prev) =>
         prev.map((p) =>
@@ -114,8 +118,8 @@ export function WinnersPanel({ questId }: { questId: string }) {
       );
       setTab("winners");
       setMessage({ type: "ok", text: `${data.added} winner(s) selected.` });
-    } else {
-      setMessage({ type: "err", text: "Failed to draw winners" });
+    } catch (err) {
+      setMessage({ type: "err", text: errMsg(err, "Failed to draw winners") });
     }
     setDrawing(false);
   }
@@ -123,18 +127,20 @@ export function WinnersPanel({ questId }: { questId: string }) {
   async function handleDrawManual(userId: string) {
     setDrawing(true);
     setMessage(null);
-    const res = await fetch(`/api/admin/quests/${questId}/draw-winners`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userIds: [userId] }),
-    });
-    const data = (await res.json()) as { added: number; winners: Winner[] };
-    if (res.ok && data.added > 0) {
-      setWinners((prev) => [...prev, ...data.winners]);
-      setParticipants((prev) =>
-        prev.map((p) => (p.userId === userId ? { ...p, isWinner: true } : p)),
+    try {
+      const data = await apiFetch<{ added: number; winners: Winner[] }>(
+        `/api/admin/quests/${questId}/draw-winners`,
+        { method: "POST", json: { userIds: [userId] } },
       );
-      setMessage({ type: "ok", text: "Winner selected." });
+      if (data.added > 0) {
+        setWinners((prev) => [...prev, ...data.winners]);
+        setParticipants((prev) =>
+          prev.map((p) => (p.userId === userId ? { ...p, isWinner: true } : p)),
+        );
+        setMessage({ type: "ok", text: "Winner selected." });
+      }
+    } catch (err) {
+      setMessage({ type: "err", text: errMsg(err, "Failed to select winner") });
     }
     setDrawing(false);
   }
@@ -144,15 +150,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
     setMessage(null);
     const body =
       drawId === "all" ? {} : { drawIds: [drawId] };
-    const res = await fetch(
-      `/api/admin/quests/${questId}/distribute-rewards`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      },
-    );
-    const data = (await res.json().catch(() => ({}))) as {
+    let data: {
       distributed?: number;
       failed?: number;
       results?: {
@@ -163,7 +161,18 @@ export function WinnersPanel({ questId }: { questId: string }) {
         ccAmount: number;
       }[];
     };
-    if (res.ok) {
+    try {
+      data = await apiFetch<typeof data>(
+        `/api/admin/quests/${questId}/distribute-rewards`,
+        { method: "POST", json: body },
+      );
+    } catch (err) {
+      data = {};
+      setMessage({ type: "err", text: errMsg(err, "Distribution failed") });
+      setDistributing(null);
+      return;
+    }
+    {
       // ccSent-aware: hanya mark distributed=true untuk winner yang BENAR-BENAR
       // terkirim onchain. Yang gagal tetap "Pending" → tombol Send muncul lagi
       // → admin bisa retry tanpa double-pay (backend filter distributed:false).
@@ -192,8 +201,6 @@ export function WinnersPanel({ questId }: { questId: string }) {
           text: `${sent} reward(s) distributed.`,
         });
       }
-    } else {
-      setMessage({ type: "err", text: "Distribution failed" });
     }
     setDistributing(null);
   }
@@ -211,28 +218,32 @@ export function WinnersPanel({ questId }: { questId: string }) {
       return;
     }
 
-    const res = await fetch(`/api/admin/quests/${questId}/invite-codes`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const data = (await res.json()) as { created: number; skipped: number };
-    if (res.ok) {
+    try {
+      const data = await apiFetch<{ created: number; skipped: number }>(
+        `/api/admin/quests/${questId}/invite-codes`,
+        { method: "POST", json: body },
+      );
       setMessage({ type: "ok", text: `${data.created} code(s) added.` });
-      const fresh = await fetch(`/api/admin/quests/${questId}/invite-codes`).then((r) => r.json()) as InviteCode[];
+      const fresh = await apiFetch<InviteCode[]>(
+        `/api/admin/quests/${questId}/invite-codes`,
+      );
       setCodes(fresh);
       setCodesInput("");
-    } else {
-      setMessage({ type: "err", text: "Failed to add codes" });
+    } catch (err) {
+      setMessage({ type: "err", text: errMsg(err, "Failed to add codes") });
     }
     setAddingCodes(false);
   }
 
   async function refreshCodes() {
-    const fresh = await fetch(`/api/admin/quests/${questId}/invite-codes`).then((r) =>
-      r.json(),
-    ) as InviteCode[];
-    setCodes(Array.isArray(fresh) ? fresh : []);
+    try {
+      const fresh = await apiFetch<InviteCode[]>(
+        `/api/admin/quests/${questId}/invite-codes`,
+      );
+      setCodes(Array.isArray(fresh) ? fresh : []);
+    } catch {
+      /* diam — admin bisa retry */
+    }
   }
 
   async function handleDeleteCode(code: InviteCode) {
@@ -247,17 +258,16 @@ export function WinnersPanel({ questId }: { questId: string }) {
 
     setDeletingCodeId(code.id);
     setMessage(null);
-    const res = await fetch(`/api/admin/quests/${questId}/invite-codes/${code.id}`, {
-      method: "DELETE",
-    });
-    const data = (await res.json()) as { message?: string };
-    if (res.ok) {
+    try {
+      await apiFetch(`/api/admin/quests/${questId}/invite-codes/${code.id}`, {
+        method: "DELETE",
+      });
       setCodes((prev) => prev.filter((c) => c.id !== code.id));
       setMessage({ type: "ok", text: `Deleted ${code.code}.` });
-    } else {
+    } catch (err) {
       setMessage({
         type: "err",
-        text: data.message ?? "Failed to delete code",
+        text: errMsg(err, "Failed to delete code"),
       });
     }
     setDeletingCodeId(null);
@@ -279,15 +289,11 @@ export function WinnersPanel({ questId }: { questId: string }) {
 
     setDeletingAll(true);
     setMessage(null);
-    const res = await fetch(`/api/admin/quests/${questId}/invite-codes`, {
-      method: "DELETE",
-    });
-    const data = (await res.json()) as {
-      deleted?: number;
-      skippedAssigned?: number;
-      message?: string;
-    };
-    if (res.ok) {
+    try {
+      const data = await apiFetch<{
+        deleted?: number;
+        skippedAssigned?: number;
+      }>(`/api/admin/quests/${questId}/invite-codes`, { method: "DELETE" });
       await refreshCodes();
       const kept =
         data.skippedAssigned && data.skippedAssigned > 0
@@ -297,10 +303,10 @@ export function WinnersPanel({ questId }: { questId: string }) {
         type: "ok",
         text: `Deleted ${data.deleted ?? 0} code(s).${kept}`,
       });
-    } else {
+    } catch (err) {
       setMessage({
         type: "err",
-        text: data.message ?? "Failed to delete codes",
+        text: errMsg(err, "Failed to delete codes"),
       });
     }
     setDeletingAll(false);
