@@ -426,6 +426,55 @@
 
 .tx-pulse { animation: tx-pulse-ring 1.8s var(--ease) infinite; }
 .tx-progress-track { position: relative; overflow: hidden; }
+
+/* ── Quest milestones timeline (mockup `quest-timeline` parity) ──
+   Vertical guide line + per-task state dots: done = solid emerald w/ glow,
+   active (next open) = brand dot w/ pulse ring, locked = hollow. */
+.quest-timeline {
+  position: relative;
+  padding-left: 2.5rem;
+}
+.quest-timeline::before {
+  content: "";
+  position: absolute;
+  left: 1.125rem;
+  top: 1.5rem;
+  bottom: 1.5rem;
+  width: 2px;
+  background: linear-gradient(to bottom, rgb(255 255 255 / 0.1), rgb(255 255 255 / 0));
+  z-index: 0;
+}
+.quest-milestone {
+  position: relative;
+  margin-bottom: 1rem;
+}
+.quest-milestone::before {
+  content: "";
+  position: absolute;
+  left: -1.625rem;
+  top: 1.25rem;
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: 50%;
+  background: var(--card-solid);
+  border: 2px solid rgb(255 255 255 / 0.1);
+  z-index: 1;
+  transition: all 0.3s var(--ease);
+}
+.quest-milestone.is-done::before {
+  background: var(--success);
+  border-color: var(--success);
+  box-shadow: 0 0 12px rgb(74 222 128 / 0.4);
+}
+.quest-milestone.is-active::before {
+  background: var(--primary);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgb(94 232 156 / 0.2);
+  animation: tx-pulse-ring 2s infinite;
+}
+.quest-timeline .quest-milestone:last-child {
+  margin-bottom: 0;
+}
 .tx-progress-sweep {
   position: absolute;
   inset: 0;
@@ -451,7 +500,8 @@
   .tx-check-pop,
   .tx-fade-up,
   .claim-modal-pop,
-  .spin {
+  .spin,
+  .quest-milestone.is-active::before {
     animation: none !important;
   }
   .float-y, .hero-card-float { transform: none !important; }

@@ -4,10 +4,22 @@ import { useState } from "react";
 import { formatFcfsClaimFeeHint } from "@/lib/canton/campaign-reward";
 import type { CampaignMeta } from "@/lib/canton/campaign-reward";
 import { CampaignFcfsRewardCard } from "@/components/app/campaign/campaign-fcfs-reward-card";
+import { ClaimDetailsModal } from "@/components/app/campaign/claim-details-modal";
 import { RewardReveal } from "@/components/app/campaign/reward-reveal";
 import { launchClaimConfetti } from "@/components/ui/confetti-effect";
 import { FCFS_CLAIM_FAIL_MSG } from "@/lib/campaign/claim-messages";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
+
+/** "Aug 14, 21:39" — compact end date for the claim-details rows. */
+function formatEndMeta(endsAt: string | null | undefined): string | null {
+  if (!endsAt) return null;
+  return new Date(endsAt).toLocaleString("en-GB", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 export function CampaignInviteClaimSection({
   questId,
@@ -27,6 +39,7 @@ export function CampaignInviteClaimSection({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [claimedCode, setClaimedCode] = useState<string | null>(null);
+  const [claimOpen, setClaimOpen] = useState(false);
 
   const sectionLabel =
     rewardType === "INVITE_CODE_FCFS"
@@ -90,8 +103,34 @@ export function CampaignInviteClaimSection({
         error={error}
         success={success}
         claimButtonLabel="Claim"
-        onClaim={() => void handleClaim()}
+        onClaim={() => setClaimOpen(true)}
       />
+
+      <ClaimDetailsModal
+        open={claimOpen}
+        onClose={() => setClaimOpen(false)}
+        heroAmount="1 invite code"
+        rewardLabel="Reward"
+        rows={[
+          {
+            label: "Claim fee",
+            value: fee > 0 ? `${fee} CC` : "Free",
+            accent: fee <= 0,
+          },
+          { label: "Codes left", value: codes > 0 ? String(codes) : "—" },
+          { label: "Network", value: "Canton" },
+          ...(formatEndMeta(campaignMeta.endsAt)
+            ? [{ label: campaignMeta.ended ? "Ended" : "Closes", value: formatEndMeta(campaignMeta.endsAt)! }]
+            : []),
+        ]}
+        eligibleHint="All milestones completed — you're eligible"
+        isConfirming={isSubmitting}
+        onConfirm={() => {
+          setClaimOpen(false);
+          void handleClaim();
+        }}
+      />
+
       {claimedCode && (
         <RewardReveal
           inviteCode={claimedCode}

@@ -162,10 +162,10 @@ export function EarnCampaignCard({
       )}
     >
       {/* ── Banner ─────────────────────────────────────────────── */}
-      <div className="relative h-28 w-full shrink-0 overflow-hidden sm:h-32">
+      <div className="relative h-32 w-full shrink-0 overflow-hidden">
         {quest.bannerImageUrl ? (
           <div
-            className="absolute inset-0 bg-cover bg-center transition-transform duration-500 group-hover:scale-105"
+            className="absolute inset-0 bg-cover bg-center transition-transform duration-500 group-hover:scale-110"
             style={{ backgroundImage: `url("${quest.bannerImageUrl}")` }}
           />
         ) : (
@@ -183,7 +183,7 @@ export function EarnCampaignCard({
       </div>
 
       {/* ── Body (overlaps banner so the logo punches through) ── */}
-      <div className="relative -mt-8 flex flex-1 flex-col p-4 sm:p-5">
+      <div className="relative -mt-8 flex flex-1 flex-col p-4">
         {/* Logo + reward row */}
         <div className="mb-3 flex items-end justify-between gap-3">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--card)] shadow-lg ring-4 ring-[var(--card)]">
@@ -237,7 +237,7 @@ export function EarnCampaignCard({
         ) : null}
 
         {/* Footer meta */}
-        <div className="mt-auto flex items-center justify-between gap-2 border-t border-[var(--border)] pt-3 text-[10px] font-semibold text-[var(--muted-foreground)]">
+        <div className="mt-auto flex items-center justify-between gap-2 border-t border-white/5 pt-4 text-[10px] font-semibold text-[var(--muted-foreground)]">
           <span className="inline-flex items-center gap-1">
             <ListChecks className="h-3 w-3 text-canton" />
             {quest.tasks.length}

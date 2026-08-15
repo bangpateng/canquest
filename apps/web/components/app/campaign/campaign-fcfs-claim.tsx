@@ -13,6 +13,16 @@ import { useState } from "react";
 import { launchClaimConfetti } from "@/components/ui/confetti-effect";
 import { FCFS_CLAIM_FAIL_MSG } from "@/lib/campaign/claim-messages";
 
+/** "Aug 14, 21:39" — compact end date for the claim-details rows. */
+function formatEndMeta(endsAt: string): string {
+  return new Date(endsAt).toLocaleString("en-GB", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export function CampaignFcfsClaimSection({
   questId,
   partyId,
@@ -117,6 +127,9 @@ export function CampaignFcfsClaimSection({
           },
           { label: "Slots", value: slotsLabel },
           { label: "Network", value: "Canton" },
+          ...(campaignMeta.endsAt
+            ? [{ label: campaignMeta.ended ? "Ended" : "Closes", value: formatEndMeta(campaignMeta.endsAt) }]
+            : []),
         ]}
         isConfirming={isSubmitting}
         onConfirm={() => {

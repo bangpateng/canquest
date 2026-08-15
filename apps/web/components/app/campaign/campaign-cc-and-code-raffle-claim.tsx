@@ -4,10 +4,22 @@ import { useState } from "react";
 import type { CampaignMeta } from "@/lib/canton/campaign-reward";
 import { formatRewardAmount } from "@/lib/canton/campaign-reward";
 import { CampaignFcfsRewardCard } from "@/components/app/campaign/campaign-fcfs-reward-card";
+import { ClaimDetailsModal } from "@/components/app/campaign/claim-details-modal";
 import { RewardReveal } from "@/components/app/campaign/reward-reveal";
 import { launchClaimConfetti } from "@/components/ui/confetti-effect";
 import { CLAIM_FAIL_MSG } from "@/lib/campaign/claim-messages";
 import { normalizeRewardToken, type RewardTokenSymbol } from "@/lib/quest/quest-types";
+
+/** "Aug 14, 21:39" — compact end date for the claim-details rows. */
+function formatEndMeta(endsAt: string | null | undefined): string | null {
+  if (!endsAt) return null;
+  return new Date(endsAt).toLocaleString("en-GB", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 /**
  * CC + Code Combined Raffle Claim Section
@@ -38,6 +50,7 @@ export function CampaignCcAndCodeRaffleClaimSection({
   const [success, setSuccess] = useState<string | null>(null);
   const [claimedCode, setClaimedCode] = useState<string | null>(null);
   const [deliveryKind, setDeliveryKind] = useState<"direct" | "pending_offer" | null>(null);
+  const [claimOpen, setClaimOpen] = useState(false);
 
   const fee = campaignMeta.fcfsClaimFeeCc;
 
@@ -127,8 +140,38 @@ export function CampaignCcAndCodeRaffleClaimSection({
         error={error}
         success={success}
         claimButtonLabel={claimLabel}
-        onClaim={() => void handleClaim()}
+        onClaim={() => setClaimOpen(true)}
       />
+
+      <ClaimDetailsModal
+        open={claimOpen}
+        onClose={() => setClaimOpen(false)}
+        heroAmount={
+          isCodeOnly
+            ? "1 invite code"
+            : `${formatRewardAmount(rewardCc, token)} + 1 Code`
+        }
+        rewardLabel="Reward · winner"
+        tokenHero={isCodeOnly ? undefined : token === "USDCx" ? "USDCx" : "CC"}
+        rows={[
+          {
+            label: "Claim fee",
+            value: fee > 0 ? `${fee} CC` : "Free",
+            accent: fee <= 0,
+          },
+          { label: "Network", value: "Canton" },
+          ...(formatEndMeta(campaignMeta.endsAt)
+            ? [{ label: campaignMeta.ended ? "Ended" : "Closes", value: formatEndMeta(campaignMeta.endsAt)! }]
+            : []),
+        ]}
+        eligibleHint="Winner drawn — you're eligible to claim"
+        isConfirming={isSubmitting}
+        onConfirm={() => {
+          setClaimOpen(false);
+          void handleClaim();
+        }}
+      />
+
       {claimedCode && (
         <RewardReveal
           inviteCode={claimedCode}

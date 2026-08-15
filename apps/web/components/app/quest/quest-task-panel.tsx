@@ -506,26 +506,49 @@ export function QuestTaskPanel({
         </div>
       ) : null}
 
-      {/* Progress bar — tanpa header teks "Missions". */}
+      {/* Progress — campaign: "Quest Milestones" header + bare bar (mockup);
+          quest hub: bar in a card (unchanged). */}
       {visibleTasks.length > 0 ? (
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)]/60 px-4 py-3 backdrop-blur-2xl sm:px-5">
-          <div className="h-1.5 overflow-hidden rounded-full bg-[var(--muted)]">
-            <div
-              className={cn(
-                "h-full rounded-full transition-all duration-500",
-                allDone
-                  ? "bg-gradient-to-r from-emerald-500 to-emerald-400"
-                  : "bg-gradient-to-r from-[var(--primary)] to-[var(--primary-strong)]",
-              )}
-              style={{ width: `${Math.max(4, pct)}%` }}
-            />
+        isQuestHub ? (
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)]/60 px-4 py-3 backdrop-blur-2xl sm:px-5">
+            <div className="h-1.5 overflow-hidden rounded-full bg-[var(--muted)]">
+              <div
+                className={cn(
+                  "h-full rounded-full transition-all duration-500",
+                  allDone
+                    ? "bg-gradient-to-r from-emerald-500 to-emerald-400"
+                    : "bg-gradient-to-r from-[var(--primary)] to-[var(--primary-strong)]",
+                )}
+                style={{ width: `${Math.max(4, pct)}%` }}
+              />
+            </div>
           </div>
-        </div>
+        ) : (
+          <div id="detail-tasks">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-[var(--foreground)]">Quest Milestones</h2>
+              <span className="text-sm font-semibold tabular-nums text-[var(--muted-foreground)]">
+                {verifiedCount} / {visibleTasks.length}
+              </span>
+            </div>
+            <div className="mb-4 h-1.5 overflow-hidden rounded-full bg-[var(--muted)]">
+              <div
+                className={cn(
+                  "h-full rounded-full transition-all duration-500",
+                  allDone
+                    ? "bg-gradient-to-r from-emerald-500 to-emerald-400"
+                    : "bg-gradient-to-r from-[var(--primary)] to-[var(--primary-strong)]",
+                )}
+                style={{ width: `${Math.max(4, pct)}%` }}
+              />
+            </div>
+          </div>
+        )
       ) : null}
 
-      {/* Task list — satu container untuk Earn hub & campaign. Tiap task = kartu
-          standalone, jadi pakai space-y (jarak), BUKAN divide-y (garis tertimpa). */}
-      <ul className="space-y-3">
+      {/* Task list — campaign: quest-timeline (dots + guide line, mockup);
+          Earn hub: kartu standalone dengan space-y (jarak). */}
+      <ul className={isQuestHub ? "space-y-3" : "quest-timeline"}>
         {visibleTasks.map((task, idx) => (
           <TaskRow
             key={task.id}
@@ -989,16 +1012,18 @@ function TaskRow({
 
   // Jalur campaign — kartu standalone, SATU baris: [icon] [title+meta] [button].
   // Tombol sejajar dengan icon & title (kanan), tidak menabrak teks.
+  // quest-milestone = dot timeline di kiri (is-done = emerald, is-active = pulse).
   // Jalur Earn-hub ditangani blok di bawah (butuh questHubDisplay).
   if (!(questHubLayout && questHubDisplay)) {
     return (
       <li
         className={cn(
-          "rounded-2xl border bg-[var(--card)] p-4 transition-all duration-200 sm:p-5",
+          "quest-milestone rounded-2xl border bg-[var(--card)] p-4 transition-all duration-200 sm:p-5",
           isVerified
-            ? "border-emerald-500/30 bg-emerald-500/[0.06]"
-            : "border-[var(--border)] hover:border-[var(--primary)]/30",
-          sequentiallyLocked && !isVerified && "opacity-55",
+            ? "is-done border-emerald-500/30 bg-emerald-500/[0.06]"
+            : sequentiallyLocked
+              ? "border-[var(--border)] opacity-50"
+              : "is-active border-[var(--border)] hover:border-[var(--primary)]/30",
         )}
       >
         <div className="flex items-center gap-3 sm:gap-4">
@@ -1030,7 +1055,8 @@ function TaskRow({
             ) : null}
           </div>
 
-          {/* Kotak hijau kanan = tombol status task (sejajar, shrink-0 = tidak nabrak). */}
+          {/* Kotak kanan = tombol status task (sejajar, shrink-0 = tidak nabrak).
+              Mockup detail: Verified = chip emerald lembut. */}
           <div className="flex shrink-0 items-center">
             {sequentiallyLocked && !isVerified ? (
               <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center gap-1 rounded-lg bg-[var(--muted)]/30 px-3 text-[10px] font-bold uppercase tracking-wide text-[var(--muted-foreground)]">
@@ -1038,8 +1064,8 @@ function TaskRow({
                 Locked
               </span>
             ) : isVerified ? (
-              <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500 px-4 text-xs font-bold text-[var(--primary-foreground)]">
-                Completed
+              <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500/15 px-4 text-xs font-bold text-emerald-300">
+                Verified
               </span>
             ) : countdown !== null && countdown > 0 ? (
               <span
@@ -1063,7 +1089,7 @@ function TaskRow({
                 onClick={startTask}
                 className={cn(
                   buttonVariants({ size: "sm" }),
-                  "h-9 min-w-[5.5rem] bg-emerald-500 px-4 font-bold hover:bg-emerald-400",
+                  "h-9 min-w-[5.5rem] px-4 font-bold",
                 )}
               >
                 {actionLabel}

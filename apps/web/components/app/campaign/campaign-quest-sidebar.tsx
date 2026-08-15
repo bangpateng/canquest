@@ -1,21 +1,11 @@
 import { RewardTokenLogo } from "@/components/app/campaign/reward-token-logo";
 import { CcUsdValue } from "@/components/app/earn/cc-usd-value";
 import { getQuestMeta } from "@/lib/quest/quest-engine";
-import { formatCodePerWinners, formatCodePoolLabel, formatRewardAmount } from "@/lib/canton/campaign-reward";
+import { formatCodePoolLabel, formatRewardAmount } from "@/lib/canton/campaign-reward";
 import { questRewardToken } from "@/lib/quest/quest-types";
 import type { Quest } from "@/lib/quest/quest-types";
 import { Card } from "@/components/ui/card";
-import { cn } from "@/lib/utils/utils";
-import {
-  Calendar,
-  Clock,
-  ListChecks,
-  Sparkles,
-  Ticket,
-  Users,
-  Zap,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { Sparkles, Ticket } from "lucide-react";
 
 /** Compact date format: "Jun 15, 21:39" */
 function formatEnd(quest: Quest): string {
@@ -31,59 +21,54 @@ function formatEnd(quest: Quest): string {
 }
 
 /**
- * Campaign reward + meta — single clean hero block shown above quest tasks.
- * Type label lives in the page hero badge (no duplication here).
+ * Campaign reward sidebar — mockup `Your Reward` glass-card (sticky on lg).
+ *
+ * Layout mirrors mockup renderEarnDetail: reward hero (icon + amount),
+ * divider, Slots + Ends In two-column grid with mini progress bar,
+ * divider, Claim fee / Reward pool / Tasks rows. All values come from
+ * quest-engine — no fabricated data.
  */
 export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
   const token = questRewardToken(quest);
   const meta = getQuestMeta(quest);
-  const { config, rewardDisplay, slots, metrics } = meta;
+  const { config, rewardDisplay, slots } = meta;
   const summary = quest.campaignSummary;
 
-  const VALUE_CLS = "text-base font-bold text-[var(--foreground)]";
+  const REWARD_CLS = "text-xl font-bold leading-tight text-[var(--foreground)]";
 
-  // ── Reward / winner value ──────────────────────────────────────
+  // ── Reward hero value (mockup rewardCell) ─────────────────────
   let rewardPerWinner: React.ReactNode;
   if (config.isDual) {
     rewardPerWinner = (
-      <div className="flex flex-wrap items-center gap-1.5">
-        <div className="flex items-center gap-1.5">
-          <RewardTokenLogo token={token} size={18} />
-          <span className={VALUE_CLS}>{quest.rewardCc > 0 ? formatRewardAmount(quest.rewardCc, token) : token}</span>
-        </div>
-        <span className="text-sm font-semibold text-[var(--muted-foreground)]">+</span>
-        <div className="flex items-center gap-1.5">
-          <Ticket className="h-4 w-4 text-canton" aria-hidden />
-          <span className={VALUE_CLS}>1 Code</span>
-        </div>
+      <div className={REWARD_CLS}>
+        {quest.rewardCc > 0 ? formatRewardAmount(quest.rewardCc, token) : token}{" "}
+        <span className="text-[var(--muted-foreground)]">+</span> 1 Code
       </div>
     );
   } else if (config.isCcToken) {
     rewardPerWinner = (
-      <div className="flex items-center gap-1.5">
-        <RewardTokenLogo token={token} size={18} />
-        <span className={VALUE_CLS}>
-          {quest.rewardCc > 0 ? formatRewardAmount(quest.rewardCc, token) : rewardDisplay.primaryText}
-        </span>
+      <div className={REWARD_CLS}>
+        {quest.rewardCc > 0 ? formatRewardAmount(quest.rewardCc, token) : rewardDisplay.primaryText}
       </div>
     );
   } else if (config.code === "INVITE_CODE_FCFS" || config.code === "INVITE_CODE_RANDOM") {
-    rewardPerWinner = (
-      <div className="flex items-center gap-1.5">
-        <Ticket className="h-4 w-4 text-canton" aria-hidden />
-        <span className={VALUE_CLS}>{formatCodePerWinners()}</span>
-      </div>
-    );
+    rewardPerWinner = <div className={REWARD_CLS}>1 Invite Code</div>;
   } else if (config.code === "WAITLIST_EMAIL") {
-    rewardPerWinner = (
-      <div className="flex items-center gap-1.5">
-        <Sparkles className="h-4 w-4 text-canton" aria-hidden />
-        <span className={VALUE_CLS}>Waitlist spot</span>
-      </div>
-    );
+    rewardPerWinner = <div className={REWARD_CLS}>Waitlist Spot</div>;
   } else {
-    rewardPerWinner = <span className={VALUE_CLS}>{rewardDisplay.primaryText}</span>;
+    rewardPerWinner = <div className={REWARD_CLS}>{rewardDisplay.primaryText}</div>;
   }
+
+  // ── Reward hero icon box (mockup tc.iconBg + icon) ────────────
+  const isCodeReward =
+    config.code === "INVITE_CODE_FCFS" || config.code === "INVITE_CODE_RANDOM";
+  const rewardIcon = config.isCcToken ? (
+    <RewardTokenLogo token={token} size={24} />
+  ) : config.code === "WAITLIST_EMAIL" ? (
+    <Sparkles className="h-6 w-6 text-cyan-300" aria-hidden />
+  ) : (
+    <Ticket className="h-6 w-6 text-violet-400" aria-hidden />
+  );
 
   // ── Claim fee ──────────────────────────────────────────────────
   const claimFeeCc = summary?.fcfsClaimFeeCc ?? config.defaultClaimFee ?? 0;
@@ -94,181 +79,104 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
         ? `${claimFeeCc} CC`
         : "Free";
 
-  // ── Pool label ─────────────────────────────────────────────────
-  const isCodeReward =
-    config.code === "INVITE_CODE_FCFS" || config.code === "INVITE_CODE_RANDOM";
-  const poolMetric = metrics.find((m) => m.key === "pool");
+  // ── Reward pool ────────────────────────────────────────────────
+  const poolMetric = meta.metrics.find((m) => m.key === "pool");
   const poolDisplay = isCodeReward
     ? formatCodePoolLabel(quest.maxWinners, summary?.codesRemaining)
     : poolMetric
       ? poolMetric.value
       : rewardDisplay.poolLabel;
-  const poolCcValue = summary?.poolTotalCc ?? 0;
 
-  // ── Left metric: FCFS slots / winners ──────────────────────────
+  // ── Slots metric (FCFS slots / winners drawn / max winners) ────
   const isFcfsType =
     config.code === "CC_ONLY" || config.code === "INVITE_CODE_FCFS";
 
-  let slotsLabel: string;
   let slotsValue: string;
-  let slotsHint: string | null = null;
-  let showSlotsProgress = false;
-  let slotsUsed = 0;
-  let slotsMax = 0;
-
-  if (isFcfsType && slots.max > 0) {
-    slotsLabel = "FCFS slots";
-    slotsValue = slots.filledLabel;
-    slotsHint = slots.full ? "All slots claimed" : `${slots.left} left`;
-    showSlotsProgress = !slots.full && summary != null;
-    slotsUsed = slots.used;
-    slotsMax = slots.max;
-  } else if (config.code === "INVITE_CODE_RANDOM" && slots.used > 0) {
-    slotsLabel = "Winners drawn";
+  let slotsPct = 0;
+  if (slots.max > 0 && (isFcfsType || slots.used > 0)) {
     slotsValue = `${slots.used}/${slots.max}`;
-    showSlotsProgress = true;
-    slotsUsed = slots.used;
-    slotsMax = slots.max;
+    slotsPct = slots.pct;
   } else {
-    slotsLabel = "Max winners";
-    slotsValue = slots.max > 0 ? String(slots.max) : "—";
+    slotsValue = slots.max > 0 ? `${slots.max} max` : "—";
   }
 
   return (
-    <Card
-      className="w-full overflow-hidden"
-      aria-label="Campaign reward"
-    >
-      {/* ── Reward highlight (single hero block) ──────────────────── */}
-      <div className="border-b border-[var(--border)]">
-        {/* Reward winner + Pool — 2 equal columns */}
-        <div className="relative grid grid-cols-2 gap-px bg-[var(--border)]">
-          {/* Reward · winner */}
-          <div className="flex min-w-0 flex-col gap-1.5 bg-[var(--card)] px-5 py-4 sm:px-6 sm:py-5">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)] sm:text-xs">
-              Reward · winner
+    <Card className="w-full overflow-hidden" aria-label="Campaign reward">
+      <div className="flex flex-col gap-4 p-5">
+        {/* ── Reward hero ────────────────────────────────────────── */}
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--muted-foreground)]">
+            Your Reward
+          </p>
+          <div className="mt-2 flex items-center gap-3">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-canton-subtle">
+              {rewardIcon}
             </span>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="min-w-0">
               {rewardPerWinner}
-              {quest.rewardCc > 0 ? <CcUsdValue cc={quest.rewardCc} /> : null}
-            </div>
-          </div>
-
-          {/* Reward Pool */}
-          <div className="flex min-w-0 flex-col gap-1.5 bg-[var(--card)] px-5 py-4 sm:px-6 sm:py-5">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)] sm:text-xs">
-              Reward Pool
-            </span>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {config.isCcToken ? (
-                <>
-                  <RewardTokenLogo token={token} size={18} />
-                  <span className={VALUE_CLS}>{poolDisplay}</span>
-                  {poolCcValue > 0 ? <CcUsdValue cc={poolCcValue} /> : null}
-                </>
-              ) : config.code === "INVITE_CODE_FCFS" || config.code === "INVITE_CODE_RANDOM" ? (
-                <>
-                  <Ticket className="h-4 w-4 shrink-0 text-canton" />
-                  <span className={VALUE_CLS}>{poolDisplay}</span>
-                </>
-              ) : (
-                <>
-                  <RewardTokenLogo token={token} size={18} />
-                  <span className={VALUE_CLS}>{poolDisplay}</span>
-                  {summary?.poolTotalCc != null && summary.poolTotalCc > 0 ? (
-                    <CcUsdValue cc={summary.poolTotalCc} />
-                  ) : null}
-                </>
-              )}
+              {quest.rewardCc > 0 ? (
+                <div className="mt-0.5">
+                  <CcUsdValue cc={quest.rewardCc} />
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
 
-        {/* Claim fee row — single line, clear */}
+        <div className="h-px bg-white/5" aria-hidden />
+
+        {/* ── Slots + Ends In (two-column grid) ─────────────────── */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--muted-foreground)]">
+              Slots
+            </p>
+            <p className="mt-1 text-sm font-bold tabular-nums text-[var(--foreground)]">
+              {slotsValue}
+            </p>
+            <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-[var(--muted)]">
+              <div
+                className={slots.full ? "h-full rounded-full bg-gradient-to-r from-amber-500 to-orange-500" : "h-full rounded-full bg-gradient-brand"}
+                style={{ width: `${Math.max(slotsPct > 0 ? 6 : 0, slotsPct)}%` }}
+              />
+            </div>
+          </div>
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--muted-foreground)]">
+              {quest.status === "ACTIVE" ? "Ends In" : quest.status === "ENDED" ? "Ended" : "Starts"}
+            </p>
+            <p className="mt-1 text-sm font-bold text-amber-300">{formatEnd(quest)}</p>
+          </div>
+        </div>
+
+        <div className="h-px bg-white/5" aria-hidden />
+
+        {/* ── Fee / pool / tasks rows ───────────────────────────── */}
         {claimFeeDisplay !== null ? (
-          <div className="relative flex items-center gap-2 bg-[var(--card)] px-5 py-2.5 sm:px-6">
-            <span className="text-xs font-semibold text-[var(--muted-foreground)]">Claim fee</span>
-            <span className={cn(
-              "ml-auto text-xs font-bold",
-              claimFeeDisplay === "Free" ? "text-canton" : "text-[var(--foreground)]",
-            )}>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs text-[var(--muted-foreground)]">Claim Fee</span>
+            <span
+              className={
+                claimFeeDisplay === "Free"
+                  ? "text-xs font-bold text-canton"
+                  : "text-xs font-bold text-[var(--foreground)]"
+              }
+            >
               {claimFeeDisplay}
             </span>
           </div>
         ) : null}
-      </div>
-
-      {/* ── Slots progress (full-width when applicable) ──────────── */}
-      {showSlotsProgress ? (
-        <div className="relative border-b border-[var(--border)] px-5 py-3 sm:px-6">
-          <div className="mb-2 flex items-center justify-between text-xs">
-            <span className="inline-flex items-center gap-1.5 font-semibold text-[var(--muted-foreground)]">
-              {isFcfsType ? <Zap className="h-3.5 w-3.5 text-canton" /> : <Users className="h-3.5 w-3.5 text-canton" />}
-              {slotsLabel}
-            </span>
-            <span className="font-bold tabular-nums text-[var(--foreground)]">
-              {slotsValue}{slotsHint ? <span className="ml-1.5 text-[10px] font-medium text-[var(--muted-foreground)]">{slotsHint}</span> : null}
-            </span>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-[var(--muted)]">
-            <div
-              className={cn(
-                "h-full rounded-full transition-all duration-500",
-                slots.warn
-                  ? "bg-gradient-to-r from-amber-500 to-orange-500"
-                  : "bg-gradient-to-r from-[var(--primary)] to-[var(--primary-strong)]",
-              )}
-              style={{
-                width: `${Math.max(6, Math.min(100, Math.round((slotsUsed / Math.max(1, slotsMax)) * 100)))}%`,
-              }}
-            />
-          </div>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs text-[var(--muted-foreground)]">Reward Pool</span>
+          <span className="truncate text-xs font-bold text-[var(--foreground)]">{poolDisplay}</span>
         </div>
-      ) : null}
-
-      {/* ── Metrics (3 columns) ──────────────────────────────────── */}
-      <dl className="relative grid grid-cols-3 gap-px bg-[var(--border)]">
-        <MetricTile
-          icon={isFcfsType ? Zap : Users}
-          label={slotsLabel}
-          value={showSlotsProgress ? slotsValue : slotsValue}
-        />
-        <MetricTile icon={ListChecks} label="Tasks" value={String(quest.tasks.length)} />
-        <MetricTile
-          icon={quest.endsAt ? Clock : Calendar}
-          label="Ends"
-          value={formatEnd(quest)}
-          small
-        />
-      </dl>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs text-[var(--muted-foreground)]">Tasks</span>
+          <span className="text-xs font-bold tabular-nums text-[var(--foreground)]">
+            {quest.tasks.length}
+          </span>
+        </div>
+      </div>
     </Card>
-  );
-}
-
-/** Single metric tile in the 3-column metrics row. */
-function MetricTile({
-  icon: Icon,
-  label,
-  value,
-  small = false,
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: string;
-  small?: boolean;
-}) {
-  return (
-    <div className="flex min-w-0 flex-col gap-1.5 bg-[var(--card)] px-4 py-3">
-      <dt className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-        <Icon className="h-3 w-3 shrink-0 text-[var(--muted-foreground)]" aria-hidden />
-        <span className="truncate">{label}</span>
-      </dt>
-      <dd className={cn(
-        "truncate font-bold text-[var(--foreground)]",
-        small ? "text-xs leading-snug" : "text-sm",
-      )}>
-        {value}
-      </dd>
-    </div>
   );
 }
