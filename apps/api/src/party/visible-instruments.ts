@@ -4,7 +4,7 @@
  * cETH, EDELx, USDC.B) disembunyikan — tidak di-query, tidak ditampilkan.
  * Dipakai di /balances, /pools, /prices supaya konsisten.
  *
- * Shared util — dipakai PartyController + CantonPriceService (agar key price
+ * Shared util — dipakai controller party (transfer/swap) + CantonPriceService (agar key price
  * map konsisten dengan daftar token di /pools).
  */
 const VISIBLE_INSTRUMENTS = new Set([
