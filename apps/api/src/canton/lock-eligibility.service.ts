@@ -81,11 +81,6 @@ export class LockEligibilityService {
     if (!ownerParty || ownerParty.startsWith('canquest:')) return [];
     try {
       const raw = await this.ledger.findLockedAmulets(ownerParty);
-      // Tabel term key → seconds; dipakai untuk tebak termKey yang paling dekat.
-      const { map } = parseLockTerms(
-        this.config.get<string>('LOCK_TERM_OPTIONS'),
-      );
-      const termSecondsList = [...map.values()].sort((a, b) => a - b);
       return raw.map((l) => {
         const expiresMs = Date.parse(l.expiresAt);
         // LockedAmulet tidak selalu expose createdAt; fallback ke now bila kosong.
@@ -93,7 +88,6 @@ export class LockEligibilityService {
         const termSeconds = Number.isFinite(expiresMs)
           ? Math.max(1, Math.round((expiresMs - lockedAtMs) / 1000))
           : 0;
-        const termKey = this.bestTermKey(map, termSeconds, termSecondsList);
         return {
           contractId: l.contractId,
           amount: Number(l.amount) || 0,

@@ -1975,7 +1975,7 @@ export class CantonLedgerService {
         // Extract updateId (Canton tx id) dari response untuk pencatatan history.
         let updateId: string | undefined;
         try {
-          const parsed = JSON.parse(text) as { updateId?: string };
+          JSON.parse(text); // validasi JSON saja — throw ditangkap catch
           updateId = extractUpdateIdFromTree(text) ?? undefined;
         } catch {
           /* ignore parse error */
@@ -2141,7 +2141,7 @@ export class CantonLedgerService {
     // Extract updateId dari response exercise (untuk link explorer Modo).
     let updateId: string | undefined;
     try {
-      const parsed = JSON.parse(text) as { updateId?: string };
+      JSON.parse(text); // validasi JSON saja — throw ditangkap catch
       updateId = extractUpdateIdFromTree(text) ?? undefined;
     } catch {
       /* ignore parse error */
@@ -2575,7 +2575,7 @@ export class CantonLedgerService {
     if (ok) {
       let updateId: string | null = null;
       try {
-        const parsed = JSON.parse(text) as { updateId?: string };
+        JSON.parse(text); // validasi JSON saja — throw ditangkap catch
         updateId = extractUpdateIdFromTree(text) ?? null;
       } catch {
         /* ignore */
@@ -2654,7 +2654,7 @@ export class CantonLedgerService {
     if (ok) {
       let updateId: string | null = null;
       try {
-        const parsed = JSON.parse(text) as { updateId?: string };
+        JSON.parse(text); // validasi JSON saja — throw ditangkap catch
         updateId = extractUpdateIdFromTree(text) ?? null;
       } catch {
         /* ignore */
@@ -2732,7 +2732,7 @@ export class CantonLedgerService {
     if (ok) {
       let updateId: string | null = null;
       try {
-        const parsed = JSON.parse(text) as { updateId?: string };
+        JSON.parse(text); // validasi JSON saja — throw ditangkap catch
         updateId = extractUpdateIdFromTree(text) ?? null;
       } catch {
         /* ignore */
@@ -2776,7 +2776,7 @@ export class CantonLedgerService {
     if (ok) {
       let updateId: string | null = null;
       try {
-        const parsed = JSON.parse(text) as { updateId?: string };
+        JSON.parse(text); // validasi JSON saja — throw ditangkap catch
         updateId = extractUpdateIdFromTree(text) ?? null;
       } catch {
         /* ignore */
@@ -2816,7 +2816,7 @@ export class CantonLedgerService {
     if (ok) {
       let updateId: string | null = null;
       try {
-        const parsed = JSON.parse(text) as { updateId?: string };
+        JSON.parse(text); // validasi JSON saja — throw ditangkap catch
         updateId = extractUpdateIdFromTree(text) ?? null;
       } catch {
         /* ignore */
@@ -4524,7 +4524,7 @@ export class CantonLedgerService {
     // Extract updateId dari response exercise (untuk link explorer Modo).
     let updateId: string | undefined;
     try {
-      const parsed = JSON.parse(text) as { updateId?: string };
+      JSON.parse(text); // validasi JSON saja — throw ditangkap catch
       updateId = extractUpdateIdFromTree(text) ?? undefined;
     } catch {
       /* ignore parse error */
@@ -4948,7 +4948,7 @@ export class CantonLedgerService {
     // dengan pattern accept/reject TransferInstruction di file ini.
     let updateId: string | undefined;
     try {
-      const parsed = JSON.parse(text) as { updateId?: string };
+      JSON.parse(text); // validasi JSON saja — throw ditangkap catch
       updateId = extractUpdateIdFromTree(text) ?? undefined;
     } catch {
       /* ignore parse error */

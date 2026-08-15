@@ -14,10 +14,8 @@
 
 import type {
   Quest,
-  QuestStatus,
   RewardType,
-  UserProgress,
-} from "@/lib/quest/quest-types";
+  UserProgress} from "@/lib/quest/quest-types";
 import { questRewardToken, rewardTokenLabel } from "@/lib/quest/quest-types";
 import type { QuestCampaignSummary } from "@/lib/canton/campaign-reward";
 import {

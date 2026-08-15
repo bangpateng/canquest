@@ -29,7 +29,7 @@ import {
 } from '../quests/quest-social-links.util';
 import { QuestLedgerService } from '../canton/quest-ledger.service';
 import { CantonLedgerService } from '../canton/canton-ledger.service';
-import { hasRealWallet } from '../common/wallet-policy';
+import {} from '../common/wallet-policy';
 import { PointsService } from '../users/points.service';
 import {
   isAllowedEmailDomain,
@@ -385,7 +385,7 @@ export class AdminService {
 
   /** Type 4 (CC FCFS) on Earn requires slots so claim-fcfs + fee run instead of auto-send on submit. */
   private assertCcFcfsMaxWinners(
-    rewardType: RewardType | string | undefined,
+    rewardType: string | undefined,
     maxWinners: number | null | undefined,
     questKind: QuestKind,
   ): void {

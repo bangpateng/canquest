@@ -16,10 +16,10 @@ import { ThrottlerGuard } from '@nestjs/throttler';
  */
 @Injectable()
 export class ThrottlerBehindProxyGuard extends ThrottlerGuard {
-  protected async getTracker(req: Record<string, unknown>): Promise<string> {
+  protected getTracker(req: Record<string, unknown>): Promise<string> {
     const r = req as { ip?: string; ips?: string[] };
     // `req.ip` sudah memperhitungkan trust proxy → IP paling kanan yang trusted.
     const tracker = r.ip;
-    return tracker ?? 'unknown';
+    return Promise.resolve(tracker ?? 'unknown');
   }
 }

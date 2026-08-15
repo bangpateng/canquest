@@ -2,7 +2,7 @@
 
 import { GoogleLogin } from "@react-oauth/google";
 import { buttonVariants } from "@/components/ui/button";
-import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { } from "@/components/ui/loading-spinner";
 import { formatApiError } from "@/lib/api/format-api-error";
 import { loginWithGoogle } from "@/lib/services/api/auth";
 import { clearCachedWalletMe } from "@/lib/auth/wallet-session-cache";

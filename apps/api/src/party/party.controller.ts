@@ -864,7 +864,6 @@ export class PartyController {
       // Deklarasi variabel fee di sini (dipakai atomic path + legacy path).
       let feeCollected = false;
       let feeLedgerTxId: string | undefined;
-      let feeTreasuryPartyId: string | undefined;
 
       if (
         useAtomicPlatformTransfer &&
@@ -921,7 +920,6 @@ export class PartyController {
               ledgerTxId = amuletRes.updateId;
               feeCollected = effectiveFeeCc > 0;
               feeLedgerTxId = amuletRes.updateId; // sama dgn transfer (atomic, 1 tx)
-              feeTreasuryPartyId = feePartyOnChainAtomic;
               this.logger.log(
                 `CC transfer ATOMIC (AmuletRules_Transfer): ${sender.username} → ${recipientLabel} ${amount} CC + fee ${effectiveFeeCc} CC (1 tx, ${outputs.length} outputs)`,
               );
@@ -1029,7 +1027,6 @@ export class PartyController {
             if (feeResult.ok && feeResult.transferKind === 'direct') {
               feeCollected = true;
               feeLedgerTxId = feeResult.updateId ?? undefined;
-              feeTreasuryPartyId = feePartyOnChain;
               await this.users.recordTransaction({
                 userId: sender.id,
                 amountCc: effectiveFeeCc,
@@ -1056,7 +1053,6 @@ export class PartyController {
                 feeCollected = true;
                 feeLedgerTxId =
                   acceptR.updateId ?? feeResult.updateId ?? undefined;
-                feeTreasuryPartyId = feePartyOnChain;
                 await this.users.recordTransaction({
                   userId: sender.id,
                   amountCc: effectiveFeeCc,
@@ -2289,9 +2285,8 @@ export class PartyController {
       // Reward PENDING yang ditolak → tandai REJECTED. Transfer dari pihak lain
       // yang ditolak → catat jejak OFFER_REJECTED (amount 0) supaya user punya
       // riwayatnya. Konsisten dengan legacy branch di bawah dan rejectTransferInstruction.
-      let settledOwnReward = 0;
       try {
-        settledOwnReward = await this.users.markTransferInstructionSettled(
+        await this.users.markTransferInstructionSettled(
           cid,
           'REJECTED',
           result.updateId ?? undefined,
@@ -2356,9 +2351,8 @@ export class PartyController {
 
       // Reward PENDING yang ditolak → tandai REJECTED. Transfer dari pihak lain
       // yang ditolak → catat jejak OFFER_REJECTED supaya user punya riwayatnya.
-      let settledOwnReward = 0;
       try {
-        settledOwnReward = await this.users.markTransferInstructionSettled(
+        await this.users.markTransferInstructionSettled(
           cid,
           'REJECTED',
           result.updateId ?? undefined,
@@ -2907,7 +2901,7 @@ export class PartyController {
    */
   @SkipThrottle()
   @Get('lock-terms')
-  async lockTerms() {
+  lockTerms() {
     const { options } = this.getLockTerms();
     return { terms: options };
   }
@@ -3019,7 +3013,7 @@ export class PartyController {
    *  set ONESWAP_MIN_AMOUNT_CC / ONESWAP_MIN_AMOUNT_TOKEN tanpa rebuild FE). */
   @Get('swap/status')
   @SkipThrottle()
-  async swapStatus() {
+  swapStatus() {
     const enabled = isOneSwapEnabled();
     const cfg = getOneSwapConfig();
     return {

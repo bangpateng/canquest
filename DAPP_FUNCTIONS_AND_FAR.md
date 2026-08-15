@@ -136,6 +136,38 @@ Profil user, wallet party ID display. Read-only.
 
 Distribute rewards (`POST /admin/quests/:id/distribute-rewards`) = satu-satunya endpoint admin yang kirim CC onchain (`splice.sendReward`).
 
+### 2.10 Inventaris endpoint hidup (pasca-cleanup Agustus 2026)
+
+> Ronde cleanup menghapus endpoint tanpa konsumen (rantai avatar upload,
+> `public/quests`, `public/contact`, `quests/{leaderboard,activity,title,
+> reward-status,claim-eligibility}`, `party/{username,create-wallet,
+> canton-binding}`, `twitter/disconnect`, `admin/{auth/me,preapproval-debug,
+> users/:id/admin}`). Daftar di bawah = surface API yang AKTIF.
+
+**health** (`app.controller`): `GET /health`, `/health/ready`, `/health/db`, `/health/canton` — infra probe.
+
+**auth**: `POST /auth/{register,verify-otp,login,google,refresh,forgot-password,reset-password,sse-token}` · `GET /auth/me`
+
+**users**: `GET /users/me/points` · `GET /referral/me`
+
+**party** (semua JWT): `GET /party/{wallet-access,offers,preapproval,notifications,transactions,transactions/:id,fee-config,lock-terms,lock-status,ledger-status,swap/status,balance,prices,pools}` · `POST /party/{username/wallet/otp/send,wallet/otp/verify,allocate,ensure-preapproval,send-cc,send-token,transfer-instruction/withdraw,offers/accept,offers/reject,preapproval/enable,preapproval/disable,notifications/seen,lock,unlock,swap/quote,swap}`
+
+**quests**: `GET /quests/{dashboard-stats,my-progress,earn-hub}` · `GET /quests` · `GET /quests/:id{,/progress,/eligibility}` · `POST /quests/:id/{claim-fcfs,claim-invite,claim-draw-cc,claim-cc-and-code-raffle,submit}` · `POST /quests/:id/tasks/:taskId/submit`
+
+**public** (tanpa auth): `GET /public/{maintenance,leaderboard}`
+
+**earn**: `GET /earn/public/:campaignId` (guest preview)
+
+**realtime**: `GET /realtime/stream` (SSE, token ephemeral 60s)
+
+**twitter**: `GET /twitter/status` · `POST /twitter/connect` (link permanen, tidak ada disconnect)
+
+**uploads** (aset publik): `GET /uploads/{cc-reward-logo,token-logo/:symbol,quests/:filename}`
+
+**admin** (guard admin-jwt): `POST /admin/auth/login` · `GET /admin/{stats,quests,earn-hub,users,users/:userId/referrals,users/referrals/fraud,quests/:id,quests/:id/{participants,export,winners,invite-codes},wallet-invites,maintenance}` · `POST /admin/{quests,earn-hub/ensure,quests/:id/tasks,quests/:id/draw-winners,quests/:id/distribute-rewards,quests/:id/invite-codes,wallet-invites,users/delete-bulk,referrals/revoke-bulk}` · `PATCH /admin/{quests/:id,tasks/:taskId,users/:userId/status,maintenance}` · `DELETE /admin/{quests/:id,tasks/:taskId,quests/:id/invite-codes/:codeId,quests/:id/invite-codes,wallet-invites/:id,users/:userId,referrals/:referredUserId}` · `POST/DELETE /admin/uploads/quest-asset`
+
+**queue** (internal Bull): job `send-cc-reward` saja (distribute-reward & accept-offer sudah dihapus).
+
 ---
 
 ## 3. Status FAR (Featured App Right) & WalletUserProxy — SAAT INI

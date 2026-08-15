@@ -223,7 +223,7 @@ export class SpliceValidatorService {
 
     const hint = spliceWalletUsernameFromParty(partyId);
     if (hint && (await this.canAccessWalletAs(hint))) {
-      const walletParty = await this.getWalletPartyId(hint);
+      const walletParty = await this.getWalletPartyId();
       if (!walletParty || cantonPartyIdsEqual(walletParty, normalized))
         return hint;
     }
@@ -236,7 +236,7 @@ export class SpliceValidatorService {
       ) {
         return name;
       }
-      const walletParty = await this.getWalletPartyId(name);
+      const walletParty = await this.getWalletPartyId();
       if (
         walletParty &&
         cantonPartyIdsEqual(walletParty, normalized) &&
@@ -341,7 +341,6 @@ export class SpliceValidatorService {
     }
 
     const url = `${this.baseUrl}/api/validator/v0/admin/users`;
-    const token = await this.adminToken();
 
     let res: Response;
     try {
@@ -591,7 +590,7 @@ export class SpliceValidatorService {
     if (!this.baseUrl) return false;
     try {
       // Try the readyz health endpoint first (preferred, less auth overhead)
-      const healthRes = await fetch(`${this.baseUrl}/api/validator/v0/readyz`, {
+      await fetch(`${this.baseUrl}/api/validator/v0/readyz`, {
         method: 'GET',
         headers: this.baseHeaders(),
         signal: AbortSignal.timeout(4_000),
@@ -617,7 +616,7 @@ export class SpliceValidatorService {
    * Party ID bound to a Splice wallet user (authoritative for treasury / fee recipient).
    * GET /api/validator/v0/wallet/user-status
    */
-  async getWalletPartyId(username: string): Promise<string | null> {
+  async getWalletPartyId(): Promise<string | null> {
     if (!this.isConfigured) return null;
     try {
       const res = await fetch(

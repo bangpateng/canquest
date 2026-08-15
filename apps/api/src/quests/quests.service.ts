@@ -467,9 +467,9 @@ export class QuestsService {
    * Earn campaigns with CC_ONLY always use claim-fcfs — never auto-send on Submit quest.
    */
   requiresFcfsCcClaim(quest: {
-    rewardType: RewardType | string;
+    rewardType: string;
     maxWinners: number | null;
-    questKind?: QuestKind | string;
+    questKind?: string;
   }): boolean {
     if (
       normalizeRewardType(quest.rewardType as RewardType) !== RewardType.CC_ONLY
@@ -486,7 +486,7 @@ export class QuestsService {
   }
 
   /** CC raffle (admin type "5 · Token CC manual"): admin draw after event; winners claim CC. */
-  requiresDrawCcClaim(quest: { rewardType: RewardType | string }): boolean {
+  requiresDrawCcClaim(quest: { rewardType: string }): boolean {
     return (
       normalizeRewardType(quest.rewardType as RewardType) ===
       RewardType.CC_MANUAL
@@ -494,9 +494,7 @@ export class QuestsService {
   }
 
   /** CC + Code combined raffle: admin draw after event; winners claim both CC and invite code. */
-  requiresCcAndCodeRaffleClaim(quest: {
-    rewardType: RewardType | string;
-  }): boolean {
+  requiresCcAndCodeRaffleClaim(quest: { rewardType: string }): boolean {
     return (
       normalizeRewardType(quest.rewardType as RewardType) ===
       RewardType.CC_AND_CODE_RAFFLE
@@ -1066,8 +1064,6 @@ export class QuestsService {
       username,
       rewardCc,
       rewardToken,
-      claimSessionId,
-      feeTxId,
       rewardLabel,
     } = params;
 
@@ -1289,7 +1285,6 @@ export class QuestsService {
     const updateId =
       settleResult.updateId ?? `settle-${Date.now()}-${userId.slice(0, 8)}`;
     const settledCid = settleResult.settledCid;
-    const rewardPending = false; // direct transfer (atomic, no offer-accept)
 
     this.logger.log(
       `${rewardLabel} atomic Settle OK: settled=${settledCid?.slice(0, 12) ?? 'none'} updateId=${updateId.slice(0, 12)}`,
@@ -1471,7 +1466,7 @@ export class QuestsService {
   private applyCampaignListStatus<
     T extends {
       status: QuestStatus;
-      rewardType?: RewardType | string;
+      rewardType?: string;
       campaignSummary?: QuestCampaignSummary;
     },
   >(q: T): T {
@@ -1503,11 +1498,11 @@ export class QuestsService {
   private async attachCampaignSummaries<
     T extends {
       id: string;
-      rewardType: RewardType | string;
+      rewardType: string;
       rewardCc: number;
       maxWinners: number | null;
       claimFeeCc?: number | null;
-      questKind?: QuestKind | string;
+      questKind?: string;
     },
   >(quests: T[]): Promise<(T & { campaignSummary: QuestCampaignSummary })[]> {
     if (quests.length === 0) return [];
@@ -1562,7 +1557,7 @@ export class QuestsService {
       }
     }
 
-    const isInviteCodeFcfs = (q: { rewardType: RewardType | string }) =>
+    const isInviteCodeFcfs = (q: { rewardType: string }) =>
       normalizeRewardType(q.rewardType as RewardType) ===
       RewardType.INVITE_CODE_FCFS;
 
@@ -3125,20 +3120,19 @@ export class QuestsService {
         // Step 2: reward wallet (canquest-reward) sends reward → same user party.
         await this.assertRewardPool(rewardCc, rewardToken);
 
-        const { rewardTxId, pending: rewardPending } =
-          await this.sendQuestRewardAndRecord({
-            drawId: reservedDrawId,
-            userId,
-            questId,
-            questTitle: quest.title,
-            cantonPartyId,
-            username,
-            rewardCc,
-            rewardToken,
-            claimSessionId,
-            feeTxId,
-            rewardLabel: 'FCFS reward',
-          });
+        const { pending: rewardPending } = await this.sendQuestRewardAndRecord({
+          drawId: reservedDrawId,
+          userId,
+          questId,
+          questTitle: quest.title,
+          cantonPartyId,
+          username,
+          rewardCc,
+          rewardToken,
+          claimSessionId,
+          feeTxId,
+          rewardLabel: 'FCFS reward',
+        });
         rewardDeliveryKind = rewardPending ? 'pending_offer' : 'direct';
 
         await this.prisma.winnerDraw.update({
@@ -3726,7 +3720,6 @@ export class QuestsService {
     // atomic Settle. feePaid=True setelah ini, sehingga RevealCode bisa jalan.
     if (useAtomicInvite && codeClaimSessionId) {
       try {
-        const feePartyId = this.feeTargetPartyId ?? validatorPartyId;
         const settleRes = await this.settleAndRecord({
           drawId: existingDraw?.id ?? '',
           userId,
@@ -3784,11 +3777,6 @@ export class QuestsService {
           },
         }),
       ]);
-
-      // Re-read the row so downstream ledger sync has the assigned id/code.
-      const codeRow = await this.prisma.inviteCodePool.findFirst({
-        where: { questId, userId, code: claimedCode },
-      });
 
       // v22/v23: RevealCode di DAML — pakai inviteSettledCid (feePaid=True dari
       // atomic Settle, RevealCode akan sukses). Fallback: codeClaimSessionId

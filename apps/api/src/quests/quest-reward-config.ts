@@ -1,7 +1,7 @@
 import { RewardType, normalizeRewardType } from '../common/prisma-types';
 
 /** Default platform claim fee (CC) when quest.claimFeeCc is null. */
-function defaultClaimFeeCc(rewardType: RewardType | string): number | null {
+function defaultClaimFeeCc(rewardType: string): number | null {
   const rt = normalizeRewardType(rewardType as RewardType);
   switch (rt) {
     case RewardType.INVITE_CODE_FCFS:
@@ -22,7 +22,7 @@ function defaultClaimFeeCc(rewardType: RewardType | string): number | null {
 
 export function resolveClaimFeeCc(quest: {
   claimFeeCc?: number | null;
-  rewardType: RewardType | string;
+  rewardType: string;
 }): number | null {
   if (quest.claimFeeCc != null && quest.claimFeeCc >= 0) {
     return quest.claimFeeCc > 0 ? quest.claimFeeCc : null;
@@ -80,7 +80,7 @@ export type QuestCampaignSummary = {
 /** Invite / code rewards that require on-chain fee before revealing the code. */
 export function requiresPaidInviteClaim(quest: {
   claimFeeCc?: number | null;
-  rewardType: RewardType | string;
+  rewardType: string;
 }): boolean {
   const fee = resolveClaimFeeCc(quest);
   if (fee == null || fee <= 0) return false;

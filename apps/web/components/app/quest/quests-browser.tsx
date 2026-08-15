@@ -52,7 +52,7 @@ export function QuestsBrowser({ variant = "earn" }: { variant?: "default" | "ear
   const pageSize = EARN_PAGE_SIZE;
 
   const [status, setStatus] = useState<QuestStatus>("ACTIVE");
-  const [query, setQuery] = useState("");
+  const [query] = useState("");
   const [allQuests, setAllQuests] = useState<Quest[]>([]);
   const [progress, setProgress] = useState<UserProgress | null>(null);
   const [loading, setLoading] = useState(true);

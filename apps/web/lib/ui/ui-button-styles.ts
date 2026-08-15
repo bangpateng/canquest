@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils/utils";
-import { buttonVariants } from "@/components/ui/button";
+import { } from "@/components/ui/button";
 
 /** Period / status filter pills (Weekly, Active, etc.) — active = brand gradient. */
 export function filterTabClass(selected: boolean, className?: string) {

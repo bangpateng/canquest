@@ -27,11 +27,11 @@ describe('AppController', () => {
         },
         {
           provide: SpliceValidatorService,
-          useValue: { isReachable: async () => true, isConfigured: true },
+          useValue: { isReachable: () => true, isConfigured: true },
         },
         {
           provide: CantonLedgerService,
-          useValue: { isReachable: async () => true },
+          useValue: { isReachable: () => true },
         },
       ],
     }).compile();

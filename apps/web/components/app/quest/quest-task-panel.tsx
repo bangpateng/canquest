@@ -3,11 +3,9 @@
 import type {
   Quest,
   QuestTask,
-  QuestTaskType,
   QuestSubmission,
   QuestRewardStatus,
-  SubmissionStatus,
-} from "@/lib/quest/quest-types";
+  SubmissionStatus } from "@/lib/quest/quest-types";
 import {
   TASK_ACTION_BUTTON_LABEL,
   TASK_COUNTDOWN_SEC,
@@ -118,7 +116,7 @@ export function QuestTaskPanel({
   const isQuestHub = quest.questKind === "EARN_HUB";
   const [submissions, setSubmissions] = useState<Record<string, QuestSubmission>>({});
   const [questCompleted, setQuestCompleted] = useState(false);
-  const [allTasksVerified, setAllTasksVerified] = useState(false);
+  const [, setAllTasksVerified] = useState(false);
   const [rewardStatus, setRewardStatus] = useState<QuestRewardStatus | null>(null);
   const [rewardCc, setRewardCc] = useState<number | null>(null);
   const [progressLoading, setProgressLoading] = useState(true);
@@ -699,7 +697,6 @@ export function QuestTaskPanel({
 }
 
 function TaskRow({
-  index,
   questId,
   quest,
   task,

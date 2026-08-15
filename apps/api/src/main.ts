@@ -1,4 +1,5 @@
 import { ValidationPipe, Logger } from '@nestjs/common';
+import express from 'express';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
@@ -45,8 +46,8 @@ async function bootstrap() {
   // Allow larger JSON payloads for avatar uploads (base64 data URL up to ~2MB).
   // Default NestJS body parser limit is 100KB which rejects avatar uploads
   // before they reach DTO validation.
-  app.use(require('express').json({ limit: '2mb' }));
-  app.use(require('express').urlencoded({ limit: '2mb', extended: true }));
+  app.use(express.json({ limit: '2mb' }));
+  app.use(express.urlencoded({ limit: '2mb', extended: true }));
 
   // ── CORS ──────────────────────────────────────────────────────────────────
   // With `credentials: true` the browser REJECTS a wildcard origin, so we must
@@ -91,4 +92,4 @@ async function bootstrap() {
   logger.log(`API running on http://127.0.0.1:${port} (loopback only)`);
   logger.log(`Environment: ${process.env.NODE_ENV ?? 'development'}`);
 }
-bootstrap();
+void bootstrap();

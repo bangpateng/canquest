@@ -47,7 +47,6 @@ export function CampaignFcfsRewardCard({
   mode,
   slotsLabel,
   description,
-  rewardCc = 0,
   partyId = null,
   canClaim = false,
   isSubmitting = false,

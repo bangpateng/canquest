@@ -3,7 +3,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
-import { useAuthModal, type AuthModalMode } from "@/components/platform/auth-context";
+import { useAuthModal } from "@/components/platform/auth-context";
 import { TurnstileField, useTurnstileRequired } from "@/components/platform/turnstile-field";
 import { buttonVariants } from "@/components/ui/button";
 import { iconButtonClass } from "@/lib/ui/ui-button-styles";

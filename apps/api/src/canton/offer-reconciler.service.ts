@@ -575,7 +575,6 @@ export class OfferReconcilerService implements OnModuleInit, OnModuleDestroy {
     }
 
     try {
-      const settledAt = newStatus === 'COMPLETED' ? new Date() : null;
       await this.prisma.tokenTransaction.update({
         where: { id: row.id },
         data: {
