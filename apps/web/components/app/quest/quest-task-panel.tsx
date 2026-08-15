@@ -546,9 +546,10 @@ export function QuestTaskPanel({
         )
       ) : null}
 
-      {/* Task list — campaign: quest-timeline (dots + guide line, mockup);
-          Earn hub: kartu standalone dengan space-y (jarak). */}
-      <ul className={isQuestHub ? "space-y-3" : "quest-timeline"}>
+      {/* Task list — Quest hub & campaign sama-sama quest-timeline (dots +
+          guide line, gaya Earn Campaign); info khas hub (cooldown/New badge/
+          quiz) tetap tampil di dalam kartu. */}
+      <ul className="quest-timeline">
         {visibleTasks.map((task, idx) => (
           <TaskRow
             key={task.id}
@@ -1225,14 +1226,18 @@ function TaskRow({
   }
 
   if (questHubLayout && questHubDisplay) {
+    // is-done = tuntas one-time ATAU repeatable yang masih cooldown;
+    // is-active = task yang bisa dikerjakan sekarang (termasuk ready-again).
+    const hubDone = (isOneTimeComplete || onRepeatCooldown) && !canRepeatNow;
     return (
       <li
         className={cn(
-          "rounded-2xl border bg-[var(--card)] p-4 transition-all duration-200 sm:p-5",
-          isOneTimeComplete || onRepeatCooldown
-            ? "border-emerald-500/30 bg-emerald-500/[0.06]"
-            : "border-[var(--border)] hover:border-[var(--primary)]/30",
-          sequentiallyLocked && !isVerified && "opacity-55",
+          "quest-milestone rounded-2xl border bg-[var(--card)] p-4 transition-all duration-200 sm:p-5",
+          hubDone
+            ? "is-done border-emerald-500/30 bg-emerald-500/[0.06]"
+            : sequentiallyLocked
+              ? "border-[var(--border)] opacity-50"
+              : "is-active border-[var(--border)] hover:border-[var(--primary)]/30",
         )}
       >
         <>
@@ -1295,8 +1300,8 @@ function TaskRow({
             ) : null}
           </div>
 
-          {/* Kotak hijau kanan = tombol status (sama dengan path campaign).
-              Satu tombol single-status: cta -> countdown -> Complete. */}
+          {/* Kotak kanan = tombol status (sama dengan path campaign):
+              Verified = chip emerald lembut; cooldown countdown = chip mono. */}
           {!isQuiz && (
             <div className="flex shrink-0 items-center">
               {sequentiallyLocked && !isVerified ? (
@@ -1305,8 +1310,8 @@ function TaskRow({
                   Locked
                 </span>
               ) : (isOneTimeComplete || onRepeatCooldown) && !canRepeatNow ? (
-                <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500 px-4 text-xs font-bold text-[var(--primary-foreground)]">
-                  Completed
+                <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500/15 px-4 text-xs font-bold text-emerald-300">
+                  Verified
                 </span>
               ) : countdown !== null && countdown > 0 ? (
                 <span
@@ -1326,7 +1331,7 @@ function TaskRow({
                   onClick={startTask}
                   className={cn(
                     buttonVariants({ size: "sm" }),
-                    "h-9 min-w-[5.5rem] bg-emerald-500 px-4 font-bold hover:bg-emerald-400",
+                    "h-9 min-w-[5.5rem] px-4 font-bold",
                   )}
                 >
                   {isDailyCheckIn
