@@ -161,7 +161,7 @@ export function QuestsBrowser({ variant = "earn" }: { variant?: "default" | "ear
     <div
       className={cn(
         "flex overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-        isEarn ? "gap-1.5" : "gap-2 pb-1 sm:pb-0",
+        isEarn ? "gap-2.5" : "gap-2 pb-1 sm:pb-0",
       )}
     >
       {TABS.map((tab) => {

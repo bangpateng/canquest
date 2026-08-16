@@ -1,13 +1,14 @@
 import { cn } from "@/lib/utils/utils";
-import { } from "@/components/ui/button";
 
-/** Period / status filter pills (Weekly, Active, etc.) — active = brand gradient. */
+/** Period / status filter pills (Weekly, Active, etc.) — active = brand gradient.
+ *  Ukuran pill: Earn mockup (padding 9px 16px, 12.5px bold) — jelas terlihat
+ *  sebagai tombol dengan state hijau gradient saat terpilih. */
 export function filterTabClass(selected: boolean, className?: string) {
   return cn(
-    "shrink-0 rounded-full text-[10px] sm:text-xs font-semibold uppercase tracking-wider transition-all px-2.5 py-1",
+    "shrink-0 cursor-pointer rounded-full border px-4 py-2 text-[12.5px] font-bold tracking-wide transition-all",
     selected
       ? "border-0 bg-gradient-brand text-[var(--primary-foreground)] shadow-[0_6px_16px_-8px_rgb(var(--canton-rgb)/0.6)]"
-      : "border border-white/10 bg-white/5 text-slate-300 hover:text-white",
+      : "border border-[var(--border)] bg-transparent text-[var(--muted-foreground)] hover:border-[var(--primary)]/35 hover:text-[var(--foreground)]",
     className,
   );
 }
