@@ -1,14 +1,14 @@
 import { cn } from "@/lib/utils/utils";
 
-/** Period / status filter pills (Weekly, Active, etc.) — active = brand gradient.
- *  Ukuran pill: Earn mockup (padding 9px 16px, 12.5px bold) — jelas terlihat
- *  sebagai tombol dengan state hijau gradient saat terpilih. */
+/** Period / status filter pills (Weekly, Active, etc.) — mockup tabs_component:
+ *  selected = SOLID mint (--mint #34e0a1) + dark text, unselected = transparent
+ *  with strong border. 12.5px bold, padding 9px/18px, rounded-full. */
 export function filterTabClass(selected: boolean, className?: string) {
   return cn(
-    "shrink-0 cursor-pointer rounded-full border px-4 py-2 text-[12.5px] font-bold tracking-wide transition-all",
+    "shrink-0 cursor-pointer rounded-full border px-[18px] py-[9px] text-[12.5px] font-bold tracking-[0.4px] transition-all",
     selected
-      ? "border-0 bg-gradient-brand text-[var(--primary-foreground)] shadow-[0_6px_16px_-8px_rgb(var(--canton-rgb)/0.6)]"
-      : "border border-[var(--border)] bg-transparent text-[var(--muted-foreground)] hover:border-[var(--primary)]/35 hover:text-[var(--foreground)]",
+      ? "border-[rgb(var(--canton-rgb))] bg-[rgb(var(--canton-rgb))] text-[#062017]"
+      : "border-white/[0.16] bg-transparent text-[var(--muted-foreground)] hover:opacity-85 hover:text-[var(--foreground)]",
     className,
   );
 }
