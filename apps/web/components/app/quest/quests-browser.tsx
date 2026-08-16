@@ -200,14 +200,14 @@ export function QuestsBrowser({ variant = "earn" }: { variant?: "default" | "ear
             </div>
           </Card>
 
-          {/* ── Toolbar: tabs dalam container pill (mockup tabs_component) ── */}
+          {/* ── Toolbar: tabs ──────────────────────────────────── */}
           <section
             aria-label={t("earnCampaigns.filterAria")}
             className="w-full overflow-hidden"
           >
-            <div className="w-full overflow-x-auto rounded-full border border-[var(--border)] bg-[var(--card)] px-4 py-3.5 sm:px-[16px]">
-              <div className="min-w-0">{tabRow}</div>
-            </div>
+            <Card bare className="w-full overflow-hidden p-3 sm:p-4">
+              <div className="min-w-0 flex-1 overflow-hidden">{tabRow}</div>
+            </Card>
           </section>
         </>
       ) : null}
