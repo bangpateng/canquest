@@ -137,6 +137,9 @@ REWARD_CIP56_MIGRATION_ANALYSIS.md
 # ─── Infra config & ops scripts with host IPs (local only) ───────────────────
 infra/nginx/canquest-api.conf
 infra/nginx/canquest.conf
+# Shared secret nginx↔BFF: file asli BERISI SECRET — hanya .example yang boleh commit
+infra/nginx/snippets/*
+!infra/nginx/snippets/*.example
 infra/systemd/canton-tunnel.service.example
 infra/env/api.env.testnet.example
 scripts/tunnel-testnet.ps1

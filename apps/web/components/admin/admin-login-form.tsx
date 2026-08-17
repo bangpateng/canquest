@@ -1,5 +1,6 @@
 'use client';
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { TurnstileField } from "@/components/platform/turnstile-field";
 import { apiFetch, ApiError } from "@/lib/services/api/client";
 
 import { useSearchParams } from 'next/navigation';
@@ -17,6 +18,9 @@ export function AdminLoginForm() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [totpCode, setTotpCode] = useState('');
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [captchaReset, setCaptchaReset] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,7 +31,12 @@ export function AdminLoginForm() {
     try {
       await apiFetch('/api/admin/auth/login', {
         method: 'POST',
-        json: { email: email.trim(), password },
+        json: {
+          email: email.trim(),
+          password,
+          ...(totpCode.trim() ? { totpCode: totpCode.trim() } : {}),
+          ...(turnstileToken ? { turnstileToken } : {}),
+        },
       });
 
       router.push(next && next.startsWith('/admin') ? next : '/admin');
@@ -38,6 +47,9 @@ export function AdminLoginForm() {
           ? err.message
           : 'Sign-in failed — try again.';
       setError(msg);
+      // Reset captcha supaya percobaan berikutnya meminta token baru.
+      setTurnstileToken(null);
+      setCaptchaReset((n) => n + 1);
     } finally {
       setLoading(false);
     }
@@ -72,6 +84,26 @@ export function AdminLoginForm() {
           className={inputCls}
         />
       </div>
+      <div>
+        <label className="mb-1.5 block text-sm font-medium">
+          Authenticator code{' '}
+          <span className="font-normal text-[var(--muted-foreground)]">
+            (6-digit, from your 2FA app)
+          </span>
+        </label>
+        <input
+          name="totp"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          pattern="[0-9]*"
+          maxLength={6}
+          placeholder="123456"
+          value={totpCode}
+          onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+          className={cn(inputCls, 'tracking-[0.3em] text-center font-mono')}
+        />
+      </div>
+      <TurnstileField onToken={setTurnstileToken} resetKey={captchaReset} />
       {error && (
         <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm font-medium text-red-600 dark:text-red-400">
           {error}
@@ -88,8 +120,9 @@ export function AdminLoginForm() {
         Sign in
       </button>
       <p className="text-center text-xs text-[var(--muted-foreground)]">
-        Use <span className="font-mono">ADMIN_PANEL_EMAIL</span> and{' '}
-        <span className="font-mono">ADMIN_PANEL_PASSWORD</span> in{' '}
+        Use <span className="font-mono">ADMIN_PANEL_EMAIL</span>,{' '}
+        <span className="font-mono">ADMIN_PANEL_PASSWORD</span>, and{' '}
+        <span className="font-mono">ADMIN_TOTP_SECRET</span> in{' '}
         <span className="font-mono">apps/api/.env</span>.
       </p>
       <p className="text-center text-xs">

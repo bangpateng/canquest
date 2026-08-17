@@ -28,6 +28,11 @@ export async function nestWithAdminAccessCookie(
   const url = `${internalApiBase()}${pathSuffix.startsWith('/') ? pathSuffix : `/${pathSuffix}`}`;
   const headers = new Headers(init.headers as HeadersInit | undefined);
   headers.set('Authorization', `Bearer ${token}`);
+  // Shared secret dengan nginx VPS (map $http_x_admin_bff_secret) — tanpa ini
+  // nginx menolak /api/admin/* langsung dari internet (403). Hanya BFF yang
+  // memegang nilai ini; browser tidak pernah melihatnya.
+  const adminBffSecret = process.env.ADMIN_BFF_SECRET?.trim();
+  if (adminBffSecret) headers.set('x-admin-bff-secret', adminBffSecret);
   // Preserve Content-Type from init if provided
   if (init.headers && typeof init.headers === 'object' && !Array.isArray(init.headers)) {
     const h = init.headers as Record<string, string>;

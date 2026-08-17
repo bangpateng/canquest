@@ -14,6 +14,7 @@ import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
 import { timingSafeEqual } from 'crypto';
 import * as bcrypt from 'bcrypt';
+import { Secret, TOTP } from 'otpauth';
 
 import { AdminLoginDto } from './dto/admin-login.dto';
 
@@ -46,6 +47,10 @@ export class AdminAuthController {
   >();
   private readonly lockedUntil = new Map<string, number>();
   private lastSweep = 0;
+
+  /** Replay guard TOTP: kode yang sudah dipakai ditolak dalam 90 detik. */
+  private readonly consumedTotpCodes = new Map<string, number>();
+  private static readonly TOTP_REUSE_WINDOW_MS = 90_000;
 
   constructor(
     private readonly jwt: JwtService,
@@ -134,6 +139,19 @@ export class AdminAuthController {
       throw new UnauthorizedException('Invalid email or password');
     }
 
+    // ── Faktor kedua: kode TOTP dari authenticator ──────────────────────────
+    try {
+      this.verifyTotpOrThrow(login.totpCode, email, isProduction);
+    } catch (err) {
+      // Gagal kode dihitung sebagai percobaan gagal (ikut lockout); error
+      // konfigurasi (5xx) tidak dihitung supaya salah setup tidak mengunci.
+      if (err instanceof UnauthorizedException) {
+        this.registerFailedAttempt(clientKey);
+        this.logger.warn(`Admin login TOTP failed key=${clientKey}`);
+      }
+      throw err;
+    }
+
     // Successful login → clear failure counters for this client.
     this.failedAttempts.delete(clientKey);
     this.lockedUntil.delete(clientKey);
@@ -146,6 +164,82 @@ export class AdminAuthController {
       },
     );
     return { accessToken };
+  }
+
+  /**
+   * Verifikasi kode TOTP (6 digit, toleransi drift ±30 detik). Fail-closed di
+   * production: tanpa ADMIN_TOTP_SECRET login admin ditolak sama sekali —
+   * password bocor saja tidak cukup untuk masuk. Di luar production secret
+   * boleh kosong (dev lokal tanpa authenticator). Kode yang sama tidak bisa
+   * dipakai ulang dalam 90 detik (replay guard, in-process seperti lockout —
+   * aman selama API single-instance).
+   */
+  private verifyTotpOrThrow(
+    code: string | undefined,
+    email: string,
+    isProduction: boolean,
+  ): void {
+    const secretBase32 = (
+      this.config.get<string>('ADMIN_TOTP_SECRET') ??
+      process.env.ADMIN_TOTP_SECRET ??
+      ''
+    )
+      .trim()
+      .replace(/\s+/g, '');
+
+    if (!secretBase32) {
+      if (isProduction) {
+        throw new InternalServerErrorException(
+          [
+            'Admin 2FA is mandatory in production: ADMIN_TOTP_SECRET is not set.',
+            'Generate: node scripts/gen-admin-totp.cjs <ADMIN_PANEL_EMAIL>',
+            'Scan the otpauth URI with an authenticator app, set ADMIN_TOTP_SECRET in apps/api/.env, then restart the API.',
+          ].join(' '),
+        );
+      }
+      this.logger.warn(
+        'ADMIN_TOTP_SECRET not set — admin login proceeds WITHOUT 2FA (non-production only)',
+      );
+      return;
+    }
+
+    const normalized = (code ?? '').replace(/\s+/g, '');
+    if (!/^\d{6}$/.test(normalized)) {
+      throw new UnauthorizedException('Invalid authenticator code');
+    }
+
+    const consumedUntil = this.consumedTotpCodes.get(normalized) ?? 0;
+    if (consumedUntil > Date.now()) {
+      this.logger.warn('Admin TOTP code replay rejected');
+      throw new UnauthorizedException('Invalid authenticator code');
+    }
+
+    let totp: TOTP;
+    try {
+      totp = new TOTP({
+        issuer: 'CanQuest Admin',
+        label: email,
+        algorithm: 'SHA1',
+        digits: 6,
+        period: 30,
+        secret: Secret.fromBase32(secretBase32),
+      });
+    } catch (err) {
+      this.logger.error(`ADMIN_TOTP_SECRET is not valid base32: ${String(err)}`);
+      throw new InternalServerErrorException(
+        'Admin 2FA secret is misconfigured (invalid base32).',
+      );
+    }
+
+    // window: 1 → terima kode step sebelumnya/berikutnya (drift clock ±30s).
+    if (totp.validate({ token: normalized, window: 1 }) === null) {
+      throw new UnauthorizedException('Invalid authenticator code');
+    }
+
+    this.consumedTotpCodes.set(
+      normalized,
+      Date.now() + AdminAuthController.TOTP_REUSE_WINDOW_MS,
+    );
   }
 
   /** Stable client fingerprint. req.ip sudah di-resolve via Express
@@ -169,6 +263,9 @@ export class AdminAuthController {
     }
     for (const [k, until] of this.lockedUntil) {
       if (until <= now) this.lockedUntil.delete(k);
+    }
+    for (const [code, until] of this.consumedTotpCodes) {
+      if (until <= now) this.consumedTotpCodes.delete(code);
     }
   }
 
