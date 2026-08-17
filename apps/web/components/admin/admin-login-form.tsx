@@ -120,10 +120,7 @@ export function AdminLoginForm() {
         Sign in
       </button>
       <p className="text-center text-xs text-[var(--muted-foreground)]">
-        Use <span className="font-mono">ADMIN_PANEL_EMAIL</span>,{' '}
-        <span className="font-mono">ADMIN_PANEL_PASSWORD</span>, and{' '}
-        <span className="font-mono">ADMIN_TOTP_SECRET</span> in{' '}
-        <span className="font-mono">apps/api/.env</span>.
+        Restricted area — authorized personnel only.
       </p>
       <p className="text-center text-xs">
         <Link href="/?auth=login" className="text-[var(--primary)] underline-offset-4 hover:underline">
