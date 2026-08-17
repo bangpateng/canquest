@@ -7,9 +7,9 @@
  *
  * Output:
  *   - ADMIN_TOTP_SECRET (base32) → salin ke apps/api/.env (atau env VPS API)
- *   - otpauth:// URI → buat QR (mis. https://quickchart.io/qr offline/lokal,
- *     atau scan manual: Google Authenticator → Set up account → Enter a setup
- *     key → masukkan secret base32, Time based).
+ *   - otpauth:// URI + QR ASCII di terminal → scan dengan authenticator app.
+ *     JANGAN pakai layanan QR online (quickchart.io dll) — secret akan bocor
+ *     ke pihak ketiga. QR di sini dirender lokal oleh qrcode-terminal.
  *
  * Setelah secret diset: restart API. Login admin di production MENOLAK
  * request tanpa ADMIN_TOTP_SECRET (fail-closed) — jangan deploy lupa ini.
@@ -60,10 +60,23 @@ const uri = `otpauth://totp/${issuer}:${label}?secret=${base32}&issuer=${issuer}
 
 console.log('=== Admin TOTP 2FA setup ===');
 console.log();
-console.log('1) Scan / masukkan ke authenticator app (Google Authenticator, Authy, 1Password):');
+console.log('1) Scan QR ini dengan authenticator app (Google Authenticator, Authy, 1Password):');
+console.log();
+
+// QR dirender lokal (qrcode-terminal). Kalau module tidak ada (mis. dijalankan
+// di luar repo), fallback: entry manual pakai secret base32 di bawah.
+try {
+  const qrcode = require('qrcode-terminal');
+  qrcode.generate(uri, { small: true });
+} catch {
+  console.log('    (qrcode-terminal tidak terpasang — pakai manual entry di bawah)');
+}
+
 console.log();
 console.log(`    otpauth URI: ${uri}`);
 console.log(`    Secret (base32, manual entry): ${base32}`);
+console.log('    Manual entry: Google Authenticator → + → Enter a setup key →');
+console.log('    Account: CanQuest Admin / <email>, Key: secret di atas, Time-based: ON');
 console.log();
 console.log('2) Set di env API (apps/api/.env di VPS):');
 console.log();

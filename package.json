@@ -27,5 +27,7 @@
   "dependencies": {
     "@nestjs/platform-express": "^11.1.24"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "qrcode-terminal": "^0.12.0"
+  }
 }
