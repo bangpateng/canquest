@@ -147,6 +147,7 @@ scripts/vps2-deploy-from-windows.ps1
 .zcode/
 
 # ─── Internal working docs (NEVER publish) ─────────────────────────────────
+GUIDE-DEPLOY-ADMIN-2FA.md
 HANDOFF_CONTEXT.md
 MASTER_PLAN.md
 
