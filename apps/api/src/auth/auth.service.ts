@@ -239,6 +239,27 @@ export class AuthService {
     const email = payload.email.toLowerCase();
     const googleSub = payload.sub;
 
+    // Hanya akun Gmail konsumer yang diizinkan (keputusan produk: fokus user
+    // Gmail asli). Google menjamin uniqueness alamat @gmail.com — hanya pemilik
+    // asli yang bisa membawa ID token dengan email tersebut, jadi auto-link
+    // ke akun existing (migrasi user lama password → Google) aman.
+    // Akun Google dengan email utama non-Gmail (mis. email kantor/Workspace,
+    // yahoo, outlook) DITOLAK — pemilik domain tersebut bisa membuat akun
+    // Google atas email user lain (akun tidak bisa dibajak).
+    const hostedDomain =
+      typeof payload.hd === 'string' ? payload.hd.toLowerCase() : '';
+    const emailDomain = email.split('@')[1] ?? '';
+    const isGmail =
+      emailDomain === 'gmail.com' || emailDomain === 'googlemail.com';
+    if (!isGmail || (hostedDomain && hostedDomain !== 'gmail.com')) {
+      this.logger.warn(
+        `Google login rejected for non-Gmail address (hd=${hostedDomain || 'none'})`,
+      );
+      throw new UnauthorizedException(
+        'Only Google accounts with a Gmail address are supported.',
+      );
+    }
+
     // Cari existing user by email.
     let user = await this.users.findByEmail(email);
     if (!user) {

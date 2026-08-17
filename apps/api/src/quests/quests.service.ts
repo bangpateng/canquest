@@ -1439,6 +1439,23 @@ export class QuestsService {
 
   /* ─── Quest list / detail ─── */
 
+  /**
+   * Jawaban kuis (correctAnswer) tidak boleh terekspos ke klien — verifikasi
+   * jawaban hanya di server (submitTask). Admin panel memakai AdminService
+   * sendiri yang tetap menyertakan jawaban untuk editing.
+   */
+  private stripTaskAnswers<T extends { tasks?: unknown[] }>(quest: T): T {
+    if (!Array.isArray(quest.tasks)) return quest;
+    return {
+      ...quest,
+      tasks: quest.tasks.map((task) => {
+        const safe = { ...(task as Record<string, unknown>) };
+        delete safe.correctAnswer;
+        return safe;
+      }),
+    };
+  }
+
   async listQuests(status?: QuestStatus) {
     const quests = await this.prisma.quest.findMany({
       where: { questKind: QuestKind.CAMPAIGN },
@@ -1446,15 +1463,17 @@ export class QuestsService {
       orderBy: { createdAt: 'desc' },
     });
     const mapped = quests.map((q) =>
-      withQuestMediaUrls(
-        {
-          ...q,
-          tags: this.parseTags(q.tags),
-          socialLinks: parseQuestSocialLinks(q.socialLinks),
-          rewardType: normalizeRewardType(q.rewardType),
-          status: resolveQuestDisplayStatus(q),
-        },
-        this.storage,
+      this.stripTaskAnswers(
+        withQuestMediaUrls(
+          {
+            ...q,
+            tags: this.parseTags(q.tags),
+            socialLinks: parseQuestSocialLinks(q.socialLinks),
+            rewardType: normalizeRewardType(q.rewardType),
+            status: resolveQuestDisplayStatus(q),
+          },
+          this.storage,
+        ),
       ),
     );
     const withSummary = await this.attachCampaignSummaries(mapped);
@@ -1625,13 +1644,13 @@ export class QuestsService {
       orderBy: { updatedAt: 'desc' },
     });
     if (!q) return null;
-    return {
+    return this.stripTaskAnswers({
       ...q,
       tags: this.parseTags(q.tags),
       socialLinks: parseQuestSocialLinks(q.socialLinks),
       rewardType: normalizeRewardType(q.rewardType),
       status: resolveQuestDisplayStatus(q),
-    };
+    });
   }
   /** Quest campaign title for wallet / transaction labels */
   async getQuestTitle(questId: string): Promise<string> {
@@ -1666,15 +1685,17 @@ export class QuestsService {
       include: { tasks: { orderBy: { order: 'asc' } } },
     });
     if (!q) throw new NotFoundException('Quest not found');
-    const mapped = withQuestMediaUrls(
-      {
-        ...q,
-        tags: this.parseTags(q.tags),
-        socialLinks: parseQuestSocialLinks(q.socialLinks),
-        rewardType: normalizeRewardType(q.rewardType),
-        status: resolveQuestDisplayStatus(q),
-      },
-      this.storage,
+    const mapped = this.stripTaskAnswers(
+      withQuestMediaUrls(
+        {
+          ...q,
+          tags: this.parseTags(q.tags),
+          socialLinks: parseQuestSocialLinks(q.socialLinks),
+          rewardType: normalizeRewardType(q.rewardType),
+          status: resolveQuestDisplayStatus(q),
+        },
+        this.storage,
+      ),
     );
     if (mapped.questKind !== QuestKind.CAMPAIGN) return mapped;
     const [withSummary] = await this.attachCampaignSummaries([mapped]);
