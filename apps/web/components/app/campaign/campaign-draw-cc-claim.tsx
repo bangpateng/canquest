@@ -8,6 +8,7 @@ import {
 import { CampaignClaimCta } from "@/components/app/campaign/campaign-fcfs-reward-card";
 import { CampaignStatusRow } from "@/components/app/campaign/campaign-status-row";
 import { ClaimDetailsModal } from "@/components/app/campaign/claim-details-modal";
+import { TokenUsdValue } from "@/components/app/earn/cc-usd-value";
 import { useTransactionStatus } from "@/lib/tx/transaction-status";
 import { CLAIM_FAIL_MSG } from "@/lib/campaign/claim-messages";
 import { normalizeRewardToken, type RewardTokenSymbol } from "@/lib/quest/quest-types";
@@ -57,6 +58,7 @@ export function CampaignDrawCcClaimSection({
       title: "Reward claimed",
       subtitle,
       amountText: `+${formatRewardAmount(rewardCc, token)}`,
+      usdAmount: rewardCc > 0 ? { amount: rewardCc, token } : null,
       subText: subtitle,
       accentBg: isUsdcx ? "bg-sky-500/15" : "bg-canton-subtle",
       accentText: isUsdcx ? "text-sky-300" : "text-canton",
@@ -129,6 +131,7 @@ export function CampaignDrawCcClaimSection({
         onClose={() => setClaimOpen(false)}
         heroValue={String(rewardCc)}
         heroUnit={token}
+        heroUsd={rewardCc > 0 ? <TokenUsdValue amount={rewardCc} token={token} /> : undefined}
         rewardLabel="Reward · winner"
         tokenHero={isUsdcx ? "USDCx" : "CC"}
         rows={[

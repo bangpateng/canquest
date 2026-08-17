@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Check, Sparkles, Ticket, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,8 @@ interface ClaimDetailsModalProps {
   heroUnit?: string;
   /** Fallback whole-string headline when heroValue/heroUnit are omitted. */
   heroAmount?: string;
+  /** Estimasi USD live di bawah hero amount (mis. <TokenUsdValue />). */
+  heroUsd?: ReactNode;
   /** Eyebrow above the hero, e.g. "Reward". */
   rewardLabel?: string;
   /** Detail rows (Claim fee / Slots / Network / Closes / …). */
@@ -73,6 +76,7 @@ export function ClaimDetailsModal({
   heroValue,
   heroUnit,
   heroAmount,
+  heroUsd,
   rewardLabel = "Reward",
   rows = [],
   eligibleHint,
@@ -123,6 +127,11 @@ export function ClaimDetailsModal({
               </span>
             ) : null}
           </p>
+          {heroUsd ? (
+            <p className="mt-1.5 text-[13px] font-medium text-[var(--muted-foreground)]">
+              {heroUsd}
+            </p>
+          ) : null}
         </div>
 
         {/* Stat panel */}

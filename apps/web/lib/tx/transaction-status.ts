@@ -26,6 +26,8 @@ export interface TxStatusConfig {
   accentText?: string;
   /** Amount headline, e.g. "5 CC" or "10 CC → 9.94 USDCx". */
   amountText: string;
+  /** Nominal token utk estimasi USD live di bawah amount (confirmed stage). */
+  usdAmount?: { amount: number; token: string } | null;
   /** Secondary line under the amount on the sign stage (e.g. recipient). */
   subText?: string;
   /** Title shown on the confirmed stage, e.g. "Transfer sent". */

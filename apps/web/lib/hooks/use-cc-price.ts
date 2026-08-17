@@ -28,12 +28,10 @@ const EMPTY: CcPriceState = { price: null, change24hPct: null };
 
 export function useCcPrice(): CcPriceState {
   const { prices } = useTokenPrices();
-  // Cari harga Amulet (CC) di price map.
-  // Key format: "<instrumentId>::<instrumentAdmin>".
-  const ccKey = Object.keys(prices).find((k) =>
-    k.toUpperCase().startsWith("AMULET::"),
-  );
-  const price = ccKey ? prices[ccKey] ?? null : null;
+  // Harga Amulet (CC). /party/prices me-normalize key ke instrumentId
+  // lowercase ("amulet"), jadi lookup langsung — bukan prefix-scan
+  // "AMULET::<admin>" (format lama yang sudah tidak dikirim backend).
+  const price = prices["amulet"] ?? null;
   if (price === null) return EMPTY;
   return { price, change24hPct: null };
 }

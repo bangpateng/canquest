@@ -11,6 +11,7 @@ import { RewardTokenLogo } from "@/components/app/campaign/reward-token-logo";
 import { getRewardConfig } from "@/lib/quest/quest-engine";
 import { formatRewardAmount } from "@/lib/canton/campaign-reward";
 import { normalizeRewardToken } from "@/lib/quest/quest-types";
+import { TokenUsdValue } from "@/components/app/earn/cc-usd-value";
 
 /**
  * Satu card reveal hadiah setelah claim berhasil — konsisten untuk semua tipe
@@ -109,7 +110,8 @@ export function RewardReveal({
         {rewardCc ? (
           <div className="flex items-baseline justify-between gap-3">
             <p className="font-mono text-lg font-bold tabular-nums text-canton">
-              +{formatRewardAmount(rewardCc, normalizeRewardToken(rewardToken))}
+              +{formatRewardAmount(rewardCc, normalizeRewardToken(rewardToken))}{" "}
+              <TokenUsdValue amount={rewardCc} token={token} />
             </p>
             <span className="text-xs font-medium text-[var(--muted-foreground)]">
               {t("earnCampaigns.ccSentToWallet")}

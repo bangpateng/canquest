@@ -5,6 +5,7 @@ import { Check, Clock, Copy, Fingerprint, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { iconButtonClass } from "@/lib/ui/ui-button-styles";
 import { cn } from "@/lib/utils/utils";
+import { TokenUsdValue } from "@/components/app/earn/cc-usd-value";
 import { useTransactionStatus } from "@/lib/tx/transaction-status";
 
 /**
@@ -114,6 +115,13 @@ export function TransactionStatusModal() {
                 <p className="mt-1 text-xs text-[var(--muted-foreground)]">{config.subtitle}</p>
               ) : null}
               <p className="mt-4 text-3xl font-bold tabular-nums text-[var(--foreground)]">{config.amountText}</p>
+              {config.usdAmount ? (
+                <TokenUsdValue
+                  amount={config.usdAmount.amount}
+                  token={config.usdAmount.token}
+                  className="mt-1 text-sm font-medium text-[var(--muted-foreground)]"
+                />
+              ) : null}
 
               <dl className="mt-5 w-full divide-y divide-[var(--border)] text-left">
                 {meta.map((m, i) => (

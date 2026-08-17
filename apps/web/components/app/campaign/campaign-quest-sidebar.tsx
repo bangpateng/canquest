@@ -1,5 +1,5 @@
 import { RewardTokenLogo } from "@/components/app/campaign/reward-token-logo";
-import { CcUsdValue } from "@/components/app/earn/cc-usd-value";
+import { TokenUsdValue } from "@/components/app/earn/cc-usd-value";
 import { getQuestMeta } from "@/lib/quest/quest-engine";
 import { formatCodePerWinners, formatCodePoolLabel, formatEndMeta, formatRewardAmount } from "@/lib/canton/campaign-reward";
 import { questRewardToken } from "@/lib/quest/quest-types";
@@ -134,7 +134,9 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
             </span>
             <div className="flex flex-wrap items-center gap-2">
               {rewardPerWinner}
-              {quest.rewardCc > 0 ? <CcUsdValue cc={quest.rewardCc} /> : null}
+              {quest.rewardCc > 0 ? (
+                <TokenUsdValue amount={quest.rewardCc} token={token} />
+              ) : null}
             </div>
           </div>
 
@@ -148,7 +150,9 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
                 <>
                   <RewardTokenLogo token={token} size={18} />
                   <span className={VALUE_CLS}>{poolDisplay}</span>
-                  {poolCcValue > 0 ? <CcUsdValue cc={poolCcValue} /> : null}
+                  {poolCcValue > 0 ? (
+                    <TokenUsdValue amount={poolCcValue} token={token} />
+                  ) : null}
                 </>
               ) : config.code === "INVITE_CODE_FCFS" || config.code === "INVITE_CODE_RANDOM" ? (
                 <>
@@ -160,7 +164,7 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
                   <RewardTokenLogo token={token} size={18} />
                   <span className={VALUE_CLS}>{poolDisplay}</span>
                   {summary?.poolTotalCc != null && summary.poolTotalCc > 0 ? (
-                    <CcUsdValue cc={summary.poolTotalCc} />
+                    <TokenUsdValue amount={summary.poolTotalCc} token={token} />
                   ) : null}
                 </>
               )}

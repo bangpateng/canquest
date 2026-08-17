@@ -9,6 +9,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { TransactionDetailModal } from "@/components/app/wallet/transaction-detail-modal";
+import { TokenUsdValue } from "@/components/app/earn/cc-usd-value";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { queryKeys } from "@/lib/queries/query-keys";
 import {
@@ -251,12 +252,45 @@ function amountSign(type: TxItem["type"]): string {
   return "+";
 }
 
-/** Render amount cell.
+/** (token, amount) yang ditampilkan AmountText — utk label estimasi USD.
+ *  null bila tx tidak menampilkan nominal (toggle, data lama, amount 0). */
+function txUsdAmount(tx: TxItem): { token: string; amount: number } | null {
+  // Cancelled offer — nominal ASLI yang dibatalkan (logika sama dgn AmountText).
+  if (CANCELLED_TX_TYPES.has(tx.type)) {
+    const tokenCancelled =
+      tx.type === "TOKEN_OFFER_REJECTED" ||
+      tx.type === "TOKEN_OFFER_WITHDRAWN";
+    const rawAmt = tokenCancelled ? tx.cancelledAmount : tx.cancelledAmountCc;
+    const amt = Number(rawAmt ?? "0");
+    if (!rawAmt || !Number.isFinite(amt) || amt <= 0) return null;
+    return {
+      token: tokenCancelled
+        ? tx.cancelledInstrumentId ?? tx.instrumentId ?? "token"
+        : "CC",
+      amount: amt,
+    };
+  }
+  if (TOGGLE_TX_TYPES.has(tx.type)) return null;
+  if (isTokenAmountTx(tx)) {
+    return {
+      token: tx.instrumentId ?? "token",
+      amount: Math.abs(Number(tx.amountDecimal ?? "0")),
+    };
+  }
+  return {
+    token: "CC",
+    amount: Math.abs(Number(tx.amountMicroCc ?? "0")) / 1_000_000,
+  };
+}
+
+/** Render amount cell + estimasi USD live (harga saat ini, prefix "≈").
  *  - cancelled (reject/withdraw) dengan amount orisinal → "−5.0000 CC" (cancelled)
  *  - toggle (amount 0, no cancelled amount, e.g. preapproval) → "—" netral
  *  - token non-CC (amountDecimal + instrumentId) → "+5.0000 USDCx"
- *  - CC (default) → "+0.2000 CC" (microCC → CC) */
+ *  - CC (default) → "+0.2000 CC" (microCC → CC)
+ *  USD hanya muncul bila harga token tersedia (CBTC dll. otomatis tanpa USD). */
 function AmountText({ tx }: { tx: TxItem }) {
+  const usd = txUsdAmount(tx);
   // Cancelled offer (reject/withdraw) — tampilkan amount ASLI yang dibatalkan.
   // Saldo tidak bergerak (amount=0), jadi pakai cancelledAmountCc/cancelledAmount.
   if (CANCELLED_TX_TYPES.has(tx.type)) {
@@ -273,10 +307,19 @@ function AmountText({ tx }: { tx: TxItem }) {
       ? tx.cancelledInstrumentId ?? tx.instrumentId ?? "token"
       : "CC";
     return (
-      <>
-        {"\u2212"}
-        {amt.toFixed(4)} {label}
-      </>
+      <span className="inline-block text-left">
+        <span>
+          {"\u2212"}
+          {amt.toFixed(4)} {label}
+        </span>
+        {usd ? (
+          <TokenUsdValue
+            amount={usd.amount}
+            token={usd.token}
+            className="block text-[11px] font-medium text-[var(--muted-foreground)]"
+          />
+        ) : null}
+      </span>
     );
   }
   if (TOGGLE_TX_TYPES.has(tx.type)) {
@@ -286,18 +329,36 @@ function AmountText({ tx }: { tx: TxItem }) {
   if (isTokenAmountTx(tx)) {
     const tokenAmt = Math.abs(Number(tx.amountDecimal ?? "0"));
     return (
-      <>
-        {amountSign(tx.type)}
-        {tokenAmt.toFixed(4)} {tx.instrumentId}
-      </>
+      <span className="inline-block text-left">
+        <span>
+          {amountSign(tx.type)}
+          {tokenAmt.toFixed(4)} {tx.instrumentId}
+        </span>
+        {usd ? (
+          <TokenUsdValue
+            amount={usd.amount}
+            token={usd.token}
+            className="block text-[11px] font-medium text-[var(--muted-foreground)]"
+          />
+        ) : null}
+      </span>
     );
   }
   const ccAmt = Math.abs(Number(tx.amountMicroCc)) / 1_000_000;
   return (
-    <>
-      {amountSign(tx.type)}
-      {ccAmt.toFixed(4)} CC
-    </>
+    <span className="inline-block text-left">
+      <span>
+        {amountSign(tx.type)}
+        {ccAmt.toFixed(4)} CC
+      </span>
+      {usd ? (
+        <TokenUsdValue
+          amount={usd.amount}
+          token={usd.token}
+          className="block text-[11px] font-medium text-[var(--muted-foreground)]"
+        />
+      ) : null}
+    </span>
   );
 }
 

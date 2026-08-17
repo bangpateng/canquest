@@ -4,6 +4,7 @@ import Link from "next/link";
 import { getQuestMeta } from "@/lib/quest/quest-engine";
 import { formatRewardAmount } from "@/lib/canton/campaign-reward";
 import { questRewardToken } from "@/lib/quest/quest-types";
+import { TokenUsdValue } from "@/components/app/earn/cc-usd-value";
 import { ROUTES } from "@/lib/routing/app-routes";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { QUEST_STATUS_BADGE, type Quest, type UserProgress } from "@/lib/quest/quest-types";
@@ -92,6 +93,10 @@ export function EarnCampaignCard({
   } else {
     rewardText = quest.rewardPool ?? "—";
   }
+
+  // USD estimasi (harga live) di bawah reward — hanya campaign berhadiah
+  // token (CC / USDCx / dual CC+Code); invite code & waitlist tanpa nominal.
+  const showRewardUsd = config.isCcToken && quest.rewardCc > 0;
 
   // CTA
   const ctaLabel = meta.joinBlocked
@@ -269,6 +274,13 @@ export function EarnCampaignCard({
           >
             {rewardText}
           </p>
+          {showRewardUsd ? (
+            <TokenUsdValue
+              amount={quest.rewardCc}
+              token={token}
+              className="mt-0.5 block text-[11px] text-[var(--muted-foreground)]/80"
+            />
+          ) : null}
         </div>
 
         {/* FCFS progress ATAU raffle row */}

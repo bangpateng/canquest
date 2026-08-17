@@ -7,6 +7,8 @@ import { ArrowDownLeft, ArrowUpRight, Ban, Check, Copy, ExternalLink, Lock, Lock
 
 import type { TransactionDetail } from "@/components/app/wallet/transaction-detail-view";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
+import { useTokenPrices } from "@/lib/hooks/use-token-prices";
+import { tokenPriceKey } from "@/components/app/earn/cc-usd-value";
 import { txTypeLabel } from "@/lib/canton/tx-labels";
 import { iconButtonClass } from "@/lib/ui/ui-button-styles";
 import { cn } from "@/lib/utils/utils";
@@ -124,6 +126,7 @@ export function TransactionDetailContent({
   compact = false,
 }: TransactionDetailContentProps) {
   const t = usePlatformT();
+  const { prices } = useTokenPrices();
 
   if (loading) {
     return (
@@ -217,10 +220,30 @@ export function TransactionDetailContent({
 
   const roundDisplay =
     detail.round != null && detail.round !== "" ? String(detail.round) : null;
+
+  // Estimasi USD utk nominal hero — dihitung dari harga LIVE /party/prices
+  // (harga saat dibuka, prefix "≈"). detail.usdEstimate backend (bila suatu
+  // saat diisi) tetap menang sebagai override.
+  const heroUsdToken =
+    isToggle && !hasCancelledAmount
+      ? null
+      : hasCancelledAmount
+        ? { amount: cancelledAmt, token: cancelledLabel }
+        : isTokenAmountTx
+          ? { amount: tokenAmt, token: detail.instrumentId ?? "token" }
+          : ccAmt > 0
+            ? { amount: ccAmt, token: "CC" }
+            : null;
+  const heroPriceKey = heroUsdToken ? tokenPriceKey(heroUsdToken.token) : null;
+  const heroPrice = heroPriceKey ? prices[heroPriceKey] : undefined;
+  const liveUsd =
+    heroUsdToken && heroPrice && heroUsdToken.amount > 0
+      ? heroUsdToken.amount * heroPrice
+      : null;
   const usdDisplay =
     typeof detail.usdEstimate === "number" && Number.isFinite(detail.usdEstimate)
       ? detail.usdEstimate
-      : null;
+      : liveUsd;
 
   // For on-chain transfers the fields already show everything — hide the
   // separate "On-chain events" block so the modal fits without scrolling.
@@ -291,7 +314,13 @@ export function TransactionDetailContent({
           </p>
           {usdDisplay != null ? (
             <p className="mt-0.5 text-sm font-medium text-[var(--muted-foreground)] tabular-nums">
-              ≈ ${usdDisplay.toFixed(2)} USD
+              ≈ $
+              {usdDisplay >= 1
+                ? usdDisplay.toFixed(2)
+                : usdDisplay >= 0.01
+                  ? usdDisplay.toFixed(3)
+                  : usdDisplay.toFixed(4)}{" "}
+              USD
             </p>
           ) : null}
         </div>
