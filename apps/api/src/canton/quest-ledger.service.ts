@@ -1042,8 +1042,80 @@ export class QuestLedgerService implements OnModuleInit {
     }
   }
 
+  /**
+   * Exercise ClaimSlot/DrawWinner dengan auto-resync cid campaign basi.
+   *
+   * Choice ini CONSUMING: tiap klaim meng-archive campaign lama dan membuat
+   * kontrak penerus (currentClaims+1) → cid yang tersimpan di
+   * Quest.ledgerCampaignId bisa kedaluwarsa (bug terlihat di smoke mainnet
+   * 19-08-2026: klaim ke-2 CONTRACT_NOT_FOUND lalu diam-diam jatuh ke jalur
+   * non-atomic). Kalau ledger menjawab contract-not-found, cari kontrak
+   * campaign AKTIF via ACS (match createArgument.campaignId) lalu retry
+   * sekali. Caller wajib persist result.campaignContractId (cid penerus).
+   */
+  private async exerciseClaimChoiceWithResync(params: {
+    campaignContractId: string;
+    campaignId: string; // campaignId logikal DAML (= quest.id)
+    ledgerPackage?: string | null;
+    choice: 'ClaimSlot' | 'DrawWinner';
+    choiceArgs: Record<string, unknown>;
+    commandIdPrefix: string;
+  }): Promise<{ ok: boolean; text: string; campaignCidUsed: string }> {
+    const tpl = this.templateIdFor(params.ledgerPackage, TPL.QuestCampaign);
+    const operator = this.operatorPartyId;
+    let campaignCid = params.campaignContractId;
+    if (!operator)
+      return {
+        ok: false,
+        text: 'operator not configured',
+        campaignCidUsed: campaignCid,
+      };
+    let attempt = await this.ledger.exerciseChoice(
+      campaignCid,
+      tpl,
+      params.choice,
+      params.choiceArgs,
+      [operator],
+      `${params.commandIdPrefix}-${randomUUID()}`,
+      'submit-and-wait-for-transaction-tree',
+    );
+    if (
+      !attempt.ok &&
+      /could not be found|contract not found|CONTRACT_NOT_FOUND/i.test(
+        attempt.text,
+      )
+    ) {
+      const freshCid = this.findContractId(
+        await this.ledger.queryActiveContracts(tpl, [operator]).catch(() => []),
+        (args) => args.campaignId === params.campaignId,
+      );
+      if (freshCid && freshCid !== campaignCid) {
+        this.logger.warn(
+          `${params.choice}: campaign cid basi (${campaignCid.slice(0, 12)}…) → resync ke ${freshCid.slice(0, 12)}… (persist hasilnya!)`,
+        );
+        campaignCid = freshCid;
+        attempt = await this.ledger.exerciseChoice(
+          campaignCid,
+          tpl,
+          params.choice,
+          params.choiceArgs,
+          [operator],
+          `${params.commandIdPrefix}-${randomUUID()}`,
+          'submit-and-wait-for-transaction-tree',
+        );
+      }
+    }
+    return {
+      ok: attempt.ok,
+      text: attempt.text,
+      campaignCidUsed: campaignCid,
+    };
+  }
+
   async claimFcfsSlot(params: {
     campaignContractId: string;
+    /** campaignId logikal DAML (= quest.id) — utk resync cid basi. */
+    campaignId?: string;
     userPartyId: string;
     claimId: string;
     rewardSenderPartyId: string; // v24: party reward wallet (CANTON_REWARD_PARTY_ID)
@@ -1067,7 +1139,6 @@ export class QuestLedgerService implements OnModuleInit {
     };
     if (!this.isClaimSessionConfigured()) return result;
     const legacy = this.isLegacyPackage(params.ledgerPackage);
-    const tpl = this.templateIdFor(params.ledgerPackage, TPL.QuestCampaign);
     const operator = this.operatorPartyId;
     if (!operator) {
       result.errors.push('Canton operator party not configured');
@@ -1079,31 +1150,67 @@ export class QuestLedgerService implements OnModuleInit {
       return result;
     }
     result.ledgerEnabled = true;
-    const { ok, text } = await this.ledger.exerciseChoice(
-      params.campaignContractId,
-      tpl,
-      'ClaimSlot',
-      legacy
-        ? {
-            // v28: tanpa lockCid; timestamp format lama (ms-ISO).
-            user: params.userPartyId,
-            claimId: params.claimId,
-            claimedAt: new Date().toISOString(),
-            rewardSender: params.rewardSenderPartyId,
-            eligibilityCid: params.eligibilityCid ?? null,
-          }
-        : {
-            user: params.userPartyId,
-            claimId: params.claimId,
-            claimedAt: this.zulu(),
-            rewardSender: params.rewardSenderPartyId, // v24: co-controller Settle
-            eligibilityCid: params.eligibilityCid ?? null, // v25: Optional (nullable)
-            lockCid: params.lockCid ?? null, // v29: Optional CoinLock (LOCK_CC)
-          },
-      [operator],
-      `claim-fcfs-${params.claimId}-${randomUUID()}`,
-      'submit-and-wait-for-transaction-tree',
-    );
+    const { ok, text, campaignCidUsed } = params.campaignId
+      ? await this.exerciseClaimChoiceWithResync({
+          campaignContractId: params.campaignContractId,
+          campaignId: params.campaignId,
+          ledgerPackage: params.ledgerPackage,
+          choice: 'ClaimSlot',
+          commandIdPrefix: `claim-fcfs-${params.claimId}`,
+          choiceArgs: legacy
+            ? {
+                // v28: tanpa lockCid; timestamp format lama (ms-ISO).
+                user: params.userPartyId,
+                claimId: params.claimId,
+                claimedAt: new Date().toISOString(),
+                rewardSender: params.rewardSenderPartyId,
+                eligibilityCid: params.eligibilityCid ?? null,
+              }
+            : {
+                user: params.userPartyId,
+                claimId: params.claimId,
+                claimedAt: this.zulu(),
+                rewardSender: params.rewardSenderPartyId, // v24: co-controller Settle
+                eligibilityCid: params.eligibilityCid ?? null, // v25: Optional (nullable)
+                lockCid: params.lockCid ?? null, // v29: Optional CoinLock (LOCK_CC)
+              },
+        })
+      : await (async () => {
+          // Fallback tanpa campaignId (caller lama) — perilaku lama.
+          const tpl = this.templateIdFor(
+            params.ledgerPackage,
+            TPL.QuestCampaign,
+          );
+          const attempt = await this.ledger.exerciseChoice(
+            params.campaignContractId,
+            tpl,
+            'ClaimSlot',
+            legacy
+              ? {
+                  user: params.userPartyId,
+                  claimId: params.claimId,
+                  claimedAt: new Date().toISOString(),
+                  rewardSender: params.rewardSenderPartyId,
+                  eligibilityCid: params.eligibilityCid ?? null,
+                }
+              : {
+                  user: params.userPartyId,
+                  claimId: params.claimId,
+                  claimedAt: this.zulu(),
+                  rewardSender: params.rewardSenderPartyId,
+                  eligibilityCid: params.eligibilityCid ?? null,
+                  lockCid: params.lockCid ?? null,
+                },
+            [operator],
+            `claim-fcfs-${params.claimId}-${randomUUID()}`,
+            'submit-and-wait-for-transaction-tree',
+          );
+          return {
+            ok: attempt.ok,
+            text: attempt.text,
+            campaignCidUsed: params.campaignContractId,
+          };
+        })();
     if (ok) {
       // FIX: extract by templateId (bukan urutan) — ClaimSlot return
       // (ContractId QuestCampaign, ContractId QuestClaimReceipt) tapi urutan
@@ -1118,7 +1225,8 @@ export class QuestLedgerService implements OnModuleInit {
         text,
         TPL.QuestClaimReceipt,
       );
-      result.campaignContractId = campaignCids[0] ?? null;
+      // cid penerus dari tree; fallback ke cid yang dipakai submit (resync).
+      result.campaignContractId = campaignCids[0] ?? campaignCidUsed;
       result.claimContractId = claimCids[0] ?? null;
       this.logger.log(
         `ClaimSlot: user=${params.userPartyId.split('::')[0]} campaign=${result.campaignContractId?.slice(0, 12) ?? 'none'}... claim=${result.claimContractId?.slice(0, 12) ?? 'none'}`,
@@ -1136,6 +1244,8 @@ export class QuestLedgerService implements OnModuleInit {
 
   async drawRaffleWinner(params: {
     campaignContractId: string;
+    /** campaignId logikal DAML (= quest.id) — utk resync cid basi. */
+    campaignId?: string;
     userPartyId: string;
     claimId: string;
     rewardCode?: string;
@@ -1156,7 +1266,6 @@ export class QuestLedgerService implements OnModuleInit {
     };
     if (!this.isClaimSessionConfigured()) return result;
     const legacy = this.isLegacyPackage(params.ledgerPackage);
-    const tpl = this.templateIdFor(params.ledgerPackage, TPL.QuestCampaign);
     const operator = this.operatorPartyId;
     if (!operator) {
       result.errors.push('Canton operator party not configured');
@@ -1168,37 +1277,54 @@ export class QuestLedgerService implements OnModuleInit {
       return result;
     }
     result.ledgerEnabled = true;
-    const { ok, text } = await this.ledger.exerciseChoice(
-      params.campaignContractId,
-      tpl,
-      'DrawWinner',
-      legacy
-        ? {
-            // v28: rewardCode Text ('' utk tanpa kode), tanpa lockCid, ms-ISO.
-            user: params.userPartyId,
-            claimId: params.claimId,
-            rewardCode: params.rewardCode ?? '',
-            drawnAt: new Date().toISOString(),
-            rewardSender: params.rewardSenderPartyId,
-            eligibilityCid: params.eligibilityCid ?? null,
-          }
-        : {
-            user: params.userPartyId,
-            claimId: params.claimId,
-            // v29: rewardCode jadi Optional Text — DAML-LF JSON: Some → string
-            // mentah, None → null. (v28 kirim '' utk "tanpa kode"; '' di v29
-            // berarti Some "" → kontrak create SecretRewardCode kosong = DITOLAK
-            // ensure code /= "". Jadi null bila tidak ada kode.)
-            rewardCode: params.rewardCode ?? null,
-            drawnAt: this.zulu(),
-            rewardSender: params.rewardSenderPartyId, // v24: co-controller Settle
-            eligibilityCid: params.eligibilityCid ?? null, // v25: Optional (nullable)
-            lockCid: params.lockCid ?? null, // v29: Optional CoinLock (LOCK_CC)
-          },
-      [operator],
-      `draw-raffle-${params.claimId}-${randomUUID()}`,
-      'submit-and-wait-for-transaction-tree',
-    );
+    const drawWinnerArgs = legacy
+      ? {
+          // v28: rewardCode Text ('' utk tanpa kode), tanpa lockCid, ms-ISO.
+          user: params.userPartyId,
+          claimId: params.claimId,
+          rewardCode: params.rewardCode ?? '',
+          drawnAt: new Date().toISOString(),
+          rewardSender: params.rewardSenderPartyId,
+          eligibilityCid: params.eligibilityCid ?? null,
+        }
+      : {
+          user: params.userPartyId,
+          claimId: params.claimId,
+          // v29: rewardCode jadi Optional Text — DAML-LF JSON: Some → string
+          // mentah, None → null. (v28 kirim '' utk "tanpa kode"; '' di v29
+          // berarti Some "" → kontrak create SecretRewardCode kosong = DITOLAK
+          // ensure code /= "". Jadi null bila tidak ada kode.)
+          rewardCode: params.rewardCode ?? null,
+          drawnAt: this.zulu(),
+          rewardSender: params.rewardSenderPartyId, // v24: co-controller Settle
+          eligibilityCid: params.eligibilityCid ?? null, // v25: Optional (nullable)
+          lockCid: params.lockCid ?? null, // v29: Optional CoinLock (LOCK_CC)
+        };
+    const tpl = this.templateIdFor(params.ledgerPackage, TPL.QuestCampaign);
+    const attempt = params.campaignId
+      ? await this.exerciseClaimChoiceWithResync({
+          campaignContractId: params.campaignContractId,
+          campaignId: params.campaignId,
+          ledgerPackage: params.ledgerPackage,
+          choice: 'DrawWinner',
+          commandIdPrefix: `draw-raffle-${params.claimId}`,
+          choiceArgs: drawWinnerArgs,
+        })
+      : await this.ledger.exerciseChoice(
+          params.campaignContractId,
+          tpl,
+          'DrawWinner',
+          drawWinnerArgs,
+          [operator],
+          `draw-raffle-${params.claimId}-${randomUUID()}`,
+          'submit-and-wait-for-transaction-tree',
+        );
+    const ok = attempt.ok;
+    const text = attempt.text;
+    const campaignCidUsed =
+      'campaignCidUsed' in attempt
+        ? (attempt as { campaignCidUsed: string }).campaignCidUsed
+        : params.campaignContractId;
     if (ok) {
       // FIX: extract by templateId (bukan urutan) — sama bug dgn claimFcfsSlot.
       const campaignCids = this.extractContractIdsByTemplate(
@@ -1209,7 +1335,7 @@ export class QuestLedgerService implements OnModuleInit {
         text,
         TPL.QuestClaimReceipt,
       );
-      result.campaignContractId = campaignCids[0] ?? null;
+      result.campaignContractId = campaignCids[0] ?? campaignCidUsed;
       result.claimContractId = claimCids[0] ?? null;
     } else {
       result.errors.push(this.formatLedgerError(text, 'DrawWinner failed'));
@@ -1257,6 +1383,52 @@ export class QuestLedgerService implements OnModuleInit {
       return { ok: true, newContractId: cids[0] ?? null, errors: [] };
     }
     return { ok: false, newContractId: null, errors: [text.slice(0, 200)] };
+  }
+
+  /**
+   * Registry transfer-factory dengan fallback v2 → v1 (Settle v29).
+   *
+   * Mainnet 19-08-2026: endpoint registry V2
+   * (/registry/transfer-instruction/v2/transfer-factory) belum tersedia di
+   * scan di belakang validator (404), sedangkan V1 jalan. factoryId dari
+   * registry V1 (ExternalPartyAmuletRules) TETAP SAH untuk Settle v29:
+   * kontrak yang sama mengimplementasikan interface TransferFactory V1 DAN
+   * V2, dan choiceContext dibangun machinery AmuletRules yang sama. Contract
+   * id tidak terikat interface → nested exercise V2 di DAML menerima cid
+   * hasil registry V1.
+   */
+  private async registryWithFallback(
+    buildPayload: (withActors: boolean) => Record<string, unknown>,
+    instrumentAdmin: string,
+    legacy: boolean,
+  ): Promise<{
+    factoryId: string;
+    choiceContextData: Record<string, unknown>;
+    disclosedContracts: unknown[];
+    transferKind: string;
+  } | null> {
+    if (legacy) {
+      // v28: registry v1 — tanpa actors (shape persis kode lama).
+      return this.ledger.callTransferFactoryRegistry(
+        buildPayload(false),
+        instrumentAdmin,
+        'v1',
+      );
+    }
+    const v2 = await this.ledger.callTransferFactoryRegistry(
+      buildPayload(true),
+      instrumentAdmin,
+      'v2',
+    );
+    if (v2) return v2;
+    this.logger.warn(
+      'Registry v2 tidak tersedia (scan belum menyajikan endpoint v2) — fallback ke registry v1 (factory contract sama, implementasi interface v1+v2)',
+    );
+    return this.ledger.callTransferFactoryRegistry(
+      buildPayload(false),
+      instrumentAdmin,
+      'v1',
+    );
   }
 
   /**
@@ -1312,7 +1484,6 @@ export class QuestLedgerService implements OnModuleInit {
     if (!this.isClaimSessionConfigured())
       return fail(['Claim session ledger disabled']);
     const legacy = this.isLegacyPackage(params.ledgerPackage);
-    const registryVersion: 'v1' | 'v2' = legacy ? 'v1' : 'v2';
     const tpl = this.templateIdFor(params.ledgerPackage, TPL.QuestClaimReceipt);
     const operator = this.operatorPartyId;
     if (!operator) return fail(['Canton operator party not configured']);
@@ -1367,24 +1538,15 @@ export class QuestLedgerService implements OnModuleInit {
         inputHoldingCids: feeInputCids,
         meta: { values: {} },
       });
-      const feeRegistry = await this.ledger.callTransferFactoryRegistry(
-        legacy
-          ? {
-              // v28: registry v1 — tanpa actors (shape persis kode lama).
-              expectedAdmin: feeInstrumentAdmin,
-              transfer: feeTransfer,
-              extraArgs: { context: { values: {} }, meta: { values: {} } },
-            }
-          : {
-              expectedAdmin: feeInstrumentAdmin,
-              // v29: TransferFactory_Transfer V2 — actors eksplisit (sender
-              // party; diekstrak dari Account.owner oleh scan registry).
-              actors: [params.userPartyId],
-              transfer: feeTransfer,
-              extraArgs: { context: { values: {} }, meta: { values: {} } },
-            },
+      const feeRegistry = await this.registryWithFallback(
+        (withActors: boolean) => ({
+          expectedAdmin: feeInstrumentAdmin,
+          ...(withActors ? { actors: [params.userPartyId] } : {}),
+          transfer: feeTransfer,
+          extraArgs: { context: { values: {} }, meta: { values: {} } },
+        }),
         feeInstrumentAdmin,
-        registryVersion,
+        legacy,
       );
       if (!feeRegistry) {
         return fail(['Fee leg: callTransferFactoryRegistry returned null']);
@@ -1430,21 +1592,15 @@ export class QuestLedgerService implements OnModuleInit {
           inputHoldingCids: rewardInputCids,
           meta: { values: {} },
         });
-        rewardRegistry = await this.ledger.callTransferFactoryRegistry(
-          legacy
-            ? {
-                expectedAdmin: rewardInstrumentAdmin,
-                transfer: rewardTransfer,
-                extraArgs: { context: { values: {} }, meta: { values: {} } },
-              }
-            : {
-                expectedAdmin: rewardInstrumentAdmin,
-                actors: [params.rewardSenderPartyId],
-                transfer: rewardTransfer,
-                extraArgs: { context: { values: {} }, meta: { values: {} } },
-              },
+        rewardRegistry = await this.registryWithFallback(
+          (withActors: boolean) => ({
+            expectedAdmin: rewardInstrumentAdmin,
+            ...(withActors ? { actors: [params.rewardSenderPartyId] } : {}),
+            transfer: rewardTransfer,
+            extraArgs: { context: { values: {} }, meta: { values: {} } },
+          }),
           rewardInstrumentAdmin,
-          registryVersion,
+          legacy,
         );
         if (!rewardRegistry) {
           return fail([

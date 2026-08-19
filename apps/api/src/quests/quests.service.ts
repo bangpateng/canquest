@@ -824,6 +824,30 @@ export class QuestsService {
     return quest.ledgerCampaignId ? 'canquest-v28' : null;
   }
 
+  /**
+   * ClaimSlot/DrawWinner adalah choice CONSUMING: kontrak campaign lama
+   * ter-archive dan penerusnya (currentClaims+1) dibuat tiap klaim.
+   * Persist cid penerus ke Quest.ledgerCampaignId supaya klaim berikutnya
+   * tidak CONTRACT_NOT_FOUND (sebelum fix, klaim 2..N diam-diam jatuh ke
+   * jalur non-atomic — audit trail on-chain hilang). Best-effort, non-block.
+   */
+  private async refreshLedgerCampaignId(
+    questId: string,
+    campaignCid: string | null | undefined,
+  ): Promise<void> {
+    if (!campaignCid) return;
+    await this.prisma.quest
+      .update({
+        where: { id: questId },
+        data: { ledgerCampaignId: campaignCid },
+      })
+      .catch((err) =>
+        this.logger.warn(
+          `refreshLedgerCampaignId fail quest=${questId.slice(0, 8)}: ${String(err)}`,
+        ),
+      );
+  }
+
   private async resolveEligibilityCid(params: {
     questId: string;
     userId: string;
@@ -3238,6 +3262,7 @@ export class QuestsService {
           }
           const claimResult = await this.questLedger.claimFcfsSlot({
             campaignContractId,
+            campaignId: questId, // v29: utk auto-resync cid campaign basi
             userPartyId: cantonPartyId,
             claimId: reservedDrawId,
             rewardSenderPartyId: rewardPartyId, // v24: co-controller Settle
@@ -3246,6 +3271,11 @@ export class QuestsService {
             ledgerPackage: QuestsService.ledgerPackageOf(quest),
           });
           claimSessionId = claimResult.claimContractId;
+          // v29: ClaimSlot/DrawWinner consuming — persist cid campaign PENERUS.
+          await this.refreshLedgerCampaignId(
+            questId,
+            claimResult.campaignContractId,
+          );
           if (claimResult.errors.length > 0) {
             this.logger.warn(
               `ClaimFcfsSlot warnings: ${claimResult.errors.join(' | ')}`,
@@ -3538,6 +3568,7 @@ export class QuestsService {
           }
           const claimResult = await this.questLedger.drawRaffleWinner({
             campaignContractId,
+            campaignId: questId, // v29: utk auto-resync cid campaign basi
             userPartyId: cantonPartyId,
             claimId: draw.id,
             rewardSenderPartyId: this.requireRewardPartyId(), // v24: co-controller Settle
@@ -3546,6 +3577,11 @@ export class QuestsService {
             ledgerPackage: QuestsService.ledgerPackageOf(quest),
           });
           claimSessionId = claimResult.claimContractId;
+          // v29: ClaimSlot/DrawWinner consuming — persist cid campaign PENERUS.
+          await this.refreshLedgerCampaignId(
+            questId,
+            claimResult.campaignContractId,
+          );
           if (claimResult.errors.length > 0) {
             this.logger.warn(
               `DrawRaffleWinner warnings: ${claimResult.errors.join(' | ')}`,
@@ -3906,6 +3942,7 @@ export class QuestsService {
             codeClaimKind === 'CODE_FCFS'
               ? await this.questLedger.claimFcfsSlot({
                   campaignContractId,
+                  campaignId: questId, // v29: utk auto-resync cid campaign basi
                   userPartyId: cantonPartyId,
                   claimId,
                   rewardSenderPartyId: this.requireRewardPartyId(), // v24: co-controller Settle
@@ -3915,6 +3952,7 @@ export class QuestsService {
                 })
               : await this.questLedger.drawRaffleWinner({
                   campaignContractId,
+                  campaignId: questId, // v29: utk auto-resync cid campaign basi
                   userPartyId: cantonPartyId,
                   claimId,
                   rewardSenderPartyId: this.requireRewardPartyId(), // v24: co-controller Settle
@@ -3923,6 +3961,10 @@ export class QuestsService {
                   ledgerPackage: QuestsService.ledgerPackageOf(quest),
                 });
           codeClaimSessionId = claimResult.claimContractId;
+          await this.refreshLedgerCampaignId(
+            questId,
+            claimResult.campaignContractId,
+          );
           if (claimResult.errors.length > 0) {
             this.logger.warn(
               `QuestCampaign ${codeClaimKind} warnings: ${claimResult.errors.join(' | ')}`,
@@ -4210,6 +4252,7 @@ export class QuestsService {
           });
           const claimResult = await this.questLedger.drawRaffleWinner({
             campaignContractId: ccCodeCampaignCid,
+            campaignId: questId, // v29: utk auto-resync cid campaign basi
             userPartyId: cantonPartyId,
             claimId: draw.id,
             rewardSenderPartyId: this.requireRewardPartyId(), // v24: co-controller Settle
@@ -4218,6 +4261,10 @@ export class QuestsService {
             ledgerPackage: QuestsService.ledgerPackageOf(quest),
           });
           ccCodeClaimSessionId = claimResult.claimContractId;
+          await this.refreshLedgerCampaignId(
+            questId,
+            claimResult.campaignContractId,
+          );
           if (claimResult.errors.length > 0) {
             this.logger.warn(
               `DrawRaffleWinner (CC+Code) warnings: ${claimResult.errors.join(' | ')}`,
