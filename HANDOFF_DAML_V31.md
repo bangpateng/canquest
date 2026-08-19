@@ -22,7 +22,7 @@
 | Sinkronisasi ke `packages/daml` (repo) | ❌ Langkah 1 (belum) |
 | Penyesuaian backend (apps/api) | ✅ Langkah 2 (19 Agt 2026 — lihat §4a) |
 | Smoke test mainnet (Settle/ExecuteTransfer asli) | ✅ SELESAI 19 Agt — run bersih tanpa error (updateId 1220a425f6a2: create→eligibility→ClaimSlot→Settle atomic reward=true→RecordTxId; lihat RUNBOOK §10) |
-| Deploy VPS produksi | ❌ Langkah 4 (belum) |
+| Deploy VPS produksi | ✅ Terdeploy seiring Langkah 3 (DAR upload + migration + backend live). GO-LIVE tinggal: deploy `112abdf`, tes klaim quest v28 aktif (jika ada), END campaign test |
 
 **Lokasi file kerja terbaru (DI LUAR REPO):** `C:\Users\Bang Pateng\test\`
 - `daml/Main.daml` — kontrak v31 (sumber kebenaran terbaru)
