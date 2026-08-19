@@ -21,7 +21,7 @@
 | Build DAR (`canquest-0.1.0.dar`) | ✅ Sukses |
 | Sinkronisasi ke `packages/daml` (repo) | ❌ Langkah 1 (belum) |
 | Penyesuaian backend (apps/api) | ✅ Langkah 2 (19 Agt 2026 — lihat §4a) |
-| Smoke test mainnet (Settle/ExecuteTransfer asli) | ✅ Inti HIJAU 19 Agt 19:14 — `Settle OK reward=true` + `RecordTxId OK` (1 tx, fee+reward atomic; registry v1 fallback; lihat RUNBOOK §10) |
+| Smoke test mainnet (Settle/ExecuteTransfer asli) | ✅ SELESAI 19 Agt — run bersih tanpa error (updateId 1220a425f6a2: create→eligibility→ClaimSlot→Settle atomic reward=true→RecordTxId; lihat RUNBOOK §10) |
 | Deploy VPS produksi | ❌ Langkah 4 (belum) |
 
 **Lokasi file kerja terbaru (DI LUAR REPO):** `C:\Users\Bang Pateng\test\`
