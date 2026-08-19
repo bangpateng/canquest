@@ -491,7 +491,20 @@ export class QuestLedgerService implements OnModuleInit {
         const cid = typeof obj.contractId === 'string' ? obj.contractId : null;
         const tplId =
           typeof obj.templateId === 'string' ? obj.templateId : null;
-        if (cid && tplId && tplId.endsWith(suffix) && !seen.has(cid)) {
+        // Hanya event CREATED (punya createArgument / CreatedEvent wrapper).
+        // Event ARCHIVED juga membawa contractId+templateId — ikut memetiknya
+        // membuat "cid penerus" bisa berisi cid yang sudah ter-archive
+        // (smoke 19-08: klaim berikutnya selalu resync). Archived event tidak
+        // memiliki createArgument.
+        const isCreated =
+          obj.createArgument !== undefined || obj.CreatedEvent !== undefined;
+        if (
+          cid &&
+          tplId &&
+          tplId.endsWith(suffix) &&
+          isCreated &&
+          !seen.has(cid)
+        ) {
           cids.push(cid);
           seen.add(cid);
         }
