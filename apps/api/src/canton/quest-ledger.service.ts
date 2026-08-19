@@ -1398,7 +1398,7 @@ export class QuestLedgerService implements OnModuleInit {
    * hasil registry V1.
    */
   private async registryWithFallback(
-    buildPayload: (withActors: boolean) => Record<string, unknown>,
+    buildPayload: (version: 'v1' | 'v2') => Record<string, unknown>,
     instrumentAdmin: string,
     legacy: boolean,
   ): Promise<{
@@ -1408,24 +1408,24 @@ export class QuestLedgerService implements OnModuleInit {
     transferKind: string;
   } | null> {
     if (legacy) {
-      // v28: registry v1 — tanpa actors (shape persis kode lama).
+      // v28: registry v1 — payload v1 (shape persis kode lama).
       return this.ledger.callTransferFactoryRegistry(
-        buildPayload(false),
+        buildPayload('v1'),
         instrumentAdmin,
         'v1',
       );
     }
     const v2 = await this.ledger.callTransferFactoryRegistry(
-      buildPayload(true),
+      buildPayload('v2'),
       instrumentAdmin,
       'v2',
     );
     if (v2) return v2;
     this.logger.warn(
-      'Registry v2 tidak tersedia (scan belum menyajikan endpoint v2) — fallback ke registry v1 (factory contract sama, implementasi interface v1+v2)',
+      'Registry v2 tidak tersedia (scan belum menyajikan endpoint v2) — fallback ke registry v1 (factory contract sama, implementasi interface v1+v2; payload dikembalikan ke shape Transfer V1)',
     );
     return this.ledger.callTransferFactoryRegistry(
-      buildPayload(false),
+      buildPayload('v1'),
       instrumentAdmin,
       'v1',
     );
@@ -1501,16 +1501,34 @@ export class QuestLedgerService implements OnModuleInit {
       // ── v29: Account V2 — regular account { owner, provider: null, id: "" } ──
       // Splice.Api.Token.HoldingV2.Account. owner WAJIB Some utk regular
       // account (scan registry: TokenStandardAccount.tryGetRegularAccountOwner).
-      // Legacy (v28): Transfer V1 — sender/receiver Party string + field lock.
+      // Legacy (v28) & registry V1: Transfer V1 — sender/receiver Party string
+      // + field lock:null. Decoder registry V1 MENOLAK object Account
+      // ("Expected text but was {") → payload registry v1 wajib shape V1;
+      // choiceArgument Settle tetap mengikuti versi paket kontrak.
       const account = (partyId: string) => ({
         owner: partyId,
         provider: null,
         id: '',
       });
-      const partyField = (partyId: string) =>
-        legacy ? partyId : account(partyId);
-      const lockField = <T extends object>(transfer: T) =>
-        legacy ? { ...transfer, lock: null } : transfer;
+      const contractVersion: 'v1' | 'v2' = legacy ? 'v1' : 'v2';
+      const transferFor = (
+        senderParty: string,
+        receiverParty: string,
+        common: Record<string, unknown>,
+        version: 'v1' | 'v2',
+      ): Record<string, unknown> =>
+        version === 'v1'
+          ? {
+              sender: senderParty,
+              receiver: receiverParty,
+              ...common,
+              lock: null,
+            }
+          : {
+              sender: account(senderParty),
+              receiver: account(receiverParty),
+              ...common,
+            };
 
       // ── FEE leg: user → feeReceiver (CC Amulet, selalu jalan) ──────────────
       const feeInstrumentAdmin = dso;
@@ -1527,22 +1545,33 @@ export class QuestLedgerService implements OnModuleInit {
         ]);
       }
       // v29 TransferInstructionV2.Transfer — TANPA field lock (dihapus di V2);
-      // sender/receiver berubah Party → Account.
-      const feeTransfer = lockField({
-        sender: partyField(params.userPartyId),
-        receiver: partyField(params.feeReceiverPartyId),
+      // sender/receiver berubah Party → Account. (v28/registry-v1: shape V1.)
+      const feeCommon = {
         amount: params.feeAmount.toFixed(10),
         instrumentId: { admin: feeInstrumentAdmin, id: 'Amulet' },
         requestedAt: nowIso,
         executeBefore,
         inputHoldingCids: feeInputCids,
         meta: { values: {} },
-      });
+      };
+      const feeTransfer = transferFor(
+        params.userPartyId,
+        params.feeReceiverPartyId,
+        feeCommon,
+        contractVersion,
+      );
       const feeRegistry = await this.registryWithFallback(
-        (withActors: boolean) => ({
+        (version) => ({
           expectedAdmin: feeInstrumentAdmin,
-          ...(withActors ? { actors: [params.userPartyId] } : {}),
-          transfer: feeTransfer,
+          ...(version === 'v2'
+            ? { actors: [params.userPartyId] }
+            : {}),
+          transfer: transferFor(
+            params.userPartyId,
+            params.feeReceiverPartyId,
+            feeCommon,
+            version,
+          ),
           extraArgs: { context: { values: {} }, meta: { values: {} } },
         }),
         feeInstrumentAdmin,
@@ -1579,9 +1608,7 @@ export class QuestLedgerService implements OnModuleInit {
             `Insufficient ${rewardInstrumentId} holdings for reward ${params.rewardAmount} (sender=${params.rewardSenderPartyId.split('::')[0]})`,
           ]);
         }
-        rewardTransfer = lockField({
-          sender: partyField(params.rewardSenderPartyId),
-          receiver: partyField(params.userPartyId),
+        const rewardCommon = {
           amount: params.rewardAmount.toFixed(10),
           instrumentId: {
             admin: rewardInstrumentAdmin,
@@ -1591,12 +1618,25 @@ export class QuestLedgerService implements OnModuleInit {
           executeBefore,
           inputHoldingCids: rewardInputCids,
           meta: { values: {} },
-        });
+        };
+        rewardTransfer = transferFor(
+          params.rewardSenderPartyId,
+          params.userPartyId,
+          rewardCommon,
+          contractVersion,
+        );
         rewardRegistry = await this.registryWithFallback(
-          (withActors: boolean) => ({
+          (version) => ({
             expectedAdmin: rewardInstrumentAdmin,
-            ...(withActors ? { actors: [params.rewardSenderPartyId] } : {}),
-            transfer: rewardTransfer,
+            ...(version === 'v2'
+              ? { actors: [params.rewardSenderPartyId] }
+              : {}),
+            transfer: transferFor(
+              params.rewardSenderPartyId,
+              params.userPartyId,
+              rewardCommon,
+              version,
+            ),
             extraArgs: { context: { values: {} }, meta: { values: {} } },
           }),
           rewardInstrumentAdmin,
