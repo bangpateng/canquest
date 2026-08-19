@@ -3361,7 +3361,11 @@ export class QuestsService {
       // Atomic: fee+reward transfer terjadi DI DALAM Settle choice (1 tx tree).
       //   Tidak boleh collectClaimFee/sendReward terpisah (akan double-transfer).
       // Fallback: collectClaimFee + sendReward terpisah (non-atomic, path v21).
-      if (this.useAtomicSettle && claimSessionId) {
+      // v29: reward non-CC (USDCx) TIDAK bisa naik Settle — kontrak mem-pin fee
+      // DAN reward ke instrumen Amulet → quest token langsung jalur fallback
+      // (fee terpisah + delivery token, jalur produktif lama), bukan gagal
+      // di Settle lalu jatuh ke fallback dengan receipt nyangkut PRE_SETTLE.
+      if (this.useAtomicSettle && claimSessionId && rewardToken === 'CC') {
         // ATOMIC PATH (DAML v22/v23 Settle)
         const { updateId } = await this.settleAndRecord({
           drawId: reservedDrawId,
@@ -3690,7 +3694,13 @@ export class QuestsService {
       let drawRewardTxId = '';
 
       // ── BRANCH: atomic Settle vs fallback (non-atomic) ──────────────────────
-      if (this.useAtomicSettle && claimSessionId) {
+      // v29: reward non-CC (USDCx) tidak bisa naik Settle (instrumen dipin
+      // Amulet) → langsung jalur fallback delivery token.
+      if (
+        this.useAtomicSettle &&
+        claimSessionId &&
+        normalizeRewardToken(quest.rewardToken) === 'CC'
+      ) {
         // ATOMIC PATH (DAML v22/v23 Settle)
         const { updateId } = await this.settleAndRecord({
           drawId: draw.id,
