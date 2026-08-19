@@ -21,7 +21,7 @@
 | Build DAR (`canquest-0.1.0.dar`) | ✅ Sukses |
 | Sinkronisasi ke `packages/daml` (repo) | ❌ Langkah 1 (belum) |
 | Penyesuaian backend (apps/api) | ✅ Langkah 2 (19 Agt 2026 — lihat §4a) |
-| Smoke test mainnet (Settle/ExecuteTransfer asli) | ❌ Langkah 3 — jalankan via `RUNBOOK_V29_MAINNET_SMOKE.md` |
+| Smoke test mainnet (Settle/ExecuteTransfer asli) | ✅ Inti HIJAU 19 Agt 19:14 — `Settle OK reward=true` + `RecordTxId OK` (1 tx, fee+reward atomic; registry v1 fallback; lihat RUNBOOK §10) |
 | Deploy VPS produksi | ❌ Langkah 4 (belum) |
 
 **Lokasi file kerja terbaru (DI LUAR REPO):** `C:\Users\Bang Pateng\test\`
