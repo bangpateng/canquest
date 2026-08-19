@@ -1083,7 +1083,12 @@ export class QuestLedgerService implements OnModuleInit {
       !attempt.ok &&
       /could not be found|contract not found|CONTRACT_NOT_FOUND/i.test(
         attempt.text,
-      )
+      ) &&
+      // HANYA resync bila cid yang hilang = cid campaign ini. Error
+      // "could not be found" bisa berasal dari fetch kontrak LAIN di dalam
+      // choice body (mis. CampaignEligibility yang sudah dikonsumsi) —
+      // resync campaign pada kasus itu salah diagnosis (smoke 19-08).
+      attempt.text.includes(campaignCid)
     ) {
       const freshCid = this.findContractId(
         await this.ledger.queryActiveContracts(tpl, [operator]).catch(() => []),

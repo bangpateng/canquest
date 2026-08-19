@@ -848,6 +848,26 @@ export class QuestsService {
       );
   }
 
+  /**
+   * Tandai cache CampaignEligibilityLedger user+quest sebagai USED.
+   * Choice UseEligibility bersifat CONSUMING (kontrak ter-archive saat
+   * dipakai ClaimSlot/DrawWinner) — tanpa penandaan ini, retry klaim akan
+   * mengirim cid eligibility yang sudah mati dan gagal "could not be found"
+   * di dalam choice body. Baris REVOKED/EXPIRED tidak tersentuh.
+   */
+  private async markEligibilityUsed(questId: string, userId: string): Promise<void> {
+    await this.prisma.campaignEligibilityLedger
+      .updateMany({
+        where: { questId, userId, status: 'ELIGIBLE' },
+        data: { status: 'USED', updatedAt: new Date() },
+      })
+      .catch((err) =>
+        this.logger.warn(
+          `markEligibilityUsed fail quest=${questId.slice(0, 8)}: ${String(err)}`,
+        ),
+      );
+  }
+
   private async resolveEligibilityCid(params: {
     questId: string;
     userId: string;
@@ -3286,6 +3306,12 @@ export class QuestsService {
             questId,
             claimResult.campaignContractId,
           );
+          // v29: UseEligibility CONSUMING — eligibility ter-archive saat
+          // dipakai. Tandai USED di cache supaya retry tidak reuse cid mati
+          // (fetch cid ter-archive => "could not be found" di choice body).
+          if (claimResult.claimContractId) {
+            await this.markEligibilityUsed(questId, userId);
+          }
           // v29 anti-slot-burn: persist receipt SEKARANG — bila Settle gagal lalu
           // user retry, klaim reuse receipt tanpa exercise ClaimSlot lagi.
           if (claimSessionId) {
@@ -3614,6 +3640,12 @@ export class QuestsService {
             questId,
             claimResult.campaignContractId,
           );
+          // v29: UseEligibility CONSUMING — eligibility ter-archive saat
+          // dipakai. Tandai USED di cache supaya retry tidak reuse cid mati
+          // (fetch cid ter-archive => "could not be found" di choice body).
+          if (claimResult.claimContractId) {
+            await this.markEligibilityUsed(questId, userId);
+          }
           // v29 anti-slot-burn: persist receipt SEKARANG — bila Settle gagal lalu
           // user retry, klaim reuse receipt tanpa exercise ClaimSlot lagi.
           if (claimSessionId) {
@@ -4011,6 +4043,12 @@ export class QuestsService {
             questId,
             claimResult.campaignContractId,
           );
+          // v29: UseEligibility CONSUMING — eligibility ter-archive saat
+          // dipakai. Tandai USED di cache supaya retry tidak reuse cid mati
+          // (fetch cid ter-archive => "could not be found" di choice body).
+          if (claimResult.claimContractId) {
+            await this.markEligibilityUsed(questId, userId);
+          }
           if (claimResult.errors.length > 0) {
             this.logger.warn(
               `QuestCampaign ${codeClaimKind} warnings: ${claimResult.errors.join(' | ')}`,
@@ -4311,6 +4349,12 @@ export class QuestsService {
             questId,
             claimResult.campaignContractId,
           );
+          // v29: UseEligibility CONSUMING — eligibility ter-archive saat
+          // dipakai. Tandai USED di cache supaya retry tidak reuse cid mati
+          // (fetch cid ter-archive => "could not be found" di choice body).
+          if (claimResult.claimContractId) {
+            await this.markEligibilityUsed(questId, userId);
+          }
           if (claimResult.errors.length > 0) {
             this.logger.warn(
               `DrawRaffleWinner (CC+Code) warnings: ${claimResult.errors.join(' | ')}`,
