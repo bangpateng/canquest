@@ -2,7 +2,7 @@
 # ============================================================
 # CanQuest — Fetch 3 DAR Splice API dependencies dari GitHub release
 #
-# daml build canquest-v31 butuh 3 DAR di packages/daml/dars/:
+# daml build canquest-v29 butuh 3 DAR di packages/daml/dars/:
 #   - splice-api-token-transfer-instruction-v2-current
 #   - splice-api-token-metadata-v1-current
 #   - splice-api-featured-app-v2-1.0.0

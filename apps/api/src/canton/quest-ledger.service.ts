@@ -5,20 +5,20 @@ import { DEBUG_LEDGER } from '../common/debug-flags';
 import { CantonLedgerService } from './canton-ledger.service';
 
 /**
- * DAML template paths — module Main (canquest-v31, DAR packages/daml)
+ * DAML template paths — module Main (canquest-v29, DAR packages/daml)
  *
- * Templates (9 — v31):
+ * Templates (9 — v29):
  *   Main:WalletRegistrationProposal — 2-step consent (admin propose → user Accept)
  *   Main:WalletRegistration         — identitas on-chain (signatory admin + userAddress)
  *   Main:CampaignEligibility        — bukti eligibility (LOCK_CC / POINTS) per campaign
  *   Main:QuestCampaign              — template induk quest (6 questKind) + state machine + eligibility guard
  *   Main:QuestClaimReceipt          — bukti klaim: atomic Settle + RevealCode + RecordTxId
  *   Main:PlatformTransfer           — atomic send token + platform fee
- *   Main:CoinLockProposal           — v31: 2-step lock (admin propose → user AcceptLock)
- *   Main:CoinLock                   — v31: lock proof utk ClaimSlot/DrawWinner LOCK_CC (lockId cross-check)
- *   Main:SecretRewardCode           — v31: kode reward admin-only, reveal setelah SETTLED
+ *   Main:CoinLockProposal           — v29: 2-step lock (admin propose → user AcceptLock)
+ *   Main:CoinLock                   — v29: lock proof utk ClaimSlot/DrawWinner LOCK_CC (lockId cross-check)
+ *   Main:SecretRewardCode           — v29: kode reward admin-only, reveal setelah SETTLED
  *
- * v31 CHANGE vs v28 (kontrak FIX-13/14/15 — dampak ke backend):
+ * v29 CHANGE vs v28 (kontrak FIX-13/14/15 — dampak ke backend):
  *   - QuestCampaign +5 field trusted*: rewardWallet, appProvider, treasury,
  *     instrumentAdmin, instrumentId. Instrument dipin ke pasangan CC/Amulet
  *     (DSO + "Amulet") karena fee SELALU CC; reward non-CC (USDCx) tetap
@@ -59,7 +59,7 @@ import { CantonLedgerService } from './canton-ledger.service';
  *     (backend custodial actAs [admin, userAddress] via grant rights)
  *   CoinLockProposal.AcceptLock: controller userAddress (pattern sama)
  *
- * TIMESTAMP KONVENSI (temuan #5 handoff v31): SEMUA field Text waktu on-chain
+ * TIMESTAMP KONVENSI (temuan #5 handoff v29): SEMUA field Text waktu on-chain
  * (createdAt/claimedAt/lockedAt/settledAt/dll) HARUS format ISO-8601 Zulu
  * detik-presisi "YYYY-MM-DDTHH:MM:SSZ" (via zulu()). Kontrak membandingkan
  * leksikografik (e.lockedAt > e.campaignCreatedAt) — format campuran
@@ -76,9 +76,9 @@ const TPL = {
   QuestCampaign: 'Main:QuestCampaign',
   QuestClaimReceipt: 'Main:QuestClaimReceipt',
   PlatformTransfer: 'Main:PlatformTransfer',
-  CoinLockProposal: 'Main:CoinLockProposal', // v31 NEW (2-step lock)
-  CoinLock: 'Main:CoinLock', // v31 NEW (LOCK_CC proof)
-  SecretRewardCode: 'Main:SecretRewardCode', // v31 NEW (kode rahasia)
+  CoinLockProposal: 'Main:CoinLockProposal', // v29 NEW (2-step lock)
+  CoinLock: 'Main:CoinLock', // v29 NEW (LOCK_CC proof)
+  SecretRewardCode: 'Main:SecretRewardCode', // v29 NEW (kode rahasia)
 } as const;
 
 // ── Result types ──────────────────────────────────────────────────────────────
@@ -252,7 +252,7 @@ export class QuestLedgerService implements OnModuleInit {
   }
 
   /**
-   * Konvensi timestamp on-chain v31 (temuan #5): ISO-8601 Zulu detik-presisi
+   * Konvensi timestamp on-chain v29 (temuan #5): ISO-8601 Zulu detik-presisi
    * "YYYY-MM-DDTHH:MM:SSZ". Kontrak membandingkan Text timestamp secara
    * LEKSIKOGRAFIK (mis. e.lockedAt > e.campaignCreatedAt) — semua penulis
    * field waktu WAJIB pakai format ini agar urutan konsisten. toISOString()
@@ -274,7 +274,45 @@ export class QuestLedgerService implements OnModuleInit {
   private get damlPackageRef(): string {
     const name = this.config.get<string>('CANTON_DAML_PACKAGE_NAME')?.trim();
     if (name) return name.startsWith('#') ? name : `#${name}`;
-    return '#canquest-v31';
+    return '#canquest-v29';
+  }
+
+  // ── Version-pinning v28/v29 (cutover mainnet) ───────────────────────────────
+  //
+  // Kontrak v28 dan v29 TIDAK saling-compatible: template ID berbeda paket →
+  // exercise kontrak v28 dengan templateId v28 (WRONGLY_TYPED_CONTRACT jika
+  // salah), payload choice/record berbeda (lockCid/trusted*/lockId hanya v29;
+  // Transfer V1 Party-string vs V2 Account), dan semantik eligibility beda
+  // (v28 masih menerima "NONE"). Backend memilih versi PER QUEST via kolom
+  // Quest.ledgerPackage (di-set saat create campaign). Quest lama (kolom null
+  // tapi punya ledgerCampaignId) dianggap v28.
+
+  /** Nama paket aktif (tanpa '#') — disimpan admin ke Quest.ledgerPackage. */
+  get packageName(): string {
+    return this.damlPackageRef.slice(1);
+  }
+
+  /** Resolve ref paket dari nama tersimpan ('canquest-v28' → '#canquest-v28'). */
+  private packageRefOf(ledgerPackage?: string | null): string {
+    const name = (ledgerPackage ?? '').trim();
+    if (name) return name.startsWith('#') ? name : `#${name}`;
+    return this.damlPackageRef;
+  }
+
+  private templateIdFor(
+    ledgerPackage: string | null | undefined,
+    suffix: (typeof TPL)[keyof typeof TPL],
+  ): string {
+    return `${this.packageRefOf(ledgerPackage)}:${suffix}`;
+  }
+
+  /**
+   * True bila paket kontrak lawas (v28 ke bawah) — payload/semantik lama.
+   * Hanya mendeteksi nama berakhiran -vNN < v29 (mis. canquest-v28).
+   */
+  private isLegacyPackage(ledgerPackage?: string | null): boolean {
+    const m = (ledgerPackage ?? '').match(/-v(\d+)$/);
+    return !!m && parseInt(m[1], 10) < 29;
   }
 
   private get operatorPartyId(): string | null {
@@ -294,7 +332,7 @@ export class QuestLedgerService implements OnModuleInit {
     return validator ?? null;
   }
 
-  // ── v31 trusted-party getters (field QuestCampaign.trusted*) ────────────────
+  // ── v29 trusted-party getters (field QuestCampaign.trusted*) ────────────────
 
   /** Reward wallet resmi (Settle co-controller + validator rewardSender). */
   private get rewardWalletPartyId(): string | null {
@@ -516,17 +554,29 @@ export class QuestLedgerService implements OnModuleInit {
       );
 
     // Idempotency: jika WalletRegistration utk user ini sudah ada, return langsung.
-    const existing = this.findContractId(
-      await this.ledger.queryActiveContracts(walletTpl, [operator]),
-      (args) => args.userAddress === params.userPartyId,
-    );
+    // Cek template paket AKTIF dulu, lalu paket v28 lawas — user yang sudah
+    // terdaftar di v28 (sebelum cutover) tidak dibuatkan registrasi duplikat.
+    const existing =
+      this.findContractId(
+        await this.ledger.queryActiveContracts(walletTpl, [operator]),
+        (args) => args.userAddress === params.userPartyId,
+      ) ??
+      this.findContractId(
+        await this.ledger
+          .queryActiveContracts(
+            this.templateIdFor('canquest-v28', TPL.WalletRegistration),
+            [operator],
+          )
+          .catch(() => []),
+        (args) => args.userAddress === params.userPartyId,
+      );
     if (existing) {
       result.contractId = existing;
       return result;
     }
 
     const userProfileRef = `user:${params.userId}`;
-    const nowIso = this.zulu(); // konvensi timestamp Text on-chain v31
+    const nowIso = this.zulu(); // konvensi timestamp Text on-chain v29
 
     // ── Step 1: create WalletRegistrationProposal (actAs: [admin]) ──────────
     const proposalRes = await this.ledger.createContract(
@@ -652,7 +702,7 @@ export class QuestLedgerService implements OnModuleInit {
     /** v25: DAML eligibility type. "NONE" default = no on-chain eligibility check.
      *  Backend map dari Quest.entryGateMode (CC_ONLY→LOCK_CC, POINTS_ONLY→POINTS,
      *  CC_OR_POINTS/NONE→NONE).
-     *  v31 [FIX-14]: "NONE" TIDAK sah di kontrak (ensure whitelist) →
+     *  v29 [FIX-14]: "NONE" TIDAK sah di kontrak (ensure whitelist) →
      *  di-map ke "POINTS" amount 0 di sini; claim path tetap wajib buat
      *  eligibility proof (auto-issue POINTS amount=earnPoints user). */
     eligibilityType?: 'NONE' | 'LOCK_CC' | 'POINTS';
@@ -671,11 +721,11 @@ export class QuestLedgerService implements OnModuleInit {
       result.errors.push('Canton operator party not configured');
       return result;
     }
-    // ── v31 ensure guards (fail fast di backend, sebelum submit) ─────────────
+    // ── v29 ensure guards (fail fast di backend, sebelum submit) ─────────────
     // [FIX-13] claimFeeCc wajib > 0 — campaign fee-0 deadlock di Settle.
     if (!(params.claimFeeCc > 0)) {
       result.errors.push(
-        `claimFeeCc harus > 0 (v31 FIX-13); dapat ${params.claimFeeCc}`,
+        `claimFeeCc harus > 0 (v29 FIX-13); dapat ${params.claimFeeCc}`,
       );
       return result;
     }
@@ -687,11 +737,11 @@ export class QuestLedgerService implements OnModuleInit {
       !(params.rewardCc > 0)
     ) {
       result.errors.push(
-        `questKind ${params.questKind} wajib rewardCc > 0 (v31 FIX-14); dapat ${params.rewardCc}`,
+        `questKind ${params.questKind} wajib rewardCc > 0 (v29 FIX-14); dapat ${params.rewardCc}`,
       );
       return result;
     }
-    // v31 trusted* parties wajib lengkap (dipakai guard Settle on-chain).
+    // v29 trusted* parties wajib lengkap (dipakai guard Settle on-chain).
     const trustedRewardWallet = this.rewardWalletPartyId;
     const trustedTreasury = this.treasuryPartyId;
     const trustedAppProvider = this.appProviderPartyId;
@@ -703,7 +753,7 @@ export class QuestLedgerService implements OnModuleInit {
     ].filter(([, v]) => !v);
     if (missing.length > 0) {
       result.errors.push(
-        `Party config v31 missing: ${missing.map(([k]) => k).join(', ')}`,
+        `Party config v29 missing: ${missing.map(([k]) => k).join(', ')}`,
       );
       return result;
     }
@@ -731,7 +781,7 @@ export class QuestLedgerService implements OnModuleInit {
         status: 'ACTIVE',
         eligibilityType: onChainEligibilityType,
         eligibilityAmount: this.dec(params.eligibilityAmount ?? 0),
-        // v31 NEW: trusted parties utk guard Settle/ExecuteTransfer on-chain.
+        // v29 NEW: trusted parties utk guard Settle/ExecuteTransfer on-chain.
         trustedRewardWallet,
         trustedAppProvider,
         trustedTreasury,
@@ -746,7 +796,7 @@ export class QuestLedgerService implements OnModuleInit {
     );
     if (res.ok && res.contractId) {
       this.logger.log(
-        `QuestCampaign created (v31): ${params.campaignId} kind=${params.questKind} quota=${params.maxWinners} eligibility=${onChainEligibilityType} fee=${params.claimFeeCc}`,
+        `QuestCampaign created (v29): ${params.campaignId} kind=${params.questKind} quota=${params.maxWinners} eligibility=${onChainEligibilityType} fee=${params.claimFeeCc}`,
       );
       result.contractId = res.contractId;
     } else {
@@ -770,9 +820,12 @@ export class QuestLedgerService implements OnModuleInit {
     amount: number; // CC locked (LOCK_CC) atau points (POINTS)
     lockedAt: string | null; // ISO kapan user lock CC (LOCK_CC); null bila POINTS
     expiresAt: string; // ISO eligibility berlaku sampai kapan
-    /** v31 [FIX-11]: lockId CcLock/CoinLock (LOCK_CC). null bila POINTS.
-     *  Dicocokkan on-chain dgn CoinLock.lockId saat ClaimSlot/DrawWinner. */
+    /** v29 [FIX-11]: lockId CcLock/CoinLock (LOCK_CC). null bila POINTS.
+     *  Dicocokkan on-chain dgn CoinLock.lockId saat ClaimSlot/DrawWinner.
+     *  Diabaikan utk paket legacy (v28 tidak punya field lockId). */
     lockId?: string | null;
+    /** Version-pinning: paket kontrak campaign terkait (mis. 'canquest-v28'). */
+    ledgerPackage?: string | null;
   }): Promise<{ ok: boolean; contractId: string | null; errors: string[] }> {
     if (!this.isClaimSessionConfigured())
       return {
@@ -780,7 +833,11 @@ export class QuestLedgerService implements OnModuleInit {
         contractId: null,
         errors: ['Claim session ledger disabled'],
       };
-    const tpl = this.templateId(TPL.CampaignEligibility);
+    const legacy = this.isLegacyPackage(params.ledgerPackage);
+    const tpl = this.templateIdFor(
+      params.ledgerPackage,
+      TPL.CampaignEligibility,
+    );
     const operator = this.operatorPartyId;
     if (!operator)
       return {
@@ -793,20 +850,38 @@ export class QuestLedgerService implements OnModuleInit {
     try {
       const res = await this.ledger.createContract(
         tpl,
-        {
-          admin: operator,
-          userAddress: params.userPartyId,
-          campaignId: params.campaignId,
-          campaignCreatedAt: this.toZulu(params.campaignCreatedAt),
-          eligibilityType: params.eligibilityType,
-          amount: this.dec(params.amount),
-          lockedAt: params.lockedAt ? this.toZulu(params.lockedAt) : '',
-          expiresAt: this.toZulu(params.expiresAt),
-          status: 'ELIGIBLE',
-          // v31 NEW: cross-check lockId (FIX-11) + Optional kosong saat create.
-          lockId: params.lockId ?? null,
-          usedInClaimId: null,
-        },
+        legacy
+          ? {
+              // v28: tanpa lockId/usedInClaimId; timestamp format lama (ms-ISO)
+              // agar perbandingan leksikografik konsisten dgn data on-chain lama.
+              admin: operator,
+              userAddress: params.userPartyId,
+              campaignId: params.campaignId,
+              campaignCreatedAt: new Date(
+                params.campaignCreatedAt,
+              ).toISOString(),
+              eligibilityType: params.eligibilityType,
+              amount: this.dec(params.amount),
+              lockedAt: params.lockedAt
+                ? new Date(params.lockedAt).toISOString()
+                : '',
+              expiresAt: new Date(params.expiresAt).toISOString(),
+              status: 'ELIGIBLE',
+            }
+          : {
+              admin: operator,
+              userAddress: params.userPartyId,
+              campaignId: params.campaignId,
+              campaignCreatedAt: this.toZulu(params.campaignCreatedAt),
+              eligibilityType: params.eligibilityType,
+              amount: this.dec(params.amount),
+              lockedAt: params.lockedAt ? this.toZulu(params.lockedAt) : '',
+              expiresAt: this.toZulu(params.expiresAt),
+              status: 'ELIGIBLE',
+              // v29 NEW: cross-check lockId (FIX-11) + Optional kosong saat create.
+              lockId: params.lockId ?? null,
+              usedInClaimId: null,
+            },
         [operator],
         `eligibility-${params.campaignId}-${params.userPartyId.slice(0, 16)}`,
       );
@@ -829,7 +904,7 @@ export class QuestLedgerService implements OnModuleInit {
     }
   }
 
-  // ── 2c. CoinLock (v31: 2-step Proposal → AcceptLock) ───────────────────────
+  // ── 2c. CoinLock (v29: 2-step Proposal → AcceptLock) ───────────────────────
   //
   // CoinLock = proof lock CC canquest-domain utk guard ClaimSlot/DrawWinner
   // LOCK_CC (cross-check e.lockId == l.lockId — FIX-11). BUKAN pengganti
@@ -856,12 +931,18 @@ export class QuestLedgerService implements OnModuleInit {
     lockedAt: string; // ISO waktu lock asli
     expiresAt: string; // ISO expiry asli
     campaignId?: string | null;
+    /** Version-pinning: CoinLock hanya ada di paket v29+ — legacy ditolak. */
+    ledgerPackage?: string | null;
   }): Promise<{ ok: boolean; contractId: string | null; errors: string[] }> {
     const fail = (errors: string[]) => ({
       ok: false,
       contractId: null,
       errors,
     });
+    if (this.isLegacyPackage(params.ledgerPackage))
+      return fail([
+        `CoinLock tidak tersedia di paket legacy (${params.ledgerPackage}) — hanya canquest-v29+`,
+      ]);
     if (!this.isClaimSessionConfigured())
       return fail(['Claim session ledger disabled']);
     const proposalTpl = this.templateId(TPL.CoinLockProposal);
@@ -951,7 +1032,7 @@ export class QuestLedgerService implements OnModuleInit {
         ]);
       }
       this.logger.log(
-        `CoinLock created (v31): lockId=${params.lockId.slice(0, 24)} user=${params.userPartyId.split('::')[0]} amount=${params.amount} days=${params.durationDays}`,
+        `CoinLock created (v29): lockId=${params.lockId.slice(0, 24)} user=${params.userPartyId.split('::')[0]} amount=${params.amount} days=${params.durationDays}`,
       );
       return { ok: true, contractId: coinLockCid, errors: [] };
     } catch (err) {
@@ -969,11 +1050,14 @@ export class QuestLedgerService implements OnModuleInit {
     // dikirim ke ClaimSlot choice → set field rewardSender
     // di QuestClaimReceipt → jadi co-controller Settle.
     /** v25: DAML CampaignEligibility contract id (utk fetch guard on-chain).
-     *  v31: WAJIB Some utk semua campaign (NONE di-map ke POINTS proof). */
+     *  v29: WAJIB Some utk semua campaign (NONE di-map ke POINTS proof). */
     eligibilityCid?: string | null;
-    /** v31 [FIX-11]: CoinLock contract id — WAJIB utk eligibility LOCK_CC
-     *  (kontrak fetch + cross-check lockId). Null utk POINTS. */
+    /** v29 [FIX-11]: CoinLock contract id — WAJIB utk eligibility LOCK_CC
+     *  (kontrak fetch + cross-check lockId). Null utk POINTS.
+     *  Diabaikan utk paket legacy (v28 ClaimSlot tidak punya field lockCid). */
     lockCid?: string | null;
+    /** Version-pinning: paket kontrak campaign yang di-exercise. */
+    ledgerPackage?: string | null;
   }): Promise<QuestClaimLedgerResult> {
     const result: QuestClaimLedgerResult = {
       ledgerEnabled: false,
@@ -982,7 +1066,8 @@ export class QuestLedgerService implements OnModuleInit {
       errors: [],
     };
     if (!this.isClaimSessionConfigured()) return result;
-    const tpl = this.templateId(TPL.QuestCampaign);
+    const legacy = this.isLegacyPackage(params.ledgerPackage);
+    const tpl = this.templateIdFor(params.ledgerPackage, TPL.QuestCampaign);
     const operator = this.operatorPartyId;
     if (!operator) {
       result.errors.push('Canton operator party not configured');
@@ -998,14 +1083,23 @@ export class QuestLedgerService implements OnModuleInit {
       params.campaignContractId,
       tpl,
       'ClaimSlot',
-      {
-        user: params.userPartyId,
-        claimId: params.claimId,
-        claimedAt: this.zulu(),
-        rewardSender: params.rewardSenderPartyId, // v24: co-controller Settle
-        eligibilityCid: params.eligibilityCid ?? null, // v25: Optional (nullable)
-        lockCid: params.lockCid ?? null, // v31: Optional CoinLock (LOCK_CC)
-      },
+      legacy
+        ? {
+            // v28: tanpa lockCid; timestamp format lama (ms-ISO).
+            user: params.userPartyId,
+            claimId: params.claimId,
+            claimedAt: new Date().toISOString(),
+            rewardSender: params.rewardSenderPartyId,
+            eligibilityCid: params.eligibilityCid ?? null,
+          }
+        : {
+            user: params.userPartyId,
+            claimId: params.claimId,
+            claimedAt: this.zulu(),
+            rewardSender: params.rewardSenderPartyId, // v24: co-controller Settle
+            eligibilityCid: params.eligibilityCid ?? null, // v25: Optional (nullable)
+            lockCid: params.lockCid ?? null, // v29: Optional CoinLock (LOCK_CC)
+          },
       [operator],
       `claim-fcfs-${params.claimId}-${randomUUID()}`,
       'submit-and-wait-for-transaction-tree',
@@ -1046,10 +1140,13 @@ export class QuestLedgerService implements OnModuleInit {
     claimId: string;
     rewardCode?: string;
     rewardSenderPartyId: string; // v24: party reward wallet (CANTON_REWARD_PARTY_ID)
-    /** v25: DAML CampaignEligibility contract id. v31: wajib Some (NONE→POINTS). */
+    /** v25: DAML CampaignEligibility contract id. v29: wajib Some (NONE→POINTS). */
     eligibilityCid?: string | null;
-    /** v31 [FIX-11]: CoinLock contract id — WAJIB utk eligibility LOCK_CC. */
+    /** v29 [FIX-11]: CoinLock contract id — WAJIB utk eligibility LOCK_CC.
+     *  Diabaikan utk paket legacy. */
     lockCid?: string | null;
+    /** Version-pinning: paket kontrak campaign yang di-exercise. */
+    ledgerPackage?: string | null;
   }): Promise<QuestClaimLedgerResult> {
     const result: QuestClaimLedgerResult = {
       ledgerEnabled: false,
@@ -1058,7 +1155,8 @@ export class QuestLedgerService implements OnModuleInit {
       errors: [],
     };
     if (!this.isClaimSessionConfigured()) return result;
-    const tpl = this.templateId(TPL.QuestCampaign);
+    const legacy = this.isLegacyPackage(params.ledgerPackage);
+    const tpl = this.templateIdFor(params.ledgerPackage, TPL.QuestCampaign);
     const operator = this.operatorPartyId;
     if (!operator) {
       result.errors.push('Canton operator party not configured');
@@ -1074,19 +1172,29 @@ export class QuestLedgerService implements OnModuleInit {
       params.campaignContractId,
       tpl,
       'DrawWinner',
-      {
-        user: params.userPartyId,
-        claimId: params.claimId,
-        // v31: rewardCode jadi Optional Text — DAML-LF JSON: Some → string
-        // mentah, None → null. (v28 kirim '' utk "tanpa kode"; '' di v31
-        // berarti Some "" → kontrak create SecretRewardCode kosong = DITOLAK
-        // ensure code /= "". Jadi null bila tidak ada kode.)
-        rewardCode: params.rewardCode ?? null,
-        drawnAt: this.zulu(),
-        rewardSender: params.rewardSenderPartyId, // v24: co-controller Settle
-        eligibilityCid: params.eligibilityCid ?? null, // v25: Optional (nullable)
-        lockCid: params.lockCid ?? null, // v31: Optional CoinLock (LOCK_CC)
-      },
+      legacy
+        ? {
+            // v28: rewardCode Text ('' utk tanpa kode), tanpa lockCid, ms-ISO.
+            user: params.userPartyId,
+            claimId: params.claimId,
+            rewardCode: params.rewardCode ?? '',
+            drawnAt: new Date().toISOString(),
+            rewardSender: params.rewardSenderPartyId,
+            eligibilityCid: params.eligibilityCid ?? null,
+          }
+        : {
+            user: params.userPartyId,
+            claimId: params.claimId,
+            // v29: rewardCode jadi Optional Text — DAML-LF JSON: Some → string
+            // mentah, None → null. (v28 kirim '' utk "tanpa kode"; '' di v29
+            // berarti Some "" → kontrak create SecretRewardCode kosong = DITOLAK
+            // ensure code /= "". Jadi null bila tidak ada kode.)
+            rewardCode: params.rewardCode ?? null,
+            drawnAt: this.zulu(),
+            rewardSender: params.rewardSenderPartyId, // v24: co-controller Settle
+            eligibilityCid: params.eligibilityCid ?? null, // v25: Optional (nullable)
+            lockCid: params.lockCid ?? null, // v29: Optional CoinLock (LOCK_CC)
+          },
       [operator],
       `draw-raffle-${params.claimId}-${randomUUID()}`,
       'submit-and-wait-for-transaction-tree',
@@ -1114,6 +1222,8 @@ export class QuestLedgerService implements OnModuleInit {
   async revealRewardCode(params: {
     claimContractId: string;
     code: string;
+    /** Version-pinning: paket kontrak receipt yang di-exercise. */
+    ledgerPackage?: string | null;
   }): Promise<{ ok: boolean; newContractId: string | null; errors: string[] }> {
     if (!this.isClaimSessionConfigured())
       return {
@@ -1121,7 +1231,7 @@ export class QuestLedgerService implements OnModuleInit {
         newContractId: null,
         errors: ['Claim session ledger disabled'],
       };
-    const tpl = this.templateId(TPL.QuestClaimReceipt);
+    const tpl = this.templateIdFor(params.ledgerPackage, TPL.QuestClaimReceipt);
     const operator = this.operatorPartyId;
     if (!operator)
       return {
@@ -1133,7 +1243,12 @@ export class QuestLedgerService implements OnModuleInit {
       params.claimContractId,
       tpl,
       'RevealCode',
-      { code: params.code, revealedAt: this.zulu() },
+      {
+        code: params.code,
+        revealedAt: this.isLegacyPackage(params.ledgerPackage)
+          ? new Date().toISOString()
+          : this.zulu(),
+      },
       [operator],
       `reveal-code-${randomUUID()}`,
     );
@@ -1179,6 +1294,9 @@ export class QuestLedgerService implements OnModuleInit {
     rewardInstrumentAdmin?: string; // resolve caller utk USDCx (CC default DSO)
     featuredAppRightCid?: string | null;
     appProviderPartyId?: string;
+    /** Version-pinning: paket kontrak receipt (v28 Settle = Transfer V1 +
+     *  registry v1; v29 = Transfer V2 Account + registry v2). */
+    ledgerPackage?: string | null;
   }): Promise<{
     ok: boolean;
     settledCid: string | null; // QuestClaimReceipt SETTLED baru
@@ -1193,7 +1311,9 @@ export class QuestLedgerService implements OnModuleInit {
     });
     if (!this.isClaimSessionConfigured())
       return fail(['Claim session ledger disabled']);
-    const tpl = this.templateId(TPL.QuestClaimReceipt);
+    const legacy = this.isLegacyPackage(params.ledgerPackage);
+    const registryVersion: 'v1' | 'v2' = legacy ? 'v1' : 'v2';
+    const tpl = this.templateIdFor(params.ledgerPackage, TPL.QuestClaimReceipt);
     const operator = this.operatorPartyId;
     if (!operator) return fail(['Canton operator party not configured']);
     const dso = this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim();
@@ -1207,14 +1327,19 @@ export class QuestLedgerService implements OnModuleInit {
       ).toISOString();
       const hasReward = params.rewardAmount > 0;
 
-      // ── v31: Account V2 — regular account { owner, provider: null, id: "" } ──
+      // ── v29: Account V2 — regular account { owner, provider: null, id: "" } ──
       // Splice.Api.Token.HoldingV2.Account. owner WAJIB Some utk regular
       // account (scan registry: TokenStandardAccount.tryGetRegularAccountOwner).
+      // Legacy (v28): Transfer V1 — sender/receiver Party string + field lock.
       const account = (partyId: string) => ({
         owner: partyId,
         provider: null,
         id: '',
       });
+      const partyField = (partyId: string) =>
+        legacy ? partyId : account(partyId);
+      const lockField = <T extends object>(transfer: T) =>
+        legacy ? { ...transfer, lock: null } : transfer;
 
       // ── FEE leg: user → feeReceiver (CC Amulet, selalu jalan) ──────────────
       const feeInstrumentAdmin = dso;
@@ -1230,29 +1355,36 @@ export class QuestLedgerService implements OnModuleInit {
           `Insufficient Amulet holdings for fee ${params.feeAmount} CC (user=${params.userPartyId.split('::')[0]})`,
         ]);
       }
-      // v31 TransferInstructionV2.Transfer — TANPA field lock (dihapus di V2);
+      // v29 TransferInstructionV2.Transfer — TANPA field lock (dihapus di V2);
       // sender/receiver berubah Party → Account.
-      const feeTransfer = {
-        sender: account(params.userPartyId),
-        receiver: account(params.feeReceiverPartyId),
+      const feeTransfer = lockField({
+        sender: partyField(params.userPartyId),
+        receiver: partyField(params.feeReceiverPartyId),
         amount: params.feeAmount.toFixed(10),
         instrumentId: { admin: feeInstrumentAdmin, id: 'Amulet' },
         requestedAt: nowIso,
         executeBefore,
         inputHoldingCids: feeInputCids,
         meta: { values: {} },
-      };
+      });
       const feeRegistry = await this.ledger.callTransferFactoryRegistry(
-        {
-          expectedAdmin: feeInstrumentAdmin,
-          // v31: TransferFactory_Transfer V2 — actors eksplisit (sender party;
-          // diekstrak dari Account.owner oleh scan registry).
-          actors: [params.userPartyId],
-          transfer: feeTransfer,
-          extraArgs: { context: { values: {} }, meta: { values: {} } },
-        },
+        legacy
+          ? {
+              // v28: registry v1 — tanpa actors (shape persis kode lama).
+              expectedAdmin: feeInstrumentAdmin,
+              transfer: feeTransfer,
+              extraArgs: { context: { values: {} }, meta: { values: {} } },
+            }
+          : {
+              expectedAdmin: feeInstrumentAdmin,
+              // v29: TransferFactory_Transfer V2 — actors eksplisit (sender
+              // party; diekstrak dari Account.owner oleh scan registry).
+              actors: [params.userPartyId],
+              transfer: feeTransfer,
+              extraArgs: { context: { values: {} }, meta: { values: {} } },
+            },
         feeInstrumentAdmin,
-        'v2',
+        registryVersion,
       );
       if (!feeRegistry) {
         return fail(['Fee leg: callTransferFactoryRegistry returned null']);
@@ -1285,9 +1417,9 @@ export class QuestLedgerService implements OnModuleInit {
             `Insufficient ${rewardInstrumentId} holdings for reward ${params.rewardAmount} (sender=${params.rewardSenderPartyId.split('::')[0]})`,
           ]);
         }
-        rewardTransfer = {
-          sender: account(params.rewardSenderPartyId),
-          receiver: account(params.userPartyId),
+        rewardTransfer = lockField({
+          sender: partyField(params.rewardSenderPartyId),
+          receiver: partyField(params.userPartyId),
           amount: params.rewardAmount.toFixed(10),
           instrumentId: {
             admin: rewardInstrumentAdmin,
@@ -1297,16 +1429,22 @@ export class QuestLedgerService implements OnModuleInit {
           executeBefore,
           inputHoldingCids: rewardInputCids,
           meta: { values: {} },
-        };
+        });
         rewardRegistry = await this.ledger.callTransferFactoryRegistry(
-          {
-            expectedAdmin: rewardInstrumentAdmin,
-            actors: [params.rewardSenderPartyId],
-            transfer: rewardTransfer,
-            extraArgs: { context: { values: {} }, meta: { values: {} } },
-          },
+          legacy
+            ? {
+                expectedAdmin: rewardInstrumentAdmin,
+                transfer: rewardTransfer,
+                extraArgs: { context: { values: {} }, meta: { values: {} } },
+              }
+            : {
+                expectedAdmin: rewardInstrumentAdmin,
+                actors: [params.rewardSenderPartyId],
+                transfer: rewardTransfer,
+                extraArgs: { context: { values: {} }, meta: { values: {} } },
+              },
           rewardInstrumentAdmin,
-          'v2',
+          registryVersion,
         );
         if (!rewardRegistry) {
           return fail([
@@ -1362,7 +1500,8 @@ export class QuestLedgerService implements OnModuleInit {
         // cuma benar-benar dipakai saat FAR on (beneficiary marker); saat FAR
         // off nilainya tidak relevan, hanya perlu valid Party utk lolos validasi.
         appProvider: params.appProviderPartyId ?? operator,
-        settledAt: nowIso,
+        // settledAt = field Text → v29 pakai Zulu detik-presisi; legacy ms-ISO.
+        settledAt: legacy ? nowIso : this.zulu(now),
       };
 
       // ── actAs: [operator, user, rewardSender?] (+ appProvider? bila FAR) ────
@@ -1379,6 +1518,13 @@ export class QuestLedgerService implements OnModuleInit {
 
       // ── Submit Settle choice ────────────────────────────────────────────────
       const commandId = `settle-${params.claimContractId.slice(0, 16)}-${randomUUID()}`;
+      // Hint party utk log/debug: Party string (v1) → username; Account (v2)
+      // → username owner; selainnya 'account'.
+      const partyHint = (v: unknown): string => {
+        if (typeof v === 'string') return v.split('::')[0];
+        const owner = (v as { owner?: unknown } | null)?.owner;
+        return typeof owner === 'string' ? owner.split('::')[0] : 'account';
+      };
       // DIAGNOSTIC: full choiceArgument payload untuk debug COMMAND_PREPROCESSING_FAILED.
       // Gate dengan DEBUG_LEDGER agar JSON.stringify tidak jalan di production.
       if (DEBUG_LEDGER) {
@@ -1386,15 +1532,15 @@ export class QuestLedgerService implements OnModuleInit {
           `SETTLE_DEBUG payload: ${JSON.stringify({
             feeFactoryCid: feeRegistry.factoryId.slice(0, 16),
             feeTransfer: {
-              sender: String(feeTransfer.sender).split('::')[0],
-              receiver: String(feeTransfer.receiver).split('::')[0],
+              sender: partyHint(feeTransfer.sender),
+              receiver: partyHint(feeTransfer.receiver),
               meta_keys: Object.keys(feeTransfer.meta ?? {}),
             },
             feeExtraArgs: feeExtraArgs,
             rewardFactoryCid: rewardRegistry?.factoryId?.slice(0, 16) ?? null,
             rewardTransfer: rewardTransfer
               ? {
-                  sender: String(rewardTransfer.sender).split('::')[0],
+                  sender: partyHint(rewardTransfer.sender),
                   meta_keys: Object.keys(rewardTransfer.meta ?? {}),
                 }
               : null,
@@ -1450,10 +1596,12 @@ export class QuestLedgerService implements OnModuleInit {
     settledContractId: string;
     feeTxId: string;
     rewardTxId: string | null; // v25: null bila kode claim (reward=0), DAML Optional Text
+    /** Version-pinning: paket kontrak receipt yang di-exercise. */
+    ledgerPackage?: string | null;
   }): Promise<{ ok: boolean; errors: string[] }> {
     if (!this.isClaimSessionConfigured())
       return { ok: false, errors: ['Claim session ledger disabled'] };
-    const tpl = this.templateId(TPL.QuestClaimReceipt);
+    const tpl = this.templateIdFor(params.ledgerPackage, TPL.QuestClaimReceipt);
     const operator = this.operatorPartyId;
     if (!operator)
       return { ok: false, errors: ['Canton operator party not configured'] };

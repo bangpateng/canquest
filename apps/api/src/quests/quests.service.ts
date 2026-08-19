@@ -811,6 +811,19 @@ export class QuestsService {
    * Best-effort: kalau create DAML gagal, return null (claim tetap jalan, DAML guard
    * akan reject bila eligibility wajib). Idempoten via commandId.
    */
+  /**
+   * Version-pinning (cutover v28→v29): paket kontrak on-chain quest.
+   * Quest baru menyimpan nama paket di kolom ledgerPackage; quest lama
+   * (kolom null tapi sudah punya kontrak) = dibuat backend lama = v28.
+   */
+  private static ledgerPackageOf(quest: {
+    ledgerPackage?: string | null;
+    ledgerCampaignId?: string | null;
+  }): string | null {
+    if (quest.ledgerPackage) return quest.ledgerPackage;
+    return quest.ledgerCampaignId ? 'canquest-v28' : null;
+  }
+
   private async resolveEligibilityCid(params: {
     questId: string;
     userId: string;
@@ -818,6 +831,8 @@ export class QuestsService {
     eligibilityType: string; // quest.eligibilityType (NONE|LOCK_CC|POINTS)
     eligibilityAmount: number; // quest.eligibilityAmount
     campaignCreatedAt: string; // ISO quest.createdAt (utk lock-after guard)
+    /** Version-pinning: paket kontrak campaign quest ini. */
+    ledgerPackage?: string | null;
   }): Promise<{ eligibilityCid: string | null; lockCid: string | null }> {
     const {
       questId,
@@ -826,9 +841,88 @@ export class QuestsService {
       eligibilityType,
       eligibilityAmount,
       campaignCreatedAt,
+      ledgerPackage,
     } = params;
 
-    // v31 [FIX-14]: "NONE" TIDAK sah di kontrak (campaign dibuat dgn
+    // ── LEGACY v28: semantik lama — "NONE" sah (tanpa proof on-chain),
+    //    tanpa CoinLock, kontrak dibuat di paket v28.
+    if (ledgerPackage === 'canquest-v28') {
+      if (eligibilityType === 'NONE' || eligibilityAmount <= 0)
+        return { eligibilityCid: null, lockCid: null };
+      const cached = await this.prisma.campaignEligibilityLedger.findFirst({
+        where: { questId, userId, status: 'ELIGIBLE' },
+        select: { contractId: true },
+      });
+      if (cached?.contractId)
+        return { eligibilityCid: cached.contractId, lockCid: null };
+      const status = await this.checkEligibilityStatus({
+        userId,
+        eligibilityType,
+        eligibilityAmount,
+        campaignCreatedAt,
+      });
+      if (!status.eligible) {
+        const detail = status.reason ? ` ${status.reason}` : '';
+        throw new BadRequestException(
+          `Not eligible to claim this campaign.${detail}${status.action ? ` ${status.action}` : ''}`,
+        );
+      }
+      const amount = status.currentAmount ?? 0;
+      let lockedAt: string | null = null;
+      if (eligibilityType === 'LOCK_CC') {
+        const locks = await this.prisma.ccLock.findMany({
+          where: { userId, status: 'LOCKED' },
+          select: { lockedAt: true },
+          orderBy: { lockedAt: 'desc' },
+        });
+        const latestLockAt = locks[0]?.lockedAt;
+        lockedAt = latestLockAt ? new Date(latestLockAt).toISOString() : null;
+      }
+      const typeForDaml: 'LOCK_CC' | 'POINTS' =
+        eligibilityType === 'POINTS' ? 'POINTS' : 'LOCK_CC';
+      const expiresAt = new Date(
+        Date.now() + 7 * 24 * 3600 * 1000,
+      ).toISOString();
+      const result = await this.questLedger.createCampaignEligibility({
+        userPartyId,
+        campaignId: questId,
+        campaignCreatedAt,
+        eligibilityType: typeForDaml,
+        amount,
+        lockedAt,
+        expiresAt,
+        ledgerPackage,
+      });
+      if (!result.ok || !result.contractId) {
+        this.logger.warn(
+          `Eligibility create fail (v28): ${result.errors.join(' | ')}`,
+        );
+        return { eligibilityCid: null, lockCid: null };
+      }
+      await this.prisma.campaignEligibilityLedger.upsert({
+        where: { questId_userId: { questId, userId } },
+        create: {
+          questId,
+          userId,
+          contractId: result.contractId,
+          eligibilityType: typeForDaml,
+          amount,
+          lockedAt: lockedAt ? new Date(lockedAt) : null,
+          status: 'ELIGIBLE',
+        },
+        update: {
+          contractId: result.contractId,
+          eligibilityType: typeForDaml,
+          amount,
+          lockedAt: lockedAt ? new Date(lockedAt) : null,
+          status: 'ELIGIBLE',
+        },
+      });
+      return { eligibilityCid: result.contractId, lockCid: null };
+    }
+
+    // ── v29: semantik baru.
+    // v29 [FIX-14]: "NONE" TIDAK sah di kontrak (campaign dibuat dgn
     // eligibilityType POINTS amount 0 oleh quest-ledger). Semua claim kini
     // WAJIB menyertakan eligibility proof → map NONE → POINTS auto-proof
     // (tanpa gate; amount 0 → guard e.amount >= 0 trivially lulus).
@@ -894,7 +988,7 @@ export class QuestsService {
         ) ?? null;
     }
 
-    // 3. LOCK_CC v31: ensure CoinLock on-chain (FIX-11 cross-check lockId).
+    // 3. LOCK_CC v29: ensure CoinLock on-chain (FIX-11 cross-check lockId).
     //    CoinLock amount HARUS == eligibility amount (guard kontrak), jadi
     //    dibuat per (quest, user) dgn lockId deterministik.
     let lockCid: string | null = null;
@@ -937,6 +1031,7 @@ export class QuestsService {
         lockedAt,
         expiresAt,
         lockId: typeForDaml === 'LOCK_CC' ? `lock:${questId}:${userId}` : null,
+        ledgerPackage,
       });
       if (!result.ok || !result.contractId) {
         this.logger.warn(
@@ -976,7 +1071,7 @@ export class QuestsService {
   }
 
   /**
-   * v31: kontrak CoinLock hanya menerima durationDays 3|7|15. Term lock asli
+   * v29: kontrak CoinLock hanya menerima durationDays 3|7|15. Term lock asli
    * (LOCK_TERM_OPTIONS — bisa menit utk uji, atau 30d di produksi) dipetakan
    * ke nilai terdekat; expiresAt CoinLock tetap menyimpan expiry ASLI.
    */
@@ -1346,6 +1441,12 @@ export class QuestsService {
     );
 
     // ── 1. ATOMIC SETTLE (fee + reward dalam 1 transaction tree) ────────────
+    // Version-pinning: receipt mengikuti versi paket campaign quest ini.
+    const questRow = await this.prisma.quest.findUnique({
+      where: { id: questId },
+      select: { ledgerPackage: true, ledgerCampaignId: true },
+    });
+    const ledgerPackage = QuestsService.ledgerPackageOf(questRow ?? {});
     const settleResult = await this.questLedger.settleAtomic({
       claimContractId,
       userPartyId: cantonPartyId,
@@ -1356,6 +1457,7 @@ export class QuestsService {
       rewardToken,
       rewardInstrumentId,
       rewardInstrumentAdmin,
+      ledgerPackage,
     });
     if (!settleResult.ok) {
       throw new Error(
@@ -1391,6 +1493,7 @@ export class QuestsService {
           settledContractId: settledCid,
           feeTxId: updateId,
           rewardTxId: rewardTxIdValue,
+          ledgerPackage,
         })
         .catch((err) =>
           this.logger.warn(`recordTxId fail (non-blocking): ${String(err)}`),
@@ -3115,7 +3218,7 @@ export class QuestsService {
         const campaignContractId = (quest as any).ledgerCampaignId ?? null;
         if (campaignContractId) {
           // v25: resolve eligibility contract (LOCK_CC / POINTS) utk on-chain guard.
-          // v31: return {eligibilityCid, lockCid} — LOCK_CC wajib bawa lockCid.
+          // v29: return {eligibilityCid, lockCid} — LOCK_CC wajib bawa lockCid.
           let eligibility: {
             eligibilityCid: string | null;
             lockCid: string | null;
@@ -3128,6 +3231,7 @@ export class QuestsService {
               eligibilityType: (quest as any).eligibilityType ?? 'NONE',
               eligibilityAmount: (quest as any).eligibilityAmount ?? 0,
               campaignCreatedAt: (quest.createdAt ?? new Date()).toISOString(),
+              ledgerPackage: QuestsService.ledgerPackageOf(quest),
             });
           } catch (e) {
             throw new BadRequestException(String(e?.message ?? e));
@@ -3137,8 +3241,9 @@ export class QuestsService {
             userPartyId: cantonPartyId,
             claimId: reservedDrawId,
             rewardSenderPartyId: rewardPartyId, // v24: co-controller Settle
-            eligibilityCid: eligibility?.eligibilityCid ?? null, // v25/v31 guard
-            lockCid: eligibility?.lockCid ?? null, // v31: CoinLock (LOCK_CC)
+            eligibilityCid: eligibility?.eligibilityCid ?? null, // v25/v29 guard
+            lockCid: eligibility?.lockCid ?? null, // v29: CoinLock (LOCK_CC)
+            ledgerPackage: QuestsService.ledgerPackageOf(quest),
           });
           claimSessionId = claimResult.claimContractId;
           if (claimResult.errors.length > 0) {
@@ -3413,7 +3518,7 @@ export class QuestsService {
         const campaignContractId = (quest as any).ledgerCampaignId ?? null;
         if (campaignContractId) {
           // v25: resolve eligibility contract utk on-chain guard.
-          // v31: return {eligibilityCid, lockCid} — LOCK_CC wajib bawa lockCid.
+          // v29: return {eligibilityCid, lockCid} — LOCK_CC wajib bawa lockCid.
           let eligibility: {
             eligibilityCid: string | null;
             lockCid: string | null;
@@ -3426,6 +3531,7 @@ export class QuestsService {
               eligibilityType: (quest as any).eligibilityType ?? 'NONE',
               eligibilityAmount: (quest as any).eligibilityAmount ?? 0,
               campaignCreatedAt: (quest.createdAt ?? new Date()).toISOString(),
+              ledgerPackage: QuestsService.ledgerPackageOf(quest),
             });
           } catch (e) {
             throw new BadRequestException(String(e?.message ?? e));
@@ -3435,8 +3541,9 @@ export class QuestsService {
             userPartyId: cantonPartyId,
             claimId: draw.id,
             rewardSenderPartyId: this.requireRewardPartyId(), // v24: co-controller Settle
-            eligibilityCid: eligibility?.eligibilityCid ?? null, // v25/v31 guard
-            lockCid: eligibility?.lockCid ?? null, // v31: CoinLock (LOCK_CC)
+            eligibilityCid: eligibility?.eligibilityCid ?? null, // v25/v29 guard
+            lockCid: eligibility?.lockCid ?? null, // v29: CoinLock (LOCK_CC)
+            ledgerPackage: QuestsService.ledgerPackageOf(quest),
           });
           claimSessionId = claimResult.claimContractId;
           if (claimResult.errors.length > 0) {
@@ -3774,7 +3881,7 @@ export class QuestsService {
       rewardType === RewardType.INVITE_CODE_FCFS ? 'CODE_FCFS' : 'CODE_RAFFLE';
 
     let codeClaimSessionId: string | null = null;
-    // v31 dedupe: claimId DETERMINISTIK per (draw|quest,user) — retry memakai
+    // v29 dedupe: claimId DETERMINISTIK per (draw|quest,user) — retry memakai
     // claimId sama (idempoten + didedupe DB via WinnerDraw.claimId unique).
     // Sebelumnya memakai Date.now() → tiap attempt claimId baru = tak terdedupe.
     // Di-scope method-level agar bisa di-persist ke WinnerDraw di bawah.
@@ -3785,7 +3892,7 @@ export class QuestsService {
         const claimId = inviteClaimId;
         try {
           // v25: resolve eligibility contract utk on-chain guard.
-          // v31: return {eligibilityCid, lockCid} — LOCK_CC wajib bawa lockCid.
+          // v29: return {eligibilityCid, lockCid} — LOCK_CC wajib bawa lockCid.
           const eligibility = await this.resolveEligibilityCid({
             questId,
             userId,
@@ -3793,6 +3900,7 @@ export class QuestsService {
             eligibilityType: (quest as any).eligibilityType ?? 'NONE',
             eligibilityAmount: (quest as any).eligibilityAmount ?? 0,
             campaignCreatedAt: (quest.createdAt ?? new Date()).toISOString(),
+            ledgerPackage: QuestsService.ledgerPackageOf(quest),
           });
           const claimResult =
             codeClaimKind === 'CODE_FCFS'
@@ -3801,16 +3909,18 @@ export class QuestsService {
                   userPartyId: cantonPartyId,
                   claimId,
                   rewardSenderPartyId: this.requireRewardPartyId(), // v24: co-controller Settle
-                  eligibilityCid: eligibility?.eligibilityCid ?? null, // v25/v31 guard
-                  lockCid: eligibility?.lockCid ?? null, // v31: CoinLock (LOCK_CC)
+                  eligibilityCid: eligibility?.eligibilityCid ?? null, // v25/v29 guard
+                  lockCid: eligibility?.lockCid ?? null, // v29: CoinLock (LOCK_CC)
+                  ledgerPackage: QuestsService.ledgerPackageOf(quest),
                 })
               : await this.questLedger.drawRaffleWinner({
                   campaignContractId,
                   userPartyId: cantonPartyId,
                   claimId,
                   rewardSenderPartyId: this.requireRewardPartyId(), // v24: co-controller Settle
-                  eligibilityCid: eligibility?.eligibilityCid ?? null, // v25/v31 guard
-                  lockCid: eligibility?.lockCid ?? null, // v31: CoinLock (LOCK_CC)
+                  eligibilityCid: eligibility?.eligibilityCid ?? null, // v25/v29 guard
+                  lockCid: eligibility?.lockCid ?? null, // v29: CoinLock (LOCK_CC)
+                  ledgerPackage: QuestsService.ledgerPackageOf(quest),
                 });
           codeClaimSessionId = claimResult.claimContractId;
           if (claimResult.errors.length > 0) {
@@ -3888,7 +3998,7 @@ export class QuestsService {
             inviteCode: claimedCode,
             distributed: true,
             claimFeeLedgerTxId: feeTxId,
-            // v31 dedupe: claimId on-chain yang dipakai ClaimSlot/DrawWinner
+            // v29 dedupe: claimId on-chain yang dipakai ClaimSlot/DrawWinner
             // (deterministik — unik via constraint WinnerDraw.claimId).
             claimId: inviteClaimId,
           },
@@ -3909,6 +4019,7 @@ export class QuestsService {
         const revealRes = await this.questLedger.revealRewardCode({
           claimContractId: revealTarget,
           code: claimedCode,
+          ledgerPackage: QuestsService.ledgerPackageOf(quest),
         });
         if (!revealRes.ok) {
           this.logger.warn(
@@ -4087,7 +4198,7 @@ export class QuestsService {
       ) {
         try {
           // v25: resolve eligibility contract utk on-chain guard.
-          // v31: return {eligibilityCid, lockCid} — LOCK_CC wajib bawa lockCid.
+          // v29: return {eligibilityCid, lockCid} — LOCK_CC wajib bawa lockCid.
           const eligibility = await this.resolveEligibilityCid({
             questId,
             userId,
@@ -4095,14 +4206,16 @@ export class QuestsService {
             eligibilityType: (quest as any).eligibilityType ?? 'NONE',
             eligibilityAmount: (quest as any).eligibilityAmount ?? 0,
             campaignCreatedAt: (quest.createdAt ?? new Date()).toISOString(),
+            ledgerPackage: QuestsService.ledgerPackageOf(quest),
           });
           const claimResult = await this.questLedger.drawRaffleWinner({
             campaignContractId: ccCodeCampaignCid,
             userPartyId: cantonPartyId,
             claimId: draw.id,
             rewardSenderPartyId: this.requireRewardPartyId(), // v24: co-controller Settle
-            eligibilityCid: eligibility?.eligibilityCid ?? null, // v25/v31 guard
-            lockCid: eligibility?.lockCid ?? null, // v31: CoinLock (LOCK_CC)
+            eligibilityCid: eligibility?.eligibilityCid ?? null, // v25/v29 guard
+            lockCid: eligibility?.lockCid ?? null, // v29: CoinLock (LOCK_CC)
+            ledgerPackage: QuestsService.ledgerPackageOf(quest),
           });
           ccCodeClaimSessionId = claimResult.claimContractId;
           if (claimResult.errors.length > 0) {
@@ -4273,6 +4386,7 @@ export class QuestsService {
         const revealRes = await this.questLedger.revealRewardCode({
           claimContractId: settledCid ?? ccCodeClaimSessionId!,
           code: finalCode,
+          ledgerPackage: QuestsService.ledgerPackageOf(quest),
         });
         if (!revealRes.ok) {
           this.logger.warn(

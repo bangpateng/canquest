@@ -458,8 +458,12 @@ model Quest {
   questKind        QuestKind         @default(CAMPAIGN)
   /// DAML QuestCampaign contract ID on Canton ledger (set after admin creates quest).
   /// Used by claimFcfsSlot() / drawRaffleWinner() to reference the on-chain campaign.
-  /// v31 dedupe (pengganti contract keys): unique — 1 quest ↔ 1 kontrak on-chain.
+  /// v29 dedupe (pengganti contract keys): unique — 1 quest ↔ 1 kontrak on-chain.
   ledgerCampaignId String? @unique
+  /// Version-pinning (cutover v28→v29): nama paket DAML kontrak on-chain
+  /// (mis. 'canquest-v29'). Null + ledgerCampaignId terisi = dibuat backend
+  /// lama = 'canquest-v28' — claim path memilih template/payload per versi.
+  ledgerPackage    String?
   /// Mode gate akses Earn per-campaign (configurable dari dashboard admin).
   /// CC_OR_POINTS (default) = lock CC atau spend points (perilaku lama).
   /// CC_ONLY / POINTS_ONLY / NONE = admin pilih per-event.
@@ -538,7 +542,7 @@ model WinnerDraw {
   distributedAt          DateTime?
   /// Set while on-chain FCFS claim runs (prevents parallel double-claim / double payout).
   fcfsClaimLockedAt      DateTime?
-  /// v31 dedupe (pengganti contract keys): claimId yang dikirim ke
+  /// v29 dedupe (pengganti contract keys): claimId yang dikirim ke
   /// ClaimSlot/DrawWinner on-chain. Jalur FCFS/raffle = WinnerDraw.id (unik
   /// via PK); jalur invite = "code-<drawId|questId:userId>" (deterministik,
   /// di-persist di sini agar retry ter-dedupe DB-level).
@@ -714,10 +718,10 @@ model CampaignEligibilityLedger {
   lockedAt        DateTime?
   /// "ELIGIBLE" | "REVOKED" | "EXPIRED" (match DAML status).
   status          String   @default("ELIGIBLE")
-  /// v31 [FIX-11]: lockId yang dicocokkan on-chain dgn CoinLock.lockId
+  /// v29 [FIX-11]: lockId yang dicocokkan on-chain dgn CoinLock.lockId
   /// (format "lock:<questId>:<userId>", deterministik). Null utk POINTS.
   lockId          String?
-  /// v31: CoinLock contract id (Main:CoinLock) utk choice arg ClaimSlot/DrawWinner.
+  /// v29: CoinLock contract id (Main:CoinLock) utk choice arg ClaimSlot/DrawWinner.
   coinLockCid     String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

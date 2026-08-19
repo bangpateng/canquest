@@ -549,7 +549,7 @@ export class AdminService {
           );
           // v25: map entryGateMode → DAML eligibilityType.
           //   CC_ONLY → LOCK_CC, POINTS_ONLY → POINTS, CC_OR_POINTS/NONE → NONE.
-          // v31: "NONE" di-map quest-ledger ke POINTS amount 0 (FIX-14 —
+          // v29: "NONE" di-map quest-ledger ke POINTS amount 0 (FIX-14 —
           // kontrak hanya menerima LOCK_CC|POINTS; claim path auto-issue proof).
           const gateMode = data.entryGateMode ?? EntryGateMode.CC_OR_POINTS;
           const eligibilityType: 'NONE' | 'LOCK_CC' | 'POINTS' =
@@ -564,7 +564,7 @@ export class AdminService {
               : eligibilityType === 'POINTS'
                 ? (data.entryCostPoints ?? 200)
                 : 0;
-          // v31 FIX-13: claimFeeCc WAJIB > 0 (ensure kontrak menolak fee-0).
+          // v29 FIX-13: claimFeeCc WAJIB > 0 (ensure kontrak menolak fee-0).
           // Null → default reward-type (2 utk kode, 3 utk CC/token) sesuai
           // konvensi kolom Quest.claimFeeCc.
           const claimFeeCcDefault = questKindDaml.startsWith('CODE') ? 2 : 3;
@@ -572,7 +572,7 @@ export class AdminService {
             quest.claimFeeCc ?? claimFeeCcDefault,
             claimFeeCcDefault,
           );
-          // v31 dedupe pre-submit (pengganti contract keys): jangan buat
+          // v29 dedupe pre-submit (pengganti contract keys): jangan buat
           // QuestCampaign kedua utk quest yang sudah punya ledgerCampaignId
           // (unique constraint Quest.ledgerCampaignId menjamin DB-level).
           const questNow = await this.prisma.quest.findUnique({
@@ -591,7 +591,7 @@ export class AdminService {
             questKind: questKindDaml,
             rewardCc: quest.rewardCc,
             rewardToken: quest.rewardToken === 'USDCx' ? 'USDCx' : 'CC', // v25 FIX bug: tidak dikirim sebelumnya
-            claimFeeCc, // v31: selalu > 0 (FIX-13)
+            claimFeeCc, // v29: selalu > 0 (FIX-13)
             maxWinners: quest.maxWinners ?? 0,
             eligibilityType, // v25 NEW
             eligibilityAmount, // v25 NEW
@@ -600,7 +600,12 @@ export class AdminService {
             await this.prisma.quest.update({
               where: { id: quest.id },
 
-              data: { ledgerCampaignId: ledgerResult.contractId } as any,
+              data: {
+                ledgerCampaignId: ledgerResult.contractId,
+                // Version-pinning: catat paket kontrak campaign ini (claim
+                // path memilih template/payload sesuai versi — cutover v28→v29).
+                ledgerPackage: this.questLedger.packageName,
+              },
             });
             this.logger.log(
               `QuestCampaign on-chain: quest=${quest.id.slice(0, 8)} kind=${questKindDaml} contract=${ledgerResult.contractId.slice(0, 12)}...`,

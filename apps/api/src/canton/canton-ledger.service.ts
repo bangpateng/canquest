@@ -351,10 +351,10 @@ export class CantonLedgerService {
     choiceArguments: unknown,
     instrumentAdmin: string,
     /**
-     * v31: token-standard registry version. 'v1' (default) = jalur lama
+     * v29: token-standard registry version. 'v1' (default) = jalur lama
      * (executeTransferFactoryTransfer dkk — TIDAK lewat kontrak canquest).
      * 'v2' = TransferInstructionV2 (Account-based sender/receiver) — dipakai
-     * quest Settle/ExecuteTransfer canquest-v31. Factory v2 di splice-node
+     * quest Settle/ExecuteTransfer canquest-v29. Factory v2 di splice-node
      * 0.6.12 = ExternalPartyAmuletRules (implement interface V2).
      */
     version: 'v1' | 'v2' = 'v1',

@@ -1,5 +1,5 @@
 -- ============================================================
--- CanQuest v30/v31 — Test Suite (module Test)
+-- CanQuest v29 — Test Suite (module Test)
 --
 -- Menjalankan `daml test` akan mengeksekusi fungsi `test` di bawah.
 -- Cakupan:
@@ -444,7 +444,7 @@ testStateMachine p = do
 -- ------------------------------------------------------------
 -- ------------------------------------------------------------
 -- ------------------------------------------------------------
--- 6b. GUARD BARU v31 ([FIX-13]/[FIX-14])
+-- 6b. GUARD BARU ([FIX-13]/[FIX-14])
 -- ------------------------------------------------------------
 testCampaignGuards : P -> Script ()
 testCampaignGuards p = do

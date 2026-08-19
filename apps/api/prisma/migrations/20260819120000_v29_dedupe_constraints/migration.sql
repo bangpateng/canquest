@@ -1,4 +1,4 @@
--- v31: Dedupe DB (pengganti contract keys — SDK 3.x tidak mendukung contract keys).
+-- v29: Dedupe DB (pengganti contract keys — SDK 3.x tidak mendukung contract keys).
 --
 -- Uniqueness campaignId / claimId / lockId + kolom lockId/coinLockCid untuk
 -- cross-check FIX-11 di claim path LOCK_CC. Lihat HANDOFF_DAML_V31.md Langkah 2.3.

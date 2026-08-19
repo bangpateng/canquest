@@ -1,10 +1,12 @@
 -- ============================================================
--- CanQuest DAML Contract v30 — module Main
--- Package: canquest-v30 | SDK: 3.4.11
+-- CanQuest DAML Contract v29 — module Main
+-- Package: canquest-v29 | SDK: 3.4.11
 --
--- CHANGE v29 → v30 (SECURITY FIXES dari audit + koreksi tipe):
+-- NOTE VERSI: v29 = konsolidasi seluruh iterasi workspace v29–v31
+-- (security fixes audit + koreksi tipe TransferV2 + FIX-13/14/15).
+-- Upgrade produksi berurutan: v28 → v29.
 --
---   KOREKSI TIPE (v31, dikonfirmasi via CIP-112 / dokumentasi resmi
+-- KOREKSI TIPE (dikonfirmasi via CIP-112 / dokumentasi resmi
 --   Splice.Api.Token.TransferInstructionV2 & HoldingV2):
 --   Transfer.sender dan Transfer.receiver bertipe Account (BUKAN Party):
 --     Account = { owner : Optional Party, provider : Optional Party, id : Text }
@@ -13,7 +15,7 @@
 --     InstrumentId = { admin : Party, id : Text }
 --   Validasi v30 pakai perbandingan Party langsung (feeTransfer.sender ==
 --   userAddress) SALAH — tidak compile karena sender bukan Party.
---   v31 pakai .owner (Optional Party):
+--   Kontrak ini pakai .owner (Optional Party):
 --     feeTransfer.sender.owner == Some userAddress
 --   Field `actors : [Party]` pada TransferFactory_Transfer diisi dari Party
 --   hasil ekstraksi .owner (basicAccount), bukan dari Account itu sendiri.

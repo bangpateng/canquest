@@ -1,5 +1,13 @@
 # HANDOFF DAML v31 — CanQuest (19 Agustus 2026)
 
+> ⚠️ **CATATAN RENAME (19 Agt 2026, sore):** paket yang dipromosikan ke produksi
+> diberi nama **`canquest-v29`** (bukan v31) — keputusan user agar penomoran
+> produksi berurutan 28 → 29; iterasi workspace v29–v31 dikonsolidasikan ke
+> satu paket v29 (isi kontrak identik dengan yang dijelaskan dokumen ini).
+> DAR: `canquest-v29-1.0.0.dar` (test 120 transaksi hijau). Backend default
+> `#canquest-v29`. Baca "v31" pada dokumen ini sebagai "paket hasil
+> konsolidasi" (= v29 produksi).
+
 > Dokumen ini dibuat untuk melanjutkan pekerjaan di chat/sesi baru.
 > Baca file ini sampai selesai sebelum mengerjakan apa pun.
 > Prompt pembuka untuk chat baru ada di bagian paling bawah.
@@ -13,7 +21,7 @@
 | Build DAR (`canquest-0.1.0.dar`) | ✅ Sukses |
 | Sinkronisasi ke `packages/daml` (repo) | ❌ Langkah 1 (belum) |
 | Penyesuaian backend (apps/api) | ✅ Langkah 2 (19 Agt 2026 — lihat §4a) |
-| Smoke test devnet (Settle/ExecuteTransfer asli) | ❌ Langkah 3 (belum) |
+| Smoke test mainnet (Settle/ExecuteTransfer asli) | ❌ Langkah 3 — jalankan via `RUNBOOK_V29_MAINNET_SMOKE.md` |
 | Deploy VPS produksi | ❌ Langkah 4 (belum) |
 
 **Lokasi file kerja terbaru (DI LUAR REPO):** `C:\Users\Bang Pateng\test\`
@@ -47,7 +55,7 @@
 
 ## 4. ROADMAP
 
-### 4a. Catatan eksekusi Langkah 2 (19 Agt 2026 — commit `feat(api): align backend with canquest-v31`)
+### 4a. Catatan eksekusi Langkah 2 (19 Agt 2026 — commit `feat(api): align backend with canquest-v29`)
 
 1. **Codegen TIDAK dijalankan** — diverifikasi (grep seluruh apps/api + apps/web): backend tidak memakai binding TS hasil `daml codegen`; integrasi via Canton JSON API dengan template-ID string. Ekuivalen "codegen ulang" = update template ID/payload di `quest-ledger.service.ts` (dilakukan).
 2. **eligibilityType "NONE" tidak sah di kontrak (FIX-14)** → di-map `NONE`→`POINTS` amount 0 saat create campaign; claim path (`resolveEligibilityCid`) kini SELALU membuat CampaignEligibility (auto-issue POINTS proof bila tanpa gate).
@@ -62,11 +70,11 @@
 
 ### Langkah 1 — Promosikan v31 ke repo produksi
 1. Salin `C:\Users\Bang Pateng\test\daml\Main.daml` dan `Test.daml` → `packages/daml/daml/`; pindahkan `Main.daml` v28 lama → `packages/daml/legacy/Main.v28.legacy.daml`.
-2. `packages/daml/daml.yaml`: `name: canquest-v31`, dependencies `daml-prim`, `daml-stdlib`, `daml-script`, data-dependencies 3 DAR:
+2. `packages/daml/daml.yaml`: `name: canquest-v29`, dependencies `daml-prim`, `daml-stdlib`, `daml-script`, data-dependencies 3 DAR:
    `splice-api-token-transfer-instruction-v2-current.dar`, `splice-api-token-metadata-v1-current.dar`, `splice-api-featured-app-v2-1.0.0.dar` (hapus 4 DAR v1 lama dari daftar).
 3. `scripts/fetch-daml-deps.sh`: ganti array `TARGETS` menjadi 3 nama file di atas (bundle splice-node yang sama, `SPLICE_VERSION` tetap 0.6.12).
 4. Verifikasi di `packages/daml`: `daml test` (harus `test: ok, ±120 transactions`) dan `daml build` (DAR tercipta).
-5. Commit dengan pesan ala: `feat(daml): promote canquest-v31 (security fixes FIX-13..15) + full test suite`.
+5. Commit dengan pesan ala: `feat(daml): promote canquest-v29 (security fixes FIX-13..15) + full test suite`.
 
 ### Langkah 2 — Penyesuaian backend (apps/api)
 File terdampak (hasil survei): `apps/api/src/canton/quest-ledger.service.ts` (terikat `canquest-v28`/codegen lama), `apps/api/src/quests/quests.service.ts`, alur wallet (`username`/`inviteCode` → `userProfileRef`, registrasi 2-step baru: `WalletRegistrationProposal` → `Accept` oleh user).

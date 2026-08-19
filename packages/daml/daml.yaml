@@ -1,6 +1,6 @@
 sdk-version: 3.4.11
 # ============================================================
-# CanQuest DAML Package — canquest-v31 (promoted dari workspace test)
+# CanQuest DAML Package — canquest-v29 (promoted dari workspace test)
 # Version: 1.0.0
 # SDK: 3.4.11 (Canton Network)
 #
@@ -37,7 +37,7 @@ sdk-version: 3.4.11
 #   File DAR dari bundle splice-node v0.6.12 (lihat scripts/fetch-daml-deps.sh).
 #   Transfer-instruction naik v1 → v2 (Account-based sender/receiver).
 # ============================================================
-name: canquest-v31
+name: canquest-v29
 source: daml
 version: 1.0.0
 dependencies:
