@@ -1,17 +1,12 @@
-import { CQ_ADMIN_ACCESS_COOKIE } from '@/lib/auth/auth-cookies';
-import { internalApiBase } from '@/lib/api/internal-api-url';
 import { type NextRequest, NextResponse } from 'next/server';
+
+import { nestWithAdminAccessCookie } from '@/lib/auth/nest-proxy-admin-access';
 
 export const runtime = 'nodejs';
 
 const MAX_BYTES = 5 * 1024 * 1024;
 
 export async function DELETE(req: NextRequest) {
-  const token = req.cookies.get(CQ_ADMIN_ACCESS_COOKIE)?.value;
-  if (!token) {
-    return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
-  }
-
   let body: { url?: string };
   try {
     body = (await req.json()) as { url?: string };
@@ -19,37 +14,14 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ message: 'Expected JSON body' }, { status: 400 });
   }
 
-  const url = `${internalApiBase()}/admin/uploads/quest-asset`;
-  try {
-    const res = await fetch(url, {
-      method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ url: body.url }),
-      cache: 'no-store',
-    });
-    const text = await res.text();
-    let data: unknown = {};
-    try {
-      data = text ? JSON.parse(text) : {};
-    } catch {
-      data = { message: text || res.statusText };
-    }
-    return NextResponse.json(data, { status: res.status });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'API unreachable';
-    return NextResponse.json({ message: `Gateway error: ${message}` }, { status: 502 });
-  }
+  return nestWithAdminAccessCookie(req, '/admin/uploads/quest-asset', {
+    method: 'DELETE',
+    body: JSON.stringify({ url: body.url }),
+    headers: { 'Content-Type': 'application/json' },
+  });
 }
 
 export async function POST(req: NextRequest) {
-  const token = req.cookies.get(CQ_ADMIN_ACCESS_COOKIE)?.value;
-  if (!token) {
-    return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
-  }
-
   let formData: FormData;
   try {
     formData = await req.formData();
@@ -70,24 +42,11 @@ export async function POST(req: NextRequest) {
   const upstream = new FormData();
   upstream.append('file', f, f.name || 'upload.jpg');
 
-  const url = `${internalApiBase()}/admin/uploads/quest-asset`;
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: upstream,
-      cache: 'no-store',
-    });
-    const text = await res.text();
-    let data: unknown = {};
-    try {
-      data = text ? JSON.parse(text) : {};
-    } catch {
-      data = { message: text || res.statusText };
-    }
-    return NextResponse.json(data, { status: res.status });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'API unreachable';
-    return NextResponse.json({ message: `Gateway error: ${message}` }, { status: 502 });
-  }
+  // Delegates to nestWithAdminAccessCookie so the x-admin-bff-secret header is
+  // attached — nginx rejects direct /api/admin/* calls without it (403), which
+  // silently broke every quest logo/banner upload from the admin panel.
+  return nestWithAdminAccessCookie(req, '/admin/uploads/quest-asset', {
+    method: 'POST',
+    body: upstream,
+  });
 }
