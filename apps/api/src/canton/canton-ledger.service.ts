@@ -350,6 +350,14 @@ export class CantonLedgerService {
   async callTransferFactoryRegistry(
     choiceArguments: unknown,
     instrumentAdmin: string,
+    /**
+     * v31: token-standard registry version. 'v1' (default) = jalur lama
+     * (executeTransferFactoryTransfer dkk — TIDAK lewat kontrak canquest).
+     * 'v2' = TransferInstructionV2 (Account-based sender/receiver) — dipakai
+     * quest Settle/ExecuteTransfer canquest-v31. Factory v2 di splice-node
+     * 0.6.12 = ExternalPartyAmuletRules (implement interface V2).
+     */
+    version: 'v1' | 'v2' = 'v1',
   ): Promise<{
     factoryId: string;
     choiceContextData: Record<string, unknown>;
@@ -368,7 +376,7 @@ export class CantonLedgerService {
         'http://127.0.0.1:8080'
       ).replace(/\/$/, '');
       const scanBase = `${validatorUrl}/api/validator/v0/scan-proxy`;
-      url = `${scanBase}/registry/transfer-instruction/v1/transfer-factory`;
+      url = `${scanBase}/registry/transfer-instruction/${version}/transfer-factory`;
     } else {
       // Non-CC path: Utility Registry API.
       const registryBase = (
@@ -376,7 +384,7 @@ export class CantonLedgerService {
         'https://api.utilities.digitalasset.com'
       ).replace(/\/$/, '');
       const registrarPartyId = encodeURIComponent(instrumentAdmin);
-      url = `${registryBase}/api/token-standard/v0/registrars/${registrarPartyId}/registry/transfer-instruction/v1/transfer-factory`;
+      url = `${registryBase}/api/token-standard/v0/registrars/${registrarPartyId}/registry/transfer-instruction/${version}/transfer-factory`;
     }
 
     this.logger.debug(

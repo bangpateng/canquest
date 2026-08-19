@@ -400,7 +400,7 @@ model CcLock {
   lockedAt        DateTime  @default(now())
   expiresAt       DateTime // lockedAt + lockSeconds
   status          String    @default("LOCKED") // LOCKED | UNLOCKED
-  lockedAmuletCid String?
+  lockedAmuletCid String?   @unique
   unlockedAt      DateTime?
   createdAt       DateTime  @default(now())
 
@@ -458,7 +458,8 @@ model Quest {
   questKind        QuestKind         @default(CAMPAIGN)
   /// DAML QuestCampaign contract ID on Canton ledger (set after admin creates quest).
   /// Used by claimFcfsSlot() / drawRaffleWinner() to reference the on-chain campaign.
-  ledgerCampaignId String?
+  /// v31 dedupe (pengganti contract keys): unique — 1 quest ↔ 1 kontrak on-chain.
+  ledgerCampaignId String? @unique
   /// Mode gate akses Earn per-campaign (configurable dari dashboard admin).
   /// CC_OR_POINTS (default) = lock CC atau spend points (perilaku lama).
   /// CC_ONLY / POINTS_ONLY / NONE = admin pilih per-event.
@@ -537,6 +538,11 @@ model WinnerDraw {
   distributedAt          DateTime?
   /// Set while on-chain FCFS claim runs (prevents parallel double-claim / double payout).
   fcfsClaimLockedAt      DateTime?
+  /// v31 dedupe (pengganti contract keys): claimId yang dikirim ke
+  /// ClaimSlot/DrawWinner on-chain. Jalur FCFS/raffle = WinnerDraw.id (unik
+  /// via PK); jalur invite = "code-<drawId|questId:userId>" (deterministik,
+  /// di-persist di sini agar retry ter-dedupe DB-level).
+  claimId                String?   @unique
 
   @@unique([questId, userId])
 }
@@ -708,12 +714,18 @@ model CampaignEligibilityLedger {
   lockedAt        DateTime?
   /// "ELIGIBLE" | "REVOKED" | "EXPIRED" (match DAML status).
   status          String   @default("ELIGIBLE")
+  /// v31 [FIX-11]: lockId yang dicocokkan on-chain dgn CoinLock.lockId
+  /// (format "lock:<questId>:<userId>", deterministik). Null utk POINTS.
+  lockId          String?
+  /// v31: CoinLock contract id (Main:CoinLock) utk choice arg ClaimSlot/DrawWinner.
+  coinLockCid     String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   @@unique([questId, userId])
   @@index([userId, status])
   @@index([questId, status])
+  @@index([lockId])
 }
 
 // ─── v25: DAML PlatformTransfer contract tracking ──────────────────────────

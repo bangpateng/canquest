@@ -12,7 +12,7 @@
 | Test suite `Test.daml` (120 transaksi, ±45 test negatif) | ✅ Hijau semua |
 | Build DAR (`canquest-0.1.0.dar`) | ✅ Sukses |
 | Sinkronisasi ke `packages/daml` (repo) | ❌ Langkah 1 (belum) |
-| Penyesuaian backend (apps/api) | ❌ Langkah 2 (belum) |
+| Penyesuaian backend (apps/api) | ✅ Langkah 2 (19 Agt 2026 — lihat §4a) |
 | Smoke test devnet (Settle/ExecuteTransfer asli) | ❌ Langkah 3 (belum) |
 | Deploy VPS produksi | ❌ Langkah 4 (belum) |
 
@@ -46,6 +46,19 @@
 - #6 Dedupe off-chain (lihat Langkah 2).
 
 ## 4. ROADMAP
+
+### 4a. Catatan eksekusi Langkah 2 (19 Agt 2026 — commit `feat(api): align backend with canquest-v31`)
+
+1. **Codegen TIDAK dijalankan** — diverifikasi (grep seluruh apps/api + apps/web): backend tidak memakai binding TS hasil `daml codegen`; integrasi via Canton JSON API dengan template-ID string. Ekuivalen "codegen ulang" = update template ID/payload di `quest-ledger.service.ts` (dilakukan).
+2. **eligibilityType "NONE" tidak sah di kontrak (FIX-14)** → di-map `NONE`→`POINTS` amount 0 saat create campaign; claim path (`resolveEligibilityCid`) kini SELALU membuat CampaignEligibility (auto-issue POINTS proof bila tanpa gate).
+3. **CoinLock**: dibuat 2-step (`CoinLockProposal`→`AcceptLock`) di `quest-ledger.createCoinLock`, lazy saat claim LOCK_CC, lockId deterministik `lock:<questId>:<userId>`. Konstrain `durationDays ∈ {3,7,15}` → term asli dipetakan ke terdekat (produksi 30d→15d; `expiresAt` asli dipertahankan — guard kontrak tidak mencocokkan keduanya). **Saran masa depan**: samakan `LOCK_TERM_OPTIONS` dengan whitelist kontrak.
+4. **Reward non-CC (USDCx) TIDAK lewat Settle on-chain**: Settle v31 mem-pin fee DAN reward ke satu pasangan instrument (Amulet/DSO) → campaign USDCx dibuat `rewardCc=0` di chain, delivery tetap jalur token terpisah (konsisten FIX-15: rewardCc=0 tidak wajib leg reward).
+5. **TransferInstructionV2** (verifikasi dari source splice 0.6.12): `sender/receiver` = Account `{owner:<party>, provider:null, id:""}`; TANPA field `lock`; registry endpoint `/registry/transfer-instruction/v2/transfer-factory`; factory = ExternalPartyAmuletRules; Amulet mengimplementasikan Holding V1+V2 dan FAR V1+V2. `callTransferFactoryRegistry` sekarang menerima param `version` ('v1' default — jalur wallet/swap lama tidak berubah).
+6. **Dedupe DB** (pengganti contract keys): unique baru — `Quest.ledgerCampaignId`, `WinnerDraw.claimId`, `CcLock.lockedAmuletCid` + kolom `CampaignEligibilityLedger.lockId/coinLockCid` (migration `20260819120000_v31_dedupe_constraints`, deploy via `prisma migrate deploy`). Pre-submit: admin skip bila quest sudah punya kontrak; claimId jalur invite jadi deterministik (tanpa `Date.now()`). "1 eligibility per user per campaign" sudah ada (`@@unique([questId,userId])`).
+7. **Timestamp Zulu** detik-presisi (`YYYY-MM-DDTHH:MM:SSZ`) via helper `zulu()/toZulu()` untuk SEMUA field Text waktu on-chain (perbandingan leksikografik aman); field DAML `Time` (requestedAt/executeBefore) tetap RFC3339 ms.
+8. **Env wajib tambahan utk create campaign**: `CANTON_REWARD_PARTY_ID`, `CANTON_FEE_RECIPIENT_PARTY_ID`, `CANTON_DSO_PARTY_ID` (field `trusted*`); opsional `CANTON_APP_PROVIDER_PARTY_ID` (FAR).
+9. **claimFeeCc**: admin kini resolve default 2 (kode) / 3 (CC-token) bila null — sebelumnya `?? 0` yang ditolak ensure FIX-13.
+10. Verifikasi: `npm run build` OK; jest 65/65 lulus. Lint: 0 error baru (68 error warisan `as any` lama — tidak disentuh).
 
 ### Langkah 1 — Promosikan v31 ke repo produksi
 1. Salin `C:\Users\Bang Pateng\test\daml\Main.daml` dan `Test.daml` → `packages/daml/daml/`; pindahkan `Main.daml` v28 lama → `packages/daml/legacy/Main.v28.legacy.daml`.
