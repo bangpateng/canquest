@@ -1,12 +1,11 @@
 #!/bin/bash
 # ============================================================
-# CanQuest — Fetch 4 DAR Splice API dependencies dari GitHub release
+# CanQuest — Fetch 3 DAR Splice API dependencies dari GitHub release
 #
-# daml build canquest-v22 butuh 4 DAR di packages/daml/dars/:
-#   - splice-api-token-transfer-instruction-v1
-#   - splice-api-token-holding-v1
-#   - splice-api-token-metadata-v1
-#   - splice-api-featured-app-v2
+# daml build canquest-v31 butuh 3 DAR di packages/daml/dars/:
+#   - splice-api-token-transfer-instruction-v2-current
+#   - splice-api-token-metadata-v1-current
+#   - splice-api-featured-app-v2-1.0.0
 #
 # Sumber resmi (per Canton AI): GitHub release bundle splice-node.tar.gz
 #   https://github.com/digital-asset/decentralized-canton-sync/releases
@@ -15,11 +14,11 @@
 # CARA PAKAI:
 #   cd /var/www/canquest   (atau mana saja)
 #   bash scripts/fetch-daml-deps.sh
-#   # default: versi 0.5.0 (match SDK 3.4.11). Override:
+#   # default: versi 0.6.12 (match SDK 3.4.11). Override:
 #   #   SPLICE_VERSION=0.6.13 bash scripts/fetch-daml-deps.sh
 #
 # Prereq: curl, tar, find
-# Output: 4 file .dar di packages/daml/dars/
+# Output: 3 file .dar di packages/daml/dars/
 # ============================================================
 set -uo pipefail
 
@@ -37,13 +36,13 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 # GitHub release bundle (Canton AI confirmed URL pattern)
 BUNDLE_URL="https://github.com/digital-asset/decentralized-canton-sync/releases/download/v${SPLICE_VERSION}/${SPLICE_VERSION}_splice-node.tar.gz"
 
-# 4 DAR target — substring nama file yg dicari di dalam bundle
+# DAR target — substring nama file yg dicari di dalam bundle
 declare -a TARGETS=(
-  "splice-api-token-transfer-instruction-v1"
-  "splice-api-token-holding-v1"
-  "splice-api-token-metadata-v1"
-  "splice-api-featured-app-v2"
+  "splice-api-token-transfer-instruction-v2-current"
+  "splice-api-token-metadata-v1-current"
+  "splice-api-featured-app-v2-1.0.0"
 )
+DAR_COUNT=${#TARGETS[@]}
 
 for cmd in curl tar find; do
   command -v $cmd >/dev/null 2>&1 || { echo "❌ $cmd belum terinstall"; exit 1; }
@@ -68,12 +67,12 @@ for tgt in "${TARGETS[@]}"; do
     EXISTING=$((EXISTING + 1))
   fi
 done
-if [ "$EXISTING" -eq 4 ]; then
-  echo "✅ Semua 4 DAR sudah ada di $DARS_DIR. Skip download."
+if [ "$EXISTING" -eq "$DAR_COUNT" ]; then
+  echo "✅ Semua $DAR_COUNT DAR sudah ada di $DARS_DIR. Skip download."
   ls -1 "$DARS_DIR"/splice-api-*.dar 2>/dev/null | sed 's|.*/|  • |'
   exit 0
 fi
-echo "  ($EXISTING/4 DAR sudah ada, download sisanya)"
+echo "  ($EXISTING/$DAR_COUNT DAR sudah ada, download sisanya)"
 echo ""
 
 # ── 1. Download bundle ───────────────────────────────────────
@@ -108,8 +107,8 @@ tar xzf "$BUNDLE_FILE" -C "$EXTRACT_DIR" 2>/dev/null || {
 echo "✅ Bundle ter-extract"
 echo ""
 
-# ── 3. Cari + copy 4 DAR target ──────────────────────────────
-echo "▶ [3/3] Cari + copy 4 DAR Splice API ke $DARS_DIR:"
+# ── 3. Cari + copy DAR target ────────────────────────────────
+echo "▶ [3/3] Cari + copy $DAR_COUNT DAR Splice API ke $DARS_DIR:"
 echo "--------------------------------------------------"
 FOUND_COUNT=0
 for tgt in "${TARGETS[@]}"; do
@@ -140,8 +139,8 @@ echo "=================================================="
 echo " DAR di $DARS_DIR:"
 ls -1 "$DARS_DIR"/*.dar 2>/dev/null | sed 's|.*/|  • |'
 echo ""
-echo " Target found: $FOUND_COUNT / 4"
-if [ "$FOUND_COUNT" -eq 4 ]; then
+echo " Target found: $FOUND_COUNT / $DAR_COUNT"
+if [ "$FOUND_COUNT" -eq "$DAR_COUNT" ]; then
   echo ""
   echo " ✅ SEMUA DAR dependencies siap."
   echo "    Sekarang bisa daml build:"

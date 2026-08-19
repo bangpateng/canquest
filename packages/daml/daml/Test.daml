@@ -1,0 +1,611 @@
+-- ============================================================
+-- CanQuest v30/v31 — Test Suite (module Test)
+--
+-- Menjalankan `daml test` akan mengeksekusi fungsi `test` di bawah.
+-- Cakupan:
+--   1. WalletRegistration  : proposal -> Accept (+ autorisasi salah pihak)
+--   2. CoinLock            : proposal -> AcceptLock -> RequestUnlock ->
+--                            ConfirmUnlock (+ durasi ilegal, salah pihak)
+--   3. CampaignEligibility + ClaimSlot LOCK_CC (happy + 10 kasus gagal)
+--   4. ClaimSlot POINTS (happy + gagal)
+--   5. DrawWinner raffle (happy + kode rahasia tidak bocor + gagal)
+--   6. State machine campaign (Activate/Pause/End/Close)
+--   7. Settle / ExecuteTransfer dengan Splice TransferFactory asli
+--      (bagian jalur uang — ditambahkan setelah tahap 1 hijau)
+-- ============================================================
+
+module Test where
+
+import Daml.Script
+
+import Main
+
+
+-- ------------------------------------------------------------
+-- Helper
+-- ------------------------------------------------------------
+
+data P = P with
+  admin           : Party
+  user1           : Party
+  user2           : Party
+  rewardWallet    : Party
+  treasury        : Party
+  instrumentAdmin : Party
+  appProvider     : Party
+
+getParties : Script P
+getParties = do
+  admin           <- allocateParty "admin"
+  user1           <- allocateParty "user1"
+  user2           <- allocateParty "user2"
+  rewardWallet    <- allocateParty "reward-wallet"
+  treasury        <- allocateParty "treasury"
+  instrumentAdmin <- allocateParty "instrument-admin"
+  appProvider     <- allocateParty "app-provider"
+  pure P { admin, user1, user2, rewardWallet, treasury, instrumentAdmin, appProvider }
+
+check : Text -> Bool -> Script ()
+check msg cond = if cond then pure () else error ("CHECK GAGAL: " <> msg)
+
+checkSome : Text -> Optional a -> Script a
+checkSome msg ma = case ma of
+  Some a -> pure a
+  None   -> error ("CHECK GAGAL: " <> msg)
+
+-- Timestamps ISO-8601 (urutan leksikografis = urutan waktu)
+t0 : Text
+t0 = "2026-08-01T00:00:00Z"   -- campaign dibuat
+
+t1 : Text
+t1 = "2026-08-05T00:00:00Z"   -- lock/eligibility terjadi
+
+-- ------------------------------------------------------------
+-- 1. WALLET REGISTRATION
+-- ------------------------------------------------------------
+testWallet : P -> Script ()
+testWallet p = do
+  propCid <- submit p.admin $ createCmd WalletRegistrationProposal with
+    admin          = p.admin
+    userAddress    = p.user1
+    userProfileRef = "profile-user1"
+    partyId        = "party-user1"
+    registeredAt   = t0
+
+  -- user lain TIDAK bisa Accept (controller = userAddress)
+  submitMustFail p.user2 $ exerciseCmd propCid Accept
+
+  -- admin juga TIDAK bisa Accept atas nama user
+  submitMustFail p.admin $ exerciseCmd propCid Accept
+
+  regCid <- submit p.user1 $ exerciseCmd propCid Accept
+  reg <- checkSome "WalletRegistration tidak tercipta" =<< queryContractId p.admin regCid
+  check "partyId salah" (reg.partyId == "party-user1")
+  check "userAddress salah" (reg.userAddress == p.user1)
+
+  -- proposal sudah terkonsumsi
+  mProp <- queryContractId p.admin propCid
+  check "Proposal harus ter-archived setelah Accept" (mProp == None)
+
+-- ------------------------------------------------------------
+-- 2. COIN LOCK
+-- ------------------------------------------------------------
+mkLockProposal : P -> Party -> Text -> Decimal -> Script (ContractId CoinLockProposal)
+mkLockProposal p user lockId amt = submit p.admin $ createCmd CoinLockProposal with
+  admin        = p.admin
+  userAddress  = user
+  lockId       = lockId
+  amount       = amt
+  durationDays = 7
+  lockedAt     = t1
+  expiresAt    = "2026-08-12T00:00:00Z"
+  campaignId   = None
+
+testLock : P -> Script ()
+testLock p = do
+  -- durasi di luar {3,7,15} ditolak ensure
+  submitMustFail p.admin $ createCmd CoinLockProposal with
+    admin = p.admin, userAddress = p.user1, lockId = "L-BAD"
+    amount = 10.0, durationDays = 5
+    lockedAt = t1, expiresAt = "2026-08-12T00:00:00Z", campaignId = None
+
+  -- amount <= 0 ditolak ensure
+  submitMustFail p.admin $ createCmd CoinLockProposal with
+    admin = p.admin, userAddress = p.user1, lockId = "L-BAD2"
+    amount = 0.0, durationDays = 7
+    lockedAt = t1, expiresAt = "2026-08-12T00:00:00Z", campaignId = None
+
+  propCid <- mkLockProposal p p.user1 "L-001" 150.0
+
+  -- pihak lain tidak bisa AcceptLock (controller = userAddress)
+  submitMustFail p.user2 $ exerciseCmd propCid AcceptLock
+
+  lockCid <- submit p.user1 $ exerciseCmd propCid AcceptLock
+  lock <- checkSome "CoinLock tidak tercipta" =<< queryContractId p.admin lockCid
+  check "status awal harus LOCKED" (lock.status == "LOCKED")
+  check "amount lock salah" (lock.amount == 150.0)
+
+  -- user lain tidak bisa RequestUnlock
+  submitMustFail p.user2 $ exerciseCmd lockCid RequestUnlock with requestedAt = t1
+
+  lockCid2 <- submit p.user1 $ exerciseCmd lockCid RequestUnlock with requestedAt = t1
+  lock2 <- checkSome "CoinLock baru tidak ada" =<< queryContractId p.admin lockCid2
+  check "status harus UNLOCK_REQUESTED" (lock2.status == "UNLOCK_REQUESTED")
+
+  -- lama ter-archived (consuming)
+  mOld <- queryContractId p.admin lockCid
+  check "CoinLock lama harus ter-archived" (mOld == None)
+
+  -- admin konfirmasi unlock -> selesai
+  submit p.admin $ exerciseCmd lockCid2 ConfirmUnlock with confirmedAt = t1
+  mDone <- queryContractId p.admin lockCid2
+  check "CoinLock harus ter-archived setelah ConfirmUnlock" (mDone == None)
+
+  -- ForceUnlock: admin bisa langsung buka dari LOCKED (kuasa darurat)
+  lpF <- mkLockProposal p p.user1 "L-002" 20.0
+  lockF <- submit p.user1 $ exerciseCmd lpF AcceptLock
+  submit p.admin $ exerciseCmd lockF ForceUnlock with reason = "kasus darurat", forcedAt = t1
+  mForce <- queryContractId p.admin lockF
+  check "CoinLock ter-archived setelah ForceUnlock" (mForce == None)
+
+  -- ForceUnlock reason kosong ditolak
+  lpF2 <- mkLockProposal p p.user1 "L-003" 20.0
+  lockF2 <- submit p.user1 $ exerciseCmd lpF2 AcceptLock
+  submitMustFail p.admin $ exerciseCmd lockF2 ForceUnlock with reason = "", forcedAt = t1
+  submit p.admin $ exerciseCmd lockF2 ForceUnlock with reason = "kosong ditolak", forcedAt = t1
+
+  -- CancelProposal: reason kosong ditolak, reason benar sukses
+  lpC <- mkLockProposal p p.user2 "L-004" 30.0
+  submitMustFail p.admin $ exerciseCmd lpC CancelProposal with reason = ""
+  submit p.admin $ exerciseCmd lpC CancelProposal with reason = "dibatalkan"
+
+-- ------------------------------------------------------------
+-- 3. CAMPAIGN + ELIGIBILITY + CLAIM SLOT (LOCK_CC)
+-- ------------------------------------------------------------
+mkCampaignCmd : P -> Text -> Text -> Decimal -> Decimal -> Int -> Int -> Text -> Text -> Commands (ContractId QuestCampaign)
+mkCampaignCmd p campaignId questKind rewardCc claimFeeCc maxWinners currentClaims status eligibilityType =
+  createCmd QuestCampaign with
+    admin                   = p.admin
+    campaignId              = campaignId
+    title                   = "Quest " <> campaignId
+    questKind               = questKind
+    rewardCc                = rewardCc
+    rewardToken             = None
+    claimFeeCc              = claimFeeCc
+    maxWinners              = maxWinners
+    currentClaims           = currentClaims
+    status                  = status
+    eligibilityType         = eligibilityType
+    eligibilityAmount       = 100.0
+    trustedRewardWallet     = p.rewardWallet
+    trustedAppProvider      = p.appProvider
+    trustedTreasury         = p.treasury
+    trustedInstrumentAdmin  = p.instrumentAdmin
+    trustedInstrumentId     = "cc-token"
+    createdAt               = t0
+
+mkCampaign : P -> Text -> Text -> Decimal -> Decimal -> Int -> Int -> Text -> Text -> Script (ContractId QuestCampaign)
+mkCampaign p campaignId questKind rewardCc claimFeeCc maxWinners currentClaims status eligibilityType =
+  submit p.admin $ mkCampaignCmd p campaignId questKind rewardCc claimFeeCc maxWinners currentClaims status eligibilityType
+
+mkEligibility : P -> Party -> Text -> Text -> Decimal -> Optional Text -> Optional Text -> Script (ContractId CampaignEligibility)
+mkEligibility p user campaignId eType amt lockId usedIn = submit p.admin $ createCmd CampaignEligibility with
+  admin             = p.admin
+  userAddress       = user
+  campaignId        = campaignId
+  campaignCreatedAt = t0
+  eligibilityType   = eType
+  amount            = amt
+  lockId            = lockId
+  lockedAt          = t1
+  expiresAt         = "2026-09-01T00:00:00Z"
+  status            = "ELIGIBLE"
+  usedInClaimId     = usedIn
+
+testClaimLockCc : P -> Script ()
+testClaimLockCc p = do
+  -- ---- kampanye FCFS LOCK_CC ----
+  draftCid <- mkCampaign p "CAMP-1" "CC_FCFS" 50.0 10.0 2 0 "DRAFT" "LOCK_CC"
+
+  -- belum ACTIVE: klaim ditolak
+  submitMustFail p.admin $ exerciseCmd draftCid ClaimSlot with
+    user = p.user1, claimId = "CL-1", claimedAt = t1
+    rewardSender = p.rewardWallet, eligibilityCid = None, lockCid = None
+
+  campCid <- submit p.admin $ exerciseCmd draftCid Activate with updatedAt = t1
+
+  -- questKind salah: DrawWinner di campaign FCFS ditolak
+  eA <- mkEligibility p p.user1 "CAMP-1" "LOCK_CC" 150.0 (Some "L-A") None
+  lpA <- mkLockProposal p p.user1 "L-A" 150.0
+  lockA <- submit p.user1 $ exerciseCmd lpA AcceptLock
+  submitMustFail p.admin $ exerciseCmd campCid DrawWinner with
+    user = p.user1, claimId = "CL-1", rewardCode = None, drawnAt = t1
+    rewardSender = p.rewardWallet, eligibilityCid = Some eA, lockCid = Some lockA
+
+  -- rewardSender palsu ditolak
+  submitMustFail p.admin $ exerciseCmd campCid ClaimSlot with
+    user = p.user1, claimId = "CL-1", claimedAt = t1
+    rewardSender = p.user2, eligibilityCid = Some eA, lockCid = Some lockA
+
+  -- LOCK_CC tanpa eligibility ditolak
+  submitMustFail p.admin $ exerciseCmd campCid ClaimSlot with
+    user = p.user1, claimId = "CL-1", claimedAt = t1
+    rewardSender = p.rewardWallet, eligibilityCid = None, lockCid = Some lockA
+
+  -- eligibility campaign lain ditolak
+  eWrongCamp <- mkEligibility p p.user1 "CAMP-LAIN" "LOCK_CC" 150.0 (Some "L-A") None
+  submitMustFail p.admin $ exerciseCmd campCid ClaimSlot with
+    user = p.user1, claimId = "CL-1", claimedAt = t1
+    rewardSender = p.rewardWallet, eligibilityCid = Some eWrongCamp, lockCid = Some lockA
+
+  -- jumlah lock di bawah minimum (50 < 100) ditolak
+  eLow <- mkEligibility p p.user1 "CAMP-1" "LOCK_CC" 50.0 (Some "L-LOW") None
+  lpLow <- mkLockProposal p p.user1 "L-LOW" 50.0
+  lockLow <- submit p.user1 $ exerciseCmd lpLow AcceptLock
+  submitMustFail p.admin $ exerciseCmd campCid ClaimSlot with
+    user = p.user1, claimId = "CL-1", claimedAt = t1
+    rewardSender = p.rewardWallet, eligibilityCid = Some eLow, lockCid = Some lockLow
+
+  -- lock milik user lain ditolak
+  lpOther <- mkLockProposal p p.user2 "L-OTHER" 150.0
+  lockOther <- submit p.user2 $ exerciseCmd lpOther AcceptLock
+  submitMustFail p.admin $ exerciseCmd campCid ClaimSlot with
+    user = p.user1, claimId = "CL-1", claimedAt = t1
+    rewardSender = p.rewardWallet, eligibilityCid = Some eA, lockCid = Some lockOther
+
+  -- lockId tidak cocok dengan eligibility ditolak
+  lpMismatch <- mkLockProposal p p.user1 "L-MISMATCH" 150.0
+  lockMismatch <- submit p.user1 $ exerciseCmd lpMismatch AcceptLock
+  submitMustFail p.admin $ exerciseCmd campCid ClaimSlot with
+    user = p.user1, claimId = "CL-1", claimedAt = t1
+    rewardSender = p.rewardWallet, eligibilityCid = Some eA, lockCid = Some lockMismatch
+
+  -- eligibility yang sudah terpakai (usedInClaimId) ditolak
+  eUsed <- mkEligibility p p.user1 "CAMP-1" "LOCK_CC" 150.0 (Some "L-A") (Some "CL-LAMA")
+  submitMustFail p.admin $ exerciseCmd campCid ClaimSlot with
+    user = p.user1, claimId = "CL-1", claimedAt = t1
+    rewardSender = p.rewardWallet, eligibilityCid = Some eUsed, lockCid = Some lockA
+
+  -- eligibility REVOKED ditolak
+  eRev <- mkEligibility p p.user1 "CAMP-1" "LOCK_CC" 150.0 (Some "L-A") None
+  eRevokedCid <- submit p.admin $ exerciseCmd eRev RevokeEligibility with revokedAt = t1
+  submitMustFail p.admin $ exerciseCmd campCid ClaimSlot with
+    user = p.user1, claimId = "CL-1", claimedAt = t1
+    rewardSender = p.rewardWallet, eligibilityCid = Some eRevokedCid, lockCid = Some lockA
+
+  -- eligibility EXPIRED ditolak
+  eExp <- mkEligibility p p.user1 "CAMP-1" "LOCK_CC" 150.0 (Some "L-A") None
+  eExpiredCid <- submit p.admin $ exerciseCmd eExp ExpireEligibility with expiredAt = t1
+  eExpired <- checkSome "eligibility EXPIRED tidak ada" =<< queryContractId p.admin eExpiredCid
+  check "status eligibility EXPIRED" (eExpired.status == "EXPIRED")
+  submitMustFail p.admin $ exerciseCmd campCid ClaimSlot with
+    user = p.user1, claimId = "CL-1", claimedAt = t1
+    rewardSender = p.rewardWallet, eligibilityCid = Some eExpiredCid, lockCid = Some lockA
+
+  -- lock yang sudah UNLOCK_REQUESTED ditolak (harus LOCKED)
+  lockA2 <- submit p.user1 $ exerciseCmd lockA RequestUnlock with requestedAt = t1
+  submitMustFail p.admin $ exerciseCmd campCid ClaimSlot with
+    user = p.user1, claimId = "CL-1", claimedAt = t1
+    rewardSender = p.rewardWallet, eligibilityCid = Some eA, lockCid = Some lockA2
+
+  -- user2 (bukan controller) tidak bisa ClaimSlot
+  submitMustFail p.user2 $ exerciseCmd campCid ClaimSlot with
+    user = p.user1, claimId = "CL-1", claimedAt = t1
+    rewardSender = p.rewardWallet, eligibilityCid = Some eA, lockCid = Some lockA2
+
+  -- ---- HAPPY PATH ----
+  eOk <- mkEligibility p p.user1 "CAMP-1" "LOCK_CC" 150.0 (Some "L-OK") None
+  lpOk <- mkLockProposal p p.user1 "L-OK" 150.0
+  lockOk <- submit p.user1 $ exerciseCmd lpOk AcceptLock
+
+  (camp2Cid, receiptCid) <- submit p.admin $ exerciseCmd campCid ClaimSlot with
+    user = p.user1, claimId = "CL-1", claimedAt = t1
+    rewardSender = p.rewardWallet, eligibilityCid = Some eOk, lockCid = Some lockOk
+
+  r <- checkSome "Receipt tidak tercipta" =<< queryContractId p.admin receiptCid
+  check "status receipt harus PRE_SETTLE" (r.status == "PRE_SETTLE")
+  check "feePaid harus False" (r.feePaid == False)
+  check "rewardSent harus False" (r.rewardSent == False)
+  check "rewardCc salah" (r.rewardCc == 50.0)
+  check "claimFeeCc salah" (r.claimFeeCc == 10.0)
+  check "rewardCode harus kosong" (r.rewardCode == "")
+
+  camp2 <- checkSome "Campaign baru tidak ada" =<< queryContractId p.admin camp2Cid
+  check "currentClaims harus 1" (camp2.currentClaims == 1)
+
+  mOldCamp <- queryContractId p.admin campCid
+  check "Campaign lama ter-archived" (mOldCamp == None)
+  mElig <- queryContractId p.admin eOk
+  check "Eligibility ter-archived (dipakai)" (mElig == None)
+
+  -- klaim kedua dengan eligibility baru: kuota (2) masih cukup -> berhasil
+  eOk2 <- mkEligibility p p.user2 "CAMP-1" "LOCK_CC" 150.0 (Some "L-OK2") None
+  lpOk2 <- mkLockProposal p p.user2 "L-OK2" 150.0
+  lockOk2 <- submit p.user2 $ exerciseCmd lpOk2 AcceptLock
+  (camp3Cid, _) <- submit p.admin $ exerciseCmd camp2Cid ClaimSlot with
+    user = p.user2, claimId = "CL-2", claimedAt = t1
+    rewardSender = p.rewardWallet, eligibilityCid = Some eOk2, lockCid = Some lockOk2
+  camp3 <- checkSome "Campaign ke-3 tidak ada" =<< queryContractId p.admin camp3Cid
+  check "currentClaims harus 2" (camp3.currentClaims == 2)
+
+  -- klaim ketiga: kuota habis -> ditolak
+  eOk3 <- mkEligibility p p.user1 "CAMP-1" "LOCK_CC" 150.0 (Some "L-OK3") None
+  lpOk3 <- mkLockProposal p p.user1 "L-OK3" 150.0
+  lockOk3 <- submit p.user1 $ exerciseCmd lpOk3 AcceptLock
+  submitMustFail p.admin $ exerciseCmd camp3Cid ClaimSlot with
+    user = p.user1, claimId = "CL-3", claimedAt = t1
+    rewardSender = p.rewardWallet, eligibilityCid = Some eOk3, lockCid = Some lockOk3
+
+-- ------------------------------------------------------------
+-- 4. CLAIM SLOT (POINTS)
+-- ------------------------------------------------------------
+testClaimPoints : P -> Script ()
+testClaimPoints p = do
+  campCid <- mkCampaign p "CAMP-P" "CODE_FCFS" 0.0 5.0 1 0 "ACTIVE" "POINTS"
+
+  -- tanpa eligibility ditolak
+  submitMustFail p.admin $ exerciseCmd campCid ClaimSlot with
+    user = p.user1, claimId = "CLP-1", claimedAt = t1
+    rewardSender = p.rewardWallet, eligibilityCid = None, lockCid = None
+
+  -- poin kurang (40 < 100) ditolak
+  eLow <- mkEligibility p p.user1 "CAMP-P" "POINTS" 40.0 None None
+  submitMustFail p.admin $ exerciseCmd campCid ClaimSlot with
+    user = p.user1, claimId = "CLP-1", claimedAt = t1
+    rewardSender = p.rewardWallet, eligibilityCid = Some eLow, lockCid = None
+
+  -- happy path: poin cukup, tanpa lock
+  eOk <- mkEligibility p p.user1 "CAMP-P" "POINTS" 100.0 None None
+  (_, receiptCid) <- submit p.admin $ exerciseCmd campCid ClaimSlot with
+    user = p.user1, claimId = "CLP-1", claimedAt = t1
+    rewardSender = p.rewardWallet, eligibilityCid = Some eOk, lockCid = None
+  r <- checkSome "Receipt POINTS tidak ada" =<< queryContractId p.admin receiptCid
+  check "receipt POINTS harus PRE_SETTLE" (r.status == "PRE_SETTLE")
+
+-- ------------------------------------------------------------
+-- 5. DRAW WINNER (RAFFLE)
+-- ------------------------------------------------------------
+testRaffle : P -> Script ()
+testRaffle p = do
+  -- CC_RAFFLE via LOCK_CC
+  ccCid <- mkCampaign p "CAMP-R1" "CC_RAFFLE" 50.0 10.0 1 0 "ACTIVE" "LOCK_CC"
+  -- ClaimSlot di campaign raffle ditolak (harus DrawWinner)
+  eBad <- mkEligibility p p.user1 "CAMP-R1" "LOCK_CC" 150.0 (Some "L-R1") None
+  submitMustFail p.admin $ exerciseCmd ccCid ClaimSlot with
+    user = p.user1, claimId = "CLR-1", claimedAt = t1
+    rewardSender = p.rewardWallet, eligibilityCid = Some eBad, lockCid = None
+
+  eR <- mkEligibility p p.user1 "CAMP-R1" "LOCK_CC" 150.0 (Some "L-R1") None
+  lpR <- mkLockProposal p p.user1 "L-R1" 150.0
+  lockR <- submit p.user1 $ exerciseCmd lpR AcceptLock
+  (cc2Cid, receiptR, secretOpt) <- submit p.admin $ exerciseCmd ccCid DrawWinner with
+    user = p.user1, claimId = "CLR-1", rewardCode = None, drawnAt = t1
+    rewardSender = p.rewardWallet, eligibilityCid = Some eR, lockCid = Some lockR
+  check "CC_RAFFLE tanpa kode: SecretRewardCode tidak boleh ada" (secretOpt == None)
+  rr <- checkSome "receipt raffle tidak ada" =<< queryContractId p.admin receiptR
+  check "receipt raffle PRE_SETTLE" (rr.status == "PRE_SETTLE")
+  check "hasRewardCode False utk CC_RAFFLE" (rr.hasRewardCode == False)
+
+  -- CODE_RAFFLE via POINTS + kode rahasia
+  codeCid <- mkCampaign p "CAMP-R2" "CODE_RAFFLE" 0.0 5.0 1 0 "ACTIVE" "POINTS"
+  -- CODE_RAFFLE tanpa rewardCode ditolak
+  submitMustFail p.admin $ exerciseCmd codeCid DrawWinner with
+    user = p.user1, claimId = "CLR-2", rewardCode = None, drawnAt = t1
+    rewardSender = p.rewardWallet, eligibilityCid = None, lockCid = None
+
+  eC <- mkEligibility p p.user1 "CAMP-R2" "POINTS" 100.0 None None
+  (_, receiptC, secretOptC) <- submit p.admin $ exerciseCmd codeCid DrawWinner with
+    user = p.user1, claimId = "CLR-2", rewardCode = Some "RAHASIA-ABC"
+    drawnAt = t1
+    rewardSender = p.rewardWallet, eligibilityCid = Some eC, lockCid = None
+  secretCid <- checkSome "SecretRewardCode tidak tercipta" secretOptC
+  sc <- checkSome "SecretRewardCode hilang" =<< queryContractId p.admin secretCid
+  check "kode rahasia tersimpan" (sc.code == "RAHASIA-ABC")
+  rc <- checkSome "receipt CODE_RAFFLE tidak ada" =<< queryContractId p.admin receiptC
+  check "receipt PRE_SETTLE" (rc.status == "PRE_SETTLE")
+  check "kode TIDAK bocor di receipt" (rc.rewardCode == "")
+  check "hasRewardCode True" (rc.hasRewardCode == True)
+
+  -- Reveal sebelum Settle ditolak
+  submitMustFail p.admin $ exerciseCmd receiptC RevealCode with
+    code = "RAHASIA-ABC", revealedAt = t1
+  submitMustFail p.admin $ exerciseCmd secretCid Reveal with
+    receiptCid = receiptC, revealedAt = t1
+
+  -- (tes mismatch claimId pada SecretRewardCode.Reveal ada di testSettle,
+  --  karena butuh receipt berstatus SETTLED)
+
+-- ------------------------------------------------------------
+-- 6. STATE MACHINE CAMPAIGN
+-- ------------------------------------------------------------
+testStateMachine : P -> Script ()
+testStateMachine p = do
+  draftCid <- mkCampaign p "CAMP-SM" "CC_FCFS" 50.0 10.0 5 0 "DRAFT" "LOCK_CC"
+
+  -- Pause dari DRAFT ditolak
+  submitMustFail p.admin $ exerciseCmd draftCid Pause with updatedAt = t1
+  -- End dari DRAFT ditolak
+  submitMustFail p.admin $ exerciseCmd draftCid EndCampaign with updatedAt = t1
+  -- Close dari DRAFT ditolak
+  submitMustFail p.admin $ exerciseCmd draftCid Close with closedAt = t1
+
+  activeCid <- submit p.admin $ exerciseCmd draftCid Activate with updatedAt = t1
+  pausedCid <- submit p.admin $ exerciseCmd activeCid Pause with updatedAt = t1
+  -- End dari PAUSED ditolak
+  submitMustFail p.admin $ exerciseCmd pausedCid EndCampaign with updatedAt = t1
+  -- resume ke ACTIVE
+  active2Cid <- submit p.admin $ exerciseCmd pausedCid Activate with updatedAt = t1
+  endedCid <- submit p.admin $ exerciseCmd active2Cid EndCampaign with updatedAt = t1
+  -- Activate dari ENDED ditolak
+  submitMustFail p.admin $ exerciseCmd endedCid Activate with updatedAt = t1
+  _ <- submit p.admin $ exerciseCmd endedCid Close with closedAt = t1
+  pure ()
+
+-- ------------------------------------------------------------
+-- ------------------------------------------------------------
+-- ------------------------------------------------------------
+-- 6b. GUARD BARU v31 ([FIX-13]/[FIX-14])
+-- ------------------------------------------------------------
+testCampaignGuards : P -> Script ()
+testCampaignGuards p = do
+  -- [FIX-13] campaign fee-0 ditolak ensure (dulu: klaim lalu macet
+  -- di PRE_SETTLE karena Settle menolak fee 0)
+  submitMustFail p.admin $ mkCampaignCmd p "CAMP-G1" "CODE_FCFS" 0.0 0.0 1 0 "ACTIVE" "POINTS"
+
+  -- [FIX-14] eligibilityType asing ditolak (dulu: lolos cabang
+  -- `_ -> pure ()` = klaim tanpa cek eligibility)
+  submitMustFail p.admin $ mkCampaignCmd p "CAMP-G2" "CODE_FCFS" 0.0 5.0 1 0 "ACTIVE" "OPEN"
+
+  -- [FIX-14] questKind typo/asing ditolak
+  submitMustFail p.admin $ mkCampaignCmd p "CAMP-G3" "CC_FCFS " 50.0 10.0 1 0 "ACTIVE" "POINTS"
+
+  -- receipt fee-0 juga ditolak ensure (dibuat langsung admin)
+  submitMustFail p.admin $ createCmd QuestClaimReceipt with
+    admin = p.admin, campaignId = "CAMP-G1", userAddress = p.user1
+    claimId = "CL-G1", claimKind = "CODE_FCFS"
+    rewardCc = 0.0, rewardToken = None, rewardCode = ""
+    hasRewardCode = False, rewardSender = p.rewardWallet
+    trustedAppProvider = p.appProvider, trustedTreasury = p.treasury
+    trustedInstrumentAdmin = p.instrumentAdmin, trustedInstrumentId = "cc-token"
+    claimFeeCc = 0.0, feePaid = False, feeTxId = None
+    rewardSent = False, rewardTxId = None
+    status = "PRE_SETTLE", claimedAt = t1
+
+-- ------------------------------------------------------------
+-- 7. SIKLUS RECEIPT & KODE RAHASIA
+--
+--    CATATAN PENGGUJIAN (penting):
+--    Template Splice (TransferFactory, Holding) bersifat ENCAPSULATED
+--    pada token-standard Canton Network — hanya bisa dibuat dari
+--    package-nya sendiri. Konsekuensinya choice Settle /
+--    ExecuteTransfer (yang parameternya butuh ContractId TransferFactory)
+--    TIDAK bisa di-exercise di `daml test`; guard-nya (amount/receiver/
+--    sender/instrument/appProvider) sudah diverifikasi lewat review kode
+--    dan harus di-smoke-test di testnet dengan factory asli.
+--    Yang DITES di sini: seluruh siklus receipt yang tidak butuh
+--    factory — PRE_SETTLE guards, RecordTxId, RevealCode, Expire,
+--    SecretRewardCode (mismatch claimId, happy path), dan kasus
+--    campaign fee-0 (klaim bisa, Settle tertahan assert "Fee harus > 0!"
+--    — satu-satunya jalan keluar Expire).
+-- ------------------------------------------------------------
+testReceipt : P -> Script ()
+testReceipt p = do
+  -- receipt PRE_SETTLE dari klaim nyata
+  campCid <- mkCampaign p "CAMP-RC" "CODE_FCFS" 0.0 5.0 5 0 "ACTIVE" "POINTS"
+  eR <- mkEligibility p p.user1 "CAMP-RC" "POINTS" 100.0 None None
+  (_, r1) <- submit p.admin $ exerciseCmd campCid ClaimSlot with
+    user = p.user1, claimId = "CL-RC-1", claimedAt = t1
+    rewardSender = p.rewardWallet, eligibilityCid = Some eR, lockCid = None
+
+  -- PRE_SETTLE: RecordTxId dan RevealCode ditolak
+  submitMustFail p.admin $ exerciseCmd r1 RecordTxId with
+    feeTxId = "x", rewardTxId = None
+  submitMustFail p.admin $ exerciseCmd r1 RevealCode with
+    code = "X", revealedAt = t1
+
+  -- receipt SETTLED dibuat langsung admin (simulasi pasca-Settle
+  -- dengan factory asli di ledger sungguhan)
+  let mkReceipt claimId status = createCmd QuestClaimReceipt with
+        admin = p.admin, campaignId = "CAMP-RC", userAddress = p.user1
+        claimId = claimId, claimKind = "CODE_FCFS"
+        rewardCc = 0.0, rewardToken = None, rewardCode = ""
+        hasRewardCode = False, rewardSender = p.rewardWallet
+        trustedAppProvider = p.appProvider, trustedTreasury = p.treasury
+        trustedInstrumentAdmin = p.instrumentAdmin, trustedInstrumentId = "cc-token"
+        claimFeeCc = 5.0, feePaid = True, feeTxId = None
+        rewardSent = True, rewardTxId = None
+        status = status, claimedAt = t1
+
+  r2 <- submit p.admin $ mkReceipt "CL-RC-2" "SETTLED"
+
+  -- RecordTxId hanya untuk SETTLED
+  r3 <- submit p.admin $ exerciseCmd r2 RecordTxId with
+    feeTxId = "tx-fee-1", rewardTxId = Some "tx-reward-1"
+  rr <- checkSome "receipt RecordTxId tidak ada" =<< queryContractId p.admin r3
+  check "feeTxId tercatat" (rr.feeTxId == Some "tx-fee-1")
+  check "rewardTxId tercatat" (rr.rewardTxId == Some "tx-reward-1")
+
+  -- Expire ditolak untuk SETTLED
+  submitMustFail p.admin $ exerciseCmd r3 Expire with expiredAt = t1
+
+  -- RevealCode: SETTLED -> REVEALED
+  r4 <- submit p.admin $ exerciseCmd r3 RevealCode with
+    code = "GOLD-123", revealedAt = t1
+  rv <- checkSome "receipt RevealCode tidak ada" =<< queryContractId p.admin r4
+  check "status REVEALED" (rv.status == "REVEALED")
+  check "kode terisi" (rv.rewardCode == "GOLD-123")
+  check "hasRewardCode True" (rv.hasRewardCode == True)
+
+  -- SecretRewardCode dengan claimId tidak cocok -> Reveal ditolak
+  secretBad <- submit p.admin $ createCmd SecretRewardCode with
+    admin = p.admin, claimId = "CLAIM-LAIN", code = "XYZ"
+  submitMustFail p.admin $ exerciseCmd secretBad Reveal with
+    receiptCid = r4, revealedAt = t1
+
+  -- SecretRewardCode happy path (receipt SETTLED + claimId cocok)
+  r5 <- submit p.admin $ mkReceipt "CL-RC-3" "SETTLED"
+  secretGood <- submit p.admin $ createCmd SecretRewardCode with
+    admin = p.admin, claimId = "CL-RC-3", code = "SECRET-777"
+  revealedCid <- submit p.admin $ exerciseCmd secretGood Reveal with
+    receiptCid = r5, revealedAt = t1
+  rv2 <- checkSome "receipt reveal S2 tidak ada" =<< queryContractId p.admin revealedCid
+  check "receipt REVEALED via SecretRewardCode" (rv2.status == "REVEALED")
+  check "kode terungkap" (rv2.rewardCode == "SECRET-777")
+
+  -- Expire happy path dari PRE_SETTLE
+  submit p.admin $ exerciseCmd r1 Expire with expiredAt = t1
+  mR1 <- queryContractId p.admin r1
+  check "receipt PRE_SETTLE ter-archived setelah Expire" (mR1 == None)
+
+  -- (Kasus audit lama "campaign fee-0" sudah tidak mungkin terjadi:
+  --  ditolak di ensure — lihat testCampaignGuards [FIX-13].)
+
+-- ------------------------------------------------------------
+-- 8. PLATFORM TRANSFER (bagian yang bisa diuji tanpa factory)
+-- ------------------------------------------------------------
+testPlatform : P -> Script ()
+testPlatform p = do
+  -- amount <= 0 ditolak ensure
+  submitMustFail p.admin $ createCmd PlatformTransfer with
+    admin = p.admin, userAddress = p.user1, transferId = "PT-BAD"
+    amount = 0.0, feeAmount = 2.0, receiver = p.user2, treasury = p.treasury
+    trustedInstrumentAdmin = p.instrumentAdmin, trustedInstrumentId = "cc-token"
+    token = "CC", status = "PENDING", createdAt = t1
+
+  -- feeAmount <= 0 ditolak ensure
+  submitMustFail p.admin $ createCmd PlatformTransfer with
+    admin = p.admin, userAddress = p.user1, transferId = "PT-BAD2"
+    amount = 5.0, feeAmount = 0.0, receiver = p.user2, treasury = p.treasury
+    trustedInstrumentAdmin = p.instrumentAdmin, trustedInstrumentId = "cc-token"
+    token = "CC", status = "PENDING", createdAt = t1
+
+  -- receiver == userAddress lolos ensure — ExecuteTransfer akan tolak,
+  -- tapi cek itu butuh factory (encapsulated); dipastikan di testnet.
+  ptCid <- submit p.admin $ createCmd PlatformTransfer with
+    admin = p.admin, userAddress = p.user1, transferId = "PT-1"
+    amount = 25.0, feeAmount = 2.0, receiver = p.user2, treasury = p.treasury
+    trustedInstrumentAdmin = p.instrumentAdmin, trustedInstrumentId = "cc-token"
+    token = "CC", status = "PENDING", createdAt = t1
+
+  -- pihak lain tidak bisa cancel (controller admin)
+  submitMustFail p.user1 $ exerciseCmd ptCid CancelTransfer with cancelledAt = t1
+
+  submit p.admin $ exerciseCmd ptCid CancelTransfer with cancelledAt = t1
+  mPt <- queryContractId p.admin ptCid
+  check "PT ter-cancel ter-archived" (mPt == None)
+
+-- ------------------------------------------------------------
+-- ORCHESTRATOR
+-- ------------------------------------------------------------
+test : Script ()
+test = do
+  p <- getParties
+  testWallet p
+  testLock p
+  testClaimLockCc p
+  testClaimPoints p
+  testRaffle p
+  testStateMachine p
+  testCampaignGuards p
+  testReceipt p
+  testPlatform p

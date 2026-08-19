@@ -1,0 +1,651 @@
+-- ============================================================
+-- CanQuest DAML Contract v28 — module Main
+-- Package: canquest-v28 | SDK: 3.4.11
+--
+-- CHANGE v27 → v28 (ROLLBACK reward flow ke Settle pattern):
+--   - KEMBALI ke QuestClaimReceipt + Settle multi-controller (pola v25)
+--     v27 (AppPaymentRequest) di-rollback krn backend Fase 2 belum selesai
+--     & Settle flow yang ada sudah verified jalan.
+--   - HAPUS QuestPaymentRequest (wrapper AppPaymentRequest v27)
+--   - ClaimSlot + DrawWinner kembali return tuple (Campaign, Receipt)
+--     & menerima rewardSender param lagi (co-controller Settle)
+--   - Tambah Settle / RecordTxId / RevealCode / Expire choices di Receipt
+--
+-- IMPROVEMENT v28 (dari playbook, BUKAN rollback):
+--   - NEW: WalletRegistrationProposal (2-step consent: admin propose →
+--     user Accept). PII (username, inviteCode) off-chain, direferensikan
+--     via userProfileRef: Text.
+--   - NEW: WalletRegistration field userProfileRef (ganti username/inviteCode)
+--   - CampaignEligibility revoke/expire jadi non-consuming
+--     (create baru status REVOKED/EXPIRED — audit trail lebih baik)
+--
+-- TEMPLATES (6):
+--   1. WalletRegistrationProposal — admin propose, user Accept
+--   2. WalletRegistration         — identitas on-chain (userProfileRef)
+--   3. CampaignEligibility        — bukti lock CC / points per campaign
+--   4. QuestCampaign              — kuota FCFS/Raffle + state machine
+--   5. QuestClaimReceipt          — receipt + atomic Settle + RevealCode
+--   6. PlatformTransfer           — send token + platform fee atomic
+--
+-- actAs backend:
+--   WalletRegistrationProposal.Accept : [userAddress]
+--   ClaimSlot / DrawWinner            : [admin]
+--   Settle                            : [admin, userAddress, rewardSender] (+ appProvider bila FAR)
+--   RecordTxId / RevealCode / Expire  : [admin]
+--   PlatformTransfer.ExecuteTransfer  : [admin, userAddress] (+ appProvider bila FAR)
+--   Semua lainnya                     : [admin]
+--
+-- FAR (FeaturedAppRight):
+--   - Settle Leg 3 + PlatformTransfer.ExecuteTransfer → FAR manual
+--   - Import Splice.Api.FeaturedAppRightV2 dipakai kedua template tsb
+-- ============================================================
+
+module Main where
+
+import DA.Foldable (forA_)
+import Splice.Api.Token.TransferInstructionV1
+  ( TransferFactory(..)
+  , TransferFactory_Transfer(..)
+  , Transfer(..)
+  )
+import Splice.Api.Token.MetadataV1 (ExtraArgs(..))
+import Splice.Api.FeaturedAppRightV2
+  ( FeaturedAppRight(..)
+  , FeaturedAppRight_CreateActivityMarker(..)
+  , AppRewardBeneficiary(..)
+  )
+
+-- ============================================================
+-- 1. WALLET REGISTRATION PROPOSAL
+--
+--    FUNGSI:
+--    Proposal 2-step utk registrasi wallet. Admin create proposal
+--    (actAs: admin), user exercise Accept (actAs: userAddress).
+--    Setelah Accept → create WalletRegistration (signatory admin + user).
+--
+--    KENAPA 2-STEP:
+--    Explicit consent dari user sebelum identitas on-chain dibuat.
+--    Admin tidak bisa unilaterally bind wallet ke user tanpa accept.
+--
+--    actAs backend:
+--      create  : [admin]
+--      Accept  : [userAddress]
+-- ============================================================
+template WalletRegistrationProposal
+  with
+    admin          : Party
+    userAddress    : Party
+    userProfileRef : Text   -- reference ke profile off-chain (DB)
+    partyId        : Text   -- party ID string (utk korelasi DB)
+    registeredAt   : Text   -- timestamp ISO8601
+  where
+    signatory admin
+    observer userAddress
+
+    choice Accept : ContractId WalletRegistration
+      controller userAddress
+      do
+        create WalletRegistration with
+          admin          = admin
+          userAddress    = userAddress
+          userProfileRef = userProfileRef
+          partyId        = partyId
+          registeredAt   = registeredAt
+
+-- ============================================================
+-- 2. WALLET REGISTRATION
+--
+--    FUNGSI:
+--    Identitas on-chain user. Signatory admin + userAddress
+--    (co-signed saat Accept proposal).
+--
+--    PII OFF-CHAIN:
+--    username, inviteCode dst disimpan di DB backend.
+--    On-ledger hanya userProfileRef (Text reference).
+--
+--    TIDAK ADA CHOICE:
+--    Immutable. Update username → archive + create baru (backend-enforced).
+--
+--    actAs backend: [admin, userAddress] (hasil Accept proposal)
+-- ============================================================
+template WalletRegistration
+  with
+    admin          : Party
+    userAddress    : Party
+    userProfileRef : Text   -- reference ke profile off-chain (DB)
+    partyId        : Text   -- party ID string (utk korelasi DB)
+    registeredAt   : Text   -- timestamp ISO8601
+  where
+    signatory admin, userAddress
+
+-- ============================================================
+-- 3. CAMPAIGN ELIGIBILITY
+--
+--    FUNGSI:
+--    Bukti on-chain bahwa user sudah memenuhi syarat untuk ikut
+--    campaign tertentu. Di-fetch oleh ClaimSlot/DrawWinner sebagai
+--    guard sebelum slot diberikan.
+--
+--    2 TIPE ELIGIBILITY:
+--    "LOCK_CC" → user harus lock CC >= amount
+--                DAN lock dilakukan SETELAH campaign dibuat
+--                (guard: e.lockedAt > e.campaignCreatedAt)
+--    "POINTS"  → user harus punya points >= amount
+--                Points di-verify backend sebelum create contract ini
+--
+--    KAPAN DIBUAT:
+--    Backend buat SETELAH verifikasi:
+--      LOCK_CC → lock sukses di ledger + lockedAt > campaignCreatedAt
+--      POINTS  → PointsService.getNetPoints(userId) >= amount
+--
+--    LIFECYCLE (NON-CONSUMING — create baru status REVOKED/EXPIRED):
+--    ELIGIBLE → [RevokeEligibility] → REVOKED (audit trail)
+--    ELIGIBLE → [ExpireEligibility]  → EXPIRED (audit trail)
+--
+--    KENAPA NON-CONSUMING:
+--    Contract tetap aktif sebagai audit trail — status jadi
+--    REVOKED/EXPIRED, bukan di-archive. Backend bisa query history.
+--
+--    actAs backend: [admin]
+-- ============================================================
+template CampaignEligibility
+  with
+    admin             : Party
+    userAddress       : Party
+    campaignId        : Text
+    campaignCreatedAt : Text
+    eligibilityType   : Text    -- "LOCK_CC" | "POINTS"
+    amount            : Decimal -- jumlah CC locked ATAU jumlah points
+    lockedAt          : Text
+    expiresAt         : Text
+    status            : Text    -- "ELIGIBLE" | "REVOKED" | "EXPIRED"
+  where
+    signatory admin
+    observer userAddress
+
+    choice RevokeEligibility : ContractId CampaignEligibility
+      with revokedAt : Text
+      controller admin
+      do
+        assertMsg "Harus ELIGIBLE untuk revoke!" (status == "ELIGIBLE")
+        assertMsg "revokedAt tidak boleh kosong!" (revokedAt /= "")
+        create this with status = "REVOKED"
+
+    choice ExpireEligibility : ContractId CampaignEligibility
+      with expiredAt : Text
+      controller admin
+      do
+        assertMsg "Harus ELIGIBLE untuk expire!" (status == "ELIGIBLE")
+        assertMsg "expiredAt tidak boleh kosong!" (expiredAt /= "")
+        create this with status = "EXPIRED"
+
+-- ============================================================
+-- 4. QUEST CAMPAIGN
+--
+--    FUNGSI:
+--    Manajemen campaign quest on-chain:
+--    - State machine status campaign
+--    - Kuota slot FCFS atomic (anti-sybil concurrent claim)
+--    - Draw pemenang Raffle/Waitlist
+--    - Guard eligibility (lock CC atau points)
+--
+--    STATE MACHINE:
+--    DRAFT → ACTIVE → PAUSED → ACTIVE (resume)
+--                   → ENDED  → CLOSED
+--                   → CLOSED (langsung)
+--
+--    QUEST KIND:
+--    CC_FCFS           → reward CC, klaim FCFS
+--    CC_RAFFLE         → reward CC, draw raffle
+--    CODE_FCFS         → reward kode invite, klaim FCFS
+--    CODE_RAFFLE       → reward kode invite, draw raffle
+--    CC_AND_CODE_RAFFLE→ reward CC + kode, draw raffle
+--    WAITLIST          → waitlist, admin draw manual
+--
+--    ELIGIBILITY TYPE:
+--    "NONE"    → siapa saja bisa klaim
+--    "LOCK_CC" → wajib lock CC >= eligibilityAmount (lock SETELAH campaign dibuat)
+--    "POINTS"  → wajib punya points >= eligibilityAmount
+--
+--    CONSUMING CHOICES:
+--    ClaimSlot + DrawWinner → consuming (auto-archive + create baru dengan
+--    currentClaims+1). Ini yang bikin atomic anti-sybil — concurrent claim
+--    akan conflict di ledger dan salah satu abort otomatis.
+--
+--    RETURN VALUE (v28):
+--    Tuple (ContractId QuestCampaign, ContractId QuestClaimReceipt).
+--    Backend extract Receipt ContractId → pass ke Settle.
+--
+--    actAs backend: [admin]
+-- ============================================================
+template QuestCampaign
+  with
+    admin             : Party
+    campaignId        : Text
+    title             : Text
+    questKind         : Text    -- CC_FCFS|CC_RAFFLE|CODE_FCFS|CODE_RAFFLE|CC_AND_CODE_RAFFLE|WAITLIST
+    rewardCc          : Decimal -- jumlah reward CC (0.0 bila kode)
+    rewardToken       : Optional Text -- None/"CC" = Amulet; "USDCx" = token non-CC
+    claimFeeCc        : Decimal -- fee yang dibayar user saat klaim
+    maxWinners        : Int     -- 0 = unlimited
+    currentClaims     : Int     -- counter slot terpakai
+    status            : Text    -- "DRAFT"|"ACTIVE"|"PAUSED"|"ENDED"|"CLOSED"
+    eligibilityType   : Text    -- "NONE"|"LOCK_CC"|"POINTS"
+    eligibilityAmount : Decimal -- min CC locked atau min points (0.0 bila NONE)
+    createdAt         : Text
+  where
+    signatory admin
+
+    ensure rewardCc >= 0.0 && maxWinners >= 0 && eligibilityAmount >= 0.0
+
+    -- ── FCFS CLAIM ───────────────────────────────────────────
+    -- User klaim slot FCFS secara atomic.
+    --
+    -- KENAPA ATOMIC:
+    -- Choice ini consuming → ledger archive contract lama + create baru.
+    -- Kalau 2 user klaim bersamaan → ledger conflict → salah satu abort.
+    -- Ini yang bikin anti-sybil tanpa perlu lock/mutex di backend.
+    --
+    -- GUARD ELIGIBILITY:
+    -- Fetch CampaignEligibility on-chain dan validasi semua field.
+    -- Bila eligibilityType = "NONE" → skip fetch, langsung klaim.
+    --
+    -- RETURN: (ContractId QuestCampaign, ContractId QuestClaimReceipt)
+    -- Backend extract QuestClaimReceipt ContractId → pass ke Settle.
+    --
+    -- actAs backend: [admin]
+    choice ClaimSlot : (ContractId QuestCampaign, ContractId QuestClaimReceipt)
+      with
+        user           : Party
+        claimId        : Text
+        claimedAt      : Text
+        rewardSender   : Party
+        eligibilityCid : Optional (ContractId CampaignEligibility)
+      controller admin
+      do
+        assertMsg "Campaign harus ACTIVE!" (status == "ACTIVE")
+        assertMsg "questKind harus FCFS!"
+          (questKind == "CC_FCFS" || questKind == "CODE_FCFS")
+        assertMsg "Kuota FCFS sudah habis!"
+          (maxWinners == 0 || currentClaims < maxWinners)
+
+        case eligibilityType of
+          "LOCK_CC" -> case eligibilityCid of
+            None -> assertMsg "User harus lock CC dulu!" False
+            Some eCid -> do
+              e <- fetch eCid
+              assertMsg "Eligibility bukan untuk campaign ini!" (e.campaignId == campaignId)
+              assertMsg "Eligibility tidak valid!" (e.status == "ELIGIBLE")
+              assertMsg "Jumlah lock CC kurang dari minimum!" (e.amount >= eligibilityAmount)
+              assertMsg "Lock CC harus dilakukan setelah campaign dibuat!" (e.lockedAt > e.campaignCreatedAt)
+          "POINTS" -> case eligibilityCid of
+            None -> assertMsg "User harus punya points cukup!" False
+            Some eCid -> do
+              e <- fetch eCid
+              assertMsg "Eligibility bukan untuk campaign ini!" (e.campaignId == campaignId)
+              assertMsg "Eligibility tidak valid!" (e.status == "ELIGIBLE")
+              assertMsg "Points kurang dari minimum!" (e.amount >= eligibilityAmount)
+          _ -> pure ()
+
+        newCampaignCid <- create this with currentClaims = currentClaims + 1
+        newClaimCid <- create QuestClaimReceipt with
+          admin = admin
+          campaignId = campaignId
+          userAddress = user
+          claimId = claimId
+          claimKind = questKind
+          rewardCc = rewardCc
+          rewardToken = rewardToken
+          rewardCode = ""
+          rewardSender = rewardSender
+          claimFeeCc = claimFeeCc
+          feePaid = False
+          feeTxId = None
+          rewardSent = False
+          rewardTxId = None
+          status = "PRE_SETTLE"
+          claimedAt = claimedAt
+        pure (newCampaignCid, newClaimCid)
+
+    -- ── RAFFLE / WAITLIST DRAW ────────────────────────────────
+    -- Admin draw pemenang raffle atau waitlist.
+    -- Hanya admin yang bisa exercise — user tidak bisa self-draw.
+    -- Guard eligibility sama dengan ClaimSlot.
+    --
+    -- RETURN: (ContractId QuestCampaign, ContractId QuestClaimReceipt)
+    -- Backend extract QuestClaimReceipt ContractId → pass ke Settle.
+    --
+    -- actAs backend: [admin]
+    choice DrawWinner : (ContractId QuestCampaign, ContractId QuestClaimReceipt)
+      with
+        user           : Party
+        claimId        : Text
+        rewardCode     : Text
+        drawnAt        : Text
+        rewardSender   : Party
+        eligibilityCid : Optional (ContractId CampaignEligibility)
+      controller admin
+      do
+        assertMsg "Campaign harus ACTIVE!" (status == "ACTIVE")
+        assertMsg "Kuota raffle sudah habis!" (maxWinners == 0 || currentClaims < maxWinners)
+        assertMsg "questKind harus RAFFLE/WAITLIST!"
+          ( questKind == "CC_RAFFLE" || questKind == "CODE_RAFFLE" || questKind == "CC_AND_CODE_RAFFLE" || questKind == "WAITLIST" )
+
+        case eligibilityType of
+          "LOCK_CC" -> case eligibilityCid of
+            None -> assertMsg "User harus lock CC dulu!" False
+            Some eCid -> do
+              e <- fetch eCid
+              assertMsg "Eligibility bukan untuk campaign ini!" (e.campaignId == campaignId)
+              assertMsg "Eligibility tidak valid!" (e.status == "ELIGIBLE")
+              assertMsg "Jumlah lock CC kurang dari minimum!" (e.amount >= eligibilityAmount)
+              assertMsg "Lock CC harus dilakukan setelah campaign dibuat!" (e.lockedAt > e.campaignCreatedAt)
+          "POINTS" -> case eligibilityCid of
+            None -> assertMsg "User harus punya points cukup!" False
+            Some eCid -> do
+              e <- fetch eCid
+              assertMsg "Eligibility bukan untuk campaign ini!" (e.campaignId == campaignId)
+              assertMsg "Eligibility tidak valid!" (e.status == "ELIGIBLE")
+              assertMsg "Points kurang dari minimum!" (e.amount >= eligibilityAmount)
+          _ -> pure ()
+
+        newCampaignCid <- create this with currentClaims = currentClaims + 1
+        newClaimCid <- create QuestClaimReceipt with
+          admin = admin
+          campaignId = campaignId
+          userAddress = user
+          claimId = claimId
+          claimKind = questKind
+          rewardCc = rewardCc
+          rewardToken = rewardToken
+          rewardCode = rewardCode
+          rewardSender = rewardSender
+          claimFeeCc = claimFeeCc
+          feePaid = False
+          feeTxId = None
+          rewardSent = False
+          rewardTxId = None
+          status = "PRE_SETTLE"
+          claimedAt = drawnAt
+        pure (newCampaignCid, newClaimCid)
+
+    -- ── STATE MACHINE ─────────────────────────────────────────
+    -- Semua consuming → archive lama + create baru dengan status baru.
+
+    -- DRAFT/PAUSED → ACTIVE
+    choice Activate : ContractId QuestCampaign
+      with updatedAt : Text
+      controller admin
+      do
+        assertMsg "Hanya DRAFT/PAUSED → ACTIVE." (status == "DRAFT" || status == "PAUSED")
+        assertMsg "updatedAt tidak boleh kosong!" (updatedAt /= "")
+        create this with status = "ACTIVE"
+
+    -- ACTIVE → PAUSED
+    choice Pause : ContractId QuestCampaign
+      with updatedAt : Text
+      controller admin
+      do
+        assertMsg "Campaign harus ACTIVE untuk pause!" (status == "ACTIVE")
+        create this with status = "PAUSED"
+
+    -- ACTIVE → ENDED
+    choice EndCampaign : ContractId QuestCampaign
+      with updatedAt : Text
+      controller admin
+      do
+        assertMsg "Campaign harus ACTIVE untuk end!" (status == "ACTIVE")
+        create this with status = "ENDED"
+
+    -- ACTIVE/ENDED → CLOSED (final, consuming tanpa create baru)
+    choice Close : ()
+      with closedAt : Text
+      controller admin
+      do
+        assertMsg "Hanya ACTIVE/ENDED → CLOSED." (status == "ACTIVE" || status == "ENDED")
+        return ()
+
+-- ============================================================
+-- 5. QUEST CLAIM RECEIPT
+--
+--    FUNGSI:
+--    Bukti klaim reward. Receipt berisi state settlement claim.
+--    Atomic Settle choice jalan fee leg + optional reward leg +
+--    optional FAR marker dalam 1 transaction tree (all-or-nothing).
+--
+--    KAPAN DIBUAT:
+--    Created otomatis di dalam body ClaimSlot / DrawWinner
+--    (QuestCampaign create QuestClaimReceipt saat slot diklaim).
+--
+--    LIFECYCLE:
+--    PRE_SETTLE → [Settle]    → SETTLED  (atomic 3 leg)
+--    SETTLED    → [RecordTxId]→ SETTLED  (isi feeTxId/rewardTxId)
+--    SETTLED    → [RevealCode]→ REVEALED (utk kode reward)
+--    PRE_SETTLE → [Expire]    → archived (claim gagal/expired)
+--
+--    SETTLE — 3 LEG ATOMIC (all-or-nothing):
+--    Leg 1 (FEE, wajib): user → treasury via feeFactoryCid
+--    Leg 2 (REWARD, optional bila kode rewardCc=0): rewardSender → user
+--    Leg 3 (FAR marker, optional bila featuredAppRightCid=Some)
+--
+--    MULTI-CONTROLLER (actAs backend WAJIB lengkap):
+--    [admin, userAddress, rewardSender]
+--    + appProvider bila FAR on (Leg 3 controller = provider FAR)
+--
+--    actAs backend: [admin] utk RecordTxId / RevealCode / Expire
+-- ============================================================
+template QuestClaimReceipt
+  with
+    admin        : Party
+    campaignId   : Text
+    userAddress  : Party
+    claimId      : Text
+    claimKind    : Text
+    rewardCc     : Decimal
+    rewardToken  : Optional Text
+    rewardCode   : Text
+    rewardSender : Party
+    claimFeeCc   : Decimal
+    feePaid      : Bool
+    feeTxId      : Optional Text
+    rewardSent   : Bool
+    rewardTxId   : Optional Text
+    status       : Text    -- "PRE_SETTLE"|"SETTLED"|"REVEALED"
+    claimedAt    : Text
+  where
+    signatory admin
+    observer userAddress
+
+    ensure rewardCc >= 0.0 && claimFeeCc >= 0.0
+
+    -- ── ATOMIC SETTLE ─────────────────────────────────────────
+    -- Fee leg wajib, reward leg optional (kode claim rewardCc=0 → None),
+    -- FAR marker optional (featuredAppRightCid None = FAR off).
+    --
+    -- actAs backend: [admin, userAddress, rewardSender] (+ appProvider bila FAR)
+    choice Settle : ContractId QuestClaimReceipt
+      with
+        feeFactoryCid       : ContractId TransferFactory
+        feeTransfer         : Transfer
+        feeExtraArgs        : ExtraArgs
+        rewardFactoryCid    : Optional (ContractId TransferFactory)
+        rewardTransfer      : Optional Transfer
+        rewardExtraArgs     : Optional ExtraArgs
+        featuredAppRightCid : Optional (ContractId FeaturedAppRight)
+        appProvider         : Party
+        settledAt           : Text
+      controller admin, userAddress, rewardSender
+      do
+        assertMsg "Claim harus PRE_SETTLE!" (status == "PRE_SETTLE")
+        assertMsg "Fee harus > 0!" (claimFeeCc > 0.0)
+
+        -- Leg 1 (FEE, wajib): user → treasury
+        _ <- exercise feeFactoryCid TransferFactory_Transfer with
+          expectedAdmin = feeTransfer.instrumentId.admin
+          transfer      = feeTransfer
+          extraArgs     = feeExtraArgs
+
+        -- Leg 2 (REWARD, optional): rewardSender → user
+        rewardActuallySent <- case rewardFactoryCid of
+          None -> pure False
+          Some rfd -> case rewardTransfer of
+            None -> pure False
+            Some rt -> case rewardExtraArgs of
+              None -> pure False
+              Some rea -> do
+                _ <- exercise rfd TransferFactory_Transfer with
+                  expectedAdmin = rt.instrumentId.admin
+                  transfer      = rt
+                  extraArgs     = rea
+                pure True
+
+        -- Leg 3 (FAR marker, optional): app rewards ke appProvider
+        forA_ featuredAppRightCid $ \farCid -> do
+          exercise farCid FeaturedAppRight_CreateActivityMarker with
+            beneficiaries = [ AppRewardBeneficiary
+              { beneficiary = appProvider
+              , weight      = 1.0
+              } ]
+            weight = None
+
+        create this with
+          feePaid = True
+          rewardSent = rewardActuallySent
+          status = "SETTLED"
+
+    -- ── RECORD TX ID ──────────────────────────────────────────
+    -- Post-settle: isi feeTxId + rewardTxId.
+    -- Tx ID tidak bisa didapat dari dalam Settle (TransferFactory_Transfer
+    -- return record, bukan tx id). Backend baca tx id dari Settle response
+    -- (updateId), lalu exercise RecordTxId utk persist di receipt.
+    --
+    -- actAs backend: [admin]
+    choice RecordTxId : ContractId QuestClaimReceipt
+      with feeTxId : Text, rewardTxId : Optional Text
+      controller admin
+      do
+        assertMsg "Claim harus SETTLED!" (status == "SETTLED")
+        create this with
+          feeTxId = Some feeTxId
+          rewardTxId = rewardTxId
+
+    -- ── REVEAL CODE ───────────────────────────────────────────
+    -- Utk kode reward: reveal kode setelah Settle sukses.
+    --
+    -- actAs backend: [admin]
+    choice RevealCode : ContractId QuestClaimReceipt
+      with code : Text, revealedAt : Text
+      controller admin
+      do
+        assertMsg "Harus SETTLED sebelum reveal kode!" (status == "SETTLED")
+        create this with
+          rewardCode = code
+          status = "REVEALED"
+
+    -- ── EXPIRE ────────────────────────────────────────────────
+    -- Cleanup claim PRE_SETTLE yang gagal/expired.
+    --
+    -- actAs backend: [admin]
+    choice Expire : ()
+      with expiredAt : Text
+      controller admin
+      do
+        assertMsg "Hanya PRE_SETTLE yang bisa expire!" (status == "PRE_SETTLE")
+        return ()
+
+-- ============================================================
+-- 6. PLATFORM TRANSFER
+--
+--    FUNGSI:
+--    Kirim token (CC/USDCx) dari user ke receiver + potong
+--    platform fee ke treasury, semua dalam 1 transaksi atomik.
+--
+--    KAPAN DIPAKAI:
+--    User kirim CC atau USDCx ke user lain via fitur send di dapp.
+--    BUKAN for reward claim campaign → pakai QuestClaimReceipt.Settle.
+--
+--    3 LEG ATOMIC (all-or-nothing):
+--    Leg 1: user → receiver (jumlah yang dikirim)
+--    Leg 2: user → treasury (platform fee)
+--    Leg 3: FAR marker → app rewards ke appProvider (bila FAR on)
+--
+--    MULTI-TOKEN:
+--    CC dan USDCx didukung via instrumentId di Transfer spec.
+--    Field token di contract hanya untuk tracking/display.
+--
+--    MULTI-CONTROLLER:
+--    admin + userAddress wajib co-controller karena kedua leg
+--    sender = user → butuh authorization user.
+--
+--    LIFECYCLE:
+--    PENDING → [ExecuteTransfer] → SETTLED
+--    PENDING → [CancelTransfer]  → archived
+--
+--    actAs backend: [admin, userAddress] (+ appProvider bila FAR on)
+-- ============================================================
+template PlatformTransfer
+  with
+    admin       : Party
+    userAddress : Party
+    transferId  : Text    -- UUID internal untuk korelasi DB
+    amount      : Decimal -- jumlah yang dikirim ke receiver
+    feeAmount   : Decimal -- platform fee ke treasury
+    receiver    : Party   -- penerima transfer
+    treasury    : Party   -- wallet treasury platform
+    token       : Text    -- "CC" | "USDCx" (untuk display/tracking)
+    status      : Text    -- "PENDING" | "SETTLED"
+    createdAt   : Text
+  where
+    signatory admin
+    observer userAddress
+
+    ensure amount > 0.0 && feeAmount > 0.0
+
+    -- ATOMIC EXECUTE
+    -- Leg 1 + Leg 2 + Leg 3 dalam 1 tx tree.
+    -- Bila salah satu leg gagal → semua rollback.
+    choice ExecuteTransfer : ContractId PlatformTransfer
+      with
+        transferFactoryCid  : ContractId TransferFactory -- factory untuk leg 1
+        transferSpec        : Transfer                   -- detail transfer ke receiver
+        transferExtraArgs   : ExtraArgs                  -- metadata leg 1
+        feeFactoryCid       : ContractId TransferFactory -- factory untuk leg 2
+        feeSpec             : Transfer                   -- detail transfer fee
+        feeExtraArgs        : ExtraArgs                  -- metadata leg 2
+        featuredAppRightCid : Optional (ContractId FeaturedAppRight) -- None = FAR off
+        appProvider         : Party                      -- party FAR (CANTON_APP_PROVIDER_PARTY_ID)
+        settledAt           : Text
+      controller admin, userAddress
+      do
+        assertMsg "Status harus PENDING!" (status == "PENDING")
+
+        -- Leg 1: Transfer utama ke receiver
+        _ <- exercise transferFactoryCid TransferFactory_Transfer with
+          expectedAdmin = transferSpec.instrumentId.admin
+          transfer      = transferSpec
+          extraArgs     = transferExtraArgs
+
+        -- Leg 2: Platform fee ke treasury
+        _ <- exercise feeFactoryCid TransferFactory_Transfer with
+          expectedAdmin = feeSpec.instrumentId.admin
+          transfer      = feeSpec
+          extraArgs     = feeExtraArgs
+
+        -- Leg 3: FAR marker (skip bila None)
+        forA_ featuredAppRightCid $ \farCid -> do
+          exercise farCid FeaturedAppRight_CreateActivityMarker with
+            beneficiaries = [ AppRewardBeneficiary
+              { beneficiary = appProvider
+              , weight      = 1.0
+              } ]
+            weight = None
+
+        create this with status = "SETTLED"
+
+    -- Cancel sebelum execute
+    choice CancelTransfer : ()
+      with cancelledAt : Text
+      controller admin
+      do
+        assertMsg "Hanya PENDING yang bisa dicancel!" (status == "PENDING")
+        return ()

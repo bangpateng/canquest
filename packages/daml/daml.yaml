@@ -1,48 +1,53 @@
 sdk-version: 3.4.11
 # ============================================================
-# CanQuest DAML Package — canquest-v28 (Settle + 2-step Wallet Register)
+# CanQuest DAML Package — canquest-v31 (promoted dari workspace test)
 # Version: 1.0.0
 # SDK: 3.4.11 (Canton Network)
 #
-# ARSITEKTUR v28 (rollback reward flow ke Settle + improvement wallet):
-#   6 template:
-#     1. WalletRegistrationProposal — admin propose → user Accept (2-step consent)
-#     2. WalletRegistration         — identitas on-chain (userProfileRef, PII off-chain)
-#     3. CampaignEligibility        — LOCK_CC/POINTS proof (non-consuming revoke/expire)
-#     4. QuestCampaign              — kuota FCFS/Raffle + state machine + eligibility guard
-#     5. QuestClaimReceipt          — receipt + atomic Settle + RevealCode
-#     6. PlatformTransfer           — send token + platform fee atomic
+# ARSITEKTUR v31 (9 template):
+#   1. WalletRegistrationProposal — admin propose → user Accept (2-step consent)
+#   2. WalletRegistration         — identitas on-chain (userProfileRef, PII off-chain)
+#   3. CampaignEligibility        — LOCK_CC/POINTS proof (non-consuming revoke/expire)
+#   4. QuestCampaign              — kuota FCFS/Raffle + state machine + eligibility guard
+#   5. QuestClaimReceipt          — receipt + atomic Settle + RevealCode
+#   6. PlatformTransfer           — send token + platform fee atomic
+#   7. CoinLockProposal           — admin propose lock → user AcceptLock (2-step)
+#   8. CoinLock                   — lock CC (RequestUnlock/ConfirmUnlock/ForceUnlock)
+#   9. SecretRewardCode           — kode reward admin-only, reveal setelah SETTLED
 #
-# CHANGE vs v27 (ROLLBACK reward flow):
-#   - v27 (AppPaymentRequest) di-rollback ke Settle multi-controller (pola v25)
-#   - HAPUS QuestPaymentRequest (wrapper AppPaymentRequest v27)
-#   - KEMBALI: QuestClaimReceipt + Settle + RecordTxId + RevealCode + Expire
-#   - KEMBALI: ClaimSlot/DrawWinner return tuple (Campaign, Receipt) + rewardSender param
+# SECURITY FIXES v31 (di atas v30):
+#   [FIX-13] claimFeeCc > 0.0 di ensure (deadlock campaign fee-0 tertutup)
+#   [FIX-14] Whitelist questKind + eligibilityType di ensure (klaim tanpa
+#            cek eligibility tertutup)
+#   [FIX-15] Settle: rewardCc > 0 WAJIB transfer reward on-chain
+#   Sebelumnya: FIX-8 (receiver fee on-chain), FIX-9 (pin instrument),
+#   FIX-10 (kode rahasia tidak bocor), FIX-11 (cross-check lockId),
+#   FIX-12 (contract keys dihapus).
 #
-# IMPROVEMENT v28 (dari playbook, BUKAN rollback):
-#   - NEW: WalletRegistrationProposal (2-step consent)
-#   - WalletRegistration: userProfileRef ganti username/inviteCode (PII off-chain)
-#   - CampaignEligibility: revoke/expire non-consuming (audit trail)
+# PENTING — TIDAK ADA CONTRACT KEYS:
+#   Compiler SDK 3.x tidak mendukung contract keys. Uniqueness
+#   campaignId/claimId/lockId + "1 eligibility aktif per user per campaign"
+#   dijamin OFF-CHAIN di backend (dedupe DB sebelum submit). Lihat
+#   HANDOFF_DAML_V31.md Langkah 2.
 #
-# Kenapa rollback v27 ke Settle:
-#   v27 AppPaymentRequest Fase 2 backend rewrite belum selesai. Settle flow
-#   (v25) yang sekarang jalan sudah verified OK. v28 = Settle pattern (stable)
-#   + wallet/eligibility improvement.
+# TEST SUITE:
+#   daml/Test.daml (±120 transaksi) — butuh `daml-script` di dependencies.
 #
 # DAR DATA-DEPENDENCIES (BUKAN dependencies — Splice DAR bukan SDK pkg):
 #   File DAR dari bundle splice-node v0.6.12 (lihat scripts/fetch-daml-deps.sh).
+#   Transfer-instruction naik v1 → v2 (Account-based sender/receiver).
 # ============================================================
-name: canquest-v28
+name: canquest-v31
 source: daml
 version: 1.0.0
 dependencies:
   - daml-prim
   - daml-stdlib
+  - daml-script
 data-dependencies:
   # Nama file aktual dari bundle splice-node v0.6.12 (lihat scripts/fetch-daml-deps.sh).
   # Canton AI: path file bebas, tidak harus match nama simbolik.
   # Versi HARUS match participant node (0.6.12) utk ABI compat.
-  - dars/splice-api-token-transfer-instruction-v1-1.0.0.dar
-  - dars/splice-api-token-holding-v1-current.dar
-  - dars/splice-api-token-metadata-v1-1.0.0.dar
+  - dars/splice-api-token-transfer-instruction-v2-current.dar
+  - dars/splice-api-token-metadata-v1-current.dar
   - dars/splice-api-featured-app-v2-1.0.0.dar
