@@ -1,7 +1,7 @@
 #!/bin/bash
 # ============================================================
 # CanQuest DAML Build + Test + Upload Script (untuk VPS Linux)
-# Package: canquest-v4 v1.0.0  |  SDK: 3.4.11
+# Package: canquest-v29 v1.0.0 | SDK: 3.4.11
 #
 # Templates (9 total):
 #   1. UserAccount        2. WalletRegistration  3. QuestCampaign
@@ -26,13 +26,13 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 DAML_DIR="$PROJECT_ROOT/packages/daml"
-DAR_NAME="canquest-v10-1.0.0.dar"
+DAR_NAME="canquest-v29-1.0.0.dar"
 SDK_VERSION="3.4.11"
 
 echo ""
 echo "=================================================="
 echo " CanQuest DAML Build + Test"
-echo " Package : canquest-v10 v1.0.0"
+echo " Package : canquest-v29 v1.0.0"
 echo " SDK     : $SDK_VERSION"
 echo " Dir     : $DAML_DIR"
 echo "=================================================="
