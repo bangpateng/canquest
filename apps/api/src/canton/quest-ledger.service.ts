@@ -1226,7 +1226,10 @@ export class QuestLedgerService implements OnModuleInit {
         TPL.QuestClaimReceipt,
       );
       // cid penerus dari tree; fallback ke cid yang dipakai submit (resync).
-      result.campaignContractId = campaignCids[0] ?? campaignCidUsed;
+      // Penerus = event CREATED terakhir di tree (event ARCHIVED campaign lama
+      // muncul lebih dulu — ambil [0] bisa menyimpan cid yang sudah ter-archive).
+      result.campaignContractId =
+        campaignCids[campaignCids.length - 1] ?? campaignCidUsed;
       result.claimContractId = claimCids[0] ?? null;
       this.logger.log(
         `ClaimSlot: user=${params.userPartyId.split('::')[0]} campaign=${result.campaignContractId?.slice(0, 12) ?? 'none'}... claim=${result.claimContractId?.slice(0, 12) ?? 'none'}`,
@@ -1335,7 +1338,10 @@ export class QuestLedgerService implements OnModuleInit {
         text,
         TPL.QuestClaimReceipt,
       );
-      result.campaignContractId = campaignCids[0] ?? campaignCidUsed;
+      // Penerus = event CREATED terakhir di tree (event ARCHIVED campaign lama
+      // muncul lebih dulu — ambil [0] bisa menyimpan cid yang sudah ter-archive).
+      result.campaignContractId =
+        campaignCids[campaignCids.length - 1] ?? campaignCidUsed;
       result.claimContractId = claimCids[0] ?? null;
     } else {
       result.errors.push(this.formatLedgerError(text, 'DrawWinner failed'));
@@ -1563,9 +1569,7 @@ export class QuestLedgerService implements OnModuleInit {
       const feeRegistry = await this.registryWithFallback(
         (version) => ({
           expectedAdmin: feeInstrumentAdmin,
-          ...(version === 'v2'
-            ? { actors: [params.userPartyId] }
-            : {}),
+          ...(version === 'v2' ? { actors: [params.userPartyId] } : {}),
           transfer: transferFor(
             params.userPartyId,
             params.feeReceiverPartyId,

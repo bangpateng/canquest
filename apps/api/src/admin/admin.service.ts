@@ -565,13 +565,16 @@ export class AdminService {
                 ? (data.entryCostPoints ?? 200)
                 : 0;
           // v29 FIX-13: claimFeeCc WAJIB > 0 (ensure kontrak menolak fee-0).
-          // Null → default reward-type (2 utk kode, 3 utk CC/token) sesuai
-          // konvensi kolom Quest.claimFeeCc.
+          // Null/0 → default reward-type (2 utk kode, 3 utk CC/token).
+          // PENTING: nilai eksplisit admin (>0) DIHORMATI apa adanya — jangan
+          // clamp Math.max ke default (bug smoke test 19-08: admin set 0.01,
+          // clamp jadi 3 di on-chain sementara DB 0.01 → Settle ditolak
+          // "Fee amount tidak sesuai kontrak!" karena feeTransfer ≠ claimFeeCc).
           const claimFeeCcDefault = questKindDaml.startsWith('CODE') ? 2 : 3;
-          const claimFeeCc = Math.max(
-            quest.claimFeeCc ?? claimFeeCcDefault,
-            claimFeeCcDefault,
-          );
+          const claimFeeCc =
+            quest.claimFeeCc && quest.claimFeeCc > 0
+              ? quest.claimFeeCc
+              : claimFeeCcDefault;
           // v29 dedupe pre-submit (pengganti contract keys): jangan buat
           // QuestCampaign kedua utk quest yang sudah punya ledgerCampaignId
           // (unique constraint Quest.ledgerCampaignId menjamin DB-level).

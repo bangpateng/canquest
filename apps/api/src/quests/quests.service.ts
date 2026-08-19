@@ -3238,9 +3238,19 @@ export class QuestsService {
       // campaignContractId diambil dari DB (disimpan saat admin buat quest).
       // Best-effort — tidak memblokir CC transfer jika ledger tidak tersedia.
       let claimSessionId: string | null = null;
+      // v29 anti-slot-burn: retry klaim (Settle gagal sebelumnya) yang SUDAH
+      // punya receipt PRE_SETTLE langsung pakai receipt lama — jangan exercise
+      // ClaimSlot lagi (tiap exercise mengonsumsi 1 slot kuota + receipt ganda;
+      // tanpa contract keys, ledger tidak mendedupe claimId yang sama).
+      if (drawNow?.claimSessionContractId) {
+        claimSessionId = drawNow.claimSessionContractId;
+        this.logger.log(
+          `ClaimFcfsSlot reuse receipt (retry settle): claim=${claimSessionId.slice(0, 12)} — skip exercise ClaimSlot`,
+        );
+      }
       if (this.questLedger.isClaimSessionConfigured() && cantonPartyId) {
         const campaignContractId = (quest as any).ledgerCampaignId ?? null;
-        if (campaignContractId) {
+        if (campaignContractId && !claimSessionId) {
           // v25: resolve eligibility contract (LOCK_CC / POINTS) utk on-chain guard.
           // v29: return {eligibilityCid, lockCid} — LOCK_CC wajib bawa lockCid.
           let eligibility: {
@@ -3276,6 +3286,20 @@ export class QuestsService {
             questId,
             claimResult.campaignContractId,
           );
+          // v29 anti-slot-burn: persist receipt SEKARANG — bila Settle gagal lalu
+          // user retry, klaim reuse receipt tanpa exercise ClaimSlot lagi.
+          if (claimSessionId) {
+            await this.prisma.winnerDraw
+              .update({
+                where: { id: reservedDrawId },
+                data: { claimSessionContractId: claimSessionId },
+              })
+              .catch((err) =>
+                this.logger.warn(
+                  `persist claimSessionContractId fail: ${String(err)}`,
+                ),
+              );
+          }
           if (claimResult.errors.length > 0) {
             this.logger.warn(
               `ClaimFcfsSlot warnings: ${claimResult.errors.join(' | ')}`,
@@ -3544,9 +3568,17 @@ export class QuestsService {
       // Ini menghasilkan (campaignCid, claimCid) yang langsung jadi
       // claimSessionId untuk atomicFeeAndReward.
       let claimSessionId: string | null = null;
+      // v29 anti-slot-burn: retry yang sudah punya receipt PRE_SETTLE pakai
+      // ulang receipt — jangan exercise DrawWinner lagi (kuota + receipt ganda).
+      if (drawNow?.claimSessionContractId) {
+        claimSessionId = drawNow.claimSessionContractId;
+        this.logger.log(
+          `DrawRaffleWinner reuse receipt (retry settle): claim=${claimSessionId.slice(0, 12)} — skip exercise DrawWinner`,
+        );
+      }
       if (this.questLedger.isClaimSessionConfigured() && cantonPartyId) {
         const campaignContractId = (quest as any).ledgerCampaignId ?? null;
-        if (campaignContractId) {
+        if (campaignContractId && !claimSessionId) {
           // v25: resolve eligibility contract utk on-chain guard.
           // v29: return {eligibilityCid, lockCid} — LOCK_CC wajib bawa lockCid.
           let eligibility: {
@@ -3582,6 +3614,20 @@ export class QuestsService {
             questId,
             claimResult.campaignContractId,
           );
+          // v29 anti-slot-burn: persist receipt SEKARANG — bila Settle gagal lalu
+          // user retry, klaim reuse receipt tanpa exercise ClaimSlot lagi.
+          if (claimSessionId) {
+            await this.prisma.winnerDraw
+              .update({
+                where: { id: draw.id },
+                data: { claimSessionContractId: claimSessionId },
+              })
+              .catch((err) =>
+                this.logger.warn(
+                  `persist claimSessionContractId fail: ${String(err)}`,
+                ),
+              );
+          }
           if (claimResult.errors.length > 0) {
             this.logger.warn(
               `DrawRaffleWinner warnings: ${claimResult.errors.join(' | ')}`,
