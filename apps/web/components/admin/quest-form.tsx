@@ -581,7 +581,7 @@ export function QuestForm({
                   {(form.org || "—").slice(0, 2).toUpperCase()}
                 </div>
               )}
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--card)]/80 px-4 py-2 text-sm font-semibold transition-colors hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10">
+              <label className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "cursor-pointer")}>
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp,image/gif"
@@ -627,7 +627,7 @@ export function QuestForm({
               Wide image on cards (JPEG/PNG/WebP/GIF, max 5 MB). Optional.
             </p>
             <div className="flex flex-wrap items-center gap-3">
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--card)]/80 px-4 py-2 text-sm font-semibold transition-colors hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10">
+              <label className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "cursor-pointer")}>
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp,image/gif"
