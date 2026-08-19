@@ -157,6 +157,16 @@ Setelah hijau: buka campaign asli v29 (deploy publik = Langkah 4 runbook deploy)
 
 ## 10. Catatan teknis penting
 
+- **Endpoint registry V2 butuh MainNet ≥ 0.7.0** (konfirmasi docs Canton AI,
+  20-08-2026): validator 0.6.14 TIDAK menyajikan
+  `/registry/transfer-instruction/v2/transfer-factory` → 404 adalah perilaku
+  yang diharapkan, bukan bug. Backend memakai fallback registry v1 (factoryId
+  `ExternalPartyAmuletRules` sama, implementasi interface v1+v2). Upgrade
+  stack validator ke ≥ 0.7.0 kelak mengaktifkan jalur v2 murni — fallback
+  tetap kompatibel (v2 dicoba dulu, v1 sebagai cadangan).
+- Kompatibilitas choiceContext v1 → exercise interface v2 tidak didokumentasikan
+  (Canton AI) — divalidasi empiris lewat smoke test; pantau error
+  `transferLifetime`/TTL bila muncul (window kami 24 jam).
 - Reward non-CC (USDCx) TIDAK lewat Settle v29 (instrument dipin Amulet);
   jalur delivery token terpisah tetap berlaku — jangan uji USDCx di canary ini.
 - Timestamp on-chain v29 = Zulu detik-presisi (`YYYY-MM-DDTHH:MM:SSZ`);
