@@ -1694,12 +1694,14 @@ export class QuestLedgerService implements OnModuleInit {
         rewardTransfer: opt(rewardTransfer),
         rewardExtraArgs,
         featuredAppRightCid: opt(params.featuredAppRightCid ?? null),
-        // appProvider: DAML Party TIDAK boleh empty string (error "Daml-LF Party
-        // is empty"). Saat FAR off (CANTON_APP_PROVIDER_PARTY_ID not set),
-        // default ke operator party (pasti valid — sudah signatory). appProvider
-        // cuma benar-benar dipakai saat FAR on (beneficiary marker); saat FAR
-        // off nilainya tidak relevan, hanya perlu valid Party utk lolos validasi.
-        appProvider: params.appProviderPartyId ?? operator,
+        // appProvider WAJIB == campaign.trustedAppProvider (assert v29
+        // "appProvider tidak valid!"). trustedAppProvider saat create campaign
+        // diisi dari getter appProviderPartyId (CANTON_APP_PROVIDER_PARTY_ID
+        // ?? operator) → resolve dengan getter YANG SAMA di sini, bukan
+        // operator mentah (bug smoke test 19-08: env FAR ter-set → campaign
+        // pakai app-provider party, Settle kirim operator → ditolak).
+        appProvider:
+          params.appProviderPartyId ?? this.appProviderPartyId ?? operator,
         // settledAt = field Text → v29 pakai Zulu detik-presisi; legacy ms-ISO.
         settledAt: legacy ? nowIso : this.zulu(now),
       };
