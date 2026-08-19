@@ -1560,6 +1560,11 @@ export class QuestsService {
       });
       // Reward record (hanya bila rewardAmount > 0)
       if (rewardAmount > 0) {
+        // Atomic settle: fee & reward SATU updateId (1 tx tree) — constraint
+        // CcTransaction @@unique(userId, ledgerTxId) menolak baris kedua.
+        // Reward pakai ledgerTxId turunan ':r'; cantonUpdateId tetap id asli
+        // supaya link explorer & dedupe berbasis updateId tetap benar.
+        const rewardLedgerTxId = `${updateId}:r`;
         if (rewardToken === 'CC') {
           await this.users.recordTransaction({
             userId,
@@ -1568,7 +1573,8 @@ export class QuestsService {
             description: `Received ${rewardAmount} CC reward`,
             referenceId: questId,
             counterparty: rewardPartyId.split('::')[0],
-            ledgerTxId: updateId,
+            ledgerTxId: rewardLedgerTxId,
+            cantonUpdateId: updateId,
             status: 'COMPLETED',
             transferInstructionCid: null,
           });
@@ -1583,7 +1589,7 @@ export class QuestsService {
             type: 'QUEST_REWARD',
             description: `Received ${rewardAmount} ${rewardToken} reward`,
             referenceId: questId,
-            ledgerTxId: updateId,
+            ledgerTxId: `${updateId}:r`,
             status: 'COMPLETED',
             transferInstructionCid: null,
           });
