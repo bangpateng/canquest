@@ -122,10 +122,10 @@ export function EarnCampaignCard({
 
   const ctaClass =
     ctaVariant === "primary"
-      ? "bg-[var(--primary)] font-semibold text-[var(--primary-foreground)]"
+      ? "btn-brand-gradient font-bold"
       : ctaVariant === "ghost"
-        ? "border border-white/[0.13] bg-transparent font-semibold text-[var(--foreground)]"
-        : "border border-[var(--border)] bg-[var(--card-solid)] font-medium text-[var(--muted-foreground)]";
+        ? "border border-white/[0.13] bg-transparent font-semibold text-[var(--foreground)] hover:opacity-90"
+        : "border border-[var(--border)] bg-[var(--card-solid)] font-medium text-[var(--muted-foreground)] hover:opacity-90";
 
   // FCFS progress fill: gray utk ended/full, amber saat hampir habis, mint default.
   const progressFillClass = cn(
@@ -318,7 +318,7 @@ export function EarnCampaignCard({
         {/* CTA */}
         <span
           className={cn(
-            "flex h-10 w-full items-center justify-center rounded-[9px] px-4 text-[13px] transition-opacity hover:opacity-90",
+            "flex h-10 w-full items-center justify-center rounded-[9px] px-4 text-[13px] transition-all",
             ctaClass,
           )}
         >
