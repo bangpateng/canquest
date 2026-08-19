@@ -117,7 +117,7 @@ if [ -n "$PKG_ID" ]; then
     echo "[OK] Package ID: $PKG_ID"
     echo ""
     echo "Update apps/api/.env on VPS:"
-    echo "  CANTON_DAML_PACKAGE_NAME=canquest-v10"
+    echo "  (Biarkan CANTON_DAML_PACKAGE_NAME KOSONG — default backend = #canquest-v29)"
     echo "  CANTON_DAML_PACKAGE_ID=$PKG_ID"
 else
     echo "[WARN] Package ID not found - check inspect output above"
@@ -126,7 +126,7 @@ fi
 echo ""
 echo "Next steps:"
 echo "  1. Upload DAR  : cd apps/api && node scripts/upload-daml-dar.cjs"
-echo "  2. Update .env : set CANTON_DAML_PACKAGE_NAME=canquest-v10"
+echo "  2. .env        : JANGAN set CANTON_DAML_PACKAGE_NAME (kosong = #canquest-v29; quest lama v28 otomatis via version-pinning)"
 echo "  3. Restart API : pm2 restart canquest-api"
 echo ""
 
@@ -148,7 +148,7 @@ if [[ "$*" == *"--upload"* ]]; then
             echo ""
             echo "Sekarang:"
 echo "  1. Update apps/api/.env:"
-echo "       CANTON_DAML_PACKAGE_NAME=canquest-v10"
+echo "       (Biarkan CANTON_DAML_PACKAGE_NAME KOSONG — default = #canquest-v29)"
             if [ -n "$PKG_ID" ]; then
                 echo "       CANTON_DAML_PACKAGE_ID=$PKG_ID"
             fi
