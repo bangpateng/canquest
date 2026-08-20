@@ -5,7 +5,8 @@ import type {
   QuestTask,
   QuestSubmission,
   QuestRewardStatus,
-  SubmissionStatus } from "@/lib/quest/quest-types";
+  SubmissionStatus,
+} from "@/lib/quest/quest-types";
 import {
   TASK_ACTION_BUTTON_LABEL,
   TASK_COUNTDOWN_SEC,
@@ -64,18 +65,23 @@ function parseApiErrorMessage(data: unknown): string {
   if (data && typeof data === "object" && "message" in data) {
     const message = (data as { message?: unknown }).message;
     if (typeof message === "string" && message.trim()) return message;
-    if (Array.isArray(message) && typeof message[0] === "string") return message[0];
+    if (Array.isArray(message) && typeof message[0] === "string")
+      return message[0];
   }
   return "Submission failed";
 }
 
 function quizAnswerKey(answer: string, taskType: string): string {
-  return taskType === "quiz_choice" ? answer.trim().toUpperCase() : answer.trim().toLowerCase();
+  return taskType === "quiz_choice"
+    ? answer.trim().toUpperCase()
+    : answer.trim().toLowerCase();
 }
 
 function taskActionButtonLabel(type: string): string {
   const key = normalizeType(type);
-  return TASK_ACTION_BUTTON_LABEL[key] ?? TASK_ACTION_BUTTON_LABEL[type] ?? "Open";
+  return (
+    TASK_ACTION_BUTTON_LABEL[key] ?? TASK_ACTION_BUTTON_LABEL[type] ?? "Open"
+  );
 }
 
 /**
@@ -114,10 +120,14 @@ export function QuestTaskPanel({
 }) {
   const t = usePlatformT();
   const isQuestHub = quest.questKind === "EARN_HUB";
-  const [submissions, setSubmissions] = useState<Record<string, QuestSubmission>>({});
+  const [submissions, setSubmissions] = useState<
+    Record<string, QuestSubmission>
+  >({});
   const [questCompleted, setQuestCompleted] = useState(false);
   const [, setAllTasksVerified] = useState(false);
-  const [rewardStatus, setRewardStatus] = useState<QuestRewardStatus | null>(null);
+  const [rewardStatus, setRewardStatus] = useState<QuestRewardStatus | null>(
+    null,
+  );
   const [rewardCc, setRewardCc] = useState<number | null>(null);
   const [progressLoading, setProgressLoading] = useState(true);
   const [progressError, setProgressError] = useState<string | null>(null);
@@ -163,7 +173,8 @@ export function QuestTaskPanel({
   );
 
   const firstOpenTaskIdx = useMemo(
-    () => visibleTasks.findIndex((t) => submissions[t.id]?.status !== "VERIFIED"),
+    () =>
+      visibleTasks.findIndex((t) => submissions[t.id]?.status !== "VERIFIED"),
     [visibleTasks, submissions],
   );
 
@@ -348,7 +359,9 @@ export function QuestTaskPanel({
   }, [hasUnresolvedCountableWalletTask, realtimeConnected, loadProgress]);
 
   const verifiedCount = useMemo(
-    () => visibleTasks.filter((t) => submissions[t.id]?.status === "VERIFIED").length,
+    () =>
+      visibleTasks.filter((t) => submissions[t.id]?.status === "VERIFIED")
+        .length,
     [visibleTasks, submissions],
   );
   // Rolling-24h progress: tasks verified within the last 24h. Mirrors the
@@ -360,7 +373,9 @@ export function QuestTaskPanel({
   );
   const pct = visibleTasks.length
     ? Math.round(
-        ((isQuestHub ? verifiedTodayCount : verifiedCount) / visibleTasks.length) * 100,
+        ((isQuestHub ? verifiedTodayCount : verifiedCount) /
+          visibleTasks.length) *
+          100,
       )
     : 0;
   const allDone = isQuestHub
@@ -372,14 +387,13 @@ export function QuestTaskPanel({
     Boolean(campaignMeta?.requiresFcfsClaim) &&
     isFcfsSlotsFull(campaignMeta?.remainingSlots, campaignMeta?.maxWinners);
   const userParticipated =
-    verifiedCount > 0 ||
-    questCompleted ||
-    Object.keys(submissions).length > 0;
+    verifiedCount > 0 || questCompleted || Object.keys(submissions).length > 0;
   const taskSubmissionsBlocked =
     campaignEnded || (fcfsSlotsFull && !userParticipated);
   const requiresFcfsClaim = campaignMeta?.requiresFcfsClaim ?? false;
   const requiresDrawCcClaim = campaignMeta?.requiresDrawCcClaim ?? false;
-  const requiresPaidInviteClaim = campaignMeta?.requiresPaidInviteClaim ?? false;
+  const requiresPaidInviteClaim =
+    campaignMeta?.requiresPaidInviteClaim ?? false;
   const showFcfsClaim =
     requiresFcfsClaim &&
     allDone &&
@@ -397,7 +411,7 @@ export function QuestTaskPanel({
     questCompleted &&
     !isQuestHub &&
     rewardStatus?.state === "fcfs_claimable";
-  // CC + Code combined raffle: winner selected by admin, pays 5 CC fee to claim both CC + code
+  // CC + Code combined raffle: winner selected by admin, pays claim fee to receive CC + code
   const showCcAndCodeRaffleClaim =
     quest.rewardType === "CC_AND_CODE_RAFFLE" &&
     questCompleted &&
@@ -413,8 +427,12 @@ export function QuestTaskPanel({
   function onTaskVerified(taskId: string, sub: QuestSubmission) {
     setSubmissions((prev) => {
       const next = { ...prev, [taskId]: sub };
-      const count = visibleTasks.filter((t) => next[t.id]?.status === "VERIFIED").length;
-      setAllTasksVerified(count === visibleTasks.length && visibleTasks.length > 0);
+      const count = visibleTasks.filter(
+        (t) => next[t.id]?.status === "VERIFIED",
+      ).length;
+      setAllTasksVerified(
+        count === visibleTasks.length && visibleTasks.length > 0,
+      );
       return next;
     });
     // Mirror the per-day progress: a fresh verification always belongs to today.
@@ -546,7 +564,9 @@ export function QuestTaskPanel({
         ) : (
           <div id="detail-tasks">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-[var(--foreground)]">Quest Milestones</h2>
+              <h2 className="text-lg font-bold text-[var(--foreground)]">
+                Quest Milestones
+              </h2>
               <span className="text-sm font-semibold tabular-nums text-[var(--muted-foreground)]">
                 {verifiedCount} / {visibleTasks.length}
               </span>
@@ -574,23 +594,25 @@ export function QuestTaskPanel({
           <TaskRow
             key={task.id}
             index={idx + 1}
-              questId={quest.id}
-              quest={quest}
-              task={task}
-              submission={submissions[task.id] ?? null}
-              partyId={partyId}
-              twitterUsername={twitterUsername}
-              campaignEnded={taskSubmissionsBlocked}
-              sequentiallyLocked={isTaskSequentiallyLocked(idx, task.id)}
-              sendProgress={sendProgress[task.id]}
-              onBusyChange={(busy) =>
-                setBusyTaskId((prev) => (busy ? task.id : prev === task.id ? null : prev))
-              }
-              questHubLayout={isQuestHub}
-              onPointsEarned={onPointsEarned}
-              onVerified={(sub) => onTaskVerified(task.id, sub)}
-            />
-          ))}
+            questId={quest.id}
+            quest={quest}
+            task={task}
+            submission={submissions[task.id] ?? null}
+            partyId={partyId}
+            twitterUsername={twitterUsername}
+            campaignEnded={taskSubmissionsBlocked}
+            sequentiallyLocked={isTaskSequentiallyLocked(idx, task.id)}
+            sendProgress={sendProgress[task.id]}
+            onBusyChange={(busy) =>
+              setBusyTaskId((prev) =>
+                busy ? task.id : prev === task.id ? null : prev,
+              )
+            }
+            questHubLayout={isQuestHub}
+            onPointsEarned={onPointsEarned}
+            onVerified={(sub) => onTaskVerified(task.id, sub)}
+          />
+        ))}
       </ul>
 
       {showFcfsClaim ? (
@@ -662,25 +684,29 @@ export function QuestTaskPanel({
         </p>
       ) : null}
 
-      {questCompleted && !isQuestHub && !showCcDrawClaim && !showInviteClaim && !showCcAndCodeRaffleClaim && (
-        <QuestSubmittedProof
-          rewardCc={rewardCc}
-          rewardStatus={rewardStatus}
-          ledger={ledgerProof}
-          rewardType={quest.rewardType}
-          rewardToken={quest.rewardToken}
-          campaignMeta={campaignMeta}
-          redeemUrl={quest.redeemUrl}
-          redeemInstructions={quest.redeemInstructions}
-        />
-      )}
+      {questCompleted &&
+        !isQuestHub &&
+        !showCcDrawClaim &&
+        !showInviteClaim &&
+        !showCcAndCodeRaffleClaim && (
+          <QuestSubmittedProof
+            rewardCc={rewardCc}
+            rewardStatus={rewardStatus}
+            ledger={ledgerProof}
+            rewardType={quest.rewardType}
+            rewardToken={quest.rewardToken}
+            campaignMeta={campaignMeta}
+            redeemUrl={quest.redeemUrl}
+            redeemInstructions={quest.redeemInstructions}
+          />
+        )}
 
       {!questCompleted &&
-        !isQuestHub &&
-        requiresFcfsClaim &&
-        allDone &&
-        !showFcfsClaim &&
-        rewardStatus?.state === "fcfs_missed" ? (
+      !isQuestHub &&
+      requiresFcfsClaim &&
+      allDone &&
+      !showFcfsClaim &&
+      rewardStatus?.state === "fcfs_missed" ? (
         <QuestSubmittedProof
           rewardCc={rewardCc}
           rewardStatus={rewardStatus}
@@ -742,7 +768,8 @@ function TaskRow({
   // Countable wallet tasks share the same flow: wallet-required → auto-submit
   // → backend re-counts real on-chain activity since 00:00 UTC (the lookback
   // window is calendar-anchored; the claim cooldown itself is rolling 24h).
-  const isCountableWalletTask = isSendTx || isSendToken || isDailySwap || isCountDaily;
+  const isCountableWalletTask =
+    isSendTx || isSendToken || isDailySwap || isCountDaily;
   const quizChoices = isQuizChoice ? parseQuizChoices(task.target) : [];
 
   const [proof, setProof] = useState(
@@ -780,7 +807,8 @@ function TaskRow({
 
   /** Quest hub (/quest): wallet only for party-ID + countable wallet tasks (send/swap/lock). Partner campaigns (/earn): wallet required. */
   const needsWallet = questHubLayout
-    ? (isPartyTask || isCountableWalletTask || isLockCc) && !hasRealWallet(partyId)
+    ? (isPartyTask || isCountableWalletTask || isLockCc) &&
+      !hasRealWallet(partyId)
     : !hasRealWallet(partyId);
 
   function requireWallet(): boolean {
@@ -821,7 +849,10 @@ function TaskRow({
 
   useEffect(() => {
     if (countdown === null || countdown <= 0) return;
-    const t = setTimeout(() => setCountdown((c) => (c !== null && c > 0 ? c - 1 : 0)), 1000);
+    const t = setTimeout(
+      () => setCountdown((c) => (c !== null && c > 0 ? c - 1 : 0)),
+      1000,
+    );
     return () => clearTimeout(t);
   }, [countdown]);
 
@@ -879,7 +910,10 @@ function TaskRow({
     await handleSubmit(answer, { isQuiz: true });
   }
 
-  async function handleSubmit(proofValue?: string, opts?: { isQuiz?: boolean }) {
+  async function handleSubmit(
+    proofValue?: string,
+    opts?: { isQuiz?: boolean },
+  ) {
     if (loading || campaignEnded) return;
     if (isAccountDataTask && accountSubmitLocked && !isRepeatable) return;
     if (countdown !== null && countdown > 0) return;
@@ -891,12 +925,15 @@ function TaskRow({
     }
     try {
       const body = { proof: proofValue ?? proof ?? undefined };
-      const res = await fetch(`/api/quests/${questId}/tasks/${task.id}/submit`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      const res = await fetch(
+        `/api/quests/${questId}/tasks/${task.id}/submit`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      );
       const data = (await res.json()) as {
         ok?: boolean;
         status?: string;
@@ -909,7 +946,9 @@ function TaskRow({
         if (opts?.isQuiz && proofValue) {
           setQuizWrong(proofValue);
           setQuizPending(null);
-          setError(msg.includes("Incorrect") ? msg : "Incorrect — try another answer.");
+          setError(
+            msg.includes("Incorrect") ? msg : "Incorrect — try another answer.",
+          );
         } else {
           setError(msg);
         }
@@ -973,7 +1012,17 @@ function TaskRow({
       autoSubmitFired.current = true;
       void handleSubmit();
     }
-  }, [countdown, started, isVerified, loading, canComplete, isQuiz, isDailyCheckIn, isCountableWalletTask, isLockCc]);
+  }, [
+    countdown,
+    started,
+    isVerified,
+    loading,
+    canComplete,
+    isQuiz,
+    isDailyCheckIn,
+    isCountableWalletTask,
+    isLockCc,
+  ]);
 
   useEffect(() => {
     if (
@@ -1026,9 +1075,12 @@ function TaskRow({
     (isEmailTask && !proof.includes("@"));
 
   const lockedHint =
-    sequentiallyLocked && !isVerified ? "Complete previous tasks first (one at a time)" : null;
+    sequentiallyLocked && !isVerified
+      ? "Complete previous tasks first (one at a time)"
+      : null;
 
-  const quizExpired = questHubLayout && isQuiz && !isVerified && isQuestHubQuizExpired(task);
+  const quizExpired =
+    questHubLayout && isQuiz && !isVerified && isQuestHubQuizExpired(task);
 
   const displayTitle = resolveQuestTaskDisplayTitle(task, quest);
 
@@ -1130,9 +1182,13 @@ function TaskRow({
           <div className="mt-3 flex rounded-full bg-[var(--muted)]/35 p-1 sm:ml-[3.25rem]">
             {(["yes", "no"] as const).map((opt) => {
               const key = quizAnswerKey(opt, taskType);
-              const isWrong = quizWrong !== null && quizAnswerKey(quizWrong, taskType) === key;
+              const isWrong =
+                quizWrong !== null &&
+                quizAnswerKey(quizWrong, taskType) === key;
               const isPendingBtn =
-                loading && quizPending !== null && quizAnswerKey(quizPending, taskType) === key;
+                loading &&
+                quizPending !== null &&
+                quizAnswerKey(quizPending, taskType) === key;
               return (
                 <button
                   key={opt}
@@ -1160,9 +1216,13 @@ function TaskRow({
             {quizChoices.map((label, idx) => {
               const letter = String.fromCharCode(65 + idx);
               const key = quizAnswerKey(letter, taskType);
-              const isWrong = quizWrong !== null && quizAnswerKey(quizWrong, taskType) === key;
+              const isWrong =
+                quizWrong !== null &&
+                quizAnswerKey(quizWrong, taskType) === key;
               const isPendingBtn =
-                loading && quizPending !== null && quizAnswerKey(quizPending, taskType) === key;
+                loading &&
+                quizPending !== null &&
+                quizAnswerKey(quizPending, taskType) === key;
               return (
                 <li key={letter}>
                   <button
@@ -1224,16 +1284,23 @@ function TaskRow({
 
         {needsTwitter && !isVerified ? (
           <p className="mt-2 text-xs text-orange-300/90 sm:ml-[3.25rem]">
-            <Link href="/settings" className="font-semibold underline underline-offset-2">
+            <Link
+              href="/settings"
+              className="font-semibold underline underline-offset-2"
+            >
               Connect X
             </Link>{" "}
             in Settings first.
           </p>
         ) : null}
 
-        {error ? <p className="mt-2 text-xs text-red-400 sm:ml-[3.25rem]">{error}</p> : null}
+        {error ? (
+          <p className="mt-2 text-xs text-red-400 sm:ml-[3.25rem]">{error}</p>
+        ) : null}
         {successMsg && !error ? (
-          <p className="mt-2 text-xs font-medium text-emerald-400 sm:ml-[3.25rem]">{successMsg}</p>
+          <p className="mt-2 text-xs font-medium text-emerald-400 sm:ml-[3.25rem]">
+            {successMsg}
+          </p>
         ) : null}
 
         <WalletCreatePromptModal
@@ -1260,192 +1327,215 @@ function TaskRow({
         )}
       >
         <>
-        <div className="flex items-center gap-3 sm:gap-4">
-          <TaskBrandIcon
-            type={task.type}
-            complete={isOneTimeComplete || onRepeatCooldown}
-          />
+          <div className="flex items-center gap-3 sm:gap-4">
+            <TaskBrandIcon
+              type={task.type}
+              complete={isOneTimeComplete || onRepeatCooldown}
+            />
 
-          <div className="min-w-0 flex-1">
-            {/* Garis atas: jumlah pts (highlight) — sama dengan path campaign. */}
-            <p
-              className={cn(
-                "mb-0.5 text-xs font-bold tabular-nums",
-                isOneTimeComplete || onRepeatCooldown
-                  ? "text-emerald-400"
-                  : "text-amber-300",
-              )}
-            >
-              +{task.points} pts
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="min-w-0 flex-1">
+              {/* Garis atas: jumlah pts (highlight) — sama dengan path campaign. */}
               <p
                 className={cn(
-                  "line-clamp-2 break-words text-sm font-semibold leading-snug text-[var(--foreground)] sm:text-base",
-                  isOneTimeComplete && "line-through opacity-70",
+                  "mb-0.5 text-xs font-bold tabular-nums",
+                  isOneTimeComplete || onRepeatCooldown
+                    ? "text-emerald-400"
+                    : "text-amber-300",
                 )}
               >
-                {questHubDisplay.headline}
+                +{task.points} pts
               </p>
-              {questHubDisplay.showNew ? (
-                <span className="shrink-0 rounded-md bg-canton/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-canton">
-                  New
-                </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <p
+                  className={cn(
+                    "line-clamp-2 break-words text-sm font-semibold leading-snug text-[var(--foreground)] sm:text-base",
+                    isOneTimeComplete && "line-through opacity-70",
+                  )}
+                >
+                  {questHubDisplay.headline}
+                </p>
+                {questHubDisplay.showNew ? (
+                  <span className="shrink-0 rounded-md bg-canton/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-canton">
+                    New
+                  </span>
+                ) : null}
+              </div>
+              {/* Baris status meta ringkas (cooldown / ready / quiz ended / send progress). */}
+              {onRepeatCooldown ? (
+                <p className="mt-0.5 break-words text-xs font-medium text-emerald-400/80">
+                  {isCountableWalletTask || isLockCc
+                    ? "Verified"
+                    : "Checked in"}{" "}
+                  — ready in {formatQuestHubCooldown(repeatCooldownMs)}
+                </p>
+              ) : canRepeatNow && isCountableWalletTask ? (
+                <p className="mt-0.5 break-words text-xs font-medium text-canton">
+                  Ready — verify for +{task.points} pts
+                </p>
+              ) : canRepeatNow ? (
+                <p className="mt-0.5 break-words text-xs font-medium text-canton">
+                  Ready again — check in for +{task.points} pts
+                </p>
+              ) : quizExpired ? (
+                <p className="mt-0.5 break-words text-xs font-medium text-orange-300/90">
+                  Quiz ended
+                </p>
+              ) : null}
+              {isCountableWalletTask && sendProgress ? (
+                <p className="mt-0.5 break-words text-xs font-medium text-[var(--muted-foreground)]">
+                  {sendProgress.today}/{sendProgress.required}{" "}
+                  {isDailySwap
+                    ? "swaps"
+                    : isCountDaily
+                      ? "transactions"
+                      : "sends"}{" "}
+                  today
+                </p>
               ) : null}
             </div>
-            {/* Baris status meta ringkas (cooldown / ready / quiz ended / send progress). */}
-            {onRepeatCooldown ? (
-              <p className="mt-0.5 break-words text-xs font-medium text-emerald-400/80">
-                {isCountableWalletTask || isLockCc ? "Verified" : "Checked in"} — ready in {formatQuestHubCooldown(repeatCooldownMs)}
-              </p>
-            ) : canRepeatNow && (isCountableWalletTask) ? (
-              <p className="mt-0.5 break-words text-xs font-medium text-canton">
-                Ready — verify for +{task.points} pts
-              </p>
-            ) : canRepeatNow ? (
-              <p className="mt-0.5 break-words text-xs font-medium text-canton">
-                Ready again — check in for +{task.points} pts
-              </p>
-            ) : quizExpired ? (
-              <p className="mt-0.5 break-words text-xs font-medium text-orange-300/90">
-                Quiz ended
-              </p>
-            ) : null}
-            {isCountableWalletTask && sendProgress ? (
-              <p className="mt-0.5 break-words text-xs font-medium text-[var(--muted-foreground)]">
-                {sendProgress.today}/{sendProgress.required}{" "}
-                {isDailySwap ? "swaps" : isCountDaily ? "transactions" : "sends"} today
-              </p>
-            ) : null}
-          </div>
 
-          {/* Kotak kanan = tombol status (sama dengan path campaign):
+            {/* Kotak kanan = tombol status (sama dengan path campaign):
               Verified = chip emerald lembut; cooldown countdown = chip mono. */}
-          {!isQuiz && (
-            <div className="flex shrink-0 items-center">
-              {sequentiallyLocked && !isVerified ? (
-                <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center gap-1 rounded-lg bg-[var(--muted)]/30 px-3 text-[10px] font-bold uppercase tracking-wide text-[var(--muted-foreground)]">
-                  <Lock className="h-3 w-3" aria-hidden />
-                  Locked
-                </span>
-              ) : (isOneTimeComplete || onRepeatCooldown) && !canRepeatNow ? (
-                <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500/15 px-4 text-xs font-bold text-emerald-300">
-                  Verified
-                </span>
-              ) : countdown !== null && countdown > 0 ? (
-                <span
-                  className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500/15 px-4 text-center text-xs font-bold tabular-nums text-emerald-300"
-                  aria-live="polite"
-                >
-                  {formatTaskCountdownSeconds(countdown)}
-                </span>
-              ) : loading ? (
-                <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500/20">
-                  <LoadingSpinner size="sm" />
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  disabled={actionDisabled || quizExpired}
-                  onClick={startTask}
-                  className={cn(
-                    buttonVariants({ size: "sm" }),
-                    "h-9 min-w-[5.5rem] px-4 font-bold",
-                  )}
-                >
-                  {isDailyCheckIn
-                    ? canRepeatNow
-                      ? "Check in"
-                      : "Check in"
-                    : actionLabel}
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Quiz blocks (yes/no + choice) tetap di bawah — hanya muncul utk task quiz. */}
-        {!isVerified && !quizExpired && isQuizYesNo ? (
-          <div className="mt-3 flex rounded-full bg-[var(--muted)]/35 p-1">
-            {(["yes", "no"] as const).map((opt) => {
-              const key = quizAnswerKey(opt, taskType);
-              const isWrong = quizWrong !== null && quizAnswerKey(quizWrong, taskType) === key;
-              const isPending =
-                loading && quizPending !== null && quizAnswerKey(quizPending, taskType) === key;
-              return (
-                <button
-                  key={opt}
-                  type="button"
-                  disabled={loading || quizExpired || sequentiallyLocked}
-                  onClick={() => void submitQuizAnswer(opt)}
-                  className={cn(
-                    "flex flex-1 items-center justify-center gap-1.5 rounded-full py-2 text-sm font-medium capitalize transition-colors",
-                    (quizExpired || sequentiallyLocked) && "cursor-not-allowed opacity-50",
-                    isWrong
-                      ? "bg-red-500/15 text-red-300"
-                      : "text-[var(--muted-foreground)] hover:bg-[var(--background)]/50 hover:text-[var(--foreground)]",
-                  )}
-                >
-                  {isPending ? <LoadingSpinner size="sm" /> : null}
-                  {opt}
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
-
-        {!isVerified && !quizExpired && isQuizChoice && quizChoices.length > 0 ? (
-          <ul className="mt-3 space-y-1.5">
-            {quizChoices.map((label, idx) => {
-              const letter = String.fromCharCode(65 + idx);
-              const key = quizAnswerKey(letter, taskType);
-              const isWrong = quizWrong !== null && quizAnswerKey(quizWrong, taskType) === key;
-              const isPending =
-                loading && quizPending !== null && quizAnswerKey(quizPending, taskType) === key;
-              return (
-                <li key={letter}>
+            {!isQuiz && (
+              <div className="flex shrink-0 items-center">
+                {sequentiallyLocked && !isVerified ? (
+                  <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center gap-1 rounded-lg bg-[var(--muted)]/30 px-3 text-[10px] font-bold uppercase tracking-wide text-[var(--muted-foreground)]">
+                    <Lock className="h-3 w-3" aria-hidden />
+                    Locked
+                  </span>
+                ) : (isOneTimeComplete || onRepeatCooldown) && !canRepeatNow ? (
+                  <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500/15 px-4 text-xs font-bold text-emerald-300">
+                    Verified
+                  </span>
+                ) : countdown !== null && countdown > 0 ? (
+                  <span
+                    className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500/15 px-4 text-center text-xs font-bold tabular-nums text-emerald-300"
+                    aria-live="polite"
+                  >
+                    {formatTaskCountdownSeconds(countdown)}
+                  </span>
+                ) : loading ? (
+                  <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500/20">
+                    <LoadingSpinner size="sm" />
+                  </span>
+                ) : (
                   <button
                     type="button"
-                    disabled={loading || quizExpired || sequentiallyLocked}
-                    onClick={() => void submitQuizAnswer(letter)}
+                    disabled={actionDisabled || quizExpired}
+                    onClick={startTask}
                     className={cn(
-                      "flex w-full items-center gap-2.5 rounded-xl bg-[var(--muted)]/25 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--muted)]/35",
-                          quizExpired && "cursor-not-allowed opacity-50",
-                          isWrong
-                            ? "bg-red-500/10 text-red-200 hover:bg-red-500/15"
-                            : "text-[var(--foreground)]",
-                        )}
-                      >
-                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[var(--muted)] text-[10px] font-bold text-[var(--muted-foreground)]">
-                          {isPending ? <LoadingSpinner size="xs" /> : letter}
-                        </span>
-                        <span className="leading-snug">{label}</span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : null}
+                      buttonVariants({ size: "sm" }),
+                      "h-9 min-w-[5.5rem] px-4 font-bold",
+                    )}
+                  >
+                    {isDailyCheckIn
+                      ? canRepeatNow
+                        ? "Check in"
+                        : "Check in"
+                      : actionLabel}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
 
-            {needsTwitter && !isVerified ? (
-              <p className="mt-2 text-[11px] text-orange-300/90">
-                <Link href="/settings" className="font-semibold underline underline-offset-2">
-                  Connect X (Twitter)
-                </Link>{" "}
-                in Settings to verify follow and retweet tasks.
-              </p>
-            ) : null}
+          {/* Quiz blocks (yes/no + choice) tetap di bawah — hanya muncul utk task quiz. */}
+          {!isVerified && !quizExpired && isQuizYesNo ? (
+            <div className="mt-3 flex rounded-full bg-[var(--muted)]/35 p-1">
+              {(["yes", "no"] as const).map((opt) => {
+                const key = quizAnswerKey(opt, taskType);
+                const isWrong =
+                  quizWrong !== null &&
+                  quizAnswerKey(quizWrong, taskType) === key;
+                const isPending =
+                  loading &&
+                  quizPending !== null &&
+                  quizAnswerKey(quizPending, taskType) === key;
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    disabled={loading || quizExpired || sequentiallyLocked}
+                    onClick={() => void submitQuizAnswer(opt)}
+                    className={cn(
+                      "flex flex-1 items-center justify-center gap-1.5 rounded-full py-2 text-sm font-medium capitalize transition-colors",
+                      (quizExpired || sequentiallyLocked) &&
+                        "cursor-not-allowed opacity-50",
+                      isWrong
+                        ? "bg-red-500/15 text-red-300"
+                        : "text-[var(--muted-foreground)] hover:bg-[var(--background)]/50 hover:text-[var(--foreground)]",
+                    )}
+                  >
+                    {isPending ? <LoadingSpinner size="sm" /> : null}
+                    {opt}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
 
-            {needsWallet && !isVerified ? (
-              <button
-                type="button"
-                onClick={() => setWalletPromptOpen(true)}
-                className="mt-2 text-left text-[11px] font-medium text-orange-300/90 underline-offset-2 hover:underline"
+          {!isVerified &&
+          !quizExpired &&
+          isQuizChoice &&
+          quizChoices.length > 0 ? (
+            <ul className="mt-3 space-y-1.5">
+              {quizChoices.map((label, idx) => {
+                const letter = String.fromCharCode(65 + idx);
+                const key = quizAnswerKey(letter, taskType);
+                const isWrong =
+                  quizWrong !== null &&
+                  quizAnswerKey(quizWrong, taskType) === key;
+                const isPending =
+                  loading &&
+                  quizPending !== null &&
+                  quizAnswerKey(quizPending, taskType) === key;
+                return (
+                  <li key={letter}>
+                    <button
+                      type="button"
+                      disabled={loading || quizExpired || sequentiallyLocked}
+                      onClick={() => void submitQuizAnswer(letter)}
+                      className={cn(
+                        "flex w-full items-center gap-2.5 rounded-xl bg-[var(--muted)]/25 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--muted)]/35",
+                        quizExpired && "cursor-not-allowed opacity-50",
+                        isWrong
+                          ? "bg-red-500/10 text-red-200 hover:bg-red-500/15"
+                          : "text-[var(--foreground)]",
+                      )}
+                    >
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[var(--muted)] text-[10px] font-bold text-[var(--muted-foreground)]">
+                        {isPending ? <LoadingSpinner size="xs" /> : letter}
+                      </span>
+                      <span className="leading-snug">{label}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
+
+          {needsTwitter && !isVerified ? (
+            <p className="mt-2 text-[11px] text-orange-300/90">
+              <Link
+                href="/settings"
+                className="font-semibold underline underline-offset-2"
               >
-                Create your wallet to complete this task →
-              </button>
-            ) : null}
-            {error ? <p className="mt-2 text-xs text-red-400">{error}</p> : null}
+                Connect X (Twitter)
+              </Link>{" "}
+              in Settings to verify follow and retweet tasks.
+            </p>
+          ) : null}
+
+          {needsWallet && !isVerified ? (
+            <button
+              type="button"
+              onClick={() => setWalletPromptOpen(true)}
+              className="mt-2 text-left text-[11px] font-medium text-orange-300/90 underline-offset-2 hover:underline"
+            >
+              Create your wallet to complete this task →
+            </button>
+          ) : null}
+          {error ? <p className="mt-2 text-xs text-red-400">{error}</p> : null}
         </>
         <WalletCreatePromptModal
           open={walletPromptOpen}

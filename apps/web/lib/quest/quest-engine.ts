@@ -12,10 +12,7 @@
  *  5. getActiveRewardTypes() — picker options for admin form
  */
 
-import type {
-  Quest,
-  RewardType,
-  UserProgress} from "@/lib/quest/quest-types";
+import type { Quest, RewardType, UserProgress } from "@/lib/quest/quest-types";
 import { questRewardToken, rewardTokenLabel } from "@/lib/quest/quest-types";
 import type { QuestCampaignSummary } from "@/lib/canton/campaign-reward";
 import {
@@ -96,8 +93,7 @@ const REWARD_CONFIGS: Record<ActiveRewardCode, RewardConfig> = {
     defaultClaimFee: 3,
     adminHint:
       "User selesaikan task → bayar 3 CC fee → terima CC reward. Slot terbatas, siapa cepat dapat.",
-    chipClass:
-      "bg-canton-soft text-canton border-canton-muted",
+    chipClass: "bg-canton-soft text-canton border-canton-muted",
     accentClass: "text-canton",
   },
   CC_MANUAL: {
@@ -113,8 +109,7 @@ const REWARD_CONFIGS: Record<ActiveRewardCode, RewardConfig> = {
     defaultClaimFee: 3,
     adminHint:
       "Setelah event: admin Draw Winners → pemenang bayar fee → terima CC. Yang kalah: You Not Lucky.",
-    chipClass:
-      "bg-canton-soft text-canton border-canton-muted",
+    chipClass: "bg-canton-soft text-canton border-canton-muted",
     accentClass: "text-canton",
   },
   INVITE_CODE_FCFS: {
@@ -130,8 +125,7 @@ const REWARD_CONFIGS: Record<ActiveRewardCode, RewardConfig> = {
     defaultClaimFee: 2,
     adminHint:
       "User selesaikan task → bayar 2 CC fee → dapat kode dari pool. Upload kode di Winners.",
-    chipClass:
-      "bg-canton-soft text-canton border-canton-muted",
+    chipClass: "bg-canton-soft text-canton border-canton-muted",
     accentClass: "text-canton",
   },
   INVITE_CODE_RANDOM: {
@@ -147,8 +141,7 @@ const REWARD_CONFIGS: Record<ActiveRewardCode, RewardConfig> = {
     defaultClaimFee: 2,
     adminHint:
       "Setelah event: admin Draw Winners → pemenang bayar 2 CC fee → dapat kode. Yang kalah: You Not Lucky.",
-    chipClass:
-      "bg-canton-soft text-canton border-canton-muted",
+    chipClass: "bg-canton-soft text-canton border-canton-muted",
     accentClass: "text-canton",
   },
   WAITLIST_EMAIL: {
@@ -164,8 +157,7 @@ const REWARD_CONFIGS: Record<ActiveRewardCode, RewardConfig> = {
     defaultClaimFee: null,
     adminHint:
       "Task Submit Email + pesan kustom pemenang. Draw di admin; pemenang lihat pesan admin. Offchain.",
-    chipClass:
-      "bg-cyan-500/12 text-cyan-200 border-cyan-500/25",
+    chipClass: "bg-cyan-500/12 text-cyan-200 border-cyan-500/25",
     accentClass: "text-cyan-300",
   },
   CC_AND_CODE_RAFFLE: {
@@ -178,9 +170,9 @@ const REWARD_CONFIGS: Record<ActiveRewardCode, RewardConfig> = {
     isRaffle: true,
     needsCcAmount: true,
     needsMaxWinners: true,
-    defaultClaimFee: 5,
+    defaultClaimFee: 3,
     adminHint:
-      "Satu event gabungan: admin draw pemenang → pemenang bayar 5 CC fee → dapat CC reward + invite code.",
+      "Satu event gabungan: admin draw pemenang → pemenang bayar claim fee → dapat CC reward + invite code.",
     chipClass:
       "bg-gradient-to-r from-canton-soft to-violet-500/15 text-canton border-canton-muted",
     accentClass: "text-canton",
@@ -270,7 +262,12 @@ export interface MetricItem {
   muted?: boolean;
 }
 
-export type CtaVariant = "primary" | "secondary" | "success" | "muted" | "dashed";
+export type CtaVariant =
+  | "primary"
+  | "secondary"
+  | "success"
+  | "muted"
+  | "dashed";
 
 export interface QuestMeta {
   /** Resolved reward config */
@@ -325,8 +322,7 @@ export function getQuestMeta(
     ? fcfsSlotsTaken(slotsLeft, slotsMax)
     : winnersDrawn;
   const slotsFull = effectiveFcfs && isFcfsSlotsFull(slotsLeft, slotsMax);
-  const slotsPct =
-    slotsMax > 0 ? Math.round((slotsUsed / slotsMax) * 100) : 0;
+  const slotsPct = slotsMax > 0 ? Math.round((slotsUsed / slotsMax) * 100) : 0;
   const slotsWarn = effectiveFcfs && slotsLeft <= 1 && !slotsFull;
 
   const slots: SlotInfo = {
@@ -334,7 +330,9 @@ export function getQuestMeta(
     isRaffle: effectiveRaffle,
     max: slotsMax,
     used: slotsUsed,
-    left: effectiveFcfs ? Math.max(0, slotsMax - slotsUsed) : slotsMax - slotsUsed,
+    left: effectiveFcfs
+      ? Math.max(0, slotsMax - slotsUsed)
+      : slotsMax - slotsUsed,
     full: slotsFull,
     pct: slotsPct,
     warn: slotsWarn,
@@ -355,8 +353,7 @@ export function getQuestMeta(
     quest.status === "ACTIVE" ||
     quest.status === "ENDED" ||
     (slotsFull && participated);
-  const joinBlocked =
-    slotsFull && !participated && quest.status === "ACTIVE";
+  const joinBlocked = slotsFull && !participated && quest.status === "ACTIVE";
 
   // ── CTA ───────────────────────────────────────────────────────
   let ctaLabel: string;
@@ -371,9 +368,7 @@ export function getQuestMeta(
   } else if (quest.status === "COMING_SOON") {
     ctaLabel = "Opens soon";
     ctaVariant = "dashed";
-  } else if (
-    userProgress?.completedQuestIds?.includes(quest.id)
-  ) {
+  } else if (userProgress?.completedQuestIds?.includes(quest.id)) {
     ctaLabel = "Quest complete";
     ctaVariant = "success";
   } else if (participated && slotsFull) {
@@ -516,7 +511,7 @@ function buildMetrics(
       items.push({
         key: "fee",
         label: "Claim Fee",
-        value: `${config.defaultClaimFee ?? 5} CC`,
+        value: `${config.defaultClaimFee ?? 3} CC`,
         iconKind: "zap",
         accent: "text-amber-300",
       });
@@ -629,7 +624,9 @@ export function validateQuestForm(data: QuestFormData): FormError[] {
 
   // Max winners
   const maxW =
-    data.maxWinners === null || data.maxWinners === undefined || data.maxWinners === ""
+    data.maxWinners === null ||
+    data.maxWinners === undefined ||
+    data.maxWinners === ""
       ? null
       : Number(data.maxWinners);
   if (config.needsMaxWinners) {

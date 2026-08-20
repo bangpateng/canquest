@@ -13,14 +13,17 @@ import { RewardReveal } from "@/components/app/campaign/reward-reveal";
 import { TokenUsdValue } from "@/components/app/earn/cc-usd-value";
 import { useTransactionStatus } from "@/lib/tx/transaction-status";
 import { CLAIM_FAIL_MSG } from "@/lib/campaign/claim-messages";
-import { normalizeRewardToken, type RewardTokenSymbol } from "@/lib/quest/quest-types";
+import {
+  normalizeRewardToken,
+  type RewardTokenSymbol,
+} from "@/lib/quest/quest-types";
 import { Trophy } from "lucide-react";
 
 /**
  * CC + Code Combined Raffle Claim Section
  *
  * Shown when rewardType === "CC_AND_CODE_RAFFLE" and user is a raffle winner.
- * Winner pays 5 CC fee → receives reward (CC or USDCx) + invite code in one transaction.
+ * Winner pays the claim fee → receives reward (CC or USDCx) + invite code in one transaction.
  */
 export function CampaignCcAndCodeRaffleClaimSection({
   questId,
@@ -49,14 +52,17 @@ export function CampaignCcAndCodeRaffleClaimSection({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [claimedCode, setClaimedCode] = useState<string | null>(null);
-  const [deliveryKind, setDeliveryKind] = useState<"direct" | "pending_offer" | null>(null);
+  const [deliveryKind, setDeliveryKind] = useState<
+    "direct" | "pending_offer" | null
+  >(null);
   const [claimOpen, setClaimOpen] = useState(false);
 
   const fee = campaignMeta.fcfsClaimFeeCc;
   const feeLabel = fee > 0 ? `${fee} CC` : "Free";
   const isCodeOnly = rewardVariant === "CODE";
   const isUsdcx = token === "USDCx";
-  const subtitle = [questOrg, questTitle].filter(Boolean).join(" · ") || undefined;
+  const subtitle =
+    [questOrg, questTitle].filter(Boolean).join(" · ") || undefined;
   const claimLabel = isCodeOnly
     ? "Claim your Code"
     : rewardVariant === "CC"
@@ -76,19 +82,27 @@ export function CampaignCcAndCodeRaffleClaimSection({
       amountText: isCodeOnly
         ? "1 invite code"
         : `+${formatRewardAmount(rewardCc, token)} + 1 Code`,
-      usdAmount: !isCodeOnly && rewardCc > 0 ? { amount: rewardCc, token } : null,
+      usdAmount:
+        !isCodeOnly && rewardCc > 0 ? { amount: rewardCc, token } : null,
       subText: subtitle,
       accentBg: isUsdcx ? "bg-sky-500/15" : "bg-canton-subtle",
-      accentText: isCodeOnly ? "text-violet-300" : isUsdcx ? "text-sky-300" : "text-canton",
+      accentText: isCodeOnly
+        ? "text-violet-300"
+        : isUsdcx
+          ? "text-sky-300"
+          : "text-canton",
       meta: [{ label: "Claim fee paid", value: feeLabel }],
     });
     tx.broadcast();
 
     try {
-      const res = await fetch(`/api/quests/${questId}/claim-cc-and-code-raffle`, {
-        method: "POST",
-        credentials: "include",
-      });
+      const res = await fetch(
+        `/api/quests/${questId}/claim-cc-and-code-raffle`,
+        {
+          method: "POST",
+          credentials: "include",
+        },
+      );
       const data = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
         message?: string;
@@ -118,10 +132,15 @@ export function CampaignCcAndCodeRaffleClaimSection({
         meta: [
           { label: "Claim fee paid", value: feeLabel },
           ...(data.rewardDelivery
-            ? [{
-                label: "Delivery",
-                value: data.rewardDelivery === "direct" ? "Sent to wallet" : "Accept in wallet inbox",
-              }]
+            ? [
+                {
+                  label: "Delivery",
+                  value:
+                    data.rewardDelivery === "direct"
+                      ? "Sent to wallet"
+                      : "Accept in wallet inbox",
+                },
+              ]
             : []),
           ...(code ? [{ label: "Your code", value: code, mono: true }] : []),
         ],
@@ -138,7 +157,12 @@ export function CampaignCcAndCodeRaffleClaimSection({
   return (
     <div className="space-y-3">
       {/* Baris WIN (state fcfs_claimable) — pemenang ditarik admin, belum claim. */}
-      <CampaignStatusRow tone="emerald" icon={Trophy} strokeWidth={2.4} label="CC + Code Raffle">
+      <CampaignStatusRow
+        tone="emerald"
+        icon={Trophy}
+        strokeWidth={2.4}
+        label="CC + Code Raffle"
+      >
         You won · claim your token + code below
       </CampaignStatusRow>
 
@@ -169,7 +193,12 @@ export function CampaignCcAndCodeRaffleClaimSection({
           { label: "Claim fee", value: feeLabel, accent: fee <= 0 },
           { label: "Network", value: "Canton" },
           ...(formatEndMeta(campaignMeta.endsAt)
-            ? [{ label: campaignMeta.ended ? "Ended" : "Closes", value: formatEndMeta(campaignMeta.endsAt)! }]
+            ? [
+                {
+                  label: campaignMeta.ended ? "Ended" : "Closes",
+                  value: formatEndMeta(campaignMeta.endsAt)!,
+                },
+              ]
             : []),
         ]}
         eligibleHint="Winner drawn — you're eligible to claim"

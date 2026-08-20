@@ -29,12 +29,16 @@ export function normalizeRewardToken(
 }
 
 /** Label singkat token utk display ("CC" / "USDCx"). */
-export function rewardTokenLabel(token: RewardTokenSymbol | string | null | undefined): string {
+export function rewardTokenLabel(
+  token: RewardTokenSymbol | string | null | undefined,
+): string {
   return normalizeRewardToken(token);
 }
 
 /** Ambil token reward dari object Quest (default CC kalau null/undefined). */
-export function questRewardToken(quest: { rewardToken?: string | null } | null | undefined): RewardTokenSymbol {
+export function questRewardToken(
+  quest: { rewardToken?: string | null } | null | undefined,
+): RewardTokenSymbol {
   return normalizeRewardToken(quest?.rewardToken);
 }
 
@@ -214,8 +218,16 @@ export type QuestTaskType =
   | "submit_canton_address";
 
 /** CanQuest Earn hub (user menu Quest) — admin adds these only */
-export const QUEST_HUB_TASK_TYPE_OPTIONS: { value: string; label: string; hint?: string }[] = [
-  { value: "daily_check_in", label: "Daily check-in", hint: "Once per day · resets at 00:00 UTC" },
+export const QUEST_HUB_TASK_TYPE_OPTIONS: {
+  value: string;
+  label: string;
+  hint?: string;
+}[] = [
+  {
+    value: "daily_check_in",
+    label: "Daily check-in",
+    hint: "Once per day · resets at 00:00 UTC",
+  },
   {
     value: "send_transaction",
     label: "Send transaction (custom count)",
@@ -246,11 +258,31 @@ export const QUEST_HUB_TASK_TYPE_OPTIONS: { value: string; label: string; hint?:
     label: "Lock CC — tier (3d / 7d / 15d)",
     hint: "Wallet required · one-time per tier · set target = tier termKey (3d, 7d, or 15d) · higher tier auto-completes lower tiers (cascade)",
   },
-  { value: "twitter_follow", label: "Follow Twitter CanQuest", hint: "X profile URL" },
-  { value: "twitter_retweet", label: "Retweet post CanQuest", hint: "Post URL to retweet" },
-  { value: "telegram_channel", label: "Join Telegram channel CanQuest", hint: "t.me/… channel link" },
-  { value: "telegram_group", label: "Join Telegram group CanQuest", hint: "t.me/… group link" },
-  { value: "discord_join", label: "Join Discord CanQuest", hint: "Discord invite link" },
+  {
+    value: "twitter_follow",
+    label: "Follow Twitter CanQuest",
+    hint: "X profile URL",
+  },
+  {
+    value: "twitter_retweet",
+    label: "Retweet post CanQuest",
+    hint: "Post URL to retweet",
+  },
+  {
+    value: "telegram_channel",
+    label: "Join Telegram channel CanQuest",
+    hint: "t.me/… channel link",
+  },
+  {
+    value: "telegram_group",
+    label: "Join Telegram group CanQuest",
+    hint: "t.me/… group link",
+  },
+  {
+    value: "discord_join",
+    label: "Join Discord CanQuest",
+    hint: "Discord invite link",
+  },
   {
     value: "quiz_yes_no",
     label: "Quiz — Yes / No",
@@ -406,7 +438,9 @@ export function isSendTransactionTask(type: string): boolean {
 }
 
 /** Required number of sends for a send-transaction task (stored in task.target). Min 1. */
-export function getSendTransactionRequiredCount(target: string | null | undefined): number {
+export function getSendTransactionRequiredCount(
+  target: string | null | undefined,
+): number {
   const n = parseInt((target ?? "").trim(), 10);
   return Number.isFinite(n) && n > 0 ? n : 1;
 }
@@ -441,13 +475,18 @@ export function isCountBasedDailyTask(type: string): boolean {
 }
 
 /** Required count for a count-based daily task (stored in task.target). Min 1. */
-export function getCountBasedDailyRequired(target: string | null | undefined): number {
+export function getCountBasedDailyRequired(
+  target: string | null | undefined,
+): number {
   const n = parseInt((target ?? "").trim(), 10);
   return Number.isFinite(n) && n > 0 ? n : 1;
 }
 
 /** Default title for a count-based daily task based on its type + count. */
-export function countBasedDailyTitle(type: string, requiredCount: number): string {
+export function countBasedDailyTitle(
+  type: string,
+  requiredCount: number,
+): string {
   const base: Record<string, string> = {
     send_any_daily: "Send CC or USDCx",
     send_to_user_daily: "Send to a CanQuest user",
@@ -472,7 +511,10 @@ export function isLockCcTask(type: string): boolean {
  * the remaining ms.
  */
 export function getQuestHubRepeatCooldownMs(
-  submission: { verifiedAt?: string | null; submittedAt?: string } | null | undefined,
+  submission:
+    | { verifiedAt?: string | null; submittedAt?: string }
+    | null
+    | undefined,
   now: number = Date.now(),
 ): number {
   if (!submission) return 0;
@@ -598,7 +640,8 @@ export function questHubTaskToDraft(task: {
     points: task.points,
     title: task.title,
     target: task.target ?? "",
-    correctAnswer: task.correctAnswer ?? (task.type === "quiz_choice" ? "A" : "yes"),
+    correctAnswer:
+      task.correctAnswer ?? (task.type === "quiz_choice" ? "A" : "yes"),
     choiceA: choices[0] ?? "",
     choiceB: choices[1] ?? "",
     choiceC: choices[2] ?? "",
@@ -608,17 +651,15 @@ export function questHubTaskToDraft(task: {
   };
 }
 
-export function validateQuestHubTaskDraft(
-  draft: {
-    type: string;
-    title?: string;
-    target?: string;
-    choiceA?: string;
-    choiceB?: string;
-    choiceC?: string;
-    choiceD?: string;
-  },
-): string | null {
+export function validateQuestHubTaskDraft(draft: {
+  type: string;
+  title?: string;
+  target?: string;
+  choiceA?: string;
+  choiceB?: string;
+  choiceC?: string;
+  choiceD?: string;
+}): string | null {
   if (draft.type === "daily_check_in" && !draft.title?.trim()) {
     return "Enter a title shown on Quest.";
   }
@@ -636,9 +677,12 @@ export function validateQuestHubTaskDraft(
   }
   if (draft.type === "quiz_choice") {
     if (!draft.title?.trim()) return "Enter the quiz question.";
-    const filled = [draft.choiceA, draft.choiceB, draft.choiceC, draft.choiceD].filter((c) =>
-      c?.trim(),
-    );
+    const filled = [
+      draft.choiceA,
+      draft.choiceB,
+      draft.choiceC,
+      draft.choiceD,
+    ].filter((c) => c?.trim());
     if (filled.length < 2) return "Add at least two answer options (A and B).";
   }
   return null;
@@ -652,7 +696,10 @@ export function parseQuizChoices(target: string | null | undefined): string[] {
     try {
       const arr = JSON.parse(raw) as unknown;
       if (Array.isArray(arr)) {
-        return arr.map((x) => String(x).trim()).filter(Boolean).slice(0, 4);
+        return arr
+          .map((x) => String(x).trim())
+          .filter(Boolean)
+          .slice(0, 4);
       }
     } catch {
       /* fall through */
@@ -787,7 +834,10 @@ export function buildQuestHubTaskPayload(input: {
 }
 
 /** Admin: partner campaign tasks (social only). */
-export const CAMPAIGN_TASK_TYPE_OPTIONS: { value: QuestTaskType; label: string }[] = [
+export const CAMPAIGN_TASK_TYPE_OPTIONS: {
+  value: QuestTaskType;
+  label: string;
+}[] = [
   { value: "twitter_follow", label: "Follow on X" },
   { value: "twitter_retweet", label: "Retweet on X" },
   { value: "telegram_channel", label: "Join Telegram channel" },
@@ -796,48 +846,49 @@ export const CAMPAIGN_TASK_TYPE_OPTIONS: { value: QuestTaskType; label: string }
 ];
 
 /** Legacy / internal — includes data-collection types not offered for new campaigns. */
-export const QUEST_TASK_TYPE_OPTIONS: { value: QuestTaskType; label: string }[] = [
+export const QUEST_TASK_TYPE_OPTIONS: {
+  value: QuestTaskType;
+  label: string;
+}[] = [
   ...CAMPAIGN_TASK_TYPE_OPTIONS,
   { value: "submit_email", label: "Submit Email" },
   { value: "submit_party_id", label: "Submit Party ID (auto-filled)" },
 ];
 
-export const REWARD_TYPE_OPTIONS: { value: RewardType; label: string; hint: string }[] = [
+export const REWARD_TYPE_OPTIONS: {
+  value: RewardType;
+  label: string;
+  hint: string;
+}[] = [
   {
     value: "INVITE_CODE_FCFS",
     label: "1 · Kode waitlist (FCFS)",
-    hint:
-      "User selesaikan sosial → submit quest → bayar claim fee (default 2 CC) → dapat kode dari pool. Upload kode di Winners.",
+    hint: "User selesaikan sosial → submit quest → bayar claim fee (default 2 CC) → dapat kode dari pool. Upload kode di Winners.",
   },
   {
     value: "INVITE_CODE_RANDOM",
     label: "2 · Kode waitlist (raffle)",
-    hint:
-      "Setelah event: admin Draw Winners → pemenang bayar claim fee → kode muncul. Yang kalah: You Not Lucky.",
+    hint: "Setelah event: admin Draw Winners → pemenang bayar claim fee → kode muncul. Yang kalah: You Not Lucky.",
   },
   {
     value: "WAITLIST_EMAIL",
     label: "3 · Waitlist email (raffle)",
-    hint:
-      "Task Submit Email + pesan kustom pemenang (winner message). Draw di admin; pemenang lihat pesan admin.",
+    hint: "Task Submit Email + pesan kustom pemenang (winner message). Draw di admin; pemenang lihat pesan admin.",
   },
   {
     value: "CC_ONLY",
     label: "4 · Token CC (FCFS)",
-    hint:
-      "Max winners = slot FCFS. User claim dengan fee (default 3 CC) → CC dari pool validator. Bukan bulk manual.",
+    hint: "Max winners = slot FCFS. User claim dengan fee (default 3 CC) → CC dari pool validator. Bukan bulk manual.",
   },
   {
     value: "CC_MANUAL",
     label: "5 · Token CC (raffle / manual draw)",
-    hint:
-      "Setelah event: admin Draw Winners → pemenang dapat notifikasi & claim CC (bukan FCFS). Yang kalah: You Not Lucky.",
+    hint: "Setelah event: admin Draw Winners → pemenang dapat notifikasi & claim CC (bukan FCFS). Yang kalah: You Not Lucky.",
   },
   {
     value: "CC_AND_CODE_RAFFLE",
     label: "6 · CC + Kode (Raffle Gabungan)",
-    hint:
-      "Satu event gabungan: user selesaikan semua task sosial → submit → tunggu raffle. Admin draw pemenang dari dashboard. Pemenang claim CC reward + invite code dengan membayar 5 CC claim fee.",
+    hint: "Satu event gabungan: user selesaikan semua task sosial → submit → tunggu raffle. Admin draw pemenang dari dashboard. Pemenang claim CC reward + invite code dengan membayar claim fee.",
   },
 ];
 
@@ -915,7 +966,10 @@ function campaignTaskTypeLabel(type: string, projectName: string): string {
     case "discord_join":
       return `Join Discord ${name}`;
     default:
-      return QUEST_TASK_TYPE_OPTIONS.find((t) => t.value === type)?.label ?? type.replace(/_/g, " ");
+      return (
+        QUEST_TASK_TYPE_OPTIONS.find((t) => t.value === type)?.label ??
+        type.replace(/_/g, " ")
+      );
   }
 }
 
@@ -923,12 +977,19 @@ function shouldAppendTargetToTitle(type: string, target: string): boolean {
   const t = normalizeTaskType(type);
   if (t === "twitter_follow" || t === "twitter_retweet") return true;
   if (target.startsWith("@")) return true;
-  if (target.startsWith("http") && (t === "twitter_follow" || t === "twitter_retweet")) return true;
+  if (
+    target.startsWith("http") &&
+    (t === "twitter_follow" || t === "twitter_retweet")
+  )
+    return true;
   return false;
 }
 
 /** Admin/UI label for a quest task type. */
-export function questTaskTypeLabel(type: string, ctx?: QuestTaskTitleContext): string {
+export function questTaskTypeLabel(
+  type: string,
+  ctx?: QuestTaskTitleContext,
+): string {
   if (ctx?.questKind === "CAMPAIGN") {
     return campaignTaskTypeLabel(type, ctx.projectName ?? "");
   }

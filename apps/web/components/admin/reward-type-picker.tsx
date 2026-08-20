@@ -1,6 +1,9 @@
 "use client";
 
-import { getActiveRewardTypes, getRewardConfig } from "@/lib/quest/quest-engine";
+import {
+  getActiveRewardTypes,
+  getRewardConfig,
+} from "@/lib/quest/quest-engine";
 import { cn } from "@/lib/utils/utils";
 import { CheckCircle2 } from "lucide-react";
 
@@ -10,12 +13,20 @@ const REWARD_TYPES = getActiveRewardTypes();
 export function RewardTypePicker({
   value,
   onChange,
+  disabled = false,
 }: {
   value: string;
   onChange: (value: string) => void;
+  /** Locked when the campaign is already on-chain (frozen questKind). */
+  disabled?: boolean;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+    <div
+      className={cn(
+        "grid grid-cols-1 gap-2 sm:grid-cols-2",
+        disabled && "opacity-60",
+      )}
+    >
       {REWARD_TYPES.map((option) => {
         const config = getRewardConfig(option.code);
         const selected = value === option.code;
@@ -24,12 +35,15 @@ export function RewardTypePicker({
           <button
             key={option.code}
             type="button"
+            disabled={disabled}
             onClick={() => onChange(option.code)}
             className={cn(
               "relative flex w-full flex-col gap-2 rounded-xl border p-4 text-left transition-all duration-150",
               selected
                 ? "border-[var(--primary)]/60 bg-[var(--primary)]/[0.06] ring-1 ring-[var(--primary)]/30"
                 : "border-[var(--border)] bg-[var(--muted)]/20 hover:border-[var(--primary)]/30 hover:bg-[var(--muted)]/40",
+              !disabled && "cursor-pointer",
+              disabled && "cursor-not-allowed",
             )}
           >
             {/* Selected checkmark */}
@@ -50,10 +64,14 @@ export function RewardTypePicker({
             </span>
 
             {/* Label */}
-            <p className={cn(
-              "text-sm font-semibold leading-snug",
-              selected ? "text-[var(--foreground)]" : "text-[var(--foreground)]/80",
-            )}>
+            <p
+              className={cn(
+                "text-sm font-semibold leading-snug",
+                selected
+                  ? "text-[var(--foreground)]"
+                  : "text-[var(--foreground)]/80",
+              )}
+            >
               {option.label}
             </p>
 
@@ -66,7 +84,9 @@ export function RewardTypePicker({
             {option.defaultClaimFee != null ? (
               <p className="text-[10px] font-semibold text-[var(--muted-foreground)]">
                 Default claim fee:{" "}
-                <span className="font-bold text-amber-400">{option.defaultClaimFee} CC</span>
+                <span className="font-bold text-amber-400">
+                  {option.defaultClaimFee} CC
+                </span>
               </p>
             ) : (
               <p className="text-[10px] font-semibold text-[var(--muted-foreground)]">

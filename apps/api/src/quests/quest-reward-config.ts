@@ -13,8 +13,12 @@ export function defaultClaimFeeCc(rewardType: string): number | null {
     case RewardType.CC_MANUAL:
       return 3;
     case RewardType.CC_AND_CODE_RAFFLE:
-      // Combined CC + Code raffle: 5 CC claim fee (covers both CC reward + code reveal)
-      return 5;
+      // Combined CC + Code raffle. HARUS cocok dengan default yang dikirim
+      // admin.service saat membuat QuestCampaign on-chain (kind non-CODE = 3).
+      // Dulu 5 di sini vs 3 on-chain → Settle ditolak "Fee amount tidak
+      // sesuai kontrak!" untuk campaign berfee default. Admin masih bisa
+      // set fee eksplisit (mis. 5) saat create — nilai itu yang naik chain.
+      return 3;
     default:
       return null;
   }
@@ -30,7 +34,10 @@ export function resolveClaimFeeCc(quest: {
   return defaultClaimFeeCc(quest.rewardType);
 }
 
-export function fcfsSlotsTakenCount(remaining: number, maxWinners: number): number {
+export function fcfsSlotsTakenCount(
+  remaining: number,
+  maxWinners: number,
+): number {
   const max = Math.max(1, maxWinners);
   const left = Math.max(0, Math.min(remaining, max));
   return max - left;

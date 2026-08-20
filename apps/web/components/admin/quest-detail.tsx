@@ -4,7 +4,14 @@ import { useEffect, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/services/api/client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Download, Plus, Trash2, Users, Trophy } from "lucide-react";
+import {
+  ChevronLeft,
+  Download,
+  Plus,
+  Trash2,
+  Users,
+  Trophy,
+} from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { buttonVariants } from "@/components/ui/button";
 import { underlineTabClass } from "@/lib/ui/ui-button-styles";
@@ -60,6 +67,8 @@ interface QuestData {
   entryGateMode?: string | null;
   entryCcLock?: number | null;
   entryCostPoints?: number | null;
+  /** Canton QuestCampaign contract id — presence freezes on-chain-bound fields. */
+  ledgerCampaignId?: string | null;
   tasks: Task[];
   _count: { completions: number; winnerDraws: number };
 }
@@ -161,9 +170,16 @@ export function QuestDetail({ questId }: { questId: string }) {
           correctAnswer: newTask.correctAnswer || null,
         },
       });
-      setQuest((prev) => prev ? { ...prev, tasks: [...prev.tasks, task] } : prev);
+      setQuest((prev) =>
+        prev ? { ...prev, tasks: [...prev.tasks, task] } : prev,
+      );
       setAddingTask(false);
-      setNewTask({ type: "twitter_follow", points: 10, target: "", correctAnswer: "" });
+      setNewTask({
+        type: "twitter_follow",
+        points: 10,
+        target: "",
+        correctAnswer: "",
+      });
     } catch {
       /* gagal tambah task — admin bisa retry */
     }
@@ -172,9 +188,13 @@ export function QuestDetail({ questId }: { questId: string }) {
 
   async function handleDeleteTask(taskId: string) {
     if (!confirm("Delete this task?")) return;
-    await apiFetch(`/api/admin/tasks/${taskId}`, { method: "DELETE" }).catch(() => undefined);
+    await apiFetch(`/api/admin/tasks/${taskId}`, { method: "DELETE" }).catch(
+      () => undefined,
+    );
     setQuest((prev) =>
-      prev ? { ...prev, tasks: prev.tasks.filter((t) => t.id !== taskId) } : prev,
+      prev
+        ? { ...prev, tasks: prev.tasks.filter((t) => t.id !== taskId) }
+        : prev,
     );
   }
 
@@ -196,9 +216,7 @@ export function QuestDetail({ questId }: { questId: string }) {
   // This detail page is CAMPAIGN-only — EARN_HUB quests redirect away at the
   // top of the fetch effect. Task options are always the campaign set here.
   const taskTypeOptions = QUEST_TASK_TYPE_OPTIONS;
-  const projectNameForTasks = quest
-    ? resolveQuestProjectName(quest)
-    : "";
+  const projectNameForTasks = quest ? resolveQuestProjectName(quest) : "";
   const adminBackHref = "/admin/earn";
 
   return (
@@ -212,13 +230,14 @@ export function QuestDetail({ questId }: { questId: string }) {
             <ChevronLeft className="h-5 w-5" />
           </Link>
           <div>
-            <h1 className="type-section-title">
-              {quest.title}
-            </h1>
+            <h1 className="type-section-title">{quest.title}</h1>
             <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
               {quest.org}
               {quest.projectName?.trim() ? (
-                <span className="text-canton"> · Project: {quest.projectName.trim()}</span>
+                <span className="text-canton">
+                  {" "}
+                  · Project: {quest.projectName.trim()}
+                </span>
               ) : null}
             </p>
           </div>
@@ -228,18 +247,31 @@ export function QuestDetail({ questId }: { questId: string }) {
             type="button"
             onClick={() => void handleExportCsv()}
             disabled={exporting}
-            className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "gap-1.5")}
+            className={cn(
+              buttonVariants({ variant: "secondary", size: "sm" }),
+              "gap-1.5",
+            )}
           >
-            {exporting ? <LoadingSpinner size="sm" /> : <Download className="h-3.5 w-3.5" />}
+            {exporting ? (
+              <LoadingSpinner size="sm" />
+            ) : (
+              <Download className="h-3.5 w-3.5" />
+            )}
             {questExportLabel(quest.rewardType)}
           </button>
-          {(isInviteRewardType(quest.rewardType) || quest.rewardType === "CC_AND_CODE_RAFFLE" || quest.rewardType === "CC_MANUAL") && (
+          {(isInviteRewardType(quest.rewardType) ||
+            quest.rewardType === "CC_AND_CODE_RAFFLE" ||
+            quest.rewardType === "CC_MANUAL") && (
             <Link
               href={`/admin/quests/${questId}/winners`}
               className={cn(buttonVariants({ size: "sm" }), "gap-1.5")}
             >
               <Trophy className="h-3.5 w-3.5" />
-              {quest.rewardType === "CC_AND_CODE_RAFFLE" ? "Codes & Draw Winners" : quest.rewardType === "CC_MANUAL" ? "Draw Winners" : "Invite codes & draw"}
+              {quest.rewardType === "CC_AND_CODE_RAFFLE"
+                ? "Codes & Draw Winners"
+                : quest.rewardType === "CC_MANUAL"
+                  ? "Draw Winners"
+                  : "Invite codes & draw"}
             </Link>
           )}
           <button
@@ -248,7 +280,11 @@ export function QuestDetail({ questId }: { questId: string }) {
             disabled={deleting}
             className="flex items-center gap-1.5 rounded-xl border border-red-500/30 px-3 py-2 text-xs font-semibold text-red-500 transition-colors hover:bg-red-500/10 disabled:opacity-50"
           >
-            {deleting ? <LoadingSpinner size="sm" /> : <Trash2 className="h-3.5 w-3.5" />}
+            {deleting ? (
+              <LoadingSpinner size="sm" />
+            ) : (
+              <Trash2 className="h-3.5 w-3.5" />
+            )}
             Delete
           </button>
         </div>
@@ -257,13 +293,33 @@ export function QuestDetail({ questId }: { questId: string }) {
       {/* Stats row */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { label: "Completions", value: quest._count.completions, icon: Users },
-          { label: "Winners drawn", value: quest._count.winnerDraws, icon: Trophy },
-          { label: "Reward", value: formatRewardAmount(quest.rewardCc, normalizeRewardToken(quest.rewardToken)), icon: null },
+          {
+            label: "Completions",
+            value: quest._count.completions,
+            icon: Users,
+          },
+          {
+            label: "Winners drawn",
+            value: quest._count.winnerDraws,
+            icon: Trophy,
+          },
+          {
+            label: "Reward",
+            value: formatRewardAmount(
+              quest.rewardCc,
+              normalizeRewardToken(quest.rewardToken),
+            ),
+            icon: null,
+          },
           { label: "Max winners", value: quest.maxWinners ?? "∞", icon: null },
         ].map((s) => (
-          <div key={s.label} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-3">
-            <p className="text-xs font-medium text-[var(--muted-foreground)]">{s.label}</p>
+          <div
+            key={s.label}
+            className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-3"
+          >
+            <p className="text-xs font-medium text-[var(--muted-foreground)]">
+              {s.label}
+            </p>
             <p className="type-stat mt-1">{s.value}</p>
           </div>
         ))}
@@ -297,18 +353,28 @@ export function QuestDetail({ questId }: { questId: string }) {
               Reward type
             </p>
             <p className="mt-1 font-semibold text-[var(--foreground)]">
-              {REWARD_TYPE_OPTIONS.find((r) => r.value === quest.rewardType)?.label ??
-                quest.rewardType}
+              {REWARD_TYPE_OPTIONS.find((r) => r.value === quest.rewardType)
+                ?.label ?? quest.rewardType}
             </p>
             <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-              {REWARD_TYPE_OPTIONS.find((r) => r.value === quest.rewardType)?.hint}
+              {
+                REWARD_TYPE_OPTIONS.find((r) => r.value === quest.rewardType)
+                  ?.hint
+              }
             </p>
           </div>
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5">
-            <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">{quest.description}</p>
+            <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
+              {quest.description}
+            </p>
             <div className="mt-4 flex flex-wrap gap-2">
               {quest.tags.map((t) => (
-                <span key={t} className="rounded-md bg-[var(--muted)] px-2 py-0.5 text-xs font-semibold">{t}</span>
+                <span
+                  key={t}
+                  className="rounded-md bg-[var(--muted)] px-2 py-0.5 text-xs font-semibold"
+                >
+                  {t}
+                </span>
               ))}
             </div>
             <div
@@ -321,24 +387,35 @@ export function QuestDetail({ questId }: { questId: string }) {
             />
             <div className="mt-3 flex items-center gap-3">
               {quest.logoUrl ? (
-                <img src={quest.logoUrl} alt="" className="h-12 w-12 rounded-xl border border-[var(--border)] object-cover" />
+                <img
+                  src={quest.logoUrl}
+                  alt=""
+                  className="h-12 w-12 rounded-xl border border-[var(--border)] object-cover"
+                />
               ) : (
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--muted)] text-sm font-bold">
                   {quest.orgSlug.slice(0, 2)}
                 </div>
               )}
-              <p className="text-xs text-[var(--muted-foreground)]">Logo shown on participant quest cards.</p>
+              <p className="text-xs text-[var(--muted-foreground)]">
+                Logo shown on participant quest cards.
+              </p>
             </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3">
-              <p className="text-xs font-medium text-[var(--muted-foreground)]">Reward Pool label</p>
+              <p className="text-xs font-medium text-[var(--muted-foreground)]">
+                Reward Pool label
+              </p>
               <p className="mt-1 font-semibold">{quest.rewardPool}</p>
             </div>
             <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3">
-              <p className="text-xs font-medium text-[var(--muted-foreground)]">Reward type</p>
+              <p className="text-xs font-medium text-[var(--muted-foreground)]">
+                Reward type
+              </p>
               <p className="mt-1 font-semibold">
-                {REWARD_TYPE_OPTIONS.find((r) => r.value === quest.rewardType)?.label ?? quest.rewardType}
+                {REWARD_TYPE_OPTIONS.find((r) => r.value === quest.rewardType)
+                  ?.label ?? quest.rewardType}
               </p>
             </div>
           </div>
@@ -346,15 +423,15 @@ export function QuestDetail({ questId }: { questId: string }) {
       )}
 
       {/* Edit */}
-      {view === "edit" && (
-        <QuestForm initialData={quest} />
-      )}
+      {view === "edit" && <QuestForm initialData={quest} />}
 
       {/* Tasks */}
       {view === "tasks" && (
         <div className="space-y-3">
           {quest.tasks.length === 0 && (
-            <p className="text-sm text-[var(--muted-foreground)]">No tasks yet.</p>
+            <p className="text-sm text-[var(--muted-foreground)]">
+              No tasks yet.
+            </p>
           )}
           {quest.tasks.map((task, idx) => (
             <div
@@ -375,11 +452,25 @@ export function QuestDetail({ questId }: { questId: string }) {
                   <span className="text-sm font-semibold">
                     {resolveQuestTaskDisplayTitle(task, quest)}
                   </span>
-                  <span className="ml-auto text-xs text-[var(--muted-foreground)]">+{task.points} pts</span>
+                  <span className="ml-auto text-xs text-[var(--muted-foreground)]">
+                    +{task.points} pts
+                  </span>
                 </div>
-                {task.description && <p className="mt-1 text-xs text-[var(--muted-foreground)]">{task.description}</p>}
-                {task.target && <p className="mt-1 font-mono text-xs">Target: {task.target}</p>}
-                {task.correctAnswer && <p className="mt-1 text-xs text-[var(--muted-foreground)]">Answer: {task.correctAnswer}</p>}
+                {task.description && (
+                  <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                    {task.description}
+                  </p>
+                )}
+                {task.target && (
+                  <p className="mt-1 font-mono text-xs">
+                    Target: {task.target}
+                  </p>
+                )}
+                {task.correctAnswer && (
+                  <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                    Answer: {task.correctAnswer}
+                  </p>
+                )}
               </div>
               <button
                 type="button"
@@ -393,24 +484,54 @@ export function QuestDetail({ questId }: { questId: string }) {
 
           {/* Add task form */}
           {addingTask ? (
-            <form onSubmit={(e) => void handleAddTask(e)} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-3">
+            <form
+              onSubmit={(e) => void handleAddTask(e)}
+              className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-3"
+            >
               <p className="font-semibold">New task</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-xs font-medium">Type</label>
-                  <select value={newTask.type} onChange={(e) => setNewTask((p) => ({ ...p, type: e.target.value }))} className={inputCls}>
-                    {taskTypeOptions.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                  <select
+                    value={newTask.type}
+                    onChange={(e) =>
+                      setNewTask((p) => ({ ...p, type: e.target.value }))
+                    }
+                    className={inputCls}
+                  >
+                    {taskTypeOptions.map((t) => (
+                      <option key={t.value} value={t.value}>
+                        {t.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-medium">Points</label>
-                  <input type="number" min="1" value={newTask.points} onChange={(e) => setNewTask((p) => ({ ...p, points: Number(e.target.value) }))} className={inputCls} />
+                  <label className="mb-1 block text-xs font-medium">
+                    Points
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={newTask.points}
+                    onChange={(e) =>
+                      setNewTask((p) => ({
+                        ...p,
+                        points: Number(e.target.value),
+                      }))
+                    }
+                    className={inputCls}
+                  />
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="mb-1 block text-xs font-medium">Target / URL / Handle</label>
+                  <label className="mb-1 block text-xs font-medium">
+                    Target / URL / Handle
+                  </label>
                   <input
                     value={newTask.target}
-                    onChange={(e) => setNewTask((p) => ({ ...p, target: e.target.value }))}
+                    onChange={(e) =>
+                      setNewTask((p) => ({ ...p, target: e.target.value }))
+                    }
                     placeholder="@handle or https://..."
                     className={inputCls}
                   />
@@ -423,10 +544,20 @@ export function QuestDetail({ questId }: { questId: string }) {
                 </div>
               </div>
               <div className="flex gap-2 pt-1">
-                <button type="submit" disabled={taskSaving} className={cn(buttonVariants(), "gap-2 disabled:opacity-60")}>
+                <button
+                  type="submit"
+                  disabled={taskSaving}
+                  className={cn(buttonVariants(), "gap-2 disabled:opacity-60")}
+                >
                   {taskSaving && <LoadingSpinner size="sm" />} Save task
                 </button>
-                <button type="button" onClick={() => setAddingTask(false)} className={buttonVariants({ variant: "secondary" })}>Cancel</button>
+                <button
+                  type="button"
+                  onClick={() => setAddingTask(false)}
+                  className={buttonVariants({ variant: "secondary" })}
+                >
+                  Cancel
+                </button>
               </div>
             </form>
           ) : (

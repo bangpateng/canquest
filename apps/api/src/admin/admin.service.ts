@@ -16,7 +16,10 @@ import {
 } from '../common/prisma-types';
 import { randomInt, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
-import { requiresPaidInviteClaim } from '../quests/quest-reward-config';
+import {
+  defaultClaimFeeCc,
+  requiresPaidInviteClaim,
+} from '../quests/quest-reward-config';
 import { SpliceValidatorService } from '../canton/splice-validator.service';
 import { UsersService } from '../users/users.service';
 import { R2StorageService } from '../storage/r2-storage.service';
@@ -405,6 +408,104 @@ export class AdminService {
     }
   }
 
+  /**
+   * Field on-chain (reward, fee, kuota, gate) DIBEKUKAN saat QuestCampaign
+   * dibuat — kontrak di-recreate per claim dan tidak punya choice update.
+   * Mengubah nilai DB setelah campaign live membuat claim pemenang DITOLAK
+   * ledger (Settle: "Fee/Reward amount tidak sesuai kontrak!"; DrawWinner:
+   * "Kuota raffle sudah habis!" / mismatch eligibility). Tolak perubahan
+   * nilai (bukan pengiriman ulang nilai sama) untuk quest ber-ledgerCampaignId.
+   */
+  private assertOnChainFrozenFields(
+    existing: {
+      ledgerCampaignId: string | null;
+      rewardType: string;
+      rewardCc: number;
+      rewardToken: string;
+      maxWinners: number | null;
+      claimFeeCc: number | null;
+      entryGateMode: EntryGateMode;
+      entryCcLock: number | null;
+      entryCostPoints: number | null;
+    },
+    data: {
+      rewardType?: RewardType;
+      rewardCc?: number;
+      rewardToken?: string;
+      maxWinners?: number | null;
+      claimFeeCc?: number | null;
+      entryGateMode?: EntryGateMode;
+      entryCcLock?: number | null;
+      entryCostPoints?: number | null;
+    },
+  ): void {
+    if (!existing.ledgerCampaignId) return; // tanpa kontrak on-chain → bebas
+    const changed: string[] = [];
+
+    if (
+      data.rewardType !== undefined &&
+      normalizeRewardType(data.rewardType) !==
+        normalizeRewardType(existing.rewardType as RewardType)
+    ) {
+      changed.push('rewardType');
+    }
+    if (data.rewardCc !== undefined && data.rewardCc !== existing.rewardCc) {
+      changed.push('rewardCc');
+    }
+    const normToken = (t: string | null | undefined) =>
+      (t ?? 'CC').toUpperCase() === 'USDCX' ? 'USDCx' : 'CC';
+    if (
+      data.rewardToken !== undefined &&
+      normToken(data.rewardToken) !== normToken(existing.rewardToken)
+    ) {
+      changed.push('rewardToken');
+    }
+    if (
+      data.maxWinners !== undefined &&
+      (data.maxWinners ?? null) !== existing.maxWinners
+    ) {
+      changed.push('maxWinners');
+    }
+    if (data.claimFeeCc !== undefined) {
+      // Bandingkan fee EFEKTIF: null/0 di DB = default on-chain saat create.
+      const feeDefault =
+        defaultClaimFeeCc(
+          normalizeRewardType(existing.rewardType as RewardType),
+        ) ?? 3;
+      const eff = (v: number | null | undefined) =>
+        v != null && v > 0 ? v : feeDefault;
+      if (eff(data.claimFeeCc) !== eff(existing.claimFeeCc)) {
+        changed.push('claimFeeCc');
+      }
+    }
+    if (
+      data.entryGateMode !== undefined &&
+      data.entryGateMode !== existing.entryGateMode
+    ) {
+      changed.push('entryGateMode');
+    }
+    if (
+      data.entryCcLock !== undefined &&
+      (data.entryCcLock ?? null) !== existing.entryCcLock
+    ) {
+      changed.push('entryCcLock');
+    }
+    if (
+      data.entryCostPoints !== undefined &&
+      (data.entryCostPoints ?? null) !== existing.entryCostPoints
+    ) {
+      changed.push('entryCostPoints');
+    }
+
+    if (changed.length > 0) {
+      throw new BadRequestException(
+        `Frozen on-chain: ${changed.join(', ')} dibekukan saat campaign dibuat ` +
+          `(kontrak Canton tidak bisa di-update). Buat campaign baru untuk nilai berbeda — ` +
+          `mengubah nilai DB membuat claim pemenang ditolak ledger (amount/kuota/eligibility mismatch).`,
+      );
+    }
+  }
+
   async createQuest(data: {
     title: string;
     projectName?: string | null;
@@ -581,12 +682,18 @@ export class AdminService {
                 ? (data.entryCostPoints ?? 200)
                 : 0;
           // v29 FIX-13: claimFeeCc WAJIB > 0 (ensure kontrak menolak fee-0).
-          // Null/0 → default reward-type (2 utk kode, 3 utk CC/token).
+          // Null/0 → default reward-type via resolver YANG SAMA dengan claim
+          // path (resolveClaimFeeCc) — dulu default kind-based terpisah
+          // (CC_AND_CODE_RAFFLE: chain 3 vs claim 5) → Settle ditolak
+          // "Fee amount tidak sesuai kontrak!" untuk campaign berfee default.
           // PENTING: nilai eksplisit admin (>0) DIHORMATI apa adanya — jangan
           // clamp Math.max ke default (bug smoke test 19-08: admin set 0.01,
           // clamp jadi 3 di on-chain sementara DB 0.01 → Settle ditolak
           // "Fee amount tidak sesuai kontrak!" karena feeTransfer ≠ claimFeeCc).
-          const claimFeeCcDefault = questKindDaml.startsWith('CODE') ? 2 : 3;
+          const claimFeeCcDefault =
+            defaultClaimFeeCc(
+              normalizeRewardType(data.rewardType ?? RewardType.CC_ONLY),
+            ) ?? 3;
           const claimFeeCc =
             quest.claimFeeCc && quest.claimFeeCc > 0
               ? quest.claimFeeCc
@@ -706,6 +813,7 @@ export class AdminService {
       nextMaxWinners,
       existing.questKind,
     );
+    this.assertOnChainFrozenFields(existing, data);
 
     await this.cleanupQuestMediaUrls(questId, existing, {
       bannerImageUrl: data.bannerImageUrl,
