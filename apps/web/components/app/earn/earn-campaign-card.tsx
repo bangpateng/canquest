@@ -323,10 +323,12 @@ export function EarnCampaignCard({
             <ListChecks className="h-[13px] w-[13px]" aria-hidden />
             {quest.tasks.length} {quest.tasks.length === 1 ? "task" : "tasks"}
           </span>
-          {showRaffleRow ? (
+          {(showRaffleRow || showFcfsProgress) ? (
             <span className="inline-flex min-w-0 items-center gap-[5px]">
               <Users className="h-[13px] w-[13px] shrink-0" aria-hidden />
-              <span className="truncate">{raffleText}</span>
+              <span className="truncate">
+                {showRaffleRow ? raffleText : `${slots.used}/${slots.max}`}
+              </span>
             </span>
           ) : null}
           <span className="inline-flex shrink-0 items-center gap-1.5">{urgencyText}</span>
