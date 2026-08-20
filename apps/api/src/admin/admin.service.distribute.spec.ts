@@ -9,6 +9,7 @@ import { R2StorageService } from '../storage/r2-storage.service';
 import { QuestLedgerService } from '../canton/quest-ledger.service';
 import { CantonLedgerService } from '../canton/canton-ledger.service';
 import { PointsService } from '../users/points.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /**
  * Unit tests untuk anti-silent-failure fix di AdminService.distributeRewards.
@@ -135,6 +136,9 @@ describe('AdminService.distributeRewards — anti-silent-failure', () => {
         { provide: QuestLedgerService, useValue: {} },
         { provide: CantonLedgerService, useValue: {} },
         { provide: PointsService, useValue: {} },
+        // v32 menambah NotificationsService ke AdminService (email winner) —
+        // distributeRewards tidak memakainya; mock kosong cukup.
+        { provide: NotificationsService, useValue: {} },
       ],
     }).compile();
 

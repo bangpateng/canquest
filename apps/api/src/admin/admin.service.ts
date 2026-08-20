@@ -780,6 +780,24 @@ export class AdminService {
               ? data.entryCostPoints
               : null,
         }),
+        // v25 mirror (sama seperti createQuest): eligibilityType/Amount yang
+        // dibaca claim path (resolveEligibilityCid) harus mengikuti gate
+        // terbaru — tanpa ini perubahan gate membuat proof claim tidak cocok
+        // dengan guard on-chain campaign.
+        ...(data.entryGateMode !== undefined && {
+          eligibilityType:
+            data.entryGateMode === EntryGateMode.CC_ONLY
+              ? 'LOCK_CC'
+              : data.entryGateMode === EntryGateMode.POINTS_ONLY
+                ? 'POINTS'
+                : 'NONE',
+          eligibilityAmount:
+            data.entryGateMode === EntryGateMode.CC_ONLY
+              ? (data.entryCcLock ?? existing.entryCcLock ?? 30)
+              : data.entryGateMode === EntryGateMode.POINTS_ONLY
+                ? (data.entryCostPoints ?? existing.entryCostPoints ?? 200)
+                : 0,
+        }),
         ...(data.socialLinks !== undefined && {
           socialLinks: serializeQuestSocialLinks(
             normalizeQuestSocialLinksForSave(data.socialLinks),
@@ -1260,7 +1278,13 @@ export class AdminService {
 
       const pool = completions.map((c) => c.userId);
       const limit = params.count ?? quest.maxWinners ?? pool.length;
-      selectedUserIds = pool.sort(() => Math.random() - 0.5).slice(0, limit);
+      // Fisher–Yates dengan CSPRNG (randomInt crypto) — sort(() => Math.random()
+      // - 0.5) bias dan tidak uniform; raffle harus uniform per peserta.
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = randomInt(0, i + 1);
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+      selectedUserIds = pool.slice(0, limit);
     }
 
     if (selectedUserIds.length === 0) {
