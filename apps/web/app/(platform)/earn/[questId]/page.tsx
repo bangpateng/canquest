@@ -199,24 +199,11 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
             </div>
           </div>
 
-          {/* Description + tags + social links */}
+          {/* Description + social links (tags hanya tampil di kartu Earn, bukan di detail) */}
           {quest.description ? (
             <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[var(--muted-foreground)]">
               {quest.description}
             </p>
-          ) : null}
-          {/* Tags dari panel admin — chip di bawah deskripsi (maks 4, sama dengan kartu Earn) */}
-          {quest.tags.length > 0 ? (
-            <div className={cn("flex flex-wrap gap-1.5", quest.description ? "mt-3" : "mt-4")}>
-              {quest.tags.slice(0, 4).map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded-full border border-[var(--border)] bg-[var(--muted)]/40 px-2.5 py-1 text-[11px] font-medium text-[var(--muted-foreground)]"
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
           ) : null}
           {quest.socialLinks && quest.socialLinks.length > 0 ? (
             <div className="mt-4">
