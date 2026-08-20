@@ -10,7 +10,7 @@ import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { QUEST_STATUS_BADGE, type Quest, type UserProgress } from "@/lib/quest/quest-types";
 import { cn } from "@/lib/utils/utils";
 import { useEffect, useState } from "react";
-import { Calendar, ListChecks } from "lucide-react";
+import { Calendar, ListChecks, Users } from "lucide-react";
 
 function CountdownTimer({ endsAt }: { endsAt: string | null }) {
   const [now, setNow] = useState(Date.now());
@@ -299,6 +299,7 @@ export function EarnCampaignCard({
         </div>
 
         {/* FCFS progress ATAU raffle row */}
+        {/* FCFS progress (types with slots bar; raffle info lives in the meta row) */}
         {showFcfsProgress ? (
           <div className="mb-3.5">
             <div className="mb-[5px] flex justify-between text-[10.5px] text-[var(--muted-foreground)]/70">
@@ -314,20 +315,21 @@ export function EarnCampaignCard({
               />
             </div>
           </div>
-        ) : showRaffleRow ? (
-          <p className="mb-3.5 flex items-center gap-1.5 text-[11px] text-[var(--muted-foreground)]">
-            <Calendar className="h-[13px] w-[13px] text-[var(--muted-foreground)]/70" aria-hidden />
-            {raffleText}
-          </p>
         ) : null}
 
-        {/* Meta row */}
-        <div className="mb-3.5 mt-auto flex items-center gap-3.5 border-t border-[var(--border)] pt-3 text-[10.5px] text-[var(--muted-foreground)]/70">
-          <span className="inline-flex items-center gap-[5px]">
+        {/* Meta row — satu baris (mockup style): tasks · winners/draws · countdown */}
+        <div className="mb-3.5 mt-auto flex items-center justify-between gap-2 border-t border-[var(--border)] pt-3 text-[10.5px] font-medium text-[var(--muted-foreground)]/70">
+          <span className="inline-flex shrink-0 items-center gap-[5px]">
             <ListChecks className="h-[13px] w-[13px]" aria-hidden />
             {quest.tasks.length} {quest.tasks.length === 1 ? "task" : "tasks"}
           </span>
-          {urgencyText}
+          {showRaffleRow ? (
+            <span className="inline-flex min-w-0 items-center gap-[5px]">
+              <Users className="h-[13px] w-[13px] shrink-0" aria-hidden />
+              <span className="truncate">{raffleText}</span>
+            </span>
+          ) : null}
+          <span className="inline-flex shrink-0 items-center gap-1.5">{urgencyText}</span>
         </div>
 
         {/* CTA */}
