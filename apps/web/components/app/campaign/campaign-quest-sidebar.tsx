@@ -129,7 +129,7 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
         <div className="relative grid grid-cols-2 gap-px bg-[var(--border)]">
           {/* Reward · winner */}
           <div className="flex min-w-0 flex-col gap-1.5 bg-[var(--card)] px-5 py-4 sm:px-6 sm:py-5">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)] sm:text-xs">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
               Reward · winner
             </span>
             <div className="flex flex-wrap items-center gap-2">
@@ -142,7 +142,7 @@ export function CampaignQuestSidebar({ quest }: { quest: Quest }) {
 
           {/* Reward Pool */}
           <div className="flex min-w-0 flex-col gap-1.5 bg-[var(--card)] px-5 py-4 sm:px-6 sm:py-5">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)] sm:text-xs">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
               Reward Pool
             </span>
             <div className="flex flex-wrap items-center gap-1.5">

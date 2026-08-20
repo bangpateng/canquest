@@ -207,7 +207,7 @@ export function EarnCampaignCard({
         <div className="relative z-[3] flex w-full items-start justify-between px-3.5 py-3">
           <span
             className={cn(
-              "inline-flex items-center gap-[5px] rounded-full border border-white/[0.12] bg-[#060a08]/55 px-[9px] py-[5px] text-[10px] font-bold uppercase tracking-[0.6px] text-[var(--foreground)] backdrop-blur-md",
+              "inline-flex items-center gap-[5px] rounded-full border border-white/[0.12] bg-[#060a08]/55 px-[9px] py-[5px] text-[10px] font-bold uppercase tracking-wider text-[var(--foreground)] backdrop-blur-md",
               quest.status === "ACTIVE" &&
                 !slots.full &&
                 "border-[rgb(var(--canton-rgb)/0.3)] text-canton",
@@ -229,7 +229,7 @@ export function EarnCampaignCard({
             />
             {statusLabel}
           </span>
-          <span className="inline-flex items-center rounded-full border border-white/[0.12] bg-[#060a08]/55 px-[9px] py-[5px] text-[10px] font-bold uppercase tracking-[0.6px] text-[var(--muted-foreground)] backdrop-blur-md">
+          <span className="inline-flex items-center rounded-full border border-white/[0.12] bg-[#060a08]/55 px-[9px] py-[5px] text-[10px] font-bold uppercase tracking-wider text-[var(--muted-foreground)] backdrop-blur-md">
             {config.shortLabel}
           </span>
         </div>
@@ -247,7 +247,7 @@ export function EarnCampaignCard({
         <div className="min-w-0 flex-1">
           <p
             className={cn(
-              "truncate text-[15.5px] font-bold leading-tight",
+              "truncate text-base font-bold leading-tight",
               isEnded ? "text-[var(--muted-foreground)]" : "text-[var(--foreground)]",
             )}
           >
@@ -277,7 +277,7 @@ export function EarnCampaignCard({
         {/* Reward row (boxed) — label kiri, nilai rata kanan */}
         <div className="mb-3 rounded-[10px] border border-[var(--border)] bg-[var(--card-solid)] px-3 py-2.5">
           <div className="flex items-baseline justify-between gap-3">
-            <p className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.4px] text-[var(--muted-foreground)]/70">
+            <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]/70">
               Reward
             </p>
             <p
@@ -293,7 +293,7 @@ export function EarnCampaignCard({
             <TokenUsdValue
               amount={quest.rewardCc}
               token={token}
-              className="mt-0.5 block text-right text-[11px] text-[var(--muted-foreground)]/80"
+              className="mt-0.5 block text-right text-xs text-[var(--muted-foreground)]/80"
             />
           ) : null}
         </div>
@@ -302,7 +302,7 @@ export function EarnCampaignCard({
         {/* FCFS progress (types with slots bar; raffle info lives in the meta row) */}
         {showFcfsProgress ? (
           <div className="mb-3.5">
-            <div className="mb-[5px] flex justify-between text-[10.5px] text-[var(--muted-foreground)]/70">
+            <div className="mb-[5px] flex justify-between text-[10px] text-[var(--muted-foreground)]/70">
               <span>
                 {slots.used} / {slots.max} claimed
               </span>
@@ -318,7 +318,7 @@ export function EarnCampaignCard({
         ) : null}
 
         {/* Meta row — satu baris (mockup style): tasks · winners/draws · countdown */}
-        <div className="mb-3.5 mt-auto flex items-center justify-between gap-2 border-t border-[var(--border)] pt-3 text-[10.5px] font-medium text-[var(--muted-foreground)]/70">
+        <div className="mb-3.5 mt-auto flex items-center justify-between gap-2 border-t border-[var(--border)] pt-3 text-[10px] font-medium text-[var(--muted-foreground)]/70">
           <span className="inline-flex shrink-0 items-center gap-[5px]">
             <ListChecks className="h-[13px] w-[13px]" aria-hidden />
             {quest.tasks.length} {quest.tasks.length === 1 ? "task" : "tasks"}
@@ -337,7 +337,7 @@ export function EarnCampaignCard({
         {/* CTA */}
         <span
           className={cn(
-            "flex h-10 w-full items-center justify-center rounded-[9px] px-4 text-[13px] transition-all",
+            "flex h-10 w-full items-center justify-center rounded-[9px] px-4 text-sm transition-all",
             ctaClass,
           )}
         >
