@@ -256,6 +256,19 @@ export function EarnCampaignCard({
           <p className="mt-0.5 truncate text-xs text-[var(--muted-foreground)]">
             {quest.description}
           </p>
+          {/* Tags dari panel admin — chip kecil di bawah deskripsi (maks 4) */}
+          {quest.tags.length > 0 ? (
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {quest.tags.slice(0, 4).map((tag) => (
+                <span
+                  key={tag}
+                  className="rounded-full border border-[var(--border)] bg-[var(--muted)]/40 px-2 py-0.5 text-[10px] font-medium text-[var(--muted-foreground)]"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -288,7 +301,7 @@ export function EarnCampaignCard({
         {/* FCFS progress ATAU raffle row */}
         {showFcfsProgress ? (
           <div className="mb-3.5">
-            <div className="mb-[5px] flex justify-between text-[11px] text-[var(--muted-foreground)]/70">
+            <div className="mb-[5px] flex justify-between text-[10.5px] text-[var(--muted-foreground)]/70">
               <span>
                 {slots.used} / {slots.max} claimed
               </span>
@@ -302,14 +315,14 @@ export function EarnCampaignCard({
             </div>
           </div>
         ) : showRaffleRow ? (
-          <p className="mb-3.5 flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
+          <p className="mb-3.5 flex items-center gap-1.5 text-[11px] text-[var(--muted-foreground)]">
             <Calendar className="h-[13px] w-[13px] text-[var(--muted-foreground)]/70" aria-hidden />
             {raffleText}
           </p>
         ) : null}
 
         {/* Meta row */}
-        <div className="mb-3.5 mt-auto flex items-center gap-3.5 border-t border-[var(--border)] pt-3 text-[11.5px] text-[var(--muted-foreground)]/70">
+        <div className="mb-3.5 mt-auto flex items-center gap-3.5 border-t border-[var(--border)] pt-3 text-[10.5px] text-[var(--muted-foreground)]/70">
           <span className="inline-flex items-center gap-[5px]">
             <ListChecks className="h-[13px] w-[13px]" aria-hidden />
             {quest.tasks.length} {quest.tasks.length === 1 ? "task" : "tasks"}
