@@ -1,11 +1,11 @@
 import { cn } from "@/lib/utils/utils";
 
 /** Period / status filter pills (Weekly, Active, etc.) — active = brand gradient.
- *  Ukuran pill: Earn mockup (padding 9px 16px, 12.5px bold) — jelas terlihat
+ *  Ukuran pill compact (padding 6px 12px, 11.5px semibold) — cukup terlihat
  *  sebagai tombol dengan state hijau gradient saat terpilih. */
 export function filterTabClass(selected: boolean, className?: string) {
   return cn(
-    "shrink-0 cursor-pointer rounded-full border px-4 py-2 text-[12.5px] font-bold tracking-wide transition-all",
+    "shrink-0 cursor-pointer rounded-full border px-3 py-1.5 text-[11.5px] font-semibold tracking-wide transition-all",
     selected
       ? "border-0 bg-gradient-brand text-[var(--primary-foreground)] shadow-[0_6px_16px_-8px_rgb(var(--canton-rgb)/0.6)]"
       : "border border-[var(--border)] bg-transparent text-[var(--muted-foreground)] hover:border-[var(--primary)]/35 hover:text-[var(--foreground)]",
