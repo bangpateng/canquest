@@ -341,7 +341,7 @@ export function AdminReferralAuditPanel() {
                                           </span>
                                         )}
                                       </p>
-                                      <p className="text-[11px] text-[var(--muted-foreground)]">
+                                      <p className="text-xs text-[var(--muted-foreground)]">
                                         {r.points} pts ·{' '}
                                         {new Date(r.createdAt).toLocaleDateString()}
                                         {r.isGmailAlias && (

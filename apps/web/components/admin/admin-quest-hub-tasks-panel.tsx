@@ -239,7 +239,7 @@ export function AdminQuestHubTasksPanel({
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-semibold text-[var(--foreground)]">{row.headline}</p>
                       {row.showNew ? (
-                        <span className="rounded-md bg-canton/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-canton">
+                        <span className="rounded-md bg-canton/20 px-1.5 py-0.5 text-[10px] font-bold uppercase text-canton">
                           New
                         </span>
                       ) : null}

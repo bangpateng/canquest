@@ -73,7 +73,7 @@ export function CcHoldingsCard({ hasWallet }: CcHoldingsCardProps) {
           <div className="flex items-center gap-2.5">
             <CcRewardLogo size={28} className="text-canton" />
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
                 {t("dashboard.ccBalance")}
               </p>
               <p className="mt-0.5 text-3xl font-extrabold tabular-nums tracking-tight text-[var(--foreground)] glow-text">
@@ -156,7 +156,7 @@ export function CcHoldingsCard({ hasWallet }: CcHoldingsCardProps) {
               style={{ left: `${100 - lockedPct}%`, width: `${lockedPct}%` }}
             />
           </div>
-          <p className="mt-2 text-right text-[11px] font-medium tabular-nums text-[var(--muted-foreground)]">
+          <p className="mt-2 text-right text-xs font-medium tabular-nums text-[var(--muted-foreground)]">
             {lockedPct}% locked
           </p>
         </div>

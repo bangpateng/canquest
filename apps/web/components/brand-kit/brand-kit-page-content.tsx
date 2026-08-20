@@ -178,7 +178,7 @@ function Swatch({ color }: { color: BrandColor }) {
           </span>
         </div>
         {color.token ? (
-          <p className="font-mono text-[11px] text-[var(--muted-foreground)]">{color.token}</p>
+          <p className="font-mono text-xs text-[var(--muted-foreground)]">{color.token}</p>
         ) : null}
         <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">{color.usage}</p>
       </div>

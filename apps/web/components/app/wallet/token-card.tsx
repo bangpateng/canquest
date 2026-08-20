@@ -37,7 +37,7 @@ export function TokenCard({ symbol, balance, fiatValue, comingSoon }: TokenCardP
             {display}
           </span>
           {comingSoon && (
-            <span className="rounded-full border border-[var(--border)] bg-[var(--muted)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
+            <span className="rounded-full border border-[var(--border)] bg-[var(--muted)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
               Coming soon
             </span>
           )}

@@ -149,7 +149,7 @@ function MaintenanceOverlay({ status }: { status: MaintenanceStatus }) {
           <Wrench className="h-9 w-9 animate-pulse text-canton" />
         </div>
 
-        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.2em] text-canton">
+        <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-canton">
           Maintenance
         </p>
 

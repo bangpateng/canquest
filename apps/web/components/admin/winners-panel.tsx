@@ -616,7 +616,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
                     type="button"
                     disabled={deletingAll || deletingCodeId !== null}
                     onClick={() => void handleDeleteAllAvailable()}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-[11px] font-semibold text-red-700 transition-colors hover:bg-red-500/15 disabled:opacity-50 dark:text-red-300"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-xs font-semibold text-red-700 transition-colors hover:bg-red-500/15 disabled:opacity-50 dark:text-red-300"
                   >
                     {deletingAll ? (
                       <LoadingSpinner size="sm" />

@@ -554,7 +554,7 @@ export function QuestForm({
       >
         <summary className="flex cursor-pointer list-none items-center justify-between p-5">
           <span className="flex items-center gap-2">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[11px] font-bold text-[var(--primary)]">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[10px] font-bold text-[var(--primary)]">
               1
             </span>
             <h2 className="type-section-title">Identity</h2>
@@ -853,7 +853,7 @@ export function QuestForm({
       >
         <summary className="flex cursor-pointer list-none items-center justify-between p-5">
           <span className="flex items-center gap-2">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[11px] font-bold text-[var(--primary)]">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[10px] font-bold text-[var(--primary)]">
               2
             </span>
             <h2 className="type-section-title">Reward</h2>
@@ -1133,7 +1133,7 @@ export function QuestForm({
                 form.rewardToken,
               )}
             </p>
-            <p className="mt-0.5 text-[11px] text-[var(--muted-foreground)]">
+            <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
               {questKind === "CAMPAIGN"
                 ? "Auto-derived from CC amount & max winners. Task points count toward the leaderboard."
                 : "Auto-derived from CC amount & max winners."}
@@ -1181,7 +1181,7 @@ export function QuestForm({
         <details className="group rounded-2xl border border-[var(--border)] bg-[var(--card)]">
           <summary className="flex cursor-pointer list-none items-center justify-between p-5">
             <span className="flex items-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[11px] font-bold text-[var(--primary)]">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[10px] font-bold text-[var(--primary)]">
                 3
               </span>
               <h2 className="type-section-title">Social links</h2>
@@ -1207,7 +1207,7 @@ export function QuestForm({
         <details className="group rounded-2xl border border-[var(--border)] bg-[var(--card)]">
           <summary className="flex cursor-pointer list-none items-center justify-between p-5">
             <span className="flex items-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[11px] font-bold text-[var(--primary)]">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[10px] font-bold text-[var(--primary)]">
                 4
               </span>
               <h2 className="type-section-title">Earn access gate</h2>
@@ -1317,7 +1317,7 @@ export function QuestForm({
             className="type-section-title flex w-full items-center justify-between"
           >
             <span className="flex items-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[11px] font-bold text-[var(--primary)]">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[10px] font-bold text-[var(--primary)]">
                 {questKind === "CAMPAIGN" ? "5" : "3"}
               </span>
               Tasks ({tasks.length})

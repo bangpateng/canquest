@@ -108,7 +108,7 @@ export function CampaignFcfsRewardCard({
             )}
           </div>
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
               {sectionLabel}
             </p>
             <p className="mt-1 text-base font-bold leading-snug text-[var(--foreground)]">

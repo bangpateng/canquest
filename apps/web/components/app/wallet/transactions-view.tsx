@@ -316,7 +316,7 @@ function AmountText({ tx }: { tx: TxItem }) {
           <TokenUsdValue
             amount={usd.amount}
             token={usd.token}
-            className="block text-[11px] font-medium text-[var(--muted-foreground)]"
+            className="block text-xs font-medium text-[var(--muted-foreground)]"
           />
         ) : null}
       </span>
@@ -338,7 +338,7 @@ function AmountText({ tx }: { tx: TxItem }) {
           <TokenUsdValue
             amount={usd.amount}
             token={usd.token}
-            className="block text-[11px] font-medium text-[var(--muted-foreground)]"
+            className="block text-xs font-medium text-[var(--muted-foreground)]"
           />
         ) : null}
       </span>
@@ -355,7 +355,7 @@ function AmountText({ tx }: { tx: TxItem }) {
         <TokenUsdValue
           amount={usd.amount}
           token={usd.token}
-          className="block text-[11px] font-medium text-[var(--muted-foreground)]"
+          className="block text-xs font-medium text-[var(--muted-foreground)]"
         />
       ) : null}
     </span>

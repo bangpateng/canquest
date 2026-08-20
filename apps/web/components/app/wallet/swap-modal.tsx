@@ -385,7 +385,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                       </button>
                     ))}
                   </div>
-                  <p className="mt-2 text-[11px] leading-relaxed text-[var(--muted-foreground)]">
+                  <p className="mt-2 text-xs leading-relaxed text-[var(--muted-foreground)]">
                     Your swap will revert if the price moves unfavorably by more than this amount.
                   </p>
                 </div>
@@ -599,7 +599,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
           </>
         )}
 
-        <p className="mt-4 flex items-center justify-center gap-1.5 text-center text-[11px] font-medium text-[var(--muted-foreground)]">
+        <p className="mt-4 flex items-center justify-center gap-1.5 text-center text-xs font-medium text-[var(--muted-foreground)]">
           <Route className="h-3 w-3" />
           Best route via OneSwap
         </p>
@@ -700,7 +700,7 @@ function TokenPicker({
                       </span>
                     )}
                   </p>
-                  <p className="truncate text-[11px] text-slate-500">
+                  <p className="truncate text-xs text-slate-500">
                     {t.instrumentAdmin.slice(0, 20)}...
                   </p>
                 </div>
@@ -753,7 +753,7 @@ function SwapCard({
           <span className="text-xs font-medium text-slate-500">{label}</span>
           {isInput && balance && (
             <div className="flex items-center gap-1.5">
-              <span className="text-[11px] text-slate-500">Bal: {balance}</span>
+              <span className="text-xs text-slate-500">Bal: {balance}</span>
               {onPercentClick && (
                 <div className="flex gap-1">
                   {[0.25, 0.5, 0.75].map((p) => (

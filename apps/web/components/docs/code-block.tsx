@@ -38,7 +38,7 @@ export function CodeBlock({
             {language}
           </span>
         ) : null}
-        <pre className="overflow-x-auto px-4 py-3.5 text-[13px] leading-relaxed">
+        <pre className="overflow-x-auto px-4 py-3.5 text-sm leading-relaxed">
           <code className="font-mono text-[var(--foreground)]">{children}</code>
         </pre>
       </div>

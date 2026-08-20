@@ -103,7 +103,7 @@ export function RewardHowToUse({
             </p>
           </div>
 
-          <p className="mt-3.5 flex items-center gap-2 border-t border-[var(--border)] pt-3.5 text-[12.5px] font-semibold text-canton">
+          <p className="mt-3.5 flex items-center gap-2 border-t border-[var(--border)] pt-3.5 text-xs font-semibold text-canton">
             <CheckCircle2 className="h-[15px] w-[15px] shrink-0 text-canton" strokeWidth={2.5} aria-hidden />
             {t("earnCampaigns.howToUseAllSet")}
           </p>

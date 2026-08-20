@@ -34,7 +34,7 @@ function Field({
     <div className="space-y-1.5">
       <label className="text-xs font-medium text-[var(--muted-foreground)]">{label}</label>
       {children}
-      {hint ? <p className="text-[11px] text-[var(--muted-foreground)]">{hint}</p> : null}
+      {hint ? <p className="text-xs text-[var(--muted-foreground)]">{hint}</p> : null}
     </div>
   );
 }

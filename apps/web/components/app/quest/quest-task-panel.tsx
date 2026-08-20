@@ -1515,7 +1515,7 @@ function TaskRow({
           ) : null}
 
           {needsTwitter && !isVerified ? (
-            <p className="mt-2 text-[11px] text-orange-300/90">
+            <p className="mt-2 text-xs text-orange-300/90">
               <Link
                 href="/settings"
                 className="font-semibold underline underline-offset-2"
@@ -1530,7 +1530,7 @@ function TaskRow({
             <button
               type="button"
               onClick={() => setWalletPromptOpen(true)}
-              className="mt-2 text-left text-[11px] font-medium text-orange-300/90 underline-offset-2 hover:underline"
+              className="mt-2 text-left text-xs font-medium text-orange-300/90 underline-offset-2 hover:underline"
             >
               Create your wallet to complete this task →
             </button>

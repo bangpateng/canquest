@@ -117,7 +117,7 @@ export function SettingsPreapprovalPanel() {
           className="flex w-full items-center justify-between p-6 transition-colors hover:bg-[var(--primary)]/[0.04] sm:p-7"
         >
           <div className="text-left">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
               One Step Transfer
             </p>
             <p className="mt-1 text-xs text-[var(--muted-foreground)]">
@@ -226,7 +226,7 @@ function TokenToggleRow({
               {displayName(instrumentId)}
             </p>
             {!enabled && (
-              <span className="rounded-full bg-[var(--muted)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
+              <span className="rounded-full bg-[var(--muted)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
                 Coming soon
               </span>
             )}

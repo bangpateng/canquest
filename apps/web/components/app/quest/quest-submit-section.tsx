@@ -383,7 +383,7 @@ export function QuestSubmittedProof({
               onClick={() => setProofOpen((o) => !o)}
               className="flex w-full items-center justify-between gap-4 px-6 py-4 text-left transition-colors hover:bg-[var(--muted)]/30"
             >
-              <span className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+              <span className="flex items-center gap-3 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
                 <Shield className="h-4 w-4" />
                 On-chain proof
                 {taskCount > 0 ? (
@@ -412,7 +412,7 @@ export function QuestSubmittedProof({
                       QuestParticipation
                     </p>
                     <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                      <code className="break-all font-mono text-[11px] leading-relaxed">
+                      <code className="break-all font-mono text-xs leading-relaxed">
                         {participationId}
                       </code>
                       <CopyButton value={participationId} className="self-start" />
@@ -425,7 +425,7 @@ export function QuestSubmittedProof({
                       QuestCompletion
                     </p>
                     <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                      <code className="break-all font-mono text-[11px] leading-relaxed">
+                      <code className="break-all font-mono text-xs leading-relaxed">
                         {completionId}
                       </code>
                       <CopyButton value={completionId} className="self-start" />

@@ -147,7 +147,7 @@ export function LandingHero() {
                   />
                   <div>
                     <p className="font-medium leading-none">2,140.00</p>
-                    <p className="mt-0.5 text-[11px] text-[var(--muted-foreground)]">USDCx</p>
+                    <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">USDCx</p>
                   </div>
                 </div>
                 <span className="flex items-center gap-1 rounded-full bg-canton-subtle px-2 py-1 text-xs font-medium text-canton">
@@ -232,12 +232,12 @@ function AccentCardView({
               {card.icon}
             </span>
           )}
-          <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+          <span className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
             {card.label}
           </span>
         </span>
         {card.badge ? (
-          <span className="flex items-center gap-1 rounded-full bg-canton-subtle px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-canton">
+          <span className="flex items-center gap-1 rounded-full bg-canton-subtle px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-canton">
             {card.badge === "Live" ? (
               <Flame className="h-2.5 w-2.5" aria-hidden />
             ) : null}
@@ -247,7 +247,7 @@ function AccentCardView({
       </div>
       <p className="mt-2 text-sm font-semibold text-[var(--foreground)]">{card.value}</p>
       {card.hint ? (
-        <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted-foreground)]">{card.hint}</p>
+        <p className="mt-0.5 text-xs leading-snug text-[var(--muted-foreground)]">{card.hint}</p>
       ) : null}
     </div>
   );

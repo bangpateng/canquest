@@ -63,7 +63,7 @@ export function LockSection() {
                   <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-canton-subtle ring-1 ring-[var(--primary)]/20">
                     <Icon className="h-5 w-5 text-canton" aria-hidden />
                   </span>
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full border border-canton-muted bg-canton-subtle text-[11px] font-bold text-canton">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full border border-canton-muted bg-canton-subtle text-[10px] font-bold text-canton">
                     {i + 1}
                   </span>
                 </div>

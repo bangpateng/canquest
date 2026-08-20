@@ -55,7 +55,7 @@ export function CampaignStatusRow({
           <Icon className="h-[11px] w-[11px]" strokeWidth={strokeWidth} aria-hidden />
         </span>
       ) : null}
-      <p className="min-w-0 flex-1 text-[12.5px] leading-relaxed text-[var(--muted-foreground)]">
+      <p className="min-w-0 flex-1 text-xs leading-relaxed text-[var(--muted-foreground)]">
         {label ? (
           <span className="font-semibold text-[var(--foreground)]">{label}</span>
         ) : null}

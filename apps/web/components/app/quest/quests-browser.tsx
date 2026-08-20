@@ -188,7 +188,7 @@ export function QuestsBrowser({ variant = "earn" }: { variant?: "default" | "ear
           {/* ── Hero header ─────────────────────────────────────────────── */}
           <Card className="w-full overflow-hidden">
             <div className="p-6 sm:p-7">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
                 {t("earnCampaigns.kindCampaign")}
               </p>
               <h1 className="mt-2 text-2xl font-bold leading-tight tracking-tight text-[var(--foreground)] sm:text-3xl md:text-4xl">

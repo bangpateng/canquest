@@ -113,7 +113,7 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
       <Card className="w-full overflow-hidden p-6 sm:p-8">
         <div>
           <div className="flex items-center justify-between">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
               Total Balance
             </p>
             <button
@@ -172,7 +172,7 @@ export function TokenList({ me, onRefresh }: TokenListProps) {
       {/* ── My Tokens ──────────────────────────────────────────────────── */}
       <div>
         <div className="mb-3 flex items-center justify-between gap-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
             My Tokens
           </p>
           {loading && (

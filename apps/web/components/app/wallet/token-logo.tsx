@@ -93,7 +93,7 @@ export function TokenLogo({
   const letter = displayName(symbol).charAt(0).toUpperCase();
   const dim =
     size === "sm"
-      ? "h-6 w-6 text-[11px]"
+      ? "h-6 w-6 text-[10px]"
       : size === "lg"
         ? "h-12 w-12 text-lg"
         : "h-8 w-8 text-sm";

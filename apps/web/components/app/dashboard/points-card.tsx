@@ -22,7 +22,7 @@ export function PointsCard({ remaining, loading }: PointsCardProps) {
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--primary)]/10">
             <Sparkles className="h-4 w-4 text-canton" aria-hidden />
           </span>
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
             {t("dashboard.questPoints")}
           </p>
         </div>

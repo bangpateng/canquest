@@ -116,19 +116,19 @@ export function ClaimDetailsModal({
         {/* Reward logo + hero amount */}
         <div className="mb-4 flex flex-col items-center">
           <ClaimTokenIcon token={tokenHero} />
-          <p className="mb-1.5 mt-3.5 font-mono text-[10.5px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+          <p className="mb-1.5 mt-3.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
             {rewardLabel}
           </p>
-          <p className="text-[36px] font-bold leading-none tracking-[-0.02em] tabular-nums text-[var(--foreground)]">
+          <p className="text-4xl font-bold leading-none tracking-[-0.02em] tabular-nums text-[var(--foreground)]">
             {headline}
             {heroUnit ? (
-              <span className="ml-1 text-[16px] font-semibold text-[var(--muted-foreground)]">
+              <span className="ml-1 text-base font-semibold text-[var(--muted-foreground)]">
                 {heroUnit}
               </span>
             ) : null}
           </p>
           {heroUsd ? (
-            <p className="mt-1.5 text-[13px] font-medium text-[var(--muted-foreground)]">
+            <p className="mt-1.5 text-sm font-medium text-[var(--muted-foreground)]">
               {heroUsd}
             </p>
           ) : null}
@@ -145,11 +145,11 @@ export function ClaimDetailsModal({
                   i < rows.length - 1 && "border-b border-[var(--border)]",
                 )}
               >
-                <span className="text-[13px] text-[var(--muted-foreground)]">{r.label}</span>
-                <span className="flex items-center gap-1.5 font-mono text-[13px] font-medium text-[var(--foreground)]">
+                <span className="text-sm text-[var(--muted-foreground)]">{r.label}</span>
+                <span className="flex items-center gap-1.5 font-mono text-sm font-medium text-[var(--foreground)]">
                   <span className={r.accent ? "text-canton" : undefined}>{r.value}</span>
                   {r.tag ? (
-                    <span className="rounded-[20px] border border-amber-400/25 bg-amber-400/10 px-1.5 py-0.5 font-mono text-[10.5px] text-amber-300">
+                    <span className="rounded-[20px] border border-amber-400/25 bg-amber-400/10 px-1.5 py-0.5 font-mono text-[10px] text-amber-300">
                       {r.tag}
                     </span>
                   ) : null}
@@ -161,7 +161,7 @@ export function ClaimDetailsModal({
 
         {/* Eligibility — plain text line with mint check (mockup rev.2) */}
         {eligibleHint ? (
-          <p className="flex items-center gap-2 px-0.5 pb-[18px] text-[12.5px] text-[var(--muted-foreground)]">
+          <p className="flex items-center gap-2 px-0.5 pb-[18px] text-xs text-[var(--muted-foreground)]">
             <Check className="h-[15px] w-[15px] shrink-0 text-canton" strokeWidth={2.4} aria-hidden />
             {eligibleHint}
           </p>
@@ -170,7 +170,7 @@ export function ClaimDetailsModal({
         {/* CTA */}
         <div>
           <Button
-            className="h-[50px] w-full rounded-xl text-[14.5px] font-bold shadow-[0_8px_20px_-12px_rgb(94_232_156/0.45)]"
+            className="h-[50px] w-full rounded-xl text-sm font-bold shadow-[0_8px_20px_-12px_rgb(94_232_156/0.45)]"
             onClick={onConfirm}
             disabled={isConfirming}
           >
@@ -180,7 +180,7 @@ export function ClaimDetailsModal({
           <button
             type="button"
             onClick={onClose}
-            className="w-full pb-0.5 pt-3.5 text-[12.5px] text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+            className="w-full pb-0.5 pt-3.5 text-xs text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
           >
             Maybe later
           </button>

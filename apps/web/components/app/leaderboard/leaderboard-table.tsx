@@ -223,7 +223,7 @@ export function LeaderboardTable() {
         {/* Card Header */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 border-b border-[var(--border)] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
               {period === "all" ? "All time" : period === "weekly" ? "Weekly ranking" : "Monthly ranking"}
             </p>
             <h2 className="mt-1 text-base sm:text-lg font-semibold tracking-tight text-[var(--foreground)]">
@@ -231,7 +231,7 @@ export function LeaderboardTable() {
             </h2>
           </div>
           {data && (
-            <p className="inline-block text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)] sm:ml-auto">
+            <p className="inline-block text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)] sm:ml-auto">
               {data.total.toLocaleString()} participants
             </p>
           )}
@@ -261,7 +261,7 @@ export function LeaderboardTable() {
         ) : (
           <div className="relative w-full overflow-x-auto">
             <table className="w-full min-w-[300px] text-left">
-              <thead className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+              <thead className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
                 <tr>
                   <th className="whitespace-nowrap px-4 py-3.5 font-semibold sm:px-6 sm:py-4 md:px-8">Rank</th>
                   <th className="min-w-[10rem] px-3 py-3.5 font-semibold sm:px-4 sm:py-4">Participant</th>

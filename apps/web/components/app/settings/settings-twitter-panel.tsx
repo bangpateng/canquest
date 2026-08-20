@@ -106,7 +106,7 @@ export function SettingsTwitterPanel({
     >
       <div className="p-6 sm:p-7">
         {/* Section header */}
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
           X (Twitter)
         </p>
         <p className="mt-1 text-xs text-[var(--muted-foreground)]">
@@ -124,7 +124,7 @@ export function SettingsTwitterPanel({
           <div className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3">
             <div className="flex items-center gap-2">
               <AtSign className="h-3.5 w-3.5 text-[var(--muted-foreground)]" aria-hidden />
-              <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
+              <span className="text-[10px] font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
                 Connected
               </span>
             </div>
@@ -140,7 +140,7 @@ export function SettingsTwitterPanel({
             <div>
               <label
                 htmlFor="twitter-handle"
-                className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-[var(--muted-foreground)]"
+                className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-[var(--muted-foreground)]"
               >
                 <AtSign className="h-3.5 w-3.5" aria-hidden />
                 X username

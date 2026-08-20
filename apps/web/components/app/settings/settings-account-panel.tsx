@@ -44,7 +44,7 @@ function SettingsField({
     <div className="relative rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3">
       <label
         htmlFor={id}
-        className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-[var(--muted-foreground)]"
+        className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-wider text-[var(--muted-foreground)]"
       >
         <Icon className="h-3.5 w-3.5" aria-hidden />
         {label}
@@ -92,7 +92,7 @@ export function SettingsAccountPanel() {
     <Card className="w-full max-w-full overflow-hidden">
       <div className="p-6 sm:p-7">
         {/* Section header */}
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
           Profile
         </p>
 

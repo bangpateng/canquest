@@ -807,7 +807,7 @@ export function WalletActions({
                 className="h-[200px] w-[200px]"
               />
               <span
-                className="absolute left-1/2 top-1/2 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-4 border-white bg-gradient-to-br from-amber-400 to-amber-600 text-[11px] font-black text-black shadow-md dark:border-zinc-950"
+                className="absolute left-1/2 top-1/2 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-4 border-white bg-gradient-to-br from-amber-400 to-amber-600 text-[10px] font-black text-black shadow-md dark:border-zinc-950"
                 aria-hidden
               >
                 C
