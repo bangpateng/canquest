@@ -31,6 +31,7 @@ import { QuestLedgerService } from '../canton/quest-ledger.service';
 import { CantonLedgerService } from '../canton/canton-ledger.service';
 import {} from '../common/wallet-policy';
 import { PointsService } from '../users/points.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   isAllowedEmailDomain,
   getDomainFromEmail,
@@ -112,6 +113,7 @@ export class AdminService {
     private readonly questLedger: QuestLedgerService,
     private readonly ledger: CantonLedgerService,
     private readonly points: PointsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /**
@@ -537,6 +539,20 @@ export class AdminService {
     });
     this.logger.log(`Quest created: ${quest.title} (${quest.id})`);
 
+    // Email blast "New campaign" ke semua user ber-wallet (outbox + Bull queue).
+    // Fire-and-forget best-effort — kegagalan email tidak menggagalkan create.
+    // Quest COMING_SOON di-skip di dalam service; di-announce saat jadi ACTIVE
+    // (hook updateQuest). Dedup via unique [userId, questId, type].
+    if (questKind === QuestKind.CAMPAIGN) {
+      void this.notifications
+        .announceCampaignCreated(quest.id)
+        .catch((err) =>
+          this.logger.warn(
+            `Campaign announcement email failed: ${String(err)}`,
+          ),
+        );
+    }
+
     // canquest-v6: Buat QuestCampaign on-chain setelah quest dibuat di DB.
     // Best-effort — tidak memblokir jika ledger tidak tersedia.
     // ledgerCampaignId disimpan ke DB agar claimFcfsSlot() bisa referensi contract.
@@ -771,6 +787,35 @@ export class AdminService {
         }),
       },
     });
+
+    // Email notifikasi pada transisi status (fire-and-forget best-effort, dedup
+    // via EmailNotificationLog): COMING_SOON→ACTIVE = blast announcement;
+    // →ENDED = email "not selected" ke peserta raffle tanpa WinnerDraw.
+    if (updated.questKind === QuestKind.CAMPAIGN) {
+      if (
+        existing.status !== QuestStatus.ACTIVE &&
+        updated.status === QuestStatus.ACTIVE
+      ) {
+        void this.notifications
+          .announceCampaignCreated(questId)
+          .catch((err) =>
+            this.logger.warn(
+              `Campaign announcement email failed: ${String(err)}`,
+            ),
+          );
+      }
+      if (
+        existing.status !== QuestStatus.ENDED &&
+        updated.status === QuestStatus.ENDED
+      ) {
+        void this.notifications
+          .announceNotSelected(questId)
+          .catch((err) =>
+            this.logger.warn(`Not-selected emails failed: ${String(err)}`),
+          );
+      }
+    }
+
     return withQuestMediaUrls(
       {
         ...updated,
@@ -1155,7 +1200,13 @@ export class AdminService {
 
   async drawWinners(
     questId: string,
-    params: { count?: number; userIds?: string[] },
+    params: {
+      count?: number;
+      userIds?: string[];
+      /** true = draw ini final → kirim juga email "not selected" ke peserta
+       *  yang tidak terpilih. Default false (draw bertahap hanya email winner). */
+      announceResults?: boolean;
+    },
   ) {
     const quest = await this.prisma.quest.findUnique({
       where: { id: questId },
@@ -1311,6 +1362,26 @@ export class AdminService {
           inviteCode: code?.code ?? null,
           rewardVariant: variant,
         });
+    }
+
+    // Email "You won" ke pemenang baru (setiap draw), plus email "not selected"
+    // bila draw ditandai final (announceResults=true). Fire-and-forget best-effort.
+    if (results.length > 0) {
+      void this.notifications
+        .announceDrawWinners(
+          questId,
+          results.map((r) => r.userId),
+        )
+        .catch((err) =>
+          this.logger.warn(`Winner emails failed: ${String(err)}`),
+        );
+    }
+    if (params.announceResults) {
+      void this.notifications
+        .announceNotSelected(questId)
+        .catch((err) =>
+          this.logger.warn(`Not-selected emails failed: ${String(err)}`),
+        );
     }
 
     return { added: results.length, winners: results };

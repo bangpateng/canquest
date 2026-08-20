@@ -12,6 +12,7 @@ import { UsersModule } from '../users/users.module';
 import { CantonModule } from '../canton/canton.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { QueueModule } from '../queue/queue.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { QuestLedgerService } from '../canton/quest-ledger.service';
 
 @Module({
@@ -46,6 +47,7 @@ import { QuestLedgerService } from '../canton/quest-ledger.service';
     CantonModule,
     PrismaModule,
     QueueModule,
+    NotificationsModule,
   ],
   controllers: [AdminAuthController, AdminController, AdminUploadsController],
   providers: [

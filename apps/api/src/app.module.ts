@@ -18,6 +18,7 @@ import { UploadsModule } from './uploads/uploads.module';
 import { StorageModule } from './storage/storage.module';
 import { QueueModule } from './queue/queue.module';
 import { TwitterModule } from './twitter/twitter.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { throttlerConfig } from './common/throttler.config';
 import { MaintenanceModule } from './common/maintenance.module';
 import { MaintenanceGuard } from './common/maintenance.guard';
@@ -53,6 +54,8 @@ const resolveApiEnvPaths = (): string[] => [
     UploadsModule,
     StorageModule,
     TwitterModule,
+    // ── Email notifikasi campaign (Resend, outbox via Bull email-jobs) ──
+    NotificationsModule,
     // ── Global maintenance mode (live toggle via AppSetting) ─────
     MaintenanceModule,
     // ── Realtime SSE push (@Global, supaya RealtimeService bisa di-inject

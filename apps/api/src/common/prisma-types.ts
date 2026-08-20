@@ -150,3 +150,23 @@ export const UserStatus = {
   SUSPENDED: 'SUSPENDED' as UserStatus,
   BANNED: 'BANNED' as UserStatus,
 };
+
+/** Jenis email notifikasi campaign — match enum prisma EmailNotificationType. */
+export type EmailNotificationType =
+  | 'CAMPAIGN_ANNOUNCEMENT'
+  | 'CAMPAIGN_WINNER'
+  | 'CAMPAIGN_NOT_SELECTED';
+export const EmailNotificationType = {
+  CAMPAIGN_ANNOUNCEMENT: 'CAMPAIGN_ANNOUNCEMENT' as EmailNotificationType,
+  CAMPAIGN_WINNER: 'CAMPAIGN_WINNER' as EmailNotificationType,
+  CAMPAIGN_NOT_SELECTED: 'CAMPAIGN_NOT_SELECTED' as EmailNotificationType,
+};
+
+/** Status kirim outbox — match enum prisma EmailNotificationStatus. */
+export type EmailNotificationStatus = 'PENDING' | 'SENT' | 'FAILED' | 'SKIPPED';
+export const EmailNotificationStatus = {
+  PENDING: 'PENDING' as EmailNotificationStatus,
+  SENT: 'SENT' as EmailNotificationStatus,
+  FAILED: 'FAILED' as EmailNotificationStatus,
+  SKIPPED: 'SKIPPED' as EmailNotificationStatus,
+};

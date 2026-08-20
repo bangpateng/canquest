@@ -506,6 +506,12 @@ export class DrawWinnersDto {
   @ArrayMaxSize(10000)
   @IsString({ each: true })
   userIds?: string[];
+
+  /** true = draw final → kirim juga email "not selected" ke peserta yang
+   *  tidak terpilih (tipe raffle saja). Default false (draw bertahap). */
+  @IsOptional()
+  @IsBoolean()
+  announceResults?: boolean;
 }
 
 /** Body for POST /quests/:questId/invite-codes */

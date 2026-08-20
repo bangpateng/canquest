@@ -63,6 +63,10 @@ model User {
   twitterConnectedAt      DateTime?
   /// Last time the user opened or dismissed in-app CC notifications (bell).
   notificationsLastSeenAt DateTime?
+  /// Email campaign notifications (new campaign / raffle winner / not selected).
+  /// Target link "Manage email preferences" di footer email — dihormati semua
+  /// query penerima email campaign.
+  emailNotificationsEnabled Boolean               @default(true)
   createdAt               DateTime              @default(now())
   updatedAt               DateTime              @updatedAt
   refreshTokens           RefreshToken[]
@@ -89,6 +93,8 @@ model User {
   pendingDeliveries       PendingDelivery[]
   /// OAuth / external identity links (Google, dst). 1 user bisa banyak provider.
   accounts                Account[]
+  /// Outbox email notifikasi campaign (Resend) — 1 baris = 1 email per (user, quest, type).
+  emailNotificationLogs   EmailNotificationLog[]
 }
 
 /// OAuth account link — binds a User to an external identity provider.
@@ -631,6 +637,22 @@ enum UserStatus {
   BANNED
 }
 
+/// Jenis email notifikasi campaign (Resend). String literal TS-nya ada di
+/// common/prisma-types.ts (konvensi repo — hindari import enum @prisma/client).
+enum EmailNotificationType {
+  CAMPAIGN_ANNOUNCEMENT
+  CAMPAIGN_WINNER
+  CAMPAIGN_NOT_SELECTED
+}
+
+/// Status kirim per email (outbox pattern — worker Bull update setelah kirim).
+enum EmailNotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
 /// Key-value store untuk konfigurasi aplikasi (earn entry cost, dll).
 model AppSetting {
   key       String   @id
@@ -757,5 +779,36 @@ model PlatformTransferLedger {
   updatedAt  DateTime @updatedAt
 
   @@index([userId, status])
+  @@index([status, createdAt])
+}
+
+// ─── v32: Email notification outbox (Resend) ────────────────────────────────
+// Satu baris = satu email campaign untuk satu user. Hook admin (createQuest /
+// drawWinners / updateQuest→ENDED) membuat baris PENDING; worker Bull queue
+// `email-jobs` mengirim via Resend batch lalu update status SENT/FAILED/SKIPPED.
+//
+// @@unique([userId, questId, type]) = idempotency: draw bertahap, hook
+// terpanggil dua kali (create + COMING_SOON→ACTIVE), atau Bull retry tidak
+// pernah mengirim email yang sama dua kali untuk user yang sama.
+model EmailNotificationLog {
+  id        String                   @id @default(cuid())
+  userId    String
+  user      User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questId   String
+  /// Snapshot alamat email saat enqueue (audit — email user bisa berubah).
+  email     String
+  type      EmailNotificationType
+  status    EmailNotificationStatus  @default(PENDING)
+  /// Snapshot data template (judul quest, reward label, dst) — worker tidak
+  /// perlu re-query quest; konten email dibekukan per penerima.
+  payload   Json?
+  /// Resend email id (trace di dashboard Resend).
+  resendId  String?
+  error     String?
+  createdAt DateTime                 @default(now())
+  sentAt    DateTime?
+
+  @@unique([userId, questId, type])
+  @@index([questId, type, status])
   @@index([status, createdAt])
 }

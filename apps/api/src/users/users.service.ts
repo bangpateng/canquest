@@ -198,6 +198,15 @@ export class UsersService {
   findById(id: string) {
     return this.prisma.user.findUnique({ where: { id } });
   }
+
+  /** Toggle email notifikasi campaign (target link "Manage email preferences"). */
+  async setEmailNotificationsEnabled(userId: string, enabled: boolean) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { emailNotificationsEnabled: enabled },
+      select: { id: true, emailNotificationsEnabled: true },
+    });
+  }
   /** Case-insensitive username lookup (Send CC / party resolve). */
   findByUsernameInsensitive(username: string) {
     return this.prisma.user.findFirst({

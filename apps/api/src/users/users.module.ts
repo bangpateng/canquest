@@ -5,9 +5,14 @@ import { ReferralController } from './referral.controller';
 import { PointsController } from './points.controller';
 import { PointsService } from './points.service';
 import { UsersService } from './users.service';
+import { UsersPreferencesController } from './users-preferences.controller';
 
 @Module({
-  controllers: [ReferralController, PointsController],
+  controllers: [
+    ReferralController,
+    PointsController,
+    UsersPreferencesController,
+  ],
   providers: [
     UsersService,
     PointsService,
