@@ -261,24 +261,26 @@ export function EarnCampaignCard({
 
       {/* ── Body ─────────────────────────────────────────────────── */}
       <div className="flex flex-1 flex-col px-4 pb-4">
-        {/* Reward row (boxed) */}
+        {/* Reward row (boxed) — label kiri, nilai rata kanan */}
         <div className="mb-3 rounded-[10px] border border-[var(--border)] bg-[var(--card-solid)] px-3 py-2.5">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.4px] text-[var(--muted-foreground)]/70">
-            Reward
-          </p>
-          <p
-            className={cn(
-              "mt-0.5 font-mono text-sm font-bold",
-              isEnded ? "text-[var(--muted-foreground)]" : "text-canton",
-            )}
-          >
-            {rewardText}
-          </p>
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.4px] text-[var(--muted-foreground)]/70">
+              Reward
+            </p>
+            <p
+              className={cn(
+                "text-right font-mono text-sm font-bold",
+                isEnded ? "text-[var(--muted-foreground)]" : "text-canton",
+              )}
+            >
+              {rewardText}
+            </p>
+          </div>
           {showRewardUsd ? (
             <TokenUsdValue
               amount={quest.rewardCc}
               token={token}
-              className="mt-0.5 block text-[11px] text-[var(--muted-foreground)]/80"
+              className="mt-0.5 block text-right text-[11px] text-[var(--muted-foreground)]/80"
             />
           ) : null}
         </div>
