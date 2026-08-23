@@ -16,13 +16,16 @@
   --canton-ink: 47 122 0;
   --canton-ink-muted: 74 150 15;
   --canton-cyan-rgb: 0 255 255;
-  --background: #fbfcfd;
-  --foreground: #0c1222;
-  --muted: #f1f4f8;
-  --muted-foreground: #5b6472;
+  /* "Mint paper" — background bertint hijau-sangat-halus (bukan putih mati):
+     kartu putih mengapung jelas, mata tidak lelah. Standar clean-2026
+     (Linear/Stripe light): page tint + card putih. */
+  --background: #f4f8f5;
+  --foreground: #0d1420;
+  --muted: #ebf1ec;
+  --muted-foreground: #55606b;
   --card: #ffffff;
   --card-solid: #ffffff;
-  --border: rgb(12 18 34 / 0.09);
+  --border: rgb(13 20 32 / 0.10);
   --primary: rgb(var(--canton-rgb));
   --primary-strong: #4db400;
   --primary-soft: rgb(111 230 0 / 0.10);
@@ -39,9 +42,9 @@
   /* Gradient brand = linear gradient logo Q (45°, kuning→hijau→cyan).
      Teks di atasnya SELALU --primary-foreground (gelap) agar terbaca. */
   --gradient-brand: linear-gradient(45deg, #faee21 0%, #6fe600 50%, #00ffff 100%);
-  --shadow-card: 0 1px 2px 0 rgb(12 18 34 / 0.05), 0 8px 24px -16px rgb(12 18 34 / 0.18);
+  --shadow-card: 0 1px 2px 0 rgb(13 20 32 / 0.05), 0 8px 24px -16px rgb(13 20 32 / 0.18);
   --shadow-glow: 0 8px 20px -10px rgb(111 230 0 / 0.55);
-  --shadow-card-hover: 0 1px 2px 0 rgb(12 18 34 / 0.06), 0 12px 28px -16px rgb(12 18 34 / 0.22), 0 6px 16px -10px rgb(111 230 0 / 0.35);
+  --shadow-card-hover: 0 1px 2px 0 rgb(13 20 32 / 0.06), 0 12px 28px -16px rgb(13 20 32 / 0.22), 0 6px 16px -10px rgb(111 230 0 / 0.35);
   --ease: cubic-bezier(0.16, 0.84, 0.44, 1);
 }
 
@@ -88,8 +91,10 @@
   }
   * { max-width: 100%; box-sizing: border-box; }
   ::-webkit-scrollbar { width: 5px; }
-  ::-webkit-scrollbar-thumb { background: rgb(12 18 34 / 0.18); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb { background: rgb(13 20 32 / 0.18); border-radius: 4px; }
   html.dark ::-webkit-scrollbar-thumb { background: rgb(255 255 255 / 0.08); }
+  /* Seleksi teks — aksen brand hijau lembut (biru default browser). */
+  ::selection { background: rgb(111 230 0 / 0.30); color: inherit; }
 
   /* Lucide icons must always inherit the parent text color so they stay
      visible on every surface (fix: icons rendered dark/invisible because
@@ -104,6 +109,12 @@
   .text-canton-muted { color: rgb(var(--canton-ink-muted)); }
   .bg-canton-subtle { background-color: var(--primary-soft); }
   .bg-canton-soft { background-color: rgb(var(--canton-rgb) / 0.16); }
+  /* Kelas bg/border-canton (+ varian opacity-nya) dipakai di chip admin.
+     Sebelumnya tak terdefinisi → chip kehilangan latar. */
+  .bg-canton { background-color: rgb(var(--canton-rgb) / 0.12); }
+  .bg-canton\/15 { background-color: rgb(var(--canton-rgb) / 0.10); }
+  .bg-canton\/20 { background-color: rgb(var(--canton-rgb) / 0.14); }
+  .border-canton { border-color: rgb(var(--canton-rgb) / 0.40); }
   .border-canton-muted { border-color: rgb(var(--canton-rgb) / 0.2); }
   .text-gradient-brand {
     background: linear-gradient(135deg, rgb(var(--canton-rgb)), rgb(var(--canton-ink)));
