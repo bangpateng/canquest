@@ -459,7 +459,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
       {tab === "winners" && (
         <div className="space-y-4">
           {isRaffleQuest ? (
-            <p className="rounded-2xl border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
+            <p className="rounded-2xl border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-600">
               Raffle / waitlist: run Draw Winners, then winners open the quest page to claim
               codes, CC, or read the winner message. Do not use Send / Distribute here.
             </p>

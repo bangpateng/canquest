@@ -881,7 +881,7 @@ export function QuestForm({
               !hasRecommendedTask &&
               !isEdit &&
               questKind === "CAMPAIGN" && (
-                <p className="mt-2 rounded-lg bg-orange-500/10 px-3 py-2 text-xs text-orange-200 dark:text-orange-200">
+                <p className="mt-2 rounded-lg bg-orange-500/10 px-3 py-2 text-xs text-orange-600 dark:text-orange-200">
                   Add a{" "}
                   <strong>
                     {
@@ -1431,7 +1431,7 @@ export function QuestForm({
       )}
 
       {uploadMsg && (
-        <p className="rounded-xl bg-orange-500/10 px-4 py-3 text-sm font-medium text-orange-200 dark:text-orange-300">
+        <p className="rounded-xl bg-orange-500/10 px-4 py-3 text-sm font-medium text-orange-600 dark:text-orange-300">
           {uploadMsg}
         </p>
       )}

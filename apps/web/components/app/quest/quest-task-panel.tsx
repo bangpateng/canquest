@@ -520,7 +520,7 @@ export function QuestTaskPanel({
   return (
     <div className="space-y-6">
       {isQuestHub && progressError ? (
-        <div className="rounded-xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-xs text-orange-200">
+        <div className="rounded-xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-xs text-orange-600">
           Could not load your progress — tasks are shown below.{" "}
           <button
             type="button"
@@ -532,7 +532,7 @@ export function QuestTaskPanel({
         </div>
       ) : null}
       {campaignEnded ? (
-        <div className="rounded-xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm text-orange-200">
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-600">
           {t("quests.campaignEndedClosed")}
         </div>
       ) : null}
@@ -1159,7 +1159,7 @@ function TaskRow({
                 <LoadingSpinner size="sm" />
               </span>
             ) : isPending ? (
-              <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-orange-500/15 px-4 text-xs font-bold text-orange-200">
+              <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-orange-500/15 px-4 text-xs font-bold text-orange-600">
                 Pending
               </span>
             ) : (
@@ -1232,7 +1232,7 @@ function TaskRow({
                     className={cn(
                       "flex w-full items-center gap-2.5 rounded-xl bg-[var(--muted)]/25 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--muted)]/35",
                       isWrong
-                        ? "bg-red-500/10 text-red-200 hover:bg-red-500/15"
+                        ? "bg-red-500/10 text-red-600 hover:bg-red-500/15"
                         : "text-[var(--foreground)]",
                     )}
                   >
@@ -1499,7 +1499,7 @@ function TaskRow({
                         "flex w-full items-center gap-2.5 rounded-xl bg-[var(--muted)]/25 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--muted)]/35",
                         quizExpired && "cursor-not-allowed opacity-50",
                         isWrong
-                          ? "bg-red-500/10 text-red-200 hover:bg-red-500/15"
+                          ? "bg-red-500/10 text-red-600 hover:bg-red-500/15"
                           : "text-[var(--foreground)]",
                       )}
                     >

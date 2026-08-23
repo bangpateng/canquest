@@ -220,10 +220,10 @@ export function QuestsBrowser({ variant = "earn" }: { variant?: "default" | "ear
         </div>
       ) : loadError ? (
         <Card className="px-4 py-10 text-center sm:px-6 sm:py-14">
-          <p className="text-lg font-bold tracking-tight text-red-200 sm:text-xl md:text-2xl">
+          <p className="text-lg font-bold tracking-tight text-red-600 sm:text-xl md:text-2xl">
             {t("earnCampaigns.loadFailed")}
           </p>
-          <p className="mt-2 text-sm font-medium leading-relaxed text-red-200/70 sm:mt-3 sm:text-base">
+          <p className="mt-2 text-sm font-medium leading-relaxed text-red-600/70 sm:mt-3 sm:text-base">
             {isWalletRequiredLoadError(loadError)
               ? t("earnCampaigns.loadFailedHint")
               : loadError}

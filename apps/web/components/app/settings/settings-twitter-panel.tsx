@@ -115,7 +115,7 @@ export function SettingsTwitterPanel({
 
         <div className="mt-5 sm:mt-6">
         {status.apiConfigured === false ? (
-          <p className="rounded-xl border border-orange-500/20 bg-orange-500/5 px-5 py-4 text-sm font-medium text-orange-200">
+          <p className="rounded-xl border border-orange-500/20 bg-orange-500/5 px-5 py-4 text-sm font-medium text-orange-600">
             Twitter verification is not configured on this server yet.
           </p>
         ) : null}
