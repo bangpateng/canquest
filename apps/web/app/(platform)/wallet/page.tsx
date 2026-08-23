@@ -105,7 +105,7 @@ export default function WalletPage() {
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
           <div className="min-w-0 text-sm">
             <p className="font-semibold text-amber-200">{t("wallet.profileStale")}</p>
-            <p className="mt-1 break-words text-sm font-medium text-amber-300/70">
+            <p className="mt-1 break-words text-sm font-medium text-amber-600/70">
               {t("wallet.profileStaleHint")}
             </p>
           </div>

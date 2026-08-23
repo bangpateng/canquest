@@ -52,7 +52,7 @@ export function WalletCreatePromptModal({
         <button
           type="button"
           onClick={onClose}
-          className="absolute right-4 top-4 z-10 rounded-2xl p-2 text-slate-300 transition-colors hover:bg-[var(--muted)] hover:text-white"
+          className="absolute right-4 top-4 z-10 rounded-2xl p-2 text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
           aria-label="Close"
         >
           <X className="h-5 w-5" />

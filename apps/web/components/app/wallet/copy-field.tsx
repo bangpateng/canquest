@@ -19,15 +19,15 @@ export function CopyField({ value, label }: { value: string; label: string }) {
 
   return (
     <div className="min-w-0 space-y-2">
-      <p className="text-sm font-medium text-slate-400">{label}</p>
-      <div className="flex min-w-0 items-center gap-3 overflow-hidden rounded-2xl border border-white/5 bg-[var(--muted)]/50 px-4 py-3">
-        <code className="min-w-0 flex-1 break-all text-sm font-mono font-medium leading-relaxed text-slate-100 sm:truncate sm:break-normal">
+      <p className="text-sm font-medium text-[var(--muted-foreground)]">{label}</p>
+      <div className="flex min-w-0 items-center gap-3 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--muted)]/50 px-4 py-3">
+        <code className="min-w-0 flex-1 break-all text-sm font-mono font-medium leading-relaxed text-[var(--foreground)] sm:truncate sm:break-normal">
           {value}
         </code>
         <button
           type="button"
           onClick={copy}
-          className={iconButtonClass("h-9 w-9 shrink-0 text-slate-100")}
+          className={iconButtonClass("h-9 w-9 shrink-0")}
           aria-label="Copy"
         >
           {copied ? (

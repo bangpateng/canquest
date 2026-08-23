@@ -89,7 +89,7 @@ export function CampaignCcAndCodeRaffleClaimSection({
       accentText: isCodeOnly
         ? "text-violet-300"
         : isUsdcx
-          ? "text-sky-300"
+          ? "text-sky-600"
           : "text-canton",
       meta: [{ label: "Claim fee paid", value: feeLabel }],
     });

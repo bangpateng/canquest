@@ -17,6 +17,10 @@ export const CANQUEST_LOGO_HEIGHT = 83;
 export const CANQUEST_LOGO_ASPECT = CANQUEST_LOGO_WIDTH / CANQUEST_LOGO_HEIGHT;
 
 const LOCKUP_SRC = "/canquest-logo.svg";
+/** Varian tema terang: glyph gelap (#0c1222), band gradient pada huruf Q
+ *  TETAP berwarna. Dulu memakai filter `brightness-0` yang ikut menghitamkan
+ *  gradient Q — makanya Q "kehilangan warna" di light theme. */
+const LOCKUP_SRC_LIGHT = "/canquest-logo-light.svg";
 
 /**
  * Display sizes — height drives width via the SVG aspect ratio (600:83 ≈ 7.23).
@@ -66,7 +70,7 @@ export function CanQuestLogo({
       )}
     >
       <Image
-        src={LOCKUP_SRC}
+        src={theme === "light" ? LOCKUP_SRC_LIGHT : LOCKUP_SRC}
         alt="CanQuest"
         width={width}
         height={height}
@@ -77,8 +81,6 @@ export function CanQuestLogo({
              overflowing/being cut off. `h-auto` + `max-h` keeps the target
              visual height when there is room. */
           "block h-auto w-auto min-w-0 max-w-full max-h-[var(--logo-h)] object-contain object-left",
-          /* Wordmark is white in SVG — readable on light platform theme */
-          theme === "light" && "brightness-0",
         )}
         style={
           {

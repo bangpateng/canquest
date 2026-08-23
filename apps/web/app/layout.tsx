@@ -37,7 +37,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark overflow-x-hidden" suppressHydrationWarning>
+    <html lang="en" className="light overflow-x-hidden" suppressHydrationWarning>
       <head>
         <ThemeInitScript />
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />

@@ -33,7 +33,7 @@ export function ListPagination({
         className,
       )}
     >
-      <p className="text-sm font-medium text-slate-400">
+      <p className="text-sm font-medium text-[var(--muted-foreground)]">
         {t("common.pageOf", { page, total: totalPages })}
         {total !== undefined ? ` · ${total} ${t("common.total")}` : null}
       </p>

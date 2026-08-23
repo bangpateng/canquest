@@ -554,7 +554,7 @@ export function QuestForm({
       >
         <summary className="flex cursor-pointer list-none items-center justify-between p-5">
           <span className="flex items-center gap-2">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[10px] font-bold text-[var(--primary)]">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[10px] font-bold text-canton">
               1
             </span>
             <h2 className="type-section-title">Identity</h2>
@@ -853,7 +853,7 @@ export function QuestForm({
       >
         <summary className="flex cursor-pointer list-none items-center justify-between p-5">
           <span className="flex items-center gap-2">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[10px] font-bold text-[var(--primary)]">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[10px] font-bold text-canton">
               2
             </span>
             <h2 className="type-section-title">Reward</h2>
@@ -871,7 +871,7 @@ export function QuestForm({
               disabled={frozenOnChain}
             />
             {frozenOnChain && (
-              <p className="mt-2 rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+              <p className="mt-2 rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-600">
                 🔒 Reward type, token, amount, max winners, claim fee, dan entry
                 gate terkunci — nilai-nilai ini dibekukan di kontrak Canton saat
                 campaign dibuat. Buat campaign baru untuk nilai yang berbeda.
@@ -921,8 +921,8 @@ export function QuestForm({
                       "rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors",
                       selected
                         ? tok === "USDCx"
-                          ? "border-sky-400 bg-sky-400/15 text-sky-300"
-                          : "border-[var(--primary)] bg-[var(--primary)]/15 text-[var(--primary)]"
+                          ? "border-sky-400 bg-sky-400/15 text-sky-600"
+                          : "border-[var(--primary)] bg-[var(--primary)]/15 text-canton"
                         : "border-[var(--border)] bg-[var(--muted)]/30 text-[var(--muted-foreground)] hover:border-[var(--foreground)]/40",
                     )}
                   >
@@ -1181,7 +1181,7 @@ export function QuestForm({
         <details className="group rounded-2xl border border-[var(--border)] bg-[var(--card)]">
           <summary className="flex cursor-pointer list-none items-center justify-between p-5">
             <span className="flex items-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[10px] font-bold text-[var(--primary)]">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[10px] font-bold text-canton">
                 3
               </span>
               <h2 className="type-section-title">Social links</h2>
@@ -1207,7 +1207,7 @@ export function QuestForm({
         <details className="group rounded-2xl border border-[var(--border)] bg-[var(--card)]">
           <summary className="flex cursor-pointer list-none items-center justify-between p-5">
             <span className="flex items-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[10px] font-bold text-[var(--primary)]">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[10px] font-bold text-canton">
                 4
               </span>
               <h2 className="type-section-title">Earn access gate</h2>
@@ -1317,7 +1317,7 @@ export function QuestForm({
             className="type-section-title flex w-full items-center justify-between"
           >
             <span className="flex items-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[10px] font-bold text-[var(--primary)]">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/15 text-[10px] font-bold text-canton">
                 {questKind === "CAMPAIGN" ? "5" : "3"}
               </span>
               Tasks ({tasks.length})
@@ -1422,7 +1422,7 @@ export function QuestForm({
             <button
               type="button"
               onClick={addTask}
-              className="flex items-center gap-2 text-sm font-medium text-[var(--primary)] underline-offset-4 hover:underline"
+              className="flex items-center gap-2 text-sm font-medium text-canton underline-offset-4 hover:underline"
             >
               <Plus className="h-4 w-4" /> Add task
             </button>

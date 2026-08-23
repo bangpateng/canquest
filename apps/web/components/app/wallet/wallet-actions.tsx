@@ -383,7 +383,7 @@ export function WalletActions({
           Offers
           {offersCount > 0 && (
             <span
-              className="absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--primary)] px-1.5 text-[10px] font-bold text-white shadow ring-2 ring-[var(--card)]"
+              className="absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--primary)] px-1.5 text-[10px] font-bold text-[var(--primary-foreground)] shadow ring-2 ring-[var(--card)]"
               aria-hidden
             >
               {offersCount}
@@ -417,7 +417,7 @@ export function WalletActions({
           Lock
           {lockedCc > 0 && (
             <span
-              className="absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--primary)] px-1.5 text-[10px] font-bold text-white shadow ring-2 ring-[var(--card)]"
+              className="absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--primary)] px-1.5 text-[10px] font-bold text-[var(--primary-foreground)] shadow ring-2 ring-[var(--card)]"
               aria-hidden
             >
               {lockedCc > 999 ? "999+" : lockedCc}
@@ -822,7 +822,7 @@ export function WalletActions({
               <CopyField label="Your Canton Party ID" value={displayPartyId} />
             </div>
 
-            <div className="mt-3 flex items-start gap-2 rounded-xl bg-amber-500/10 px-3.5 py-2.5 text-xs text-amber-300">
+            <div className="mt-3 flex items-start gap-2 rounded-xl bg-amber-500/10 px-3.5 py-2.5 text-xs text-amber-600">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               Sending unsupported assets or wrong-network tokens to this address may result in permanent loss.
             </div>

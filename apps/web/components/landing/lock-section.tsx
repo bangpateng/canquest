@@ -85,9 +85,9 @@ export function LockSection() {
         })}
       </ol>
 
-      {/* Screenshot slot — public/landing/how-it-works.svg */}
+      {/* Screenshot slot — public/landing/how-it-works-light.svg */}
       <LandingImage
-        src="/landing/how-it-works.svg"
+        src="/landing/how-it-works-light.svg"
         alt="Browse and join partner campaigns in the CanQuest app"
         ratio="4/3"
         className="mx-auto max-w-2xl"

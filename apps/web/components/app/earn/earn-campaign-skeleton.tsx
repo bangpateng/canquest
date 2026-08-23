@@ -5,7 +5,7 @@ export function EarnCampaignSkeleton({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "flex h-full flex-col overflow-hidden rounded-3xl border border-white/5 bg-[var(--card)]",
+        "flex h-full flex-col overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--card)]",
         className,
       )}
     >
@@ -24,12 +24,12 @@ export function EarnCampaignSkeleton({ className }: { className?: string }) {
           <div className="h-4 w-16 animate-pulse rounded bg-[var(--muted)]/35" />
           <div className="h-4 w-24 animate-pulse rounded bg-[var(--muted)]/30" />
         </div>
-        <div className="overflow-hidden rounded-2xl border border-white/5">
-          <div className="flex h-16 divide-x divide-slate-800/80">
+        <div className="overflow-hidden rounded-2xl border border-[var(--border)]">
+          <div className="flex h-16 divide-x divide-[var(--border)]">
             <div className="flex-1 animate-pulse bg-[var(--muted)]/25" />
             <div className="flex-1 animate-pulse bg-[var(--muted)]/20" />
           </div>
-          <div className="h-10 animate-pulse border-t border-slate-800/80 bg-[var(--muted)]/15" />
+          <div className="h-10 animate-pulse border-t border-[var(--border)] bg-[var(--muted)]/15" />
         </div>
         <div className="mt-auto h-12 animate-pulse rounded-2xl bg-[var(--muted)]/45" />
       </div>

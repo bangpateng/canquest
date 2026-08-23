@@ -237,7 +237,7 @@ export function AdminReferralAuditPanel() {
         <p className="text-sm text-[var(--muted-foreground)]">Loading…</p>
       ) : !data || data.totalFlagged === 0 ? (
         <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 px-5 py-8 text-center">
-          <p className="font-semibold text-emerald-300">
+          <p className="font-semibold text-emerald-600">
             No flagged referrals found
           </p>
           <p className="mt-1 text-sm text-[var(--muted-foreground)]">
@@ -248,7 +248,7 @@ export function AdminReferralAuditPanel() {
       ) : (
         <>
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3">
-            <p className="flex items-center gap-2 text-sm font-semibold text-amber-300">
+            <p className="flex items-center gap-2 text-sm font-semibold text-amber-600">
               <AlertTriangle className="h-4 w-4" />
               {data.totalFlagged} referral(s) flagged
             </p>

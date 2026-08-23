@@ -21,26 +21,22 @@ type ThemeContextValue = {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
+/** App ini LIGHT-ONLY (permintaan produk: background putih semua).
+ *  Provider tetap dipertahankan karena konsumen `useTheme()` ada (mis. logo
+ *  wordmark memilih varian terang/gelap) — nilai `theme` selalu "light". */
 function readStoredTheme(): Theme {
-  if (typeof window === "undefined") return "dark";
-  try {
-    const stored = localStorage.getItem(THEME_STORAGE_KEY);
-    if (stored === "light" || stored === "dark") return stored;
-  } catch {
-    /* ignore */
-  }
-  return "dark";
+  return "light";
 }
 
 function applyTheme(theme: Theme) {
   const root = document.documentElement;
   root.classList.remove("light", "dark");
-  root.classList.add(theme);
-  root.style.colorScheme = theme;
+  root.classList.add(theme === "dark" ? "light" : "light");
+  root.style.colorScheme = "light";
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("dark");
+  const [theme, setThemeState] = useState<Theme>("light");
 
   useEffect(() => {
     const initial = readStoredTheme();
@@ -48,27 +44,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     applyTheme(initial);
   }, []);
 
-  const setTheme = useCallback((next: Theme) => {
-    setThemeState(next);
-    applyTheme(next);
-    try {
-      localStorage.setItem(THEME_STORAGE_KEY, next);
-    } catch {
-      /* ignore */
-    }
+  // Light-only: setter disediakan demi kompatibilitas API, tapi selalu
+  // mengembalikan ke light dan tidak pernah menulis preferensi gelap.
+  const setTheme = useCallback((_next: Theme) => {
+    setThemeState("light");
+    applyTheme("light");
   }, []);
 
   const toggleTheme = useCallback(() => {
-    setThemeState((prev) => {
-      const next: Theme = prev === "dark" ? "light" : "dark";
-      applyTheme(next);
-      try {
-        localStorage.setItem(THEME_STORAGE_KEY, next);
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
+    setThemeState("light");
+    applyTheme("light");
   }, []);
 
   const value = useMemo(

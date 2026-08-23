@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" font-family="Inter, system-ui, sans-serif">
+  <defs>
+    <linearGradient id="bg3" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f7faf8"/><stop offset="100%" stop-color="#eef4f0"/>
+    </linearGradient>
+    <radialGradient id="g3" cx="50%" cy="0%" r="55%">
+      <stop offset="0%" stop-color="#6fe600" stop-opacity="0.14"/><stop offset="100%" stop-color="#16a34a" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="brand3" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#faee21"/><stop offset="50%" stop-color="#6fe600"/><stop offset="100%" stop-color="#00ffff"/>
+    </linearGradient>
+    <linearGradient id="usdcg3" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#34d399"/><stop offset="100%" stop-color="#14b8a6"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="900" fill="url(#bg3)"/>
+  <rect width="1200" height="900" fill="url(#g3)"/>
+
+  <rect x="60" y="60" width="1080" height="780" rx="22" fill="#ffffff" stroke="#0c1222" stroke-opacity="0.06"/>
+  <circle cx="96" cy="96" r="6" fill="#0c1222" fill-opacity="0.15"/>
+  <circle cx="118" cy="96" r="6" fill="#0c1222" fill-opacity="0.15"/>
+  <circle cx="140" cy="96" r="6" fill="#0c1222" fill-opacity="0.15"/>
+
+  <text x="100" y="170" fill="#0c1222" font-size="26" font-weight="800">Wallet</text>
+
+  <!-- party ID card -->
+  <rect x="100" y="210" width="1000" height="130" rx="18" fill="#f4f7f5" stroke="#16a34a" stroke-opacity="0.25"/>
+  <rect x="128" y="238" width="64" height="64" rx="16" fill="#16a34a" fill-opacity="0.12"/>
+  <g transform="translate(140,250)" stroke="#16a34a" stroke-width="2.2" fill="none" stroke-linecap="round">
+    <path d="M20 8 a12 12 0 0 1 12 12 v6"/>
+    <path d="M20 14 a6 6 0 0 1 6 6 v8 a6 6 0 0 1 -6 6"/>
+    <path d="M20 20 v10"/>
+    <path d="M20 26 v4"/>
+  </g>
+  <text x="212" y="262" fill="#5b6472" font-size="12" font-weight="600" letter-spacing="1">YOUR CANTON PARTY ID</text>
+  <text x="212" y="296" fill="#2f7a00" font-size="20" font-weight="700" font-family="ui-monospace, monospace">canton::party::0a4f··7c2b</text>
+  <text x="212" y="320" fill="#5b6472" font-size="13">One per verified human · invite-gated · custodial</text>
+  <rect x="990" y="250" width="84" height="36" rx="18" fill="#16a34a" fill-opacity="0.12"/>
+  <text x="1032" y="273" fill="#2f7a00" font-size="12" font-weight="700" text-anchor="middle">Copy</text>
+
+  <!-- CC balance -->
+  <rect x="100" y="370" width="490" height="200" rx="18" fill="#f4f7f5" stroke="#0c1222" stroke-opacity="0.05"/>
+  <circle cx="142" cy="412" r="22" fill="url(#brand3)"/>
+  <text x="142" y="419" fill="#ffffff" font-size="18" font-weight="800" text-anchor="middle">CC</text>
+  <text x="180" y="408" fill="#5b6472" font-size="13" font-weight="600" letter-spacing="1">CANTON COIN</text>
+  <text x="180" y="432" fill="#5b6472" font-size="12">Available</text>
+  <text x="128" y="496" fill="#0c1222" font-size="44" font-weight="800">1,284.50</text>
+  <text x="128" y="538" fill="#2f7a00" font-size="14" font-weight="600">≈ $321.13 USD</text>
+  <text x="558" y="496" fill="#0c1222" font-size="16" font-weight="700" text-anchor="end">CC</text>
+
+  <!-- USDCx balance -->
+  <rect x="610" y="370" width="490" height="200" rx="18" fill="#f4f7f5" stroke="#0c1222" stroke-opacity="0.05"/>
+  <circle cx="652" cy="412" r="22" fill="url(#usdcg3)"/>
+  <text x="652" y="419" fill="#ffffff" font-size="15" font-weight="800" text-anchor="middle">$</text>
+  <text x="690" y="408" fill="#5b6472" font-size="13" font-weight="600" letter-spacing="1">USDCX</text>
+  <text x="690" y="432" fill="#5b6472" font-size="12">Available</text>
+  <text x="638" y="496" fill="#0c1222" font-size="44" font-weight="800">542.18</text>
+  <text x="638" y="538" fill="#2f7a00" font-size="14" font-weight="600">≈ $542.18 USD</text>
+  <text x="1068" y="496" fill="#0c1222" font-size="16" font-weight="700" text-anchor="end">USDCx</text>
+
+  <!-- quick actions -->
+  <text x="100" y="620" fill="#5b6472" font-size="13" font-weight="600" letter-spacing="1">QUICK ACTIONS</text>
+  <rect x="100" y="640" width="232" height="80" rx="14" fill="#f4f7f5" stroke="#0c1222" stroke-opacity="0.05"/>
+  <rect x="124" y="664" width="36" height="36" rx="10" fill="#16a34a" fill-opacity="0.12"/>
+  <g transform="translate(134,672)" stroke="#16a34a" stroke-width="2.2" fill="none"><path d="M0 8 L14 8 M9 3 L14 8 L9 13"/></g>
+  <text x="172" y="688" fill="#0c1222" font-size="14" font-weight="600">Send CC</text>
+
+  <rect x="354" y="640" width="232" height="80" rx="14" fill="#f4f7f5" stroke="#0c1222" stroke-opacity="0.05"/>
+  <rect x="378" y="664" width="36" height="36" rx="10" fill="#16a34a" fill-opacity="0.12"/>
+  <text x="396" y="690" fill="#2f7a00" font-size="18" text-anchor="middle">⬌</text>
+  <text x="426" y="688" fill="#0c1222" font-size="14" font-weight="600">Send Token</text>
+
+  <rect x="608" y="640" width="232" height="80" rx="14" fill="#f4f7f5" stroke="#0c1222" stroke-opacity="0.05"/>
+  <rect x="632" y="664" width="36" height="36" rx="10" fill="#16a34a" fill-opacity="0.12"/>
+  <g transform="translate(642,672)" stroke="#16a34a" stroke-width="2.2" fill="none"><path d="M0 5 L14 5 M0 11 L14 11"/></g>
+  <text x="680" y="688" fill="#0c1222" font-size="14" font-weight="600">Swap</text>
+
+  <rect x="862" y="640" width="238" height="80" rx="14" fill="#f4f7f5" stroke="#0c1222" stroke-opacity="0.05"/>
+  <rect x="886" y="664" width="36" height="36" rx="10" fill="#16a34a" fill-opacity="0.12"/>
+  <g transform="translate(896,670)" stroke="#16a34a" stroke-width="2.2" fill="none"><rect x="2" y="6" width="12" height="10" rx="2"/><path d="M5 6 V3 a3 3 0 0 1 6 0 V6"/></g>
+  <text x="934" y="688" fill="#0c1222" font-size="14" font-weight="600">Lock / Unlock</text>
+
+  <rect x="100" y="750" width="1000" height="56" rx="14" fill="#f4f7f5" stroke="#0c1222" stroke-opacity="0.04" stroke-dasharray="4 4"/>
+  <text x="128" y="784" fill="#5b6472" font-size="13">Custodial · operator submits commands on your behalf · your party is the on-chain home for your balance</text>
+</svg>

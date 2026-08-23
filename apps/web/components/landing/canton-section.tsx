@@ -20,7 +20,7 @@ export function CantonSection() {
         />
       </div>
       <LandingImage
-        src="/landing/canton-wallet.svg"
+        src="/landing/canton-wallet-light.svg"
         alt="CanQuest Canton wallet showing party ID and CC balance"
         ratio="4/3"
         className="mx-auto max-w-2xl"

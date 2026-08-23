@@ -87,7 +87,7 @@ export default async function MaintenancePage() {
         <form action="/maintenance" className="inline-block">
           <button
             type="submit"
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-canton px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-brand px-5 py-2.5 text-sm font-semibold text-[var(--primary-foreground)] transition-opacity hover:opacity-90"
           >
             <RefreshCw className="h-4 w-4" />
             Coba lagi

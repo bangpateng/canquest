@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils/utils";
  * neutral = ditutup/tidak terpilih.
  */
 const TONE_ICON: Record<CampaignStatusRowTone, string> = {
-  neutral: "bg-white/[0.06] text-[var(--muted-foreground)]",
+  neutral: "bg-[var(--muted)] text-[var(--muted-foreground)]",
   emerald: "bg-emerald-400/15 text-emerald-400",
   sky: "bg-sky-400/15 text-sky-400",
   amber: "bg-amber-400/15 text-amber-400",

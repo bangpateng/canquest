@@ -352,7 +352,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
       >
         {/* Header */}
         <div className="mb-5 flex items-center justify-between">
-          <h2 id={titleId} className="text-lg font-bold text-white">
+          <h2 id={titleId} className="text-lg font-bold text-[var(--foreground)]">
             Swap
           </h2>
           <div className="flex items-center gap-1">
@@ -420,7 +420,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
             <span>{tokensError}</span>
           </div>
         ) : tokens.length === 0 ? (
-          <p className="py-12 text-center text-sm text-slate-400">
+          <p className="py-12 text-center text-sm text-[var(--muted-foreground)]">
             No tokens available for swap yet.
           </p>
         ) : (
@@ -530,7 +530,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                   Swap completed!
                 </p>
                 {swapOutput && (
-                  <p className="mt-1 text-xs text-slate-400">
+                  <p className="mt-1 text-xs text-[var(--muted-foreground)]">
                     Received {swapOutput}{" "}
                     {displayName(swapReceivedToken || (buyToken?.instrumentId ?? ""))}
                   </p>
@@ -650,21 +650,21 @@ function TokenPicker({
       />
       <div className="relative z-10 my-auto max-h-[85vh] w-full max-w-md overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-2xl">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-base font-bold text-white">Select Token</h3>
+          <h3 className="text-base font-bold text-[var(--foreground)]">Select Token</h3>
           <button
             type="button"
             onClick={onClose}
-              className={iconButtonClass(
-                "h-8 w-8 text-slate-300 hover:text-white",
-              )}
-              aria-label="Close"
+            className={iconButtonClass(
+              "h-8 w-8",
+            )}
+            aria-label="Close"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
         {/* Search */}
         <div className="relative mb-4">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-300" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted-foreground)]" />
           <input
             type="text"
             placeholder="Search token..."
@@ -676,7 +676,7 @@ function TokenPicker({
         {/* List */}
         <div className="max-h-[50vh] space-y-1 overflow-y-auto">
           {filtered.length === 0 ? (
-            <p className="py-8 text-center text-sm text-slate-500">
+            <p className="py-8 text-center text-sm text-[var(--muted-foreground)]">
               No tokens found.
             </p>
           ) : (
@@ -688,11 +688,11 @@ function TokenPicker({
                   onSelect(t);
                   onClose();
                 }}
-                className="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-white/5"
+                className="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-[var(--primary)]/5"
               >
                 <TokenLogo symbol={t.instrumentId} />
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-white">
+                  <p className="truncate text-sm font-semibold text-[var(--foreground)]">
                     {displayName(t.instrumentId)}
                     {t.isCC && (
                       <span className="ml-1.5 rounded bg-canton-subtle px-1.5 py-0.5 text-[10px] font-bold text-canton">
@@ -700,7 +700,7 @@ function TokenPicker({
                       </span>
                     )}
                   </p>
-                  <p className="truncate text-xs text-slate-500">
+                  <p className="truncate text-xs text-[var(--muted-foreground)]">
                     {t.instrumentAdmin.slice(0, 20)}...
                   </p>
                 </div>
@@ -750,10 +750,10 @@ function SwapCard({
     <>
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--muted)] p-4">
         <div className="mb-2 flex items-center justify-between">
-          <span className="text-xs font-medium text-slate-500">{label}</span>
+          <span className="text-xs font-medium text-[var(--muted-foreground)]">{label}</span>
           {isInput && balance && (
             <div className="flex items-center gap-1.5">
-              <span className="text-xs text-slate-500">Bal: {balance}</span>
+              <span className="text-xs text-[var(--muted-foreground)]">Bal: {balance}</span>
               {onPercentClick && (
                 <div className="flex gap-1">
                   {[0.25, 0.5, 0.75].map((p) => (
@@ -789,7 +789,7 @@ function SwapCard({
               placeholder="0.0"
               value={amount ?? ""}
               onChange={(e) => onAmountChange?.(e.target.value)}
-              className="w-full min-w-0 flex-1 bg-transparent text-2xl font-bold text-white outline-none placeholder:text-slate-600"
+              className="w-full min-w-0 flex-1 bg-transparent text-2xl font-bold text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)]/60"
             />
           ) : (
             <span
@@ -799,7 +799,7 @@ function SwapCard({
                   ? isLoading
                     ? "text-[var(--muted-foreground)]"
                     : "text-canton"
-                  : "text-white",
+                  : "text-[var(--foreground)]",
               )}
             >
               {isLoading ? "…" : (amount || "0.0")}
@@ -815,16 +815,16 @@ function SwapCard({
             {selectedToken ? (
               <>
                 <TokenLogo symbol={selectedToken.instrumentId} size="sm" />
-                <span className="text-sm font-semibold text-white">
+                <span className="text-sm font-semibold text-[var(--foreground)]">
                   {displayName(selectedToken.instrumentId)}
                 </span>
               </>
             ) : (
-              <span className="text-sm font-semibold text-slate-400">
+              <span className="text-sm font-semibold text-[var(--muted-foreground)]">
                 Select
               </span>
             )}
-            <ChevronDown className="h-4 w-4 text-slate-300" />
+            <ChevronDown className="h-4 w-4 text-[var(--muted-foreground)]" />
           </button>
         </div>
       </div>
@@ -854,9 +854,9 @@ function DetailRow({
   valueClass?: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-2 text-slate-400">
+    <div className="flex items-center justify-between gap-2 text-[var(--muted-foreground)]">
       <span>{label}</span>
-      <span className={cn("font-medium text-slate-300", valueClass)}>
+      <span className={cn("font-medium text-[var(--muted-foreground)]", valueClass)}>
         {value}
       </span>
     </div>

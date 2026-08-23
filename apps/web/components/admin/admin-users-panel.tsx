@@ -71,8 +71,8 @@ function formatCc(micro: string) {
 
 function StatusBadge({ status }: { status: UserStatus }) {
   const styles: Record<UserStatus, string> = {
-    ACTIVE: 'bg-emerald-500/15 text-emerald-300',
-    SUSPENDED: 'bg-amber-500/15 text-amber-300',
+    ACTIVE: 'bg-emerald-500/15 text-emerald-600',
+    SUSPENDED: 'bg-amber-500/15 text-amber-600',
     BANNED: 'bg-red-500/15 text-red-300',
   };
   return (
@@ -532,7 +532,7 @@ export function AdminUsersPanel() {
               <button
                 type="button"
                 onClick={() => setReferralModalUser(null)}
-                className="rounded-lg p-1.5 text-slate-300 hover:bg-[var(--muted)] hover:text-white"
+                className="rounded-lg p-1.5 text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
                 aria-label="Close"
               >
                 <X className="h-5 w-5" />
@@ -576,7 +576,7 @@ export function AdminUsersPanel() {
                             </span>
                           )}
                           {r.referredStatus && r.referredStatus !== 'ACTIVE' && (
-                            <span className="inline-flex items-center rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-300">
+                            <span className="inline-flex items-center rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-600">
                               {r.referredStatus}
                             </span>
                           )}

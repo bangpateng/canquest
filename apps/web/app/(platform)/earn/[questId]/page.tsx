@@ -28,7 +28,7 @@ function StatusPill({ status, label }: { status: Quest["status"]; label: string 
   return (
     <span className={cn(
       "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider backdrop-blur-md",
-      status === "ACTIVE" && "border border-emerald-500/25 bg-emerald-500/15 text-emerald-300",
+      status === "ACTIVE" && "border border-emerald-500/25 bg-emerald-500/15 text-emerald-600",
       status === "COMING_SOON" && "border border-cyan-500/25 bg-cyan-500/15 text-cyan-300",
       status === "ENDED" && "border border-[var(--border)] bg-[var(--muted)] text-[var(--muted-foreground)]",
     )}>
@@ -48,10 +48,11 @@ function StatusPill({ status, label }: { status: Quest["status"]; label: string 
   );
 }
 
-/** Type pill — reward type label as a dark banner chip (mockup style). */
+/** Type pill — reward type label sebagai chip kontras (terang di dark, gelap
+ *  di light) — aksen tipografi modern, tema-adaptif via token fg/bg. */
 function TypePill({ config }: { config: ReturnType<typeof getRewardConfig> }) {
   return (
-    <span className="inline-flex items-center rounded-full bg-black/50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white/90 ring-1 ring-white/10 backdrop-blur-md">
+    <span className="inline-flex items-center rounded-full bg-[var(--foreground)]/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[var(--background)]">
       {config.shortLabel}
     </span>
   );

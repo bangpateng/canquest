@@ -31,8 +31,8 @@ export function CcHoldingsCard({ hasWallet }: CcHoldingsCardProps) {
   // ── No wallet state ──
   if (!hasWallet) {
     return (
-      <Card className="relative overflow-hidden p-6 sm:p-8">
-        <div className="flex flex-col items-center gap-4 text-center">
+      <Card className="relative h-full overflow-hidden p-6 sm:p-8">
+        <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
           <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--muted)]">
             <Wallet className="h-6 w-6 text-[var(--muted-foreground)]" aria-hidden />
           </span>
@@ -66,18 +66,28 @@ export function CcHoldingsCard({ hasWallet }: CcHoldingsCardProps) {
   const lockedPct = total > 0 ? Math.round((locked / total) * 100) : 0;
 
   return (
-    <Card interactive className="overflow-hidden p-6 sm:p-7">
-      <div>
+    <Card interactive className="relative h-full overflow-hidden p-6 sm:p-7">
+      {/* Wash brand lembut — hero balance. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 right-0 w-2/3 bg-[linear-gradient(270deg,rgb(var(--canton-cyan-rgb)/0.05),transparent_70%)]"
+      />
+      <div className="relative">
         {/* ── Balance hero ── */}
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-2.5">
-            <CcRewardLogo size={28} className="text-canton" />
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--primary)]/10">
+              <CcRewardLogo size={26} className="text-canton" />
+            </span>
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
                 {t("dashboard.ccBalance")}
               </p>
-              <p className="mt-0.5 text-3xl font-extrabold tabular-nums tracking-tight text-[var(--foreground)] glow-text">
+              <p className="mt-0.5 text-3xl font-extrabold tabular-nums tracking-tight text-[var(--foreground)] sm:text-4xl">
                 {loading ? "…" : formatCc(total)}
+                <span className="ml-1.5 align-middle text-sm font-bold text-[var(--muted-foreground)]">
+                  CC
+                </span>
               </p>
             </div>
           </div>

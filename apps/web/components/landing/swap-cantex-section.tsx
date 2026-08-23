@@ -38,7 +38,7 @@ export function SwapCantexSection() {
       </div>
 
       <LandingImage
-        src="/landing/swap.svg"
+        src="/landing/swap-light.svg"
         alt="Swap CC for USDCx inside the CanQuest wallet"
         ratio="4/3"
         className="mx-auto max-w-2xl"

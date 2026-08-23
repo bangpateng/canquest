@@ -149,7 +149,7 @@ export function ClaimDetailsModal({
                 <span className="flex items-center gap-1.5 font-mono text-sm font-medium text-[var(--foreground)]">
                   <span className={r.accent ? "text-canton" : undefined}>{r.value}</span>
                   {r.tag ? (
-                    <span className="rounded-[20px] border border-amber-400/25 bg-amber-400/10 px-1.5 py-0.5 font-mono text-[10px] text-amber-300">
+                    <span className="rounded-[20px] border border-amber-400/25 bg-amber-400/10 px-1.5 py-0.5 font-mono text-[10px] text-amber-600">
                       {r.tag}
                     </span>
                   ) : null}

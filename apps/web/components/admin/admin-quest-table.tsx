@@ -37,7 +37,7 @@ const STATUS_CONFIG: Record<string, { label: string; cls: string; icon: React.Co
   },
   ENDED: {
     label: "Ended",
-    cls: "bg-slate-500/15 text-slate-400 ring-1 ring-slate-500/25",
+    cls: "bg-slate-500/10 text-[var(--muted-foreground)] ring-1 ring-slate-500/20",
     icon: XCircle,
   },
 };

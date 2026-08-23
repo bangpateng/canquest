@@ -96,13 +96,13 @@ export function ShareCampaign({ url, title, text, className }: ShareCampaignProp
       </button>
 
       {open ? (
-        <div className="absolute right-0 z-20 mt-2 w-44 overflow-hidden rounded-xl border border-white/10 bg-[#0a0c14] shadow-xl">
+        <div className="absolute right-0 z-20 mt-2 w-44 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-[var(--shadow-card)]">
           {targets.map((tgt) => (
             <button
               key={tgt.label}
               type="button"
               onClick={() => openLink(tgt.href)}
-              className="flex w-full items-center px-3 py-2.5 text-left text-sm text-slate-200 transition-colors hover:bg-white/5"
+              className="flex w-full items-center px-3 py-2.5 text-left text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--primary)]/5"
             >
               {tgt.label}
             </button>
@@ -110,7 +110,7 @@ export function ShareCampaign({ url, title, text, className }: ShareCampaignProp
           <button
             type="button"
             onClick={copyLink}
-            className="flex w-full items-center gap-2 border-t border-white/5 px-3 py-2.5 text-left text-sm text-slate-200 transition-colors hover:bg-white/5"
+            className="flex w-full items-center gap-2 border-t border-[var(--border)] px-3 py-2.5 text-left text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--primary)]/5"
           >
             {copied ? (
               <Check className="h-4 w-4 text-green-500" />

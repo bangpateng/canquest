@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   Compass,
@@ -12,7 +13,6 @@ import {
   Sparkles,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { CanQuestLogo } from "@/components/ui/canquest-logo";
 import { PlatformToolbar } from "@/components/platform/platform-toolbar";
 import { TransactionStatusModal } from "@/components/platform/transaction-status-modal";
 import { platformContentClass } from "@/components/platform/platform-page";
@@ -36,65 +36,89 @@ const navItems: {
   { href: "/settings", key: "settings", icon: Settings },
 ];
 
-function NavLinks({
-  variant,
-  hasWallet,
-}: {
-  variant: "sidebar" | "mobile";
-  hasWallet: boolean;
-}) {
+/** Label muncul di kanan ikon saat hover / keyboard-focus (desktop rail). */
+function RailTooltip({ label }: { label: string }) {
+  return (
+    <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-lg bg-[var(--foreground)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--background)] opacity-0 shadow-md transition-all duration-150 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100">
+      {label}
+    </span>
+  );
+}
+
+function useNavState(hasWallet: boolean) {
   const pathname = usePathname();
   const { t } = usePlatformI18n();
 
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(`${href}/`);
 
-  const base =
-    variant === "sidebar"
-      ? "flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-semibold transition-all duration-200"
-      : "flex flex-col items-center justify-center gap-0.5 py-1.5 px-0.5 transition-all duration-200 min-w-0";
+  return navItems.map(({ href, key, icon: Icon }) => {
+    const active = isActive(href);
+    const label = t(`nav.${key}`);
+    const locked = hrefRequiresWallet(href) && !hasWallet;
+    const hrefTarget = locked ? `/wallet?from=${encodeURIComponent(href)}` : href;
+    return { href, hrefTarget, label, locked, active, Icon };
+  });
+}
+
+/** Desktop icon rail — 72px, ikon saja + tooltip. Aktif = pill gradient brand. */
+function RailNav({ hasWallet }: { hasWallet: boolean }) {
+  const items = useNavState(hasWallet);
 
   return (
     <>
-      {navItems.map(({ href, key, icon: Icon }) => {
-        const active = isActive(href);
-        const label = t(`nav.${key}`);
-        const locked = hrefRequiresWallet(href) && !hasWallet;
-        const hrefTarget = locked ? `/wallet?from=${encodeURIComponent(href)}` : href;
-        const className =
-          base +
-          (locked
-            ? " opacity-50 cursor-not-allowed"
-            : active
-              ? variant === "mobile"
-                ? " bg-canton-subtle text-[var(--foreground)] shadow-md shadow-black/20 ring-1 ring-inset ring-[rgb(var(--canton-rgb)/0.20)] rounded-lg"
-                : " bg-canton-subtle text-[var(--foreground)] shadow-md shadow-black/20 ring-1 ring-[rgb(var(--canton-rgb)/0.20)]"
-              : " text-[var(--muted-foreground)] hover:bg-[var(--primary)]/5 hover:text-[var(--foreground)]");
-
-        return (
+      {items.map(({ href, hrefTarget, label, locked, active, Icon }) => (
+        <div key={href} className="group relative">
           <Link
-            key={href}
             href={hrefTarget}
-            title={locked ? t("walletGate.navLocked") : undefined}
-            className={className}
-          >
-            <Icon
-              className={
-                variant === "sidebar"
-                  ? cn("h-5 w-5 shrink-0", active && "text-canton")
-                  : cn("h-5 w-5 shrink-0", active ? "text-canton" : "text-[var(--muted-foreground)]")
-              }
-            />
-            {variant === "mobile" ? (
-              <span className="text-[10px] tracking-tight whitespace-nowrap text-center leading-tight font-medium w-full truncate">
-                {label}
-              </span>
-            ) : (
-              label
+            title={locked ? label : undefined}
+            aria-label={label}
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "flex h-11 w-11 items-center justify-center rounded-2xl transition-all duration-200",
+              locked
+                ? "cursor-not-allowed text-[var(--muted-foreground)] opacity-40"
+                : active
+                  ? "bg-gradient-brand text-[var(--primary-foreground)] shadow-[var(--shadow-glow)]"
+                  : "text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]",
             )}
+          >
+            <Icon className="h-[21px] w-[21px] shrink-0" strokeWidth={active ? 2.4 : 2} />
           </Link>
-        );
-      })}
+          <RailTooltip label={label} />
+        </div>
+      ))}
+    </>
+  );
+}
+
+/** Bottom nav mobile — ikon + label kecil, aktif = pill hijau lembut. */
+function MobileNav({ hasWallet }: { hasWallet: boolean }) {
+  const items = useNavState(hasWallet);
+
+  return (
+    <>
+      {items.map(({ href, hrefTarget, label, locked, active, Icon }) => (
+        <Link
+          key={href}
+          href={hrefTarget}
+          title={locked ? label : undefined}
+          aria-label={label}
+          aria-current={active ? "page" : undefined}
+          className={cn(
+            "flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl px-0.5 py-1.5 transition-all duration-200",
+            locked && "opacity-40",
+            active
+              ? "bg-canton-subtle text-canton"
+              : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
+          )}
+        >
+          <Icon className="h-5 w-5 shrink-0" strokeWidth={active ? 2.4 : 2} />
+          <span className="w-full truncate text-center text-[10px] font-medium leading-tight tracking-tight">
+            {label}
+          </span>
+        </Link>
+      ))}
     </>
   );
 }
@@ -107,48 +131,74 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
   useRealtime();
 
   return (
-    <div className="relative flex min-h-screen w-full max-w-full isolate items-start overflow-x-hidden bg-[var(--background)] font-sans">
-      {/* Ambient nebula — fixed radial glows (canton / violet / cyan) behind all platform content. */}
+    <div className="relative flex min-h-screen w-full max-w-full isolate items-stretch overflow-x-hidden bg-[var(--background)] font-sans">
+      {/* Ambient tint — fixed, very subtle radial wash (canton / cyan). */}
       <div
         aria-hidden
         className="pointer-events-none fixed inset-0 -z-10"
         style={{
           background:
-            "radial-gradient(48rem 30rem at 14% -8%, rgb(var(--canton-rgb) / 0.16), transparent 60%), radial-gradient(40rem 26rem at 100% 8%, rgb(var(--violet-rgb) / 0.12), transparent 55%), radial-gradient(36rem 24rem at 8% 92%, rgb(var(--canton-cyan-rgb) / 0.08), transparent 55%)",
+            "radial-gradient(48rem 30rem at 14% -8%, rgb(var(--canton-rgb) / 0.07), transparent 60%), radial-gradient(40rem 26rem at 100% 8%, rgb(var(--canton-cyan-rgb) / 0.05), transparent 55%)",
         }}
       />
-      {/* Desktop Sidebar — hidden on mobile */}
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--card)]/60 px-4 py-8 backdrop-blur-2xl md:flex">
-        <div className="mb-6 min-w-0 px-2">
-          <CanQuestLogo size="md" href="/overview" />
-        </div>
-        <p className="mb-6 px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--muted-foreground)]">
-          {t("shell.platform")}
-        </p>
-        <nav className="flex flex-1 flex-col gap-1.5">
-          <NavLinks variant="sidebar" hasWallet={hasWallet} />
+
+      {/* Desktop icon rail */}
+      <aside className="sticky top-0 z-40 hidden h-screen w-[72px] shrink-0 flex-col items-center border-r border-[var(--border)] bg-[var(--card)] py-5 md:flex">
+        {/* Brand mark */}
+        <Link
+          href="/overview"
+          aria-label="CanQuest"
+          className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-gradient-brand shadow-[var(--shadow-glow)] transition-transform duration-200 hover:scale-105"
+        >
+          <Image
+            src="/favicon.png"
+            alt=""
+            width={30}
+            height={30}
+            className="h-[30px] w-[30px] rounded-lg object-cover"
+          />
+        </Link>
+
+        {/* Nav */}
+        <nav className="mt-8 flex flex-1 flex-col items-center gap-2" aria-label={t("shell.platform")}>
+          <RailNav hasWallet={hasWallet} />
         </nav>
-        <div className="mt-auto space-y-1 border-t border-[var(--border)] pt-5">
-          <Link
-            href="/"
-            className="flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium text-[var(--muted-foreground)] transition-all duration-200 hover:bg-[var(--primary)]/5 hover:text-[var(--foreground)]"
-          >
-            <Compass className="h-4 w-4" />
-            {t("shell.landing")}
-          </Link>
-          <p className="px-4 pt-2 text-[10px] font-medium text-[var(--muted-foreground)]">canquest.cc</p>
+
+        {/* Bottom actions */}
+        <div className="mt-auto flex flex-col items-center gap-2 border-t border-[var(--border)] pt-4">
+          <div className="group relative">
+            <Link
+              href="/"
+              aria-label={t("shell.landing")}
+              className="flex h-11 w-11 items-center justify-center rounded-2xl text-[var(--muted-foreground)] transition-all duration-200 hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+            >
+              <Compass className="h-[21px] w-[21px]" />
+            </Link>
+            <RailTooltip label={t("shell.landing")} />
+          </div>
         </div>
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden pb-24 md:pb-0" style={{ maxWidth: '100%' }}>
-        {/* Top Header */}
-        <header className="sticky top-0 z-30 flex h-16 w-full max-w-full items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--background)]/80 px-4 backdrop-blur-2xl sm:h-[4.5rem] sm:px-6 md:px-8 lg:px-10">
-          {/* Match landing-header structure: wrap logo in a flex/centered box so
-              the lockup sits vertically centered like on the landing page. */}
-          <div className="flex shrink-0 items-center justify-start md:hidden">
-            <CanQuestLogo size="md" href="/overview" />
-          </div>
+      <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden pb-24 md:pb-0" style={{ maxWidth: "100%" }}>
+        {/* Top Header — clean, hairline border, toolbar right */}
+        <header className="sticky top-0 z-30 flex h-16 w-full max-w-full items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--card)]/85 px-4 backdrop-blur-xl sm:h-[4.25rem] sm:px-6 md:px-8 lg:px-10">
+          {/* Mobile: wordmark. Desktop rail sudah ada brand mark. */}
+          <Link
+            href="/overview"
+            className="flex shrink-0 items-center md:hidden"
+            aria-label="CanQuest"
+          >
+            <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-gradient-brand">
+              <Image
+                src="/favicon.png"
+                alt=""
+                width={24}
+                height={24}
+                className="h-6 w-6 rounded-md object-cover"
+              />
+            </span>
+          </Link>
           <div className="hidden flex-1 md:block" />
           <PlatformToolbar />
         </header>
@@ -159,13 +209,14 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
         </main>
       </div>
 
-      {/* Mobile Bottom Navigation — centered 6-item grid, no truncation */}
+      {/* Mobile Bottom Navigation */}
       <nav
-        className="fixed bottom-0 left-0 right-0 z-50 bg-[var(--card)]/90 backdrop-blur-xl border-t border-[var(--border)] py-1.5 px-2 md:hidden"
+        className="fixed bottom-0 left-0 right-0 z-50 border-t border-[var(--border)] bg-[var(--card)]/95 px-2 py-1.5 shadow-[0_-8px_24px_-16px_rgb(12_18_34/0.18)] backdrop-blur-xl md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0.375rem)" }}
+        aria-label={t("shell.platform")}
       >
-        <div className="grid grid-cols-6 w-full items-center mx-auto max-w-lg gap-0">
-          <NavLinks variant="mobile" hasWallet={hasWallet} />
+        <div className="mx-auto grid w-full max-w-lg grid-cols-6 items-center gap-0">
+          <MobileNav hasWallet={hasWallet} />
         </div>
       </nav>
 

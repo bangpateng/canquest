@@ -65,7 +65,7 @@ export function CampaignFcfsClaimSection({
       usdAmount: rewardCc > 0 ? { amount: rewardCc, token } : null,
       subText: subtitle,
       accentBg: isUsdcx ? "bg-sky-500/15" : "bg-canton-subtle",
-      accentText: isUsdcx ? "text-sky-300" : "text-canton",
+      accentText: isUsdcx ? "text-sky-600" : "text-canton",
       meta: [{ label: "Claim fee paid", value: feeLabel }],
     });
     tx.broadcast();

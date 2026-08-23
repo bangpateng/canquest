@@ -171,9 +171,9 @@ export function DashboardView() {
 
           {/* ── Cards Bento Grid ─────────────────────────────────────────── */}
           {!initialLoading && !loadError && (
-            <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 md:gap-5">
-              {/* Profile (full width) */}
-              <div className="sm:col-span-2 lg:col-span-12">
+            <section className="grid grid-cols-1 gap-4 md:gap-5 lg:grid-cols-12">
+              {/* Profile hero (full width) */}
+              <div className="lg:col-span-12">
                 <ProfileCard
                   displayName={me?.displayName}
                   username={me?.username}
@@ -184,21 +184,17 @@ export function DashboardView() {
                 />
               </div>
 
-              {/* CC Holdings — hero card (wider) */}
-              <div className="sm:col-span-2 lg:col-span-6">
+              {/* CC Holdings — hero utama (lebar) */}
+              <div className="lg:col-span-8">
                 <CcHoldingsCard hasWallet={hasWallet} />
               </div>
 
-              {/* Points (narrow) */}
-              <div className="sm:col-span-1 lg:col-span-3">
+              {/* Stack kanan: Points + Activity */}
+              <div className="flex flex-col gap-4 md:gap-5 lg:col-span-4">
                 <PointsCard
                   remaining={pointsBalance?.remaining ?? s.pointsRemaining ?? 0}
                   loading={loading}
                 />
-              </div>
-
-              {/* Activity totals (narrow) */}
-              <div className="sm:col-span-1 lg:col-span-3">
                 <ActivityStatsCard
                   questsDone={s.earnHubCompleted ?? 0}
                   earnDone={s.campaignCompleted ?? 0}

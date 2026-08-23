@@ -30,7 +30,7 @@ function CountdownTimer({ endsAt }: { endsAt: string | null }) {
   if (hours > 0 || days > 0) parts.push(`${hours}h`);
   parts.push(`${mins}m`);
   return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-300">
+    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600">
       {parts.join(" ")}
     </span>
   );
@@ -124,7 +124,7 @@ export function EarnCampaignCard({
     ctaVariant === "primary"
       ? "btn-brand-gradient font-bold"
       : ctaVariant === "ghost"
-        ? "border border-white/[0.13] bg-transparent font-semibold text-[var(--foreground)] hover:opacity-90"
+        ? "border border-[var(--border)] bg-transparent font-semibold text-[var(--foreground)] hover:opacity-90"
         : "border border-[var(--border)] bg-[var(--card-solid)] font-medium text-[var(--muted-foreground)] hover:opacity-90";
 
   // FCFS progress fill: gray utk ended/full, amber saat hampir habis, mint default.
@@ -166,7 +166,7 @@ export function EarnCampaignCard({
   const inner = (
     <div
       className={cn(
-        "group relative flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden rounded-[20px] border border-white/[0.07] bg-[var(--card)] transition-colors duration-300",
+        "group relative flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--card)] transition-colors duration-300",
         meta.canOpen && !meta.joinBlocked && "hover:border-[var(--primary)]/30",
       )}
     >
@@ -181,15 +181,16 @@ export function EarnCampaignCard({
             style={{ backgroundImage: `url("${quest.bannerImageUrl}")` }}
           />
         ) : (
-          /* Fallback: stripes + watermark huruf org (mockup banner-fallback) */
+          /* Fallback: stripes + watermark huruf org (tema-adaptif: mint di
+             light, gelap di dark) */
           <div
             className="absolute inset-0 flex items-center justify-center"
             style={{
               backgroundImage:
-                "repeating-linear-gradient(135deg, rgba(94,232,156,0.06) 0 2px, transparent 2px 14px), linear-gradient(160deg,#16211b,#0b0f0d)",
+                "repeating-linear-gradient(135deg, rgba(22,163,74,0.10) 0 2px, transparent 2px 14px), linear-gradient(160deg,#f0f7f2,#e3efe8)",
             }}
           >
-            <span className="text-[30px] font-extrabold text-[rgb(var(--canton-rgb)/0.28)]">
+            <span className="text-[30px] font-extrabold text-[rgb(var(--canton-rgb)/0.35)]">
               {quest.orgSlug.slice(0, 2).toUpperCase()}
             </span>
           </div>
@@ -197,7 +198,7 @@ export function EarnCampaignCard({
         {isEnded ? <div className="absolute inset-0 bg-[#060a08]/25" /> : null}
         {isSoon ? (
           <div className="absolute inset-0 z-[2] flex items-center justify-center bg-[#060a08]/35 backdrop-blur-[3px] saturate-[0.7]">
-            <span className="rounded-full border border-white/[0.13] bg-[#060a08]/60 px-3 py-1.5 text-xs font-bold text-[var(--foreground)]">
+            <span className="rounded-full border border-black/[0.06] bg-white/90 px-3 py-1.5 text-xs font-bold text-[#0f172a] backdrop-blur-md dark:border-white/[0.13] dark:bg-[#060a08]/60 dark:text-[var(--foreground)]">
               Coming soon
             </span>
           </div>
@@ -207,12 +208,12 @@ export function EarnCampaignCard({
         <div className="relative z-[3] flex w-full items-start justify-between px-3.5 py-3">
           <span
             className={cn(
-              "inline-flex items-center gap-[5px] rounded-full border border-white/[0.12] bg-[#060a08]/55 px-[9px] py-[5px] text-[10px] font-bold uppercase tracking-wider text-[var(--foreground)] backdrop-blur-md",
+              "inline-flex items-center gap-[5px] rounded-full border border-black/[0.06] bg-white/85 px-[9px] py-[5px] text-[10px] font-bold uppercase tracking-wider text-[#0f172a] backdrop-blur-md dark:border-white/[0.12] dark:bg-[#060a08]/55 dark:text-[var(--foreground)]",
               quest.status === "ACTIVE" &&
                 !slots.full &&
-                "border-[rgb(var(--canton-rgb)/0.3)] text-canton",
+                "border-[rgb(var(--canton-rgb)/0.35)] text-canton",
               quest.status === "COMING_SOON" &&
-                "border-amber-300/30 text-amber-300",
+                "border-amber-500/30 text-amber-600 dark:text-amber-300",
             )}
           >
             <span
@@ -229,7 +230,7 @@ export function EarnCampaignCard({
             />
             {statusLabel}
           </span>
-          <span className="inline-flex items-center rounded-full border border-white/[0.12] bg-[#060a08]/55 px-[9px] py-[5px] text-[10px] font-bold uppercase tracking-wider text-[var(--muted-foreground)] backdrop-blur-md">
+          <span className="inline-flex items-center rounded-full border border-black/[0.06] bg-white/85 px-[9px] py-[5px] text-[10px] font-bold uppercase tracking-wider text-[#3d4654] backdrop-blur-md dark:border-white/[0.12] dark:bg-[#060a08]/55 dark:text-[var(--muted-foreground)]">
             {config.shortLabel}
           </span>
         </div>
@@ -237,7 +238,7 @@ export function EarnCampaignCard({
 
       {/* ── Head: logo 44px + judul & deskripsi satu baris ─────── */}
       <div className="flex items-center gap-3 px-4 pb-3.5 pt-4">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/[0.13] bg-[var(--card-solid)] text-base font-bold text-canton">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card-solid)] text-base font-bold text-canton">
           {quest.logoUrl ? (
             <img src={quest.logoUrl} alt="" className="h-full w-full object-cover" />
           ) : (

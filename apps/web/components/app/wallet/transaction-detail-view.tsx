@@ -70,7 +70,7 @@ export function TransactionDetailView({ transactionId }: TransactionDetailViewPr
     <div className="mx-auto w-full min-w-0 max-w-2xl space-y-6 sm:space-y-8">
       <Link
         href="/activity"
-        className="inline-flex items-center gap-2 text-sm font-medium text-slate-300 transition-colors hover:text-white"
+        className="inline-flex items-center gap-2 text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
       >
         <ArrowLeft className="h-5 w-5" />
         Back to activity

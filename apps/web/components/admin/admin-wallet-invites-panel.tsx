@@ -244,7 +244,7 @@ export function AdminWalletInvitesPanel() {
                       {rowStatus(row) === "Used" ? (
                         <span className="text-[var(--muted-foreground)]">Used</span>
                       ) : rowStatus(row) === "In progress" ? (
-                        <span className="text-amber-300/90">In progress</span>
+                        <span className="text-amber-600/90">In progress</span>
                       ) : (
                         <span className="font-medium text-canton">Available</span>
                       )}

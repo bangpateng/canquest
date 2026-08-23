@@ -53,12 +53,17 @@ export function ProfileCard({
   const seed = username?.trim() || displayName?.trim() || "guest";
 
   return (
-    <Card interactive className="overflow-hidden p-6 sm:p-7">
-      <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+    <Card interactive className="relative overflow-hidden p-6 sm:p-7">
+      {/* Wash hijau lembut di sisi kiri — identitas brand tanpa warna penuh. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 left-0 w-2/3 bg-[linear-gradient(90deg,rgb(var(--canton-rgb)/0.07),transparent_70%)]"
+      />
+      <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
         {/* ── Identity ── */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 sm:gap-5">
           <div
-            className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl"
+            className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-[1.25rem] shadow-[var(--shadow-card)] ring-2 ring-white/70 dark:ring-white/10"
             style={avatarSrc ? undefined : { backgroundImage: avatarGradient(seed) }}
           >
             {avatarSrc ? (
@@ -79,7 +84,7 @@ export function ProfileCard({
           </div>
 
           <div className="min-w-0">
-            <p className="truncate text-lg font-bold tracking-tight text-[var(--foreground)]">
+            <p className="truncate text-xl font-bold tracking-tight text-[var(--foreground)] sm:text-2xl">
               {name}
             </p>
             {twitterUsername?.trim() ? (
@@ -87,7 +92,7 @@ export function ProfileCard({
                 href={`https://x.com/${twitterUsername.trim()}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-0.5 inline-flex items-center gap-1 text-sm font-medium text-canton hover:underline"
+                className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-canton hover:underline"
               >
                 <AtSign className="h-3 w-3" />
                 {twitterUsername.trim()}
@@ -95,7 +100,7 @@ export function ProfileCard({
             ) : (
               <Link
                 href="/settings"
-                className="mt-0.5 inline-block text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                className="mt-1 inline-block text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
               >
                 {t("dashboard.connectTwitter")}
               </Link>
@@ -106,7 +111,7 @@ export function ProfileCard({
         {/* ── Weekly rank badge ── */}
         <Link
           href={ROUTES.leaderboard}
-          className="group flex shrink-0 items-center gap-3 rounded-xl bg-[var(--muted)] px-4 py-2.5 transition-colors hover:bg-[var(--primary)]/5"
+          className="group flex shrink-0 items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-2.5 transition-colors hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/5"
         >
           <div className="text-right">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">

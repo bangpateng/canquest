@@ -1114,7 +1114,7 @@ function TaskRow({
             <p
               className={cn(
                 "mb-0.5 text-xs font-bold tabular-nums",
-                isVerified ? "text-emerald-400" : "text-amber-300",
+                isVerified ? "text-emerald-400" : "text-amber-600",
               )}
             >
               +{task.points} pts
@@ -1144,12 +1144,12 @@ function TaskRow({
                 Locked
               </span>
             ) : isVerified ? (
-              <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500/15 px-4 text-xs font-bold text-emerald-300">
+              <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500/15 px-4 text-xs font-bold text-emerald-600">
                 Verified
               </span>
             ) : countdown !== null && countdown > 0 ? (
               <span
-                className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500/15 px-4 text-center text-xs font-bold tabular-nums text-emerald-300"
+                className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500/15 px-4 text-center text-xs font-bold tabular-nums text-emerald-600"
                 aria-live="polite"
               >
                 {formatTaskCountdownSeconds(countdown)}
@@ -1340,7 +1340,7 @@ function TaskRow({
                   "mb-0.5 text-xs font-bold tabular-nums",
                   isOneTimeComplete || onRepeatCooldown
                     ? "text-emerald-400"
-                    : "text-amber-300",
+                    : "text-amber-600",
                 )}
               >
                 +{task.points} pts
@@ -1404,12 +1404,12 @@ function TaskRow({
                     Locked
                   </span>
                 ) : (isOneTimeComplete || onRepeatCooldown) && !canRepeatNow ? (
-                  <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500/15 px-4 text-xs font-bold text-emerald-300">
+                  <span className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500/15 px-4 text-xs font-bold text-emerald-600">
                     Verified
                   </span>
                 ) : countdown !== null && countdown > 0 ? (
                   <span
-                    className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500/15 px-4 text-center text-xs font-bold tabular-nums text-emerald-300"
+                    className="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500/15 px-4 text-center text-xs font-bold tabular-nums text-emerald-600"
                     aria-live="polite"
                   >
                     {formatTaskCountdownSeconds(countdown)}

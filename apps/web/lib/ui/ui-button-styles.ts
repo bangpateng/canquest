@@ -37,14 +37,12 @@ export function underlineTabClass(selected: boolean, className?: string) {
 
 /** Small icon-only control (toolbar, copy, close).
  *
- *  Self-contained: provides its own surface background + explicit white icon
- *  color so the lucide SVG (stroke=currentColor) is ALWAYS visible on dark
- *  cards, no matter where it's rendered. Previously delegated to the cva
- *  `icon` variant which had no background and inherited a dim color, making
- *  bell/close/copy icons render dark/invisible. */
+ *  Self-contained: provides its own surface background + explicit icon
+ *  color via tokens so the lucide SVG (stroke=currentColor) is ALWAYS
+ *  visible on every surface/theme, no matter where it's rendered. */
 export function iconButtonClass(className?: string) {
   return cn(
-    "inline-flex items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card)]/80 text-white backdrop-blur-md transition-[border-color,background-color,transform] hover:-translate-y-px hover:border-[var(--primary)]/35 hover:bg-[var(--primary)]/10 hover:text-white disabled:pointer-events-none disabled:opacity-50",
+    "inline-flex items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card)]/80 text-[var(--foreground)] transition-[border-color,background-color,color,transform] hover:-translate-y-px hover:border-[var(--primary)]/35 hover:bg-[var(--primary)]/10 hover:text-[var(--primary-strong)] disabled:pointer-events-none disabled:opacity-50",
     className,
   );
 }

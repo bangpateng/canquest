@@ -85,7 +85,7 @@ export function CampaignFcfsRewardCard({
                     : "bg-gradient-to-br from-canton/15 to-violet-500/15 text-violet-300"
                   : isCcOnly
                     ? isUsdcx
-                      ? "bg-sky-400/15 text-sky-300"
+                      ? "bg-sky-400/15 text-sky-600"
                       : "bg-[var(--primary)]/15 text-canton"
                     : isWaitlist
                       ? "bg-cyan-500/15 text-cyan-300"
@@ -152,7 +152,7 @@ export function CampaignFcfsRewardCard({
           className={cn(
             "relative mt-4 inline-flex items-center gap-2",
             successBannerClass,
-            deliveryKind === "direct" ? "" : "border-amber-500/30 bg-amber-500/10 text-amber-300",
+            deliveryKind === "direct" ? "" : "border-amber-500/30 bg-amber-500/10 text-amber-600",
           )}
         >
           {deliveryKind === "direct" ? (
@@ -238,7 +238,7 @@ export function CampaignClaimCta({
           className={cn(
             "inline-flex w-full items-center gap-2",
             successBannerClass,
-            deliveryKind === "direct" ? "" : "border-amber-500/30 bg-amber-500/10 text-amber-300",
+            deliveryKind === "direct" ? "" : "border-amber-500/30 bg-amber-500/10 text-amber-600",
           )}
         >
           {deliveryKind === "direct" ? (
