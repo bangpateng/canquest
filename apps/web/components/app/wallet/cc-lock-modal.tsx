@@ -212,7 +212,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative z-10 my-auto w-full max-h-[min(92vh,92dvh)] max-w-md overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-xl sm:p-8"
+        className="relative z-10 my-auto w-full max-h-[calc(100dvh-6.75rem)] md:max-h-[min(92vh,92dvh)] max-w-md overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-xl sm:p-8"
       >
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-2">

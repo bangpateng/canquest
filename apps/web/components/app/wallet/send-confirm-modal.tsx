@@ -92,7 +92,7 @@ export function SendConfirmModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative z-10 my-auto w-full max-w-md max-h-[min(92vh,92dvh)] overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-xl sm:p-8"
+        className="relative z-10 my-auto w-full max-w-md max-h-[calc(100dvh-6.75rem)] md:max-h-[min(92vh,92dvh)] overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-xl sm:p-8"
       >
         <div className="flex items-start justify-between gap-4">
           <h2 id={titleId} className="text-xl font-bold text-[var(--foreground)]">

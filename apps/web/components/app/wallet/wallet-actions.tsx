@@ -30,7 +30,6 @@ import {
   AlertTriangle,
   CheckCircle2,
 } from "lucide-react";
-import { QRCodeSVG } from "qrcode.react";
 import { useCallback, useEffect, useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -455,7 +454,7 @@ export function WalletActions({
             role="dialog"
             aria-modal="true"
             aria-labelledby={sendTitleId}
-            className="relative z-10 my-auto w-full max-h-[min(92vh,92dvh)] max-w-md overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-xl sm:p-8"
+            className="relative z-10 my-auto w-full max-h-[calc(100dvh-6.75rem)] md:max-h-[min(92vh,92dvh)] max-w-md overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-xl sm:p-8"
           >
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -774,7 +773,7 @@ export function WalletActions({
             role="dialog"
             aria-modal="true"
             aria-labelledby={receiveTitleId}
-            className="relative z-10 my-auto w-full max-h-[min(92vh,92dvh)] max-w-md overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-xl sm:p-8"
+            className="relative z-10 my-auto w-full max-h-[calc(100dvh-6.75rem)] md:max-h-[min(92vh,92dvh)] max-w-md overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-xl sm:p-8"
           >
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -798,28 +797,13 @@ export function WalletActions({
               </button>
             </div>
 
-            <div className="relative mt-7 flex justify-center rounded-3xl border border-[var(--border)] bg-white p-6 dark:bg-zinc-950">
-              <QRCodeSVG
-                value={displayPartyId}
-                size={200}
-                level="M"
-                marginSize={2}
-                className="h-[200px] w-[200px]"
-              />
-              <span
-                className="absolute left-1/2 top-1/2 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-4 border-white bg-gradient-to-br from-amber-400 to-amber-600 text-[10px] font-black text-black shadow-md dark:border-zinc-950"
-                aria-hidden
-              >
-                C
-              </span>
-            </div>
-            <div className="mt-4 flex items-center justify-center gap-1.5 text-xs font-semibold text-[var(--muted-foreground)]">
-              <span className="h-1.5 w-1.5 rounded-full bg-canton" />
-              Canton Network
-            </div>
-
             <div className="mt-6">
               <CopyField label="Your Canton Party ID" value={displayPartyId} />
+            </div>
+
+            <div className="mt-3 flex items-center justify-center gap-1.5 text-xs font-semibold text-[var(--muted-foreground)]">
+              <span className="h-1.5 w-1.5 rounded-full bg-canton" />
+              Canton Network
             </div>
 
             <div className="mt-3 flex items-start gap-2 rounded-xl bg-amber-500/10 px-3.5 py-2.5 text-xs text-amber-600">

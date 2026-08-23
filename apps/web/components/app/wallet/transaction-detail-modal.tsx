@@ -57,7 +57,7 @@ export function TransactionDetailModal({
       <div
         role="dialog"
         aria-modal="true"
-        className="relative z-10 my-auto flex w-full min-w-0 max-h-[min(92vh,92dvh)] max-w-md flex-col overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--card)] shadow-xl sm:max-h-[min(90vh,90dvh)]"
+        className="relative z-10 my-auto flex w-full min-w-0 max-h-[calc(100dvh-6.75rem)] md:max-h-[min(92vh,92dvh)] max-w-md flex-col overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--card)] shadow-xl sm:max-h-[min(90vh,90dvh)]"
       >
         <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] px-6 py-5">
           <div className="flex min-w-0 items-start gap-4">

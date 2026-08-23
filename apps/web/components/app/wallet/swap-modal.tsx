@@ -348,7 +348,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative z-10 my-auto w-full max-h-[min(92vh,92dvh)] max-w-md overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-2xl"
+        className="relative z-10 my-auto w-full max-h-[calc(100dvh-6.75rem)] md:max-h-[min(92vh,92dvh)] max-w-md overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-2xl"
       >
         {/* Header */}
         <div className="mb-5 flex items-center justify-between">
@@ -648,7 +648,7 @@ function TokenPicker({
         aria-label="Close token list"
         onClick={onClose}
       />
-      <div className="relative z-10 my-auto max-h-[85vh] w-full max-w-md overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-2xl">
+      <div className="relative z-10 my-auto max-h-[calc(100dvh-6.75rem)] md:max-h-[85vh] w-full max-w-md overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-2xl">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-base font-bold text-[var(--foreground)]">Select Token</h3>
           <button

@@ -34,7 +34,7 @@ export function TransactionStatusModal() {
       aria-modal="true"
     >
       <button className="modal-backdrop" aria-label="Close" onClick={dismiss} />
-      <div className="relative z-10 my-auto max-h-[min(92vh,92dvh)] w-full max-w-[380px] overflow-y-auto rounded-[20px] border border-[var(--border)] bg-[var(--card-solid)] shadow-[0_20px_44px_-24px_rgb(0_0_0/0.8)]">
+      <div className="relative z-10 my-auto max-h-[calc(100dvh-6.75rem)] md:max-h-[min(92vh,92dvh)] w-full max-w-[380px] overflow-y-auto rounded-[20px] border border-[var(--border)] bg-[var(--card-solid)] shadow-[0_20px_44px_-24px_rgb(0_0_0/0.8)]">
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[var(--primary)]/40 to-transparent" />
         <button
           className={iconButtonClass("absolute right-3 top-3 h-8 w-8")}
