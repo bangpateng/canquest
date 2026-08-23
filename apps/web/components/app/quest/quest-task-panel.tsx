@@ -505,7 +505,7 @@ export function QuestTaskPanel({
   if (progressError && !isQuestHub) {
     return (
       <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-5 py-8 text-center">
-        <p className="text-sm font-medium text-red-300">{progressError}</p>
+        <p className="text-sm font-medium text-red-600">{progressError}</p>
         <button
           type="button"
           onClick={() => loadProgress()}
@@ -1114,7 +1114,7 @@ function TaskRow({
             <p
               className={cn(
                 "mb-0.5 text-xs font-bold tabular-nums",
-                isVerified ? "text-emerald-400" : "text-amber-600",
+                isVerified ? "text-emerald-600" : "text-amber-600",
               )}
             >
               +{task.points} pts
@@ -1199,7 +1199,7 @@ function TaskRow({
                     "flex flex-1 items-center justify-center gap-1.5 rounded-full py-2 text-sm font-medium capitalize transition-colors",
                     sequentiallyLocked && "cursor-not-allowed opacity-50",
                     isWrong
-                      ? "bg-red-500/15 text-red-300"
+                      ? "bg-red-500/15 text-red-600"
                       : "text-[var(--muted-foreground)] hover:bg-[var(--background)]/50 hover:text-[var(--foreground)]",
                   )}
                 >
@@ -1266,7 +1266,7 @@ function TaskRow({
               <button
                 type="button"
                 onClick={() => setWalletPromptOpen(true)}
-                className="w-full max-w-md rounded-full bg-orange-500/10 px-4 py-2.5 text-left text-xs text-orange-300"
+                className="w-full max-w-md rounded-full bg-orange-500/10 px-4 py-2.5 text-left text-xs text-orange-600"
               >
                 Create wallet to verify →
               </button>
@@ -1283,7 +1283,7 @@ function TaskRow({
         ) : null}
 
         {needsTwitter && !isVerified ? (
-          <p className="mt-2 text-xs text-orange-300/90 sm:ml-[3.25rem]">
+          <p className="mt-2 text-xs text-orange-600/90 sm:ml-[3.25rem]">
             <Link
               href="/settings"
               className="font-semibold underline underline-offset-2"
@@ -1295,10 +1295,10 @@ function TaskRow({
         ) : null}
 
         {error ? (
-          <p className="mt-2 text-xs text-red-400 sm:ml-[3.25rem]">{error}</p>
+          <p className="mt-2 text-xs text-red-600 sm:ml-[3.25rem]">{error}</p>
         ) : null}
         {successMsg && !error ? (
-          <p className="mt-2 text-xs font-medium text-emerald-400 sm:ml-[3.25rem]">
+          <p className="mt-2 text-xs font-medium text-emerald-600 sm:ml-[3.25rem]">
             {successMsg}
           </p>
         ) : null}
@@ -1339,7 +1339,7 @@ function TaskRow({
                 className={cn(
                   "mb-0.5 text-xs font-bold tabular-nums",
                   isOneTimeComplete || onRepeatCooldown
-                    ? "text-emerald-400"
+                    ? "text-emerald-600"
                     : "text-amber-600",
                 )}
               >
@@ -1362,7 +1362,7 @@ function TaskRow({
               </div>
               {/* Baris status meta ringkas (cooldown / ready / quiz ended / send progress). */}
               {onRepeatCooldown ? (
-                <p className="mt-0.5 break-words text-xs font-medium text-emerald-400/80">
+                <p className="mt-0.5 break-words text-xs font-medium text-emerald-600/80">
                   {isCountableWalletTask || isLockCc
                     ? "Verified"
                     : "Checked in"}{" "}
@@ -1377,7 +1377,7 @@ function TaskRow({
                   Ready again — check in for +{task.points} pts
                 </p>
               ) : quizExpired ? (
-                <p className="mt-0.5 break-words text-xs font-medium text-orange-300/90">
+                <p className="mt-0.5 break-words text-xs font-medium text-orange-600/90">
                   Quiz ended
                 </p>
               ) : null}
@@ -1462,7 +1462,7 @@ function TaskRow({
                       (quizExpired || sequentiallyLocked) &&
                         "cursor-not-allowed opacity-50",
                       isWrong
-                        ? "bg-red-500/15 text-red-300"
+                        ? "bg-red-500/15 text-red-600"
                         : "text-[var(--muted-foreground)] hover:bg-[var(--background)]/50 hover:text-[var(--foreground)]",
                     )}
                   >
@@ -1515,7 +1515,7 @@ function TaskRow({
           ) : null}
 
           {needsTwitter && !isVerified ? (
-            <p className="mt-2 text-xs text-orange-300/90">
+            <p className="mt-2 text-xs text-orange-600/90">
               <Link
                 href="/settings"
                 className="font-semibold underline underline-offset-2"
@@ -1530,12 +1530,12 @@ function TaskRow({
             <button
               type="button"
               onClick={() => setWalletPromptOpen(true)}
-              className="mt-2 text-left text-xs font-medium text-orange-300/90 underline-offset-2 hover:underline"
+              className="mt-2 text-left text-xs font-medium text-orange-600/90 underline-offset-2 hover:underline"
             >
               Create your wallet to complete this task →
             </button>
           ) : null}
-          {error ? <p className="mt-2 text-xs text-red-400">{error}</p> : null}
+          {error ? <p className="mt-2 text-xs text-red-600">{error}</p> : null}
         </>
         <WalletCreatePromptModal
           open={walletPromptOpen}

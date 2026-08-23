@@ -219,7 +219,7 @@ export function AdminReferralAuditPanel() {
           title="Remove every referral outside the allowed webmail list, in one server-side batch"
           className={cn(
             buttonVariants({ variant: 'danger' }),
-            'gap-2 border-red-400 bg-transparent text-red-500 hover:bg-red-600 hover:text-white disabled:opacity-50',
+            'gap-2 border-red-400 bg-transparent text-red-600 hover:bg-red-600 hover:text-white disabled:opacity-50',
           )}
         >
           <Trash2 className="h-4 w-4" />
@@ -284,14 +284,14 @@ export function AdminReferralAuditPanel() {
                         <p className="font-semibold">
                           {ref.referrerEmail}
                           {ref.isAdmin && (
-                            <span className="ml-2 inline-flex rounded-md bg-orange-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-orange-300">
+                            <span className="ml-2 inline-flex rounded-md bg-orange-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-orange-600">
                               admin
                             </span>
                           )}
                         </p>
                       </td>
                       <td className="px-4 py-3 tabular-nums">{ref.flaggedCount}</td>
-                      <td className="px-4 py-3 font-semibold tabular-nums text-red-300">
+                      <td className="px-4 py-3 font-semibold tabular-nums text-red-600">
                         {ref.totalPoints}
                       </td>
                       <td className="px-4 py-3 tabular-nums">
@@ -301,7 +301,7 @@ export function AdminReferralAuditPanel() {
                         <button
                           type="button"
                           onClick={() => toggleExpand(ref.referrerId)}
-                          className="text-xs font-semibold text-blue-300 hover:underline"
+                          className="text-xs font-semibold text-blue-600 hover:underline"
                         >
                           {expanded.has(ref.referrerId) ? 'Hide' : 'View'}
                         </button>
@@ -330,13 +330,13 @@ export function AdminReferralAuditPanel() {
                                         {r.referredEmail}{' '}
                                         {r.isGmailAlias ? (
                                           <span
-                                            className="ml-1 inline-flex rounded-md bg-purple-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-purple-300"
+                                            className="ml-1 inline-flex rounded-md bg-purple-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-purple-600"
                                             title={`Alias duplicate — canonical: ${r.canonicalEmail}`}
                                           >
                                             alias duplicate
                                           </span>
                                         ) : (
-                                          <span className="text-[10px] font-bold uppercase text-red-300">
+                                          <span className="text-[10px] font-bold uppercase text-red-600">
                                             @{r.referredDomain}
                                           </span>
                                         )}
@@ -345,7 +345,7 @@ export function AdminReferralAuditPanel() {
                                         {r.points} pts ·{' '}
                                         {new Date(r.createdAt).toLocaleDateString()}
                                         {r.isGmailAlias && (
-                                          <span className="text-purple-300/80">
+                                          <span className="text-purple-600/80">
                                             {' '}· = {r.canonicalEmail}
                                           </span>
                                         )}

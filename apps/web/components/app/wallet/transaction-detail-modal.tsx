@@ -67,7 +67,7 @@ export function TransactionDetailModal({
               <span
                 className={cn(
                   "mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
-                  isIn ? "bg-green-500/15 text-green-500" : "bg-red-500/15 text-red-500",
+                  isIn ? "bg-green-500/15 text-green-600" : "bg-red-500/15 text-red-600",
                 )}
                 aria-hidden
               >

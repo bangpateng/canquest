@@ -123,7 +123,7 @@ export function AdminLoginForm() {
         Restricted area — authorized personnel only.
       </p>
       <p className="text-center text-xs">
-        <Link href="/?auth=login" className="text-[var(--primary)] underline-offset-4 hover:underline">
+        <Link href="/?auth=login" className="text-canton underline-offset-4 hover:underline">
           User app login
         </Link>
       </p>

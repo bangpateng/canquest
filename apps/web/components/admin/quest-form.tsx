@@ -932,7 +932,7 @@ export function QuestForm({
               })}
             </div>
             {form.rewardToken === "USDCx" && (
-              <p className="text-xs text-amber-500">
+              <p className="text-xs text-amber-600">
                 Fund the reward wallet (CANTON_REWARD_PARTY_ID) with USDCx
                 before the campaign goes live. The claim fee is still paid in
                 CC.
@@ -1346,7 +1346,7 @@ export function QuestForm({
                     <button
                       type="button"
                       onClick={() => removeTask(idx)}
-                      className="text-red-500 hover:text-red-400"
+                      className="text-red-600 hover:text-red-400"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>

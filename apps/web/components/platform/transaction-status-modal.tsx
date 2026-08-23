@@ -94,7 +94,7 @@ export function TransactionStatusModal() {
                 <div className="flex items-center justify-between py-2">
                   <dt className="text-xs text-[var(--muted-foreground)]">Status</dt>
                   <dd>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-400">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-600">
                       <Clock className="h-2.5 w-2.5" />
                       Pending
                     </span>
@@ -107,7 +107,7 @@ export function TransactionStatusModal() {
           {/* CONFIRMED — success */}
           {stage === "confirmed" && (
             <div className="flex flex-col items-center text-center tx-fade-up">
-              <div className="flex h-14 w-14 items-center justify-center rounded-[14px] bg-emerald-500/[0.13] text-emerald-400 tx-check-pop">
+              <div className="flex h-14 w-14 items-center justify-center rounded-[14px] bg-emerald-500/[0.13] text-emerald-600 tx-check-pop">
                 <Check className="h-7 w-7" />
               </div>
               <p className="mt-4 text-base font-bold text-[var(--foreground)]">{config.title}</p>
@@ -152,7 +152,7 @@ export function TransactionStatusModal() {
                           href={config.explorerUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="truncate font-mono text-xs font-semibold text-[var(--primary)] hover:underline"
+                          className="truncate font-mono text-xs font-semibold text-canton hover:underline"
                         >
                           {config.txHash}
                         </a>
@@ -174,7 +174,7 @@ export function TransactionStatusModal() {
                 <div className="flex items-center justify-between py-2">
                   <dt className="text-xs text-[var(--muted-foreground)]">Status</dt>
                   <dd>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-400">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-600">
                       <Check className="h-2.5 w-2.5" />
                       Confirmed
                     </span>

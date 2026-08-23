@@ -44,7 +44,7 @@ export function WalletReconnect({ username, onConnected }: WalletReconnectProps)
         <div>
           <div className="mb-8 flex justify-center">
             <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-orange-500/30 bg-orange-500/10">
-              <Wallet className="h-10 w-10 text-orange-400" />
+              <Wallet className="h-10 w-10 text-orange-600" />
             </div>
           </div>
           <PageTitle as="h2">{t("wallet.reconnectTitle")}</PageTitle>
@@ -57,7 +57,7 @@ export function WalletReconnect({ username, onConnected }: WalletReconnectProps)
 
           {error ? (
             <p
-              className="mt-6 rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm font-medium text-orange-300"
+              className="mt-6 rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm font-medium text-orange-600"
               role="alert"
             >
               {error}

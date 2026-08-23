@@ -211,7 +211,7 @@ export function AdminQuestHubTaskForm({
           <p className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-[var(--muted-foreground)]">
             {isSendTx ? (
               <>
-                <strong className="text-amber-400">Send transaction</strong> requires a Canton
+                <strong className="text-amber-600">Send transaction</strong> requires a Canton
                 wallet. On-chain sends are counted since{" "}
                 <strong className="text-canton">00:00 UTC</strong> (calendar-day lookback); the task
                 can be claimed again <strong className="text-canton">24h</strong> after the last
@@ -219,7 +219,7 @@ export function AdminQuestHubTaskForm({
               </>
             ) : (
               <>
-                <strong className="text-amber-400">{selectedMeta?.label ?? "Daily task"}</strong>{" "}
+                <strong className="text-amber-600">{selectedMeta?.label ?? "Daily task"}</strong>{" "}
                 requires a Canton wallet. On-chain activity is counted since{" "}
                 <strong className="text-canton">00:00 UTC</strong> (calendar-day lookback); the task
                 can be claimed again <strong className="text-canton">24h</strong> after the last
@@ -232,7 +232,7 @@ export function AdminQuestHubTaskForm({
 
       {draft.type === "daily_check_in" ? (
         <p className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs text-[var(--muted-foreground)]">
-          <strong className="text-emerald-400">Daily check-in</strong> stays on Quest permanently.
+          <strong className="text-emerald-600">Daily check-in</strong> stays on Quest permanently.
           Users can check in again <strong className="text-canton">24h</strong> after their last
           check-in for more points.
         </p>
@@ -344,7 +344,7 @@ export function AdminQuestHubTaskForm({
         </>
       ) : null}
 
-      {formError ? <p className="text-sm text-red-500">{formError}</p> : null}
+      {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
 
       <div className="flex flex-wrap gap-2">
         <button

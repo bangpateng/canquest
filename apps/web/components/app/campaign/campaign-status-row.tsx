@@ -14,9 +14,9 @@ import { cn } from "@/lib/utils/utils";
  */
 const TONE_ICON: Record<CampaignStatusRowTone, string> = {
   neutral: "bg-[var(--muted)] text-[var(--muted-foreground)]",
-  emerald: "bg-emerald-400/15 text-emerald-400",
-  sky: "bg-sky-400/15 text-sky-400",
-  amber: "bg-amber-400/15 text-amber-400",
+  emerald: "bg-emerald-400/15 text-emerald-600",
+  sky: "bg-sky-400/15 text-sky-600",
+  amber: "bg-amber-400/15 text-amber-600",
 };
 
 export type CampaignStatusRowTone = "neutral" | "emerald" | "sky" | "amber";

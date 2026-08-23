@@ -53,7 +53,7 @@ export function CampaignInviteClaimSection({
       amountText: "1 invite code",
       subText: subtitle,
       accentBg: "bg-violet-500/15",
-      accentText: "text-violet-300",
+      accentText: "text-violet-600",
       meta: [{ label: "Claim fee paid", value: feeLabel }],
     });
     tx.broadcast();

@@ -64,11 +64,11 @@ export function QuestReferralCard() {
     >
       <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--muted)]/20 px-6 py-4">
         <p className="flex items-center gap-3 text-sm font-medium text-[var(--muted-foreground)]">
-          <Gift className="h-4 w-4 text-emerald-400" aria-hidden />
+          <Gift className="h-4 w-4 text-emerald-600" aria-hidden />
           {t("questReferral.title")}
         </p>
         {stats && !loading ? (
-          <span className="text-sm font-semibold tabular-nums text-emerald-400/90">
+          <span className="text-sm font-semibold tabular-nums text-emerald-600/90">
             +{stats.pointsPerInvite} {t("questReferral.perFriend")}
           </span>
         ) : null}
@@ -78,7 +78,7 @@ export function QuestReferralCard() {
         {loading ? (
           <InlineLoading label={t("common.loading")} size="md" />
         ) : error ? (
-          <p className="text-sm font-medium text-red-400">{error}</p>
+          <p className="text-sm font-medium text-red-600">{error}</p>
         ) : stats ? (
           <div className="space-y-6">
             <p className="text-sm font-medium leading-relaxed text-[var(--muted-foreground)]">
@@ -87,7 +87,7 @@ export function QuestReferralCard() {
 
             <div className="flex flex-wrap gap-5 text-base">
               <div className="flex items-center gap-3">
-                <UserPlus className="h-5 w-5 text-emerald-400" aria-hidden />
+                <UserPlus className="h-5 w-5 text-emerald-600" aria-hidden />
                 <span className="text-[var(--muted-foreground)]">{t("questReferral.invited")}</span>
                 <span className="font-bold tabular-nums text-[var(--foreground)]">
                   {stats.invitedCount}
@@ -95,7 +95,7 @@ export function QuestReferralCard() {
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-[var(--muted-foreground)]">{t("questReferral.earned")}</span>
-                <span className="font-bold tabular-nums text-emerald-400/90">
+                <span className="font-bold tabular-nums text-emerald-600/90">
                   {stats.pointsEarned} pts
                 </span>
               </div>

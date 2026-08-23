@@ -415,7 +415,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
             <LoadingSpinner className="h-6 w-6" />
           </div>
         ) : tokensError ? (
-          <div className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
+          <div className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-600">
             <AlertCircle className="h-4 w-4 shrink-0" />
             <span>{tokensError}</span>
           </div>
@@ -480,7 +480,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
 
             {/* Insufficient balance */}
             {insufficientBalance && (
-              <p className="mt-3 text-center text-sm font-medium text-red-400">
+              <p className="mt-3 text-center text-sm font-medium text-red-600">
                 Insufficient {displayName(sellToken?.instrumentId ?? "")} balance
               </p>
             )}
@@ -488,7 +488,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
             {/* Quote details */}
             {!sameToken &&
               (quoteError ? (
-                <div className="mt-3 flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
+                <div className="mt-3 flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-600">
                   <AlertCircle className="h-4 w-4 shrink-0" />
                   <span>{quoteError}</span>
                 </div>
@@ -503,8 +503,8 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                     value={`${quote.priceImpactPct.toFixed(2)}%`}
                     valueClass={
                       quote.priceImpactPct > 3
-                        ? "text-red-400"
-                        : "text-emerald-400"
+                        ? "text-red-600"
+                        : "text-emerald-600"
                     }
                   />
                   <DetailRow label="Max slippage" value={`${slippage}%`} />
@@ -526,7 +526,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
             {/* CTA / Swap execution */}
             {swapState === "success" ? (
               <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-center">
-                <p className="text-sm font-semibold text-emerald-400">
+                <p className="text-sm font-semibold text-emerald-600">
                   Swap completed!
                 </p>
                 {swapOutput && (
@@ -551,7 +551,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
               </div>
             ) : swapState === "error" ? (
               <div className="mt-4 space-y-2">
-                <div className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
+                <div className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-600">
                   <AlertCircle className="h-4 w-4 shrink-0" />
                   <span>{swapMessage}</span>
                 </div>

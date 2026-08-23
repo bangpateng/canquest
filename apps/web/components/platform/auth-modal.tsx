@@ -238,7 +238,7 @@ export function AuthModal() {
         <div className="relative border-t border-[var(--border)] px-6 py-6">
           {error && (
             <div
-              className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-sm text-red-300"
+              className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-sm text-red-600"
               role="alert"
             >
               {error}

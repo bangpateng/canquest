@@ -29,7 +29,7 @@ function StatusPill({ status, label }: { status: Quest["status"]; label: string 
     <span className={cn(
       "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider backdrop-blur-md",
       status === "ACTIVE" && "border border-emerald-500/25 bg-emerald-500/15 text-emerald-600",
-      status === "COMING_SOON" && "border border-cyan-500/25 bg-cyan-500/15 text-cyan-300",
+      status === "COMING_SOON" && "border border-cyan-500/25 bg-cyan-500/15 text-cyan-600",
       status === "ENDED" && "border border-[var(--border)] bg-[var(--muted)] text-[var(--muted-foreground)]",
     )}>
       <span className={cn(

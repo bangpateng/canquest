@@ -293,8 +293,8 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
 
           {lockState === "error" && (
             <div className="flex items-start gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-3">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
-              <p className="text-sm font-medium text-red-400">{lockMessage}</p>
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+              <p className="text-sm font-medium text-red-600">{lockMessage}</p>
             </div>
           )}
 

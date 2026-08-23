@@ -30,7 +30,7 @@ export function TurnstileField({ onToken, resetKey = 0 }: TurnstileFieldProps) {
   if (!siteKey) {
     if (process.env.NODE_ENV === "production") {
       return (
-        <p className="text-xs text-orange-300">
+        <p className="text-xs text-orange-600">
           Captcha is not configured. Set{" "}
           <code className="text-[10px]">NEXT_PUBLIC_TURNSTILE_SITE_KEY</code> or{" "}
           <code className="text-[10px]">TURNSTILE_SITE_KEY</code> in{" "}

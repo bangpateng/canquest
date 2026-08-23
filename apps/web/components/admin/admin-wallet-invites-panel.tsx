@@ -188,7 +188,7 @@ export function AdminWalletInvitesPanel() {
         </label>
 
         {error ? (
-          <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+          <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-600">
             {error}
           </p>
         ) : null}
@@ -273,7 +273,7 @@ export function AdminWalletInvitesPanel() {
                             onClick={() => void handleDelete(row.id)}
                             className={cn(
                               buttonVariants({ variant: "ghost", size: "sm" }),
-                              "h-8 w-8 p-0 text-red-400 hover:text-red-300",
+                              "h-8 w-8 p-0 text-red-600 hover:text-red-300",
                             )}
                             title="Delete"
                           >

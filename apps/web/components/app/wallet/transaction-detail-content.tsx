@@ -76,7 +76,7 @@ function InlineCopyButton({ value, label = "Copy" }: { value: string; label?: st
       aria-label={label}
     >
       {copied ? (
-        <Check className="h-4 w-4 shrink-0 text-green-500" />
+        <Check className="h-4 w-4 shrink-0 text-green-600" />
       ) : (
         <Copy className="h-4 w-4" />
       )}
@@ -267,10 +267,10 @@ export function TransactionDetailContent({
               isToggle
                 ? "bg-[var(--muted)] text-[var(--muted-foreground)]"
                 : isLock
-                  ? "bg-amber-500/15 text-amber-500"
+                  ? "bg-amber-500/15 text-amber-600"
                   : isUnlock || isIn || isTokenIn
-                    ? "bg-green-500/15 text-green-500"
-                    : "bg-red-500/15 text-red-500",
+                    ? "bg-green-500/15 text-green-600"
+                    : "bg-red-500/15 text-red-600",
             )}
             aria-hidden
           >
@@ -293,10 +293,10 @@ export function TransactionDetailContent({
               isToggle
                 ? "text-[var(--muted-foreground)]"
                 : isLock
-                  ? "text-amber-500"
+                  ? "text-amber-600"
                   : isOut
-                    ? "text-red-500"
-                    : "text-green-500",
+                    ? "text-red-600"
+                    : "text-green-600",
             )}
           >
             {isToggle && !hasCancelledAmount
@@ -372,12 +372,12 @@ export function TransactionDetailContent({
               // Badge pill untuk status: Completed (hijau), Pending (amber), Rejected (merah).
               const pill =
                 detail.status === "PENDING"
-                  ? "inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-400"
+                  ? "inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-600"
                   : detail.status === "REJECTED"
-                    ? "inline-flex items-center gap-1 rounded-full bg-red-500/15 px-2.5 py-0.5 text-xs font-semibold text-red-400"
+                    ? "inline-flex items-center gap-1 rounded-full bg-red-500/15 px-2.5 py-0.5 text-xs font-semibold text-red-600"
                     : detail.onChainSettled
-                      ? "inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2.5 py-0.5 text-xs font-semibold text-green-500"
-                      : "inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-400";
+                      ? "inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2.5 py-0.5 text-xs font-semibold text-green-600"
+                      : "inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-600";
               return (
                 <span className={pill}>
                   {detail.status === "REJECTED" ? (
@@ -414,7 +414,7 @@ export function TransactionDetailContent({
                       href={explorerUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="truncate text-[var(--primary)] underline-offset-2 hover:underline"
+                      className="truncate text-canton underline-offset-2 hover:underline"
                       title={txId}
                     >
                       {truncateMiddle(txId)}
@@ -428,7 +428,7 @@ export function TransactionDetailContent({
                       href={explorerUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className={iconButtonClass("h-7 w-7 shrink-0 text-[var(--primary)]")}
+                      className={iconButtonClass("h-7 w-7 shrink-0 text-canton")}
                       aria-label="View on ccview.io"
                       title="View on ccview.io"
                     >

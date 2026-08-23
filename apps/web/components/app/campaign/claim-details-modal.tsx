@@ -58,13 +58,13 @@ function ClaimTokenIcon({ token }: { token?: "CC" | "USDCx" | "CODE" | "WAITLIST
   }
   if (token === "WAITLIST") {
     return (
-      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-cyan-500/[0.14] text-cyan-300 shadow-[inset_0_0_0_1px_rgb(255_255_255/0.06)]">
+      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-cyan-500/[0.14] text-cyan-600 shadow-[inset_0_0_0_1px_rgb(255_255_255/0.06)]">
         <Sparkles className="h-[22px] w-[22px]" aria-hidden />
       </span>
     );
   }
   return (
-    <span className="flex h-11 w-11 items-center justify-center rounded-full bg-violet-500/[0.14] text-violet-300 shadow-[inset_0_0_0_1px_rgb(255_255_255/0.06)]">
+    <span className="flex h-11 w-11 items-center justify-center rounded-full bg-violet-500/[0.14] text-violet-600 shadow-[inset_0_0_0_1px_rgb(255_255_255/0.06)]">
       <Ticket className="h-[22px] w-[22px]" aria-hidden />
     </span>
   );

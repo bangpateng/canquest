@@ -30,7 +30,7 @@ export function TaskBrandIcon({
     return (
       <span
         className={cn(
-          "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30",
+          "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 ring-1 ring-emerald-500/30",
           className,
         )}
       >

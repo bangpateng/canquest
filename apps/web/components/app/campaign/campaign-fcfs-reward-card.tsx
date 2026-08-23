@@ -81,15 +81,15 @@ export function CampaignFcfsRewardCard({
                 ? "bg-[var(--muted)]/60 text-[var(--muted-foreground)]"
                 : isDual
                   ? isUsdcx
-                    ? "bg-gradient-to-br from-sky-400/15 to-violet-500/15 text-violet-300"
-                    : "bg-gradient-to-br from-canton/15 to-violet-500/15 text-violet-300"
+                    ? "bg-gradient-to-br from-sky-400/15 to-violet-500/15 text-violet-600"
+                    : "bg-gradient-to-br from-canton/15 to-violet-500/15 text-violet-600"
                   : isCcOnly
                     ? isUsdcx
                       ? "bg-sky-400/15 text-sky-600"
                       : "bg-[var(--primary)]/15 text-canton"
                     : isWaitlist
-                      ? "bg-cyan-500/15 text-cyan-300"
-                      : "bg-violet-500/15 text-violet-400",
+                      ? "bg-cyan-500/15 text-cyan-600"
+                      : "bg-violet-500/15 text-violet-600",
             )}
           >
             {isStatus ? (
@@ -97,7 +97,7 @@ export function CampaignFcfsRewardCard({
             ) : isDual ? (
               <span className="flex items-center justify-center gap-0.5">
                 <RewardTokenLogo token={rewardToken} size={16} />
-                <Ticket className="h-4 w-4 text-violet-300" strokeWidth={2.5} aria-hidden />
+                <Ticket className="h-4 w-4 text-violet-600" strokeWidth={2.5} aria-hidden />
               </span>
             ) : isCcOnly ? (
               <RewardTokenLogo token={rewardToken} size={20} />
@@ -139,7 +139,7 @@ export function CampaignFcfsRewardCard({
       </div>
 
       {mode === "claim" && !partyId ? (
-        <p className="relative mt-4 text-sm font-medium text-orange-300">
+        <p className="relative mt-4 text-sm font-medium text-orange-600">
           <Link href="/wallet" className="font-semibold underline underline-offset-2">
             Create your wallet
           </Link>{" "}
@@ -225,7 +225,7 @@ export function CampaignClaimCta({
       </button>
 
       {needsWallet ? (
-        <p className="text-sm font-medium text-orange-300">
+        <p className="text-sm font-medium text-orange-600">
           <Link href="/wallet" className="font-semibold underline underline-offset-2">
             Create your wallet
           </Link>{" "}

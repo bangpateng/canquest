@@ -115,7 +115,7 @@ export function QuestHubPage() {
               {/* Headline number */}
               <p className="mt-5 text-4xl font-extrabold tabular-nums leading-none tracking-tight text-[var(--foreground)] glow-text sm:text-5xl md:text-6xl">
                 {pointsRemaining.toLocaleString()}
-                <span className="ml-2 text-base font-semibold text-[var(--primary)] sm:ml-2.5 sm:text-lg md:text-xl">
+                <span className="ml-2 text-base font-semibold text-canton sm:ml-2.5 sm:text-lg md:text-xl">
                   pts
                 </span>
               </p>

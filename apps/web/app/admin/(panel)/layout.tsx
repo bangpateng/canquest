@@ -75,7 +75,7 @@ export default async function AdminPanelLayout({ children }: { children: ReactNo
                 </span>
                 <div>
                   <p className="text-sm font-semibold leading-tight">CanQuest</p>
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-red-400">Admin</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-red-600">Admin</p>
                 </div>
               </Link>
             </div>

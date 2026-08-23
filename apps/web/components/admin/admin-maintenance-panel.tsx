@@ -106,7 +106,7 @@ export function AdminMaintenancePanel() {
         <ShieldAlert
           className={cn(
             "h-5 w-5 shrink-0",
-            status?.enabled ? "text-amber-400" : "text-emerald-400",
+            status?.enabled ? "text-amber-600" : "text-emerald-600",
           )}
         />
         <div className="text-sm">
@@ -124,7 +124,7 @@ export function AdminMaintenancePanel() {
       </div>
 
       {error && (
-        <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+        <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-600">
           {error}
         </div>
       )}

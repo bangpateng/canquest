@@ -96,15 +96,15 @@ export function CampaignEligibilityBadge({ questId }: { questId: string }) {
       )}
     >
       {eligible ? (
-        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" aria-hidden />
+        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden />
       ) : (
-        <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" aria-hidden />
+        <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" aria-hidden />
       )}
       <div className="flex-1">
         <p
           className={cn(
             "text-xs font-bold uppercase tracking-wider",
-            eligible ? "text-emerald-400" : "text-red-400",
+            eligible ? "text-emerald-600" : "text-red-600",
           )}
         >
           {eligible ? "Eligible" : "Not eligible"}

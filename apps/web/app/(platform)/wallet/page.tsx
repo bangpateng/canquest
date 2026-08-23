@@ -102,7 +102,7 @@ export default function WalletPage() {
     <PlatformPage>
       {profileStale ? (
         <div className="flex w-full min-w-0 items-start gap-3 rounded-3xl border border-amber-500/20 bg-amber-500/5 px-5 py-4 backdrop-blur-xl">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
           <div className="min-w-0 text-sm">
             <p className="font-semibold text-amber-200">{t("wallet.profileStale")}</p>
             <p className="mt-1 break-words text-sm font-medium text-amber-600/70">
@@ -114,10 +114,10 @@ export default function WalletPage() {
 
       {showNodeWarning ? (
         <div className="flex w-full min-w-0 items-start gap-3 rounded-3xl border border-orange-500/20 bg-orange-500/5 px-5 py-4 backdrop-blur-xl">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-orange-400" />
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-orange-600" />
           <div className="min-w-0 text-sm">
             <p className="font-semibold text-orange-200">{t("wallet.nodeIssue")}</p>
-            <p className="mt-1 break-words text-sm font-medium text-orange-300/70">
+            <p className="mt-1 break-words text-sm font-medium text-orange-600/70">
               {ledgerStatus!.message}
             </p>
           </div>

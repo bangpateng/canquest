@@ -73,7 +73,7 @@ export function RewardReveal({
         {isDual ? (
           <span className="flex h-9 w-9 shrink-0 items-center justify-center gap-0.5 rounded-xl bg-gradient-to-br from-canton/15 to-violet-500/15">
             <RewardTokenLogo token={token} size={16} />
-            <Ticket className="h-4 w-4 text-violet-300" strokeWidth={2.5} aria-hidden />
+            <Ticket className="h-4 w-4 text-violet-600" strokeWidth={2.5} aria-hidden />
           </span>
         ) : (
           <span
@@ -82,8 +82,8 @@ export function RewardReveal({
               isCcOnly
                 ? "bg-canton/15 text-canton"
                 : isWaitlist
-                  ? "bg-cyan-500/15 text-cyan-300"
-                  : "bg-violet-500/15 text-violet-400",
+                  ? "bg-cyan-500/15 text-cyan-600"
+                  : "bg-violet-500/15 text-violet-600",
             )}
           >
             {isCcOnly ? (

@@ -84,7 +84,7 @@ export function RewardTypePicker({
             {option.defaultClaimFee != null ? (
               <p className="text-[10px] font-semibold text-[var(--muted-foreground)]">
                 Default claim fee:{" "}
-                <span className="font-bold text-amber-400">
+                <span className="font-bold text-amber-600">
                   {option.defaultClaimFee} CC
                 </span>
               </p>

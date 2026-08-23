@@ -27,12 +27,12 @@ export interface AdminQuestRow {
 const STATUS_CONFIG: Record<string, { label: string; cls: string; icon: React.ComponentType<{ className?: string }> }> = {
   ACTIVE: {
     label: "Active",
-    cls: "bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/25",
+    cls: "bg-emerald-500/15 text-emerald-600 ring-1 ring-emerald-500/25",
     icon: CheckCircle2,
   },
   COMING_SOON: {
     label: "Coming Soon",
-    cls: "bg-cyan-500/15 text-cyan-400 ring-1 ring-cyan-500/25",
+    cls: "bg-cyan-500/15 text-cyan-600 ring-1 ring-cyan-500/25",
     icon: Clock,
   },
   ENDED: {
@@ -106,7 +106,7 @@ export function AdminQuestTable({
         <p className="font-semibold text-[var(--muted-foreground)]">Nothing here yet</p>
         <Link
           href={emptyHref}
-          className="mt-3 inline-block text-sm font-medium text-[var(--primary)] underline-offset-4 hover:underline"
+          className="mt-3 inline-block text-sm font-medium text-canton underline-offset-4 hover:underline"
         >
           {emptyLabel}
         </Link>
@@ -118,12 +118,12 @@ export function AdminQuestTable({
     <div className="space-y-3">
       {deleteError && (
         <div className="flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3">
-          <AlertCircle className="h-4 w-4 shrink-0 text-red-400" />
-          <p className="text-sm font-medium text-red-400">{deleteError}</p>
+          <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
+          <p className="text-sm font-medium text-red-600">{deleteError}</p>
           <button
             type="button"
             onClick={() => setDeleteError(null)}
-            className="ml-auto text-red-400 hover:text-red-300"
+            className="ml-auto text-red-600 hover:text-red-300"
           >
             ×
           </button>

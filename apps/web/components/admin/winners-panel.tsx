@@ -540,7 +540,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
                             Sent
                           </span>
                         ) : (
-                          <span className="flex items-center gap-1 text-xs font-semibold text-orange-400 dark:text-orange-400">
+                          <span className="flex items-center gap-1 text-xs font-semibold text-orange-600 dark:text-orange-400">
                             <Clock className="h-3.5 w-3.5" />
                             Pending
                           </span>
@@ -631,7 +631,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
                 {codes.map((code) => (
                   <div key={code.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
                     <div className="flex min-w-0 items-center gap-3">
-                      <Ticket className={cn("h-4 w-4 shrink-0", code.assigned ? "text-[var(--muted-foreground)]" : "text-[var(--primary)]")} />
+                      <Ticket className={cn("h-4 w-4 shrink-0", code.assigned ? "text-[var(--muted-foreground)]" : "text-canton")} />
                       <span className="truncate font-mono text-sm">{code.code}</span>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">

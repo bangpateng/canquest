@@ -113,7 +113,7 @@ export function ShareCampaign({ url, title, text, className }: ShareCampaignProp
             className="flex w-full items-center gap-2 border-t border-[var(--border)] px-3 py-2.5 text-left text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--primary)]/5"
           >
             {copied ? (
-              <Check className="h-4 w-4 text-green-500" />
+              <Check className="h-4 w-4 text-green-600" />
             ) : (
               <Link2 className="h-4 w-4" />
             )}

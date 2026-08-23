@@ -90,7 +90,7 @@ export function AdminQuestHubTasksPanel({
           One hub for the user <strong>Quest</strong> menu. After setup you only add tasks here —
           no banners, invite codes, or campaign settings.
         </p>
-        {ensureError ? <p className="mt-3 text-sm text-red-500">{ensureError}</p> : null}
+        {ensureError ? <p className="mt-3 text-sm text-red-600">{ensureError}</p> : null}
         <button
           type="button"
           onClick={onEnsureHub}
@@ -192,7 +192,7 @@ export function AdminQuestHubTasksPanel({
             {sortedTasks.length} task(s) · shown on user Quest page
           </p>
         </div>
-        <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-400">
+        <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-600">
           {hub.status}
         </span>
       </div>
@@ -291,7 +291,7 @@ export function AdminQuestHubTasksPanel({
                     <button
                       type="button"
                       onClick={() => void handleDeleteTask(t)}
-                      className="text-red-400 hover:text-red-500"
+                      className="text-red-600 hover:text-red-500"
                       aria-label="Delete task"
                     >
                       <Trash2 className="h-4 w-4" />

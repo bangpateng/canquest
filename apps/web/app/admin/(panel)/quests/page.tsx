@@ -30,7 +30,7 @@ export default async function AdminQuestHubPage() {
   return (
     <div className="space-y-8">
       <div>
-        <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-violet-300">
+        <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-violet-600">
           <Gift className="h-3.5 w-3.5" />
           User menu: Quest
         </div>

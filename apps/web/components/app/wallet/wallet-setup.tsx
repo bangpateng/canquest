@@ -233,7 +233,7 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
                       onExpire={() => setOtpExpired(true)}
                       className={cn(
                         "font-mono font-semibold",
-                        otpExpired ? "text-red-400" : "text-[var(--foreground)]",
+                        otpExpired ? "text-red-600" : "text-[var(--foreground)]",
                       )}
                     />
                   </p>
@@ -242,7 +242,7 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
 
               {error ? (
                 <p
-                  className="rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm font-medium text-orange-300"
+                  className="rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm font-medium text-orange-600"
                   role="alert"
                 >
                   {error}
@@ -300,7 +300,7 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
           <div>
             <div className="mb-8 flex justify-center">
               <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-emerald-500/30 bg-emerald-500/10">
-                <CheckCircle2 className="h-10 w-10 text-emerald-400" />
+                <CheckCircle2 className="h-10 w-10 text-emerald-600" />
               </div>
             </div>
             <PageTitle as="h2">{t("wallet.successTitle")}</PageTitle>
@@ -354,7 +354,7 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
                     className={cn(inputClass, "pl-10 opacity-80")}
                   />
                 </div>
-                <p className="flex items-center gap-1 text-xs text-emerald-400">
+                <p className="flex items-center gap-1 text-xs text-emerald-600">
                   <CheckCircle2 className="h-3.5 w-3.5" />
                   {t("wallet.emailVerified")}
                 </p>
@@ -460,7 +460,7 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
 
             {error ? (
               <p
-                className="rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm font-medium text-orange-300"
+                className="rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm font-medium text-orange-600"
                 role="alert"
               >
                 {error}

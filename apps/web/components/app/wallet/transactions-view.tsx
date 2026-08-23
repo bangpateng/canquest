@@ -145,7 +145,7 @@ function TxStatusBadge({ status }: { status?: TxItem["status"] }) {
     <span
       className={cn(
         "ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
-        isPending ? "bg-amber-500/15 text-amber-600" : "bg-red-500/10 text-red-500",
+        isPending ? "bg-amber-500/15 text-amber-600" : "bg-red-500/10 text-red-600",
       )}
     >
       {isPending ? "Pending" : "Rejected"}
@@ -193,13 +193,13 @@ function txIconBg(type: TxItem["type"]): string {
   switch (type) {
     case "TRANSFER_OUT":
     case "TOKEN_TRANSFER_OUT":
-      return "bg-red-500/10 text-red-500 ring-1 ring-red-500/15";
+      return "bg-red-500/10 text-red-600 ring-1 ring-red-500/15";
     case "TRANSFER_IN":
     case "TOKEN_TRANSFER_IN":
       return "bg-canton-subtle text-canton ring-1 ring-[rgb(var(--canton-rgb)/0.15)]";
     case "CC_LOCK":
       // Netral/amber — BUKAN merah transfer (dana dikunci, bukan keluar).
-      return "bg-orange-500/10 text-orange-500 ring-1 ring-orange-500/15";
+      return "bg-orange-500/10 text-orange-600 ring-1 ring-orange-500/15";
     case "CC_UNLOCK":
       return "bg-canton-subtle text-canton ring-1 ring-[rgb(var(--canton-rgb)/0.15)]";
     case "OFFER_REJECTED":
@@ -218,7 +218,7 @@ function txIconBg(type: TxItem["type"]): string {
       return "bg-canton-subtle text-canton-muted ring-1 ring-[rgb(var(--canton-rgb)/0.15)]";
     case "SWAP_OUT":
       // CC keluar — merah (sama transfer out).
-      return "bg-red-500/10 text-red-500 ring-1 ring-red-500/15";
+      return "bg-red-500/10 text-red-600 ring-1 ring-red-500/15";
     case "SWAP_IN":
       // CC masuk — canton/green (sama transfer in).
       return "bg-canton-subtle text-canton ring-1 ring-[rgb(var(--canton-rgb)/0.15)]";
@@ -231,7 +231,7 @@ function amountColor(type: TxItem["type"]): string {
   // Toggle (amount 0) → muted netral.
   if (TOGGLE_TX_TYPES.has(type)) return "text-[var(--muted-foreground)]";
   // CC_LOCK = debit (amber, netral — bukan merah transfer).
-  if (type === "CC_LOCK") return "text-orange-500";
+  if (type === "CC_LOCK") return "text-orange-600";
   // Debit (keluar): muted, bukan merah.
   if (type === "TRANSFER_OUT" || type === "TOKEN_TRANSFER_OUT")
     return "text-[var(--muted-foreground)]";

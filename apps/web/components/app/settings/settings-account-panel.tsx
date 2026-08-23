@@ -177,7 +177,7 @@ export function SettingsAccountPanel() {
 
         {errorMsg ? (
           <p
-            className="mt-5 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm font-medium text-red-300 sm:mt-6 sm:px-5 sm:py-4"
+            className="mt-5 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm font-medium text-red-600 sm:mt-6 sm:px-5 sm:py-4"
             role="alert"
           >
             {errorMsg}

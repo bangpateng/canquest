@@ -123,7 +123,7 @@ function CopyButton({ value, label = "Copy" }: { value: string; label?: string }
       aria-label={`${label} ${value}`}
     >
       {copied ? (
-        <Check className="h-3.5 w-3.5 text-[var(--primary)]" />
+        <Check className="h-3.5 w-3.5 text-canton" />
       ) : (
         <Copy className="h-3.5 w-3.5" />
       )}

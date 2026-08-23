@@ -87,7 +87,7 @@ export function CampaignCcAndCodeRaffleClaimSection({
       subText: subtitle,
       accentBg: isUsdcx ? "bg-sky-500/15" : "bg-canton-subtle",
       accentText: isCodeOnly
-        ? "text-violet-300"
+        ? "text-violet-600"
         : isUsdcx
           ? "text-sky-600"
           : "text-canton",

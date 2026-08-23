@@ -73,7 +73,7 @@ function StatusBadge({ status }: { status: UserStatus }) {
   const styles: Record<UserStatus, string> = {
     ACTIVE: 'bg-emerald-500/15 text-emerald-600',
     SUSPENDED: 'bg-amber-500/15 text-amber-600',
-    BANNED: 'bg-red-500/15 text-red-300',
+    BANNED: 'bg-red-500/15 text-red-600',
   };
   return (
     <span
@@ -398,7 +398,7 @@ export function AdminUsersPanel() {
                     <div className="flex items-center gap-2">
                       <p className="font-semibold">{u.email}</p>
                       {u.isAdmin && (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-orange-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-orange-300 dark:text-orange-300">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-orange-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-orange-600 dark:text-orange-300">
                           <Shield className="h-3 w-3" />
                           Admin
                         </span>
@@ -429,7 +429,7 @@ export function AdminUsersPanel() {
                       className={
                         u._count.referralRewardsGiven === 0
                           ? 'text-[var(--muted-foreground)]'
-                          : 'inline-flex items-center gap-1 rounded-md bg-blue-500/15 px-2 py-0.5 font-semibold text-blue-300 hover:bg-blue-500/25'
+                          : 'inline-flex items-center gap-1 rounded-md bg-blue-500/15 px-2 py-0.5 font-semibold text-blue-600 hover:bg-blue-500/25'
                       }
                       title={u._count.referralRewardsGiven === 0 ? 'No referrals' : 'View referred users'}
                     >
@@ -564,14 +564,14 @@ export function AdminUsersPanel() {
                           <p className="truncate font-semibold">{r.referredEmail}</p>
                           {r.isGmailAlias && (
                             <span
-                              className="inline-flex items-center rounded-md bg-purple-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-purple-300"
+                              className="inline-flex items-center rounded-md bg-purple-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-purple-600"
                               title={`Gmail alias — canonical: ${r.canonicalEmail}`}
                             >
                               gmail alias
                             </span>
                           )}
                           {r.nonAllowedDomain && !r.isGmailAlias && (
-                            <span className="inline-flex items-center rounded-md bg-red-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-red-300">
+                            <span className="inline-flex items-center rounded-md bg-red-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-red-600">
                               non-webmail
                             </span>
                           )}
@@ -585,7 +585,7 @@ export function AdminUsersPanel() {
                           @{r.referredDomain || '—'} · {r.points} pts ·{' '}
                           {new Date(r.createdAt).toLocaleDateString()}
                           {r.isGmailAlias && (
-                            <span className="text-purple-300/80">
+                            <span className="text-purple-600/80">
                               {' '}· = {r.canonicalEmail}
                             </span>
                           )}

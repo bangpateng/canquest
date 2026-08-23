@@ -21,7 +21,7 @@ function CountdownTimer({ endsAt }: { endsAt: string | null }) {
   if (!endsAt) return null;
   const end = new Date(endsAt).getTime();
   const diff = end - now;
-  if (diff <= 0) return <span className="font-bold text-red-400 text-[10px]">Ended</span>;
+  if (diff <= 0) return <span className="font-bold text-red-600 text-[10px]">Ended</span>;
   const days = Math.floor(diff / 86_400_000);
   const hours = Math.floor((diff % 86_400_000) / 3_600_000);
   const mins = Math.floor((diff % 3_600_000) / 60_000);

@@ -165,14 +165,14 @@ export function SettingsPreapprovalPanel() {
 
         {/* Error */}
         {error ? (
-          <p className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm font-medium text-red-300">
+          <p className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm font-medium text-red-600">
             {error}
           </p>
         ) : null}
 
         {/* Success */}
         {success ? (
-          <p className="text-sm font-semibold text-emerald-400 flex items-center gap-1.5">
+          <p className="text-sm font-semibold text-emerald-600 flex items-center gap-1.5">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
             {success}
           </p>

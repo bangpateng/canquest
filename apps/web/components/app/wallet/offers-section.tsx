@@ -429,7 +429,7 @@ export function OffersModal({
         <div className="mt-6 space-y-3">
           {/* Success message */}
           {successMsg && (
-            <div className="rounded-2xl border border-green-500/20 bg-green-500/5 px-5 py-3 text-sm font-medium text-green-400">
+            <div className="rounded-2xl border border-green-500/20 bg-green-500/5 px-5 py-3 text-sm font-medium text-green-600">
               {successMsg}
             </div>
           )}
@@ -440,7 +440,7 @@ export function OffersModal({
                 <LoadingSpinner size="sm" tone="muted" />
               </div>
             ) : error ? (
-              <div className="rounded-2xl border border-red-500/20 bg-red-500/5 px-5 py-4 text-sm font-medium text-red-400">
+              <div className="rounded-2xl border border-red-500/20 bg-red-500/5 px-5 py-4 text-sm font-medium text-red-600">
                 {error}
               </div>
             ) : offers.length === 0 ? (
@@ -508,7 +508,7 @@ export function OffersModal({
                           onClick={() => handleAccept(offer)}
                           className={cn(
                             buttonVariants({ variant: "secondary", size: "sm" }),
-                            "flex-1 justify-center gap-1.5 text-green-400 hover:text-green-300 border-green-500/20 hover:border-green-500/40",
+                            "flex-1 justify-center gap-1.5 text-green-600 hover:text-green-300 border-green-500/20 hover:border-green-500/40",
                           )}
                         >
                           {isAccepting ? (
@@ -524,7 +524,7 @@ export function OffersModal({
                           onClick={() => handleReject(offer)}
                           className={cn(
                             buttonVariants({ variant: "secondary", size: "sm" }),
-                            "flex-1 justify-center gap-1.5 text-red-400 hover:text-red-300 border-red-500/20 hover:border-red-500/40",
+                            "flex-1 justify-center gap-1.5 text-red-600 hover:text-red-300 border-red-500/20 hover:border-red-500/40",
                           )}
                         >
                           {isRejecting ? (
@@ -545,7 +545,7 @@ export function OffersModal({
               <LoadingSpinner size="sm" tone="muted" />
             </div>
           ) : sentError ? (
-            <div className="rounded-2xl border border-red-500/20 bg-red-500/5 px-5 py-4 text-sm font-medium text-red-400">
+            <div className="rounded-2xl border border-red-500/20 bg-red-500/5 px-5 py-4 text-sm font-medium text-red-600">
               {sentError}
             </div>
           ) : sentOffers.length === 0 ? (
@@ -609,7 +609,7 @@ export function OffersModal({
                         onClick={() => handleWithdraw(offer)}
                         className={cn(
                           buttonVariants({ variant: "secondary", size: "sm" }),
-                          "flex-1 justify-center gap-1.5 text-red-400 hover:text-red-300 border-red-500/20 hover:border-red-500/40",
+                          "flex-1 justify-center gap-1.5 text-red-600 hover:text-red-300 border-red-500/20 hover:border-red-500/40",
                         )}
                       >
                         {isWithdrawing ? (

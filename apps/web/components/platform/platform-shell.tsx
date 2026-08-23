@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   Compass,
@@ -13,6 +12,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { CanQuestLogo } from "@/components/ui/canquest-logo";
 import { PlatformToolbar } from "@/components/platform/platform-toolbar";
 import { TransactionStatusModal } from "@/components/platform/transaction-status-modal";
 import { platformContentClass } from "@/components/platform/platform-page";
@@ -144,23 +144,8 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
 
       {/* Desktop icon rail */}
       <aside className="sticky top-0 z-40 hidden h-screen w-[72px] shrink-0 flex-col items-center border-r border-[var(--border)] bg-[var(--card)] py-5 md:flex">
-        {/* Brand mark */}
-        <Link
-          href="/overview"
-          aria-label="CanQuest"
-          className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-gradient-brand shadow-[var(--shadow-glow)] transition-transform duration-200 hover:scale-105"
-        >
-          <Image
-            src="/favicon.png"
-            alt=""
-            width={30}
-            height={30}
-            className="h-[30px] w-[30px] rounded-lg object-cover"
-          />
-        </Link>
-
-        {/* Nav */}
-        <nav className="mt-8 flex flex-1 flex-col items-center gap-2" aria-label={t("shell.platform")}>
+        {/* Nav — brand wordmark ada di header atas (CanQuestLogo). */}
+        <nav className="flex flex-1 flex-col items-center gap-2" aria-label={t("shell.platform")}>
           <RailNav hasWallet={hasWallet} />
         </nav>
 
@@ -181,24 +166,9 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
 
       {/* Main Content Area */}
       <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden pb-24 md:pb-0" style={{ maxWidth: "100%" }}>
-        {/* Top Header — clean, hairline border, toolbar right */}
+        {/* Top Header — wordmark kiri (semua breakpoint), toolbar kanan */}
         <header className="sticky top-0 z-30 flex h-16 w-full max-w-full items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--card)]/85 px-4 backdrop-blur-xl sm:h-[4.25rem] sm:px-6 md:px-8 lg:px-10">
-          {/* Mobile: wordmark. Desktop rail sudah ada brand mark. */}
-          <Link
-            href="/overview"
-            className="flex shrink-0 items-center md:hidden"
-            aria-label="CanQuest"
-          >
-            <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-gradient-brand">
-              <Image
-                src="/favicon.png"
-                alt=""
-                width={24}
-                height={24}
-                className="h-6 w-6 rounded-md object-cover"
-              />
-            </span>
-          </Link>
+          <CanQuestLogo size="md" href="/overview" />
           <div className="hidden flex-1 md:block" />
           <PlatformToolbar />
         </header>

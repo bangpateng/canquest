@@ -513,7 +513,7 @@ export function TransactionNotifications() {
               <Link
                 href="/wallet"
                 onClick={() => setOpen(false)}
-                className="block text-center text-xs font-medium text-[var(--primary)] hover:underline"
+                className="block text-center text-xs font-medium text-canton hover:underline"
               >
                 {t("notifications.viewWallet")}
               </Link>
