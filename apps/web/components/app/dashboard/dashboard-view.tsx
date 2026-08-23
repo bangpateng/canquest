@@ -17,6 +17,7 @@ import { CcHoldingsCard } from "./cc-holdings-card";
 import { ProfileCard } from "./profile-card";
 import { PointsCard } from "./points-card";
 import { ActivityStatsCard } from "./activity-stats-card";
+import { LiveCampaignsStrip, RecentActivityFeed } from "./overview-widgets";
 import { PageLoading } from "@/components/ui/loading-spinner";
 
 const FOCUS_REFETCH_MIN_MS = 60_000;
@@ -201,6 +202,20 @@ export function DashboardView() {
                   onchainTx={s.txCount}
                   loading={loading}
                 />
+              </div>
+            </section>
+          )}
+
+          {/* ── Row 3: Live campaigns + recent activity. Widget opsional —
+              otomatis tersembunyi saat datanya kosong (mis. belum punya
+              wallet atau tidak ada kampanye aktif). ── */}
+          {!initialLoading && !loadError && (
+            <section className="grid grid-cols-1 gap-4 md:gap-5 lg:grid-cols-12">
+              <div className="lg:col-span-7">
+                <LiveCampaignsStrip />
+              </div>
+              <div className="lg:col-span-5">
+                <RecentActivityFeed hasWallet={hasWallet} />
               </div>
             </section>
           )}
