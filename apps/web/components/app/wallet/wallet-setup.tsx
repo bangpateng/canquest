@@ -448,9 +448,6 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
           <PageTitle as="h2" className="text-center">
             {t("wallet.createTitle")}
           </PageTitle>
-          <p className="mt-3 text-center text-sm font-medium text-[var(--muted-foreground)]">
-            {needsInvite ? t("wallet.inviteCodeHint") : t("wallet.inviteCodeRetryHint")}
-          </p>
 
           <form onSubmit={handleSubmitForOtp} className="mt-10 space-y-6">
             {/* Email (read-only, verified via Google badge) */}
@@ -483,10 +480,7 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
                 htmlFor="wallet-username"
                 className="text-sm font-medium text-[var(--muted-foreground)]"
               >
-                {t("wallet.usernameLabel")}{" "}
-                <span className="font-normal text-[var(--muted-foreground)]">
-                  ({t("wallet.usernameHint")})
-                </span>
+                {t("wallet.usernameLabel")}
               </label>
               <input
                 id="wallet-username"
@@ -496,7 +490,7 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
                     e.target.value.replace(/^@/, "").toLowerCase().replace(/[^a-z0-9_]/g, ""),
                   )
                 }
-                placeholder="e.g. alex_canton"
+                undefined
                 minLength={3}
                 maxLength={32}
                 pattern="[a-z0-9_]+"
@@ -523,7 +517,7 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
                   id="wallet-invite-code"
                   value={inviteCode}
                   onChange={(e) => setInviteCode(e.target.value.replace(/\s+/g, ""))}
-                  placeholder="8-character code (e.g. aB3xKp9Q)"
+                  placeholder="Invite code"
                   minLength={4}
                   maxLength={64}
                   autoCapitalize="none"
@@ -567,12 +561,6 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
               )}
             </button>
 
-            {externalEnabled ? (
-              <p className="text-center text-xs leading-relaxed text-[var(--muted-foreground)]">
-                🔒 Non-custodial wallet — your private key is created and
-                stored in this browser, never sent to a server.
-              </p>
-            ) : null}
           </form>
         </div>
       </Card>
