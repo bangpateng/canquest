@@ -490,7 +490,6 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
                     e.target.value.replace(/^@/, "").toLowerCase().replace(/[^a-z0-9_]/g, ""),
                   )
                 }
-                undefined
                 minLength={3}
                 maxLength={32}
                 pattern="[a-z0-9_]+"
