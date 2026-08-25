@@ -517,17 +517,6 @@ export function SettingsWalletKeyPanel() {
             {/* ── Wallet key present ──────────────────────────────────── */}
             {phase === "ready" && meta ? (
               <div className="space-y-5">
-                <div className="flex items-start gap-3 rounded-2xl border border-canton/30 bg-canton-subtle p-4">
-                  <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-canton" />
-                  <div className="min-w-0 text-sm">
-                    <p className="font-semibold text-[var(--foreground)]">
-                      Non-custodial wallet active in this browser
-                    </p>
-                    <p className="mt-1 break-all font-mono text-xs text-[var(--muted-foreground)]">
-                      {meta.partyIdPreview}
-                    </p>
-                  </div>
-                </div>
 
                 {/* View backup key */}
                 {reveal === "hidden" ? (
@@ -540,7 +529,7 @@ export function SettingsWalletKeyPanel() {
                     }}
                   >
                     <Eye className="h-4 w-4" />
-                    View Backup Key (Raw Hex)
+                    Backup Key
                   </button>
                 ) : null}
 

@@ -483,7 +483,7 @@ function ExternalPreapprovalRow() {
         onClick={() => void handleToggle()}
         className={cn(
           "relative h-6 w-11 shrink-0 rounded-full transition-colors",
-          on ? "bg-canton" : "bg-[var(--muted-foreground)]/30",
+          on ? "bg-[rgb(var(--canton-rgb))]" : "bg-[var(--border)]",
         )}
       >
         <span
@@ -530,7 +530,7 @@ function AutoAcceptBackupRow() {
         onClick={() => { const n = !on; setAutoAccept(n); setOn(n); }}
         className={cn(
           "relative h-6 w-11 shrink-0 rounded-full transition-colors",
-          on ? "bg-canton" : "bg-[var(--muted-foreground)]/30",
+          on ? "bg-[rgb(var(--canton-rgb))]" : "bg-[var(--border)]",
         )}
       >
         <span className={cn("absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all", on ? "left-[22px]" : "left-0.5")} />
@@ -556,7 +556,7 @@ function AutoAcceptSwitch() {
       }}
       className={cn(
         "relative h-6 w-11 shrink-0 rounded-full transition-colors",
-        on ? "bg-canton" : "bg-[var(--muted-foreground)]/30",
+        on ? "bg-[rgb(var(--canton-rgb))]" : "bg-[var(--border)]",
       )}
     >
       <span
@@ -664,7 +664,7 @@ function PreapprovalToggle() {
         onClick={() => void handleToggle()}
         className={cn(
           "relative h-6 w-11 shrink-0 rounded-full transition-colors",
-          on ? "bg-canton" : "bg-[var(--muted-foreground)]/30",
+          on ? "bg-[rgb(var(--canton-rgb))]" : "bg-[var(--border)]",
         )}
       >
         <span
