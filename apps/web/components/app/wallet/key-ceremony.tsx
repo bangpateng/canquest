@@ -17,6 +17,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Card } from "@/components/ui/card";
 import { CopyField } from "@/components/app/wallet/copy-field";
 import {
+  deleteWalletKey,
   exportSyncBlob,
   generateWalletKey,
   saveWalletKey,
@@ -50,9 +51,16 @@ export interface KeyCeremonyProps {
   onComplete: (meta: WalletKeyMeta) => void;
   /** Optional: back button on the intro step. */
   onCancel?: () => void;
+  /**
+   * NEW-WALLET mode: any stale key already in this browser (from a failed
+   * registration attempt) is silently replaced — the account has no wallet,
+   * so an existing browser key is definitionally an orphan.
+   * Do NOT set for the Settings upgrade card (it has its own resume logic).
+   */
+  replaceStaleKey?: boolean;
 }
 
-export function KeyCeremony({ onComplete, onCancel }: KeyCeremonyProps) {
+export function KeyCeremony({ onComplete, onCancel, replaceStaleKey }: KeyCeremonyProps) {
   const [step, setStep] = useState<Step>("intro");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,6 +109,9 @@ export function KeyCeremony({ onComplete, onCancel }: KeyCeremonyProps) {
     setBusy(true);
     setError(null);
     try {
+      // NEW-WALLET mode: ganti kunci yatim dari attempt yang gagal (akun
+      // belum punya wallet → kunci lama di browser pasti orphan, aman replace).
+      if (replaceStaleKey) await deleteWalletKey().catch(() => undefined);
       await saveWalletKey(seedHex, pass1, meta);
       await unlock(pass1); // active for this session right away
       // M4b: sync default ON — simpan salinan terenkripsi ke akun supaya

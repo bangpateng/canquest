@@ -378,6 +378,7 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
     return (
       <div className="flex min-h-[60vh] w-full min-w-0 items-center justify-center">
         <KeyCeremony
+          replaceStaleKey
           onCancel={() => {
             setStep("form");
             setError(null);
