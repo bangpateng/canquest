@@ -19,6 +19,8 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { CopyField } from "@/components/app/wallet/copy-field";
 import { KeyCeremony } from "@/components/app/wallet/key-ceremony";
 import { useMe } from "@/lib/hooks/use-me";
+import { signHashWithUnlock } from "@/lib/wallet/sign-relay";
+import { usePassphrasePrompt } from "@/lib/wallet/use-passphrase-prompt";
 import {
   deleteWalletKey,
   exportSeedHex,
@@ -46,7 +48,7 @@ import {
  * not here. This panel never sends the private key to any server.
  */
 
-type Phase = "loading" | "none" | "ready" | "upgrading";
+type Phase = "loading" | "none" | "ready" | "upgrading" | "registering";
 type RevealState = "hidden" | "form" | "shown";
 type DeleteState = "idle" | "confirm" | "done";
 
@@ -58,6 +60,8 @@ export function SettingsWalletKeyPanel() {
   // M4: detect custodial users → offer upgrade to non-custodial.
   const { me, refetch: refetchMe } = useMe();
   const isCustodial = me?.walletKind === "custodial" && !!me.cantonPartyId;
+  const [resumeMeta, setResumeMeta] = useState<WalletKeyMeta | null>(null);
+  const { prompt: promptPassphrase, passphraseModal } = usePassphrasePrompt();
 
   // Reveal (view backup key)
   const [reveal, setReveal] = useState<RevealState>("hidden");
@@ -155,14 +159,25 @@ export function SettingsWalletKeyPanel() {
   // ── M4: upgrade helpers ────────────────────────────────────────────────
 
   async function startUpgrade() {
-    // Block the upgrade if this browser already holds another wallet key.
+    // RESUME: kalau browser ini sudah menyimpan kunci ceremony (upgrade yang
+    // terputus — mis. gagal registrasi karena flag), pakai ulang kunci itu
+    // dan langsung ke registrasi. Tanpa ini user terjebak ("key exists").
     if (await hasWalletKey()) {
+      const existing = await getWalletKeyMeta();
+      if (existing?.publicKeyHex && existing.hint) {
+        setError(null);
+        setResumeMeta(existing);
+        setPhase("registering");
+        void registerUpgradeWallet(existing);
+        return;
+      }
       setError(
-        "This browser already stores a wallet key. Remove it first (or use another browser) before upgrading.",
+        "This browser already stores a wallet key that cannot be reused. Clear this site's browser data (or use another browser) before upgrading.",
       );
       return;
     }
     setError(null);
+    setResumeMeta(null);
     setPhase("upgrading");
   }
 
@@ -190,7 +205,12 @@ export function SettingsWalletKeyPanel() {
         setPhase("none");
         return;
       }
-      const signature = await signPreparedHash(prepRaw.multiHash);
+      // Sign dengan auto-unlock (resume sesi baru = dompet terkunci).
+      const signature = await signHashWithUnlock(
+        prepRaw.multiHash,
+        "Complete wallet upgrade",
+        { onWalletLocked: () => promptPassphrase("Complete wallet upgrade") },
+      );
       const comp = await fetch("/api/party/wallet-external/complete", {
         method: "POST",
         credentials: "include",
@@ -309,6 +329,15 @@ export function SettingsWalletKeyPanel() {
                 onCancel={() => setPhase("none")}
               />
             ) : null}
+
+            {/* ── M4: resume upgrade (registrasi dengan kunci yang sudah ada) ── */}
+            {phase === "registering" ? (
+              <div className="flex items-center justify-center gap-3 rounded-2xl border border-canton/30 bg-canton-subtle p-6 text-sm font-medium text-[var(--foreground)]">
+                <LoadingSpinner size="sm" />
+                Completing your upgrade — registering your wallet key…
+              </div>
+            ) : null}
+            {passphraseModal}
 
             {/* ── No wallet key yet ───────────────────────────────────── */}
             {phase === "none" && !isCustodial ? (

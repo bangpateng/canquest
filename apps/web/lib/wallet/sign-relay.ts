@@ -25,7 +25,12 @@ export interface SignRelayOptions {
   onWalletLocked?: (description: string) => Promise<string>;
 }
 
-async function signWithUnlock(
+/**
+ * Tanda tangani hash transaksi dengan auto-unlock — dipakai semua alur sign
+ * (relay & resume upgrade). Kalau dompet terkunci, panggil onWalletLocked
+ * (prompt passphrase UI), unlock, lalu tanda tangani ulang.
+ */
+export async function signHashWithUnlock(
   hash: string,
   description: string,
   options?: SignRelayOptions,
@@ -79,7 +84,7 @@ export async function signRelayPrepared(
   options?: SignRelayOptions,
 ): Promise<SignRelayResult> {
   // Tanda tangan terjadi di sini — di browser, dengan kunci user.
-  const signature = await signWithUnlock(prep.hash, prep.description ?? '', options);
+  const signature = await signHashWithUnlock(prep.hash, prep.description ?? '', options);
 
   const exec = await fetch('/api/party/sign/execute', {
     method: 'POST',
