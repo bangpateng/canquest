@@ -4,6 +4,7 @@
  * Diekstraksi dari party.controller.ts — route path & behavior identik.
  */
 import { AuthGuard } from '@nestjs/passport';
+import { ConfigService } from '@nestjs/config';
 import {
   BadRequestException,
   Controller,
@@ -36,6 +37,7 @@ export class PartyPreapprovalController {
     private readonly ledger: CantonLedgerService,
     private readonly splice: SpliceValidatorService,
     private readonly featuredActivity: FeaturedAppActivityService,
+    private readonly config: ConfigService,
   ) {}
 
   /** Cooldown toggle preapproval: 1× per 7 hari (tiap re-enable burn ~1.5 CC). */
@@ -176,10 +178,50 @@ export class PartyPreapprovalController {
     if (!user?.cantonPartyId) {
       return {
         hasWallet: false,
+        active: false,
         preapproval: { active: false, walletUiUrl: this.splice.walletUiUrl },
         message:
           'No wallet found. Create your wallet first from the Wallet page.',
       };
+    }
+
+    // M5b: For EXTERNAL users, check via validator API (ExternalPartySetupProposal
+    // creates TransferPreapproval that may not be visible via splice's custodial lookup).
+    if (user.walletKind === 'external') {
+      try {
+        const valUrl = (this.config.get<string>('CANTON_VALIDATOR_URL') ?? '').replace(/\/$/, '');
+        const keycloakUrl = this.config.get<string>('KEYCLOAK_URL');
+        const realm = this.config.get<string>('KEYCLOAK_REALM');
+        const tokenRes = await fetch(
+          `${keycloakUrl}/realms/${realm}/protocol/openid-connect/token`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `grant_type=client_credentials&client_id=${this.config.get('LEDGER_CLIENT_ID')}&client_secret=${this.config.get('LEDGER_CLIENT_SECRET')}&scope=daml_ledger_api`,
+          },
+        );
+        const { access_token: token } = await tokenRes.json();
+        const checkRes = await fetch(
+          `${valUrl}/api/validator/v0/admin/transfer-preapprovals/by-party/${encodeURIComponent(user.cantonPartyId)}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (checkRes.ok) {
+          const data = await checkRes.json();
+          const active = Boolean(
+            data?.transfer_preapproval || data?.transfer_preapproval_contract_id || data?.active,
+          );
+          return { hasWallet: true, active, preapproval: { active }, partyId: user.cantonPartyId };
+        }
+        // 404 = no preapproval
+        return {
+          hasWallet: true,
+          active: false,
+          preapproval: { active: false },
+          partyId: user.cantonPartyId,
+        };
+      } catch {
+        // Validator API check failed — fallback to splice
+      }
     }
 
     const [preapprovals, isPlaceholder] = await Promise.all([
