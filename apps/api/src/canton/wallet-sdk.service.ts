@@ -70,8 +70,17 @@ export class CantonWalletSdkService {
       this.initPromise = (async () => {
         this.applyDnsOverrides();
 
-        // ESM INTEROP: dynamic import saat runtime — lihat catatan header file.
-        const { SDK, CustomLogAdapter } = await import('@canton-network/wallet-sdk');
+        // ESM INTEROP: TypeScript compiler men-downlevel import() menjadi
+        // require() di output CJS — dynamic import biasa TIDAK bekerja.
+        // new Function() mem-bypass compiler: string tidak di-analyze,
+        // Node mengeksekusi import() ESM asli saat runtime.
+        const loadSdk = new Function(
+          'm',
+          'return import(m)',
+        ) as (m: string) => Promise<WalletSdkModule>;
+        const { SDK, CustomLogAdapter } = await loadSdk(
+          '@canton-network/wallet-sdk',
+        );
 
         // Logger redaksi: default SDK mencetak response (berisi access token).
         const quiet = new CustomLogAdapter((level: string, ctx: Record<string, unknown>, message?: string) => {
