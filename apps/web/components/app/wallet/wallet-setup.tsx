@@ -40,8 +40,6 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
   const { me } = useMe();
 
   const [username, setUsername] = useState("");
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [otp, setOtp] = useState("");
   const [busy, setBusy] = useState(false);
@@ -97,8 +95,6 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           username: val,
-          firstName: firstName.trim() || undefined,
-          lastName: lastName.trim() || undefined,
           ...(needsInvite ? { walletInviteCode: inviteCode.trim() } : {}),
         }),
       });
@@ -145,8 +141,6 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
         body: JSON.stringify({
           username: normalizeWalletUsername(username) ?? username,
           code: otp,
-          firstName: firstName.trim() || undefined,
-          lastName: lastName.trim() || undefined,
           ...(needsInvite ? { walletInviteCode: inviteCode.trim() } : {}),
         }),
       });
@@ -254,8 +248,6 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           username: normalizeWalletUsername(username) ?? username,
-          firstName: firstName.trim() || undefined,
-          lastName: lastName.trim() || undefined,
           ...(needsInvite ? { walletInviteCode: inviteCode.trim() } : {}),
         }),
       });
@@ -518,46 +510,7 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
             </div>
 
             {/* First/last name (side-by-side, optional) */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <label
-                  htmlFor="wallet-first-name"
-                  className="text-sm font-medium text-[var(--muted-foreground)]"
-                >
-                  {t("wallet.firstNameLabel")}
-                </label>
-                <input
-                  id="wallet-first-name"
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value.slice(0, 50))}
-                  maxLength={50}
-                  autoComplete="given-name"
-                  disabled={busy}
-                  className={inputClass}
-                />
-              </div>
-              <div className="space-y-2">
-                <label
-                  htmlFor="wallet-last-name"
-                  className="text-sm font-medium text-[var(--muted-foreground)]"
-                >
-                  {t("wallet.lastNameLabel")}
-                </label>
-                <input
-                  id="wallet-last-name"
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value.slice(0, 50))}
-                  maxLength={50}
-                  autoComplete="family-name"
-                  disabled={busy}
-                  className={inputClass}
-                />
-              </div>
-            </div>
-            <p className="-mt-3 text-xs text-[var(--muted-foreground)]">
-              {t("wallet.nameOptionalHint")}
-            </p>
-
+            
             {needsInvite ? (
               <div className="space-y-2">
                 <label
