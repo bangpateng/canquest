@@ -38,7 +38,32 @@ async function main() {
   const { access_token: token } = await tres.json();
   console.log('[0] Token OK');
 
-  // Step 1: Registry
+  // Step 0.5: Query sender holdings (inputHoldingCids WAJIB diisi)
+  const offsetRes = await fetch(`${LEDGER}/v2/state/ledger-end`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const { offset } = await offsetRes.json();
+  const acsRes = await fetch(`${LEDGER}/v2/state/active-contracts`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      eventFormat: {
+        filtersByParty: { [SENDER]: { cumulative: [{ identifierFilter: { WildcardFilter: { value: { includeCreatedEventBlob: false } } } }] } },
+        verbose: true,
+      },
+      activeAtOffset: offset,
+    }),
+  });
+  const contracts = await acsRes.json();
+  const holdings = [];
+  for (const entry of contracts ?? []) {
+    const ev = entry?.contractEntry?.JsActiveContract?.createdEvent ?? entry;
+    if (!String(ev.templateId ?? '').includes('Splice.Amulet:Amulet')) continue;
+    holdings.push(ev.contractId);
+  }
+  if (holdings.length === 0) throw new Error('Sender has no CC holdings!');
+  console.log(`[0.5] Sender holdings: ${holdings.length} amulet`);
+
   const now = new Date().toISOString();
   const ca = {
     expectedAdmin: DSO,
@@ -48,7 +73,7 @@ async function main() {
       lock: null,
       requestedAt: now,
       executeBefore: new Date(Date.now() + 24 * 3600e3).toISOString(),
-      inputHoldingCids: [],
+      inputHoldingCids: holdings,
       meta: { values: { 'splice.lfdecentralizedtrust.org/reason': 'Test send to external party' } },
     },
     extraArgs: { context: { values: {} }, meta: { values: {} } },
