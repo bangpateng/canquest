@@ -73,37 +73,60 @@ export class CantonWalletSdkService {
           );
         });
 
-        const ledgerUrl =
-          this.config.get<string>('LEDGER_API_URL') ||
-          this.config.get<string>('CANTON_JSON_API_URL');
+        const primary =
+          this.config.get<string>('LEDGER_API_URL')?.trim() || '';
+        const fallback =
+          this.config.get<string>('CANTON_JSON_API_URL')?.trim() || '';
         const keycloakUrl = this.config.get<string>('KEYCLOAK_URL');
         const realm = this.config.get<string>('KEYCLOAK_REALM');
         const clientId = this.config.get<string>('LEDGER_CLIENT_ID');
         const clientSecret = this.config.get<string>('LEDGER_CLIENT_SECRET');
-        if (!ledgerUrl || !keycloakUrl || !realm || !clientId || !clientSecret) {
+        if ((!primary && !fallback) || !keycloakUrl || !realm || !clientId || !clientSecret) {
           throw new Error(
-            'Konfigurasi SDK belum lengkap (LEDGER_API_URL / KEYCLOAK_URL / KEYCLOAK_REALM / LEDGER_CLIENT_ID / LEDGER_CLIENT_SECRET)',
+            'Konfigurasi SDK belum lengkap (LEDGER_API_URL/CANTON_JSON_API_URL + KEYCLOAK_URL/REALM + LEDGER_CLIENT_ID/SECRET)',
           );
         }
 
-        const sdk = await SDK.create({
-          auth: {
-            method: 'client_credentials',
-            configUrl: `${keycloakUrl}/realms/${realm}/.well-known/openid-configuration`,
-            credentials: {
-              clientId,
-              clientSecret,
-              audience:
-                this.config.get<string>('CANTON_LEDGER_API_AUDIENCE') ||
-                'https://canton.network.global',
-              scope:
-                this.config.get<string>('LEDGER_API_AUTH_SCOPE') ||
-                'daml_ledger_api',
+        const buildSdk = (url: string) =>
+          SDK.create({
+            auth: {
+              method: 'client_credentials',
+              configUrl: `${keycloakUrl}/realms/${realm}/.well-known/openid-configuration`,
+              credentials: {
+                clientId,
+                clientSecret,
+                audience:
+                  this.config.get<string>('CANTON_LEDGER_API_AUDIENCE') ||
+                  'https://canton.network.global',
+                scope:
+                  this.config.get<string>('LEDGER_API_AUTH_SCOPE') ||
+                  'daml_ledger_api',
+              },
             },
-          },
-          ledgerClientUrl: ledgerUrl,
-          logAdapter: quiet,
-        });
+            ledgerClientUrl: url,
+            logAdapter: quiet,
+          });
+
+        // Primary: gateway publik (LEDGER_API_URL). Kalau gagal (routing VPS
+        // beda dgn PC dev), fallback ke jalur tunnel produksi lama
+        // (CANTON_JSON_API_URL) yang terbukti dipakai seluruh dapp.
+        let sdk: CantonSdk;
+        try {
+          if (!primary) throw new Error('no primary URL');
+          sdk = await buildSdk(primary);
+        } catch (errPrimary) {
+          this.logger.warn(
+            `SDK init via ${primary} gagal: ${String(errPrimary).slice(0, 180)}`,
+          );
+          if (!fallback || fallback === primary) {
+            this.logger.error(
+              `SDK init GAGAL total (primary=${primary || '-'} fallback=${fallback || '-'}): ${String(errPrimary).slice(0, 300)}`,
+            );
+            throw errPrimary;
+          }
+          this.logger.log(`SDK init retry via fallback ${fallback}…`);
+          sdk = await buildSdk(fallback);
+        }
 
         this.sdk = sdk;
         this.logger.log('Canton wallet-sdk siap (client_credentials).');
