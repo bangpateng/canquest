@@ -390,7 +390,7 @@ function ExternalPreapprovalRow() {
   const [on, setOn] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { prompt: promptPassphrase } = usePassphrasePrompt();
+  const { prompt: promptPassphrase, passphraseModal } = usePassphrasePrompt();
 
   useEffect(() => {
     void (async () => {
@@ -495,6 +495,7 @@ function ExternalPreapprovalRow() {
           )}
         />
       </button>
+      {passphraseModal}
     </div>
   );
 }
