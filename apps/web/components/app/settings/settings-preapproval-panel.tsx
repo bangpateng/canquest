@@ -164,7 +164,7 @@ export function SettingsPreapprovalPanel() {
                 One Step Transfer
               </p>
               <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                Receive transfers instantly without manual acceptance
+                Auto-accept incoming transfers without manual approval
               </p>
             </div>
             <ChevronDown
@@ -177,23 +177,28 @@ export function SettingsPreapprovalPanel() {
 
           <div
             className={cn(
-              "space-y-4 px-6 pb-6 sm:space-y-4 sm:px-7 sm:pb-7",
+              "space-y-3 px-6 pb-6 sm:space-y-4 sm:px-7 sm:pb-7",
               collapsed && "hidden",
             )}
           >
-            <PreapprovalToggle />
-            <div className="flex items-start justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--muted)]/40 p-4">
-              <div className="min-w-0 text-sm">
-                <p className="font-semibold text-[var(--foreground)]">
-                  Auto-Accept (Backup)
-                </p>
-                <p className="mt-1 leading-relaxed text-[var(--muted-foreground)]">
-                  Backup for when One Step Transfer is off. Auto-accepts
-                  offers while wallet is unlocked.
-                </p>
-              </div>
-              <AutoAcceptSwitch />
-            </div>
+            {/* CC — Preapproval toggle (M5b: works for external via validator API) */}
+            <ExternalPreapprovalRow />
+
+            {/* Other tokens — same "Coming soon" as custodial */}
+            {ALL_TOKENS.filter((t) => t !== "CC").map((token) => (
+              <TokenToggleRow
+                key={token}
+                token={token}
+                enabled={false}
+                active={false}
+                busy={false}
+                expiresAt={null}
+                onToggle={undefined}
+              />
+            ))}
+
+            {/* Auto-accept backup (only visible when preapproval is off) */}
+            <AutoAcceptBackupRow />
           </div>
         </div>
       </Card>
@@ -379,6 +384,160 @@ function TokenToggleRow({
           <Lock className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
         </div>
       )}
+    </div>
+  );
+}
+
+// ── External Preapproval Row (M5b: same visual as custodial TokenToggleRow) ──
+function ExternalPreapprovalRow() {
+  const [on, setOn] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { prompt: promptPassphrase } = usePassphrasePrompt();
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/party/preapproval-status", { credentials: "include" });
+        if (res.ok) {
+          const data = await res.json();
+          setOn(Boolean(data.active));
+        }
+      } catch { /* non-fatal */ }
+    })();
+  }, []);
+
+  async function handleToggle() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (!on) {
+        const meta = await getWalletKeyMeta();
+        if (!meta?.publicKeyHex) throw new Error("No wallet key found");
+
+        const prep = await fetch("/api/party/sign/preapproval/prepare", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ publicKeyHex: meta.publicKeyHex }),
+        });
+        const prepRaw = await prep.json().catch(() => null);
+        if (!prep.ok || !prepRaw?.hash) throw new Error(prepRaw?.message ?? "Prepare failed");
+
+        const hashBytes = new Uint8Array(
+          (String(prepRaw.hash).match(/.{2}/g) ?? []).map((b) => parseInt(b, 16)),
+        );
+        const sigHex = await signHashRaw(hashBytes, promptPassphrase);
+
+        const exec = await fetch("/api/party/sign/preapproval/execute", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ signature: sigHex }),
+        });
+        const execRaw = await exec.json().catch(() => null);
+        if (!exec.ok) throw new Error(execRaw?.message ?? "Execute failed");
+        setOn(true);
+      } else {
+        const res = await fetch("/api/party/sign/preapproval/disable", {
+          method: "POST",
+          credentials: "include",
+        });
+        if (!res.ok) {
+          const raw = await res.json().catch(() => null);
+          throw new Error(raw?.message ?? "Disable failed");
+        }
+        setOn(false);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Toggle failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3.5 transition-colors hover:border-[var(--primary)]/25 sm:px-5">
+      <div className="flex min-w-0 items-center gap-3">
+        <TokenLogo symbol="amulet" size="sm" />
+        <div className="min-w-0">
+          <p
+            className={cn(
+              "text-sm font-semibold",
+              on ? "text-canton" : "text-[var(--foreground)]",
+            )}
+          >
+            {displayName("amulet")}
+          </p>
+          <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+            {on ? "Incoming CC arrives directly" : "Incoming CC requires manual accept"}
+          </p>
+          {error ? (
+            <p className="mt-1 text-xs font-medium text-orange-600">{error}</p>
+          ) : null}
+        </div>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        disabled={busy}
+        onClick={() => void handleToggle()}
+        className={cn(
+          "relative h-6 w-11 shrink-0 rounded-full transition-colors",
+          on ? "bg-canton" : "bg-[var(--muted-foreground)]/30",
+        )}
+      >
+        <span
+          className={cn(
+            "absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all",
+            on ? "left-[22px]" : "left-0.5",
+          )}
+        />
+      </button>
+    </div>
+  );
+}
+
+// ── Auto-accept backup row (shown when preapproval is off) ──
+function AutoAcceptBackupRow() {
+  const [on, setOn] = useState(true);
+  const [show, setShow] = useState(false);
+
+  useEffect(() => {
+    setOn(isAutoAcceptEnabled());
+    void fetch("/api/party/preapproval-status", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => setShow(!(data as { active?: boolean })?.active))
+      .catch(() => setShow(true));
+  }, []);
+
+  if (!show) return null;
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-dashed border-[var(--border)] px-4 py-3.5 sm:px-5">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--muted)]/60 text-xs">⚡</div>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-[var(--muted-foreground)]">Auto-Accept Backup</p>
+          <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+            Auto-accept offers while wallet is unlocked
+          </p>
+        </div>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        onClick={() => { const n = !on; setAutoAccept(n); setOn(n); }}
+        className={cn(
+          "relative h-6 w-11 shrink-0 rounded-full transition-colors",
+          on ? "bg-canton" : "bg-[var(--muted-foreground)]/30",
+        )}
+      >
+        <span className={cn("absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all", on ? "left-[22px]" : "left-0.5")} />
+      </button>
     </div>
   );
 }
