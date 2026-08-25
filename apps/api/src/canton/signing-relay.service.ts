@@ -917,10 +917,14 @@ export class SigningRelayService {
     publicKeyHex: string,
   ): Promise<{ flow: string; hash: string; commandId: string; description: string }> {
     this.sweepExpired();
+    // Auto-clear stale pending dari auto-accept / attempt sebelumnya —
+    // preapproval prepare selalu boleh mulai fresh.
     if (this.pending.has(userId)) {
-      throw new BadRequestException(
-        'A transaction is already awaiting your signature — complete it first.',
+      const existing = this.pending.get(userId);
+      this.logger.warn(
+        `Clearing stale pending (flow=${existing?.flow}, age=${Date.now() - (existing?.createdAt ?? 0)}ms) for preapproval`,
       );
+      this.pending.delete(userId);
     }
 
     const user = await this.requireExternalUser(userId);
