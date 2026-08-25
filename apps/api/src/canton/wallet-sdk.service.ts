@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import dns from 'node:dns';
-import { SDK, CustomLogAdapter } from '@canton-network/wallet-sdk';
 
 /**
  * CantonWalletSdkService — penyedia singleton @canton-network/wallet-sdk.
@@ -13,6 +12,12 @@ import { SDK, CustomLogAdapter } from '@canton-network/wallet-sdk';
  * Kunci private user TIDAK PERNAH melewati service ini — yang diterima hanya
  * public key dan signature hasil-sign di browser (arsitektur M0 terverifikasi).
  *
+ * PENTING — ESM INTEROP: wallet-sdk adalah paket ESM. Import statis di build
+ * CommonJS (nest build) di-compile jadi require() → "openapi_fetch.default
+ * is not a function" di produksi (terbukti VPS 2026-08-25). Karena itu SDK
+ * dimuat via dynamic import() SAAT RUNTIME — Node memuatnya sebagai ESM asli
+ * dan interop benar. JANGAN kembalikan ke import statis.
+ *
  * Auth: Keycloak client_credentials (client validator-app-backend), sama dengan
  * CantonLedgerService. Logger SDK di-redam (default-nya mencetak access token).
  *
@@ -20,7 +25,10 @@ import { SDK, CustomLogAdapter } from '@canton-network/wallet-sdk';
  *   CANTON_DNS_OVERRIDES — opsional, format "host=ip,host=ip". Untuk lingkungan
  *   yang DNS-nya di-override ke proxy mati (mis. PC dev); di VPS tidak perlu.
  */
-export type CantonSdk = Awaited<ReturnType<typeof SDK.create>>;
+type WalletSdkModule = typeof import('@canton-network/wallet-sdk');
+export type CantonSdk = Awaited<
+  ReturnType<WalletSdkModule['SDK']['create']>
+>;
 
 @Injectable()
 export class CantonWalletSdkService {
@@ -62,8 +70,11 @@ export class CantonWalletSdkService {
       this.initPromise = (async () => {
         this.applyDnsOverrides();
 
+        // ESM INTEROP: dynamic import saat runtime — lihat catatan header file.
+        const { SDK, CustomLogAdapter } = await import('@canton-network/wallet-sdk');
+
         // Logger redaksi: default SDK mencetak response (berisi access token).
-        const quiet = new CustomLogAdapter((level, ctx, message) => {
+        const quiet = new CustomLogAdapter((level: string, ctx: Record<string, unknown>, message?: string) => {
           if (level !== 'warn' && level !== 'error') return;
           const safe = { ...ctx };
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
