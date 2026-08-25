@@ -8,6 +8,10 @@ import { Card } from "@/components/ui/card";
 import { TokenLogo, displayName } from "@/components/app/wallet/token-logo";
 import { useFeeConfig } from "@/lib/hooks/use-fee-config";
 import { useMe } from "@/lib/hooks/use-me";
+import {
+  isAutoAcceptEnabled,
+  setAutoAccept,
+} from "@/lib/wallet/auto-accept";
 
 type PreapprovalStatus = {
   active?: boolean;
@@ -112,21 +116,55 @@ export function SettingsPreapprovalPanel() {
 
   if (isExternalWallet) {
     return (
-      <Card id="preapproval" className="scroll-mt-8 overflow-hidden">
-        <div className="p-6 sm:p-7">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-            One Step Transfer
-          </p>
-          <div className="mt-3 flex items-start gap-3 rounded-2xl border border-[var(--border)] bg-[var(--muted)]/40 p-4">
-            <Lock className="mt-0.5 h-5 w-5 shrink-0 text-[var(--muted-foreground)]" />
-            <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
-              <strong className="text-[var(--foreground)]">
-                Not available for non-custodial wallets.
-              </strong>{" "}
-              Incoming transfers arrive as pending offers in your wallet
-              inbox — you accept each one with your signature. This is a
-              security feature: no one can move funds to your wallet without
-              your approval.
+      <Card
+        id="preapproval"
+        className="scroll-mt-8 overflow-hidden"
+      >
+        <div>
+          <button
+            type="button"
+            onClick={() => setCollapsed((c) => !c)}
+            className="flex w-full items-center justify-between p-6 transition-colors hover:bg-[var(--primary)]/[0.04] sm:p-7"
+          >
+            <div className="text-left">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+                Instant Receive
+              </p>
+              <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                Auto-accept incoming transfers while your wallet is unlocked
+              </p>
+            </div>
+            <ChevronDown
+              className={cn(
+                "h-5 w-5 shrink-0 text-canton transition-transform duration-200",
+                collapsed ? "" : "rotate-180",
+              )}
+            />
+          </button>
+
+          <div
+            className={cn(
+              "space-y-3 px-6 pb-6 sm:space-y-4 sm:px-7 sm:pb-7",
+              collapsed && "hidden",
+            )}
+          >
+            <div className="flex items-start justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--muted)]/40 p-4">
+              <div className="min-w-0 text-sm">
+                <p className="font-semibold text-[var(--foreground)]">
+                  Auto-Accept Transfers
+                </p>
+                <p className="mt-1 leading-relaxed text-[var(--muted-foreground)]">
+                  Incoming CC and token transfers are accepted automatically
+                  while your wallet is unlocked. Keep this browser tab open to
+                  receive funds instantly.
+                </p>
+              </div>
+              <AutoAcceptSwitch />
+            </div>
+            <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">
+              Your wallet must be unlocked (passphrase entered) for
+              auto-accept to work. Transfers still require your signature —
+              this just signs them automatically while your session is active.
             </p>
           </div>
         </div>
@@ -314,5 +352,35 @@ function TokenToggleRow({
         </div>
       )}
     </div>
+  );
+}
+
+// ── Auto-accept switch (M5: replaces preapproval toggle for external users) ──
+function AutoAcceptSwitch() {
+  const [on, setOn] = useState(true);
+  useEffect(() => setOn(isAutoAcceptEnabled()), []);
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label="Auto-accept incoming transfers"
+      onClick={() => {
+        const next = !on;
+        setAutoAccept(next);
+        setOn(next);
+      }}
+      className={cn(
+        "relative h-6 w-11 shrink-0 rounded-full transition-colors",
+        on ? "bg-canton" : "bg-[var(--muted-foreground)]/30",
+      )}
+    >
+      <span
+        className={cn(
+          "absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all",
+          on ? "left-[22px]" : "left-0.5",
+        )}
+      />
+    </button>
   );
 }
