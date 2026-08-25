@@ -300,6 +300,13 @@ export async function signBytes(message: Uint8Array): Promise<string> {
   return b64(await ed25519.signAsync(message, session.seed));
 }
 
+/** Tanda tangani pesan byte → return HEX langsung (tanpa base64 round-trip). */
+export async function signBytesHex(message: Uint8Array): Promise<string> {
+  if (!session) throw new Error('Wallet locked — unlock with your passphrase first');
+  const sig = await ed25519.signAsync(message, session.seed);
+  return Array.from(sig).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 /** Backup: tampilkan ulang seed raw hex. Harus unlocked. */
 export function exportSeedHex(): string {
   if (!session) throw new Error('Wallet locked — unlock with your passphrase first');

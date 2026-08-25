@@ -15,7 +15,7 @@ import {
 import {
   getWalletKeyMeta,
   unlock,
-  signBytes,
+  signBytesHex,
 } from "@/lib/wallet/key-manager";
 import { usePassphrasePrompt } from "@/lib/wallet/use-passphrase-prompt";
 
@@ -28,19 +28,14 @@ async function signHashRaw(
   promptPassphrase: (desc: string) => Promise<string>,
 ): Promise<string> {
   try {
-    const sigB64 = await signBytes(bytes);
-    // Convert base64 to hex
-    const raw = atob(sigB64);
-    return Array.from(raw).map((c) => c.charCodeAt(0).toString(16).padStart(2, "0")).join("");
+    return await signBytesHex(bytes);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes("Wallet locked")) {
       const pass = await promptPassphrase("Enable instant receive");
       if (!pass) throw err;
       await unlock(pass);
-      const sigB64 = await signBytes(bytes);
-      const raw = atob(sigB64);
-      return Array.from(raw).map((c) => c.charCodeAt(0).toString(16).padStart(2, "0")).join("");
+      return signBytesHex(bytes);
     }
     throw err;
   }
