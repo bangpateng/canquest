@@ -469,7 +469,7 @@ function PreapprovalToggle() {
         if (!exec.ok) throw new Error(execRaw?.message ?? "Execute failed");
         setOn(true);
       } else {
-        const res = await fetch("/api/party/preapproval/disable", {
+        const res = await fetch("/api/party/sign/preapproval/disable", {
           method: "POST",
           credentials: "include",
         });
@@ -493,8 +493,8 @@ function PreapprovalToggle() {
           One Step Transfer
         </p>
         <p className="mt-1 leading-relaxed text-[var(--muted-foreground)]">
-          Receive CC transfers instantly from any sender — no manual acceptance
-          needed. Valid for 90 days, auto-renews.
+          Receive Canton Coin (CC) instantly — no manual acceptance needed.
+          90 days, auto-renews. CC only; other tokens use offer/accept.
         </p>
         {error ? (
           <p className="mt-2 text-xs font-medium text-orange-600">{error}</p>

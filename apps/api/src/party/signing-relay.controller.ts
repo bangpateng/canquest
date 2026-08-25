@@ -54,4 +54,10 @@ export class SigningRelayController {
   async executePreapproval(@Req() req: AuthedReq, @Body() dto: PreapprovalExecuteDto) {
     return this.relay.executePreapproval(req.user.userId, dto.signature);
   }
+
+  /** M5b: Preapproval disable — via validator API DELETE (operator cancels as provider). */
+  @Post('preapproval/disable')
+  async disablePreapproval(@Req() req: AuthedReq) {
+    return this.relay.disablePreapproval(req.user.userId);
+  }
 }

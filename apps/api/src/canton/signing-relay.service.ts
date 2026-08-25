@@ -1013,6 +1013,30 @@ export class SigningRelayService {
   }
 
   /** Get Keycloak token for validator API calls. */
+  /**
+   * M5b: Disable preapproval via validator API DELETE.
+   * Operator (provider) has the right to cancel — no user signature needed.
+   */
+  async disablePreapproval(userId: string): Promise<{ ok: boolean }> {
+    const user = await this.requireExternalUser(userId);
+    const valUrl = (this.config.get<string>('CANTON_VALIDATOR_URL') ?? '').replace(/\/$/, '');
+    if (!valUrl) throw new BadRequestException('CANTON_VALIDATOR_URL not set');
+    const token = await this.getValidatorToken();
+
+    const res = await fetch(
+      `${valUrl}/api/validator/v0/admin/transfer-preapprovals/by-party/${encodeURIComponent(user.partyId)}`,
+      { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } },
+    );
+    const text = await res.text();
+
+    if (res.ok || res.status === 404) {
+      this.logger.log(`preapproval disabled user=${userId.slice(0, 8)}…`);
+      return { ok: true };
+    }
+    this.logger.warn(`preapproval disable failed: ${text.slice(0, 200)}`);
+    throw new BadRequestException(`Disable failed: ${text.slice(0, 150)}`);
+  }
+
   private tokenCache: { token: string; exp: number } | null = null;
   private async getValidatorToken(): Promise<string> {
     if (this.tokenCache && Date.now() < this.tokenCache.exp) return this.tokenCache.token;
