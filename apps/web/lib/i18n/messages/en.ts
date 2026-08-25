@@ -235,7 +235,7 @@ export const en: PlatformMessages = {
     firstNameLabel: "First name",
     lastNameLabel: "Last name",
     nameOptionalHint: "Optional · shown on your public profile",
-    sendOtpButton: "Continue · Send verification code",
+    sendOtpButton: "Verify",
     sendingCode: "Sending code…",
     otpTitle: "Check your email",
     otpSubtitle: "We sent a 6-digit code to",
