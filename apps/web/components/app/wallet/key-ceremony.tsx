@@ -17,6 +17,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Card } from "@/components/ui/card";
 import { CopyField } from "@/components/app/wallet/copy-field";
 import {
+  exportSyncBlob,
   generateWalletKey,
   saveWalletKey,
   unlock,
@@ -102,6 +103,20 @@ export function KeyCeremony({ onComplete, onCancel }: KeyCeremonyProps) {
     try {
       await saveWalletKey(seedHex, pass1, meta);
       await unlock(pass1); // active for this session right away
+      // M4b: sync default ON — simpan salinan terenkripsi ke akun supaya
+      // user bisa unlock di browser lain cukup dengan passphrase.
+      // (Server tidak pernah lihat passphrase — blob didekripsi client.)
+      const blob = await exportSyncBlob();
+      if (blob) {
+        void fetch("/api/party/wallet-key/backup", {
+          method: "PUT",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ blob }),
+        }).catch(() => {
+          /* non-fatal — raw hex backup tetap berlaku */
+        });
+      }
       cleanup(); // seed no longer needed in component memory
       setStep("done");
       onComplete(meta);

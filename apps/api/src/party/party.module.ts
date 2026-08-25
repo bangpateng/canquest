@@ -13,6 +13,7 @@ import { PartySwapController } from './party-swap.controller';
 import { PartyAccountController } from './party-account.controller';
 import { ExternalWalletController } from './external-wallet.controller';
 import { SigningRelayController } from './signing-relay.controller';
+import { WalletKeyBackupController } from './wallet-key-backup.controller';
 
 /**
  * Semua controller domain memakai prefix @Controller('party') — URL publik
@@ -31,6 +32,7 @@ import { SigningRelayController } from './signing-relay.controller';
     PartyAccountController,
     ExternalWalletController,
     SigningRelayController,
+    WalletKeyBackupController,
   ],
   providers: [WalletInviteCodeService],
   exports: [WalletInviteCodeService],

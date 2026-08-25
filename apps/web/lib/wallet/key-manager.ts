@@ -339,3 +339,48 @@ export async function deleteWalletKey(): Promise<void> {
   lock();
   await idbRun('readwrite', (s) => s.delete(RECORD_KEY));
 }
+
+// ── M4b: sync blob antar-browser ───────────────────────────────────────────
+
+/**
+ * Export record terenkripsi utk sync ke akun (server hanya menyimpan blob —
+ * dekripsi butuh passphrase yang tidak pernah keluar dari browser).
+ * Return null kalau browser ini belum punya kunci.
+ */
+export async function exportSyncBlob(): Promise<string | null> {
+  const rec = await idbRun<StoredKeyRecord | undefined>(
+    'readonly',
+    (s) => s.get(RECORD_KEY),
+  );
+  if (!rec) return null;
+  return JSON.stringify(rec);
+}
+
+/**
+ * Import blob terenkripsi dari akun ke browser ini (browser baru/perangkat
+ * baru). Tidak butuh passphrase saat import — passphrase diverifikasi saat
+ * unlock pertama. Return meta; throw kalau browser sudah punya kunci lain.
+ */
+export async function importSyncBlob(blobJson: string): Promise<WalletKeyMeta> {
+  if (await hasWalletKey()) {
+    throw new Error('A wallet key already exists in this browser');
+  }
+  let rec: StoredKeyRecord;
+  try {
+    const parsed = JSON.parse(blobJson) as StoredKeyRecord;
+    if (
+      parsed?.v !== 1 ||
+      !parsed?.kdf?.saltB64 ||
+      !parsed?.cipher?.ivB64 ||
+      !parsed?.cipher?.ctB64 ||
+      !parsed?.meta?.fingerprint
+    ) {
+      throw new Error('shape');
+    }
+    rec = parsed;
+  } catch {
+    throw new Error('Invalid encrypted backup blob');
+  }
+  await idbRun('readwrite', (s) => s.put(rec, RECORD_KEY));
+  return rec.meta;
+}

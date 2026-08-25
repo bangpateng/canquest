@@ -67,6 +67,10 @@ model User {
   earnPoints              Int                   @default(0)
   /// Linked X (Twitter) handle for social task verification (twitterapi.io).
   twitterUsername         String?               @unique
+  /// M4b: backup kunci dompet terenkripsi (sync antar-browser, opt-out-able).
+  /// Blob = AES-256-GCM atas seed Ed25519; kunci derive dari PASSPHRASE user
+  /// (PBKDF2 310k). Server TIDAK pernah punya passphrase — dekripsi 100% client.
+  walletKeyBackup         WalletKeyBackup?
   twitterUserId           String?
   /// High-res X avatar URL (pbs.twimg.com, _400x400) — not stored on VPS disk.
   twitterAvatarUrl        String?
@@ -146,6 +150,18 @@ model EarnEntry {
 
   @@unique([userId, questId])
   @@index([questId])
+}
+
+/// M4b: backup kunci dompet terenkripsi — sync antar-browser (1 per user).
+/// Blob = record terenkripsi dari browser (AES-256-GCM, PBKDF2 dari passphrase
+/// user). Server hanya penyimpan; dekripsi & passphrase tidak pernah keluar
+/// dari browser.
+model WalletKeyBackup {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  blob      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 /// One-time codes required to create a Canton wallet (admin-generated).
