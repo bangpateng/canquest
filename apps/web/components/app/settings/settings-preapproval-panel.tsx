@@ -449,6 +449,8 @@ function ExternalPreapprovalRow() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Toggle failed");
+      // Auto-clear stale pending supaya user bisa retry langsung
+      void fetch("/api/party/sign/cancel", { method: "POST", credentials: "include" }).catch(() => undefined);
     } finally {
       setBusy(false);
     }

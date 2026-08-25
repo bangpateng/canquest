@@ -60,4 +60,11 @@ export class SigningRelayController {
   async disablePreapproval(@Req() req: AuthedReq) {
     return this.relay.disablePreapproval(req.user.userId);
   }
+
+  /** Clear stale pending transaction (stuck from failed signing attempt). */
+  @Post('cancel')
+  async cancelPending(@Req() req: AuthedReq) {
+    this.relay.discard(req.user.userId);
+    return { ok: true };
+  }
 }
