@@ -85,15 +85,41 @@ export class ExternalWalletController {
         );
       }
       const oldParty = existing.cantonPartyId as string;
+      // Guard upgrade: wallet lama harus praktis kosong. Toleransi:
+      //  - DUST (≤ 0.05 CC total): sisa pembulatan transfer yang tidak bisa
+      //    dikirim (di bawah fee) — dibiarkan di party lama (abandoned).
+      //  - Lock KEDALUWARSA diabaikan (tetap di party lama, tak bernilai).
+      // Sisa di atas toleransi → blokir dengan jumlah persis supaya user
+      // tahu harus disapu dulu.
+      const DUST_TOLERANCE_CC = 0.05;
       const holdings = await this.ledger
         .queryAmuletHoldings(oldParty)
         .catch(() => []);
       const locks = await this.ledger
         .findLockedAmulets(oldParty)
         .catch(() => []);
-      if (holdings.length > 0 || locks.length > 0) {
+      const totalCc = (holdings as Array<{ amount?: string }>).reduce(
+        (s, h) => s + (parseFloat(h.amount ?? '0') || 0),
+        0,
+      );
+      const now = Date.now();
+      const activeLocks = (
+        locks as Array<{ expiresAt?: string | null }>
+      ).filter((l) => l.expiresAt && Date.parse(l.expiresAt) > now);
+
+      if (activeLocks.length > 0) {
         throw new BadRequestException(
-          'Your old wallet still holds funds or locks — empty it before upgrading.',
+          'Your old wallet has an active lock — wait until it expires (or unlock it), then upgrade again.',
+        );
+      }
+      if (totalCc > DUST_TOLERANCE_CC) {
+        throw new BadRequestException(
+          `Your old wallet still holds ${totalCc.toFixed(4)} CC — send it out first (e.g. to your reward wallet), then upgrade again.`,
+        );
+      }
+      if (totalCc > 0) {
+        this.logger.log(
+          `upgrade dust abandoned: user=${req.user.userId.slice(0, 8)}… ~${totalCc.toFixed(4)} CC left in legacy party`,
         );
       }
     } else if (hasRealWallet(existing.cantonPartyId)) {
