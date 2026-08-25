@@ -560,6 +560,13 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
               )}
             </button>
 
+            {externalEnabled ? (
+              <p className="text-center text-xs leading-relaxed text-[var(--muted-foreground)]">
+                🔒 Non-custodial wallet — your private key is created and
+                stored in this browser, never sent to a server.
+              </p>
+            ) : null}
+
           </form>
         </div>
       </Card>
