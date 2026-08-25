@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils/utils";
 import { Card } from "@/components/ui/card";
 import { TokenLogo, displayName } from "@/components/app/wallet/token-logo";
 import { useFeeConfig } from "@/lib/hooks/use-fee-config";
+import { useMe } from "@/lib/hooks/use-me";
 
 type PreapprovalStatus = {
   active?: boolean;
@@ -34,6 +35,11 @@ export function SettingsPreapprovalPanel() {
   const { data: feeConfig } = useFeeConfig();
   const enabledTokens = feeConfig?.preapprovalTokens ?? ["CC"];
   const [collapsed, setCollapsed] = useState(false);
+  // M3c: preapproval TIDAK MUNGKIN untuk wallet external (Daml butuh
+  // co-authorizer provider — terbukti spike M3c). Sembunyikan toggle utk
+  // user external; incoming transfer via offer + sign-accept (by design).
+  const { me } = useMe();
+  const isExternalWallet = me?.walletKind === "external";
 
   const loadCcStatus = useCallback(async () => {
     setLoading(true);
@@ -102,6 +108,30 @@ export function SettingsPreapprovalPanel() {
     } finally {
       setBusy(false);
     }
+  }
+
+  if (isExternalWallet) {
+    return (
+      <Card id="preapproval" className="scroll-mt-8 overflow-hidden">
+        <div className="p-6 sm:p-7">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+            One Step Transfer
+          </p>
+          <div className="mt-3 flex items-start gap-3 rounded-2xl border border-[var(--border)] bg-[var(--muted)]/40 p-4">
+            <Lock className="mt-0.5 h-5 w-5 shrink-0 text-[var(--muted-foreground)]" />
+            <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
+              <strong className="text-[var(--foreground)]">
+                Not available for non-custodial wallets.
+              </strong>{" "}
+              Incoming transfers arrive as pending offers in your wallet
+              inbox — you accept each one with your signature. This is a
+              security feature: no one can move funds to your wallet without
+              your approval.
+            </p>
+          </div>
+        </div>
+      </Card>
+    );
   }
 
   return (
