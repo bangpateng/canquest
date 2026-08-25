@@ -164,43 +164,14 @@ export class PartyWalletController {
         message: string;
       }
   > {
-    // 1. Verify OTP (auth service throw kalau invalid / expired / lockout).
+    // 1. Verify OTP.
     await this.auth.verifyWalletCreationOtp(req.user.userId, body.code);
 
-    // 2a. M2: jalur non-custodial — cukup verifikasi OTP. Wallet dibuat via
-    // /party/wallet-external/prepare + /complete SETELAH key ceremony di
-    // browser (kunci tidak pernah keluar dari perangkat user). Invite tetap
-    // tertahan (reserved di /otp/send) dan di-redeem saat complete.
-    if (this.externalWallet.isEnabled) {
-      return {
-        needsKeyCeremony: true,
-        message:
-          'Email verified. Continue with your wallet key ceremony in the browser.',
-      };
-    }
-
-    // 2b. Jalur custodial lama (execute onboarding di server).
-    const result = await this.executeWalletOnboarding(req.user.userId, {
-      username: body.username,
-      firstName: body.firstName,
-      lastName: body.lastName,
-      walletInviteCode: body.walletInviteCode,
-    });
-
-    // 3. Kirim confirmation email (best-effort, never throws).
-    void this.resend
-      .sendWalletCreatedEmail(req.user.email, {
-        username: result.username,
-        partyId: result.cantonPartyId,
-        displayName: undefined, // bisa di-enhance: baca displayName dari User
-      })
-      .catch((err: unknown) => {
-        this.logger.warn(
-          `Wallet-created email failed for ${req.user.email}: ${String(err)}`,
-        );
-      });
-
-    return result;
+    // M5: Custodial path REMOVED — ALL wallets are non-custodial (key ceremony).
+    return {
+      needsKeyCeremony: true as const,
+      message: 'Email verified. Continue with your wallet key ceremony.',
+    };
   }
 
   /**
@@ -349,8 +320,21 @@ export class PartyWalletController {
     }
   }
 
+  /** M5: custodial allocation REMOVED. */
   @Post('allocate')
   async allocateCantonParty(
+    @Req() req: AuthedReq,
+    @Body() body: AllocateWalletDto,
+  ) {
+    // M5: Always reject — custodial wallets are permanently removed.
+    throw new BadRequestException(
+      'Custodial wallet creation has been removed. Use non-custodial wallet setup.',
+    );
+  }
+
+  // M5: Dead code below is the old custodial allocate — kept for reference only.
+  // It is unreachable and will be removed in a future cleanup commit.
+  private async _deprecatedAllocateCantonParty(
     @Req() req: AuthedReq,
     @Body() body: AllocateWalletDto,
   ) {

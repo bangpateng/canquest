@@ -87,6 +87,14 @@ export class PartyTransferController {
   @Post('send-cc')
   async sendCc(@Req() req: AuthedReq, @Body() body: SendCcDto) {
     const sender = await this.users.findById(req.user.userId);
+    
+    // M5: custodial path removed — reject custodial users
+    if (sender?.walletKind === 'custodial') {
+      throw new BadRequestException(
+        'Custodial wallets are deprecated. Please upgrade to a non-custodial wallet.',
+      );
+    }
+
     if (!sender?.username || !sender.cantonPartyId) {
       throw new BadRequestException(
         'You need a wallet to send CC. Create yours first.',

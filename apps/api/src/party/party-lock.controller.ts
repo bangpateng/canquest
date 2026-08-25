@@ -56,6 +56,14 @@ export class PartyLockController {
   @Post('lock')
   async lockCc(@Req() req: AuthedReq, @Body() body: LockCcDto) {
     const user = await this.users.findById(req.user.userId);
+    
+    // M5: custodial path removed — reject custodial users
+    if (user?.walletKind === 'custodial') {
+      throw new BadRequestException(
+        'Custodial wallets are deprecated. Please upgrade to a non-custodial wallet.',
+      );
+    }
+
     if (!user?.cantonPartyId || !hasRealWallet(user.cantonPartyId)) {
       throw new BadRequestException(
         'No wallet found. Create your wallet first.',
