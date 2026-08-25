@@ -14,8 +14,11 @@ import { PageTitle } from "@/components/ui/typography";
 import { useEffect, useState } from "react";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { useMe } from "@/lib/hooks/use-me";
+import { KeyCeremony } from "@/components/app/wallet/key-ceremony";
+import { signPreparedHash, type WalletKeyMeta } from "@/lib/wallet/key-manager";
+import { signRelayTransaction } from "@/lib/wallet/sign-relay";
 
-type Step = "form" | "otp" | "success";
+type Step = "form" | "otp" | "ceremony" | "registering" | "success";
 
 interface WalletSetupProps {
   onCreated: () => void;
@@ -45,6 +48,7 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<Step>("form");
   const [needsInvite, setNeedsInvite] = useState(true);
+  const [externalEnabled, setExternalEnabled] = useState(false);
   const [otpExpiresAt, setOtpExpiresAt] = useState<string | null>(null);
   const [otpExpired, setOtpExpired] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(false);
@@ -52,11 +56,21 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
   useEffect(() => {
     void fetch("/api/party/wallet-access", { credentials: "include", cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
-      .then((data: { hasRedeemedInvite?: boolean } | null) => {
-        if (data && typeof data.hasRedeemedInvite === "boolean") {
-          setNeedsInvite(!data.hasRedeemedInvite);
-        }
-      })
+      .then(
+        (
+          data: {
+            hasRedeemedInvite?: boolean;
+            externalWalletEnabled?: boolean;
+          } | null,
+        ) => {
+          if (data && typeof data.hasRedeemedInvite === "boolean") {
+            setNeedsInvite(!data.hasRedeemedInvite);
+          }
+          if (data && typeof data.externalWalletEnabled === "boolean") {
+            setExternalEnabled(data.externalWalletEnabled);
+          }
+        },
+      )
       .catch(() => undefined);
   }, []);
 
@@ -137,10 +151,18 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
         }),
       });
 
-      const raw = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+      const raw = (await res.json().catch(() => null)) as
+        | (Record<string, unknown> & { needsKeyCeremony?: boolean })
+        | null;
 
       if (!res.ok) {
         setError(formatApiError(raw));
+        return;
+      }
+
+      // M2: jalur non-custodial — OTP valid, lanjut key ceremony di browser.
+      if (raw?.needsKeyCeremony === true) {
+        setStep("ceremony");
         return;
       }
 
@@ -148,6 +170,73 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
       setTimeout(() => onCreated(), 1500);
     } catch (err) {
       setError(formatApiError(err, "Verification failed."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * M2: registrasi wallet external setelah key ceremony selesai.
+   * prepare (public key saja) → sign multiHash DI BROWSER → complete (signature).
+   * Private key tidak pernah keluar dari perangkat.
+   */
+  async function registerExternalWallet(meta: WalletKeyMeta) {
+    setBusy(true);
+    setError(null);
+    try {
+      const prep = await fetch("/api/party/wallet-external/prepare", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          publicKeyHex: meta.publicKeyHex,
+          partyHint: meta.hint,
+        }),
+      });
+      const prepRaw = (await prep.json().catch(() => null)) as {
+        multiHash?: string;
+      } | null;
+      if (!prep.ok || !prepRaw?.multiHash) {
+        setError(formatApiError(prepRaw, "Failed to prepare wallet registration."));
+        setStep("form");
+        return;
+      }
+
+      // Tanda tangan terjadi di browser, dengan kunci user.
+      const signature = await signPreparedHash(prepRaw.multiHash);
+
+      const comp = await fetch("/api/party/wallet-external/complete", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          signature,
+          username: normalizeWalletUsername(username) ?? username,
+          ...(needsInvite ? { walletInviteCode: inviteCode.trim() } : {}),
+        }),
+      });
+      const compRaw = (await comp.json().catch(() => null)) as Record<
+        string,
+        unknown
+      > | null;
+      if (!comp.ok) {
+        setError(formatApiError(compRaw, "Wallet registration failed."));
+        setStep("form");
+        return;
+      }
+
+      // M3: aktivasi WalletRegistration on-chain — di-sign browser (dompet
+      // masih unlocked dari ceremony). Best-effort: kegagalan tidak menghalangi
+      // wallet aktif (registrasi bisa diulang kapan saja).
+      await signRelayTransaction("wallet_registration_accept").catch(() => {
+        /* non-critical */
+      });
+
+      setStep("success");
+      setTimeout(() => onCreated(), 1500);
+    } catch (err) {
+      setError(formatApiError(err, "Wallet registration failed."));
+      setStep("form");
     } finally {
       setBusy(false);
     }
@@ -287,6 +376,42 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
               </div>
             </form>
           </div>
+        </Card>
+      </div>
+    );
+  }
+
+  // ── Render step: CEREMONY (non-custodial, M2) ─────────────────────────────
+  if (step === "ceremony") {
+    return (
+      <div className="flex min-h-[60vh] w-full min-w-0 items-center justify-center">
+        <KeyCeremony
+          onCancel={() => {
+            setStep("form");
+            setError(null);
+          }}
+          onComplete={(meta) => {
+            setStep("registering");
+            void registerExternalWallet(meta);
+          }}
+        />
+      </div>
+    );
+  }
+
+  // ── Render step: REGISTERING (signature + allocate berjalan) ─────────────
+  if (step === "registering") {
+    return (
+      <div className="flex min-h-[60vh] w-full min-w-0 items-center justify-center">
+        <Card className="w-full min-w-0 max-w-md overflow-hidden p-8 text-center sm:p-10">
+          <div className="mb-6 flex justify-center">
+            <LoadingSpinner size="lg" />
+          </div>
+          <PageTitle as="h2">Creating Your Wallet</PageTitle>
+          <p className="mt-3 text-sm font-medium text-[var(--muted-foreground)]">
+            Registering your party on the CanQuest validator — your key stays
+            safe in this browser.
+          </p>
         </Card>
       </div>
     );
@@ -488,6 +613,13 @@ export function WalletSetup({ onCreated }: WalletSetupProps) {
                 </>
               )}
             </button>
+
+            {externalEnabled ? (
+              <p className="text-center text-xs leading-relaxed text-[var(--muted-foreground)]">
+                🔒 Non-custodial wallet — your private key is created and
+                stored in this browser, never sent to a server.
+              </p>
+            ) : null}
           </form>
         </div>
       </Card>

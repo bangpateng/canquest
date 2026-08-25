@@ -6,6 +6,9 @@ import { buttonVariants } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { iconButtonClass } from "@/lib/ui/ui-button-styles";
 import { useTransactionStatus } from "@/lib/tx/transaction-status";
+import { useMe } from "@/lib/hooks/use-me";
+import { signRelayPrepared } from "@/lib/wallet/sign-relay";
+import { usePassphrasePrompt } from "@/lib/wallet/use-passphrase-prompt";
 import {
   ArrowDown,
   ChevronDown,
@@ -83,6 +86,10 @@ import {
 export function SwapModal({ open, onClose, balance }: SwapModalProps) {
   const titleId = useId();
   const tx = useTransactionStatus();
+  // M3b: user external → leg input swap di-sign di browser.
+  const { me } = useMe();
+  const isExternalWallet = me?.walletKind === "external";
+  const { prompt: promptPassphrase, passphraseModal } = usePassphrasePrompt();
 
   // WAVE 6 real-time: pools & saldo dari TanStack Query (auto-refresh saat SSE
   // balance:changed masuk). Key dishared dengan TokenList/WalletActions parent
@@ -272,9 +279,61 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
       accentBg: "bg-[var(--primary)]/15",
       accentText: "text-canton",
     });
-    tx.broadcast();
 
     try {
+      // ── M3b: user EXTERNAL — tanda tangani leg input di browser dulu ──
+      const clientNonce =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      let externalDepositDone = false;
+      if (isExternalWallet) {
+        const prep = await fetch("/api/party/swap/prepare-external", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            from: sellSym,
+            to: buySym,
+            amount: parseFloat(amount),
+            clientNonce,
+          }),
+        });
+        const prepRaw = (await prep.json().catch(() => null)) as {
+          hash?: string;
+          description?: string;
+          message?: string;
+        } | null;
+        if (!prep.ok || !prepRaw?.hash) {
+          tx.dismiss();
+          setSwapState("error");
+          setSwapMessage(prepRaw?.message ?? "Failed to prepare swap.");
+          return;
+        }
+        try {
+          await signRelayPrepared(
+            { hash: prepRaw.hash, description: prepRaw.description },
+            {
+              onWalletLocked: () =>
+                promptPassphrase(
+                  `Swap ${formatAmountNum(parseFloat(amount))} ${displayName(sellToken.instrumentId)}`,
+                ),
+            },
+          );
+          externalDepositDone = true;
+        } catch (err) {
+          tx.dismiss();
+          setSwapState("error");
+          setSwapMessage(
+            err instanceof Error && err.message
+              ? err.message
+              : "Swap failed while signing.",
+          );
+          return;
+        }
+      }
+      tx.broadcast();
+
       const res = await fetch("/api/party/swap", {
         method: "POST",
         credentials: "include",
@@ -284,10 +343,8 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
           to: buySym,
           amount: parseFloat(amount),
           slippagePct: slippage,
-          clientNonce:
-            typeof crypto !== "undefined" && crypto.randomUUID
-              ? crypto.randomUUID()
-              : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          clientNonce,
+          ...(externalDepositDone ? { externalDepositDone: true } : {}),
         }),
       });
       const data = (await res.json()) as {
@@ -338,6 +395,8 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
       className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overscroll-contain p-4"
       role="presentation"
     >
+      {/* M3b: prompt passphrase leg input swap (user external). */}
+      {passphraseModal}
       <button
         type="button"
         className="modal-backdrop"

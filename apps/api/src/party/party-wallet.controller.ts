@@ -29,6 +29,7 @@ import { UsersService } from '../users/users.service';
 import { VerifyWalletOtpDto } from './dto/verify-wallet-otp.dto';
 import { WalletInviteCodeService } from './wallet-invite-code.service';
 import { WalletOnboardingService } from '../canton/wallet-onboarding.service';
+import { ExternalWalletService } from '../canton/external-wallet.service';
 import { hasRealWallet } from '../common/wallet-policy';
 import {
   normalizeCantonPartyId,
@@ -53,6 +54,7 @@ export class PartyWalletController {
     private readonly walletInvites: WalletInviteCodeService,
     private readonly questLedger: QuestLedgerService,
     private readonly walletOnboarding: WalletOnboardingService,
+    private readonly externalWallet: ExternalWalletService,
     private readonly auth: AuthService,
     private readonly resend: ResendEmailService,
   ) {}
@@ -87,6 +89,9 @@ export class PartyWalletController {
     return {
       requiresInviteCode: true,
       hasRedeemedInvite,
+      // M2: frontend memakai ini untuk memilih jalur onboarding —
+      // true = key ceremony (non-custodial), false = jalur custodial lama.
+      externalWalletEnabled: this.externalWallet.isEnabled,
     };
   }
 
@@ -144,18 +149,37 @@ export class PartyWalletController {
   async verifyWalletOtp(
     @Req() req: AuthedReq,
     @Body() body: VerifyWalletOtpDto,
-  ): Promise<{
-    username: string;
-    cantonPartyId: string;
-    isPlaceholder: boolean;
-    spliceOnboarded: boolean;
-    preapproval: { active: boolean };
-    message: string;
-  }> {
+  ): Promise<
+    | {
+        username: string;
+        cantonPartyId: string;
+        isPlaceholder: boolean;
+        spliceOnboarded: boolean;
+        preapproval: { active: boolean };
+        message: string;
+      }
+    | {
+        /** M2: jalur non-custodial — OTP valid, lanjut key ceremony di browser. */
+        needsKeyCeremony: true;
+        message: string;
+      }
+  > {
     // 1. Verify OTP (auth service throw kalau invalid / expired / lockout).
     await this.auth.verifyWalletCreationOtp(req.user.userId, body.code);
 
-    // 2. Execute onboarding (logic sama seperti setUsername).
+    // 2a. M2: jalur non-custodial — cukup verifikasi OTP. Wallet dibuat via
+    // /party/wallet-external/prepare + /complete SETELAH key ceremony di
+    // browser (kunci tidak pernah keluar dari perangkat user). Invite tetap
+    // tertahan (reserved di /otp/send) dan di-redeem saat complete.
+    if (this.externalWallet.isEnabled) {
+      return {
+        needsKeyCeremony: true,
+        message:
+          'Email verified. Continue with your wallet key ceremony in the browser.',
+      };
+    }
+
+    // 2b. Jalur custodial lama (execute onboarding di server).
     const result = await this.executeWalletOnboarding(req.user.userId, {
       username: body.username,
       firstName: body.firstName,

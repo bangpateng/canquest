@@ -9,6 +9,9 @@ import { iconButtonClass } from "@/lib/ui/ui-button-styles";
 import { ArrowDownLeft, ArrowUpRight, Check, X, Clock, Undo2 } from "lucide-react";
 import { queryKeys } from "@/lib/queries/query-keys";
 import { displayName } from "@/components/app/wallet/token-logo";
+import { useMe } from "@/lib/hooks/use-me";
+import { signRelayTransaction } from "@/lib/wallet/sign-relay";
+import { usePassphrasePrompt } from "@/lib/wallet/use-passphrase-prompt";
 
 export interface OfferItem {
   type: "transfer_offer" | "transfer_instruction";
@@ -231,11 +234,35 @@ export function OffersModal({
   } | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  // M3b: user external (non-custodial) → aksi offer di-sign di browser.
+  const { me } = useMe();
+  const isExternalWallet = me?.walletKind === "external";
+  const { prompt: promptPassphrase, passphraseModal } = usePassphrasePrompt();
+
   const handleAccept = useCallback(
     async (offer: OfferItem) => {
       setProcessingAction({ id: offer.contractId, action: "accept" });
       setSuccessMsg(null);
       try {
+        // M3b: external → tanda tangan di browser (TransferInstruction).
+        if (isExternalWallet) {
+          await signRelayTransaction(
+            "accept_offer",
+            { contractId: offer.contractId },
+            {
+              onWalletLocked: () =>
+                promptPassphrase(
+                  `Accept ${displayName(offer.instrumentId ?? "Amulet")} transfer`,
+                ),
+            },
+          );
+          removeOfferLocally(setOffers, offer.contractId);
+          setSuccessMsg(
+            `Transfer accepted — ${displayName(offer.instrumentId ?? "Amulet")} added to your wallet.`,
+          );
+          onRefresh?.();
+          return;
+        }
         const res = await fetch("/api/party/offers/accept", {
           method: "POST",
           credentials: "include",
@@ -256,13 +283,17 @@ export function OffersModal({
         } else {
           alert(data.message ?? "Failed to accept offer.");
         }
-      } catch {
-        alert("Network error. Check your connection and try again.");
+      } catch (err) {
+        alert(
+          err instanceof Error && err.message
+            ? err.message
+            : "Network error. Check your connection and try again.",
+        );
       } finally {
         setProcessingAction(null);
       }
     },
-    [setOffers, onRefresh],
+    [setOffers, onRefresh, isExternalWallet, promptPassphrase],
   );
 
   const handleReject = useCallback(
@@ -270,6 +301,25 @@ export function OffersModal({
       setProcessingAction({ id: offer.contractId, action: "reject" });
       setSuccessMsg(null);
       try {
+        // M3b: external → tanda tangan di browser.
+        if (isExternalWallet) {
+          await signRelayTransaction(
+            "reject_offer",
+            { contractId: offer.contractId },
+            {
+              onWalletLocked: () =>
+                promptPassphrase(
+                  `Reject ${displayName(offer.instrumentId ?? "Amulet")} transfer`,
+                ),
+            },
+          );
+          removeOfferLocally(setOffers, offer.contractId);
+          setSuccessMsg(
+            `Transfer rejected — ${displayName(offer.instrumentId ?? "Amulet")} returned to sender.`,
+          );
+          onRefresh?.();
+          return;
+        }
         const res = await fetch("/api/party/offers/reject", {
           method: "POST",
           credentials: "include",
@@ -289,13 +339,17 @@ export function OffersModal({
         } else {
           alert(data.message ?? "Failed to reject offer.");
         }
-      } catch {
-        alert("Network error. Check your connection and try again.");
+      } catch (err) {
+        alert(
+          err instanceof Error && err.message
+            ? err.message
+            : "Network error. Check your connection and try again.",
+        );
       } finally {
         setProcessingAction(null);
       }
     },
-    [setOffers, onRefresh],
+    [setOffers, onRefresh, isExternalWallet, promptPassphrase],
   );
 
   // Withdraw (cancel) outgoing offer — hanya sender yang boleh. Mirror
@@ -306,6 +360,25 @@ export function OffersModal({
       setProcessingAction({ id: offer.contractId, action: "withdraw" });
       setSuccessMsg(null);
       try {
+        // M3b: external → tanda tangan di browser.
+        if (isExternalWallet) {
+          await signRelayTransaction(
+            "withdraw_offer",
+            { contractId: offer.contractId },
+            {
+              onWalletLocked: () =>
+                promptPassphrase(
+                  `Withdraw ${displayName(offer.instrumentId ?? "Amulet")} transfer`,
+                ),
+            },
+          );
+          removeOfferLocally(setSentOffers, offer.contractId);
+          setSuccessMsg(
+            `Transfer cancelled — ${displayName(offer.instrumentId ?? "Amulet")} returned to your wallet.`,
+          );
+          onSentRefresh?.();
+          return;
+        }
         const res = await fetch("/api/party/transfer-instruction/withdraw", {
           method: "POST",
           credentials: "include",
@@ -331,7 +404,7 @@ export function OffersModal({
         setProcessingAction(null);
       }
     },
-    [setSentOffers, onSentRefresh],
+    [setSentOffers, onSentRefresh, isExternalWallet, promptPassphrase],
   );
 
   // Esc to close.
@@ -356,6 +429,8 @@ export function OffersModal({
       className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overscroll-contain p-4"
       role="presentation"
     >
+      {/* M3b: prompt passphrase untuk sign aksi offer (user external). */}
+      {passphraseModal}
       <button
         type="button"
         className="modal-backdrop"

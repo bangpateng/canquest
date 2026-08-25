@@ -41,6 +41,16 @@ model User {
   /// email accounts sharing one funded wallet. The app-layer findByPartyId check
   /// in party.controller is a TOCTOU guard; this constraint is the source of truth.
   cantonPartyId           String?               @unique
+  /// Model custody wallet: null = belum ada wallet, "custodial" = party lama di
+  /// namespace validator (kunci server), "external" = non-custodial (kunci Ed25519
+  /// di browser user; tanda tangan transaksi wajib dari user — terverifikasi M0).
+  walletKind              String?
+  /// Kapan user menyelesaikan verifikasi backup kunci (key ceremony: ketik ulang
+  /// karakter raw hex). Wajib terisi untuk walletKind "external".
+  backupVerifiedAt        DateTime?
+  /// M4: party custodial lama sebelum upgrade ke non-custodial (audit trail;
+  /// party lama dibiarkan kosong di chain). Null = belum pernah upgrade.
+  legacyPartyId           String?
   /// Keycloak user UUID (sub) — identity bridge between web2 User and on-chain Ledger API user.
   keycloakId              String?               @unique
   /// Last time user toggled preapproval (enable/disable). Cooldown 7 hari anti-spam burn.

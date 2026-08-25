@@ -13,6 +13,7 @@ import { RewardReveal } from "@/components/app/campaign/reward-reveal";
 import { TokenUsdValue } from "@/components/app/earn/cc-usd-value";
 import { useTransactionStatus } from "@/lib/tx/transaction-status";
 import { CLAIM_FAIL_MSG } from "@/lib/campaign/claim-messages";
+import { useExternalClaimFee } from "@/lib/wallet/use-external-claim-fee";
 import {
   normalizeRewardToken,
   type RewardTokenSymbol,
@@ -48,6 +49,8 @@ export function CampaignCcAndCodeRaffleClaimSection({
 }) {
   const token: RewardTokenSymbol = normalizeRewardToken(rewardToken);
   const tx = useTransactionStatus();
+  // M3b: user external → claim fee di-sign di browser (semua tipe campaign).
+  const { signClaimFee, passphraseModal } = useExternalClaimFee();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -96,11 +99,35 @@ export function CampaignCcAndCodeRaffleClaimSection({
     tx.broadcast();
 
     try {
+      // ── M3b: user EXTERNAL — bayar claim fee via tanda tangan browser ──
+      let externalFeeTxId: string | undefined;
+      try {
+        externalFeeTxId = await signClaimFee(
+          questId,
+          'cc_code_raffle',
+          fee,
+          `Claim fee ${fee} CC${subtitle ? ` — ${subtitle}` : ''}`,
+        );
+      } catch (err) {
+        tx.dismiss();
+        setError(
+          err instanceof Error && err.message ? err.message : CLAIM_FAIL_MSG,
+        );
+        return;
+      }
+      tx.broadcast();
+
       const res = await fetch(
         `/api/quests/${questId}/claim-cc-and-code-raffle`,
         {
           method: "POST",
           credentials: "include",
+          ...(externalFeeTxId
+            ? {
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ externalFeeTxId }),
+              }
+            : {}),
         },
       );
       const data = (await res.json().catch(() => ({}))) as {
@@ -156,6 +183,8 @@ export function CampaignCcAndCodeRaffleClaimSection({
 
   return (
     <div className="space-y-3">
+      {/* M3b: prompt passphrase claim fee (user external). */}
+      {passphraseModal}
       {/* Baris WIN (state fcfs_claimable) — pemenang ditarik admin, belum claim. */}
       <CampaignStatusRow
         tone="emerald"

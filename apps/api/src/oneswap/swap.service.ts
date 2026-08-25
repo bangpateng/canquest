@@ -20,7 +20,12 @@
  * menghilangkan langkah delivery & refund manual.
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { CantonLedgerService } from '../canton/canton-ledger.service';
@@ -28,11 +33,13 @@ import { CcInboundSyncService } from '../canton/cc-inbound-sync.service';
 import { UsersService } from '../users/users.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { hasRealWallet } from '../common/wallet-policy';
+import { isOneSwapEnabled } from './oneswap.config';
 import { OneSwapClient } from './oneswap-client';
 import { getOneSwapConfig } from './oneswap.config';
 import type { ExecuteSwapParams, SwapExecResult } from './oneswap.types';
 import { OpenSwapExistsError } from '@oneswap/sdk';
 import type { Token } from '@oneswap/sdk';
+import { SigningRelayService } from '../canton/signing-relay.service';
 
 /** CC instrument id (Amulet) — symbol 'CC' memetakan ke instrument id 'Amulet'. */
 const CC_SYMBOL = 'CC';
@@ -57,11 +64,126 @@ export class SwapService {
     private readonly users: UsersService,
     private readonly realtime: RealtimeService,
     private readonly config: ConfigService,
+    private readonly signRelay: SigningRelayService,
   ) {}
+
+  /**
+   * M3b: siapkan leg input swap untuk user EXTERNAL — transfer user →
+   * depositParty OneSwap ditandatangani di browser. Setelah sign, OneSwap
+   * otomatis mengeksekusi begitu deposit terdeteksi; frontend lalu memanggil
+   * /party/swap dengan externalDepositDone utk menunggu hasil + record.
+   *
+   * Precheck: quote gate (price impact) + idempotency clientNonce — mirror
+   * awal executeSwap supaya tanda tangan tidak sia-sia.
+   */
+  async prepareExternalSwap(
+    userId: string,
+    params: ExecuteSwapParams,
+  ): Promise<{
+    flow: string;
+    hash: string;
+    commandId: string;
+    description: string;
+  }> {
+    if (!isOneSwapEnabled()) {
+      throw new ServiceUnavailableException('Swap is not enabled.');
+    }
+    const user = await this.users.findById(userId);
+    if (!user?.cantonPartyId || !user.username) {
+      throw new BadRequestException('Wallet not found.');
+    }
+    if (user.walletKind && user.walletKind !== 'external') {
+      throw new BadRequestException(
+        'Your wallet is still custodial — swap directly without signing.',
+      );
+    }
+
+    // Idempotency nonce — sudah pernah swap dengan nonce ini?
+    const existing = await this.prisma.swapTransaction.findUnique({
+      where: { clientNonce: params.clientNonce },
+    });
+    if (existing) {
+      throw new BadRequestException('Swap with this nonce already exists.');
+    }
+
+    // Quote gate (mirror runOneSwap step 1).
+    const cfg = getOneSwapConfig();
+    const quote = await this.oneswap.getQuote({
+      from: params.from,
+      to: params.to,
+      amount: params.amount,
+    });
+    if (quote.priceImpactPct > cfg.maxPriceImpactPct) {
+      throw new BadRequestException(
+        `Price impact too high (${quote.priceImpactPct.toFixed(2)}% > ${cfg.maxPriceImpactPct}%). Try a smaller amount.`,
+      );
+    }
+
+    // Create-or-resume swap OneSwap (mirror step 2) → depositParty.
+    let swap = await this.createOrResumeSwap({
+      userRef: user.id,
+      inSymbol: params.from,
+      amountIn: params.amount,
+      outSymbol: params.to,
+      minOut: Math.max(0, quote.amountOut * 0.98),
+      slippageBps: cfg.defaultSlippageBps,
+    });
+    if (
+      ['returned', 'refunded', 'expired', 'failed', 'cancelled'].includes(
+        swap.status,
+      )
+    ) {
+      swap = await this.createOrResumeSwap({
+        userRef: user.id,
+        inSymbol: params.from,
+        amountIn: params.amount,
+        outSymbol: params.to,
+        minOut: Math.max(0, quote.amountOut * 0.98),
+        slippageBps: cfg.defaultSlippageBps,
+      });
+    }
+    if (swap.status !== 'awaiting_deposit') {
+      throw new BadRequestException(
+        `OneSwap swap not ready for deposit (status ${swap.status}). Try again.`,
+      );
+    }
+
+    // Bangun command transfer input (mirror step 3, tanpa submit).
+    const inputToken = await this.resolveToken(params.from);
+    const built = await this.ledger.buildCip56TransferCommand({
+      senderPartyId: user.cantonPartyId,
+      receiverPartyId: swap.depositParty,
+      amountCc: params.amount,
+      description: `Swap ${params.amount} ${params.from} → ${params.to} (OneSwap ${swap.id})`,
+      instrumentId: inputToken.id,
+      instrumentAdmin: inputToken.admin,
+    });
+    if (!built.ok) throw new BadRequestException(built.error);
+
+    return this.signRelay.prepareWithCommands(
+      userId,
+      'swap_input',
+      [built.command],
+      {
+        disclosedContracts: built.disclosedContracts,
+        meta: {
+          oneswapId: swap.id,
+          from: params.from,
+          to: params.to,
+          amount: params.amount,
+          clientNonce: params.clientNonce,
+        },
+        description: `Swap ${params.amount} ${params.from} → ${params.to}`,
+      },
+    );
+  }
 
   /**
    * Execute swap `from` → `to` untuk user. Custodial: backend orchestrate
    * transfer input + tunggu OneSwap selesai + record transaksi + emit SSE.
+   * M3b: user EXTERNAL memanggil dengan externalDepositDone=true — leg input
+   * SUDAH dibayar via tanda tangan browser (flow swap_input); backend langsung
+   * menunggu hasil OneSwap.
    */
   async executeSwap(
     userId: string,
@@ -92,6 +214,18 @@ export class SwapService {
           success: false,
           direction: '',
           message: 'You need a Canton wallet to use swap.',
+        };
+      }
+      // M3b: user external WAJIB sudah menandatangani leg input (swap_input)
+      // sebelum ke sini — transfer custodial mustahil untuk party external.
+      if (
+        user.walletKind === 'external' &&
+        params.externalDepositDone !== true
+      ) {
+        return {
+          success: false,
+          direction: '',
+          message: 'Sign the swap in your wallet first (non-custodial flow).',
         };
       }
 
@@ -131,7 +265,9 @@ export class SwapService {
       });
 
       try {
-        const result = await this.runOneSwap(userId, userInfo, params);
+        const result = await this.runOneSwap(userId, userInfo, params, {
+          skipDeposit: params.externalDepositDone === true,
+        });
         // Update record sesuai hasil.
         await this.prisma.swapTransaction.update({
           where: { id: swapTx.id },
@@ -174,6 +310,7 @@ export class SwapService {
     userId: string,
     user: { id: string; username: string; cantonPartyId: string },
     params: ExecuteSwapParams,
+    opts?: { skipDeposit?: boolean },
   ): Promise<SwapExecResult> {
     const cfg = getOneSwapConfig();
 
@@ -219,7 +356,8 @@ export class SwapService {
     // ── 3. Transfer input user → depositParty (backend jadi funder) ───────
     // Output OneSwap balik ke senderParty = party yang transfer = party user.
     // Cuma transfer kalau swap masih butuh deposit (awaiting_deposit).
-    if (swap.status === 'awaiting_deposit') {
+    // M3b: skipDeposit = leg input sudah dibayar via tanda tangan browser.
+    if (swap.status === 'awaiting_deposit' && !opts?.skipDeposit) {
       const inputToken = await this.resolveToken(params.from);
       const transfer = await this.ledger.executeTransferFactoryTransfer({
         senderPartyId: user.cantonPartyId,

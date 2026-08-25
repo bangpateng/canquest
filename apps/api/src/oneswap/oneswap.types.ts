@@ -27,6 +27,8 @@ export interface ExecuteSwapParams {
   amount: number;
   /** Idempotency key dari client (UUID per klik Swap). */
   clientNonce: string;
+  /** M3b: true utk user external — leg input sudah di-sign browser (swap_input). */
+  externalDepositDone?: boolean;
 }
 
 /** Hasil eksekusi swap — shape yang dikembalikan ke controller/frontend. */

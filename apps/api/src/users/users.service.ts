@@ -374,6 +374,72 @@ export class UsersService {
     }
   }
 
+  /**
+   * Bind wallet EXTERNAL (non-custodial) ke akun — M2.
+   * Tidak menyentuh keycloakId (identitas Keycloak tidak diperlukan untuk
+   * party external: tanda tangan transaksi berasal dari browser user).
+   * walletKind='external' + backupVerifiedAt terisi (key ceremony sudah
+   * dilewati user sebelum endpoint complete dipanggil).
+   */
+  async setExternalCantonIdentity(
+    userId: string,
+    params: { partyId: string; username?: string },
+  ) {
+    const normalized =
+      normalizeCantonPartyId(params.partyId) ?? params.partyId.trim();
+    try {
+      return await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          cantonPartyId: normalized,
+          walletKind: 'external',
+          backupVerifiedAt: new Date(),
+          username: params.username?.trim() || undefined,
+        },
+      });
+    } catch (err) {
+      // SECURITY (H6): sama dengan setCantonIdentity — 1 wallet ↔ 1 account.
+      if (this.isUniquePartyViolation(err)) {
+        throw new ConflictException('Party ID Already Taken');
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * M4: UPGRADE wallet custodial → external. Switch cantonPartyId ke party
+   * external baru, catat party lama sebagai legacyPartyId (audit). Username
+   * tidak berubah. Caller wajib memastikan wallet lama kosong (guard on-chain
+   * di controller) sebelum memanggil ini.
+   */
+  async upgradeToExternalCantonIdentity(
+    userId: string,
+    params: { partyId: string; legacyPartyId: string },
+  ) {
+    const normalized =
+      normalizeCantonPartyId(params.partyId) ?? params.partyId.trim();
+    const legacy =
+      normalizeCantonPartyId(params.legacyPartyId) ??
+      params.legacyPartyId.trim();
+    try {
+      return await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          cantonPartyId: normalized,
+          legacyPartyId: legacy,
+          walletKind: 'external',
+          backupVerifiedAt: new Date(),
+        },
+      });
+    } catch (err) {
+      // SECURITY (H6): 1 wallet ↔ 1 account — party baru bentrok = tolak jelas.
+      if (this.isUniquePartyViolation(err)) {
+        throw new ConflictException('Party ID Already Taken');
+      }
+      throw err;
+    }
+  }
+
   async setPartyId(userId: string, cantonPartyId: string, username?: string) {
     const normalized =
       normalizeCantonPartyId(cantonPartyId) ?? cantonPartyId.trim();

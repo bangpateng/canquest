@@ -11,6 +11,8 @@ import { PartyOfferController } from './party-offer.controller';
 import { PartyLockController } from './party-lock.controller';
 import { PartySwapController } from './party-swap.controller';
 import { PartyAccountController } from './party-account.controller';
+import { ExternalWalletController } from './external-wallet.controller';
+import { SigningRelayController } from './signing-relay.controller';
 
 /**
  * Semua controller domain memakai prefix @Controller('party') — URL publik
@@ -27,6 +29,8 @@ import { PartyAccountController } from './party-account.controller';
     PartyLockController,
     PartySwapController,
     PartyAccountController,
+    ExternalWalletController,
+    SigningRelayController,
   ],
   providers: [WalletInviteCodeService],
   exports: [WalletInviteCodeService],

@@ -13,6 +13,9 @@ import { TokenUsdValue } from "@/components/app/earn/cc-usd-value";
 import { normalizeRewardToken, type RewardTokenSymbol } from "@/lib/quest/quest-types";
 import { useTransactionStatus } from "@/lib/tx/transaction-status";
 import { FCFS_CLAIM_FAIL_MSG } from "@/lib/campaign/claim-messages";
+import { useMe } from "@/lib/hooks/use-me";
+import { signRelayPrepared } from "@/lib/wallet/sign-relay";
+import { usePassphrasePrompt } from "@/lib/wallet/use-passphrase-prompt";
 import { useState } from "react";
 
 export function CampaignFcfsClaimSection({
@@ -36,6 +39,10 @@ export function CampaignFcfsClaimSection({
 }) {
   const token: RewardTokenSymbol = normalizeRewardToken(rewardToken);
   const tx = useTransactionStatus();
+  // M3b: user external → claim fee di-sign di browser sebelum klaim.
+  const { me } = useMe();
+  const isExternalWallet = me?.walletKind === "external";
+  const { prompt: promptPassphrase, passphraseModal } = usePassphrasePrompt();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -68,12 +75,59 @@ export function CampaignFcfsClaimSection({
       accentText: isUsdcx ? "text-sky-600" : "text-canton",
       meta: [{ label: "Claim fee paid", value: feeLabel }],
     });
-    tx.broadcast();
 
     try {
+      // ── M3b: user EXTERNAL — bayar claim fee via tanda tangan browser ──
+      // (prepare-external → sign hash → execute). Modal menunggu di tahap
+      // 'sign' sampai signature diterima.
+      let externalFeeTxId: string | undefined;
+      if (isExternalWallet && fee > 0) {
+        const prep = await fetch(
+          `/api/quests/${questId}/claim-fcfs/prepare-external`,
+          { method: "POST", credentials: "include" },
+        );
+        const prepRaw = (await prep.json().catch(() => null)) as {
+          hash?: string;
+          description?: string;
+          message?: string;
+        } | null;
+        if (!prep.ok || !prepRaw?.hash) {
+          tx.dismiss();
+          setError(prepRaw?.message ?? FCFS_CLAIM_FAIL_MSG);
+          return;
+        }
+        try {
+          const signed = await signRelayPrepared(
+            { hash: prepRaw.hash, description: prepRaw.description },
+            {
+              onWalletLocked: () =>
+                promptPassphrase(
+                  `Claim fee ${fee} CC${subtitle ? ` — ${subtitle}` : ""}`,
+                ),
+            },
+          );
+          externalFeeTxId = signed.updateId;
+        } catch (err) {
+          tx.dismiss();
+          setError(
+            err instanceof Error && err.message
+              ? err.message
+              : FCFS_CLAIM_FAIL_MSG,
+          );
+          return;
+        }
+      }
+      tx.broadcast();
+
       const res = await fetch(`/api/quests/${questId}/claim-fcfs`, {
         method: "POST",
         credentials: "include",
+        ...(externalFeeTxId
+          ? {
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ externalFeeTxId }),
+            }
+          : {}),
       });
       const data = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
@@ -119,6 +173,8 @@ export function CampaignFcfsClaimSection({
 
   return (
     <>
+      {/* M3b: prompt passphrase claim fee (user external). */}
+      {passphraseModal}
       {/* Cukup tombol Claim — rincian (fee/slots/reward) ada di modal. */}
       <CampaignClaimCta
         label={canClaim ? "Claim" : "Checking slot availability…"}

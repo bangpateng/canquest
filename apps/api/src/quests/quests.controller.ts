@@ -16,6 +16,7 @@ import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { QuestKind, QuestStatus } from '../common/prisma-types';
 import { WalletRequiredGuard } from '../common/wallet-required.guard';
 import { assertHasRealWallet } from '../common/wallet-policy';
+import { ClaimExternalFeeDto } from './dto/claim-external-fee.dto';
 import { QuestsService } from './quests.service';
 import { UsersService } from '../users/users.service';
 import { FeaturedAppActivityService } from '../canton/featured-app-activity.service';
@@ -129,7 +130,11 @@ export class QuestsController {
   @Post(':questId/claim-fcfs')
   @UseGuards(WalletRequiredGuard)
   @Throttle({ ledger: { limit: 3, ttl: 60_000 } })
-  async claimFcfs(@Param('questId') questId: string, @Req() req: AuthedReq) {
+  async claimFcfs(
+    @Param('questId') questId: string,
+    @Req() req: AuthedReq,
+    @Body() body: ClaimExternalFeeDto,
+  ) {
     const user = await this.users.findById(req.user.userId);
     if (!user) return { ok: false, message: 'User not found' };
     return this.quests.claimFcfsReward({
@@ -137,14 +142,62 @@ export class QuestsController {
       username: user.username,
       cantonPartyId: user.cantonPartyId,
       questId,
+      walletKind: user.walletKind,
+      externalFeeTxId: body?.externalFeeTxId,
     });
+  }
+
+  /**
+   * M3b: langkah 1 klaim FCFS untuk user EXTERNAL — siapkan fee leg untuk
+   * ditandatangani browser (precheck penuh agar tanda tangan tidak sia-sia).
+   * Setelah sign, frontend memanggil /claim-fcfs dengan externalFeeTxId.
+   */
+  @Post(':questId/claim-fcfs/prepare-external')
+  @UseGuards(WalletRequiredGuard)
+  @Throttle({ ledger: { limit: 3, ttl: 60_000 } })
+  async prepareExternalFcfsFee(
+    @Param('questId') questId: string,
+    @Req() req: AuthedReq,
+  ) {
+    return this.quests.prepareExternalFcfsClaimFee(req.user.userId, questId);
+  }
+
+  /**
+   * M3b: langkah 1 klaim untuk user EXTERNAL — SEMUA tipe campaign
+   * (fcfs | draw_cc | invite | cc_code_raffle). Siapkan fee leg untuk
+   * ditandatangani browser (precheck penuh per tipe).
+   */
+  @Post(':questId/claim-external/prepare')
+  @UseGuards(WalletRequiredGuard)
+  @Throttle({ ledger: { limit: 5, ttl: 60_000 } })
+  async prepareExternalClaimFee(
+    @Param('questId') questId: string,
+    @Req() req: AuthedReq,
+    @Body() body: { claimType?: string },
+  ) {
+    const allowed = ['fcfs', 'draw_cc', 'invite', 'cc_code_raffle'] as const;
+    const claimType = allowed.find((t) => t === body?.claimType);
+    if (!claimType) {
+      return {
+        message: 'claimType harus salah dari: fcfs, draw_cc, invite, cc_code_raffle',
+      };
+    }
+    return this.quests.prepareExternalClaimFee(
+      req.user.userId,
+      questId,
+      claimType,
+    );
   }
 
   /** Paid claim for invite / waitlist code (2 CC default fee). */
   @Post(':questId/claim-invite')
   @UseGuards(WalletRequiredGuard)
   @Throttle({ ledger: { limit: 5, ttl: 60_000 } })
-  async claimInvite(@Param('questId') questId: string, @Req() req: AuthedReq) {
+  async claimInvite(
+    @Param('questId') questId: string,
+    @Req() req: AuthedReq,
+    @Body() body: ClaimExternalFeeDto,
+  ) {
     await this.requireWalletForCampaignQuest(questId, req.user.userId);
     const user = await this.users.findById(req.user.userId);
     if (!user) return { ok: false, message: 'User not found' };
@@ -153,6 +206,8 @@ export class QuestsController {
       username: user.username,
       cantonPartyId: user.cantonPartyId,
       questId,
+      walletKind: user.walletKind,
+      externalFeeTxId: body?.externalFeeTxId,
     });
   }
 
@@ -160,7 +215,11 @@ export class QuestsController {
   @Post(':questId/claim-draw-cc')
   @UseGuards(WalletRequiredGuard)
   @Throttle({ ledger: { limit: 3, ttl: 60_000 } })
-  async claimDrawCc(@Param('questId') questId: string, @Req() req: AuthedReq) {
+  async claimDrawCc(
+    @Param('questId') questId: string,
+    @Req() req: AuthedReq,
+    @Body() body: ClaimExternalFeeDto,
+  ) {
     const user = await this.users.findById(req.user.userId);
     if (!user) return { ok: false, message: 'User not found' };
     return this.quests.claimDrawCcReward({
@@ -168,6 +227,8 @@ export class QuestsController {
       username: user.username,
       cantonPartyId: user.cantonPartyId,
       questId,
+      walletKind: user.walletKind,
+      externalFeeTxId: body?.externalFeeTxId,
     });
   }
 
@@ -178,6 +239,7 @@ export class QuestsController {
   async claimCcAndCodeRaffle(
     @Param('questId') questId: string,
     @Req() req: AuthedReq,
+    @Body() body: ClaimExternalFeeDto,
   ) {
     const user = await this.users.findById(req.user.userId);
     if (!user) return { ok: false, message: 'User not found' };
@@ -186,6 +248,8 @@ export class QuestsController {
       username: user.username,
       cantonPartyId: user.cantonPartyId,
       questId,
+      walletKind: user.walletKind,
+      externalFeeTxId: body?.externalFeeTxId,
     });
   }
 

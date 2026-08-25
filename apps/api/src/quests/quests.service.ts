@@ -31,6 +31,7 @@ import {
   type QuestLedgerSubmitResult,
 } from '../canton/quest-ledger.service';
 import { CantonLedgerService } from '../canton/canton-ledger.service';
+import { SigningRelayService } from '../canton/signing-relay.service';
 import { CcInboundSyncService } from '../canton/cc-inbound-sync.service';
 import { SpliceValidatorService } from '../canton/splice-validator.service';
 import { LockEligibilityService } from '../canton/lock-eligibility.service';
@@ -119,6 +120,7 @@ export class QuestsService {
     private readonly storage: R2StorageService,
     private readonly lockEligibility: LockEligibilityService,
     private readonly tokenInstrument: TokenInstrumentHelper,
+    private readonly signRelay: SigningRelayService,
   ) {}
 
   /** Default biaya poin ikut Earn (jalur method='points'). Bisa di-override via AppSetting/env. */
@@ -3111,11 +3113,194 @@ export class QuestsService {
    * FCFS CC claim — reserve slot in DB, charge claim fee, send reward CC (Splice CIP-56).
    * Rolls back the slot reservation if on-chain steps fail.
    */
+  /**
+   * M3b: siapkan fee leg klaim untuk user EXTERNAL — ditandatangani di
+   * browser via signing relay. Berlaku SEMUA tipe campaign (FCFS, draw-cc,
+   * invite berbayar, cc+code raffle). Precheck per tipe supaya user tidak
+   * menandatangani fee untuk klaim yang pasti ditolak.
+   *
+   * Alur frontend: prepare-external (endpoint) → signRelayPrepared →
+   * claim-* dengan externalFeeTxId.
+   */
+  async prepareExternalClaimFee(
+    userId: string,
+    questId: string,
+    claimType: 'fcfs' | 'draw_cc' | 'invite' | 'cc_code_raffle',
+  ): Promise<{
+    flow: string;
+    hash: string;
+    commandId: string;
+    description: string;
+    feeCc: number;
+  }> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user?.username?.trim() || !user.cantonPartyId?.trim()) {
+      throw new BadRequestException(
+        'Create your Canton wallet before claiming.',
+      );
+    }
+    if (user.walletKind && user.walletKind !== 'external') {
+      throw new BadRequestException(
+        'Your wallet is still custodial — claim directly without signing a fee.',
+      );
+    }
+
+    const quest = await this.prisma.quest.findUnique({
+      where: { id: questId },
+    });
+    if (!quest) throw new NotFoundException('Quest not found');
+
+    const flowByType: Record<typeof claimType, string> = {
+      fcfs: 'quest_claim_fcfs_fee',
+      draw_cc: 'quest_claim_draw_cc_fee',
+      invite: 'quest_claim_invite_fee',
+      cc_code_raffle: 'quest_claim_cc_code_raffle_fee',
+    };
+    const flow = flowByType[claimType];
+
+    // ── Precheck per tipe (mirror guard awal tiap method claim) ──────────
+    let feeCc: number;
+    if (claimType === 'fcfs') {
+      if (!this.requiresFcfsCcClaim(quest)) {
+        throw new BadRequestException(
+          'This campaign does not use FCFS CC claim.',
+        );
+      }
+      if (this.isCampaignEnded(quest)) {
+        throw new BadRequestException('This campaign has ended.');
+      }
+      const allDone = await this.areAllTasksVerified(userId, questId);
+      if (!allDone) {
+        throw new BadRequestException(
+          'Complete all missions before claiming.',
+        );
+      }
+      feeCc = resolveClaimFeeCc(quest) ?? 3;
+    } else if (claimType === 'draw_cc' || claimType === 'cc_code_raffle') {
+      if (
+        claimType === 'draw_cc' && !this.requiresDrawCcClaim(quest)
+      ) {
+        throw new BadRequestException(
+          'This campaign does not use raffle CC claim.',
+        );
+      }
+      if (
+        claimType === 'cc_code_raffle' &&
+        !this.requiresCcAndCodeRaffleClaim(quest)
+      ) {
+        throw new BadRequestException(
+          'This campaign does not use CC + code raffle claim.',
+        );
+      }
+      const completion = await this.prisma.questCompletion.findUnique({
+        where: { userId_questId: { userId, questId } },
+      });
+      if (!completion) {
+        throw new BadRequestException(
+          'Submit the quest before claiming your reward.',
+        );
+      }
+      const draw = await this.prisma.winnerDraw.findUnique({
+        where: { questId_userId: { questId, userId } },
+      });
+      if (!draw) {
+        throw new BadRequestException(
+          'You were not selected in the raffle draw.',
+        );
+      }
+      if (draw.distributed) {
+        throw new BadRequestException('You already claimed this reward.');
+      }
+      feeCc = resolveClaimFeeCc(quest) ?? 3;
+    } else {
+      // invite berbayar
+      const rewardType = normalizeRewardType(quest.rewardType);
+      const paidInvite =
+        requiresPaidInviteClaim(quest) &&
+        (rewardType === RewardType.INVITE_CODE_FCFS ||
+          rewardType === RewardType.INVITE_CODE_RANDOM ||
+          rewardType === RewardType.INVITE_CODE);
+      if (!paidInvite) {
+        throw new BadRequestException(
+          'This campaign does not use paid code claim.',
+        );
+      }
+      const completion = await this.prisma.questCompletion.findUnique({
+        where: { userId_questId: { userId, questId } },
+      });
+      if (!completion) {
+        throw new BadRequestException(
+          'Submit the quest before claiming your code.',
+        );
+      }
+      const allDone = await this.areAllTasksVerified(userId, questId);
+      if (!allDone) {
+        throw new BadRequestException('Complete all missions before claiming.');
+      }
+      const existingDraw = await this.prisma.winnerDraw.findUnique({
+        where: { questId_userId: { questId, userId } },
+      });
+      if (existingDraw?.inviteCode) {
+        throw new BadRequestException('Code already claimed.');
+      }
+      feeCc = resolveClaimFeeCc(quest) ?? 2;
+    }
+
+    if (feeCc <= 0) {
+      throw new BadRequestException(
+        'This campaign has no claim fee — claim directly without signing.',
+      );
+    }
+
+    const validatorPartyId = this.config
+      .get<string>('CANTON_VALIDATOR_PARTY_ID')
+      ?.trim();
+    const feeTarget = this.feeTargetPartyId ?? validatorPartyId;
+    if (!feeTarget) {
+      throw new BadRequestException('Fee target party is not configured.');
+    }
+
+    const [senderOnChain, feeOnChain] = await Promise.all([
+      this.splice.resolveOnChainPartyId(user.cantonPartyId),
+      this.splice.resolveOnChainPartyId(feeTarget),
+    ]);
+
+    const built = await this.cantonLedger.buildCip56TransferCommand({
+      senderPartyId: senderOnChain,
+      receiverPartyId: feeOnChain,
+      amountCc: feeCc,
+      description: `Claim fee (${claimType}): ${quest.title}`,
+    });
+    if (!built.ok) throw new BadRequestException(built.error);
+
+    const prepared = await this.signRelay.prepareWithCommands(
+      userId,
+      flow,
+      [built.command],
+      {
+        disclosedContracts: built.disclosedContracts,
+        meta: { questId, feeCc, claimType },
+        description: `Claim fee ${feeCc} CC — ${quest.title}`,
+        partyId: user.cantonPartyId,
+      },
+    );
+    return { ...prepared, feeCc };
+  }
+
+  /** Kompatibilitas: endpoint prepare-external FCFS lama. */
+  prepareExternalFcfsClaimFee(userId: string, questId: string) {
+    return this.prepareExternalClaimFee(userId, questId, 'fcfs');
+  }
+
   async claimFcfsReward(params: {
     userId: string;
     username: string | null;
     cantonPartyId: string | null;
     questId: string;
+    /** M3b: model custody — 'external' memaksa jalur fallback + fee via relay. */
+    walletKind?: string | null;
+    /** M3b: updateId fee yang sudah di-sign user external (flow quest_claim_fcfs_fee). */
+    externalFeeTxId?: string;
   }): Promise<{
     ok: boolean;
     message: string;
@@ -3399,7 +3584,10 @@ export class QuestsService {
       // DAN reward ke instrumen Amulet → quest token langsung jalur fallback
       // (fee terpisah + delivery token, jalur produktif lama), bukan gagal
       // di Settle lalu jatuh ke fallback dengan receipt nyangkut PRE_SETTLE.
-      if (this.useAtomicSettle && claimSessionId && rewardToken === 'CC') {
+      if (this.useAtomicSettle &&
+        claimSessionId &&
+        rewardToken === 'CC' &&
+        params.walletKind !== 'external') {
         // ATOMIC PATH (DAML v22/v23 Settle)
         const { updateId } = await this.settleAndRecord({
           drawId: reservedDrawId,
@@ -3426,9 +3614,25 @@ export class QuestsService {
         });
       } else {
         // FALLBACK PATH (non-atomic, v21-style: collectClaimFee + sendReward terpisah)
-        const feeTxId =
-          drawNow?.claimFeeLedgerTxId ??
-          (await this.collectClaimFee({
+        // M3b: user EXTERNAL — fee HARUS sudah dibayar via sign relay (browser);
+        // collectClaimFee custodial mustahil utk party external (M0-proof).
+        let feeTxId: string | undefined;
+        if (drawNow?.claimFeeLedgerTxId) {
+          feeTxId = drawNow.claimFeeLedgerTxId;
+        } else if (params.walletKind === 'external') {
+          if (feeCc > 0 && !params.externalFeeTxId) {
+            throw new BadRequestException(
+              'Sign the claim fee in your wallet first (non-custodial flow).',
+            );
+          }
+          feeTxId = params.externalFeeTxId;
+          if (feeTxId) {
+            this.logger.log(
+              `FCFS external fee (user-signed): user=${userId.slice(0, 8)} quest=${questId.slice(0, 8)} feeTx=${feeTxId.slice(0, 16)}…`,
+            );
+          }
+        } else {
+          feeTxId = await this.collectClaimFee({
             userId,
             cantonPartyId,
             username,
@@ -3436,7 +3640,8 @@ export class QuestsService {
             feeCc,
             feeLabel: 'FCFS claim fee',
             feeTargetPartyId: this.feeTargetPartyId ?? validatorPartyId,
-          }));
+          });
+        }
 
         // Persist fee TX early so retries don't double-charge and slot stays reserved.
         if (!drawNow?.claimFeeLedgerTxId) {
@@ -3465,7 +3670,7 @@ export class QuestsService {
           rewardCc,
           rewardToken,
           claimSessionId,
-          feeTxId,
+          feeTxId: feeTxId ?? '',
           rewardLabel: 'FCFS reward',
         });
         rewardDeliveryKind = rewardPending ? 'pending_offer' : 'direct';
@@ -3524,6 +3729,10 @@ export class QuestsService {
     username: string | null;
     cantonPartyId: string | null;
     questId: string;
+    /** M3b: model custody — 'external' memaksa fallback + fee via relay. */
+    walletKind?: string | null;
+    /** M3b: updateId fee yang sudah di-sign user external. */
+    externalFeeTxId?: string;
   }): Promise<{
     ok: boolean;
     message: string;
@@ -3733,7 +3942,8 @@ export class QuestsService {
       if (
         this.useAtomicSettle &&
         claimSessionId &&
-        normalizeRewardToken(quest.rewardToken) === 'CC'
+        normalizeRewardToken(quest.rewardToken) === 'CC' &&
+        params.walletKind !== 'external'
       ) {
         // ATOMIC PATH (DAML v22/v23 Settle)
         const { updateId } = await this.settleAndRecord({
@@ -3767,9 +3977,19 @@ export class QuestsService {
       } else {
         // FALLBACK PATH (non-atomic, v21-style)
         // ⚠️ SECURITY (C1): Fee idempotency guard.
-        const feeTxId =
-          drawNow?.claimFeeLedgerTxId ??
-          (await this.collectClaimFee({
+        // M3b: user EXTERNAL — fee via tanda tangan browser (bukan custodial).
+        let feeTxId: string | undefined;
+        if (drawNow?.claimFeeLedgerTxId) {
+          feeTxId = drawNow.claimFeeLedgerTxId;
+        } else if (params.walletKind === 'external') {
+          if (feeCc > 0 && !params.externalFeeTxId) {
+            throw new BadRequestException(
+              'Sign the claim fee in your wallet first (non-custodial flow).',
+            );
+          }
+          feeTxId = params.externalFeeTxId;
+        } else {
+          feeTxId = await this.collectClaimFee({
             userId,
             cantonPartyId,
             username,
@@ -3777,7 +3997,8 @@ export class QuestsService {
             feeCc,
             feeLabel: 'Raffle claim fee',
             feeTargetPartyId: this.feeTargetPartyId ?? validatorPartyId,
-          }));
+          });
+        }
 
         if (!drawNow?.claimFeeLedgerTxId) {
           await this.prisma.winnerDraw.updateMany({
@@ -3823,7 +4044,7 @@ export class QuestsService {
           rewardCc,
           rewardToken: normalizeRewardToken(quest.rewardToken),
           claimSessionId,
-          feeTxId,
+          feeTxId: feeTxId ?? '',
           rewardLabel: 'Raffle reward',
         });
         drawRewardTxId = rewardTxId;
@@ -3874,6 +4095,10 @@ export class QuestsService {
     username: string | null;
     cantonPartyId: string | null;
     questId: string;
+    /** M3b: model custody — 'external' memaksa fallback + fee via relay. */
+    walletKind?: string | null;
+    /** M3b: updateId fee yang sudah di-sign user external. */
+    externalFeeTxId?: string;
   }): Promise<{
     ok: boolean;
     message: string;
@@ -4035,14 +4260,23 @@ export class QuestsService {
       // ── BRANCH: atomic Settle (fee-only, reward=0) vs fallback ──────────────
       // Atomic: fee transfer di Settle choice (1 transaction tree). Tidak collectClaimFee.
       // Fallback: collectClaimFee terpisah (non-atomic, path v21).
+      // M3b: user EXTERNAL selalu fallback — fee via tanda tangan browser.
       let feeTxId: string;
       let inviteSettledCid: string | null = null;
-      const useAtomicInvite = this.useAtomicSettle;
+      const useAtomicInvite =
+        this.useAtomicSettle && params.walletKind !== 'external';
 
       if (!useAtomicInvite) {
         // FALLBACK: collectClaimFee terpisah
         if (drawRow.claimFeeLedgerTxId) {
           feeTxId = drawRow.claimFeeLedgerTxId;
+        } else if (params.walletKind === 'external') {
+          if (feeCc > 0 && !params.externalFeeTxId) {
+            throw new BadRequestException(
+              'Sign the claim fee in your wallet first (non-custodial flow).',
+            );
+          }
+          feeTxId = params.externalFeeTxId ?? `external-free-${questId}-${userId}`;
         } else {
           try {
             feeTxId = await this.collectClaimFee({
@@ -4304,6 +4538,10 @@ export class QuestsService {
     username: string | null;
     cantonPartyId: string | null;
     questId: string;
+    /** M3b: model custody — 'external' memaksa fallback + fee via relay. */
+    walletKind?: string | null;
+    /** M3b: updateId fee yang sudah di-sign user external. */
+    externalFeeTxId?: string;
   }): Promise<{
     ok: boolean;
     message: string;
@@ -4554,6 +4792,7 @@ export class QuestsService {
       if (
         this.useAtomicSettle &&
         ccCodeClaimSessionId &&
+        params.walletKind !== 'external' &&
         rewardCc > 0 &&
         normalizeRewardToken(quest.rewardToken) === 'CC'
       ) {
@@ -4581,9 +4820,20 @@ export class QuestsService {
       } else {
         // FALLBACK PATH (non-atomic, v21-style)
         // ⚠️ SECURITY (C1): Fee idempotency guard.
-        feeTxId =
-          drawNow?.claimFeeLedgerTxId ??
-          (await this.collectClaimFee({
+        // M3b: user EXTERNAL — fee via tanda tangan browser (bukan custodial).
+        if (drawNow?.claimFeeLedgerTxId) {
+          feeTxId = drawNow.claimFeeLedgerTxId;
+        } else if (params.walletKind === 'external') {
+          if (feeCc > 0 && !params.externalFeeTxId) {
+            throw new BadRequestException(
+              'Sign the claim fee in your wallet first (non-custodial flow).',
+            );
+          }
+          feeTxId =
+            params.externalFeeTxId ??
+            `external-free-${questId}-${userId.slice(0, 8)}`;
+        } else {
+          feeTxId = await this.collectClaimFee({
             userId,
             cantonPartyId,
             username,
@@ -4591,7 +4841,8 @@ export class QuestsService {
             feeCc,
             feeLabel: 'CC+Code raffle claim fee',
             feeTargetPartyId: this.feeTargetPartyId ?? validatorPartyId,
-          }));
+          });
+        }
 
         if (!drawNow?.claimFeeLedgerTxId) {
           await this.prisma.winnerDraw.updateMany({

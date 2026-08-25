@@ -6,6 +6,8 @@ export interface Me {
   displayName?: string | null;
   username?: string | null;
   cantonPartyId?: string | null;
+  /** Model custody wallet: "external" = non-custodial (sign di browser), "custodial" = jalur lama. */
+  walletKind?: string | null;
   avatarUrl?: string | null;
   /** Handle X/Twitter yang di-link user (dikembalikan backend, opsional). */
   twitterUsername?: string | null;

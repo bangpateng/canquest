@@ -494,6 +494,9 @@ export class AuthService {
       username: normalizeWalletUsername(user.username) ?? user.username,
       cantonPartyId:
         normalizeCantonPartyId(user.cantonPartyId) ?? user.cantonPartyId,
+      // M2: model custody wallet — frontend memakai ini untuk memilih jalur
+      // transaksi (external = sign di browser via relay; custodial = jalur lama).
+      walletKind: user.walletKind,
       twitterUsername: user.twitterUsername,
       twitterConnectedAt: user.twitterConnectedAt?.toISOString() ?? null,
       earnPoints,

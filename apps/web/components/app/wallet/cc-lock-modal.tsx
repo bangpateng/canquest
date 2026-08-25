@@ -7,6 +7,9 @@ import { buttonVariants } from "@/components/ui/button";
 import { iconButtonClass } from "@/lib/ui/ui-button-styles";
 import { cn } from "@/lib/utils/utils";
 import { useTransactionStatus } from "@/lib/tx/transaction-status";
+import { useMe } from "@/lib/hooks/use-me";
+import { signRelayTransaction } from "@/lib/wallet/sign-relay";
+import { usePassphrasePrompt } from "@/lib/wallet/use-passphrase-prompt";
 import type { ActiveLock, LockStatus } from "@/lib/hooks/use-lock-status";
 
 /** Render termKey (mis. "15d"/"5m") jadi label manusiawi untuk tombol aksi. */
@@ -38,6 +41,10 @@ interface TermOption {
 export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalProps) {
   const titleId = useId();
   const tx = useTransactionStatus();
+  // M3b: user external (non-custodial) → lock/unlock di-sign di browser.
+  const { me } = useMe();
+  const isExternalWallet = me?.walletKind === "external";
+  const { prompt: promptPassphrase, passphraseModal } = usePassphrasePrompt();
   const [terms, setTerms] = useState<TermOption[]>([]);
   const [amount, setAmount] = useState("");
   const [selectedTerm, setSelectedTerm] = useState<string>("");
@@ -105,6 +112,42 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
         accentBg: "bg-[var(--primary)]/15",
         accentText: "text-canton",
       });
+      // M3b: user external → sign di browser; tahap 'sign' menunggu passphrase.
+      if (isExternalWallet) {
+        try {
+          await signRelayTransaction(
+            "lock_cc",
+            { amountCc: numericAmount, termKey: selectedTerm },
+            {
+              onWalletLocked: () =>
+                promptPassphrase(`Lock ${numericAmount} CC (${termLabel(selectedTerm)})`),
+            },
+          );
+          setLockState("idle");
+          setLockMessage("");
+          setAmount("");
+          onRefresh();
+          tx.succeed({
+            amountText: `${numericAmount} CC`,
+            title: "CC locked",
+            subtitle: `Locked for ${termLabel(selectedTerm)}`,
+            meta: [
+              { label: "Amount", value: `${numericAmount} CC` },
+              { label: "Duration", value: termLabel(selectedTerm) },
+              { label: "Network", value: "Canton" },
+            ],
+          });
+        } catch (err) {
+          tx.dismiss();
+          setLockState("error");
+          setLockMessage(
+            err instanceof Error && err.message
+              ? err.message
+              : "Lock failed. Please try again.",
+          );
+        }
+        return;
+      }
       tx.broadcast();
       try {
         const res = await fetch("/api/party/lock", {
@@ -143,7 +186,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
         setLockMessage("Network error. Check your connection.");
       }
     },
-    [selectedTerm, amountValid, numericAmount, onRefresh, tx],
+    [selectedTerm, amountValid, numericAmount, onRefresh, tx, isExternalWallet, promptPassphrase],
   );
 
   const submitUnlock = useCallback(
@@ -157,6 +200,44 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
         accentBg: "bg-[var(--primary)]/15",
         accentText: "text-canton",
       });
+      // M3b: user external → sign di browser.
+      if (isExternalWallet) {
+        try {
+          await signRelayTransaction(
+            "unlock_cc",
+            { lockId },
+            {
+              onWalletLocked: () =>
+                promptPassphrase(
+                  lock ? `Unlock ${lock.amountCc} CC` : "Unlock CC",
+                ),
+            },
+          );
+          onRefresh();
+          tx.succeed({
+            amountText: lock ? `${lock.amountCc} CC` : "CC",
+            title: "CC unlocked",
+            subtitle: "Funds returned to your wallet.",
+            meta: lock
+              ? [
+                  { label: "Amount", value: `${lock.amountCc} CC` },
+                  { label: "Network", value: "Canton" },
+                ]
+              : undefined,
+          });
+        } catch (err) {
+          tx.dismiss();
+          setLockState("error");
+          setLockMessage(
+            err instanceof Error && err.message
+              ? err.message
+              : "Unlock failed.",
+          );
+        } finally {
+          setUnlockingId(null);
+        }
+        return;
+      }
       tx.broadcast();
       try {
         const res = await fetch("/api/party/unlock", {
@@ -192,7 +273,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
         setUnlockingId(null);
       }
     },
-    [onRefresh, status.activeLocks, tx],
+    [onRefresh, status.activeLocks, tx, isExternalWallet, promptPassphrase],
   );
 
   if (!open) return null;
@@ -202,6 +283,8 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
       className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4"
       role="presentation"
     >
+      {/* M3b: prompt passphrase untuk sign lock/unlock (user external). */}
+      {passphraseModal}
       <button
         type="button"
         className="modal-backdrop"

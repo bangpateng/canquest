@@ -351,11 +351,16 @@ export class PartySwapController {
         'You need a Canton wallet to use swap. Create yours first.',
       );
     }
+    // M3b: flag externalDepositDone hanya sah untuk user external — guard
+    // supaya user custodial tidak bisa memakai flag utk skip transfer.
+    const externalDepositDone =
+      user.walletKind === 'external' && body.externalDepositDone === true;
     const result = await this.swapService.executeSwap(req.user.userId, {
       from: body.from,
       to: body.to,
       amount: body.amount,
       clientNonce: body.clientNonce,
+      externalDepositDone,
     });
     if (!result.success) {
       throw new BadRequestException(
@@ -368,5 +373,20 @@ export class PartySwapController {
       outputAmount: result.outputAmount,
       swapId: result.swapId,
     };
+  }
+
+  /**
+   * M3b: langkah 1 swap untuk user EXTERNAL — siapkan leg input (user →
+   * depositParty OneSwap) untuk ditandatangani browser. Setelah sign,
+   * frontend memanggil /party/swap dengan externalDepositDone=true.
+   */
+  @Post('swap/prepare-external')
+  async prepareExternalSwap(@Req() req: AuthedReq, @Body() body: SwapDto) {
+    return this.swapService.prepareExternalSwap(req.user.userId, {
+      from: body.from,
+      to: body.to,
+      amount: body.amount,
+      clientNonce: body.clientNonce,
+    });
   }
 }

@@ -50,8 +50,11 @@
  *
  * ── Resilience ───────────────────────────────────────────────────────────────
  * - Proactive reconnect (scheduled timer, ~240s cycle = 300s token - 60s lead)
- * - Reactive reconnect exponential backoff (1s, 2s, 4s, 8s, 16s, max 10 attempts)
- *   untuk kasus network drop / close 1008.
+ * - Reactive reconnect exponential backoff 1s → 2s → 4s → … → cap 60s,
+ *   TANPA batas jumlah attempt. (Dulu: berhenti permanen setelah 10 attempt —
+ *   sekali reverse proxy 502, stream mati sampai API direstart meski infra
+ *   sudah sembuh → saldo user berhenti sinkron. Sekarang: retry selamanya
+ *   dengan delay terkap, jadi self-heal otomatis.)
  * - Offset tracking: simpan offset terakhir, resume dari situ saat reconnect
  *   (event tidak hilang, tidak duplikat — offset bersifat exclusive begin)
  * - Feature flag CANTON_UPDATES_WS_ENABLED (default false — harus di-enable
@@ -214,8 +217,13 @@ export interface CantonUpdateEvent {
   exercised: ExercisedEventShape[];
 }
 
-const MAX_RECONNECTS = 10;
 const RECONNECT_BASE_DELAY_MS = 1_000;
+/**
+ * Cap delay reconnect reaktif. Tidak ada "give up" — selama service enabled,
+ * terus retry dengan delay ≤60s supaya stream self-heal setelah infra sembuh
+ * (kasus nyata: reverse proxy 502 berjam-jam, WS mati permanen, saldo stale).
+ */
+const RECONNECT_MAX_DELAY_MS = 60_000;
 /** Buffer waktu sebelum token expire untuk trigger proactive reconnect.
  *  Token Keycloak lifetime 300s → reconnect scheduled pada T-60s. */
 const TOKEN_REFRESH_LEAD_MS = 60_000;
@@ -240,6 +248,13 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
    *  per-RPC di stream WS — tanpa reconnect, semua request gagal ACCESS_TOKEN_EXPIRED
    *  setelah token mati. Timer ini tutup + buka ulang WS dengan token baru. */
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Timer reconnect REAKTIF (error/close). Satu pada satu waktu — mencegah
+   *  error + close beruntun men-stack beberapa timer → beberapa socket. */
+  private reactiveReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Guard anti startStream konkuren: proactive timer + reactive timer bisa
+   *  dua-duanya memanggil startStream; tanpa guard, dua WS bisa terbentuk
+   *  (yang lama leak — listener-nya inert tapi koneksi tetap hidup). */
+  private connecting = false;
   /** Track party yang punya created event sejak flush reconcile terakhir —
    *  dipakai untuk emit SSE `offer:new` ke potential receiver (idempoten). */
   private readonly partyHadCreated = new Set<string>();
@@ -402,7 +417,7 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Tutup WS aktif + clear connect timer + clear reconnect timer. Aman
-   *  dipanggil berulang. */
+   * dipanggil berulang. */
   private teardownConnection(): void {
     if (this.connectTimer) {
       clearTimeout(this.connectTimer);
@@ -411,6 +426,12 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
+    }
+    // Reactive reconnect pending tidak relevan lagi bila koneksi akan dibuka
+    // ulang dari jalur lain (proactive / startStream langsung) — bersihkan.
+    if (this.reactiveReconnectTimer) {
+      clearTimeout(this.reactiveReconnectTimer);
+      this.reactiveReconnectTimer = null;
     }
     if (this.ws) {
       // Lepas listener dulu supaya close() tidak trigger reconnect.
@@ -454,6 +475,18 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
    * reconnect T-60s sebelum expiry.
    */
   private async startStream(): Promise<void> {
+    if (this.closedByUser) return;
+    // Guard anti startStream konkuren (proactive timer vs reactive timer).
+    if (this.connecting) return;
+    this.connecting = true;
+    try {
+      await this.startStreamInner();
+    } finally {
+      this.connecting = false;
+    }
+  }
+
+  private async startStreamInner(): Promise<void> {
     this.closedByUser = false;
     const token = await this.getTokenSafe();
     if (!token) {
@@ -468,10 +501,6 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     if (!this.lastOffset) {
       try {
         beginExclusive = await this.fetchLedgerEnd();
-        this.lastOffset = beginExclusive ?? null;
-        this.logger.log(
-          `CantonUpdates: starting from ledgerEnd offset=${beginExclusive}`,
-        );
       } catch (err) {
         this.logger.warn(
           `CantonUpdates: ledgerEnd failed, will retry: ${String(err)}`,
@@ -479,6 +508,20 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
         this.scheduleReconnect(err as Error);
         return;
       }
+      if (beginExclusive === undefined) {
+        // ledgerEnd tidak terbaca (REST juga bermasalah — kasus proxy 502).
+        // JANGAN lanjut connect tanpa offset: subscription tanpa beginExclusive
+        // bisa dianggap mulai dari offset 0 → replay seluruh history ledger.
+        // Retry pada cycle berikutnya.
+        this.scheduleReconnect(
+          new Error('ledgerEnd unavailable — cannot resume safely'),
+        );
+        return;
+      }
+      this.lastOffset = beginExclusive;
+      this.logger.log(
+        `CantonUpdates: starting from ledgerEnd offset=${beginExclusive}`,
+      );
     } else {
       beginExclusive = this.lastOffset;
     }
@@ -575,8 +618,8 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
 
       // Catatan: reconnectAttempts TIDAK di-reset di sini. Reset pindah ke
       // handleStreamLine() saat event valid pertama masuk (tanda subscription
-      // benar-benar sukses). Kalau di-reset di open, close-1000 loop tidak
-      // pernah capai MAX_RECONNECTS → infinite reconnect.
+      // benar-benar sukses). Kalau di-reset di open, close-1000 loop akan
+      // backoff-nya terus reset ke 1s (reconnect storm).
       if (wasReconnecting) {
         this.logger.log('CantonUpdates: WS connected (recovered).');
       } else {
@@ -644,7 +687,13 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
             `Kemungkinan: (1) reverse proxy ${this.baseUrl} tidak forward WS Upgrade, ` +
             `(2) endpoint WS /v2/updates ada di host/port berbeda dari REST, ` +
             `(3) Canton participant node tidak enable WS. ` +
-            `Akan OFF setelah ${MAX_RECONNECTS} attempts; poller existing jadi fallback.`,
+            `Akan terus retry dengan backoff (tanpa give-up); poller jadi fallback.`,
+        );
+      } else if (httpStatus === '502' || httpStatus === '503' || httpStatus === '504') {
+        this.logger.error(
+          `CantonUpdates: WS ${httpStatus} — upstream proxy/participant tidak terjangkau ` +
+            `(cek nginx VPS 1, container participant, tunnel WireGuard). ` +
+            `Akan terus retry dengan backoff (tanpa give-up) sampai infra pulih.`,
         );
       } else if (httpStatus === '401' || httpStatus === '403') {
         this.logger.error(
@@ -973,22 +1022,34 @@ export class CantonUpdatesService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * Schedule reconnect reaktif setelah failure (error / close / timeout).
+   *
+   * TIDAK ADA give-up permanen. Dulu: setelah 10 attempt service berhenti
+   * mencoba selamanya ("giving up after 10 attempts") — dipicu kasus nyata
+   * produksi: reverse proxy 502 berjam-jam → WS mati total → tidak ada yang
+   * meng-update saldo user. Sekarang: exponential backoff 1s → cap 60s,
+   * retry selamanya selama service enabled — stream self-heal otomatis begitu
+   * infra (proxy/tunnel/participant) pulih. reconnectAttempts di-reset ke 0
+   * di handleStreamLine() saat event valid pertama masuk.
+   */
   private scheduleReconnect(err: Error): void {
-    if (this.reconnectAttempts >= MAX_RECONNECTS) {
-      this.logger.error(
-        `CantonUpdates: giving up after ${MAX_RECONNECTS} attempts. ` +
-          `Last error: ${err.message}. Poller existing tetap aktif sebagai fallback.`,
-      );
-      return;
-    }
+    if (this.closedByUser) return;
+    // Satu reactive reconnect pada satu waktu. Tanpa guard, error + close
+    // beruntun (keduanya memanggil scheduleReconnect) men-stack timer ganda.
+    if (this.reactiveReconnectTimer) return;
     this.reconnectAttempts++;
-    const delay =
-      RECONNECT_BASE_DELAY_MS * Math.pow(2, this.reconnectAttempts - 1);
+    const delay = Math.min(
+      RECONNECT_BASE_DELAY_MS * Math.pow(2, this.reconnectAttempts - 1),
+      RECONNECT_MAX_DELAY_MS,
+    );
     this.logger.warn(
-      `CantonUpdates: reconnect in ${delay}ms (attempt ${this.reconnectAttempts}/${MAX_RECONNECTS}). ` +
+      `CantonUpdates: reconnect in ${Math.round(delay / 1000)}s ` +
+        `(attempt #${this.reconnectAttempts}, backoff cap ${RECONNECT_MAX_DELAY_MS / 1000}s — no give-up). ` +
         `Reason: ${err.message}`,
     );
-    setTimeout(() => {
+    this.reactiveReconnectTimer = setTimeout(() => {
+      this.reactiveReconnectTimer = null;
       if (!this.closedByUser) void this.startStream();
     }, delay);
   }

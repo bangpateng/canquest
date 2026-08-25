@@ -18,6 +18,9 @@ import { CantonUpdatesService } from './canton-updates.service';
 import { BalanceEventHandlerService } from './balance-event-handler.service';
 import { TokenInstrumentHelper } from './token-instrument.helper';
 import { ProxyCacheService } from './proxy-cache.service';
+import { CantonWalletSdkService } from './wallet-sdk.service';
+import { ExternalWalletService } from './external-wallet.service';
+import { SigningRelayService } from './signing-relay.service';
 
 /**
  * CantonModule wires together:
@@ -48,6 +51,9 @@ import { ProxyCacheService } from './proxy-cache.service';
     BalanceEventHandlerService,
     TokenInstrumentHelper,
     ProxyCacheService,
+    CantonWalletSdkService,
+    ExternalWalletService,
+    SigningRelayService,
   ],
   exports: [
     CantonLedgerService,
@@ -64,6 +70,8 @@ import { ProxyCacheService } from './proxy-cache.service';
     BalanceEventHandlerService,
     TokenInstrumentHelper,
     ProxyCacheService,
+    ExternalWalletService,
+    SigningRelayService,
   ],
 })
 export class CantonModule {}

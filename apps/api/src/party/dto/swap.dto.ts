@@ -1,5 +1,7 @@
 import {
+  IsBoolean,
   IsNumber,
+  IsOptional,
   IsString,
   Max,
   MaxLength,
@@ -22,6 +24,11 @@ export const MAX_SWAP_AMOUNT = 1_000_000;
 
 /** Request body POST /api/party/swap — execute swap. */
 export class SwapDto {
+  /** M3b: user external — leg input swap sudah di-sign browser. */
+  @IsOptional()
+  @IsBoolean()
+  externalDepositDone?: boolean;
+
   /** Symbol token yang dijual (slot atas), mis. 'CC' atau 'USDCX'. */
   @IsString()
   @MinLength(1, { message: 'from token is required.' })

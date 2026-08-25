@@ -9,6 +9,7 @@ import { ClaimDetailsModal } from "@/components/app/campaign/claim-details-modal
 import { RewardReveal } from "@/components/app/campaign/reward-reveal";
 import { useTransactionStatus } from "@/lib/tx/transaction-status";
 import { FCFS_CLAIM_FAIL_MSG } from "@/lib/campaign/claim-messages";
+import { useExternalClaimFee } from "@/lib/wallet/use-external-claim-fee";
 import { Trophy } from "lucide-react";
 
 export function CampaignInviteClaimSection({
@@ -29,6 +30,8 @@ export function CampaignInviteClaimSection({
   onClaimed: () => void;
 }) {
   const tx = useTransactionStatus();
+  // M3b: user external → claim fee di-sign di browser (semua tipe campaign).
+  const { signClaimFee, passphraseModal } = useExternalClaimFee();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -59,9 +62,35 @@ export function CampaignInviteClaimSection({
     tx.broadcast();
 
     try {
+      // ── M3b: user EXTERNAL — bayar claim fee via tanda tangan browser ──
+      let externalFeeTxId: string | undefined;
+      try {
+        externalFeeTxId = await signClaimFee(
+          questId,
+          'invite',
+          fee,
+          `Claim fee ${fee} CC${subtitle ? ` — ${subtitle}` : ''}`,
+        );
+      } catch (err) {
+        tx.dismiss();
+        setError(
+          err instanceof Error && err.message
+            ? err.message
+            : FCFS_CLAIM_FAIL_MSG,
+        );
+        return;
+      }
+      tx.broadcast();
+
       const res = await fetch(`/api/quests/${questId}/claim-invite`, {
         method: "POST",
         credentials: "include",
+        ...(externalFeeTxId
+          ? {
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ externalFeeTxId }),
+            }
+          : {}),
       });
       const data = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
@@ -97,6 +126,8 @@ export function CampaignInviteClaimSection({
 
   return (
     <div className="space-y-3">
+      {/* M3b: prompt passphrase claim fee (user external). */}
+      {passphraseModal}
       {/* Baris WIN untuk code raffle (INVITE_CODE_RANDOM); FCFS code tidak
           menampilkan baris ini (bukan undian). */}
       {rewardType === "INVITE_CODE_RANDOM" ? (

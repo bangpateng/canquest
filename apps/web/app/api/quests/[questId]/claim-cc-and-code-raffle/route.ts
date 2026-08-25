@@ -6,10 +6,17 @@ export async function POST(
   { params }: { params: Promise<{ questId: string }> },
 ) {
   const { questId } = await params;
+  // M3b: body optional { externalFeeTxId } utk user external.
+  const body = await req.text().catch(() => "");
   return nestWithAccessCookie(
     req,
     `/quests/${questId}/claim-cc-and-code-raffle`,
-    { method: "POST" },
+    {
+      method: "POST",
+      ...(body
+        ? { body, headers: { "Content-Type": "application/json" } }
+        : {}),
+    },
     { upstreamTimeoutMs: 60_000 },
   );
 }

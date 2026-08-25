@@ -30,8 +30,14 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
    * controller setelah send/swap/reward (14 call site) — itu tetap aktif
    * terlepas dari flag ini.
    *
-   * Default true supaya backward-compat. Set 'false' kalau CantonUpdatesService
-   * (event-driven /v2/updates stream) sudah jalan — hilangkan double-work.
+   * Default true supaya backward-compat. BOLEH dimatikan kalau CantonUpdates
+   * (event-driven /v2/updates stream) terbukti stabil — TAPI disarankan tetap
+   * ON sebagai reconciler: poller menulis NILAI ABSOLUT on-chain (bukan delta),
+   * sehingga men-self-heal saldo saat WS down/mis-event/double-count (kasus
+   * nyata: proxy 502 berjam-jam → WS give-up → saldo semua user stale).
+   *
+   * Dengan guard activeAtOffset=0 di queryAmuletHoldingsRaw, poller TIDAK
+   * akan menimpa saldo DB dengan phantom-0 saat ledger-end gagal dibaca.
    */
   private readonly pollEnabled: boolean;
   private readonly pollIntervalMs: number;
@@ -344,6 +350,17 @@ export class CcInboundSyncService implements OnModuleInit, OnModuleDestroy {
       }
 
       if (onChainMicro < existing.balanceMicroCc) {
+        // Canary visibility: saldo on-chain terbaca 0 padahal DB positif.
+        // Setelah guard activeAtOffset=0 di queryAmuletHoldingsRaw, kasus ini
+        // biasanya berarti memang habis di-chain (belanja external) — TAPI bila
+        // berulang untuk banyak user, kemungkinan rights CanReadAsAnyParty
+        // hilang / ACS tidak terlihat. Log warn supaya kelihatan di api-error.log.
+        if (onChainMicro === 0n && existing.balanceMicroCc > 0n) {
+          this.logger.warn(
+            `syncUserBalance: on-chain read 0 for @${username} while DB=${Number(existing.balanceMicroCc) / 1_000_000} CC — updating to 0. ` +
+              `If wrong, check CanReadAsAnyParty rights / ledger visibility.`,
+          );
+        }
         await this.prisma.ccBalance.update({
           where: { userId },
           data: { balanceMicroCc: onChainMicro },

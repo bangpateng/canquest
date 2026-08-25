@@ -470,6 +470,136 @@ export class CantonLedgerService {
    * @param description - Human-readable description (stored in meta)
    * @returns { ok, updateId, transferKind, error }
    */
+  /**
+   * M3 (signing relay): bangun command TransferFactory_Transfer TANPA submit.
+   * Dipakai SigningRelayService untuk interactive submission — user external
+   * menandatangani command yang identik dengan jalur custodial (CIP-0056).
+   *
+   * Langkah 1-3 sama dengan executeTransferFactoryTransfer (holdings →
+   * choiceArguments → registry), tapi berhenti sebelum submit: caller yang
+   * memutuskan submit custodial (exerciseChoice) atau interactive prepare.
+   */
+  async buildCip56TransferCommand(params: {
+    senderPartyId: string;
+    receiverPartyId: string;
+    amountCc: number;
+    description?: string;
+    clientNonce?: string;
+    /** Instrument token (default 'Amulet' = CC). Utk non-CC set bersama instrumentAdmin. */
+    instrumentId?: string;
+    /** Admin party instrument non-CC (dari token selector client / OneSwap). */
+    instrumentAdmin?: string;
+  }): Promise<
+    | {
+        ok: true;
+        command: Record<string, unknown>;
+        commandId: string;
+        disclosedContracts: unknown[];
+        transferKind: string;
+      }
+    | { ok: false; error: string }
+  > {
+    const {
+      senderPartyId,
+      receiverPartyId,
+      amountCc,
+      description,
+      clientNonce,
+      instrumentId = 'Amulet',
+    } = params;
+
+    const dsoParty = this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() || '';
+    const effectiveAdmin = params.instrumentAdmin || dsoParty;
+    const isAmulet = instrumentId.toLowerCase() === 'amulet';
+    if (!effectiveAdmin) {
+      return { ok: false, error: 'instrumentAdmin/DSO party tidak diset' };
+    }
+
+    // Step 1: holdings pengirim — Amulet pakai query khusus; non-CC WAJIB
+    // getTokenHoldingCids (InterfaceFilter) — mirror executeTransferFactoryTransfer.
+    const holdings = isAmulet
+      ? await this.queryAmuletHoldings(senderPartyId)
+      : await this.getTokenHoldingCids(senderPartyId, instrumentId);
+    if (holdings.length === 0) {
+      return {
+        ok: false,
+        error: `Sender has no ${instrumentId} holdings — cannot fund transfer`,
+      };
+    }
+    const inputHoldingCids = holdings.map((h) => h.contractId);
+
+    const now = new Date();
+    const choiceArguments: Record<string, unknown> = {
+      expectedAdmin: effectiveAdmin,
+      transfer: {
+        sender: senderPartyId,
+        receiver: receiverPartyId,
+        amount: amountCc.toFixed(10),
+        instrumentId: {
+          admin: effectiveAdmin,
+          id: instrumentId,
+        },
+        lock: null,
+        requestedAt: now.toISOString(),
+        executeBefore: new Date(
+          now.getTime() + 24 * 60 * 60 * 1000,
+        ).toISOString(),
+        inputHoldingCids,
+        meta: {
+          values: description
+            ? { 'splice.lfdecentralizedtrust.org/reason': description }
+            : {},
+        },
+      },
+      extraArgs: {
+        context: { values: {} }, // diisi registry choiceContextData di bawah
+        meta: { values: {} },
+      },
+    };
+
+    // Step 2: Transfer Factory Registry — CC via Scan-proxy; non-CC via
+    // Utility Registry (callTransferFactoryRegistry bercabang otomatis).
+    const registry = await this.callTransferFactoryRegistry(
+      choiceArguments,
+      effectiveAdmin,
+    );
+    if (!registry) {
+      return {
+        ok: false,
+        error: 'Transfer Factory Registry call failed — check CANTON_SCAN_URL',
+      };
+    }
+    (choiceArguments.extraArgs as Record<string, unknown>).context =
+      registry.choiceContextData;
+
+    // Step 3: susun ExerciseCommand + commandId deterministik (dedup nonce).
+    const factoryInterfaceId =
+      '#splice-api-token-transfer-instruction-v1:Splice.Api.Token.TransferInstructionV1:TransferFactory';
+    const commandId = clientNonce
+      ? `tf-${createHash('sha256')
+          .update(
+            `${senderPartyId}|${receiverPartyId}|${amountCc.toFixed(10)}|${clientNonce}`,
+          )
+          .digest('hex')
+          .slice(0, 32)}`
+      : `relay-tf-${randomUUID().slice(0, 24)}`;
+
+    return {
+      ok: true,
+      command: {
+        ExerciseCommand: {
+          templateId: factoryInterfaceId,
+          contractId: registry.factoryId,
+          choice: 'TransferFactory_Transfer',
+          choiceArgument: choiceArguments,
+        },
+      },
+      commandId,
+      disclosedContracts: registry.disclosedContracts,
+      transferKind: registry.transferKind,
+    };
+  }
+
   async executeTransferFactoryTransfer(params: {
     senderPartyId: string;
     receiverPartyId: string;
@@ -1732,7 +1862,7 @@ export class CantonLedgerService {
    *   contracts the receiver does not (e.g. if the operator lacks CanReadAs on
    *   the receiver), so callers can pass the provider party here.
    */
-  private async findTransferPreapprovalContract(
+  async findTransferPreapprovalContract(
     partyId: string,
     visibilityParty?: string,
   ): Promise<{
@@ -2395,7 +2525,7 @@ export class CantonLedgerService {
     ];
   }
 
-  private async getInstructionChoiceContext(
+  async getInstructionChoiceContext(
     transferInstructionCid: string,
     action: 'accept' | 'reject' | 'withdraw',
     instrumentAdmin: string,
@@ -2934,6 +3064,33 @@ export class CantonLedgerService {
     }
   }
 
+  /**
+   * Grant CanReadAs SAJA untuk party external (non-custodial).
+   *
+   * Read = sink saldo/ACS server-side tetap jalan; Act sengaja TIDAK diberikan —
+   * M0 membuktikan participant menolak submit actAs external party, tapi
+   * higienisnya rights penulisan tidak pernah di-grant untuk wallet user.
+   */
+  async grantReadRightsOnParty(partyId: string): Promise<void> {
+    const url = `${this.baseUrl}/v2/users/${encodeURIComponent(this.ledgerApiUser)}/rights`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: await this.authHeaders(),
+      body: JSON.stringify({
+        identityProviderId: '',
+        userId: this.ledgerApiUser,
+        rights: [{ kind: { CanReadAs: { value: { party: partyId } } } }],
+      }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      this.logger.warn(`grantReadRightsOnParty ${res.status}: ${t.slice(0, 200)}`);
+    } else {
+      this.logger.log(`Granted CanReadAs (only) for external party: ${partyId.split('::')[0]}`);
+    }
+  }
+
   /** Ambil current mining round dari Validator API (admin Keycloak token). */
   /**
    * Ambil nomor round Canton saat ini dari validator balance endpoint.
@@ -2996,6 +3153,17 @@ export class CantonLedgerService {
       offset = end?.offset ?? 0;
     } catch {
       offset = 0;
+    }
+    // SAFETY: JANGAN query ACS dengan activeAtOffset=0. Offset 0 = genesis =
+    // ACS kosong. Dulu, saat ledgerEnd gagal (timeout 6s / proxy 502), offset
+    // fallback 0 → response [] yang VALID → getLedgerBalance return 0 →
+    // poller menulis saldo 0 ke DB (saldo user "hilang") atau delta masuk
+    // tidak pernah terdeteksi. Kalau ledger-end tidak terbaca, THROW supaya
+    // caller mempertahankan saldo DB lama.
+    if (!offset || offset === '0') {
+      throw new Error(
+        'queryAmuletHoldingsRaw: ledger-end offset unavailable — refusing to query ACS at offset 0 (empty-state phantom)',
+      );
     }
 
     const filtersByParty: Record<string, unknown> = {
@@ -3150,6 +3318,14 @@ export class CantonLedgerService {
     } catch {
       offset = 0;
     }
+    // SAFETY (mirror queryAmuletHoldingsRaw): offset 0 = genesis = ACS kosong.
+    // Dulu failure ledgerEnd → offset 0 → response [] VALID → caller melihat
+    // "tidak punya Amulet" padahal hanya query gagal (phantom empty). THROW.
+    if (!offset || offset === '0') {
+      throw new Error(
+        'queryAmuletHoldings: ledger-end offset unavailable — refusing to query ACS at offset 0 (empty-state phantom)',
+      );
+    }
 
     const filtersByParty: Record<string, unknown> = {};
     for (const party of effectiveReadAs) {
@@ -3184,13 +3360,17 @@ export class CantonLedgerService {
         allContracts = (await res.json()) as unknown[];
         if (!Array.isArray(allContracts)) allContracts = [];
       } else {
+        // THROW, bukan warn + lanjut dengan [] — response kosong palsu membuat
+        // caller (validasi saldo send/swap/lock) menganggap user tidak punya
+        // Amulet padahal query gagal (proxy 502 / timeout).
         const text = await res.text();
-        this.logger.warn(
+        throw new Error(
           `queryAmuletHoldings wildcard ${res.status}: ${text.slice(0, 200)}`,
         );
       }
     } catch (err) {
       this.logger.warn(`queryAmuletHoldings error: ${String(err)}`);
+      throw err;
     }
 
     // Client-side filter: only Splice.Amulet:Amulet contracts owned by this party
@@ -4382,6 +4562,184 @@ export class CantonLedgerService {
   // ============================================================
 
   /** Lock `amountCc` milik ownerParty selama `lockSeconds` detik → LockedAmulet. */
+  /**
+   * M3b (signing relay): bangun command AmuletRules_Transfer self-lock TANPA
+   * submit — mirror lockCc langkah 1-4 (scan-proxy contracts, holdings scoring,
+   * inputs, choiceArgument). Opsi lockHolderOverride untuk user external
+   * (self-held: lockHolder = party user → otorisasi tunggal, cocok interactive
+   * submission).
+   */
+  async buildLockCcCommand(
+    ownerParty: string,
+    amountCc: number,
+    lockSeconds: number,
+    opts?: { lockHolderOverride?: string },
+  ): Promise<
+    | {
+        ok: true;
+        command: Record<string, unknown>;
+        commandId: string;
+        disclosedContracts: unknown[];
+        expiresAt: string;
+      }
+    | { ok: false; error: string }
+  > {
+    const expectedDso = this.config.get<string>('CANTON_DSO_PARTY_ID') ?? null;
+    const lockHolder =
+      opts?.lockHolderOverride ||
+      this.config.get<string>('CANTON_LOCK_HOLDER_PARTY')?.trim() ||
+      this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
+    if (!lockHolder) return { ok: false, error: 'lock holder party not set' };
+
+    const amuletRules = await this.fetchScanProxyContract('amulet-rules');
+    if (!amuletRules) return { ok: false, error: 'scan-proxy /amulet-rules failed' };
+    const openRound = await this.fetchScanProxyContract(
+      'open-and-issuing-mining-rounds',
+    );
+    if (!openRound) {
+      return { ok: false, error: 'scan-proxy /open-and-issuing-mining-rounds failed' };
+    }
+
+    const holdings = await this.queryAmuletHoldingsRaw(ownerParty);
+    if (holdings.length === 0)
+      return { ok: false, error: `${ownerParty} tidak punya Amulet` };
+
+    const round = openRound.round ?? 0;
+    const scored = holdings
+      .map((h) => {
+        const init = parseFloat(h.initialAmount) || 0;
+        const rate = parseFloat(h.ratePerRound) || 0;
+        const decay = Math.max(0, round - (h.createdAtRound || 0)) * rate;
+        return { h, eff: Math.max(0, init - decay) };
+      })
+      .sort((a, b) => b.eff - a.eff);
+
+    const totalEff = scored.reduce((s, x) => s + x.eff, 0);
+    if (totalEff < amountCc) {
+      return { ok: false, error: `Saldo efektif ~${totalEff.toFixed(4)} < ${amountCc} CC` };
+    }
+
+    const inputs: Array<{ tag: 'InputAmulet'; value: string }> = [];
+    let acc = 0;
+    for (const s of scored) {
+      inputs.push({ tag: 'InputAmulet', value: s.h.contractId });
+      acc += s.eff;
+      if (acc >= amountCc) break;
+    }
+
+    const expiresAt = new Date(Date.now() + lockSeconds * 1000).toISOString();
+    const choiceArgument = {
+      transfer: {
+        sender: ownerParty,
+        provider: lockHolder,
+        inputs,
+        outputs: [
+          {
+            receiver: ownerParty,
+            receiverFeeRatio: '0.0',
+            amount: amountCc.toString(),
+            lock: { holders: [lockHolder], expiresAt, optContext: null },
+          },
+        ],
+        beneficiaries: null,
+      },
+      // TransferContext FLAT — mirror lockCc (bukan PaymentTransferContext).
+      context: {
+        openMiningRound: openRound.contractId,
+        issuingMiningRounds: [],
+        validatorRights: [],
+        featuredAppRight: null,
+      },
+      expectedDso,
+    };
+
+    const disclosedContracts = [
+      { templateId: amuletRules.templateId, contractId: amuletRules.contractId, createdEventBlob: amuletRules.blob },
+      { templateId: openRound.templateId, contractId: openRound.contractId, createdEventBlob: openRound.blob },
+    ];
+
+    return {
+      ok: true,
+      command: {
+        ExerciseCommand: {
+          templateId: amuletRules.templateId,
+          contractId: amuletRules.contractId,
+          choice: 'AmuletRules_Transfer',
+          choiceArgument,
+        },
+      },
+      commandId: `lock-cc-${randomUUID()}`,
+      disclosedContracts,
+      expiresAt,
+    };
+  }
+
+  /**
+   * M3b (signing relay): bangun command LockedAmulet_OwnerExpireLockV2 TANPA
+   * submit — mirror unlockCc (resolve template dari chain, disclosed openRound).
+   * actAs [owner] → otorisasi tunggal, cocok interactive submission.
+   */
+  async buildUnlockCcCommand(
+    ownerParty: string,
+    lockedAmuletCid: string,
+  ): Promise<
+    | {
+        ok: true;
+        command: Record<string, unknown>;
+        commandId: string;
+        disclosedContracts: unknown[];
+      }
+    | { ok: false; error: string }
+  > {
+    const openRound = await this.fetchScanProxyContract(
+      'open-and-issuing-mining-rounds',
+    );
+    if (!openRound) {
+      return { ok: false, error: 'scan-proxy /open-and-issuing-mining-rounds failed' };
+    }
+
+    const locks = await this.findLockedAmulets(ownerParty);
+    const tmpl =
+      locks.find((l) => l.contractId === lockedAmuletCid)?.templateId ?? null;
+    if (!tmpl) {
+      const ar = await this.fetchScanProxyContract('amulet-rules');
+      const pkg = ar?.templateId?.split(':')[0];
+      const fallback = pkg ? `${pkg}:Splice.Amulet:LockedAmulet` : null;
+      if (!fallback) return { ok: false, error: 'LockedAmulet cid tidak ditemukan' };
+      return {
+        ok: true,
+        command: {
+          ExerciseCommand: {
+            templateId: fallback,
+            contractId: lockedAmuletCid,
+            choice: 'LockedAmulet_OwnerExpireLockV2',
+            choiceArgument: {},
+          },
+        },
+        commandId: `unlock-cc-${randomUUID()}`,
+        disclosedContracts: [
+          { templateId: openRound.templateId, contractId: openRound.contractId, createdEventBlob: openRound.blob },
+        ],
+      };
+    }
+
+    return {
+      ok: true,
+      command: {
+        ExerciseCommand: {
+          templateId: tmpl,
+          contractId: lockedAmuletCid,
+          choice: 'LockedAmulet_OwnerExpireLockV2',
+          choiceArgument: {},
+        },
+      },
+      commandId: `unlock-cc-${randomUUID()}`,
+      disclosedContracts: [
+        { templateId: openRound.templateId, contractId: openRound.contractId, createdEventBlob: openRound.blob },
+      ],
+    };
+  }
+
   async lockCc(
     ownerParty: string,
     amountCc: number,

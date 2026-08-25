@@ -43,6 +43,9 @@ import {
   useInvalidateWalletTokens,
 } from "@/lib/hooks/use-wallet-tokens";
 import { useFeeConfig } from "@/lib/hooks/use-fee-config";
+import { useMe } from "@/lib/hooks/use-me";
+import { signRelayTransaction } from "@/lib/wallet/sign-relay";
+import { SignPassphraseModal } from "@/components/app/wallet/sign-passphrase-modal";
 import { TokenLogo, displayName } from "@/components/app/wallet/token-logo";
 
 type Sheet = null | "send" | "receive" | "offers" | "swap";
@@ -79,6 +82,22 @@ export function WalletActions({
   // Unified on-chain transaction status modal (Sign → Broadcast → Confirmed).
   // Presentation layer only — driven around the existing fetch in submitSend.
   const tx = useTransactionStatus();
+
+  // M3b: user external (non-custodial) → transaksi CC di-sign di browser.
+  const { me } = useMe();
+  const isExternalWallet = me?.walletKind === "external";
+
+  // Prompt passphrase deferred — dipakai sign-relay saat dompet terkunci.
+  const [passPrompt, setPassPrompt] = useState<{
+    description: string;
+    resolve: (pass: string) => void;
+    reject: () => void;
+  } | null>(null);
+  const openPassphrasePrompt = useCallback((description: string) => {
+    return new Promise<string>((resolve, reject) => {
+      setPassPrompt({ description, resolve, reject });
+    });
+  }, []);
 
   // Pending incoming offers — badge count + modal content.
   const { offers, loading: offersLoading, error: offersError, setOffers, refresh: refreshOffers } = useOffers();
@@ -235,8 +254,6 @@ export function WalletActions({
       accentBg: "bg-[var(--primary)]/15",
       accentText: "text-canton",
     });
-    tx.broadcast();
-
     // ── AUTO-ROUTE: CC → /send-cc, non-CC → /send-token ──────────────────
     // User pilih token di selector, tidak sadar backend beda. CC pakai jalur
     // lama (preapproval path, bisa direct). Non-CC pakai CIP-0056 two-step.
@@ -256,6 +273,67 @@ export function WalletActions({
       payload.instrumentId = selectedSendToken.instrumentId;
       payload.instrumentAdmin = selectedSendToken.instrumentAdmin;
     }
+
+    // ── M3b: user EXTERNAL → tanda tangan di browser via sign relay ──────
+    // Modal status berhenti di tahap 'sign' (menunggu passphrase bila dompet
+    // terkunci); broadcast() hanya setelah signature diterima.
+    if (isExternalWallet) {
+      try {
+        await signRelayTransaction(
+          isCC ? "send_cc" : "send_token",
+          {
+            to: recipient,
+            amount,
+            memo: memo.trim() || undefined,
+            clientNonce: nonce,
+            ...(!isCC
+              ? {
+                  instrumentId: selectedSendToken.instrumentId,
+                  instrumentAdmin: selectedSendToken.instrumentAdmin,
+                }
+              : {}),
+          },
+          {
+            onWalletLocked: () =>
+              openPassphrasePrompt(
+                `Send ${amount} ${tokenLabel} to ${recipientDisplay}`,
+              ),
+          },
+        );
+      } catch (err) {
+        tx.dismiss();
+        setSendState("error");
+        setSendMessage(
+          err instanceof Error
+            ? err.message
+            : "Transfer failed. Please try again.",
+        );
+        setConfirmOpen(false);
+        return;
+      }
+      tx.broadcast();
+      setConfirmOpen(false);
+      setSheet("send");
+      setSendState("success");
+      setSendMessage(`Signed with your key — sent ${amount} ${tokenLabel}.`);
+      onBalanceRefresh?.();
+      void invalidateWalletTokens();
+      tx.succeed({
+        amountText: `${amount} ${tokenLabel}`,
+        title: "Transfer sent",
+        subtitle: "Signed with your key.",
+        accentBg: "bg-[var(--primary)]/15",
+        accentText: "text-canton",
+        meta: [
+          { label: "Amount", value: `${amount} ${tokenLabel}` },
+          { label: "Recipient", value: recipientDisplay, mono: true },
+          { label: "Network", value: "Canton" },
+        ],
+      });
+      return;
+    }
+
+    tx.broadcast();
 
     try {
       const res = await fetch(endpoint, {
@@ -754,6 +832,20 @@ export function WalletActions({
         subtitle="Funds are on the way. Review your receipt below."
         partyId={partyId}
         onClose={closeSuccessReceipt}
+      />
+
+      {/* M3b: prompt passphrase saat dompet terkunci (sign transaksi external). */}
+      <SignPassphraseModal
+        open={!!passPrompt}
+        description={passPrompt?.description}
+        onSubmit={(pass) => {
+          passPrompt?.resolve(pass);
+          setPassPrompt(null);
+        }}
+        onCancel={() => {
+          passPrompt?.reject();
+          setPassPrompt(null);
+        }}
       />
 
 
