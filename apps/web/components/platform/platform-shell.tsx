@@ -21,6 +21,7 @@ import { ROUTES } from "@/lib/routing/app-routes";
 import { useWalletAccess } from "@/lib/hooks/use-wallet-access";
 import { hrefRequiresWallet } from "@/lib/auth/wallet-access";
 import { useRealtime } from "@/lib/realtime/use-realtime";
+import { useAutoAccept } from "@/lib/wallet/auto-accept";
 import { cn } from "@/lib/utils/utils";
 
 const navItems: {
@@ -129,6 +130,8 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
   // Realtime SSE push — push transaksi/balance baru dari server → invalidate
   // cache react-query → update UI instan. No-op bila belum login (BFF 401).
   useRealtime();
+  // M5: auto-accept incoming transfers while wallet unlocked (UX like custodial)
+  useAutoAccept();
 
   return (
     <div className="relative flex min-h-screen w-full max-w-full isolate items-stretch overflow-x-hidden bg-[var(--background)] font-sans">

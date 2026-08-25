@@ -9,10 +9,15 @@ import {
   KeyRound,
   Lock,
   ShieldCheck,
+  Zap,
   Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils/utils";
 import { Card } from "@/components/ui/card";
+import {
+  isAutoAcceptEnabled,
+  setAutoAccept,
+} from "@/lib/wallet/auto-accept";
 import { buttonVariants } from "@/components/ui/button";
 import { inputClass } from "@/lib/ui/ui-tokens";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -619,6 +624,24 @@ export function SettingsWalletKeyPanel() {
                   </div>
                 ) : null}
 
+                {/* Auto-accept incoming transfers */}
+                <div className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--muted)]/40 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 text-sm">
+                      <p className="flex items-center gap-2 font-semibold text-[var(--foreground)]">
+                        <Zap className="h-4 w-4 text-canton" />
+                        Auto-Accept Transfers
+                      </p>
+                      <p className="mt-1 leading-relaxed text-[var(--muted-foreground)]">
+                        Automatically accept incoming transfers while your
+                        wallet is unlocked. Keep this browser tab open to
+                        receive funds instantly.
+                      </p>
+                    </div>
+                    <AutoAcceptToggle />
+                  </div>
+                </div>
+
                 {/* M4b: sync toggle — encrypted copy in account (any-device unlock) */}
                 <div className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--muted)]/40 p-4">
                   <div className="flex items-start justify-between gap-3">
@@ -727,6 +750,35 @@ export function SettingsWalletKeyPanel() {
         )}
       </div>
     </Card>
+  );
+}
+
+// ── Auto-accept toggle component ─────────────────────────────────────────
+function AutoAcceptToggle() {
+  const [on, setOn] = useState(true);
+  useEffect(() => setOn(isAutoAcceptEnabled()), []);
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={() => {
+        const next = !on;
+        setAutoAccept(next);
+        setOn(next);
+      }}
+      className={cn(
+        "relative h-6 w-11 shrink-0 rounded-full transition-colors",
+        on ? "bg-canton" : "bg-[var(--muted-foreground)]/30",
+      )}
+    >
+      <span
+        className={cn(
+          "absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all",
+          on ? "left-[22px]" : "left-0.5",
+        )}
+      />
+    </button>
   );
 }
 
