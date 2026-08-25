@@ -404,6 +404,39 @@ export class SigningRelayService {
           `recipient=${meta.recipientPartyId} — DB record gagal: ${String(err).slice(0, 160)}`,
       );
     }
+
+    // Fee leg: kumpulkan via jalur CUSTODIAL (operator sign) — interactive
+    // submission tidak support multi-command. Operator masih punya CanActAs
+    // pada party external (di-grant saat complete), dan fee transfer hanya
+    // butuh actAs [sender] yang bisa dilakukan participant.
+    if (meta.feeCc > 0 && meta.feeParty) {
+      try {
+        const senderOnChain = await this.splice.resolveOnChainPartyId(
+          entry.partyId,
+        );
+        const feePartyOnChain =
+          await this.splice.resolveOnChainPartyId(meta.feeParty);
+        const feeResult = await this.ledger.executeTransferFactoryTransfer({
+          senderPartyId: senderOnChain,
+          receiverPartyId: feePartyOnChain,
+          amountCc: meta.feeCc,
+          description: `Platform fee: ${meta.recipientLabel} (relay)`,
+        });
+        if (feeResult.ok) {
+          this.logger.log(
+            `Fee collected post-relay: ${meta.feeCc} CC from ${entry.partyId.split('::')[0]} → ${meta.feeParty.split('::')[0]}`,
+          );
+        } else {
+          this.logger.warn(
+            `Fee collection post-relay failed (non-fatal): ${feeResult.error ?? 'unknown'}`,
+          );
+        }
+      } catch (feeErr) {
+        this.logger.warn(
+          `Fee collection post-relay error (non-fatal): ${String(feeErr).slice(0, 120)}`,
+        );
+      }
+    }
     } // end if send_cc
   }
 
@@ -586,32 +619,15 @@ export class SigningRelayService {
       throw new BadRequestException(main.error);
     }
 
-    // ── Leg platform fee (command kedua, satu tanda tangan yang sama) ────
+    // ── Interactive submission HANYA support 1 command per prepare ──────
+    // Fee leg dikumpulkan via jalur custodial (operator sign) DI postExecute,
+    // BUKAN di-include di sini — "Preparing multiple commands is currently
+    // not supported" (VPS MainNet 2026-08-25).
     const commands: unknown[] = [main.command];
     const disclosed = [...main.disclosedContracts];
-    let feeIncluded = false;
     const feePartyRaw =
       this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
       this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
-    if (feeCc > 0 && feePartyRaw) {
-      const feePartyOnChain =
-        await this.splice.resolveOnChainPartyId(feePartyRaw);
-      const feeCmd = await this.ledger.buildCip56TransferCommand({
-        senderPartyId: senderOnChain,
-        receiverPartyId: feePartyOnChain,
-        amountCc: feeCc,
-        description: `Platform fee: ${recipientLabel}`,
-      });
-      if (feeCmd.ok) {
-        commands.push(feeCmd.command);
-        disclosed.push(...(feeCmd.disclosedContracts as unknown[]));
-        feeIncluded = true;
-      } else {
-        this.logger.warn(
-          `Fee leg build gagal — transfer tanpa fee: ${feeCmd.error}`,
-        );
-      }
-    }
 
     return {
       commands,
@@ -619,7 +635,7 @@ export class SigningRelayService {
       commandId: clientNonce ? main.commandId.replace(/^tf-/, '') : undefined,
       meta: {
         amount,
-        feeCc: feeIncluded ? feeCc : 0,
+        feeCc,
         feeParty: feePartyRaw ?? '',
         recipientPartyId,
         recipientLabel,
@@ -772,32 +788,13 @@ export class SigningRelayService {
     });
     if (!main.ok) throw new BadRequestException(main.error);
 
-    // Leg fee (CC) — command kedua, satu tanda tangan.
+    // Interactive submission hanya 1 command — fee leg dikumpulkan via
+    // custodial di postExecute (sama seperti send_cc).
     const commands: unknown[] = [main.command];
     const disclosed = [...main.disclosedContracts];
-    let feeIncluded = false;
     const feePartyRaw =
       this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
       this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
-    if (feeCc > 0 && feePartyRaw) {
-      const feePartyOnChain =
-        await this.splice.resolveOnChainPartyId(feePartyRaw);
-      const feeCmd = await this.ledger.buildCip56TransferCommand({
-        senderPartyId: senderOnChain,
-        receiverPartyId: feePartyOnChain,
-        amountCc: feeCc,
-        description: `Platform fee (token transfer to ${recipientLabel})`,
-      });
-      if (feeCmd.ok) {
-        commands.push(feeCmd.command);
-        disclosed.push(...(feeCmd.disclosedContracts as unknown[]));
-        feeIncluded = true;
-      } else {
-        this.logger.warn(
-          `Fee leg (token) build gagal — transfer tanpa fee: ${feeCmd.error}`,
-        );
-      }
-    }
 
     return {
       commands,
@@ -805,7 +802,7 @@ export class SigningRelayService {
       commandId: clientNonce ? main.commandId.replace(/^tf-/, '') : undefined,
       meta: {
         amount,
-        feeCc: feeIncluded ? feeCc : 0,
+        feeCc,
         feeParty: feePartyRaw ?? '',
         recipientPartyId,
         recipientLabel,

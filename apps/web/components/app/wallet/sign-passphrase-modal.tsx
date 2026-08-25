@@ -40,12 +40,14 @@ export function SignPassphraseModal({
 
   return (
     <div
-      className="modal-backdrop fixed inset-0 z-[70] flex items-end justify-center bg-black/60 p-4 backdrop-blur-sm sm:items-center"
+      className="fixed inset-0 z-[80] flex items-center justify-center overflow-y-auto p-4"
       role="dialog"
       aria-modal="true"
       aria-label="Wallet passphrase"
     >
-      <div className="modal-backdrop w-full max-w-md rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl sm:p-8">
+      {/* Backdrop terpisah — tidak menutup klik (wajib isi passphrase) */}
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div className="relative z-10 my-auto w-full max-w-md rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl sm:p-8">
         <div className="mb-5 flex items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-canton-muted bg-canton-subtle">
             <KeyRound className="h-6 w-6 text-canton" />
