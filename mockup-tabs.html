@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CanQuest — Tabs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#070a08;
+    --card:#101512;
+    --border:rgba(255,255,255,0.07);
+    --border-strong:rgba(255,255,255,0.16);
+    --mint:#34e0a1;
+    --text:#edf2ef;
+    --text-2:#9aa39e;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:
+      radial-gradient(600px 320px at 10% 0%, rgba(52,224,161,0.07), transparent 60%),
+      var(--bg);
+    min-height:100vh;
+    display:flex; align-items:center; justify-content:flex-start;
+    padding:40px;
+    font-family:'Inter',sans-serif;
+  }
+
+  .tabs{
+    display:inline-flex;
+    gap:10px;
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:100px;
+    padding:14px 16px;
+  }
+  .tab{
+    border:1px solid var(--border-strong);
+    background:transparent;
+    color:var(--text-2);
+    font-family:'Inter',sans-serif;
+    font-size:12.5px;
+    font-weight:700;
+    letter-spacing:0.4px;
+    padding:9px 18px;
+    border-radius:100px;
+    cursor:pointer;
+    transition:opacity .15s ease;
+  }
+  .tab:hover{ opacity:0.85; }
+  .tab.selected{
+    background:var(--mint);
+    border-color:var(--mint);
+    color:#062017;
+  }
+</style>
+</head>
+<body>
+  <div class="tabs">
+    <button class="tab selected">ACTIVE (3)</button>
+    <button class="tab">COMING SOON (1)</button>
+    <button class="tab">ENDED (3)</button>
+  </div>
+</body>
+</html>

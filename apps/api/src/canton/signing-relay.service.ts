@@ -905,6 +905,129 @@ export class SigningRelayService {
     };
   }
 
+  // ═══ M5b: PREAPPROVAL via ExternalPartySetupProposal ═══════════════════
+
+  /**
+   * Prepare preapproval via validator API (bukan ledger API).
+   * Hash yang di-return: RAW 32 bytes hex-encoded (TANPA 1220 prefix).
+   * Browser sign raw bytes TANPA prefix — berbeda dari relay biasa!
+   */
+  async preparePreapproval(
+    userId: string,
+    publicKeyHex: string,
+  ): Promise<{ flow: string; hash: string; commandId: string; description: string }> {
+    this.sweepExpired();
+    if (this.pending.has(userId)) {
+      throw new BadRequestException(
+        'A transaction is already awaiting your signature — complete it first.',
+      );
+    }
+
+    const user = await this.requireExternalUser(userId);
+    const valUrl = (this.config.get<string>('CANTON_VALIDATOR_URL') ?? '').replace(/\/$/, '');
+    if (!valUrl) throw new BadRequestException('CANTON_VALIDATOR_URL not set');
+
+    const token = await this.getValidatorToken();
+    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+    // Step 1: Create or reuse setup proposal
+    let contractId: string | null = null;
+    const propRes = await fetch(`${valUrl}/api/validator/v0/admin/external-party/setup-proposal`, {
+      method: 'POST', headers, body: JSON.stringify({ user_party_id: user.partyId }),
+    });
+    const propText = await propRes.text();
+    if (propRes.ok) {
+      contractId = JSON.parse(propText).contract_id;
+    } else if (propRes.status === 409) {
+      contractId = propText.match(/ContractId\(([^)]+)\)/)?.[1] ?? null;
+    }
+    if (!contractId) throw new BadRequestException(`Setup proposal failed: ${propText.slice(0, 150)}`);
+
+    // Step 2: Prepare accept
+    const prepRes = await fetch(`${valUrl}/api/validator/v0/admin/external-party/setup-proposal/prepare-accept`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ user_party_id: user.partyId, contract_id: contractId }),
+    });
+    const prepText = await prepRes.text();
+    if (!prepRes.ok) throw new BadRequestException(`prepare-accept failed: ${prepText.slice(0, 150)}`);
+    const prep = JSON.parse(prepText);
+
+    const commandId = `relay-preapproval-${randomUUID()}`;
+    this.pending.set(userId, {
+      userId, flow: 'preapproval_enable', partyId: user.partyId, commandId,
+      prepared: {
+        __preapproval: true,
+        transaction: prep.transaction,
+        txHash: prep.tx_hash,
+      },
+      meta: { contractId, publicKeyHex },
+      createdAt: Date.now(),
+    });
+
+    this.logger.log(`prepare preapproval user=${userId.slice(0, 8)}… hash=${prep.tx_hash.slice(0, 12)}…`);
+    return { flow: 'preapproval_enable', hash: prep.tx_hash, commandId, description: 'Enable instant receive (90 days)' };
+  }
+
+  /**
+   * Execute preapproval via validator API submit-accept.
+   * Signature: raw 32 bytes hex-decoded tx_hash, TANPA 1220 prefix, hex-encoded sig.
+   */
+  async executePreapproval(
+    userId: string,
+    signatureHex: string,
+  ): Promise<{ transferPreapprovalCid: string; updateId?: string }> {
+    const entry = this.pending.get(userId);
+    if (!entry || entry.flow !== 'preapproval_enable') {
+      throw new BadRequestException('No preapproval pending — run prepare again.');
+    }
+    const prep = entry.prepared as { __preapproval: boolean; transaction: string; txHash: string };
+    if (!prep?.__preapproval) throw new BadRequestException('Invalid pending entry.');
+
+    const valUrl = (this.config.get<string>('CANTON_VALIDATOR_URL') ?? '').replace(/\/$/, '');
+    const token = await this.getValidatorToken();
+    const pubKeyHex = (entry.meta as { publicKeyHex?: string })?.publicKeyHex;
+    if (!pubKeyHex) throw new BadRequestException('publicKeyHex missing from meta.');
+
+    const subRes = await fetch(`${valUrl}/api/validator/v0/admin/external-party/setup-proposal/submit-accept`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        submission: {
+          party_id: entry.partyId,
+          transaction: prep.transaction,
+          signed_tx_hash: signatureHex,
+          public_key: pubKeyHex,
+        },
+      }),
+    });
+    const subText = await subRes.text();
+    this.pending.delete(userId);
+
+    if (subRes.ok) {
+      const result = JSON.parse(subText);
+      this.logger.log(`preapproval ENABLED user=${userId.slice(0, 8)}… cid=${result.transfer_preapproval_contract_id?.slice(0, 16)}…`);
+      return { transferPreapprovalCid: result.transfer_preapproval_contract_id, updateId: result.update_id };
+    }
+    this.logger.warn(`preapproval submit failed: ${subText.slice(0, 200)}`);
+    throw new BadRequestException(`Preapproval failed: ${subText.slice(0, 150)}`);
+  }
+
+  /** Get Keycloak token for validator API calls. */
+  private tokenCache: { token: string; exp: number } | null = null;
+  private async getValidatorToken(): Promise<string> {
+    if (this.tokenCache && Date.now() < this.tokenCache.exp) return this.tokenCache.token;
+    const keycloakUrl = this.config.get<string>('KEYCLOAK_URL');
+    const realm = this.config.get<string>('KEYCLOAK_REALM');
+    const res = await fetch(`${keycloakUrl}/realms/${realm}/protocol/openid-connect/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `grant_type=client_credentials&client_id=${this.config.get('LEDGER_CLIENT_ID')}&client_secret=${this.config.get('LEDGER_CLIENT_SECRET')}&scope=daml_ledger_api`,
+    });
+    const json = await res.json();
+    this.tokenCache = { token: json.access_token, exp: Date.now() + (json.expires_in - 30) * 1000 };
+    return json.access_token;
+  }
+
   private isSystemPartyId(partyId: string): boolean {    const candidates = [
       this.config.get<string>('CANTON_VALIDATOR_PARTY_ID'),
       this.config.get<string>('CANTON_APP_PROVIDER_PARTY_ID'),

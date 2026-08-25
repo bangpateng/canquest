@@ -1,0 +1,2707 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>CanQuest — Platform Mockup</title>
+
+<script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+<script>
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ["Inter", "system-ui", "sans-serif"],
+          heading: ["'Space Grotesk'", "system-ui", "sans-serif"],
+          mono: ["ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
+        },
+      },
+    },
+  };
+</script>
+
+<script src="https://unpkg.com/lucide@latest"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+
+<style>
+  :root, .dark {
+    --canton-rgb: 94 232 156;
+    --canton-ink: 196 250 222;
+    --canton-ink-muted: 138 198 168;
+    --canton-cyan-rgb: 45 224 214;
+    --background: #05060a;
+    --foreground: #f6f7fb;
+    --muted: #12141d;
+    --muted-foreground: #868b9c;
+    --card: #10131c;
+    --card-solid: #0e1017;
+    --border: rgb(255 255 255 / 0.07);
+    --primary: rgb(var(--canton-rgb));
+    --primary-strong: #8bf6bb;
+    --primary-soft: rgb(var(--canton-rgb) / 0.13);
+    --primary-foreground: #04120b;
+    --accent: #67e8d9;
+    --accent-muted: rgb(var(--canton-cyan-rgb) / 0.1);
+    --ring: rgb(var(--canton-rgb) / 0.45);
+    --danger: #fb7185;
+    --success: #4ade80;
+    --warn-rgb: 251 146 60;
+    --violet-rgb: 167 139 250;
+    --gradient-brand: linear-gradient(135deg, #5EE89C 0%, #2DE0D6 100%);
+    --shadow-card: 0 1px 0 0 rgb(255 255 255 / 0.04) inset, 0 24px 48px -28px rgb(0 0 0 / 0.75);
+    --shadow-glow: 0 10px 30px -10px rgb(var(--canton-rgb) / 0.45);
+    --ease: cubic-bezier(.16,.84,.44,1);
+  }
+
+  html, body { overflow-x: hidden; max-width: 100vw; width: 100%; }
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: Inter, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    position: relative;
+    letter-spacing: -0.005em;
+  }
+  * { max-width: 100%; box-sizing: border-box; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-thumb { background: rgb(255 255 255 / 0.1); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgb(var(--canton-rgb) / 0.35); }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  body::after {
+    content: "";
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      radial-gradient(48rem 30rem at 14% -8%, rgb(var(--canton-rgb) / 0.16), transparent 60%),
+      radial-gradient(40rem 26rem at 100% 8%, rgb(var(--violet-rgb) / 0.12), transparent 55%),
+      radial-gradient(36rem 24rem at 8% 92%, rgb(var(--canton-cyan-rgb) / 0.08), transparent 55%);
+  }
+  #app-shell { position: relative; z-index: 1; }
+
+  a, button, input, .card, .btn { font-family: inherit; }
+  :focus-visible { outline: 2px solid rgb(var(--canton-rgb) / 0.6); outline-offset: 2px; border-radius: 4px; }
+
+  svg.lucide { fill: none; stroke: currentColor; flex-shrink: 0; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  .text-canton { color: rgb(var(--canton-ink)); }
+  .text-canton-muted { color: rgb(var(--canton-ink-muted)); }
+  .bg-canton-subtle { background-color: var(--primary-soft); }
+  .bg-canton-soft { background-color: rgb(var(--canton-rgb) / 0.16); }
+  .border-canton-muted { border-color: rgb(var(--canton-rgb) / 0.22); }
+  .glow-text { text-shadow: 0 0 44px rgb(var(--canton-rgb) / 0.4); background: linear-gradient(180deg, var(--foreground) 42%, rgb(var(--canton-ink) / 0.85)); -webkit-background-clip: text; background-clip: text; }
+
+  .modal-backdrop {
+    position: fixed; inset: 0;
+    background-color: rgb(4 5 8 / 0.72);
+    backdrop-filter: blur(6px) saturate(140%); -webkit-backdrop-filter: blur(6px) saturate(140%);
+    cursor: default;
+    border: 0;
+  }
+
+  .card {
+    border-radius: 1.125rem; background-color: rgb(16 19 28 / 0.78); border: 1px solid var(--border);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    box-shadow: var(--shadow-card);
+  }
+  .card-bare { border-radius: 1.125rem; background-color: var(--card-solid); }
+  .card-interactive { transition: border-color 0.25s var(--ease), transform 0.25s var(--ease), box-shadow 0.25s var(--ease); }
+  .card-interactive:hover { border-color: rgb(var(--canton-rgb) / 0.32); transform: translateY(-2px); box-shadow: var(--shadow-card), var(--shadow-glow); }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+    border-radius: 0.875rem; font-weight: 600; transition: transform 0.15s var(--ease), box-shadow 0.2s var(--ease), background-color 0.2s var(--ease), border-color 0.2s var(--ease), filter 0.2s var(--ease);
+    cursor: pointer; border: 0; white-space: nowrap;
+  }
+  .btn:active { transform: translateY(1px) scale(0.99); }
+  .btn:disabled { pointer-events: none; opacity: 0.5; }
+  .btn-primary {
+    background: var(--gradient-brand); color: var(--primary-foreground); font-weight: 700;
+    box-shadow: 0 1px 0 0 rgb(255 255 255 / 0.35) inset, 0 10px 24px -10px rgb(var(--canton-rgb) / 0.55);
+  }
+  .btn-primary:hover { filter: brightness(1.06); transform: translateY(-1px); box-shadow: 0 1px 0 0 rgb(255 255 255 / 0.4) inset, 0 14px 30px -10px rgb(var(--canton-rgb) / 0.65); }
+  .btn-secondary { border: 1px solid var(--border); background-color: rgb(15 17 25 / 0.75); color: var(--foreground); backdrop-filter: blur(12px); }
+  .btn-secondary:hover { border-color: rgb(var(--canton-rgb) / 0.35); background-color: rgb(var(--canton-rgb) / 0.09); transform: translateY(-1px); }
+  .btn-ghost { background: transparent; color: var(--foreground); }
+  .btn-ghost:hover { background-color: rgb(var(--canton-rgb) / 0.1); }
+  .btn-success { border: 1px solid rgb(var(--canton-rgb) / 0.35); background-color: rgb(var(--canton-rgb) / 0.1); color: rgb(var(--canton-ink)); }
+  .btn-muted { border: 1px solid var(--border); background-color: rgb(16 19 27 / 0.5); color: var(--muted-foreground); cursor: default; }
+  .btn-danger { border: 1px solid rgb(251 113 133 / 0.3); background-color: rgb(251 113 133 / 0.1); color: #fda4af; }
+  .btn-icon { background: transparent; color: #fff; border: 0; }
+  .btn-icon:hover { background-color: var(--muted); color: #fff; }
+
+  .btn-sm { height: 2.375rem; padding: 0 1.05rem; font-size: 0.8rem; }
+  .btn-default { height: 2.75rem; padding: 0 1.25rem; font-size: 0.875rem; }
+  .btn-lg { height: 3.125rem; padding: 0 2rem; font-size: 1rem; }
+  .btn-block { height: 2.75rem; width: 100%; padding: 0 1.25rem; font-size: 0.875rem; }
+
+  .icon-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 0.875rem; border: 1px solid var(--border);
+    background-color: rgb(15 17 25 / 0.75); color: #fff;
+    backdrop-filter: blur(12px);
+    transition: all 0.2s var(--ease); cursor: pointer;
+  }
+  .icon-btn:hover { border-color: rgb(var(--canton-rgb) / 0.35); background-color: rgb(var(--canton-rgb) / 0.1); transform: translateY(-1px); }
+
+  .tab-pill {
+    display: inline-flex; align-items: center; gap: 0.25rem;
+    border-radius: 9999px; padding: 0.3rem 0.7rem;
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+    cursor: pointer; transition: all 0.2s var(--ease); white-space: nowrap;
+  }
+  .tab-pill-on { background: var(--gradient-brand); color: var(--primary-foreground); border: 0; box-shadow: 0 6px 16px -8px rgb(var(--canton-rgb) / 0.6); }
+  .tab-pill-off { border: 1px solid rgb(255 255 255 / 0.1); background-color: rgb(255 255 255 / 0.04); color: #cbd0dc; }
+  .tab-pill-off:hover { color: #fff; border-color: rgb(255 255 255 / 0.18); }
+
+  .input {
+    width: 100%; border-radius: 0.875rem; border: 1px solid var(--border);
+    background-color: var(--muted); padding: 0.7rem 0.85rem;
+    font-size: 0.875rem; color: var(--foreground); outline: none;
+    transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+  }
+  .input::placeholder { color: var(--muted-foreground); }
+  .input:focus { border-color: rgb(var(--canton-rgb) / 0.55); box-shadow: 0 0 0 3px rgb(var(--canton-rgb) / 0.14); }
+
+  .spin { animation: spin 1s linear infinite; }
+  @media (prefers-reduced-motion: reduce) {
+    .card-interactive, .btn, .icon-btn, .switch-knob, .tab-pill { transition: none !important; }
+    .card-interactive:hover, .btn-primary:hover, .btn-secondary:hover, .icon-btn:hover { transform: none !important; }
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes toast-in { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+
+  @keyframes tx-pulse-ring { 0%, 100% { box-shadow: 0 0 0 0 rgb(var(--canton-rgb) / 0.32); } 50% { box-shadow: 0 0 0 10px rgb(var(--canton-rgb) / 0); } }
+  .tx-pulse { animation: tx-pulse-ring 1.8s var(--ease) infinite; }
+  @keyframes tx-sweep { 0% { transform: translateX(-120%); } 100% { transform: translateX(220%); } }
+  .tx-progress-track { position: relative; overflow: hidden; }
+  .tx-progress-sweep { position: absolute; inset: 0; width: 35%; animation: tx-sweep 1.15s ease-in-out infinite; }
+  @keyframes tx-check-pop { 0% { transform: scale(0.55); opacity: 0; } 65% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); } }
+  .tx-check-pop { animation: tx-check-pop 0.4s var(--ease) both; }
+  @keyframes tx-fade-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .tx-fade-up { animation: tx-fade-up 0.32s var(--ease) both; }
+  @media (prefers-reduced-motion: reduce) {
+    .tx-pulse, .tx-progress-sweep, .tx-check-pop, .tx-fade-up, .claim-modal-pop { animation: none !important; }
+  }
+
+  @keyframes claim-modal-pop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .claim-modal-pop { animation: claim-modal-pop 0.18s ease-out both; }
+
+  .page { display: none; }
+  .page.active { display: block; }
+  .modal { display: none; }
+  .modal.open { display: flex; }
+
+  .switch { position: relative; height: 1.75rem; width: 3rem; border-radius: 9999px; transition: background 0.2s var(--ease), box-shadow 0.2s var(--ease); cursor: pointer; border: 0; }
+  .switch-on { background: var(--gradient-brand); box-shadow: 0 4px 14px -4px rgb(var(--canton-rgb) / 0.55); }
+  .switch-off { background-color: var(--muted); }
+  .switch-knob { position: absolute; top: 0.1875rem; height: 1.375rem; width: 1.375rem; border-radius: 9999px; background: #fff; box-shadow: 0 1px 3px rgb(0 0 0 / 0.35); transition: transform 0.2s var(--ease); }
+  .switch-on .switch-knob { transform: translateX(1.375rem); }
+  .switch-off .switch-knob { transform: translateX(0.1875rem); }
+
+  .eyebrow { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted-foreground); }
+
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+  .logo-text { font-family: 'Space Grotesk', system-ui, sans-serif; font-weight: 700; letter-spacing: -0.03em; }
+
+  .av-grad-1 { background: linear-gradient(145deg, #e8ff6a 0%, #a3c412 55%, #6b8a00 100%); }
+  .av-grad-2 { background: linear-gradient(145deg, #7cc4ff 0%, #3b82f6 55%, #1d4ed8 100%); }
+  .av-grad-3 { background: linear-gradient(145deg, #fb9fd0 0%, #d946ef 55%, #7e22ce 100%); }
+  .av-grad-4 { background: linear-gradient(145deg, #5eead4 0%, #22c58e 55%, #0d9488 100%); }
+  .av-grad-5 { background: linear-gradient(145deg, #fdba74 0%, #f97316 55%, #c2410c 100%); }
+
+  .glass-card {
+    background: rgba(16, 19, 28, 0.6);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: 0 20px 50px -20px rgba(0, 0, 0, 0.5);
+  }
+  .quest-timeline {
+    position: relative;
+    padding-left: 2.5rem;
+  }
+  .quest-timeline::before {
+    content: '';
+    position: absolute;
+    left: 1.125rem;
+    top: 1.5rem;
+    bottom: 1.5rem;
+    width: 2px;
+    background: linear-gradient(to bottom, rgba(255,255,255,0.1), rgba(255,255,255,0));
+    z-index: 0;
+  }
+  .quest-milestone {
+    position: relative;
+    margin-bottom: 1rem;
+  }
+  .quest-milestone::before {
+    content: '';
+    position: absolute;
+    left: -1.625rem;
+    top: 1.25rem;
+    width: 0.875rem;
+    height: 0.875rem;
+    border-radius: 50%;
+    background: var(--card-solid);
+    border: 2px solid rgba(255,255,255,0.1);
+    z-index: 1;
+    transition: all 0.3s var(--ease);
+  }
+  .quest-milestone.is-done::before {
+    background: var(--success);
+    border-color: var(--success);
+    box-shadow: 0 0 12px rgba(74, 222, 128, 0.4);
+  }
+  .quest-milestone.is-active::before {
+    background: var(--primary);
+    border-color: var(--primary);
+    box-shadow: 0 0 0 4px rgba(94, 232, 156, 0.2);
+    animation: tx-pulse-ring 2s infinite;
+  }
+
+  body::before {
+    content: "MOCKUP — data dummy · bukan app asli";
+    position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+    z-index: 999; font-size: 10px; font-weight: 600; color: var(--muted-foreground);
+    background: var(--card-solid); border: 1px solid var(--border); border-bottom: 0;
+    backdrop-filter: blur(12px);
+    padding: 4px 12px; border-radius: 8px 8px 0 0; pointer-events: none;
+    display: none; 
+  }
+  @media (max-width: 767px) { body::before { display: block; bottom: 64px; } }
+</style>
+</head>
+
+<body class="dark">
+
+<div id="app-shell" class="flex min-h-screen w-full items-start overflow-x-hidden font-sans">
+
+  <!-- DESKTOP SIDEBAR -->
+  <aside class="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--card)]/60 px-4 py-8 backdrop-blur-2xl md:flex">
+    <div class="mb-6 px-2">
+      <a href="#/overview" class="logo-text inline-flex items-center text-xl text-[var(--foreground)]">
+        Can<span class="text-canton">Quest</span>
+      </a>
+    </div>
+    <p class="mb-6 px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--muted-foreground)]">Platform</p>
+    <nav class="flex flex-1 flex-col gap-1.5" id="sidebar-nav"></nav>
+    <div class="mt-auto space-y-1 border-t border-[var(--border)] pt-5">
+      <a href="#" onclick="alert('Ini hanya mockup — landing page tidak termasuk.')" class="flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium text-[var(--muted-foreground)] hover:bg-[var(--primary)]/5 hover:text-[var(--foreground)]">
+        <i data-lucide="compass" class="h-4 w-4"></i>Landing
+      </a>
+      <p class="px-4 pt-2 text-[10px] font-medium text-[var(--muted-foreground)]">canquest.cc</p>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="flex min-w-0 flex-1 flex-col overflow-x-hidden pb-24 md:pb-0">
+
+    <header class="sticky top-0 z-30 flex h-16 w-full items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--background)]/80 px-4 backdrop-blur-2xl sm:h-[4.5rem] sm:px-6 md:px-8 lg:px-10">
+      <div class="flex shrink-0 items-center md:hidden">
+        <a href="#/overview" class="logo-text text-lg text-[var(--foreground)]">Can<span class="text-canton">Quest</span></a>
+      </div>
+      <div class="hidden flex-1 md:block"></div>
+      <div class="relative flex shrink-0 items-center gap-1.5 sm:gap-2">
+        <button id="bell-btn" class="icon-btn relative h-9 w-9" onclick="toggleNotifPanel()" title="Notifications">
+          <i data-lucide="bell" class="h-4 w-4"></i>
+          <span id="bell-badge" class="absolute -right-1 -top-1 hidden inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--primary)] px-1 text-[10px] font-bold text-white ring-2 ring-[var(--card)]">0</span>
+        </button>
+        <div id="notif-panel" class="hidden absolute right-0 top-12 z-50 w-80 max-w-[calc(100vw-2rem)] rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl overflow-hidden">
+          <div class="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
+            <p class="text-sm font-semibold text-[var(--foreground)]">Notifications</p>
+            <button class="text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]" onclick="clearNotifs()">Mark all read</button>
+          </div>
+          <ul id="notif-list" class="max-h-96 overflow-y-auto"></ul>
+          <div id="notif-empty" class="hidden px-4 py-8 text-center">
+            <i data-lucide="bell-off" class="h-6 w-6 text-[var(--muted-foreground)] mx-auto"></i>
+            <p class="mt-2 text-sm font-medium text-[var(--muted-foreground)]">No notifications yet</p>
+            <p class="mt-1 text-xs text-[var(--muted-foreground)]">Activity like sends, swaps &amp; claims will show here.</p>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="w-full max-w-full min-w-0 overflow-x-hidden px-4 py-6 sm:px-6 sm:py-8 md:px-8 md:py-10 lg:px-10">
+      <div class="mx-auto w-full max-w-7xl">
+
+        <!-- OVERVIEW -->
+        <section id="page-overview" class="page">
+          <div class="space-y-5 md:space-y-6">
+            <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 md:gap-5">
+              <div class="sm:col-span-2 lg:col-span-12">
+                <div class="card card-interactive overflow-hidden p-6 sm:p-7">
+                  <div class="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                    <div class="flex items-center gap-4">
+                      <div class="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl av-grad-4">
+                        <span class="text-lg font-bold uppercase tracking-wider text-white">AR</span>
+                      </div>
+                      <div class="min-w-0">
+                        <p class="truncate text-lg font-bold tracking-tight text-[var(--foreground)]">Aria Rahman</p>
+                        <a href="#" class="mt-0.5 inline-flex items-center gap-1 text-sm font-medium text-canton hover:underline">
+                          <i data-lucide="at-sign" class="h-3 w-3"></i>aria_canton
+                        </a>
+                      </div>
+                    </div>
+                    <a href="#/leaderboard" class="group flex shrink-0 items-center gap-3 rounded-xl bg-[var(--muted)] px-4 py-2.5 transition-colors hover:bg-[var(--primary)]/5">
+                      <div class="text-right">
+                        <p class="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">Weekly rank</p>
+                        <p class="text-xl font-extrabold tabular-nums tracking-tight text-[var(--foreground)]">#7</p>
+                      </div>
+                      <i data-lucide="arrow-up-right" class="h-4 w-4 text-[var(--muted-foreground)] transition-colors group-hover:text-canton"></i>
+                    </a>
+                  </div>
+                </div>
+              </div>
+              <div class="sm:col-span-2 lg:col-span-6">
+                <div class="card card-interactive overflow-hidden p-6 sm:p-7">
+                  <div>
+                    <div class="flex items-start justify-between">
+                      <div class="flex items-center gap-2.5">
+                        <div class="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-[11px] font-bold text-black">C</div>
+                        <div>
+                          <p class="eyebrow">CC balance</p>
+                          <p class="mt-0.5 text-3xl font-extrabold tabular-nums tracking-tight text-[var(--foreground)] glow-text">142.38</p>
+                        </div>
+                      </div>
+                      <div class="rounded-xl bg-[var(--muted)] px-3 py-1.5 text-right">
+                        <p class="text-[10px] font-medium uppercase tracking-wider text-[var(--muted-foreground)]">Value</p>
+                        <p class="text-sm font-bold tabular-nums text-[var(--foreground)]">$35.60</p>
+                      </div>
+                    </div>
+                    <div class="mt-6 space-y-3">
+                      <div class="flex items-center justify-between">
+                        <span class="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
+                          <span class="h-2 w-2 rounded-full bg-[var(--primary)]"></span>Available CC
+                        </span>
+                        <div class="flex items-baseline justify-end gap-2">
+                          <span class="text-base font-bold tabular-nums text-[var(--foreground)]">112.38</span>
+                          <span class="text-xs tabular-nums text-[var(--muted-foreground)]">$28.10</span>
+                        </div>
+                      </div>
+                      <div class="flex items-center justify-between">
+                        <span class="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
+                          <i data-lucide="lock" class="h-3 w-3 text-canton"></i>Locked CC
+                        </span>
+                        <div class="flex items-baseline justify-end gap-2">
+                          <span class="text-base font-bold tabular-nums text-[var(--foreground)]">30.00</span>
+                          <span class="text-xs tabular-nums text-[var(--muted-foreground)]">$7.50</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="mt-5">
+                      <div class="relative h-2 w-full overflow-hidden rounded-full bg-[var(--muted)]">
+                        <div class="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-[var(--primary)] to-[rgb(var(--canton-cyan-rgb))]" style="width:79%"></div>
+                        <div class="absolute inset-y-0 rounded-full bg-gradient-to-r from-[rgb(var(--canton-rgb)/0.4)] to-[var(--primary)]" style="left:79%;width:21%"></div>
+                      </div>
+                      <p class="mt-2 text-right text-[11px] font-medium tabular-nums text-[var(--muted-foreground)]">21% locked</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="sm:col-span-1 lg:col-span-3">
+                <div class="card card-interactive overflow-hidden p-6 sm:p-7">
+                  <div>
+                    <div class="flex items-center gap-2.5">
+                      <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--primary)]/10">
+                        <i data-lucide="sparkles" class="h-4 w-4 text-canton"></i>
+                      </span>
+                      <p class="eyebrow">Quest points</p>
+                    </div>
+                    <div class="mt-5">
+                      <p class="text-4xl font-extrabold tabular-nums tracking-tight text-[var(--foreground)] glow-text">2,480</p>
+                      <p class="mt-1.5 text-xs text-[var(--muted-foreground)]">Spendable on Earn campaigns</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="sm:col-span-1 lg:col-span-3">
+                <div class="card card-interactive overflow-hidden p-6 sm:p-7">
+                  <div>
+                    <div class="flex items-center gap-2.5">
+                      <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--primary)]/10">
+                        <i data-lucide="activity" class="h-4 w-4 text-canton"></i>
+                      </span>
+                      <p class="eyebrow">Recent activity</p>
+                    </div>
+                    <div class="mt-5 grid grid-cols-3 gap-2.5">
+                      <div class="flex flex-col gap-1 rounded-xl bg-[var(--muted)]/50 px-3 py-3">
+                        <p class="text-xl font-extrabold tabular-nums tracking-tight text-[var(--foreground)]">12</p>
+                        <p class="text-[10px] font-medium uppercase tracking-wide leading-tight text-[var(--muted-foreground)]">Quests</p>
+                      </div>
+                      <div class="flex flex-col gap-1 rounded-xl bg-[var(--muted)]/50 px-3 py-3">
+                        <p class="text-xl font-extrabold tabular-nums tracking-tight text-canton">4</p>
+                        <p class="text-[10px] font-medium uppercase tracking-wide leading-tight text-[var(--muted-foreground)]">Earn</p>
+                      </div>
+                      <div class="flex flex-col gap-1 rounded-xl bg-[var(--muted)]/50 px-3 py-3">
+                        <p class="text-xl font-extrabold tabular-nums tracking-tight text-[var(--foreground)]">37</p>
+                        <p class="text-[10px] font-medium uppercase tracking-wide leading-tight text-[var(--muted-foreground)]">On-chain</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <!-- EARN -->
+        <section id="page-earn" class="page">
+          <div class="space-y-4 sm:space-y-5 md:space-y-6">
+            <div class="card w-full overflow-hidden p-6 sm:p-8">
+              <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+                <div class="min-w-0">
+                  <p class="eyebrow">Kind campaign</p>
+                  <h1 class="mt-2 text-2xl font-bold leading-tight tracking-tight text-[var(--foreground)] sm:text-3xl md:text-4xl">Earn Rewards</h1>
+                  <p class="mt-2 max-w-md text-xs font-medium leading-relaxed text-[var(--muted-foreground)] sm:text-sm">Complete quests from partner projects to earn CC, tokens, invite codes and early access.</p>
+                </div>
+                </div>
+              </div>
+            </div>
+
+            <section class="w-full overflow-hidden">
+              <div class="card-bare w-full overflow-hidden p-3 sm:p-4">
+                <div class="flex overflow-x-auto no-scrollbar gap-1.5">
+                  <button class="tab-pill tab-pill-on" onclick="selectPill(this); filterEarn('ACTIVE')">Active <span class="opacity-80">(11)</span></button>
+                  <button class="tab-pill tab-pill-off" onclick="selectPill(this); filterEarn('COMING_SOON')">Coming soon <span class="opacity-80">(2)</span></button>
+                  <button class="tab-pill tab-pill-off" onclick="selectPill(this); filterEarn('ENDED')">Ended <span class="opacity-80">(8)</span></button>
+                </div>
+              </div>
+            </section>
+
+            <div id="earn-grid" class="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 md:gap-6 xl:grid-cols-3"></div>
+
+            <div id="earn-pagination" class="flex items-center justify-between gap-3 px-1"></div>
+          </div>
+        </section>
+
+        <!-- EARN QUEST DETAIL -->
+        <section id="page-earn-quest" class="page">
+          <div id="earn-detail" class="space-y-5 sm:space-y-6"></div>
+        </section>
+
+        <!-- QUESTS -->
+        <section id="page-quests" class="page">
+          <div class="space-y-5 md:space-y-6 font-sans">
+            <div class="card card-interactive w-full overflow-hidden p-6 sm:p-7">
+              <div class="flex items-center gap-2.5">
+                <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--primary)]/10"><i data-lucide="sparkles" class="h-4 w-4 text-canton"></i></span>
+                <p class="eyebrow">Quest Hub · Available Points</p>
+              </div>
+              <p class="mt-5 text-4xl font-extrabold tabular-nums leading-none tracking-tight text-[var(--foreground)] glow-text sm:text-5xl md:text-6xl">2,480<span class="ml-2 text-base font-semibold text-[var(--primary)] sm:text-lg md:text-xl">pts</span></p>
+              <p class="mt-3 max-w-md text-xs font-normal leading-relaxed text-[var(--muted-foreground)] sm:text-sm">Your spendable balance. Complete daily tasks and invite friends to earn more.</p>
+              <div class="mt-5 flex flex-wrap items-center gap-3 sm:mt-6">
+                <a href="#/leaderboard" class="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)]/80 px-4 py-2.5 text-sm font-semibold text-[var(--foreground)] hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10 sm:px-5 sm:py-3">
+                  <i data-lucide="trophy" class="h-4 w-4"></i>View Leaderboard
+                </a>
+              </div>
+            </div>
+            <div class="space-y-6">
+              <ul class="space-y-3">
+                <li class="rounded-2xl border border-[var(--border)] hover:border-[var(--primary)]/30 p-4 sm:p-5 transition-all duration-200">
+                  <div class="flex items-center gap-3 sm:gap-4">
+                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--muted)]"><i data-lucide="calendar-check" class="h-4 w-4 text-canton"></i></span>
+                    <div class="min-w-0 flex-1">
+                      <p class="mb-0.5 text-xs font-bold tabular-nums text-amber-300">+5 pts</p>
+                      <p class="text-sm font-semibold leading-snug text-[var(--foreground)]">Daily check-in</p>
+                      <p class="mt-0.5 text-xs font-medium text-canton">Ready again — check in for +5 pts</p>
+                    </div>
+                    <div class="flex shrink-0 items-center">
+                      <button class="btn btn-primary btn-sm h-9 min-w-[5.5rem] font-bold" onclick="checkIn(this,5)">Check in</button>
+                    </div>
+                  </div>
+                </li>
+                <li class="rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.06] p-4 sm:p-5">
+                  <div class="flex items-center gap-3 sm:gap-4">
+                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--muted)]"><i data-lucide="twitter" class="h-4 w-4 text-canton"></i></span>
+                    <div class="min-w-0 flex-1">
+                      <p class="mb-0.5 text-xs font-bold tabular-nums text-emerald-400">+10 pts</p>
+                      <p class="text-sm font-semibold leading-snug text-[var(--foreground)] line-through opacity-70">Follow @canquest on X</p>
+                      <p class="mt-0.5 text-xs font-medium text-emerald-400/80">Verified — ready in 18h 24m</p>
+                    </div>
+                    <div class="flex shrink-0 items-center">
+                      <span class="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500/15 px-4 text-center text-xs font-bold tabular-nums text-emerald-300">18h 24m</span>
+                    </div>
+                  </div>
+                </li>
+                <li class="rounded-2xl border border-[var(--border)] hover:border-[var(--primary)]/30 p-4 sm:p-5 transition-all duration-200">
+                  <div class="flex items-center gap-3 sm:gap-4">
+                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--muted)]"><i data-lucide="help-circle" class="h-4 w-4 text-canton"></i></span>
+                    <div class="min-w-0 flex-1">
+                      <p class="mb-0.5 text-xs font-bold tabular-nums text-amber-300">+15 pts</p>
+                      <p class="text-sm font-semibold leading-snug text-[var(--foreground)]">Daily quiz: What does CC stand for?</p>
+                    </div>
+                    <div class="flex shrink-0 items-center">
+                      <button class="btn btn-primary btn-sm h-9 min-w-[5.5rem] font-bold" onclick="toast('Pick an option below 👇')">Answer</button>
+                    </div>
+                  </div>
+                  <ul class="mt-3 space-y-1.5">
+                    <li><button class="flex w-full items-center gap-2.5 rounded-xl bg-[var(--muted)]/25 px-3 py-2 text-left text-sm hover:bg-[var(--muted)]/35" onclick="answerMcq(this,'A',true)"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[var(--muted)] text-[10px] font-bold text-[var(--muted-foreground)]">A</span>Canton Coin</button></li>
+                    <li><button class="flex w-full items-center gap-2.5 rounded-xl bg-[var(--muted)]/25 px-3 py-2 text-left text-sm hover:bg-[var(--muted)]/35" onclick="answerMcq(this,'B',false)"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[var(--muted)] text-[10px] font-bold text-[var(--muted-foreground)]">B</span>Crypto Credit</button></li>
+                    <li><button class="flex w-full items-center gap-2.5 rounded-xl bg-[var(--muted)]/25 px-3 py-2 text-left text-sm hover:bg-[var(--muted)]/35" onclick="answerMcq(this,'C',false)"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[var(--muted)] text-[10px] font-bold text-[var(--muted-foreground)]">C</span>CanQuest Credit</button></li>
+                  </ul>
+                </li>
+                <li class="rounded-2xl border border-[var(--border)] hover:border-[var(--primary)]/30 p-4 sm:p-5 transition-all duration-200">
+                  <div class="flex items-center gap-3 sm:gap-4">
+                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--muted)]"><i data-lucide="arrow-left-right" class="h-4 w-4 text-canton"></i></span>
+                    <div class="min-w-0 flex-1">
+                      <p class="mb-0.5 text-xs font-bold tabular-nums text-amber-300">+20 pts</p>
+                      <p class="text-sm font-semibold leading-snug text-[var(--foreground)]">Make your first swap</p>
+                    </div>
+                    <div class="flex shrink-0 items-center">
+                      <button class="btn btn-primary btn-sm h-9 min-w-[5.5rem] font-bold" onclick="verifyTask(this,20)">Open</button>
+                    </div>
+                  </div>
+                </li>
+              </ul>
+              <p class="text-center text-sm text-[var(--muted-foreground)]">Keep going — points land in your balance above.</p>
+            </div>
+            <section>
+              <div class="card-bare overflow-hidden rounded-3xl border border-[var(--border)]">
+                <div class="flex items-center justify-between border-b border-[var(--border)] bg-[var(--muted)]/20 px-6 py-4">
+                  <div class="flex items-center gap-3 text-sm font-medium text-[var(--muted-foreground)]">
+                    <i data-lucide="gift" class="h-4 w-4 text-emerald-400"></i>Invite friends
+                  </div>
+                  <span class="text-sm font-semibold tabular-nums text-emerald-400/90">+50 per friend</span>
+                </div>
+                <div class="px-6 py-6">
+                  <div class="space-y-6">
+                    <p class="text-sm font-medium leading-relaxed text-[var(--muted-foreground)]">Earn 50 pts for every friend who creates a wallet with your link.</p>
+                    <div class="flex flex-wrap gap-5 text-base">
+                      <div class="flex items-center gap-2">
+                        <i data-lucide="user-plus" class="h-5 w-5 text-emerald-400"></i>
+                        <span class="text-[var(--muted-foreground)]">Invited</span>
+                        <span class="font-bold tabular-nums text-[var(--foreground)]">8</span>
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <span class="text-[var(--muted-foreground)]">Earned</span>
+                        <span class="font-bold tabular-nums text-emerald-400/90">400 pts</span>
+                      </div>
+                    </div>
+                    <div class="space-y-3">
+                      <p class="text-sm font-medium text-[var(--muted-foreground)]">Referral code</p>
+                      <code id="ref-code" class="block truncate rounded-2xl border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3 font-mono text-base font-medium tracking-wider text-[var(--foreground)]">CQ-ARIA8X</code>
+                      <button class="btn btn-secondary btn-sm gap-2" onclick="copyById('ref-code',this)"><i data-lucide="copy" class="h-4 w-4"></i>Copy code</button>
+                    </div>
+                    <div class="space-y-3">
+                      <p class="text-sm font-medium text-[var(--muted-foreground)]">Referral link</p>
+                      <div class="flex gap-2">
+                        <input id="ref-link" class="input flex-1" readonly value="https://canquest.cc/r/CQ-ARIA8X" />
+                        <button class="btn btn-block btn-sm gap-2" onclick="copyById('ref-link',this)"><i data-lucide="copy" class="h-4 w-4"></i>Copy link</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <!-- WALLET -->
+        <section id="page-wallet" class="page">
+          <div class="space-y-5 md:space-y-6 font-sans">
+            <div class="card w-full overflow-hidden p-6 sm:p-8">
+              <div>
+                <div class="flex items-center justify-between">
+                  <p class="eyebrow">Total Balance</p>
+                  <button class="btn btn-icon btn-sm border-0 bg-transparent hover:bg-transparent" aria-label="Refresh balance" onclick="spinIcon(this,'refresh-cw')"><i data-lucide="refresh-cw" class="h-4 w-4 text-[var(--muted-foreground)]"></i></button>
+                </div>
+                <p class="mt-3 text-4xl font-extrabold tabular-nums leading-none tracking-tight text-[var(--foreground)] glow-text sm:text-5xl">
+                  $39.34<span class="ml-2 text-base font-semibold text-[var(--muted-foreground)] sm:text-lg">USD</span>
+                </p>
+              </div>
+            </div>
+            <div class="grid w-full min-w-0 grid-cols-3 gap-3 sm:gap-4">
+              <button class="btn btn-primary btn-sm w-full justify-center gap-2" onclick="openModal('send-modal')"><i data-lucide="arrow-up-right" class="h-5 w-5"></i>Send</button>
+              <button class="btn btn-secondary btn-sm w-full justify-center gap-2" onclick="openModal('receive-modal')"><i data-lucide="arrow-down-left" class="h-5 w-5"></i>Receive</button>
+              <button class="btn btn-secondary btn-sm w-full justify-center gap-2 relative" onclick="openModal('offers-modal')">
+                <i data-lucide="inbox" class="h-5 w-5"></i>Offers
+                <span class="absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--primary)] px-1.5 text-[10px] font-bold text-white shadow ring-2 ring-[var(--card)]">1</span>
+              </button>
+              <button class="btn btn-secondary btn-sm w-full justify-center gap-2" onclick="openModal('swap-modal')"><i data-lucide="arrow-left-right" class="h-5 w-5"></i>Swap</button>
+              <button class="btn btn-secondary btn-sm w-full justify-center gap-2 relative border-canton-muted text-canton hover:border-canton-muted hover:bg-canton-subtle" onclick="openModal('lock-modal')">
+                <i data-lucide="lock" class="h-5 w-5"></i>Lock
+                <span class="absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--primary)] px-1.5 text-[10px] font-bold text-white shadow ring-2 ring-[var(--card)]">30</span>
+              </button>
+              <a href="#/activity" class="btn btn-secondary btn-sm w-full justify-center gap-2"><i data-lucide="activity" class="h-5 w-5"></i>Activity</a>
+            </div>
+            <div>
+              <div class="mb-3 flex items-center justify-between gap-3">
+                <p class="eyebrow">My Tokens</p>
+              </div>
+              <div class="space-y-3">
+                <div class="card flex w-full items-center gap-3 p-4">
+                  <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-[11px] font-bold text-black">C</span>
+                  <div class="min-w-0 flex-1">
+                    <span class="text-sm font-semibold text-[var(--foreground)]">CC</span>
+                  </div>
+                  <div class="shrink-0 text-right">
+                    <p class="text-sm font-bold tabular-nums text-[var(--foreground)]">112.3800</p>
+                    <p class="text-xs tabular-nums text-[var(--muted-foreground)]">$28.10</p>
+                  </div>
+                </div>
+                <div class="card flex w-full items-center gap-3 p-4">
+                  <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-400 to-blue-600 text-[11px] font-bold text-black">U</span>
+                  <div class="min-w-0 flex-1">
+                    <span class="text-sm font-semibold text-[var(--foreground)]">USDCx</span>
+                  </div>
+                  <div class="shrink-0 text-right">
+                    <p class="text-sm font-bold tabular-nums text-[var(--foreground)]">11.2400</p>
+                    <p class="text-xs tabular-nums text-[var(--muted-foreground)]">$11.24</p>
+                  </div>
+                </div>
+                <div class="card flex w-full items-center gap-3 p-4 opacity-60">
+                  <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-orange-600 text-[11px] font-bold text-black">C</span>
+                  <div class="min-w-0 flex-1">
+                    <span class="text-sm font-semibold text-[var(--foreground)]">CBTC</span>
+                    <span class="ml-2 rounded-full border border-[var(--border)] bg-[var(--muted)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">Coming soon</span>
+                  </div>
+                  <div class="shrink-0 text-right">
+                    <span class="text-sm font-medium text-[var(--muted-foreground)]">—</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- WALLET SETUP -->
+        <section id="page-wallet-setup" class="page">
+          <div class="flex min-h-[60vh] w-full min-w-0 items-center justify-center">
+            <div class="card w-full min-w-0 max-w-md overflow-hidden p-8 sm:p-10">
+              <div class="mb-8 flex justify-center">
+                <span class="flex h-20 w-20 items-center justify-center rounded-3xl border border-canton-muted bg-canton-subtle"><i data-lucide="wallet" class="h-10 w-10 text-canton"></i></span>
+              </div>
+              <h2 class="text-2xl font-bold tracking-tight text-center text-[var(--foreground)] sm:text-3xl">Create your Canton wallet</h2>
+              <p class="mt-3 text-center text-sm font-medium text-[var(--muted-foreground)]">Pick a username — this is your on-chain identity on Canton.</p>
+              <form class="mt-10 space-y-6" onsubmit="event.preventDefault(); openModal('auth-modal');">
+                <div class="space-y-1.5">
+                  <label class="text-xs font-medium text-[var(--muted-foreground)]">Email</label>
+                  <div class="relative">
+                    <i data-lucide="lock" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted-foreground)]"></i>
+                    <input class="input pl-10 opacity-80" readonly value="aria@canquest.cc" />
+                  </div>
+                  <p class="flex items-center gap-1 text-xs text-emerald-400"><i data-lucide="check-circle-2" class="h-3.5 w-3.5"></i>Email verified</p>
+                </div>
+                <div class="space-y-1.5">
+                  <label class="text-xs font-medium text-[var(--muted-foreground)]">Username <span class="font-normal">(lowercase, 3–32 chars)</span></label>
+                  <input class="input font-mono" placeholder="e.g. alex_canton" value="aria_canton" />
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="space-y-1.5">
+                    <label class="text-xs font-medium text-[var(--muted-foreground)]">First name</label>
+                    <input class="input" placeholder="Aria" />
+                  </div>
+                  <div class="space-y-1.5">
+                    <label class="text-xs font-medium text-[var(--muted-foreground)]">Last name</label>
+                    <input class="input" placeholder="Rahman" />
+                  </div>
+                </div>
+                <p class="-mt-3 text-xs text-[var(--muted-foreground)]">Optional — used only for display.</p>
+                <button type="submit" class="btn btn-primary btn-lg w-full gap-2"><i data-lucide="wallet" class="h-5 w-5"></i>Send verification code</button>
+              </form>
+              <p class="mt-6 text-center text-xs text-[var(--muted-foreground)]">
+                <a href="#/wallet" class="font-semibold text-canton hover:underline">← Back to wallet</a>
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <!-- LEADERBOARD -->
+        <section id="page-leaderboard" class="page">
+          <div class="space-y-5 md:space-y-6 font-sans">
+            <div class="flex flex-wrap gap-2">
+              <button class="tab-pill tab-pill-on" onclick="selectPill(this); lbPeriod(this,'Weekly ranking')">Weekly</button>
+              <button class="tab-pill tab-pill-off" onclick="selectPill(this); lbPeriod(this,'Monthly ranking')">Monthly</button>
+              <button class="tab-pill tab-pill-off" onclick="selectPill(this); lbPeriod(this,'All time')">All time</button>
+            </div>
+            <div class="card card-interactive w-full overflow-hidden">
+              <div class="flex flex-col sm:flex-row sm:items-center gap-3 border-b border-[var(--border)] px-5 py-4 sm:px-6 sm:py-5 md:px-8">
+                <div>
+                  <p class="eyebrow" id="lb-eyebrow">Weekly ranking</p>
+                  <h2 class="mt-1 text-base sm:text-lg font-semibold tracking-tight text-[var(--foreground)]">Top Participants</h2>
+                </div>
+                <p class="eyebrow sm:ml-auto">128 participants</p>
+              </div>
+              <div class="relative w-full overflow-x-auto">
+                <table class="w-full min-w-[300px] text-left">
+                  <thead class="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+                    <tr>
+                      <th class="whitespace-nowrap px-4 py-3.5 sm:px-6 sm:py-4 md:px-8">Rank</th>
+                      <th class="min-w-[10rem] px-3 sm:px-4 py-3.5 sm:py-4">Participant</th>
+                      <th class="whitespace-nowrap px-4 py-3.5 sm:px-6 sm:py-4 md:px-8 text-right">Points</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr class="border-t border-[var(--border)] transition-all duration-200 hover:bg-[var(--muted)]/60">
+                      <td class="px-4 py-3.5 sm:px-6 sm:py-4 md:px-8"><span class="flex h-8 w-8 items-center justify-center rounded-full bg-canton-subtle ring-1 ring-[var(--primary)]/25"><i data-lucide="crown" class="h-5 w-5 text-canton"></i></span></td>
+                      <td class="px-4 py-3.5 sm:px-6 sm:py-4">
+                        <div class="flex items-center gap-3 sm:gap-4">
+                          <div class="relative flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center overflow-hidden rounded-full av-grad-1"><span class="text-xs font-bold uppercase tracking-wider text-white drop-shadow-sm">MK</span></div>
+                          <div class="min-w-0 leading-tight">
+                            <p class="text-sm font-semibold text-[var(--foreground)] sm:text-base">Maya Kusuma</p>
+                            <p class="mt-0.5 text-xs font-medium text-[var(--muted-foreground)] sm:text-sm">@maya_k</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td class="px-4 py-3.5 sm:px-6 sm:py-4 md:px-8 text-right"><span class="text-sm sm:text-base tabular-nums font-extrabold text-[var(--foreground)]">4,820</span> <span class="ml-1 text-xs font-medium text-[var(--muted-foreground)]">pts</span></td>
+                    </tr>
+                    <tr class="border-t border-[var(--border)] transition-all duration-200 hover:bg-[var(--muted)]/60">
+                      <td class="px-4 py-3.5 sm:px-6 sm:py-4 md:px-8"><span class="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--muted)]"><i data-lucide="medal" class="h-5 w-5 text-[var(--foreground)]"></i></span></td>
+                      <td class="px-4 py-3.5 sm:px-6 sm:py-4">
+                        <div class="flex items-center gap-3 sm:gap-4">
+                          <div class="relative flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center overflow-hidden rounded-full av-grad-2"><span class="text-xs font-bold uppercase tracking-wider text-white drop-shadow-sm">JD</span></div>
+                          <div class="min-w-0 leading-tight"><p class="text-sm font-semibold text-[var(--foreground)] sm:text-base">Jono Dewa</p><p class="mt-0.5 text-xs font-medium text-[var(--muted-foreground)] sm:text-sm">@jonod</p></div>
+                        </div>
+                      </td>
+                      <td class="px-4 py-3.5 sm:px-6 sm:py-4 md:px-8 text-right"><span class="text-sm sm:text-base tabular-nums font-extrabold text-[var(--foreground)]">3,940</span> <span class="ml-1 text-xs font-medium text-[var(--muted-foreground)]">pts</span></td>
+                    </tr>
+                    <tr class="border-t border-[var(--border)] transition-all duration-200 hover:bg-[var(--muted)]/60">
+                      <td class="px-4 py-3.5 sm:px-6 sm:py-4 md:px-8"><span class="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--muted)]"><i data-lucide="medal" class="h-5 w-5 text-canton-muted"></i></span></td>
+                      <td class="px-4 py-3.5 sm:px-6 sm:py-4">
+                        <div class="flex items-center gap-3 sm:gap-4">
+                          <div class="relative flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center overflow-hidden rounded-full av-grad-3"><span class="text-xs font-bold uppercase tracking-wider text-white drop-shadow-sm">SP</span></div>
+                          <div class="min-w-0 leading-tight"><p class="text-sm font-semibold text-[var(--foreground)] sm:text-base">Sara Putri</p><p class="mt-0.5 text-xs font-medium text-[var(--muted-foreground)] sm:text-sm">@sarap</p></div>
+                        </div>
+                      </td>
+                      <td class="px-4 py-3.5 sm:px-6 sm:py-4 md:px-8 text-right"><span class="text-sm sm:text-base tabular-nums font-extrabold text-[var(--foreground)]">3,610</span> <span class="ml-1 text-xs font-medium text-[var(--muted-foreground)]">pts</span></td>
+                    </tr>
+                    <tr class="border-t border-[var(--border)] transition-all duration-200 hover:bg-[var(--muted)]/60">
+                      <td class="px-4 py-3.5 sm:px-6 sm:py-4 md:px-8"><span class="text-sm font-bold tabular-nums text-[var(--muted-foreground)]">4</span></td>
+                      <td class="px-4 py-3.5 sm:px-6 sm:py-4">
+                        <div class="flex items-center gap-3 sm:gap-4">
+                          <div class="relative flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center overflow-hidden rounded-full av-grad-5"><span class="text-xs font-bold uppercase tracking-wider text-white drop-shadow-sm">RH</span></div>
+                          <div class="min-w-0 leading-tight"><p class="text-sm font-semibold text-[var(--foreground)] sm:text-base">Rafi Hidayat</p><p class="mt-0.5 text-xs font-medium text-[var(--muted-foreground)] sm:text-sm">@rafih</p></div>
+                        </div>
+                      </td>
+                      <td class="px-4 py-3.5 sm:px-6 sm:py-4 md:px-8 text-right"><span class="text-sm sm:text-base tabular-nums font-extrabold text-[var(--foreground)]">2,910</span> <span class="ml-1 text-xs font-medium text-[var(--muted-foreground)]">pts</span></td>
+                    </tr>
+                    <tr class="border-t border-[var(--border)] bg-canton-subtle/60 hover:bg-canton-subtle transition-all duration-200">
+                      <td class="px-4 py-3.5 sm:px-6 sm:py-4 md:px-8"><span class="text-sm font-bold tabular-nums text-[var(--muted-foreground)]">7</span></td>
+                      <td class="px-4 py-3.5 sm:px-6 sm:py-4">
+                        <div class="flex items-center gap-3 sm:gap-4">
+                          <div class="relative flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center overflow-hidden rounded-full av-grad-4"><span class="text-xs font-bold uppercase tracking-wider text-white drop-shadow-sm">AR</span></div>
+                          <div class="min-w-0 leading-tight">
+                            <p class="text-sm font-semibold text-[var(--foreground)] sm:text-base inline-flex items-center gap-2">Aria Rahman <span class="rounded-md bg-canton-subtle px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-canton ring-1 ring-[var(--primary)]/20">You</span></p>
+                            <p class="mt-0.5 text-xs font-medium text-[var(--muted-foreground)] sm:text-sm">@aria_canton</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td class="px-4 py-3.5 sm:px-6 sm:py-4 md:px-8 text-right"><span class="text-sm sm:text-base tabular-nums font-extrabold text-[var(--foreground)]">2,480</span> <span class="ml-1 text-xs font-medium text-[var(--muted-foreground)]">pts</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="relative border-t border-[var(--border)]">
+                <div class="flex items-center justify-between gap-3 px-5 py-4 sm:px-6 sm:py-5 md:px-8">
+                  <p class="text-xs font-medium text-[var(--muted-foreground)]">Page 1 of 26</p>
+                  <div class="flex items-center gap-1.5">
+                    <button class="tab-pill tab-pill-off opacity-40 cursor-not-allowed"><i data-lucide="chevron-left" class="h-3 w-3"></i>Prev</button>
+                    <button class="tab-pill tab-pill-off">Next<i data-lucide="chevron-right" class="h-3 w-3"></i></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- SETTINGS -->
+        <section id="page-settings" class="page">
+          <div class="w-full max-w-full min-w-0 space-y-5 md:space-y-6 pb-10">
+
+                        <!-- Profile Header Card -->
+            <div class="card w-full overflow-hidden p-6 sm:p-7">
+              <div class="flex flex-col sm:flex-row sm:items-center gap-5">
+                <img src="https://api.dicebear.com/7.x/initials/svg?seed=Aria&backgroundColor=10b981" class="h-16 w-16 rounded-2xl object-cover ring-4 ring-[var(--muted)]/50" alt="" />
+                <div class="min-w-0">
+                  <p class="eyebrow">Profile</p>
+                  <h2 class="mt-1 text-xl font-bold tracking-tight text-[var(--foreground)]">Aria Rahman</h2>
+                  <div class="mt-2 flex flex-wrap items-center gap-2">
+                    <span class="inline-flex items-center gap-1.5 rounded-lg bg-[var(--muted)] px-2.5 py-1 text-xs font-semibold text-[var(--muted-foreground)]">
+                      <i data-lucide="at-sign" class="h-3 w-3"></i>aria_canton
+                    </span>
+                    <span class="inline-flex items-center gap-1.5 rounded-lg bg-[var(--muted)] px-2.5 py-1 text-xs font-semibold text-[var(--muted-foreground)]">
+                      <i data-lucide="mail" class="h-3 w-3"></i>aria@canquest.cc
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+                        <!-- Account Details List -->
+            <div class="card w-full overflow-hidden">
+              <div class="flex items-center justify-between border-b border-[var(--border)] px-5 py-4 sm:px-6">
+                <h3 class="text-sm font-bold text-[var(--foreground)]">Account Details</h3>
+                <button class="text-xs font-medium text-canton hover:underline">Edit</button>
+              </div>
+              <ul class="divide-y divide-[var(--border)]">
+                <li class="flex items-center justify-between gap-4 px-5 py-4 sm:px-6">
+                  <div class="flex items-center gap-3 min-w-0">
+                    <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--muted)] text-[var(--muted-foreground)]"><i data-lucide="user" class="h-4 w-4"></i></span>
+                    <span class="text-sm font-medium text-[var(--muted-foreground)]">Display Name</span>
+                  </div>
+                  <span class="truncate text-sm font-semibold text-[var(--foreground)]">Aria Rahman</span>
+                </li>
+                <li class="flex items-center justify-between gap-4 px-5 py-4 sm:px-6">
+                  <div class="flex items-center gap-3 min-w-0">
+                    <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--muted)] text-[var(--muted-foreground)]"><i data-lucide="shield" class="h-4 w-4"></i></span>
+                    <span class="text-sm font-medium text-[var(--muted-foreground)]">Canton Username</span>
+                  </div>
+                  <span class="truncate font-mono text-sm font-semibold text-[var(--foreground)]">aria_canton</span>
+                </li>
+                <li class="flex items-center justify-between gap-4 px-5 py-4 sm:px-6">
+                  <div class="flex items-center gap-3 min-w-0">
+                    <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--muted)] text-[var(--muted-foreground)]"><i data-lucide="key" class="h-4 w-4"></i></span>
+                    <span class="text-sm font-medium text-[var(--muted-foreground)]">Canton Party ID</span>
+                  </div>
+                  <div class="flex items-center gap-2 min-w-0">
+                    <span class="truncate font-mono text-sm font-semibold text-[var(--foreground)] hidden md:inline">DSO::1220a7f3c1e9b4d2f8a6c0e5b3d1f9a2c4e6b8d0f2a4c6e8b0d2f4a6c8e0b2d4f6</span>
+                    <span class="truncate font-mono text-sm font-semibold text-[var(--foreground)] md:hidden">DSO::1220a7f3c1e9…</span>
+                    <button class="icon-btn h-8 w-8 shrink-0" onclick="copyText('DSO::1220a7f3c1e9b4d2f8a6', this)" aria-label="Copy ID">
+                      <i data-lucide="copy" class="h-3.5 w-3.5"></i>
+                    </button>
+                  </div>
+                </li>
+              </ul>
+            </div>
+
+            <!-- Preapproval Panel -->
+            <div class="card w-full overflow-hidden" id="preapproval">
+              <button class="flex w-full items-center justify-between p-5 sm:p-6 hover:bg-[var(--muted)]/30 transition-colors" onclick="togglePreapproval(this)">
+                <div class="flex items-center gap-3 text-left">
+                  <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-canton-subtle text-canton"><i data-lucide="zap" class="h-4 w-4"></i></span>
+                  <div>
+                    <p class="text-sm font-bold text-[var(--foreground)]">One Step Transfer</p>
+                    <p class="text-xs text-[var(--muted-foreground)]">Auto-accept incoming transfers without manual approval</p>
+                  </div>
+                </div>
+                <i data-lucide="chevron-down" class="h-5 w-5 text-[var(--muted-foreground)] chev transition-transform" style="transform: rotate(180deg);"></i>
+              </button>
+              <div class="preapproval-body border-t border-[var(--border)]" style="display:block">
+                <ul class="divide-y divide-[var(--border)]">
+                  <li class="flex items-center justify-between gap-4 px-5 py-4 sm:px-6">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <span class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-[11px] font-bold text-black">C</span>
+                      <div class="min-w-0">
+                        <p class="text-sm font-semibold text-[var(--foreground)]">CC</p>
+                        <p class="text-xs text-[var(--muted-foreground)]">Incoming CC arrives directly</p>
+                      </div>
+                    </div>
+                    <button class="switch switch-on" onclick="this.classList.toggle('switch-on');this.classList.toggle('switch-off')"><span class="switch-knob"></span></button>
+                  </li>
+                  <li class="flex items-center justify-between gap-4 px-5 py-4 sm:px-6">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <span class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-400 to-blue-600 text-[11px] font-bold text-black">U</span>
+                      <div class="min-w-0">
+                        <p class="text-sm font-semibold text-[var(--foreground)]">USDCx</p>
+                        <p class="text-xs text-[var(--muted-foreground)]">Incoming USDCx requires manual accept</p>
+                      </div>
+                    </div>
+                    <button class="switch switch-off" onclick="this.classList.toggle('switch-on');this.classList.toggle('switch-off')"><span class="switch-knob"></span></button>
+                  </li>
+                  <li class="flex items-center justify-between gap-4 px-5 py-4 sm:px-6 opacity-50">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <span class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-orange-600 text-[11px] font-bold text-black">C</span>
+                      <div class="min-w-0">
+                        <p class="text-sm font-semibold text-[var(--muted-foreground)]">CBTC <span class="ml-1 rounded bg-[var(--muted)] px-1.5 py-0.5 text-[9px] uppercase">Soon</span></p>
+                        <p class="text-xs text-[var(--muted-foreground)]">Not yet available</p>
+                      </div>
+                    </div>
+                    <span class="switch switch-off bg-[var(--muted)]/50 flex items-center justify-center"><i data-lucide="lock" class="h-3.5 w-3.5 text-[var(--muted-foreground)]"></i></span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+                        <!-- Twitter Panel -->
+            <div class="card w-full overflow-hidden">
+              <div class="flex items-center justify-between p-5 sm:p-6">
+                <div class="flex items-center gap-3">
+                  <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--muted)] text-[var(--foreground)]"><i data-lucide="twitter" class="h-4 w-4"></i></span>
+                  <div>
+                    <p class="text-sm font-bold text-[var(--foreground)]">X (Twitter)</p>
+                    <p class="text-xs text-[var(--muted-foreground)]">Connected for quest verification</p>
+                  </div>
+                </div>
+                <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-400">
+                  <i data-lucide="check-circle-2" class="h-3 w-3"></i>Linked
+                </span>
+              </div>
+              <div class="border-t border-[var(--border)] px-5 py-4 sm:px-6">
+                <p class="text-xs text-[var(--muted-foreground)]">This X account is permanently linked and cannot be changed or disconnected.</p>
+              </div>
+            </div>
+
+            <!-- Sign out -->
+            <div class="flex justify-center pt-4">
+              <button class="btn btn-secondary btn-danger h-11 px-6 gap-2" onclick="openModal('auth-modal')">
+                <i data-lucide="log-out" class="h-4 w-4"></i>Sign out
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ACTIVITY -->
+        <section id="page-activity" class="page">
+          <div class="space-y-8">
+            <div class="card w-full min-w-0 overflow-hidden">
+              <div class="flex items-start justify-between gap-4 border-b border-[var(--border)] px-5 py-4 sm:px-6 sm:py-5">
+                <p class="text-base font-semibold text-[var(--foreground)]">Activity</p>
+                <button class="btn btn-icon btn-sm border-0 bg-transparent text-[var(--muted-foreground)] hover:bg-transparent hover:text-[var(--foreground)]" aria-label="Refresh transactions" onclick="spinIcon(this,'refresh-cw')"><i data-lucide="refresh-cw" class="h-4 w-4"></i></button>
+              </div>
+              <div class="relative hidden min-w-0 md:block">
+                <table class="w-full table-fixed text-left text-base">
+                  <thead class="border-b border-[var(--border)] text-sm font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                    <tr>
+                      <th class="whitespace-nowrap px-5 py-3.5 sm:px-6 sm:py-4">Type</th>
+                      <th class="whitespace-nowrap px-5 py-3.5 sm:px-6 sm:py-4">Amount</th>
+                      <th class="whitespace-nowrap px-5 py-3.5 sm:px-6 sm:py-4">Description</th>
+                      <th class="whitespace-nowrap px-5 py-3.5 sm:px-6 sm:py-4">Ledger Tx</th>
+                      <th class="whitespace-nowrap px-5 py-3.5 sm:px-6 sm:py-4">When</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tx-tbody"></tbody>
+                </table>
+              </div>
+              <ul class="relative divide-y divide-[var(--border)] md:hidden" id="tx-mobile"></ul>
+              <div class="relative">
+                <div class="flex items-center justify-between gap-3 px-5 py-4 sm:px-6">
+                  <p class="text-xs font-medium text-[var(--muted-foreground)]">Page 1 of 8</p>
+                  <div class="flex items-center gap-1.5">
+                    <button class="tab-pill tab-pill-off opacity-40 cursor-not-allowed"><i data-lucide="chevron-left" class="h-3 w-3"></i>Prev</button>
+                    <button class="tab-pill tab-pill-off">Next<i data-lucide="chevron-right" class="h-3 w-3"></i></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- MOBILE BOTTOM NAV -->
+  <nav class="fixed bottom-0 left-0 right-0 z-50 bg-[var(--card)]/90 backdrop-blur-xl border-t border-[var(--border)] py-1.5 px-2 md:hidden">
+    <div class="grid grid-cols-6 w-full items-center mx-auto max-w-lg gap-0" id="mobile-nav"></div>
+  </nav>
+</div>
+
+<!-- AUTH MODAL -->
+<div class="modal fixed inset-0 z-[100] items-center justify-center p-4 max-sm:items-end max-sm:p-0" id="auth-modal" role="dialog" aria-modal="true">
+  <button class="modal-backdrop" aria-label="Close dialog" onclick="closeModal('auth-modal')"></button>
+  <div class="relative w-full max-w-[420px] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl max-sm:max-w-full max-sm:rounded-b-none max-sm:rounded-t-2xl max-sm:border-b-0">
+    <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[var(--primary)]/50 to-transparent"></div>
+    <button class="absolute right-4 top-4 rounded-lg p-1.5 text-slate-300 hover:bg-[var(--muted)] hover:text-white" onclick="closeModal('auth-modal')"><i data-lucide="x" class="h-5 w-5"></i></button>
+    <div class="px-6 pb-4 pt-6 max-sm:px-4">
+      <h2 class="text-2xl font-bold tracking-tight text-[var(--foreground)] sm:text-3xl max-sm:text-xl">Welcome back</h2>
+      <p class="mt-1 text-sm text-[var(--muted-foreground)]">Sign in with Google to continue.</p>
+    </div>
+    <div class="border-t border-[var(--border)] px-6 py-6 max-sm:px-4 max-sm:py-5">
+      <button class="btn btn-primary btn-block gap-2" onclick="googleSignIn(this)"><i data-lucide="chrome" class="h-5 w-5"></i>Continue with Google</button>
+      <p class="mt-5 text-center text-sm text-[var(--muted-foreground)]">No account? <button class="font-semibold text-canton hover:underline">Create one with Google</button></p>
+    </div>
+  </div>
+</div>
+
+<!-- SEND MODAL -->
+<div class="modal fixed inset-0 z-50 items-center justify-center overflow-y-auto p-4 max-sm:items-end max-sm:p-0" id="send-modal">
+  <button class="modal-backdrop" aria-label="Close dialog" onclick="closeModal('send-modal')"></button>
+  <div class="relative z-10 my-auto flex w-full max-w-md max-h-[min(92dvh,92vh)] flex-col overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 sm:p-8 shadow-xl max-sm:max-w-full max-sm:rounded-b-none max-sm:border-b-0 max-sm:p-4">
+    <div class="flex shrink-0 items-start justify-between gap-4">
+      <h2 class="text-xl font-bold text-[var(--foreground)] max-sm:text-lg">Send</h2>
+      <button class="icon-btn h-9 w-9 shrink-0" onclick="closeModal('send-modal')" aria-label="Close"><i data-lucide="x" class="h-4 w-4"></i></button>
+    </div>
+    <form id="send-form" class="min-h-0 flex-1 overflow-y-auto overscroll-contain mt-6 space-y-6 max-sm:mt-3 max-sm:space-y-4 pr-0.5" onsubmit="event.preventDefault(); if(!validateSendForm()) return; prepareSendConfirm(); closeModal('send-modal'); openModal('send-confirm-modal');">
+      <div class="space-y-2 relative">
+        <label class="text-sm font-medium text-[var(--muted-foreground)]">Token</label>
+        <button type="button" id="send-token-btn" class="flex w-full items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--muted)] px-4 py-3 text-left" onclick="toggleSendTokenPicker()">
+          <span class="flex items-center gap-2">
+            <span id="send-token-logo" class="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-[10px] font-bold text-black">C</span>
+            <span id="send-token-name" class="font-bold text-[var(--foreground)]">CC</span>
+          </span>
+          <i data-lucide="chevron-down" class="h-4 w-4 text-[var(--muted-foreground)]"></i>
+        </button>
+        <div id="send-token-picker" class="hidden absolute left-0 right-0 top-full z-30 mt-1 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-2 shadow-xl">
+          <button type="button" class="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left hover:bg-[var(--muted)]" onclick="selectSendToken('CC')">
+            <span class="flex items-center gap-2">
+              <span class="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-[10px] font-bold text-black">C</span>
+              <span class="font-medium text-[var(--foreground)]">CC</span>
+            </span>
+            <span class="text-xs tabular-nums text-[var(--muted-foreground)]">112.3800</span>
+          </button>
+          <button type="button" class="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left hover:bg-[var(--muted)]" onclick="selectSendToken('USDCx')">
+            <span class="flex items-center gap-2">
+              <span class="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-blue-400 to-blue-600 text-[10px] font-bold text-black">U</span>
+              <span class="font-medium text-[var(--foreground)]">USDCx</span>
+            </span>
+            <span class="text-xs tabular-nums text-[var(--muted-foreground)]">11.2400</span>
+          </button>
+        </div>
+      </div>
+      <div class="space-y-2">
+        <div class="flex items-center justify-between">
+          <label class="text-sm font-medium text-[var(--muted-foreground)]">Amount</label>
+          <p id="send-balance-label" class="tabular-nums text-xs text-[var(--muted-foreground)]">Balance: 112.380000 CC</p>
+        </div>
+        <div class="relative">
+          <input id="send-amount" inputmode="decimal" class="w-full rounded-2xl border border-[var(--border)] bg-[var(--muted)] py-3 pl-4 pr-16 text-base font-bold tabular-nums text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--primary)]/40" placeholder="0.00" value="5" oninput="updateSendAmountDisplay(); validateSendForm(false)" />
+          <button type="button" id="send-max-btn" class="btn btn-ghost btn-sm absolute right-2 top-1/2 h-auto -translate-y-1/2 px-2.5 py-1 text-xs" onclick="sendMax()">MAX</button>
+        </div>
+        <p id="send-amount-error" class="hidden text-xs font-medium text-[#fda4af]">Amount exceeds your available balance.</p>
+      </div>
+      <div class="space-y-2">
+        <div class="flex items-center justify-between">
+          <label class="text-sm font-medium text-[var(--muted-foreground)]">Recipient</label>
+          <span id="send-recipient-status" class="hidden items-center gap-1 text-xs font-semibold text-canton"><i data-lucide="check-circle-2" class="h-3.5 w-3.5"></i>Valid address</span>
+        </div>
+        <textarea id="send-recipient" class="w-full resize-none rounded-2xl border border-[var(--border)] bg-[var(--muted)] px-4 py-3 font-mono text-sm font-medium text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--primary)]/40" rows="2" placeholder="Recipient wallet address" oninput="validateSendForm(false)">DSO::1220maya_kusuma_party_id_hash</textarea>
+        <div class="flex flex-wrap gap-1.5">
+          <span class="text-[11px] font-medium text-[var(--muted-foreground)]">Recent:</span>
+          <button type="button" class="rounded-full bg-[var(--muted)] px-2.5 py-1 text-[11px] font-semibold text-[var(--foreground)] ring-1 ring-[var(--border)] hover:bg-[var(--primary)]/10 hover:text-canton" onclick="pickRecentRecipient('DSO::1220maya_kusuma_party_id_hash')">@maya_k</button>
+          <button type="button" class="rounded-full bg-[var(--muted)] px-2.5 py-1 text-[11px] font-semibold text-[var(--foreground)] ring-1 ring-[var(--border)] hover:bg-[var(--primary)]/10 hover:text-canton" onclick="pickRecentRecipient('DSO::1220budi_santoso_party_id_hash')">@budi.s</button>
+        </div>
+      </div>
+      <div class="space-y-2">
+        <label class="text-sm font-medium text-[var(--muted-foreground)]">Memo <span class="font-normal text-[var(--muted-foreground)]">(optional)</span></label>
+        <input id="send-memo" class="w-full rounded-2xl border border-[var(--border)] bg-[var(--muted)] px-4 py-3 text-base font-medium text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--primary)]/40" placeholder="Add a note" value="Thanks for the swap!" />
+      </div>
+      <div class="flex items-center justify-between rounded-2xl bg-[var(--muted)]/60 px-4 py-2.5 text-xs max-sm:py-2">
+        <span class="flex items-center gap-1.5 text-[var(--muted-foreground)]"><i data-lucide="zap" class="h-3.5 w-3.5"></i>Network fee</span>
+        <span class="font-semibold tabular-nums text-[var(--foreground)]">≈ 1 CC · Canton</span>
+      </div>
+    </form>
+    <div class="mt-5 flex shrink-0 gap-3 max-sm:mt-3">
+      <button type="button" class="btn btn-secondary btn-sm flex-1 max-sm:h-10" onclick="closeModal('send-modal')">Cancel</button>
+      <button type="submit" form="send-form" id="send-submit-btn" class="btn btn-primary btn-sm flex-1 max-sm:h-10">Send</button>
+    </div>
+  </div>
+</div>
+
+<!-- SEND CONFIRM MODAL -->
+<!-- SEND CONFIRM MODAL -->
+<div class="modal fixed inset-0 z-[60] items-center justify-center overflow-y-auto p-4 max-sm:items-end max-sm:p-0" id="send-confirm-modal">
+  <button class="modal-backdrop" aria-label="Close" onclick="closeModal('send-confirm-modal')"></button>
+  <div class="relative z-10 my-auto flex w-full max-w-md max-h-[min(92dvh,92vh)] flex-col overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 sm:p-8 shadow-xl max-sm:max-w-full max-sm:rounded-b-none max-sm:border-b-0 max-sm:p-4">
+    <div class="flex shrink-0 items-start justify-between gap-4">
+      <h2 class="text-xl font-bold text-[var(--foreground)] max-sm:text-lg">Confirm transaction</h2>
+      <button class="icon-btn h-9 w-9 shrink-0" onclick="closeModal('send-confirm-modal')" aria-label="Close"><i data-lucide="x" class="h-4 w-4"></i></button>
+    </div>
+    <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      <div class="mt-6 flex flex-col items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--muted)] px-6 py-7 text-center max-sm:mt-4 max-sm:py-5">
+        <p id="send-amount-display" class="text-3xl font-bold tabular-nums text-[var(--foreground)] max-sm:text-2xl">5 CC</p>
+      </div>
+      <dl class="mt-5 divide-y divide-[var(--border)] max-sm:mt-3">
+        <div class="flex items-center justify-between gap-3 py-2.5 max-sm:py-2"><span class="text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">Recipient</span><span class="min-w-0 max-w-[60%] truncate text-right text-sm font-medium text-[var(--foreground)]">DSO::1220…maya</span></div>
+        <div class="flex items-center justify-between gap-3 py-2.5 max-sm:py-2"><span class="text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">Memo</span><span class="min-w-0 max-w-[60%] truncate text-right text-sm font-medium text-[var(--foreground)]">Thanks for the swap!</span></div>
+        <div class="flex items-center justify-between gap-3 py-2.5 max-sm:py-2"><span class="text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">Network</span><span class="min-w-0 max-w-[60%] truncate text-right text-sm font-medium text-[var(--foreground)]">Canton</span></div>
+        <div class="flex items-center justify-between gap-3 py-2.5 max-sm:py-2"><span class="text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">Platform fee</span><span id="send-fee-display" class="tabular-nums text-canton text-sm font-medium">1 CC</span></div>
+      </dl>
+    </div>
+    <div class="mt-7 flex shrink-0 gap-3 max-sm:mt-4">
+      <button class="btn btn-secondary btn-sm flex-1 max-sm:h-10" onclick="closeModal('send-confirm-modal')">Cancel</button>
+      <button class="btn btn-primary btn-sm flex-1 max-sm:h-10" onclick="confirmSend(this)">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- RECEIVE MODAL -->
+<div class="modal fixed inset-0 z-50 items-center justify-center overflow-y-auto p-4 max-sm:items-end max-sm:p-0" id="receive-modal">
+  <button class="modal-backdrop" aria-label="Close dialog" onclick="closeModal('receive-modal')"></button>
+  <div class="relative z-10 my-auto flex w-full max-w-md max-h-[min(92dvh,92vh)] flex-col overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 sm:p-8 shadow-xl max-sm:max-w-full max-sm:rounded-b-none max-sm:border-b-0 max-sm:p-4">
+    <div class="flex shrink-0 items-start justify-between gap-4">
+      <div>
+        <h2 class="text-xl font-bold text-[var(--foreground)] max-sm:text-lg">Receive</h2>
+        <p class="mt-0.5 text-sm text-[var(--muted-foreground)]">Only send assets on Canton to this address.</p>
+      </div>
+      <button class="icon-btn h-9 w-9 shrink-0" onclick="closeModal('receive-modal')" aria-label="Close"><i data-lucide="x" class="h-4 w-4"></i></button>
+    </div>
+    <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      <div class="relative mt-7 flex justify-center rounded-3xl border border-[var(--border)] bg-white p-6 max-sm:mt-4 max-sm:p-4">
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=DSO::1220aria_canton_party_id&color=000000&bgcolor=ffffff" alt="QR code for your Canton party ID" class="h-[200px] w-[200px] max-sm:h-[168px] max-sm:w-[168px]" width="200" height="200" />
+        <span class="absolute left-1/2 top-1/2 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-4 border-white bg-gradient-to-br from-emerald-400 to-teal-500 text-[11px] font-black text-black shadow-md">C</span>
+      </div>
+      <div class="mt-4 flex items-center justify-center gap-1.5 text-xs font-semibold text-[var(--muted-foreground)] max-sm:mt-2">
+        <span class="h-1.5 w-1.5 rounded-full bg-canton"></span>Canton Network
+      </div>
+      <div class="mt-6 max-sm:mt-4">
+        <div class="mb-2 flex items-center justify-between">
+          <p class="text-sm font-medium text-[var(--muted-foreground)]">Your Canton Party ID</p>
+          <button class="text-xs font-semibold text-canton hover:underline" onclick="togglePartyIdView(this)" data-expanded="false">Show full</button>
+        </div>
+        <div class="flex min-w-0 items-center gap-3 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--muted)] px-4 py-3 max-sm:py-2.5">
+          <code id="party-id" data-full="DSO::1220a7f3c1e9b4d2f8a6c0e5b3d1f9a2c4e6b8d0f2a4c6e8b0d2f4a6c8e0b2d4f6" data-short="DSO::1220a7f3c1e9…e0b2d4f6" class="min-w-0 flex-1 truncate text-sm font-mono font-medium leading-relaxed text-[var(--foreground)] max-sm:text-xs">DSO::1220a7f3c1e9…e0b2d4f6</code>
+          <button class="icon-btn h-9 w-9 shrink-0" aria-label="Copy party ID" onclick="copyById('party-id',this)"><i data-lucide="copy" class="h-5 w-5"></i></button>
+        </div>
+      </div>
+      <div class="mt-3 flex items-start gap-2 rounded-xl bg-amber-500/10 px-3.5 py-2.5 text-xs text-amber-300">
+        <i data-lucide="alert-triangle" class="mt-0.5 h-3.5 w-3.5 shrink-0"></i>
+        Sending unsupported assets or wrong-network tokens to this address may result in permanent loss.
+      </div>
+    </div>
+    <div class="mt-6 flex shrink-0 gap-3 max-sm:mt-4">
+      <button class="btn btn-secondary btn-sm flex-1 gap-2 max-sm:h-10" onclick="sharePartyId(this)"><i data-lucide="share-2" class="h-4 w-4"></i>Share</button>
+      <button class="btn btn-primary btn-sm flex-1 max-sm:h-10" onclick="closeModal('receive-modal')">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- OFFERS MODAL -->
+<div class="modal fixed inset-0 z-50 items-center justify-center overflow-y-auto p-4 max-sm:items-end max-sm:p-0" id="offers-modal">
+  <button class="modal-backdrop" aria-label="Close" onclick="closeModal('offers-modal')"></button>
+  <div class="relative z-10 my-auto flex w-full max-w-md max-h-[min(92dvh,92vh)] flex-col overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 sm:p-8 shadow-xl max-sm:max-w-full max-sm:rounded-b-none max-sm:border-b-0 max-sm:p-4">
+    <div class="flex shrink-0 items-center justify-between gap-2">
+      <div class="flex items-center gap-1 rounded-xl bg-[var(--muted)] p-1">
+        <button id="offers-tab-incoming" class="offers-tab flex items-center gap-1.5 rounded-lg bg-canton-subtle px-3 py-1.5 text-xs font-semibold text-canton" onclick="switchOffersTab('incoming')"><i data-lucide="arrow-down-left" class="h-3.5 w-3.5"></i>Incoming <span class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-canton-soft px-1 text-[10px] font-bold text-canton">1</span></button>
+        <button id="offers-tab-sent" class="offers-tab flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-[var(--muted-foreground)] hover:text-[var(--foreground)]" onclick="switchOffersTab('sent')"><i data-lucide="arrow-up-right" class="h-3.5 w-3.5"></i>Sent</button>
+      </div>
+      <button class="icon-btn h-9 w-9 shrink-0" onclick="closeModal('offers-modal')"><i data-lucide="x" class="h-4 w-4"></i></button>
+    </div>
+    <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+    <ul id="offers-list-incoming" class="mt-6 space-y-3 max-sm:mt-3 max-sm:space-y-2.5">
+      <li class="list-none flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] px-5 py-4 max-sm:px-4 max-sm:py-3">
+        <div class="min-w-0 flex-1 space-y-1.5">
+          <div class="flex items-center gap-2.5">
+            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-canton-subtle text-canton"><i data-lucide="arrow-down-left" class="h-4 w-4"></i></span>
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-sm font-semibold text-[var(--foreground)]">5.0000 CC from @maya_k <span class="font-normal text-[var(--muted-foreground)]">≈ $1.25</span></p>
+              <p class="truncate text-xs font-medium text-[var(--muted-foreground)]">Swap reimbursement 🙌</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-3">
+            <p class="font-mono text-[10px] font-medium text-[var(--muted-foreground)] truncate">ID: 1220a7f3c1e9b4d2f8a6…</p>
+            <span class="flex shrink-0 items-center gap-1 text-[10px] font-medium text-amber-400"><i data-lucide="clock" class="h-3 w-3"></i>Expires in 18h 22m</span>
+          </div>
+        </div>
+        <div class="flex shrink-0 items-center gap-2">
+          <button class="btn btn-secondary btn-sm flex-1 justify-center gap-1.5 text-green-400 hover:text-green-300 border-green-500/20 hover:border-green-500/40" onclick="offerAction(this,'accept')"><i data-lucide="check" class="h-4 w-4"></i>Accept</button>
+          <button class="btn btn-secondary btn-sm flex-1 justify-center gap-1.5 text-red-400 hover:text-red-300 border-red-500/20 hover:border-red-500/40" onclick="offerAction(this,'reject')"><i data-lucide="x" class="h-4 w-4"></i>Reject</button>
+        </div>
+      </li>
+    </ul>
+    <div id="offers-list-sent" class="mt-6 hidden flex-col items-center gap-2 py-10 text-center max-sm:mt-3 max-sm:py-6">
+      <span class="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--muted)] text-[var(--muted-foreground)]"><i data-lucide="arrow-up-right" class="h-5 w-5"></i></span>
+      <p class="text-sm font-semibold text-[var(--foreground)]">No sent offers</p>
+      <p class="max-w-[220px] text-xs text-[var(--muted-foreground)]">Offers you send to other wallets will show up here until they're accepted or expire.</p>
+    </div>
+    </div>
+  </div>
+</div>
+
+<!-- SWAP MODAL -->
+<div class="modal fixed inset-0 z-50 items-center justify-center overflow-y-auto p-4 max-sm:items-end max-sm:p-0" id="swap-modal">
+  <button class="modal-backdrop" aria-label="Close dialog" onclick="closeModal('swap-modal')"></button>
+  <div class="relative z-10 my-auto flex w-full max-w-md max-h-[min(92dvh,92vh)] flex-col overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-2xl max-sm:max-w-full max-sm:rounded-b-none max-sm:border-b-0 max-sm:p-4">
+    <div class="mb-5 flex shrink-0 items-center justify-between max-sm:mb-3">
+      <h2 class="text-lg font-bold text-[var(--foreground)]">Swap</h2>
+      <div class="flex items-center gap-1">
+        <div class="relative">
+          <button id="swap-settings-btn" class="icon-btn h-8 w-8" onclick="toggleSwapSettings()" aria-label="Slippage settings"><i data-lucide="settings-2" class="h-4 w-4"></i></button>
+          <div id="swap-settings-panel" class="hidden absolute right-0 top-full z-30 mt-2 w-56 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3.5 shadow-xl max-sm:w-52 max-sm:p-3">
+            <p class="text-xs font-semibold text-[var(--foreground)]">Slippage tolerance</p>
+            <div id="swap-slippage-opts" class="mt-2 flex items-center gap-1.5">
+              <button class="swap-slip flex-1 rounded-lg border border-[var(--border)] bg-[var(--muted)] py-1.5 text-xs font-semibold text-[var(--muted-foreground)]" data-val="0.1" onclick="setSlippage(this)">0.1%</button>
+              <button class="swap-slip swap-slip-on flex-1 rounded-lg border border-canton-muted bg-canton-subtle py-1.5 text-xs font-semibold text-canton" data-val="0.5" onclick="setSlippage(this)">0.5%</button>
+              <button class="swap-slip flex-1 rounded-lg border border-[var(--border)] bg-[var(--muted)] py-1.5 text-xs font-semibold text-[var(--muted-foreground)]" data-val="1.0" onclick="setSlippage(this)">1.0%</button>
+            </div>
+            <p class="mt-2 text-[11px] leading-relaxed text-[var(--muted-foreground)]">Your swap will revert if the price moves unfavorably by more than this amount.</p>
+          </div>
+        </div>
+        <button class="icon-btn h-8 w-8" onclick="closeModal('swap-modal')" aria-label="Close"><i data-lucide="x" class="h-4 w-4"></i></button>
+      </div>
+    </div>
+    <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+    <div class="relative space-y-2">
+      <div class="rounded-2xl border border-[var(--border)] bg-[var(--muted)] p-4 max-sm:p-3">
+        <div class="mb-2 flex items-center justify-between">
+          <span class="text-xs font-medium text-[var(--muted-foreground)]">You Pay</span>
+          <div class="flex items-center gap-1.5">
+            <span class="text-[11px] text-[var(--muted-foreground)]">Bal: 112.3800</span>
+            <div class="flex gap-1">
+              <button class="rounded bg-[var(--card)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--foreground)] ring-1 ring-[var(--border)] hover:bg-[var(--primary)]/10 hover:text-canton" onclick="setSwapPct(0.25)">25%</button>
+              <button class="rounded bg-[var(--card)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--foreground)] ring-1 ring-[var(--border)] hover:bg-[var(--primary)]/10 hover:text-canton" onclick="setSwapPct(0.50)">50%</button>
+              <button class="rounded bg-[var(--card)] px-1.5 py-0.5 text-[10px] font-semibold text-canton ring-1 ring-[var(--border)] hover:bg-[var(--primary)]/10" onclick="setSwapPct(1)">MAX</button>
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <input id="swap-pay-input" type="number" class="w-full min-w-0 flex-1 bg-transparent text-2xl font-bold text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] max-sm:text-xl" placeholder="0.0" value="10" oninput="updateSwapQuote()" />
+          <button class="flex shrink-0 items-center gap-2 rounded-full bg-[var(--card)] px-3 py-2 ring-1 ring-[var(--border)] hover:bg-[var(--primary)]/10">
+            <span class="flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-[9px] font-bold text-black">C</span>
+            <span class="text-sm font-semibold text-[var(--foreground)]">CC</span>
+            <i data-lucide="chevron-down" class="h-4 w-4 text-[var(--muted-foreground)]"></i>
+          </button>
+        </div>
+      </div>
+      <div class="relative z-10 flex justify-center -my-2">
+        <button class="flex h-10 w-10 items-center justify-center rounded-full border-4 border-[var(--card)] bg-[var(--muted)] text-canton transition hover:rotate-180 hover:bg-[var(--primary)]/10" aria-label="Flip tokens"><i data-lucide="arrow-down" class="h-4 w-4"></i></button>
+      </div>
+      <div class="rounded-2xl border border-[var(--border)] bg-[var(--muted)] p-4 max-sm:p-3">
+        <div class="mb-2 flex items-center justify-between">
+          <span class="text-xs font-medium text-[var(--muted-foreground)]">You Get (est.)</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <span id="swap-get-span" class="w-full min-w-0 flex-1 text-2xl font-bold text-canton tabular-nums max-sm:text-xl">9.94</span>
+          <button class="flex shrink-0 items-center gap-2 rounded-full bg-[var(--card)] px-3 py-2 ring-1 ring-[var(--border)] hover:bg-[var(--primary)]/10">
+            <span class="flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-blue-400 to-blue-600 text-[9px] font-bold text-black">U</span>
+            <span class="text-sm font-semibold text-[var(--foreground)]">USDCx</span>
+            <i data-lucide="chevron-down" class="h-4 w-4 text-[var(--muted-foreground)]"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="mt-3 space-y-2 rounded-xl border border-[var(--border)] bg-[var(--muted)] p-4 text-xs max-sm:p-3">
+      <div class="flex items-center justify-between gap-2 text-[var(--muted-foreground)]"><span class="flex items-center gap-1.5">Rate <i data-lucide="refresh-cw" class="h-3 w-3"></i></span><span class="font-medium text-[var(--foreground)]">1 CC ≈ 0.9940 USDCx</span></div>
+      <div class="flex items-center justify-between gap-2 text-[var(--muted-foreground)]"><span>Price Impact</span><span class="font-medium text-emerald-400">0.12%</span></div>
+      <div class="flex items-center justify-between gap-2 text-[var(--muted-foreground)]"><span>Max slippage</span><span id="swap-slippage-display" class="font-medium text-[var(--foreground)]">0.5%</span></div>
+      <div class="flex items-center justify-between gap-2 text-[var(--muted-foreground)]"><span>Minimum received</span><span id="swap-min-received" class="font-medium text-[var(--foreground)] tabular-nums">9.89 USDCx</span></div>
+      <div class="flex items-center justify-between gap-2 text-[var(--muted-foreground)]"><span>Pool Fee</span><span class="font-medium text-[var(--foreground)]">0.3% (0.03 CC)</span></div>
+      <div class="flex items-center justify-between gap-2 text-[var(--muted-foreground)]"><span>Network Fee</span><span class="font-medium text-[var(--foreground)]">0.001 CC</span></div>
+    </div>
+    </div>
+    <div class="shrink-0">
+      <button id="swap-submit" class="btn btn-primary btn-sm mt-4 w-full max-sm:mt-3 max-sm:h-10" onclick="executeSwap(this)">Swap CC → USDCx</button>
+      <p class="mt-4 flex items-center justify-center gap-1.5 text-center text-[11px] font-medium text-[var(--muted-foreground)] max-sm:mt-2.5"><i data-lucide="route" class="h-3 w-3"></i>Best route via OneSwap</p>
+    </div>
+  </div>
+</div>
+
+<!-- LOCK MODAL -->
+<div class="modal fixed inset-0 z-50 items-center justify-center overflow-y-auto p-4 max-sm:items-end max-sm:p-0" id="lock-modal">
+  <button class="modal-backdrop" aria-label="Close" onclick="closeModal('lock-modal')"></button>
+  <div class="relative z-10 my-auto flex w-full max-w-md max-h-[min(92dvh,92vh)] flex-col overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 sm:p-8 shadow-xl max-sm:max-w-full max-sm:rounded-b-none max-sm:border-b-0 max-sm:p-4">
+    <div class="flex shrink-0 items-start justify-between gap-4">
+      <div class="flex items-center gap-2">
+        <i data-lucide="lock" class="h-5 w-5 text-canton"></i>
+        <h2 class="text-xl font-bold text-[var(--foreground)] max-sm:text-lg">Lock</h2>
+      </div>
+      <button class="icon-btn h-9 w-9 shrink-0" onclick="closeModal('lock-modal')" aria-label="Close"><i data-lucide="x" class="h-4 w-4"></i></button>
+    </div>
+    <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+    <form id="lock-form" class="mt-6 space-y-5 max-sm:mt-3 max-sm:space-y-4" onsubmit="event.preventDefault()">
+      <div class="space-y-2">
+        <div class="flex items-center justify-between">
+          <label class="text-sm font-medium text-[var(--muted-foreground)]">Amount</label>
+          <button type="button" class="btn btn-ghost btn-sm h-auto px-1 py-0 text-xs" onclick="document.getElementById('lock-amount').value='82.38'">MAX</button>
+        </div>
+        <input id="lock-amount" class="w-full rounded-2xl border border-[var(--border)] bg-[var(--muted)] px-4 py-3 text-base font-bold tabular-nums text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--primary)]/40 max-sm:py-2.5" placeholder="e.g. 30" value="30" oninput="document.getElementById('lock-submit').textContent='Lock '+(parseFloat(this.value)||0)+' CC for '+document.querySelector('#lock-duration .lock-dur-on').textContent.trim()" />
+        <p class="text-xs text-[var(--muted-foreground)]">Lock 30 CC to unlock Earn campaigns.</p>
+      </div>
+      <div class="space-y-2">
+        <span class="text-sm font-medium text-[var(--muted-foreground)]">Duration</span>
+        <div id="lock-duration" class="grid grid-cols-3 gap-2 max-sm:gap-1.5">
+          <button type="button" data-fee="0.05" class="lock-dur lock-dur-on rounded-2xl border border-canton-muted bg-canton-subtle px-3 py-2.5 text-sm font-semibold text-canton max-sm:px-1 max-sm:py-2 max-sm:text-xs" onclick="selectLockDur(this)">15 minutes</button>
+          <button type="button" data-fee="0.30" class="lock-dur rounded-2xl border border-[var(--border)] bg-[var(--muted)] px-3 py-2.5 text-sm font-semibold text-[var(--muted-foreground)] hover:text-[var(--foreground)] max-sm:px-1 max-sm:py-2 max-sm:text-xs" onclick="selectLockDur(this)">5 hours</button>
+          <button type="button" data-fee="1.20" class="lock-dur rounded-2xl border border-[var(--border)] bg-[var(--muted)] px-3 py-2.5 text-sm font-semibold text-[var(--muted-foreground)] hover:text-[var(--foreground)] max-sm:px-1 max-sm:py-2 max-sm:text-xs" onclick="selectLockDur(this)">30 day</button>
+        </div>
+      </div>
+    </form>
+    <div class="mt-7 border-t border-[var(--border)] pt-5 max-sm:mt-5 max-sm:pt-4">
+      <h3 class="mb-3 text-sm font-semibold text-[var(--foreground)]">Lock active</h3>
+      <ul class="space-y-3 max-sm:space-y-2.5">
+        <li class="rounded-2xl border border-[var(--border)] bg-[var(--muted)] p-4 flex items-center justify-between gap-3 max-sm:p-3">
+          <div class="min-w-0">
+            <p class="truncate text-sm font-semibold text-[var(--foreground)]">30 CC · 5 hours</p>
+            <p class="flex items-center gap-1 text-xs font-medium text-canton"><i data-lucide="check-circle-2" class="h-3 w-3"></i>Ready to unlock</p>
+          </div>
+          <button class="btn btn-primary btn-sm shrink-0" onclick="unlockCc(this)">Unlock</button>
+        </li>
+        <li class="rounded-2xl border border-[var(--border)] bg-[var(--muted)] p-4 flex items-center justify-between gap-3 max-sm:p-3">
+          <div class="min-w-0">
+            <p class="truncate text-sm font-semibold text-[var(--foreground)]">50 CC · 30 day</p>
+            <p class="flex items-center gap-1 text-xs font-medium text-[var(--muted-foreground)]"><i data-lucide="lock" class="h-3 w-3"></i>Locked · 12d 4h left</p>
+          </div>
+          <button class="btn btn-muted btn-sm shrink-0" disabled>Locked</button>
+        </li>
+      </ul>
+    </div>
+    </div>
+    <div class="shrink-0">
+      <button id="lock-submit" type="submit" form="lock-form" class="btn btn-primary btn-sm mt-5 w-full gap-2 max-sm:h-10" onclick="executeLock(this)">Lock 30 CC for 15 minutes</button>
+      <p class="mt-3 text-center text-xs text-[var(--muted-foreground)] max-sm:mt-2">CC remains yours, with full return upon unlocking — holding fee of <span id="lock-fee-preview" class="font-semibold text-[var(--foreground)]">0.05 CC</span> applies while locked.</p>
+    </div>
+  </div>
+</div>
+
+<!-- TRANSACTION DETAIL MODAL -->
+<div class="modal fixed inset-0 z-[60] items-end justify-center overflow-y-auto p-4 max-sm:p-0 sm:items-center sm:p-6" id="tx-detail-modal">
+  <button class="modal-backdrop" aria-label="Close" onclick="closeModal('tx-detail-modal')"></button>
+  <div class="relative z-10 my-auto flex w-full min-w-0 max-w-md max-h-[min(92dvh,92vh)] flex-col overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--card)] shadow-xl max-sm:max-w-full max-sm:rounded-b-none max-sm:border-b-0">
+    <div class="flex shrink-0 items-start justify-between gap-4 border-b border-[var(--border)] px-6 py-5 max-sm:px-4 max-sm:py-4">
+      <div class="flex min-w-0 items-start gap-4">
+        <span class="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-500/15 text-green-500"><i data-lucide="arrow-down-left" class="h-5 w-5"></i></span>
+        <div class="min-w-0">
+          <h2 class="text-xl font-bold text-[var(--foreground)]">Transfer received</h2>
+          <p class="mt-2 text-sm font-medium text-[var(--muted-foreground)]">Funds are in your wallet.</p>
+        </div>
+      </div>
+      <button class="icon-btn h-10 w-10 shrink-0" onclick="closeModal('tx-detail-modal')"><i data-lucide="x" class="h-5 w-5"></i></button>
+    </div>
+    <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 pb-6 pt-4 max-sm:px-4">
+      <div class="flex flex-col items-center text-center">
+        <span class="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400"><i data-lucide="arrow-down-left" class="h-5 w-5"></i></span>
+        <p class="mt-3 text-3xl font-bold tabular-nums text-emerald-400">+5.0000 CC</p>
+        <p class="mt-0.5 text-sm font-medium tabular-nums text-[var(--muted-foreground)]">≈ $1.25 USD</p>
+      </div>
+      <dl class="mt-4 divide-y divide-[var(--border)]">
+        <div class="flex items-start justify-between gap-3 py-2.5"><dt class="shrink-0 text-sm font-medium text-[var(--muted-foreground)]">Type</dt><dd class="min-w-0 text-right text-sm font-semibold text-[var(--foreground)]">Received</dd></div>
+        <div class="flex items-start justify-between gap-3 py-2.5"><dt class="shrink-0 text-sm font-medium text-[var(--muted-foreground)]">From</dt><dd class="min-w-0 text-right text-sm font-semibold text-[var(--foreground)] font-mono">DSO::1220…maya <span class="text-xs font-medium text-[var(--muted-foreground)]">(Maya Kusuma)</span></dd></div>
+        <div class="flex items-start justify-between gap-3 py-2.5"><dt class="shrink-0 text-sm font-medium text-[var(--muted-foreground)]">To</dt><dd class="min-w-0 text-right text-sm font-semibold text-[var(--foreground)] font-mono">DSO::1220…aria <span class="text-xs font-medium text-[var(--muted-foreground)]">(You)</span></dd></div>
+        <div class="flex items-start justify-between gap-3 py-2.5"><dt class="shrink-0 text-sm font-medium text-[var(--muted-foreground)]">Round</dt><dd class="min-w-0 text-right text-sm font-semibold text-[var(--foreground)] tabular-nums">#184,302</dd></div>
+        <div class="flex items-start justify-between gap-3 py-2.5"><dt class="shrink-0 text-sm font-medium text-[var(--muted-foreground)]">When</dt><dd class="min-w-0 text-right text-sm font-semibold text-[var(--foreground)]">11 Aug 2026, 14:32:07</dd></div>
+        <div class="flex items-start justify-between gap-3 py-2.5"><dt class="shrink-0 text-sm font-medium text-[var(--muted-foreground)]">Status</dt><dd class="min-w-0 text-right text-sm font-semibold"><span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-semibold text-emerald-400"><i data-lucide="check" class="h-3 w-3"></i>Completed</span></dd></div>
+        <div class="flex items-start justify-between gap-3 py-2.5"><dt class="shrink-0 text-sm font-medium text-[var(--muted-foreground)]">Tx ID</dt><dd class="min-w-0 flex items-center justify-end gap-1.5 text-right text-sm font-semibold"><a href="#" onclick="return TX.viewExplorer(event)" class="truncate text-[var(--primary)] underline-offset-2 hover:underline font-mono">1220a7f3c1e9…</a><button class="icon-btn h-6 w-6 shrink-0" onclick="copyText('1220a7f3c1e9b4d2f8a6', this)" aria-label="Copy tx id"><i data-lucide="copy" class="h-3 w-3"></i></button></dd></div>
+      </dl>
+    </div>
+  </div>
+</div>
+
+<!-- UNIFIED ON-CHAIN TX MODAL -->
+<div class="modal fixed inset-0 z-[90] items-center justify-center overflow-y-auto p-4 max-sm:items-end max-sm:p-0" id="tx-status-modal" role="dialog" aria-modal="true">
+  <button class="modal-backdrop" aria-label="Close" onclick="TX.dismiss()"></button>
+  <div class="relative z-10 my-auto w-full max-w-[380px] max-h-[min(92dvh,92vh)] overflow-y-auto overscroll-contain rounded-3xl border border-[var(--border)] bg-[var(--card)] shadow-2xl max-sm:max-w-full max-sm:rounded-b-none max-sm:border-b-0">
+    <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[var(--primary)]/50 to-transparent"></div>
+    <div id="tx-status-body" class="px-6 py-7 sm:px-7 max-sm:px-4 max-sm:py-5"></div>
+  </div>
+</div>
+
+<!-- CLAIM DETAILS MODAL -->
+<div class="modal fixed inset-0 z-[85] items-center justify-center overflow-y-auto p-4 max-sm:items-end max-sm:p-0" id="claim-details-modal" role="dialog" aria-modal="true">
+  <button class="modal-backdrop" aria-label="Close" onclick="closeModal('claim-details-modal')"></button>
+  <div class="relative z-10 my-auto w-full max-w-[380px] max-h-[min(92dvh,92vh)] overflow-y-auto overscroll-contain rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl claim-modal-pop max-sm:max-w-full max-sm:rounded-b-none max-sm:rounded-t-2xl max-sm:border-b-0">
+    <div id="claim-details-body"></div>
+  </div>
+</div>
+
+<script>
+  const NAV = [
+    { route: "#/overview",      key: "overview",    label: "Overview",    icon: "layout-grid" },
+    { route: "#/earn",          key: "earn",        label: "Earn",        icon: "sparkles" },
+    { route: "#/quests",        key: "quests",      label: "Quests",      icon: "gift" },
+    { route: "#/wallet",        key: "wallet",      label: "Wallet",      icon: "wallet" },
+    { route: "#/leaderboard",   key: "leaderboard", label: "Leaderboard", icon: "trophy" },
+    { route: "#/settings",      key: "settings",    label: "Settings",    icon: "settings" },
+  ];
+
+  const ROUTE_TO_PAGE = {
+    "#/overview": "page-overview",
+    "#/earn": "page-earn",
+    "#/earn/quest": "page-earn-quest",
+    "#/quests": "page-quests",
+    "#/wallet": "page-wallet",
+    "#/wallet/setup": "page-wallet-setup",
+    "#/leaderboard": "page-leaderboard",
+    "#/settings": "page-settings",
+    "#/activity": "page-activity",
+  };
+
+  function activeKey(hash) {
+    if (hash.startsWith("#/earn/")) return "#/earn/quest";
+    if (hash.startsWith("#/wallet/setup")) return "#/wallet/setup";
+    return hash;
+  }
+
+  function navKeyFor(route) {
+    if (route.startsWith("#/earn")) return "earn";
+    if (route.startsWith("#/wallet")) return "wallet";
+    if (route.startsWith("#/quests")) return "quests";
+    if (route.startsWith("#/leaderboard")) return "leaderboard";
+    if (route.startsWith("#/settings")) return "settings";
+    if (route.startsWith("#/activity")) return "wallet";
+    return "overview";
+  }
+
+  function renderNav() {
+    const current = activeKey(location.hash) || "#/overview";
+    const activeNav = navKeyFor(location.hash);
+
+    const sidebar = document.getElementById("sidebar-nav");
+    sidebar.innerHTML = NAV.map(({ route, key, label, icon }) => {
+      const active = activeNav === key;
+      const cls = active
+        ? "flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-semibold bg-canton-subtle text-[var(--foreground)] ring-1 ring-[var(--primary)]/20"
+        : "flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-semibold text-[var(--muted-foreground)] hover:bg-[var(--primary)]/5 hover:text-[var(--foreground)]";
+      const iconCls = "h-5 w-5 shrink-0" + (active ? " text-canton" : "");
+      return `<a href="${route}" class="${cls}"><i data-lucide="${icon}" class="${iconCls}"></i>${label}</a>`;
+    }).join("");
+
+    const mobile = document.getElementById("mobile-nav");
+    mobile.innerHTML = NAV.map(({ route, key, label, icon }) => {
+      const active = activeNav === key;
+      const cls = active
+        ? "flex flex-col items-center justify-center gap-0.5 py-1.5 px-0.5 min-w-0 bg-canton-subtle text-[var(--foreground)] rounded-lg ring-1 ring-inset ring-[var(--primary)]/20"
+        : "flex flex-col items-center justify-center gap-0.5 py-1.5 px-0.5 min-w-0 text-[var(--muted-foreground)]";
+      const iconCls = "h-5 w-5 shrink-0" + (active ? " text-canton" : "");
+      return `<a href="${route}" class="${cls}"><i data-lucide="${icon}" class="${iconCls}"></i><span class="text-[10px] tracking-tight whitespace-nowrap text-center leading-tight font-medium w-full truncate">${label}</span></a>`;
+    }).join("");
+  }
+
+  function router() {
+    const hash = activeKey(location.hash) || "#/overview";
+    const pageId = ROUTE_TO_PAGE[hash] || "page-overview";
+    document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+    const el = document.getElementById(pageId);
+    if (el) el.classList.add("active");
+    if (pageId === "page-earn") renderEarnGrid();
+    if (pageId === "page-earn-quest") {
+      renderEarnDetail();
+      try {
+        if (/[?&]claim=1/.test(location.hash)) {
+          const id = getQuestId();
+          if (id) {
+            const c = CAMPAIGNS.find(x => x.id === id);
+            if (c) c.userState = "completed";
+            openClaimDetails(id);
+          }
+        }
+      } catch (e) {
+        const d = document.createElement("div");
+        d.style.cssText = "position:fixed;top:1rem;left:1rem;z-index:300;background:#7f1d1d;color:#fecaca;padding:.75rem;border-radius:.5rem;font:11px monospace;max-width:400px";
+        d.textContent = "auto-claim error: " + e.message;
+        document.body.appendChild(d);
+      }
+    }
+    renderNav();
+    if (window.lucide) lucide.createIcons();
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }
+
+  function openModal(id) {
+    const m = document.getElementById(id);
+    if (!m) return;
+    m.classList.add("open");
+    document.body.style.overflow = "hidden";
+    if (window.lucide) lucide.createIcons();
+  }
+  function closeModal(id) {
+    const m = document.getElementById(id);
+    if (!m) return;
+    m.classList.remove("open");
+    document.body.style.overflow = "";
+  }
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape") {
+      const open = [...document.querySelectorAll(".modal.open")].pop();
+      if (open) open.classList.remove("open"), (document.body.style.overflow = "");
+    }
+  });
+
+  const TX = (() => {
+    let timers = [];
+    let current = null;
+
+    function clearTimers() {
+      timers.forEach(t => { clearTimeout(t); clearInterval(t); });
+      timers = [];
+    }
+    function randHex(len) {
+      const chars = "0123456789abcdef";
+      let s = "";
+      for (let i = 0; i < len; i++) s += chars[Math.floor(Math.random() * 16)];
+      return s;
+    }
+    function fmtRound(n) { return "#" + n.toLocaleString("en-US"); }
+    function body() { return document.getElementById("tx-status-body"); }
+
+    function renderSign() {
+      const b = body();
+      if (!b) return;
+      b.innerHTML = `
+        <div class="flex flex-col items-center text-center">
+          <div class="relative flex h-16 w-16 items-center justify-center rounded-2xl ${current.accentBg} ${current.accentText} tx-pulse">
+            <i data-lucide="fingerprint" class="h-7 w-7"></i>
+          </div>
+          <p class="mt-4 text-base font-bold text-[var(--foreground)]">Confirm in your wallet</p>
+          <p class="mx-auto mt-1 max-w-[240px] text-xs leading-relaxed text-[var(--muted-foreground)]">Approve this transaction to continue. Nothing is broadcast until you confirm.</p>
+          <div class="mt-5 w-full rounded-2xl border border-[var(--border)] bg-[var(--muted)] px-4 py-3.5 text-left">
+            <p class="text-2xl font-bold tabular-nums text-[var(--foreground)] max-sm:text-xl">${current.amountText}</p>
+            ${current.subText ? `<p class="mt-0.5 truncate text-xs font-medium text-[var(--muted-foreground)]">${current.subText}</p>` : ""}
+          </div>
+          <button class="btn btn-secondary btn-sm mt-5 w-full" onclick="TX.dismiss()">Cancel</button>
+        </div>`;
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function renderBroadcast() {
+      const b = body();
+      if (!b) return;
+      const startRound = 184300 + Math.floor(Math.random() * 40);
+      b.innerHTML = `
+        <div class="flex flex-col items-center text-center">
+          <div class="flex h-16 w-16 items-center justify-center rounded-2xl ${current.accentBg} ${current.accentText}">
+            <i data-lucide="loader-2" class="h-7 w-7 spin"></i>
+          </div>
+          <p class="mt-4 text-base font-bold text-[var(--foreground)]">Broadcasting to Canton</p>
+          <p class="mt-1 text-xs text-[var(--muted-foreground)]">Waiting for network confirmation…</p>
+          <div class="tx-progress-track mt-5 h-1.5 w-full rounded-full bg-[var(--muted)]">
+            <div class="tx-progress-sweep rounded-full bg-gradient-to-r from-transparent via-[rgb(var(--canton-rgb))] to-transparent"></div>
+          </div>
+          <dl class="mt-5 w-full divide-y divide-[var(--border)] text-left">
+            <div class="flex items-center justify-between py-2"><dt class="text-xs text-[var(--muted-foreground)]">Round</dt><dd class="text-xs font-semibold tabular-nums text-[var(--foreground)]" id="tx-round-live">${fmtRound(startRound)}</dd></div>
+            <div class="flex items-center justify-between py-2"><dt class="text-xs text-[var(--muted-foreground)]">Status</dt><dd><span class="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-400"><i data-lucide="clock" class="h-2.5 w-2.5"></i>Pending</span></dd></div>
+          </dl>
+        </div>`;
+      if (window.lucide) lucide.createIcons();
+      let round = startRound;
+      timers.push(setInterval(() => {
+        round += 1;
+        const el = document.getElementById("tx-round-live");
+        if (el) el.textContent = fmtRound(round);
+      }, 260));
+      timers.push(setTimeout(() => renderConfirmed(round), 1300));
+    }
+
+    function renderConfirmed(finalRound) {
+      clearTimers();
+      const b = body();
+      if (!b) return;
+      const hash = randHex(8) + "…" + randHex(6);
+      const metaRows = (current.meta || []).map(m =>
+        `<div class="flex items-start justify-between gap-3 py-2"><dt class="shrink-0 text-xs text-[var(--muted-foreground)]">${m.label}</dt><dd class="min-w-0 max-w-[62%] truncate text-right text-xs font-semibold text-[var(--foreground)] ${m.mono ? "font-mono" : ""}">${m.value}</dd></div>`
+      ).join("");
+      b.innerHTML = `
+        <div class="flex flex-col items-center text-center tx-fade-up">
+          <div class="relative flex h-16 w-16 items-center justify-center">
+            <span class="absolute inset-0 -m-2 rounded-full bg-emerald-400/25 blur-xl"></span>
+            <span class="relative z-10 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-400 tx-check-pop"><i data-lucide="check" class="h-7 w-7"></i></span>
+          </div>
+          <p class="mt-4 text-base font-bold text-[var(--foreground)]">${current.title}</p>
+          ${current.subtitle ? `<p class="mt-1 text-xs text-[var(--muted-foreground)]">${current.subtitle}</p>` : ""}
+          <p class="mt-4 text-3xl font-bold tabular-nums text-[var(--foreground)] max-sm:text-2xl">${current.amountText}</p>
+          ${current.extraHtml || ""}
+          <dl class="mt-5 w-full divide-y divide-[var(--border)] text-left">
+            ${metaRows}
+            <div class="flex items-center justify-between py-2"><dt class="text-xs text-[var(--muted-foreground)]">Round</dt><dd class="text-xs font-semibold tabular-nums text-[var(--foreground)]">${fmtRound(finalRound)}</dd></div>
+            <div class="flex items-center justify-between gap-3 py-2"><dt class="shrink-0 text-xs text-[var(--muted-foreground)]">Tx hash</dt><dd class="flex min-w-0 items-center gap-1.5"><a href="#" onclick="return TX.viewExplorer(event)" class="truncate font-mono text-xs font-semibold text-[var(--primary)] hover:underline">${hash}</a><button class="icon-btn h-6 w-6 shrink-0" onclick="copyText('${hash.replace("…", "")}', this)" aria-label="Copy hash"><i data-lucide="copy" class="h-3 w-3"></i></button></dd></div>
+            <div class="flex items-center justify-between py-2"><dt class="text-xs text-[var(--muted-foreground)]">Status</dt><dd><span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-400"><i data-lucide="check" class="h-2.5 w-2.5"></i>Confirmed</span></dd></div>
+          </dl>
+          <button class="btn btn-primary btn-block btn-default mt-6" onclick="TX.done()">Done</button>
+        </div>`;
+      if (window.lucide) lucide.createIcons();
+      if (typeof current.onConfirmed === "function") current.onConfirmed();
+    }
+
+    function start(cfg) {
+      current = cfg;
+      clearTimers();
+      openModal("tx-status-modal");
+      if (cfg.skipToConfirmed) {
+        renderConfirmed(184300 + Math.floor(Math.random() * 40));
+      } else {
+        renderSign();
+        timers.push(setTimeout(renderBroadcast, 900));
+      }
+    }
+    function dismiss() {
+      clearTimers();
+      closeModal("tx-status-modal");
+      if (current && typeof current.onCancel === "function") current.onCancel();
+      current = null;
+    }
+    function done() {
+      closeModal("tx-status-modal");
+      if (current && typeof current.onDone === "function") current.onDone();
+      current = null;
+    }
+    function viewExplorer(e) {
+      if (e) e.preventDefault();
+      toast("Explorer preview — connect to a live network to view on-chain.");
+      return false;
+    }
+    return { start, dismiss, done, viewExplorer };
+  })();
+  window.TX = TX;
+
+  function togglePreapproval(btn) {
+    const body = btn.parentElement.querySelector(".preapproval-body");
+    const chev = btn.querySelector(".chev");
+    const show = body.style.display === "none" || !body.style.display;
+    body.style.display = show ? "block" : "none";
+    chev.style.transform = show ? "rotate(180deg)" : "rotate(0deg)";
+  }
+
+  const TXS = [
+    { type: "Received", icon: "arrow-down-left", iconBg: "bg-canton-subtle text-canton ring-1 ring-[var(--primary)]/15", amount: "+5.0000 CC", amountColor: "text-canton", desc: "Swap reimbursement 🙌", ledger: "1220a7f3c1…", when: "11 Aug, 14:32" },
+    { type: "Sent", icon: "arrow-up-right", iconBg: "bg-red-500/10 text-red-500 ring-1 ring-red-500/15", amount: "−2.5000 CC", amountColor: "text-[var(--muted-foreground)]", desc: "Coffee for @jonod", ledger: "1220b8e2d9…", when: "10 Aug, 19:04" },
+    { type: "CC Locked", icon: "lock", iconBg: "bg-orange-500/10 text-orange-500 ring-1 ring-orange-500/15", amount: "−30.0000 CC", amountColor: "text-orange-500", desc: "Lock for Earn access", ledger: "View", when: "10 Aug, 09:15" },
+    { type: "Quest reward", icon: "gift", iconBg: "bg-canton-subtle text-canton ring-1 ring-[var(--primary)]/20", amount: "+25.0000 CC", amountColor: "text-canton", desc: "NovaPay Swap & Earn", ledger: "reward-8f3…", when: "09 Aug, 22:41" },
+    { type: "Swap", icon: "arrow-left-right", iconBg: "bg-red-500/10 text-red-500 ring-1 ring-red-500/15", amount: "−10.0000 CC", amountColor: "text-[var(--muted-foreground)]", desc: "CC → USDCx", ledger: "1220c1d4e7…", when: "09 Aug, 18:20" },
+  ];
+
+  function renderTx() {
+    const tbody = document.getElementById("tx-tbody");
+    const mobile = document.getElementById("tx-mobile");
+    if (!tbody || !mobile) return;
+    tbody.innerHTML = TXS.map(tx => `
+      <tr class="border-t border-[var(--border)] transition-colors hover:bg-[var(--muted)]/60 cursor-pointer" onclick="openModal('tx-detail-modal')">
+        <td class="px-5 py-3.5 sm:px-6 sm:py-4">
+          <div class="flex items-center gap-3">
+            <span class="flex h-9 w-9 items-center justify-center rounded-xl ${tx.iconBg}"><i data-lucide="${tx.icon}" class="h-4 w-4"></i></span>
+            <span class="text-base font-semibold text-[var(--foreground)]">${tx.type}</span>
+          </div>
+        </td>
+        <td class="px-5 py-3.5 sm:px-6 sm:py-4 text-base font-bold tabular-nums ${tx.amountColor}">${tx.amount}</td>
+        <td class="max-w-[12rem] truncate px-5 py-3.5 sm:px-6 sm:py-4 text-sm font-medium text-[var(--muted-foreground)]">${tx.desc}</td>
+        <td class="px-5 py-3.5 sm:px-6 sm:py-4"><span class="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--muted)]/60 px-2.5 py-1 font-mono text-xs font-medium text-canton">${tx.ledger}</span></td>
+        <td class="whitespace-nowrap px-5 py-3.5 sm:px-6 sm:py-4 text-sm font-medium text-[var(--muted-foreground)]">${tx.when}</td>
+      </tr>`).join("");
+    mobile.innerHTML = TXS.map(tx => `
+      <li><button class="flex w-full items-center gap-4 px-5 py-4 transition-colors hover:bg-[var(--muted)]/60 text-left" onclick="openModal('tx-detail-modal')">
+        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${tx.iconBg}"><i data-lucide="${tx.icon}" class="h-4 w-4"></i></div>
+        <div class="min-w-0 flex-1">
+          <p class="truncate text-sm font-semibold text-[var(--foreground)]">${tx.type}</p>
+          <p class="mt-0.5 truncate text-xs font-medium text-[var(--muted-foreground)]">${tx.desc}</p>
+          <p class="mt-0.5 text-xs font-medium text-[var(--muted-foreground)]">${tx.when}</p>
+        </div>
+        <div class="shrink-0 text-right"><p class="text-sm font-bold tabular-nums ${tx.amountColor}">${tx.amount}</p></div>
+      </button></li>`).join("");
+  }
+
+  const CAMPAIGNS = [
+    { id: "novapay", org: "NovaPay", initials: "NV", orgColor: "text-canton", title: "Swap & Earn with NovaPay", desc: "Complete swaps on NovaPay DEX and earn CC rewards for every qualified transaction.", banner: "https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=800&q=70", tags: ["defi", "swap"], status: "ACTIVE", type: "cc-draw", typeLabel: "CC", rewardPerWinnerCc: 25, poolTotalCc: 2500, claimFee: "1 CC", slots: { used: 42, max: 100, label: "winners" }, endsAt: "Aug 14, 21:39", tasks: 5, socials: ["twitter", "globe", "send"], userState: "eligible" },
+    { id: "glint", org: "Glint Labs", initials: "GL", orgColor: "text-violet-400", title: "First-come Beta Access Codes", desc: "Grab a limited beta invite code for the Glint wallet. FCFS — slots go fast.", banner: "https://images.unsplash.com/photo-1639721626828-9b5b2a1f8bca?w=800&q=70", tags: ["wallet", "beta"], status: "ACTIVE", type: "code-fcfs", typeLabel: "Code", rewardCode: "GLINT-BETA-7H3K", claimFee: "1 CC", slots: { used: 142, max: 200, label: "slots" }, endsAt: "Aug 20, 18:00", tasks: 3, socials: ["twitter", "globe", "send"], userState: "eligible" },
+    { id: "mintx", org: "MintX", initials: "MX", orgColor: "text-violet-300", title: "CC + Code Raffle Drop", desc: "Win CC plus an exclusive platform code. Winners drawn at random when campaign ends.", banner: "https://images.unsplash.com/photo-1640340434855-6084b1f4a1c3?w=800&q=70", tags: ["raffle", "drop"], status: "ACTIVE", type: "cc-code-raffle", typeLabel: "CC + Code", rewardPerWinnerCc: 50, rewardCode: "MINTX-RARE-X9", claimFee: "1 CC", slots: { used: 18, max: 50, label: "winners" }, endsAt: "Aug 25, 23:59", tasks: 4, socials: ["twitter", "globe"], userState: "eligible" },
+    { id: "pulsenet", org: "PulseNet", initials: "PL", orgColor: "text-cyan-300", title: "Early Access Waitlist", desc: "Join the waitlist for PulseNet mainnet launch rewards. Spots drawn at launch.", banner: "https://images.unsplash.com/photo-1518186285589-2f7649de83e0?w=800&q=70", tags: ["waitlist", "mainnet"], status: "ACTIVE", type: "waitlist", typeLabel: "Waitlist", claimFee: "1 CC", slots: { used: 320, max: 1000, label: "spots" }, endsAt: "Sep 01, 12:00", tasks: 2, socials: ["twitter", "globe", "send"], userState: "eligible" },
+    { id: "orbitfi", org: "OrbitFi", initials: "OR", orgColor: "text-canton", title: "Follow & Retweet Campaign", desc: "Spread the word about OrbitFi and earn CC rewards. Top sharers win.", banner: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&q=70", tags: ["social", "twitter"], status: "ACTIVE", type: "invite", typeLabel: "Code", rewardCode: "ORBIT-INVITE-2A", claimFee: "1 CC", slots: { used: 64, max: 150, label: "winners" }, endsAt: "Aug 18, 20:00", tasks: 3, socials: ["twitter"], userState: "eligible" },
+    { id: "zenithx", org: "ZenithX", initials: "ZX", orgColor: "text-[var(--muted-foreground)]", title: "FCFS Token Airdrop", desc: "First-come, first-served CC airdrop for early supporters. All slots claimed.", banner: "https://images.unsplash.com/photo-1621761191319-c6fb62004040?w=800&q=70", tags: ["airdrop", "fcfs"], status: "ENDED", type: "cc-fcfs", typeLabel: "CC", rewardPerWinnerCc: 10, poolTotalCc: 2000, claimFee: "1 CC", slots: { used: 200, max: 200, label: "slots", full: true }, endsAt: "Ended", tasks: 4, socials: ["twitter", "globe"], userState: "not-eligible" },
+    { id: "aqualend", org: "AquaLend", initials: "AQ", orgColor: "text-sky-300", title: "Lend & Earn USDCx Rewards", desc: "Supply liquidity to AquaLend pools. Top lenders share the USDCx reward pool.", banner: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&q=70", tags: ["defi", "lending"], status: "ACTIVE", type: "usdcx-draw", typeLabel: "USDCx", rewardPerWinnerUsdcx: 5, poolTotalUsdcx: 500, claimFee: "1 CC", slots: { used: 28, max: 100, label: "winners" }, endsAt: "Aug 22, 23:59", tasks: 4, socials: ["twitter", "globe", "send"], userState: "eligible" },
+    { id: "swiftswap", org: "SwiftSwap", initials: "SS", orgColor: "text-sky-300", title: "FCFS USDCx Airdrop", desc: "First-come, first-served USDCx drop for early swappers. Slots go fast.", banner: "https://images.unsplash.com/photo-1518544801976-3e159e50e5bb?w=800&q=70", tags: ["airdrop", "fcfs"], status: "ACTIVE", type: "usdcx-fcfs", typeLabel: "USDCx", rewardPerWinnerUsdcx: 2, poolTotalUsdcx: 200, claimFee: "1 CC", slots: { used: 76, max: 100, label: "slots" }, endsAt: "Aug 19, 20:00", tasks: 3, socials: ["twitter", "globe"], userState: "eligible" },
+    { id: "raffleusd", org: "RaffleDAO", initials: "RD", orgColor: "text-sky-300", title: "USDCx Raffle Giveaway", desc: "Complete tasks to earn raffle entries. Winners drawn at random for the USDCx pool.", banner: "https://images.unsplash.com/photo-1561414927-6d86591d0c47?w=800&q=70", tags: ["raffle", "giveaway"], status: "ACTIVE", type: "usdcx-raffle", typeLabel: "USDCx", rewardPerWinnerUsdcx: 10, poolTotalUsdcx: 1000, claimFee: "1 CC", slots: { used: 12, max: 100, label: "winners" }, endsAt: "Aug 28, 18:00", tasks: 5, socials: ["twitter", "globe", "send"], userState: "eligible" },
+    { id: "cryptogate", org: "CryptoGate", initials: "CG", orgColor: "text-violet-300", title: "USDCx + Code Raffle Drop", desc: "Win USDCx plus an exclusive platform access code. Winners drawn at random.", banner: "https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=800&q=70", tags: ["raffle", "drop"], status: "ACTIVE", type: "usdcx-code-raffle", typeLabel: "USDCx + Code", rewardPerWinnerUsdcx: 15, rewardCode: "GATE-ELITE-Q7", claimFee: "1 CC", slots: { used: 8, max: 50, label: "winners" }, endsAt: "Aug 30, 22:00", tasks: 4, socials: ["twitter", "globe"], userState: "eligible" },
+    { id: "ccraffle", org: "RewardFi", initials: "RF", orgColor: "text-canton", title: "CC Raffle Bonanza", desc: "Complete tasks for raffle entries. Random winners share the CC pool.", banner: "https://images.unsplash.com/photo-1605792657660-596af9009e82?w=800&q=70", tags: ["raffle", "cc"], status: "ACTIVE", type: "cc-raffle", typeLabel: "CC", rewardPerWinnerCc: 50, poolTotalCc: 5000, claimFee: "1 CC", slots: { used: 22, max: 100, label: "winners" }, endsAt: "Aug 26, 21:00", tasks: 4, socials: ["twitter", "globe", "send"], userState: "eligible" },
+    { id: "coderaffle", org: "AlphaPass", initials: "AP", orgColor: "text-violet-400", title: "Code Raffle — Alpha Access", desc: "Earn raffle entries for a chance to win an exclusive alpha access code.", banner: "https://images.unsplash.com/photo-1620731291205-43231a7f9b94?w=800&q=70", tags: ["raffle", "alpha"], status: "ACTIVE", type: "code-raffle", typeLabel: "Code", rewardCode: "ALPHA-X7K9", claimFee: "1 CC", slots: { used: 14, max: 30, label: "winners" }, endsAt: "Sep 05, 12:00", tasks: 3, socials: ["twitter", "globe"], userState: "eligible" },
+  ];
+
+  const TYPE_CONFIG = {
+    "cc-draw":        { accent: "text-canton",    iconBg: "bg-[rgb(var(--canton-rgb)/0.12)]",                     icon: "coins",    shortLabel: "CC" },
+    "cc-fcfs":        { accent: "text-canton",     iconBg: "bg-[rgb(var(--canton-rgb)/0.12)]",                     icon: "coins",    shortLabel: "CC" },
+    "cc-raffle":      { accent: "text-canton",     iconBg: "bg-[rgb(var(--canton-rgb)/0.12)]",                     icon: "coins",    shortLabel: "CC" },
+    "code-fcfs":      { accent: "text-violet-400", iconBg: "bg-violet-500/12",                                      icon: "ticket",   shortLabel: "Code" },
+    "code-raffle":    { accent: "text-violet-400", iconBg: "bg-violet-500/12",                                      icon: "ticket",   shortLabel: "Code" },
+    "cc-code-raffle": { accent: "text-violet-300", iconBg: "bg-gradient-to-br from-[rgb(var(--canton-rgb)/0.15)] to-violet-500/15 text-violet-300", icon: "ticket", shortLabel: "CC + Code" },
+    "usdcx-draw":     { accent: "text-sky-300",    iconBg: "bg-sky-500/12",                                         icon: "coins",    shortLabel: "USDCx" },
+    "usdcx-fcfs":     { accent: "text-sky-300",    iconBg: "bg-sky-500/12",                                         icon: "coins",    shortLabel: "USDCx" },
+    "usdcx-raffle":   { accent: "text-sky-300",    iconBg: "bg-sky-500/12",                                         icon: "coins",    shortLabel: "USDCx" },
+    "usdcx-code-raffle": { accent: "text-violet-300", iconBg: "bg-gradient-to-br from-sky-400/15 to-violet-500/15 text-violet-300", icon: "ticket", shortLabel: "USDCx + Code" },
+    "waitlist":       { accent: "text-cyan-300",   iconBg: "bg-cyan-500/12",                                        icon: "sparkles", shortLabel: "Waitlist" },
+    "invite":         { accent: "text-violet-400", iconBg: "bg-violet-500/12",                                      icon: "ticket",   shortLabel: "Code" },
+  };
+
+  function rewardText(c) {
+    switch (c.type) {
+      case "cc-draw":   return `${c.rewardPerWinnerCc} CC`;
+      case "cc-fcfs":   return `${c.rewardPerWinnerCc} CC`;
+      case "cc-raffle": return `${c.rewardPerWinnerCc} CC`;
+      case "code-fcfs": return "1 invite code";
+      case "code-raffle": return "1 invite code";
+      case "cc-code-raffle": return `${c.rewardPerWinnerCc} CC + 1 Code`;
+      case "usdcx-draw":   return `${c.rewardPerWinnerUsdcx} USDCx`;
+      case "usdcx-fcfs":   return `${c.rewardPerWinnerUsdcx} USDCx`;
+      case "usdcx-raffle": return `${c.rewardPerWinnerUsdcx} USDCx`;
+      case "usdcx-code-raffle": return `${c.rewardPerWinnerUsdcx} USDCx + 1 Code`;
+      case "waitlist":  return "Waitlist spot";
+      case "invite":    return "1 invite code";
+      default: return c.rewardPool || "—";
+    }
+  }
+
+  function tokenLogoSpan(token, sizeClass, fontClass) {
+    const font = fontClass || "text-[10px]";
+    if (token === "USDCx") return `<span class="flex ${sizeClass || "h-6 w-6"} items-center justify-center rounded-full bg-gradient-to-br from-blue-400 to-blue-600 ${font} font-bold text-black">U</span>`;
+    return `<span class="flex ${sizeClass || "h-6 w-6"} items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 ${font} font-bold text-black">C</span>`;
+  }
+  window.tokenLogoSpan = tokenLogoSpan;
+
+  function statusBadge(c) {
+    if (c.status === "ACTIVE") return `<span class="inline-flex items-center gap-1 rounded-full border border-emerald-500/25 bg-emerald-500/15 px-2.5 py-0.5 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-emerald-300 backdrop-blur-md"><span class="relative flex h-1.5 w-1.5"><span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/70"></span><span class="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400"></span></span>Active</span>`;
+    if (c.status === "COMING_SOON") return `<span class="inline-flex items-center gap-1 rounded-full border border-cyan-500/25 bg-cyan-500/15 px-2.5 py-0.5 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-cyan-300 backdrop-blur-md"><span class="h-1.5 w-1.5 rounded-full bg-cyan-400"></span>Soon</span>`;
+    return `<span class="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--muted)] px-2.5 py-0.5 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-[var(--muted-foreground)] backdrop-blur-md">Ended</span>`;
+  }
+
+  function ctaFor(c) {
+    if (c.slots.full) return { label: "Slots full", variant: "btn-muted" };
+    if (c.status === "ENDED") return { label: "View", variant: "btn-secondary" };
+    if (c.userState === "claimed") return { label: "Claimed", variant: "btn-success" };
+    if (c.userState === "completed") return { label: "Claim reward", variant: "btn-success" };
+    if (c.userState === "submitted") return { label: "Entry recorded", variant: "btn-secondary" };
+    if (c.userState === "waitlisted") return { label: "On waitlist", variant: "btn-secondary" };
+    return { label: "Join quest", variant: "btn-primary" };
+  }
+
+  let earnFilter = "ACTIVE";
+  function filterEarn(status) {
+    earnFilter = status;
+    renderEarnGrid();
+  }
+  window.filterEarn = filterEarn;
+
+  function renderEarnGrid() {
+    const grid = document.getElementById("earn-grid");
+    if (!grid) return;
+    const visible = CAMPAIGNS.filter(c => c.status === earnFilter);
+    if (!visible.length) {
+      grid.innerHTML = `<div class="col-span-full text-center py-16"><div class="flex flex-col items-center gap-4"><div class="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--muted)]"><i data-lucide="search" class="h-8 w-8 text-[var(--muted-foreground)]"></i></div><p class="text-lg font-bold text-[var(--foreground)]">No campaigns here</p><p class="text-sm text-[var(--muted-foreground)]">Try another tab.</p></div></div>`;
+      return;
+    }
+    grid.innerHTML = visible.map(c => {
+      const tc = TYPE_CONFIG[c.type];
+      const cta = ctaFor(c);
+      const hasBanner = Boolean(c.banner);
+      const slotsPct = c.slots.max ? Math.round((c.slots.used / c.slots.max) * 100) : 0;
+      const isFcfs = c.type === "code-fcfs" || c.type === "cc-fcfs";
+      const fullBar = c.slots.full;
+
+      return `<a href="#/earn/quest?id=${c.id}" class="group relative flex flex-col overflow-hidden rounded-2xl bg-[var(--card)] border border-white/5 hover:border-[var(--primary)]/30 transition-all duration-300 hover:-translate-y-1 ${c.status === "ENDED" ? "opacity-60" : ""}">
+        <div class="relative h-32 overflow-hidden">
+          ${hasBanner
+            ? `<div class="absolute inset-0 bg-cover bg-center transition-transform duration-500 group-hover:scale-110" style="background-image:url('${c.banner}')"></div>`
+            : `<div class="absolute inset-0 ${tc.iconBg}"></div>`}
+          <div class="absolute inset-0 bg-gradient-to-t from-[var(--card)] via-transparent to-transparent"></div>
+          <div class="absolute top-3 left-3 flex items-center gap-1.5">${statusBadge(c)}</div>
+          <span class="absolute top-3 right-3 inline-flex items-center rounded-full bg-black/50 backdrop-blur-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white/90 ring-1 ring-white/10">${tc.shortLabel}</span>
+        </div>
+        <div class="relative flex flex-1 flex-col p-4 -mt-8">
+          <div class="mb-3 flex items-end justify-between">
+            <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--card)] text-base font-bold shadow-lg ring-4 ring-[var(--card)] ${c.orgColor}">${c.initials}</div>
+            <div class="text-right">
+              <p class="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">Reward</p>
+              <p class="text-sm font-bold tabular-nums ${tc.accent}">${rewardText(c)}</p>
+            </div>
+          </div>
+          <p class="text-[10px] font-semibold text-[var(--muted-foreground)]">${c.org}</p>
+          <h3 class="mt-0.5 text-base font-bold leading-tight text-[var(--foreground)] line-clamp-2">${c.title}</h3>
+          <p class="mt-1.5 text-xs font-medium leading-relaxed text-[var(--muted-foreground)] line-clamp-2">${c.desc}</p>
+          ${isFcfs ? `<div class="mt-3"><div class="flex justify-between text-[10px] font-semibold tabular-nums text-[var(--muted-foreground)] mb-1"><span>${c.slots.used} / ${c.slots.max}</span><span>${slotsPct}%</span></div><div class="h-1.5 rounded-full bg-[var(--muted)]"><div class="h-full rounded-full ${fullBar ? "bg-gradient-to-r from-amber-500 to-orange-500" : ""}" style="width:${slotsPct}%; ${fullBar ? "" : "background-image:var(--gradient-brand);"}"></div></div></div>` : ""}
+          <div class="mt-auto pt-4 flex items-center justify-between gap-2 border-t border-white/5 text-[10px] font-semibold text-[var(--muted-foreground)]">
+            <span class="inline-flex items-center gap-1"><i data-lucide="list-checks" class="h-3 w-3 text-canton"></i>${c.tasks}</span>
+            <span class="inline-flex items-center gap-1"><i data-lucide="users" class="h-3 w-3"></i>${c.slots.used}/${c.slots.max}</span>
+            ${c.status === "ACTIVE" ? `<span class="inline-flex items-center gap-1 text-amber-300"><i data-lucide="clock" class="h-3 w-3"></i>${c.endsAt}</span>` : `<span class="inline-flex items-center gap-1"><i data-lucide="calendar" class="h-3 w-3"></i>${c.endsAt}</span>`}
+          </div>
+          ${(c.userState === "completed" || c.userState === "claimed")
+            ? `<button type="button" class="btn ${cta.variant} btn-block mt-3 h-11 text-sm" onclick="event.preventDefault(); event.stopPropagation(); openClaimDetails('${c.id}');">${cta.label}</button>`
+            : `<span class="btn ${cta.variant} btn-block mt-3 h-11 text-sm">${cta.label}</span>`}
+        </div>
+      </a>`;
+    }).join("");
+
+    const pg = document.getElementById("earn-pagination");
+    if (pg) pg.innerHTML = `<p class="text-xs font-medium text-[var(--muted-foreground)]">${CAMPAIGNS.length} campaigns</p>`;
+  }
+
+  function getQuestId() {
+    const m = (location.hash || "").match(/[?&]id=([^&]+)/);
+    return m ? decodeURIComponent(m[1]) : null;
+  }
+
+  const DETAIL_PROGRESS = {};
+  function detailTasks(c) {
+    const handle = c.org.toLowerCase().replace(/\s/g, "");
+    const all = [
+      { id: "follow", title: `Follow @${handle} on X`, points: 10, icon: "twitter" },
+      { id: "share", title: "Share the campaign post", points: 10, icon: "repeat-2" },
+      { id: "visit", title: `Visit ${c.org} and connect wallet`, points: 15, icon: "external-link" },
+      { id: "action", title: `Make 1 transaction on ${c.org}`, points: 25, icon: "arrow-left-right" },
+      { id: "quiz", title: `Quiz: What does ${c.org} do?`, points: 20, icon: "help-circle" },
+    ];
+    return all.slice(0, Math.max(2, c.tasks || 3));
+  }
+  function getProgress(c) {
+    if (!DETAIL_PROGRESS[c.id]) {
+      const tasks = detailTasks(c);
+      DETAIL_PROGRESS[c.id] = new Set([tasks[0].id, tasks[1].id]);
+    }
+    return DETAIL_PROGRESS[c.id];
+  }
+  function completeDetailTask(campaignId, taskId, btn) {
+    const c = CAMPAIGNS.find(x => x.id === campaignId);
+    if (!c) return;
+    const done = getProgress(c);
+    const tasks = detailTasks(c);
+    const idx = tasks.findIndex(t => t.id === taskId);
+    const prevDone = tasks.slice(0, idx).every(t => done.has(t.id));
+    if (!prevDone || done.has(taskId)) return;
+    const task = tasks[idx];
+    btn.disabled = true;
+    btn.innerHTML = `<i data-lucide="loader-2" class="h-4 w-4 spin"></i>`;
+    if (window.lucide) lucide.createIcons();
+    setTimeout(() => {
+      done.add(taskId);
+      toast(`+${task.points} pts — task verified`);
+      if (done.size >= tasks.length) {
+        const isDelayed = /draw|raffle/.test(c.type);
+        c.userState = isDelayed ? "submitted" : "completed";
+      }
+      renderEarnDetail();
+      if (window.lucide) lucide.createIcons();
+      const anchor = document.getElementById("detail-tasks");
+      if (anchor) anchor.scrollIntoView({ block: "start" });
+    }, 700);
+  }
+  window.completeDetailTask = completeDetailTask;
+
+  function renderEarnDetail() {
+    const wrap = document.getElementById("earn-detail");
+    if (!wrap) return;
+    const id = getQuestId();
+    const c = CAMPAIGNS.find(x => x.id === id) || CAMPAIGNS[0];
+    const tc = TYPE_CONFIG[c.type];
+
+    const tasks = detailTasks(c);
+    const done = getProgress(c);
+    const completedCount = done.size;
+    const allDone = completedCount >= tasks.length;
+    const pct = Math.round((completedCount / tasks.length) * 100);
+
+    let statusBanner = "";
+    if (c.userState === "submitted") {
+      statusBanner = `<div class="glass-card px-5 py-4 flex items-start gap-4"><span class="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-400"><i data-lucide="clock" class="h-5 w-5"></i></span><div class="min-w-0"><p class="text-[11px] font-semibold uppercase tracking-wider text-amber-300">Entry recorded</p><p class="mt-1 text-base font-bold leading-snug text-[var(--foreground)]">You're in the draw — winners announced when campaign ends.</p></div></div>`;
+    } else if (c.userState === "waitlisted") {
+      statusBanner = `<div class="glass-card px-5 py-4 flex items-start gap-4"><span class="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-500/15 text-sky-400"><i data-lucide="hourglass" class="h-5 w-5"></i></span><div class="min-w-0"><p class="text-[11px] font-semibold uppercase tracking-wider text-sky-300">On the waitlist</p><p class="mt-1 text-base font-bold leading-snug text-[var(--foreground)]">We'll notify you if a spot opens up.</p></div></div>`;
+    }
+
+        const isUsdcx = c.type.startsWith("usdcx");
+    const rewardCell = (() => {
+      if (c.type === "code-fcfs" || c.type === "code-raffle" || c.type === "invite") return `<div class="text-xl font-bold text-[var(--foreground)]">1 Invite Code</div>`;
+      if (c.type === "waitlist") return `<div class="text-xl font-bold text-[var(--foreground)]">Waitlist Spot</div>`;
+      if (c.type === "cc-code-raffle") return `<div class="text-xl font-bold text-[var(--foreground)]">${c.rewardPerWinnerCc} CC <span class="text-[var(--muted-foreground)]">+</span> 1 Code</div>`;
+      if (c.type === "usdcx-code-raffle") return `<div class="text-xl font-bold text-[var(--foreground)]">${c.rewardPerWinnerUsdcx} USDCx <span class="text-[var(--muted-foreground)]">+</span> 1 Code</div>`;
+      if (isUsdcx) return `<div class="text-xl font-bold text-[var(--foreground)]">${c.rewardPerWinnerUsdcx} USDCx</div>`;
+      return `<div class="text-xl font-bold text-[var(--foreground)]">${c.rewardPerWinnerCc} CC</div>`;
+    })();
+
+    const slotsPct = c.slots.max ? Math.round((c.slots.used / c.slots.max) * 100) : 0;
+
+    let sidebarCta;
+    if (c.userState === "claimed") {
+      sidebarCta = `<button class="btn btn-ghost btn-block h-12 gap-2 border border-emerald-500/25 bg-emerald-500/[0.07] text-emerald-300" onclick="openClaimDetails('${c.id}')"><i data-lucide="check-circle-2" class="h-4 w-4"></i>Reward claimed</button>`;
+    } else if (allDone) {
+      const isWaitlistType = c.type === "waitlist";
+      const ctaLabel = isWaitlistType ? "Join waitlist" : "Claim reward";
+      const ctaIcon = isWaitlistType ? "sparkles" : "gift";
+      sidebarCta = `<button class="btn btn-success btn-block h-12 gap-2 font-bold" onclick="openClaimDetails('${c.id}')"><i data-lucide="${ctaIcon}" class="h-4 w-4"></i>${ctaLabel}</button>`;
+    } else if (c.userState === "submitted") {
+      sidebarCta = `<button class="btn btn-muted btn-block h-12" disabled>Entry recorded</button>`;
+    } else if (c.userState === "waitlisted") {
+      sidebarCta = `<button class="btn btn-muted btn-block h-12" disabled>On waitlist</button>`;
+    } else if (c.slots.full) {
+      sidebarCta = `<button class="btn btn-muted btn-block h-12" disabled>Slots full</button>`;
+    } else {
+      const remaining = tasks.length - completedCount;
+      sidebarCta = `<div class="rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3 flex items-center gap-2.5"><i data-lucide="list-checks" class="h-4 w-4 shrink-0 text-canton"></i><p class="text-xs font-medium leading-snug text-[var(--muted-foreground)]">Complete ${remaining} more task${remaining === 1 ? "" : "s"} to unlock</p></div>`;
+    }
+
+    wrap.innerHTML = `
+      <a href="#/earn" class="inline-flex items-center gap-2 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]"><i data-lucide="arrow-left" class="h-4 w-4"></i>Back to Earn</a>
+
+      <div class="mt-4 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px] lg:items-start">
+        <div class="min-w-0 space-y-6">
+          
+          <div class="relative w-full overflow-hidden rounded-2xl border border-white/5">
+            <div class="relative h-48 md:h-64 w-full bg-cover bg-center" style="background-image: linear-gradient(to top, var(--background) 5%, rgba(5,6,10,0.2) 60%, transparent), url('${c.banner}')">
+              <div class="absolute top-4 left-4 flex gap-2">
+                ${statusBadge(c)}
+                <span class="inline-flex items-center rounded-full bg-black/50 backdrop-blur-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white/90 ring-1 ring-white/10">${tc.shortLabel}</span>
+              </div>
+            </div>
+            <div class="relative px-6 pb-6">
+              <div class="flex items-end gap-4 -mt-12">
+                <div class="relative z-10 h-20 w-20 rounded-2xl bg-[var(--card)] flex items-center justify-center text-2xl font-bold shadow-xl ring-4 ring-[var(--background)] ${c.orgColor}">${c.initials}</div>
+                <div class="pb-2">
+                  <p class="text-xs font-semibold text-[var(--muted-foreground)]">${c.org}</p>
+                  <h1 class="text-xl md:text-2xl font-bold leading-tight text-[var(--foreground)]">${c.title}</h1>
+                </div>
+              </div>
+              <p class="mt-4 text-sm leading-relaxed text-[var(--muted-foreground)] max-w-2xl">${c.desc}</p>
+              ${c.socials && c.socials.length ? `<div class="mt-4 flex flex-wrap gap-2">${c.socials.map(s => `<a href="#" class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/5 bg-white/5 text-[var(--muted-foreground)] hover:border-canton-muted hover:bg-canton-subtle hover:text-canton"><i data-lucide="${s}" class="h-4 w-4"></i></a>`).join("")}</div>` : ""}
+            </div>
+          </div>
+
+          ${statusBanner}
+
+          <div id="detail-tasks">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-lg font-bold text-[var(--foreground)]">Quest Milestones</h2>
+              <span class="text-sm font-semibold text-[var(--muted-foreground)] tabular-nums">${completedCount} / ${tasks.length}</span>
+            </div>
+            
+            <div class="mb-4 h-1.5 overflow-hidden rounded-full bg-[var(--muted)]">
+              <div class="h-full rounded-full transition-all duration-500" style="width:${pct}%; background-image:${allDone ? "linear-gradient(90deg,#10b981,#6ee7b7)" : "var(--gradient-brand)"};"></div>
+            </div>
+
+            <div class="quest-timeline">
+              ${tasks.map((t, i) => {
+                const isDone = done.has(t.id);
+                const prevAllDone = tasks.slice(0, i).every(x => done.has(x.id));
+                const isNext = !isDone && prevAllDone;
+                const isLocked = !isDone && !prevAllDone;
+                
+                const stateClass = isDone ? 'is-done' : isNext ? 'is-active' : '';
+                const cardCls = isDone
+                  ? "border-emerald-500/30 bg-emerald-500/[0.06]"
+                  : isNext
+                  ? "border-[var(--border)] bg-[var(--card)] hover:border-[var(--primary)]/30"
+                  : "border-[var(--border)] opacity-50 bg-[var(--card)]";
+                  
+                const rightSlot = isDone
+                  ? `<span class="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500/15 px-4 text-xs font-bold text-emerald-300">Verified</span>`
+                  : isNext
+                  ? (() => { const ctaLabel = t.id === "visit" ? "Open" : t.id === "action" ? "Verify" : t.id === "quiz" ? "Answer" : "Verify"; return `<button class="btn btn-primary btn-sm h-9 min-w-[5.5rem] font-bold" onclick="completeDetailTask('${c.id}','${t.id}',this)">${ctaLabel}</button>`; })()
+                  : `<span class="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-[var(--muted)]/50 px-3 text-[10px] font-bold uppercase tracking-wide text-[var(--muted-foreground)]">Locked</span>`;
+                  
+                return `<div class="quest-milestone ${stateClass}">
+                  <div class="rounded-xl border p-4 transition-all duration-200 ${cardCls}">
+                    <div class="flex items-center gap-4">
+                      <div class="min-w-0 flex-1">
+                        <p class="mb-0.5 text-xs font-bold tabular-nums ${isDone ? "text-emerald-400" : "text-amber-300"}">+${t.points} pts</p>
+                        <p class="text-sm font-semibold leading-snug text-[var(--foreground)] ${isDone ? "line-through opacity-70" : ""}">${t.title}</p>
+                      </div>
+                      <div class="flex shrink-0 items-center">${rightSlot}</div>
+                    </div>
+                  </div>
+                </div>`;
+              }).join("")}
+            </div>
+          </div>
+        </div>
+
+        <div class="space-y-4 lg:sticky lg:top-24">
+          <div class="glass-card rounded-2xl p-5">
+            <div class="flex flex-col gap-4">
+              <div>
+                <p class="text-[10px] font-bold uppercase tracking-widest text-[var(--muted-foreground)]">Your Reward</p>
+                <div class="mt-2 flex items-center gap-3">
+                   <span class="flex h-12 w-12 items-center justify-center rounded-xl ${tc.iconBg}"><i data-lucide="${tc.icon}" class="h-6 w-6 ${tc.accent}"></i></span>
+                   <div>${rewardCell}</div>
+                </div>
+              </div>
+              
+              <div class="h-px bg-white/5"></div>
+              
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <p class="text-[10px] font-bold uppercase tracking-widest text-[var(--muted-foreground)]">Slots</p>
+                  <p class="mt-1 text-sm font-bold text-[var(--foreground)] tabular-nums">${c.slots.used}/${c.slots.max}</p>
+                  <div class="mt-1.5 h-1 rounded-full bg-[var(--muted)]"><div class="h-full rounded-full" style="width:${slotsPct}%; background-image:var(--gradient-brand);"></div></div>
+                </div>
+                <div>
+                  <p class="text-[10px] font-bold uppercase tracking-widest text-[var(--muted-foreground)]">Ends In</p>
+                  <p class="mt-1 text-sm font-bold text-amber-300">${c.endsAt}</p>
+                </div>
+              </div>
+
+              <div class="h-px bg-white/5"></div>
+              
+              <div class="flex items-center justify-between">
+                <span class="text-xs text-[var(--muted-foreground)]">Claim Fee</span>
+                <span class="text-xs font-bold ${c.claimFee === "Free" ? "text-canton" : "text-[var(--foreground)]"}">${c.claimFee}</span>
+              </div>
+              
+              <div class="pt-2">${sidebarCta}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function openClaimDetails(campaignId) {
+    const c = CAMPAIGNS.find(x => x.id === campaignId);
+    if (!c) return;
+    const b = document.getElementById("claim-details-body");
+    if (b) b.innerHTML = claimDetailsHtml(c);
+    openModal("claim-details-modal");
+    if (window.lucide) lucide.createIcons();
+  }
+  window.openClaimDetails = openClaimDetails;
+
+  function claimDetailsHtml(c) {
+    const alreadyClaimed = c.userState === "claimed";
+    const tc = TYPE_CONFIG[c.type];
+    const isUsdcx = c.type.startsWith("usdcx");
+    const isCodeOnly = ["code-fcfs", "code-raffle", "invite"].includes(c.type);
+    const isWaitlistType = c.type === "waitlist";
+    const isComboType = ["cc-code-raffle", "usdcx-code-raffle"].includes(c.type);
+    const isTokenReward = !isCodeOnly && !isWaitlistType;
+    const rewardLabel = isComboType ? "Reward · winner" : isWaitlistType ? "You'll get" : "Reward";
+    const heroAmount = isWaitlistType ? "Waitlist spot" : rewardText(c);
+
+    const heroVisual = alreadyClaimed
+      ? `<div class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400 ring-4 ring-emerald-500/10"><i data-lucide="check-circle-2" class="h-8 w-8"></i></div>`
+      : isTokenReward
+      ? `<div class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-[var(--primary)]/20 to-transparent ring-4 ring-[var(--primary)]/10">${tokenLogoSpan(isUsdcx ? "USDCx" : "CC", "h-10 w-10", "text-base")}</div>`
+      : `<div class="mx-auto flex h-16 w-16 items-center justify-center rounded-full ${tc.iconBg} ${tc.accent} ring-4 ring-white/5"><i data-lucide="${isWaitlistType ? "sparkles" : "ticket"}" class="h-8 w-8"></i></div>`;
+
+    const rows = [];
+    if (c.type === "waitlist") rows.push({ label: "Position", value: "Assigned on claim" });
+    rows.push({ label: "Claim fee", value: c.claimFee, accent: c.claimFee === "Free" });
+    rows.push({ label: "Network", value: "Canton" });
+    rows.push({ label: c.status === "ACTIVE" ? "Closes" : "Ended", value: c.endsAt });
+
+    const rowsHtml = rows.map(r =>
+      `<div class="flex items-center justify-between py-3"><dt class="text-xs text-[var(--muted-foreground)]">${r.label}</dt><dd class="text-xs font-bold ${r.accent ? "text-canton" : "text-[var(--foreground)]"}">${r.value}</dd></div>`
+    ).join(`<div class="h-px bg-white/5"></div>`);
+
+    const tasksStrip = (!alreadyClaimed && c.tasks)
+      ? `<div class="mt-4 flex items-center gap-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] px-4 py-3 text-xs font-medium text-emerald-300"><i data-lucide="shield-check" class="h-4 w-4 shrink-0"></i>All ${c.tasks} milestones completed — you're eligible</div>`
+      : "";
+
+    const footer = alreadyClaimed
+      ? `<div class="flex items-center justify-center gap-2 rounded-xl border border-white/5 bg-white/5 px-4 py-3 text-xs font-semibold text-[var(--muted-foreground)]"><i data-lucide="check-circle-2" class="h-4 w-4 text-emerald-400"></i>${isWaitlistType ? "Already on the waitlist" : "Reward already claimed"}</div>
+         <button class="btn btn-secondary btn-block h-12 mt-2.5" onclick="closeModal('claim-details-modal'); showReward('${c.id}')">View receipt</button>`
+      : `<button class="btn btn-primary btn-block h-12 gap-2 font-bold text-sm" onclick="confirmClaim('${c.id}')"><i data-lucide="zap" class="h-4 w-4"></i>${isWaitlistType ? "Join waitlist" : "Claim reward now"}</button>
+         <button class="btn btn-ghost btn-block h-10 mt-1.5 text-xs font-semibold text-[var(--muted-foreground)]" onclick="closeModal('claim-details-modal')">Maybe later</button>`;
+
+    return `
+      <div class="relative">
+        <div class="absolute inset-0 bg-gradient-to-b from-[var(--primary)]/5 to-transparent pointer-events-none"></div>
+        <div class="relative p-6 max-sm:p-4">
+          <div class="flex items-center justify-between mb-6 max-sm:mb-4">
+            <div class="flex items-center gap-3">
+              ${c.logo ? `<img src="${c.logo}" class="h-10 w-10 rounded-xl object-cover" alt="" />` : `<div class="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--muted)] text-sm font-bold ${c.orgColor}">${c.initials}</div>`}
+              <div>
+                <p class="text-xs text-[var(--muted-foreground)]">${c.org}</p>
+                <p class="text-sm font-bold text-[var(--foreground)]">Claim Reward</p>
+              </div>
+            </div>
+            <button class="icon-btn h-8 w-8 shrink-0" onclick="closeModal('claim-details-modal')" aria-label="Close"><i data-lucide="x" class="h-4 w-4"></i></button>
+          </div>
+
+          <div class="flex flex-col items-center text-center py-4 max-sm:py-3">
+            ${heroVisual}
+            <p class="mt-4 text-[10px] font-bold uppercase tracking-widest text-[var(--muted-foreground)]">${rewardLabel}</p>
+            <p class="mt-1 text-3xl font-extrabold text-[var(--foreground)] glow-text max-sm:text-2xl">${heroAmount}</p>
+          </div>
+
+          <div class="mt-4 rounded-xl border border-white/5 bg-black/20 px-4 max-sm:mt-3">
+            ${rowsHtml}
+          </div>
+
+          ${tasksStrip}
+
+          <div class="mt-6 max-sm:mt-4">${footer}</div>
+        </div>
+      </div>
+    `;
+  }
+  window.claimDetailsHtml = claimDetailsHtml;
+
+  function confirmClaim(campaignId) {
+    closeModal("claim-details-modal");
+    setTimeout(() => showReward(campaignId), 180);
+  }
+  window.confirmClaim = confirmClaim;
+
+  function showReward(campaignId) {
+    const c = CAMPAIGNS.find(x => x.id === campaignId);
+    if (!c) return;
+
+    const alreadyClaimed = c.userState === "claimed";
+    const isUsdcx = c.type.startsWith("usdcx");
+    const tokenColor = isUsdcx ? "text-sky-300" : "text-canton";
+    const tokenName = isUsdcx ? "USDCx" : "CC";
+    const tokenAmt = isUsdcx ? c.rewardPerWinnerUsdcx : c.rewardPerWinnerCc;
+
+    let accentBg, accentText, title, subtitle, amountText, extraHtml = "";
+
+    if (c.type === "waitlist") {
+      accentBg = "bg-cyan-500/15"; accentText = "text-cyan-300";
+      title = "Added to the waitlist"; subtitle = `${c.org} · ${c.title}`;
+      amountText = `#${320 + Math.floor(Math.random() * 50)}`;
+      extraHtml = `<p class="mt-1 text-xs text-[var(--muted-foreground)]">Your position — we'll email you at launch.</p>`;
+    } else if (c.type === "code-fcfs" || c.type === "code-raffle" || c.type === "invite") {
+      accentBg = "bg-violet-500/15"; accentText = "text-violet-300";
+      title = "Invite code claimed"; subtitle = `${c.org} · ${c.title}`;
+      amountText = "1 invite code";
+      extraHtml = codeCopyHtml(c.rewardCode) + howToHtml(c);
+    } else if (c.type === "cc-code-raffle" || c.type === "usdcx-code-raffle") {
+      accentBg = isUsdcx ? "bg-sky-500/15" : "bg-canton-subtle"; accentText = tokenColor;
+      title = "Reward claimed"; subtitle = `${c.org} · ${c.title}`;
+      amountText = `+${tokenAmt}.0000 ${tokenName}`;
+      extraHtml = `<p class="mt-1 text-xs text-[var(--muted-foreground)]">sent to your wallet</p>` + codeCopyHtml(c.rewardCode);
+    } else {
+      accentBg = isUsdcx ? "bg-sky-500/15" : "bg-canton-subtle"; accentText = tokenColor;
+      title = "Reward claimed"; subtitle = `${c.org} · ${c.title}`;
+      amountText = `+${tokenAmt}.0000 ${tokenName}`;
+      extraHtml = `<p class="mt-1 text-xs text-[var(--muted-foreground)]">sent to your wallet</p>`;
+    }
+
+    const meta = [];
+    if (c.claimFee && c.claimFee !== "Free") meta.push({ label: "Claim fee paid", value: c.claimFee });
+
+    TX.start({
+      accentBg, accentText, title, subtitle, amountText, extraHtml, meta,
+      skipToConfirmed: alreadyClaimed,
+      onConfirmed: alreadyClaimed ? null : () => {
+        c.userState = "claimed";
+        if (c.type !== "waitlist") {
+          toast(`Reward claimed: ${rewardText(c)}`);
+          pushNotif({ title: `Reward received: ${rewardText(c)}`, desc: `From ${c.org} campaign`, icon: "gift", tone: "reward" });
+        } else {
+          toast("Added to the waitlist");
+          pushNotif({ title: "Added to waitlist", desc: `${c.org} — we'll notify you at launch`, icon: "sparkles", tone: "info" });
+        }
+        renderEarnDetail();
+        renderEarnGrid();
+        if (window.lucide) lucide.createIcons();
+      },
+    });
+  }
+  window.showReward = showReward;
+
+  function codeCopyHtml(code) {
+    return `<div class="mt-5 w-full text-left"><p class="text-xs font-medium text-[var(--muted-foreground)]">Your code</p><div class="mt-1.5 flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3"><code class="min-w-0 truncate font-mono text-sm font-semibold tracking-wide text-[var(--foreground)]">${code}</code><button class="icon-btn h-8 w-8 shrink-0" onclick="copyText('${code}', this)" aria-label="Copy code"><i data-lucide="copy" class="h-3.5 w-3.5"></i></button></div><p class="mt-1.5 text-xs text-[var(--muted-foreground)]">Won't be shown again — save it now.</p></div>`;
+  }
+  function howToHtml(c) {
+    return `<div class="mt-3 w-full rounded-xl border border-[var(--border)] bg-[var(--muted)]/25 px-4 py-3 text-left"><p class="text-xs leading-relaxed text-[var(--muted-foreground)]">Redeem at <span class="font-medium text-canton">${c.org.toLowerCase().replace(/\s/g,"")}.com</span> — enter the code above at checkout.</p></div>`;
+  }
+
+  function copyText(text, btn) {
+    navigator.clipboard?.writeText(text).catch(() => {});
+    if (btn) {
+      const orig = btn.innerHTML;
+      btn.innerHTML = `<i data-lucide="check" class="h-3.5 w-3.5"></i>Copied`;
+      if (window.lucide) lucide.createIcons();
+      setTimeout(() => { btn.innerHTML = orig; if (window.lucide) lucide.createIcons(); }, 2000);
+    }
+  }
+  window.copyText = copyText;
+
+  function spinIcon(btn, iconName) {
+    const svg = btn.querySelector("svg.lucide, svg");
+    if (svg) { svg.classList.add("spin"); setTimeout(() => svg.classList.remove("spin"), 800); }
+  }
+  window.spinIcon = spinIcon;
+
+  function selectPill(btn) {
+    const group = btn.parentElement;
+    group.querySelectorAll(".tab-pill").forEach(p => {
+      p.classList.remove("tab-pill-on");
+      p.classList.add("tab-pill-off");
+    });
+    btn.classList.remove("tab-pill-off");
+    btn.classList.add("tab-pill-on");
+  }
+  window.selectPill = selectPill;
+
+  function copyById(elId, btn) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    const val = el.value || el.textContent || "";
+    navigator.clipboard?.writeText(val).catch(() => {});
+    if (btn) {
+      const orig = btn.innerHTML;
+      btn.innerHTML = `<i data-lucide="check" class="h-4 w-4"></i>Copied`;
+      if (window.lucide) lucide.createIcons();
+      setTimeout(() => { btn.innerHTML = orig; if (window.lucide) lucide.createIcons(); }, 1800);
+    }
+  }
+  window.copyById = copyById;
+
+  function togglePartyIdView(btn) {
+    const el = document.getElementById("party-id");
+    if (!el) return;
+    const expanded = btn.dataset.expanded === "true";
+    el.textContent = expanded ? el.dataset.short : el.dataset.full;
+    el.classList.toggle("break-all", !expanded);
+    el.classList.toggle("truncate", expanded);
+    btn.dataset.expanded = expanded ? "false" : "true";
+    btn.textContent = expanded ? "Show full" : "Show less";
+  }
+  window.togglePartyIdView = togglePartyIdView;
+
+  function sharePartyId(btn) {
+    const addr = document.getElementById("party-id")?.dataset.full || "";
+    if (navigator.share) {
+      navigator.share({ title: "My Canton Party ID", text: addr }).catch(() => {});
+    } else {
+      navigator.clipboard?.writeText(addr).catch(() => {});
+      toast("Party ID copied to clipboard");
+    }
+  }
+  window.sharePartyId = sharePartyId;
+
+  function switchOffersTab(tab) {
+    const incTab = document.getElementById("offers-tab-incoming");
+    const sentTab = document.getElementById("offers-tab-sent");
+    const incList = document.getElementById("offers-list-incoming");
+    const sentList = document.getElementById("offers-list-sent");
+    [incTab, sentTab].forEach(t => {
+      t.classList.remove("bg-canton-subtle", "text-canton");
+      t.classList.add("text-[var(--muted-foreground)]");
+    });
+    if (tab === "incoming") {
+      incTab.classList.add("bg-canton-subtle", "text-canton");
+      incTab.classList.remove("text-[var(--muted-foreground)]");
+      incList.classList.remove("hidden"); incList.classList.add("space-y-3");
+      sentList.classList.add("hidden"); sentList.classList.remove("flex");
+    } else {
+      sentTab.classList.add("bg-canton-subtle", "text-canton");
+      sentTab.classList.remove("text-[var(--muted-foreground)]");
+      sentList.classList.remove("hidden"); sentList.classList.add("flex");
+      incList.classList.add("hidden"); incList.classList.remove("space-y-3");
+    }
+  }
+  window.switchOffersTab = switchOffersTab;
+
+  function verifyTask(btn, points) {
+    const li = btn.closest("li");
+    if (!li || li.dataset.done === "1") return;
+    li.dataset.done = "1";
+    li.classList.remove("border-[var(--border)]", "hover:border-[var(--primary)]/30");
+    li.classList.add("border-emerald-500/30", "bg-emerald-500/[0.06]");
+    li.querySelectorAll("p").forEach(p => {
+      if (/pts/i.test(p.textContent)) { p.classList.remove("text-amber-300"); p.classList.add("text-emerald-400"); }
+      else if (p.classList.contains("text-sm")) p.classList.add("line-through", "opacity-70");
+    });
+    btn.outerHTML = `<span class="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500 px-4 text-xs font-bold text-[var(--primary-foreground)]">Completed</span>`;
+    if (window.lucide) lucide.createIcons();
+    toast(`+${points} pts added to your balance`);
+    pushNotif({ title: `+${points} pts earned`, desc: "Task verified", icon: "sparkles", tone: "reward" });
+  }
+  window.verifyTask = verifyTask;
+
+  function checkIn(btn, points) {
+    if (btn.dataset.done === "1") return;
+    btn.dataset.done = "1";
+    btn.outerHTML = `<span class="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500/15 px-4 text-xs font-bold tabular-nums text-emerald-300">24h 00m</span>`;
+    toast(`+${points} pts — see you tomorrow!`);
+    pushNotif({ title: `Daily check-in: +${points} pts`, desc: "Come back tomorrow for more", icon: "calendar-check", tone: "reward" });
+    if (window.lucide) lucide.createIcons();
+  }
+  window.checkIn = checkIn;
+
+  function answerMcq(btn, letter, correct) {
+    const li = btn.closest("li");
+    const ul = li.parentElement;
+    ul.querySelectorAll("button.flex.w-full").forEach(b => { b.disabled = true; });
+    if (correct) {
+      btn.classList.add("bg-emerald-500/15", "text-emerald-300");
+      li.classList.remove("border-[var(--border)]","hover:border-[var(--primary)]/30");
+      li.classList.add("border-emerald-500/30","bg-emerald-500/[0.06]");
+      const cta = li.querySelector('button.btn-primary');
+      if (cta) cta.outerHTML = `<span class="inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg bg-emerald-500 px-4 text-xs font-bold text-[var(--primary-foreground)]">Completed</span>`;
+      toast("Correct! +15 pts");
+      pushNotif({ title: "Quiz correct: +15 pts", desc: "Daily quiz answered", icon: "help-circle", tone: "reward" });
+    } else {
+      btn.classList.add("bg-red-500/15", "text-red-300");
+      setTimeout(() => ul.querySelectorAll("button.flex.w-full").forEach(b => b.disabled = false), 900);
+      toast("Not quite — try again");
+    }
+    if (window.lucide) lucide.createIcons();
+  }
+  window.answerMcq = answerMcq;
+
+  function toast(msg) {
+    let host = document.getElementById("toast-host");
+    if (!host) {
+      host = document.createElement("div");
+      host.id = "toast-host";
+      host.style.cssText = "position:fixed;top:1rem;right:1rem;z-index:200;display:flex;flex-direction:column;gap:.5rem;pointer-events:none";
+      document.body.appendChild(host);
+    }
+    const el = document.createElement("div");
+    el.style.cssText = "pointer-events:auto;background:var(--card);border:1px solid var(--border);border-left:3px solid var(--primary);border-radius:.75rem;padding:.75rem 1rem;font-size:.875rem;font-weight:600;color:var(--foreground);box-shadow:0 10px 30px -10px rgba(0,0,0,.6);max-width:320px;animation:toast-in .2s ease";
+    el.textContent = msg;
+    host.appendChild(el);
+    setTimeout(() => { el.style.transition="opacity .3s, transform .3s"; el.style.opacity="0"; el.style.transform="translateX(20px)"; setTimeout(()=>el.remove(), 300); }, 2400);
+  }
+  window.toast = toast;
+
+  const NOTIFS = [];
+  function timeAgo(ts) {
+    const s = Math.floor((Date.now() - ts) / 1000);
+    if (s < 60) return "just now";
+    if (s < 3600) return Math.floor(s/60) + "m ago";
+    return Math.floor(s/3600) + "h ago";
+  }
+  function toneStyle(tone) {
+    switch (tone) {
+      case "out":   return "bg-red-500/10 text-red-500 ring-1 ring-red-500/15";
+      case "in":    return "bg-canton-subtle text-canton ring-1 ring-[var(--primary)]/15";
+      case "reward":return "bg-canton-subtle text-canton ring-1 ring-[var(--primary)]/20";
+      default:      return "bg-[var(--muted)] text-[var(--muted-foreground)]";
+    }
+  }
+  function pushNotif({ title, desc, icon = "bell", tone = "info" }) {
+    NOTIFS.unshift({ id: Date.now() + Math.random(), title, desc, icon, tone, ts: Date.now() });
+    if (NOTIFS.length > 20) NOTIFS.pop();
+    renderNotifs();
+    const bell = document.querySelector("#bell-btn svg");
+    if (bell) { bell.style.transition = "transform .3s"; bell.style.transform = "rotate(15deg)"; setTimeout(() => bell.style.transform = "", 300); }
+  }
+  window.pushNotif = pushNotif;
+  function renderNotifs() {
+    const list = document.getElementById("notif-list");
+    const empty = document.getElementById("notif-empty");
+    const badge = document.getElementById("bell-badge");
+    if (!list) return;
+    if (!NOTIFS.length) {
+      list.innerHTML = "";
+      if (empty) empty.classList.remove("hidden");
+      if (badge) badge.classList.add("hidden");
+      return;
+    }
+    if (empty) empty.classList.add("hidden");
+    if (badge) { badge.classList.remove("hidden"); badge.textContent = NOTIFS.length > 9 ? "9+" : NOTIFS.length; }
+    list.innerHTML = NOTIFS.map(n => `
+      <li class="border-b border-[var(--border)] last:border-0">
+        <div class="flex items-start gap-3 px-4 py-3 hover:bg-[var(--muted)]/40 transition-colors">
+          <span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${toneStyle(n.tone)}"><i data-lucide="${n.icon}" class="h-4 w-4"></i></span>
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-semibold text-[var(--foreground)] truncate">${n.title}</p>
+            <p class="mt-0.5 text-xs text-[var(--muted-foreground)] truncate">${n.desc}</p>
+            <p class="mt-0.5 text-[10px] text-[var(--muted-foreground)]">${timeAgo(n.ts)}</p>
+          </div>
+        </div>
+      </li>`).join("");
+    if (window.lucide) lucide.createIcons();
+  }
+  window.renderNotifs = renderNotifs;
+  function toggleNotifPanel() {
+    const p = document.getElementById("notif-panel");
+    if (p) p.classList.toggle("hidden");
+  }
+  window.toggleNotifPanel = toggleNotifPanel;
+  function clearNotifs() {
+    NOTIFS.length = 0;
+    renderNotifs();
+    toast("All notifications marked as read");
+  }
+  window.clearNotifs = clearNotifs;
+  document.addEventListener("click", (e) => {
+    const panel = document.getElementById("notif-panel");
+    const btn = document.getElementById("bell-btn");
+    if (panel && !panel.classList.contains("hidden") && !panel.contains(e.target) && e.target !== btn && !btn?.contains(e.target)) {
+      panel.classList.add("hidden");
+    }
+  });
+
+  function fillMax(btn, inputId, value) {
+    const inp = document.getElementById(inputId);
+    if (!inp) return;
+    inp.value = value;
+    inp.focus();
+  }
+  window.fillMax = fillMax;
+
+  const SWAP_RATE = 0.9940; 
+  let swapSlippagePct = 0.5;
+  function updateSwapQuote() {
+    const payInput = document.getElementById("swap-pay-input");
+    const getSpan = document.getElementById("swap-get-span");
+    const minEl = document.getElementById("swap-min-received");
+    if (!payInput || !getSpan) return;
+    const amt = parseFloat(payInput.value) || 0;
+    const gotNum = amt * SWAP_RATE;
+    const got = amt > 0 ? gotNum.toFixed(4).replace(/\.?0+$/,"") : "0.0";
+    getSpan.textContent = got;
+    getSpan.classList.toggle("text-canton", amt > 0);
+    if (minEl) {
+      const min = gotNum * (1 - swapSlippagePct / 100);
+      minEl.textContent = `${min.toFixed(2)} USDCx`;
+    }
+  }
+  window.updateSwapQuote = updateSwapQuote;
+
+  function setSwapPct(frac) {
+    const inp = document.getElementById("swap-pay-input");
+    if (!inp) return;
+    inp.value = (112.38 * frac).toFixed(4).replace(/\.?0+$/,"");
+    updateSwapQuote();
+  }
+  window.setSwapPct = setSwapPct;
+
+  function toggleSwapSettings() {
+    const p = document.getElementById("swap-settings-panel");
+    if (p) p.classList.toggle("hidden");
+  }
+  window.toggleSwapSettings = toggleSwapSettings;
+  function setSlippage(btn) {
+    swapSlippagePct = parseFloat(btn.dataset.val);
+    document.querySelectorAll(".swap-slip").forEach(b => {
+      b.classList.remove("swap-slip-on","border-canton-muted","bg-canton-subtle","text-canton");
+      b.classList.add("border-[var(--border)]","bg-[var(--muted)]","text-[var(--muted-foreground)]");
+    });
+    btn.classList.add("swap-slip-on","border-canton-muted","bg-canton-subtle","text-canton");
+    btn.classList.remove("border-[var(--border)]","bg-[var(--muted)]","text-[var(--muted-foreground)]");
+    const disp = document.getElementById("swap-slippage-display");
+    if (disp) disp.textContent = `${swapSlippagePct}%`;
+    updateSwapQuote();
+  }
+  window.setSlippage = setSlippage;
+  document.addEventListener("click", (e) => {
+    const panel = document.getElementById("swap-settings-panel");
+    const btn = document.getElementById("swap-settings-btn");
+    if (panel && !panel.classList.contains("hidden") && !panel.contains(e.target) && e.target !== btn && !btn?.contains(e.target)) {
+      panel.classList.add("hidden");
+    }
+  });
+
+  function executeSwap(btn) {
+    const payInput = document.getElementById("swap-pay-input");
+    const amt = parseFloat(payInput?.value || "0");
+    if (!amt || amt <= 0) { toast("Enter an amount first"); return; }
+    const got = (amt * SWAP_RATE).toFixed(4);
+    closeModal("swap-modal");
+    TX.start({
+      accentBg: "bg-canton-subtle", accentText: "text-canton",
+      amountText: `${amt} CC → ${got} USDCx`,
+      subText: "via OneSwap · Canton",
+      title: "Swap completed",
+      subtitle: "Tokens have landed in your wallet.",
+      meta: [
+        { label: "Rate", value: `1 CC ≈ ${SWAP_RATE.toFixed(4)} USDCx` },
+        { label: "Pool fee", value: `0.3% (${(amt * 0.003).toFixed(4)} CC)` },
+        { label: "Network fee", value: "0.001 CC" },
+      ],
+      onConfirmed: () => {
+        toast(`Swapped ${amt} CC → ${got} USDCx`);
+        pushNotif({ title: `Swap: ${amt} CC → ${got} USDCx`, desc: "Swap confirmed on Canton via OneSwap", icon: "arrow-left-right", tone: "info" });
+      },
+    });
+  }
+  window.executeSwap = executeSwap;
+
+  function selectLockDur(btn) {
+    document.querySelectorAll("#lock-duration .lock-dur").forEach(b => {
+      b.classList.remove("lock-dur-on","border-canton-muted","bg-canton-subtle","text-canton");
+      b.classList.add("border-[var(--border)]","bg-[var(--muted)]","text-[var(--muted-foreground)]");
+    });
+    btn.classList.add("lock-dur-on","border-canton-muted","bg-canton-subtle","text-canton");
+    btn.classList.remove("border-[var(--border)]","bg-[var(--muted)]","text-[var(--muted-foreground)]");
+    const amt = parseFloat(document.getElementById("lock-amount")?.value || "0") || 0;
+    const sub = document.getElementById("lock-submit");
+    if (sub) sub.textContent = `Lock ${amt} CC for ${btn.textContent.trim()}`;
+    const feePreview = document.getElementById("lock-fee-preview");
+    if (feePreview) feePreview.textContent = `${btn.dataset.fee || "0.05"} CC`;
+  }
+  window.selectLockDur = selectLockDur;
+
+  function executeLock(btn) {
+    const amt = parseFloat(document.getElementById("lock-amount")?.value || "0") || 0;
+    const durBtn = document.querySelector("#lock-duration .lock-dur-on");
+    const durLabel = durBtn?.textContent.trim() || "15 minutes";
+    const fee = durBtn?.dataset.fee || "0.05";
+    closeModal("lock-modal");
+    TX.start({
+      accentBg: "bg-canton-subtle", accentText: "text-canton",
+      amountText: `${amt} CC`,
+      subText: `Locked for ${durLabel}`,
+      title: "CC locked",
+      subtitle: "You can unlock any time — full amount returns.",
+      meta: [
+        { label: "Duration", value: durLabel },
+        { label: "Holding fee", value: `${fee} CC` },
+      ],
+      onConfirmed: () => {
+        toast(`${amt} CC locked for ${durLabel}`);
+        pushNotif({ title: `${amt} CC locked`, desc: `Lock active — ${durLabel}`, icon: "lock", tone: "out" });
+      },
+    });
+  }
+  window.executeLock = executeLock;
+
+  function unlockCc(btn) {
+    const row = btn.closest("li");
+    const label = row?.querySelector("p")?.textContent.trim() || "30 CC";
+    const amtText = label.split("·")[0].trim();
+    closeModal("lock-modal");
+    TX.start({
+      accentBg: "bg-canton-subtle", accentText: "text-canton",
+      amountText: amtText,
+      subText: "Unlocked back to your wallet",
+      title: "CC unlocked",
+      subtitle: "Funds are available in your wallet again.",
+      meta: [
+        { label: "Source", value: "Lock" },
+      ],
+      onConfirmed: () => {
+        if (row) {
+          const sub = row.querySelectorAll("p")[1];
+          if (sub) sub.innerHTML = `<i data-lucide="check-circle-2" class="h-3 w-3"></i>Unlocked`;
+          const rowBtn = row.querySelector("button");
+          if (rowBtn) { rowBtn.textContent = "Unlocked"; rowBtn.disabled = true; rowBtn.classList.remove("btn-primary"); rowBtn.classList.add("btn-muted"); }
+          if (window.lucide) lucide.createIcons();
+        }
+        toast(`${amtText} unlocked — back in your wallet`);
+        pushNotif({ title: `${amtText} unlocked`, desc: "Funds back in your wallet", icon: "lock-open", tone: "in" });
+      },
+    });
+  }
+  window.unlockCc = unlockCc;
+
+  function offerAction(btn, action) {
+    const li = btn.closest("li");
+    if (!li) return;
+    if (action === "accept") {
+      li.style.transition = "opacity .3s, transform .3s";
+      li.style.opacity = "0"; li.style.transform = "translateX(20px)";
+      setTimeout(() => { li.remove(); toast("Offer accepted — 5 CC received"); pushNotif({ title: "5 CC received", desc: "Incoming offer accepted", icon: "arrow-down-left", tone: "in" }); }, 300);
+    } else {
+      li.style.transition = "opacity .3s, transform .3s";
+      li.style.opacity = "0"; li.style.transform = "translateX(-20px)";
+      setTimeout(() => { li.remove(); toast("Offer rejected"); }, 300);
+    }
+  }
+  window.offerAction = offerAction;
+
+  let sendSelectedToken = "CC";
+  const SEND_TOKENS = {
+    "CC":    { balance: 112.38,  fee: 1, logoBg: "from-amber-400 to-amber-600", logoChar: "C" },
+    "USDCx": { balance: 11.24,   fee: 1, logoBg: "from-blue-400 to-blue-600",  logoChar: "U" },
+  };
+  function toggleSendTokenPicker() {
+    const p = document.getElementById("send-token-picker");
+    if (p) p.classList.toggle("hidden");
+  }
+  window.toggleSendTokenPicker = toggleSendTokenPicker;
+  function selectSendToken(token) {
+    sendSelectedToken = token;
+    const t = SEND_TOKENS[token];
+    const logo = document.getElementById("send-token-logo");
+    const name = document.getElementById("send-token-name");
+    if (logo) { logo.className = `flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br ${t.logoBg} text-[10px] font-bold text-black`; logo.textContent = t.logoChar; }
+    if (name) name.textContent = token;
+    const bal = document.getElementById("send-balance-label");
+    if (bal) bal.textContent = `Balance: ${t.balance.toFixed(6)} ${token}`;
+    const p = document.getElementById("send-token-picker");
+    if (p) p.classList.add("hidden");
+    const inp = document.getElementById("send-amount");
+    if (inp) inp.value = "";
+    updateSendAmountDisplay();
+    validateSendForm(false);
+  }
+  window.selectSendToken = selectSendToken;
+  function sendMax() {
+    const t = SEND_TOKENS[sendSelectedToken];
+    const inp = document.getElementById("send-amount");
+    if (inp) { inp.value = Math.max(0, t.balance - t.fee).toFixed(6); updateSendAmountDisplay(); }
+    validateSendForm(false);
+  }
+  window.sendMax = sendMax;
+  function updateSendAmountDisplay() {
+    const inp = document.getElementById("send-amount");
+    const disp = document.getElementById("send-amount-display");
+    if (!inp || !disp) return;
+    const amt = parseFloat(inp.value) || 0;
+    disp.textContent = `${amt} ${sendSelectedToken}`;
+  }
+  window.updateSendAmountDisplay = updateSendAmountDisplay;
+
+  function validateSendForm(showAddressState = true) {
+    const t = SEND_TOKENS[sendSelectedToken];
+    const amt = parseFloat(document.getElementById("send-amount")?.value || "0") || 0;
+    const recipient = document.getElementById("send-recipient")?.value?.trim() || "";
+    const amtErr = document.getElementById("send-amount-error");
+    const addrStatus = document.getElementById("send-recipient-status");
+    const submitBtn = document.getElementById("send-submit-btn");
+
+    const overBalance = amt > (t.balance - t.fee) + 1e-9;
+    if (amtErr) amtErr.classList.toggle("hidden", !overBalance || amt <= 0);
+
+    const validAddr = recipient.startsWith("DSO::") && recipient.length > 10;
+    if (addrStatus) {
+      addrStatus.classList.toggle("hidden", !validAddr);
+      addrStatus.classList.toggle("flex", validAddr);
+    }
+
+    const ok = amt > 0 && !overBalance && validAddr;
+    if (submitBtn) submitBtn.disabled = !ok;
+    return ok;
+  }
+  window.validateSendForm = validateSendForm;
+
+  function pickRecentRecipient(addr) {
+    const ta = document.getElementById("send-recipient");
+    if (ta) ta.value = addr;
+    validateSendForm();
+  }
+  window.pickRecentRecipient = pickRecentRecipient;
+  function prepareSendConfirm() {
+    updateSendAmountDisplay();
+    const feeEl = document.getElementById("send-fee-display");
+    if (feeEl) feeEl.textContent = `1 CC`;
+  }
+  window.prepareSendConfirm = prepareSendConfirm;
+
+  function confirmSend(btn) {
+    const amt = (document.getElementById("send-amount")?.value || "0").trim() || "0";
+    const token = sendSelectedToken;
+    const recipient = document.getElementById("send-recipient")?.value?.trim() || "DSO::1220…maya";
+    const recipientShort = recipient.length > 24 ? recipient.slice(0, 10) + "…" + recipient.slice(-4) : recipient;
+    closeModal("send-confirm-modal");
+    TX.start({
+      accentBg: "bg-canton-subtle", accentText: "text-canton",
+      amountText: `${amt} ${token}`,
+      subText: `to ${recipientShort}`,
+      title: "Transfer sent",
+      subtitle: "Funds have arrived in the recipient's wallet.",
+      meta: [
+        { label: "Recipient", value: recipientShort, mono: true },
+        { label: "Network fee", value: "1 CC" },
+      ],
+      onConfirmed: () => {
+        if (SEND_TOKENS[token]) SEND_TOKENS[token].balance = Math.max(0, SEND_TOKENS[token].balance - parseFloat(amt));
+        toast(`Sent ${amt} ${token}`);
+        pushNotif({ title: `${amt} ${token} sent`, desc: "Transfer confirmed on Canton", icon: "arrow-up-right", tone: "out" });
+      },
+    });
+  }
+  window.confirmSend = confirmSend;
+
+  function signOut(btn) {
+    toast("Signed out — opening login…");
+    setTimeout(() => openModal("auth-modal"), 400);
+  }
+  window.signOut = signOut;
+
+  function googleSignIn(btn) {
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<i data-lucide="loader-2" class="h-5 w-5 spin"></i>Connecting…`;
+    if (window.lucide) lucide.createIcons();
+    setTimeout(() => {
+      btn.disabled = false; btn.innerHTML = orig;
+      if (window.lucide) lucide.createIcons();
+      closeModal("auth-modal");
+      toast("Signed in as Aria Rahman");
+    }, 1400);
+  }
+  window.googleSignIn = googleSignIn;
+
+  function lbPeriod(btn, label) {
+    const el = document.getElementById("lb-eyebrow");
+    if (el) el.textContent = label;
+  }
+  window.lbPeriod = lbPeriod;
+
+  window.addEventListener("error", (e) => {
+    console.error("MOCKUP ERROR:", e.message, e.filename, e.lineno);
+    const d = document.createElement("div");
+    d.style.cssText = "position:fixed;bottom:1rem;left:1rem;z-index:300;max-width:400px;background:#7f1d1d;color:#fecaca;border-radius:.5rem;padding:.75rem;font-size:11px;font-family:monospace;white-space:pre-wrap";
+    d.textContent = "JS error: " + e.message + " (" + (e.filename||"").split("/").pop() + ":" + e.lineno + ")";
+    document.body.appendChild(d);
+    setTimeout(() => d.remove(), 8000);
+  });
+
+  window.addEventListener("hashchange", router);
+  window.addEventListener("DOMContentLoaded", () => {
+    if (!location.hash) location.hash = "#/overview";
+    renderTx();
+    router();
+  });
+  if (document.readyState !== "loading") {
+    if (!location.hash) location.hash = "#/overview";
+    renderTx();
+    router();
+  }
+</script>
+
+</body>
+</html>

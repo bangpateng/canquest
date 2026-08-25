@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claim Reward Modals — Semua Tipe Reward (UI Saat Ini)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  /* ═══════════════════════════════════════════════════════════════
+     PALET — 1:1 dengan variabel apps/web (globals.css).
+     Edit warna di sini, efek ke semua varian.
+     ═══════════════════════════════════════════════════════════════ */
+  :root{
+    --void:#05060a;            /* --background */
+    --card:#10131c;            /* --card */
+    --card-solid:#0e1017;      /* --card-solid */
+    --muted:#12141d;           /* --muted (stat panel bg) */
+    --border:rgb(255 255 255 / 0.07);
+    --text:#f6f7fb;            /* --foreground */
+    --muted-text:#868b9c;      /* --muted-foreground */
+    --mint:#5ee89c;            /* rgb(var(--canton-rgb)) */
+    --cyan-brand:#2de0d6;      /* rgb(var(--canton-cyan-rgb)) */
+    --cyan-dot:#22d3ee;        /* bg-cyan-400 */
+    --mint-ink:#c4fade;        /* text-canton (--canton-ink) */
+    --amber:#fcd34d;           /* text-amber-300 */
+    --amber-raw:#fbbf24;       /* amber-400 (tag border/bg) */
+    --violet-badge:#c4b5fd;    /* text-violet-300 */
+    --violet-raw:#8b5cf6;      /* violet-500 */
+    --cyan-badge:#67e8f9;      /* text-cyan-300 */
+    --cyan-raw:#06b6d4;        /* cyan-500 */
+    --primary-foreground:#04120b;
+    --gradient-brand:linear-gradient(135deg,#5ee89c 0%,#2de0d6 100%);
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    min-height:100vh;
+    background:var(--void);
+    background-image:
+      linear-gradient(rgba(255,255,255,0.014) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.014) 1px, transparent 1px);
+    background-size:32px 32px;
+    font-family:'Inter',sans-serif;
+    color:var(--text);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:48px 20px 64px;
+    gap:14px;
+  }
+
+  .page-title{font-size:22px;font-weight:800;letter-spacing:-0.02em;}
+  .page-sub{font-size:13px;color:var(--muted-text);max-width:640px;text-align:center;line-height:1.6;}
+
+  .board{
+    display:flex;
+    flex-wrap:wrap;
+    justify-content:center;
+    gap:40px;
+    margin-top:26px;
+  }
+
+  .slot{display:flex;flex-direction:column;align-items:center;gap:14px;}
+  .slot-label{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;letter-spacing:0.16em;text-transform:uppercase;
+    color:#535c6e;
+    text-align:center;
+  }
+  .slot-label b{color:var(--mint-ink);font-weight:700;}
+
+  /* ═══════════ MODAL — struktur .claim-modal-pop di apps/web ═══════════ */
+  .modal{
+    width:400px;max-width:92vw;
+    background:var(--card-solid);
+    border:1px solid var(--border);
+    border-radius:20px;
+    padding:28px 26px 24px;
+    box-shadow:0 20px 44px -24px rgba(0,0,0,0.8);
+    animation:rise 0.4s cubic-bezier(.2,.8,.2,1);
+  }
+  @keyframes rise{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+
+  .modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;}
+  .modal-title{font-size:16px;font-weight:600;letter-spacing:-0.01em;}
+  .close-btn{
+    width:30px;height:30px;border-radius:9px;
+    border:1px solid var(--border);
+    background:rgba(255,255,255,0.02);
+    display:flex;align-items:center;justify-content:center;
+    color:var(--muted-text);cursor:pointer;transition:all .15s ease;
+  }
+  .close-btn:hover{background:rgba(255,255,255,0.06);color:var(--text);}
+
+  /* ── Logo reward (tengah) — TANPA ring, TANPA ikon dekoratif ── */
+  .token-wrap{display:flex;flex-direction:column;align-items:center;margin-bottom:18px;}
+  .token-logo{
+    width:44px;height:44px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    font-weight:700;font-size:16px;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,0.06);
+    object-fit:cover;
+  }
+  .token-cc{background:#f5a623;color:#3b2400;}
+  .token-usdcx{background:#3b82f6;color:#eaf2ff;}
+  .token-code{
+    background:rgba(139,92,246,0.14);color:var(--violet-badge);
+  }
+  .token-code svg{width:22px;height:22px;}
+  .token-waitlist{background:rgba(6,182,212,0.14);color:var(--cyan-badge);}
+  .token-waitlist svg{width:22px;height:22px;}
+
+  .reward-eyebrow{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10.5px;letter-spacing:0.18em;text-transform:uppercase;
+    color:var(--muted-text);
+    margin:14px 0 6px;
+  }
+  .reward-amount{
+    font-size:36px;font-weight:700;letter-spacing:-0.02em;line-height:1;
+    color:var(--text);
+    font-variant-numeric:tabular-nums;
+  }
+  .reward-amount .unit{
+    font-size:16px;font-weight:600;color:var(--muted-text);
+    margin-left:4px;
+  }
+
+  /* ── Stat panel (rows) ── */
+  .stat-panel{
+    background:var(--muted);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:4px 16px;
+    margin-bottom:16px;
+  }
+  .stat-row{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:11px 0;border-bottom:1px solid var(--border);
+  }
+  .stat-row:last-child{border-bottom:none;}
+  .stat-label{font-size:13px;color:var(--muted-text);}
+  .stat-value{
+    font-family:'JetBrains Mono',monospace;
+    font-size:13px;font-weight:500;color:var(--text);
+    display:flex;align-items:center;gap:6px;
+  }
+  .stat-value .accent{color:var(--mint-ink);}
+  .slots-tag{
+    font-size:10.5px;padding:2px 7px;border-radius:20px;
+    background:rgba(251,191,36,0.1);color:var(--amber);
+    border:1px solid rgba(251,191,36,0.25);
+    font-family:'JetBrains Mono',monospace;
+  }
+
+  /* ── Eligibility strip ── */
+  .eligible-strip{
+    display:flex;align-items:center;gap:8px;
+    padding:2px 2px 18px;
+    font-size:12.5px;color:var(--muted-text);
+  }
+  .eligible-strip svg{color:var(--mint);flex-shrink:0;}
+
+  /* ── CTA (tanpa ikon) ── */
+  .cta{
+    width:100%;border:none;border-radius:12px;padding:14px;
+    background:var(--gradient-brand);
+    color:var(--primary-foreground);
+    font-family:'Inter',sans-serif;font-weight:700;font-size:14.5px;letter-spacing:-0.01em;
+    cursor:pointer;
+    box-shadow:0 8px 20px -12px rgba(94,232,156,0.45);
+    transition:transform .15s ease, filter .15s ease;
+  }
+  .cta:hover{filter:brightness(1.05);}
+  .cta:active{transform:scale(0.99);}
+  .ghost-btn{
+    width:100%;background:none;border:none;
+    color:var(--muted-text);font-size:12.5px;
+    padding:14px 0 2px;cursor:pointer;transition:color .15s ease;
+    font-family:'Inter',sans-serif;
+  }
+  .ghost-btn:hover{color:var(--text);}
+
+  .note{
+    margin-top:34px;max-width:880px;
+    border:1px solid var(--border);border-radius:14px;
+    background:rgba(255,255,255,0.02);
+    padding:18px 22px;
+    font-size:12.5px;line-height:1.8;color:var(--muted-text);
+  }
+  .note b{color:var(--text);}
+  .note code{
+    font-family:'JetBrains Mono',monospace;font-size:11.5px;
+    background:rgba(255,255,255,0.05);padding:2px 6px;border-radius:6px;color:var(--mint-ink);
+  }
+
+  /* ═══════════ TX-STATUS MODAL — "receipt" setelah konfirmasi claim ═══════════
+     (replika TransactionStatusModal · stage CONFIRMED) */
+  .tx-modal{
+    width:400px;max-width:92vw;position:relative;
+    background:var(--card-solid);
+    border:1px solid var(--border);border-radius:20px;
+    box-shadow:0 20px 44px -24px rgba(0,0,0,0.8);
+    animation:rise 0.4s cubic-bezier(.2,.8,.2,1);
+  }
+  .tx-modal::before{
+    content:"";position:absolute;left:0;right:0;top:0;height:1px;border-radius:20px 20px 0 0;
+    background:linear-gradient(90deg,transparent,rgba(94,232,156,0.4),transparent);
+  }
+  .tx-body{padding:28px 26px 26px;position:relative;}
+  .tx-close{position:absolute;right:12px;top:12px;}
+
+  .tx-check-wrap{position:relative;width:56px;height:56px;display:flex;align-items:center;justify-content:center;}
+  .tx-check{
+    position:relative;width:56px;height:56px;border-radius:14px;
+    background:rgba(16,185,129,0.13);color:#34d399;
+    display:flex;align-items:center;justify-content:center;
+    animation:pop 0.35s cubic-bezier(.2,.8,.2,1) both;
+  }
+  @keyframes pop{0%{transform:scale(.7);opacity:0}100%{transform:scale(1);opacity:1}}
+
+  .tx-center{display:flex;flex-direction:column;align-items:center;text-align:center;}
+  .tx-title{margin-top:16px;font-size:16px;font-weight:700;color:var(--text);}
+  .tx-subtitle{margin-top:4px;font-size:12px;color:var(--muted-text);}
+  .tx-amount{margin-top:16px;font-size:30px;font-weight:700;color:var(--text);}
+
+  .tx-rows{margin-top:20px;width:100%;}
+  .tx-row{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:8px 0;border-bottom:1px solid var(--border);
+  }
+  .tx-row:first-child{border-top:1px solid var(--border);}
+  .tx-row dt{font-size:12px;color:var(--muted-text);flex-shrink:0;}
+  .tx-row dd{
+    font-size:12px;font-weight:600;color:var(--text);
+    font-family:'JetBrains Mono',monospace;
+    min-width:0;max-width:62%;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .status-chip{
+    display:inline-flex;align-items:center;gap:4px;border-radius:9999px;
+    background:rgba(16,185,129,0.15);color:#34d399;
+    font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;
+    padding:2px 8px;font-family:'Inter',sans-serif;
+  }
+  .tx-done{
+    margin-top:24px;width:100%;border:none;border-radius:12px;height:44px;
+    background:var(--gradient-brand);color:var(--primary-foreground);
+    font-family:'Inter',sans-serif;font-weight:600;font-size:14px;cursor:pointer;
+    box-shadow:0 8px 20px -12px rgba(94,232,156,0.45);
+    transition:transform .15s ease, filter .15s ease;
+  }
+  .tx-done:hover{filter:brightness(1.05);}
+  .tx-done:active{transform:scale(0.99);}
+
+  /* ═══════════ REWARD REVEAL CARD — persist di bawah tombol claim ═══════════
+     (replika RewardReveal + RewardHowToUse) */
+  .reveal-card{
+    width:400px;max-width:92vw;
+    background:var(--card-solid);
+    border:1px solid var(--border);border-radius:20px;
+    padding:20px;
+    box-shadow:0 20px 44px -24px rgba(0,0,0,0.8);
+    animation:rise 0.4s cubic-bezier(.2,.8,.2,1);
+  }
+  .reveal-header{display:flex;align-items:center;gap:12px;}
+  .reveal-icon{
+    width:36px;height:36px;border-radius:12px;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .reveal-icon.dual{background:linear-gradient(135deg, rgba(94,232,156,0.15), rgba(139,92,246,0.15));gap:2px;}
+  .reveal-icon.dual svg{width:16px;height:16px;color:var(--violet-badge);}
+  .reveal-icon.code{background:rgba(139,92,246,0.15);color:var(--violet-badge);}
+  .reveal-icon.code svg{width:20px;height:20px;}
+  .reveal-title{font-size:16px;font-weight:700;color:var(--text);}
+  .reveal-sub{font-size:12px;color:var(--muted-text);margin-top:2px;}
+
+  .reveal-cc{
+    display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-top:16px;
+    font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:var(--mint-ink);
+  }
+  .reveal-cc span{font-family:'Inter',sans-serif;font-size:12px;font-weight:500;color:var(--muted-text);}
+
+  .code-eyebrow{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted-text);}
+  .code-row{margin-top:6px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+  .code-value{font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:700;letter-spacing:0.16em;color:var(--mint-ink);}
+  .copy-btn{
+    border:1px solid var(--border);background:rgba(255,255,255,0.02);color:var(--text);
+    font-family:'Inter',sans-serif;font-size:12px;font-weight:600;border-radius:10px;padding:7px 12px;cursor:pointer;
+    display:inline-flex;align-items:center;gap:6px;flex-shrink:0;
+    transition:all .15s ease;
+  }
+  .copy-btn:hover{border-color:rgba(94,232,156,0.35);background:rgba(94,232,156,0.1);}
+  .copy-btn svg{width:14px;height:14px;}
+  .code-warn{margin-top:6px;font-size:12px;color:var(--muted-text);}
+
+  .howto{margin-top:16px;border-top:1px solid var(--border);padding-top:16px;}
+  .howto-title{font-size:14px;font-weight:700;color:var(--text);}
+  .howto-step{display:flex;align-items:flex-start;gap:12px;margin-top:10px;}
+  .step-badge{
+    width:24px;height:24px;border-radius:9999px;flex-shrink:0;margin-top:1px;
+    display:flex;align-items:center;justify-content:center;
+    font-size:12px;font-weight:700;
+    background:rgba(94,232,156,0.15);color:var(--mint-ink);
+  }
+  .step-badge svg{width:14px;height:14px;}
+  .howto-step p{font-size:12px;line-height:1.6;color:var(--muted-text);}
+  .howto-step a{color:var(--mint-ink);font-weight:500;text-decoration:underline;text-underline-offset:2px;}
+  .howto-done{
+    display:flex;align-items:center;gap:8px;margin-top:14px;
+    padding-top:14px;border-top:1px solid var(--border);
+    font-size:12.5px;font-weight:600;color:var(--mint-ink);
+  }
+  .howto-done svg{width:15px;height:15px;color:var(--mint);flex-shrink:0;}
+  .code-inline{font-family:'JetBrains Mono',monospace;font-weight:700;letter-spacing:0.1em;color:var(--mint-ink);}
+</style>
+</head>
+<body>
+
+  <p class="page-title">Claim Reward — Modal per Tipe Reward</p>
+  <p class="page-sub">
+    Replika 1:1 modal claim yang sedang berjalan di apps/web (komponen
+    <b>ClaimDetailsModal</b>). Semua varian memakai struktur &amp; palet yang sama —
+    hanya logo, label, angka, dan baris yang berbeda. Edit CSS di atas untuk mengubah semuanya sekaligus.
+  </p>
+
+  <div class="board">
+
+    <!-- ═══════════ 01 · FCFS TOKEN (CC) ═══════════ -->
+    <div class="slot">
+      <p class="slot-label">01 · FCFS Token — <b>CC</b></p>
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-title">Claim Reward</div>
+          <div class="close-btn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </div>
+        </div>
+        <div class="token-wrap">
+          <!-- App: logo CC asli via RewardTokenLogo (fallback lingkaran amber "C") -->
+          <div class="token-logo token-cc">C</div>
+          <div class="reward-eyebrow">Reward</div>
+          <div class="reward-amount">0.01<span class="unit">CC</span></div>
+        </div>
+        <div class="stat-panel">
+          <div class="stat-row"><span class="stat-label">Claim fee</span><span class="stat-value">0.01 CC</span></div>
+          <div class="stat-row"><span class="stat-label">Slots</span><span class="stat-value">0/1 <span class="slots-tag">1 left</span></span></div>
+          <div class="stat-row"><span class="stat-label">Network</span><span class="stat-value">Canton</span></div>
+          <div class="stat-row"><span class="stat-label">Closes</span><span class="stat-value">Aug 14, 21:39</span></div>
+        </div>
+        <div class="eligible-strip">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+          All milestones completed — you're eligible
+        </div>
+        <button class="cta">Claim reward now</button>
+        <button class="ghost-btn">Maybe later</button>
+      </div>
+    </div>
+
+    <!-- ═══════════ 02 · RAFFLE TOKEN (CC) ═══════════ -->
+    <div class="slot">
+      <p class="slot-label">02 · Raffle Token — <b>CC</b> (pemenang draw)</p>
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-title">Claim Reward</div>
+          <div class="close-btn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </div>
+        </div>
+        <div class="token-wrap">
+          <div class="token-logo token-cc">C</div>
+          <div class="reward-eyebrow">Reward · Winner</div>
+          <div class="reward-amount">25<span class="unit">CC</span></div>
+        </div>
+        <div class="stat-panel">
+          <div class="stat-row"><span class="stat-label">Claim fee</span><span class="stat-value">3 CC</span></div>
+          <div class="stat-row"><span class="stat-label">Network</span><span class="stat-value">Canton</span></div>
+          <div class="stat-row"><span class="stat-label">Closes</span><span class="stat-value">Aug 26, 21:00</span></div>
+        </div>
+        <div class="eligible-strip">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+          Winner drawn — you're eligible to claim
+        </div>
+        <button class="cta">Claim reward now</button>
+        <button class="ghost-btn">Maybe later</button>
+      </div>
+    </div>
+
+    <!-- ═══════════ 03 · RAFFLE TOKEN (USDCx) ═══════════ -->
+    <div class="slot">
+      <p class="slot-label">03 · Raffle Token — <b>USDCx</b></p>
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-title">Claim Reward</div>
+          <div class="close-btn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </div>
+        </div>
+        <div class="token-wrap">
+          <!-- App: logo USDCx asli via RewardTokenLogo (fallback lingkaran biru "U") -->
+          <div class="token-logo token-usdcx">U</div>
+          <div class="reward-eyebrow">Reward · Winner</div>
+          <div class="reward-amount">5<span class="unit">USDCx</span></div>
+        </div>
+        <div class="stat-panel">
+          <div class="stat-row"><span class="stat-label">Claim fee</span><span class="stat-value">3 CC</span></div>
+          <div class="stat-row"><span class="stat-label">Network</span><span class="stat-value">Canton</span></div>
+          <div class="stat-row"><span class="stat-label">Closes</span><span class="stat-value">Aug 22, 23:59</span></div>
+        </div>
+        <div class="eligible-strip">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+          Winner drawn — you're eligible to claim
+        </div>
+        <button class="cta">Claim reward now</button>
+        <button class="ghost-btn">Maybe later</button>
+      </div>
+    </div>
+
+    <!-- ═══════════ 04 · INVITE CODE (FCFS / Code Raffle) ═══════════ -->
+    <div class="slot">
+      <p class="slot-label">04 · Invite Code — <b>Code</b> (3 tahap: claim → receipt → reveal)</p>
+
+      <!-- 04a · MODAL CLAIM (pra-claim) -->
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-title">Claim Reward</div>
+          <div class="close-btn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </div>
+        </div>
+        <div class="token-wrap">
+          <div class="token-logo token-code">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/></svg>
+          </div>
+          <div class="reward-eyebrow">Reward</div>
+          <div class="reward-amount">1<span class="unit">invite code</span></div>
+        </div>
+        <div class="stat-panel">
+          <div class="stat-row"><span class="stat-label">Claim fee</span><span class="stat-value">1 CC</span></div>
+          <div class="stat-row"><span class="stat-label">Codes</span><span class="stat-value">12 left</span></div>
+          <div class="stat-row"><span class="stat-label">Network</span><span class="stat-value">Canton</span></div>
+          <div class="stat-row"><span class="stat-label">Closes</span><span class="stat-value">Aug 18, 20:00</span></div>
+        </div>
+        <div class="eligible-strip">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+          All milestones completed — you're eligible
+        </div>
+        <button class="cta">Claim reward now</button>
+        <button class="ghost-btn">Maybe later</button>
+      </div>
+
+      <!-- 04b · TX-STATUS RECEIPT (muncul setelah "Claim reward now") -->
+      <div class="tx-modal">
+        <div class="tx-body">
+          <div class="close-btn tx-close">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </div>
+          <div class="tx-center">
+            <div class="tx-check-wrap">
+              <span class="tx-check">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+              </span>
+            </div>
+            <p class="tx-title">Invite code claimed</p>
+            <p class="tx-subtitle">OrbitFi · Follow &amp; Retweet Campaign</p>
+            <p class="tx-amount">1 invite code</p>
+            <dl class="tx-rows">
+              <div class="tx-row"><dt>Claim fee paid</dt><dd>1 CC</dd></div>
+              <div class="tx-row"><dt>Your code</dt><dd>ORBIT-INVITE-2A</dd></div>
+              <div class="tx-row"><dt>Status</dt><dd><span class="status-chip">✓ Confirmed</span></dd></div>
+            </dl>
+            <button class="tx-done">Done</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 04c · REWARD REVEAL CARD (persist di bawah tombol claim) -->
+      <div class="reveal-card">
+        <div class="reveal-header">
+          <div class="reveal-icon code">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/></svg>
+          </div>
+          <div>
+            <p class="reveal-title">Congratulations!</p>
+            <p class="reveal-sub">Your rewards are ready below</p>
+          </div>
+        </div>
+
+        <p class="code-eyebrow" style="margin-top:16px;">Your code</p>
+        <div class="code-row">
+          <p class="code-value">ORBIT-INVITE-2A</p>
+          <button class="copy-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+            Copy
+          </button>
+        </div>
+        <p class="code-warn">Save this code — it will not be shown again after you leave this page.</p>
+
+        <div class="howto">
+          <p class="howto-title">How to use your code</p>
+          <div class="howto-step">
+            <span class="step-badge">1</span>
+            <p>Create an account at <a href="https://orbitfi.com" target="_blank" rel="noopener">orbitfi.com</a></p>
+          </div>
+          <div class="howto-step">
+            <span class="step-badge">2</span>
+            <p>Enter code <span class="code-inline">ORBIT-INVITE-2A</span> during signup</p>
+          </div>
+          <div class="howto-done">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+            You're all set
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ 05 · CC + CODE RAFFLE (gabungan) ═══════════ -->
+    <div class="slot">
+      <p class="slot-label">05 · CC + Code Raffle — <b>Token + Code</b> (claim → reveal CC + kode)</p>
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-title">Claim Reward</div>
+          <div class="close-btn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </div>
+        </div>
+        <div class="token-wrap">
+          <!-- Varian pemenang CC+Code: logo token (CC). Varian pemenang Code-only → ticket. -->
+          <div class="token-logo token-cc">C</div>
+          <div class="reward-eyebrow">Reward · Winner</div>
+          <div class="reward-amount">10<span class="unit">CC + 1 Code</span></div>
+        </div>
+        <div class="stat-panel">
+          <div class="stat-row"><span class="stat-label">Claim fee</span><span class="stat-value">5 CC</span></div>
+          <div class="stat-row"><span class="stat-label">Network</span><span class="stat-value">Canton</span></div>
+          <div class="stat-row"><span class="stat-label">Closes</span><span class="stat-value">Aug 25, 23:59</span></div>
+        </div>
+        <div class="eligible-strip">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+          Winner drawn — you're eligible to claim
+        </div>
+        <button class="cta">Claim reward now</button>
+        <button class="ghost-btn">Maybe later</button>
+      </div>
+
+      <!-- 05b · REWARD REVEAL CARD — dual: CC masuk wallet + kode -->
+      <div class="reveal-card">
+        <div class="reveal-header">
+          <!-- Dual: logo CC + ikon ticket berdampingan -->
+          <div class="reveal-icon dual">
+            <div class="token-logo token-cc" style="width:16px;height:16px;font-size:9px;border-radius:9999px;">C</div>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/></svg>
+          </div>
+          <div>
+            <p class="reveal-title">Congratulations!</p>
+            <p class="reveal-sub">Your rewards are ready below</p>
+          </div>
+        </div>
+
+        <!-- Baris CC (khusus tipe dual / token) -->
+        <div class="reveal-cc">
+          <p>+10 CC</p>
+          <span>Sent to your wallet</span>
+        </div>
+
+        <p class="code-eyebrow" style="margin-top:16px;">Your code</p>
+        <div class="code-row">
+          <p class="code-value">MINTX-RARE-X9</p>
+          <button class="copy-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+            Copy
+          </button>
+        </div>
+        <p class="code-warn">Save this code — it will not be shown again after you leave this page.</p>
+
+        <div class="howto">
+          <p class="howto-title">How to use your code</p>
+          <div class="howto-step">
+            <span class="step-badge">1</span>
+            <p>Create an account at <a href="https://mintx.io" target="_blank" rel="noopener">mintx.io</a></p>
+          </div>
+          <div class="howto-step">
+            <span class="step-badge">2</span>
+            <p>Enter code <span class="code-inline">MINTX-RARE-X9</span> during signup</p>
+          </div>
+          <div class="howto-done">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+            You're all set
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ 06 · WAITLIST (PROPOSAL — belum ada di app) ═══════════ -->
+    <div class="slot">
+      <p class="slot-label">06 · Waitlist — <b>PROPOSAL</b> (belum ada di app)</p>
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-title">Claim Reward</div>
+          <div class="close-btn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </div>
+        </div>
+        <div class="token-wrap">
+          <div class="token-logo token-waitlist">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3Z"/></svg>
+          </div>
+          <div class="reward-eyebrow">You'll get</div>
+          <div class="reward-amount">1<span class="unit">waitlist spot</span></div>
+        </div>
+        <div class="stat-panel">
+          <div class="stat-row"><span class="stat-label">Position</span><span class="stat-value">Assigned on claim</span></div>
+          <div class="stat-row"><span class="stat-label">Claim fee</span><span class="stat-value"><span class="accent">Free</span></span></div>
+          <div class="stat-row"><span class="stat-label">Network</span><span class="stat-value">Canton</span></div>
+          <div class="stat-row"><span class="stat-label">Closes</span><span class="stat-value">Sep 01, 12:00</span></div>
+        </div>
+        <div class="eligible-strip">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+          All milestones completed — you're eligible
+        </div>
+        <button class="cta">Join waitlist</button>
+        <button class="ghost-btn">Maybe later</button>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="note">
+    <b>Catatan implementasi</b> — semua varian di atas dirender oleh satu komponen yang sama:<br>
+    • Komponen modal: <code>apps/web/components/app/campaign/claim-details-modal.tsx</code> (props: <code>heroValue</code>, <code>heroUnit</code>, <code>rewardLabel</code>, <code>rows[]</code>, <code>eligibleHint</code>, <code>tokenHero</code>, <code>confirmLabel</code>).<br>
+    • Varian 01 FCFS: <code>campaign-fcfs-claim.tsx</code> · Varian 02/03 Raffle Token: <code>campaign-draw-cc-claim.tsx</code> · Varian 04 Code: <code>campaign-invite-claim.tsx</code> · Varian 05 CC+Code: <code>campaign-cc-and-code-raffle-claim.tsx</code>.<br>
+    • Logo CC / USDCx di app memakai <code>RewardTokenLogo</code> (logo asli dari API <code>/api/uploads/token-logo/…</code>); di mockup ini digambar sebagai lingkaran flat fallback.<br>
+    • <b>04b Receipt</b> = tx-status modal stage Confirmed (<code>transaction-status-modal.tsx</code>) — muncul otomatis setelah "Claim reward now"; kode tampil di baris <code>Your code</code>.<br>
+    • <b>04c / 05b Reward Reveal</b> = kartu persist di bawah tombol claim (<code>reward-reveal.tsx</code> + <code>reward-how-to-use.tsx</code>): kode + tombol Copy + peringatan "tidak ditampilkan lagi" + "How to use your code" (2 langkah aktif: Create an account → Enter code; status penutup "You're all set" dipisah dari list bernomor, bukan step ke-3; atau teks custom admin via <code>redeemInstructions</code>).<br>
+    • Varian 06 Waitlist <b>belum ada</b> di aplikasi (quest waitlist saat ini hanya submit email tanpa tombol claim) — ditampilkan sebagai proposal bila nanti dibuatkan claim flow-nya.<br>
+    • Setelah konfirmasi, semua varian menampilkan tx-status modal (Broadcasting → Confirmed) — sama seperti di wallet.
+  </div>
+
+</body>
+</html>

@@ -12,6 +12,39 @@ import {
   isAutoAcceptEnabled,
   setAutoAccept,
 } from "@/lib/wallet/auto-accept";
+import {
+  getWalletKeyMeta,
+  unlock,
+  signBytes,
+} from "@/lib/wallet/key-manager";
+import { usePassphrasePrompt } from "@/lib/wallet/use-passphrase-prompt";
+
+/**
+ * Sign raw bytes and return hex-encoded signature.
+ * Handles wallet unlock if locked (prompts passphrase).
+ */
+async function signHashRaw(
+  bytes: Uint8Array,
+  promptPassphrase: (desc: string) => Promise<string>,
+): Promise<string> {
+  try {
+    const sigB64 = await signBytes(bytes);
+    // Convert base64 to hex
+    const raw = atob(sigB64);
+    return Array.from(raw).map((c) => c.charCodeAt(0).toString(16).padStart(2, "0")).join("");
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("Wallet locked")) {
+      const pass = await promptPassphrase("Enable instant receive");
+      if (!pass) throw err;
+      await unlock(pass);
+      const sigB64 = await signBytes(bytes);
+      const raw = atob(sigB64);
+      return Array.from(raw).map((c) => c.charCodeAt(0).toString(16).padStart(2, "0")).join("");
+    }
+    throw err;
+  }
+}
 
 type PreapprovalStatus = {
   active?: boolean;
@@ -128,10 +161,10 @@ export function SettingsPreapprovalPanel() {
           >
             <div className="text-left">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-                Instant Receive
+                One Step Transfer
               </p>
               <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                Auto-accept incoming transfers while your wallet is unlocked
+                Receive transfers instantly without manual acceptance
               </p>
             </div>
             <ChevronDown
@@ -144,19 +177,19 @@ export function SettingsPreapprovalPanel() {
 
           <div
             className={cn(
-              "space-y-3 px-6 pb-6 sm:space-y-4 sm:px-7 sm:pb-7",
+              "space-y-4 px-6 pb-6 sm:space-y-4 sm:px-7 sm:pb-7",
               collapsed && "hidden",
             )}
           >
+            <PreapprovalToggle />
             <div className="flex items-start justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--muted)]/40 p-4">
               <div className="min-w-0 text-sm">
                 <p className="font-semibold text-[var(--foreground)]">
-                  Auto-Accept Transfers
+                  Auto-Accept (Backup)
                 </p>
                 <p className="mt-1 leading-relaxed text-[var(--muted-foreground)]">
-                  Incoming CC and token transfers are accepted automatically
-                  while your wallet is unlocked. Keep this browser tab open to
-                  receive funds instantly.
+                  Backup for when One Step Transfer is off. Auto-accepts
+                  offers while wallet is unlocked.
                 </p>
               </div>
               <AutoAcceptSwitch />
@@ -377,5 +410,114 @@ function AutoAcceptSwitch() {
         )}
       />
     </button>
+  );
+}
+
+// ── Preapproval Toggle (M5b: ExternalPartySetupProposal via validator API) ──
+function PreapprovalToggle() {
+  const [on, setOn] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { prompt: promptPassphrase } = usePassphrasePrompt();
+  const { me } = useMe();
+  const isExternal = me?.walletKind === "external";
+
+  useEffect(() => {
+    if (!isExternal) return;
+    void (async () => {
+      try {
+        const res = await fetch("/api/party/preapproval-status", { credentials: "include" });
+        if (res.ok) {
+          const data = await res.json();
+          setOn(Boolean(data.active));
+        }
+      } catch { /* non-fatal */ }
+    })();
+  }, [isExternal]);
+
+  async function handleToggle() {
+    if (busy || !isExternal) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (!on) {
+        const meta = await getWalletKeyMeta();
+        if (!meta?.publicKeyHex) throw new Error("No wallet key found");
+
+        const prep = await fetch("/api/party/sign/preapproval/prepare", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ publicKeyHex: meta.publicKeyHex }),
+        });
+        const prepRaw = await prep.json().catch(() => null);
+        if (!prep.ok || !prepRaw?.hash) throw new Error(prepRaw?.message ?? "Prepare failed");
+
+        // Sign RAW hex-decoded bytes (NO 1220 prefix!)
+        const hashBytes = new Uint8Array(
+          (String(prepRaw.hash).match(/.{2}/g) ?? []).map((b) => parseInt(b, 16)),
+        );
+        const sigHex = await signHashRaw(hashBytes, promptPassphrase);
+
+        const exec = await fetch("/api/party/sign/preapproval/execute", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ signature: sigHex }),
+        });
+        const execRaw = await exec.json().catch(() => null);
+        if (!exec.ok) throw new Error(execRaw?.message ?? "Execute failed");
+        setOn(true);
+      } else {
+        const res = await fetch("/api/party/preapproval/disable", {
+          method: "POST",
+          credentials: "include",
+        });
+        if (!res.ok) {
+          const raw = await res.json().catch(() => null);
+          throw new Error(raw?.message ?? "Disable failed");
+        }
+        setOn(false);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Toggle failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex items-start justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--muted)]/40 p-4">
+      <div className="min-w-0 text-sm">
+        <p className="font-semibold text-[var(--foreground)]">
+          One Step Transfer
+        </p>
+        <p className="mt-1 leading-relaxed text-[var(--muted-foreground)]">
+          Receive CC transfers instantly from any sender — no manual acceptance
+          needed. Valid for 90 days, auto-renews.
+        </p>
+        {error ? (
+          <p className="mt-2 text-xs font-medium text-orange-600">{error}</p>
+        ) : null}
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        disabled={busy}
+        onClick={() => void handleToggle()}
+        className={cn(
+          "relative h-6 w-11 shrink-0 rounded-full transition-colors",
+          on ? "bg-canton" : "bg-[var(--muted-foreground)]/30",
+        )}
+      >
+        <span
+          className={cn(
+            "absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all",
+            on ? "left-[22px]" : "left-0.5",
+          )}
+        />
+      </button>
+    </div>
   );
 }
