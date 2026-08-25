@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -24,17 +24,22 @@ import {
 } from "@/lib/wallet/key-manager";
 
 /**
- * Key ceremony — non-custodial wallet key creation (M1; used by M2 onboarding).
+ * Key ceremony — non-custodial wallet key creation (M1; used by M2 onboarding
+ * and the M4 upgrade card).
  *
  * Steps (state machine):
  *   intro    → warning + start
  *   reveal   → raw hex 64-char key shown ONCE (copy + strong warning)
- *   verify   → user retypes 4 characters at random positions
+ *   verify   → user RETYPES THE FULL KEY from their saved copy (proves the
+ *              backup is complete and correct — no position counting)
  *   pass     → set passphrase (x2) → store encrypted in IndexedDB
  *   done     → meta (party preview) + auto-unlock, calls onComplete
  *
  * The private key is never sent to the server by this component — onComplete
- * only carries meta (public key + party hint) for backend registration in M2.
+ * only carries meta (public key + party hint) for backend registration.
+ *
+ * UI tokens follow the Settings panel conventions (same Card, chip icons,
+ * muted boxes, button variants) so the flow doesn't feel foreign in Settings.
  */
 
 type Step = "intro" | "reveal" | "verify" | "pass" | "done";
@@ -46,15 +51,6 @@ export interface KeyCeremonyProps {
   onCancel?: () => void;
 }
 
-// Pick 4 random positions (0-based) from the 64 hex characters.
-function pickVerifyPositions(): number[] {
-  const positions = new Set<number>();
-  while (positions.size < 4) {
-    positions.add(Math.floor(Math.random() * 64));
-  }
-  return [...positions].sort((a, b) => a - b);
-}
-
 export function KeyCeremony({ onComplete, onCancel }: KeyCeremonyProps) {
   const [step, setStep] = useState<Step>("intro");
   const [busy, setBusy] = useState(false);
@@ -62,11 +58,7 @@ export function KeyCeremony({ onComplete, onCancel }: KeyCeremonyProps) {
 
   const [seedHex, setSeedHex] = useState<string | null>(null);
   const [meta, setMeta] = useState<WalletKeyMeta | null>(null);
-  const verifyPositions = useMemo(
-    () => (step === "verify" ? pickVerifyPositions() : []),
-    [step],
-  );
-  const [verifyInputs, setVerifyInputs] = useState<string[]>(["", "", "", ""]);
+  const [retyped, setRetyped] = useState("");
 
   const [pass1, setPass1] = useState("");
   const [pass2, setPass2] = useState("");
@@ -87,12 +79,20 @@ export function KeyCeremony({ onComplete, onCancel }: KeyCeremonyProps) {
     }
   }
 
-  const verifyOk =
-    seedHex !== null &&
-    verifyPositions.every((pos, i) => {
-      const v = verifyInputs[i]?.trim().toLowerCase();
-      return v !== undefined && v.length === 1 && v === seedHex[pos];
-    });
+  const normalized = retyped.replace(/[^0-9a-fA-F]/g, "").toLowerCase();
+  const retypedComplete = normalized.length === 64;
+
+  function handleVerify() {
+    if (!seedHex || !retypedComplete) return;
+    if (normalized !== seedHex.toLowerCase()) {
+      setError(
+        "The key doesn't match. Check your saved copy and retype it exactly.",
+      );
+      return;
+    }
+    setError(null);
+    setStep("pass");
+  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -114,36 +114,39 @@ export function KeyCeremony({ onComplete, onCancel }: KeyCeremonyProps) {
 
   function cleanup() {
     setSeedHex(null);
-    setVerifyInputs(["", "", "", ""]);
+    setRetyped("");
     setPass1("");
     setPass2("");
   }
 
   return (
     <div className="flex w-full min-w-0 justify-center">
-      <Card className="w-full min-w-0 max-w-md overflow-hidden p-8 sm:p-10">
-        <div>
+      <Card className="w-full min-w-0 max-w-md overflow-hidden p-6 sm:p-7">
+        <div className="space-y-5">
           {/* ── STEP: intro ─────────────────────────────────────────── */}
           {step === "intro" ? (
-            <div className="space-y-6 text-center">
-              <div className="mb-2 flex justify-center">
-                <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-canton-muted bg-canton-subtle">
-                  <KeyRound className="h-10 w-10 text-canton" />
+            <div className="space-y-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-canton-muted bg-canton-subtle">
+                  <KeyRound className="h-5 w-5 text-canton" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+                    Wallet
+                  </p>
+                  <h2 className="text-lg font-semibold leading-tight text-[var(--foreground)]">
+                    Create Your Wallet Key
+                  </h2>
                 </div>
               </div>
-              <div className="space-y-3">
-                <h2 className="text-xl font-semibold text-[var(--foreground)]">
-                  Create Your Wallet Key
-                </h2>
-                <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
-                  Your private key is generated and stored{" "}
-                  <span className="font-semibold text-[var(--foreground)]">
-                    only in this browser
-                  </span>
-                  . CanQuest never stores it — and cannot recover it if lost.
-                </p>
-              </div>
-              <div className="flex items-start gap-3 rounded-2xl border border-orange-500/30 bg-orange-500/10 p-4 text-left">
+              <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
+                Your private key is generated and stored{" "}
+                <span className="font-semibold text-[var(--foreground)]">
+                  only in this browser
+                </span>
+                . CanQuest never stores it — and cannot recover it if lost.
+              </p>
+              <div className="flex items-start gap-3 rounded-2xl border border-orange-500/30 bg-orange-500/10 p-4">
                 <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-orange-600" />
                 <p className="text-sm leading-relaxed text-[var(--foreground)]">
                   You will receive a <strong>64-character backup key</strong>.
@@ -163,7 +166,7 @@ export function KeyCeremony({ onComplete, onCancel }: KeyCeremonyProps) {
                 onClick={() => void handleGenerate()}
                 className={cn(buttonVariants({ size: "lg" }), "w-full gap-2")}
               >
-                {busy ? <LoadingSpinner size="md" /> : <KeyRound className="h-5 w-5" />}
+                {busy ? <LoadingSpinner size="md" /> : <KeyRound className="h-4 w-4" />}
                 Create My Key
               </button>
               {onCancel ? (
@@ -181,17 +184,15 @@ export function KeyCeremony({ onComplete, onCancel }: KeyCeremonyProps) {
 
           {/* ── STEP: reveal (once) ──────────────────────────────────── */}
           {step === "reveal" && seedHex ? (
-            <div className="space-y-6">
-              <div className="space-y-2 text-center">
-                <div className="mb-4 flex justify-center">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-3xl border border-orange-500/30 bg-orange-500/10">
-                    <Eye className="h-8 w-8 text-orange-600" />
-                  </div>
-                </div>
-                <h2 className="text-xl font-semibold text-[var(--foreground)]">
+            <div className="space-y-5">
+              <div className="space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+                  Wallet
+                </p>
+                <h2 className="text-lg font-semibold text-[var(--foreground)]">
                   Your Backup Key
                 </h2>
-                <p className="text-sm text-[var(--muted-foreground)]">
+                <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
                   Shown <strong>only once</strong>. Copy and store it now —
                   after continuing, it can only be viewed again in Settings
                   with your passphrase.
@@ -205,7 +206,7 @@ export function KeyCeremony({ onComplete, onCancel }: KeyCeremonyProps) {
                 onClick={() => setStep("verify")}
                 className={cn(buttonVariants({ size: "lg" }), "w-full gap-2")}
               >
-                <CheckCircle2 className="h-5 w-5" />
+                <CheckCircle2 className="h-4 w-4" />
                 I've Saved It
               </button>
               <button
@@ -222,47 +223,45 @@ export function KeyCeremony({ onComplete, onCancel }: KeyCeremonyProps) {
             </div>
           ) : null}
 
-          {/* ── STEP: verify (retype) ────────────────────────────────── */}
+          {/* ── STEP: verify (retype full key) ───────────────────────── */}
           {step === "verify" && seedHex ? (
-            <div className="space-y-6">
-              <div className="space-y-2 text-center">
-                <h2 className="text-xl font-semibold text-[var(--foreground)]">
+            <div className="space-y-5">
+              <div className="space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+                  Wallet
+                </p>
+                <h2 className="text-lg font-semibold text-[var(--foreground)]">
                   Verify Your Backup
                 </h2>
-                <p className="text-sm text-[var(--muted-foreground)]">
-                  Retype 4 characters of your key at the positions below to
-                  confirm your backup is correct.
+                <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
+                  Paste or retype the <strong>full 64-character key</strong>{" "}
+                  from your saved copy to confirm your backup is complete and
+                  correct.
                 </p>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                {verifyPositions.map((pos, i) => (
-                  <div key={pos} className="space-y-2">
-                    <label
-                      htmlFor={`verify-char-${pos}`}
-                      className="text-sm font-medium text-[var(--muted-foreground)]"
-                    >
-                      Character #{pos + 1}
-                    </label>
-                    <input
-                      id={`verify-char-${pos}`}
-                      value={verifyInputs[i] ?? ""}
-                      onChange={(e) => {
-                        const v = e.target.value.replace(/[^0-9a-fA-F]/g, "").slice(0, 1);
-                        setVerifyInputs((prev) => {
-                          const next = [...prev];
-                          next[i] = v;
-                          return next;
-                        });
-                      }}
-                      maxLength={1}
-                      autoCapitalize="none"
-                      autoCorrect="off"
-                      spellCheck={false}
-                      className={cn(inputClass, "text-center font-mono text-lg uppercase")}
-                    />
-                  </div>
-                ))}
-              </div>
+              <textarea
+                value={retyped}
+                onChange={(e) => {
+                  setRetyped(e.target.value);
+                  setError(null);
+                }}
+                placeholder="Your 64-character backup key…"
+                rows={3}
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                className={cn(inputClass, "resize-none font-mono text-sm leading-relaxed")}
+              />
+              <p
+                className={cn(
+                  "text-xs font-medium",
+                  retypedComplete
+                    ? "text-emerald-600"
+                    : "text-[var(--muted-foreground)]",
+                )}
+              >
+                {normalized.length}/64 characters
+              </p>
               {error ? (
                 <p role="alert" className="text-sm font-medium text-orange-600">
                   {error}
@@ -270,16 +269,20 @@ export function KeyCeremony({ onComplete, onCancel }: KeyCeremonyProps) {
               ) : null}
               <button
                 type="button"
-                disabled={!verifyOk}
-                onClick={() => setStep("pass")}
+                disabled={!retypedComplete}
+                onClick={handleVerify}
                 className={cn(buttonVariants({ size: "lg" }), "w-full gap-2")}
               >
-                <CheckCircle2 className="h-5 w-5" />
+                <CheckCircle2 className="h-4 w-4" />
                 Verify
               </button>
               <button
                 type="button"
-                onClick={() => setStep("reveal")}
+                onClick={() => {
+                  setRetyped("");
+                  setError(null);
+                  setStep("reveal");
+                }}
                 className="mx-auto flex items-center gap-1 text-sm text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
               >
                 <ArrowLeft className="h-4 w-4" />
@@ -290,22 +293,25 @@ export function KeyCeremony({ onComplete, onCancel }: KeyCeremonyProps) {
 
           {/* ── STEP: passphrase ─────────────────────────────────────── */}
           {step === "pass" ? (
-            <form onSubmit={handleSave} className="space-y-6">
-              <div className="space-y-2 text-center">
-                <div className="mb-4 flex justify-center">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-3xl border border-canton-muted bg-canton-subtle">
-                    <Lock className="h-8 w-8 text-canton" />
-                  </div>
+            <form onSubmit={handleSave} className="space-y-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-canton-muted bg-canton-subtle">
+                  <Lock className="h-5 w-5 text-canton" />
                 </div>
-                <h2 className="text-xl font-semibold text-[var(--foreground)]">
-                  Wallet Passphrase
-                </h2>
-                <p className="text-sm text-[var(--muted-foreground)]">
-                  This passphrase encrypts your key in this browser and is
-                  requested every time you sign a transaction. CanQuest never
-                  stores it.
-                </p>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+                    Wallet
+                  </p>
+                  <h2 className="text-lg font-semibold leading-tight text-[var(--foreground)]">
+                    Wallet Passphrase
+                  </h2>
+                </div>
               </div>
+              <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
+                This passphrase encrypts your key in this browser and is
+                requested every time you sign a transaction. CanQuest never
+                stores it.
+              </p>
               <div className="space-y-4">
                 <div className="space-y-2">
                   <label
@@ -365,7 +371,7 @@ export function KeyCeremony({ onComplete, onCancel }: KeyCeremonyProps) {
                 disabled={busy || pass1.length < 8 || pass1 !== pass2}
                 className={cn(buttonVariants({ size: "lg" }), "w-full gap-2")}
               >
-                {busy ? <LoadingSpinner size="md" /> : <ShieldCheck className="h-5 w-5" />}
+                {busy ? <LoadingSpinner size="md" /> : <ShieldCheck className="h-4 w-4" />}
                 Save &amp; Finish
               </button>
             </form>
@@ -374,17 +380,17 @@ export function KeyCeremony({ onComplete, onCancel }: KeyCeremonyProps) {
           {/* ── STEP: done ───────────────────────────────────────────── */}
           {step === "done" && meta ? (
             <div className="space-y-5 text-center">
-              <div className="mb-2 flex justify-center">
-                <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-emerald-500/30 bg-emerald-500/10">
-                  <CheckCircle2 className="h-10 w-10 text-emerald-600" />
-                </div>
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-500/30 bg-emerald-500/10">
+                <CheckCircle2 className="h-7 w-7 text-emerald-600" />
               </div>
-              <h2 className="text-xl font-semibold text-[var(--foreground)]">
-                Wallet Key Active
-              </h2>
-              <p className="break-all font-mono text-xs text-[var(--muted-foreground)]">
-                {meta.partyIdPreview}
-              </p>
+              <div className="space-y-1">
+                <h2 className="text-lg font-semibold text-[var(--foreground)]">
+                  Wallet Key Active
+                </h2>
+                <p className="break-all font-mono text-xs text-[var(--muted-foreground)]">
+                  {meta.partyIdPreview}
+                </p>
+              </div>
             </div>
           ) : null}
         </div>
