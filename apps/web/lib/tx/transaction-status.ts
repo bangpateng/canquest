@@ -78,6 +78,13 @@ export const useTransactionStatus = create<TxStatusState>((set, get) => ({
     const next: TxStatusConfig = { ...cur, ...patch };
     set({ stage: "confirmed", config: next });
     next.onConfirmed?.();
+    // Auto-close setelah 2.5 detik supaya modal tidak menumpuk dgn modal lain
+    setTimeout(() => {
+      if (get().stage === "confirmed" && get().open) {
+        set({ open: false });
+        next.onDone?.();
+      }
+    }, 2500);
   },
   dismiss: () => {
     const { stage, config } = get();

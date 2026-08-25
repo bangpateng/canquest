@@ -352,15 +352,7 @@ export function SettingsWalletKeyPanel() {
         >
           <div className="text-left">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-              Wallet
-            </p>
-            <p className="mt-1 flex items-center gap-2 text-lg font-semibold text-[var(--foreground)]">
-              <KeyRound className="h-5 w-5 text-canton" />
-              Wallet Key (Non-Custodial)
-            </p>
-            <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-              Your private key is stored encrypted in this browser — it is
-              never sent to a server.
+              Wallet Keys (Non Custodial)
             </p>
           </div>
           <ChevronDown
@@ -622,42 +614,6 @@ export function SettingsWalletKeyPanel() {
                     </button>
                   </div>
                 ) : null}
-
-                {/* M4b: sync toggle — encrypted copy in account (any-device unlock) */}
-                <div className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--muted)]/40 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 text-sm">
-                      <p className="font-semibold text-[var(--foreground)]">
-                        Key Sync
-                      </p>
-                      <p className="mt-1 leading-relaxed text-[var(--muted-foreground)]">
-                        Store an encrypted copy of your key in your CanQuest
-                        account. Unlock your wallet on any browser with just
-                        your passphrase — the server can never read it.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={syncChecked}
-                      disabled={busy}
-                      onClick={() => void toggleSync(!syncChecked)}
-                      className={cn(
-                        "relative h-6 w-11 shrink-0 rounded-full transition-colors",
-                        syncChecked
-                          ? "bg-canton"
-                          : "bg-[var(--muted-foreground)]/30",
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all",
-                          syncChecked ? "left-[22px]" : "left-0.5",
-                        )}
-                      />
-                    </button>
-                  </div>
-                </div>
 
                 {/* Advanced (hidden by default) */}
                 <div className="space-y-3">

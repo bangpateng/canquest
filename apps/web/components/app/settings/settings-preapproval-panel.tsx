@@ -161,11 +161,6 @@ export function SettingsPreapprovalPanel() {
               </div>
               <AutoAcceptSwitch />
             </div>
-            <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">
-              Your wallet must be unlocked (passphrase entered) for
-              auto-accept to work. Transfers still require your signature —
-              this just signs them automatically while your session is active.
-            </p>
           </div>
         </div>
       </Card>
