@@ -196,9 +196,6 @@ export function SettingsPreapprovalPanel() {
                 onToggle={undefined}
               />
             ))}
-
-            {/* Auto-accept backup (only visible when preapproval is off) */}
-            <AutoAcceptBackupRow />
           </div>
         </div>
       </Card>
