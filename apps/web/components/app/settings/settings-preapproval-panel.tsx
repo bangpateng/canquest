@@ -415,7 +415,14 @@ function ExternalPreapprovalRow() {
           body: JSON.stringify({ publicKeyHex: meta.publicKeyHex }),
         });
         const prepRaw = await prep.json().catch(() => null);
-        if (!prep.ok || !prepRaw?.hash) throw new Error(prepRaw?.message ?? "Prepare failed");
+        if (!prep.ok) throw new Error(prepRaw?.message ?? "Prepare failed");
+        // Preapproval already active on-chain (idempotent re-enable) —
+        // nothing to sign, just reflect the real state.
+        if (prepRaw?.alreadyEnabled) {
+          setOn(true);
+          return;
+        }
+        if (!prepRaw?.hash) throw new Error(prepRaw?.message ?? "Prepare failed");
 
         const hashBytes = new Uint8Array(
           (String(prepRaw.hash).match(/.{2}/g) ?? []).map((b) => parseInt(b, 16)),

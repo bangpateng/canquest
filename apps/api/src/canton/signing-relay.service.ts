@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { CantonWalletSdkService } from './wallet-sdk.service';
 import { CantonLedgerService } from './canton-ledger.service';
 import { SpliceValidatorService } from './splice-validator.service';
@@ -915,7 +915,13 @@ export class SigningRelayService {
   async preparePreapproval(
     userId: string,
     publicKeyHex: string,
-  ): Promise<{ flow: string; hash: string; commandId: string; description: string }> {
+  ): Promise<{
+    flow: string;
+    hash: string | null;
+    commandId: string;
+    description: string;
+    alreadyEnabled?: boolean;
+  }> {
     this.sweepExpired();
     // Auto-clear stale pending dari auto-accept / attempt sebelumnya —
     // preapproval prepare selalu boleh mulai fresh.
@@ -931,6 +937,24 @@ export class SigningRelayService {
     const valUrl = (this.config.get<string>('CANTON_VALIDATOR_URL') ?? '').replace(/\/$/, '');
     if (!valUrl) throw new BadRequestException('CANTON_VALIDATOR_URL not set');
 
+    // Preflight: fingerprint dari kunci browser HARUS sama dengan fingerprint di
+    // party ID. Kalau beda (user re-create wallet key tanpa re-register), semua
+    // signature akan ditolak validator dengan error kabur "0 valid signatures".
+    const partyFp = user.partyId.split('::')[1];
+    if (partyFp) {
+      const computed =
+        '1220' +
+        createHash('sha256')
+          .update(Buffer.concat([Buffer.from([0, 0, 0, 12]), Buffer.from(publicKeyHex, 'hex')]))
+          .digest('hex');
+      if (computed !== partyFp) {
+        throw new BadRequestException(
+          'Your wallet key does not match this wallet on-chain. ' +
+            'Restore your original key via Settings → Restore from Backup Key.',
+        );
+      }
+    }
+
     const token = await this.getValidatorToken();
     const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
@@ -943,6 +967,19 @@ export class SigningRelayService {
     if (propRes.ok) {
       contractId = JSON.parse(propText).contract_id;
     } else if (propRes.status === 409) {
+      // Dua makna 409 yang BERBEDA:
+      //  a. "TransferPreapproval contract already exists" → preapproval SUDAH AKTIF.
+      //     Tidak ada yang perlu di-sign — idempotent success (toggle harus ON).
+      //  b. Proposal accept masih hidup dari attempt sebelumnya → pakai contract_id itu.
+      if (/TransferPreapproval contract already exists/i.test(propText)) {
+        this.logger.log(
+          `prepare preapproval: already enabled on-chain, user=${userId.slice(0, 8)}…`,
+        );
+        return {
+          flow: 'preapproval_enable', hash: null, commandId: '',
+          description: 'Instant receive already active', alreadyEnabled: true,
+        };
+      }
       contractId = propText.match(/ContractId\(([^)]+)\)/)?.[1] ?? null;
     }
     if (!contractId) throw new BadRequestException(`Setup proposal failed: ${propText.slice(0, 150)}`);
