@@ -237,12 +237,25 @@ export class SigningRelayService {
 
     const sdk = await this.sdkProvider.getSdk();
     const response = await entry.prepared.preparedPromise;
-    const signed = sdk.ledger.fromSignature(response, signatureB64);
-    const result = await sdk.ledger.execute(signed, {
-      partyId: entry.partyId,
-      submissionId: entry.commandId,
-    });
-
+    let result: { updateId?: string; completionOffset?: number } | undefined;
+    try {
+      const signed = sdk.ledger.fromSignature(response, signatureB64);
+      result = await sdk.ledger.execute(signed, {
+        partyId: entry.partyId,
+        submissionId: entry.commandId,
+      });
+    } catch (err) {
+      // Jangan biarkan pending stuck — participant sudah menolak, prepare ulang.
+      this.pending.delete(userId);
+      const cause = String((err as { cause?: string })?.cause ?? err);
+      if (/0 valid signatures/i.test(cause)) {
+        throw new BadRequestException(
+          'Signature rejected — your wallet key does not match this wallet on-chain. ' +
+            'Restore your original key via Settings → Restore from Backup Key.',
+        );
+      }
+      throw err;
+    }
     this.pending.delete(userId);
     this.logger.log(
       `execute flow=${entry.flow} user=${userId.slice(0, 8)}… updateId=${String(result?.updateId ?? '?').slice(0, 16)}…`,
@@ -386,29 +399,18 @@ export class SigningRelayService {
         ledgerTxId: updateId,
         cantonUpdateId: updateId,
       });
-      if (meta.feeCc > 0 && meta.feeParty) {
-        await this.users.recordTransaction({
-          userId: entry.userId,
-          amountCc: meta.feeCc,
-          type: 'TRANSFER_OUT',
-          description: `Platform fee (transfer to ${meta.recipientLabel})`,
-          referenceId: `fee:${normalizeCantonPartyId(meta.feeParty) ?? meta.feeParty}`,
-          ledgerTxId: updateId,
-          cantonUpdateId: updateId,
-        });
-      }
     } catch (err) {
       this.logger.error(
         `⚠️ AUDIT-TRAIL LOSS: relay send_cc SUCCEEDED on-chain (updateId=${updateId ?? 'n/a'}) ` +
-          `user=${entry.userId} amount=${meta.amount} fee=${meta.feeCc} ` +
+          `user=${entry.userId} amount=${meta.amount} ` +
           `recipient=${meta.recipientPartyId} — DB record gagal: ${String(err).slice(0, 160)}`,
       );
     }
 
     // Fee leg: kumpulkan via jalur CUSTODIAL (operator sign) — interactive
-    // submission tidak support multi-command. Operator masih punya CanActAs
-    // pada party external (di-grant saat complete), dan fee transfer hanya
-    // butuh actAs [sender] yang bisa dilakukan participant.
+    // submission tidak support multi-command. Fee hanya dicatat di history
+    // BILA benar-benar terkumpul (party external sering menolak submit
+    // custodial: NO_SYNCHRONIZER_ON_WHICH_ALL_SUBMITTERS_CAN_SUBMIT).
     if (meta.feeCc > 0 && meta.feeParty) {
       try {
         const senderOnChain = await this.splice.resolveOnChainPartyId(
@@ -426,6 +428,21 @@ export class SigningRelayService {
           this.logger.log(
             `Fee collected post-relay: ${meta.feeCc} CC from ${entry.partyId.split('::')[0]} → ${meta.feeParty.split('::')[0]}`,
           );
+          await this.users
+            .recordTransaction({
+              userId: entry.userId,
+              amountCc: meta.feeCc,
+              type: 'TRANSFER_OUT',
+              description: `Platform fee (transfer to ${meta.recipientLabel})`,
+              referenceId: `fee:${normalizeCantonPartyId(meta.feeParty) ?? meta.feeParty}`,
+              ledgerTxId: feeResult.updateId ?? undefined,
+              cantonUpdateId: feeResult.updateId ?? undefined,
+            })
+            .catch((feeRecErr) => {
+              this.logger.warn(
+                `Fee history record failed (fee already collected): ${String(feeRecErr).slice(0, 120)}`,
+              );
+            });
         } else {
           this.logger.warn(
             `Fee collection post-relay failed (non-fatal): ${feeResult.error ?? 'unknown'}`,
