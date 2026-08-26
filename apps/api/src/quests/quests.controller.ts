@@ -105,6 +105,7 @@ export class QuestsController {
       ledger: this.quests.toApiLedgerProof(p.ledger, p.rewardCc),
       campaignMeta: p.campaignMeta,
       sendProgress: p.sendProgress,
+      todayVerifiedTaskIds: p.todayVerifiedTaskIds ?? [],
     };
   }
 
