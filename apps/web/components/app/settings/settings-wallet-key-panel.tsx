@@ -28,6 +28,7 @@ import {
   hasWalletKey,
   importSyncBlob,
   importWalletKey,
+  isUnlocked,
   lock,
   unlock,
   type WalletKeyMeta,
@@ -54,6 +55,9 @@ type DeleteState = "idle" | "confirm" | "done";
 
 export function SettingsWalletKeyPanel() {
   const [collapsed, setCollapsed] = useState(false);
+  // Status sesi signing (live) + feedback tombol Lock Now.
+  const [sessionUnlocked, setSessionUnlocked] = useState(false);
+  const [lockMsg, setLockMsg] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>("loading");
   const [meta, setMeta] = useState<WalletKeyMeta | null>(null);
 
@@ -152,6 +156,14 @@ export function SettingsWalletKeyPanel() {
     void refresh();
     return () => lock(); // auto-lock when the panel closes/unmounts
   }, [refresh]);
+
+  // Status sesi signing hidup di memori — poll ringan supaya chip akurat.
+  useEffect(() => {
+    const sync = () => setSessionUnlocked(isUnlocked());
+    sync();
+    const id = setInterval(sync, 5_000);
+    return () => clearInterval(id);
+  }, []);
 
   function resetReveal() {
     setReveal("hidden");
@@ -488,17 +500,57 @@ export function SettingsWalletKeyPanel() {
                     </button>
                     <button
                       type="button"
+                      disabled={!sessionUnlocked}
                       className={cn(buttonVariants({ variant: "secondary" }), "gap-2")}
                       onClick={() => {
                         lock();
                         resetReveal();
+                        setSessionUnlocked(false);
+                        setLockMsg(
+                          "Wallet locked — your passphrase will be asked next time you sign.",
+                        );
                       }}
-                      title="Lock the unlocked wallet session on this device. Signing will ask for your passphrase again."
+                      title={
+                        sessionUnlocked
+                          ? "Lock the unlocked signing session on this device. Signing will ask for your passphrase again."
+                          : "No unlocked signing session right now — nothing to lock."
+                      }
                     >
                       <Lock className="h-4 w-4" />
                       Lock Wallet Now
                     </button>
                   </div>
+                ) : null}
+
+                {/* Status sesi signing + feedback Lock Now */}
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="font-medium text-[var(--muted-foreground)]">
+                    Signing session:
+                  </span>
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-semibold",
+                      sessionUnlocked
+                        ? "bg-emerald-500/15 text-emerald-600"
+                        : "bg-[var(--muted)] text-[var(--muted-foreground)]",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "h-1.5 w-1.5 rounded-full",
+                        sessionUnlocked ? "bg-emerald-500" : "bg-[var(--muted-foreground)]",
+                      )}
+                    />
+                    {sessionUnlocked ? "Unlocked" : "Locked"}
+                  </span>
+                  {sessionUnlocked ? (
+                    <span className="text-[var(--muted-foreground)]">
+                      auto-locks after 10 min idle
+                    </span>
+                  ) : null}
+                </div>
+                {lockMsg ? (
+                  <p className="text-xs font-medium text-emerald-600">{lockMsg}</p>
                 ) : null}
 
                 {reveal === "form" ? (
