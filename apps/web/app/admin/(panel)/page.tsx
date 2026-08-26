@@ -1,7 +1,4 @@
 import Link from "next/link";
-import { cookies } from "next/headers";
-import { CQ_ADMIN_ACCESS_COOKIE } from "@/lib/auth/auth-cookies";
-import { internalApiBase } from "@/lib/api/internal-api-url";
 import {
   Users,
   Scroll,
@@ -13,6 +10,7 @@ import {
   Coins,
   Ticket,
 } from "lucide-react";
+import { adminServerFetch } from "@/lib/auth/admin-server-fetch";
 
 interface Stats {
   totalUsers: number;
@@ -27,24 +25,8 @@ interface Stats {
   codesAvailable?: number;
 }
 
-async function fetchAdmin<T>(path: string): Promise<T | null> {
-  const jar = await cookies();
-  const token = jar.get(CQ_ADMIN_ACCESS_COOKIE)?.value;
-  if (!token) return null;
-  try {
-    const res = await fetch(`${internalApiBase()}/admin${path}`, {
-      headers: { Authorization: `Bearer ${token}` },
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    return res.json() as Promise<T>;
-  } catch {
-    return null;
-  }
-}
-
 export default async function AdminPage() {
-  const stats = await fetchAdmin<Stats>("/stats");
+  const stats = await adminServerFetch<Stats>("/stats");
 
   const statCards = [
     { label: "Total Users", value: stats?.totalUsers ?? 0, icon: Users },

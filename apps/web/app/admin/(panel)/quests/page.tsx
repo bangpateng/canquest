@@ -1,26 +1,16 @@
-import { cookies } from "next/headers";
 import { Gift } from "lucide-react";
-import { CQ_ADMIN_ACCESS_COOKIE } from "@/lib/auth/auth-cookies";
-import { internalApiBase } from "@/lib/api/internal-api-url";
 import { AdminQuestHubPanel } from "@/components/admin/admin-quest-hub-panel";
+import { adminServerFetch } from "@/lib/auth/admin-server-fetch";
 import type { QuestHub } from "@/components/admin/admin-quest-hub-tasks-panel";
 
 async function fetchQuestHub(): Promise<QuestHub | null> {
-  const jar = await cookies();
-  const token = jar.get(CQ_ADMIN_ACCESS_COOKIE)?.value;
-  if (!token) return null;
-  try {
-    const res = await fetch(`${internalApiBase()}/admin/earn-hub`, {
-      headers: { Authorization: `Bearer ${token}` },
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (!data || typeof data !== "object" || !("id" in data)) return null;
-    return data as QuestHub;
-  } catch {
-    return null;
-  }
+  // earn-hub merespon 404 saat belum ada hub — treat as null (panel akan
+  // menawarkan tombol setup), bukan error.
+  const data = await adminServerFetch<QuestHub | { message?: string }>(
+    "/earn-hub",
+  );
+  if (!data || typeof data !== "object" || !("id" in data)) return null;
+  return data as QuestHub;
 }
 
 /** Admin — CanQuest Earn hub (user menu Quest) */
