@@ -350,13 +350,19 @@ export class SwapService {
 
     // ── 2. Create-or-resume (anti OpenSwapExistsError) ───────────────────
     // 1 userRef = 1 open swap. Kalau ada yang masih terbuka, resolve dulu.
-    // skipDeposit (external) = deposit user SUDAH dikirim ke open swap yang
-    // ada → keepAwaitingDeposit supaya swap itu di-resume, bukan di-cancel
-    // (cancel = deposit yatim; docs OneSwap: cancel hanya sebelum deposit).
+    // skipDeposit (external) = swap SUDAH dibuat oleh prepare-external dan
+    // deposit user sudah dikirim ke depositParty-nya — jangan createSwap lagi
+    // (OneSwap menolak create saat open swap ada; error generiknya membatalkan
+    // pencatatan kita padahal swap sebenarnya berjalan). Ambil open swap dulu.
     const slippagePct = params.slippagePct ?? 0.5;
     const minOutFactor = Math.max(0, 1 - slippagePct / 100);
     const slippageBps = Math.round(slippagePct * 100);
-    let swap = await this.createOrResumeSwap(
+    const openSwap = opts?.skipDeposit
+      ? await this.oneswap.getOpenSwap(user.id)
+      : null;
+    let swap = openSwap
+      ? openSwap
+      : await this.createOrResumeSwap(
       {
         userRef: user.id,
         inSymbol: params.from,
