@@ -5257,6 +5257,7 @@ export class QuestsService {
         type: 'TRANSFER_OUT',
         status: 'COMPLETED',
         createdAt: { gte: since },
+        amountMicroCc: { gte: QuestsService.MIN_TASK_ACTION_MICRO_CC },
       },
       select: { referenceId: true, description: true },
     });
@@ -5300,6 +5301,13 @@ export class QuestsService {
    * lockSeconds >= the tier's threshold. Cascade: completing a higher tier
    * auto-completes every lower tier in the same quest.
    */
+  /**
+   * Minimum CC value for a daily on-chain task action to count (sends and
+   * swaps). Smaller sends/swaps are ignored — anti-farm guard.
+   */
+  private static readonly MIN_TASK_ACTION_CC = 20;
+  private static readonly MIN_TASK_ACTION_MICRO_CC = 20 * 1_000_000;
+
   private static readonly LOCK_CC_TIER_SECONDS: Record<string, number> = {
     '3d': 3 * 24 * 60 * 60, // 259200
     '7d': 7 * 24 * 60 * 60, // 604800
@@ -5364,21 +5372,36 @@ export class QuestsService {
   }
 
   /**
-   * Count a user's REAL swaps since `since`. Counts either direction
-   * (CC→USDCx = SWAP_OUT, USDCx→CC = SWAP_IN), COMPLETED only.
+   * Count a user's REAL swaps since `since` whose CC side is at least
+   * MIN_TASK_ACTION_CC. Each swap pair contributes exactly one leg in CC:
+   *   - CC → token: the SWAP_OUT row (input amount, description "Swap N CC → …")
+   *   - token → CC: the SWAP_IN row (output amount, description "Swap received N CC")
+   * Count only rows whose description names CC and whose amount clears the min.
    */
   private async countRecentUserSwaps(
     userId: string,
     since: Date,
   ): Promise<number> {
-    return this.prisma.ccTransaction.count({
+    const rows = await this.prisma.ccTransaction.findMany({
       where: {
         userId,
         type: { in: ['SWAP_OUT', 'SWAP_IN'] },
         status: 'COMPLETED',
         createdAt: { gte: since },
+        amountMicroCc: { gte: QuestsService.MIN_TASK_ACTION_MICRO_CC },
       },
+      select: { type: true, description: true },
     });
+    let count = 0;
+    for (const r of rows) {
+      // Leg CC = description menuliskan unit CC pada nominalnya.
+      const desc = r.description ?? '';
+      const namesCc =
+        (r.type === 'SWAP_OUT' && desc.includes(' CC ')) ||
+        (r.type === 'SWAP_IN' && desc.trimEnd().endsWith(' CC'));
+      if (namesCc) count++;
+    }
+    return count;
   }
 
   /**
@@ -5402,7 +5425,7 @@ export class QuestsService {
     if (today < params.requiredCount) {
       return {
         ok: false,
-        message: `You have made ${today}/${params.requiredCount} swap(s) today. Swap CC ↔ USDCx to complete this task.`,
+        message: `You have made ${today}/${params.requiredCount} swap(s) of at least ${QuestsService.MIN_TASK_ACTION_CC} CC today. Swap at least ${QuestsService.MIN_TASK_ACTION_CC} CC to complete this task.`,
       };
     }
     return { ok: true };
@@ -5489,6 +5512,7 @@ export class QuestsService {
           type: 'TRANSFER_OUT',
           status: 'COMPLETED',
           createdAt: { gte: since },
+          amountMicroCc: { gte: QuestsService.MIN_TASK_ACTION_MICRO_CC },
         },
         select: { referenceId: true, description: true },
       }),
@@ -5555,7 +5579,7 @@ export class QuestsService {
     if (count < params.requiredCount) {
       return {
         ok: false,
-        message: `You have sent ${count}/${params.requiredCount} transaction(s) to a CanQuest user today. Send to a CanQuest user to complete this task.`,
+        message: `You have sent ${count}/${params.requiredCount} send(s) of at least ${QuestsService.MIN_TASK_ACTION_CC} CC to a CanQuest user today. Send at least ${QuestsService.MIN_TASK_ACTION_CC} CC to complete this task.`,
       };
     }
     return { ok: true };
@@ -5601,7 +5625,7 @@ export class QuestsService {
     if (count < params.requiredCount) {
       return {
         ok: false,
-        message: `You have sent ${count}/${params.requiredCount} transaction(s) to an external wallet today. Send CC to an external wallet to complete this task.`,
+        message: `You have sent ${count}/${params.requiredCount} send(s) of at least ${QuestsService.MIN_TASK_ACTION_CC} CC to an external wallet today. Send at least ${QuestsService.MIN_TASK_ACTION_CC} CC to complete this task.`,
       };
     }
     return { ok: true };

@@ -243,12 +243,17 @@ export const QUEST_HUB_TASK_TYPE_OPTIONS: {
   {
     value: "send_to_user_daily",
     label: "Send to a CanQuest user — daily",
-    hint: "Wallet required · resets at 00:00 UTC · counts only sends whose recipient is a registered CanQuest user (CC + USDCx) · set any count",
+    hint: "Wallet required · resets at 00:00 UTC · counts only sends of at least 20 CC whose recipient is a registered CanQuest user · set any count",
   },
   {
     value: "send_to_external_daily",
     label: "Send to an external wallet — daily",
-    hint: "Wallet required · resets at 00:00 UTC · counts only sends whose recipient is NOT a registered CanQuest user (other dapps, CEX deposit addresses) · set any count",
+    hint: "Wallet required · resets at 00:00 UTC · counts only sends of at least 20 CC whose recipient is NOT a registered CanQuest user (other dapps, CEX deposit addresses) · set any count",
+  },
+  {
+    value: "daily_swap",
+    label: "Swap daily",
+    hint: "Wallet required · resets every 24 hours · counts real swaps of at least 20 CC on the CC side (either direction) · set any count",
   },
   {
     value: "lock_cc_daily",
