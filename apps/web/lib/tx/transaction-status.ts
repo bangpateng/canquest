@@ -3,14 +3,17 @@ import { create } from "zustand";
 /**
  * Unified on-chain transaction status modal — presentation layer only.
  *
- * Mirrors the mockup's `tx-status-modal` (Sign → Broadcast → Confirmed). It does
- * NOT execute any on-chain call: callers drive the stages around their own
- * existing async fetch (start → broadcast while awaiting → succeed on resolve).
- * All real data (hash, round, meta) is supplied by the caller from the API
- * response; nothing is fabricated.
+ * Standar flow web3 (satu modal pada satu waktu — tidak ada tumpang-tindih):
+ *   Input → Review (TxReviewModal) → Sign (stage 'sign' + passphrase prompt
+ *   bila dompet terkunci) → Broadcast → Success / Failed.
+ *
+ * It does NOT execute any on-chain call: callers drive the stages around
+ * their own existing async fetch (start → broadcast while awaiting → succeed
+ * on resolve / fail on rejection). All real data (hash, round, meta) is
+ * supplied by the caller from the API response; nothing is fabricated.
  */
 
-export type TxStage = "sign" | "broadcast" | "confirmed";
+export type TxStage = "sign" | "broadcast" | "confirmed" | "failed";
 
 export interface TxMetaRow {
   label: string;
@@ -34,6 +37,8 @@ export interface TxStatusConfig {
   title: string;
   /** Subtitle shown under the title on confirmed. */
   subtitle?: string;
+  /** Title override on the failed stage (default "Transaction failed"). */
+  failedTitle?: string;
   /** Detail rows shown on the confirmed stage (Type / Rate / …). */
   meta?: TxMetaRow[];
   /** Real on-chain transaction hash (display-ready), if the API returned one. */
@@ -46,7 +51,7 @@ export interface TxStatusConfig {
   onConfirmed?: () => void;
   /** Fired when the user closes via Done after success. */
   onDone?: () => void;
-  /** Fired when the user cancels (only meaningful pre-confirmation). */
+  /** Fired when the user cancels (pre-confirmation or after failure). */
   onCancel?: () => void;
 }
 
@@ -54,23 +59,33 @@ interface TxStatusState {
   open: boolean;
   stage: TxStage;
   config: TxStatusConfig | null;
+  /** Error message shown on the failed stage. */
+  errorMessage: string | null;
+  /** Retried by the user from the failed stage, if provided. */
+  retry: (() => void | Promise<void>) | null;
   /** Open at the sign (authorize) stage. */
   start: (config: TxStatusConfig) => void;
   /** Advance to the broadcast (network) stage. */
   broadcast: () => void;
   /** Advance to confirmed, merging any patch (hash / meta / round / title). */
   succeed: (patch?: Partial<TxStatusConfig>) => void;
+  /** Advance to failed with the error message (no auto-close). */
+  fail: (message: string, patch?: Partial<TxStatusConfig>) => void;
   /** Close from any stage; fires onCancel when not yet confirmed. */
   dismiss: () => void;
   /** Close after success; fires onDone. */
   done: () => void;
+  /** Re-run the transaction from the failed stage. */
+  tryAgain: () => void;
 }
 
 export const useTransactionStatus = create<TxStatusState>((set, get) => ({
   open: false,
   stage: "sign",
   config: null,
-  start: (config) => set({ open: true, stage: "sign", config }),
+  errorMessage: null,
+  retry: null,
+  start: (config) => set({ open: true, stage: "sign", config, errorMessage: null, retry: null }),
   broadcast: () => set({ stage: "broadcast" }),
   succeed: (patch) => {
     const cur = get().config;
@@ -86,6 +101,11 @@ export const useTransactionStatus = create<TxStatusState>((set, get) => ({
       }
     }, 2500);
   },
+  fail: (message, patch) => {
+    const cur = get().config;
+    if (!cur) return;
+    set({ stage: "failed", config: { ...cur, ...patch }, errorMessage: message });
+  },
   dismiss: () => {
     const { stage, config } = get();
     set({ open: false });
@@ -95,5 +115,10 @@ export const useTransactionStatus = create<TxStatusState>((set, get) => ({
     const { config } = get();
     set({ open: false });
     config?.onDone?.();
+  },
+  tryAgain: () => {
+    const { retry } = get();
+    set({ open: false });
+    retry?.();
   },
 }));

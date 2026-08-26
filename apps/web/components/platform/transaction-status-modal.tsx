@@ -12,13 +12,21 @@ import { useTransactionStatus } from "@/lib/tx/transaction-status";
  * Unified on-chain transaction status dialog (mockup `tx-status-modal`).
  * Mounted once in the platform shell; driven by the `useTransactionStatus`
  * store. Pure presentation — no fetch/network logic lives here.
+ *
+ * Layering contract (satu modal terlihat pada satu waktu):
+ *   input/review modals z-50/z-60 → status modal z-90 (backdrop OPAQUE,
+ *   menutup penuh apa pun di bawahnya) → passphrase prompt z-95 (langkah
+ *   Sign, menutup penuh status modal).
  */
 export function TransactionStatusModal() {
   const open = useTransactionStatus((s) => s.open);
   const stage = useTransactionStatus((s) => s.stage);
   const config = useTransactionStatus((s) => s.config);
+  const errorMessage = useTransactionStatus((s) => s.errorMessage);
+  const hasRetry = useTransactionStatus((s) => s.retry !== null);
   const dismiss = useTransactionStatus((s) => s.dismiss);
   const done = useTransactionStatus((s) => s.done);
+  const tryAgain = useTransactionStatus((s) => s.tryAgain);
 
   if (!open || !config) return null;
 
@@ -33,7 +41,9 @@ export function TransactionStatusModal() {
       role="dialog"
       aria-modal="true"
     >
-      <button className="modal-backdrop" aria-label="Close" onClick={dismiss} />
+      {/* Backdrop opaque — input/review modal di bawahnya tertutup penuh,
+          tidak ada dua modal yang terlihat bersamaan. */}
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-md" />
       <div className="relative z-10 my-auto max-h-[calc(100dvh-6.75rem)] md:max-h-[min(92vh,92dvh)] w-full max-w-[380px] overflow-y-auto rounded-[20px] border border-[var(--border)] bg-[var(--card-solid)] shadow-[0_20px_44px_-24px_rgb(0_0_0/0.8)]">
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[var(--primary)]/40 to-transparent" />
         <button
@@ -185,6 +195,39 @@ export function TransactionStatusModal() {
               <Button className="mt-6 w-full" onClick={done}>
                 Done
               </Button>
+            </div>
+          )}
+
+          {/* FAILED — rejected / error */}
+          {stage === "failed" && (
+            <div className="flex flex-col items-center text-center tx-fade-up">
+              <div className="flex h-14 w-14 items-center justify-center rounded-[14px] bg-red-500/[0.13] text-red-600 tx-check-pop">
+                <X className="h-7 w-7" />
+              </div>
+              <p className="mt-4 text-base font-bold text-[var(--foreground)]">
+                {config.failedTitle ?? "Transaction failed"}
+              </p>
+              {errorMessage ? (
+                <p className="mt-2 max-w-[280px] break-words text-xs leading-relaxed text-[var(--muted-foreground)]">
+                  {errorMessage}
+                </p>
+              ) : null}
+              <div className="mt-5 w-full rounded-2xl border border-[var(--border)] bg-[var(--muted)] px-4 py-3.5 text-left">
+                <p className="text-lg font-bold tabular-nums text-[var(--foreground)]">{config.amountText}</p>
+                {config.subText ? (
+                  <p className="mt-0.5 truncate text-xs font-medium text-[var(--muted-foreground)]">{config.subText}</p>
+                ) : null}
+              </div>
+              <div className="mt-5 flex w-full gap-2">
+                {hasRetry && (
+                  <Button variant="secondary" size="sm" className="flex-1" onClick={tryAgain}>
+                    Try Again
+                  </Button>
+                )}
+                <Button size="sm" className={hasRetry ? "flex-1" : "w-full"} onClick={dismiss}>
+                  Close
+                </Button>
+              </div>
             </div>
           )}
         </div>

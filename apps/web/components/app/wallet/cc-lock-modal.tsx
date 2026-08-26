@@ -7,6 +7,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { iconButtonClass } from "@/lib/ui/ui-button-styles";
 import { cn } from "@/lib/utils/utils";
 import { useTransactionStatus } from "@/lib/tx/transaction-status";
+import { TxReviewModal } from "@/components/app/wallet/tx-review-modal";
 import { useMe } from "@/lib/hooks/use-me";
 import { signRelayTransaction } from "@/lib/wallet/sign-relay";
 import { usePassphrasePrompt } from "@/lib/wallet/use-passphrase-prompt";
@@ -52,6 +53,13 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
   const [lockMessage, setLockMessage] = useState("");
   const [unlockingId, setUnlockingId] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
+  // Tahap REVIEW (Input → Review → Sign → Broadcast → Success/Failed):
+  // form Unlock/Lock tombol buka review dulu; eksekusi jalan saat Confirm.
+  const [review, setReview] = useState<
+    | { kind: "lock" }
+    | { kind: "unlock"; lock: ActiveLock }
+    | null
+  >(null);
 
   // Fetch lock-terms sekali saat modal dibuka.
   useEffect(() => {
@@ -98,10 +106,18 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
     Number.isFinite(numericAmount) && numericAmount > 0 &&
     (status.availableCc == null || numericAmount <= status.availableCc);
 
+  // Form submit → buka tahap REVIEW (validasi dulu). Eksekusi di runLock().
   const submitLock = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
       if (!selectedTerm || !amountValid) return;
+      setReview({ kind: "lock" });
+    },
+    [selectedTerm, amountValid],
+  );
+
+  const runLock = useCallback(async () => {
+    if (!selectedTerm || !amountValid) return;
       setLockState("loading");
       setLockMessage("");
       tx.start({
@@ -138,13 +154,13 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
             ],
           });
         } catch (err) {
-          tx.dismiss();
-          setLockState("error");
-          setLockMessage(
+          const msg =
             err instanceof Error && err.message
               ? err.message
-              : "Lock failed. Please try again.",
-          );
+              : "Lock failed. Please try again.";
+          tx.fail(msg);
+          setLockState("error");
+          setLockMessage(msg);
         }
         return;
       }
@@ -161,9 +177,10 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
         });
         const data = (await res.json()) as { ok?: boolean; error?: string };
         if (!res.ok || data.ok === false) {
-          tx.dismiss();
+          const msg = data.error ?? "Lock failed. Please try again.";
+          tx.fail(msg);
           setLockState("error");
-          setLockMessage(data.error ?? "Lock failed. Please try again.");
+          setLockMessage(msg);
           return;
         }
         setLockState("idle");
@@ -181,15 +198,25 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
           ],
         });
       } catch {
-        tx.dismiss();
+        tx.fail("Network error. Check your connection.");
         setLockState("error");
         setLockMessage("Network error. Check your connection.");
       }
-    },
+  },
     [selectedTerm, amountValid, numericAmount, onRefresh, tx, isExternalWallet, promptPassphrase],
   );
 
+  // Tombol Unlock → buka tahap REVIEW dulu. Eksekusi di runUnlock().
   const submitUnlock = useCallback(
+    async (lockId: string) => {
+      const lock = status.activeLocks.find((l) => l.id === lockId);
+      if (!lock) return;
+      setReview({ kind: "unlock", lock });
+    },
+    [status.activeLocks],
+  );
+
+  const runUnlock = useCallback(
     async (lockId: string) => {
       const lock = status.activeLocks.find((l) => l.id === lockId);
       setUnlockingId(lockId);
@@ -226,13 +253,11 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
               : undefined,
           });
         } catch (err) {
-          tx.dismiss();
+          const msg =
+            err instanceof Error && err.message ? err.message : "Unlock failed.";
+          tx.fail(msg);
           setLockState("error");
-          setLockMessage(
-            err instanceof Error && err.message
-              ? err.message
-              : "Unlock failed.",
-          );
+          setLockMessage(msg);
         } finally {
           setUnlockingId(null);
         }
@@ -248,9 +273,10 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
         });
         const data = (await res.json()) as { ok?: boolean; error?: string };
         if (!res.ok || data.ok === false) {
-          tx.dismiss();
+          const msg = data.error ?? "Unlock failed.";
+          tx.fail(msg);
           setLockState("error");
-          setLockMessage(data.error ?? "Unlock failed.");
+          setLockMessage(msg);
         } else {
           onRefresh();
           tx.succeed({
@@ -266,7 +292,7 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
           });
         }
       } catch {
-        tx.dismiss();
+        tx.fail("Network error.");
         setLockState("error");
         setLockMessage("Network error.");
       } finally {
@@ -285,6 +311,49 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
     >
       {/* M3b: prompt passphrase untuk sign lock/unlock (user external). */}
       {passphraseModal}
+
+      {/* Tahap REVIEW sebelum eksekusi (Input → Review → Sign → Broadcast). */}
+      <TxReviewModal
+        open={review !== null}
+        title={review?.kind === "unlock" ? "Confirm unlock" : "Confirm lock"}
+        amountText={
+          review?.kind === "unlock"
+            ? `Unlock ${review.lock.amountCc} CC`
+            : `Lock ${numericAmount} CC`
+        }
+        subText={
+          review?.kind === "unlock"
+            ? "Funds return to your wallet"
+            : `for ${termLabel(selectedTerm)}`
+        }
+        rows={
+          review?.kind === "unlock"
+            ? [
+                { label: "Amount", value: `${review.lock.amountCc} CC` },
+                { label: "Duration", value: termLabel(review.lock.termKey) },
+                { label: "Network", value: "Canton" },
+              ]
+            : [
+                { label: "Amount", value: `${numericAmount} CC` },
+                { label: "Duration", value: termLabel(selectedTerm) },
+                { label: "Network", value: "Canton" },
+              ]
+        }
+        note={
+          review?.kind === "unlock"
+            ? undefined
+            : "CC remains yours — a small holding fee applies while locked."
+        }
+        confirmLabel={review?.kind === "unlock" ? "Unlock" : "Lock"}
+        onClose={() => setReview(null)}
+        onConfirm={() => {
+          const r = review;
+          setReview(null);
+          if (r?.kind === "unlock") void runUnlock(r.lock.id);
+          else void runLock();
+        }}
+      />
+
       <button
         type="button"
         className="modal-backdrop"

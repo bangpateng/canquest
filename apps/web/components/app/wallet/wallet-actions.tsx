@@ -13,7 +13,7 @@ import { useTransactionStatus } from "@/lib/tx/transaction-status";
 import { TransactionDetailModal } from "@/components/app/wallet/transaction-detail-modal";
 import { OffersModal, useOffers, useSentOffers } from "@/components/app/wallet/offers-section";
 import { SwapModal } from "@/components/app/wallet/swap-modal";
-import { SendConfirmModal } from "@/components/app/wallet/send-confirm-modal";
+import { TxReviewModal } from "@/components/app/wallet/tx-review-modal";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -301,7 +301,11 @@ export function WalletActions({
           },
         );
       } catch (err) {
-        tx.dismiss();
+        tx.fail(
+          err instanceof Error
+            ? err.message
+            : "Transfer failed. Please try again.",
+        );
         setSendState("error");
         setSendMessage(
           err instanceof Error
@@ -363,7 +367,9 @@ export function WalletActions({
       // Error hanya jika HTTP error ATAU success=false
       // accepted=false + offerPending=true = offer berhasil dibuat, receiver perlu accept manual (BUKAN error)
       if (!res.ok || data.success === false) {
-        tx.dismiss();
+        tx.fail(
+          data.message ?? data.error ?? "Transfer failed. Please try again.",
+        );
         setSendState("error");
         setSendMessage(data.message ?? data.error ?? "Transfer failed. Please try again.");
         setConfirmOpen(false);
@@ -416,7 +422,7 @@ export function WalletActions({
         ],
       });
     } catch {
-      tx.dismiss();
+      tx.fail("Network error. Check your connection and try again.");
       setSendState("error");
       setSendMessage("Network error. Check your connection and try again.");
       setConfirmOpen(false);
@@ -808,21 +814,31 @@ export function WalletActions({
         </div>
       ) : null}
 
-      {/* ── CONFIRM TRANSACTION MODAL (langkah 2) ── */}
-      <SendConfirmModal
+      {/* ── REVIEW MODAL (langkah 2 — Input → Review → Sign → Broadcast → Done) ── */}
+      <TxReviewModal
         open={confirmOpen}
-        busy={sendState === "loading"}
-        token={selectedSendToken}
-        amount={ccAmount}
-        recipientDisplay={formatPartyIdForDisplay(
-          normalizeSendRecipientInput(recipientUsername),
-        )}
-        memo={memo}
-        feeCc={feeCc}
+        amountText={`${ccAmount || "0"} ${selectedSendToken ? displayName(selectedSendToken.instrumentId) : ""}`}
+        subText={`to ${formatPartyIdForDisplay(normalizeSendRecipientInput(recipientUsername))}`}
+        rows={[
+          {
+            label: "Recipient",
+            value: formatPartyIdForDisplay(normalizeSendRecipientInput(recipientUsername)),
+            mono: true,
+          },
+          { label: "Memo", value: memo.trim() || "—" },
+          { label: "Network", value: "Canton" },
+          ...(selectedIsCC
+            ? [{ label: "Platform fee", value: `≈ ${feeCc} CC` }]
+            : []),
+        ]}
+        confirmLabel="Confirm"
         onClose={closeConfirm}
-        onConfirm={() =>
-          void submitSend({ preventDefault: () => {} } as React.FormEvent)
-        }
+        onConfirm={() => {
+          // Tutup review DULU — status modal (z-90, opaque) ambil alih,
+          // satu modal terlihat pada satu waktu.
+          setConfirmOpen(false);
+          void submitSend({ preventDefault: () => {} } as React.FormEvent);
+        }}
       />
 
       <TransactionDetailModal
