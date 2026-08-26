@@ -317,9 +317,11 @@ export function WalletActions({
       }
       tx.broadcast();
       setConfirmOpen(false);
-      setSheet("send");
-      setSendState("success");
-      setSendMessage(`Signed with your key — sent ${amount} ${tokenLabel}.`);
+      // Sukses sudah ditampilkan modal status (✓ Transfer sent) — tutup form
+      // Send sepenuhnya, tanpa pesan sukses ganda di form.
+      setSheet(null);
+      setSendState("idle");
+      setSendMessage("");
       onBalanceRefresh?.();
       void invalidateWalletTokens();
       tx.succeed({
@@ -818,7 +820,6 @@ export function WalletActions({
       <TxReviewModal
         open={confirmOpen}
         amountText={`${ccAmount || "0"} ${selectedSendToken ? displayName(selectedSendToken.instrumentId) : ""}`}
-        subText={`to ${formatPartyIdForDisplay(normalizeSendRecipientInput(recipientUsername))}`}
         rows={[
           {
             label: "Recipient",
