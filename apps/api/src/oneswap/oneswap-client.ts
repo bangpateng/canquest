@@ -72,6 +72,11 @@ export class OneSwapClient {
     return this.ensureReady().swaps.getOpenSwap(userRef);
   }
 
+  /** Satu swap by id — untuk rekonsiliasi outcome swap yang sudah terminal. */
+  async getSwap(id: string) {
+    return this.ensureReady().swaps.getSwap(id);
+  }
+
   /** Cancel swap yang masih awaiting_deposit (belum nerima deposit). */
   async cancel(id: string) {
     return this.ensureReady().swaps.cancel(id);

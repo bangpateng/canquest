@@ -162,6 +162,26 @@ export class SwapService {
       );
     }
 
+    // Persist row PENDING + esc id SEKARANG (rekomendasi rekonsiliasi docs
+    // OneSwap): POST /swap memakai row ini — bukan createSwap lagi — jadi
+    // outcome swap (termasuk yang selesai di antara prepare dan submit)
+    // tercatat benar. cantexSubmissionId = kolom legacy, dipakai utk esc id.
+    await this.prisma.swapTransaction.create({
+      data: {
+        userId,
+        direction:
+          params.from.toUpperCase() === CC_SYMBOL ? 'CC_TO_TOKEN' : 'TOKEN_TO_CC',
+        sellInstrumentId: params.from,
+        sellInstrumentAdmin: '',
+        sellAmount: params.amount,
+        buyInstrumentId: params.to,
+        buyInstrumentAdmin: '',
+        clientNonce: params.clientNonce,
+        cantexSubmissionId: swap.id,
+        status: 'PENDING',
+      },
+    });
+
     // Bangun command transfer input (mirror step 3, tanpa submit).
     const inputToken = await this.resolveToken(params.from);
     const built = await this.ledger.buildCip56TransferCommand({
@@ -243,52 +263,61 @@ export class SwapService {
         };
       }
 
-      // Idempotency: clientNonce sudah dipakai? Return hasil sebelumnya.
-      // Row FAILED = attempt sebelumnya gagal di pipeline kita — izinkan retry
-      // (hapus row lama) daripada memblokir user dengan "pending" palsu.
+      // Idempotency clientNonce:
+      //  - EXECUTED → return hasil.
+      //  - PENDING → row milik prepare-external (esc id tersimpan) → LANJUT
+      //    (bukan early-return; deposit user sudah dikirim ke swap itu).
+      //  - FAILED → attempt pipeline gagal — hapus, izinkan retry.
       const existing = await this.prisma.swapTransaction.findUnique({
         where: { clientNonce: params.clientNonce },
       });
-      if (existing) {
-        if (existing.status === 'FAILED') {
-          await this.prisma.swapTransaction.delete({
-            where: { id: existing.id },
-          });
-        } else {
-          return {
-            success: existing.status === 'EXECUTED',
-            direction: existing.direction,
-            outputAmount: existing.buyAmount?.toString() ?? undefined,
-            swapId: existing.id,
-            message:
-              existing.status === 'EXECUTED'
-                ? 'Swap already completed.'
-                : 'Swap already pending.',
-          };
-        }
+      if (existing && existing.status === 'EXECUTED') {
+        return {
+          success: true,
+          direction: existing.direction,
+          outputAmount: existing.buyAmount?.toString() ?? undefined,
+          swapId: existing.id,
+          message: 'Swap already completed.',
+        };
+      }
+      if (existing && existing.status === 'FAILED') {
+        await this.prisma.swapTransaction.delete({
+          where: { id: existing.id },
+        });
       }
 
       const direction =
         params.from.toUpperCase() === CC_SYMBOL ? 'CC_TO_TOKEN' : 'TOKEN_TO_CC';
 
-      // Buat record SwapTransaction PENDING (mirror pattern Cantex lama).
-      const swapTx = await this.prisma.swapTransaction.create({
-        data: {
-          userId,
-          direction,
-          sellInstrumentId: params.from,
-          sellInstrumentAdmin: '', // OneSwap identifikasi via symbol, admin di-resolve saat transfer
-          sellAmount: params.amount,
-          buyInstrumentId: params.to,
-          buyInstrumentAdmin: '',
-          clientNonce: params.clientNonce,
-          status: 'PENDING',
-        },
-      });
+      // Row PENDING: pakai row milik prepare-external (esc id tersimpan di
+      // cantexSubmissionId) bila ada; buat baru hanya untuk jalur non-external.
+      const swapTx =
+        existing && existing.status === 'PENDING'
+          ? await this.prisma.swapTransaction.update({
+              where: { id: existing.id },
+              data: { direction, status: 'PENDING' },
+            })
+          : await this.prisma.swapTransaction.create({
+              data: {
+                userId,
+                direction,
+                sellInstrumentId: params.from,
+                sellInstrumentAdmin: '', // OneSwap identifikasi via symbol, admin di-resolve saat transfer
+                sellAmount: params.amount,
+                buyInstrumentId: params.to,
+                buyInstrumentAdmin: '',
+                clientNonce: params.clientNonce,
+                status: 'PENDING',
+              },
+            });
 
       try {
         const result = await this.runOneSwap(userId, userInfo, params, {
           skipDeposit: params.externalDepositDone === true,
+          priorSwapId:
+            existing && existing.status === 'PENDING'
+              ? existing.cantexSubmissionId
+              : swapTx.cantexSubmissionId,
         });
         // Update record sesuai hasil.
         await this.prisma.swapTransaction.update({
@@ -332,7 +361,7 @@ export class SwapService {
     userId: string,
     user: { id: string; username: string; cantonPartyId: string },
     params: ExecuteSwapParams,
-    opts?: { skipDeposit?: boolean },
+    opts?: { skipDeposit?: boolean; priorSwapId?: string | null },
   ): Promise<SwapExecResult> {
     const cfg = getOneSwapConfig();
 
@@ -360,9 +389,15 @@ export class SwapService {
     const openSwap = opts?.skipDeposit
       ? await this.oneswap.getOpenSwap(user.id)
       : null;
+    const priorSwap =
+      !openSwap && opts?.skipDeposit && opts.priorSwapId
+        ? await this.oneswap.getSwap(opts.priorSwapId).catch(() => null)
+        : null;
     let swap = openSwap
       ? openSwap
-      : await this.createOrResumeSwap(
+      : priorSwap
+        ? priorSwap
+        : await this.createOrResumeSwap(
       {
         userRef: user.id,
         inSymbol: params.from,
