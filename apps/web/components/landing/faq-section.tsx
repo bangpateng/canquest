@@ -33,6 +33,18 @@ const faqs = [
     a: "Restore your wallet with your Backup Key — the 64-character code you saved during setup — and set a new passphrase. If both the passphrase and the Backup Key are lost, the wallet cannot be recovered by anyone, including us. That is what true self-custody means.",
   },
   {
+    q: "How do I get CC into my wallet?",
+    a: "Three ways: receive from another CanQuest user (instant if one-step transfer is enabled), receive from any external Canton wallet, or withdraw from an exchange that supports the Canton Network — use your Party ID as the address and include the exchange's memo/tag exactly as shown. Only send assets on Canton: other networks will be lost.",
+  },
+  {
+    q: "What happens if I use a new device or clear my browser data?",
+    a: "Your key lives encrypted in your browser, not on our servers' reach. On a new device, sign in and unlock with your passphrase (your encrypted key syncs to your account), or restore from your Backup Key in Settings → Wallet Keys. If you clear browser data without either, the wallet cannot be recovered.",
+  },
+  {
+    q: "Do I need to lock CC to join campaigns?",
+    a: "It depends on the campaign. Some require locking CC for a term (it returns in full when unlocked), some accept points instead, and some are free to enter — the requirement is shown on each campaign card.",
+  },
+  {
     q: "How do I get an invite code?",
     a: "From the CanQuest team or a partner. Wallet creation is gated by an invite code under a daily quota. Without a code, you can't create a party ID yet.",
   },
