@@ -5,7 +5,6 @@ import { UsersModule } from '../users/users.module';
 import { KeycloakTokenService } from '../auth/keycloak-token.service';
 import { KeycloakAdminService } from '../auth/keycloak-admin.service';
 import { CantonLedgerService } from './canton-ledger.service';
-import { WalletOnboardingService } from './wallet-onboarding.service';
 import { SpliceValidatorService } from './splice-validator.service';
 import { FeaturedAppActivityService } from './featured-app-activity.service';
 import { CcInboundSyncService } from './cc-inbound-sync.service';
@@ -44,7 +43,6 @@ import { SigningRelayService } from './signing-relay.service';
     CantonPriceService,
     TransactionDetailService,
     QuestLedgerService,
-    WalletOnboardingService,
     LockEligibilityService,
     OfferReconcilerService,
     CantonUpdatesService,
@@ -63,7 +61,6 @@ import { SigningRelayService } from './signing-relay.service';
     CantonPriceService,
     TransactionDetailService,
     QuestLedgerService,
-    WalletOnboardingService,
     LockEligibilityService,
     OfferReconcilerService,
     CantonUpdatesService,

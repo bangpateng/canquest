@@ -6,7 +6,7 @@ import {
   formatEndMeta,
   formatRewardAmount,
 } from "@/lib/canton/campaign-reward";
-import { CampaignClaimCta } from "@/components/app/campaign/campaign-fcfs-reward-card";
+import { CampaignClaimCta } from "@/components/app/campaign/campaign-claim-cta";
 import { CampaignStatusRow } from "@/components/app/campaign/campaign-status-row";
 import { ClaimDetailsModal } from "@/components/app/campaign/claim-details-modal";
 import { RewardReveal } from "@/components/app/campaign/reward-reveal";

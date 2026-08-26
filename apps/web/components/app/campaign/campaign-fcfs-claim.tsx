@@ -7,7 +7,7 @@ import {
   formatFcfsSlotsRemaining,
   isFcfsSlotsFull,
 } from "@/lib/canton/campaign-reward";
-import { CampaignClaimCta } from "@/components/app/campaign/campaign-fcfs-reward-card";
+import { CampaignClaimCta } from "@/components/app/campaign/campaign-claim-cta";
 import { ClaimDetailsModal } from "@/components/app/campaign/claim-details-modal";
 import { TokenUsdValue } from "@/components/app/earn/cc-usd-value";
 import { normalizeRewardToken, type RewardTokenSymbol } from "@/lib/quest/quest-types";
