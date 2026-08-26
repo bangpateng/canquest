@@ -58,6 +58,7 @@ const res = await fetch(`${LEDGER}/v2/state/active-contracts`, {
 const contracts = await res.json();
 let total = 0;
 const kinds = {};
+const instr = [];
 for (const entry of contracts ?? []) {
   const ev = entry?.contractEntry?.JsActiveContract?.createdEvent ?? entry;
   const tid = String(ev.templateId ?? '?');
@@ -66,7 +67,17 @@ for (const entry of contracts ?? []) {
   if (tid.includes('Splice.Amulet:Amulet') && ev.createArgument?.owner === PARTY) {
     total += parseFloat(ev.createArgument?.amount?.initialAmount ?? ev.createArgument?.amount?.amount ?? '0');
   }
+  if (kind.includes('TransferInstruction')) {
+    instr.push({
+      receiver: String(ev.createArgument?.receiver ?? '').split('::')[0],
+      desc: ev.createArgument?.description ?? ev.createArgument?.transfer?.description ?? '(none)',
+    });
+  }
 }
 console.log('Party:', PARTY.split('::')[0]);
 console.log('Saldo CC:', total.toFixed(4));
 console.log('Kontrak aktif:', JSON.stringify(kinds));
+if (instr.length) {
+  console.log('Instruksi transfer (sender copy):');
+  for (const i of instr) console.log(`  → ${i.receiver} | memo: ${JSON.stringify(i.desc)}`);
+}
