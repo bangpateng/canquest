@@ -52,6 +52,13 @@ export class SwapDto {
   @MinLength(8, { message: 'Idempotency nonce is required.' })
   @MaxLength(64)
   clientNonce!: string;
+
+  /** Slippage tolerance (persen, mis. 0.5 = 0.5%). Default 0.5. */
+  @IsOptional()
+  @IsNumber()
+  @Min(0.01)
+  @Max(50)
+  slippagePct?: number;
 }
 
 /** Request body POST /api/party/swap/quote — live quote preview. */

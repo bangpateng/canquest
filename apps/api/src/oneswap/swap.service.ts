@@ -103,7 +103,10 @@ export class SwapService {
       where: { clientNonce: params.clientNonce },
     });
     if (existing) {
-      throw new BadRequestException('Swap with this nonce already exists.');
+      if (existing.status !== 'FAILED') {
+        throw new BadRequestException('Swap with this nonce already exists.');
+      }
+      await this.prisma.swapTransaction.delete({ where: { id: existing.id } });
     }
 
     // Quote gate (mirror runOneSwap step 1).
@@ -120,14 +123,25 @@ export class SwapService {
     }
 
     // Create-or-resume swap OneSwap (mirror step 2) → depositParty.
-    let swap = await this.createOrResumeSwap({
-      userRef: user.id,
-      inSymbol: params.from,
-      amountIn: params.amount,
-      outSymbol: params.to,
-      minOut: Math.max(0, quote.amountOut * 0.98),
-      slippageBps: cfg.defaultSlippageBps,
-    });
+    // Slippage dari user (UI) — swap inilah yang nanti di-resume POST /swap.
+    const prepSlippagePct = params.slippagePct ?? 0.5;
+    const prepMinOut = Math.max(
+      0,
+      quote.amountOut * (1 - prepSlippagePct / 100),
+    );
+    let swap = await this.createOrResumeSwap(
+      {
+        userRef: user.id,
+        inSymbol: params.from,
+        amountIn: params.amount,
+        outSymbol: params.to,
+        minOut: prepMinOut,
+        slippageBps: Math.round(prepSlippagePct * 100),
+      },
+      // External: deposit PASTI belum dikirim saat prepare — cancel-recreate
+      // awaiting_deposit yang basi di sini aman (deposit lama sudah terminal).
+      undefined,
+    );
     if (
       ['returned', 'refunded', 'expired', 'failed', 'cancelled'].includes(
         swap.status,
@@ -138,8 +152,8 @@ export class SwapService {
         inSymbol: params.from,
         amountIn: params.amount,
         outSymbol: params.to,
-        minOut: Math.max(0, quote.amountOut * 0.98),
-        slippageBps: cfg.defaultSlippageBps,
+        minOut: prepMinOut,
+        slippageBps: Math.round(prepSlippagePct * 100),
       });
     }
     if (swap.status !== 'awaiting_deposit') {
@@ -230,20 +244,28 @@ export class SwapService {
       }
 
       // Idempotency: clientNonce sudah dipakai? Return hasil sebelumnya.
+      // Row FAILED = attempt sebelumnya gagal di pipeline kita — izinkan retry
+      // (hapus row lama) daripada memblokir user dengan "pending" palsu.
       const existing = await this.prisma.swapTransaction.findUnique({
         where: { clientNonce: params.clientNonce },
       });
       if (existing) {
-        return {
-          success: existing.status === 'EXECUTED',
-          direction: existing.direction,
-          outputAmount: existing.buyAmount?.toString() ?? undefined,
-          swapId: existing.id,
-          message:
-            existing.status === 'EXECUTED'
-              ? 'Swap already completed.'
-              : 'Swap already pending.',
-        };
+        if (existing.status === 'FAILED') {
+          await this.prisma.swapTransaction.delete({
+            where: { id: existing.id },
+          });
+        } else {
+          return {
+            success: existing.status === 'EXECUTED',
+            direction: existing.direction,
+            outputAmount: existing.buyAmount?.toString() ?? undefined,
+            swapId: existing.id,
+            message:
+              existing.status === 'EXECUTED'
+                ? 'Swap already completed.'
+                : 'Swap already pending.',
+          };
+        }
       }
 
       const direction =
@@ -328,14 +350,23 @@ export class SwapService {
 
     // ── 2. Create-or-resume (anti OpenSwapExistsError) ───────────────────
     // 1 userRef = 1 open swap. Kalau ada yang masih terbuka, resolve dulu.
-    let swap = await this.createOrResumeSwap({
-      userRef: user.id,
-      inSymbol: params.from,
-      amountIn: params.amount,
-      outSymbol: params.to,
-      minOut: Math.max(0, quote.amountOut * 0.98), // floor 2% di bawah quote
-      slippageBps: cfg.defaultSlippageBps,
-    });
+    // skipDeposit (external) = deposit user SUDAH dikirim ke open swap yang
+    // ada → keepAwaitingDeposit supaya swap itu di-resume, bukan di-cancel
+    // (cancel = deposit yatim; docs OneSwap: cancel hanya sebelum deposit).
+    const slippagePct = params.slippagePct ?? 0.5;
+    const minOutFactor = Math.max(0, 1 - slippagePct / 100);
+    const slippageBps = Math.round(slippagePct * 100);
+    let swap = await this.createOrResumeSwap(
+      {
+        userRef: user.id,
+        inSymbol: params.from,
+        amountIn: params.amount,
+        outSymbol: params.to,
+        minOut: Math.max(0, quote.amountOut * minOutFactor),
+        slippageBps,
+      },
+      { keepAwaitingDeposit: opts?.skipDeposit === true },
+    );
 
     // Kalau swap lama sudah terminal (refunded/expired), recreate yang baru.
     if (
@@ -343,14 +374,17 @@ export class SwapService {
         swap.status,
       )
     ) {
-      swap = await this.createOrResumeSwap({
-        userRef: user.id,
-        inSymbol: params.from,
-        amountIn: params.amount,
-        outSymbol: params.to,
-        minOut: Math.max(0, quote.amountOut * 0.98),
-        slippageBps: cfg.defaultSlippageBps,
-      });
+      swap = await this.createOrResumeSwap(
+        {
+          userRef: user.id,
+          inSymbol: params.from,
+          amountIn: params.amount,
+          outSymbol: params.to,
+          minOut: Math.max(0, quote.amountOut * minOutFactor),
+          slippageBps,
+        },
+        { keepAwaitingDeposit: opts?.skipDeposit === true },
+      );
     }
 
     // ── 3. Transfer input user → depositParty (backend jadi funder) ───────
@@ -478,14 +512,17 @@ export class SwapService {
    *   - awaiting_deposit → cancel lalu recreate (dana belum masuk, aman)
    *   - sudah deposit → resume (biarkan waitForSwap yang tunggu)
    */
-  private async createOrResumeSwap(args: {
-    userRef: string;
-    inSymbol: string;
-    amountIn: number;
-    outSymbol: string;
-    minOut: number;
-    slippageBps: number;
-  }) {
+  private async createOrResumeSwap(
+    args: {
+      userRef: string;
+      inSymbol: string;
+      amountIn: number;
+      outSymbol: string;
+      minOut: number;
+      slippageBps: number;
+    },
+    opts?: { keepAwaitingDeposit?: boolean },
+  ) {
     try {
       return await this.oneswap.createSwap(args);
     } catch (err) {
@@ -496,12 +533,22 @@ export class SwapService {
         // Race: open swap hilang di antara — retry create.
         return this.oneswap.createSwap(args);
       }
+      // Deposit user SUDAH DIKIRIM ke swap ini (jalur external sign):
+      // OneSwap mencocokkan deposit per depositParty — membatalkan swap
+      // ini membuat depositnya yatim (kasus post-terminal, manual review
+      // menurut docs). RESUME swap ini, jangan cancel.
+      if (opts?.keepAwaitingDeposit && open.status === 'awaiting_deposit') {
+        return open;
+      }
       // awaiting_deposit (belum nerima deposit) → cancel + recreate.
       if (open.status === 'awaiting_deposit') {
         try {
           await this.oneswap.cancel(open.id);
         } catch {
-          /* mungkin sudah deposit — biarkan */
+          // Docs: cancel hanya bisa SEBELUM deposit. ConflictError di sini
+          // berarti deposit SUDAH terdeteksi → swap harus jalan — resume,
+          // JANGAN recreate (recreate akan OpenSwapExists lagi).
+          return open;
         }
         return this.oneswap.createSwap(args);
       }
@@ -521,6 +568,16 @@ export class SwapService {
       throw new Error(`Token symbol "${symbol}" not found in OneSwap tokens.`);
     }
     return tok;
+  }
+
+  /**
+   * Normalisasi symbol user → casing kanonik OneSwap (map uppercase-keyed).
+   * OneSwap case-sensitive ('USDCx' sah, 'USDCX' = NoDirectPool). Fallback:
+   * return input apa adanya bila tak dikenal (biar error OneSwap jelas).
+   */
+  async canonicalSymbol(symbol: string): Promise<string> {
+    const map = await this.getTokenMap();
+    return map.get(symbol.trim().toUpperCase())?.symbol ?? symbol.trim();
   }
 
   private async getTokenMap(): Promise<Map<string, Token>> {

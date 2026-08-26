@@ -292,8 +292,8 @@ export class PartySwapController {
     }
     try {
       const quote = await this.oneswap.getQuote({
-        from: body.from,
-        to: body.to,
+        from: await this.swapService.canonicalSymbol(body.from),
+        to: await this.swapService.canonicalSymbol(body.to),
         amount: body.amount,
       });
       // Shape OneSwap native sesuai dokumentasi Quote type. Field:
@@ -356,11 +356,12 @@ export class PartySwapController {
     const externalDepositDone =
       user.walletKind === 'external' && body.externalDepositDone === true;
     const result = await this.swapService.executeSwap(req.user.userId, {
-      from: body.from,
-      to: body.to,
+      from: await this.swapService.canonicalSymbol(body.from),
+      to: await this.swapService.canonicalSymbol(body.to),
       amount: body.amount,
       clientNonce: body.clientNonce,
       externalDepositDone,
+      slippagePct: body.slippagePct,
     });
     if (!result.success) {
       throw new BadRequestException(
@@ -383,10 +384,11 @@ export class PartySwapController {
   @Post('swap/prepare-external')
   async prepareExternalSwap(@Req() req: AuthedReq, @Body() body: SwapDto) {
     return this.swapService.prepareExternalSwap(req.user.userId, {
-      from: body.from,
-      to: body.to,
+      from: await this.swapService.canonicalSymbol(body.from),
+      to: await this.swapService.canonicalSymbol(body.to),
       amount: body.amount,
       clientNonce: body.clientNonce,
+      slippagePct: body.slippagePct,
     });
   }
 }

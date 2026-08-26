@@ -27,6 +27,8 @@ export interface ExecuteSwapParams {
   amount: number;
   /** Idempotency key dari client (UUID per klik Swap). */
   clientNonce: string;
+  /** Slippage tolerance user (persen, mis. 0.5 = 0.5%). Default 0.5. */
+  slippagePct?: number;
   /** M3b: true utk user external — leg input sudah di-sign browser (swap_input). */
   externalDepositDone?: boolean;
 }
