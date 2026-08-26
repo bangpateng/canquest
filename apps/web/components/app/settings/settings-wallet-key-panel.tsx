@@ -13,10 +13,6 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils/utils";
 import { Card } from "@/components/ui/card";
-import {
-  isAutoAcceptEnabled,
-  setAutoAccept,
-} from "@/lib/wallet/auto-accept";
 import { buttonVariants } from "@/components/ui/button";
 import { inputClass } from "@/lib/ui/ui-tokens";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -34,7 +30,6 @@ import {
   importSyncBlob,
   importWalletKey,
   lock,
-  signPreparedHash,
   unlock,
   type WalletKeyMeta,
 } from "@/lib/wallet/key-manager";
@@ -66,7 +61,6 @@ export function SettingsWalletKeyPanel() {
   // M4: detect custodial users → offer upgrade to non-custodial.
   const { me, refetch: refetchMe } = useMe();
   const isCustodial = me?.walletKind === "custodial" && !!me.cantonPartyId;
-  const [resumeMeta, setResumeMeta] = useState<WalletKeyMeta | null>(null);
   const { prompt: promptPassphrase, passphraseModal } = usePassphrasePrompt();
 
   // Reveal (view backup key)
@@ -372,7 +366,7 @@ export function SettingsWalletKeyPanel() {
               </div>
             ) : null}
 
-            {error ? (
+            {error && reveal !== "form" ? (
               <p
                 role="alert"
                 className="rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm font-medium text-orange-600"
@@ -520,17 +514,31 @@ export function SettingsWalletKeyPanel() {
 
                 {/* View backup key */}
                 {reveal === "hidden" ? (
-                  <button
-                    type="button"
-                    className={cn(buttonVariants({ variant: "secondary" }), "gap-2")}
-                    onClick={() => {
-                      setReveal("form");
-                      setError(null);
-                    }}
-                  >
-                    <Eye className="h-4 w-4" />
-                    Backup Key
-                  </button>
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      className={cn(buttonVariants({ variant: "secondary" }), "gap-2")}
+                      onClick={() => {
+                        setReveal("form");
+                        setError(null);
+                      }}
+                    >
+                      <Eye className="h-4 w-4" />
+                      Backup Key
+                    </button>
+                    <button
+                      type="button"
+                      className={cn(buttonVariants({ variant: "secondary" }), "gap-2")}
+                      onClick={() => {
+                        lock();
+                        resetReveal();
+                      }}
+                      title="Lock the unlocked wallet session on this device. Signing will ask for your passphrase again."
+                    >
+                      <Lock className="h-4 w-4" />
+                      Lock Wallet Now
+                    </button>
+                  </div>
                 ) : null}
 
                 {reveal === "form" ? (
@@ -538,6 +546,14 @@ export function SettingsWalletKeyPanel() {
                     <p className="text-sm font-medium text-[var(--foreground)]">
                       Enter your wallet passphrase to reveal the key.
                     </p>
+                    {error ? (
+                      <p role="alert" className="text-sm font-medium text-orange-600">
+                        {error}
+                        {" "}Forgot your passphrase? Use{" "}
+                        <strong>Restore from Backup Key</strong> below with your
+                        64-character backup hex to set a new one.
+                      </p>
+                    ) : null}
                     <div className="relative">
                       <input
                         type={showPass ? "text" : "password"}

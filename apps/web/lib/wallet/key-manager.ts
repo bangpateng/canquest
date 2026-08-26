@@ -201,6 +201,16 @@ async function decryptSeed(
 // ── sesi unlock (memori saja, tidak persisten) ────────────────────────────
 let session: UnlockedKey | null = null;
 
+/**
+ * Auto-lock idle (standar industri, mirip MetaMask): sesi unlocked yang tidak
+ * dipakai >10 menit dikunci otomatis. Timer di-reset pada setiap operasi
+ * (unlock / sign / export). Seed di-zero-kan — tidak tertinggal di memori
+ * pada komputer yang ditinggalkan dengan tab terbuka.
+ */
+const AUTO_LOCK_MS = 10 * 60 * 1000;
+let lastActivityAt = 0;
+let autoLockTimer: ReturnType<typeof setInterval> | null = null;
+
 export function isUnlocked(): boolean {
   return session !== null;
 }
@@ -208,6 +218,27 @@ export function isUnlocked(): boolean {
 export function lock(): void {
   if (session) session.seed.fill(0);
   session = null;
+}
+
+/** Catat aktivitas + pastikan timer auto-lock berjalan. */
+function noteActivity(): void {
+  lastActivityAt = Date.now();
+  if (autoLockTimer === null && typeof setInterval !== 'undefined') {
+    autoLockTimer = setInterval(() => {
+      if (session && Date.now() - lastActivityAt > AUTO_LOCK_MS) {
+        lock();
+        if (autoLockTimer !== null) {
+          clearInterval(autoLockTimer);
+          autoLockTimer = null;
+        }
+      }
+    }, 30_000);
+  }
+}
+
+/** Kunci bila idle melewati batas — dipanggil di awal tiap operasi kunci. */
+function enforceAutoLock(): void {
+  if (session && Date.now() - lastActivityAt > AUTO_LOCK_MS) lock();
 }
 
 // ── API publik ─────────────────────────────────────────────────────────────
@@ -279,6 +310,7 @@ export async function unlock(passphrase: string): Promise<WalletKeyMeta> {
     throw new Error('Wallet integrity check failed — fingerprint mismatch');
   }
   session = { seed, meta: { ...rec.meta, publicKeyHex: hex(pub) } };
+  noteActivity();
   return session.meta;
 }
 
@@ -289,27 +321,35 @@ export async function unlock(passphrase: string): Promise<WalletKeyMeta> {
  * Harus dalam keadaan unlocked.
  */
 export async function signPreparedHash(hashB64Input: string): Promise<string> {
+  enforceAutoLock();
   if (!session) throw new Error('Wallet locked — unlock with your passphrase first');
+  noteActivity();
   const sig = await ed25519.signAsync(unb64(hashB64Input), session.seed);
   return b64(sig);
 }
 
 /** Tanda tangani pesan arbitrer (byte) — untuk kebutuhan registrasi M2. */
 export async function signBytes(message: Uint8Array): Promise<string> {
+  enforceAutoLock();
   if (!session) throw new Error('Wallet locked — unlock with your passphrase first');
+  noteActivity();
   return b64(await ed25519.signAsync(message, session.seed));
 }
 
 /** Tanda tangani pesan byte → return HEX langsung (tanpa base64 round-trip). */
 export async function signBytesHex(message: Uint8Array): Promise<string> {
+  enforceAutoLock();
   if (!session) throw new Error('Wallet locked — unlock with your passphrase first');
+  noteActivity();
   const sig = await ed25519.signAsync(message, session.seed);
   return Array.from(sig).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 /** Backup: tampilkan ulang seed raw hex. Harus unlocked. */
 export function exportSeedHex(): string {
+  enforceAutoLock();
   if (!session) throw new Error('Wallet locked — unlock with your passphrase first');
+  noteActivity();
   return hex(session.seed);
 }
 
