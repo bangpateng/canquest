@@ -35,6 +35,8 @@ export interface TxStatusConfig {
   subText?: string;
   /** Title shown on the confirmed stage, e.g. "Transfer sent". */
   title: string;
+  /** Catatan tambahan di stage broadcast (mis. "OneSwap matching — up to a minute"). */
+  broadcastNote?: string;
   /** Subtitle shown under the title on confirmed. */
   subtitle?: string;
   /** Title override on the failed stage (default "Transaction failed"). */

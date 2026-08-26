@@ -91,6 +91,11 @@ export function TransactionStatusModal() {
               </div>
               <p className="mt-4 text-base font-bold text-[var(--foreground)]">Broadcasting to Canton</p>
               <p className="mt-1 text-xs text-[var(--muted-foreground)]">Waiting for network confirmation…</p>
+              {config.broadcastNote ? (
+                <p className="mt-1 max-w-[260px] text-xs leading-relaxed text-[var(--muted-foreground)]">
+                  {config.broadcastNote}
+                </p>
+              ) : null}
               <div className="tx-progress-track mt-5 h-1.5 w-full rounded-full bg-[var(--muted)]">
                 <div className="tx-progress-sweep rounded-full bg-gradient-to-r from-transparent via-[rgb(var(--canton-rgb))] to-transparent" />
               </div>

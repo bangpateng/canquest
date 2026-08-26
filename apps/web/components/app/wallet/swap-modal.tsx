@@ -280,6 +280,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
     tx.start({
       amountText: `${formatAmountNum(parseFloat(amount))} ${displayName(sellToken.instrumentId)} → ${estOut} ${displayName(buyToken.instrumentId)}`,
       title: "Swap complete",
+      broadcastNote: "OneSwap is matching your swap — this usually takes under a minute.",
       subtitle: `Received ${estOut} ${displayName(buyToken.instrumentId)}`,
       accentBg: "bg-[var(--primary)]/15",
       accentText: "text-canton",

@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { iconButtonClass } from "@/lib/ui/ui-button-styles";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
+import { useTransactionStatus } from "@/lib/tx/transaction-status";
 import {
   useTransactionNotifications,
   type NotificationItem,
@@ -305,6 +306,10 @@ function NotificationRow({ item }: { item: NotificationItem }) {
 
 export function TransactionNotifications() {
   const t = usePlatformT();
+  // Urutan modal: toast notifikasi ANTRE sampai modal transaksi (Sign →
+  // Broadcast → Success) tertutup — tidak pernah tumpang-tindih.
+  const txModalOpen = useTransactionStatus((s) => s.open);
+
   const { feed, loading, toasts, dismissToast, markSeen } =
     useTransactionNotifications();
   const [open, setOpen] = useState(false);
@@ -365,12 +370,12 @@ export function TransactionNotifications() {
   }, [open, markSeen]);
 
   useEffect(() => {
-    if (toasts.length === 0) return;
+    if (toasts.length === 0 || txModalOpen) return;
     const timers = toasts.map((toast) =>
       setTimeout(() => dismissToast(toast.id), 6_000),
     );
     return () => timers.forEach(clearTimeout);
-  }, [toasts, dismissToast]);
+  }, [toasts, dismissToast, txModalOpen]);
 
   /** Ikon + warna toast mengikuti jenis event (debit = merah, lock = amber, dsb). */
   function toastIcon(toast: (typeof toasts)[number]) {
@@ -526,7 +531,7 @@ export function TransactionNotifications() {
         className="pointer-events-none fixed bottom-20 right-4 z-[60] flex flex-col gap-2 sm:bottom-6 sm:right-6"
         aria-live="polite"
       >
-        {toasts.map((toast) => (
+        {!txModalOpen && toasts.map((toast) => (
           <div
             key={toast.id}
             className="pointer-events-auto flex max-w-sm items-start gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 shadow-lg"

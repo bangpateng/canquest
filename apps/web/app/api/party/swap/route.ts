@@ -8,5 +8,5 @@ export async function POST(req: NextRequest) {
     method: 'POST',
     body,
     headers: { 'Content-Type': 'application/json' },
-  });
+  }, { upstreamTimeoutMs: 300_000 });
 }

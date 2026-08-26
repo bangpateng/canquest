@@ -26,7 +26,7 @@ import { CantonLedgerService } from '../canton/canton-ledger.service';
 import { CantonPriceService } from '../canton/canton-price.service';
 import { OneSwapClient } from '../oneswap/oneswap-client';
 import { PrismaService } from '../prisma/prisma.service';
-import { SkipThrottle } from '@nestjs/throttler';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { SwapDto, SwapQuoteDto } from './dto/swap.dto';
 import { SwapService } from '../oneswap/swap.service';
 import { UsersService } from '../users/users.service';
@@ -340,6 +340,7 @@ export class PartySwapController {
     }
   }
 
+  @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
   @Post('swap')
   async swap(@Req() req: AuthedReq, @Body() body: SwapDto) {
     if (!isOneSwapEnabled()) {
@@ -381,6 +382,7 @@ export class PartySwapController {
    * depositParty OneSwap) untuk ditandatangani browser. Setelah sign,
    * frontend memanggil /party/swap dengan externalDepositDone=true.
    */
+  @Throttle({ ledger: { limit: 10, ttl: 60_000 } })
   @Post('swap/prepare-external')
   async prepareExternalSwap(@Req() req: AuthedReq, @Body() body: SwapDto) {
     return this.swapService.prepareExternalSwap(req.user.userId, {
