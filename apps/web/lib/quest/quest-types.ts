@@ -203,9 +203,11 @@ export type QuestTaskType =
   | "daily_swap"
   | "send_any_daily"
   | "send_to_user_daily"
+  | "send_to_external_daily"
   | "receive_external_daily"
   | "receive_internal_daily"
   | "lock_cc"
+  | "lock_cc_daily"
   | "quiz_yes_no"
   | "quiz_choice"
   | "twitter_follow"
@@ -242,6 +244,16 @@ export const QUEST_HUB_TASK_TYPE_OPTIONS: {
     value: "send_to_user_daily",
     label: "Send to a CanQuest user — daily",
     hint: "Wallet required · resets at 00:00 UTC · counts only sends whose recipient is a registered CanQuest user (CC + USDCx) · set any count",
+  },
+  {
+    value: "send_to_external_daily",
+    label: "Send to an external wallet — daily",
+    hint: "Wallet required · resets at 00:00 UTC · counts only sends whose recipient is NOT a registered CanQuest user (other dapps, CEX deposit addresses) · set any count",
+  },
+  {
+    value: "lock_cc_daily",
+    label: "Lock CC — daily",
+    hint: "Wallet required · resets at 00:00 UTC · counts NEW locks created today (any duration, the 2-minute term qualifies) · set any count",
   },
   {
     value: "receive_external_daily",
@@ -427,8 +439,10 @@ export function isQuestHubRepeatableTask(task: { type: string }): boolean {
     task.type === "daily_swap" ||
     task.type === "send_any_daily" ||
     task.type === "send_to_user_daily" ||
+    task.type === "send_to_external_daily" ||
     task.type === "receive_external_daily" ||
-    task.type === "receive_internal_daily"
+    task.type === "receive_internal_daily" ||
+    task.type === "lock_cc_daily"
   );
 }
 
@@ -469,8 +483,10 @@ export function isCountBasedDailyTask(type: string): boolean {
   return (
     type === "send_any_daily" ||
     type === "send_to_user_daily" ||
+    type === "send_to_external_daily" ||
     type === "receive_external_daily" ||
-    type === "receive_internal_daily"
+    type === "receive_internal_daily" ||
+    type === "lock_cc_daily"
   );
 }
 
@@ -490,8 +506,10 @@ export function countBasedDailyTitle(
   const base: Record<string, string> = {
     send_any_daily: "Send CC or USDCx",
     send_to_user_daily: "Send to a CanQuest user",
+    send_to_external_daily: "Send to an external wallet",
     receive_external_daily: "Receive from an external wallet",
     receive_internal_daily: "Receive from a CanQuest user",
+    lock_cc_daily: "Lock CC",
   };
   const label = base[type] ?? "Daily task";
   return `${label} ${requiredCount}×`;
@@ -1056,9 +1074,11 @@ export const TASK_ACTION_BUTTON_LABEL: Record<string, string> = {
   daily_swap: "Verify",
   send_any_daily: "Verify",
   send_to_user_daily: "Verify",
+  send_to_external_daily: "Verify",
   receive_external_daily: "Verify",
   receive_internal_daily: "Verify",
   lock_cc: "Verify",
+  lock_cc_daily: "Verify",
   quiz_yes_no: "Answer",
   quiz_choice: "Answer",
   twitter_follow: "Twitter",

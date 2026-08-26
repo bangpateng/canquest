@@ -2029,8 +2029,10 @@ export class QuestsService {
         nt === 'daily_swap' ||
         nt === 'send_any_daily' ||
         nt === 'send_to_user_daily' ||
+        nt === 'send_to_external_daily' ||
         nt === 'receive_external_daily' ||
-        nt === 'receive_internal_daily'
+        nt === 'receive_internal_daily' ||
+        nt === 'lock_cc_daily'
       ) {
         (byType[nt] ??= []).push(t);
       }
@@ -2043,8 +2045,10 @@ export class QuestsService {
       swaps,
       sendAny,
       sendToUser,
+      sendToExternal,
       receiveExternal,
       receiveInternal,
+      locksToday,
     ] = await Promise.all([
       byType['send_transaction']?.length
         ? this.countRecentUserSends(userId, windowStart)
@@ -2061,11 +2065,17 @@ export class QuestsService {
       byType['send_to_user_daily']?.length
         ? this.countSendToUserToday(userId, windowStart)
         : Promise.resolve(0),
+      byType['send_to_external_daily']?.length
+        ? this.countSendToExternalToday(userId, windowStart)
+        : Promise.resolve(0),
       byType['receive_external_daily']?.length
         ? this.countReceiveExternalToday(userId, windowStart, undefined)
         : Promise.resolve(0),
       byType['receive_internal_daily']?.length
         ? this.countReceiveInternalToday(userId, windowStart)
+        : Promise.resolve(0),
+      byType['lock_cc_daily']?.length
+        ? this.countLocksCreatedToday(userId, windowStart)
         : Promise.resolve(0),
     ]);
 
@@ -2075,8 +2085,10 @@ export class QuestsService {
       daily_swap: swaps,
       send_any_daily: sendAny,
       send_to_user_daily: sendToUser,
+      send_to_external_daily: sendToExternal,
       receive_external_daily: receiveExternal,
       receive_internal_daily: receiveInternal,
+      lock_cc_daily: locksToday,
     };
 
     const result: Record<string, { required: number; today: number }> = {};
@@ -2241,6 +2253,8 @@ export class QuestsService {
     const isSendToUserDailyTask = taskType === 'send_to_user_daily';
     const isReceiveExternalDailyTask = taskType === 'receive_external_daily';
     const isReceiveInternalDailyTask = taskType === 'receive_internal_daily';
+    const isSendToExternalDailyTask = taskType === 'send_to_external_daily';
+    const isLockCcDailyTask = taskType === 'lock_cc_daily';
     const repeatable24h =
       quest.questKind === QuestKind.EARN_HUB &&
       (taskType === 'daily_check_in' ||
@@ -2250,7 +2264,9 @@ export class QuestsService {
         isSendAnyDailyTask ||
         isSendToUserDailyTask ||
         isReceiveExternalDailyTask ||
-        isReceiveInternalDailyTask);
+        isReceiveInternalDailyTask ||
+        isSendToExternalDailyTask ||
+        isLockCcDailyTask);
 
     // Gate akses Earn: per-campaign, first participation. CAMPAIGN saja (bukan EARN_HUB).
     if (quest.questKind === QuestKind.CAMPAIGN) {
@@ -2345,6 +2361,26 @@ export class QuestsService {
           }
           if (isReceiveInternalDailyTask) {
             const result = await this.verifyReceiveInternalDaily({
+              userId,
+              userPartyId,
+              requiredCount: this.parseSendTransactionRequired(task.target),
+            });
+            if (!result.ok) {
+              throw new BadRequestException(result.message);
+            }
+          }
+          if (isSendToExternalDailyTask) {
+            const result = await this.verifySendToExternalDaily({
+              userId,
+              userPartyId,
+              requiredCount: this.parseSendTransactionRequired(task.target),
+            });
+            if (!result.ok) {
+              throw new BadRequestException(result.message);
+            }
+          }
+          if (isLockCcDailyTask) {
+            const result = await this.verifyLockCcDaily({
               userId,
               userPartyId,
               requiredCount: this.parseSendTransactionRequired(task.target),
@@ -2535,6 +2571,28 @@ export class QuestsService {
         throw new BadRequestException(result.message);
       }
       proof = 'received_internal';
+    }
+    if (isSendToExternalDailyTask) {
+      const result = await this.verifySendToExternalDaily({
+        userId,
+        userPartyId,
+        requiredCount: this.parseSendTransactionRequired(task.target),
+      });
+      if (!result.ok) {
+        throw new BadRequestException(result.message);
+      }
+      proof = 'sent_to_external';
+    }
+    if (isLockCcDailyTask) {
+      const result = await this.verifyLockCcDaily({
+        userId,
+        userPartyId,
+        requiredCount: this.parseSendTransactionRequired(task.target),
+      });
+      if (!result.ok) {
+        throw new BadRequestException(result.message);
+      }
+      proof = 'locked_cc_daily';
     }
 
     // Auto-verify logic by task type
@@ -5498,6 +5556,88 @@ export class QuestsService {
       return {
         ok: false,
         message: `You have sent ${count}/${params.requiredCount} transaction(s) to a CanQuest user today. Send to a CanQuest user to complete this task.`,
+      };
+    }
+    return { ok: true };
+  }
+
+  /**
+   * Count today's outgoing sends whose recipient is NOT a registered CanQuest
+   * user (an external wallet — e.g. another dapp's user, a CEX deposit
+   * address). Mirror of countSendToUserToday using the notCq set.
+   */
+  private async countSendToExternalToday(
+    userId: string,
+    since: Date,
+  ): Promise<number> {
+    const candidates = await this.collectTodayOutgoingCounterparties(
+      userId,
+      since,
+    );
+    if (candidates.length === 0) return 0;
+    const { notCq } = await this.resolveCanQuestCounterparties(candidates);
+    let count = 0;
+    for (const raw of candidates) {
+      const n = normalizeCantonPartyId(raw);
+      if (n && notCq.has(n)) count++;
+    }
+    return count;
+  }
+
+  /** Verify send_to_external_daily: wallet + ≥ requiredCount sends to a NON-CanQuest wallet today. */
+  private async verifySendToExternalDaily(params: {
+    userId: string;
+    userPartyId: string;
+    requiredCount: number;
+  }): Promise<{ ok: boolean; message?: string }> {
+    if (!this.hasRealWallet(params.userPartyId)) {
+      return {
+        ok: false,
+        message: 'Create your Canton wallet first to complete this task.',
+      };
+    }
+    const since = startOfTodayUtc();
+    const count = await this.countSendToExternalToday(params.userId, since);
+    if (count < params.requiredCount) {
+      return {
+        ok: false,
+        message: `You have sent ${count}/${params.requiredCount} transaction(s) to an external wallet today. Send CC to an external wallet to complete this task.`,
+      };
+    }
+    return { ok: true };
+  }
+
+  /** Count locks the user CREATED today (lockedAt since 00:00 UTC). */
+  private async countLocksCreatedToday(
+    userId: string,
+    since: Date,
+  ): Promise<number> {
+    return this.prisma.ccLock.count({
+      where: { userId, lockedAt: { gte: since } },
+    });
+  }
+
+  /**
+   * Verify lock_cc_daily: wallet + ≥ requiredCount NEW locks created today
+   * (any duration — the short 2m term qualifies). Repeatable every 24h.
+   */
+  private async verifyLockCcDaily(params: {
+    userId: string;
+    userPartyId: string;
+    requiredCount: number;
+  }): Promise<{ ok: boolean; message?: string }> {
+    if (!this.hasRealWallet(params.userPartyId)) {
+      return {
+        ok: false,
+        message: 'Create your Canton wallet first to complete this task.',
+      };
+    }
+    const since = startOfTodayUtc();
+    const count = await this.countLocksCreatedToday(params.userId, since);
+    if (count < params.requiredCount) {
+      return {
+        ok: false,
+        message: `You have created ${count}/${params.requiredCount} lock(s) today. Lock CC from your wallet to complete this task.`,
       };
     }
     return { ok: true };

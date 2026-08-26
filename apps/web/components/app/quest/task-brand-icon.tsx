@@ -11,6 +11,10 @@ import {
   Send,
   SendHorizonal,
   Users,
+  ArrowLeftRight,
+  Lock,
+  Globe,
+  UserRound,
 } from "lucide-react";
 
 /**
@@ -78,7 +82,28 @@ export function TaskBrandIcon({
       glyph = <CalendarCheck className={cls} aria-hidden />;
       break;
     case "send_transaction":
+    case "send_any_daily":
       glyph = <SendHorizonal className={cls} aria-hidden />;
+      break;
+    case "send_token":
+      glyph = <SendHorizonal className={cls} aria-hidden />;
+      break;
+    case "send_to_user_daily":
+      glyph = <UserRound className={cls} aria-hidden />;
+      break;
+    case "send_to_external_daily":
+      glyph = <Globe className={cls} aria-hidden />;
+      break;
+    case "daily_swap":
+      glyph = <ArrowLeftRight className={cls} aria-hidden />;
+      break;
+    case "lock_cc":
+    case "lock_cc_daily":
+      glyph = <Lock className={cls} aria-hidden />;
+      break;
+    case "receive_external_daily":
+    case "receive_internal_daily":
+      glyph = <ArrowLeftRight className={cls} aria-hidden />;
       break;
     case "quiz_yes_no":
     case "quiz_choice":

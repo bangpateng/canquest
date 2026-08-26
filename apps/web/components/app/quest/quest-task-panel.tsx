@@ -1386,9 +1386,11 @@ function TaskRow({
                   {sendProgress.today}/{sendProgress.required}{" "}
                   {isDailySwap
                     ? "swaps"
-                    : isCountDaily
-                      ? "transactions"
-                      : "sends"}{" "}
+                    : taskType === "lock_cc_daily"
+                      ? "locks"
+                      : isCountDaily
+                        ? "transactions"
+                        : "sends"}{" "}
                   today
                 </p>
               ) : null}
