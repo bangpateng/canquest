@@ -1340,6 +1340,18 @@ export class AdminService {
     if (!quest) throw new NotFoundException('Quest not found');
     this.assertCampaignQuest(quest);
 
+    // Raffle hanya SETELAH event berakhir: status ENDED, atau Ends At sudah
+    // terlewat. Mencegah draw saat event masih berjalan (peserta masih bisa
+    // masuk, kuota/jumlah peserta belum final).
+    const endedByTime =
+      quest.endsAt != null && quest.endsAt.getTime() <= Date.now();
+    if (quest.status !== 'ENDED' && !endedByTime) {
+      throw new BadRequestException(
+        'This campaign has not ended yet. Wait until the campaign ends (or set ' +
+          'status to ENDED / set Ends At in the past) before drawing winners.',
+      );
+    }
+
     const rewardType = normalizeRewardType(quest.rewardType);
     if (
       rewardType === RewardType.INVITE_CODE_RANDOM ||

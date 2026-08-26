@@ -103,7 +103,7 @@ export class NotificationsService {
         : 'Raffle draw',
       endsLabel: this.endsLabel(quest),
       tasksLabel: this.tasksLabel(quest.tasks.length),
-      campaignUrl: this.emails.webUrl('/earn'),
+      campaignUrl: this.emails.webUrl(`/earn/${questId}`),
     };
 
     const created = await this.prisma.emailNotificationLog.createMany({
@@ -167,7 +167,7 @@ export class NotificationsService {
         claimByLabel: claimDeadline
           ? `Claim by ${formatDate(claimDeadline)}`
           : 'Claim via your dApp dashboard',
-        claimUrl: this.emails.webUrl('/dashboard'),
+        claimUrl: this.emails.webUrl(`/earn/${questId}`),
       };
       return {
         userId: w.id,
