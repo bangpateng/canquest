@@ -2,14 +2,13 @@
 import { AuthGuard } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
 import {
-  BadRequestException,
   Controller,
   Get,
   Logger,
   Req,
-  SkipThrottle,
   UseGuards,
 } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { UsersService } from '../users/users.service';
 import type { AuthedReq } from './party-shared';
 
