@@ -93,7 +93,7 @@ export function QuestSubmitSection({
   submitting,
   submitError,
   onSubmit,
-  cantonLedgerConfigured = false,
+  cantonLedgerConfigured: _cantonLedgerConfigured = false,
   campaignEnded = false,
 }: {
   partyId: string | null;
@@ -106,43 +106,40 @@ export function QuestSubmitSection({
 }) {
   const t = usePlatformT();
 
+  // Gaya identik dengan CampaignClaimCta — SATU tombol gradient full-width,
+  // tanpa kotak Card/border. Pesan status tampil di bawah sebagai banner polos.
   return (
-    <section className="py-6">
-      <Card className="overflow-hidden px-6 py-8 text-center">
-        {campaignEnded ? (
-          <p className={cn("relative mx-auto mt-2 max-w-md", warnBannerClass)}>
-            {t("quests.campaignEndedClosed")}
-          </p>
-        ) : null}
-
-        <button
-          type="button"
-          disabled={submitting || !partyId || campaignEnded}
-          onClick={onSubmit}
-          className={cn(
-            buttonVariants({ size: "default" }),
-            "relative min-w-[8rem] px-5",
-          )}
-        >
-          {submitting ? <LoadingSpinner size="sm" /> : null}
-          {submitting ? "Submitting…" : "Submit"}
-        </button>
-
-        {!partyId && (
-          <p className={cn("relative mt-6", warnBannerClass)}>
-            <Link href="/wallet" className="font-semibold underline underline-offset-2">
-              Create your wallet
-            </Link>{" "}
-            first — required for Quest and Earn.
-          </p>
+    <div className="space-y-3">
+      <button
+        type="button"
+        disabled={submitting || !partyId || campaignEnded}
+        onClick={onSubmit}
+        className={cn(
+          buttonVariants({ size: "block" }),
+          "h-12 text-sm font-bold",
         )}
-        {submitError && (
-          <p className={cn("relative mx-auto mt-6 max-w-md", errorBannerClass)}>
-            {submitError}
-          </p>
-        )}
-      </Card>
-    </section>
+      >
+        {submitting ? <LoadingSpinner size="sm" /> : null}
+        {submitting ? "Submitting…" : "Submit"}
+      </button>
+
+      {campaignEnded ? (
+        <p className={cn(warnBannerClass)}>{t("quests.campaignEndedClosed")}</p>
+      ) : null}
+
+      {!partyId && (
+        <p className="text-sm font-medium text-orange-600">
+          <Link href="/wallet" className="font-semibold underline underline-offset-2">
+            Create your wallet
+          </Link>{" "}
+          first to join this campaign.
+        </p>
+      )}
+
+      {submitError ? (
+        <p className={cn(errorBannerClass)}>{submitError}</p>
+      ) : null}
+    </div>
   );
 }
 
