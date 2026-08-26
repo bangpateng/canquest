@@ -24,7 +24,6 @@ import { usePassphrasePrompt } from "@/lib/wallet/use-passphrase-prompt";
 import {
   deleteWalletKey,
   exportSeedHex,
-  exportSyncBlob,
   getWalletKeyMeta,
   hasWalletKey,
   importSyncBlob,
@@ -83,7 +82,6 @@ export function SettingsWalletKeyPanel() {
 
   // M4b: sync blob (unlock on new device + on/off toggle)
   const [syncBlob, setSyncBlob] = useState<string | null>(null);
-  const [syncChecked, setSyncChecked] = useState(false);
   const [unlockPass, setUnlockPass] = useState("");
 
   const refresh = useCallback(async () => {
@@ -122,7 +120,7 @@ export function SettingsWalletKeyPanel() {
           });
           if (!res.ok) return;
           const data = (await res.json()) as { blob?: string | null };
-          setSyncChecked(!!data.blob);
+          setSyncBlob(data.blob ?? null);
         } catch {
           /* non-fatal */
         }
@@ -145,42 +143,6 @@ export function SettingsWalletKeyPanel() {
       setError(e instanceof Error ? e.message : "Failed to unlock");
       // passphrase salah → hapus record yang barusan di-import, coba lagi
       await deleteWalletKey().catch(() => undefined);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  /** M4b: toggle sync on/off. */
-  async function toggleSync(next: boolean) {
-    setBusy(true);
-    setError(null);
-    try {
-      if (next) {
-        const blob = await exportSyncBlob();
-        if (!blob) throw new Error("No wallet key in this browser");
-        const res = await fetch("/api/party/wallet-key/backup", {
-          method: "PUT",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ blob }),
-        });
-        if (!res.ok) {
-          const raw = (await res.json().catch(() => null)) as {
-            message?: string;
-          } | null;
-          throw new Error(raw?.message ?? "Failed to sync");
-        }
-        setSyncBlob(blob);
-      } else {
-        await fetch("/api/party/wallet-key/backup", {
-          method: "DELETE",
-          credentials: "include",
-        });
-        setSyncBlob(null);
-      }
-      setSyncChecked(next);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Sync toggle failed");
     } finally {
       setBusy(false);
     }
@@ -262,7 +224,6 @@ export function SettingsWalletKeyPanel() {
       const existing = await getWalletKeyMeta();
       if (existing?.publicKeyHex && existing.hint) {
         setError(null);
-        setResumeMeta(existing);
         setPhase("registering");
         void registerUpgradeWallet(existing);
         return;
@@ -273,7 +234,6 @@ export function SettingsWalletKeyPanel() {
       return;
     }
     setError(null);
-    setResumeMeta(null);
     setPhase("upgrading");
   }
 
@@ -512,7 +472,7 @@ export function SettingsWalletKeyPanel() {
             {phase === "ready" && meta ? (
               <div className="space-y-5">
 
-                {/* View backup key */}
+                {/* View backup key + manual lock */}
                 {reveal === "hidden" ? (
                   <div className="flex flex-wrap gap-3">
                     <button
@@ -548,8 +508,7 @@ export function SettingsWalletKeyPanel() {
                     </p>
                     {error ? (
                       <p role="alert" className="text-sm font-medium text-orange-600">
-                        {error}
-                        {" "}Forgot your passphrase? Use{" "}
+                        {error} Forgot your passphrase? Use{" "}
                         <strong>Restore from Backup Key</strong> below with your
                         64-character backup hex to set a new one.
                       </p>
