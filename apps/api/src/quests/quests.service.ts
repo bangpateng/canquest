@@ -3063,7 +3063,9 @@ export class QuestsService {
           rewardVariant: variant,
           message:
             custom ||
-            `Congratulations! You received ${quest.rewardCc} CC and code: ${draw.inviteCode}`,
+            (variant === 'CODE'
+              ? `Congratulations! Your invite code: ${draw.inviteCode}`
+              : `Congratulations! You received ${quest.rewardCc} CC and code: ${draw.inviteCode}`),
         };
       }
       if (draw?.distributed && !draw.inviteCode) {
