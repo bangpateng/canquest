@@ -263,8 +263,8 @@ export function AdminReferralAuditPanel() {
           </div>
 
           {/* Ringkasan per-pengundang */}
-          <div className="overflow-hidden rounded-2xl border border-[var(--border)]">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto rounded-2xl border border-[var(--border)]">
+            <table className="w-full min-w-[36rem] text-left text-sm">
               <thead>
                 <tr className="border-b border-[var(--border)] bg-[var(--muted)]/50 text-left">
                   <th className="px-4 py-3 font-semibold">Referrer</th>

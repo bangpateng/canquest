@@ -130,8 +130,8 @@ export function AdminQuestTable({
         </div>
       )}
 
-      <div className="overflow-hidden rounded-2xl border border-[var(--border)]">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-2xl border border-[var(--border)]">
+        <table className="w-full min-w-[40rem] text-left text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] bg-[var(--muted)]/50 text-left">
               <th className="px-5 py-3 font-semibold">Campaign</th>

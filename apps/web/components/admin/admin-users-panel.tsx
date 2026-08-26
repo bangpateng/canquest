@@ -354,8 +354,8 @@ export function AdminUsersPanel() {
       ) : !data || data.users.length === 0 ? (
         <p className="text-sm text-[var(--muted-foreground)]">No users found.</p>
       ) : (
-        <div className="overflow-x-auto overflow-hidden rounded-2xl border border-[var(--border)]">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto rounded-2xl border border-[var(--border)]">
+          <table className="w-full min-w-[44rem] text-left text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] bg-[var(--muted)]/50 text-left">
                 <th className="px-4 py-3">

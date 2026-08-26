@@ -403,8 +403,8 @@ export function WinnersPanel({ questId }: { questId: string }) {
               No participants have completed this quest yet.
             </p>
           ) : (
-            <div className="overflow-hidden rounded-2xl border border-[var(--border)]">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto rounded-2xl border border-[var(--border)]">
+              <table className="w-full min-w-[40rem] text-left text-sm">
                 <thead>
                   <tr className="border-b border-[var(--border)] bg-[var(--muted)]/50 text-left">
                     <th className="px-4 py-3 font-semibold">User</th>
@@ -486,8 +486,8 @@ export function WinnersPanel({ questId }: { questId: string }) {
               No winners selected yet. Go to Participants tab to draw winners.
             </p>
           ) : (
-            <div className="overflow-hidden rounded-2xl border border-[var(--border)]">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto rounded-2xl border border-[var(--border)]">
+              <table className="w-full min-w-[40rem] text-left text-sm">
                 <thead>
                   <tr className="border-b border-[var(--border)] bg-[var(--muted)]/50 text-left">
                     <th className="px-4 py-3 font-semibold">Winner</th>
@@ -606,7 +606,7 @@ export function WinnersPanel({ questId }: { questId: string }) {
           {codes.length === 0 ? (
             <p className="py-6 text-center text-sm text-[var(--muted-foreground)]">No invite codes yet.</p>
           ) : (
-            <div className="overflow-hidden rounded-2xl border border-[var(--border)]">
+            <div className="overflow-x-auto rounded-2xl border border-[var(--border)]">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--muted)]/50 px-4 py-2.5">
                 <p className="text-xs font-semibold text-[var(--muted-foreground)]">
                   {availableCodes} available · {codes.filter((c) => c.assigned).length} assigned
