@@ -25,8 +25,12 @@ const faqs = [
     a: "Currently CC ↔ USDCx. More pairs are coming — it's still in Beta.",
   },
   {
-    q: "Why is the wallet custodial?",
-    a: "To make onboarding simple: sign up with email + invite code, no private keys to manage. The operator submits commands to the ledger, but your balance and transactions are still real on-chain records on Canton — not an off-chain database counter.",
+    q: "Who controls my wallet?",
+    a: "You do — CanQuest is fully non-custodial. Your private key is generated in your browser and encrypted with your passphrase. It never leaves your device, and every on-chain action (send, lock, swap, claim) requires your signature. Even we cannot move your funds.",
+  },
+  {
+    q: "What if I forget my passphrase?",
+    a: "Restore your wallet with your Backup Key — the 64-character code you saved during setup — and set a new passphrase. If both the passphrase and the Backup Key are lost, the wallet cannot be recovered by anyone, including us. That is what true self-custody means.",
   },
   {
     q: "How do I get an invite code?",

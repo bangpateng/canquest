@@ -33,9 +33,11 @@ export default function ConceptsPage() {
           It&apos;s the address you send to and receive CC and tokens at.
         </p>
         <p>
-          CanQuest is <Lead>custodial</Lead>: the operator submits on-chain
-          actions on your behalf, so you don&apos;t manage keys or sign raw
-          transactions.
+          CanQuest is <Lead>non-custodial</Lead>: your Ed25519 private key is
+          generated and encrypted in your browser and never leaves it. Every
+          on-chain action — send, lock, swap, claim — is signed by you. During
+          setup you save a <Lead>Backup Key</Lead> (64-character hex) that can
+          restore your wallet and reset your passphrase on any device.
         </p>
       </DocsSection>
 

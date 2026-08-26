@@ -67,10 +67,22 @@ export default function GettingStartedPage() {
             party ID.
           </li>
           <li>
-            Confirm with the <Lead>email OTP</Lead>. Your Canton party ID is
-            then created and shown in Wallet and Settings.
+            <Lead>Create your key — in your browser.</Lead> During setup you
+            write down a <Lead>Backup Key</Lead> (64-character hex) and verify
+            it by retyping, then choose a <Lead>passphrase</Lead>. The private
+            key is encrypted locally and never sent to any server.
+          </li>
+          <li>
+            Your Canton party ID is created and shown in Wallet and Settings.
+            Every on-chain action from now on asks for your signature.
           </li>
         </OL>
+        <Callout type="warning" title="Save your Backup Key">
+          The Backup Key is the only way to restore your wallet or reset your
+          passphrase — on this device or a new one. Write it offline and keep
+          it private. If you lose both the passphrase and the Backup Key, the
+          wallet cannot be recovered by anyone, including CanQuest.
+        </Callout>
         <Callout type="note" title="One wallet per person">
           A party ID is your on-chain identity on Canton. It cannot be reset or
           multiplied — protect your account. Don&apos;t share your invite code

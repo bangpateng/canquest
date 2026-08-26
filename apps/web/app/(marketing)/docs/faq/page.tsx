@@ -61,9 +61,10 @@ export default function FaqPage() {
       <DocsSection title="Does CanQuest do KYC / identity verification?">
         <p>
           No. CanQuest uses <Lead>structural</Lead> anti-sybil controls
-          (invite-gated wallets, email OTP, server-verified tasks, commitment
-          gating) to make farming costly. It is not a KYC product and does not
-          prove a single real-world human behind every account.
+          (invite-gated wallets, email-verified accounts, browser-held keys,
+          server-verified tasks, commitment gating) to make farming costly. It
+          is not a KYC product and does not prove a single real-world human
+          behind every account.
         </p>
       </DocsSection>
 

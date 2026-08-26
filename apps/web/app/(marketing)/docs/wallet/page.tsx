@@ -56,11 +56,10 @@ export default function WalletPage() {
             otherwise they arrive as an offer the recipient must accept.
           </li>
         </UL>
-        <Callout type="warning" title="Platform fee">
+        <Callout type="note" title="Platform fee">
           CC sends carry a small platform fee (current default{" "}
-          <strong>5 CC</strong>) routed on-chain to the treasury. The exact fee
-          is shown in the send preview and is a configurable default, subject
-          to change.
+          <strong>0.02 CC</strong>). The exact fee is shown in the review step
+          before you sign. It is a configurable default, subject to change.
         </Callout>
       </DocsSection>
 
@@ -121,8 +120,11 @@ export default function WalletPage() {
         </p>
         <UL>
           <li>Per-token. CC is live; USDCx/CBTC are coming soon.</li>
-          <li>Enabling pre-pays a one-time network burn (around 1.5 CC).</li>
-          <li>Toggling has a 7-day cooldown.</li>
+          <li>
+            Valid for 90 days and renews on re-enable — enabling is signed in
+            your browser like every other on-chain action.
+          </li>
+          <li>Turn it off and on any time from Settings.</li>
         </UL>
         <Callout type="warning" title="Trade-off">
           With preapproval <em>off</em>, incoming CC is safer from unwanted
@@ -130,6 +132,27 @@ export default function WalletPage() {
           transfers land instantly but anyone who knows your party ID can push
           CC to you. Most users enable it for convenience.
         </Callout>
+      </DocsSection>
+
+      <DocsSection title="Signing & security">
+        <p>
+          Every on-chain action is signed with the key held in your browser.
+          You enter your <Lead>passphrase</Lead> once per session — after that,
+          transactions only need your confirmation. The wallet{" "}
+          <Lead>auto-locks after 10 minutes</Lead> of inactivity, and you can
+          lock it any time from Settings → Wallet Keys.
+        </p>
+        <UL>
+          <li>Keys are generated and encrypted in your browser — never sent to any server.</li>
+          <li>
+            Forgot your passphrase? Restore with your Backup Key (64-char hex)
+            and set a new one — Settings → Wallet Keys.
+          </li>
+          <li>
+            Lost both passphrase and Backup Key? The wallet is unrecoverable —
+            no one, including CanQuest, can restore it.
+          </li>
+        </UL>
       </DocsSection>
 
       <DocsSection title="Offer inbox">
