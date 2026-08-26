@@ -30,7 +30,10 @@ export async function GET(req: Request) {
     typeof data.accessToken !== 'string' ||
     typeof data.refreshToken !== 'string'
   ) {
-    return NextResponse.json({ message: 'login failed' }, { status: 403 });
+    return NextResponse.json(
+      { message: 'login failed', upstream: data },
+      { status: 403 },
+    );
   }
   const out = NextResponse.redirect(new URL('/overview', url.origin), 302);
   setAuthCookies(out, data.accessToken, data.refreshToken);
