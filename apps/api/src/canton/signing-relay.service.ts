@@ -485,7 +485,7 @@ export class SigningRelayService {
         select: {
           amountMicroCc: true,
           description: true,
-          counterparty: true,
+          referenceId: true, // party ID sender utk display counterparty
           userId: true,
         },
       });
@@ -510,7 +510,7 @@ export class SigningRelayService {
           amountCc: Math.abs(Number(senderCc.amountMicroCc)) / 1_000_000,
           type: 'TRANSFER_IN',
           description: senderCc.description ?? 'Received CC',
-          counterparty: senderCc.userId,
+          referenceId: senderCc.referenceId,
           ledgerTxId: updateId,
           cantonUpdateId: updateId,
           status: 'COMPLETED',
