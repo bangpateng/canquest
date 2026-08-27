@@ -266,14 +266,7 @@ export function OffersModal({
 
       setProcessingAction({ id: offer.contractId, action });
       setSuccessMsg(null);
-      tx.start({
-        amountText,
-        subText,
-        title: labels[action].title,
-        subtitle: labels[action].subtitle,
-        accentBg: "bg-[var(--primary)]/15",
-        accentText: "text-canton",
-      });
+      // Modal status hanya SETELAH sign.
       try {
         // M3b: external → tanda tangan di browser (TransferInstruction).
         if (isExternalWallet) {
@@ -319,7 +312,14 @@ export function OffersModal({
           });
           return;
         }
-        tx.broadcast();
+        tx.startBroadcast({
+          amountText,
+          subText,
+          title: labels[action].title,
+          subtitle: labels[action].subtitle,
+          accentBg: "bg-[var(--primary)]/15",
+          accentText: "text-canton",
+        });
         const endpoint =
           action === "accept"
             ? "/api/party/offers/accept"

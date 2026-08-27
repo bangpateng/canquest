@@ -246,14 +246,7 @@ export function WalletActions({
     // on error). The fetch itself is unchanged.
     const tokenLabel = displayName(selectedSendToken.instrumentId);
     const recipientDisplay = formatPartyIdForDisplay(recipient);
-    tx.start({
-      amountText: `${amount} ${tokenLabel}`,
-      subText: recipientDisplay,
-      title: "Transfer sent",
-      subtitle: "Funds are on the way.",
-      accentBg: "bg-[var(--primary)]/15",
-      accentText: "text-canton",
-    });
+    // Modal status hanya SETELAH sign.
     // ── AUTO-ROUTE: CC → /send-cc, non-CC → /send-token ──────────────────
     // User pilih token di selector, tidak sadar backend beda. CC pakai jalur
     // lama (preapproval path, bisa direct). Non-CC pakai CIP-0056 two-step.
@@ -315,7 +308,14 @@ export function WalletActions({
         setConfirmOpen(false);
         return;
       }
-      tx.broadcast();
+      tx.startBroadcast({
+        amountText: `${amount} ${tokenLabel}`,
+        subText: recipientDisplay,
+        title: "Transfer sent",
+        subtitle: "Funds are on the way.",
+        accentBg: "bg-[var(--primary)]/15",
+        accentText: "text-canton",
+      });
       setConfirmOpen(false);
       // Sukses sudah ditampilkan modal status (✓ Transfer sent) — tutup form
       // Send sepenuhnya, tanpa pesan sukses ganda di form.
@@ -339,7 +339,14 @@ export function WalletActions({
       return;
     }
 
-    tx.broadcast();
+    tx.startBroadcast({
+      amountText: `${amount} ${tokenLabel}`,
+      subText: recipientDisplay,
+      title: "Transfer sent",
+      subtitle: "Funds are on the way.",
+      accentBg: "bg-[var(--primary)]/15",
+      accentText: "text-canton",
+    });
 
     try {
       const res = await fetch(endpoint, {

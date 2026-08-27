@@ -120,14 +120,6 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
     if (!selectedTerm || !amountValid) return;
       setLockState("loading");
       setLockMessage("");
-      tx.start({
-        amountText: `Lock ${numericAmount} CC`,
-        subText: `for ${termLabel(selectedTerm)}`,
-        title: "CC locked",
-        subtitle: `Locked for ${termLabel(selectedTerm)}`,
-        accentBg: "bg-[var(--primary)]/15",
-        accentText: "text-canton",
-      });
       // M3b: user external → sign di browser; tahap 'sign' menunggu passphrase.
       if (isExternalWallet) {
         try {
@@ -164,7 +156,13 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
         }
         return;
       }
-      tx.broadcast();
+      tx.startBroadcast({
+        amountText: `${numericAmount} CC`,
+        title: "CC locked",
+        subtitle: `Locked for ${termLabel(selectedTerm)}`,
+        accentBg: "bg-[var(--primary)]/15",
+        accentText: "text-canton",
+      });
       try {
         const res = await fetch("/api/party/lock", {
           method: "POST",
@@ -220,13 +218,6 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
     async (lockId: string) => {
       const lock = status.activeLocks.find((l) => l.id === lockId);
       setUnlockingId(lockId);
-      tx.start({
-        amountText: lock ? `Unlock ${lock.amountCc} CC` : "Unlock CC",
-        title: "CC unlocked",
-        subtitle: "Funds returned to your wallet.",
-        accentBg: "bg-[var(--primary)]/15",
-        accentText: "text-canton",
-      });
       // M3b: user external → sign di browser.
       if (isExternalWallet) {
         try {
@@ -263,7 +254,13 @@ export function CcLockModal({ open, onClose, status, onRefresh }: CcLockModalPro
         }
         return;
       }
-      tx.broadcast();
+      tx.startBroadcast({
+        amountText: lock ? `${lock.amountCc} CC` : "CC",
+        title: "CC unlocked",
+        subtitle: "Funds returned to your wallet.",
+        accentBg: "bg-[var(--primary)]/15",
+        accentText: "text-canton",
+      });
       try {
         const res = await fetch("/api/party/unlock", {
           method: "POST",

@@ -279,13 +279,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
     const sellSym = sellToken.symbol ?? (sellToken.isCC ? "CC" : sellToken.instrumentId);
     const buySym = buyToken.symbol ?? (buyToken.isCC ? "CC" : buyToken.instrumentId);
     const estOut = quote ? formatAmountNum(quote.amountOut) : "0";
-    tx.start({
-      amountText: `${formatAmountNum(parseFloat(amount))} ${displayName(sellToken.instrumentId)} → ${estOut} ${displayName(buyToken.instrumentId)}`,
-      title: "Swap complete",
-      subtitle: `Received ${estOut} ${displayName(buyToken.instrumentId)}`,
-      accentBg: "bg-[var(--primary)]/15",
-      accentText: "text-canton",
-    });
+    // Modal status hanya SETELAH sign — passphrase adalah UX sign.
 
     try {
       // ── M3b: user EXTERNAL — tanda tangani leg input di browser dulu ──
@@ -340,7 +334,13 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
           return;
         }
       }
-      tx.broadcast();
+      tx.startBroadcast({
+        amountText: `${formatAmountNum(parseFloat(amount))} ${displayName(sellToken.instrumentId)} → ${estOut} ${displayName(buyToken.instrumentId)}`,
+        title: "Swap complete",
+        subtitle: `Received ${estOut} ${displayName(buyToken.instrumentId)}`,
+        accentBg: "bg-[var(--primary)]/15",
+        accentText: "text-canton",
+      });
 
       const res = await fetch("/api/party/swap", {
         method: "POST",

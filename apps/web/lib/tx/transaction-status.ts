@@ -67,6 +67,10 @@ interface TxStatusState {
   retry: (() => void | Promise<void>) | null;
   /** Open at the sign (authorize) stage. */
   start: (config: TxStatusConfig) => void;
+  /** Open DIRECTLY at broadcast stage — signing already completed via
+   *  the passphrase modal (which is the real sign UX). The tx modal
+   *  shouldn't compete with / appear behind the passphrase prompt. */
+  startBroadcast: (config: TxStatusConfig) => void;
   /** Advance to the broadcast (network) stage. */
   broadcast: () => void;
   /** Advance to confirmed, merging any patch (hash / meta / round / title). */
@@ -88,6 +92,8 @@ export const useTransactionStatus = create<TxStatusState>((set, get) => ({
   errorMessage: null,
   retry: null,
   start: (config) => set({ open: true, stage: "sign", config, errorMessage: null, retry: null }),
+  startBroadcast: (config) =>
+    set({ open: true, stage: "broadcast", config, errorMessage: null, retry: null }),
   broadcast: () => set({ stage: "broadcast" }),
   succeed: (patch) => {
     const cur = get().config;
