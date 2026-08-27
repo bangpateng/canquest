@@ -717,37 +717,6 @@ model QuestCompletion {
 /// on-chain ke user party (mis. transfer offer tak ter-accept, network error).
 /// User bisa accept/reject via UI, admin bisa refund/retry.
 /// Replaces the old "fallback off-chain credit" pattern (source of balance drift).
-model PendingDelivery {
-  id                      String   @id @default(cuid())
-  userId                  String
-  user                    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  /// Link ke SwapTransaction asal (opsional — bisa juga dari path non-swap).
-  swapTransactionId       String?
-  swapTransaction         SwapTransaction? @relation(fields: [swapTransactionId], references: [id])
-  /// User Canton party (receiver untuk delivery).
-  userPartyId             String
-  /// Token yang harus di-deliver.
-  tokenId                 String
-  tokenAdmin              String
-  /// Amount token (Decimal, 38,18).
-  amount                  Decimal  @db.Decimal(38, 18)
-  /// Amount CC dalam micro-CC (1 CC = 1e6) bila token = CC/Amulet.
-  amountMicroCc           BigInt?
-  /// PENDING_APPROVAL (offer belum accept) | COMPLETED (sukses) | REJECTED (user reject) | REFUNDED (CC balik ke trading).
-  status                  String   @default("PENDING_APPROVAL")
-  /// 'direct' | 'offer' | 'unknown' — jenis transfer Cantex.
-  transferKind            String?
-  /// TransferInstruction contract id bila offer-kind (perlu accept/reject).
-  transferInstructionCid  String?
-  errorMessage            String?
-  deliveredAt             DateTime?
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
-
-  @@index([userId, status])
-  @@index([status, createdAt])
-}
-
 // ─── v25: DAML CampaignEligibility contract tracking ───────────────────────
 // Mirror on-chain CampaignEligibility contract (LOCK_CC / POINTS eligibility proof).
 // Dibuat backend SETELAH verifikasi lock CC / points utk quest claim.
@@ -784,30 +753,6 @@ model CampaignEligibilityLedger {
 // Mirror on-chain PlatformTransfer contract (atomic send + platform fee).
 // Dibuat backend saat user send token dgn platform fee (feature flag on).
 // Replaces non-atomic sendCc path (2 transfer terpisah) bila QUEST_ATOMIC_PLATFORM_TRANSFER=true.
-model PlatformTransferLedger {
-  id         String   @id @default(cuid())
-  userId     String
-  /// Client-side transfer id (idempotency, match DAML transferId).
-  transferId String   @unique
-  amount     Float
-  feeAmount  Float
-  /// Receiver party id (full, dgn ::suffix).
-  receiver   String
-  /// Treasury party id (full, CANTON_FEE_RECIPIENT_PARTY_ID).
-  treasury   String
-  /// "CC" | "USDCx" | token lain (match DAML token field).
-  token      String   @default("CC")
-  /// DAML PlatformTransfer contract id (null bila create belum sukses).
-  contractId String?
-  /// "PENDING" | "SETTLED" | "CANCELLED" (match DAML status).
-  status     String   @default("PENDING")
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  @@index([userId, status])
-  @@index([status, createdAt])
-}
-
 // ─── v32: Email notification outbox (Resend) ────────────────────────────────
 // Satu baris = satu email campaign untuk satu user. Hook admin (createQuest /
 // drawWinners / updateQuest→ENDED) membuat baris PENDING; worker Bull queue
