@@ -298,6 +298,8 @@ export class SwapService {
       };
     }
     this.swapInFlight.add(userId);
+    // Scope: finally luar perlu membaca flag ini — deklarasi harus di luar try.
+    let pendingBackground = false;
     try {
       const user = await this.users.findById(userId);
       if (!user?.cantonPartyId || !user?.username) {
@@ -377,7 +379,6 @@ export class SwapService {
               },
             });
 
-      let pendingBackground = false;
       try {
         const result = await this.runOneSwap(userId, userInfo, params, {
           skipDeposit: params.externalDepositDone === true,
