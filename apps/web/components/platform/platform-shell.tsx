@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   Compass,
   Gift,
-  LayoutGrid,
+  Globe2,
   Settings,
   Trophy,
   Wallet,
@@ -26,10 +26,10 @@ import { cn } from "@/lib/utils/utils";
 
 const navItems: {
   href: string;
-  key: "overview" | "earn" | "quests" | "wallet" | "leaderboard" | "settings";
+  key: "ecosystem" | "earn" | "quests" | "wallet" | "leaderboard" | "settings";
   icon: LucideIcon;
 }[] = [
-  { href: "/overview", key: "overview", icon: LayoutGrid },
+  { href: "/ecosystem", key: "ecosystem", icon: Globe2 },
   { href: ROUTES.campaignQuests, key: "earn", icon: Sparkles },
   { href: ROUTES.questHub, key: "quests", icon: Gift },
   { href: "/wallet", key: "wallet", icon: Wallet },
@@ -171,7 +171,7 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden pb-24 md:pb-0" style={{ maxWidth: "100%" }}>
         {/* Top Header — wordmark kiri (semua breakpoint), toolbar kanan */}
         <header className="sticky top-0 z-30 flex h-16 w-full max-w-full items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--card)]/85 px-4 backdrop-blur-xl sm:h-[4.25rem] sm:px-6 md:px-8 lg:px-10">
-          <CanQuestLogo size="md" href="/overview" />
+          <CanQuestLogo size="md" href="/ecosystem" />
           <div className="hidden flex-1 md:block" />
           <PlatformToolbar />
         </header>

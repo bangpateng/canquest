@@ -79,7 +79,7 @@ export function AuthModal() {
   function redirectAfterAuth() {
     const next = nextPath;
     const safe =
-      next?.startsWith("/") && !next.startsWith("//") ? next : "/overview";
+      next?.startsWith("/") && !next.startsWith("//") ? next : "/ecosystem";
     window.location.assign(safe);
   }
 

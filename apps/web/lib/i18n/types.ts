@@ -8,6 +8,7 @@ export type PlatformLocale = (typeof PLATFORM_LOCALES)[number]["code"];
 export type PlatformMessages = {
   nav: {
     overview: string;
+    ecosystem: string;
     earn: string;
     quests: string;
     wallet: string;

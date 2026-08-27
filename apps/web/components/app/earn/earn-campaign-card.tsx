@@ -29,8 +29,11 @@ function CountdownTimer({ endsAt }: { endsAt: string | null }) {
   if (days > 0) parts.push(`${days}d`);
   if (hours > 0 || days > 0) parts.push(`${hours}h`);
   parts.push(`${mins}m`);
+  // Urgency colors: green > 7d, amber < 7d, red < 24h
+  const urgentClass =
+    days >= 7 ? "text-emerald-600" : days >= 1 ? "text-amber-600" : "text-red-600";
   return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600">
+    <span className={cn("inline-flex items-center gap-1 text-[10px] font-bold", urgentClass)}>
       {parts.join(" ")}
     </span>
   );
