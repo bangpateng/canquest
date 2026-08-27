@@ -145,28 +145,10 @@ export function QuestsBrowser({ variant = "earn" }: { variant?: "default" | "ear
     return c;
   }, [allQuests]);
 
-  const [sortBy, setSortBy] = useState<"newest" | "ending" | "reward">(
-    "newest",
+  const filtered = useMemo(
+    () => allQuests.filter((q) => q.status === status && matchesSearch(q, query)),
+    [allQuests, status, query],
   );
-
-  const filtered = useMemo(() => {
-    const list = allQuests.filter(
-      (q) => q.status === status && matchesSearch(q, query),
-    );
-    // Sort: newest (default), ending soon (earliest deadline), highest reward
-    if (sortBy === "ending") {
-      list.sort((a, b) => {
-        const aT = a.endsAt ? Date.parse(a.endsAt) : Infinity;
-        const bT = b.endsAt ? Date.parse(b.endsAt) : Infinity;
-        return aT - bT;
-      });
-    } else if (sortBy === "reward") {
-      list.sort((a, b) => (b.rewardCc ?? 0) - (a.rewardCc ?? 0));
-    } else {
-      list.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
-    }
-    return list;
-  }, [allQuests, status, query, sortBy]);
 
   useEffect(() => {
     setPage(1);
@@ -199,26 +181,6 @@ export function QuestsBrowser({ variant = "earn" }: { variant?: "default" | "ear
     </div>
   );
 
-  const sortDropdown = isEarn ? (
-    <div className="flex shrink-0 items-center gap-2">
-      <span className="hidden text-xs font-medium text-[var(--muted-foreground)] sm:inline">
-        Sort:
-      </span>
-      <select
-        value={sortBy}
-        onChange={(e) =>
-          setSortBy(e.target.value as "newest" | "ending" | "reward")
-        }
-        className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--foreground)] outline-none focus:border-[var(--primary)]/40"
-        aria-label="Sort campaigns"
-      >
-        <option value="newest">Newest</option>
-        <option value="ending">Ending Soon</option>
-        <option value="reward">Highest Reward</option>
-      </select>
-    </div>
-  ) : null;
-
   return (
     <div className={cn("w-full max-w-full overflow-hidden", isEarn ? "space-y-4 sm:space-y-5 md:space-y-6" : "space-y-5 sm:space-y-6 md:space-y-8")}>
       {isEarn ? (
@@ -244,10 +206,7 @@ export function QuestsBrowser({ variant = "earn" }: { variant?: "default" | "ear
             className="w-full overflow-hidden"
           >
             <Card bare className="w-full overflow-hidden p-3 sm:p-4">
-              <div className="flex min-w-0 flex-1 items-center gap-3">
-                <div className="min-w-0 flex-1 overflow-hidden">{tabRow}</div>
-                {sortDropdown}
-              </div>
+              <div className="min-w-0 flex-1 overflow-hidden">{tabRow}</div>
             </Card>
           </section>
         </>

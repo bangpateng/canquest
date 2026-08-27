@@ -3,7 +3,6 @@ import type { PlatformMessages } from "../types";
 export const en: PlatformMessages = {
   nav: {
     overview: "Overview",
-    ecosystem: "Ecosystem",
     earn: "Earn",
     quests: "Quests",
     wallet: "Wallet",

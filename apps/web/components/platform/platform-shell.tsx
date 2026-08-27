@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   Compass,
   Gift,
-  Globe2,
+  LayoutGrid,
   Settings,
   Trophy,
   Wallet,
@@ -26,10 +26,10 @@ import { cn } from "@/lib/utils/utils";
 
 const navItems: {
   href: string;
-  key: "ecosystem" | "earn" | "quests" | "wallet" | "leaderboard" | "settings";
+  key: "overview" | "earn" | "quests" | "wallet" | "leaderboard" | "settings";
   icon: LucideIcon;
 }[] = [
-  { href: "/ecosystem", key: "ecosystem", icon: Globe2 },
+  { href: "/overview", key: "overview", icon: LayoutGrid },
   { href: ROUTES.campaignQuests, key: "earn", icon: Sparkles },
   { href: ROUTES.questHub, key: "quests", icon: Gift },
   { href: "/wallet", key: "wallet", icon: Wallet },
@@ -135,14 +135,13 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="relative flex min-h-screen w-full max-w-full isolate items-stretch overflow-x-hidden bg-[var(--background)] font-sans">
-      {/* Ambient tint — fixed, subtle neon radial wash (Canton green/cyan).
-          Dark mode: stronger glow untuk modern web3 aesthetic. */}
+      {/* Ambient tint — fixed, very subtle radial wash (canton / cyan). */}
       <div
         aria-hidden
         className="pointer-events-none fixed inset-0 -z-10"
         style={{
           background:
-            "radial-gradient(48rem 30rem at 14% -8%, rgb(var(--canton-rgb) / 0.09), transparent 60%), radial-gradient(40rem 26rem at 100% 8%, rgb(var(--canton-cyan-rgb) / 0.07), transparent 55%), radial-gradient(60rem 40rem at 50% 120%, rgb(var(--canton-rgb) / 0.04), transparent 65%)",
+            "radial-gradient(48rem 30rem at 14% -8%, rgb(var(--canton-rgb) / 0.07), transparent 60%), radial-gradient(40rem 26rem at 100% 8%, rgb(var(--canton-cyan-rgb) / 0.05), transparent 55%)",
         }}
       />
 
@@ -172,7 +171,7 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden pb-24 md:pb-0" style={{ maxWidth: "100%" }}>
         {/* Top Header — wordmark kiri (semua breakpoint), toolbar kanan */}
         <header className="sticky top-0 z-30 flex h-16 w-full max-w-full items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--card)]/85 px-4 backdrop-blur-xl sm:h-[4.25rem] sm:px-6 md:px-8 lg:px-10">
-          <CanQuestLogo size="md" href="/ecosystem" />
+          <CanQuestLogo size="md" href="/overview" />
           <div className="hidden flex-1 md:block" />
           <PlatformToolbar />
         </header>

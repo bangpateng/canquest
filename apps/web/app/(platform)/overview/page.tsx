@@ -1,6 +1,10 @@
-import { redirect } from "next/navigation";
+import { DashboardView } from "@/components/app/dashboard/dashboard-view";
+import { PlatformPage } from "@/components/platform/platform-page";
 
-/** /overview has been renamed to /ecosystem — permanent redirect. */
-export default function OverviewRedirect() {
-  redirect("/ecosystem");
+export default function OverviewPage() {
+  return (
+    <PlatformPage className="space-y-8">
+      <DashboardView />
+    </PlatformPage>
+  );
 }

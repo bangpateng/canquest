@@ -8,7 +8,7 @@ import { hasRealWallet } from "@/lib/auth/wallet-access";
 import { useMe } from "@/lib/hooks/use-me";
 import { usePoints, useInvalidatePoints } from "@/lib/hooks/use-points";
 import type { Quest } from "@/lib/quest/quest-types";
-import { Sparkles, Zap, Flame, Trophy } from "lucide-react";
+import { Sparkles, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 
@@ -86,11 +86,6 @@ export function QuestHubPage() {
 
   const loading = hubLoading || meLoading;
 
-  // Level = floor(totalPoints / 500) — simple visual gamification.
-  const totalPoints = points?.total ?? 0;
-  const level = Math.floor(totalPoints / 500);
-  const levelProgress = ((totalPoints % 500) / 500) * 100;
-
   return (
     <div className="w-full max-w-full min-w-0 overflow-x-hidden space-y-5 md:space-y-6 font-sans">
 
@@ -107,24 +102,14 @@ export function QuestHubPage() {
             </div>
           ) : (
             <>
-              {/* Icon + eyebrow + level chip */}
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--primary)]/10">
-                    <Sparkles className="h-4 w-4 text-canton" aria-hidden />
-                  </span>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-                    Quest Hub · Available Points
-                  </p>
-                </div>
-                {level > 0 ? (
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-canton-subtle px-3 py-1 text-xs font-bold text-canton">
-                      <Trophy className="h-3 w-3" />
-                      Lv {level}
-                    </span>
-                  </div>
-                ) : null}
+              {/* Icon + eyebrow label */}
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--primary)]/10">
+                  <Sparkles className="h-4 w-4 text-canton" aria-hidden />
+                </span>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+                  Quest Hub · Available Points
+                </p>
               </div>
 
               {/* Headline number */}
@@ -134,23 +119,6 @@ export function QuestHubPage() {
                   pts
                 </span>
               </p>
-
-              {/* Level progress bar */}
-              {levelProgress > 0 ? (
-                <div className="mt-3 max-w-xs">
-                  <div className="flex items-center justify-between text-[10px] font-medium text-[var(--muted-foreground)]">
-                    <span>Lv {level}</span>
-                    <span>{Math.round(levelProgress)}% to Lv {level + 1}</span>
-                  </div>
-                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[var(--muted)]">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-[rgb(var(--canton-rgb))] to-cyan-400 transition-all duration-500"
-                      style={{ width: `${Math.max(3, levelProgress)}%` }}
-                    />
-                  </div>
-                </div>
-              ) : null}
-
               <p className="mt-3 max-w-md text-xs font-normal leading-relaxed text-[var(--muted-foreground)] sm:mt-4 sm:text-sm">
                 Your spendable balance. Complete daily tasks and invite friends to earn more.
               </p>

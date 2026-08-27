@@ -3,7 +3,6 @@ import type { PlatformMessages } from "../types";
 export const tr: PlatformMessages = {
   nav: {
     overview: "Genel Bakış",
-    ecosystem: "Ekosistem",
     earn: "Kazan",
     quests: "Görevler",
     wallet: "Cüzdan",

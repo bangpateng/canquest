@@ -84,7 +84,7 @@ export default async function AdminPanelLayout({ children }: { children: ReactNo
             </div>
             <div className="space-y-2 border-t border-[var(--border)] p-3">
               <Link
-                href="/ecosystem"
+                href="/overview"
                 className="block rounded-xl px-3 py-2 text-xs font-medium text-[var(--muted-foreground)] hover:text-canton"
               >
                 ← Open app
