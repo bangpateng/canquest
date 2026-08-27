@@ -50,6 +50,7 @@ export class ExternalWalletController {
 
   constructor(
     private readonly externalWallet: ExternalWalletService,
+    private readonly ledger: CantonLedgerService,
     private readonly featuredActivity: FeaturedAppActivityService,
     private readonly users: UsersService,
     private readonly walletInvites: WalletInviteCodeService,
