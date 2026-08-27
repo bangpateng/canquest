@@ -104,7 +104,6 @@ model User {
   /// Riwayat swap CC ↔ token Cantex DEX.
   swapTransactions        SwapTransaction[]
   /// Delivery token/CC tertunda dari swap yang gagal di-deliver on-chain.
-  pendingDeliveries       PendingDelivery[]
   /// OAuth / external identity links (Google, dst). 1 user bisa banyak provider.
   accounts                Account[]
   /// Outbox email notifikasi campaign (Resend) — 1 baris = 1 email per (user, quest, type).
@@ -412,7 +411,6 @@ model SwapTransaction {
   createdAt           DateTime @default(now())
 
   /// Delivery tertunda bila token/CC gagal dikirim on-chain ke user.
-  pendingDeliveries   PendingDelivery[]
 
   @@index([userId, createdAt])
 }
