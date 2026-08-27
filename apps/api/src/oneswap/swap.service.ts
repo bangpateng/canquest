@@ -722,7 +722,14 @@ export class SwapService {
     try {
       return await this.oneswap.createSwap(args);
     } catch (err) {
-      if (!(err instanceof OpenSwapExistsError)) throw err;
+      // OneSwap kadang balas 500 generik ("Something went wrong") untuk
+      // kondisi open-swap-exists — bukan cuma OpenSwapExistsError bertipe.
+      // Fallback: SELALU cek getOpenSwap sebelum menyerah.
+      if (!(err instanceof OpenSwapExistsError)) {
+        this.logger.warn(
+          `createSwap non-typed error (${err.constructor?.name}): ${String((err as Error).message).slice(0, 120)} — trying getOpenSwap fallback`,
+        );
+      }
 
       const open = await this.oneswap.getOpenSwap(args.userRef);
       if (!open) {
