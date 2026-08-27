@@ -294,6 +294,17 @@ export class SigningRelayService {
           entry.flow === 'accept_offer' ? 'COMPLETED' : 'REJECTED',
           result?.updateId,
         );
+
+        // ACCEPT: buat juga record + notifikasi utk PENERIMA (receiver).
+        // markTransferInstructionSettled hanya update row SENDER — receiver
+        // tidak mendapat TRANSFER_IN apa pun → badge tidak muncul.
+        if (entry.flow === 'accept_offer') {
+          await this.recordReceiverAccept(
+            meta.cid,
+            entry.userId,
+            result?.updateId,
+          );
+        }
       } catch (err) {
         this.logger.warn(
           `markTransferInstructionSettled (${entry.flow}) gagal: ${String(err).slice(0, 120)}`,
@@ -455,6 +466,82 @@ export class SigningRelayService {
       }
     }
     } // end if send_cc
+  }
+
+  /**
+   * Setelah accept_offer sukses: buat record TRANSFER_IN / TOKEN_TRANSFER_IN
+   * untuk PENERIMA + push notifikasi badge. Data diambil dari row SENDER
+   * yang baru saja di-settle (amount, instrument, counterparty).
+   */
+  private async recordReceiverAccept(
+    transferInstructionCid: string,
+    receiverUserId: string,
+    updateId: string | undefined,
+  ): Promise<void> {
+    try {
+      // Cari row sender yang baru di-settle — dari situ ambil detail offer.
+      const senderCc = await this.prisma.ccTransaction.findFirst({
+        where: { transferInstructionCid, status: 'COMPLETED' },
+        select: {
+          amountMicroCc: true,
+          description: true,
+          counterparty: true,
+          userId: true,
+        },
+      });
+      const senderToken = senderCc
+        ? null
+        : await this.prisma.tokenTransaction.findFirst({
+            where: { transferInstructionCid, status: 'COMPLETED' },
+            select: {
+              amount: true,
+              instrumentId: true,
+              instrumentAdmin: true,
+              description: true,
+              referenceId: true,
+              userId: true,
+            },
+          });
+
+      if (senderCc) {
+        // CC transfer — record TRANSFER_IN utk receiver.
+        await this.users.recordTransaction({
+          userId: receiverUserId,
+          amountCc: Math.abs(Number(senderCc.amountMicroCc)) / 1_000_000,
+          type: 'TRANSFER_IN',
+          description: senderCc.description ?? 'Received CC',
+          counterparty: senderCc.userId,
+          ledgerTxId: updateId,
+          cantonUpdateId: updateId,
+          status: 'COMPLETED',
+        });
+        this.logger.log(
+          `accept_offer receiver TRANSFER_IN recorded: user=${receiverUserId.slice(0, 8)} amount=${Math.abs(Number(senderCc.amountMicroCc)) / 1_000_000}`,
+        );
+      } else if (senderToken) {
+        // Token (USDCx dll) — record TOKEN_TRANSFER_IN utk receiver.
+        await this.users.recordTokenTransaction({
+          userId: receiverUserId,
+          amount: Math.abs(Number(senderToken.amount)),
+          instrumentId: senderToken.instrumentId,
+          instrumentAdmin: senderToken.instrumentAdmin ?? '',
+          type: 'TOKEN_TRANSFER_IN',
+          description: senderToken.description ?? 'Token received',
+          referenceId: senderToken.referenceId,
+          ledgerTxId: updateId,
+          cantonUpdateId: updateId,
+          status: 'COMPLETED',
+        });
+        this.logger.log(
+          `accept_offer receiver TOKEN_TRANSFER_IN recorded: user=${receiverUserId.slice(0, 8)} amount=${senderToken.amount} ${senderToken.instrumentId}`,
+        );
+      }
+    } catch (err) {
+      // Non-fatal: accept sudah sukses on-chain — hanya notifikasi yang gagal.
+      this.logger.warn(
+        `recordReceiverAccept gagal (non-fatal): ${String(err).slice(0, 160)}`,
+      );
+    }
   }
 
   /**
