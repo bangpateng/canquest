@@ -63,7 +63,6 @@ export function SettingsWalletKeyPanel() {
 
   // M4: detect custodial users → offer upgrade to non-custodial.
   const { me, refetch: refetchMe } = useMe();
-  const isCustodial = me?.walletKind === "custodial" && !!me.cantonPartyId;
   const { prompt: promptPassphrase, passphraseModal } = usePassphrasePrompt();
 
   // Reveal (view backup key)
@@ -101,7 +100,7 @@ export function SettingsWalletKeyPanel() {
   // M4b: user external tanpa kunci lokal → cek blob sync di akun
   // (kalau ada → tampil kartu "Unlock on this device", cukup passphrase).
   useEffect(() => {
-    if (phase === "none" && !isCustodial) {
+    if (phase === "none") {
       void (async () => {
         try {
           const res = await fetch("/api/party/wallet-key/backup", {
@@ -130,7 +129,7 @@ export function SettingsWalletKeyPanel() {
         }
       })();
     }
-  }, [phase, isCustodial]);
+  }, [phase]);
 
   /** M4b: buka kunci di device baru — import blob lalu verify passphrase. */
   async function handleUnlockFromSync() {
@@ -226,85 +225,6 @@ export function SettingsWalletKeyPanel() {
     }
   }
 
-  // ── M4: upgrade helpers ────────────────────────────────────────────────
-
-  async function startUpgrade() {
-    // RESUME: kalau browser ini sudah menyimpan kunci ceremony (upgrade yang
-    // terputus — mis. gagal registrasi karena flag), pakai ulang kunci itu
-    // dan langsung ke registrasi. Tanpa ini user terjebak ("key exists").
-    if (await hasWalletKey()) {
-      const existing = await getWalletKeyMeta();
-      if (existing?.publicKeyHex && existing.hint) {
-        setError(null);
-        setPhase("registering");
-        void registerUpgradeWallet(existing);
-        return;
-      }
-      setError(
-        "This browser already stores a wallet key that cannot be reused. Clear this site's browser data (or use another browser) before upgrading.",
-      );
-      return;
-    }
-    setError(null);
-    setPhase("upgrading");
-  }
-
-  /** M4: register external wallet in upgrade mode (old wallet must be empty). */
-  async function registerUpgradeWallet(upgradeMeta: WalletKeyMeta) {
-    setBusy(true);
-    setError(null);
-    try {
-      const prep = await fetch("/api/party/wallet-external/prepare", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          publicKeyHex: upgradeMeta.publicKeyHex,
-          partyHint: upgradeMeta.hint,
-          upgrade: true,
-        }),
-      });
-      const prepRaw = (await prep.json().catch(() => null)) as {
-        multiHash?: string;
-        message?: string;
-      } | null;
-      if (!prep.ok || !prepRaw?.multiHash) {
-        setError(prepRaw?.message ?? "Failed to prepare the upgrade.");
-        setPhase("none");
-        return;
-      }
-      // Sign dengan auto-unlock (resume sesi baru = dompet terkunci).
-      const signature = await signHashWithUnlock(
-        prepRaw.multiHash,
-        "Complete wallet upgrade",
-        { onWalletLocked: () => promptPassphrase("Complete wallet upgrade") },
-      );
-      const comp = await fetch("/api/party/wallet-external/complete", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ signature, upgrade: true }),
-      });
-      const compRaw = (await comp.json().catch(() => null)) as {
-        cantonPartyId?: string;
-        message?: string;
-      } | null;
-      if (!comp.ok) {
-        setError(compRaw?.message ?? "Upgrade failed.");
-        setPhase("none");
-        return;
-      }
-      setMeta(upgradeMeta);
-      setPhase("ready");
-      void refetchMe();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Upgrade failed.");
-      setPhase("none");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   const hexValid = /^[0-9a-fA-F]{64}$/.test(importHex.trim());
 
   return (
@@ -347,60 +267,11 @@ export function SettingsWalletKeyPanel() {
               </p>
             ) : null}
 
-            {/* ── M4: custodial user → upgrade offer ─────────────────── */}
-            {isCustodial && phase === "none" ? (
-              <div className="space-y-4 rounded-2xl border border-canton/30 bg-canton-subtle p-4">
-                <div className="flex items-start gap-3">
-                  <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-canton" />
-                  <div className="min-w-0 text-sm">
-                    <p className="font-semibold text-[var(--foreground)]">
-                      Upgrade to a Non-Custodial Wallet
-                    </p>
-                    <p className="mt-1 leading-relaxed text-[var(--muted-foreground)]">
-                      Your current wallet is held by the server (custodial).
-                      Upgrade to hold your own key — the key is created and
-                      stored <strong>only in this browser</strong>, and every
-                      transaction requires your signature.
-                    </p>
-                    <p className="mt-2 rounded-xl bg-orange-500/10 px-3 py-2 text-xs leading-relaxed text-orange-600">
-                      Requirement: your old wallet balance must be empty. After
-                      upgrading: a lost key means permanently lost funds — make
-                      sure you save the raw hex backup during the process.
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void startUpgrade()}
-                  className={cn(buttonVariants({ size: "sm" }), "gap-2")}
-                >
-                  <ShieldCheck className="h-4 w-4" />
-                  Upgrade Now
-                </button>
-              </div>
-            ) : null}
-
-            {/* ── M4: key ceremony for upgrade ────────────────────────── */}
-            {phase === "upgrading" ? (
-              <KeyCeremony
-                onComplete={(m) => {
-                  void registerUpgradeWallet(m);
-                }}
-                onCancel={() => setPhase("none")}
-              />
-            ) : null}
-
-            {/* ── M4: resume upgrade (registrasi dengan kunci yang sudah ada) ── */}
-            {phase === "registering" ? (
-              <div className="flex items-center justify-center gap-3 rounded-2xl border border-canton/30 bg-canton-subtle p-6 text-sm font-medium text-[var(--foreground)]">
-                <LoadingSpinner size="sm" />
-                Completing your upgrade — registering your wallet key…
-              </div>
-            ) : null}
+            {/* ── No wallet key in this browser ───────────────────────── */}
             {passphraseModal}
 
             {/* ── No wallet key in this browser ───────────────────────── */}
-            {phase === "none" && !isCustodial ? (
+            {phase === "none" ? (
               syncBlob ? (
                 // M4b: ada blob sync di akun → cukup passphrase (tanpa raw hex).
                 <div className="space-y-4 rounded-2xl border border-canton/30 bg-canton-subtle p-4">

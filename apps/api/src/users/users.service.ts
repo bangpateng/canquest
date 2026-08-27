@@ -411,45 +411,6 @@ export class UsersService {
     }
   }
 
-  /**
-   * M4: UPGRADE wallet custodial → external. Switch cantonPartyId ke party
-   * external baru, catat party lama sebagai legacyPartyId (audit). Username
-   * tidak berubah. Caller wajib memastikan wallet lama kosong (guard on-chain
-   * di controller) sebelum memanggil ini.
-   */
-  async upgradeToExternalCantonIdentity(
-    userId: string,
-    params: { partyId: string; legacyPartyId: string },
-  ) {
-    const normalized =
-      normalizeCantonPartyId(params.partyId) ?? params.partyId.trim();
-    const legacy =
-      normalizeCantonPartyId(params.legacyPartyId) ??
-      params.legacyPartyId.trim();
-    // Bersihkan saldo token legacy (era custodial) — CantexTokenBalance tidak
-    // di-sync on-chain. Tanpa ini, user upgrade menampilkan USDCx "hantu".
-    await this.prisma.cantexTokenBalance
-      .updateMany({ where: { userId, balance: { gt: 0 } }, data: { balance: 0 } })
-      .catch(() => {});
-    try {
-      return await this.prisma.user.update({
-        where: { id: userId },
-        data: {
-          cantonPartyId: normalized,
-          legacyPartyId: legacy,
-          walletKind: 'external',
-          backupVerifiedAt: new Date(),
-        },
-      });
-    } catch (err) {
-      // SECURITY (H6): 1 wallet ↔ 1 account — party baru bentrok = tolak jelas.
-      if (this.isUniquePartyViolation(err)) {
-        throw new ConflictException('Party ID Already Taken');
-      }
-      throw err;
-    }
-  }
-
   async setPartyId(userId: string, cantonPartyId: string, username?: string) {
     const normalized =
       normalizeCantonPartyId(cantonPartyId) ?? cantonPartyId.trim();

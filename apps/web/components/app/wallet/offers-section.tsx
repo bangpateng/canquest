@@ -10,7 +10,6 @@ import { ArrowDownLeft, ArrowUpRight, Check, X, Clock, Undo2 } from "lucide-reac
 import { queryKeys } from "@/lib/queries/query-keys";
 import { displayName } from "@/components/app/wallet/token-logo";
 import { useTransactionStatus } from "@/lib/tx/transaction-status";
-import { TxReviewModal } from "@/components/app/wallet/tx-review-modal";
 import { useMe } from "@/lib/hooks/use-me";
 import { signRelayTransaction } from "@/lib/wallet/sign-relay";
 import { usePassphrasePrompt } from "@/lib/wallet/use-passphrase-prompt";
@@ -235,12 +234,6 @@ export function OffersModal({
     action: "accept" | "reject" | "withdraw";
   } | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  // Tahap REVIEW (Input → Review → Sign → Broadcast → Success/Failed):
-  // tombol aksi buka review dulu; eksekusi jalan saat Confirm.
-  const [review, setReview] = useState<{
-    action: "accept" | "reject" | "withdraw";
-    offer: OfferItem;
-  } | null>(null);
 
   // M3b: user external (non-custodial) → aksi offer di-sign di browser.
   const { me } = useMe();
@@ -249,7 +242,7 @@ export function OffersModal({
   const tx = useTransactionStatus();
 
   // Eksekusi aksi offer dengan status modal standar (Sign → Broadcast →
-  // Success / Failed). Dipanggil dari Confirm di TxReviewModal.
+  // Success / Failed). Dipanggil dari klik tombol Accept/Reject/Withdraw.
   const runOfferAction = useCallback(
     async (action: "accept" | "reject" | "withdraw", offer: OfferItem) => {
       const token = displayName(offer.instrumentId ?? "Amulet");
@@ -412,65 +405,6 @@ export function OffersModal({
       {/* M3b: prompt passphrase untuk sign aksi offer (user external). */}
       {passphraseModal}
 
-      {/* Tahap REVIEW sebelum eksekusi (Input → Review → Sign → Broadcast). */}
-      <TxReviewModal
-        open={review !== null}
-        title={
-          review?.action === "accept"
-            ? "Accept transfer"
-            : review?.action === "reject"
-              ? "Reject transfer"
-              : "Cancel sent transfer"
-        }
-        amountText={
-          review ? `${formatAmount(review.offer)} ${displayName(review.offer.instrumentId ?? "Amulet")}` : ""
-        }
-        subText={
-          review
-            ? review.action === "withdraw"
-              ? `sent to ${receiverDisplay(review.offer)}`
-              : `from ${senderDisplay(review.offer)}`
-            : undefined
-        }
-        rows={
-          review
-            ? [
-                {
-                  label: review.action === "withdraw" ? "To" : "From",
-                  value:
-                    review.action === "withdraw"
-                      ? receiverDisplay(review.offer)
-                      : senderDisplay(review.offer),
-                  mono: true,
-                },
-                { label: "Memo", value: review.offer.description || "—" },
-                ...(review.offer.expiresAt
-                  ? [
-                      {
-                        label: "Expires",
-                        value: new Date(review.offer.expiresAt).toLocaleString(),
-                      },
-                    ]
-                  : []),
-                { label: "Network", value: "Canton" },
-              ]
-            : []
-        }
-        confirmLabel={
-          review?.action === "accept"
-            ? "Accept"
-            : review?.action === "reject"
-              ? "Reject"
-              : "Withdraw"
-        }
-        danger={review?.action !== "accept"}
-        onClose={() => setReview(null)}
-        onConfirm={() => {
-          const r = review;
-          setReview(null);
-          if (r) void runOfferAction(r.action, r.offer);
-        }}
-      />
       <button
         type="button"
         className="modal-backdrop"
@@ -620,7 +554,7 @@ export function OffersModal({
                         <button
                           type="button"
                           disabled={isBusy}
-                          onClick={() => setReview({ action: "accept", offer })}
+                          onClick={() => void runOfferAction("accept", offer)}
                           className={cn(
                             buttonVariants({ variant: "secondary", size: "sm" }),
                             "flex-1 justify-center gap-1.5 text-green-600 hover:text-green-300 border-green-500/20 hover:border-green-500/40",
@@ -636,7 +570,7 @@ export function OffersModal({
                         <button
                           type="button"
                           disabled={isBusy}
-                          onClick={() => setReview({ action: "reject", offer })}
+                          onClick={() => void runOfferAction("reject", offer)}
                           className={cn(
                             buttonVariants({ variant: "secondary", size: "sm" }),
                             "flex-1 justify-center gap-1.5 text-red-600 hover:text-red-300 border-red-500/20 hover:border-red-500/40",
@@ -721,7 +655,7 @@ export function OffersModal({
                       <button
                         type="button"
                         disabled={isWithdrawing}
-                        onClick={() => setReview({ action: "withdraw", offer })}
+                        onClick={() => void runOfferAction("withdraw", offer)}
                         className={cn(
                           buttonVariants({ variant: "secondary", size: "sm" }),
                           "flex-1 justify-center gap-1.5 text-red-600 hover:text-red-300 border-red-500/20 hover:border-red-500/40",

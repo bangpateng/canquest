@@ -18,10 +18,6 @@ export class PrepareExternalWalletDto {
   })
   partyHint!: string;
 
-  /** M4: mode upgrade wallet custodial lama → external (saldo harus kosong). */
-  @IsOptional()
-  @IsBoolean()
-  upgrade?: boolean;
 }
 
 export class CompleteExternalWalletDto {
@@ -31,10 +27,6 @@ export class CompleteExternalWalletDto {
   @MaxLength(512)
   signature!: string;
 
-  /** M4: mode upgrade wallet custodial lama. */
-  @IsOptional()
-  @IsBoolean()
-  upgrade?: boolean;
 
   /** Username dapp (opsional — diset kalau user belum punya). */
   @IsOptional()

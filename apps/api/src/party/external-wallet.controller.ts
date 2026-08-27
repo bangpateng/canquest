@@ -32,7 +32,6 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ExternalWalletService } from '../canton/external-wallet.service';
-import { CantonLedgerService } from '../canton/canton-ledger.service';
 import { FeaturedAppActivityService } from '../canton/featured-app-activity.service';
 import { UsersService } from '../users/users.service';
 import { WalletInviteCodeService } from './wallet-invite-code.service';
@@ -51,7 +50,6 @@ export class ExternalWalletController {
 
   constructor(
     private readonly externalWallet: ExternalWalletService,
-    private readonly ledger: CantonLedgerService,
     private readonly featuredActivity: FeaturedAppActivityService,
     private readonly users: UsersService,
     private readonly walletInvites: WalletInviteCodeService,
@@ -72,57 +70,7 @@ export class ExternalWalletController {
 
     const existing = await this.users.findById(req.user.userId);
     if (!existing) throw new BadRequestException('User not found');
-
-    if (dto.upgrade === true) {
-      // M4: mode upgrade — user HARUS punya wallet custodial, dan wallet lama
-      // HARUS kosong on-chain (saldo CC + lock) sebelum boleh ganti kunci.
-      if (
-        !hasRealWallet(existing.cantonPartyId) ||
-        existing.walletKind === 'external'
-      ) {
-        throw new BadRequestException(
-          'Upgrade is only for existing custodial wallets.',
-        );
-      }
-      const oldParty = existing.cantonPartyId as string;
-      // Guard upgrade: wallet lama harus praktis kosong. Toleransi:
-      //  - DUST (≤ 0.05 CC total): sisa pembulatan transfer yang tidak bisa
-      //    dikirim (di bawah fee) — dibiarkan di party lama (abandoned).
-      //  - Lock KEDALUWARSA diabaikan (tetap di party lama, tak bernilai).
-      // Sisa di atas toleransi → blokir dengan jumlah persis supaya user
-      // tahu harus disapu dulu.
-      const DUST_TOLERANCE_CC = 0.05;
-      const holdings = await this.ledger
-        .queryAmuletHoldings(oldParty)
-        .catch(() => []);
-      const locks = await this.ledger
-        .findLockedAmulets(oldParty)
-        .catch(() => []);
-      const totalCc = (holdings as Array<{ amount?: string }>).reduce(
-        (s, h) => s + (parseFloat(h.amount ?? '0') || 0),
-        0,
-      );
-      const now = Date.now();
-      const activeLocks = (
-        locks as Array<{ expiresAt?: string | null }>
-      ).filter((l) => l.expiresAt && Date.parse(l.expiresAt) > now);
-
-      if (activeLocks.length > 0) {
-        throw new BadRequestException(
-          'Your old wallet has an active lock — wait until it expires (or unlock it), then upgrade again.',
-        );
-      }
-      if (totalCc > DUST_TOLERANCE_CC) {
-        throw new BadRequestException(
-          `Your old wallet still holds ${totalCc.toFixed(4)} CC — send it out first (e.g. to your reward wallet), then upgrade again.`,
-        );
-      }
-      if (totalCc > 0) {
-        this.logger.log(
-          `upgrade dust abandoned: user=${req.user.userId.slice(0, 8)}… ~${totalCc.toFixed(4)} CC left in legacy party`,
-        );
-      }
-    } else if (hasRealWallet(existing.cantonPartyId)) {
+    if (hasRealWallet(existing.cantonPartyId)) {
       throw new ConflictException(
         'You already have a wallet. Only one wallet is allowed per account.',
       );
@@ -142,13 +90,10 @@ export class ExternalWalletController {
 
     const existing = await this.users.findById(req.user.userId);
     if (!existing) throw new BadRequestException('User not found');
-    if (dto.upgrade !== true && hasRealWallet(existing.cantonPartyId)) {
+    if (hasRealWallet(existing.cantonPartyId)) {
       throw new ConflictException(
         'You already have a wallet. Only one wallet is allowed per account.',
       );
-    }
-    if (dto.upgrade === true && existing.walletKind === 'external') {
-      throw new BadRequestException('Your wallet is already non-custodial.');
     }
 
     const username = dto.username
@@ -182,14 +127,7 @@ export class ExternalWalletController {
         throw new ConflictException('Party ID Already Taken');
       }
 
-      if (dto.upgrade === true) {
-        // M4: switch identitas — party lama jadi legacyPartyId (audit).
-        // Wallet lama sudah dipastikan kosong (guard di prepare).
-        await this.users.upgradeToExternalCantonIdentity(req.user.userId, {
-          partyId,
-          legacyPartyId: existing.cantonPartyId!,
-        });
-      } else {
+      {
         try {
           await this.users.setExternalCantonIdentity(req.user.userId, {
             partyId,
