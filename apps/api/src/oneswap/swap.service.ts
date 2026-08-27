@@ -644,7 +644,10 @@ export class SwapService {
           description: `Swap received ${done.amountOut} ${params.to}`,
           ledgerTxId: `oneswap:${done.id}:out`,
           status: 'COMPLETED',
-          silent: true,
+          // TIDAK silent: SWAP_IN adalah "uang sampai" — user harus dapat
+          // toast + badge via transaction:new. WSS handler hanya melihat
+          // transfer CC (Amulet), bukan token USDCx — tanpa ini, user
+          // tidak pernah tahu swap-nya selesai.
         });
         void this.inboundSync.alignBalanceFromChain(userId, args.user.username);
         void this.realtime.push(userId, 'swap:completed', {
