@@ -32,6 +32,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ExternalWalletService } from '../canton/external-wallet.service';
+import { CantonLedgerService } from '../canton/canton-ledger.service';
 import { FeaturedAppActivityService } from '../canton/featured-app-activity.service';
 import { UsersService } from '../users/users.service';
 import { WalletInviteCodeService } from './wallet-invite-code.service';
