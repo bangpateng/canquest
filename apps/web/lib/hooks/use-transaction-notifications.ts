@@ -190,6 +190,31 @@ export function useTransactionNotifications(
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
+  // Direct swap-completed toast via custom event dari use-realtime SSE.
+  // Lebih reliable daripada notification feed diff (SWAP_IN bisa terdorong
+  // keluar dari take=12 oleh TRANSFER_IN terbaru — diff tidak melihatnya).
+  useEffect(() => {
+    const onSwapToast = (e: Event) => {
+      const detail = (e as CustomEvent<{ outputAmount?: string }>).detail;
+      setToasts((prev) =>
+        [
+          {
+            id: `swap-${Date.now()}`,
+            kind: "transaction" as const,
+            txType: "SWAP_IN" as const,
+            amountCc: 0,
+            description: detail?.outputAmount
+              ? `Swap received ${detail.outputAmount} USDCx`
+              : "Swap completed — tokens received",
+          },
+          ...prev,
+        ].slice(0, 3),
+      );
+    };
+    window.addEventListener("cq:swap-toast", onSwapToast);
+    return () => window.removeEventListener("cq:swap-toast", onSwapToast);
+  }, []);
+
   const markSeen = useCallback(async () => {
     try {
       await fetch("/api/party/notifications/seen", {

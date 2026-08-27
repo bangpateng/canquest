@@ -110,13 +110,27 @@ export function useRealtime(): void {
       // list. Backend SwapService (oneswap/swap.service.ts) emit event ini saat
       // output swap balik ke party user. Tanpa listener ini, hasil swap tidak
       // muncul instan di UI.
-      es.addEventListener("swap:completed", () => {
+      es.addEventListener("swap:completed", (ev: MessageEvent) => {
         void queryClient.invalidateQueries({
           queryKey: queryKeys.party.balances,
         });
         void queryClient.invalidateQueries({
           queryKey: queryKeys.party.transactions.all,
         });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.party.notifications,
+        });
+        // Direct toast — jangan andalkan notification feed diff detection
+        // (feed take=12 bisa penuh TRANSFER_IN terbaru sehingga SWAP_IN
+        // terdorong keluar dan diff tidak melihatnya).
+        try {
+          const data = JSON.parse(ev.data) as { outputAmount?: string };
+          window.dispatchEvent(
+            new CustomEvent("cq:swap-toast", {
+              detail: { outputAmount: data?.outputAmount ?? "" },
+            }),
+          );
+        } catch { /* non-fatal */ }
       });
 
       // Offer baru masuk (incoming) atau status offer berubah (external
