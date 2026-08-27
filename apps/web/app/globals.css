@@ -48,37 +48,38 @@
   --ease: cubic-bezier(0.16, 0.84, 0.44, 1);
 }
 
-/* Dark mode tetap didukung (toggle user sudah ada) — palet gelap netral
-   yang serasi dengan sistem light: abu pekat, bukan ungu-unguan. */
+/* Dark mode — modern web3 neon aesthetic.
+   Deep black + Canton neon green/cyan glows, glassmorphic cards,
+   gradient mesh background — crypto dapp look (yapperagent-style). */
 .dark {
   --canton-rgb: 52 211 153;
   --canton-ink: 167 243 208;
   --canton-ink-muted: 110 200 160;
-  --canton-cyan-rgb: 45 212 191;
-  --background: #0b0d11;
-  --foreground: #f2f5f7;
-  --muted: #15181d;
-  --muted-foreground: #8b93a1;
-  --card: #12151b;
-  --card-solid: #14171d;
-  --border: rgb(255 255 255 / 0.08);
+  --canton-cyan-rgb: 34 211 238;
+  --background: #06080b;
+  --foreground: #eef4f1;
+  --muted: #0c1016;
+  --muted-foreground: #7a8a84;
+  --card: rgb(12 16 22 / 0.72);
+  --card-solid: #0a0e14;
+  --border: rgb(52 211 153 / 0.12);
   --primary: rgb(var(--canton-rgb));
   --primary-strong: #6ee7b7;
-  --primary-soft: rgb(52 211 153 / 0.12);
+  --primary-soft: rgb(52 211 153 / 0.10);
   --primary-foreground: #05130c;
-  --accent: #2dd4bf;
-  --accent-muted: rgb(45 212 191 / 0.1);
-  --ring: rgb(52 211 153 / 0.4);
+  --accent: #22d3ee;
+  --accent-muted: rgb(34 211 238 / 0.08);
+  --ring: rgb(52 211 153 / 0.45);
   --danger: #fb7185;
   --success: #34d399;
   --warn-rgb: 251 146 60;
   --violet-rgb: 167 139 250;
-  --surface-glass: var(--card);
+  --surface-glass: rgb(12 16 22 / 0.55);
   --gradient-brand: linear-gradient(45deg, #faee21 0%, #6fe600 50%, #00ffff 100%);
-  --shadow-card: 0 1px 0 0 rgb(255 255 255 / 0.04) inset, 0 20px 44px -28px rgb(0 0 0 / 0.7);
-  --shadow-glow: 0 8px 20px -10px rgb(52 211 153 / 0.4);
-  --shadow-card-hover: 0 1px 0 0 rgb(255 255 255 / 0.04) inset, 0 20px 44px -28px rgb(0 0 0 / 0.7), 0 8px 20px -10px rgb(52 211 153 / 0.35);
-  --ease: cubic-bezier(0.16, 0.84, 0.44, 1);
+  --shadow-card: 0 1px 0 0 rgb(52 211 153 / 0.06) inset, 0 0 0 1px rgb(52 211 153 / 0.06), 0 20px 44px -28px rgb(0 0 0 / 0.8);
+  --shadow-glow: 0 0 24px rgb(52 211 153 / 0.15), 0 0 48px rgb(34 211 238 / 0.08);
+  --shadow-card-hover: 0 1px 0 0 rgb(52 211 153 / 0.10) inset, 0 0 0 1px rgb(52 211 153 / 0.15), 0 20px 44px -28px rgb(0 0 0 / 0.8), 0 0 32px rgb(52 211 153 / 0.20);
+  --ease: cubic-bezier(0.16, 0.84, 0.44, 0.1);
 }
 
 @layer base {
@@ -88,6 +89,23 @@
   body {
     @apply bg-[var(--background)] text-[var(--foreground)] antialiased;
     font-family: var(--font-inter), system-ui, sans-serif;
+  }
+  /* Dark mode: ambient neon mesh background — subtle Canton green/cyan
+     glows at corners, like modern web3 dapps. */
+  html.dark body {
+    background-image:
+      radial-gradient(ellipse 80% 60% at -10% -10%, rgb(52 211 153 / 0.06), transparent 50%),
+      radial-gradient(ellipse 60% 50% at 110% 5%, rgb(34 211 238 / 0.04), transparent 55%),
+      radial-gradient(ellipse 70% 60% at 50% 110%, rgb(52 211 153 / 0.03), transparent 60%);
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+  }
+  /* Dark mode: card dengan backdrop-blur glassmorphism */
+  html.dark .glass-card {
+    backdrop-filter: blur(16px) saturate(1.2);
+    -webkit-backdrop-filter: blur(16px) saturate(1.2);
+    background-color: rgb(12 16 22 / 0.60);
+    border: 1px solid rgb(52 211 153 / 0.10);
   }
   * { max-width: 100%; box-sizing: border-box; }
   ::-webkit-scrollbar { width: 5px; }

@@ -135,13 +135,14 @@ function PlatformShellInner({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="relative flex min-h-screen w-full max-w-full isolate items-stretch overflow-x-hidden bg-[var(--background)] font-sans">
-      {/* Ambient tint — fixed, very subtle radial wash (canton / cyan). */}
+      {/* Ambient tint — fixed, subtle neon radial wash (Canton green/cyan).
+          Dark mode: stronger glow untuk modern web3 aesthetic. */}
       <div
         aria-hidden
         className="pointer-events-none fixed inset-0 -z-10"
         style={{
           background:
-            "radial-gradient(48rem 30rem at 14% -8%, rgb(var(--canton-rgb) / 0.07), transparent 60%), radial-gradient(40rem 26rem at 100% 8%, rgb(var(--canton-cyan-rgb) / 0.05), transparent 55%)",
+            "radial-gradient(48rem 30rem at 14% -8%, rgb(var(--canton-rgb) / 0.09), transparent 60%), radial-gradient(40rem 26rem at 100% 8%, rgb(var(--canton-cyan-rgb) / 0.07), transparent 55%), radial-gradient(60rem 40rem at 50% 120%, rgb(var(--canton-rgb) / 0.04), transparent 65%)",
         }}
       />
 
