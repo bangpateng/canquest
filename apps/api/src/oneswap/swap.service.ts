@@ -56,6 +56,8 @@ export class SwapService {
   private tokenCache: { at: number; map: Map<string, Token> } | null = null;
   private static readonly TOKEN_CACHE_TTL_MS = 60_000;
 
+  private reconcileTimer: ReturnType<typeof setInterval> | null = null;
+
   constructor(
     private readonly oneswap: OneSwapClient,
     private readonly prisma: PrismaService,
@@ -66,6 +68,70 @@ export class SwapService {
     private readonly config: ConfigService,
     private readonly signRelay: SigningRelayService,
   ) {}
+
+  /**
+   * Reconciler swap PENDING: finalizer background hilang saat restart PM2 —
+   * row PENDING berumur >90 detik dicek ulang via esc id (cantexSubmissionId);
+   * terminal → settle (catat + SSE), agar hasil swap tidak pernah menggantung.
+   */
+  onModuleInit(): void {
+    this.reconcileTimer = setInterval(
+      () => void this.reconcilePendingSwaps(),
+      60_000,
+    );
+  }
+
+  onModuleDestroy(): void {
+    if (this.reconcileTimer !== null) clearInterval(this.reconcileTimer);
+  }
+
+  private async reconcilePendingSwaps(): Promise<void> {
+    try {
+      const stale = await this.prisma.swapTransaction.findMany({
+        where: {
+          status: 'PENDING',
+          createdAt: { lt: new Date(Date.now() - 90_000) },
+          cantexSubmissionId: { not: null },
+        },
+        select: {
+          id: true,
+          userId: true,
+          cantexSubmissionId: true,
+          sellInstrumentId: true,
+          buyInstrumentId: true,
+          sellAmount: true,
+        },
+        take: 10,
+      });
+      for (const row of stale) {
+        const esc = row.cantexSubmissionId;
+        if (!esc) continue;
+        const done = await this.oneswap.getSwap(esc).catch(() => null);
+        if (!done) continue;
+        if (
+          ['returned', 'refunded', 'expired', 'failed', 'cancelled', 'needs_review'].includes(
+            done.status,
+          )
+        ) {
+          const user = await this.users.findById(row.userId);
+          await this.finalizeSwapInBackground({
+            swapId: esc,
+            swapTxId: row.id,
+            userId: row.userId,
+            username: user?.username ?? '',
+            params: {
+              from: row.sellInstrumentId,
+              to: row.buyInstrumentId,
+              amount: Number(row.sellAmount),
+              clientNonce: `reconcile-${row.id}`,
+            },
+          });
+        }
+      }
+    } catch (e) {
+      this.logger.warn(`reconcilePendingSwaps: ${String(e)}`);
+    }
+  }
 
   /**
    * M3b: siapkan leg input swap untuk user EXTERNAL — transfer user →
@@ -311,14 +377,22 @@ export class SwapService {
               },
             });
 
+      let pendingBackground = false;
       try {
         const result = await this.runOneSwap(userId, userInfo, params, {
           skipDeposit: params.externalDepositDone === true,
+          swapTxId: swapTx.id,
           priorSwapId:
             existing && existing.status === 'PENDING'
               ? existing.cantexSubmissionId
               : swapTx.cantexSubmissionId,
         });
+        if (result.pending) {
+          // Async: swap diselesaikan background — row tetap PENDING,
+          // finalizer yang menulis hasil akhir + melepas swapInFlight.
+          pendingBackground = true;
+          return { ...result, swapId: swapTx.id };
+        }
         // Update record sesuai hasil.
         await this.prisma.swapTransaction.update({
           where: { id: swapTx.id },
@@ -347,9 +421,14 @@ export class SwapService {
           message: msg,
           swapId: swapTx.id,
         };
+      } finally {
+        // Pending-background: guard tetap dipegang finalizer (1 open swap
+        // per userRef — swap kedua harus menunggu yang pertama terminal).
+        if (!pendingBackground) this.swapInFlight.delete(userId);
       }
     } finally {
-      this.swapInFlight.delete(userId);
+      // Safety net bila return path baru terlewat — guard tidak boleh bocor.
+      if (!pendingBackground) this.swapInFlight.delete(userId);
     }
   }
 
@@ -361,7 +440,11 @@ export class SwapService {
     userId: string,
     user: { id: string; username: string; cantonPartyId: string },
     params: ExecuteSwapParams,
-    opts?: { skipDeposit?: boolean; priorSwapId?: string | null },
+    opts?: {
+      skipDeposit?: boolean;
+      priorSwapId?: string | null;
+      swapTxId?: string | null;
+    },
   ): Promise<SwapExecResult> {
     const cfg = getOneSwapConfig();
 
@@ -455,17 +538,95 @@ export class SwapService {
       }
     }
 
-    // ── 4. Wait for terminal status ──────────────────────────────────────
-    const done = await this.oneswap.waitForSwap(swap.id, {
-      timeoutMs: 15 * 60_000, // 15 menit (deadline OneSwap 60m, kita shorter)
+    const direction =
+      params.from.toUpperCase() === CC_SYMBOL ? 'CC_TO_TOKEN' : 'TOKEN_TO_CC';
+
+    // ── 4. ASYNC: swap sudah in-flight — JANGAN tahan request ──────────────────────────
+    // UX (permintaan operator): Sign → modal sukses ±3 detik → keluar.
+    // OneSwap (30-60 detik) diselesaikan di background; hasil masuk via SSE
+    // (swap:completed + balance:changed) dan badge notifikasi seperti tx lain.
+    void this.finalizeSwapInBackground({
+      swapId: swap.id,
+      swapTxId: opts?.swapTxId ?? null,
+      userId,
+      username: user.username,
+      params,
     });
 
+    return {
+      success: true,
+      pending: true,
+      direction,
+      outputAmount: String(quote.amountOut),
+      message: 'Swap submitted — completing in the background.',
+    };
+  }
+
+  /**
+   * Background: tunggu OneSwap terminal, catat hasil (SWAP_OUT/SWAP_IN +
+   * balance align + SSE), update row SwapTransaction, lepas swapInFlight.
+   * Dipanggil fire-and-forget dari runOneSwap; juga dipakai reconciler.
+   */
+  private async finalizeSwapInBackground(args: {
+    swapId: string;
+    swapTxId: string | null;
+    userId: string;
+    username: string;
+    params: ExecuteSwapParams;
+  }): Promise<void> {
+    try {
+      const done = await this.oneswap.waitForSwap(args.swapId, {
+        timeoutMs: 15 * 60_000,
+      });
+      const result = await this.settleSwapOutcome({
+        done,
+        userId: args.userId,
+        user: { id: args.userId, username: args.username },
+        params: args.params,
+      });
+      if (args.swapTxId) {
+        await this.prisma.swapTransaction
+          .update({
+            where: { id: args.swapTxId },
+            data: {
+              status: result.success ? 'EXECUTED' : 'FAILED',
+              buyAmount: result.outputAmount ? Number(result.outputAmount) : null,
+              swapExecutedAt: result.success ? new Date() : null,
+              errorMessage: result.success ? null : (result.message ?? null),
+            },
+          })
+          .catch((e) => this.logger.warn(`swap row update fail: ${String(e)}`));
+      }
+    } catch (e) {
+      this.logger.error(`finalizeSwapInBackground error: ${String(e)}`);
+      if (args.swapTxId) {
+        await this.prisma.swapTransaction
+          .update({
+            where: { id: args.swapTxId },
+            data: { status: 'FAILED', errorMessage: String(e) },
+          })
+          .catch(() => {});
+      }
+    } finally {
+      this.swapInFlight.delete(args.userId);
+    }
+  }
+
+  /** Catat outcome terminal swap (transaksi, balance align, SSE). */
+  private async settleSwapOutcome(args: {
+    done: Awaited<ReturnType<OneSwapClient['waitForSwap']>>;
+    userId: string;
+    user: { id: string; username: string };
+    params: ExecuteSwapParams;
+  }): Promise<SwapExecResult> {
+    const done = args.done;
+    const userId = args.userId;
+    const params = args.params;
     const direction =
       params.from.toUpperCase() === CC_SYMBOL ? 'CC_TO_TOKEN' : 'TOKEN_TO_CC';
 
     switch (done.status) {
       case 'returned': {
-        // Sukses. Output sudah balik ke party user (senderParty). Catat transaksi.
         await this.users.recordTransaction({
           userId,
           amountCc: params.amount,
@@ -473,7 +634,7 @@ export class SwapService {
           description: `Swap ${params.amount} ${params.from} → ${done.amountOut} ${params.to} (OneSwap fee incl.)`,
           ledgerTxId: `oneswap:${done.id}:in`,
           status: 'COMPLETED',
-          silent: true, // notif via SSE swap:completed (anti duplikat)
+          silent: true,
         });
         await this.users.recordTransaction({
           userId,
@@ -484,16 +645,11 @@ export class SwapService {
           status: 'COMPLETED',
           silent: true,
         });
-
-        // Reconcile saldo CC (kalau salah satu leg CC).
-        void this.inboundSync.alignBalanceFromChain(userId, user.username);
-
-        // Emit SSE (nama sama dengan Cantex lama — FE use-realtime tetap jalan).
+        void this.inboundSync.alignBalanceFromChain(userId, args.user.username);
         void this.realtime.push(userId, 'swap:completed', {
           direction,
           outputAmount: String(done.amountOut ?? 0),
         });
-
         return {
           success: true,
           direction,
@@ -501,7 +657,6 @@ export class SwapService {
         };
       }
       case 'refunded':
-        // Input balik ke user. Tidak ada pergerakan neto — jangan catat swap leg.
         this.logger.warn(
           `OneSwap ${done.id} refunded — input returned to user ${userId}`,
         );
@@ -534,7 +689,6 @@ export class SwapService {
           message: `Swap could not complete (${done.status}). Your input is safe — contact support if needed.`,
         };
       default:
-        // Non-terminal setelah timeout (awaiting_deposit/deposit_detected/swapping/recovering).
         this.logger.warn(
           `OneSwap ${done.id} timed out at status=${done.status} — still processing`,
         );

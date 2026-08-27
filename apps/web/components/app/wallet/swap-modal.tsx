@@ -128,6 +128,8 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
   const [swapMessage, setSwapMessage] = useState("");
   const [swapOutput, setSwapOutput] = useState("");
   const [swapReceivedToken, setSwapReceivedToken] = useState("");
+  /** true = swap masih diproses OneSwap di background (hasil via notifikasi). */
+  const [swapPending, setSwapPending] = useState(false);
 
   // Slippage tolerance (client-controlled; passed to the swap endpoint, ignored
   // if unsupported). "Minimum received" is computed honestly from the quote.
@@ -280,7 +282,6 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
     tx.start({
       amountText: `${formatAmountNum(parseFloat(amount))} ${displayName(sellToken.instrumentId)} → ${estOut} ${displayName(buyToken.instrumentId)}`,
       title: "Swap complete",
-      broadcastNote: "OneSwap is matching your swap — this usually takes under a minute.",
       subtitle: `Received ${estOut} ${displayName(buyToken.instrumentId)}`,
       accentBg: "bg-[var(--primary)]/15",
       accentText: "text-canton",
@@ -356,6 +357,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
       });
       const data = (await res.json()) as {
         success?: boolean;
+        pending?: boolean;
         outputAmount?: string;
         message?: string;
       };
@@ -366,17 +368,23 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
         setSwapMessage(msg);
         return;
       }
+      // ASYNC: submit diterima — OneSwap menyelesaikan di background.
+      // Modal sukses auto-tutup ±2.5 detik; hasil final masuk via SSE
+      // (swap:completed) + badge notifikasi seperti transaksi lain.
       setSwapState("success");
-      setSwapOutput(data.outputAmount ?? "");
+      setSwapOutput(data.outputAmount ?? estOut);
       setSwapReceivedToken(buyToken?.instrumentId ?? "");
-      // WAVE 6 real-time: invalidate react-query supaya saldo refresh otomatis
-      // (useBalances/usePools hook background refetch).
+      setSwapPending(Boolean(data.pending));
+      // Leg deposit sudah on-chain saat sign — refresh saldo sell sekarang;
+      // saldo buy menyusul via SSE swap:completed (listener use-realtime).
       void invalidateWalletTokens();
 
       tx.succeed({
         amountText: `${formatAmountNum(parseFloat(amount))} ${displayName(sellToken.instrumentId)} → ${data.outputAmount ?? estOut} ${displayName(buyToken.instrumentId)}`,
-        title: "Swap complete",
-        subtitle: `Received ${data.outputAmount ?? estOut} ${displayName(buyToken.instrumentId)}`,
+        title: data.pending ? "Swap submitted" : "Swap complete",
+        subtitle: data.pending
+          ? "Completing in the background — watch your notifications."
+          : `Received ${data.outputAmount ?? estOut} ${displayName(buyToken.instrumentId)}`,
         accentBg: "bg-[var(--primary)]/15",
         accentText: "text-canton",
         meta: quote
@@ -641,19 +649,28 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
             {swapState === "success" ? (
               <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-center">
                 <p className="text-sm font-semibold text-emerald-600">
-                  Swap completed!
+                  {swapPending ? "Swap submitted!" : "Swap completed!"}
                 </p>
                 {swapOutput && (
                   <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                    Received {swapOutput}{" "}
+                    {swapPending ? "≈" : "Received"} {swapOutput}{" "}
                     {displayName(swapReceivedToken || (buyToken?.instrumentId ?? ""))}
+                    {swapPending
+                      ? " expected — arriving in your wallet shortly"
+                      : ""}
                   </p>
                 )}
+                {swapPending ? (
+                  <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                    You&apos;ll get a notification when it completes.
+                  </p>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => {
                     setSwapState("idle");
                     setAmount("");
+                    setSwapPending(false);
                   }}
                   className={cn(
                     buttonVariants({ size: "sm" }),

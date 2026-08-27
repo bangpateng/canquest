@@ -36,6 +36,8 @@ export interface ExecuteSwapParams {
 /** Hasil eksekusi swap — shape yang dikembalikan ke controller/frontend. */
 export interface SwapExecResult {
   success: boolean;
+  /** true = swap diterima dan diselesaikan di BACKGROUND (UI tidak menunggu). */
+  pending?: boolean;
   /** 'CC_TO_TOKEN' | 'TOKEN_TO_CC' | '' (gagal). */
   direction: string;
   /** Jumlah output (token yang dibeli), bila sukses. */
