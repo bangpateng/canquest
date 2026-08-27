@@ -387,6 +387,11 @@ export class UsersService {
   ) {
     const normalized =
       normalizeCantonPartyId(params.partyId) ?? params.partyId.trim();
+    // Bersihkan saldo token legacy (era custodial) — CantexTokenBalance tidak
+    // di-sync on-chain. Tanpa ini, user upgrade menampilkan USDCx "hantu".
+    await this.prisma.cantexTokenBalance
+      .updateMany({ where: { userId, balance: { gt: 0 } }, data: { balance: 0 } })
+      .catch(() => {});
     try {
       return await this.prisma.user.update({
         where: { id: userId },
@@ -421,6 +426,11 @@ export class UsersService {
     const legacy =
       normalizeCantonPartyId(params.legacyPartyId) ??
       params.legacyPartyId.trim();
+    // Bersihkan saldo token legacy (era custodial) — CantexTokenBalance tidak
+    // di-sync on-chain. Tanpa ini, user upgrade menampilkan USDCx "hantu".
+    await this.prisma.cantexTokenBalance
+      .updateMany({ where: { userId, balance: { gt: 0 } }, data: { balance: 0 } })
+      .catch(() => {});
     try {
       return await this.prisma.user.update({
         where: { id: userId },
