@@ -19,6 +19,8 @@ export type NotificationTx = {
     | "OFFER_WITHDRAWN"
     | "PREAPPROVAL_ENABLED"
     | "PREAPPROVAL_DISABLED"
+    | "SWAP_IN"
+    | "SWAP_OUT"
     // Token non-CC (CIP-0056 P2P transfer, mis. USDCx).
     | "TOKEN_TRANSFER_IN"
     | "TOKEN_TRANSFER_OUT"

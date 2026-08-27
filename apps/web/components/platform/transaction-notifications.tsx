@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  ArrowLeftRight,
   Ban,
   Bell,
   Coins,
@@ -98,6 +99,10 @@ function txLabel(
       return cp
         ? t("transactions.sentTo", { counterparty: cp })
         : t("transactions.tokenSent");
+    case "SWAP_IN":
+      return t("transactions.swapReceived");
+    case "SWAP_OUT":
+      return t("transactions.swapSent");
     default:
       return tx.description;
   }
@@ -405,12 +410,25 @@ export function TransactionNotifications() {
         return <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />;
       case "PREAPPROVAL_DISABLED":
         return <ShieldOff className="mt-0.5 h-4 w-4 shrink-0 text-[var(--muted-foreground)]" />;
+      case "SWAP_IN":
+        case "SWAP_OUT":
+          return <ArrowLeftRight className="mt-0.5 h-4 w-4 shrink-0 text-canton" />;
       default:
         return <Gift className="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />;
     }
   }
 
   function toastMessage(toast: (typeof toasts)[number]) {
+    if (toast.txType === "SWAP_IN") {
+      return t("transactions.swapReceivedToast", {
+        amount: toast.amountCc ?? "",
+      });
+    }
+    if (toast.txType === "SWAP_OUT") {
+      return t("transactions.swapSentToast", {
+        amount: toast.amountCc ?? "",
+      });
+    }
     if (toast.kind === "draw" || toast.kind === "code") {
       return toast.description;
     }
