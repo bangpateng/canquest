@@ -6,7 +6,6 @@ import { buttonVariants } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { iconButtonClass } from "@/lib/ui/ui-button-styles";
 import { useTransactionStatus } from "@/lib/tx/transaction-status";
-import { TxReviewModal } from "@/components/app/wallet/tx-review-modal";
 import { useMe } from "@/lib/hooks/use-me";
 import { signRelayPrepared } from "@/lib/wallet/sign-relay";
 import { usePassphrasePrompt } from "@/lib/wallet/use-passphrase-prompt";
@@ -138,7 +137,6 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
 
   // Tahap REVIEW (Input → Review → Sign → Broadcast → Success/Failed):
   // tombol Swap buka review dulu; eksekusi jalan saat Confirm.
-  const [reviewOpen, setReviewOpen] = useState(false);
 
   // Escape to close.
   useEffect(() => {
@@ -412,54 +410,6 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
       {/* M3b: prompt passphrase leg input swap (user external). */}
       {passphraseModal}
 
-      {/* Tahap REVIEW sebelum eksekusi (Input → Review → Sign → Broadcast). */}
-      <TxReviewModal
-        open={reviewOpen}
-        title="Confirm swap"
-        amountText={`${formatAmountNum(parseFloat(amount || "0"))} ${displayName(sellToken?.instrumentId ?? "")} → ${quote ? formatAmountNum(quote.amountOut) : "…"} ${displayName(buyToken?.instrumentId ?? "")}`}
-        subText="Best route via OneSwap"
-        rows={[
-          {
-            label: "You pay",
-            value: `${formatAmountNum(parseFloat(amount || "0"))} ${displayName(sellToken?.instrumentId ?? "")}`,
-          },
-          {
-            label: "You get (est.)",
-            value: quote
-              ? `${formatAmountNum(quote.amountOut)} ${displayName(buyToken?.instrumentId ?? "")}`
-              : "…",
-          },
-          ...(quote
-            ? [
-                {
-                  label: "Rate",
-                  value: `1 ${displayName(sellToken?.instrumentId ?? "")} ≈ ${formatPriceNum(quote.amountOut / (quote.effInput || parseFloat(amount) || 1))} ${displayName(buyToken?.instrumentId ?? "")}`,
-                },
-                {
-                  label: "Min received",
-                  value: `${formatAmountNum(quote.amountOut * (1 - slippage / 100))} ${displayName(buyToken?.instrumentId ?? "")}`,
-                },
-                {
-                  label: "Network fee",
-                  value: `${formatAmountNum(quote.networkFeeIn)} ${displayName(sellToken?.instrumentId ?? "")}`,
-                },
-                {
-                  label: "Pool fee",
-                  value: `${(quote.effFeeBps / 100).toFixed(2)}%`,
-                },
-              ]
-            : []),
-          { label: "Max slippage", value: `${slippage}%` },
-          { label: "Network", value: "Canton" },
-        ]}
-        note="Output is estimated — it may change slightly before confirmation."
-        confirmLabel="Confirm Swap"
-        onClose={() => setReviewOpen(false)}
-        onConfirm={() => {
-          setReviewOpen(false);
-          void submitSwap();
-        }}
-      />
       <button
         type="button"
         className="modal-backdrop"
@@ -700,7 +650,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
             ) : (
               <button
                 type="button"
-                onClick={() => setReviewOpen(true)}
+                onClick={() => void submitSwap()}
                 disabled={
                   swapState === "loading" ||
                   !amount ||
