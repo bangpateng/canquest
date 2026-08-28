@@ -1819,18 +1819,28 @@ export class CantonLedgerService {
       const isAmuletLeg = t.instrumentId.toLowerCase() === 'amulet';
       let legInputCids: string[];
       if (isAmuletLeg) {
+        // BEST-FIT: prioritaskan SATU holding terkecil yang eff >= amount
+        // (pool ascending). Gabung beberapa hanya bila tidak ada single-fit —
+        // decay membuat holding nominal-exact bisa eff-nya sedikit di bawah
+        // amount, dan ascending murni akan menghabiskan seluruh pool untuk
+        // leg pertama sehingga leg berikutnya kehabisan.
         legInputCids = [];
-        let acc = 0;
-        while (acc < t.amount && amuletPool.length > 0) {
-          const h = amuletPool.shift()!;
-          legInputCids.push(h.contractId);
-          acc += h.eff;
-        }
-        if (acc < t.amount) {
-          return {
-            ok: false,
-            error: `Insufficient holdings to cover leg disjointly (${acc.toFixed(4)} < ${t.amount} ${t.instrumentId}) — falling back`,
-          };
+        const singleIdx = amuletPool.findIndex((h) => h.eff >= t.amount);
+        if (singleIdx >= 0) {
+          legInputCids.push(amuletPool.splice(singleIdx, 1)[0].contractId);
+        } else {
+          let acc = 0;
+          while (acc < t.amount && amuletPool.length > 0) {
+            const h = amuletPool.shift()!;
+            legInputCids.push(h.contractId);
+            acc += h.eff;
+          }
+          if (acc < t.amount) {
+            return {
+              ok: false,
+              error: `Insufficient holdings to cover leg disjointly (${acc.toFixed(4)} < ${t.amount} ${t.instrumentId}) — falling back`,
+            };
+          }
         }
       } else {
         // Non-Amulet: satu leg per instrument (leg sama instrument ke-2 tidak
