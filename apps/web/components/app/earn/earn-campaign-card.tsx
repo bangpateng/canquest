@@ -10,7 +10,8 @@ import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { QUEST_STATUS_BADGE, type Quest, type UserProgress } from "@/lib/quest/quest-types";
 import { cn } from "@/lib/utils/utils";
 import { useEffect, useRef, useState } from "react";
-import { Calendar, ListChecks, Users } from "lucide-react";
+import { Calendar, ListChecks, Sparkles, Ticket, Users } from "lucide-react";
+import { RewardTokenLogo } from "@/components/app/campaign/reward-token-logo";
 
 /** Progress bar mengisi saat kartu masuk viewport (mockup v2) — sekali saja. */
 function useInViewOnce<T extends HTMLElement>() {
@@ -122,6 +123,20 @@ export function EarnCampaignCard({
   // USD estimasi (harga live) di bawah reward — hanya campaign berhadiah
   // token (CC / USDCx / dual CC+Code); invite code & waitlist tanpa nominal.
   const showRewardUsd = config.isCcToken && quest.rewardCc > 0;
+
+  // Logo kecil di depan nilai reward (mockup v2): CC/USDCx → logo asli R2,
+  // WL → logo "WL", code → ikon ticket (konsisten dgn claim modal).
+  const rewardIcon =
+    config.isCcToken || config.isDual ? (
+      <RewardTokenLogo token={token} size={16} circular />
+    ) : config.code === "WAITLIST_EMAIL" ? (
+      <RewardTokenLogo token="WL" size={16} circular />
+    ) : config.code === "INVITE_CODE_FCFS" ||
+        config.code === "INVITE_CODE_RANDOM" ? (
+      <Ticket className="h-4 w-4 shrink-0 text-violet-600" aria-hidden />
+    ) : (
+      <Sparkles className="h-4 w-4 shrink-0 text-[var(--muted-foreground)]" aria-hidden />
+    );
 
   // CTA
   const ctaLabel = meta.joinBlocked
@@ -322,21 +337,24 @@ export function EarnCampaignCard({
             <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]/70">
               Reward
             </p>
-            <p
-              className={cn(
-                "text-right text-sm font-bold tabular-nums",
-                isEnded ? "text-[var(--muted-foreground)]" : "text-canton",
-              )}
-            >
-              {rewardText}
+            <span className="flex min-w-0 items-center justify-end gap-1.5">
+              {rewardIcon}
+              <span
+                className={cn(
+                  "text-sm font-bold tabular-nums",
+                  isEnded ? "text-[var(--muted-foreground)]" : "text-canton",
+                )}
+              >
+                {rewardText}
+              </span>
               {showRewardUsd ? (
                 <TokenUsdValue
                   amount={quest.rewardCc}
                   token={token}
-                  className="ml-1.5 text-xs font-medium text-[var(--muted-foreground)]/80"
+                  className="text-xs font-medium text-[var(--muted-foreground)]/80"
                 />
               ) : null}
-            </p>
+            </span>
           </div>
         </div>
 
