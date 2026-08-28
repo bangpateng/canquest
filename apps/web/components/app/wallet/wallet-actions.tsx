@@ -13,7 +13,6 @@ import { useTransactionStatus } from "@/lib/tx/transaction-status";
 import { TransactionDetailModal } from "@/components/app/wallet/transaction-detail-modal";
 import { OffersModal, useOffers, useSentOffers } from "@/components/app/wallet/offers-section";
 import { SwapModal } from "@/components/app/wallet/swap-modal";
-import { TxReviewModal } from "@/components/app/wallet/tx-review-modal";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -29,6 +28,7 @@ import {
   Share2,
   AlertTriangle,
   CheckCircle2,
+  User,
 } from "lucide-react";
 import { useCallback, useEffect, useId, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -336,8 +336,8 @@ export function WalletActions({
       void invalidateWalletTokens();
       tx.succeed({
         amountText: `${amount} ${tokenLabel}`,
-        title: "Transfer sent",
-        subtitle: "Signed with your key.",
+        title: "Transaction Submitted",
+        subtitle: `Your transfer of ${amount} ${tokenLabel} has been broadcasted.`,
         accentBg: "bg-[var(--primary)]/15",
         accentText: "text-canton",
         meta: [
@@ -429,8 +429,10 @@ export function WalletActions({
       const isOffer = Boolean(data.offerPending);
       tx.succeed({
         amountText: `${amount} ${tokenLabel}`,
-        title: isOffer ? "Offer sent" : "Transfer sent",
-        subtitle: isOffer ? "Recipient must accept to receive." : "Funds are on the way.",
+        title: isOffer ? "Offer sent" : "Transaction Submitted",
+        subtitle: isOffer
+          ? "Recipient must accept to receive."
+          : `Your transfer of ${amount} ${tokenLabel} has been broadcasted.`,
         accentBg: "bg-[var(--primary)]/15",
         accentText: "text-canton",
         meta: [
@@ -746,10 +748,10 @@ export function WalletActions({
                       </span>
                     ) : null}
                   </div>
-                  <textarea
+                  <input
                     id="wallet-send-recipient"
                     required
-                    rows={2}
+                    type="text"
                     autoComplete="off"
                     value={recipientUsername}
                     onChange={(e) => setRecipientUsername(e.target.value)}
@@ -759,7 +761,7 @@ export function WalletActions({
                     }}
                     placeholder="Recipient wallet address"
                     disabled={sendState === "loading"}
-                    className="w-full resize-none rounded-2xl border border-[var(--border)] bg-[var(--muted)] px-4 py-3 font-mono text-sm font-medium text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[rgb(var(--canton-rgb)/0.40)] disabled:opacity-50"
+                    className="w-full rounded-2xl border border-[var(--border)] bg-[var(--muted)] px-4 py-3.5 font-mono text-sm font-medium text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[rgb(var(--canton-rgb)/0.40)] disabled:opacity-50"
                   />
                 </div>
 
@@ -771,14 +773,15 @@ export function WalletActions({
                     Memo{" "}
                     <span className="font-normal text-[var(--muted-foreground)]">(optional)</span>
                   </label>
-                  <input
+                  <textarea
                     id="wallet-send-memo"
+                    rows={3}
                     autoComplete="off"
                     value={memo}
                     onChange={(e) => setMemo(e.target.value)}
                     placeholder="Add a note"
                     disabled={sendState === "loading"}
-                    className="w-full rounded-2xl border border-[var(--border)] bg-[var(--muted)] px-4 py-3 text-base font-medium text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[rgb(var(--canton-rgb)/0.40)] disabled:opacity-50"
+                    className="w-full resize-none rounded-2xl border border-[var(--border)] bg-[var(--muted)] px-4 py-3 text-base font-medium text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[rgb(var(--canton-rgb)/0.40)] disabled:opacity-50"
                   />
                 </div>
 
@@ -790,8 +793,8 @@ export function WalletActions({
                 )}
 
                 {selectedIsCC && (
-                  <div className="flex items-center justify-between rounded-2xl bg-[var(--muted)]/60 px-4 py-2.5 text-xs">
-                    <span className="flex items-center gap-1.5 text-[var(--muted-foreground)]">
+                  <div className="flex items-center justify-between py-1 text-sm text-[var(--muted-foreground)]">
+                    <span className="flex items-center gap-1.5">
                       <Zap className="h-3.5 w-3.5" />
                       Network fee
                     </span>
@@ -832,54 +835,122 @@ export function WalletActions({
         </ModalPortal>
       ) : null}
 
-      {/* ── REVIEW MODAL (langkah 2 — Input → Review → Sign → Broadcast → Done) ── */}
+      {/* ── CONFIRM SEND modal (mockup): avatar + amount besar + kotak detail ── */}
       <ModalPortal>
-      <TxReviewModal
-        open={confirmOpen}
-        amountText={`${ccAmount || "0"} ${selectedSendToken ? displayName(selectedSendToken.instrumentId) : ""}`}
-        rows={[
-          {
-            label: "Recipient",
-            value: formatPartyIdForDisplay(normalizeSendRecipientInput(recipientUsername)),
-            mono: true,
-          },
-          { label: "Memo", value: memo.trim() || "—" },
-          { label: "Network", value: "Canton" },
-          ...(selectedIsCC
-            ? [{ label: "Platform fee", value: `≈ ${feeCc} CC` }]
-            : []),
-        ]}
-        confirmLabel="Confirm & Sign"
-        onClose={closeConfirm}
-        onConfirm={() => {
-          // Tutup review DULU — langkah berikutnya ambil alih (satu modal
-          // terlihat pada satu waktu).
-          setConfirmOpen(false);
-          // User external: satu langkah lagi — Signature Request; klik
-          // Sign & Send langsung mengeksekusi transfer.
-          if (isExternalWallet) {
-            setSignReq([
-              { label: "Action", value: "Transfer" },
-              {
-                label: "Token",
-                value: selectedSendToken
+      {confirmOpen ? (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Confirm send"
+        >
+          <button
+            type="button"
+            className="modal-backdrop"
+            aria-label="Close"
+            onClick={closeConfirm}
+          />
+          <div className="relative z-10 my-auto w-full max-w-[380px] rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl">
+            <div className="mb-5 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-[var(--foreground)]">
+                Confirm Send
+              </h3>
+              <button
+                type="button"
+                onClick={closeConfirm}
+                className={iconButtonClass("h-8 w-8")}
+                aria-label="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Avatar penerima (mockup) */}
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--muted)] text-[var(--muted-foreground)]">
+              <User className="h-6 w-6" />
+            </div>
+
+            {/* Amount besar di tengah */}
+            <p className="mb-6 flex items-center justify-center gap-1.5 text-3xl font-bold tabular-nums text-[var(--foreground)]">
+              {ccAmount || "0"}
+              <span className="text-base font-semibold text-[var(--muted-foreground)]">
+                {selectedSendToken
                   ? displayName(selectedSendToken.instrumentId)
-                  : "",
-              },
-              { label: "Amount", value: ccAmount },
-              {
-                label: "To",
-                value: formatPartyIdForDisplay(
-                  normalizeSendRecipientInput(recipientUsername),
-                ),
-              },
-              { label: "Memo", value: memo.trim() || "None" },
-            ]);
-            return;
-          }
-          void submitSend({ preventDefault: () => {} } as React.FormEvent);
-        }}
-      />
+                  : ""}
+              </span>
+            </p>
+
+            {/* Kotak detail (mockup) */}
+            <div className="mb-6 space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--muted)] p-4 text-sm">
+              <div className="flex items-start justify-between gap-3">
+                <span className="shrink-0 text-xs text-[var(--muted-foreground)]">To</span>
+                <span className="min-w-0 max-w-[62%] break-all text-right font-mono text-xs font-medium text-[var(--foreground)]">
+                  {formatPartyIdForDisplay(
+                    normalizeSendRecipientInput(recipientUsername),
+                  )}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs text-[var(--muted-foreground)]">Network</span>
+                <span className="text-xs font-medium text-[var(--foreground)]">
+                  Canton Mainnet
+                </span>
+              </div>
+              {memo.trim() ? (
+                <div className="flex items-start justify-between gap-3">
+                  <span className="shrink-0 text-xs text-[var(--muted-foreground)]">Memo</span>
+                  <span className="min-w-0 max-w-[62%] break-words text-right text-xs italic text-[var(--foreground)]">
+                    {memo.trim()}
+                  </span>
+                </div>
+              ) : null}
+              {selectedIsCC ? (
+                <div className="flex items-center justify-between gap-3 border-t border-dashed border-[var(--border)] pt-3">
+                  <span className="text-xs text-[var(--muted-foreground)]">Network Fee</span>
+                  <span className="text-xs font-medium text-[var(--foreground)]">
+                    ≈ {feeCc} CC
+                  </span>
+                </div>
+              ) : null}
+            </div>
+
+            {/* Satu tombol gradient (mockup) */}
+            <button
+              type="button"
+              onClick={() => {
+                // Tutup confirm DULU — langkah berikutnya ambil alih.
+                setConfirmOpen(false);
+                // User external: satu langkah lagi — Signature Request; klik
+                // Sign & Send langsung mengeksekusi transfer.
+                if (isExternalWallet) {
+                  setSignReq([
+                    { label: "Action", value: "Transfer" },
+                    {
+                      label: "Token",
+                      value: selectedSendToken
+                        ? displayName(selectedSendToken.instrumentId)
+                        : "",
+                    },
+                    { label: "Amount", value: ccAmount },
+                    {
+                      label: "To",
+                      value: formatPartyIdForDisplay(
+                        normalizeSendRecipientInput(recipientUsername),
+                      ),
+                    },
+                    { label: "Memo", value: memo.trim() || "None" },
+                  ]);
+                  return;
+                }
+                void submitSend({ preventDefault: () => {} } as React.FormEvent);
+              }}
+              className="w-full rounded-xl bg-gradient-to-r from-[#a3e635] to-[#4ade80] px-4 py-4 text-base font-semibold text-[#064e3b] transition hover:opacity-90"
+            >
+              Confirm & Sign
+            </button>
+          </div>
+        </div>
+      ) : null}
       </ModalPortal>
 
       {/* Langkah SIGN — Signature Request ala wallet (tanpa passphrase). */}
