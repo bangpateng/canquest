@@ -98,7 +98,8 @@ export function EarnCampaignCard({
       ? t("earnCampaigns.slotsEnded")
       : statusMeta.label;
 
-  // Reward value (boxed row) — "0.05 CC · first-come" / "0.02 CC · winner".
+  // Reward value (boxed row) — cukup nilai reward; jenis FCFS/Raffle sudah
+  // terwakili chip tipe di banner (permintaan user, tanpa suffix).
   let rewardText: string;
   if (config.isDual) {
     rewardText =
@@ -106,9 +107,7 @@ export function EarnCampaignCard({
         ? `${formatRewardAmount(quest.rewardCc, token)} + Code`
         : `${token} + Code`;
   } else if (config.isCcToken && quest.rewardCc > 0) {
-    rewardText = `${formatRewardAmount(quest.rewardCc, token)} · ${
-      config.isFcfs ? "first-come" : "winner"
-    }`;
+    rewardText = formatRewardAmount(quest.rewardCc, token);
   } else if (
     config.code === "INVITE_CODE_FCFS" ||
     config.code === "INVITE_CODE_RANDOM"
@@ -325,7 +324,7 @@ export function EarnCampaignCard({
             </p>
             <p
               className={cn(
-                "text-right font-mono text-sm font-bold tabular-nums",
+                "text-right text-sm font-bold tabular-nums",
                 isEnded ? "text-[var(--muted-foreground)]" : "text-canton",
               )}
             >

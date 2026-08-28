@@ -371,13 +371,8 @@ export function QuestTaskPanel({
     () => visibleTasks.filter((t) => todayVerified.has(t.id)).length,
     [visibleTasks, todayVerified],
   );
-  const pct = visibleTasks.length
-    ? Math.round(
-        ((isQuestHub ? verifiedTodayCount : verifiedCount) /
-          visibleTasks.length) *
-          100,
-      )
-    : 0;
+  // Progress bar dihapus (campaign detail + quest hub) — jumlah task sudah
+  // terwakili metric tile / status per-task (permintaan user, anti-duplikat).
   const allDone = isQuestHub
     ? verifiedTodayCount === visibleTasks.length && visibleTasks.length > 0
     : verifiedCount === visibleTasks.length && visibleTasks.length > 0;
@@ -541,25 +536,6 @@ export function QuestTaskPanel({
           {userParticipated
             ? t("earnCampaigns.slotsFullBanner")
             : t("earnCampaigns.slotsFullClosedBanner")}
-        </div>
-      ) : null}
-
-      {/* Progress bar — HANYA quest hub. Di campaign detail dihapus:
-          jumlah & progres sudah terwakili metric tile "Tasks" di sidebar
-          reward card (permintaan user, anti-duplikat). */}
-      {visibleTasks.length > 0 && isQuestHub ? (
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)]/60 px-4 py-3 backdrop-blur-2xl sm:px-5">
-          <div className="h-1.5 overflow-hidden rounded-full bg-[var(--muted)]">
-            <div
-              className={cn(
-                "h-full rounded-full transition-all duration-500",
-                allDone
-                  ? "bg-gradient-to-r from-emerald-500 to-emerald-400"
-                  : "bg-gradient-to-r from-[var(--primary)] to-[var(--primary-strong)]",
-              )}
-              style={{ width: `${Math.max(4, pct)}%` }}
-            />
-          </div>
         </div>
       ) : null}
 

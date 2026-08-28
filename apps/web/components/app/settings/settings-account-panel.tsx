@@ -150,7 +150,7 @@ export function SettingsAccountPanel() {
           />
           <SettingsField
             id="settings-username"
-            label="Canton Username"
+            label="Username"
             icon={Shield}
             value={formatUsernameForDisplay(me?.username)}
             placeholder={me?.username ?? "Not set — create via Wallet"}
