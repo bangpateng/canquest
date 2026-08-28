@@ -20,6 +20,8 @@ import {
   X,
   AlertCircle,
   Search,
+  Route,
+  Info,
 } from "lucide-react";
 
 /** Token aktif untuk swap (selain CC). Lainnya = Coming Soon.
@@ -140,6 +142,10 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
   // Langkah SIGN (mockup Signature Request): satu tombol, tanpa passphrase —
   // dompet auto-unlock via device key (sign-relay).
   const [signReq, setSignReq] = useState<SignaturePayloadRow[] | null>(null);
+
+  // Mockup: router trigger → Select Route modal; Confirm Swap → Sign.
+  const [routerOpen, setRouterOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   // Tahap REVIEW (Input → Review → Sign → Broadcast → Success/Failed):
   // tombol Swap buka review dulu; eksekusi jalan saat Confirm.
@@ -272,8 +278,8 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
     setQuote(null);
   };
 
-  // Klik CTA Swap: user external → Signature Request dulu; klik Sign & Send
-  // langsung mengeksekusi swap (async — hasil via notifikasi).
+  // Mockup flow: klik Swap → Confirm Swap → Signature Request → Sign & Send
+  // langsung mengeksekusi (async — hasil via notifikasi).
   const startSwap = () => {
     if (!sellToken || !buyToken || !amount || sameToken || insufficientBalance)
       return;
@@ -281,19 +287,22 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
       void submitSwap();
       return;
     }
-    setSignReq([
-      { label: "Action", value: "Swap (Atomic DvP)" },
-      { label: "Router", value: "OneSwapRouter" },
-      {
-        label: "AmountIn",
-        value: `${formatAmountNum(parseFloat(amount))} ${displayName(sellToken.instrumentId)}`,
-      },
-      {
-        label: "AmountOutMin",
-        value: `${quote ? formatAmountNum(quote.amountOut * (1 - slippage / 100)) : "0"} ${displayName(buyToken.instrumentId)}`,
-      },
-    ]);
+    setConfirmOpen(true);
   };
+
+  // Payload sign — dipakai Signature Request setelah Confirm Swap.
+  const signPayload = (): SignaturePayloadRow[] => [
+    { label: "Action", value: "Swap (Atomic DvP)" },
+    { label: "Router", value: "OneSwapRouter" },
+    {
+      label: "AmountIn",
+      value: `${formatAmountNum(parseFloat(amount))} ${displayName(sellToken?.instrumentId ?? "")}`,
+    },
+    {
+      label: "AmountOutMin",
+      value: `${quote ? formatAmountNum(quote.amountOut * (1 - slippage / 100)) : "0"} ${displayName(buyToken?.instrumentId ?? "")}`,
+    },
+  ];
 
   // Execute swap via POST /api/party/swap.
   const submitSwap = async () => {
@@ -536,6 +545,30 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
               />
             </div>
 
+            {/* Router trigger (mockup) — tampil saat amount valid; klik buka
+                Select Route modal. */}
+            {quote && !sameToken ? (
+              <button
+                type="button"
+                onClick={() => setRouterOpen(true)}
+                className="mt-3 flex w-full items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--muted)]/50 px-4 py-3 transition hover:bg-[var(--muted)]"
+              >
+                <span className="flex items-center gap-2 text-xs font-medium text-[var(--muted-foreground)]">
+                  <Route className="h-3.5 w-3.5" />
+                  Routing via
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="text-sm font-semibold text-[var(--foreground)]">
+                    OneSwap
+                  </span>
+                  <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-600">
+                    Best
+                  </span>
+                  <ChevronDown className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
+                </span>
+              </button>
+            ) : null}
+
             {/* Same token warning */}
             {sameToken && (
               <p className="mt-3 text-center text-sm text-canton">
@@ -571,15 +604,6 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                         ? "text-red-600"
                         : "text-emerald-600"
                     }
-                  />
-                  <DetailRow label="Max slippage" value={`${slippage}%`} />
-                  <DetailRow
-                    label="Minimum received"
-                    value={`${formatAmountNum(quote.amountOut * (1 - slippage / 100))} ${displayName(buyToken?.instrumentId ?? "")}`}
-                  />
-                  <DetailRow
-                    label="Pool Fee"
-                    value={`${(quote.effFeeBps / 100).toFixed(2)}% (${formatAmountNum(quote.lpFee + quote.platformFee)} ${displayName(sellToken?.instrumentId ?? "")})`}
                   />
                   <DetailRow
                     label="Network Fee"
@@ -652,12 +676,19 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                   insufficientBalance ||
                   belowMinimum
                 }
-                className="mt-4 w-full rounded-xl bg-gradient-to-r from-[#a3e635] to-[#4ade80] px-4 py-4 text-base font-semibold text-[#064e3b] transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-[var(--muted)] disabled:text-[var(--muted-foreground)] disabled:opacity-60"
+                className={cn(
+                  "mt-4 w-full rounded-xl px-4 py-4 text-base font-semibold transition",
+                  insufficientBalance
+                    ? "bg-[#fee2e2] text-[#991b1b]"
+                    : !amount || !quote || sameToken || belowMinimum
+                      ? "cursor-not-allowed bg-[#e5e7eb] text-[#9ca3af]"
+                      : "bg-gradient-to-r from-[#a3e635] to-[#4ade80] text-[#064e3b] hover:opacity-90",
+                )}
               >
                 {swapState === "loading"
                   ? "Swapping..."
                   : insufficientBalance
-                    ? `Insufficient ${displayName(sellToken?.instrumentId ?? "")}`
+                    ? "Insufficient Balance"
                     : sameToken
                       ? "Select Different Tokens"
                       : belowMinimum
@@ -670,36 +701,172 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
           </>
         )}
 
-        {/* Routers (mockup) — OneSwap aktif, Tradecraft coming soon.
-            Logo di-serve dari R2 via /api/uploads/token-logo/<nama>. */}
-        <div className="mt-4 space-y-2">
-          <div className="flex items-center justify-between rounded-xl border border-canton-muted bg-canton-subtle/40 px-4 py-3">
-            <span className="flex items-center gap-2.5">
-              <TokenLogo symbol="oneswap" size="sm" />
-              <span className="text-sm font-semibold text-[var(--foreground)]">
-                OneSwap
-              </span>
-              <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-600">
-                Best
-              </span>
-            </span>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-canton">
-              Active
-            </span>
-          </div>
-          <div className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3 opacity-70">
-            <span className="flex items-center gap-2.5">
-              <TokenLogo symbol="tradecraft" size="sm" />
-              <span className="text-sm font-semibold text-[var(--foreground)]">
-                Tradecraft
-              </span>
-              <span className="rounded bg-[var(--muted)] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[var(--muted-foreground)]">
-                Soon
-              </span>
-            </span>
+      </div>
+
+      {/* ── SELECT ROUTE modal (mockup) — OneSwap aktif, Tradecraft soon ── */}
+      {routerOpen ? (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Select route"
+        >
+          <button
+            type="button"
+            className="modal-backdrop"
+            aria-label="Close"
+            onClick={() => setRouterOpen(false)}
+          />
+          <div className="relative z-10 my-auto w-full max-w-[380px] rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-[var(--foreground)]">
+                Select Route
+              </h3>
+              <button
+                type="button"
+                onClick={() => setRouterOpen(false)}
+                className={iconButtonClass("h-8 w-8")}
+                aria-label="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <p className="mb-4 text-xs leading-relaxed text-[var(--muted-foreground)]">
+              We scan multiple DEXes to ensure you get the best price for your
+              trade.
+            </p>
+            <div className="space-y-3">
+              {/* OneSwap — aktif (satu-satunya router live) */}
+              <button
+                type="button"
+                onClick={() => setRouterOpen(false)}
+                className="flex w-full items-center justify-between rounded-2xl border-2 border-[#a3e635] bg-canton-subtle/30 p-4 text-left shadow-[0_4px_12px_rgba(163,230,53,0.1)]"
+              >
+                <span className="flex items-center gap-2.5">
+                  <TokenLogo symbol="oneswap" size="sm" />
+                  <span>
+                    <span className="flex items-center gap-2 text-sm font-bold text-[var(--foreground)]">
+                      OneSwap
+                      <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-600">
+                        Best
+                      </span>
+                    </span>
+                    <span className="mt-0.5 flex items-center gap-1 text-[11px] text-[var(--muted-foreground)]">
+                      <Info className="h-3 w-3" />
+                      {quote ? (quote.effFeeBps / 100).toFixed(2) : "0.30"}%
+                      Pool Fee
+                    </span>
+                  </span>
+                </span>
+                <span className="text-right">
+                  <span className="block font-mono text-sm font-bold text-[var(--foreground)]">
+                    {quote ? formatAmountNum(quote.amountOut) : "0.00"}
+                  </span>
+                  <span className="block text-[11px] font-semibold text-emerald-600">
+                    Max Return
+                  </span>
+                </span>
+              </button>
+              {/* Tradecraft — coming soon */}
+              <div className="flex cursor-not-allowed items-center justify-between rounded-2xl border-2 border-[#f3f4f6] p-4 opacity-60">
+                <span className="flex items-center gap-2.5">
+                  <TokenLogo symbol="tradecraft" size="sm" />
+                  <span>
+                    <span className="flex items-center gap-2 text-sm font-bold text-[var(--foreground)]">
+                      Tradecraft
+                      <span className="rounded bg-[var(--muted)] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[var(--muted-foreground)]">
+                        Soon
+                      </span>
+                    </span>
+                    <span className="mt-0.5 flex items-center gap-1 text-[11px] text-[var(--muted-foreground)]">
+                      <Info className="h-3 w-3" />
+                      0.35% Pool Fee
+                    </span>
+                  </span>
+                </span>
+                <span className="text-right">
+                  <span className="block font-mono text-sm font-bold text-[var(--muted-foreground)]">
+                    —
+                  </span>
+                  <span className="block text-[11px] font-semibold text-[var(--muted-foreground)]">
+                    Coming soon
+                  </span>
+                </span>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
+
+      {/* ── CONFIRM SWAP modal (mockup) — summary → Signature Request ── */}
+      {confirmOpen ? (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Confirm swap"
+        >
+          <button
+            type="button"
+            className="modal-backdrop"
+            aria-label="Close"
+            onClick={() => setConfirmOpen(false)}
+          />
+          <div className="relative z-10 my-auto w-full max-w-[380px] rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl">
+            <div className="mb-5 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-[var(--foreground)]">
+                Confirm Swap
+              </h3>
+              <button
+                type="button"
+                onClick={() => setConfirmOpen(false)}
+                className={iconButtonClass("h-8 w-8")}
+                aria-label="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Summary: pay token → arrow → get token */}
+            <div className="mb-5 text-center">
+              <div className="flex items-center justify-center gap-2 text-2xl font-bold tabular-nums text-[var(--foreground)]">
+                <TokenLogo symbol={sellToken?.instrumentId ?? "CC"} size="sm" />
+                {formatAmountNum(parseFloat(amount))}
+                <span className="text-sm font-semibold text-[var(--muted-foreground)]">
+                  {displayName(sellToken?.instrumentId ?? "")}
+                </span>
+              </div>
+              <ArrowDown className="mx-auto my-2 h-5 w-5 text-[var(--muted-foreground)]" />
+              <div className="flex items-center justify-center gap-2 text-2xl font-bold tabular-nums text-[var(--foreground)]">
+                <TokenLogo symbol={buyToken?.instrumentId ?? "USDCX"} size="sm" />
+                {quote ? formatAmountNum(quote.amountOut) : "0"}
+                <span className="text-sm font-semibold text-[var(--muted-foreground)]">
+                  {displayName(buyToken?.instrumentId ?? "")}
+                </span>
+              </div>
+            </div>
+
+            <div className="mb-5 space-y-2 rounded-xl border border-[var(--border)] bg-[var(--muted)] p-4 text-xs">
+              <DetailRow
+                label="Expected Output"
+                value={`${quote ? formatAmountNum(quote.amountOut) : "0"} ${displayName(buyToken?.instrumentId ?? "")}`}
+              />
+              <DetailRow label="Router" value="OneSwap" />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmOpen(false);
+                setSignReq(signPayload());
+              }}
+              className="w-full rounded-xl bg-[#1a1a1a] px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-[#333]"
+            >
+              Confirm Swap
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {/* Langkah SIGN — Signature Request ala wallet (tanpa passphrase).
           Klik Sign & Send → submitSwap langsung jalan. */}
@@ -865,20 +1032,17 @@ function SwapCard({
               <span className="text-xs text-[var(--muted-foreground)]">Bal: {balance}</span>
               {onPercentClick && (
                 <div className="flex gap-1">
-                  {[0.25, 0.5, 0.75].map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => onPercentClick(p)}
-                      className="rounded bg-[var(--card)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--foreground)] ring-1 ring-[var(--border)] hover:bg-[var(--primary)]/10 hover:text-canton"
-                    >
-                      {p === 0.25 ? "25" : p === 0.5 ? "50" : "75"}%
-                    </button>
-                  ))}
+                  <button
+                    type="button"
+                    onClick={() => onPercentClick(0.5)}
+                    className="rounded bg-[#e5e7eb] px-2 py-0.5 text-[10px] font-semibold text-[var(--foreground)] transition hover:bg-[#d1d5db]"
+                  >
+                    50%
+                  </button>
                   <button
                     type="button"
                     onClick={() => onPercentClick(1)}
-                    className="rounded bg-[var(--card)] px-1.5 py-0.5 text-[10px] font-semibold text-canton ring-1 ring-[var(--border)] hover:bg-[var(--primary)]/10"
+                    className="rounded bg-[#d1fae5] px-2 py-0.5 text-[10px] font-bold text-[#059669] transition hover:bg-[#a7f3d0]"
                   >
                     MAX
                   </button>
