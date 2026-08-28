@@ -8,7 +8,7 @@
  * Private key tidak pernah keluar dari perangkat.
  */
 
-import { signPreparedHash, unlock } from './key-manager';
+import { signPreparedHash, tryDeviceAutoUnlock, unlock } from './key-manager';
 
 export interface SignRelayResult {
   flow: string;
@@ -39,7 +39,15 @@ export async function signHashWithUnlock(
     return await signPreparedHash(hash);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('Wallet locked') && options?.onWalletLocked) {
+    if (!msg.includes('Wallet locked')) throw err;
+    // 1) Passwordless: coba device auto-unlock dulu ("remember this device").
+    if (await tryDeviceAutoUnlock()) {
+      return signPreparedHash(hash);
+    }
+    // 2) Fallback terakhir: prompt passphrase (device belum pernah unlock /
+    //    blob dihapus). Setelah unlock berhasil, device blob dibuat ulang —
+    //    prompt ini hanya muncul sekali per perangkat.
+    if (options?.onWalletLocked) {
       const pass = await options.onWalletLocked(description);
       if (!pass) throw err;
       await unlock(pass);

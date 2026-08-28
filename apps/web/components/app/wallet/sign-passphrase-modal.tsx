@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Eye, EyeOff, KeyRound, LifeBuoy } from "lucide-react";
+import { Eye, EyeOff, KeyRound } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils/utils";
 import { buttonVariants } from "@/components/ui/button";
@@ -36,7 +36,6 @@ export function SignPassphraseModal({
 }: SignPassphraseModalProps) {
   const [pass, setPass] = useState("");
   const [show, setShow] = useState(false);
-  const [showHelp, setShowHelp] = useState(false);
 
   if (!open) return null;
 
@@ -104,48 +103,18 @@ export function SignPassphraseModal({
           </p>
         ) : null}
 
-        {/* Lupa passphrase? — pemulihan via Backup Key (raw hex).
-            Non-custodial: TIDAK ada reset via email — server tidak bisa
-            membuka blob terenkripsi. Hex backup = master recovery. */}
-        <button
-          type="button"
-          onClick={() => setShowHelp((h) => !h)}
-          className="mt-4 flex items-center gap-1.5 text-xs font-semibold text-canton hover:underline"
-        >
-          <LifeBuoy className="h-3.5 w-3.5" />
-          Forgot passphrase?
-        </button>
-        {showHelp ? (
-          <div className="mt-2 rounded-2xl border border-[var(--border)] bg-[var(--muted)]/50 p-4 text-xs leading-relaxed text-[var(--muted-foreground)]">
-            <p>
-              Your passphrase can&apos;t be reset by email — only you hold your
-              keys. If you saved your{" "}
-              <strong className="text-[var(--foreground)]">Backup Key</strong>{" "}
-              (64-character hex) during wallet setup, you can restore the wallet
-              and set a new passphrase:
-            </p>
-            <ol className="mt-2 list-decimal space-y-1 pl-4">
-              <li>Copy this transaction&apos;s details — you&apos;ll redo it after restoring</li>
-              <li>Cancel this dialog</li>
-              <li>
-                Open{" "}
-                <Link
-                  href="/settings"
-                  target="_blank"
-                  className="font-semibold text-canton underline underline-offset-2"
-                >
-                  Settings → Wallet Keys
-                </Link>{" "}
-                → <span className="font-medium">Restore from Backup Key</span>
-              </li>
-              <li>Paste your backup key and choose a new passphrase</li>
-            </ol>
-            <p className="mt-2 text-orange-600">
-              Lost both passphrase and backup key? The wallet cannot be
-              recovered — no one, including us, can restore it.
-            </p>
-          </div>
-        ) : null}
+        {/* Forgot passphrase — bantuan singkat, satu baris. Pemulihan penuh
+            (restore Backup Key) ada di Settings → Wallet Keys, bukan di sini. */}
+        <p className="mt-4 text-xs text-[var(--muted-foreground)]">
+          Forgot passphrase? Restore with your{" "}
+          <Link
+            href="/settings"
+            className="font-semibold text-canton hover:underline"
+          >
+            Backup Key in Settings → Wallet Keys
+          </Link>
+          .
+        </p>
 
         <div className="mt-6 flex gap-2">
           <button

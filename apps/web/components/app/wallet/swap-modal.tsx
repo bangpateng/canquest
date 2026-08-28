@@ -10,6 +10,10 @@ import { useMe } from "@/lib/hooks/use-me";
 import { signRelayPrepared } from "@/lib/wallet/sign-relay";
 import { usePassphrasePrompt } from "@/lib/wallet/use-passphrase-prompt";
 import {
+  SignatureRequestModal,
+  type SignaturePayloadRow,
+} from "@/components/app/wallet/signature-request-modal";
+import {
   ArrowDown,
   ChevronDown,
   X,
@@ -134,6 +138,10 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
   // if unsupported). "Minimum received" is computed honestly from the quote.
   const [slippageOpen, setSlippageOpen] = useState(false);
   const [slippage, setSlippage] = useState(0.5);
+
+  // Langkah SIGN (mockup Signature Request): satu tombol, tanpa passphrase —
+  // dompet auto-unlock via device key (sign-relay).
+  const [signReq, setSignReq] = useState<SignaturePayloadRow[] | null>(null);
 
   // Tahap REVIEW (Input → Review → Sign → Broadcast → Success/Failed):
   // tombol Swap buka review dulu; eksekusi jalan saat Confirm.
@@ -264,6 +272,29 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
     setBuyToken(sellToken);
     setAmount("");
     setQuote(null);
+  };
+
+  // Klik CTA Swap: user external → Signature Request dulu (button-only sign);
+  // selain itu langsung eksekusi.
+  const startSwap = () => {
+    if (!sellToken || !buyToken || !amount || sameToken || insufficientBalance)
+      return;
+    if (!isExternalWallet) {
+      void submitSwap();
+      return;
+    }
+    setSignReq([
+      { label: "Action", value: "Swap (Atomic DvP)" },
+      { label: "Router", value: "OneSwapRouter" },
+      {
+        label: "AmountIn",
+        value: `${formatAmountNum(parseFloat(amount))} ${displayName(sellToken.instrumentId)}`,
+      },
+      {
+        label: "AmountOutMin",
+        value: `${quote ? formatAmountNum(quote.amountOut * (1 - slippage / 100)) : "0"} ${displayName(buyToken.instrumentId)}`,
+      },
+    ]);
   };
 
   // Execute swap via POST /api/party/swap.
@@ -650,7 +681,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
             ) : (
               <button
                 type="button"
-                onClick={() => void submitSwap()}
+                onClick={() => startSwap()}
                 disabled={
                   swapState === "loading" ||
                   !amount ||
@@ -659,10 +690,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                   insufficientBalance ||
                   belowMinimum
                 }
-                className={cn(
-                  buttonVariants({ size: "sm" }),
-                  "mt-4 w-full",
-                )}
+                className="mt-4 w-full rounded-xl bg-gradient-to-r from-[#a3e635] to-[#4ade80] px-4 py-4 text-base font-semibold text-[#064e3b] transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-[var(--muted)] disabled:text-[var(--muted-foreground)] disabled:opacity-60"
               >
                 {swapState === "loading"
                   ? "Swapping..."
@@ -680,11 +708,34 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
           </>
         )}
 
-        <p className="mt-4 flex items-center justify-center gap-1.5 text-center text-xs font-medium text-[var(--muted-foreground)]">
-          <Route className="h-3 w-3" />
-          Best route via OneSwap
-        </p>
+        {/* Router trigger (mockup) — OneSwap satu-satunya router aktif. */}
+        <div className="mt-4 flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--muted)]/60 px-4 py-3">
+          <span className="flex items-center gap-1.5 text-xs font-medium text-[var(--muted-foreground)]">
+            <Route className="h-3.5 w-3.5" />
+            Routing via
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="text-sm font-semibold text-[var(--foreground)]">
+              OneSwap
+            </span>
+            <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-600">
+              Best
+            </span>
+            <ChevronDown className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
+          </span>
+        </div>
       </div>
+
+      {/* Langkah SIGN — Signature Request ala wallet (tanpa passphrase). */}
+      <SignatureRequestModal
+        open={!!signReq}
+        payload={signReq ?? []}
+        busy={swapState === "loading"}
+        onSign={() => {
+          void submitSwap().finally(() => setSignReq(null));
+        }}
+        onReject={() => setSignReq(null)}
+      />
     </div>
   );
 }

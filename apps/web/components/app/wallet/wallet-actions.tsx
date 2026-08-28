@@ -46,6 +46,10 @@ import { useFeeConfig } from "@/lib/hooks/use-fee-config";
 import { useMe } from "@/lib/hooks/use-me";
 import { signRelayTransaction } from "@/lib/wallet/sign-relay";
 import { SignPassphraseModal } from "@/components/app/wallet/sign-passphrase-modal";
+import {
+  SignatureRequestModal,
+  type SignaturePayloadRow,
+} from "@/components/app/wallet/signature-request-modal";
 import { TokenLogo, displayName } from "@/components/app/wallet/token-logo";
 
 type Sheet = null | "send" | "receive" | "offers" | "swap";
@@ -173,6 +177,10 @@ export function WalletActions({
   // ── Alur 2-langkah: form Send → modal "Confirm transaction" → eksekusi.
   // confirmOpen membuka modal review. Pada Confirm, modal panggil submitSend.
   const [confirmOpen, setConfirmOpen] = useState(false);
+
+  // ── Langkah SIGN (mockup Signature Request): user external menekan satu
+  // tombol "Sign & Send" — dompet auto-unlock via device key, tanpa passphrase.
+  const [signReq, setSignReq] = useState<SignaturePayloadRow[] | null>(null);
 
   const close = useCallback(() => {
     setSheet(null);
@@ -795,17 +803,14 @@ export function WalletActions({
                     type="button"
                     onClick={close}
                     disabled={sendState === "loading"}
-                    className={cn(
-                      buttonVariants({ variant: "secondary", size: "sm" }),
-                      "flex-1",
-                    )}
+                    className="flex-1 rounded-xl bg-[var(--muted)] px-4 py-4 text-base font-semibold text-[var(--foreground)] transition hover:bg-[var(--border)]/60 disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={sendState === "loading"}
-                    className={cn(buttonVariants({ size: "sm" }), "flex-1 gap-2")}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#a3e635] to-[#4ade80] px-4 py-4 text-base font-semibold text-[#064e3b] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {sendState === "loading" ? (
                       <>
@@ -839,14 +844,48 @@ export function WalletActions({
             ? [{ label: "Platform fee", value: `≈ ${feeCc} CC` }]
             : []),
         ]}
-        confirmLabel="Confirm"
+        confirmLabel="Confirm & Sign"
         onClose={closeConfirm}
         onConfirm={() => {
-          // Tutup review DULU — status modal (z-90, opaque) ambil alih,
-          // satu modal terlihat pada satu waktu.
+          // Tutup review DULU — langkah berikutnya ambil alih (satu modal
+          // terlihat pada satu waktu).
           setConfirmOpen(false);
+          // User external: satu langkah lagi — Signature Request (button-only).
+          if (isExternalWallet) {
+            setSignReq([
+              { label: "Action", value: "Transfer" },
+              {
+                label: "Token",
+                value: selectedSendToken
+                  ? displayName(selectedSendToken.instrumentId)
+                  : "",
+              },
+              { label: "Amount", value: ccAmount },
+              {
+                label: "To",
+                value: formatPartyIdForDisplay(
+                  normalizeSendRecipientInput(recipientUsername),
+                ),
+              },
+              { label: "Memo", value: memo.trim() || "None" },
+            ]);
+            return;
+          }
           void submitSend({ preventDefault: () => {} } as React.FormEvent);
         }}
+      />
+
+      {/* Langkah SIGN — Signature Request ala wallet (tanpa passphrase). */}
+      <SignatureRequestModal
+        open={!!signReq}
+        payload={signReq ?? []}
+        busy={sendState === "loading"}
+        onSign={() => {
+          void submitSend({ preventDefault: () => {} } as React.FormEvent).finally(
+            () => setSignReq(null),
+          );
+        }}
+        onReject={() => setSignReq(null)}
       />
 
       <TransactionDetailModal

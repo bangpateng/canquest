@@ -24,6 +24,10 @@ const DB_NAME = 'canquest-wallet';
 const DB_VERSION = 1;
 const STORE = 'keys';
 const RECORD_KEY = 'primary';
+/** CryptoKey non-extractable untuk device auto-unlock ("remember this device"). */
+const DEVICE_KEY_REC = 'device-autounlock-key';
+/** Seed ter-wrap device key — dipakai tryDeviceAutoUnlock() saat sign. */
+const DEVICE_BLOB_REC = 'device-autounlock-blob';
 const PBKDF2_ITERATIONS = 310_000; // OWASP 2023 untuk PBKDF2-SHA256
 const SALT_BYTES = 16;
 const IV_BYTES = 12;
@@ -311,7 +315,94 @@ export async function unlock(passphrase: string): Promise<WalletKeyMeta> {
   }
   session = { seed, meta: { ...rec.meta, publicKeyHex: hex(pub) } };
   noteActivity();
+  // Passwordless sign (permintaan UX): setelah unlock valid, wrap seed dengan
+  // device key non-extractable di IndexedDB. Sign berikutnya (termasuk setelah
+  // reload) auto-unlock — passphrase hanya untuk unlock eksplisit/restore.
+  void persistDeviceSession().catch(() => {});
   return session.meta;
+}
+
+// ── device auto-unlock ("remember this device") ────────────────────────────
+
+interface DeviceBlob {
+  v: 1;
+  ivB64: string;
+  ctB64: string;
+}
+
+/**
+ * Wrap seed sesi dengan AES-GCM device key (non-extractable, disimpan sebagai
+ * CryptoKey di IndexedDB). Trade-off disengaja: blob ini membuka seed di
+ * perangkat ini tanpa passphrase — setara "keep me signed in". Yang tetap
+ * aman: blob tidak bisa dibaca dari luar browser/origin, dan passphrase
+ * (faktor pengetahuan) tetap satu-satunya jalan restore di perangkat lain.
+ * Best-effort — kegagalan silent (flow passphrase lama tetap jalan).
+ */
+async function persistDeviceSession(): Promise<void> {
+  if (!session) return;
+  const deviceKey = await subtle().generateKey(
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt'],
+  );
+  const iv = globalThis.crypto.getRandomValues(new Uint8Array(IV_BYTES));
+  const ct = new Uint8Array(
+    await subtle().encrypt(
+      { name: 'AES-GCM', iv: iv as unknown as ArrayBuffer },
+      deviceKey,
+      session.seed as unknown as ArrayBuffer,
+    ),
+  );
+  await idbRun('readwrite', (s) => s.put(deviceKey, DEVICE_KEY_REC));
+  const blob: DeviceBlob = { v: 1, ivB64: b64(iv), ctB64: b64(ct) };
+  await idbRun('readwrite', (s) => s.put(blob, DEVICE_BLOB_REC));
+}
+
+/**
+ * Buka sesi dari device blob (dipanggil sign-relay saat dompet terkunci).
+ * Verifikasi fingerprint terhadap record utama — blob stale (mis. setelah
+ * restore wallet baru) otomatis ditolak.
+ */
+export async function tryDeviceAutoUnlock(): Promise<boolean> {
+  enforceAutoLock();
+  if (session) return true;
+  try {
+    const deviceKey = await idbRun<CryptoKey | undefined>(
+      'readonly',
+      (s) => s.get(DEVICE_KEY_REC),
+    );
+    const blob = await idbRun<DeviceBlob | undefined>(
+      'readonly',
+      (s) => s.get(DEVICE_BLOB_REC),
+    );
+    if (!deviceKey || !blob || blob.v !== 1) return false;
+    const seed = new Uint8Array(
+      await subtle().decrypt(
+        { name: 'AES-GCM', iv: unb64(blob.ivB64) as unknown as ArrayBuffer },
+        deviceKey,
+        unb64(blob.ctB64) as unknown as ArrayBuffer,
+      ),
+    );
+    const rec = await idbRun<StoredKeyRecord | undefined>(
+      'readonly',
+      (s) => s.get(RECORD_KEY),
+    );
+    if (!rec) return false;
+    const pub = await publicKeyFromSeed(seed);
+    const fingerprint = await computeFingerprint(pub);
+    if (fingerprint !== rec.meta.fingerprint) return false;
+    session = { seed, meta: { ...rec.meta, publicKeyHex: hex(pub) } };
+    noteActivity();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Hapus device auto-unlock (dipakai deleteWalletKey/import agar blob stale hilang). */
+async function clearDeviceAutoUnlock(): Promise<void> {
+  await idbRun('readwrite', (s) => s.delete(DEVICE_KEY_REC));
+  await idbRun('readwrite', (s) => s.delete(DEVICE_BLOB_REC));
 }
 
 /**
@@ -378,6 +469,8 @@ export async function importWalletKey(
   };
   const record: StoredKeyRecord = { v: 1, ...(await encryptSeed(seed, passphrase)), meta };
   await idbRun('readwrite', (s) => s.put(record, RECORD_KEY));
+  // Seed berganti — device blob lama (wallet sebelumnya) tidak valid lagi.
+  await clearDeviceAutoUnlock().catch(() => {});
   return meta;
 }
 
@@ -385,6 +478,7 @@ export async function importWalletKey(
 export async function deleteWalletKey(): Promise<void> {
   lock();
   await idbRun('readwrite', (s) => s.delete(RECORD_KEY));
+  await clearDeviceAutoUnlock().catch(() => {});
 }
 
 // ── M4b: sync blob antar-browser ───────────────────────────────────────────

@@ -119,11 +119,11 @@ export function TransactionStatusModal() {
             </div>
           )}
 
-          {/* CONFIRMED — success */}
+          {/* CONFIRMED — success (mockup style: lingkaran hijau + submitted) */}
           {stage === "confirmed" && (
             <div className="flex flex-col items-center text-center tx-fade-up">
-              <div className="flex h-14 w-14 items-center justify-center rounded-[14px] bg-emerald-500/[0.13] text-emerald-600 tx-check-pop">
-                <Check className="h-7 w-7" />
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/[0.13] text-emerald-600 tx-check-pop">
+                <Check className="h-8 w-8" />
               </div>
               <p className="mt-4 text-base font-bold text-[var(--foreground)]">{config.title}</p>
               {config.subtitle ? (
@@ -197,8 +197,8 @@ export function TransactionStatusModal() {
                 </div>
               </dl>
 
-              <Button className="mt-6 w-full" onClick={done}>
-                Done
+              <Button variant="secondary" className="mt-6 w-full" onClick={done}>
+                Close
               </Button>
             </div>
           )}
