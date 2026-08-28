@@ -544,46 +544,23 @@ export function QuestTaskPanel({
         </div>
       ) : null}
 
-      {/* Progress — campaign: "Quest Milestones" header + bare bar (mockup);
-          quest hub: bar in a card (unchanged). */}
-      {visibleTasks.length > 0 ? (
-        isQuestHub ? (
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)]/60 px-4 py-3 backdrop-blur-2xl sm:px-5">
-            <div className="h-1.5 overflow-hidden rounded-full bg-[var(--muted)]">
-              <div
-                className={cn(
-                  "h-full rounded-full transition-all duration-500",
-                  allDone
-                    ? "bg-gradient-to-r from-emerald-500 to-emerald-400"
-                    : "bg-gradient-to-r from-[var(--primary)] to-[var(--primary-strong)]",
-                )}
-                style={{ width: `${Math.max(4, pct)}%` }}
-              />
-            </div>
+      {/* Progress bar — HANYA quest hub. Di campaign detail dihapus:
+          jumlah & progres sudah terwakili metric tile "Tasks" di sidebar
+          reward card (permintaan user, anti-duplikat). */}
+      {visibleTasks.length > 0 && isQuestHub ? (
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)]/60 px-4 py-3 backdrop-blur-2xl sm:px-5">
+          <div className="h-1.5 overflow-hidden rounded-full bg-[var(--muted)]">
+            <div
+              className={cn(
+                "h-full rounded-full transition-all duration-500",
+                allDone
+                  ? "bg-gradient-to-r from-emerald-500 to-emerald-400"
+                  : "bg-gradient-to-r from-[var(--primary)] to-[var(--primary-strong)]",
+              )}
+              style={{ width: `${Math.max(4, pct)}%` }}
+            />
           </div>
-        ) : (
-          <div id="detail-tasks">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-[var(--foreground)]">
-                Quest Milestones
-              </h2>
-              <span className="text-sm font-semibold tabular-nums text-[var(--muted-foreground)]">
-                {verifiedCount} / {visibleTasks.length}
-              </span>
-            </div>
-            <div className="mb-4 h-1.5 overflow-hidden rounded-full bg-[var(--muted)]">
-              <div
-                className={cn(
-                  "h-full rounded-full transition-all duration-500",
-                  allDone
-                    ? "bg-gradient-to-r from-emerald-500 to-emerald-400"
-                    : "bg-gradient-to-r from-[var(--primary)] to-[var(--primary-strong)]",
-                )}
-                style={{ width: `${Math.max(4, pct)}%` }}
-              />
-            </div>
-          </div>
-        )
+        </div>
       ) : null}
 
       {/* Task list — Quest hub & campaign sama-sama quest-timeline (dots +
