@@ -44,6 +44,7 @@ import {
 } from "@/lib/hooks/use-wallet-tokens";
 import { useFeeConfig } from "@/lib/hooks/use-fee-config";
 import { useMe } from "@/lib/hooks/use-me";
+import { ModalPortal } from "@/lib/ui/modal-portal";
 import { signRelayTransaction } from "@/lib/wallet/sign-relay";
 import { SignPassphraseModal } from "@/components/app/wallet/sign-passphrase-modal";
 import {
@@ -541,6 +542,7 @@ export function WalletActions({
 
       {/* ── SEND DIALOG ── */}
       {sheet === "send" ? (
+        <ModalPortal>
         <div
           className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overscroll-contain p-4"
           role="presentation"
@@ -826,9 +828,11 @@ export function WalletActions({
             )}
           </div>
         </div>
+        </ModalPortal>
       ) : null}
 
       {/* ── REVIEW MODAL (langkah 2 — Input → Review → Sign → Broadcast → Done) ── */}
+      <ModalPortal>
       <TxReviewModal
         open={confirmOpen}
         amountText={`${ccAmount || "0"} ${selectedSendToken ? displayName(selectedSendToken.instrumentId) : ""}`}
@@ -874,8 +878,10 @@ export function WalletActions({
           void submitSend({ preventDefault: () => {} } as React.FormEvent);
         }}
       />
+      </ModalPortal>
 
       {/* Langkah SIGN — Signature Request ala wallet (tanpa passphrase). */}
+      <ModalPortal>
       <SignatureRequestModal
         open={!!signReq}
         payload={signReq ?? []}
@@ -887,7 +893,9 @@ export function WalletActions({
         }}
         onReject={() => setSignReq(null)}
       />
+      </ModalPortal>
 
+      <ModalPortal>
       <TransactionDetailModal
         open={successTransactionId !== null}
         transactionId={successTransactionId}
@@ -896,8 +904,10 @@ export function WalletActions({
         partyId={partyId}
         onClose={closeSuccessReceipt}
       />
+      </ModalPortal>
 
       {/* M3b: prompt passphrase saat dompet terkunci (sign transaksi external). */}
+      <ModalPortal>
       <SignPassphraseModal
         open={!!passPrompt}
         description={passPrompt?.description}
@@ -910,10 +920,12 @@ export function WalletActions({
           setPassPrompt(null);
         }}
       />
+      </ModalPortal>
 
 
       {/* ── RECEIVE DIALOG ── */}
       {sheet === "receive" ? (
+        <ModalPortal>
         <div
           className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overscroll-contain p-4"
           role="presentation"
@@ -998,9 +1010,11 @@ export function WalletActions({
             </div>
           </div>
         </div>
+        </ModalPortal>
       ) : null}
 
       {/* ── OFFERS MODAL ── */}
+      <ModalPortal>
       <OffersModal
         open={sheet === "offers"}
         onClose={() => setSheet(null)}
@@ -1021,6 +1035,7 @@ export function WalletActions({
           onBalanceRefresh?.();
         }}
       />
+      </ModalPortal>
 
       <SwapModal
         open={sheet === "swap"}

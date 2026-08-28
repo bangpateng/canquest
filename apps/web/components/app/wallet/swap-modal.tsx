@@ -9,6 +9,7 @@ import { useTransactionStatus } from "@/lib/tx/transaction-status";
 import { useMe } from "@/lib/hooks/use-me";
 import { signRelayPrepared } from "@/lib/wallet/sign-relay";
 import { usePassphrasePrompt } from "@/lib/wallet/use-passphrase-prompt";
+import { ModalPortal } from "@/lib/ui/modal-portal";
 import {
   SignatureRequestModal,
   type SignaturePayloadRow,
@@ -19,8 +20,6 @@ import {
   X,
   AlertCircle,
   Search,
-  Settings2,
-  Route,
 } from "lucide-react";
 
 /** Token aktif untuk swap (selain CC). Lainnya = Coming Soon.
@@ -134,10 +133,9 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
   /** true = swap masih diproses OneSwap di background (hasil via notifikasi). */
   const [swapPending, setSwapPending] = useState(false);
 
-  // Slippage tolerance (client-controlled; passed to the swap endpoint, ignored
-  // if unsupported). "Minimum received" is computed honestly from the quote.
-  const [slippageOpen, setSlippageOpen] = useState(false);
-  const [slippage, setSlippage] = useState(0.5);
+  // Slippage tolerance — default 0.5%. UI pengaturannya dihapus (permintaan
+  // UX); nilai tetap dipakai untuk guard AmountOutMin di payload sign.
+  const slippage = 0.5;
 
   // Langkah SIGN (mockup Signature Request): satu tombol, tanpa passphrase —
   // dompet auto-unlock via device key (sign-relay).
@@ -434,6 +432,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
   };
 
   return (
+    <ModalPortal>
     <div
       className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overscroll-contain p-4"
       role="presentation"
@@ -458,51 +457,14 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
           <h2 id={titleId} className="text-lg font-bold text-[var(--foreground)]">
             Swap
           </h2>
-          <div className="flex items-center gap-1">
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setSlippageOpen((v) => !v)}
-                className={iconButtonClass("h-8 w-8")}
-                aria-label="Slippage settings"
-              >
-                <Settings2 className="h-4 w-4" />
-              </button>
-              {slippageOpen && (
-                <div className="absolute right-0 top-full z-30 mt-2 w-56 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3.5 shadow-xl">
-                  <p className="text-xs font-semibold text-[var(--foreground)]">Slippage tolerance</p>
-                  <div className="mt-2 flex items-center gap-1.5">
-                    {[0.1, 0.5, 1.0].map((v) => (
-                      <button
-                        key={v}
-                        type="button"
-                        onClick={() => setSlippage(v)}
-                        className={cn(
-                          "flex-1 rounded-lg border py-1.5 text-xs font-semibold",
-                          slippage === v
-                            ? "border-canton-muted bg-canton-subtle text-canton"
-                            : "border-[var(--border)] bg-[var(--muted)] text-[var(--muted-foreground)]",
-                        )}
-                      >
-                        {v}%
-                      </button>
-                    ))}
-                  </div>
-                  <p className="mt-2 text-xs leading-relaxed text-[var(--muted-foreground)]">
-                    Your swap will revert if the price moves unfavorably by more than this amount.
-                  </p>
-                </div>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className={iconButtonClass("h-8 w-8")}
-              aria-label="Close"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className={iconButtonClass("h-8 w-8")}
+            aria-label="Close"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
 
         {/* Status banner */}
@@ -708,21 +670,34 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
           </>
         )}
 
-        {/* Router trigger (mockup) — OneSwap satu-satunya router aktif. */}
-        <div className="mt-4 flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--muted)]/60 px-4 py-3">
-          <span className="flex items-center gap-1.5 text-xs font-medium text-[var(--muted-foreground)]">
-            <Route className="h-3.5 w-3.5" />
-            Routing via
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="text-sm font-semibold text-[var(--foreground)]">
-              OneSwap
+        {/* Routers (mockup) — OneSwap aktif, Tradecraft coming soon.
+            Logo di-serve dari R2 via /api/uploads/token-logo/<nama>. */}
+        <div className="mt-4 space-y-2">
+          <div className="flex items-center justify-between rounded-xl border border-canton-muted bg-canton-subtle/40 px-4 py-3">
+            <span className="flex items-center gap-2.5">
+              <TokenLogo symbol="oneswap" size="sm" />
+              <span className="text-sm font-semibold text-[var(--foreground)]">
+                OneSwap
+              </span>
+              <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-600">
+                Best
+              </span>
             </span>
-            <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-600">
-              Best
+            <span className="text-[10px] font-bold uppercase tracking-wider text-canton">
+              Active
             </span>
-            <ChevronDown className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
-          </span>
+          </div>
+          <div className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3 opacity-70">
+            <span className="flex items-center gap-2.5">
+              <TokenLogo symbol="tradecraft" size="sm" />
+              <span className="text-sm font-semibold text-[var(--foreground)]">
+                Tradecraft
+              </span>
+              <span className="rounded bg-[var(--muted)] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[var(--muted-foreground)]">
+                Soon
+              </span>
+            </span>
+          </div>
         </div>
       </div>
 
@@ -737,6 +712,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
         onReject={() => setSignReq(null)}
       />
     </div>
+    </ModalPortal>
   );
 }
 
