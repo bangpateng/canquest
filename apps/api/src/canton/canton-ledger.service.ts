@@ -1720,21 +1720,52 @@ export class CantonLedgerService {
       choiceArg: Record<string, unknown>;
     }> = [];
 
+    // ── POOL AMULET utk alokasi DISJOINT antar leg CC ──────────────────
+    // DAML Transfer wajib inputHoldingCids non-kosong per leg, dan satu
+    // holding TIDAK BOLEH dipakai dua leg (leg pertama meng-archive-nya →
+    // CONTRACT_NOT_ACTIVE di leg kedua; tidak ada auto-threading change).
+    // Karena itu tiap leg CC dialokasikan holdings yang TIDAK SALING
+    // OVERLAP (greedy ascending — set terkecil yang mencukupi). Pool tak
+    // mencukupi semua leg → gagal build → relay fallback ke jalur legacy.
+    let amuletPool: Array<{ contractId: string; eff: number }> = [];
+    let fullAmuletCids: string[] = [];
+    if (transfers.some((t) => t.instrumentId.toLowerCase() === 'amulet')) {
+      try {
+        const openRound = await this.fetchScanProxyContract(
+          'open-and-issuing-mining-rounds',
+        );
+        const round = openRound?.round ?? 0;
+        const raw = await this.queryAmuletHoldingsRaw(senderPartyId);
+        amuletPool = raw
+          .map((h) => {
+            const init = parseFloat(h.initialAmount) || 0;
+            const rate = parseFloat(h.ratePerRound) || 0;
+            const decay = Math.max(0, round - (h.createdAtRound || 0)) * rate;
+            return { contractId: h.contractId, eff: Math.max(0, init - decay) };
+          })
+          .sort((a, b) => a.eff - b.eff); // ascending — set terkecil dulu
+        fullAmuletCids = amuletPool.map((h) => h.contractId);
+      } catch {
+        /* pool kosong → alokasi leg CC akan gagal → fallback legacy */
+      }
+    }
+
     for (const t of transfers) {
       const instrumentKey = `${t.instrumentAdmin}|${t.instrumentId}`;
       let registry = instrumentRegistries.get(instrumentKey);
       if (!registry) {
         const isAmulet = t.instrumentId.toLowerCase() === 'amulet';
-        const holdings = isAmulet
-          ? await this.queryAmuletHoldings(senderPartyId)
-          : await this.getTokenHoldingCids(senderPartyId, t.instrumentId);
-        if (holdings.length === 0) {
+        const inputHoldingCids = isAmulet
+          ? fullAmuletCids
+          : (await this.getTokenHoldingCids(senderPartyId, t.instrumentId)).map(
+              (h) => h.contractId,
+            );
+        if (inputHoldingCids.length === 0) {
           return {
             ok: false,
             error: `Sender has no ${t.instrumentId} holdings for leg to ${t.receiverPartyId.split('::')[0]}`,
           };
         }
-        const inputHoldingCids = holdings.map((h) => h.contractId);
         const protoTransferSpec = {
           sender: senderPartyId,
           receiver: t.receiverPartyId,
@@ -1784,20 +1815,41 @@ export class CantonLedgerService {
           if (!exists) allDisclosedContracts.push(dc);
         }
       }
-      // HOLDINGS THREADING (interactive variant): hanya LEG PERTAMA per
-      // instrument yang membawa inputHoldingCids; leg berikutnya instrument
-      // sama mengirim [] — DAML me-fetch change hasil leg sebelumnya.
-      // Me-list ulang holding yang sama → CONTRACT_NOT_ACTIVE (sudah
-      // dikonsumsi leg pertama dalam sub-transaction yang sama).
-      const isFirstLegForInstrument = !instrumentRegistries.has(
-        `${t.instrumentAdmin}|${t.instrumentId}`,
-      );
+      // ALOKASI HOLDINGS per leg — lihat komentar POOL AMULET di atas.
       const isAmuletLeg = t.instrumentId.toLowerCase() === 'amulet';
-      const legHoldings = isFirstLegForInstrument
-        ? isAmuletLeg
-          ? await this.queryAmuletHoldings(senderPartyId)
-          : await this.getTokenHoldingCids(senderPartyId, t.instrumentId)
-        : [];
+      let legInputCids: string[];
+      if (isAmuletLeg) {
+        legInputCids = [];
+        let acc = 0;
+        while (acc < t.amount && amuletPool.length > 0) {
+          const h = amuletPool.shift()!;
+          legInputCids.push(h.contractId);
+          acc += h.eff;
+        }
+        if (acc < t.amount) {
+          return {
+            ok: false,
+            error: `Insufficient holdings to cover leg disjointly (${acc.toFixed(4)} < ${t.amount} ${t.instrumentId}) — falling back`,
+          };
+        }
+      } else {
+        // Non-Amulet: satu leg per instrument (leg sama instrument ke-2 tidak
+        // didukung tanpa overlap → fallback).
+        if (instrumentRegistries.has(instrumentKey)) {
+          return {
+            ok: false,
+            error: `Multiple ${t.instrumentId} legs not supported (holdings overlap)`,
+          };
+        }
+        const th = await this.getTokenHoldingCids(senderPartyId, t.instrumentId);
+        if (th.length === 0) {
+          return {
+            ok: false,
+            error: `Sender has no ${t.instrumentId} holdings for leg to ${t.receiverPartyId.split('::')[0]}`,
+          };
+        }
+        legInputCids = th.map((h) => h.contractId);
+      }
       const transferSpec = {
         sender: senderPartyId,
         receiver: t.receiverPartyId,
@@ -1806,7 +1858,7 @@ export class CantonLedgerService {
         lock: null,
         requestedAt: nowIso,
         executeBefore,
-        inputHoldingCids: legHoldings.map((h) => h.contractId),
+        inputHoldingCids: legInputCids,
         meta: {
           values: t.description
             ? { 'splice.lfdecentralizedtrust.org/reason': t.description }
