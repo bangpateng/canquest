@@ -12,6 +12,12 @@ interface ShareCampaignProps {
   /** Teks tambahan, mis. reward ("Earn 1 CC"). */
   text?: string;
   className?: string;
+  /**
+   * Varian trigger (mockup v2):
+   * - "banner": glass gelap — di atas banner image/strip gelap.
+   * - "light": kartu terang + border — di atas strip gradien terang (default).
+   */
+  variant?: "banner" | "light";
 }
 
 /**
@@ -21,7 +27,7 @@ interface ShareCampaignProps {
  * - Desktop / fallback: dropdown X (Twitter), Telegram, WhatsApp, Copy link.
  *   (Discord tidak punya share-intent web → tercakup oleh "Copy link".)
  */
-export function ShareCampaign({ url, title, text, className }: ShareCampaignProps) {
+export function ShareCampaign({ url, title, text, className, variant = "light" }: ShareCampaignProps) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -84,18 +90,24 @@ export function ShareCampaign({ url, title, text, className }: ShareCampaignProp
 
   return (
     <div ref={ref} className={cn("relative", className)}>
-      {/* Trigger icon-only glass dark — pas di atas banner (mockup v2) */}
+      {/* Trigger icon-only (mockup v2) — adaptif konteks banner gelap / terang.
+          36px = touch-friendly di mobile kecil. */}
       <button
         type="button"
         onClick={handleClick}
         aria-label="Share campaign"
-        className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/30 bg-[#0f1714]/45 text-white shadow-[0_6px_14px_-10px_rgba(22,36,27,0.5)] backdrop-blur-md transition-all duration-200 hover:bg-[#0f1714]/65"
+        className={cn(
+          "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all duration-200 active:scale-95",
+          variant === "banner"
+            ? "border border-white/30 bg-[#0f1714]/45 text-white shadow-[0_6px_14px_-10px_rgba(22,36,27,0.5)] backdrop-blur-md hover:bg-[#0f1714]/65"
+            : "border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] shadow-[0_6px_14px_-10px_rgba(22,36,27,0.35)] hover:border-[rgb(var(--canton-rgb)/0.35)] hover:bg-[var(--muted)]",
+        )}
       >
         <Share2 className="h-4 w-4" />
       </button>
 
       {open ? (
-        <div className="absolute right-0 z-20 mt-2 w-[188px] rounded-[14px] border border-[var(--border)] bg-[var(--card)] p-1.5 shadow-[0_16px_32px_-18px_rgba(22,36,27,0.4)]">
+        <div className="absolute right-0 z-20 mt-2 w-[188px] max-w-[calc(100vw-1.5rem)] rounded-[14px] border border-[var(--border)] bg-[var(--card)] p-1.5 shadow-[0_16px_32px_-18px_rgba(22,36,27,0.4)]">
           <button
             type="button"
             onClick={copyLink}

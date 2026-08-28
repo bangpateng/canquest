@@ -148,7 +148,7 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
               <TypePill config={config} />
             </div>
             <div className="absolute right-3 top-3 sm:right-4 sm:top-4">
-              <ShareCampaign title={quest.title} text={shareText} />
+              <ShareCampaign title={quest.title} text={shareText} variant={quest.bannerImageUrl ? "banner" : "light"} />
             </div>
           </div>
         ) : (
@@ -168,7 +168,7 @@ export default async function CampaignQuestDetailPage(props: PageProps) {
                 <StatusPill status={quest.status} label={statusMeta.label} />
                 <TypePill config={config} />
               </div>
-              <ShareCampaign title={quest.title} text={shareText} />
+              <ShareCampaign title={quest.title} text={shareText} variant={quest.bannerImageUrl ? "banner" : "light"} />
             </div>
           </div>
         )}
