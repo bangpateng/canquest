@@ -1,7 +1,10 @@
 "use client";
 
+import { useState } from "react";
+
 import { buttonVariants } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { apiOrigin } from "@/components/app/wallet/token-logo";
 import { cn } from "@/lib/utils/utils";
 
 /**
@@ -35,6 +38,8 @@ export function SignatureRequestModal({
   onSign,
   onReject,
 }: SignatureRequestModalProps) {
+  // Logo CanQuest dari R2 (128×128 source, tampil 40×40). Fallback: huruf CQ.
+  const [logoError, setLogoError] = useState(false);
   if (!open) return null;
 
   return (
@@ -46,10 +51,19 @@ export function SignatureRequestModal({
     >
       <div className="absolute inset-0 bg-black/70 backdrop-blur-md" />
       <div className="relative z-10 my-auto w-full max-w-[380px] rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-[0_20px_40px_rgba(0,0,0,0.2)]">
-        {/* Wallet header — identitas peminta tanda tangan (style brand dapp) */}
+        {/* Wallet header — identitas peminta tanda tangan (logo brand) */}
         <div className="mb-5 flex items-center gap-3 border-b border-[var(--border)] pb-4">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-canton-subtle text-sm font-bold text-canton ring-1 ring-canton-muted">
-            CQ
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-canton-subtle ring-1 ring-canton-muted">
+            {logoError ? (
+              <span className="text-sm font-bold text-canton">CQ</span>
+            ) : (
+              <img
+                src={`${apiOrigin()}/api/uploads/token-logo/canquest-logo`}
+                alt="CanQuest"
+                onError={() => setLogoError(true)}
+                className="h-full w-full object-contain"
+              />
+            )}
           </div>
           <div className="min-w-0">
             <p className="text-base font-bold text-[var(--foreground)]">
