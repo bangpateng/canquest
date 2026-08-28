@@ -774,15 +774,15 @@ export function WalletActions({
                     Memo{" "}
                     <span className="font-normal text-[var(--muted-foreground)]">(optional)</span>
                   </label>
-                  <textarea
+                  <input
                     id="wallet-send-memo"
-                    rows={3}
+                    type="text"
                     autoComplete="off"
                     value={memo}
                     onChange={(e) => setMemo(e.target.value)}
                     placeholder="Add a note"
                     disabled={sendState === "loading"}
-                    className="w-full resize-none rounded-2xl border border-[var(--border)] bg-[var(--muted)] px-4 py-3 text-base font-medium text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[rgb(var(--canton-rgb)/0.40)] disabled:opacity-50"
+                    className="w-full rounded-2xl border border-[var(--border)] bg-[var(--muted)] px-4 py-3.5 text-base font-medium text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[rgb(var(--canton-rgb)/0.40)] disabled:opacity-50"
                   />
                 </div>
 
