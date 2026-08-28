@@ -12,6 +12,7 @@ import { usePassphrasePrompt } from "@/lib/wallet/use-passphrase-prompt";
 import { ModalPortal } from "@/lib/ui/modal-portal";
 import {
   SignatureRequestModal,
+  type SignaturePayloadRow,
 } from "@/components/app/wallet/signature-request-modal";
 import {
   ArrowDown,
@@ -138,7 +139,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
 
   // Langkah SIGN (mockup Signature Request): satu tombol, tanpa passphrase —
   // dompet auto-unlock via device key (sign-relay).
-  const [signOpen, setSignOpen] = useState(false);
+  const [signReq, setSignReq] = useState<SignaturePayloadRow[] | null>(null);
 
   // Tahap REVIEW (Input → Review → Sign → Broadcast → Success/Failed):
   // tombol Swap buka review dulu; eksekusi jalan saat Confirm.
@@ -271,8 +272,8 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
     setQuote(null);
   };
 
-  // Klik CTA Swap: user external → Signature Request dulu (button-only sign);
-  // selain itu langsung eksekusi.
+  // Klik CTA Swap: user external → Signature Request dulu; klik Sign & Send
+  // langsung mengeksekusi swap (async — hasil via notifikasi).
   const startSwap = () => {
     if (!sellToken || !buyToken || !amount || sameToken || insufficientBalance)
       return;
@@ -280,7 +281,18 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
       void submitSwap();
       return;
     }
-    setSignOpen(true);
+    setSignReq([
+      { label: "Action", value: "Swap (Atomic DvP)" },
+      { label: "Router", value: "OneSwapRouter" },
+      {
+        label: "AmountIn",
+        value: `${formatAmountNum(parseFloat(amount))} ${displayName(sellToken.instrumentId)}`,
+      },
+      {
+        label: "AmountOutMin",
+        value: `${quote ? formatAmountNum(quote.amountOut * (1 - slippage / 100)) : "0"} ${displayName(buyToken.instrumentId)}`,
+      },
+    ]);
   };
 
   // Execute swap via POST /api/party/swap.
@@ -689,17 +701,16 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
         </div>
       </div>
 
-      {/* Langkah SIGN — Signature Request ringkas: amount + router kecil. */}
+      {/* Langkah SIGN — Signature Request ala wallet (tanpa passphrase).
+          Klik Sign & Send → submitSwap langsung jalan. */}
       <SignatureRequestModal
-        open={signOpen}
-        amountText={`${formatAmountNum(parseFloat(amount))} ${displayName(sellToken?.instrumentId ?? "")} → ${quote ? formatAmountNum(quote.amountOut) : "0"} ${displayName(buyToken?.instrumentId ?? "")}`}
-        subText="Atomic DvP · completes in the background after signing"
-        rows={[{ label: "Router", value: "OneSwap" }]}
+        open={!!signReq}
+        payload={signReq ?? []}
         busy={swapState === "loading"}
         onSign={() => {
-          void submitSwap().finally(() => setSignOpen(false));
+          void submitSwap().finally(() => setSignReq(null));
         }}
-        onReject={() => setSignOpen(false)}
+        onReject={() => setSignReq(null)}
       />
     </div>
     </ModalPortal>

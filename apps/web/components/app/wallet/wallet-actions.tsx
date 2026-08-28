@@ -49,6 +49,7 @@ import { signRelayTransaction } from "@/lib/wallet/sign-relay";
 import { SignPassphraseModal } from "@/components/app/wallet/sign-passphrase-modal";
 import {
   SignatureRequestModal,
+  type SignaturePayloadRow,
 } from "@/components/app/wallet/signature-request-modal";
 import { TokenLogo, displayName } from "@/components/app/wallet/token-logo";
 
@@ -179,8 +180,9 @@ export function WalletActions({
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   // ── Langkah SIGN (mockup Signature Request): user external menekan satu
-  // tombol "Sign & Send" — dompet auto-unlock via device key, tanpa passphrase.
-  const [signOpen, setSignOpen] = useState(false);
+  // tombol "Sign & Send" — transfer langsung dieksekusi; dompet auto-unlock
+  // via device key, tanpa passphrase.
+  const [signReq, setSignReq] = useState<SignaturePayloadRow[] | null>(null);
 
   const close = useCallback(() => {
     setSheet(null);
@@ -853,9 +855,26 @@ export function WalletActions({
           // Tutup review DULU — langkah berikutnya ambil alih (satu modal
           // terlihat pada satu waktu).
           setConfirmOpen(false);
-          // User external: satu langkah lagi — Signature Request (button-only).
+          // User external: satu langkah lagi — Signature Request; klik
+          // Sign & Send langsung mengeksekusi transfer.
           if (isExternalWallet) {
-            setSignOpen(true);
+            setSignReq([
+              { label: "Action", value: "Transfer" },
+              {
+                label: "Token",
+                value: selectedSendToken
+                  ? displayName(selectedSendToken.instrumentId)
+                  : "",
+              },
+              { label: "Amount", value: ccAmount },
+              {
+                label: "To",
+                value: formatPartyIdForDisplay(
+                  normalizeSendRecipientInput(recipientUsername),
+                ),
+              },
+              { label: "Memo", value: memo.trim() || "None" },
+            ]);
             return;
           }
           void submitSend({ preventDefault: () => {} } as React.FormEvent);
@@ -863,19 +882,18 @@ export function WalletActions({
       />
       </ModalPortal>
 
-      {/* Langkah SIGN — Signature Request ringkas (tanpa passphrase). */}
+      {/* Langkah SIGN — Signature Request ala wallet (tanpa passphrase). */}
       <ModalPortal>
       <SignatureRequestModal
-        open={signOpen}
-        amountText={`${ccAmount || "0"} ${selectedSendToken ? displayName(selectedSendToken.instrumentId) : ""}`}
-        subText={`to ${formatPartyIdForDisplay(normalizeSendRecipientInput(recipientUsername))}`}
+        open={!!signReq}
+        payload={signReq ?? []}
         busy={sendState === "loading"}
         onSign={() => {
           void submitSend({ preventDefault: () => {} } as React.FormEvent).finally(
-            () => setSignOpen(false),
+            () => setSignReq(null),
           );
         }}
-        onReject={() => setSignOpen(false)}
+        onReject={() => setSignReq(null)}
       />
       </ModalPortal>
 
