@@ -13,8 +13,8 @@ export default function AdminMaintenanceSettingsPage() {
         </Link>
         <h1 className="type-page-title mt-2">Maintenance mode</h1>
         <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-          Aktifkan untuk menghentikan sementara semua aktivitas pengguna (mis.
-          saat pembaruan). Admin panel tetap dapat diakses untuk pemulihan.
+          Turn on to temporarily pause all user activity (e.g. during an
+          upgrade). The admin panel stays accessible for recovery.
         </p>
       </div>
       <AdminMaintenancePanel />

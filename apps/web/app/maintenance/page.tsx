@@ -5,7 +5,7 @@ import { internalApiBase } from "@/lib/api/internal-api-url";
 
 export const metadata: Metadata = {
   title: "Maintenance — CanQuest",
-  description: "CanQuest sedang dalam pemeliharaan.",
+  description: "CanQuest is under maintenance.",
   robots: { index: false, follow: false },
 };
 
@@ -73,7 +73,7 @@ export default async function MaintenancePage() {
         {endValid && (
           <p className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--card)]/60 px-4 py-3 text-sm text-[var(--foreground)]">
             <span className="text-[var(--muted-foreground)]">
-              Estimasi selesai:{" "}
+              Estimated end:{" "}
             </span>
             <span className="font-semibold">
               {end.toLocaleString(undefined, {
@@ -90,7 +90,7 @@ export default async function MaintenancePage() {
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-brand px-5 py-2.5 text-sm font-semibold text-[var(--primary-foreground)] transition-opacity hover:opacity-90"
           >
             <RefreshCw className="h-4 w-4" />
-            Coba lagi
+            Try again
           </button>
         </form>
       </div>

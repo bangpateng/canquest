@@ -13,9 +13,9 @@ interface MaintenanceStatus {
   estimatedEnd: string | null;
 }
 
-const DEFAULT_TITLE = "CanQuest sedang dalam pemeliharaan";
+const DEFAULT_TITLE = "CanQuest is under maintenance";
 const DEFAULT_MESSAGE =
-  "Kami sedang melakukan pembaruan untuk meningkatkan pengalaman Anda. Semua aktivitas dihentikan sementara. Silakan kembali lagi nanti.";
+  "We're making updates to improve your experience. All activity is temporarily paused. Please check back soon.";
 
 export function AdminMaintenancePanel() {
   const [status, setStatus] = useState<MaintenanceStatus | null>(null);
@@ -58,7 +58,7 @@ export function AdminMaintenancePanel() {
 
     if (enabled) {
       const ok = window.confirm(
-        "Aktifkan mode maintenance?\n\nSEMUA pengguna non-admin akan langsung diblokir dan melihat layar maintenance. Admin panel tetap bisa diakses.",
+        "Turn on maintenance mode?\n\nALL non-admin users will be blocked immediately and see the maintenance screen. The admin panel stays accessible.",
       );
       if (!ok) return;
     }
@@ -87,7 +87,7 @@ export function AdminMaintenancePanel() {
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
-        <Loader2 className="h-4 w-4 animate-spin" /> Memuat status maintenance…
+        <Loader2 className="h-4 w-4 animate-spin" /> Loading maintenance status…
       </div>
     );
   }
@@ -112,13 +112,13 @@ export function AdminMaintenancePanel() {
         <div className="text-sm">
           <p className="font-semibold text-[var(--foreground)]">
             {status?.enabled
-              ? "Maintenance sedang AKTIF"
-              : "Maintenance nonaktif"}
+              ? "Maintenance mode is ON"
+              : "Maintenance mode is OFF"}
           </p>
           <p className="text-[var(--muted-foreground)]">
             {status?.enabled
-              ? "Seluruh aktivitas pengguna non-admin saat ini diblokir."
-              : "Situs berjalan normal."}
+              ? "All non-admin user activity is currently blocked."
+              : "The site is running normally."}
           </p>
         </div>
       </div>
@@ -134,11 +134,11 @@ export function AdminMaintenancePanel() {
         <label className="flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-[var(--border)] bg-[var(--card)]/60 px-4 py-4">
           <div>
             <p className="text-sm font-semibold text-[var(--foreground)]">
-              Aktifkan mode maintenance
+              Enable maintenance mode
             </p>
             <p className="text-xs text-[var(--muted-foreground)]">
-              Saat ON, semua pengguna non-admin melihat layar maintenance &
-              semua panggilan API tertolak (503).
+              When ON, every non-admin user sees the maintenance screen and all
+              API calls are rejected (503).
             </p>
           </div>
           <button
@@ -163,7 +163,7 @@ export function AdminMaintenancePanel() {
         {/* Pesan kustom */}
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-[var(--foreground)]">
-            Judul
+            Title
           </label>
           <input
             type="text"
@@ -177,7 +177,7 @@ export function AdminMaintenancePanel() {
 
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-[var(--foreground)]">
-            Pesan
+            Message
           </label>
           <textarea
             value={message}
@@ -191,9 +191,9 @@ export function AdminMaintenancePanel() {
 
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-[var(--foreground)]">
-            Estimasi selesai{" "}
+            Estimated end{" "}
             <span className="font-normal text-[var(--muted-foreground)]">
-              (opsional)
+              (optional)
             </span>
           </label>
           <input
@@ -220,14 +220,14 @@ export function AdminMaintenancePanel() {
             ) : (
               <PowerOff className="h-4 w-4" />
             )}
-            {enabled ? "Aktifkan maintenance" : "Nonaktifkan & simpan"}
+            {enabled ? "Turn on & save" : "Turn off & save"}
           </button>
           <button
             type="button"
             onClick={refresh}
             className={buttonVariants({ variant: "secondary", size: "sm" })}
           >
-            Muat ulang
+            Reload
           </button>
         </div>
       </form>

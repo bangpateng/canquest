@@ -27,9 +27,9 @@ export interface SetMaintenanceInput {
   estimatedEnd?: string | null;
 }
 
-const DEFAULT_TITLE = 'CanQuest sedang dalam pemeliharaan';
+const DEFAULT_TITLE = 'CanQuest is under maintenance';
 const DEFAULT_MESSAGE =
-  'Kami sedang melakukan pembaruan untuk meningkatkan pengalaman Anda. Semua aktivitas dihentikan sementara. Silakan kembali lagi nanti.';
+  "We're making updates to improve your experience. All activity is temporarily paused. Please check back soon.";
 
 /**
  * Sumber kebenaran tunggal untuk status maintenance.
@@ -124,7 +124,7 @@ export class MaintenanceService {
     // Invalidate cache agar baca berikutnya langsung akurat.
     this.cache = null;
     this.logger.warn(
-      `Maintenance mode ${input.enabled ? 'AKTIF' : 'NONAKTIF'} — title="${title}"`,
+      `Maintenance mode ${input.enabled ? 'ON' : 'OFF'} — title="${title}"`,
     );
     return this.getStatus();
   }
