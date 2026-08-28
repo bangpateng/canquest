@@ -1507,13 +1507,19 @@ export class CantonLedgerService {
         };
         instrumentRegistries.set(instrumentKey, registry);
         lastTransferKind = registry.transferKind;
-        // Dedupe disclosed contracts per instrument.
+        // Dedupe disclosed contracts per instrument. Key yang benar adalah
+        // `contractId` — dedupe lama membaca `.contract` (undefined) sehingga
+        // SEMUA entry setelah yang pertama dianggap duplikat dan dibuang.
+        // Jalur custodial tidak tersandung (service account melihat factory
+        // langsung tanpa disclosure), tapi interactive prepare (party user)
+        // butuh disclosure lengkap → CONTRACT_NOT_FOUND tanpa perbaikan ini.
         for (const dc of registry.disclosedContracts) {
-          const dcCid = (dc as Record<string, unknown>)?.contract;
-          const exists = allDisclosedContracts.some(
-            (existing) =>
-              (existing as Record<string, unknown>)?.contract === dcCid,
-          );
+          const dcRec = dc as Record<string, unknown>;
+          const dcCid = dcRec.contractId ?? dcRec.contract;
+          const exists = allDisclosedContracts.some((existing) => {
+            const ex = existing as Record<string, unknown>;
+            return (ex.contractId ?? ex.contract) === dcCid;
+          });
           if (!exists) allDisclosedContracts.push(dc);
         }
       }
@@ -1757,12 +1763,15 @@ export class CantonLedgerService {
         };
         instrumentRegistries.set(instrumentKey, registry);
         lastTransferKind = registry.transferKind;
+        // Dedupe by contractId (key `contractId`, bukan `contract`) —
+        // lihat catatan fix yang sama di executeProxyBatchTransferMulti.
         for (const dc of registry.disclosedContracts) {
-          const dcCid = (dc as Record<string, unknown>)?.contract;
-          const exists = allDisclosedContracts.some(
-            (existing) =>
-              (existing as Record<string, unknown>)?.contract === dcCid,
-          );
+          const dcRec = dc as Record<string, unknown>;
+          const dcCid = dcRec.contractId ?? dcRec.contract;
+          const exists = allDisclosedContracts.some((existing) => {
+            const ex = existing as Record<string, unknown>;
+            return (ex.contractId ?? ex.contract) === dcCid;
+          });
           if (!exists) allDisclosedContracts.push(dc);
         }
       }
