@@ -14,6 +14,7 @@ import { TransactionDetailModal } from "@/components/app/wallet/transaction-deta
 import { OffersModal, useOffers, useSentOffers } from "@/components/app/wallet/offers-section";
 import { SwapModal } from "@/components/app/wallet/swap-modal";
 import {
+  ArrowDown,
   ArrowDownLeft,
   ArrowUpRight,
   ArrowLeftRight,
@@ -868,49 +869,61 @@ export function WalletActions({
               </button>
             </div>
 
-            {/* Avatar penerima (mockup) */}
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--muted)] text-[var(--muted-foreground)]">
-              <User className="h-6 w-6" />
+            {/* Summary ala Confirm Swap: token+amount → panah → penerima */}
+            <div className="mb-5 text-center">
+              <div className="flex items-center justify-center gap-2 text-2xl font-bold tabular-nums text-[var(--foreground)]">
+                <TokenLogo
+                  symbol={selectedSendToken?.instrumentId ?? "CC"}
+                  size="sm"
+                />
+                {ccAmount || "0"}
+                <span className="text-sm font-semibold text-[var(--muted-foreground)]">
+                  {selectedSendToken
+                    ? displayName(selectedSendToken.instrumentId)
+                    : ""}
+                </span>
+              </div>
+              <ArrowDown className="mx-auto my-2 h-5 w-5 text-[var(--muted-foreground)]" />
+              <div className="flex items-center justify-center gap-2">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--muted)] text-[var(--muted-foreground)]">
+                  <User className="h-3.5 w-3.5" />
+                </span>
+                <span className="max-w-[220px] truncate font-mono text-sm font-semibold text-[var(--foreground)]">
+                  {formatPartyIdForDisplay(
+                    normalizeSendRecipientInput(recipientUsername),
+                  )}
+                </span>
+              </div>
             </div>
 
-            {/* Amount besar di tengah */}
-            <p className="mb-6 flex items-center justify-center gap-1.5 text-3xl font-bold tabular-nums text-[var(--foreground)]">
-              {ccAmount || "0"}
-              <span className="text-base font-semibold text-[var(--muted-foreground)]">
-                {selectedSendToken
-                  ? displayName(selectedSendToken.instrumentId)
-                  : ""}
-              </span>
-            </p>
-
-            {/* Kotak detail (mockup) */}
-            <div className="mb-6 space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--muted)] p-4 text-sm">
+            {/* Kotak detail — style sama dengan Confirm Swap */}
+            <div className="mb-6 space-y-2 rounded-xl border border-[var(--border)] bg-[var(--muted)] p-4 text-xs">
               <div className="flex items-start justify-between gap-3">
-                <span className="shrink-0 text-xs text-[var(--muted-foreground)]">To</span>
-                <span className="min-w-0 max-w-[62%] break-all text-right font-mono text-xs font-medium text-[var(--foreground)]">
+                <span className="text-[var(--muted-foreground)]">To</span>
+                <span className="min-w-0 max-w-[62%] break-all text-right font-mono font-medium text-[var(--foreground)]">
                   {formatPartyIdForDisplay(
                     normalizeSendRecipientInput(recipientUsername),
                   )}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <span className="text-xs text-[var(--muted-foreground)]">Network</span>
-                <span className="text-xs font-medium text-[var(--foreground)]">
+                <span className="text-[var(--muted-foreground)]">Network</span>
+                <span className="font-medium text-[var(--foreground)]">
                   Canton Mainnet
                 </span>
               </div>
               {memo.trim() ? (
                 <div className="flex items-start justify-between gap-3">
-                  <span className="shrink-0 text-xs text-[var(--muted-foreground)]">Memo</span>
-                  <span className="min-w-0 max-w-[62%] break-words text-right text-xs italic text-[var(--foreground)]">
+                  <span className="text-[var(--muted-foreground)]">Memo</span>
+                  <span className="min-w-0 max-w-[62%] break-words text-right italic text-[var(--foreground)]">
                     {memo.trim()}
                   </span>
                 </div>
               ) : null}
               {selectedIsCC ? (
-                <div className="flex items-center justify-between gap-3 border-t border-dashed border-[var(--border)] pt-3">
-                  <span className="text-xs text-[var(--muted-foreground)]">Network Fee</span>
-                  <span className="text-xs font-medium text-[var(--foreground)]">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[var(--muted-foreground)]">Network Fee</span>
+                  <span className="font-medium text-[var(--foreground)]">
                     ≈ {feeCc} CC
                   </span>
                 </div>

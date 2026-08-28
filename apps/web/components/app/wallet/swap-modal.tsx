@@ -599,7 +599,8 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                 </div>
               ) : null)}
 
-            {/* CTA / Swap execution — style tombol dapp (buttonVariants). */}
+            {/* CTA / Swap execution — style tombol dapp (buttonVariants).
+                Warning saldo cukup cukup ditunjukkan teks merah di atas. */}
             <button
               type="button"
               onClick={() => startSwap()}
@@ -611,24 +612,17 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                 insufficientBalance ||
                 belowMinimum
               }
-              className={cn(
-                buttonVariants({
-                  variant: insufficientBalance ? "danger" : "primary",
-                }),
-                "mt-4 w-full py-3.5 text-base",
-              )}
+              className={cn(buttonVariants({}), "mt-4 w-full py-3.5 text-base")}
             >
               {swapState === "loading"
                 ? "Swapping..."
-                : insufficientBalance
-                  ? "Insufficient Balance"
-                  : sameToken
-                    ? "Select Different Tokens"
-                    : belowMinimum
-                      ? `Min ${minAmount} ${sellToken?.isCC ? "CC" : (sellToken?.instrumentId ?? "token")} to swap`
-                      : !amount
-                        ? "Enter Amount"
-                        : `Swap ${displayName(sellToken?.instrumentId ?? "")} → ${displayName(buyToken?.instrumentId ?? "")}`}
+                : sameToken
+                  ? "Select Different Tokens"
+                  : belowMinimum
+                    ? `Min ${minAmount} ${sellToken?.isCC ? "CC" : (sellToken?.instrumentId ?? "token")} to swap`
+                    : !amount
+                      ? "Enter Amount"
+                      : `Swap ${displayName(sellToken?.instrumentId ?? "")} → ${displayName(buyToken?.instrumentId ?? "")}`}
             </button>
           </>
         )}
@@ -961,7 +955,7 @@ function SwapCard({
           <span className="text-xs font-medium text-[var(--muted-foreground)]">{label}</span>
           {isInput && balance && (
             <div className="flex items-center gap-1.5">
-              <span className="text-xs text-[var(--muted-foreground)]">Bal: {balance}</span>
+              <span className="text-xs tabular-nums text-[var(--muted-foreground)]">{balance}</span>
               {onPercentClick && (
                 <div className="flex gap-1">
                   <button
