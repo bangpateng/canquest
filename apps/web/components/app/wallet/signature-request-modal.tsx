@@ -53,7 +53,7 @@ export function SignatureRequestModal({
       <div className="relative z-10 my-auto w-full max-w-[380px] rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-[0_20px_40px_rgba(0,0,0,0.2)]">
         {/* Wallet header — identitas peminta tanda tangan (logo brand) */}
         <div className="mb-5 flex items-center gap-3 border-b border-[var(--border)] pb-4">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-canton-subtle ring-1 ring-canton-muted">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg">
             {logoError ? (
               <span className="text-sm font-bold text-canton">CQ</span>
             ) : (

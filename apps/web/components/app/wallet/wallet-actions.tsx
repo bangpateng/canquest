@@ -884,16 +884,9 @@ export function WalletActions({
                 </span>
               </div>
               <ArrowDown className="mx-auto my-2 h-5 w-5 text-[var(--muted-foreground)]" />
-              <div className="flex items-center justify-center gap-2">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--muted)] text-[var(--muted-foreground)]">
-                  <User className="h-3.5 w-3.5" />
-                </span>
-                <span className="max-w-[220px] truncate font-mono text-sm font-semibold text-[var(--foreground)]">
-                  {formatPartyIdForDisplay(
-                    normalizeSendRecipientInput(recipientUsername),
-                  )}
-                </span>
-              </div>
+              <span className="mx-auto flex h-6 w-6 items-center justify-center rounded-full bg-[var(--muted)] text-[var(--muted-foreground)]">
+                <User className="h-3.5 w-3.5" />
+              </span>
             </div>
 
             {/* Kotak detail — style sama dengan Confirm Swap */}
