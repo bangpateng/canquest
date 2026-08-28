@@ -1524,11 +1524,20 @@ export class CantonLedgerService {
         }
       }
       // Build transferSpec utk leg ini (receiver + amount spesifik per leg).
-      // Kirim SEMUA holdings — BatchTransfer threading change antar leg.
+      // HOLDINGS THREADING: hanya LEG PERTAMA per instrument yang membawa
+      // inputHoldingCids (semua holdings). Leg berikutnya instrument sama
+      // mengirim [] — DAML me-fetch change hasil leg sebelumnya. Kalau leg
+      // berikutnya me-list holdings yang sama, leg pertama sudah
+      // meng-archive-nya → CONTRACT_NOT_ACTIVE (sub-transaction fetch).
+      const isFirstLegForInstrument = !instrumentRegistries.has(
+        `${t.instrumentAdmin}|${t.instrumentId}`,
+      );
       const isAmuletLeg = t.instrumentId.toLowerCase() === 'amulet';
-      const legHoldings = isAmuletLeg
-        ? await this.queryAmuletHoldings(senderPartyId)
-        : await this.getTokenHoldingCids(senderPartyId, t.instrumentId);
+      const legHoldings = isFirstLegForInstrument
+        ? isAmuletLeg
+          ? await this.queryAmuletHoldings(senderPartyId)
+          : await this.getTokenHoldingCids(senderPartyId, t.instrumentId)
+        : [];
       const transferSpec = {
         sender: senderPartyId,
         receiver: t.receiverPartyId,
@@ -1775,12 +1784,20 @@ export class CantonLedgerService {
           if (!exists) allDisclosedContracts.push(dc);
         }
       }
-      // Leg spesifik: kirim SEMUA holdings instrument ini — BatchTransfer
-      // me-thread change antar leg (sender sama, multi-leg aman).
+      // HOLDINGS THREADING (interactive variant): hanya LEG PERTAMA per
+      // instrument yang membawa inputHoldingCids; leg berikutnya instrument
+      // sama mengirim [] — DAML me-fetch change hasil leg sebelumnya.
+      // Me-list ulang holding yang sama → CONTRACT_NOT_ACTIVE (sudah
+      // dikonsumsi leg pertama dalam sub-transaction yang sama).
+      const isFirstLegForInstrument = !instrumentRegistries.has(
+        `${t.instrumentAdmin}|${t.instrumentId}`,
+      );
       const isAmuletLeg = t.instrumentId.toLowerCase() === 'amulet';
-      const legHoldings = isAmuletLeg
-        ? await this.queryAmuletHoldings(senderPartyId)
-        : await this.getTokenHoldingCids(senderPartyId, t.instrumentId);
+      const legHoldings = isFirstLegForInstrument
+        ? isAmuletLeg
+          ? await this.queryAmuletHoldings(senderPartyId)
+          : await this.getTokenHoldingCids(senderPartyId, t.instrumentId)
+        : [];
       const transferSpec = {
         sender: senderPartyId,
         receiver: t.receiverPartyId,
