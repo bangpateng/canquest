@@ -432,7 +432,10 @@ export class SigningRelayService {
             type: 'TRANSFER_OUT',
             description: `Platform fee (transfer to ${meta.recipientLabel})`,
             referenceId: `fee:${normalizeCantonPartyId(meta.feeParty) ?? meta.feeParty}`,
-            ledgerTxId: updateId ?? undefined,
+            // Atomic = SATU updateId untuk dua leg → constraint unik
+            // (userId, ledgerTxId) akan bentrok dengan baris transfer utama.
+            // Baris fee tampil tanpa ledgerTxId; tautan on-chain tetap utuh
+            // via cantonUpdateId (indexed, non-unik).
             cantonUpdateId: updateId ?? undefined,
           })
           .catch((feeRecErr) => {
