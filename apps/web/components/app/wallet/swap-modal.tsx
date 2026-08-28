@@ -12,7 +12,6 @@ import { usePassphrasePrompt } from "@/lib/wallet/use-passphrase-prompt";
 import { ModalPortal } from "@/lib/ui/modal-portal";
 import {
   SignatureRequestModal,
-  type SignaturePayloadRow,
 } from "@/components/app/wallet/signature-request-modal";
 import {
   ArrowDown,
@@ -139,7 +138,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
 
   // Langkah SIGN (mockup Signature Request): satu tombol, tanpa passphrase —
   // dompet auto-unlock via device key (sign-relay).
-  const [signReq, setSignReq] = useState<SignaturePayloadRow[] | null>(null);
+  const [signOpen, setSignOpen] = useState(false);
 
   // Tahap REVIEW (Input → Review → Sign → Broadcast → Success/Failed):
   // tombol Swap buka review dulu; eksekusi jalan saat Confirm.
@@ -281,18 +280,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
       void submitSwap();
       return;
     }
-    setSignReq([
-      { label: "Action", value: "Swap (Atomic DvP)" },
-      { label: "Router", value: "OneSwapRouter" },
-      {
-        label: "AmountIn",
-        value: `${formatAmountNum(parseFloat(amount))} ${displayName(sellToken.instrumentId)}`,
-      },
-      {
-        label: "AmountOutMin",
-        value: `${quote ? formatAmountNum(quote.amountOut * (1 - slippage / 100)) : "0"} ${displayName(buyToken.instrumentId)}`,
-      },
-    ]);
+    setSignOpen(true);
   };
 
   // Execute swap via POST /api/party/swap.
@@ -701,15 +689,17 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
         </div>
       </div>
 
-      {/* Langkah SIGN — Signature Request ala wallet (tanpa passphrase). */}
+      {/* Langkah SIGN — Signature Request ringkas: amount + router kecil. */}
       <SignatureRequestModal
-        open={!!signReq}
-        payload={signReq ?? []}
+        open={signOpen}
+        amountText={`${formatAmountNum(parseFloat(amount))} ${displayName(sellToken?.instrumentId ?? "")} → ${quote ? formatAmountNum(quote.amountOut) : "0"} ${displayName(buyToken?.instrumentId ?? "")}`}
+        subText="Atomic DvP · completes in the background after signing"
+        rows={[{ label: "Router", value: "OneSwap" }]}
         busy={swapState === "loading"}
         onSign={() => {
-          void submitSwap().finally(() => setSignReq(null));
+          void submitSwap().finally(() => setSignOpen(false));
         }}
-        onReject={() => setSignReq(null)}
+        onReject={() => setSignOpen(false)}
       />
     </div>
     </ModalPortal>
