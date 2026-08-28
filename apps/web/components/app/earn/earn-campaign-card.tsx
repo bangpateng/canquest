@@ -9,8 +9,33 @@ import { ROUTES } from "@/lib/routing/app-routes";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
 import { QUEST_STATUS_BADGE, type Quest, type UserProgress } from "@/lib/quest/quest-types";
 import { cn } from "@/lib/utils/utils";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Calendar, ListChecks, Users } from "lucide-react";
+
+/** Progress bar mengisi saat kartu masuk viewport (mockup v2) — sekali saja. */
+function useInViewOnce<T extends HTMLElement>() {
+  const ref = useRef<T | null>(null);
+  const [seen, setSeen] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || seen || typeof IntersectionObserver === "undefined") {
+      if (!seen) setSeen(true);
+      return;
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setSeen(true);
+          io.disconnect();
+        }
+      },
+      { threshold: 0.3 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [seen]);
+  return { ref, seen };
+}
 
 function CountdownTimer({ endsAt }: { endsAt: string | null }) {
   const [now, setNow] = useState(Date.now());
@@ -30,7 +55,7 @@ function CountdownTimer({ endsAt }: { endsAt: string | null }) {
   if (hours > 0 || days > 0) parts.push(`${hours}h`);
   parts.push(`${mins}m`);
   return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600">
+    <span className="inline-flex items-center gap-1 text-[10px] font-bold tabular-nums text-amber-600">
       {parts.join(" ")}
     </span>
   );
@@ -65,6 +90,7 @@ export function EarnCampaignCard({
   const isEnded = quest.status === "ENDED";
   const isSoon = quest.status === "COMING_SOON";
   const token = questRewardToken(quest);
+  const fcfsRef = useInViewOnce<HTMLDivElement>();
 
   const statusMeta = QUEST_STATUS_BADGE[quest.status];
   const statusLabel =
@@ -87,7 +113,7 @@ export function EarnCampaignCard({
     config.code === "INVITE_CODE_FCFS" ||
     config.code === "INVITE_CODE_RANDOM"
   ) {
-    rewardText = "1 invite code";
+    rewardText = "1 Code Access";
   } else if (config.code === "WAITLIST_EMAIL") {
     rewardText = "Waitlist spot";
   } else {
@@ -122,10 +148,10 @@ export function EarnCampaignCard({
 
   const ctaClass =
     ctaVariant === "primary"
-      ? "btn-brand-gradient font-bold"
+      ? "btn-brand-gradient font-bold shadow-[0_8px_16px_-8px_rgba(74,222,128,.55)] hover:-translate-y-px active:translate-y-0"
       : ctaVariant === "ghost"
-        ? "border border-[var(--border)] bg-transparent font-semibold text-[var(--foreground)] hover:opacity-90"
-        : "border border-[var(--border)] bg-[var(--card-solid)] font-medium text-[var(--muted-foreground)] hover:opacity-90";
+        ? "border border-[var(--border)] bg-transparent font-semibold text-[var(--foreground)] hover:border-[rgb(var(--canton-rgb)/0.3)] hover:bg-[var(--muted)]"
+        : "border border-[var(--border)] bg-[var(--card-solid)] font-medium text-[var(--muted-foreground)]";
 
   // FCFS progress fill: gray utk ended/full, amber saat hampir habis, mint default.
   const progressFillClass = cn(
@@ -166,8 +192,10 @@ export function EarnCampaignCard({
   const inner = (
     <div
       className={cn(
-        "group relative flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--card)] transition-colors duration-300",
-        meta.canOpen && !meta.joinBlocked && "hover:border-[var(--primary)]/30",
+        "group relative flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--card)] transition-[border-color,transform,box-shadow] duration-300",
+        meta.canOpen &&
+          !meta.joinBlocked &&
+          "hover:-translate-y-[3px] hover:border-[var(--primary)]/30 hover:shadow-[0_20px_32px_-18px_rgba(22,36,27,0.22)] active:-translate-y-[1px]",
       )}
     >
       {/* ── Banner (104px) + status/type chips ─────────────────── */}
@@ -175,7 +203,8 @@ export function EarnCampaignCard({
         {quest.bannerImageUrl ? (
           <div
             className={cn(
-              "absolute inset-0 bg-cover bg-center",
+              "absolute inset-0 bg-cover bg-center transition-transform duration-500 ease-out",
+              !isEnded && "group-hover:scale-[1.06]",
               isEnded && "grayscale brightness-[0.6]",
             )}
             style={{ backgroundImage: `url("${quest.bannerImageUrl}")` }}
@@ -275,35 +304,48 @@ export function EarnCampaignCard({
 
       {/* ── Body ─────────────────────────────────────────────────── */}
       <div className="flex flex-1 flex-col px-4 pb-4">
-        {/* Reward row (boxed) — label kiri, nilai rata kanan */}
-        <div className="mb-3 rounded-[10px] border border-[var(--border)] bg-[var(--card-solid)] px-3 py-2.5">
+        {/* Reward row (boxed) — aksen bar kiri + label + nilai & USD inline kanan */}
+        <div
+          className={cn(
+            "relative mb-3 overflow-hidden rounded-[10px] border border-[var(--border)] bg-[var(--card-solid)] py-2.5 pl-[15px] pr-3",
+          )}
+        >
+          <span
+            className={cn(
+              "absolute bottom-0 left-0 top-0 w-[3px]",
+              isEnded
+                ? "bg-[var(--muted-foreground)]/40"
+                : "bg-[rgb(var(--canton-rgb))]/55",
+            )}
+            aria-hidden
+          />
           <div className="flex items-baseline justify-between gap-3">
             <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]/70">
               Reward
             </p>
             <p
               className={cn(
-                "text-right font-mono text-sm font-bold",
+                "text-right font-mono text-sm font-bold tabular-nums",
                 isEnded ? "text-[var(--muted-foreground)]" : "text-canton",
               )}
             >
               {rewardText}
+              {showRewardUsd ? (
+                <TokenUsdValue
+                  amount={quest.rewardCc}
+                  token={token}
+                  className="ml-1.5 text-xs font-medium text-[var(--muted-foreground)]/80"
+                />
+              ) : null}
             </p>
           </div>
-          {showRewardUsd ? (
-            <TokenUsdValue
-              amount={quest.rewardCc}
-              token={token}
-              className="mt-0.5 block text-right text-xs text-[var(--muted-foreground)]/80"
-            />
-          ) : null}
         </div>
 
         {/* FCFS progress ATAU raffle row */}
         {/* FCFS progress (types with slots bar; raffle info lives in the meta row) */}
         {showFcfsProgress ? (
-          <div className="mb-3.5">
-            <div className="mb-[5px] flex justify-between text-[10px] text-[var(--muted-foreground)]/70">
+          <div className="mb-3.5" ref={fcfsRef.ref}>
+            <div className="mb-[5px] flex justify-between text-[10px] tabular-nums text-[var(--muted-foreground)]/70">
               <span>
                 {slots.used} / {slots.max} claimed
               </span>
@@ -311,15 +353,19 @@ export function EarnCampaignCard({
             </div>
             <div className="h-[5px] overflow-hidden rounded-full bg-[var(--card-solid)]">
               <div
-                className={progressFillClass}
-                style={{ width: `${Math.max(slots.pct > 0 ? 2 : 0, slots.pct)}%` }}
+                className={cn(progressFillClass, "transition-[width] duration-1000 ease-out")}
+                style={{
+                  width: fcfsRef.seen
+                    ? `${Math.max(slots.pct > 0 ? 2 : 0, slots.pct)}%`
+                    : "0%",
+                }}
               />
             </div>
           </div>
         ) : null}
 
         {/* Meta row — satu baris (mockup style): tasks · winners/draws · countdown */}
-        <div className="mb-3.5 mt-auto flex items-center justify-between gap-2 border-t border-[var(--border)] pt-3 text-[10px] font-medium text-[var(--muted-foreground)]/70">
+        <div className="mb-3.5 mt-auto flex items-center justify-between gap-2 border-t border-[var(--border)] pt-3 text-[10px] font-medium tabular-nums text-[var(--muted-foreground)]/70">
           <span className="inline-flex shrink-0 items-center gap-[5px]">
             <ListChecks className="h-[13px] w-[13px]" aria-hidden />
             {quest.tasks.length} {quest.tasks.length === 1 ? "task" : "tasks"}

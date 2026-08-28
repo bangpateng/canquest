@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Check, Copy, Sparkles, Ticket } from "lucide-react";
-import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils/utils";
 import { usePlatformT } from "@/lib/i18n/platform-provider";
@@ -61,33 +60,45 @@ export function RewardReveal({
     <Card
       bare
       className={cn(
-        "rounded-[20px] border border-[var(--border)] p-5 shadow-[0_20px_44px_-24px_rgb(0_0_0/0.8)]",
+        "relative overflow-hidden rounded-[24px] border border-[rgb(var(--canton-rgb)/0.28)] bg-[var(--card)] p-[22px] pb-5 shadow-[0_24px_50px_-28px_rgba(22,36,27,0.45)]",
         className,
       )}
     >
+      {/* Glow dekoratif pojok — aura reward (mockup v2) */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute -left-6 -top-6 h-[140px] w-[140px] rounded-full bg-[radial-gradient(circle,rgb(var(--canton-rgb)/0.22),transparent_70%)]"
+      />
+
+      {/* Kicker — badge "Reward unlocked" dengan dot berdenyut */}
+      <span className="relative inline-flex items-center gap-1.5 rounded-full border border-[rgb(var(--canton-rgb)/0.35)] bg-white/70 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.12em] text-canton dark:bg-[var(--card)]/70">
+        <span className="relative flex h-1.5 w-1.5">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--primary)] opacity-70" />
+          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--primary)]" />
+        </span>
+        Reward unlocked
+      </span>
+
       {/* Header */}
-      <div className="flex items-center gap-3">
-        {/* Dual reward (CC + Code): tampilkan CC logo + icon code berdampingan
-            untuk menandakan kedua jenis reward. Fungsi raffle (ada pemenang CC
-            & ada pemenang code) tidak berubah — ini murni tampilan icon header. */}
+      <div className="relative mt-3.5 flex items-start gap-3">
         {isDual ? (
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center gap-0.5 rounded-xl bg-gradient-to-br from-canton/15 to-violet-500/15">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center gap-0.5 rounded-[14px] bg-gradient-to-br from-[#d9f99d] to-[#86efac] text-[#14532d] shadow-[0_8px_16px_-10px_rgba(74,222,128,0.7)]">
             <RewardTokenLogo token={token} size={16} />
-            <Ticket className="h-4 w-4 text-violet-600" strokeWidth={2.5} aria-hidden />
+            <Ticket className="h-4 w-4" strokeWidth={2.5} aria-hidden />
           </span>
         ) : (
           <span
             className={cn(
-              "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
+              "flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] shadow-[0_8px_16px_-10px_rgba(74,222,128,0.7)]",
               isCcOnly
-                ? "bg-canton/15 text-canton"
+                ? "bg-gradient-to-br from-[#d9f99d] to-[#86efac] text-[#14532d]"
                 : isWaitlist
-                  ? "bg-cyan-500/15 text-cyan-600"
-                  : "bg-violet-500/15 text-violet-600",
+                  ? "bg-gradient-to-br from-cyan-100 to-cyan-300 text-cyan-800"
+                  : "bg-gradient-to-br from-[#d9f99d] to-[#86efac] text-[#14532d]",
             )}
           >
             {isCcOnly ? (
-              <RewardTokenLogo token={token} size={18} />
+              <RewardTokenLogo token={token} size={20} />
             ) : isWaitlist ? (
               <Sparkles className="h-5 w-5" strokeWidth={2.5} aria-hidden />
             ) : (
@@ -96,10 +107,10 @@ export function RewardReveal({
           </span>
         )}
         <div className="min-w-0">
-          <p className="text-base font-bold text-[var(--foreground)]">
+          <p className="text-[22px] font-extrabold leading-tight tracking-[-0.03em] text-[var(--foreground)]">
             {t("earnCampaigns.congratsTitle")}
           </p>
-          <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+          <p className="mt-1 text-[13px] leading-snug text-[var(--muted-foreground)]">
             {t("earnCampaigns.rewardsReady")}
           </p>
         </div>
@@ -121,14 +132,25 @@ export function RewardReveal({
 
         {inviteCode ? (
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-              {t("earnCampaigns.yourCode")}
-            </p>
-            <div className="mt-1.5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="font-mono text-xl font-bold tracking-widest text-canton">
-                {inviteCode}
+            {/* Tiket gelap dengan notch kiri-kanan (mockup v2) */}
+            <div className="relative rounded-2xl bg-[#0f1a14] px-4 pb-3.5 pt-4 text-[#ecfdf3]">
+              <span
+                aria-hidden
+                className="absolute -left-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-[var(--card)]"
+              />
+              <span
+                aria-hidden
+                className="absolute -right-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-[var(--card)]"
+              />
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[#a7f3d0]/70">
+                {t("earnCampaigns.yourCode")}
               </p>
-              <CopyButton value={inviteCode} label={t("earnCampaigns.copy")} />
+              <div className="flex items-center justify-between gap-2.5">
+                <p className="min-w-0 break-all font-mono text-[15px] font-bold tracking-[0.08em] text-white">
+                  {inviteCode}
+                </p>
+                <TicketCopyButton value={inviteCode} />
+              </div>
             </div>
             <p className="mt-1.5 text-xs text-[var(--muted-foreground)]">
               {t("earnCampaigns.saveCodeWarn")}
@@ -151,49 +173,34 @@ export function RewardReveal({
   );
 }
 
-function CopyButton({
-  value,
-  label = "Copy",
-  className,
-}: {
-  value: string;
-  label?: string;
-  className?: string;
-}) {
+/** Copy icon-only utk tiket (mockup v2) — state "copied" hijau. */
+function TicketCopyButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
-
   async function copy() {
     try {
       await navigator.clipboard.writeText(value);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => setCopied(false), 1800);
     } catch {
       /* ignore */
     }
   }
-
   return (
     <button
       type="button"
       onClick={() => void copy()}
-      aria-label={label}
+      aria-label="Copy code"
       className={cn(
-        buttonVariants({ size: "sm" }),
-        "shrink-0",
-        copied && "brightness-95",
-        className,
+        "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/20 bg-white/10 text-white transition-colors hover:bg-white/20",
+        copied && "border-[#86efac]/40 text-[#86efac]",
       )}
     >
       {copied ? (
-        <>
-          <Check className="h-3.5 w-3.5" />
-        </>
+        <Check className="h-[15px] w-[15px]" aria-hidden />
       ) : (
-        <>
-          <Copy className="h-3.5 w-3.5" />
-        </>
+        <Copy className="h-[15px] w-[15px]" aria-hidden />
       )}
-      {copied ? "Copied" : label}
     </button>
   );
 }
+
