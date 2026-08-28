@@ -809,14 +809,17 @@ export function WalletActions({
                     type="button"
                     onClick={close}
                     disabled={sendState === "loading"}
-                    className="flex-1 rounded-xl bg-[var(--muted)] px-4 py-4 text-base font-semibold text-[var(--foreground)] transition hover:bg-[var(--border)]/60 disabled:opacity-50"
+                    className={cn(
+                      buttonVariants({ variant: "secondary" }),
+                      "flex-1 py-3.5 text-base",
+                    )}
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={sendState === "loading"}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#a3e635] to-[#4ade80] px-4 py-4 text-base font-semibold text-[#064e3b] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                    className={cn(buttonVariants({}), "flex-1 gap-2 py-3.5 text-base")}
                   >
                     {sendState === "loading" ? (
                       <>
@@ -914,7 +917,7 @@ export function WalletActions({
               ) : null}
             </div>
 
-            {/* Satu tombol gradient (mockup) */}
+            {/* Satu tombol utama — style dapp (buttonVariants) */}
             <button
               type="button"
               onClick={() => {
@@ -944,7 +947,7 @@ export function WalletActions({
                 }
                 void submitSend({ preventDefault: () => {} } as React.FormEvent);
               }}
-              className="w-full rounded-xl bg-gradient-to-r from-[#a3e635] to-[#4ade80] px-4 py-4 text-base font-semibold text-[#064e3b] transition hover:opacity-90"
+              className={cn(buttonVariants({}), "w-full py-3.5 text-base")}
             >
               Confirm & Sign
             </button>

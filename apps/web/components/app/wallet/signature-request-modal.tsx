@@ -1,6 +1,8 @@
 "use client";
 
+import { buttonVariants } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { cn } from "@/lib/utils/utils";
 
 /**
  * SignatureRequestModal — konfirmasi tanda tangan ala wallet (mockup
@@ -44,9 +46,9 @@ export function SignatureRequestModal({
     >
       <div className="absolute inset-0 bg-black/70 backdrop-blur-md" />
       <div className="relative z-10 my-auto w-full max-w-[380px] rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-[0_20px_40px_rgba(0,0,0,0.2)]">
-        {/* Wallet header — identitas peminta tanda tangan */}
+        {/* Wallet header — identitas peminta tanda tangan (style brand dapp) */}
         <div className="mb-5 flex items-center gap-3 border-b border-[var(--border)] pb-4">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#1a1a1a] text-sm font-bold text-white">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-canton-subtle text-sm font-bold text-canton ring-1 ring-canton-muted">
             CQ
           </div>
           <div className="min-w-0">
@@ -79,13 +81,16 @@ export function SignatureRequestModal({
           your device.
         </p>
 
-        {/* Actions — Reject outline + Sign & Send hitam (mockup) */}
+        {/* Actions — style tombol dapp (secondary + primary) */}
         <div className="flex gap-3">
           <button
             type="button"
             disabled={busy}
             onClick={onReject}
-            className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3.5 text-sm font-semibold text-[var(--foreground)] transition hover:bg-[var(--muted)] disabled:opacity-50"
+            className={cn(
+              buttonVariants({ variant: "secondary" }),
+              "flex-1 py-3.5 text-base",
+            )}
           >
             Reject
           </button>
@@ -93,7 +98,7 @@ export function SignatureRequestModal({
             type="button"
             disabled={busy}
             onClick={onSign}
-            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#1a1a1a] px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-[#333] disabled:opacity-60"
+            className={cn(buttonVariants({}), "flex-1 gap-2 py-3.5 text-base")}
           >
             {busy ? (
               <>

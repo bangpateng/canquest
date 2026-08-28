@@ -125,15 +125,9 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
     MIN_SWAP_AMOUNT_TOKEN_FALLBACK,
   );
 
-  // Swap execution state.
-  const [swapState, setSwapState] = useState<
-    "idle" | "loading" | "success" | "error"
-  >("idle");
-  const [swapMessage, setSwapMessage] = useState("");
-  const [swapOutput, setSwapOutput] = useState("");
-  const [swapReceivedToken, setSwapReceivedToken] = useState("");
-  /** true = swap masih diproses OneSwap di background (hasil via notifikasi). */
-  const [swapPending, setSwapPending] = useState(false);
+  // Swap execution state. Hasil akhir ditampilkan TransactionStatusModal
+  // (z-90) — form tidak punya panel sukses/error sendiri.
+  const [swapState, setSwapState] = useState<"idle" | "loading">("idle");
 
   // Slippage tolerance — default 0.5%. UI pengaturannya dihapus (permintaan
   // UX); nilai tetap dipakai untuk guard AmountOutMin di payload sign.
@@ -309,8 +303,6 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
     if (!sellToken || !buyToken || !amount || sameToken || insufficientBalance)
       return;
     setSwapState("loading");
-    setSwapMessage("");
-    setSwapOutput("");
 
     const sellSym = sellToken.symbol ?? (sellToken.isCC ? "CC" : sellToken.instrumentId);
     const buySym = buyToken.symbol ?? (buyToken.isCC ? "CC" : buyToken.instrumentId);
@@ -344,8 +336,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
         if (!prep.ok || !prepRaw?.hash) {
           const msg = prepRaw?.message ?? "Failed to prepare swap.";
           tx.fail(msg);
-          setSwapState("error");
-          setSwapMessage(msg);
+          setSwapState("idle");
           return;
         }
         try {
@@ -365,8 +356,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
               ? err.message
               : "Swap failed while signing.";
           tx.fail(msg);
-          setSwapState("error");
-          setSwapMessage(msg);
+          setSwapState("idle");
           return;
         }
       }
@@ -400,17 +390,15 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
       if (!res.ok || !data.success) {
         const msg = data.message ?? "Swap failed. Please try again.";
         tx.fail(msg);
-        setSwapState("error");
-        setSwapMessage(msg);
+        setSwapState("idle");
         return;
       }
-      // ASYNC: submit diterima — OneSwap menyelesaikan di background.
-      // Modal sukses auto-tutup ±2.5 detik; hasil final masuk via SSE
-      // (swap:completed) + badge notifikasi seperti transaksi lain.
-      setSwapState("success");
-      setSwapOutput(data.outputAmount ?? estOut);
-      setSwapReceivedToken(buyToken?.instrumentId ?? "");
-      setSwapPending(Boolean(data.pending));
+      // ASYNC: submit diterima — OneSwap menyelesaikan di background; hasil
+      // final masuk via SSE (swap:completed) + badge notifikasi. Form tidak
+      // menampilkan panel sukses (status modal menangani) — reset & tutup.
+      setSwapState("idle");
+      setAmount("");
+      onClose();
       // Leg deposit sudah on-chain saat sign — refresh saldo sell sekarang;
       // saldo buy menyusul via SSE swap:completed (listener use-realtime).
       void invalidateWalletTokens();
@@ -435,8 +423,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
       });
     } catch {
       tx.fail("Network error. Check your connection.");
-      setSwapState("error");
-      setSwapMessage("Network error. Check your connection.");
+      setSwapState("idle");
     }
   };
 
@@ -612,92 +599,37 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                 </div>
               ) : null)}
 
-            {/* CTA / Swap execution */}
-            {swapState === "success" ? (
-              <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-center">
-                <p className="text-sm font-semibold text-emerald-600">
-                  {swapPending ? "Swap submitted!" : "Swap completed!"}
-                </p>
-                {swapOutput && (
-                  <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                    {swapPending ? "≈" : "Received"} {swapOutput}{" "}
-                    {displayName(swapReceivedToken || (buyToken?.instrumentId ?? ""))}
-                    {swapPending
-                      ? " expected — arriving in your wallet shortly"
-                      : ""}
-                  </p>
-                )}
-                {swapPending ? (
-                  <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                    You&apos;ll get a notification when it completes.
-                  </p>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSwapState("idle");
-                    setAmount("");
-                    setSwapPending(false);
-                  }}
-                  className={cn(
-                    buttonVariants({ size: "sm" }),
-                    "mt-3 w-full",
-                  )}
-                >
-                  Done
-                </button>
-              </div>
-            ) : swapState === "error" ? (
-              <div className="mt-4 space-y-2">
-                <div className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-600">
-                  <AlertCircle className="h-4 w-4 shrink-0" />
-                  <span>{swapMessage}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSwapState("idle")}
-                  className={cn(
-                    buttonVariants({ size: "sm" }),
-                    "w-full",
-                  )}
-                >
-                  Try Again
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => startSwap()}
-                disabled={
-                  swapState === "loading" ||
-                  !amount ||
-                  !quote ||
-                  Boolean(sameToken) ||
-                  insufficientBalance ||
-                  belowMinimum
-                }
-                className={cn(
-                  "mt-4 w-full rounded-xl px-4 py-4 text-base font-semibold transition",
-                  insufficientBalance
-                    ? "bg-[#fee2e2] text-[#991b1b]"
-                    : !amount || !quote || sameToken || belowMinimum
-                      ? "cursor-not-allowed bg-[#e5e7eb] text-[#9ca3af]"
-                      : "bg-gradient-to-r from-[#a3e635] to-[#4ade80] text-[#064e3b] hover:opacity-90",
-                )}
-              >
-                {swapState === "loading"
-                  ? "Swapping..."
-                  : insufficientBalance
-                    ? "Insufficient Balance"
-                    : sameToken
-                      ? "Select Different Tokens"
-                      : belowMinimum
-                        ? `Min ${minAmount} ${sellToken?.isCC ? "CC" : (sellToken?.instrumentId ?? "token")} to swap`
-                        : !amount
-                          ? "Enter Amount"
-                          : `Swap ${displayName(sellToken?.instrumentId ?? "")} → ${displayName(buyToken?.instrumentId ?? "")}`}
-              </button>
-            )}
+            {/* CTA / Swap execution — style tombol dapp (buttonVariants). */}
+            <button
+              type="button"
+              onClick={() => startSwap()}
+              disabled={
+                swapState === "loading" ||
+                !amount ||
+                !quote ||
+                Boolean(sameToken) ||
+                insufficientBalance ||
+                belowMinimum
+              }
+              className={cn(
+                buttonVariants({
+                  variant: insufficientBalance ? "danger" : "primary",
+                }),
+                "mt-4 w-full py-3.5 text-base",
+              )}
+            >
+              {swapState === "loading"
+                ? "Swapping..."
+                : insufficientBalance
+                  ? "Insufficient Balance"
+                  : sameToken
+                    ? "Select Different Tokens"
+                    : belowMinimum
+                      ? `Min ${minAmount} ${sellToken?.isCC ? "CC" : (sellToken?.instrumentId ?? "token")} to swap`
+                      : !amount
+                        ? "Enter Amount"
+                        : `Swap ${displayName(sellToken?.instrumentId ?? "")} → ${displayName(buyToken?.instrumentId ?? "")}`}
+            </button>
           </>
         )}
 
@@ -740,7 +672,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
               <button
                 type="button"
                 onClick={() => setRouterOpen(false)}
-                className="flex w-full items-center justify-between rounded-2xl border-2 border-[#a3e635] bg-canton-subtle/30 p-4 text-left shadow-[0_4px_12px_rgba(163,230,53,0.1)]"
+                className="flex w-full items-center justify-between rounded-2xl border-2 border-canton-muted bg-canton-subtle/30 p-4 text-left"
               >
                 <span className="flex items-center gap-2.5">
                   <TokenLogo symbol="oneswap" size="sm" />
@@ -768,7 +700,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                 </span>
               </button>
               {/* Tradecraft — coming soon */}
-              <div className="flex cursor-not-allowed items-center justify-between rounded-2xl border-2 border-[#f3f4f6] p-4 opacity-60">
+              <div className="flex cursor-not-allowed items-center justify-between rounded-2xl border-2 border-[var(--border)] p-4 opacity-60">
                 <span className="flex items-center gap-2.5">
                   <TokenLogo symbol="tradecraft" size="sm" />
                   <span>
@@ -860,7 +792,7 @@ export function SwapModal({ open, onClose, balance }: SwapModalProps) {
                 setConfirmOpen(false);
                 setSignReq(signPayload());
               }}
-              className="w-full rounded-xl bg-[#1a1a1a] px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-[#333]"
+              className={cn(buttonVariants({ variant: "primary" }), "w-full py-3.5 text-base")}
             >
               Confirm Swap
             </button>
@@ -1035,14 +967,14 @@ function SwapCard({
                   <button
                     type="button"
                     onClick={() => onPercentClick(0.5)}
-                    className="rounded bg-[#e5e7eb] px-2 py-0.5 text-[10px] font-semibold text-[var(--foreground)] transition hover:bg-[#d1d5db]"
+                    className="rounded bg-[var(--card)] px-2 py-0.5 text-[10px] font-semibold text-[var(--foreground)] ring-1 ring-[var(--border)] transition hover:bg-[var(--primary)]/10 hover:text-canton"
                   >
                     50%
                   </button>
                   <button
                     type="button"
                     onClick={() => onPercentClick(1)}
-                    className="rounded bg-[#d1fae5] px-2 py-0.5 text-[10px] font-bold text-[#059669] transition hover:bg-[#a7f3d0]"
+                    className="rounded bg-[var(--card)] px-2 py-0.5 text-[10px] font-bold text-canton ring-1 ring-[var(--border)] transition hover:bg-[var(--primary)]/10"
                   >
                     MAX
                   </button>
