@@ -395,6 +395,7 @@ export class SigningRelayService {
       amount: number;
       feeCc: number;
       feeParty: string;
+      atomicFee?: boolean;
       recipientPartyId: string;
       recipientLabel: string;
       memo: string;
@@ -418,7 +419,35 @@ export class SigningRelayService {
       );
     }
 
-    // Fee leg: kumpulkan via jalur CUSTODIAL (operator sign) — interactive
+    // ── Fee leg ──────────────────────────────────────────────────────────
+    // ATOMIC (v32): fee sudah settle DI DALAM transaksi yang di-sign user
+    // (WalletUserProxy_BatchTransfer multi-leg) → cukup catat history dengan
+    // updateId yang sama. Tidak ada submit terpisah.
+    if (meta.atomicFee) {
+      if (meta.feeCc > 0) {
+        await this.users
+          .recordTransaction({
+            userId: entry.userId,
+            amountCc: meta.feeCc,
+            type: 'TRANSFER_OUT',
+            description: `Platform fee (transfer to ${meta.recipientLabel})`,
+            referenceId: `fee:${normalizeCantonPartyId(meta.feeParty) ?? meta.feeParty}`,
+            ledgerTxId: updateId ?? undefined,
+            cantonUpdateId: updateId ?? undefined,
+          })
+          .catch((feeRecErr) => {
+            this.logger.warn(
+              `Atomic fee history record failed (fee settled on-chain): ${String(feeRecErr).slice(0, 120)}`,
+            );
+          });
+        this.logger.log(
+          `Atomic fee settled in-tx: ${meta.feeCc} CC → ${meta.feeParty.split('::')[0]} (updateId=${updateId?.slice(0, 16) ?? 'n/a'})`,
+        );
+      }
+      return;
+    }
+
+    // LEGACY: kumpulkan via jalur CUSTODIAL (operator sign) — interactive
     // submission tidak support multi-command. Fee hanya dicatat di history
     // BILA benar-benar terkumpul (party external sering menolak submit
     // custodial: NO_SYNCHRONIZER_ON_WHICH_ALL_SUBMITTERS_CAN_SUBMIT).
@@ -711,7 +740,78 @@ export class SigningRelayService {
       this.splice.resolveOnChainPartyId(recipientPartyId),
     ]);
 
-    // ── Bangun command transfer utama ────────────────────────────────────
+    // ── ATOMIC (v32): transfer + platform fee dalam SATU command via
+    // WalletUserProxy_BatchTransfer. Controller choice = first sender →
+    // cukup SATU tanda tangan user (interactive submission). Semua leg
+    // settle atau batal semua — fee dijamin terkumpul bersama transfer.
+    // Fallback: single-transfer legacy + fee custodial postExecute bila
+    // WUP/registry tidak tersedia atau build gagal.
+    if (
+      this.config.get<string>('QUEST_ATOMIC_PLATFORM_TRANSFER') === 'true' &&
+      feeCc > 0
+    ) {
+      try {
+        const feePartyRawAtomic =
+          this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
+          this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
+        if (feePartyRawAtomic) {
+          const feePartyOnChain =
+            await this.splice.resolveOnChainPartyId(feePartyRawAtomic);
+          const dsoAtomic =
+            this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() || '';
+          const batch = await this.ledger.buildProxyBatchTransferCommand({
+            senderPartyId: senderOnChain,
+            transfers: [
+              {
+                receiverPartyId: receiverOnChain,
+                amount,
+                instrumentId: 'Amulet',
+                instrumentAdmin: dsoAtomic,
+                description: memo || `Send to ${recipientLabel}`,
+              },
+              {
+                receiverPartyId: feePartyOnChain,
+                amount: feeCc,
+                instrumentId: 'Amulet',
+                instrumentAdmin: dsoAtomic,
+                description: `Platform fee: ${recipientLabel}`,
+              },
+            ],
+            clientNonce,
+          });
+          if (batch.ok) {
+            this.logger.log(
+              `send_cc ATOMIC batch ready: ${amount} CC → ${recipientLabel} + fee ${feeCc} CC (kind=${batch.transferKind})`,
+            );
+            return {
+              commands: [batch.command],
+              disclosedContracts: batch.disclosedContracts,
+              commandId: clientNonce ? batch.commandId : undefined,
+              meta: {
+                amount,
+                feeCc,
+                feeParty: feePartyRawAtomic,
+                atomicFee: true,
+                transferKind: batch.transferKind,
+                recipientPartyId,
+                recipientLabel,
+                memo,
+              },
+              description: `Send ${amount} CC to ${recipientLabel}`,
+            };
+          }
+          this.logger.warn(
+            `send_cc atomic build failed → legacy single: ${batch.error}`,
+          );
+        }
+      } catch (err) {
+        this.logger.warn(
+          `send_cc atomic build error → legacy single: ${String(err).slice(0, 140)}`,
+        );
+      }
+    }
+
+    // ── Bangun command transfer utama (legacy single-transfer) ───────────
     const main = await this.ledger.buildCip56TransferCommand({
       senderPartyId: senderOnChain,
       receiverPartyId: receiverOnChain,
@@ -880,7 +980,76 @@ export class SigningRelayService {
       this.splice.resolveOnChainPartyId(recipientPartyId),
     ]);
 
-    // Leg utama: transfer token non-CC.
+    // ── ATOMIC (v32): token leg + fee CC dalam SATU command via
+    // WalletUserProxy_BatchTransfer (instrument campur — registry per
+    // instrument). Fallback: legacy single + fee custodial postExecute.
+    if (
+      this.config.get<string>('QUEST_ATOMIC_PLATFORM_TRANSFER') === 'true' &&
+      feeCc > 0
+    ) {
+      try {
+        const feePartyRawAtomic =
+          this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
+          this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
+        if (feePartyRawAtomic) {
+          const feePartyOnChain =
+            await this.splice.resolveOnChainPartyId(feePartyRawAtomic);
+          const dsoAtomic =
+            this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() || '';
+          const batch = await this.ledger.buildProxyBatchTransferCommand({
+            senderPartyId: senderOnChain,
+            transfers: [
+              {
+                receiverPartyId: receiverOnChain,
+                amount,
+                instrumentId,
+                instrumentAdmin,
+                description: memo || `Send to ${recipientLabel}`,
+              },
+              {
+                receiverPartyId: feePartyOnChain,
+                amount: feeCc,
+                instrumentId: 'Amulet',
+                instrumentAdmin: dsoAtomic,
+                description: `Platform fee: ${recipientLabel}`,
+              },
+            ],
+            clientNonce,
+          });
+          if (batch.ok) {
+            this.logger.log(
+              `send_token ATOMIC batch ready: ${amount} ${instrumentId} → ${recipientLabel} + fee ${feeCc} CC (kind=${batch.transferKind})`,
+            );
+            return {
+              commands: [batch.command],
+              disclosedContracts: batch.disclosedContracts,
+              commandId: clientNonce ? batch.commandId : undefined,
+              meta: {
+                amount,
+                feeCc,
+                feeParty: feePartyRawAtomic,
+                atomicFee: true,
+                transferKind: batch.transferKind,
+                recipientPartyId,
+                recipientLabel,
+                memo,
+                instrumentId,
+              },
+              description: `Send ${amount} ${instrumentId} to ${recipientLabel}`,
+            };
+          }
+          this.logger.warn(
+            `send_token atomic build failed → legacy single: ${batch.error}`,
+          );
+        }
+      } catch (err) {
+        this.logger.warn(
+          `send_token atomic build error → legacy single: ${String(err).slice(0, 140)}`,
+        );
+      }
+    }
+
+    // Leg utama: transfer token non-CC (legacy single-transfer).
     const main = await this.ledger.buildCip56TransferCommand({
       senderPartyId: senderOnChain,
       receiverPartyId: receiverOnChain,

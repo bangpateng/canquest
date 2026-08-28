@@ -948,6 +948,9 @@ export function WalletActions({
                       ),
                     },
                     { label: "Memo", value: memo.trim() || "None" },
+                    ...(selectedIsCC
+                      ? [{ label: "Fee", value: `${feeCc} CC` }]
+                      : []),
                   ]);
                   return;
                 }

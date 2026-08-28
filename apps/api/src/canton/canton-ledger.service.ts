@@ -1630,6 +1630,232 @@ export class CantonLedgerService {
   }
 
   /**
+   * BUILD variant dari executeProxyBatchTransferMulti — untuk interactive
+   * submission via signing relay (user external). Menyusun ExerciseCommand
+   * WalletUserProxy_BatchTransfer multi-leg (transfer utama + platform fee)
+   * TANPA men-submit; submitter = tanda tangan user di browser.
+   *
+   * Kenapa BatchTransfer (bukan AmuletRules_Transfer multi-output):
+   *   - Choice controller = FIRST SENDER party → cukup SATU tanda tangan user
+   *     (AmuletRules mewajibkan co-authorizer provider + semua receiver →
+   *     terbukti DAML_AUTHORIZATION_ERROR pada interactive submission).
+   *   - Holdings threading antar leg ditangani DAML (kirim semua input
+   *     holdings per instrument; change di-thread).
+   *   - Kind per instrument mengikuti preapproval receiver (direct/offer).
+   *
+   * Atomic: SEMUA leg (transfer + fee) settle dalam SATU transaksi atau
+   * batal semua — fee platform dijamin terkumpul bersamaan dengan transfer.
+   */
+  async buildProxyBatchTransferCommand(params: {
+    senderPartyId: string;
+    transfers: Array<{
+      receiverPartyId: string;
+      amount: number;
+      instrumentId: string; // 'Amulet' (CC) atau token id (USDCx)
+      instrumentAdmin: string; // DSO utk CC, registrar utk non-CC
+      description?: string;
+    }>;
+    clientNonce?: string;
+  }): Promise<
+    | {
+        ok: true;
+        command: Record<string, unknown>;
+        commandId: string;
+        disclosedContracts: unknown[];
+        transferKind: string;
+      }
+    | { ok: false; error: string }
+  > {
+    if (!this.proxyCache) {
+      return { ok: false, error: 'ProxyCacheService not injected' };
+    }
+    const wupCid = await this.proxyCache.getWalletUserProxyCid();
+    if (!wupCid) {
+      return { ok: false, error: 'WalletUserProxy contractId not found' };
+    }
+    const farCid = await this.proxyCache.getFeaturedAppRightCid();
+    const { senderPartyId, transfers } = params;
+    if (transfers.length === 0) {
+      return { ok: false, error: 'No transfers provided' };
+    }
+
+    const now = new Date();
+    const executeBefore = new Date(
+      now.getTime() + 24 * 3600 * 1000,
+    ).toISOString();
+    const nowIso = now.toISOString();
+
+    // GROUP BY INSTRUMENT: registry SEKALI per instrument — factory untuk
+    // instrument sama adalah contract yang identik; exercise dua kali dari
+    // factory berbeda utk instrument sama → CONTRACT_NOT_FOUND.
+    const instrumentRegistries = new Map<
+      string,
+      {
+        factoryId: string;
+        choiceContextData: Record<string, unknown>;
+        disclosedContracts: unknown[];
+        transferKind: string;
+      }
+    >();
+    const allDisclosedContracts: unknown[] = [];
+    let lastTransferKind = 'direct';
+
+    const transferCalls: Array<{
+      factoryCid: string;
+      choiceArg: Record<string, unknown>;
+    }> = [];
+
+    for (const t of transfers) {
+      const instrumentKey = `${t.instrumentAdmin}|${t.instrumentId}`;
+      let registry = instrumentRegistries.get(instrumentKey);
+      if (!registry) {
+        const isAmulet = t.instrumentId.toLowerCase() === 'amulet';
+        const holdings = isAmulet
+          ? await this.queryAmuletHoldings(senderPartyId)
+          : await this.getTokenHoldingCids(senderPartyId, t.instrumentId);
+        if (holdings.length === 0) {
+          return {
+            ok: false,
+            error: `Sender has no ${t.instrumentId} holdings for leg to ${t.receiverPartyId.split('::')[0]}`,
+          };
+        }
+        const inputHoldingCids = holdings.map((h) => h.contractId);
+        const protoTransferSpec = {
+          sender: senderPartyId,
+          receiver: t.receiverPartyId,
+          amount: t.amount.toFixed(10),
+          instrumentId: { admin: t.instrumentAdmin, id: t.instrumentId },
+          lock: null,
+          requestedAt: nowIso,
+          executeBefore,
+          inputHoldingCids,
+          meta: {
+            values: t.description
+              ? { 'splice.lfdecentralizedtrust.org/reason': t.description }
+              : {},
+          },
+        };
+        const regRes = await this.callTransferFactoryRegistry(
+          {
+            expectedAdmin: t.instrumentAdmin,
+            transfer: protoTransferSpec,
+            extraArgs: { context: { values: {} }, meta: { values: {} } },
+          },
+          t.instrumentAdmin,
+        );
+        if (!regRes) {
+          return {
+            ok: false,
+            error: `Registry call failed for ${t.instrumentId} leg to ${t.receiverPartyId.split('::')[0]}`,
+          };
+        }
+        registry = {
+          factoryId: regRes.factoryId,
+          choiceContextData: regRes.choiceContextData,
+          disclosedContracts: regRes.disclosedContracts,
+          transferKind: regRes.transferKind,
+        };
+        instrumentRegistries.set(instrumentKey, registry);
+        lastTransferKind = registry.transferKind;
+        for (const dc of registry.disclosedContracts) {
+          const dcCid = (dc as Record<string, unknown>)?.contract;
+          const exists = allDisclosedContracts.some(
+            (existing) =>
+              (existing as Record<string, unknown>)?.contract === dcCid,
+          );
+          if (!exists) allDisclosedContracts.push(dc);
+        }
+      }
+      // Leg spesifik: kirim SEMUA holdings instrument ini — BatchTransfer
+      // me-thread change antar leg (sender sama, multi-leg aman).
+      const isAmuletLeg = t.instrumentId.toLowerCase() === 'amulet';
+      const legHoldings = isAmuletLeg
+        ? await this.queryAmuletHoldings(senderPartyId)
+        : await this.getTokenHoldingCids(senderPartyId, t.instrumentId);
+      const transferSpec = {
+        sender: senderPartyId,
+        receiver: t.receiverPartyId,
+        amount: t.amount.toFixed(10),
+        instrumentId: { admin: t.instrumentAdmin, id: t.instrumentId },
+        lock: null,
+        requestedAt: nowIso,
+        executeBefore,
+        inputHoldingCids: legHoldings.map((h) => h.contractId),
+        meta: {
+          values: t.description
+            ? { 'splice.lfdecentralizedtrust.org/reason': t.description }
+            : {},
+        },
+      };
+      transferCalls.push({
+        factoryCid: registry.factoryId,
+        choiceArg: {
+          expectedAdmin: t.instrumentAdmin,
+          transfer: transferSpec,
+          extraArgs: {
+            context: registry.choiceContextData,
+            meta: { values: {} },
+          },
+        },
+      });
+    }
+
+    const optFar = farCid ?? null;
+    const choiceArgument = {
+      transferCalls,
+      optFeaturedAppRightCid: optFar,
+    };
+
+    const commandId = params.clientNonce
+      ? `proxy-batch-multi-${createHash('sha256')
+          .update(`${senderPartyId}|${params.clientNonce}`)
+          .digest('hex')
+          .slice(0, 32)}`
+      : `proxy-batch-multi-${senderPartyId.slice(0, 12)}-${randomUUID().slice(0, 16)}`;
+
+    const wupDisclosure =
+      await this.proxyCache.getWalletUserProxyDisclosedContract();
+    const farDisclosure =
+      await this.proxyCache.getFeaturedAppRightDisclosedContract();
+    if (!wupDisclosure) {
+      return {
+        ok: false,
+        error: 'WalletUserProxy disclosed contract unavailable (no blob)',
+      };
+    }
+    const disclosedContracts: unknown[] = [
+      ...allDisclosedContracts,
+      wupDisclosure,
+      ...(farDisclosure ? [farDisclosure] : []),
+    ];
+
+    this.logger.log(
+      `BUILD WalletUserProxy_BatchTransfer (interactive, ${transferCalls.length} legs): ` +
+        `sender=${senderPartyId.split('::')[0]} legs=[${transfers
+          .map(
+            (t) =>
+              `${t.receiverPartyId.split('::')[0]}:${t.amount}:${t.instrumentId}`,
+          )
+          .join(', ')}] kind=${lastTransferKind}`,
+    );
+
+    return {
+      ok: true,
+      command: {
+        ExerciseCommand: {
+          templateId: this.proxyCache.wupTemplateId,
+          contractId: wupCid,
+          choice: 'WalletUserProxy_BatchTransfer',
+          choiceArgument,
+        },
+      },
+      commandId,
+      disclosedContracts,
+      transferKind: lastTransferKind,
+    };
+  }
+
+  /**
    * Execute offer choice (Accept / Reject / Withdraw) via WalletUserProxy.
    *
    * DAML reference: choice controller = `user` party (proxyArg.user). Signatory
