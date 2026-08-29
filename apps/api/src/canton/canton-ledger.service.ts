@@ -1798,6 +1798,60 @@ export class CantonLedgerService {
       }
     }
 
+    // ── GUARD: batch maksimal SATU leg direct-settlement (konstraint DAML) ──
+    // Amulet exercise menolak >1 group owner berbeda dalam satu batch:
+    // "Contract group identifier mismatch: ForOwner{A} vs ForOwner{B}".
+    // [offer + direct] aman (terbukti MainNet); [direct + direct] TIDAK —
+    // mis. kirim ke exchange (MEXC preapproved) + leg fee (fee party juga
+    // preapproved) → 2 direct → ledger reject. Deteksi via registry probe
+    // per leg (transferKind = fungsi preapproval receiver) → bila >1 direct,
+    // tolak build secara graceful → relay fallback ke legacy single-transfer.
+    const amuletLegsAll = transfers.filter(
+      (t) => t.instrumentId.toLowerCase() === 'amulet',
+    );
+    const distinctReceivers = new Set(
+      amuletLegsAll.map((t) => t.receiverPartyId),
+    );
+    if (amuletLegsAll.length > 1 && distinctReceivers.size > 1) {
+      let directCount = 0;
+      for (const leg of amuletLegsAll) {
+        try {
+          const probeSpec = {
+            sender: senderPartyId,
+            receiver: leg.receiverPartyId,
+            amount: leg.amount.toFixed(10),
+            instrumentId: { admin: leg.instrumentAdmin, id: leg.instrumentId },
+            lock: null,
+            requestedAt: nowIso,
+            executeBefore,
+            inputHoldingCids: fullAmuletCids,
+            meta: { values: {} },
+          };
+          const probe = await this.callTransferFactoryRegistry(
+            {
+              expectedAdmin: leg.instrumentAdmin,
+              transfer: probeSpec,
+              extraArgs: { context: { values: {} }, meta: { values: {} } },
+            },
+            leg.instrumentAdmin,
+          );
+          if (probe?.transferKind === 'direct') directCount++;
+        } catch {
+          /* probe gagal → lanjut; kegagalan akan tertangani saat exercise */
+        }
+      }
+      if (directCount > 1) {
+        this.logger.warn(
+          `Batch guard: ${directCount} direct-settlement legs (DAML owner-group constraint) → fallback legacy`,
+        );
+        return {
+          ok: false,
+          error:
+            'Multiple direct-settlement legs in one batch exceed the DAML owner-group constraint — falling back',
+        };
+      }
+    }
+
     for (const t of transfers) {
       const instrumentKey = `${t.instrumentAdmin}|${t.instrumentId}`;
       let registry = instrumentRegistries.get(instrumentKey);
