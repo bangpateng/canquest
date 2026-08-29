@@ -470,41 +470,18 @@ export class SigningRelayService {
       recipientPartyId: string;
       recipientLabel: string;
       memo: string;
-      /** send_token saja — utk baris TokenTransaction (amount token ≠ CC). */
-      instrumentId?: string;
-      instrumentAdmin?: string;
     };
     const updateId = result?.updateId;
     try {
-      if (
-        entry.flow === 'send_token' &&
-        meta.instrumentId &&
-        meta.instrumentAdmin
-      ) {
-        // Leg utama TOKEN → TokenTransaction. (Sebelumnya salah rekam ke
-        // CcTransaction sebagai CC — baris -amount CC palsu di history user.)
-        await this.users.recordTokenTransaction({
-          userId: entry.userId,
-          instrumentId: meta.instrumentId,
-          instrumentAdmin: meta.instrumentAdmin,
-          amount: meta.amount,
-          type: 'TOKEN_TRANSFER_OUT',
-          description: meta.memo || `Send to ${meta.recipientLabel}`,
-          referenceId: meta.recipientPartyId,
-          ledgerTxId: updateId,
-          cantonUpdateId: updateId,
-        });
-      } else {
-        await this.users.recordTransaction({
-          userId: entry.userId,
-          amountCc: meta.amount,
-          type: 'TRANSFER_OUT',
-          description: meta.memo,
-          counterparty: meta.recipientPartyId,
-          ledgerTxId: updateId,
-          cantonUpdateId: updateId,
-        });
-      }
+      await this.users.recordTransaction({
+        userId: entry.userId,
+        amountCc: meta.amount,
+        type: 'TRANSFER_OUT',
+        description: meta.memo,
+        counterparty: meta.recipientPartyId,
+        ledgerTxId: updateId,
+        cantonUpdateId: updateId,
+      });
     } catch (err) {
       this.logger.error(
         `⚠️ AUDIT-TRAIL LOSS: relay send_cc SUCCEEDED on-chain (updateId=${updateId ?? 'n/a'}) ` +
@@ -1309,7 +1286,6 @@ export class SigningRelayService {
           recipientLabel,
           memo,
           instrumentId,
-          instrumentAdmin,
         },
         description: `Send ${amount} ${instrumentId} to ${recipientLabel}`,
       };
@@ -1394,7 +1370,6 @@ export class SigningRelayService {
                 recipientLabel,
                 memo,
                 instrumentId,
-                instrumentAdmin,
               },
               description: `Send ${amount} ${instrumentId} to ${recipientLabel}`,
             };
@@ -1430,7 +1405,6 @@ export class SigningRelayService {
                 recipientLabel,
                 memo,
                 instrumentId,
-                instrumentAdmin,
               },
               description: `Send ${amount} ${instrumentId} to ${recipientLabel}`,
               fallback: fallbackChain,
