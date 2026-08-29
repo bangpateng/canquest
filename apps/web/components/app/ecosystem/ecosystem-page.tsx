@@ -23,16 +23,43 @@ import {
 
 type DetailTab = "about" | "features" | "apps" | "team";
 
-const CATEGORY_CHIP_COLORS: Record<string, string> = {
-  PAYMENTS: "bg-[rgb(111_230_0/0.10)] text-canton",
-  WALLETS: "bg-[rgb(0_255_255/0.12)] text-[#00838f]",
-};
+/**
+ * Variasi warna kategori — 4 keluarga warna (green/cyan/violet/amber, mirror
+ * mockup ecosystem). Assign deterministik dari nama kategori (jumlah charCode)
+ * supaya konsisten antar render — semua kategori dapat warna, bukan cuma 2.
+ */
+const CATEGORY_COLOR_FAMILIES = [
+  {
+    chip: "bg-[rgb(111_230_0/0.12)] text-canton",
+    text: "text-canton",
+    dot: "bg-[var(--primary)]",
+  },
+  {
+    chip: "bg-[rgb(0_255_255/0.14)] text-[#00838f]",
+    text: "text-[#00838f]",
+    dot: "bg-[#00a8a8]",
+  },
+  {
+    chip: "bg-[rgb(124_58_237/0.10)] text-[#7c3aed]",
+    text: "text-[#7c3aed]",
+    dot: "bg-[#7c3aed]",
+  },
+  {
+    chip: "bg-[rgb(234_88_12/0.10)] text-[#c2410c]",
+    text: "text-[#c2410c]",
+    dot: "bg-[#ea580c]",
+  },
+] as const;
 
-function categoryChipClass(category: string): string {
-  return (
-    CATEGORY_CHIP_COLORS[category] ??
-    "bg-[var(--muted)] text-[var(--muted-foreground)]"
-  );
+function categoryFamily(category: string) {
+  const sum = [...category].reduce((a, c) => a + c.charCodeAt(0), 0);
+  return CATEGORY_COLOR_FAMILIES[sum % CATEGORY_COLOR_FAMILIES.length];
+}
+
+/** Ringkasan kartu — kalimat pertama about (mirror mockup detail). */
+function cardSummary(p: Partner): string {
+  const first = (p.about ?? "").split(".")[0]?.trim();
+  return first ? `${first}.` : "Partner profile coming soon.";
 }
 
 function SocialIcon({ platform }: { platform: string }) {
@@ -155,19 +182,31 @@ export function EcosystemPage() {
 
   return (
     <div>
-      {/* ── Intro ── */}
-      <div className="text-center">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--muted-foreground)]">
+      {/* ── Hero panel (mockup: kartu dengan blur gradient brand) ── */}
+      <div className="relative overflow-hidden rounded-[24px] border border-[var(--border)] bg-[var(--card)] px-6 py-9 text-center shadow-[var(--shadow-card)]">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -right-[60px] -top-[70px] h-[240px] w-[240px] rounded-full bg-gradient-brand opacity-[0.16] blur-[36px]"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -bottom-[80px] -left-[40px] h-[200px] w-[200px] rounded-full bg-gradient-brand opacity-10 blur-[36px]"
+        />
+        <p className="relative text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--muted-foreground)]">
           Ecosystem
         </p>
-        <h1 className="mt-1 font-[family-name:var(--font-space)] text-2xl font-bold tracking-[-0.025em] sm:text-3xl">
+        <h1 className="relative mt-1 font-[family-name:var(--font-space)] text-2xl font-bold tracking-[-0.025em] sm:text-3xl">
           Explore the CanQuest ecosystem
         </h1>
+        <p className="relative mx-auto mt-1.5 max-w-[520px] text-[13.5px] leading-[1.6] text-[var(--muted-foreground)]">
+          Merchants, brands, and communities already connected to CanQuest —
+          pay, collect points, and complete quests straight from one wallet.
+        </p>
       </div>
 
-      {/* ── Search + kategori ── */}
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 sm:flex-row">
-        <div className="flex h-[52px] min-w-0 flex-1 items-center gap-3 rounded-full border border-[var(--border)] bg-[var(--card)] px-5 shadow-[var(--shadow-card)] transition-colors focus-within:border-[rgb(111_230_0/0.45)]">
+      {/* ── Search + kategori (mobile: stacked full-width — mirror mockup) ── */}
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-2.5 sm:flex-row sm:gap-2.5">
+        <div className="flex h-12 min-w-0 flex-1 items-center gap-3 rounded-full border border-[var(--border)] bg-[var(--card)] px-4 shadow-[var(--shadow-card)] transition-colors focus-within:border-[rgb(111_230_0/0.45)] sm:h-[52px] sm:px-5">
           <Search className="h-[18px] w-[18px] shrink-0 text-[var(--muted-foreground)]" />
           <input
             value={query}
@@ -176,25 +215,32 @@ export function EcosystemPage() {
             className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-[var(--muted-foreground)]"
           />
         </div>
-        <div ref={ddRef} className="relative shrink-0">
+        <div ref={ddRef} className="relative w-full shrink-0 sm:w-auto">
           <button
             type="button"
             onClick={() => setDdOpen((v) => !v)}
-            className="flex h-[52px] w-full items-center justify-between gap-3 rounded-full border border-[var(--border)] bg-[var(--card)] px-5 text-sm font-semibold shadow-[var(--shadow-card)] transition-colors hover:border-[rgb(111_230_0/0.35)] sm:w-auto"
+            className="flex h-12 w-full items-center justify-between gap-3 rounded-full border border-[var(--border)] bg-[var(--card)] px-4 text-sm font-semibold shadow-[var(--shadow-card)] transition-colors hover:border-[rgb(111_230_0/0.35)] sm:h-[52px] sm:px-5 sm:pr-4"
           >
-            <span className="flex items-center gap-2">
-              <span className="h-[7px] w-[7px] rounded-full bg-[var(--primary)]" />
-              <span className="max-w-[180px] truncate">{activeCategoryLabel}</span>
+            <span className="flex min-w-0 items-center gap-2">
+              <span
+                className={cn(
+                  "h-[7px] w-[7px] shrink-0 rounded-full transition-colors",
+                  category === "all"
+                    ? "bg-[var(--primary)]"
+                    : categoryFamily(category).dot,
+                )}
+              />
+              <span className="truncate">{activeCategoryLabel}</span>
             </span>
             <ChevronDown
               className={cn(
-                "h-4 w-4 transition-transform duration-200",
+                "h-4 w-4 shrink-0 text-[var(--muted-foreground)] transition-transform duration-200",
                 ddOpen && "rotate-180",
               )}
             />
           </button>
           {ddOpen && (
-            <div className="absolute right-0 top-[calc(100%+8px)] z-40 max-h-[320px] w-60 overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-1.5 shadow-[0_12px_32px_-12px_rgb(13_20_32/0.25)]">
+            <div className="absolute inset-x-0 top-[calc(100%+8px)] z-40 max-h-[320px] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-1.5 shadow-[0_12px_32px_-12px_rgb(13_20_32/0.25)] sm:inset-x-auto sm:right-0 sm:w-60">
               {[{ value: "all", label: "All Categories" }, ...PARTNER_CATEGORIES].map(
                 (c) => (
                   <button
@@ -205,15 +251,23 @@ export function EcosystemPage() {
                       setDdOpen(false);
                     }}
                     className={cn(
-                      "flex w-full items-center gap-2 rounded-[10px] px-3 py-2.5 text-left text-[13.5px] transition-colors hover:bg-[rgb(111_230_0/0.10)]",
+                      "flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2.5 text-left text-[13.5px] transition-colors hover:bg-[rgb(111_230_0/0.10)]",
                       category === c.value
                         ? "font-semibold text-canton"
                         : "font-medium text-[var(--foreground)]",
                     )}
                   >
+                    <span
+                      className={cn(
+                        "h-[7px] w-[7px] shrink-0 rounded-full",
+                        c.value === "all"
+                          ? "bg-[var(--primary)]"
+                          : categoryFamily(c.value).dot,
+                      )}
+                    />
                     {c.label}
                     {category === c.value && (
-                      <Check className="ml-auto h-3.5 w-3.5" />
+                      <Check className="ml-auto h-3.5 w-3.5 shrink-0" />
                     )}
                   </button>
                 ),
@@ -223,13 +277,23 @@ export function EcosystemPage() {
         </div>
       </div>
 
+      {/* ── Section head ── */}
+      <div className="flex items-baseline gap-2.5 border-t border-[var(--border)] pt-3">
+        <h2 className="font-[family-name:var(--font-space)] text-lg font-semibold tracking-[-0.01em]">
+          All Partners
+        </h2>
+        <span className="text-xs text-[var(--muted-foreground)]">
+          {loading ? "…" : `${visible.length} partner${visible.length === 1 ? "" : "s"} shown`}
+        </span>
+      </div>
+
       {/* ── Grid partner ── */}
       {loading ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <div
               key={i}
-              className="h-[120px] animate-pulse rounded-[20px] border border-[var(--border)] bg-[var(--card)]"
+              className="h-[150px] animate-pulse rounded-[20px] border border-[var(--border)] bg-[var(--card)]"
             />
           ))}
         </div>
@@ -252,33 +316,43 @@ export function EcosystemPage() {
             >
               <div className="flex items-center gap-3">
                 <PartnerLogo partner={p} className="h-11 w-11 text-sm" />
-                <div className="min-w-0">
-                  <p className="truncate font-[family-name:var(--font-space)] text-[15px] font-bold leading-tight">
-                    {p.name}
-                  </p>
-                  <p className="mt-0.5 truncate text-xs text-[var(--muted-foreground)]">
-                    {p.activeQuestCount != null &&
-                      `${p.activeQuestCount} active ${
-                        p.activeQuestCount === 1 ? "campaign" : "campaigns"
-                      }`}
-                  </p>
-                </div>
+                <h3 className="min-w-0 truncate font-[family-name:var(--font-space)] text-[15px] font-bold leading-tight tracking-[-0.01em]">
+                  {p.name}
+                </h3>
               </div>
-              <div className="mt-3 flex items-center gap-2 pt-1">
+              <p className="mt-2.5 line-clamp-2 text-xs leading-[1.5] text-[var(--muted-foreground)]">
+                {cardSummary(p)}
+              </p>
+              <div className="mt-auto flex items-center justify-between gap-1.5 pt-3">
                 <span
                   className={cn(
-                    "rounded-full px-2.5 py-[3px] text-[10.5px] font-semibold",
-                    categoryChipClass(p.category),
+                    "text-[11px] font-semibold",
+                    categoryFamily(p.category).text,
                   )}
                 >
                   {partnerCategoryLabel(p.category)}
                 </span>
-                <span className="ml-auto flex h-[26px] w-[26px] items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted-foreground)] transition-all group-hover:border-[rgb(111_230_0/0.4)] group-hover:bg-[rgb(111_230_0/0.10)] group-hover:text-canton">
+                <span className="flex h-[26px] w-[26px] items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted-foreground)] transition-all group-hover:border-[rgb(111_230_0/0.4)] group-hover:bg-[rgb(111_230_0/0.10)] group-hover:text-canton">
                   <ChevronRight className="h-4 w-4" />
                 </span>
               </div>
             </button>
           ))}
+        </div>
+      )}
+
+      {/* ── CTA bawah (mockup) ── */}
+      {!loading && !error && partners.length > 0 && (
+        <div className="mt-7 flex justify-center">
+          <a
+            href="https://www.canton.network/ecosystem"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--card)] px-[22px] py-3 text-[13.5px] font-semibold shadow-[var(--shadow-card)] transition-all hover:-translate-y-px hover:border-[rgb(111_230_0/0.35)] hover:bg-[rgb(111_230_0/0.10)]"
+          >
+            View all partners
+            <ChevronRight className="h-4 w-4" />
+          </a>
         </div>
       )}
 
