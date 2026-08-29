@@ -15,6 +15,7 @@ import {
   Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils/utils";
+import { Card } from "@/components/ui/card";
 import {
   PARTNER_CATEGORIES,
   partnerCategoryLabel,
@@ -181,71 +182,70 @@ export function EcosystemPage() {
   };
 
   return (
-    <div>
-      {/* ── Hero panel (mockup: kartu dengan blur gradient brand) ── */}
-      <div className="relative overflow-hidden rounded-[24px] border border-[var(--border)] bg-[var(--card)] px-6 py-9 text-center shadow-[var(--shadow-card)]">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -right-[60px] -top-[70px] h-[240px] w-[240px] rounded-full bg-gradient-brand opacity-[0.16] blur-[36px]"
-        />
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -bottom-[80px] -left-[40px] h-[200px] w-[200px] rounded-full bg-gradient-brand opacity-10 blur-[36px]"
-        />
-        <p className="relative text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--muted-foreground)]">
-          Ecosystem
-        </p>
-        <h1 className="relative mt-1 font-[family-name:var(--font-space)] text-2xl font-bold tracking-[-0.025em] sm:text-3xl">
-          Explore the CanQuest ecosystem
-        </h1>
-        <p className="relative mx-auto mt-1.5 max-w-[520px] text-[13.5px] leading-[1.6] text-[var(--muted-foreground)]">
-          Merchants, brands, and communities already connected to CanQuest —
-          pay, collect points, and complete quests straight from one wallet.
-        </p>
-      </div>
-
-      {/* ── Search + kategori — SELALU sejajar satu baris (mobile juga);
-            menu dropdown melebar penuh mengikuti toolbar (tidak terpotong). ── */}
-      <div
-        ref={ddRef}
-        className="relative mx-auto flex w-full max-w-3xl flex-row items-center gap-2.5"
-      >
-        <div className="flex h-12 min-w-0 flex-1 items-center gap-2.5 rounded-full border border-[var(--border)] bg-[var(--card)] px-4 shadow-[var(--shadow-card)] transition-colors focus-within:border-[rgb(111_230_0/0.45)] sm:h-[52px] sm:gap-3 sm:px-5">
-          <Search className="h-[18px] w-[18px] shrink-0 text-[var(--muted-foreground)]" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search partners…"
-            className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-[var(--muted-foreground)]"
-          />
+    <div className="w-full max-w-full space-y-4 overflow-hidden sm:space-y-5 md:space-y-6">
+      {/* ── Hero — Card standar, left-aligned (mirror hero Earn) ── */}
+      <Card className="w-full overflow-hidden">
+        <div className="p-6 sm:p-7">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+            Ecosystem
+          </p>
+          <h1 className="mt-2 text-2xl font-bold leading-tight tracking-tight text-[var(--foreground)] sm:text-3xl">
+            Explore the CanQuest ecosystem
+          </h1>
+          <p className="mt-2 max-w-md text-xs font-medium leading-relaxed text-[var(--muted-foreground)] sm:text-sm">
+            Merchants, brands, and communities already connected to CanQuest —
+            pay, collect points, and complete quests straight from one wallet.
+          </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setDdOpen((v) => !v)}
-          className="flex h-12 shrink-0 items-center justify-between gap-2 rounded-full border border-[var(--border)] bg-[var(--card)] pl-3.5 pr-3 text-sm font-semibold shadow-[var(--shadow-card)] transition-colors hover:border-[rgb(111_230_0/0.35)] sm:h-[52px] sm:gap-2.5 sm:pl-4"
-        >
-          <span className="flex min-w-0 items-center gap-2">
-            <span
+      </Card>
+
+      {/* ── Toolbar: search + kategori sejajar SATU BARIS di semua ukuran;
+            menu dropdown selebar toolbar (tidak pernah terpotong).
+            Mirror pola Card bare p-3/p-4 seperti filter tabs Earn. ── */}
+      <Card bare className="relative w-full p-3 sm:p-4" ref={ddRef}>
+        <div className="flex w-full items-center gap-2.5 sm:gap-3">
+          <div className="flex h-10 min-w-0 flex-1 items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3.5 transition-colors focus-within:border-[rgb(111_230_0/0.45)] sm:h-11 sm:px-4">
+            <Search className="h-4 w-4 shrink-0 text-[var(--muted-foreground)]" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search partners…"
+              className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-[var(--muted-foreground)]"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => setDdOpen((v) => !v)}
+            className={cn(
+              "flex h-10 shrink-0 items-center justify-between gap-2 rounded-xl border bg-[var(--card)] px-3 text-[13px] font-semibold shadow-none transition-colors sm:h-11 sm:gap-2.5 sm:px-3.5 sm:text-sm",
+              ddOpen
+                ? "border-[rgb(111_230_0/0.45)]"
+                : "border-[var(--border)] hover:border-[rgb(111_230_0/0.35)]",
+            )}
+          >
+            <span className="flex min-w-0 items-center gap-2">
+              <span
+                className={cn(
+                  "h-[7px] w-[7px] shrink-0 rounded-full transition-colors",
+                  category === "all"
+                    ? "bg-[var(--primary)]"
+                    : categoryFamily(category).dot,
+                )}
+              />
+              <span className="max-w-[92px] truncate sm:max-w-[150px]">
+                {activeCategoryLabel}
+              </span>
+            </span>
+            <ChevronDown
               className={cn(
-                "h-[7px] w-[7px] shrink-0 rounded-full transition-colors",
-                category === "all"
-                  ? "bg-[var(--primary)]"
-                  : categoryFamily(category).dot,
+                "h-4 w-4 shrink-0 text-[var(--muted-foreground)] transition-transform duration-200",
+                ddOpen && "rotate-180",
               )}
             />
-            <span className="max-w-[92px] truncate sm:max-w-[150px]">
-              {activeCategoryLabel}
-            </span>
-          </span>
-          <ChevronDown
-            className={cn(
-              "h-4 w-4 shrink-0 text-[var(--muted-foreground)] transition-transform duration-200",
-              ddOpen && "rotate-180",
-            )}
-          />
-        </button>
+          </button>
+        </div>
         {ddOpen && (
-          <div className="absolute inset-x-0 top-[calc(100%+8px)] z-40 max-h-[320px] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-1.5 shadow-[0_12px_32px_-12px_rgb(13_20_32/0.25)]">
+          <div className="absolute inset-x-3 top-[calc(100%-4px)] z-40 max-h-[320px] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-1.5 shadow-[0_12px_32px_-12px_rgb(13_20_32/0.25)] sm:inset-x-4">
             {[{ value: "all", label: "All Categories" }, ...PARTNER_CATEGORIES].map(
               (c) => (
                 <button
@@ -279,10 +279,10 @@ export function EcosystemPage() {
             )}
           </div>
         )}
-      </div>
+      </Card>
 
       {/* ── Section head ── */}
-      <div className="flex items-baseline gap-2.5 border-t border-[var(--border)] pt-3">
+      <div className="flex items-baseline gap-2.5">
         <h2 className="font-[family-name:var(--font-space)] text-lg font-semibold tracking-[-0.01em]">
           All Partners
         </h2>
@@ -291,13 +291,13 @@ export function EcosystemPage() {
         </span>
       </div>
 
-      {/* ── Grid partner ── */}
+      {/* ── Grid partner — gap konsisten dgn grid Earn ── */}
       {loading ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <div
               key={i}
-              className="h-[150px] animate-pulse rounded-[20px] border border-[var(--border)] bg-[var(--card)]"
+              className="h-[150px] animate-pulse rounded-[1.25rem] border border-[var(--border)] bg-[var(--card)]"
             />
           ))}
         </div>
@@ -310,13 +310,18 @@ export function EcosystemPage() {
           No partners found{q ? ` for “${query.trim()}”` : ""}.
         </p>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4">
           {visible.map((p) => (
-            <button
+            <Card
               key={p.id}
-              type="button"
+              interactive
+              role="button"
+              tabIndex={0}
               onClick={() => openDetail(p)}
-              className="group flex flex-col rounded-[20px] border border-[var(--border)] bg-[var(--card)] p-4 text-left shadow-[var(--shadow-card)] transition-all duration-300 hover:-translate-y-[3px] hover:border-[rgb(111_230_0/0.30)] hover:shadow-[var(--shadow-card-hover)]"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") openDetail(p);
+              }}
+              className="flex cursor-pointer flex-col p-4"
             >
               <div className="flex items-center gap-3">
                 <PartnerLogo partner={p} className="h-11 w-11 text-sm" />
@@ -340,14 +345,14 @@ export function EcosystemPage() {
                   <ChevronRight className="h-4 w-4" />
                 </span>
               </div>
-            </button>
+            </Card>
           ))}
         </div>
       )}
 
       {/* ── CTA bawah (mockup) ── */}
       {!loading && !error && partners.length > 0 && (
-        <div className="mt-7 flex justify-center">
+        <div className="flex justify-center">
           <a
             href="https://www.canton.network/ecosystem"
             target="_blank"
