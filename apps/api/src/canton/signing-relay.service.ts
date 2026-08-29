@@ -161,6 +161,12 @@ export class SigningRelayService {
       withdraw_offer: (u, p) => this.buildOfferAction(u, p, 'withdraw'),
       lock_cc: (u, p) => this.buildLockCc(u, p),
       unlock_cc: (u, p) => this.buildUnlockCc(u, p),
+      // Preapproval TOKEN REGISTRY (USDCx) — P2P one-step via CIP-0056 generic.
+      // Berbeda dari CC (jalur validator setup-proposal, controller M5b):
+      // template Utility.Registry.App.V0.Model.TransferPreapproval,
+      // signatory = receiver → create/Archive cukup signature user.
+      usdcx_preapproval_enable: (u) => this.buildRegistryPreapprovalEnable(u),
+      usdcx_preapproval_disable: (u) => this.buildRegistryPreapprovalDisable(u),
       // NOTE: preapproval_enable/disable TIDAK dibuat utk user external —
       // terbukti MainNet (spike-m3c): AmuletRules_CreateTransferPreapproval
       // mewajibkan co-authorizer provider; interactive submission hanya
@@ -1004,6 +1010,98 @@ export class SigningRelayService {
     }
 
     return buildLegacySingle();
+  }
+
+  /**
+   * Flow: usdcx_preapproval_enable — buat TransferPreapproval TOKEN REGISTRY
+   * (USDCx) agar transfer masuk one-step tanpa Accept (CIP-0056 generic).
+   *
+   * Template Utility.Registry.App.V0.Model.TransferPreapproval — signatory =
+   * RECEIVER → CreateCommand cukup SATU signature user (interactive prepare,
+   * tanpa disclosed contracts). instrumentAllowances kosong = SEMUA instrument
+   * milik instrumentAdmin (registrar USDCx). `operator` = party yang
+   * mendisclose contract saat transfer direct — default registrar; override
+   * via CANTON_USDCX_PREAPPROVAL_OPERATOR.
+   */
+  private async buildRegistryPreapprovalEnable(user: {
+    userId: string;
+    partyId: string;
+    username: string | null;
+  }): Promise<BuiltFlow> {
+    const senderOnChain = await this.splice.resolveOnChainPartyId(user.partyId);
+    const existing = await this.ledger.findRegistryPreapproval(senderOnChain);
+    if (existing) {
+      throw new BadRequestException(
+        'USDCx instant receive is already active.',
+      );
+    }
+    const instrumentAdmin =
+      this.config.get<string>('CANTON_USDCX_INSTRUMENT_ADMIN')?.trim() ||
+      // Registrar USDCx MainNet (source instrumentAdmin holding USDCx).
+      'decentralized-usdc-interchain-rep::12208115f1e168dd7e792320be9c4ca720c751a02a3053c7606e1c1cd3dad9bf60ef';
+    const operator =
+      this.config.get<string>('CANTON_USDCX_PREAPPROVAL_OPERATOR')?.trim() ||
+      instrumentAdmin;
+    const pkgId =
+      this.config.get<string>('CANTON_USDCX_PREAPPROVAL_PACKAGE_ID')?.trim() ||
+      // utility-registry-app-v0 MainNet (verified /v2/packages — satu-satunya
+      // paket dengan marker InstrumentAllowance).
+      '7a75ef6e69f69395a4e60919e228528bb8f3881150ccfde3f31bcc73864b18ab';
+
+    this.logger.log(
+      `usdcx_preapproval_enable: receiver=${senderOnChain.split('::')[0]} ` +
+        `admin=${instrumentAdmin.split('::')[0]} operator=${operator.split('::')[0]}`,
+    );
+    return {
+      commands: [
+        {
+          CreateCommand: {
+            templateId: `${pkgId}:Utility.Registry.App.V0.Model.TransferPreapproval:TransferPreapproval`,
+            createArguments: {
+              operator,
+              receiver: senderOnChain,
+              instrumentAdmin,
+              instrumentAllowances: [],
+            },
+          },
+        },
+      ],
+      meta: { instrumentAdmin },
+      description: 'Enable USDCx instant receive',
+    };
+  }
+
+  /**
+   * Flow: usdcx_preapproval_disable — Archive TransferPreapproval registry
+   * user (choice Archive, controller receiver → 1 signature user).
+   */
+  private async buildRegistryPreapprovalDisable(user: {
+    userId: string;
+    partyId: string;
+    username: string | null;
+  }): Promise<BuiltFlow> {
+    const senderOnChain = await this.splice.resolveOnChainPartyId(user.partyId);
+    const existing = await this.ledger.findRegistryPreapproval(senderOnChain);
+    if (!existing) {
+      throw new BadRequestException('USDCx instant receive is already off.');
+    }
+    this.logger.log(
+      `usdcx_preapproval_disable: cid=${existing.contractId.slice(0, 16)}…`,
+    );
+    return {
+      commands: [
+        {
+          ExerciseCommand: {
+            templateId: existing.templateId,
+            contractId: existing.contractId,
+            choice: 'Archive',
+            choiceArgument: {},
+          },
+        },
+      ],
+      meta: {},
+      description: 'Disable USDCx instant receive',
+    };
   }
 
   /**

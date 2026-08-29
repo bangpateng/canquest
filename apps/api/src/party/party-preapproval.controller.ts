@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { UsersService } from '../users/users.service';
+import { CantonLedgerService } from '../canton/canton-ledger.service';
 import type { AuthedReq } from './party-shared';
 
 /**
@@ -26,6 +27,7 @@ export class PartyPreapprovalController {
   constructor(
     private readonly users: UsersService,
     private readonly config: ConfigService,
+    private readonly ledger: CantonLedgerService,
   ) {}
 
   @SkipThrottle()
@@ -63,18 +65,29 @@ export class PartyPreapprovalController {
           `${valUrl}/api/validator/v0/admin/transfer-preapprovals/by-party/${encodeURIComponent(user.cantonPartyId)}`,
           { headers: { Authorization: `Bearer ${token}` } },
         );
+        let active = false;
         if (checkRes.ok) {
           const data = await checkRes.json();
-          const active = Boolean(
+          active = Boolean(
             data?.transfer_preapproval || data?.transfer_preapproval_contract_id || data?.active,
           );
-          return { hasWallet: true, active, preapproval: { active }, partyId: user.cantonPartyId };
         }
-        // 404 = no preapproval
+        // USDCx (token registry) preapproval — P2P one-step via template
+        // Utility.Registry.App.V0.Model.TransferPreapproval (signatory user).
+        let usdcx = { active: false, contractId: null as string | null };
+        try {
+          const found = await this.ledger.findRegistryPreapproval(
+            user.cantonPartyId,
+          );
+          usdcx = { active: !!found, contractId: found?.contractId ?? null };
+        } catch {
+          /* non-fatal — UI menampilkan OFF */
+        }
         return {
           hasWallet: true,
-          active: false,
-          preapproval: { active: false },
+          active,
+          preapproval: { active },
+          usdcx,
           partyId: user.cantonPartyId,
         };
       } catch {
@@ -83,6 +96,7 @@ export class PartyPreapprovalController {
           hasWallet: true,
           active: false,
           preapproval: { active: false },
+          usdcx: { active: false, contractId: null },
           partyId: user.cantonPartyId,
         };
       }
@@ -93,6 +107,7 @@ export class PartyPreapprovalController {
       hasWallet: true,
       active: false,
       preapproval: { active: false },
+      usdcx: { active: false, contractId: null },
       partyId: user.cantonPartyId,
     };
   }

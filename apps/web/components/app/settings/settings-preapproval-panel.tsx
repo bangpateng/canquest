@@ -7,6 +7,7 @@ import { TokenLogo, displayName } from "@/components/app/wallet/token-logo";
 import { useMe } from "@/lib/hooks/use-me";
 import { getWalletKeyMeta, unlock, signBytesHex, tryDeviceAutoUnlock } from "@/lib/wallet/key-manager";
 import { usePassphrasePrompt } from "@/lib/wallet/use-passphrase-prompt";
+import { signRelayTransaction } from "@/lib/wallet/sign-relay";
 
 /**
  * Sign raw bytes and return hex-encoded signature.
@@ -80,8 +81,11 @@ export function SettingsPreapprovalPanel() {
           {/* CC — Preapproval toggle (validator API, signed in browser) */}
           <ExternalPreapprovalRow />
 
+          {/* USDCx — Preapproval toggle (token registry, relay sign flow) */}
+          <RegistryPreapprovalRow />
+
           {/* Other tokens — "Coming soon" */}
-          {ALL_TOKENS.filter((t) => t !== "CC").map((token) => (
+          {ALL_TOKENS.filter((t) => t !== "CC" && t !== "USDCx").map((token) => (
             <TokenToggleRow
               key={token}
               token={token}
@@ -198,6 +202,93 @@ function TokenToggleRow({
           <span aria-hidden>🔒</span>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Registry (USDCx) Preapproval Row — sign-relay flow, passwordless ──
+// Template Utility.Registry.App.V0.Model.TransferPreapproval: create/Archive
+// cukup SATU signature user → sama seperti send/swap (modal Signature Request).
+function RegistryPreapprovalRow() {
+  const [on, setOn] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/party/preapproval-status", { credentials: "include" });
+        if (res.ok) {
+          const data = await res.json();
+          setOn(Boolean(data?.usdcx?.active));
+        }
+      } catch { /* non-fatal */ }
+    })();
+  }, []);
+
+  async function handleToggle() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const flow = on ? "usdcx_preapproval_disable" : "usdcx_preapproval_enable";
+      await signRelayTransaction(flow);
+      setOn(!on);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Toggle failed");
+      // Auto-clear stale pending supaya user bisa retry langsung
+      void fetch("/api/party/sign/cancel", { method: "POST", credentials: "include" }).catch(() => undefined);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3.5 transition-colors hover:border-[var(--primary)]/25 sm:px-5">
+      <div className="flex min-w-0 items-center gap-3">
+        <TokenLogo symbol="USDCX" size="sm" />
+        <div className="min-w-0">
+          <p
+            className={cn(
+              "text-sm font-semibold",
+              on ? "text-canton" : "text-[var(--foreground)]",
+            )}
+          >
+            {displayName("USDCX")}
+          </p>
+          <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+            {on ? "Incoming USDCx arrives directly" : "Incoming USDCx requires manual accept"}
+          </p>
+          {error ? (
+            <p className="mt-1 text-xs font-medium text-orange-600">{error}</p>
+          ) : null}
+        </div>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        aria-label="Toggle one step transfer USDCx"
+        disabled={busy}
+        onClick={() => void handleToggle()}
+        className={cn(
+          "relative h-6 w-11 shrink-0 rounded-full transition-colors",
+          on ? "bg-[rgb(var(--canton-rgb))]" : "bg-[var(--border)]",
+        )}
+      >
+        {busy ? (
+          <span className="absolute inset-0 flex items-center justify-center">
+            <span className="h-3 w-3 animate-pulse rounded-full bg-[var(--muted-foreground)]" />
+          </span>
+        ) : (
+          <span
+            className={cn(
+              "absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all",
+              on ? "left-[22px]" : "left-0.5",
+            )}
+          />
+        )}
+      </button>
     </div>
   );
 }

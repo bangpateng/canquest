@@ -2522,6 +2522,91 @@ export class CantonLedgerService {
   // ───────────────────────────────────────────────────────────────────────────
 
   /**
+   * ACS lookup: TransferPreapproval TOKEN REGISTRY (USDCx dkk.) milik user.
+   *
+   * Berbeda dari TransferPreapproval CC (splice-wallet, via proposal +
+   * provider accept) — versi registry: template
+   * Utility.Registry.App.V0.Model.TransferPreapproval, SIGNATORY = receiver,
+   * fields {operator, receiver, instrumentAdmin, instrumentAllowances}
+   * (allowances kosong = SEMUA instrument registrar tsb). Cancel = choice
+   * Archive (controller receiver). Create/cancel cukup SATU signature user
+   * via interactive submission → cocok signing relay.
+   */
+  async findRegistryPreapproval(
+    userPartyId: string,
+  ): Promise<{
+    contractId: string;
+    templateId: string;
+    instrumentAdmin: string;
+    operator: string;
+  } | null> {
+    let offset: number | string = 0;
+    try {
+      const end = (await this.ledgerEnd()) as { offset?: number | string };
+      offset = end?.offset ?? 0;
+    } catch {
+      return null;
+    }
+    let contracts: unknown[] = [];
+    try {
+      const res = await fetch(`${this.baseUrl}/v2/state/active-contracts`, {
+        method: 'POST',
+        headers: await this.authHeaders(),
+        body: JSON.stringify({
+          eventFormat: {
+            filtersByParty: {
+              [userPartyId]: {
+                cumulative: [
+                  {
+                    identifierFilter: {
+                      WildcardFilter: { value: { includeCreatedEventBlob: false } },
+                    },
+                  },
+                ],
+              },
+            },
+            verbose: true,
+          },
+          activeAtOffset: offset,
+        }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (res.ok) contracts = (await res.json()) as unknown[];
+    } catch {
+      return null;
+    }
+    for (const entry of contracts) {
+      if (!entry || typeof entry !== 'object') continue;
+      const wrapper = entry as Record<string, unknown>;
+      const jsActive = (wrapper.contractEntry as Record<string, unknown>)
+        ?.JsActiveContract as Record<string, unknown> | undefined;
+      const ev = (jsActive?.createdEvent ?? wrapper) as Record<string, unknown>;
+      const tplId = typeof ev.templateId === 'string' ? ev.templateId : '';
+      if (
+        !tplId.includes(
+          'Utility.Registry.App.V0.Model.TransferPreapproval:TransferPreapproval',
+        )
+      ) {
+        continue;
+      }
+      const args =
+        (ev.createArgument as Record<string, unknown> | undefined) ?? {};
+      const receiver = typeof args.receiver === 'string' ? args.receiver : '';
+      if (!cantonPartyIdsEqual(receiver, userPartyId)) continue;
+      const cid = typeof ev.contractId === 'string' ? ev.contractId : null;
+      if (!cid) continue;
+      return {
+        contractId: cid,
+        templateId: tplId,
+        instrumentAdmin:
+          typeof args.instrumentAdmin === 'string' ? args.instrumentAdmin : '',
+        operator: typeof args.operator === 'string' ? args.operator : '',
+      };
+    }
+    return null;
+  }
+
+  /**
    * ACS lookup: TransferPreapproval contract whose receiver === partyId.
    *
    * @param partyId - The receiver party whose preapproval we want to find.
