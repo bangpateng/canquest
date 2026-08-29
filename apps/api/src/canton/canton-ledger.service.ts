@@ -1997,6 +1997,268 @@ export class CantonLedgerService {
   }
 
   /**
+   * BUILD multi-command alur "canton-loop": SATU ExerciseCommand
+   * TransferFactory_Transfer PER LEG (transfer utama + platform fee) untuk
+   * interactive submission via signing relay.
+   *
+   * Bukti MainNet (ccview update 122039728fded9…): dapp lain menyelesaikan
+   * [send 418.43 CC → CEX] + [fee 16.18 CC → party validator] sebagai DUA
+   * exercise TransferFactory_Transfer dalam SATU update (2 ROOT event).
+   *
+   * Kenapa per-command (bukan WalletUserProxy_BatchTransfer):
+   *   - WUP BatchTransfer menabrak owner-group constraint AmuletRules saat
+   *     salah satu receiver adalah party EXTERNAL (CEX / user validator lain)
+   *     — DAML menolak campuran kelompok ForOwner beda dalam SATU exercise.
+   *   - Dua exercise TERPISAH = dua konteks interpretasi mandiri → tiap
+   *     exercise hanya punya owner tunggal (sender). Choice
+   *     TransferFactory_Transfer non-consuming → factory contract boleh
+   *     di-exercise 2x dalam satu transaksi (persis pola canton-loop).
+   *
+   * Catatan transport: dokumen JSON API menyebut interactive submission
+   * "single command", tapi jalur kita adalah participant Ledger API via
+   * wallet-sdk (`commands` array, tanpa validasi client-side). Caller wajib
+   * menyediakan fallback (WUP batch / legacy single) bila participant menolak.
+   *
+   * Holdings per leg WAJIB disjoint (satu holding tidak boleh jadi input dua
+   * exercise dalam satu tx — exercise pertama meng-archive-nya). Alokasi
+   * best-fit + index-lag retry, sama dengan buildProxyBatchTransferCommand.
+   */
+  async buildFactoryTransferCommands(params: {
+    senderPartyId: string;
+    transfers: Array<{
+      receiverPartyId: string;
+      amount: number;
+      instrumentId: string; // 'Amulet' (CC) atau token id (USDCx)
+      instrumentAdmin: string; // DSO utk CC, registrar utk non-CC
+      description?: string;
+    }>;
+    clientNonce?: string;
+  }): Promise<
+    | {
+        ok: true;
+        commands: Record<string, unknown>[];
+        commandId: string;
+        disclosedContracts: unknown[];
+        transferKind: string;
+      }
+    | { ok: false; error: string }
+  > {
+    const { senderPartyId, transfers } = params;
+    if (transfers.length === 0) {
+      return { ok: false, error: 'No transfers provided' };
+    }
+
+    const now = new Date();
+    const executeBefore = new Date(
+      now.getTime() + 24 * 3600 * 1000,
+    ).toISOString();
+    const nowIso = now.toISOString();
+
+    // Pool Amulet + alokasi disjoint antar leg CC (mirror
+    // buildProxyBatchTransferCommand, termasuk index-lag retry 3s).
+    let amuletPool: Array<{ contractId: string; eff: number }> = [];
+    const amuletLegs = transfers.filter(
+      (t) => t.instrumentId.toLowerCase() === 'amulet',
+    );
+    if (amuletLegs.length > 0) {
+      const buildPool = async () => {
+        const openRound = await this.fetchScanProxyContract(
+          'open-and-issuing-mining-rounds',
+        );
+        const round = openRound?.round ?? 0;
+        const raw = await this.queryAmuletHoldingsRaw(senderPartyId);
+        return raw
+          .map((h) => {
+            const init = parseFloat(h.initialAmount) || 0;
+            const rate = parseFloat(h.ratePerRound) || 0;
+            const decay = Math.max(0, round - (h.createdAtRound || 0)) * rate;
+            return { contractId: h.contractId, eff: Math.max(0, init - decay) };
+          })
+          .sort((a, b) => a.eff - b.eff); // ascending — set terkecil dulu
+      };
+      const canCoverDisjoint = (
+        pool: Array<{ contractId: string; eff: number }>,
+      ): boolean => {
+        const sim = [...pool];
+        for (const leg of amuletLegs) {
+          const singleIdx = sim.findIndex((h) => h.eff >= leg.amount);
+          if (singleIdx >= 0) {
+            sim.splice(singleIdx, 1);
+            continue;
+          }
+          let acc = 0;
+          while (acc < leg.amount && sim.length > 0) acc += sim.shift()!.eff;
+          if (acc < leg.amount) return false;
+        }
+        return true;
+      };
+      try {
+        amuletPool = await buildPool();
+        if (!canCoverDisjoint(amuletPool)) {
+          await new Promise((r) => setTimeout(r, 3_000));
+          amuletPool = await buildPool();
+          if (!canCoverDisjoint(amuletPool)) {
+            return {
+              ok: false,
+              error:
+                'Insufficient holdings to cover legs disjointly (re-checked after index catch-up) — falling back',
+            };
+          }
+        }
+      } catch {
+        /* pool kosong → alokasi leg CC gagal → fallback caller */
+      }
+    }
+
+    const factoryInterfaceId =
+      '#splice-api-token-transfer-instruction-v1:Splice.Api.Token.TransferInstructionV1:TransferFactory';
+
+    const commands: Record<string, unknown>[] = [];
+    const allDisclosedContracts: unknown[] = [];
+    const nonAmuletSeen = new Set<string>();
+    let lastTransferKind = 'direct';
+    // Factory per instrument HARUS identik antar leg instrument sama — dua
+    // exercise pada factory BERBEDA utk instrument sama → CONTRACT_NOT_FOUND.
+    const factoryByInstrument = new Map<string, string>();
+
+    for (const t of transfers) {
+      const isAmuletLeg = t.instrumentId.toLowerCase() === 'amulet';
+
+      // ── Alokasi holdings leg ini ────────────────────────────────────────
+      let legInputCids: string[];
+      if (isAmuletLeg) {
+        legInputCids = [];
+        const singleIdx = amuletPool.findIndex((h) => h.eff >= t.amount);
+        if (singleIdx >= 0) {
+          legInputCids.push(amuletPool.splice(singleIdx, 1)[0].contractId);
+        } else {
+          let acc = 0;
+          while (acc < t.amount && amuletPool.length > 0) {
+            const h = amuletPool.shift()!;
+            legInputCids.push(h.contractId);
+            acc += h.eff;
+          }
+          if (acc < t.amount) {
+            return {
+              ok: false,
+              error: `Insufficient holdings to cover leg disjointly (${acc.toFixed(4)} < ${t.amount} ${t.instrumentId}) — falling back`,
+            };
+          }
+        }
+      } else {
+        // Non-Amulet: satu leg per instrument (holdings overlap antar leg
+        // instrument sama tidak didukung tanpa disjoint pool).
+        if (nonAmuletSeen.has(t.instrumentId)) {
+          return {
+            ok: false,
+            error: `Multiple ${t.instrumentId} legs not supported (holdings overlap)`,
+          };
+        }
+        nonAmuletSeen.add(t.instrumentId);
+        const th = await this.getTokenHoldingCids(senderPartyId, t.instrumentId);
+        if (th.length === 0) {
+          return {
+            ok: false,
+            error: `Sender has no ${t.instrumentId} holdings for leg to ${t.receiverPartyId.split('::')[0]}`,
+          };
+        }
+        legInputCids = th.map((h) => h.contractId);
+      }
+
+      // ── Registry PER LEG (bukan per instrument) ─────────────────────────
+      // choiceContext bisa spesifik receiver (rule direct vs offer beda
+      // preapproval) → context leg external ≠ context leg fee internal.
+      const choiceArgument: Record<string, unknown> = {
+        expectedAdmin: t.instrumentAdmin,
+        transfer: {
+          sender: senderPartyId,
+          receiver: t.receiverPartyId,
+          amount: t.amount.toFixed(10),
+          instrumentId: { admin: t.instrumentAdmin, id: t.instrumentId },
+          lock: null,
+          requestedAt: nowIso,
+          executeBefore,
+          inputHoldingCids: legInputCids,
+          meta: {
+            values: t.description
+              ? { 'splice.lfdecentralizedtrust.org/reason': t.description }
+              : {},
+          },
+        },
+        extraArgs: { context: { values: {} }, meta: { values: {} } },
+      };
+      const registry = await this.callTransferFactoryRegistry(
+        choiceArgument,
+        t.instrumentAdmin,
+      );
+      if (!registry) {
+        return {
+          ok: false,
+          error: `Registry call failed for ${t.instrumentId} leg to ${t.receiverPartyId.split('::')[0]}`,
+        };
+      }
+      (choiceArgument.extraArgs as Record<string, unknown>).context =
+        registry.choiceContextData;
+      lastTransferKind = registry.transferKind;
+
+      const knownFactory = factoryByInstrument.get(t.instrumentId);
+      if (knownFactory && knownFactory !== registry.factoryId) {
+        return {
+          ok: false,
+          error: `Factory mismatch for ${t.instrumentId} legs — cannot exercise two factories for one instrument`,
+        };
+      }
+      factoryByInstrument.set(t.instrumentId, registry.factoryId);
+
+      // Dedupe disclosure by contractId (`contractId`, bukan `contract`).
+      for (const dc of registry.disclosedContracts) {
+        const dcCid =
+          (dc as Record<string, unknown>).contractId ??
+          (dc as Record<string, unknown>).contract;
+        const exists = allDisclosedContracts.some((existing) => {
+          const ex = existing as Record<string, unknown>;
+          return (ex.contractId ?? ex.contract) === dcCid;
+        });
+        if (!exists) allDisclosedContracts.push(dc);
+      }
+
+      commands.push({
+        ExerciseCommand: {
+          templateId: factoryInterfaceId,
+          contractId: registry.factoryId,
+          choice: 'TransferFactory_Transfer',
+          choiceArgument,
+        },
+      });
+    }
+
+    const commandId = params.clientNonce
+      ? `multi-tf-${createHash('sha256')
+          .update(`${senderPartyId}|${params.clientNonce}`)
+          .digest('hex')
+          .slice(0, 32)}`
+      : `multi-tf-${senderPartyId.slice(0, 12)}-${randomUUID().slice(0, 16)}`;
+
+    this.logger.log(
+      `BUILD multi TransferFactory_Transfer (interactive, ${commands.length} cmds): ` +
+        `sender=${senderPartyId.split('::')[0]} legs=[${transfers
+          .map(
+            (t) =>
+              `${t.receiverPartyId.split('::')[0]}:${t.amount}:${t.instrumentId}`,
+          )
+          .join(', ')}] kind=${lastTransferKind}`,
+    );
+
+    return {
+      ok: true,
+      commands,
+      commandId,
+      disclosedContracts: allDisclosedContracts,
+      transferKind: lastTransferKind,
+    };
+  }
+
+  /**
    * Execute offer choice (Accept / Reject / Withdraw) via WalletUserProxy.
    *
    * DAML reference: choice controller = `user` party (proxyArg.user). Signatory

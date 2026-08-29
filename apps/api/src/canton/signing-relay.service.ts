@@ -56,12 +56,30 @@ interface BuiltFlow {
   commandId?: string;
   meta?: Record<string, unknown>;
   description?: string;
+  /**
+   * Rantai fallback bila prepare attempt utama DITOLAK participant (mis.
+   * multi-command belum didukung → turun ke WUP batch → legacy single).
+   * Dicoba berurutan; attempt pertama yang lolos prepare yang dipakai.
+   */
+  fallback?: BuiltFlow;
 }
+
+/** Variant sukses buildFactoryTransferCommands (union narrowed ke ok:true). */
+type FactoryMultiBuild = Extract<
+  Awaited<ReturnType<CantonLedgerService['buildFactoryTransferCommands']>>,
+  { ok: true }
+>;
 
 @Injectable()
 export class SigningRelayService {
   private readonly logger = new Logger(SigningRelayService.name);
   private readonly pending = new Map<string, PendingSigning>();
+  /**
+   * True bila participant Ledger API terbukti menolak >1 command per prepare
+   * (dokumen JSON API menyebut "single command"; jalur participant belum
+   * pasti). Sekali terdeteksi, attempt multi-command dilewati di proses ini.
+   */
+  private multiCommandRejected = false;
 
   constructor(
     private readonly sdkProvider: CantonWalletSdkService,
@@ -153,6 +171,7 @@ export class SigningRelayService {
       meta: built.meta,
       description: built.description,
       partyId: user.partyId,
+      fallback: built.fallback,
     });
   }
 
@@ -160,6 +179,11 @@ export class SigningRelayService {
    * Prepare generik dengan command PRA-DIBANGUN — dipakai flow yang builder-nya
    * hidup di service lain (mis. QuestsService.prepareExternalFcfsClaimFee;
    * hindari circular dependency module). Hanya utk user external.
+   *
+   * `opts.fallback`: rantai BuiltFlow alternatif bila attempt utama ditolak
+   * participant saat prepare (belum ada dana bergerak — prepare hanya menghitung
+   * hash). Dicoba berurutan sampai ada yang lolos; meta/description attempt
+   * yang lolos yang dipakai untuk bookkeeping execute.
    */
   async prepareWithCommands(
     userId: string,
@@ -171,6 +195,7 @@ export class SigningRelayService {
       meta?: Record<string, unknown>;
       description?: string;
       partyId?: string;
+      fallback?: BuiltFlow;
     },
   ): Promise<{ flow: string; hash: string; commandId: string; description: string }> {
     this.sweepExpired();
@@ -184,37 +209,69 @@ export class SigningRelayService {
       ? { userId, partyId: opts.partyId, username: null }
       : await this.requireExternalUser(userId);
 
-    const commandId = `relay-${flow}-${opts?.commandId ?? randomUUID()}`;
+    const attempts: BuiltFlow[] = [
+      {
+        commands,
+        disclosedContracts: opts?.disclosedContracts,
+        commandId: opts?.commandId,
+        meta: opts?.meta,
+        description: opts?.description,
+      },
+    ];
+    for (let fb = opts?.fallback; fb; fb = fb.fallback) attempts.push(fb);
+
     const sdk = await this.sdkProvider.getSdk();
-    const prepared = sdk.ledger.prepare({
-      partyId: user.partyId,
-      commands,
-      commandId,
-      ...(opts?.disclosedContracts?.length
-        ? { disclosedContracts: opts.disclosedContracts as never }
-        : {}),
-    });
-    const response = await prepared.preparedPromise;
+    let lastErr: unknown;
+    for (const attempt of attempts) {
+      const commandId = `relay-${flow}-${attempt.commandId ?? randomUUID()}`;
+      try {
+        const prepared = sdk.ledger.prepare({
+          partyId: user.partyId,
+          commands: attempt.commands,
+          commandId,
+          ...(attempt.disclosedContracts?.length
+            ? { disclosedContracts: attempt.disclosedContracts as never }
+            : {}),
+        });
+        const response = await prepared.preparedPromise;
 
-    this.pending.set(userId, {
-      userId,
-      flow,
-      partyId: user.partyId,
-      commandId,
-      prepared,
-      meta: opts?.meta ?? {},
-      createdAt: Date.now(),
-    });
+        this.pending.set(userId, {
+          userId,
+          flow,
+          partyId: user.partyId,
+          commandId,
+          prepared,
+          meta: attempt.meta ?? {},
+          createdAt: Date.now(),
+        });
 
-    this.logger.log(
-      `prepare flow=${flow} user=${userId.slice(0, 8)}… hash=${response.preparedTransactionHash.slice(0, 12)}…`,
-    );
-    return {
-      flow,
-      hash: response.preparedTransactionHash,
-      commandId,
-      description: opts?.description ?? flow,
-    };
+        this.logger.log(
+          `prepare flow=${flow} user=${userId.slice(0, 8)}… hash=${response.preparedTransactionHash.slice(0, 12)}… (${attempts.length > 1 ? `attempt ${commandId.slice(6, 30)}` : 'single attempt'})`,
+        );
+        return {
+          flow,
+          hash: response.preparedTransactionHash,
+          commandId,
+          description: attempt.description ?? flow,
+        };
+      } catch (err) {
+        lastErr = err;
+        const cause = String((err as { cause?: string })?.cause ?? err);
+        if (/multiple commands|single command/i.test(cause)) {
+          // Participant menolak >1 command — catat agar attempt multi-command
+          // berikutnya dilewati (hemat latensi), lalu turuni rantai fallback.
+          this.multiCommandRejected = true;
+          this.logger.warn(
+            `Participant rejected multi-command prepare — flag ON, falling back: ${cause.slice(0, 180)}`,
+          );
+        } else {
+          this.logger.warn(
+            `prepare attempt failed (${commandId.slice(6, 40)}): ${cause.slice(0, 180)}`,
+          );
+        }
+      }
+    }
+    throw lastErr ?? new Error('prepare failed');
   }
 
   /**
@@ -743,12 +800,47 @@ export class SigningRelayService {
       this.splice.resolveOnChainPartyId(recipientPartyId),
     ]);
 
-    // ── ATOMIC (v32): transfer + platform fee dalam SATU command via
-    // WalletUserProxy_BatchTransfer. Controller choice = first sender →
-    // cukup SATU tanda tangan user (interactive submission). Semua leg
-    // settle atau batal semua — fee dijamin terkumpul bersama transfer.
-    // Fallback: single-transfer legacy + fee custodial postExecute bila
-    // WUP/registry tidak tersedia atau build gagal.
+    // ── LEGACY single-transfer (fallback terakhir + jalur non-atomic) ────
+    const feePartyRaw =
+      this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
+      this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
+    const buildLegacySingle = async (): Promise<BuiltFlow> => {
+      const main = await this.ledger.buildCip56TransferCommand({
+        senderPartyId: senderOnChain,
+        receiverPartyId: receiverOnChain,
+        amountCc: amount,
+        description: memo || undefined,
+        clientNonce,
+      });
+      if (!main.ok) {
+        throw new BadRequestException(main.error);
+      }
+      // Fee leg dikumpulkan via jalur custodial (operator sign) di postExecute
+      // — legacy hanya utk kasus atomic gagal total.
+      return {
+        commands: [main.command],
+        disclosedContracts: main.disclosedContracts,
+        commandId: clientNonce
+          ? main.commandId.replace(/^tf-/, '')
+          : undefined,
+        meta: {
+          amount,
+          feeCc,
+          feeParty: feePartyRaw ?? '',
+          recipientPartyId,
+          recipientLabel,
+          memo,
+        },
+        description: `Send ${amount} CC to ${recipientLabel}`,
+      };
+    };
+
+    // ── ATOMIC (v33 — alur canton-loop): transfer + platform fee dalam SATU
+    // submission, SATU ExerciseCommand TransferFactory_Transfer per leg.
+    // Dua exercise terpisah tiap leg bebas owner-group constraint WUP → leg
+    // ke party EXTERNAL (CEX / user validator lain) pun atomic. Rantai
+    // fallback bila participant menolak multi-command: WUP BatchTransfer
+    // (terbukti utk receiver internal) → legacy single + fee custodial.
     if (
       this.config.get<string>('QUEST_ATOMIC_PLATFORM_TRANSFER') === 'true' &&
       feeCc > 0
@@ -762,31 +854,56 @@ export class SigningRelayService {
             await this.splice.resolveOnChainPartyId(feePartyRawAtomic);
           const dsoAtomic =
             this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() || '';
+          const legs = () => [
+            {
+              receiverPartyId: receiverOnChain,
+              amount,
+              instrumentId: 'Amulet',
+              instrumentAdmin: dsoAtomic,
+              description: memo || `Send to ${recipientLabel}`,
+            },
+            {
+              receiverPartyId: feePartyOnChain,
+              amount: feeCc,
+              instrumentId: 'Amulet',
+              instrumentAdmin: dsoAtomic,
+              description: `Platform fee: ${recipientLabel}`,
+            },
+          ];
+
+          // Attempt 1 — multi-command canton-loop (2× TransferFactory_Transfer).
+          let multi: FactoryMultiBuild | null = null;
+          if (!this.multiCommandRejected) {
+            try {
+              const m = await this.ledger.buildFactoryTransferCommands({
+                senderPartyId: senderOnChain,
+                transfers: legs(),
+                clientNonce,
+              });
+              if (m.ok) {
+                multi = m;
+              } else {
+                this.logger.warn(
+                  `send_cc multi-command build failed: ${m.error}`,
+                );
+              }
+            } catch (err) {
+              this.logger.warn(
+                `send_cc multi-command build error: ${String(err).slice(0, 140)}`,
+              );
+            }
+          }
+
+          // Attempt 2 — WUP BatchTransfer (proven receiver internal; utk
+          // receiver external akan gagal saat prepare → turun ke legacy).
+          let wupBuilt: BuiltFlow | undefined;
           const batch = await this.ledger.buildProxyBatchTransferCommand({
             senderPartyId: senderOnChain,
-            transfers: [
-              {
-                receiverPartyId: receiverOnChain,
-                amount,
-                instrumentId: 'Amulet',
-                instrumentAdmin: dsoAtomic,
-                description: memo || `Send to ${recipientLabel}`,
-              },
-              {
-                receiverPartyId: feePartyOnChain,
-                amount: feeCc,
-                instrumentId: 'Amulet',
-                instrumentAdmin: dsoAtomic,
-                description: `Platform fee: ${recipientLabel}`,
-              },
-            ],
+            transfers: legs(),
             clientNonce,
           });
           if (batch.ok) {
-            this.logger.log(
-              `send_cc ATOMIC batch ready: ${amount} CC → ${recipientLabel} + fee ${feeCc} CC (kind=${batch.transferKind})`,
-            );
-            return {
+            wupBuilt = {
               commands: [batch.command],
               disclosedContracts: batch.disclosedContracts,
               commandId: clientNonce ? batch.commandId : undefined,
@@ -802,10 +919,51 @@ export class SigningRelayService {
               },
               description: `Send ${amount} CC to ${recipientLabel}`,
             };
+          } else {
+            this.logger.warn(
+              `send_cc atomic WUP build failed: ${batch.error}`,
+            );
           }
-          this.logger.warn(
-            `send_cc atomic build failed → legacy single: ${batch.error}`,
-          );
+
+          if (multi) {
+            // Rantai fallback: WUP → legacy (dibangun eager — biaya 1 registry
+            // call, hanya jadi jaminan bila multi prepare ditolak participant).
+            let fallbackChain: BuiltFlow | undefined = wupBuilt;
+            try {
+              const legacy = await buildLegacySingle();
+              if (fallbackChain) fallbackChain.fallback = legacy;
+              else fallbackChain = legacy;
+            } catch {
+              /* legacy gagal build → rantai sependek yang tersedia */
+            }
+            this.logger.log(
+              `send_cc ATOMIC multi-command ready (canton-loop): ${amount} CC → ${recipientLabel} + fee ${feeCc} CC (kind=${multi.transferKind})`,
+            );
+            return {
+              commands: multi.commands,
+              disclosedContracts: multi.disclosedContracts,
+              commandId: clientNonce ? multi.commandId : undefined,
+              meta: {
+                amount,
+                feeCc,
+                feeParty: feePartyRawAtomic,
+                atomicFee: true,
+                transferKind: multi.transferKind,
+                recipientPartyId,
+                recipientLabel,
+                memo,
+              },
+              description: `Send ${amount} CC to ${recipientLabel}`,
+              fallback: fallbackChain,
+            };
+          }
+
+          if (wupBuilt) {
+            this.logger.log(
+              `send_cc ATOMIC batch ready (WUP): ${amount} CC → ${recipientLabel} + fee ${feeCc} CC (kind=${String(wupBuilt.meta?.transferKind ?? '?')})`,
+            );
+            return wupBuilt;
+          }
         }
       } catch (err) {
         this.logger.warn(
@@ -814,42 +972,7 @@ export class SigningRelayService {
       }
     }
 
-    // ── Bangun command transfer utama (legacy single-transfer) ───────────
-    const main = await this.ledger.buildCip56TransferCommand({
-      senderPartyId: senderOnChain,
-      receiverPartyId: receiverOnChain,
-      amountCc: amount,
-      description: memo || undefined,
-      clientNonce,
-    });
-    if (!main.ok) {
-      throw new BadRequestException(main.error);
-    }
-
-    // ── Interactive submission HANYA support 1 command per prepare ──────
-    // Fee leg dikumpulkan via jalur custodial (operator sign) DI postExecute,
-    // BUKAN di-include di sini — "Preparing multiple commands is currently
-    // not supported" (VPS MainNet 2026-08-25).
-    const commands: unknown[] = [main.command];
-    const disclosed = [...main.disclosedContracts];
-    const feePartyRaw =
-      this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
-      this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
-
-    return {
-      commands,
-      disclosedContracts: disclosed,
-      commandId: clientNonce ? main.commandId.replace(/^tf-/, '') : undefined,
-      meta: {
-        amount,
-        feeCc,
-        feeParty: feePartyRaw ?? '',
-        recipientPartyId,
-        recipientLabel,
-        memo,
-      },
-      description: `Send ${amount} CC to ${recipientLabel}`,
-    };
+    return buildLegacySingle();
   }
 
   /**
@@ -983,9 +1106,46 @@ export class SigningRelayService {
       this.splice.resolveOnChainPartyId(recipientPartyId),
     ]);
 
-    // ── ATOMIC (v32): token leg + fee CC dalam SATU command via
-    // WalletUserProxy_BatchTransfer (instrument campur — registry per
-    // instrument). Fallback: legacy single + fee custodial postExecute.
+    // ── LEGACY single-transfer (fallback terakhir + jalur non-atomic) ────
+    const feePartyRaw =
+      this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
+      this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
+    const buildLegacySingle = async (): Promise<BuiltFlow> => {
+      const main = await this.ledger.buildCip56TransferCommand({
+        senderPartyId: senderOnChain,
+        receiverPartyId: receiverOnChain,
+        amountCc: amount,
+        description: memo || undefined,
+        clientNonce,
+        instrumentId,
+        instrumentAdmin,
+      });
+      if (!main.ok) throw new BadRequestException(main.error);
+      // Fee leg dikumpulkan via jalur custodial di postExecute (sama seperti
+      // send_cc) — legacy hanya utk kasus atomic gagal total.
+      return {
+        commands: [main.command],
+        disclosedContracts: main.disclosedContracts,
+        commandId: clientNonce
+          ? main.commandId.replace(/^tf-/, '')
+          : undefined,
+        meta: {
+          amount,
+          feeCc,
+          feeParty: feePartyRaw ?? '',
+          recipientPartyId,
+          recipientLabel,
+          memo,
+          instrumentId,
+        },
+        description: `Send ${amount} ${instrumentId} to ${recipientLabel}`,
+      };
+    };
+
+    // ── ATOMIC (v33 — alur canton-loop): token leg + fee CC, SATU
+    // ExerciseCommand TransferFactory_Transfer per leg dalam satu submission
+    // (factory beda instrument, holdings beda pool — tidak ada overlap).
+    // Rantai fallback: WUP BatchTransfer → legacy single + fee custodial.
     if (
       this.config.get<string>('QUEST_ATOMIC_PLATFORM_TRANSFER') === 'true' &&
       feeCc > 0
@@ -999,31 +1159,55 @@ export class SigningRelayService {
             await this.splice.resolveOnChainPartyId(feePartyRawAtomic);
           const dsoAtomic =
             this.config.get<string>('CANTON_DSO_PARTY_ID')?.trim() || '';
+          const legs = () => [
+            {
+              receiverPartyId: receiverOnChain,
+              amount,
+              instrumentId,
+              instrumentAdmin,
+              description: memo || `Send to ${recipientLabel}`,
+            },
+            {
+              receiverPartyId: feePartyOnChain,
+              amount: feeCc,
+              instrumentId: 'Amulet',
+              instrumentAdmin: dsoAtomic,
+              description: `Platform fee: ${recipientLabel}`,
+            },
+          ];
+
+          // Attempt 1 — multi-command canton-loop.
+          let multi: FactoryMultiBuild | null = null;
+          if (!this.multiCommandRejected) {
+            try {
+              const m = await this.ledger.buildFactoryTransferCommands({
+                senderPartyId: senderOnChain,
+                transfers: legs(),
+                clientNonce,
+              });
+              if (m.ok) {
+                multi = m;
+              } else {
+                this.logger.warn(
+                  `send_token multi-command build failed: ${m.error}`,
+                );
+              }
+            } catch (err) {
+              this.logger.warn(
+                `send_token multi-command build error: ${String(err).slice(0, 140)}`,
+              );
+            }
+          }
+
+          // Attempt 2 — WUP BatchTransfer (proven receiver internal).
+          let wupBuilt: BuiltFlow | undefined;
           const batch = await this.ledger.buildProxyBatchTransferCommand({
             senderPartyId: senderOnChain,
-            transfers: [
-              {
-                receiverPartyId: receiverOnChain,
-                amount,
-                instrumentId,
-                instrumentAdmin,
-                description: memo || `Send to ${recipientLabel}`,
-              },
-              {
-                receiverPartyId: feePartyOnChain,
-                amount: feeCc,
-                instrumentId: 'Amulet',
-                instrumentAdmin: dsoAtomic,
-                description: `Platform fee: ${recipientLabel}`,
-              },
-            ],
+            transfers: legs(),
             clientNonce,
           });
           if (batch.ok) {
-            this.logger.log(
-              `send_token ATOMIC batch ready: ${amount} ${instrumentId} → ${recipientLabel} + fee ${feeCc} CC (kind=${batch.transferKind})`,
-            );
-            return {
+            wupBuilt = {
               commands: [batch.command],
               disclosedContracts: batch.disclosedContracts,
               commandId: clientNonce ? batch.commandId : undefined,
@@ -1040,10 +1224,50 @@ export class SigningRelayService {
               },
               description: `Send ${amount} ${instrumentId} to ${recipientLabel}`,
             };
+          } else {
+            this.logger.warn(
+              `send_token atomic WUP build failed: ${batch.error}`,
+            );
           }
-          this.logger.warn(
-            `send_token atomic build failed → legacy single: ${batch.error}`,
-          );
+
+          if (multi) {
+            let fallbackChain: BuiltFlow | undefined = wupBuilt;
+            try {
+              const legacy = await buildLegacySingle();
+              if (fallbackChain) fallbackChain.fallback = legacy;
+              else fallbackChain = legacy;
+            } catch {
+              /* legacy gagal build → rantai sependek yang tersedia */
+            }
+            this.logger.log(
+              `send_token ATOMIC multi-command ready (canton-loop): ${amount} ${instrumentId} → ${recipientLabel} + fee ${feeCc} CC (kind=${multi.transferKind})`,
+            );
+            return {
+              commands: multi.commands,
+              disclosedContracts: multi.disclosedContracts,
+              commandId: clientNonce ? multi.commandId : undefined,
+              meta: {
+                amount,
+                feeCc,
+                feeParty: feePartyRawAtomic,
+                atomicFee: true,
+                transferKind: multi.transferKind,
+                recipientPartyId,
+                recipientLabel,
+                memo,
+                instrumentId,
+              },
+              description: `Send ${amount} ${instrumentId} to ${recipientLabel}`,
+              fallback: fallbackChain,
+            };
+          }
+
+          if (wupBuilt) {
+            this.logger.log(
+              `send_token ATOMIC batch ready (WUP): ${amount} ${instrumentId} → ${recipientLabel} + fee ${feeCc} CC (kind=${String(wupBuilt.meta?.transferKind ?? '?')})`,
+            );
+            return wupBuilt;
+          }
         }
       } catch (err) {
         this.logger.warn(
@@ -1052,41 +1276,7 @@ export class SigningRelayService {
       }
     }
 
-    // Leg utama: transfer token non-CC (legacy single-transfer).
-    const main = await this.ledger.buildCip56TransferCommand({
-      senderPartyId: senderOnChain,
-      receiverPartyId: receiverOnChain,
-      amountCc: amount,
-      description: memo || undefined,
-      clientNonce,
-      instrumentId,
-      instrumentAdmin,
-    });
-    if (!main.ok) throw new BadRequestException(main.error);
-
-    // Interactive submission hanya 1 command — fee leg dikumpulkan via
-    // custodial di postExecute (sama seperti send_cc).
-    const commands: unknown[] = [main.command];
-    const disclosed = [...main.disclosedContracts];
-    const feePartyRaw =
-      this.config.get<string>('CANTON_FEE_RECIPIENT_PARTY_ID')?.trim() ||
-      this.config.get<string>('CANTON_VALIDATOR_PARTY_ID')?.trim();
-
-    return {
-      commands,
-      disclosedContracts: disclosed,
-      commandId: clientNonce ? main.commandId.replace(/^tf-/, '') : undefined,
-      meta: {
-        amount,
-        feeCc,
-        feeParty: feePartyRaw ?? '',
-        recipientPartyId,
-        recipientLabel,
-        memo,
-        instrumentId,
-      },
-      description: `Send ${amount} ${instrumentId} to ${recipientLabel}`,
-    };
+    return buildLegacySingle();
   }
 
   /**
