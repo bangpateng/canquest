@@ -13,6 +13,7 @@ import { TransactionDetailService } from './transaction-detail.service';
 import { QuestLedgerService } from './quest-ledger.service';
 import { LockEligibilityService } from './lock-eligibility.service';
 import { OfferReconcilerService } from './offer-reconciler.service';
+import { FeeAccepterService } from './fee-accepter.service';
 import { CantonUpdatesService } from './canton-updates.service';
 import { BalanceEventHandlerService } from './balance-event-handler.service';
 import { TokenInstrumentHelper } from './token-instrument.helper';
@@ -45,6 +46,7 @@ import { SigningRelayService } from './signing-relay.service';
     QuestLedgerService,
     LockEligibilityService,
     OfferReconcilerService,
+    FeeAccepterService,
     CantonUpdatesService,
     BalanceEventHandlerService,
     TokenInstrumentHelper,

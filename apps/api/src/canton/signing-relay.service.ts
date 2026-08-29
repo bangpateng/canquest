@@ -75,11 +75,14 @@ export class SigningRelayService {
   private readonly logger = new Logger(SigningRelayService.name);
   private readonly pending = new Map<string, PendingSigning>();
   /**
-   * True bila participant Ledger API terbukti menolak >1 command per prepare
-   * (dokumen JSON API menyebut "single command"; jalur participant belum
-   * pasti). Sekali terdeteksi, attempt multi-command dilewati di proses ini.
+   * True = LEWATI attempt multi-command (2× TransferFactory_Transfer dalam
+   * satu prepare). Default true: node produksi (Splice 0.6.12 / Canton 3.4)
+   * TERBUKTI menolak — "Preparing multiple commands is currently not
+   * supported" (MainNet 2026-08-29). Set QUEST_TRY_MULTI_COMMAND=true utk
+   * re-probe (mis. setelah upgrade node — pola canton-loop 2 ROOT event).
+   * Sekali participant menerima, error-handler di bawah memflip flag ini.
    */
-  private multiCommandRejected = false;
+  private multiCommandRejected = true;
 
   constructor(
     private readonly sdkProvider: CantonWalletSdkService,
@@ -88,7 +91,12 @@ export class SigningRelayService {
     private readonly prisma: PrismaService,
     private readonly users: UsersService,
     private readonly config: ConfigService,
-  ) {}
+  ) {
+    // Opt-in re-probe multi-command (default skip — node Splice 0.6.12 menolak).
+    if (this.config.get<string>('QUEST_TRY_MULTI_COMMAND') === 'true') {
+      this.multiCommandRejected = false;
+    }
+  }
 
   private get packagePrefix(): string {
     return this.config.get<string>('CANTON_DAML_PACKAGE_NAME') || '#canquest-v29';
