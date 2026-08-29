@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils/utils";
 import { Card } from "@/components/ui/card";
 import { TokenLogo, displayName } from "@/components/app/wallet/token-logo";
 import { useMe } from "@/lib/hooks/use-me";
-import { getWalletKeyMeta, unlock, signBytesHex } from "@/lib/wallet/key-manager";
+import { getWalletKeyMeta, unlock, signBytesHex, tryDeviceAutoUnlock } from "@/lib/wallet/key-manager";
 import { usePassphrasePrompt } from "@/lib/wallet/use-passphrase-prompt";
 
 /**
@@ -21,6 +21,10 @@ async function signHashRaw(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes("Wallet locked")) {
+      // Passwordless: coba device auto-unlock dulu (mirror signHashWithUnlock).
+      if (await tryDeviceAutoUnlock()) {
+        return signBytesHex(bytes);
+      }
       const pass = await promptPassphrase("Enable instant receive");
       if (!pass) throw err;
       await unlock(pass);
