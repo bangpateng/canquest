@@ -1725,18 +1725,29 @@ export class CantonLedgerService {
     // holding TIDAK BOLEH dipakai dua leg (leg pertama meng-archive-nya →
     // CONTRACT_NOT_ACTIVE di leg kedua; tidak ada auto-threading change).
     // Karena itu tiap leg CC dialokasikan holdings yang TIDAK SALING
-    // OVERLAP (greedy ascending — set terkecil yang mencukupi). Pool tak
-    // mencukupi semua leg → gagal build → relay fallback ke jalur legacy.
+    // OVERLAP (best-fit: single-fit dulu, merge hanya bila perlu).
+    //
+    // INDEX-LAG GUARD: queryAmuletHoldingsRaw membaca ACS pada offset
+    // ledger-end — transaksi yang settle 1-3 detik lalu (mis. atomic send
+    // beruntun) belum terlihat, pool tampak kurang → gagal alokasi padahal
+    // dana cukup. Simulasi alokasi di bawah menolak fallback prematur:
+    // bila gagal, tunggu 3s, re-fetch pool, coba sekali lagi.
     let amuletPool: Array<{ contractId: string; eff: number }> = [];
     let fullAmuletCids: string[] = [];
-    if (transfers.some((t) => t.instrumentId.toLowerCase() === 'amulet')) {
-      try {
+    const hasAmuletLeg = transfers.some(
+      (t) => t.instrumentId.toLowerCase() === 'amulet',
+    );
+    if (hasAmuletLeg) {
+      const amuletLegs = transfers.filter(
+        (t) => t.instrumentId.toLowerCase() === 'amulet',
+      );
+      const buildPool = async () => {
         const openRound = await this.fetchScanProxyContract(
           'open-and-issuing-mining-rounds',
         );
         const round = openRound?.round ?? 0;
         const raw = await this.queryAmuletHoldingsRaw(senderPartyId);
-        amuletPool = raw
+        return raw
           .map((h) => {
             const init = parseFloat(h.initialAmount) || 0;
             const rate = parseFloat(h.ratePerRound) || 0;
@@ -1744,6 +1755,43 @@ export class CantonLedgerService {
             return { contractId: h.contractId, eff: Math.max(0, init - decay) };
           })
           .sort((a, b) => a.eff - b.eff); // ascending — set terkecil dulu
+      };
+      /** Simulasi best-fit disjoint utk semua leg CC — true bila pool cukup. */
+      const canCoverDisjoint = (
+        pool: Array<{ contractId: string; eff: number }>,
+      ): boolean => {
+        const sim = [...pool];
+        for (const leg of amuletLegs) {
+          const singleIdx = sim.findIndex((h) => h.eff >= leg.amount);
+          if (singleIdx >= 0) {
+            sim.splice(singleIdx, 1);
+            continue;
+          }
+          let acc = 0;
+          while (acc < leg.amount && sim.length > 0) {
+            acc += sim.shift()!.eff;
+          }
+          if (acc < leg.amount) return false;
+        }
+        return true;
+      };
+      try {
+        amuletPool = await buildPool();
+        if (!canCoverDisjoint(amuletPool)) {
+          // Retry sekali setelah 3s — beri waktu ACS index mengejar.
+          await new Promise((r) => setTimeout(r, 3_000));
+          amuletPool = await buildPool();
+          if (!canCoverDisjoint(amuletPool)) {
+            return {
+              ok: false,
+              error:
+                'Insufficient holdings to cover legs disjointly (re-checked after index catch-up) — falling back',
+            };
+          }
+          this.logger.log(
+            'Amulet pool index-lag detected — pool rebuilt after 3s wait, allocation now feasible',
+          );
+        }
         fullAmuletCids = amuletPool.map((h) => h.contractId);
       } catch {
         /* pool kosong → alokasi leg CC akan gagal → fallback legacy */
